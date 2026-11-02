@@ -3252,14 +3252,6 @@
     },
     {
       "file": "projects/engines/geometry/crates/geom-num/src/crossing.rs",
-      "mutant": "replace Ssi::routed -> Option<Sign> with None",
-      "line_text": "let [a, b, c, d] = self.points;",
-      "occurrences": 1,
-      "kind": "equivalent",
-      "reason": "On None, Ssi::orient2d takes orient2d_hand, which computes the same sign exactly: oa . ob2 - ob . oa2 in I256 (then I320) times the sign of w, the expression the generated ssi_side and ssi_weight evaluate. Both paths are exact, so the answer is the same for every input; only the time taken changes."
-    },
-    {
-      "file": "projects/engines/geometry/crates/geom-num/src/crossing.rs",
       "mutant": "replace side -> Option<Sign> with None",
       "line_text": "let left = Wide::<L>::product_i128(oa, ob2)?;",
       "occurrences": 1,
@@ -3760,79 +3752,7 @@
       "line_text": "Some((n, d)) if within_budget(&n, d) => Ok(Plane { n, d }),",
       "occurrences": 1,
       "kind": "equivalent",
-      "reason": "within_budget's only caller is Plane::through, the only maker of a Plane (its fields are private). For grid points (|coordinate| <= M = 2^40 - 1) each normal component is at most 4M^2 < 2^82 and the offset at most 4M^3 < 2^122 in magnitude (the derivation on Plane::through; both reached in tests), below the budget's 2^83 and 2^125, so every clause is true for every input: the check never fails, and a weaker one (`||`, `<=`, or true) changes no result. It is kept because chapter 6.2 requires the plane type to check its budget at construction."
-    },
-    {
-      "file": "projects/engines/geometry/crates/geom-num/src/plane.rs",
-      "mutant": "replace within_budget -> bool with true",
-      "line_text": "let [nx, ny, nz] = *n;",
-      "occurrences": 1,
-      "kind": "equivalent",
-      "reason": "within_budget's only caller is Plane::through, the only maker of a Plane (its fields are private). For grid points (|coordinate| <= M = 2^40 - 1) each normal component is at most 4M^2 < 2^82 and the offset at most 4M^3 < 2^122 in magnitude (the derivation on Plane::through; both reached in tests), below the budget's 2^83 and 2^125, so every clause is true for every input: the check never fails, and a weaker one (`||`, `<=`, or true) changes no result. It is kept because chapter 6.2 requires the plane type to check its budget at construction."
-    },
-    {
-      "file": "projects/engines/geometry/crates/geom-num/src/plane.rs",
-      "mutant": "replace && with || in within_budget",
-      "line_text": "&& d.unsigned_abs() < OFFSET_LIMIT",
-      "occurrences": 1,
-      "kind": "equivalent",
-      "reason": "within_budget's only caller is Plane::through, the only maker of a Plane (its fields are private). For grid points (|coordinate| <= M = 2^40 - 1) each normal component is at most 4M^2 < 2^82 and the offset at most 4M^3 < 2^122 in magnitude (the derivation on Plane::through; both reached in tests), below the budget's 2^83 and 2^125, so every clause is true for every input: the check never fails, and a weaker one (`||`, `<=`, or true) changes no result. It is kept because chapter 6.2 requires the plane type to check its budget at construction."
-    },
-    {
-      "file": "projects/engines/geometry/crates/geom-num/src/plane.rs",
-      "mutant": "replace && with || in within_budget",
-      "line_text": "&& nz.unsigned_abs() < NORMAL_LIMIT",
-      "occurrences": 1,
-      "kind": "equivalent",
-      "reason": "within_budget's only caller is Plane::through, the only maker of a Plane (its fields are private). For grid points (|coordinate| <= M = 2^40 - 1) each normal component is at most 4M^2 < 2^82 and the offset at most 4M^3 < 2^122 in magnitude (the derivation on Plane::through; both reached in tests), below the budget's 2^83 and 2^125, so every clause is true for every input: the check never fails, and a weaker one (`||`, `<=`, or true) changes no result. It is kept because chapter 6.2 requires the plane type to check its budget at construction."
-    },
-    {
-      "file": "projects/engines/geometry/crates/geom-num/src/plane.rs",
-      "mutant": "replace && with || in within_budget",
-      "line_text": "&& ny.unsigned_abs() < NORMAL_LIMIT",
-      "occurrences": 1,
-      "kind": "equivalent",
-      "reason": "within_budget's only caller is Plane::through, the only maker of a Plane (its fields are private). For grid points (|coordinate| <= M = 2^40 - 1) each normal component is at most 4M^2 < 2^82 and the offset at most 4M^3 < 2^122 in magnitude (the derivation on Plane::through; both reached in tests), below the budget's 2^83 and 2^125, so every clause is true for every input: the check never fails, and a weaker one (`||`, `<=`, or true) changes no result. It is kept because chapter 6.2 requires the plane type to check its budget at construction."
-    },
-    {
-      "file": "projects/engines/geometry/crates/geom-num/src/plane.rs",
-      "mutant": "replace < with <= in within_budget",
-      "line_text": "nx.unsigned_abs() < NORMAL_LIMIT",
-      "occurrences": 1,
-      "kind": "equivalent",
-      "reason": "within_budget's only caller is Plane::through, the only maker of a Plane (its fields are private). For grid points (|coordinate| <= M = 2^40 - 1) each normal component is at most 4M^2 < 2^82 and the offset at most 4M^3 < 2^122 in magnitude (the derivation on Plane::through; both reached in tests), below the budget's 2^83 and 2^125, so every clause is true for every input: the check never fails, and a weaker one (`||`, `<=`, or true) changes no result. It is kept because chapter 6.2 requires the plane type to check its budget at construction."
-    },
-    {
-      "file": "projects/engines/geometry/crates/geom-num/src/plane.rs",
-      "mutant": "replace < with <= in within_budget",
-      "line_text": "&& ny.unsigned_abs() < NORMAL_LIMIT",
-      "occurrences": 1,
-      "kind": "equivalent",
-      "reason": "within_budget's only caller is Plane::through, the only maker of a Plane (its fields are private). For grid points (|coordinate| <= M = 2^40 - 1) each normal component is at most 4M^2 < 2^82 and the offset at most 4M^3 < 2^122 in magnitude (the derivation on Plane::through; both reached in tests), below the budget's 2^83 and 2^125, so every clause is true for every input: the check never fails, and a weaker one (`||`, `<=`, or true) changes no result. It is kept because chapter 6.2 requires the plane type to check its budget at construction."
-    },
-    {
-      "file": "projects/engines/geometry/crates/geom-num/src/plane.rs",
-      "mutant": "replace < with <= in within_budget",
-      "line_text": "&& nz.unsigned_abs() < NORMAL_LIMIT",
-      "occurrences": 1,
-      "kind": "equivalent",
-      "reason": "within_budget's only caller is Plane::through, the only maker of a Plane (its fields are private). For grid points (|coordinate| <= M = 2^40 - 1) each normal component is at most 4M^2 < 2^82 and the offset at most 4M^3 < 2^122 in magnitude (the derivation on Plane::through; both reached in tests), below the budget's 2^83 and 2^125, so every clause is true for every input: the check never fails, and a weaker one (`||`, `<=`, or true) changes no result. It is kept because chapter 6.2 requires the plane type to check its budget at construction."
-    },
-    {
-      "file": "projects/engines/geometry/crates/geom-num/src/plane.rs",
-      "mutant": "replace < with <= in within_budget",
-      "line_text": "&& d.unsigned_abs() < OFFSET_LIMIT",
-      "occurrences": 1,
-      "kind": "equivalent",
-      "reason": "within_budget's only caller is Plane::through, the only maker of a Plane (its fields are private). For grid points (|coordinate| <= M = 2^40 - 1) each normal component is at most 4M^2 < 2^82 and the offset at most 4M^3 < 2^122 in magnitude (the derivation on Plane::through; both reached in tests), below the budget's 2^83 and 2^125, so every clause is true for every input: the check never fails, and a weaker one (`||`, `<=`, or true) changes no result. It is kept because chapter 6.2 requires the plane type to check its budget at construction."
-    },
-    {
-      "file": "projects/engines/geometry/crates/geom-num/src/plane.rs",
-      "mutant": "replace lpi_routed -> Option<Sign> with None",
-      "line_text": "let ([ax, ay, az], ad) = (l.plane.n, l.plane.d);",
-      "occurrences": 1,
-      "kind": "equivalent",
-      "reason": "On None, Plane::side_of_lpi takes side_of_lpi_hand, which computes the same sign exactly: w1 s2p - w2 s1p in I256 (then I320) times the sign of w1, from the same planes and points, the very expression the generated lpi_side and lpi_weight evaluate. Both paths are exact, so the answer is the same for every input; only the time taken changes. (tests/gate1_core.rs calls the generated predicates directly.)"
+      "reason": "Plane::through takes grid points (|coordinate| <= M = 2^40 - 1), so each normal component is at most 4M^2 < 2^82 and the offset at most 4M^3 < 2^122 in magnitude: within_budget holds of every plane it can build, and true in its place is the same function. Plane::new takes coefficients from outside, and its tests reach each limit."
     },
     {
       "file": "projects/engines/geometry/crates/geom-num/src/plane.rs",
@@ -3841,14 +3761,6 @@
       "occurrences": 1,
       "kind": "equivalent",
       "reason": "lpi_classify runs only in side_of_lpi_hand, which Plane::side_of_lpi calls only when the generated lpi_weight or lpi_side path returns None. Those paths check their rounded inputs against their certified widths (83 and 125 bits) on entry, and every plane a user can make comes from Plane::through on grid points, whose coefficients lie inside them (G29's budget); inside them no step overflows (the certificate). So no public input reaches lpi_classify, and returning None from it changes no result a user can see."
-    },
-    {
-      "file": "projects/engines/geometry/crates/geom-num/src/plane.rs",
-      "mutant": "replace tpi_routed -> Option<Sign> with None",
-      "line_text": "let [p, q, r] = t.planes;",
-      "occurrences": 1,
-      "kind": "equivalent",
-      "reason": "On None, Plane::side_of_tpi takes side_of_tpi_hand, which computes the same sign exactly: n . X + d . w from Tpi::homogeneous in I384 (then I512) times the sign of w, the 4 x 4 determinant the generated tpi_side evaluates. Both paths are exact, so the answer is the same for every input; only the time taken changes."
     },
     {
       "file": "projects/engines/geometry/crates/geom-num/src/plane.rs",
@@ -5059,12 +4971,1453 @@
       "reason": "Only the scan's start moves, and it still meets the same member. last_within is private; members, its one caller, passes it only periodic families from Scalar::critical, whose lower ends c lie in [−1.5, 2.5] up to a rounding (φ = atan2/π in [−1, 1], plus ψ in [−½, ½], 1 − ψ or 1, or the involute's ½ and 3/2), and extent sends spans past 2⁵⁰ to the pieces' route first. With X = (t₁ − c)/2, the answer is ⌊X⌋, or ⌊X⌋ + 1 when rounding a member down lets it meet t₁ (only for X within ¼ below a whole number). The mutant starts at ⌊(t₁ + c)/2⌋ + 2 = ⌊X + c + e⌋ + 2 with |e| ≤ 1/16 (the roundings of t₁ + c, below 2⁵¹, and of its half), which lies at or above the answer and at most ⌊X⌋ + 5: inside the scan's six steps down. The scan returns the first m from the top whose member's lower end is at most t₁, so both return the same m."
     },
     {
+      "file": "projects/engines/geometry/crates/geom-name/src/graph.rs",
+      "mutant": "replace match guard node.bytes == bytes with true in NameGraph::insert",
+      "line_text": "Some(node) if node.bytes == bytes => Ok(id),",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "The guard decides only when the graph already holds the NameId being interned. Through the public interface that NameId is the 128-bit cut of SHA-256 over the prefix and the name's canonical bytes, so a node held under it with different bytes needs two encodings whose truncated hashes agree: no such pair is known, and finding one costs about 2^64 hashes (32.19). So no input through the public interface tells the mutant from the original; the unit test graph::tests::a_second_encoding_under_a_held_name_id_is_refused forges the collision directly."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-name/src/ordinal.rs",
+      "mutant": "replace < with <= in sorted",
+      "line_text": "while width < from.len() {",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "With <=, the loop makes one more pass when width equals the number of entities. That pass has one chunk, split at its full length, so the right run is empty and the merge copies the left run unchanged. The order, and every comparison's outcome, is the same."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-name/src/ordinal.rs",
+      "mutant": "replace < with > in sorted",
+      "line_text": "while width < from.len() {",
+      "occurrences": 1,
+      "kind": "hangs",
+      "reason": "With >, for no entity or one the condition 1 > 0 or 1 > 1 holds and stays true as width doubles and saturates at usize::MAX, so the loop never ends and the tests stop it by their timeout. For two or more entities the loop does not run and the unsorted order fails the tests. It hangs or is caught; it never returns a wrong order unnoticed."
+    },
+    {
       "file": "projects/engines/geometry/crates/geom-num/src/ball.rs",
       "mutant": "replace > with >= in <impl Scalar for Ball>::sqrt",
       "line_text": "let spread = if root_floor > 0.0 {",
       "occurrences": 1,
       "kind": "equivalent",
       "reason": "root_floor is next_down of the correctly rounded square root of floor, and floor is at least +0 (the sqrt above refuses floor < radius, and the radius is never negative). For floor = +0 or -0 the root is a zero and its next_down is -2^-1074; for floor > 0 the root is at least 2^-537 and its next_down is positive. So root_floor is never 0.0, and > and >= against 0.0 choose the same arm for every ball."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-topo/src/column.rs",
+      "mutant": "replace > with >= in Column<K, V>::filled",
+      "line_text": "if full > 0 {",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "full is a u32, so full >= 0 always holds. When the column needs no full chunk (fewer than CHUNK_ROWS rows), the mutant builds one full chunk anyway and then places it zero times: column.chunks.resize(0, chunk) leaves the list empty with the capacity reserved before, and the chunk is dropped. The column's rows, chunks, values and Memory report are the same as the original's for every rows and value. Only a temporary allocation of one chunk differs, which a machine out of memory could refuse (OutOfMemory, never stored or replayed, 23.10) where the original needs none."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-op/src/cbor.rs",
+      "mutant": "replace | with ^ in head",
+      "line_text": "out.push(major | b7);",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "head writes the first byte of a head as the major type, one of 0x00, 0x20, ... 0xe0, so only its top three bits can be set, joined with the additional information, which is below 24 or one of 0x18 to 0x1b, so only its low five bits can be set. The two never share a bit, so | and ^ give the same byte for every argument of every head. Here the argument is below 24, so b7 is the whole argument."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-op/src/cbor.rs",
+      "mutant": "replace | with ^ in head",
+      "line_text": "out.extend_from_slice(&[major | 0x18, b7]);",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "head writes the first byte of a head as the major type, one of 0x00, 0x20, ... 0xe0, so only its top three bits can be set, joined with the additional information, which is below 24 or one of 0x18 to 0x1b, so only its low five bits can be set. The two never share a bit, so | and ^ give the same byte for every argument of every head."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-op/src/cbor.rs",
+      "mutant": "replace | with ^ in head",
+      "line_text": "out.extend_from_slice(&[major | 0x19, b6, b7]);",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "head writes the first byte of a head as the major type, one of 0x00, 0x20, ... 0xe0, so only its top three bits can be set, joined with the additional information, which is below 24 or one of 0x18 to 0x1b, so only its low five bits can be set. The two never share a bit, so | and ^ give the same byte for every argument of every head."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-op/src/cbor.rs",
+      "mutant": "replace | with ^ in head",
+      "line_text": "out.extend_from_slice(&[major | 0x1a, b4, b5, b6, b7]);",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "head writes the first byte of a head as the major type, one of 0x00, 0x20, ... 0xe0, so only its top three bits can be set, joined with the additional information, which is below 24 or one of 0x18 to 0x1b, so only its low five bits can be set. The two never share a bit, so | and ^ give the same byte for every argument of every head."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-op/src/cbor.rs",
+      "mutant": "replace | with ^ in head",
+      "line_text": "out.extend_from_slice(&[major | 0x1b, b0, b1, b2, b3, b4, b5, b6, b7]);",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "head writes the first byte of a head as the major type, one of 0x00, 0x20, ... 0xe0, so only its top three bits can be set, joined with the additional information, which is below 24 or one of 0x18 to 0x1b, so only its low five bits can be set. The two never share a bit, so | and ^ give the same byte for every argument of every head."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-op/src/cbor.rs",
+      "mutant": "replace | with ^ in narrow",
+      "line_text": "(exponent.checked_sub(format.rebias)? << format.fraction) | (fraction >> format.dropped)",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "The narrow exponent field is shifted left by the narrow format's fraction width M, so its low M bits are zero, and the narrow fraction is the binary64 fraction shifted right by 52 - M, so it is below 2^M. The two never share a bit, so | and ^ give the same bits for every double."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-op/src/cbor.rs",
+      "mutant": "replace | with ^ in narrow",
+      "line_text": "let q = (1 << 52) | fraction;",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "fraction is the binary64's low 52 bits (bits & (2^52 - 1)), so it is below 2^52 and never has bit 52, the implicit leading bit set here; | and ^ give the same q for every double."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-op/src/cbor.rs",
+      "mutant": "replace | with ^ in narrow",
+      "line_text": "Some(sign | magnitude)",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "sign is zero or the narrow format's sign bit alone (bit 15 of a binary16, bit 31 of a binary32), and magnitude is a narrow exponent field of at most 30 (binary16) or 254 (binary32) above an M-bit fraction, so it is below 0x7c00 or 0x7f800000 and never has the sign bit. The two never share a bit, so | and ^ give the same bits."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-format/src/cbor/decode.rs",
+      "mutant": "replace | with ^ in Decoder<'a>::head",
+      "line_text": ".fold(0_u64, |value, &byte| (value << 8) | u64::from(byte));",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "value << 8 has its low eight bits clear and u64::from(byte) sets only those eight. Two words with no set bit in common give the same word under OR and XOR, so the result is the same for every input."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-format/src/cbor/float.rs",
+      "mutant": "replace | with ^ in half",
+      "line_text": "u16::try_from(magnitude >> 13).ok().map(|m| m | sign)",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "m is at most 0x7bff (larger magnitudes are refused just above), so its bit 15 is clear, and sign is 0 or 0x8000. Two words with no set bit in common give the same word under OR and XOR, so the result is the same for every input."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-format/src/cbor/parse.rs",
+      "mutant": "replace Cursor<'_>::bump -> Option<char> with Some(Default::default())",
+      "line_text": "let c = self.peek()?;",
+      "occurrences": 1,
+      "kind": "hangs",
+      "reason": "The cursor never advances, so the first loop that reads past a character (whitespace, a digit, a string) reads the same character for ever. It hangs; it never returns bytes."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-format/src/cbor/parse.rs",
+      "mutant": "replace Cursor<'_>::bump -> Option<char> with None",
+      "line_text": "let c = self.peek()?;",
+      "occurrences": 1,
+      "kind": "hangs",
+      "reason": "The cursor never advances, so the first loop that reads past a character (whitespace, a digit, a string) reads the same character for ever. It hangs; it never returns bytes."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-format/src/cbor/parse.rs",
+      "mutant": "replace | with ^ in hex_float",
+      "line_text": "significand = (significand << 4) | u128::from(d);",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "significand << 4 has its low four bits clear and d is a hexadecimal digit, below 16. Two words with no set bit in common give the same word under OR and XOR, so the result is the same for every input."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-format/src/cbor/parse.rs",
+      "mutant": "replace | with ^ in escape",
+      "line_text": "let code = (((unit & 0x3ff) << 10) | (low & 0x3ff))",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "(unit & 0x3ff) << 10 sets only bits 10 to 19 and low & 0x3ff only bits 0 to 9. Two words with no set bit in common give the same word under OR and XOR, so the result is the same for every input."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-format/src/cbor/parse.rs",
+      "mutant": "replace | with ^ in hex4",
+      "line_text": "unit = (unit << 4) | d;",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "unit << 4 has its low four bits clear and d is a hexadecimal digit, below 16. Two words with no set bit in common give the same word under OR and XOR, so the result is the same for every input."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-format/src/cbor/parse.rs",
+      "mutant": "replace | with ^ in hex_bytes",
+      "line_text": "Some(h) => out.push(u8::try_from((h << 4) | d).map_err(|_| here)?),",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "h << 4 has its low four bits clear and d is a hexadecimal digit, below 16. Two words with no set bit in common give the same word under OR and XOR, so the result is the same for every input."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-format/src/cbor/parse.rs",
+      "mutant": "replace | with ^ in head",
+      "line_text": "out.push(initial | small);",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "initial is the major type shifted up five places, so its low five bits are clear, and small is below 24. Two words with no set bit in common give the same word under OR and XOR, so the result is the same for every input."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-format/src/cbor/parse.rs",
+      "mutant": "replace | with ^ in head",
+      "line_text": "out.push(initial | info);",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "initial is the major type shifted up five places, so its low five bits are clear, and info is 24, 25, 26 or 27. Two words with no set bit in common give the same word under OR and XOR, so the result is the same for every input."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-format/src/cbor/text.rs",
+      "mutant": "replace < with <= in hex_float",
+      "line_text": "let (normal, offset) = if magnitude < f64::MIN_POSITIVE {",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "The two branches differ only at magnitude = f64::MIN_POSITIVE = 2^-1022. Scaled by 2^64 it reads with exponent field 65 and offset 1087, unscaled with field 1 and offset 1023: the same exponent -1022 and the same empty fraction, so the same text."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-format/src/file.rs",
+      "mutant": "replace | with ^ in pull_record",
+      "line_text": "bytes.iter().fold(0_u64, |a, &b| (a << 8) | u64::from(b))",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "The value so far is shifted left by 8, so its low byte is zero, and u64::from(b) is a single byte, below 256. The two never share a bit, so | and ^ give the same argument for every head."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-format/src/record.rs",
+      "mutant": "replace | with ^",
+      "line_text": "const FLAGS: u64 = REQUIRED | COPY_ALWAYS;",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "REQUIRED is 1 and COPY_ALWAYS is 2, one bit each and not the same bit, so REQUIRED | COPY_ALWAYS and REQUIRED ^ COPY_ALWAYS are both 3."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-check/src/curved.rs",
+      "mutant": "replace * with / in same_side",
+      "line_text": "[a.lo() * a.hi(), b.lo() * b.hi(), a.lo() * b.lo()]",
+      "occurrences": 3,
+      "kind": "equivalent",
+      "reason": "same_side answers whether the smallest of the three numbers is above 0. Interval bounds are finite and a zero bound is +0, so x / y has the sign of x * y whenever y is not zero, and the answer can differ only where a divisor is 0. Then: in a.lo() / a.hi() and b.lo() / b.hi(), hi = 0 means lo <= 0, giving -inf or NaN where the product gave 0; in a.lo() / b.lo(), b.lo() = 0 makes b.lo() * b.hi() = 0 in the same list. In each case another number of the list, or the replaced one, is at most 0 (a NaN is the largest in tight::smaller's total order, so it never becomes the smallest), and the answer stays false."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-check/src/report.rs",
+      "mutant": "replace Group::built -> bool with true",
+      "line_text": "matches!(",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "Since G85 every group of 8.3 is built: the matches! lists all four Group variants, so built returns true for each, as the mutant does. It stays a function so that a group added later, or a level that drops one, can say it is not built."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-check/src/combinatorial.rs",
+      "mutant": "replace != with == in check",
+      "line_text": "if sink.found() != before {",
+      "occurrences": 1,
+      "kind": "hangs",
+      "reason": "Group 1's first stage is what proves every list and ring finite before anything walks them again (combinatorial.rs header, 23.11). The mutant lets a broken body through to the second stage (it runs exactly when the first stage found faults) through, or never ends a walk, so a test body with a broken ring (faults.rs, and the gating tests in attack_g85.rs, the first test binary cargo-mutants runs) walks it forever: the run times out rather than failing an assertion. Caught as a hang."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-check/src/combinatorial.rs",
+      "mutant": "replace != with == in ring",
+      "line_text": "(n != first).then_some(n)",
+      "occurrences": 1,
+      "kind": "hangs",
+      "reason": "Group 1's first stage is what proves every list and ring finite before anything walks them again (combinatorial.rs header, 23.11). The mutant lets a broken ring walk: a ring of one fin (each edge of a sheet) yields its fin forever through, or never ends a walk, so a test body with a broken ring (faults.rs, and the gating tests in attack_g85.rs, the first test binary cargo-mutants runs) walks it forever: the run times out rather than failing an assertion. Caught as a hang."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-check/src/combinatorial.rs",
+      "mutant": "replace fin_rings -> Result<(), Stopped> with Ok(())",
+      "line_text": "let (owner, _) = take(scratch, a.rows(Arena::Fin));",
+      "occurrences": 1,
+      "kind": "hangs",
+      "reason": "Group 1's first stage is what proves every list and ring finite before anything walks them again (combinatorial.rs header, 23.11). The mutant lets a broken loop ring (its check is skipped) through, or never ends a walk, so a test body with a broken ring (faults.rs, and the gating tests in attack_g85.rs, the first test binary cargo-mutants runs) walks it forever: the run times out rather than failing an assertion. Caught as a hang."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-check/src/combinatorial.rs",
+      "mutant": "replace radial_rings -> Result<(), Stopped> with Ok(())",
+      "line_text": "let (on, _) = take(scratch, a.rows(Arena::Fin));",
+      "occurrences": 1,
+      "kind": "hangs",
+      "reason": "Group 1's first stage is what proves every list and ring finite before anything walks them again (combinatorial.rs header, 23.11). The mutant lets a broken radial ring (its check is skipped) through, or never ends a walk, so a test body with a broken ring (faults.rs, and the gating tests in attack_g85.rs, the first test binary cargo-mutants runs) walks it forever: the run times out rather than failing an assertion. Caught as a hang."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-check/src/combinatorial.rs",
+      "mutant": "replace == with != in Sets<'s>::find",
+      "line_text": "if up == row {",
+      "occurrences": 1,
+      "kind": "hangs",
+      "reason": "The mutant's find returns only from a row that is not a root and loops at a root, where up == row makes grand = row forever. shells() calls find on every valid body (attack_g85.rs's first test builds cubes), so the first test binary never ends: caught as a hang."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-check/src/curved.rs",
+      "mutant": "replace * with / in carrier",
+      "line_text": "slope: slope * s.axial_sign(),",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "A surface's axial sign is exactly +1 or -1 (geom_surface::analytic, Cone::axial_sign), and for s = +1 or -1, slope / s and slope * s are the same double: both are slope or -slope exactly."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-check/src/curved.rs",
+      "mutant": "replace * with / in away",
+      "line_text": "a.lo() * a.hi() > 0.0",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "Interval bounds are finite with lo <= hi and a zero bound stored as +0. Where hi is not zero, lo / hi has the sign of lo * hi; where hi is zero, lo <= 0, so lo / hi is -inf or NaN and lo * hi is 0, and none of them is above 0. So the comparison with 0 is the same for every interval."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-format/src/kinds.rs",
+      "mutant": "replace < with <= in end",
+      "line_text": "if x.is_infinite() && (x < 0.0) == low {",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "The comparison is reached only when x is infinite, and for ±∞ x < 0 and x <= 0 agree."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-format/src/kinds.rs",
+      "mutant": "replace < with <= in read_round_tail",
+      "line_text": "Ok((read_frame(d, m)?, read_box(d, m)?, read_sign(d, m)? < 0.0))",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "read_sign returns only 1.0 or -1.0, never 0, so s < 0 and s <= 0 agree."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-make/src/pattern.rs",
+      "mutant": "replace > with >= in less_exact",
+      "line_text": "if key(b) > key(a) { b } else { a }",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "Two records with equal keys, the same class and the same bound, are the same record here: every copy of a pattern takes its grid step from the input, or from the one ceiling the caller gave, so a and b differ in nothing either branch could return."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-num/src/math/log.rs",
+      "mutant": "replace log_fast -> (f64, f64) with (0.0, 0.0)",
+      "line_text": "/// `z + P[1]·z² + … + P[5]·z⁶` approximates `ln(1 + z)` on",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "With h = l = 0, left = -ERR and right = +ERR differ, so every input other than 1 (returned before) goes to log_accurate, which gives the same correctly rounded value: only the time changes. This rests on CORE-MATH's log.wc holding every input with at least 47 identical bits after the round bit, as its header states (Lefevre and Muller's exhaustive search and BaCSeL results, which log.rs's header names and its own correct rounding rests on, proof step A)."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-num/src/math/log.rs",
+      "mutant": "replace || with && in ln",
+      "line_text": "if x.is_nan() || x < 0.0 {",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "The public ln (math::ln, Interval::ln) passes only finite x >= 0 (or -0) to the port, so x.is_nan() and x < 0.0 are both false here and || and && agree."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-num/src/math/log.rs",
+      "mutant": "replace < with == in ln",
+      "line_text": "if x.is_nan() || x < 0.0 {",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "The port sees only finite x >= 0 or -0 (math::log_argument; Interval::ln refuses a zero lower bound itself). The forms differ only at x = +-0, where the mutant returns NaN instead of -inf: math::ln reports both through Real::new as NotFinite, the same outcome."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-num/src/math/log.rs",
+      "mutant": "replace < with <= in ln",
+      "line_text": "if x.is_nan() || x < 0.0 {",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "The port sees only finite x >= 0 or -0 (math::log_argument; Interval::ln refuses a zero lower bound itself). The forms differ only at x = +-0, where the mutant returns NaN instead of -inf: math::ln reports both through Real::new as NotFinite, the same outcome."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-num/src/math/sincospi.rs",
+      "mutant": "replace > with >= in refine",
+      "line_text": "let sgn = if iq > 2048 { -1.0 } else { 1.0 };",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "sgn is used only when a listed hard case matches. At iq == 2048, the one value where > and >= differ, the folded index iq & 0x7ff is 0, and no listed case has index 0 or 2048 (they are 76 to 1235), so no case matches and sgn is never read."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-num/src/math/atan2.rs",
+      "mutant": "replace + with * in atan2",
+      "line_text": "let lb = fh + (fl - eps);",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "The mutated bound is the high part H times the low part with the bound, a term below 2^-15·|H| in magnitude here (where H is the quotient z itself, jt = 0 with no offset, the low part is at most the cubic term, 0.34·|z|³ with |z| <= 2^-7, plus the quotient's rounding error and the bound, together below 2^-36·|z| since |z| > 2^-54; otherwise |H| >= 2^-7 and the low part is below 2^-22), so it is at most 2^-15·H², below |H|/2 (|H| <= pi), while the other bound is H plus that small term, at least |H|·(1 - 2^-15) (H is never 0 here): the two always differ, so this fast path never returns and every input goes on to the next path, which gives the same correctly rounded value. Only the time changes."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-num/src/math/atan2.rs",
+      "mutant": "replace + with * in atan2",
+      "line_text": "let ub = fh + (fl + eps);",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "The mutated bound is the high part H times the low part with the bound, a term below 2^-15·|H| in magnitude here (where H is the quotient z itself, jt = 0 with no offset, the low part is at most the cubic term, 0.34·|z|³ with |z| <= 2^-7, plus the quotient's rounding error and the bound, together below 2^-36·|z| since |z| > 2^-54; otherwise |H| >= 2^-7 and the low part is below 2^-22), so it is at most 2^-15·H², below |H|/2 (|H| <= pi), while the other bound is H plus that small term, at least |H|·(1 - 2^-15) (H is never 0 here): the two always differ, so this fast path never returns and every input goes on to the next path, which gives the same correctly rounded value. Only the time changes."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-poly/src/subdivide.rs",
+      "mutant": "replace splits -> [(usize, Option<i64>); 3] with [(0, Some(0)); 3]",
+      "line_text": "let at = |axis: usize| {",
+      "occurrences": 1,
+      "kind": "hangs",
+      "reason": "A split at half step 0 on axis 0 outside the box leaves one child the whole box, which splits the same way for ever, so the tests stop it by their timeout. It hangs; it never returns a wrong arrangement."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-poly/src/subdivide.rs",
+      "mutant": "replace splits -> [(usize, Option<i64>); 3] with [(1, Some(0)); 3]",
+      "line_text": "let at = |axis: usize| {",
+      "occurrences": 1,
+      "kind": "hangs",
+      "reason": "A split at half step 0 on axis 1 outside the box leaves one child the whole box, which splits the same way for ever, so the tests stop it by their timeout. It hangs; it never returns a wrong arrangement."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-poly/src/subdivide.rs",
+      "mutant": "replace | with ^ in splits",
+      "line_text": "let odd = middle | 1;",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "The mutant moves an odd middle one half step down, onto a whole step, and leaves an even one as it was. The split is then on a plane of the grid, where a corner can lie. A polygon in that plane goes on as the in-plane test sends it, a path that meets the plane is settled by the moved planes of Simulation of Simplicity, and a box's vectors do not depend on where it was split (a_small_leaf_gives_the_vectors_a_large_one_does, and the body tests at every leaf size). Odd steps only keep those ties from arising, so no result changes."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-poly/src/subdivide.rs",
+      "mutant": "replace == with != in divide",
+      "line_text": "corner.map(|v| if i.next() == Some(axis) { at } else { v })",
+      "occurrences": 1,
+      "kind": "hangs",
+      "reason": "The children's corners move on the two axes the split is not on, so a child keeps the width along the axis it was split on and splits there for ever, and the tests stop it by their timeout. It hangs; it never returns a wrong arrangement."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-poly/src/subdivide.rs",
+      "mutant": "replace | with ^ in divide",
+      "line_text": "key: node.key | bit,",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "bit is the bit of this node's depth, and a node's key has only the bits of the depths above it, so the bit is clear and | and ^ give one value."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-poly/src/subdivide.rs",
+      "mutant": "replace splits -> [(usize, Option<i64>); 3] with [(0, Some(-1)); 3]",
+      "line_text": "let at = |axis: usize| {",
+      "occurrences": 1,
+      "kind": "hangs",
+      "reason": "A split at half step -1 on axis 0 outside the box leaves one child the whole box, which splits the same way for ever, so the tests stop it by their timeout. It hangs; it never returns a wrong arrangement."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-poly/src/subdivide.rs",
+      "mutant": "replace splits -> [(usize, Option<i64>); 3] with [(1, Some(-1)); 3]",
+      "line_text": "let at = |axis: usize| {",
+      "occurrences": 1,
+      "kind": "hangs",
+      "reason": "A split at half step -1 on axis 1 outside the box leaves one child the whole box, which splits the same way for ever, so the tests stop it by their timeout. It hangs; it never returns a wrong arrangement."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-poly/src/merge.rs",
+      "mutant": "replace == with != in root",
+      "line_text": "if up == at {",
+      "occurrences": 1,
+      "kind": "hangs",
+      "reason": "The walk stops at a set's root, whose parent is itself. The mutant stops anywhere else and walks on from a root for ever, and every merge calls it on a root, so the tests stop it by their timeout. It hangs; it never returns a wrong set."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-poly/src/merge.rs",
+      "mutant": "replace < with <= in sides_of",
+      "line_text": "rising: from < to,",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "from and to are equal only for a side shrunk to a point, whose low equals its high. A stretch runs between two different marks, so such a side is along no stretch and its direction is never read."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-bool/src/combine.rs",
+      "mutant": "delete match arm RebuildError::Merge(MergeError::Num(e)) | RebuildError::Num(e) in rebuilt",
+      "line_text": "RebuildError::Merge(MergeError::Num(e)) | RebuildError::Num(e) => numbers(ctx, e),",
+      "occurrences": 1,
+      "kind": "harmless",
+      "reason": "The numbers layer refuses nothing a plane within budget can reach (6.2), so no test can make this arm run. Without it the error would come out as ResultInvalid instead of the numbers layer's own: still an error, never a body."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-bool/src/half_space.rs",
+      "mutant": "replace > with >= in cap",
+      "line_text": "if largest(k) > largest(axis) {",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "On a tie the mutant takes the later of two axes with equal largest components. Either way the axis has a non-zero component, so the four sides around it bound the plane and the other two clip it to the same polygon of the range box."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-bool/src/half_space.rs",
+      "mutant": "replace < with <= in cap",
+      "line_text": "if n.get(axis).is_some_and(|v| *v < 0) {",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "axis holds the normal's largest component, and a plane's normal is not zero, so the component is never 0."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-bool/src/operand.rs",
+      "mutant": "replace != with == in side_of_fin",
+      "line_text": "while at != own {",
+      "occurrences": 1,
+      "kind": "hangs",
+      "reason": "The radial walk stops when it comes back to the fin it started from. The mutant skips the walk at once for that fin and for every other one walks past it for ever, or until the same fin comes round, so the tests stop it by their timeout. It hangs; it never returns a wrong side."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-bool/src/certificate.rs",
+      "mutant": "replace == with != in pairs_up",
+      "line_text": "if at == first {",
+      "occurrences": 1,
+      "kind": "hangs",
+      "reason": "The radial walk stops when it comes back to the edge's first fin. The mutant stops at the second fin and otherwise walks the ring for ever, on any edge with more than two fins, so the tests stop it by their timeout. It hangs; it never passes a body."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-bool/src/names.rs",
+      "mutant": "replace == with != in told_apart",
+      "line_text": "if rows.len() == out.len() {",
+      "occurrences": 1,
+      "kind": "hangs",
+      "reason": "The loop ends when no two rows share a name. The mutant goes on while they all differ, and there is then nothing to change, so it never ends and the tests stop it by their timeout. It hangs; it never returns a repeated name."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-bool/src/names.rs",
+      "mutant": "replace > with == in told_apart",
+      "line_text": "for (name, list) in rows.iter().filter(|(_, list)| list.len() > 1) {",
+      "occurrences": 1,
+      "kind": "hangs",
+      "reason": "The pass renames only rows that hold a name alone, so names that repeat stay repeated and the loop never ends, and the tests stop it by their timeout. It hangs; it never returns a repeated name."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-bool/src/names.rs",
+      "mutant": "replace > with < in told_apart",
+      "line_text": "for (name, list) in rows.iter().filter(|(_, list)| list.len() > 1) {",
+      "occurrences": 1,
+      "kind": "hangs",
+      "reason": "A list of rows holds at least one, so the pass renames nothing, names that repeat stay repeated and the loop never ends, and the tests stop it by their timeout. It hangs; it never returns a repeated name."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-check/src/planar.rs",
+      "mutant": "replace == with != in Cut::order",
+      "line_text": "Ok(ordering(if rising == Sign::Positive {",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "It reverses every order along every line at once, which is each line run the other way. Stretches, overlaps, covering and sorted crossings ask only how marks on one line lie against each other, and a ray run the other way from a point off the shell crosses it the same number of times modulo two: orientation only asks a body with no fault, so the point is on no face, and a tie falls on one edge, in both its faces at once, so its two changes cancel."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-check/src/planar.rs",
+      "mutant": "replace Cut::holds -> bool with true",
+      "line_text": "[&self.first, &self.second]",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "Group 3 runs only on a body groups 1 and 2 passed, and joins asks it only of a vertex or edge the two faces share. Group 2 held each vertex to the plane of each of its faces, so such a corner lies on both planes and on their line: the answer is always true where it is asked."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-check/src/planar.rs",
+      "mutant": "replace > with >= in stood_on",
+      "line_text": "v.saturating_sub(if v > 0 { 1 } else { -1 })",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "It differs only at v = 0, where the third point moves one step down the axis instead of up. That point, p and q span the same plane, with its normal turned at worst; every use asks whether a corner is on that plane, whether two signs on it agree, or where it crosses a line, and none of those changes with the way it faces."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-check/src/planar.rs",
+      "mutant": "replace != with == in point_side",
+      "line_text": "if ray.at(&o.plane).is_none() || ray.order(&Mark(z), &Mark(o.plane))? != Ordering::Less {",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "It counts the faces behind the point instead of those ahead of it. Orientation asks only a body with no fault, so the point lies on no face of the closed shell, and a ray each way from a point off a closed shell crosses it the same number of times modulo two. A face whose plane holds the point is crossed nowhere on the face either way."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-check/src/planar.rs",
+      "mutant": "replace == with != in point_side",
+      "line_text": "let rising = known(line.at(&y))?.weight() == Sign::Positive;",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "It moves the ray infinitely little to the other side of y, in every face at once. That is another ray from a point infinitely near the first, which orientation's precondition keeps off the shell, so it lies on the same side of it, and the parity of a ray that meets no edge is that side."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-mesh/src/cdt.rs",
+      "mutant": "replace > with >= in ahead",
+      "line_text": "dot(x, b, u) > 0",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "x and b are on one line through u and neither is u, so (x − u) · (b − u) is never 0."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-mesh/src/cdt.rs",
+      "mutant": "replace | with ^ in morton::spread",
+      "line_text": "x = (x | (x << 32)) & 0x0000_0000_ffff_ffff_0000_0000_ffff_ffff;",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "x and x shifted overlap only in bits the mask on this line clears, because each step moves the upper half of every group past its zeros: | and ^ differ only in bits that go."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-mesh/src/cdt.rs",
+      "mutant": "replace | with ^ in morton::spread",
+      "line_text": "x = (x | (x << 16)) & 0x0000_ffff_0000_ffff_0000_ffff_0000_ffff;",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "x and x shifted overlap only in bits the mask on this line clears, because each step moves the upper half of every group past its zeros: | and ^ differ only in bits that go."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-mesh/src/cdt.rs",
+      "mutant": "replace | with ^ in morton::spread",
+      "line_text": "x = (x | (x << 8)) & 0x00ff_00ff_00ff_00ff_00ff_00ff_00ff_00ff;",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "x and x shifted overlap only in bits the mask on this line clears, because each step moves the upper half of every group past its zeros: | and ^ differ only in bits that go."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-mesh/src/cdt.rs",
+      "mutant": "replace | with ^ in morton::spread",
+      "line_text": "x = (x | (x << 4)) & 0x0f0f_0f0f_0f0f_0f0f_0f0f_0f0f_0f0f_0f0f;",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "x and x shifted overlap only in bits the mask on this line clears, because each step moves the upper half of every group past its zeros: | and ^ differ only in bits that go."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-mesh/src/cdt.rs",
+      "mutant": "replace | with ^ in morton::spread",
+      "line_text": "x = (x | (x << 2)) & 0x3333_3333_3333_3333_3333_3333_3333_3333;",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "x and x shifted overlap only in bits the mask on this line clears, because each step moves the upper half of every group past its zeros: | and ^ differ only in bits that go."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-mesh/src/cdt.rs",
+      "mutant": "replace | with ^ in morton::spread",
+      "line_text": "(x | (x << 1)) & 0x5555_5555_5555_5555_5555_5555_5555_5555",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "x and x shifted overlap only in bits the mask on this line clears, because each step moves the upper half of every group past its zeros: | and ^ differ only in bits that go."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-mesh/src/cdt.rs",
+      "mutant": "replace | with ^ in morton",
+      "line_text": "spread(shift(p.x.get())) | (spread(shift(p.y.get())) << 1)",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "The first term holds only even places and the second only odd ones, so no bit is set in both."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-mesh/src/cdt.rs",
+      "mutant": "replace < with == in Mesh::walk",
+      "line_text": "if beyond.is_none_or(|(least, _)| edge < least) {",
+      "occurrences": 1,
+      "kind": "harmless",
+      "reason": "The walk still ends at a segment in the way or at the triangle holding the centre, and either is a valid next step of refinement: a different edge first changes which valid mesh comes out for this input, the same on every target, and never its quality or its validity."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-mesh/src/cdt.rs",
+      "mutant": "replace < with > in Mesh::walk",
+      "line_text": "if beyond.is_none_or(|(least, _)| edge < least) {",
+      "occurrences": 1,
+      "kind": "harmless",
+      "reason": "The walk still ends at a segment in the way or at the triangle holding the centre, and either is a valid next step of refinement: a different edge first changes which valid mesh comes out for this input, the same on every target, and never its quality or its validity."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-mesh/src/cdt.rs",
+      "mutant": "replace < with <= in Mesh::walk",
+      "line_text": "if beyond.is_none_or(|(least, _)| edge < least) {",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "The edges of one triangle are distinct, so an edge never equals the least so far."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-mesh/src/cdt.rs",
+      "mutant": "replace < with <= in refine",
+      "line_text": "&& dot(mesh.p(x)?, mesh.p(y)?, centre) < 0",
+      "occurrences": 1,
+      "kind": "harmless",
+      "reason": "A centre exactly on a segment's diametral circle counts as encroaching, so that segment is split instead of the centre going in: a valid step either way, the same on every target."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-mesh/src/cdt.rs",
+      "mutant": "replace < with == in refine",
+      "line_text": "&& hit.is_none_or(|e| [x.min(y), x.max(y)] < e)",
+      "occurrences": 1,
+      "kind": "harmless",
+      "reason": "Which encroached segment is split first changes the order of the splits: each split is a valid step and every encroached segment is still split, so the result is still valid and refined, the same on every target."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-mesh/src/cdt.rs",
+      "mutant": "replace < with > in refine",
+      "line_text": "&& hit.is_none_or(|e| [x.min(y), x.max(y)] < e)",
+      "occurrences": 1,
+      "kind": "harmless",
+      "reason": "Which encroached segment is split first changes the order of the splits: each split is a valid step and every encroached segment is still split, so the result is still valid and refined, the same on every target."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-mesh/src/cdt.rs",
+      "mutant": "replace < with <= in refine",
+      "line_text": "&& hit.is_none_or(|e| [x.min(y), x.max(y)] < e)",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "The edges of one triangle are distinct, so an edge never equals the least so far."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-mesh/src/exact/mod.rs",
+      "mutant": "replace | with ^ in gcd",
+      "line_text": "return u128::from(x | y);",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "One of x and y is 0 on this line, so or and exclusive or give one number."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-mesh/src/exact/mod.rs",
+      "mutant": "replace >>= with <<= in gcd",
+      "line_text": "x >>= x.trailing_zeros();",
+      "occurrences": 1,
+      "kind": "hangs",
+      "reason": "A large even x shifts out to 0, which never ends the loop."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-mesh/src/exact/mod.rs",
+      "mutant": "replace >>= with <<= in gcd",
+      "line_text": "y >>= y.trailing_zeros();",
+      "occurrences": 1,
+      "kind": "hangs",
+      "reason": "y stays even, so the loop never reaches 0."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-mesh/src/exact/mod.rs",
+      "mutant": "replace < with <= in every_third",
+      "line_text": "while shift < u128::BITS {",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "The shifts go up in steps of 3, 6, 12, 24, 48 and 96 from 0, none of which lands on 128."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-mesh/src/exact/mod.rs",
+      "mutant": "replace | with ^ in spread",
+      "line_text": "x = (x | (x << 64)) & every_third(32);",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "x and x shifted overlap only in bits the mask on this line clears, so or and exclusive or agree."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-mesh/src/exact/mod.rs",
+      "mutant": "replace | with ^ in spread",
+      "line_text": "x = (x | (x << 32)) & every_third(16);",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "x and x shifted overlap only in bits the mask on this line clears, so or and exclusive or agree."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-mesh/src/exact/mod.rs",
+      "mutant": "replace | with ^ in spread",
+      "line_text": "x = (x | (x << 16)) & every_third(8);",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "x and x shifted overlap only in bits the mask on this line clears, so or and exclusive or agree."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-mesh/src/exact/mod.rs",
+      "mutant": "replace | with ^ in spread",
+      "line_text": "x = (x | (x << 8)) & every_third(4);",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "x and x shifted overlap only in bits the mask on this line clears, so or and exclusive or agree."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-mesh/src/exact/mod.rs",
+      "mutant": "replace | with ^ in spread",
+      "line_text": "x = (x | (x << 4)) & every_third(2);",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "x and x shifted overlap only in bits the mask on this line clears, so or and exclusive or agree."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-mesh/src/exact/mod.rs",
+      "mutant": "replace | with ^ in spread",
+      "line_text": "(x | (x << 2)) & every_third(1)",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "x and x shifted overlap only in bits the mask on this line clears, so or and exclusive or agree."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-mesh/src/exact/build.rs",
+      "mutant": "delete match arm (Ok(a), Ok(b)) in part",
+      "line_text": "(Ok(a), Ok(b)) => a.checked_div(b).map_or(0, i128::from),",
+      "occurrences": 1,
+      "kind": "harmless",
+      "reason": "The arm only saves the 128-bit division below it, which gives the same quotient."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-mesh/src/exact/build.rs",
+      "mutant": "replace | with ^ in rank",
+      "line_text": "let key = (u64::from(width) << 56) | top;",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "top is below 2^56, and the width sits above it."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-mesh/src/exact/build.rs",
+      "mutant": "replace | with ^ in rank",
+      "line_text": "(1 << 63) | key",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "A plane coefficient is below 2^127, so its width is at most 127 and key is below 2^63."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-mesh/src/exact/build.rs",
+      "mutant": "replace < with <= in grouped",
+      "line_text": "forward: a < b,",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "An edge from a vertex to itself is refused whichever way it counts, and no other edge has a equal to b."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-mesh/src/exact/build.rs",
+      "mutant": "replace > with >= in emit",
+      "line_text": "let ordered = if last.saturating_sub(first) > 1 {",
+      "occurrences": 1,
+      "kind": "harmless",
+      "reason": "A face of one loop sorts to that same loop, at the cost of the sort."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-mesh/src/exact/check.rs",
+      "mutant": "replace < with <= in shape",
+      "line_text": "&& p.he_vert.iter().all(|&v| (v as usize) < p.verts.len())",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "The index one past the end fails in `at` with the same Shape fault."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-mesh/src/exact/check.rs",
+      "mutant": "replace < with <= in shape",
+      "line_text": ".all(|&h| h == NONE || (h as usize) < halves)",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "The index one past the end fails in `at` with the same Shape fault."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-mesh/src/exact/check.rs",
+      "mutant": "replace < with <= in shape",
+      "line_text": ".all(|f| (f.row as usize) < p.planes.len())",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "The index one past the end fails in `at` with the same Shape fault."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-mesh/src/exact/check.rs",
+      "mutant": "replace > with >= in plane_in_order",
+      "line_text": "let upright = [x, y, z].iter().find(|c| **c != 0).is_some_and(|c| *c > 0);",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "find stops at a coefficient that is not 0."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-mesh/src/exact/check.rs",
+      "mutant": "replace == with != in vertices",
+      "line_text": "let same = rest.iter().take_while(|e| e.0 == head.0).count();",
+      "occurrences": 1,
+      "kind": "hangs",
+      "reason": "A run of no points never moves past the head."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-mesh/src/exact/mod.rs",
+      "mutant": "replace | with ^ in morton",
+      "line_text": "spread(shift(p.x.get())) | (spread(shift(p.y.get())) << 1) | (spread(shift(p.z.get())) << 2)",
+      "occurrences": 2,
+      "kind": "equivalent",
+      "reason": "Spread coordinates hold every third bit, and the shifts by 1 and 2 keep them apart."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-mesh/src/classify.rs",
+      "mutant": "replace < with <= in grid_edge",
+      "line_text": "let (ai, aj, bi, bj) = if uj < vj {",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "This branch is reached only by an edge whose two ends differ in j, so they are never equal here."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-mesh/src/classify.rs",
+      "mutant": "replace > with < in grid_edge",
+      "line_text": "crossed: run > 0,",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "Either sign of the ε² move is a valid perturbation: both faces of an edge flip together, and the ray counts one of them."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-mesh/src/classify.rs",
+      "mutant": "replace > with >= in grid_edge",
+      "line_text": "crossed: run > 0,",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "An edge straight along j is then counted as if the start moved by −ε², which is as valid as +ε²: both its faces flip together."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-mesh/src/classify.rs",
+      "mutant": "delete match arm (Some(a), Some(b)) in Classifier<'m>::in_face",
+      "line_text": "(Some(a), Some(b)) => grid_edge(",
+      "occurrences": 1,
+      "kind": "harmless",
+      "reason": "plane_edge gives the same step from the edge's planes; this arm only saves the determinants for an edge on the grid."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-mesh/src/exact/build.rs",
+      "mutant": "replace rank -> u64 with 0",
+      "line_text": "let magnitude = v.unsigned_abs();",
+      "occurrences": 1,
+      "kind": "harmless",
+      "reason": "With every rank equal, every plane ties and the sort of ties gives the same order, one thread and more slowly."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-mesh/src/exact/build.rs",
+      "mutant": "replace rank -> u64 with 1",
+      "line_text": "let magnitude = v.unsigned_abs();",
+      "occurrences": 1,
+      "kind": "harmless",
+      "reason": "With every rank equal, every plane ties and the sort of ties gives the same order, one thread and more slowly."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-mesh/src/classify.rs",
+      "mutant": "replace == with != in Classifier<'m>::plane_edge",
+      "line_text": "crossed: run.mul(rise) == Sign::Positive,",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "Either sign of the ε² move is a valid perturbation: both faces of an edge flip together, and the ray counts one of them."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-mesh/src/exact/build.rs",
+      "mutant": "replace != with == in radial",
+      "line_text": "reversed: facing.flipped != against,",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "The mutant turns every flap over at once, which moves each by half a circle about the edge and leaves their order round it, and so the pairs, as they were."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-mesh/src/boolean.rs",
+      "mutant": "replace == with != in root",
+      "line_text": "if up == at {",
+      "occurrences": 1,
+      "kind": "hangs",
+      "reason": "A walk up the forest that stops at the wrong test goes round its root for ever, which the timeout catches."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-mesh/src/exact/build.rs",
+      "mutant": "replace > with >= in map_blocks",
+      "line_text": "if charge > 0 {",
+      "occurrences": 1,
+      "kind": "harmless",
+      "reason": "With a charge of 0 the mutant calls charge(0), which adds no work and only counts toward the meter's next cancellation poll: every result and every budget stop is the same, and a cancellation is noticed a few items sooner."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-mesh/src/exact/build.rs",
+      "mutant": "replace || with && in edge_leaders",
+      "line_text": "if given || !grid(c)? || !grid(*at(after, c)?)? {",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "Read as given || (!grid(c) && !grid(after)), it lets an edge with one end off the grid and no given plane share; corner_plane refuses such an edge as EdgePlaneNeeded at its lower half-edge, which the leader is, so the same error comes first either way. (The other || on this line is caught by given_edge_planes_are_never_shared.)"
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-mesh/src/exact/build.rs",
+      "mutant": "delete ! in edge_leaders",
+      "line_text": "if given || !grid(c)? || !grid(*at(after, c)?)? {",
+      "occurrences": 2,
+      "kind": "harmless",
+      "reason": "Either deletion stops grid edges from sharing, so each half-edge makes its own plane, the same plane its twin would have given it; and it lets only one half of an edge with an end off the grid ask to share, while its twin's axis stays None, so no pair shares. The mesh is the same; only more planes are made and pooled."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-mesh/src/exact/build.rs",
+      "mutant": "replace != with == in edge_leaders",
+      "line_text": "if p.forward != q.forward && axis(a)?.is_some() && axis(a)? == axis(b)? {",
+      "occurrences": 1,
+      "kind": "harmless",
+      "reason": "The mutant never pairs twins, so each half-edge makes its own plane, the same one; and it pairs two half-edges running one way, which make the same plane from the same ends and which the build refuses as UnevenEdge either way. The mesh or the error is the same; only more planes are made."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-mesh/src/hull.rs",
+      "mutant": "replace > with >= in plan_axes",
+      "line_text": "([1, 2], x > 0)",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "x is the largest part of a normal that is not zero, so it is never 0 here."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-mesh/src/hull.rs",
+      "mutant": "replace > with >= in plan_axes",
+      "line_text": "([2, 0], y > 0)",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "y is the largest part of a normal that is not zero, so it is never 0 here."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-mesh/src/hull.rs",
+      "mutant": "replace > with >= in plan_axes",
+      "line_text": "([0, 1], z > 0)",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "z is the largest part of a normal that is not zero, so it is never 0 here."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-mesh/src/hull.rs",
+      "mutant": "replace difference -> [i128; 3] with [0; 3]",
+      "line_text": "let [x, y, z] = a;",
+      "occurrences": 1,
+      "kind": "harmless",
+      "reason": "Only which point the search takes next hangs on this: every decision after it is an exact test, and the hull is the same."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-mesh/src/hull.rs",
+      "mutant": "replace difference -> [i128; 3] with [1; 3]",
+      "line_text": "let [x, y, z] = a;",
+      "occurrences": 1,
+      "kind": "harmless",
+      "reason": "Only which point the search takes next hangs on this: every decision after it is an exact test, and the hull is the same."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-mesh/src/hull.rs",
+      "mutant": "replace difference -> [i128; 3] with [-1; 3]",
+      "line_text": "let [x, y, z] = a;",
+      "occurrences": 1,
+      "kind": "harmless",
+      "reason": "Only which point the search takes next hangs on this: every decision after it is an exact test, and the hull is the same."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-mesh/src/hull.rs",
+      "mutant": "replace cross -> [i128; 3] with [0; 3]",
+      "line_text": "let [a, b, c] = u;",
+      "occurrences": 1,
+      "kind": "harmless",
+      "reason": "Only which point the search takes next hangs on this: every decision after it is an exact test, and the hull is the same."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-mesh/src/hull.rs",
+      "mutant": "replace cross -> [i128; 3] with [1; 3]",
+      "line_text": "let [a, b, c] = u;",
+      "occurrences": 1,
+      "kind": "harmless",
+      "reason": "Only which point the search takes next hangs on this: every decision after it is an exact test, and the hull is the same."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-mesh/src/hull.rs",
+      "mutant": "replace cross -> [i128; 3] with [-1; 3]",
+      "line_text": "let [a, b, c] = u;",
+      "occurrences": 1,
+      "kind": "harmless",
+      "reason": "Only which point the search takes next hangs on this: every decision after it is an exact test, and the hull is the same."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-mesh/src/hull.rs",
+      "mutant": "replace dot -> i128 with 0",
+      "line_text": "let [a, b, c] = u;",
+      "occurrences": 1,
+      "kind": "harmless",
+      "reason": "Only which point the search takes next hangs on this: every decision after it is an exact test, and the hull is the same."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-mesh/src/hull.rs",
+      "mutant": "replace dot -> i128 with 1",
+      "line_text": "let [a, b, c] = u;",
+      "occurrences": 1,
+      "kind": "harmless",
+      "reason": "Only which point the search takes next hangs on this: every decision after it is an exact test, and the hull is the same."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-mesh/src/hull.rs",
+      "mutant": "replace dot -> i128 with -1",
+      "line_text": "let [a, b, c] = u;",
+      "occurrences": 1,
+      "kind": "harmless",
+      "reason": "Only which point the search takes next hangs on this: every decision after it is an exact test, and the hull is the same."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-mesh/src/hull.rs",
+      "mutant": "replace Quick<'_>::rough_at -> Result<[i64; 3], HullError> with Ok([0; 3])",
+      "line_text": "self.rough.get(i as usize).copied().ok_or(HullError::Defect)",
+      "occurrences": 1,
+      "kind": "harmless",
+      "reason": "Only which point the search takes next hangs on this: every decision after it is an exact test, and the hull is the same."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-mesh/src/hull.rs",
+      "mutant": "replace Quick<'_>::rough_at -> Result<[i64; 3], HullError> with Ok([1; 3])",
+      "line_text": "self.rough.get(i as usize).copied().ok_or(HullError::Defect)",
+      "occurrences": 1,
+      "kind": "harmless",
+      "reason": "Only which point the search takes next hangs on this: every decision after it is an exact test, and the hull is the same."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-mesh/src/hull.rs",
+      "mutant": "replace Quick<'_>::rough_at -> Result<[i64; 3], HullError> with Ok([-1; 3])",
+      "line_text": "self.rough.get(i as usize).copied().ok_or(HullError::Defect)",
+      "occurrences": 1,
+      "kind": "harmless",
+      "reason": "Only which point the search takes next hangs on this: every decision after it is an exact test, and the hull is the same."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-mesh/src/hull.rs",
+      "mutant": "replace > with == in Quick<'_>::farthest",
+      "line_text": "if best.is_none_or(|(most, _)| height > most) {",
+      "occurrences": 1,
+      "kind": "harmless",
+      "reason": "Only which point the search takes next hangs on this: every decision after it is an exact test, and the hull is the same."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-mesh/src/hull.rs",
+      "mutant": "replace > with < in Quick<'_>::farthest",
+      "line_text": "if best.is_none_or(|(most, _)| height > most) {",
+      "occurrences": 1,
+      "kind": "harmless",
+      "reason": "Only which point the search takes next hangs on this: every decision after it is an exact test, and the hull is the same."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-mesh/src/hull.rs",
+      "mutant": "replace > with >= in Quick<'_>::farthest",
+      "line_text": "if best.is_none_or(|(most, _)| height > most) {",
+      "occurrences": 1,
+      "kind": "harmless",
+      "reason": "Only which point the search takes next hangs on this: every decision after it is an exact test, and the hull is the same."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-mesh/src/export.rs",
+      "mutant": "replace match guard ring.len() == 3 with false in triangles",
+      "line_text": "[ring] if ring.len() == 3 => {",
+      "occurrences": 1,
+      "kind": "harmless",
+      "reason": "A triangle then goes through the triangulation and comes back the same triangle, at its cost."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-mesh/src/export.rs",
+      "mutant": "replace != with == in places",
+      "line_text": "if part != 0 {",
+      "occurrences": 1,
+      "kind": "hangs",
+      "reason": "With no decimal part, the loop that drops trailing zeros never reaches a digit that is not one."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-mesh/src/export.rs",
+      "mutant": "replace /= with %= in places",
+      "line_text": "kept /= 10;",
+      "occurrences": 1,
+      "kind": "hangs",
+      "reason": "A remainder of 0 keeps the loop that drops trailing zeros turning for ever."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-mesh/src/export.rs",
+      "mutant": "replace > with >= in on_lattice",
+      "line_text": "if exponent > 0 {",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "At exponent 0 the shift is 0, so both branches leave the value as it is."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-mesh/src/export.rs",
+      "mutant": "replace << with >> in lattice",
+      "line_text": "let limit = QUARTER_NM_PER_MM << 24;",
+      "occurrences": 1,
+      "kind": "hangs",
+      "reason": "A limit of 0 fits no chunk, so the search for an exponent never ends."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-mesh/src/export.rs",
+      "mutant": "replace >> with << in to_f32",
+      "line_text": "magnitude >> width.saturating_sub(24)",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "This branch is reached only by 2^24 itself, one bit, whose fraction the mask clears either way."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-mesh/src/export.rs",
+      "mutant": "replace < with <= in to_f32",
+      "line_text": "let sign = u32::from(units < 0) << 31;",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "units is not 0 here: the function returned at the top for that."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-mesh/src/export.rs",
+      "mutant": "replace | with ^ in to_f32",
+      "line_text": "f32::from_bits(sign | (field << 23) | (fraction & 0x007f_ffff))",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "The sign, the exponent and the fraction sit in bits of their own, so or and exclusive or agree."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-mesh/src/export.rs",
+      "mutant": "replace < with <= in dyadic",
+      "line_text": "if units < 0 {",
+      "occurrences": 1,
+      "kind": "harmless",
+      "reason": "Only a closed chunk reaches here, whose extent is not 0, so a box of 0 units does not arise; and -0 is still a JSON number."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-mesh/src/export.rs",
+      "mutant": "replace box_of -> Result<([i64; 3], [i64; 3]), ExportError> with Ok(([0; 3], [0; 3]))",
+      "line_text": "let [a, b, c] = corner;",
+      "occurrences": 1,
+      "kind": "harmless",
+      "reason": "Boxes only rule pairs out; with all of them one box every pair is tested, and the flaws are the same."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-mesh/src/export.rs",
+      "mutant": "replace box_of -> Result<([i64; 3], [i64; 3]), ExportError> with Ok(([0; 3], [1; 3]))",
+      "line_text": "let [a, b, c] = corner;",
+      "occurrences": 1,
+      "kind": "harmless",
+      "reason": "Boxes only rule pairs out; with all of them one box every pair is tested, and the flaws are the same."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-mesh/src/export.rs",
+      "mutant": "replace box_of -> Result<([i64; 3], [i64; 3]), ExportError> with Ok(([1; 3], [1; 3]))",
+      "line_text": "let [a, b, c] = corner;",
+      "occurrences": 1,
+      "kind": "harmless",
+      "reason": "Boxes only rule pairs out; with all of them one box every pair is tested, and the flaws are the same."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-mesh/src/export.rs",
+      "mutant": "replace box_of -> Result<([i64; 3], [i64; 3]), ExportError> with Ok(([-1; 3], [0; 3]))",
+      "line_text": "let [a, b, c] = corner;",
+      "occurrences": 1,
+      "kind": "harmless",
+      "reason": "Boxes only rule pairs out; with all of them one box every pair is tested, and the flaws are the same."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-mesh/src/export.rs",
+      "mutant": "replace box_of -> Result<([i64; 3], [i64; 3]), ExportError> with Ok(([-1; 3], [1; 3]))",
+      "line_text": "let [a, b, c] = corner;",
+      "occurrences": 1,
+      "kind": "harmless",
+      "reason": "Boxes only rule pairs out; with all of them one box every pair is tested, and the flaws are the same."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-mesh/src/export.rs",
+      "mutant": "replace box_of -> Result<([i64; 3], [i64; 3]), ExportError> with Ok(([-1; 3], [-1; 3]))",
+      "line_text": "let [a, b, c] = corner;",
+      "occurrences": 1,
+      "kind": "harmless",
+      "reason": "Boxes only rule pairs out; with all of them one box every pair is tested, and the flaws are the same."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-mesh/src/export.rs",
+      "mutant": "replace <= with > in recheck",
+      "line_text": "if other <= entry.key {",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "Each pair is then met the other way round, once, and the flaws are sorted and made unique after."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-mesh/src/slice.rs",
+      "mutant": "replace < with <= in place",
+      "line_text": "while low < high {",
+      "occurrences": 1,
+      "kind": "hangs",
+      "reason": "The bisection stops when its ends meet; asked to go on, it looks at one plane for ever."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-mesh/src/slice.rs",
+      "mutant": "replace / with % in place",
+      "line_text": "let middle = low.saturating_add(high.saturating_sub(low) / 2);",
+      "occurrences": 1,
+      "kind": "hangs",
+      "reason": "A remainder of 0 keeps the middle at the low end, so the bisection does not narrow."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-mesh/src/slice.rs",
+      "mutant": "replace < with <= in crossings",
+      "line_text": "let (up, upper) = if p < q { (true, b) } else { (false, a) };",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "Only an edge between different places is on this list, so p is never equal to q."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-mesh/src/slice.rs",
+      "mutant": "replace || with && in paired",
+      "line_text": "if coming.up || !going.up {",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "Along a line through a checked face the crossings alternate, so neither test is true; the guard is for a defect only."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-mesh/src/slice.rs",
+      "mutant": "replace == with != in contours",
+      "line_text": ".take_while(|c| face_of.get(c.half_edge as usize) == Some(&face))",
+      "occurrences": 1,
+      "kind": "hangs",
+      "reason": "A group of no crossings never moves past its head."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-mesh/src/slice.rs",
+      "mutant": "replace match guard a.up != b.up with true in contours",
+      "line_text": "&[a, b] if a.up != b.up => pieces.push(if a.up { (b, a) } else { (a, b) }),",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "Two crossings of a checked face on one plane always run opposite ways, so the guard is never false."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-mesh/src/slice.rs",
+      "mutant": "replace match guard a.up != b.up with false in contours",
+      "line_text": "&[a, b] if a.up != b.up => pieces.push(if a.up { (b, a) } else { (a, b) }),",
+      "occurrences": 1,
+      "kind": "harmless",
+      "reason": "Two crossings then take the road of many, and are paired the same, at the cost of the exact sort."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-mesh/src/slice.rs",
+      "mutant": "replace != with == in contours",
+      "line_text": "&[a, b] if a.up != b.up => pieces.push(if a.up { (b, a) } else { (a, b) }),",
+      "occurrences": 1,
+      "kind": "harmless",
+      "reason": "Two crossings then take the road of many, and are paired the same, at the cost of the exact sort."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-mesh/src/slice.rs",
+      "mutant": "replace > with >= in contours",
+      "line_text": "if cuts.len() > 1 && cuts.first() == cuts.last() {",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "One cut left is under three either way, and the contour is dropped on the next line."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-mesh/src/export.rs",
+      "mutant": "replace < with <= in on_lattice",
+      "line_text": "Ok(if top < 0 { units.wrapping_neg() } else { units })",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "At a top of 0 there are 0 units, and the negative of 0 is 0."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-mesh/src/export.rs",
+      "mutant": "replace > with >= in half_unit",
+      "line_text": "let half = if halves > 0 {",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "At 0 halves the shift is 0, so dividing by one and shifting by none agree."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-poly/src/publish.rs",
+      "mutant": "replace < with <= in arenas",
+      "line_text": "sense: if fin.from < fin.to {",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "A fin runs between two different vertices of the merge, so its ends are never equal and the two comparisons agree on every fin."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-mesh/src/minkowski.rs",
+      "mutant": "delete match arm ExportError::Num(e) in from_export",
+      "line_text": "ExportError::Num(e) => MeshError::Num(e),",
+      "occurrences": 1,
+      "kind": "harmless",
+      "reason": "A mesh that was built has rows that fit and corners inside the frame, so drawing it cannot end here, and the arm left in its place refuses as well."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-mesh/src/minkowski.rs",
+      "mutant": "delete match arm ExportError::Fault(f) in from_export",
+      "line_text": "ExportError::Fault(f) => MeshError::Fault(f),",
+      "occurrences": 1,
+      "kind": "harmless",
+      "reason": "A mesh that was built has rows that fit and corners inside the frame, so drawing it cannot end here, and the arm left in its place refuses as well."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-bool/src/rebuild.rs",
+      "mutant": "replace < with <= in arenas",
+      "line_text": "sense: if fin.from < fin.to {",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "A fin's two vertices are its edge's two ends, numbers of two different points, because a run's low is below its high. They are never equal."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-poly/src/merge.rs",
+      "mutant": "replace < with > in radial",
+      "line_text": "let rising = |fin: &Fin| fin.from < fin.to;",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "rising is only compared with rising of another fin of the same edge, and a fin's ends differ, so turning every answer over leaves every comparison as it was."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-poly/src/merge.rs",
+      "mutant": "replace < with <= in radial",
+      "line_text": "let rising = |fin: &Fin| fin.from < fin.to;",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "A fin's two vertices are its edge's two ends, numbers of two different points, because a run's low is below its high. They are never equal."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-poly/src/merge.rs",
+      "mutant": "replace == with != in radial",
+      "line_text": "reversed: rising(&fin) == rising(&start),",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "The mutant turns every flap about the line by half a turn, the reference with the rest. about orders flaps by their angle from the reference, and that does not change when all of them turn together."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-surface/src/contract.rs",
+      "mutant": "replace + with * in check",
+      "line_text": "let outside = beyond + 1.0;",
+      "occurrences": 1,
+      "kind": "harmless",
+      "reason": "The probe moves from b + (b - a) + 1 to b + (b - a), still past the end since b > a. A kind keeping the contract refuses every parameter outside its domain, so both probes see the same refusal; a kind that refuses some parameters past its end and not others may slip past either."
+    },
+    {},
+    {
+      "file": "projects/engines/geometry/crates/geom-mesh/src/exact/build.rs",
+      "mutant": "replace next_group -> Option<&'a[Use]> with Some(Vec::leak(Vec::new()))",
+      "line_text": "let head = rest.first()?;",
+      "occurrences": 1,
+      "kind": "hangs",
+      "reason": "Every call then gives an empty group and leaves the rest as it was, so the loops that take groups until none is left never end."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-mesh/src/exact/build.rs",
+      "mutant": "replace == with != in next_group",
+      "line_text": "let same = rest.iter().take_while(|u| u.high == head.high).count();",
+      "occurrences": 1,
+      "kind": "hangs",
+      "reason": "The first use always has its own end, so nothing is taken: an empty group, the rest unchanged, and the loops that take groups never end."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-check/src/combinatorial.rs",
+      "mutant": "replace Sets<'s>::size -> u32 with 0",
+      "line_text": "self.size.get(at(root)).copied().unwrap_or(1)",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "Sets joins by size only to keep its trees shallow. Which root goes under which never changes the partition: join links two different roots, so no cycle forms whatever the order, find follows parents to the same root, and shells() reads only whether every face of a shell has one root. Nothing is charged to the meter inside Sets, so the reports and the meter's usage are the same for every body; only the depth of the trees, and the time, differ."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-check/src/combinatorial.rs",
+      "mutant": "replace Sets<'s>::size -> u32 with 1",
+      "line_text": "self.size.get(at(root)).copied().unwrap_or(1)",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "Sets joins by size only to keep its trees shallow. Which root goes under which never changes the partition: join links two different roots, so no cycle forms whatever the order, find follows parents to the same root, and shells() reads only whether every face of a shell has one root. Nothing is charged to the meter inside Sets, so the reports and the meter's usage are the same for every body; only the depth of the trees, and the time, differ."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-check/src/combinatorial.rs",
+      "mutant": "replace < with == in Sets<'s>::join",
+      "line_text": "let (big, small) = if self.size(x) < self.size(y) {",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "Sets joins by size only to keep its trees shallow. Which root goes under which never changes the partition: join links two different roots, so no cycle forms whatever the order, find follows parents to the same root, and shells() reads only whether every face of a shell has one root. Nothing is charged to the meter inside Sets, so the reports and the meter's usage are the same for every body; only the depth of the trees, and the time, differ."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-check/src/combinatorial.rs",
+      "mutant": "replace < with > in Sets<'s>::join",
+      "line_text": "let (big, small) = if self.size(x) < self.size(y) {",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "Sets joins by size only to keep its trees shallow. Which root goes under which never changes the partition: join links two different roots, so no cycle forms whatever the order, find follows parents to the same root, and shells() reads only whether every face of a shell has one root. Nothing is charged to the meter inside Sets, so the reports and the meter's usage are the same for every body; only the depth of the trees, and the time, differ."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-check/src/combinatorial.rs",
+      "mutant": "replace < with <= in Sets<'s>::join",
+      "line_text": "let (big, small) = if self.size(x) < self.size(y) {",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "Sets joins by size only to keep its trees shallow. Which root goes under which never changes the partition: join links two different roots, so no cycle forms whatever the order, find follows parents to the same root, and shells() reads only whether every face of a shell has one root. Nothing is charged to the meter inside Sets, so the reports and the meter's usage are the same for every body; only the depth of the trees, and the time, differ."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-format/src/cbor/decode.rs",
+      "mutant": "replace Decoder<'a>::open -> Result<(), CborError> with Ok(())",
+      "line_text": "let (start, end) = head;",
+      "occurrences": 1,
+      "kind": "hangs",
+      "reason": "Without pushing the frame or moving past the container's head, the next call of next reads the same head again, for ever under the tests' unlimited meter (a metered read stops at its budget). It hangs; it never accepts bytes the original refuses."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-format/src/cbor/decode.rs",
+      "mutant": "replace Decoder<'a>::complete -> Result<(), CborError> with Ok(())",
+      "line_text": "self.at = end;",
+      "occurrences": 1,
+      "kind": "hangs",
+      "reason": "Without moving past the item it just read, the next call of next reads the same head again, for ever under the tests' unlimited meter. It hangs; it never accepts bytes the original refuses."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-format/src/cbor/parse.rs",
+      "mutant": "replace Parser<'_>::item -> Result<bool, TextError> with Ok(false)",
+      "line_text": "let (line, column) = (self.cursor.line, self.cursor.column);",
+      "occurrences": 1,
+      "kind": "hangs",
+      "reason": "No item ever completes and nothing is consumed, so the parse loop calls item for ever under the tests' unlimited meter. It hangs; it never returns bytes."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-num/src/plane.rs",
+      "mutant": "replace tpi_routed -> Option<Sign> with None",
+      "line_text": "let [p, q, r] = &t.planes;",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "On None, Plane::side_of_tpi takes side_of_tpi_hand, which computes the same sign exactly: n . X + d . w from Tpi::homogeneous in I384 (then I512) times the sign of w, the 4 x 4 determinant the generated tpi_side evaluates. Both paths are exact, so the answer is the same for every input; only the time taken changes."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-poly/src/subdivide.rs",
+      "mutant": "replace < with == in splits",
+      "line_text": "(low < odd && odd < high).then_some(odd)",
+      "occurrences": 1,
+      "kind": "hangs",
+      "reason": "The tests stop it by their timeout: the mutant offers a split only where the odd half step is the cell's own low face, so every polygon lies on one side, the child cell is the cell itself with every polygon, and the walk splits it there again for ever. It is a hang the tests catch; kept so that the judge counts it as one."
     }
   ],
   "coverage_off": [
@@ -5457,27 +6810,6 @@
     },
     {
       "file": "projects/engines/geometry/crates/geom-num/src/plane.rs",
-      "line_text": "nx.unsigned_abs() < NORMAL_LIMIT",
-      "occurrences": 1,
-      "piece": "G41",
-      "reason": "A plane predicate's budget, degenerate-input or fallback arm that the tests' inputs never reach (a coordinate past the budget, an overflowing cross product, a zero normal, a weight the filter cannot decide, a point the narrow commit cannot hold). G41 proves it unreachable, or a test reaches it."
-    },
-    {
-      "file": "projects/engines/geometry/crates/geom-num/src/plane.rs",
-      "line_text": "&& ny.unsigned_abs() < NORMAL_LIMIT",
-      "occurrences": 1,
-      "piece": "G41",
-      "reason": "A plane predicate's budget, degenerate-input or fallback arm that the tests' inputs never reach (a coordinate past the budget, an overflowing cross product, a zero normal, a weight the filter cannot decide, a point the narrow commit cannot hold). G41 proves it unreachable, or a test reaches it."
-    },
-    {
-      "file": "projects/engines/geometry/crates/geom-num/src/plane.rs",
-      "line_text": "&& nz.unsigned_abs() < NORMAL_LIMIT",
-      "occurrences": 1,
-      "piece": "G41",
-      "reason": "A plane predicate's budget, degenerate-input or fallback arm that the tests' inputs never reach (a coordinate past the budget, an overflowing cross product, a zero normal, a weight the filter cannot decide, a point the narrow commit cannot hold). G41 proves it unreachable, or a test reaches it."
-    },
-    {
-      "file": "projects/engines/geometry/crates/geom-num/src/plane.rs",
       "line_text": ".or_else(|| commit::<TOTAL_LIMBS>(&x, &w))",
       "occurrences": 2,
       "piece": "G41",
@@ -5605,7 +6937,7 @@
     {
       "file": "projects/engines/geometry/crates/geom-num/src/predicate.rs",
       "line_text": "Some(sign) => Ok(sign),",
-      "occurrences": 1,
+      "occurrences": 2,
       "piece": "G41",
       "reason": "magnitude_bits runs only at compile time, in constants, and the filtered orient2d path is off while ORIENT2D_FILTER_FIRST is false (G42's measurement keeps it off), so no test runs these lines. G41 proves or removes them."
     },
@@ -5625,7 +6957,14 @@
     },
     {
       "file": "projects/engines/geometry/crates/geom-num/src/predicate.rs",
-      "line_text": "orient2d_exact(a, b, c)",
+      "line_text": "match orient2d_narrow(a, b, c) {",
+      "occurrences": 1,
+      "piece": "G41",
+      "reason": "magnitude_bits runs only at compile time, in constants, and the filtered orient2d path is off while ORIENT2D_FILTER_FIRST is false (G42's measurement keeps it off), so no test runs these lines. G41 proves or removes them."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-num/src/predicate.rs",
+      "line_text": "None => orient2d_exact(a, b, c),",
       "occurrences": 1,
       "piece": "G41",
       "reason": "magnitude_bits runs only at compile time, in constants, and the filtered orient2d path is off while ORIENT2D_FILTER_FIRST is false (G42's measurement keeps it off), so no test runs these lines. G41 proves or removes them."
@@ -5993,6 +7332,13 @@
       "occurrences": 2,
       "piece": "G41",
       "reason": "Wide32's extremes set their top limb through last_mut, which always finds one: L >= 2 is checked when the width is used (AT_LEAST_TWO_LIMBS), so the None arm and the end of the if let never run. As for Wide's same lines, G41's bounded proof of no panic in geom-num removes them."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-poly/src/order.rs",
+      "line_text": "Err(e) => Err(e),",
+      "occurrences": 1,
+      "piece": "G41",
+      "reason": "Tpi::new's one error other than Degenerate is BudgetExceeded, the arm G41's proofs close in geom-num: planes within budget cannot reach it, and every Plane is within budget, so no test can run this line."
     }
   ]
 }

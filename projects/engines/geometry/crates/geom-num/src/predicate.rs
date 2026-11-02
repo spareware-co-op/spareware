@@ -30,7 +30,18 @@
 //!   other input are tested against exact oracles (`tests/attack_predicate.rs`, the verification
 //!   suite).
 //!
-//! Four evaluation steps, each exact; a call returns from the first that answers:
+//! Where [`orient2d`]'s filter runs, a call the filter leaves first takes the narrow step of chapter
+//! 23.2: when every coordinate difference is below 2^31, 335 m at q0, [`orient2d_narrow`] computes
+//! the same determinant in checked `i64`, which saves the wide multiplies of an exact zero. A target
+//! with a 64 × 64 → 128-bit multiply goes straight to an exact path as cheap as that (routing,
+//! below). Each `_step` twin gives the same sign and names the step that answered ([`Step`]): it
+//! makes the plain call, then asks each step in turn, so counting costs the plain call nothing.
+//! [`insphere`] has no twin: its steps are the filter and the exact path, and a second caller of its
+//! filter costs every plain call the filter's inlining (15% on general points, measured). Nor has
+//! it a narrow step: 72δ⁵ stays in `i64` only for differences below 2^11, a third of a millimetre at
+//! q0.
+//!
+//! Four evaluation steps follow, each exact; a call returns from the first that answers:
 //!
 //! 1. **The generated filter** ([`crate::generated`]): the determinant in `f64` with a
 //!    semi-static error bound (Meyer and Pion's method, as Geogram's PCK uses it), generated with
@@ -215,6 +226,7 @@ use crate::error::NumError;
 use crate::generated;
 use crate::grid::{COORD_BITS, P2, P3};
 use crate::sign::Sign;
+use crate::step::Step;
 use crate::wide::{I256, I384};
 
 use bounded::Bounded;
@@ -787,6 +799,55 @@ fn xyz(p: P3) -> [i64; 3] {
 }
 
 // ---------------------------------------------------------------------------------------------
+// The narrow step: `i64`, after a magnitude check (chapter 23.2).
+// ---------------------------------------------------------------------------------------------
+
+/// Differences below 2^31 (335 m at q0) keep [`orient2d`] within `i64`: two products below 2^62,
+/// their difference below 2^63.
+const NARROW_2D_BITS: u32 = 31;
+
+/// What `i64` holds in magnitude: |v| < 2^63.
+const I64_MAGNITUDE_BITS: u32 = 63;
+
+const _: () = {
+    let products = exponent_sum(NARROW_2D_BITS, NARROW_2D_BITS);
+    assert!(
+        exponent_sum(products, 1) <= I64_MAGNITUDE_BITS,
+        "orient2d's narrow step fits i64"
+    );
+};
+
+/// p − q when it is below 2^`bits` in magnitude: the narrow step's magnitude check.
+fn narrow(p: i64, q: i64, bits: u32) -> Option<i64> {
+    let d = p.checked_sub(q)?;
+    (d.unsigned_abs() < u64::pow(2, bits)).then_some(d)
+}
+
+/// The narrow step of [`orient2d`]: the same sign, computed in `i64`, or `None` when a difference
+/// is out of range. Budget on `NARROW_2D_BITS`; every step is checked all the same.
+#[must_use]
+#[allow(
+    clippy::many_single_char_names,
+    reason = "a, b and c are the points, and p, q, r and s the differences of the formula"
+)]
+pub fn orient2d_narrow(a: P2, b: P2, c: P2) -> Option<Sign> {
+    let [ax, ay] = xy(a);
+    let [bx, by] = xy(b);
+    let [cx, cy] = xy(c);
+    let (p, q) = (
+        narrow(bx, ax, NARROW_2D_BITS)?,
+        narrow(cy, ay, NARROW_2D_BITS)?,
+    );
+    let (r, s) = (
+        narrow(by, ay, NARROW_2D_BITS)?,
+        narrow(cx, ax, NARROW_2D_BITS)?,
+    );
+    Some(Sign::of_i64(
+        p.checked_mul(q)?.checked_sub(r.checked_mul(s)?)?,
+    ))
+}
+
+// ---------------------------------------------------------------------------------------------
 // The predicates.
 // ---------------------------------------------------------------------------------------------
 
@@ -807,13 +868,25 @@ fn xyz(p: P3) -> [i64; 3] {
 /// (the module documentation): never a sign that was not computed.
 pub fn orient2d(a: P2, b: P2, c: P2) -> Result<Sign, NumError> {
     if ORIENT2D_FILTER_FIRST {
-        match generated::orient2d::filter(a, b, c) {
+        match filtered(|| generated::orient2d::filter(a, b, c)) {
             Some(sign) => Ok(sign),
             None => orient2d_unfiltered(a, b, c),
         }
     } else {
         orient2d_exact(a, b, c)
     }
+}
+
+/// [`orient2d`], and the [`Step`] that settled it.
+///
+/// # Errors
+///
+/// As [`orient2d`].
+pub fn orient2d_step(a: P2, b: P2, c: P2) -> Result<(Sign, Step), NumError> {
+    let sign = orient2d(a, b, c)?;
+    let filtered = generated::orient2d::filter(a, b, c).is_some();
+    let narrowed = orient2d_narrow(a, b, c).is_some();
+    Ok((sign, Step::route(ORIENT2D_FILTER_FIRST, filtered, narrowed)))
 }
 
 /// Whether [`orient2d`] runs its generated filter first on this target: not on a 64-bit target
@@ -826,11 +899,26 @@ const ORIENT2D_FILTER_FIRST: bool = !cfg!(all(
     not(target_family = "wasm")
 ));
 
-/// [`orient2d`] when its filter cannot decide. Out of line, so that a call the filter answers
-/// does not pay for the exact paths' stack frame.
+/// Whether this build runs the generated filters: false in reference mode (23.13; piece G106), the
+/// `reference` feature, where every predicate answers from its exact path.
+pub const FILTERS: bool = !cfg!(feature = "reference");
+
+/// `filter`'s answer in a build that runs filters, and none in reference mode, which leaves the
+/// call to the exact path. Every call of a generated filter in this crate goes through here
+/// (`tests/attack_g106.rs`), so reference mode leaves none behind.
+#[inline]
+pub(crate) fn filtered<T>(filter: impl FnOnce() -> Option<T>) -> Option<T> {
+    if FILTERS { filter() } else { None }
+}
+
+/// [`orient2d`] when its filter cannot decide: the narrow step, then the exact paths. Out of line,
+/// so that a call the filter answers does not pay for the exact paths' stack frame.
 #[inline(never)]
 fn orient2d_unfiltered(a: P2, b: P2, c: P2) -> Result<Sign, NumError> {
-    orient2d_exact(a, b, c)
+    match orient2d_narrow(a, b, c) {
+        Some(sign) => Ok(sign),
+        None => orient2d_exact(a, b, c),
+    }
 }
 
 /// [`orient2d`]'s exact steps: the generated exact path, then the hand-written fast path and the
@@ -860,10 +948,21 @@ fn orient2d_exact(a: P2, b: P2, c: P2) -> Result<Sign, NumError> {
 /// [`NumError::BudgetExceeded`] only if every exact path failed, which no grid points can cause
 /// (the module documentation): never a sign that was not computed.
 pub fn orient3d(a: P3, b: P3, c: P3, d: P3) -> Result<Sign, NumError> {
-    match generated::orient3d::filter(a, b, c, d) {
+    match filtered(|| generated::orient3d::filter(a, b, c, d)) {
         Some(sign) => Ok(sign),
         None => orient3d_unfiltered(a, b, c, d),
     }
+}
+
+/// [`orient3d`], and the [`Step`] that settled it. It has no narrow step: 6δ³ stays in `i64` only for
+/// differences below 2^20, 16 cm at q0, too little to earn the check.
+///
+/// # Errors
+///
+/// As [`orient3d`].
+pub fn orient3d_step(a: P3, b: P3, c: P3, d: P3) -> Result<(Sign, Step), NumError> {
+    let filtered = generated::orient3d::filter(a, b, c, d).is_some();
+    Ok((orient3d(a, b, c, d)?, Step::route(true, filtered, false)))
 }
 
 /// [`orient3d`] when its filter cannot decide: the generated exact path, then the hand-written
@@ -911,10 +1010,21 @@ fn orient3d_unfiltered(a: P3, b: P3, c: P3, d: P3) -> Result<Sign, NumError> {
 /// [`NumError::BudgetExceeded`] only if every exact path failed, which no grid points can cause
 /// (the module documentation): never a sign that was not computed.
 pub fn incircle(a: P2, b: P2, c: P2, d: P2) -> Result<Sign, NumError> {
-    match generated::incircle::filter(a, b, c, d) {
+    match filtered(|| generated::incircle::filter(a, b, c, d)) {
         Some(sign) => Ok(sign),
         None => incircle_unfiltered(a, b, c, d),
     }
+}
+
+/// [`incircle`], and the [`Step`] that settled it. It has no narrow step: 12δ⁴ stays in `i64` only
+/// for differences below 2^14, 2.5 mm at q0.
+///
+/// # Errors
+///
+/// As [`incircle`].
+pub fn incircle_step(a: P2, b: P2, c: P2, d: P2) -> Result<(Sign, Step), NumError> {
+    let filtered = generated::incircle::filter(a, b, c, d).is_some();
+    Ok((incircle(a, b, c, d)?, Step::route(true, filtered, false)))
 }
 
 /// [`incircle`] when its filter cannot decide: the generated exact path, then the hand-written
@@ -979,7 +1089,7 @@ fn incircle_unfiltered(a: P2, b: P2, c: P2, d: P2) -> Result<Sign, NumError> {
     reason = "a to e name the points of the documented formula"
 )]
 pub fn insphere(a: P3, b: P3, c: P3, d: P3, e: P3) -> Result<Sign, NumError> {
-    match generated::insphere::filter(a, b, c, d, e) {
+    match filtered(|| generated::insphere::filter(a, b, c, d, e)) {
         Some(sign) => Ok(sign),
         None => insphere_unfiltered(a, b, c, d, e),
     }

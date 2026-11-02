@@ -4,6 +4,8 @@
 //! analytic kind under a map that is not a similarity keeps the contract itself; a ruled surface
 //! between curves of different degrees and knots converts on one knot vector; a placed surface's
 //! derivatives do not move with its translation; and the accessors answer with what was given.
+//!
+//! Covers: SurfaceKind::Affine.
 
 #![allow(
     clippy::float_cmp,

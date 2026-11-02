@@ -8,6 +8,36 @@
 //!
 //! Layer: 1, Numbers and the contract (chapter 27's proposed layer table).
 //!
+//! Every operation has chapter 10.1's shape:
+//!
+//! ```text
+//! fn operation(ctx: &OpContext, input: &OpInput) -> Result<OpOutput<R>, OpError>
+//! ```
+//!
+//! An [`OpContext`] says which operation runs ([`OpPath`]), inside which budget, under whose
+//! cancellation and at which [`Precision`]. A success is an [`OpOutput`]: the operation's own
+//! result with its exactness class and its warnings ([`Diagnostic`]). A failure is an [`OpError`]:
+//! a base [`ErrorKind`] from chapter 22's closed set, read from the operation's own typed
+//! [`OpErrorDetail`], with the entities involved, the [`Evidence`], plain words and the
+//! [`Remedy`]s that would make it succeed. [`OpContext::run`] runs an operation's body inside its
+//! context's budget, charging by its schema's [`Charge`] schedule, and publishes nothing once
+//! stopped. Every operation is also described as data by an [`OpSchema`]. A batch call runs the
+//! operation once per item through [`Batch`], each item its own operation at the batch's path plus
+//! the caller's key, with one result per item.
+//!
+//! ```
+//! use geom_num::NumError;
+//! use geom_op::{ErrorKind, NumDetail, OpError, OpId, OpPath, Remedy};
+//!
+//! let path = OpPath::new(OpId::from_bytes([7; 16])).step("cut").unwrap();
+//! // A coordinate past the frame's range, from the numbers layer, wrapped by meaning.
+//! let error = OpError::new(path, NumError::OutOfRange { value: 1 << 41 });
+//! assert_eq!(error.kind(), ErrorKind::FrameRangeExceeded);
+//! assert_eq!(error.remedies(), [Remedy::ChangeFrame]);
+//! // An exact computation over its proven bit budget is a defect, never a budget failure.
+//! assert_eq!(NumDetail::from(NumError::BudgetExceeded).kind(), ErrorKind::Internal);
+//! ```
+//!
 //! Invariants this crate keeps:
 //!
 //! - `OpContext` holds no randomness and no clock that can affect a result (10.1).
@@ -27,8 +57,65 @@
 //! kernel architecture (`projects/engines/geometry/architecture/`).
 //!
 //! Its direct dependencies are its row of chapter 27's crate table, checked by the
-//! scaffold test in `engine-geometry` (`tests/scaffold`).
+//! scaffold test in `engine-geometry` (`tests/scaffold`), and `sha2`, the one hash 32.20 approves.
 //!
-//! Status: scaffold only; built by pieces G82, G83, G86, G87, G88, G104, G143, G144, G459.
+//! Licences of the published crates this crate depends on (DEPEND, chapter 29.1), as each one's
+//! manifest at the version in `Cargo.lock` states it:
+//!
+//! - MIT OR Apache-2.0: `sha2`.
+//! - (MIT OR Apache-2.0) AND Unicode-3.0: `unicode-normalization`.
+//!
+//! Status: the context, the error base and its details for the parallel helper and the numbers
+//! layer, the exactness class and warnings of an output, operation identity and the schema types
+//! built (G82), and the batch driver (G104); budgets in the contract, the charge schedule and
+//! fallible reservations (G83); the canonical CBOR encoder ([`cbor`]) and SHA-256 ([`hash`]) built
+//! (G86); persistent names and their `NameId`s under `NameScheme v1` ([`name`]) built (G87); history
+//! records, their laws and their composition ([`history`]) built (G88); per-entity bounds to come in
+//! G143, the local-operation driver in G144 and preview precision in G459.
 #![cfg_attr(not(test), no_std)]
 #![forbid(unsafe_code)]
+
+extern crate alloc;
+
+pub mod batch;
+pub mod bounds;
+pub mod canonical;
+pub mod cbor;
+pub mod context;
+pub mod detail;
+pub mod error;
+pub mod evidence;
+pub mod hash;
+pub mod history;
+pub mod id;
+pub mod kind;
+pub mod name;
+pub mod output;
+pub mod remedy;
+pub mod run;
+pub mod schema;
+
+pub use batch::{Batch, BatchDetail, Key};
+pub use bounds::{Bounds, Limits, Spent};
+pub use context::{OpContext, Precision};
+pub use detail::{
+    BoundDetail, CombineDetail, MakeDetail, NumDetail, OpErrorDetail, QueryDetail, RunDetail,
+};
+pub use error::OpError;
+pub use evidence::{Evidence, Value};
+pub use geom_num::Exactness;
+pub use history::{
+    ChangeClass, History, HistoryError, LawBreak, LoopChange, Origin, Record, Relations,
+    TopologyChange, Vanish,
+};
+pub use id::{Label, NameId, OpId, OpPath};
+pub use kind::ErrorKind;
+pub use name::{
+    BLANK_OP, EdgeOrVertex, KEYED_ROLES, NAME_SCHEME_V1_PREFIX, NameError, NameList, NameSet,
+    Ordinal, PieceKey, Role, RoleArg, Side, Stamp, TopoName,
+};
+pub use output::{Diagnostic, OpOutput};
+pub use remedy::{Bound, Remedy};
+pub use run::Tally;
+pub use run::{Charge, RUN, reserve};
+pub use schema::{Class, DiagnosticSpec, ErrorSpec, Family, Field, OpSchema, RoleSpec, Unit};

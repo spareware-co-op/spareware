@@ -9,11 +9,50 @@ how each engine runs a target, on your machine and in CI. The first target built
 `orient2d` (`src/orient2d.rs`): `geom-num`'s orient2d, its exact path and its `f64` filter must
 agree with the exact determinant of orient2d's definition, computed from scratch. The others:
 `predicates` (`src/predicates.rs`, G11), every exact predicate answers and swapping two points
+flips its sign; `wide` (`src/wide.rs`, G26), the wide integers agree with `num-bigint` on every
+operation at every width, `I128` to the reserved 768 bits; `arenas` (`src/arenas.rs`, G80),
+`geom-topo` publishes exactly the arenas its rules allow, and a body's versions never see each
+other's edits; `attributes` (`src/attributes.rs`, G90), `geom-name`'s attribute step gives each
+output exactly what section 8.4's table gives; `cbor` (`src/cbor.rs`, G91), `geom-format`'s strict
+CBOR decoder and its text form never panic, refuse inside their input and convert both ways bit for
+bit; `cache` (`src/cache.rs`, G105), `geom-format`'s memo store keeps to its bound, forgets the
+entry used longest ago first and answers only where the caller's budget covers the stored run;
+`make` (`src/make.rs`, G101), the primitives and transforms return only what the full checker
+passes, keep their laws, and refuse with a typed error; `sequence` (`src/sequence.rs`, G116), whole
+operation logs replay to the same hash and keep every law at every step; `batch` (`src/batch.rs`,
+G104), `geom-op`'s batch driver gives each item its own result, and the many-point calls give the
+single calls' bits; `cbor` (`src/cbor.rs`, G91), `geom-format`'s strict CBOR decoder and its text
+form never panic, refuse inside their input and convert both ways bit for bit; `make`
+(`src/make.rs`, G101), the primitives and transforms return only what the full checker passes, keep
+their laws, and refuse with a typed error; `make` (`src/make.rs`, G101), the primitives and
+transforms return only what the full checker passes, keep their laws, and refuse with a typed
+error; `sequence` (`src/sequence.rs`, G116), whole operation logs replay to the same hash and keep
+every law at every step; `cbor` (`src/cbor.rs`, G91), `geom-format`'s strict CBOR decoder and its
+text form never panic, refuse inside their input and convert both ways bit for bit; and `surfaces`
+(`src/surfaces.rs`), every curve and surface kind built from any bytes keeps the kind contract kit
+(`geom_curve::contract`, `geom_surface::contract`) under any typed transform. `src/adversarial.rs`
+holds the generators aimed at the hard cases, and `src/robustness.rs` counts how many plain designs
+succeed per family: `src/robustness.txt` records it, and a count may not fall.
 flips its sign; `wide` (`src/wide.rs`, G26), the wide integers agree with `num-bigint` on
-every operation at every width, `I128` to the reserved 768 bits; and, for Gate 2 (decision 32.44:
-a target per phase-2 code piece), `curves` (`src/curves.rs`) and `surfaces` (`src/surfaces.rs`),
-every curve and surface kind built from any bytes keeps the kind contract kit
-(`geom_curve::contract`, `geom_surface::contract`) under any typed transform.
+every operation at every width, `I128` to the reserved 768 bits; `cbor` (`src/cbor.rs`, G91),
+`geom-format`'s strict CBOR decoder and its text form never panic, refuse inside their input and
+convert both ways bit for bit; `cache` (`src/cache.rs`, G105), `geom-format`'s memo store keeps to
+its bound, forgets the entry used longest ago first and answers only where the caller's budget
+covers the stored run; `arenas` (`src/arenas.rs`, G80), `geom-topo` publishes exactly the arenas its
+rules allow, and a body's versions never see each other's edits; and `make` (`src/make.rs`, G101),
+the primitives and transforms return only what the full checker passes, keep their laws, and refuse
+with a typed error; `sequence` (`src/sequence.rs`, G116), whole operation logs replay to the same
+hash and keep every law at every step; and `intersect` (`src/intersect.rs`, G158), an intersection's
+items keep their invariants against an all-pairs oracle, and a pair asked either way round makes one
+call. `src/adversarial.rs` holds the generators aimed at the hard
+cases, and `src/robustness.rs` counts how many plain designs succeed per family: `src/robustness.txt`
+records it, and a count may not fall.
+other's edits; `cbor` (`src/cbor.rs`, G91), `geom-format`'s strict CBOR decoder and its text form never panic, refuse inside their input bound and convert both ways bit for bit; `make` (`src/make.rs`, G101),
+the primitives and transforms return only what the full checker passes, keep their laws, and
+refuse with a typed error; and, for Gate 2 (decision 32.44: a target per phase-2 code piece),
+`curves` (`src/curves.rs`) and `surfaces` (`src/surfaces.rs`), every curve and surface kind built
+from any bytes keeps the kind contract kit (`geom_curve::contract`, `geom_surface::contract`) under
+any typed transform.
 
 ## One law, four engines
 

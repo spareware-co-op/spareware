@@ -23,6 +23,23 @@
 //! Its direct dependencies are its row of chapter 27's crate table, checked by the
 //! scaffold test in `engine-geometry` (`tests/scaffold`).
 //!
-//! Status: scaffold only; built by pieces G123, G124, G125, G126, G127, G128, G142.
+//! Status: canonical planes ([`plane`]) and the arrangement predicates ([`order`]) built (G123);
+//! faces into convex pieces ([`convex`]) built (G125); clipping and local cuts ([`cut`]) built
+//! (G126); winding vectors ([`winding`]) and tracing ([`trace`]) built (G127); the subdivision
+//! ([`subdivide`]) built (G128); the maximal-face merge ([`merge`]) built (G129); committed planes
+//! ([`commit`]) built (G142); the rest by piece G124.
 #![cfg_attr(not(test), no_std)]
 #![forbid(unsafe_code)]
+
+extern crate alloc;
+
+pub mod commit;
+pub mod convex;
+pub mod cut;
+pub mod merge;
+pub mod order;
+pub mod plane;
+pub mod publish;
+pub mod subdivide;
+pub mod trace;
+pub mod winding;

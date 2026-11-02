@@ -1,0 +1,911 @@
+//! A body stored as records reads back index for index, its chunks are geom-topo's own runs so an
+//! edit rewrites only the chunks it touches, the next operation on the body read back gives the
+//! same bits, and records that are not the body's are refused (G94).
+
+#![allow(
+    dead_code,
+    clippy::arithmetic_side_effects,
+    clippy::cast_possible_truncation,
+    clippy::indexing_slicing,
+    clippy::unwrap_used,
+    clippy::panic,
+    reason = "tests: native arithmetic and indexing, and a failure stops the test"
+)]
+
+// geom-topo's fixtures, whose module allows the ones these tests do not use.
+#[path = "../../geom-topo/tests/common/mod.rs"]
+mod topo;
+
+use std::collections::BTreeSet;
+
+use geom_curve::{CurveKind, Line};
+use geom_format::body::{
+    BODY_TAG, BodyError, CHUNK_ROWS, CHUNK_TAG, SCHEMA, StoredBody, chunk_ids, read_body,
+    write_body,
+};
+use geom_format::cbor::{Decoder, Item};
+use geom_format::content::ContentId;
+use geom_format::kinds::{KindError, write_curve, write_surface};
+use geom_format::record::{COPY_ALWAYS, REQUIRED, Record};
+use geom_math::Box3;
+use geom_math::{Axis, Transform, TypedTransform};
+use geom_num::grid::P3;
+use geom_num::plane::Plane;
+use geom_op::cbor::Encoder;
+use geom_surface::{Plane as Flat, SurfaceKind};
+use geom_topo::order::{NameKey, Names};
+use geom_topo::{
+    Body, BodyKind, Builder, Edge, Face, Fin, Loop, PointKind, Region, RegionKind, Sense, Shell,
+    Vertex,
+};
+
+use topo::{ix, many_faces, meter, wall, wall_builder, wall_outside, wall_rows};
+
+fn store(body: &Body) -> StoredBody {
+    write_body(body, &mut meter()).unwrap()
+}
+
+fn ids(s: &StoredBody) -> BTreeSet<ContentId> {
+    s.chunks.iter().map(Record::content_id).collect()
+}
+
+fn key(arena: u8, row: usize) -> NameKey {
+    let mut k = [0u8; 16];
+    k[0] = arena;
+    k[8..].copy_from_slice(&(row as u64).to_be_bytes());
+    NameKey(k)
+}
+
+fn named_wall() -> Body {
+    let r = wall_rows();
+    let names = Names {
+        regions: (0..r.regions.len()).map(|i| key(1, i)).collect(),
+        faces: (0..r.faces.len()).map(|i| key(3, i)).collect(),
+        edges: (0..r.edges.len()).map(|i| key(6, i)).collect(),
+        vertices: (0..r.vertices.len()).map(|i| key(7, i)).collect(),
+    };
+    wall_builder(true)
+        .publish_named(&names, BodyKind::Solid, wall_outside(), &mut meter())
+        .unwrap()
+}
+
+#[test]
+fn a_body_reads_back_index_for_index() {
+    for body in [wall(), named_wall(), many_faces(3)] {
+        let stored = store(&body);
+        assert_eq!(stored.index.tag, BODY_TAG);
+        assert!(stored.chunks.iter().all(|c| c.tag == CHUNK_TAG));
+        let back = read_body(&stored, &mut meter()).unwrap();
+        assert_eq!(back, body);
+        assert_eq!(back.names(), body.names());
+        // Written again, the records are the same bytes: the content ID is a function of the body.
+        assert_eq!(store(&back), stored);
+        assert_eq!(store(&back).content_id(), stored.content_id());
+        // The chunks may come in any order.
+        let mut shuffled = stored.clone();
+        shuffled.chunks.reverse();
+        assert_eq!(read_body(&shuffled, &mut meter()).unwrap(), body);
+    }
+}
+
+#[test]
+fn a_named_body_lists_its_names_and_another_does_not() {
+    assert_eq!(
+        store(&named_wall()).chunks.len(),
+        store(&wall()).chunks.len() + 4
+    );
+}
+
+#[test]
+fn tables_are_cut_into_geom_topos_runs() {
+    let n = 2 * CHUNK_ROWS + 1808;
+    let body = many_faces(n);
+    let stored = store(&body);
+    // Regions, shells, faces (three runs), surfaces; the other tables are empty and have none.
+    assert_eq!(stored.chunks.len(), 1 + 1 + 3 + 1);
+    assert_eq!(read_body(&stored, &mut meter()).unwrap(), body);
+}
+
+#[test]
+fn a_one_percent_edit_rewrites_only_the_chunks_it_touches() {
+    let n = 10_000_u32;
+    let body = many_faces(n);
+    let mut arenas = body.arenas().clone();
+    // 1% of the faces, all in the second run, move to the other surface.
+    for row in 5_000..5_100 {
+        arenas.faces.surface.set(ix(row), ix(1)).unwrap();
+    }
+    let edited = Builder { arenas }
+        .publish(body.kind(), body.outside(), &mut meter())
+        .unwrap();
+    let (before, after) = (store(&body), store(&edited));
+    let changed: Vec<_> = ids(&after).difference(&ids(&before)).cloned().collect();
+    assert_eq!(changed.len(), 1, "only the faces' second chunk is new");
+    assert_eq!(ids(&before).difference(&ids(&after)).count(), 1);
+    assert_ne!(after.content_id(), before.content_id());
+    assert_eq!(read_body(&after, &mut meter()).unwrap(), edited);
+}
+
+#[test]
+fn the_next_operation_on_a_body_read_back_gives_the_same_bits() {
+    let ops = [
+        TypedTransform::from(Transform::rotation(Axis::Z, 0.3).unwrap()),
+        TypedTransform::from(Transform::scale(2.0, 0.5, 3.0).unwrap()),
+    ];
+    for body in [wall(), named_wall()] {
+        let back = read_body(&store(&body), &mut meter()).unwrap();
+        for t in &ops {
+            let bytes = |b: &Body| {
+                let mut out = Vec::new();
+                for s in b.arenas().surfaces.iter() {
+                    let mut e = Encoder::new();
+                    write_surface(
+                        &mut e,
+                        &geom_surface::ParamSurface::transformed(s, t, &mut meter())
+                            .unwrap()
+                            .value,
+                    )
+                    .unwrap();
+                    out.extend(e.finish().unwrap().into_bytes());
+                }
+                for c in b.arenas().curves.iter() {
+                    let mut e = Encoder::new();
+                    write_curve(
+                        &mut e,
+                        &geom_curve::ParamCurve::transformed(c, t, &mut meter())
+                            .unwrap()
+                            .value,
+                    )
+                    .unwrap();
+                    out.extend(e.finish().unwrap().into_bytes());
+                }
+                out
+            };
+            assert_eq!(bytes(&back), bytes(&body));
+        }
+    }
+}
+
+#[test]
+fn records_that_are_not_the_bodys_are_refused() {
+    let stored = store(&wall());
+    // A chunk's byte changed: its content ID is no longer the one listed.
+    let mut s = stored.clone();
+    let last = s.chunks[2].payload.len() - 1;
+    s.chunks[2].payload[last] ^= 1;
+    assert!(matches!(
+        read_body(&s, &mut meter()),
+        Err(BodyError::Chunk { .. })
+    ));
+    // A chunk missing.
+    let mut s = stored.clone();
+    s.chunks.remove(0);
+    assert!(matches!(
+        read_body(&s, &mut meter()),
+        Err(BodyError::Chunk { .. })
+    ));
+    // A chunk the index does not list, and one given twice.
+    let other = store(&many_faces(5));
+    let mut s = stored.clone();
+    s.chunks.push(other.chunks[2].clone());
+    assert!(matches!(
+        read_body(&s, &mut meter()),
+        Err(BodyError::Shape(_))
+    ));
+    let mut s = stored.clone();
+    s.chunks.push(stored.chunks[0].clone());
+    assert!(matches!(
+        read_body(&s, &mut meter()),
+        Err(BodyError::Shape(_))
+    ));
+    // Dependencies other than the chunks.
+    let mut s = stored.clone();
+    s.index.depends.pop();
+    assert!(matches!(
+        read_body(&s, &mut meter()),
+        Err(BodyError::Shape(_))
+    ));
+    // Another record type, schema or flags for the index or a chunk.
+    for change in 0..3 {
+        let mut s = stored.clone();
+        match change {
+            0 => s.index.tag = CHUNK_TAG,
+            1 => s.index.schema = 2,
+            _ => s.index.flags |= COPY_ALWAYS,
+        }
+        assert!(
+            matches!(read_body(&s, &mut meter()), Err(BodyError::Shape(_))),
+            "index {change}"
+        );
+        let mut s = stored.clone();
+        match change {
+            0 => s.chunks[1].tag = BODY_TAG,
+            1 => s.chunks[1].schema = 2,
+            _ => s.chunks[1].flags |= COPY_ALWAYS,
+        }
+        // The chunk's ID is of its payload alone, so it is still found, and refused as the wrong one.
+        assert!(
+            matches!(read_body(&s, &mut meter()), Err(BodyError::Chunk { .. })),
+            "chunk {change}"
+        );
+    }
+    // Another body's index over this body's chunks.
+    let mut s = stored.clone();
+    s.index = other.index.clone();
+    assert!(read_body(&s, &mut meter()).is_err());
+}
+
+/// A chunk's table and place, as its payload names them.
+fn place(r: &Record) -> (u64, u64) {
+    let mut d = Decoder::new(&r.payload, 4);
+    let mut m = meter();
+    d.next(&mut m).unwrap();
+    let mut uint = || match d.next(&mut m).unwrap() {
+        Some(Item::Uint(n)) => n,
+        other => panic!("{other:?}"),
+    };
+    (uint(), uint())
+}
+
+/// The chunks of table `code`, in order.
+fn table(s: &StoredBody, code: u64) -> Vec<Record> {
+    let mut v: Vec<Record> = s
+        .chunks
+        .iter()
+        .filter(|r| place(r).0 == code)
+        .cloned()
+        .collect();
+    v.sort_by_key(|r| place(r).1);
+    v
+}
+
+/// An index written by hand over `tables` (code, rows, chunks), with `extra` items after it.
+fn forge(
+    kind: u64,
+    outside: u64,
+    tables: &[(u64, u64, Vec<Record>)],
+    named: u64,
+    extra: bool,
+) -> StoredBody {
+    let mut e = Encoder::new();
+    e.array(5).unwrap();
+    e.uint(kind).unwrap();
+    e.uint(outside).unwrap();
+    e.array(tables.len() as u64).unwrap();
+    let mut chunks = Vec::new();
+    let mut ids = Vec::new();
+    for (code, rows, records) in tables {
+        e.array(3).unwrap();
+        e.uint(*code).unwrap();
+        e.uint(*rows).unwrap();
+        e.array(records.len() as u64).unwrap();
+        for r in records {
+            let id = r.content_id();
+            e.item(&id.item().unwrap()).unwrap();
+            ids.push(id);
+            chunks.push(r.clone());
+        }
+    }
+    e.uint(named).unwrap();
+    e.map(0).unwrap();
+    let mut payload = e.finish().unwrap().into_bytes();
+    if extra {
+        payload.push(0);
+    }
+    ids.sort_by_key(|id| id.item().unwrap().into_bytes());
+    ids.dedup();
+    StoredBody {
+        index: Record {
+            tag: BODY_TAG,
+            flags: REQUIRED,
+            schema: SCHEMA,
+            depends: ids,
+            payload,
+        },
+        chunks,
+    }
+}
+
+/// The tables of a stored body of `rows` rows per table, as the writer lists them.
+fn tables_of(s: &StoredBody, rows: &[(u64, u64)]) -> Vec<(u64, u64, Vec<Record>)> {
+    rows.iter()
+        .map(|&(code, n)| (code, n, table(s, code)))
+        .collect()
+}
+
+/// `many_faces(n)`'s tables: one solid and one void region, one shell, n faces, two surfaces.
+fn many(n: u64) -> [(u64, u64); 11] {
+    [
+        (1, 2),
+        (2, 1),
+        (3, n),
+        (4, 0),
+        (5, 0),
+        (6, 0),
+        (7, 0),
+        (8, 0),
+        (9, 2),
+        (10, 0),
+        (11, 0),
+    ]
+}
+
+#[test]
+fn an_index_written_by_hand_reads_as_the_writers() {
+    let stored = store(&many_faces(10));
+    assert_eq!(
+        forge(1, 2, &tables_of(&stored, &many(10)), 0, false),
+        stored
+    );
+}
+
+#[test]
+fn an_index_that_does_not_fit_its_chunks_is_refused() {
+    let stored = store(&many_faces(10));
+    let shape = |s: &StoredBody| matches!(read_body(s, &mut meter()), Err(BodyError::Shape(_)));
+    // Rows other than the chunks hold.
+    let mut t = tables_of(&stored, &many(10));
+    t[2].1 = 11;
+    assert!(shape(&forge(1, 2, &t, 0, false)));
+    // A table missing, given twice, or out of order.
+    let t = tables_of(&stored, &many(10));
+    let mut missing = t.clone();
+    missing.pop();
+    assert!(shape(&forge(1, 2, &missing, 0, false)));
+    let mut twice = t.clone();
+    twice.push(t[10].clone());
+    assert!(shape(&forge(1, 2, &twice, 0, false)));
+    let mut swapped = t.clone();
+    swapped.swap(3, 4);
+    assert!(shape(&forge(1, 2, &swapped, 0, false)));
+    // Names said and not given; a named flag, a kind or an outside region out of range.
+    assert!(shape(&forge(1, 2, &t, 1, false)));
+    assert!(shape(&forge(1, 2, &t, 2, false)));
+    assert!(shape(&forge(5, 2, &t, 0, false)));
+    assert!(shape(&forge(1, 0, &t, 0, false)));
+    // Bytes after the index.
+    assert!(shape(&forge(1, 2, &t, 0, true)));
+    // Each body kind the index can name reads, as far as the builder allows.
+    for kind in 0..5 {
+        let s = forge(kind, 2, &t, 0, false);
+        assert!(
+            !matches!(read_body(&s, &mut meter()), Err(BodyError::Shape(_))),
+            "{kind}"
+        );
+    }
+}
+
+#[test]
+fn chunks_are_whole_runs_in_their_places() {
+    let one = store(&many_faces(1));
+    let big = store(&many_faces(2 * CHUNK_ROWS));
+    // 4,097 faces as a run of 1 and a run of 4,096: the first run is not full.
+    let mut t = tables_of(&one, &many(1));
+    t[2] = (
+        3,
+        u64::from(CHUNK_ROWS) + 1,
+        vec![table(&one, 3)[0].clone(), table(&big, 3)[1].clone()],
+    );
+    assert!(matches!(
+        read_body(&forge(1, 2, &t, 0, false), &mut meter()),
+        Err(BodyError::Chunk { table: 3, chunk: 0 })
+    ));
+    // Two runs listed in each other's places.
+    let n = 2 * u64::from(CHUNK_ROWS);
+    let mut t = tables_of(&big, &many(n));
+    t[2].2.swap(0, 1);
+    assert!(matches!(
+        read_body(&forge(1, 2, &t, 0, false), &mut meter()),
+        Err(BodyError::Chunk { table: 3, chunk: 0 })
+    ));
+    // A run listed under another table.
+    let mut t = tables_of(&big, &many(n));
+    t[0].2 = t[1].2.clone();
+    assert!(matches!(
+        read_body(&forge(1, 2, &t, 0, false), &mut meter()),
+        Err(BodyError::Chunk { table: 1, chunk: 0 })
+    ));
+    // A chunk with a byte after it.
+    let mut t = tables_of(&one, &many(1));
+    let mut r = t[1].2[0].clone();
+    r.payload.push(0);
+    t[1].2 = vec![r];
+    assert!(matches!(
+        read_body(&forge(1, 2, &t, 0, false), &mut meter()),
+        Err(BodyError::Shape(_))
+    ));
+}
+
+#[test]
+fn a_body_error_says_what_was_wrong() {
+    assert_eq!(
+        BodyError::Shape("an index of five fields").to_string(),
+        "not a body record: an index of five fields"
+    );
+    assert_eq!(
+        BodyError::Chunk { table: 3, chunk: 1 }.to_string(),
+        "chunk 1 of table 3 is missing or not the one listed"
+    );
+}
+
+#[test]
+fn a_body_with_pcurves_reads_back() {
+    let body = wall();
+    let mut arenas = body.arenas().clone();
+    let line = geom_curve::Line::new([0.0, 0.0], [1.0, 0.5], (0.0, 1.0)).unwrap();
+    let pcurve = arenas
+        .pcurves
+        .push(geom_curve::CurveKind::Line(line))
+        .unwrap();
+    arenas.fins.pcurve.set(ix(0), Some(pcurve)).unwrap();
+    let with = Builder { arenas }
+        .publish(body.kind(), body.outside(), &mut meter())
+        .unwrap();
+    let stored = store(&with);
+    assert_eq!(read_body(&stored, &mut meter()).unwrap(), with);
+    assert_ne!(stored.content_id(), store(&body).content_id());
+}
+
+#[test]
+fn a_surface_nested_past_a_chunks_depth_is_refused_by_the_decoder() {
+    let one = store(&many_faces(1));
+    // The surfaces table's one chunk, its surface eleven offsets deep around a plane.
+    let mut e = Encoder::new();
+    e.array(4).unwrap();
+    e.uint(9).unwrap();
+    e.uint(0).unwrap();
+    e.uint(1).unwrap();
+    e.array(1).unwrap();
+    e.array(1).unwrap();
+    let levels = 11;
+    for _ in 0..levels {
+        e.array(5).unwrap();
+        e.uint(geom_format::kinds::surface::OFFSET).unwrap();
+    }
+    let plane = geom_surface::Plane::new(
+        [0.0; 3],
+        [1.0, 0.0, 0.0],
+        [0.0, 1.0, 0.0],
+        ((0.0, 1.0), (0.0, 1.0)),
+    );
+    write_surface(&mut e, &geom_surface::SurfaceKind::Plane(plane.unwrap())).unwrap();
+    for _ in 0..levels {
+        e.float(0.25).unwrap();
+        e.array(2).unwrap();
+        for _ in 0..2 {
+            e.array(2).unwrap();
+            e.float(0.0).unwrap();
+            e.float(1.0).unwrap();
+        }
+        e.uint(0).unwrap();
+    }
+    let chunk = Record {
+        tag: CHUNK_TAG,
+        flags: REQUIRED,
+        schema: SCHEMA,
+        depends: Vec::new(),
+        payload: e.finish().unwrap().into_bytes(),
+    };
+    let mut t = tables_of(&one, &many(1));
+    t[8] = (9, 1, vec![chunk]);
+    let read = read_body(&forge(1, 2, &t, 0, false), &mut meter());
+    assert!(
+        matches!(read, Err(BodyError::Kind(KindError::Cbor(_)))),
+        "{read:?}"
+    );
+}
+
+#[test]
+fn an_index_lists_its_chunks_in_the_writers_order() {
+    for body in [wall(), named_wall(), many_faces(9_000)] {
+        let stored = store(&body);
+        let listed = chunk_ids(&stored.index, &mut meter()).unwrap();
+        let written: Vec<ContentId> = stored.chunks.iter().map(Record::content_id).collect();
+        assert_eq!(listed, written);
+    }
+    // Only a body index of schema 1 has a list.
+    let stored = store(&wall());
+    let not_an_index = |r: &Record| chunk_ids(r, &mut meter()).unwrap_err();
+    for wrong in [
+        stored.chunks[0].clone(),
+        Record {
+            schema: 2,
+            ..stored.index.clone()
+        },
+        Record {
+            tag: CHUNK_TAG,
+            ..stored.index.clone()
+        },
+    ] {
+        assert_eq!(
+            not_an_index(&wrong),
+            BodyError::Shape("not a body index of schema 1")
+        );
+    }
+    // An index whose payload breaks off inside its tables is refused, not read past.
+    let mut short = stored.index.clone();
+    short.payload.truncate(short.payload.len() / 2);
+    assert!(matches!(
+        chunk_ids(&short, &mut meter()),
+        Err(BodyError::Cbor(_))
+    ));
+}
+
+// Meeting points (G129): a vertex where three planes of the body's plane pool meet.
+
+/// The plane where coordinate `k` is `at`, its normal along that axis.
+fn axis(k: usize, at: i128) -> Plane {
+    let mut n = [0; 3];
+    n[k] = 1;
+    Plane::new(n, -at).unwrap()
+}
+
+/// The corners of a box, by bits, x first.
+const CORNERS: [[u32; 4]; 6] = [
+    [0, 2, 3, 1],
+    [4, 5, 7, 6],
+    [0, 1, 5, 4],
+    [2, 6, 7, 3],
+    [0, 4, 6, 2],
+    [1, 3, 7, 5],
+];
+
+/// Corner `bits` of the box from 0 of side 10.
+fn corner(bits: u32) -> [i64; 3] {
+    [0, 1, 2].map(|k| 10 * i64::from(bits >> k & 1))
+}
+
+/// A box from 0 of side 10: the corners whose x bit is 0 meet three of the pool's six axis planes,
+/// the others are grid points. `extra` planes follow the six in the pool, and corner 0 meets the
+/// first of them in place of its x plane when there is one.
+#[allow(
+    clippy::too_many_lines,
+    clippy::cast_precision_loss,
+    reason = "one block per arena, as geom-topo's own meeting box; corners of ten steps are exact"
+)]
+fn mixed_box(extra: &[Plane]) -> Builder {
+    let mut b = Builder::new();
+    let a = &mut b.arenas;
+    a.regions
+        .extend(&[
+            Region {
+                kind: RegionKind::Solid,
+                first_shell: Some(ix(0)),
+            },
+            Region {
+                kind: RegionKind::Void,
+                first_shell: None,
+            },
+        ])
+        .unwrap();
+    a.shells
+        .extend(&[Shell {
+            region: ix(0),
+            next: None,
+            first_face: Some(ix(0)),
+        }])
+        .unwrap();
+    for k in 0..3 {
+        for at in [0, 10] {
+            a.planes.push(axis(k, at)).unwrap();
+        }
+    }
+    for plane in extra {
+        a.planes.push(*plane).unwrap();
+    }
+    for bits in 0..8 {
+        let point = if bits & 1 == 0 {
+            let mut place = [0, 1, 2].map(|k| ix(k * 2 + (bits >> k & 1)));
+            if bits == 0 && !extra.is_empty() {
+                place[0] = ix(6);
+            }
+            PointKind::Meet(place)
+        } else {
+            let [x, y, z] = corner(bits);
+            PointKind::Grid(P3::new(x, y, z).unwrap())
+        };
+        a.points.push(point).unwrap();
+        a.vertices.push(Vertex { point: ix(bits) }).unwrap();
+    }
+    let flat = Flat::new(
+        [0.0; 3],
+        [1.0, 0.0, 0.0],
+        [0.0, 1.0, 0.0],
+        ((0.0, 1.0), (0.0, 1.0)),
+    )
+    .unwrap();
+    a.surfaces.push(SurfaceKind::Plane(flat)).unwrap();
+    let bound = Box3::new(P3::new(0, 0, 0).unwrap(), P3::new(10, 10, 10).unwrap()).unwrap();
+    let mut pairs: Vec<(u32, u32)> = Vec::new();
+    for (f, ring) in CORNERS.iter().enumerate() {
+        let f = f as u32;
+        a.faces
+            .push(Face {
+                shell: ix(0),
+                next: (f < 5).then(|| ix(f + 1)),
+                surface: ix(0),
+                sense: Sense::Forward,
+                first_loop: Some(ix(f)),
+                bound,
+            })
+            .unwrap();
+        a.loops
+            .push(Loop {
+                face: ix(f),
+                next: None,
+                first_fin: Some(ix(f * 4)),
+            })
+            .unwrap();
+        for k in 0..4_u32 {
+            let (s, t) = (ring[k as usize], ring[((k + 1) % 4) as usize]);
+            let key = (s.min(t), s.max(t));
+            let e = pairs.iter().position(|&q| q == key).map_or_else(
+                || {
+                    pairs.push(key);
+                    pairs.len() as u32 - 1
+                },
+                |e| e as u32,
+            );
+            a.fins
+                .push(Fin {
+                    loop_: ix(f),
+                    next: ix(f * 4 + (k + 1) % 4),
+                    prev: ix(f * 4 + (k + 3) % 4),
+                    edge: ix(e),
+                    sense: if s < t {
+                        Sense::Forward
+                    } else {
+                        Sense::Reversed
+                    },
+                    radial: ix(f * 4 + k),
+                    pcurve: None,
+                })
+                .unwrap();
+        }
+    }
+    for (e, &(s, t)) in pairs.iter().enumerate() {
+        let (from, to) = (corner(s).map(|x| x as f64), corner(t).map(|x| x as f64));
+        let d = [0, 1, 2].map(|k| to[k] - from[k]);
+        a.curves
+            .push(CurveKind::Line(Line::new(from, d, (0.0, 1.0)).unwrap()))
+            .unwrap();
+        a.edges
+            .push(Edge {
+                first_fin: None,
+                start: Some(ix(s)),
+                end: Some(ix(t)),
+                curve: ix(e as u32),
+            })
+            .unwrap();
+    }
+    b
+}
+
+/// [`mixed_box`], published.
+fn mixed(extra: &[Plane]) -> Body {
+    mixed_box(extra)
+        .publish(BodyKind::Solid, ix(1), &mut meter())
+        .unwrap()
+}
+
+/// The index's tables: code and rows, in order.
+fn listed(s: &StoredBody) -> Vec<(u64, u64)> {
+    let mut d = Decoder::new(&s.index.payload, 8);
+    let mut m = meter();
+    let mut next = || d.next(&mut m).unwrap().unwrap();
+    let uint = |item: Item| match item {
+        Item::Uint(n) => n,
+        other => panic!("{other:?}"),
+    };
+    for _ in 0..3 {
+        next();
+    }
+    let Item::Array(count) = next() else {
+        panic!("the tables")
+    };
+    let mut out = Vec::new();
+    for _ in 0..count {
+        next();
+        let code = uint(next());
+        let rows = uint(next());
+        let Item::Array(chunks) = next() else {
+            panic!("the chunks")
+        };
+        for _ in 0..chunks * 3 {
+            next();
+        }
+        out.push((code, rows));
+    }
+    out
+}
+
+/// The number of columns of a chunk.
+fn columns(r: &Record) -> u64 {
+    let mut d = Decoder::new(&r.payload, 4);
+    let mut m = meter();
+    for _ in 0..4 {
+        d.next(&mut m).unwrap();
+    }
+    match d.next(&mut m).unwrap() {
+        Some(Item::Array(n)) => n,
+        other => panic!("{other:?}"),
+    }
+}
+
+/// A chunk of table `code` at place 0 with `rows` rows and the `width` columns `write` encodes.
+fn chunk(code: u64, rows: u64, width: u64, write: impl FnOnce(&mut Encoder)) -> Record {
+    let mut e = Encoder::new();
+    e.array(4).unwrap();
+    e.uint(code).unwrap();
+    e.uint(0).unwrap();
+    e.uint(rows).unwrap();
+    e.array(width).unwrap();
+    write(&mut e);
+    Record {
+        tag: CHUNK_TAG,
+        flags: REQUIRED,
+        schema: SCHEMA,
+        depends: Vec::new(),
+        payload: e.finish().unwrap().into_bytes(),
+    }
+}
+
+/// `s` with table `code`'s chunks replaced by `with`, listed with `rows` rows, or not listed.
+fn swap(s: &StoredBody, code: u64, rows: Option<u64>, with: Vec<Record>) -> StoredBody {
+    let mut tables: Vec<(u64, u64, Vec<Record>)> = listed(s)
+        .into_iter()
+        .filter(|&(c, _)| c != code)
+        .map(|(c, n)| (c, n, table(s, c)))
+        .collect();
+    if let Some(rows) = rows {
+        tables.push((code, rows, with));
+        tables.sort_by_key(|t| t.0);
+    }
+    forge(0, 2, &tables, 0, false)
+}
+
+/// The mixed box's planes chunk with `list` in place of its planes.
+fn planes(list: &[[i128; 4]]) -> Record {
+    let rows = list.len() as u64;
+    chunk(16, rows, 1, |e| {
+        e.array(rows * 4).unwrap();
+        for v in list.iter().flatten() {
+            e.int(*v).unwrap();
+        }
+    })
+}
+
+/// The mixed box's six axis planes as four integers each, the first replaced by `first`.
+fn six(first: [i128; 4]) -> Vec<[i128; 4]> {
+    let mut list = vec![first];
+    for (k, at) in [(0, 10), (1, 0), (1, 10), (2, 0), (2, 10)] {
+        let mut n = [0; 4];
+        n[k] = 1;
+        n[3] = -at;
+        list.push(n);
+    }
+    list
+}
+
+/// The mixed box's points chunk written by hand: each row's kind, then the grid points' x, y and
+/// z, then the meetings' plane references.
+fn points(kinds: &[u64], xyz: &[i64], refs: &[u64]) -> Record {
+    chunk(8, kinds.len() as u64, 3, |e| {
+        e.array(kinds.len() as u64).unwrap();
+        for k in kinds {
+            e.uint(*k).unwrap();
+        }
+        e.i64_column(xyz).unwrap();
+        e.array(refs.len() as u64).unwrap();
+        for r in refs {
+            e.uint(*r).unwrap();
+        }
+    })
+}
+
+#[test]
+fn a_body_with_meetings_reads_back_index_for_index() {
+    let body = mixed(&[]);
+    let stored = store(&body);
+    let back = read_body(&stored, &mut meter()).unwrap();
+    assert_eq!(back, body);
+    assert_eq!(store(&back), stored);
+    // The plane pool is table 16, after the rest, its six planes in one chunk.
+    let tables = listed(&stored);
+    assert_eq!(tables.last(), Some(&(16, 6)));
+    assert_eq!(tables.len(), 12);
+    // The points chunk holds meetings, so it has its three columns.
+    assert_eq!(columns(&table(&stored, 8)[0]), 3);
+    assert_eq!(forge(0, 2, &tables_of(&stored, &tables), 0, false), stored);
+    // The writer's chunks, written by hand from 24.3's rule, are the same bytes.
+    let mut kinds = Vec::new();
+    let (mut xyz, mut refs) = (Vec::new(), Vec::new());
+    for bits in 0..8_u32 {
+        kinds.push(u64::from(bits & 1 == 0));
+        if bits & 1 == 0 {
+            refs.extend([0, 1, 2].map(|k| u64::from(k * 2 + (bits >> k & 1)) + 1));
+        } else {
+            xyz.extend(corner(bits));
+        }
+    }
+    assert_eq!(table(&stored, 8), vec![points(&kinds, &xyz, &refs)]);
+    assert_eq!(table(&stored, 16), vec![planes(&six([1, 0, 0, 0]))]);
+}
+
+#[test]
+fn a_body_of_grid_points_alone_is_stored_as_before_meetings() {
+    let stored = store(&wall());
+    assert!(listed(&stored).iter().all(|&(code, _)| code <= 11));
+    assert!(table(&stored, 8).iter().all(|c| columns(c) == 1));
+    assert_eq!(table(&stored, 16), Vec::new());
+}
+
+#[test]
+fn a_plane_past_64_bits_reads_back_as_a_bignum() {
+    // Reduced, its normal past 2^64 and its offset past 2^100, and meeting the y and z planes of
+    // corner 0 in one point.
+    let big = Plane::new([(1 << 70) + 1, 3, 0], -((1 << 100) + 7)).unwrap();
+    let body = mixed(&[big]);
+    let stored = store(&body);
+    assert_eq!(read_body(&stored, &mut meter()).unwrap(), body);
+    assert_eq!(listed(&stored).last(), Some(&(16, 7)));
+    // Negative as well as positive.
+    let below = Plane::new([-(1 << 82), 1, 0], (1 << 124) - 1).unwrap();
+    let body = mixed(&[below]);
+    assert_eq!(read_body(&store(&body), &mut meter()).unwrap(), body);
+}
+
+#[test]
+fn the_writer_refuses_a_plane_that_is_not_reduced() {
+    let twice = Plane::new([2, 0, 0], -4).unwrap();
+    assert!(matches!(
+        write_body(&mixed(&[twice]), &mut meter()),
+        Err(BodyError::Shape(_))
+    ));
+}
+
+#[test]
+fn planes_that_break_the_rules_are_refused() {
+    let stored = store(&mixed(&[]));
+    let shape = |s: &StoredBody| matches!(read_body(s, &mut meter()), Err(BodyError::Shape(_)));
+    let with = |list: Vec<[i128; 4]>| swap(&stored, 16, Some(6), vec![planes(&list)]);
+    // The writer's planes, written by hand, read back.
+    assert!(read_body(&with(six([1, 0, 0, 0])), &mut meter()).is_ok());
+    // A plane not reduced; a normal past 83 bits; an offset past 125; a zero normal.
+    assert!(shape(&with(six([2, 0, 0, 0]))));
+    assert!(shape(&with(six([1 << 84, 1, 0, 0]))));
+    assert!(shape(&with(six([1, 0, 0, 1 << 126]))));
+    assert!(shape(&with(six([0, 0, 0, 1]))));
+    // Where corner 0 meets: x = 0 made parallel to its y plane, so the three meet in no point.
+    let mut parallel = six([1, 0, 0, 0]);
+    parallel[0] = [0, 1, 0, -5];
+    assert!(shape(&with(parallel)));
+    // A plane table listed empty, or missing while meetings name its planes.
+    assert!(shape(&swap(&stored, 16, Some(0), Vec::new())));
+    assert!(read_body(&swap(&stored, 16, None, Vec::new()), &mut meter()).is_err());
+}
+
+#[test]
+fn points_that_break_the_rules_are_refused() {
+    let stored = store(&mixed(&[]));
+    let shape = |s: &StoredBody| matches!(read_body(s, &mut meter()), Err(BodyError::Shape(_)));
+    let all: Vec<i64> = (0..8).flat_map(corner).collect();
+    let with = |chunk: Record| swap(&stored, 8, Some(8), vec![chunk]);
+    // Every corner a grid point, with a kind column: grid points alone have one column.
+    assert!(shape(&swap(
+        &with(points(&[0; 8], &all, &[])),
+        16,
+        None,
+        Vec::new()
+    )));
+    // A kind of 2.
+    let mut kinds = [0; 8];
+    kinds[0] = 2;
+    assert!(shape(&with(points(&kinds, &all[3..], &[1, 3, 5]))));
+    // A meeting with two plane references, or with a reference of 0.
+    kinds[0] = 1;
+    assert!(shape(&with(points(&kinds, &all[3..], &[1, 3]))));
+    assert!(shape(&with(points(&kinds, &all[3..], &[0, 3, 5]))));
+    // A grid point short of a coordinate.
+    assert!(shape(&with(points(&kinds, &all[4..], &[1, 3, 5]))));
+}

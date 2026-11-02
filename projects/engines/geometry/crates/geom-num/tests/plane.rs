@@ -36,7 +36,7 @@
 use std::cmp::Ordering;
 
 use geom_num::grid::COORD_MAX;
-use geom_num::plane::{Plane, Tpi};
+use geom_num::plane::{Plane, Tpi, determinant_sign, normals_sign};
 use geom_num::{NumError, P3, Sign, Wide};
 use num_bigint::BigInt;
 use num_integer::Integer;
@@ -1063,5 +1063,264 @@ fn extreme_tpis() {
         (max.n, max.d, max.w, max.x, max.class),
         (82, 122, 248, 288, 372),
         "{max:?}"
+    );
+}
+
+#[test]
+fn a_plane_from_coefficients_is_checked_as_a_plane_through_points_is() {
+    assert_eq!(Plane::new([0, 0, 0], 1), Err(NumError::Degenerate));
+    for n in [[1, 0, 0], [0, 1, 0], [0, 0, 1], [-1, 0, 0]] {
+        let plane = Plane::new(n, 5).unwrap();
+        assert_eq!((plane.n(), plane.d()), (n, 5));
+    }
+    let top_n = (1i128 << 83) - 1;
+    let top_d = (1i128 << 125) - 1;
+    assert!(Plane::new([top_n, -top_n, top_n], top_d).is_ok());
+    assert!(Plane::new([-top_n, top_n, -top_n], -top_d).is_ok());
+    for n in [[top_n + 1, 0, 0], [0, -top_n - 1, 0], [0, 0, top_n + 1]] {
+        assert_eq!(Plane::new(n, 0), Err(NumError::BudgetExceeded));
+    }
+    assert_eq!(
+        Plane::new([1, 0, 0], top_d + 1),
+        Err(NumError::BudgetExceeded)
+    );
+    assert_eq!(
+        Plane::new([1, 0, 0], -top_d - 1),
+        Err(NumError::BudgetExceeded)
+    );
+}
+
+#[test]
+fn a_point_says_the_sign_of_its_weight() {
+    let at = |n: [i128; 3]| Plane::new(n, 0).unwrap();
+    let (x, y, z) = (at([1, 0, 0]), at([0, 1, 0]), at([0, 0, 1]));
+    assert_eq!(Tpi::new(x, y, z).unwrap().weight(), Sign::Positive);
+    assert_eq!(Tpi::new(y, x, z).unwrap().weight(), Sign::Negative);
+}
+
+/// A coefficient of any length from a bit to past a machine word, so that every step of the word
+/// path overflows in some case.
+fn any_length() -> impl Strategy<Value = i128> {
+    (0u32..70, -3i128..=3).prop_map(|(bits, low)| (1i128 << bits) * low.signum() + low)
+}
+
+fn any_length_plane() -> impl Strategy<Value = Plane> {
+    (prop::array::uniform3(any_length()), any_length())
+        .prop_filter_map("a normal", |(n, d)| Plane::new(n, d).ok())
+}
+
+/// A plane of very short coefficients, so that determinants are often zero.
+fn short_plane() -> impl Strategy<Value = Plane> {
+    (prop::array::uniform3(-2i128..=2), -3i128..=3)
+        .prop_filter_map("a normal", |(n, d)| Plane::new(n, d).ok())
+}
+
+fn normals_big(p: &Plane, q: &Plane, r: &Plane) -> BigInt {
+    det3(&[plane_big(p).0, plane_big(q).0, plane_big(r).0])
+}
+
+/// The 4 × 4 determinant, expanded in big integers.
+fn determinant_big(p: &Plane, q: &Plane, r: &Plane, s: &Plane) -> BigInt {
+    let offset = |plane: &Plane| plane_big(plane).1;
+    offset(q) * normals_big(p, r, s)
+        - offset(p) * normals_big(q, r, s)
+        - offset(r) * normals_big(p, q, s)
+        + offset(s) * normals_big(p, q, r)
+}
+
+fn check_determinants(p: &Plane, q: &Plane, r: &Plane, s: &Plane) {
+    let want = sign_big(&determinant_big(p, q, r, s));
+    assert_eq!(determinant_sign(p, q, r, s).unwrap(), want);
+    let weight = sign_big(&normals_big(p, q, r));
+    assert_eq!(normals_sign(p, q, r).unwrap(), weight);
+    let (full, quick) = (Tpi::new(*p, *q, *r), Tpi::meeting(*p, *q, *r));
+    assert_eq!(full, quick);
+    if weight == Sign::Zero {
+        assert_eq!(quick, Err(NumError::Degenerate));
+    } else {
+        assert_eq!(quick.unwrap().weight(), weight);
+        assert_eq!(s.side_of_tpi(&quick.unwrap()).unwrap(), want.mul(weight));
+    }
+}
+
+proptest! {
+    #![proptest_config(ProptestConfig::with_cases(2000))]
+
+    #[test]
+    fn determinants_are_exact_at_any_length(
+        p in any_length_plane(),
+        q in any_length_plane(),
+        r in any_length_plane(),
+        s in any_length_plane(),
+    ) {
+        check_determinants(&p, &q, &r, &s);
+    }
+
+    #[test]
+    fn determinants_are_exact_when_they_vanish(
+        p in short_plane(),
+        q in short_plane(),
+        r in short_plane(),
+        s in short_plane(),
+    ) {
+        check_determinants(&p, &q, &r, &s);
+    }
+
+    /// One step from every degeneracy (chapter 28.6): a fourth plane that is a combination of the
+    /// first three makes the determinant exactly zero, and a third normal that is a combination
+    /// of the first two makes the weight zero; moving any one coefficient by one either way then
+    /// gives ± a minor, whose sign must be exact.
+    #[test]
+    fn determinants_one_step_from_zero(
+        p in any_length_plane(),
+        q in any_length_plane(),
+        r in any_length_plane(),
+        (a, b, c) in (-3i128..=3, -3i128..=3, -3i128..=3),
+        coefficient in 0usize..4,
+    ) {
+        if let Some(s) = mix(&[(a, &p), (b, &q), (c, &r)]) {
+            prop_assert_eq!(determinant_sign(&p, &q, &r, &s).unwrap(), Sign::Zero);
+            for k in [-1, 1] {
+                if let Some(moved) = nudged(&s, coefficient, k) {
+                    check_determinants(&p, &q, &r, &moved);
+                }
+            }
+        }
+        if let Some(dependent) = mix(&[(a, &p), (b, &q)]) {
+            prop_assert_eq!(normals_sign(&p, &q, &dependent).unwrap(), Sign::Zero);
+            for k in [-1, 1] {
+                if let Some(moved) = nudged(&dependent, coefficient, k) {
+                    check_determinants(&p, &q, &moved, &r);
+                }
+            }
+        }
+    }
+
+    /// The laws of a determinant: swapping any two planes flips the sign, negating a plane's
+    /// coefficients flips it, and a repeated plane makes it zero. The same for three normals,
+    /// whose sign is the weight of the point where the planes meet.
+    #[test]
+    fn determinant_laws(
+        p in any_length_plane(),
+        q in any_length_plane(),
+        r in any_length_plane(),
+        s in any_length_plane(),
+    ) {
+        let rows = [p, q, r, s];
+        let det = determinant_sign(&p, &q, &r, &s).unwrap();
+        for i in 0..4 {
+            for j in i + 1..4 {
+                let mut swapped = rows;
+                swapped.swap(i, j);
+                let [w, x, y, z] = swapped;
+                prop_assert_eq!(determinant_sign(&w, &x, &y, &z).unwrap(), det.negate());
+            }
+            let mut negated = rows;
+            negated[i] = Plane::new(rows[i].n().map(|v| -v), -rows[i].d()).unwrap();
+            let [w, x, y, z] = negated;
+            prop_assert_eq!(determinant_sign(&w, &x, &y, &z).unwrap(), det.negate());
+            let mut repeated = rows;
+            repeated[(i + 1) % 4] = rows[i];
+            let [w, x, y, z] = repeated;
+            prop_assert_eq!(determinant_sign(&w, &x, &y, &z).unwrap(), Sign::Zero);
+        }
+        let weight = normals_sign(&p, &q, &r).unwrap();
+        prop_assert_eq!(normals_sign(&q, &p, &r).unwrap(), weight.negate());
+        prop_assert_eq!(normals_sign(&p, &r, &q).unwrap(), weight.negate());
+        prop_assert_eq!(normals_sign(&r, &p, &q).unwrap(), weight);
+        let minus = Plane::new(p.n().map(|v| -v), p.d()).unwrap();
+        prop_assert_eq!(normals_sign(&minus, &q, &r).unwrap(), weight.negate());
+        prop_assert_eq!(normals_sign(&p, &q, &p).unwrap(), Sign::Zero);
+    }
+}
+
+/// `terms` summed coefficient by coefficient, as a plane, if every step fits and the plane is
+/// within the budget.
+fn mix(terms: &[(i128, &Plane)]) -> Option<Plane> {
+    let mut n = [0i128; 3];
+    let mut d = 0i128;
+    for &(k, plane) in terms {
+        for (sum, v) in n.iter_mut().zip(plane.n()) {
+            *sum = sum.checked_add(k.checked_mul(v)?)?;
+        }
+        d = d.checked_add(k.checked_mul(plane.d())?)?;
+    }
+    Plane::new(n, d).ok()
+}
+
+/// `plane` with one coefficient moved by `k`: 0 to 2 a component of the normal, 3 the offset.
+fn nudged(plane: &Plane, coefficient: usize, k: i128) -> Option<Plane> {
+    let (mut n, mut d) = (plane.n(), plane.d());
+    match n.get_mut(coefficient) {
+        Some(v) => *v = v.checked_add(k)?,
+        None => d = d.checked_add(k)?,
+    }
+    Plane::new(n, d).ok()
+}
+
+/// Every sign corner of the budget (chapter 28.6): each normal component at ±(2^83 − 1) and each
+/// offset at ±(2^125 − 1), the largest coefficients `Plane::new` accepts, so these are the
+/// largest determinants any planes have. Every one of the 16^4 determinants and 16^3 weights
+/// against the big-integer oracle, and none past the exact path's budget, which
+/// `determinant_sign` and `normals_sign` document no planes reach. Weights also with components
+/// at zero, the centres of the frame.
+#[test]
+fn determinants_at_the_coefficient_corners() {
+    let (n, d) = ((1i128 << 83) - 1, (1i128 << 125) - 1);
+    let at = |bits: u32, i: u32, v: i128| if bits >> i & 1 == 1 { -v } else { v };
+    let corners: Vec<Plane> = (0..16u32)
+        .map(|bits| {
+            Plane::new(
+                [at(bits, 0, n), at(bits, 1, n), at(bits, 2, n)],
+                at(bits, 3, d),
+            )
+            .unwrap()
+        })
+        .collect();
+    let mut seen = [0usize; 3];
+    let tally = |seen: &mut [usize; 3], s: Sign| {
+        seen[match s {
+            Sign::Negative => 0,
+            Sign::Zero => 1,
+            Sign::Positive => 2,
+        }] += 1;
+    };
+    for p in &corners {
+        for q in &corners {
+            for r in &corners {
+                assert_eq!(
+                    normals_sign(p, q, r).unwrap(),
+                    sign_big(&normals_big(p, q, r))
+                );
+                for s in &corners {
+                    let got = determinant_sign(p, q, r, s).unwrap();
+                    assert_eq!(got, sign_big(&determinant_big(p, q, r, s)));
+                    tally(&mut seen, got);
+                }
+            }
+        }
+    }
+    assert!(
+        seen.iter().all(|&k| k > 0),
+        "zero, negative and positive all reached: {seen:?}"
+    );
+    let values = [-n, 0, n];
+    let centres: Vec<Plane> = (0..27usize)
+        .filter_map(|i| Plane::new([values[i % 3], values[i / 3 % 3], values[i / 9]], d).ok())
+        .collect();
+    assert_eq!(centres.len(), 26, "every normal but zero");
+    let mut weights = [0usize; 3];
+    for p in &centres {
+        for q in &centres {
+            for r in &centres {
+                let got = normals_sign(p, q, r).unwrap();
+                assert_eq!(got, sign_big(&normals_big(p, q, r)));
+                tally(&mut weights, got);
+            }
+        }
+    }
+    assert!(
+        weights.iter().all(|&k| k > 0),
+        "zero, negative and positive all reached: {weights:?}"
     );
 }

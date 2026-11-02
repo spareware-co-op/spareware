@@ -15,8 +15,9 @@
 //!   the nearest grid point (ties to even) and says whether it rounded, moving each coordinate by
 //!   at most [`COMMIT_PER_AXIS`](crate::ladder::COMMIT_PER_AXIS), half a step.
 //! - Nothing overflows, and nothing could wrap silently if it did. A [`Plane`] can only be made by
-//!   [`Plane::through`] from grid points (within 2^40 − 1 steps of the origin), which checks the
-//!   plane's budget below at construction (chapter 6.2); a [`Tpi`] can only be made by
+//!   [`Plane::through`] from grid points (within 2^40 − 1 steps of the origin) or by [`Plane::new`]
+//!   from coefficients, each of which checks the plane's budget below at construction (chapter
+//!   6.2); a [`Tpi`] can only be made by
 //!   [`Tpi::new`], which checks that its homogeneous coordinates fit their types. Every
 //!   intermediate fits its type by the derivation written on each function; the arithmetic of
 //!   every derivation, and every figure in the table below, is asserted when the crate compiles
@@ -101,7 +102,9 @@ use core::cmp::Ordering;
 use crate::error::NumError;
 use crate::generated;
 use crate::grid::{COORD_BITS, COORD_MAX, Coord, P3, Rounded};
+use crate::predicate::filtered;
 use crate::sign::Sign;
+use crate::step::Step;
 use crate::wide::{I256, I320, Wide};
 // Named in the documentation only; the code reaches them as `Wide<6>` and `Wide<8>`.
 #[cfg(doc)]
@@ -283,6 +286,23 @@ impl Plane {
         }
     }
 
+    /// The plane n · p + d = 0 from its coefficients, as a stored or reduced plane gives them.
+    ///
+    /// # Errors
+    ///
+    /// [`NumError::Degenerate`] for a zero normal, and [`NumError::BudgetExceeded`] for a
+    /// coefficient over its budget (|`n_i`| ≥ 2^83 or |d| ≥ 2^125): chapter 6.2 has the type refuse
+    /// it here, so no plane over budget reaches an exact computation.
+    pub const fn new(n: [i128; 3], d: i128) -> Result<Plane, NumError> {
+        if n[0] == 0 && n[1] == 0 && n[2] == 0 {
+            Err(NumError::Degenerate)
+        } else if within_budget(&n, d) {
+            Ok(Plane { n, d })
+        } else {
+            Err(NumError::BudgetExceeded)
+        }
+    }
+
     /// The normal n; |`n_i`| < 2^83, checked at construction.
     #[must_use]
     pub const fn n(&self) -> [i128; 3] {
@@ -359,6 +379,47 @@ impl Plane {
     /// could only if the checked wide arithmetic itself were wrong (module docs, "No answer is
     /// silently wrong"), and then this reports it rather than answering.
     pub fn side_of_tpi(&self, t: &Tpi) -> Result<Sign, NumError> {
+        if t.planes.contains(self) {
+            return Ok(Sign::Zero);
+        }
+        tpi_filtered(t, self).map_or_else(|| self.side_of_tpi_unfiltered(t), Ok)
+    }
+
+    /// [`Plane::side_of_tpi`], and the [`Step`] that settled it: this plane among the point's own;
+    /// the generated filter; for what it leaves, small coefficients in `i64`, then a plane square to
+    /// an axis in one narrower product; the exact paths. The narrow and axis steps go after the
+    /// filter, which settles general position for less than they would add to it, and what they
+    /// save is the exact path of the ties it leaves.
+    ///
+    /// # Errors
+    ///
+    /// As [`Plane::side_of_tpi`].
+    pub fn side_of_tpi_step(&self, t: &Tpi) -> Result<(Sign, Step), NumError> {
+        let sign = self.side_of_tpi(t)?;
+        let step = if t.planes.contains(self) {
+            Step::Identity
+        } else if tpi_filtered(t, self).is_some() {
+            Step::Filter
+        } else if tpi_narrow(t, self).is_some() {
+            Step::Narrow
+        } else if tpi_axis(t, self).is_some() {
+            Step::Axis
+        } else {
+            Step::Exact
+        };
+        Ok((sign, step))
+    }
+
+    /// [`Plane::side_of_tpi`] when the filter cannot decide: small coefficients, a plane square to an
+    /// axis, the exact paths. Out of line, so that a call the filter answers does not pay for them.
+    #[inline(never)]
+    fn side_of_tpi_unfiltered(&self, t: &Tpi) -> Result<Sign, NumError> {
+        if let Some(sign) = tpi_narrow(t, self) {
+            return Ok(sign);
+        }
+        if let Some(sign) = tpi_axis(t, self) {
+            return Ok(sign);
+        }
         tpi_routed(t, self).map_or_else(|| self.side_of_tpi_hand(t), Ok)
     }
 
@@ -564,6 +625,29 @@ impl Tpi {
             }
             None => Err(NumError::BudgetExceeded),
         }
+    }
+
+    /// [`Tpi::new`] at a fraction of its cost, for loops that make a point to read a sign from it:
+    /// it computes only w. [`Tpi::new`] also computes X, and is proved never to fail doing so for
+    /// any planes (`verus/plane.rs`), so the result is the same.
+    ///
+    /// # Errors
+    ///
+    /// As [`Tpi::new`].
+    pub fn meeting(p: Plane, q: Plane, r: Plane) -> Result<Tpi, NumError> {
+        match normals_sign(&p, &q, &r)? {
+            Sign::Zero => Err(NumError::Degenerate),
+            weight => Ok(Tpi {
+                planes: [p, q, r],
+                weight,
+            }),
+        }
+    }
+
+    /// The sign of the point's weight w = det(`n_p`, `n_q`, `n_r`), exactly: never `Zero`.
+    #[must_use]
+    pub const fn weight(&self) -> Sign {
+        self.weight
     }
 
     /// The three planes, in the order given to [`Tpi::new`].
@@ -840,9 +924,9 @@ fn lpi_routed(l: &Lpi, s: &Plane) -> Option<Sign> {
     let ([ax, ay, az], ad) = (l.plane.n, l.plane.d);
     let ([bx, by, bz], bd) = (s.n, s.d);
     let (p, q) = (l.p, l.q);
-    let weight = generated::lpi_weight::filter(ax, ay, az, p, q)
+    let weight = filtered(|| generated::lpi_weight::filter(ax, ay, az, p, q))
         .or_else(|| generated::lpi_weight::exact(ax, ay, az, p, q))?;
-    let side = generated::lpi_side::filter(ax, ay, az, ad, bx, by, bz, bd, p, q)
+    let side = filtered(|| generated::lpi_side::filter(ax, ay, az, ad, bx, by, bz, bd, p, q))
         .or_else(|| generated::lpi_side::exact(ax, ay, az, ad, bx, by, bz, bd, p, q))?;
     Some(side.mul(weight))
 }
@@ -854,13 +938,155 @@ fn lpi_classify<const L: usize>(w1: i128, s2p: i128, w2: i128, s1p: i128) -> Opt
     Some(a.checked_sub(&b)?.signum())
 }
 
-/// The side of plane `s` that the point where `t`'s planes meet is on, through the generated
-/// predicates (chapter 6.2): the sign of the 4 × 4 determinant of the four planes' coefficients
-/// (`tpi_side`, which equals n · X + d · w), from its `f64` filter when the filter can decide and
-/// from its generated exact path otherwise, times the sign of the point's weight w, which
-/// [`Tpi::new`] stored exactly (so the generated `tpi_weight` is never needed here). `None` only
-/// when the generated exact path does not fit its certified types, which no planes made by
-/// [`Plane::through`] cause; the caller then takes the hand-written paths.
+/// The bound on a normal component for [`Plane::side_of_tpi`]'s narrow step: 2^6, which holds the
+/// axes, 45 degrees and small rational slopes.
+const TPI_NARROW_NORMAL: u128 = 1 << 6;
+
+/// The bound on an offset for [`Plane::side_of_tpi`]'s narrow step: 2^40, so a unit normal stays
+/// narrow anywhere in the frame.
+const TPI_NARROW_OFFSET: u128 = 1 << 40;
+
+/// A plane's coefficients in `i64` when they are below those bounds in magnitude.
+fn narrow_plane(plane: &Plane) -> Option<([i64; 3], i64)> {
+    let small = |v: i128, limit: u128| {
+        if v.unsigned_abs() < limit {
+            i64::try_from(v).ok()
+        } else {
+            None
+        }
+    };
+    let [x, y, z] = plane.n;
+    Some((
+        [
+            small(x, TPI_NARROW_NORMAL)?,
+            small(y, TPI_NARROW_NORMAL)?,
+            small(z, TPI_NARROW_NORMAL)?,
+        ],
+        small(plane.d, TPI_NARROW_OFFSET)?,
+    ))
+}
+
+/// The cross product a × b in `i64`.
+fn narrow_cross(a: [i64; 3], b: [i64; 3]) -> Option<[i64; 3]> {
+    let ([ax, ay, az], [bx, by, bz]) = (a, b);
+    let minor = |p: i64, q: i64, r: i64, s: i64| p.checked_mul(q)?.checked_sub(r.checked_mul(s)?);
+    Some([
+        minor(ay, bz, az, by)?,
+        minor(az, bx, ax, bz)?,
+        minor(ax, by, ay, bx)?,
+    ])
+}
+
+/// [`Plane::side_of_tpi`] in `i64`, or `None` when a coefficient is out of range: the point's X and
+/// w as on [`Tpi::homogeneous`], then n · X + d · w. With |`n_i`| < 2^6 and |d| < 2^40, the cross
+/// products are below 2^13, w below 2^21, `X_i` below 2^55 and the result, a 4 × 4 determinant,
+/// below 24 · 2^58 < 2^63. Every step is checked all the same, and a partial sum that did not fit
+/// would leave the call to the next step.
+#[allow(
+    clippy::many_single_char_names,
+    reason = "p, q and r are the three planes and s the fourth, as in the formulas above"
+)]
+fn tpi_narrow(t: &Tpi, s: &Plane) -> Option<Sign> {
+    let [p, q, r] = &t.planes;
+    let (np, dp) = narrow_plane(p)?;
+    let (nq, dq) = narrow_plane(q)?;
+    let (nr, dr) = narrow_plane(r)?;
+    let ([sx, sy, sz], sd) = narrow_plane(s)?;
+    let qr = narrow_cross(nq, nr)?;
+    let [rp_x, rp_y, rp_z] = narrow_cross(nr, np)?;
+    let [pq_x, pq_y, pq_z] = narrow_cross(np, nq)?;
+    let [qr_x, qr_y, qr_z] = qr;
+    let [px, py, pz] = np;
+    let w = px
+        .checked_mul(qr_x)?
+        .checked_add(py.checked_mul(qr_y)?)?
+        .checked_add(pz.checked_mul(qr_z)?)?;
+    let numerator = |a: i64, b: i64, c: i64| {
+        dp.checked_mul(a)?
+            .checked_add(dq.checked_mul(b)?)?
+            .checked_add(dr.checked_mul(c)?)?
+            .checked_neg()
+    };
+    let side = sx
+        .checked_mul(numerator(qr_x, rp_x, pq_x)?)?
+        .checked_add(sy.checked_mul(numerator(qr_y, rp_y, pq_y)?)?)?
+        .checked_add(sz.checked_mul(numerator(qr_z, rp_z, pq_z)?)?)?
+        .checked_add(sd.checked_mul(w)?)?;
+    Some(Sign::of_i64(side).mul(t.weight))
+}
+
+/// [`Plane::side_of_tpi`] for a plane with a unit normal along a frame axis, the shape every such
+/// plane has in canonical form (11.3): ±`X_i` + d · w, which needs one component of the
+/// numerators and one product in [`I320`], about 300 bits where the general path takes 384. `None`
+/// for any other plane, and when d · w does not fit, which a plane within the frame cannot cause
+/// (|d| < 2^41, |w| < 2^252).
+#[allow(
+    clippy::many_single_char_names,
+    reason = "p, q and r are the three planes and s the fourth, as in the formulas above"
+)]
+fn tpi_axis(t: &Tpi, s: &Plane) -> Option<Sign> {
+    let (axis, negative) = match s.n {
+        [1, 0, 0] => (0, false),
+        [-1, 0, 0] => (0, true),
+        [0, 1, 0] => (1, false),
+        [0, -1, 0] => (1, true),
+        [0, 0, 1] => (2, false),
+        [0, 0, -1] => (2, true),
+        _ => return None,
+    };
+    let [p, q, r] = &t.planes;
+    let c_qr = cross(&q.n, &r.n)?;
+    let w = dot(&p.n, &c_qr)?;
+    let one = |a: &[i128; 3], b: &[i128; 3]| {
+        let ([ax, ay, az], [bx, by, bz]) = (*a, *b);
+        match axis {
+            0 => product_difference(ay, bz, az, by),
+            1 => product_difference(az, bx, ax, bz),
+            _ => product_difference(ax, by, ay, bx),
+        }
+    };
+    let [qr_x, qr_y, qr_z] = &c_qr;
+    let qr = match axis {
+        0 => qr_x,
+        1 => qr_y,
+        _ => qr_z,
+    };
+    let (pd, qd, rd) = (
+        I320::from_i128(p.d),
+        I320::from_i128(q.d),
+        I320::from_i128(r.d),
+    );
+    let (rp, pq) = (one(&r.n, &p.n)?, one(&p.n, &q.n)?);
+    let x = numerator(&pd, &qd, &rd, qr, &rp, &pq)?;
+    let x = if negative { x.checked_neg()? } else { x };
+    let side = x.checked_add(&I320::from_i128(s.d).checked_mul(&w.resize::<5>()?)?)?;
+    Some(side.signum().mul(t.weight))
+}
+
+/// The side of plane `s` that the point where `t`'s planes meet is on, from the `f64` filter of
+/// the generated predicate (chapter 6.2): the sign of the 4 × 4 determinant of the four planes'
+/// coefficients (`tpi_side`, which equals n · X + d · w), times the sign of the point's weight w,
+/// which [`Tpi::new`] stored exactly (so the generated `tpi_weight` is never needed here). `None`
+/// when the filter cannot decide.
+#[allow(
+    clippy::many_single_char_names,
+    reason = "p, q and r are the three planes and s the fourth, as in the formulas above"
+)]
+fn tpi_filtered(t: &Tpi, s: &Plane) -> Option<Sign> {
+    let [p, q, r] = t.planes;
+    let ([ax, ay, az], ad) = (p.n, p.d);
+    let ([bx, by, bz], bd) = (q.n, q.d);
+    let ([cx, cy, cz], cd) = (r.n, r.d);
+    let ([sx, sy, sz], sd) = (s.n, s.d);
+    let side = generated::tpi_side::filter(
+        ax, ay, az, ad, bx, by, bz, bd, cx, cy, cz, cd, sx, sy, sz, sd,
+    )?;
+    Some(side.mul(t.weight))
+}
+
+/// [`tpi_filtered`] from the generated exact path. `None` only when that path does not fit its
+/// certified types, which no planes within budget cause; the caller then takes the hand-written
+/// paths.
 #[allow(
     clippy::many_single_char_names,
     reason = "p, q and r are the three planes and s the fourth, as in the formulas above"
@@ -871,15 +1097,106 @@ fn tpi_routed(t: &Tpi, s: &Plane) -> Option<Sign> {
     let ([bx, by, bz], bd) = (q.n, q.d);
     let ([cx, cy, cz], cd) = (r.n, r.d);
     let ([sx, sy, sz], sd) = (s.n, s.d);
-    let side = generated::tpi_side::filter(
+    let side = generated::tpi_side::exact(
         ax, ay, az, ad, bx, by, bz, bd, cx, cy, cz, cd, sx, sy, sz, sd,
-    )
-    .or_else(|| {
-        generated::tpi_side::exact(
+    )?;
+    Some(side.mul(t.weight))
+}
+
+/// The sign of the determinant of four planes' coefficients: machine words if they fit, else the
+/// generated predicate, its filter and then its exact path (6.2).
+#[allow(
+    clippy::many_single_char_names,
+    reason = "p, q, r and s are the planes, as on Plane::side_of_tpi"
+)]
+fn determinant_routed(p: &Plane, q: &Plane, r: &Plane, s: &Plane) -> Option<Sign> {
+    determinant_in_words(p, q, r, s).or_else(|| {
+        let ([ax, ay, az], ad) = (p.n, p.d);
+        let ([bx, by, bz], bd) = (q.n, q.d);
+        let ([cx, cy, cz], cd) = (r.n, r.d);
+        let ([sx, sy, sz], sd) = (s.n, s.d);
+        generated::tpi_side::filter(
             ax, ay, az, ad, bx, by, bz, bd, cx, cy, cz, cd, sx, sy, sz, sd,
         )
-    })?;
-    Some(side.mul(t.weight))
+        .or_else(|| {
+            generated::tpi_side::exact(
+                ax, ay, az, ad, bx, by, bz, bd, cx, cy, cz, cd, sx, sy, sz, sd,
+            )
+        })
+    })
+}
+
+/// A plane's coefficients as machine words, if they fit: a face square to the axes always does.
+fn words(p: &Plane) -> Option<[i64; 4]> {
+    let [x, y, z] = p.n;
+    Some([
+        i64::try_from(x).ok()?,
+        i64::try_from(y).ok()?,
+        i64::try_from(z).ok()?,
+        i64::try_from(p.d).ok()?,
+    ])
+}
+
+/// The determinant of three rows' normals, if every step fits a machine word.
+fn det_in_words(a: &[i64; 4], b: &[i64; 4], c: &[i64; 4]) -> Option<i64> {
+    let ([ax, ay, az, _], [bx, by, bz, _], [cx, cy, cz, _]) = (*a, *b, *c);
+    let minor = |p: i64, q: i64, r: i64, s: i64| p.checked_mul(q)?.checked_sub(r.checked_mul(s)?);
+    ax.checked_mul(minor(by, cz, bz, cy)?)?
+        .checked_add(ay.checked_mul(minor(bz, cx, bx, cz)?)?)?
+        .checked_add(az.checked_mul(minor(bx, cy, by, cx)?)?)
+}
+
+/// The sign of the determinant of four planes' coefficients, if every step fits a machine word.
+/// Every step is checked, so it is exact or it is `None`, and needs neither filter nor budget: at
+/// about a hundred instructions it is the first rung for the planes of a building's faces, whose
+/// normals are short. Expanded along the offsets: −`d_p` m(q, r, s) + `d_q` m(p, r, s) −
+/// `d_r` m(p, q, s) + `d_s` m(p, q, r), m being the determinant of three normals.
+#[allow(
+    clippy::many_single_char_names,
+    reason = "p, q, r and s are the planes, and a, b, c and e their rows"
+)]
+fn determinant_in_words(p: &Plane, q: &Plane, r: &Plane, s: &Plane) -> Option<Sign> {
+    let (a, b, c, e) = (words(p)?, words(q)?, words(r)?, words(s)?);
+    let ([.., ad], [.., bd], [.., cd], [.., ed]) = (a, b, c, e);
+    let total = bd
+        .checked_mul(det_in_words(&a, &c, &e)?)?
+        .checked_sub(ad.checked_mul(det_in_words(&b, &c, &e)?)?)?
+        .checked_sub(cd.checked_mul(det_in_words(&a, &b, &e)?)?)?
+        .checked_add(ed.checked_mul(det_in_words(&a, &b, &c)?)?)?;
+    Some(Sign::of_i64(total))
+}
+
+/// The sign of the 4 × 4 determinant of four planes' coefficients, rows in the order given and the
+/// offset last, exactly. It is n · X + d · w for the point where the first three meet, and is
+/// defined whether they meet or not.
+///
+/// # Errors
+///
+/// [`NumError::BudgetExceeded`] if the exact path does not fit, which no four planes cause.
+#[allow(
+    clippy::many_single_char_names,
+    reason = "p, q, r and s are the planes, as on Plane::side_of_tpi"
+)]
+pub fn determinant_sign(p: &Plane, q: &Plane, r: &Plane, s: &Plane) -> Result<Sign, NumError> {
+    determinant_routed(p, q, r, s).ok_or(NumError::BudgetExceeded)
+}
+
+/// The sign of det(`n_a`, `n_b`, `n_c`) exactly, `Zero` for normals that are dependent: the sign of
+/// the weight of the point where three planes meet, without the rest of the point.
+///
+/// # Errors
+///
+/// [`NumError::BudgetExceeded`] if a step did not fit, which the normals' budget rules out.
+pub fn normals_sign(a: &Plane, b: &Plane, c: &Plane) -> Result<Sign, NumError> {
+    if let (Some(p), Some(q), Some(r)) = (words(a), words(b), words(c))
+        && let Some(det) = det_in_words(&p, &q, &r)
+    {
+        return Ok(Sign::of_i64(det));
+    }
+    cross(&b.n, &c.n)
+        .and_then(|across| dot(&a.n, &across))
+        .map(|w| w.signum())
+        .ok_or(NumError::BudgetExceeded)
 }
 
 /// The sign of n · X + d · w times the sign of w, in `Wide<L>`: [`I384`] on the budgeted path,

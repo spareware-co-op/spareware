@@ -26,9 +26,43 @@
 //! the records hold.
 //!
 //! Its direct dependencies are its row of chapter 27's crate table, checked by the
-//! scaffold test in `engine-geometry` (`tests/scaffold`).
+//! scaffold test in `engine-geometry` (`tests/scaffold`), and `crc`, for records' CRC-32C (24.2).
 //!
-//! Status: scaffold only; built by pieces G91, G92, G93, G94, G95, G96, G105, G108, G112, G175,
-//! G318, G405, G410, G411, G459.
+//! Licences of the published crates this crate depends on (DEPEND, chapter 29.1), as each one's
+//! manifest at the version in `Cargo.lock` states it:
+//!
+//! - MIT OR Apache-2.0: `crc`.
+//!
+//! Status: the strict CBOR decoder, its columns and the text form built (G91); the record layer,
+//! byte sources, files, salvage, chunks and range checks built (G92); the header record and the
+//! registry built (G93); body records built (G94); cache keys, the reference memo store, body
+//! versions and restamping built (G105); validation stamps, the reference container and trust on
+//! open built (G108); the rest by pieces G95, G96, G112, G175, G318, G405, G410, G411, G459.
 #![cfg_attr(not(test), no_std)]
 #![forbid(unsafe_code)]
+
+extern crate alloc;
+
+pub mod attributes;
+pub mod body;
+pub mod cache;
+pub mod cbor;
+pub mod checksum;
+pub mod chunk;
+pub mod container;
+pub mod content;
+pub mod file;
+pub mod header;
+pub mod history;
+pub mod kinds;
+pub mod names;
+pub mod operation;
+pub mod payload;
+pub mod pruned;
+pub mod range;
+pub mod recipe;
+pub mod record;
+pub mod registry;
+pub mod source;
+pub mod stamp;
+pub mod trust;

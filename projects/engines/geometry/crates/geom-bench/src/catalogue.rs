@@ -23,6 +23,8 @@
 //!
 //! Cost: the tables are static. Finding a name scans them once (a few hundred entries), and
 //! preparing a benchmark builds its batch, O([`inputs::BATCH`]).
+//!
+//! Covers: make.box, make.cylinder, transform.move, transform.rotate.
 
 use core::fmt;
 
@@ -91,9 +93,9 @@ impl fmt::Display for Case {
     }
 }
 
-/// Classes of the predicates, `Plane::side` and `Plane::side_of_tpi`.
+/// Classes of the predicates, `Plane::side`, `Plane::side_of_tpi` and `plane::determinant_sign`.
 const TDNE: &[Class] = &[Typical, Degenerate, NearlyDegenerate, Extreme];
-/// Classes of `Plane::through` and `Tpi::new`.
+/// Classes of `Plane::through`, `Tpi::new`, `Tpi::meeting` and `plane::normals_sign`.
 const TDE: &[Class] = &[Typical, Degenerate, Extreme];
 /// Classes of checked wide-integer arithmetic, of the random draws and of cutting stream ranges.
 const TEO: &[Class] = &[Typical, Extreme, Overflow];
@@ -104,6 +106,8 @@ const TE: &[Class] = &[Typical, Extreme];
 /// out of range.
 const TO: &[Class] = &[Typical, Overflow];
 /// Classes of the perturbed predicates: the exact path, and an exact tie the perturbation decides.
+/// Also of the face planes of `plane::determinant_sign` and `plane::normals_sign`: a nonzero sign
+/// and a zero, both decided by the machine-word rung.
 const TD: &[Class] = &[Typical, Degenerate];
 /// The class of operations with a single path, or whose paths one batch covers in rotation.
 const T: &[Class] = &[Typical];
@@ -198,8 +202,13 @@ pub static OPS: &[Op] = &[
     Op { group: "plane", name: "through", measures: "Plane::through", classes: TDE, prepare: |c| bind(inputs::plane::through(c), kernels::plane::through) },
     Op { group: "plane", name: "side", measures: "Plane::side", classes: TDNE, prepare: |c| bind(inputs::plane::side(c), kernels::plane::side) },
     Op { group: "plane", name: "tpi_new", measures: "Tpi::new", classes: TDE, prepare: |c| bind(inputs::plane::tpi_new(c), kernels::plane::tpi_new) },
+    Op { group: "plane", name: "tpi_meeting", measures: "Tpi::meeting", classes: TDE, prepare: |c| bind(inputs::plane::tpi_meeting(c), kernels::plane::tpi_meeting) },
+    Op { group: "plane", name: "normals_sign", measures: "plane::normals_sign", classes: TDE, prepare: |c| bind(inputs::plane::normals_sign(c), kernels::plane::normals_sign) },
+    Op { group: "plane", name: "normals_sign_faces", measures: "plane::normals_sign", classes: TD, prepare: |c| bind(inputs::plane::normals_sign_faces(c), kernels::plane::normals_sign_faces) },
     Op { group: "plane", name: "tpi_homogeneous", measures: "Tpi::homogeneous", classes: TE, prepare: |c| bind(inputs::plane::tpi_homogeneous(c), kernels::plane::tpi_homogeneous) },
     Op { group: "plane", name: "side_of_tpi", measures: "Plane::side_of_tpi", classes: TDNE, prepare: |c| bind(inputs::plane::side_of_tpi(c), kernels::plane::side_of_tpi) },
+    Op { group: "plane", name: "determinant_sign", measures: "plane::determinant_sign", classes: TDNE, prepare: |c| bind(inputs::plane::determinant_sign(c), kernels::plane::determinant_sign) },
+    Op { group: "plane", name: "determinant_sign_faces", measures: "plane::determinant_sign", classes: TD, prepare: |c| bind(inputs::plane::determinant_sign_faces(c), kernels::plane::determinant_sign_faces) },
     Op { group: "plane", name: "to_grid", measures: "Tpi::to_grid", classes: &[Typical, OnGrid, Extreme, Overflow], prepare: |c| bind(inputs::plane::to_grid(c), kernels::plane::to_grid) },
     Op { group: "plane", name: "lpi_new", measures: "Lpi::new", classes: TDE, prepare: |c| bind(inputs::plane::lpi_new(c), kernels::plane::lpi_new) },
     Op { group: "plane", name: "lpi_homogeneous", measures: "Lpi::homogeneous", classes: TE, prepare: |c| bind(inputs::plane::lpi_homogeneous(c), kernels::plane::lpi_homogeneous) },
@@ -396,6 +405,29 @@ pub static OPS: &[Op] = &[
     // each built for a scene and queried.
     Op { group: "bvh", name: "tree_build_query", measures: "geom_bvh::BoxTree::build", classes: T, prepare: |c| bind(inputs::bvh::tree_build_query(c), kernels::bvh::tree_build_query) },
     Op { group: "bvh", name: "cells_within", measures: "geom_bvh::CellIndex::build", classes: T, prepare: |c| bind(inputs::bvh::cells_within(c), kernels::bvh::cells_within) },
+    // geom-topo's hot paths (piece G80; decision 32.44): a column's copy on write, and publishing.
+    Op { group: "topo", name: "column_edit", measures: "geom_topo::Column::set", classes: T, prepare: |c| bind(inputs::topo::column_edit(c), kernels::topo::column_edit) },
+    Op { group: "topo", name: "publish", measures: "geom_topo::Builder::publish", classes: T, prepare: |c| bind(inputs::topo::publish(c), kernels::topo::publish) },
+    // The attribute step's hot path (piece G90; decision 32.44).
+    Op { group: "attributes", name: "apply", measures: "geom_name::classes::apply", classes: T, prepare: |c| bind(inputs::attributes::apply(c), kernels::attributes::apply) },
+    // The batch runner's hot paths (piece G104; decision 32.44): the driver and the flat arrays.
+    Op { group: "batch", name: "run_items", measures: "geom_op::Batch::run", classes: T, prepare: |c| bind(inputs::batch::run_items(c), kernels::batch::run_items) },
+    Op { group: "batch", name: "curve_points", measures: "geom_curve::ParamCurve::points", classes: T, prepare: |c| bind(inputs::batch::curve_points(c), kernels::batch::curve_points) },
+    Op { group: "batch", name: "surface_points", measures: "geom_surface::ParamSurface::points", classes: T, prepare: |c| bind(inputs::batch::surface_points(c), kernels::batch::surface_points) },
+    // The triangulation's hot path (piece G153; decision 32.44).
+    Op { group: "mesh", name: "cdt", measures: "geom_mesh::cdt::triangulate", classes: T, prepare: |c| bind(inputs::mesh::cdt(c), kernels::mesh::cdt) },
+    Op { group: "mesh", name: "exact_build", measures: "geom_mesh::exact::build::build", classes: T, prepare: |c| bind(inputs::mesh::exact_build(c), kernels::mesh::exact_build) },
+    Op { group: "mesh", name: "locate", measures: "geom_mesh::Classifier::locate_all", classes: T, prepare: |c| bind(inputs::mesh::locate(c), kernels::mesh::locate) },
+    Op { group: "mesh", name: "boolean", measures: "geom_mesh::boolean::boolean", classes: T, prepare: |c| bind(inputs::mesh::boolean(c), kernels::mesh::boolean) },
+    Op { group: "mesh", name: "hull", measures: "geom_mesh::Hull::of", classes: T, prepare: |c| bind(inputs::mesh::hull(c), kernels::mesh::hull) },
+    Op { group: "mesh", name: "slice", measures: "geom_mesh::slice::slice", classes: T, prepare: |c| bind(inputs::mesh::slice(c), kernels::mesh::slice) },
+    Op { group: "mesh", name: "point_point", measures: "distance::point_point", classes: T, prepare: |c| bind(inputs::mesh::point_point(c), kernels::mesh::point_point) },
+    Op { group: "mesh", name: "point_line", measures: "distance::point_line", classes: T, prepare: |c| bind(inputs::mesh::point_line(c), kernels::mesh::point_line) },
+    Op { group: "mesh", name: "point_plane", measures: "distance::point_plane", classes: T, prepare: |c| bind(inputs::mesh::point_plane(c), kernels::mesh::point_plane) },
+    Op { group: "mesh", name: "line_line", measures: "distance::line_line", classes: T, prepare: |c| bind(inputs::mesh::line_line(c), kernels::mesh::line_line) },
+    Op { group: "mesh", name: "closest_dots", measures: "distance::product_difference", classes: T, prepare: |c| bind(inputs::mesh::closest_dots(c), kernels::mesh::closest_dots) },
+    Op { group: "mesh", name: "triangles", measures: "geom_mesh::contact::triangles", classes: T, prepare: |c| bind(inputs::mesh::triangles(c), kernels::mesh::triangles) },
+    Op { group: "mesh", name: "envelope", measures: "geom_mesh::TriangleEnvelope::contains", classes: T, prepare: |c| bind(inputs::mesh::envelope(c), kernels::mesh::envelope) },
     // geom-nurbs's hot paths (pieces G56, G58 and G59; decision 32.44): evaluation, interpolation
     // and the Bernstein bound.
     Op { group: "nurbs", name: "curve_point", measures: "geom_nurbs::Curve::point", classes: T, prepare: |c| bind(inputs::nurbs::curve_point(c), kernels::nurbs::curve_point) },
@@ -416,6 +448,22 @@ pub static OPS: &[Op] = &[
     Op { group: "surface", name: "offset_point", measures: "geom_surface::SurfaceKind::point", classes: T, prepare: |c| bind(inputs::surface::offset_point(c), kernels::surface::offset_point) },
     Op { group: "surface", name: "torus_second_bound", measures: "geom_surface::ParamSurface::second_derivative_bound", classes: T, prepare: |c| bind(inputs::surface::torus_second_bound(c), kernels::surface::torus_second_bound) },
     Op { group: "surface", name: "torus_normal_bound", measures: "geom_surface::ParamSurface::normal_derivative_bound", classes: T, prepare: |c| bind(inputs::surface::torus_normal_bound(c), kernels::surface::torus_normal_bound) },
+    // geom-format's hot paths (piece G105; decision 32.44): a cache key, a memo store's lookup and
+    // a body's next version.
+    Op { group: "format", name: "cache_key", measures: "geom_format::CacheKey::new", classes: T, prepare: |c| bind(inputs::format::cache_key(c), kernels::format::cache_key) },
+    Op { group: "format", name: "memo_get", measures: "geom_format::MemoStore::get", classes: T, prepare: |c| bind(inputs::format::memo_get(c), kernels::format::memo_get) },
+    Op { group: "format", name: "next_version", measures: "geom_format::BodyVersion::next", classes: T, prepare: |c| bind(inputs::format::next_version(c), kernels::format::next_version) },
+    // geom-intersect's canonical order (piece G158; decision 32.44): a list of items sorted and
+    // proven disjoint, a key read through a circle's NURBS form, and a pair of keys put in order.
+    Op { group: "intersect", name: "sort_items", measures: "geom_intersect::Intersection::new", classes: T, prepare: |c| bind(inputs::intersect::items(c), kernels::intersect::sorted) },
+    Op { group: "intersect", name: "key_circle", measures: "geom_intersect::CanonicalKey::of_curve", classes: T, prepare: |c| bind(inputs::intersect::circles(c), kernels::intersect::keys) },
+    Op { group: "intersect", name: "pair_lines", measures: "geom_intersect::order::pair", classes: T, prepare: |c| bind(inputs::intersect::lines(c), kernels::intersect::paired) },
+    // geom-make's hot paths (piece G101; decision 32.44): a primitive built and a body moved, named,
+    // published and checked.
+    Op { group: "make", name: "build_box", measures: "geom_make::primitive::make_box", classes: T, prepare: |c| bind(inputs::make::boxes(c), kernels::make::boxes) },
+    Op { group: "make", name: "cylinder", measures: "geom_make::primitive::cylinder", classes: T, prepare: |c| bind(inputs::make::cylinders(c), kernels::make::cylinders) },
+    Op { group: "make", name: "move_box", measures: "geom_make::transform::move_by", classes: T, prepare: |c| bind(inputs::make::moved_boxes(c), kernels::make::moved_boxes) },
+    Op { group: "make", name: "turn_box", measures: "geom_make::transform::rotate", classes: T, prepare: |c| bind(inputs::make::turned_boxes(c), kernels::make::turned_boxes) },
     // Root finding and quadrature (piece G51; decision 32.44).
     Op { group: "brent", name: "zero", measures: "brent::zero", classes: T, prepare: |c| bind(inputs::roots::zero(c), kernels::roots::zero) },
     Op { group: "quadrature", name: "gauss_legendre", measures: "quadrature::gauss_legendre", classes: T, prepare: |c| bind(inputs::roots::gauss_legendre(c), kernels::roots::gauss_legendre) },
@@ -423,7 +471,7 @@ pub static OPS: &[Op] = &[
 ];
 
 /// The groups of [`OPS`], in order.
-pub const GROUPS: [&str; 30] = [
+pub const GROUPS: [&str; 37] = [
     "predicate",
     "sign",
     "wide",
@@ -448,12 +496,19 @@ pub const GROUPS: [&str; 30] = [
     "ball",
     "math_types",
     "bvh",
+    "topo",
+    "attributes",
+    "batch",
+    "mesh",
     "nurbs",
     "curve",
+    "format",
     "surface",
     "brent",
     "quadrature",
     "linalg",
+    "intersect",
+    "make",
 ];
 
 /// The group of the growth checks.
@@ -603,6 +658,14 @@ pub fn prepare_named(name: &str) -> Option<Prepared> {
 /// `tests/coverage.rs` checks that each constant still refuses, so its entry cannot outlive it.
 #[rustfmt::skip]
 pub static UNMEASURED: &[(&str, &str)] = &[
+    ("predicate::orient2d_step", "predicate::orient2d's path, with its step beside the sign"),
+    ("predicate::orient2d_narrow", "a step of predicate::orient2d, measured there on the targets that take it"),
+    ("predicate::orient3d_step", "predicate::orient3d's path, with its step beside the sign"),
+    ("predicate::incircle_step", "predicate::incircle's path, with its step beside the sign"),
+    ("Plane::side_of_tpi_step", "Plane::side_of_tpi's path, with its step beside the sign"),
+    ("Step::name", "a table of names"),
+    ("Step::route", "a table of the steps, for the twins that count"),
+    ("distance::dot_from", "one dot product of differences, inside mesh/closest_dots"),
     ("Coord::get", "field accessor"),
     ("Steps::get", "field accessor"),
     ("Real::get", "field accessor"),
@@ -612,7 +675,9 @@ pub static UNMEASURED: &[(&str, &str)] = &[
     ("Interval::hi", "field accessor"),
     ("Plane::n", "field accessor"),
     ("Plane::d", "field accessor"),
+    ("Plane::new", "four magnitude comparisons on a plane already made"),
     ("Tpi::planes", "field accessor"),
+    ("Tpi::weight", "field accessor"),
     ("Lpi::points", "field accessor"),
     ("Lpi::plane", "field accessor"),
     ("Ssi::points", "field accessor"),

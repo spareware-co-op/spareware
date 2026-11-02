@@ -65,6 +65,13 @@ pub enum CurveError {
     TooManyPanels,
     /// A step its own bounds rule out failed: a defect in this crate, reported, never a panic.
     Defect,
+    /// A flat array of a many-point call holds the wrong number of values (chapter 23.6).
+    ArrayLength {
+        /// The values it must hold.
+        expected: usize,
+        /// The values it holds.
+        given: usize,
+    },
 }
 
 impl fmt::Display for CurveError {
@@ -102,6 +109,10 @@ impl fmt::Display for CurveError {
                 "the transition's heading turns too far for its certified quadrature's panels",
             ),
             CurveError::Defect => f.write_str("an internal step failed (a defect in geom-curve)"),
+            CurveError::ArrayLength { expected, given } => write!(
+                f,
+                "a flat array holds {given} values where the call needs {expected}"
+            ),
         }
     }
 }

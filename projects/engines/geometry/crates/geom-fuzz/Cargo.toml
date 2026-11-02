@@ -7,7 +7,14 @@ publish.workspace = true
 license.workspace = true
 description = "Spare Kit geometry kernel, development only: fuzz harnesses and bounded proofs, run as tests on stable, under libFuzzer with cargo-bolero, in ClusterFuzzLite and under Kani."
 
+[features]
+# Reference mode (23.13; piece G106), for `replay-hashes`.
+reference = ["geom-test/reference"]
+
 [dependencies]
+# The triangulation target (G153) and the exact mesh target (G146).
+geom-mesh = { path = "../geom-mesh" }
+geom-op = { path = "../geom-op" }
 geom-num = { path = "../geom-num" }
 # The exact rationals of the nurbs target's oracle (Gate 2, 32.44), as geom-test's NURBS reference
 # uses them. MIT OR Apache-2.0, the version geom-test pins.
@@ -24,14 +31,32 @@ geom-nurbs = { path = "../geom-nurbs" }
 geom-run = { path = "../geom-run" }
 geom-surface = { path = "../geom-surface" }
 geom-test = { path = "../geom-test" }
+# The intersect target (G158): the code under test. The shapes and boxes its cases are made of come
+# from the kernel crates listed below for the make and arenas targets (ours, MPL-2.0).
+geom-intersect = { path = "../geom-intersect" }
 # Avnaim et al.'s reference signs (piece G42), without the bench judge's dependencies.
 geom-bench = { path = "../geom-bench", default-features = false }
 # The variants target (G42) reads the predicates' descriptions with geom-gen's own parser (ours,
 # MPL-2.0; development only).
 geom-gen = { path = "../geom-gen" }
+# The planes target (G123): geom-poly's planes and orders, under test (ours, MPL-2.0).
+geom-poly = { path = "../geom-poly" }
+# The make target (G101): geom-make's operations under test, and the kernel crates its inputs and
+# oracles come from (ours, MPL-2.0).
+# The make target (G101) and the arenas target (G80): geom-make's operations and geom-topo's
+# arenas and builder, under test, with the checker and the operation contract they are judged by;
+# the kinds above fill their inputs (ours, MPL-2.0).
+geom-check = { path = "../geom-check", features = ["full"] }
+geom-make = { path = "../geom-make" }
+geom-topo = { path = "../geom-topo" }
 # The oracle of the wide-integer target (G26) and of the variants target (G42): exact
 # arbitrary-precision integers, the big-integer oracle chapter 29.3 names. MIT OR Apache-2.0.
 num-bigint = "0.4.8"
+# The code under test of the cbor target (G91), and the work meter it is read with (MPL-2.0, ours).
+# The code under test of the cbor target (G91; MPL-2.0, ours).
+# The code under test of the cbor target (G91), read with geom-run's work meter (MPL-2.0, ours).
+geom-format = { path = "../geom-format" }
+geom-name = { path = "../geom-name" }
 
 [dev-dependencies]
 # The harness front end: one `check!` runs a harness as a property test (on stable), under

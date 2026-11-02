@@ -230,9 +230,51 @@
               "kind": "corpus",
               "piece": "G70",
               "why": "26 new count benchmarks on the hot paths of phase 2's code pieces (decision 32.44): geom-math 7, geom-curve 5, geom-surface 5, geom-nurbs 3, geom-linalg 2, geom-bvh 2, geom-num 2; no existing digest moved"
+            },
+            {
+              "sha256": "046f3d4883d4a30f17d9366db22efdf83ea063bd38f04694be237bebcad8b8f6",
+              "kind": "corpus",
+              "piece": "G111",
+              "why": "the phase 3 integration train: every piece's count benchmarks together, no existing digest moved"
+            },
+            {
+              "sha256": "c2c5ed32a0431e2eaf5d9f1e791d6d9d11f5cfb28e88cd5acc8454160c92e50e",
+              "kind": "corpus",
+              "piece": "G142",
+              "why": "the phase 4 integration train: piece/G142's count benchmarks with G158's canonical order (a list sorted, a circle's key, a pair of lines), merged; no existing digest moved"
+            },
+            {
+              "sha256": "b6def317782dfaf6db8988d5eb24c48dde0993f8afd723772f8b1f4ce7e896dd",
+              "kind": "corpus",
+              "piece": "G146",
+              "why": "the phase 4 integration train: piece/G146's count benchmarks on the exact mesh and G153's on the triangulation, merged; no existing digest moved"
+            },
+            {
+              "sha256": "147817a90a09679487ffa70173c81a2dd286f52abf776aeb91ba6c76839b038c",
+              "kind": "corpus",
+              "piece": "G147",
+              "why": "the phase 4 integration train: piece/G147's count benchmark on point location, with G151's and G152's, merged; no existing digest moved"
+            },
+            {
+              "sha256": "54ca7f29da99fd041340b96768061ae7fd7934c8cf5641b6fdd7aaaec4922a91",
+              "kind": "corpus",
+              "piece": "G148",
+              "why": "the phase 4 integration train: piece/G148's count benchmarks of Tpi::meeting, plane::normals_sign and plane::determinant_sign merged; no existing digest moved"
+            },
+            {
+              "sha256": "e0c594dd4130745d206a03badec8796ab1bf0af81f5d5809deb49a10cf837fca",
+              "kind": "corpus",
+              "piece": "G149",
+              "why": "the phase 4 integration train: piece/G149's count benchmarks mesh/hull and mesh/slice merged; no existing digest moved"
+            },
+            {
+              "sha256": "9af601fb857736eccc342e23f263128804af2456c8a7994dc088e25a55d32d7e",
+              "kind": "corpus",
+              "piece": "G129",
+              "why": "the phase 4 integration train: G129's arena points are PointKind, and geom-bench hashes a topology builder by its Debug text, which now prints each point as Grid(..); so topo/publish/typical's input digest moved from 19b37a1a... to 202114d1..., the same builders, and its result digest de024522... did not move; no other digest moved"
             }
           ],
-          "sha256": "046f3d4883d4a30f17d9366db22efdf83ea063bd38f04694be237bebcad8b8f6"
+          "sha256": "ce4ae5e9ea1c12c8efec995cfb950e0f43971240ff3fd466e0c4637b183aaf81"
         },
         {
           "id": "geom-nurbs/operations",
@@ -484,6 +526,166 @@
             "function": "dense_golden_hash_is_the_same_on_every_target"
           },
           "sha256": "507472559492ae92313b7e32156a0f64df25fa341cd6eab56772404bcfd55a91"
+        },
+        {
+          "id": "geom-topo/arenas",
+          "what": "The arenas of geom-topo (piece G80): 48 bodies of random sizes (six past three chunks of faces and fins), every link random and in range, filled row by row or each arena at once, each published with every column in row order, its chunk count and the work publishing charged; an edit of random rows published beside the unchanged original; and each body refused once with a link pointed past its arena and once with a column one row longer, as tests/arena_determinism.rs records them.",
+          "check": {
+            "crate": "geom-topo",
+            "test": "arena_determinism",
+            "function": "arenas_golden_hash_is_the_same_on_every_target"
+          },
+          "sha256": "9df6dc9250d028d90f299d94442c212ac16472679a9d22d207c6d6e0a0a161dc"
+        },
+        {
+          "id": "geom-op/determinism",
+          "what": "geom-op's canonical CBOR and SHA-256 corpus (piece G86): every power of two and the edges of each float width and integer head, 3,000 nested values of SKG's subset drawn from a fixed SplitMix64 stream, and the SHA-256 and 128-bit cut of each encoding and of seeded messages of every length to 300 bytes: 22,369 records in the encoding of tests/determinism.rs.",
+          "check": {
+            "crate": "geom-op",
+            "test": "determinism",
+            "function": "golden_hash_is_the_same_on_every_target"
+          },
+          "sha256": "9d3844529ba8b080138c3667380a91a2a7b2695dfd7b6a4f7651334d46b58d29"
+        },
+        {
+          "id": "geom-name/attributes",
+          "what": "The shared attribute step of geom-name (piece G90): 200 operations, each a history of up to 24 outputs (unchanged, changed, split, merged, modified from several, generated in a copy role or another, from nothing) with deleted inputs, three attributes with random behaviours (one of an unknown owner, one a point a transform moves in a third of them) holding values on up to 32 names; every output value and note of the step, as tests/attributes_determinism.rs records them.",
+          "check": {
+            "crate": "geom-name",
+            "test": "attributes_determinism",
+            "function": "attributes_golden_hash_is_the_same_on_every_target"
+          },
+          "sha256": "47b93b32a27411ae3fe176d5fc19248cf2be0d553d1bcdc8aab1b62f9ad8357b"
+        },
+        {
+          "id": "geom-format/record-layer",
+          "what": "geom-format's record-layer corpus (piece G92): 40 files of random records written whole, each salvaged with one bit flipped (intact offsets and damaged spans), the CRC-32C of seeded messages of every length to 300 bytes, and the grid, real and plane range checks at the frame's edge, in the encoding of tests/record_determinism.rs.",
+          "check": {
+            "crate": "geom-format",
+            "test": "record_determinism",
+            "function": "golden_hash_is_the_same_on_every_target"
+          },
+          "sha256": "601faa6494c0ad3f9b1d7dd7b8a1e78724066b90ac4a998057959dae37206886"
+        },
+        {
+          "id": "geom-format/body-records",
+          "what": "geom-format's body records (piece G94): the records of geom-topo's wall, of a body of 9,000 faces and of that body with 90 faces moved to another surface, each read back and written again, and a cached offset curve, a reversed transition part and a cached offset cylinder, each read back (refitting the caches) and written again, in the encoding of tests/body_determinism.rs.",
+          "check": {
+            "crate": "geom-format",
+            "test": "body_determinism",
+            "function": "golden_hash_is_the_same_on_every_target"
+          },
+          "sha256": "24ff775319022741d62b771ab3c5e33beba0ff2da29bb39b005f30778c7c73e1"
+        },
+        {
+          "id": "geom-format/cache-keys",
+          "what": "geom-format's cache keys and content IDs (piece G105): keys with a path and name-free keys of two editions at final and preview precision; the content and geometry IDs of geom-topo's wall, of a body of 9,000 faces and of a wall named by a run; the content IDs of a chain of eight versions of the 9,000 faces; and a name-free wall restamped: its names' IDs and its records, in the encoding of tests/cache_determinism.rs.",
+          "check": {
+            "crate": "geom-format",
+            "test": "cache_determinism",
+            "function": "golden_hash_is_the_same_on_every_target"
+          },
+          "sha256": "6b400b80063ad59bfa4d6ea59a194596b2613a4854db06ad4ef1ad1aeb597cae"
+        },
+        {
+          "id": "geom-op/batch",
+          "what": "The batch driver of geom-op (piece G104): 60 batches of 0 to 300 items with random keys, work and failures, under random per-item budgets, half with a batch total, every one run on the serial executor and on pools of 1, 2, 3 and 8 threads that must agree; each item's result (its value, or its error's kind, path and detail) and each whole-batch refusal of a repeated key, as tests/batch_determinism.rs records them.",
+          "check": {
+            "crate": "geom-op",
+            "test": "batch_determinism",
+            "function": "batch_golden_hash_is_the_same_on_every_target"
+          },
+          "sha256": "4b98bad9ee5cc99b1e4a64e7d1c1ccb208a8e9f79165bf8bf7bc08564ca63743"
+        },
+        {
+          "id": "geom-format/containers",
+          "what": "geom-format's reference container and trust on open (piece G108): the archived stamped bodies taken into the container and written back, the document opened at both trusts, and each blob salvaged and opened at both trusts with one bit flipped at its first, middle and last byte (the salvaged file, the damage named, each entry's state and stamp and the work charged), in the encoding of tests/container_determinism.rs.",
+          "check": {
+            "crate": "geom-format",
+            "test": "container_determinism",
+            "function": "golden_hash_is_the_same_on_every_target"
+          },
+          "sha256": "a90962abe911d73e10dbece77ea6c798efdde9eff8a7e265e870831af5cbd025"
+        },
+        {
+          "id": "geom-name/prune",
+          "what": "The PruneHistory operation (piece G109): 200 element histories of one to six steps, each step keeping, modifying, splitting, merging, deleting, or deleting while generating every name of the body before it; a held set of up to eight names, some never in the history; and every kept step's path, history, operation and held set, in the encoding of tests/prune_determinism.rs.",
+          "check": {
+            "crate": "geom-name",
+            "test": "prune_determinism",
+            "function": "prune_golden_hash_is_the_same_on_every_target"
+          },
+          "sha256": "f04dd902446d1ee7162c648b8191dbdb359dd34ba7ab5e4bb4b8610e9354790c"
+        },
+        {
+          "id": "geom-make/queries",
+          "what": "The core queries (piece G102) over 32 boxes, each also moved, 32 prisms and 8 cylinders from a fixed stream: every face's row, name and roles, twice-area vectors, the bounding box, six times the volume, the exactness report's counts and the validity report's deferred count, as tests/query_determinism.rs records them.",
+          "check": {
+            "crate": "geom-make",
+            "test": "query_determinism",
+            "function": "queries_golden_hash_is_the_same_on_every_target"
+          },
+          "sha256": "b8f2e38d41f1e8a7dacd616b124f55c6b7b46cc691203456872debd94e8f9c4f"
+        },
+        {
+          "id": "geom-test/replay-corpus",
+          "what": "The replay corpus (piece G98): every stored fixture and the seeded logs of the box, make, transform and budget families, each by its id, log hash, work units and logical bytes.",
+          "check": {
+            "crate": "geom-test",
+            "test": "determinism",
+            "function": "replay_corpus_golden"
+          },
+          "sha256": "742f10a75747ba3c3181572802a374545b6b27194162608d37bd8c5ccf240d30"
+        },
+        {
+          "id": "geom-test/museum",
+          "what": "The format museum (piece G99): every exhibit of geom-test/museum held to its record on this target, each file read whole and written back byte for byte and each log replayed to its hash, the digest of every exhibit's id, bytes and hash.",
+          "check": {
+            "crate": "geom-test",
+            "test": "museum",
+            "function": "every_exhibit_opens_and_replays_on_this_target"
+          },
+          "sha256": "76634dd5ae283981eb2fbe1e5cf6e76a8e0d586a56ffbfa7a8bcb50c97749aa5"
+        },
+        {
+          "id": "geom-poly/commits",
+          "what": "geom-poly's committed planes (piece G142): seeded commits of a plane through an edge and a free plane, and their images under a quarter turn and a mirror, every coefficient and every deviation's bits.",
+          "check": {
+            "crate": "geom-poly",
+            "test": "commit_determinism",
+            "function": "golden_hash_is_the_same_on_every_target"
+          },
+          "sha256": "6cf5c186dfbe9dccc0f128643959d7c5f55872be7a2cc78b29f353bbe29bc2ba"
+        },
+        {
+          "id": "geom-test/ssi-catalogue",
+          "what": "The failure catalogue of the intersection harness (piece G160): every case, its surfaces and its closed-form truth, as the JSON the corpus's scorer reads.",
+          "check": {
+            "crate": "geom-test",
+            "test": "ssi",
+            "function": "the_catalogue_is_pinned"
+          },
+          "sha256": "72833e2e0e317cd26acba70110f485d2ad8a6bc8b8ed6f2cdcf04beadc0031db"
+        },
+        {
+          "id": "geom-mesh/cdt",
+          "what": "The constrained Delaunay triangulation of geom-mesh (piece G153): cocircular grids of 2 to 32 points a side, plain and with crossing constraints; 16 scatters with constraints between random points; 8 outlines refined to a quality. Vertices, triangles and constrained edges in canonical order.",
+          "check": {
+            "crate": "geom-mesh",
+            "test": "cdt_determinism",
+            "function": "cdt_golden_hash_is_the_same_on_every_target"
+          },
+          "sha256": "e785c8bb58ed861f1eafccaa437e35dca30ec69a695ddf3abb238d1db057cb11"
+        },
+        {
+          "id": "geom-mesh/exact",
+          "what": "The exact mesh of geom-mesh (piece G146): boxes at five scales, 16 closed height fields and a cut pyramid with corners off the grid. Every array of each mesh and its volume, in canonical order.",
+          "check": {
+            "crate": "geom-mesh",
+            "test": "exact_determinism",
+            "function": "exact_mesh_golden_hash_is_the_same_on_every_target"
+          },
+          "sha256": "c5cb15aaf5ad8f21e50ad1dd903efb38d0dbc85e695e17afc662519ecbdbc134"
         }
       ]
     }

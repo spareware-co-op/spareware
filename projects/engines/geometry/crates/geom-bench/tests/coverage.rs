@@ -58,7 +58,8 @@ const KERNEL_WORKFLOW: &str = include_str!("../../../../../../.github/workflows/
 /// This crate's own reference, Avnaim et al.'s signs (chapter 23.3, piece G42): measured beside
 /// `geom-num`'s exact paths, and not a `geom-num` function.
 const AVNAIM: &str = include_str!("../src/avnaim.rs");
-const GEOM_NUM: [(&str, &str); 28] = [
+const GEOM_NUM: [(&str, &str); 30] = [
+    ("distance", include_str!("../../geom-num/src/distance.rs")),
     ("ball", include_str!("../../geom-num/src/ball.rs")),
     ("brent", include_str!("../../geom-num/src/brent.rs")),
     ("dd", include_str!("../../geom-num/src/dd.rs")),
@@ -94,6 +95,7 @@ const GEOM_NUM: [(&str, &str); 28] = [
     ("rng", include_str!("../../geom-num/src/rng.rs")),
     ("scalar", include_str!("../../geom-num/src/scalar.rs")),
     ("sign", include_str!("../../geom-num/src/sign.rs")),
+    ("step", include_str!("../../geom-num/src/step.rs")),
     ("wide", include_str!("../../geom-num/src/wide.rs")),
     ("wide32", include_str!("../../geom-num/src/wide32.rs")),
 ];
@@ -488,6 +490,20 @@ fn the_parser_finds_every_public_function_however_it_is_written() {
 /// it measures there, by module name.
 const OTHER_CRATES: &[(&str, &[(&str, &str)])] = &[
     (
+        "geom_format",
+        &[
+            ("cache", include_str!("../../geom-format/src/cache.rs")),
+            ("body", include_str!("../../geom-format/src/body.rs")),
+        ],
+    ),
+    (
+        "geom_intersect",
+        &[
+            ("order", include_str!("../../geom-intersect/src/order.rs")),
+            ("result", include_str!("../../geom-intersect/src/result.rs")),
+        ],
+    ),
+    (
         "geom_math",
         &[
             ("typed", include_str!("../../geom-math/src/typed.rs")),
@@ -504,10 +520,54 @@ const OTHER_CRATES: &[(&str, &[(&str, &str)])] = &[
         ],
     ),
     (
+        "geom_make",
+        &[
+            (
+                "primitive",
+                include_str!("../../geom-make/src/primitive.rs"),
+            ),
+            (
+                "transform",
+                include_str!("../../geom-make/src/transform.rs"),
+            ),
+        ],
+    ),
+    (
         "geom_bvh",
         &[
             ("tree", include_str!("../../geom-bvh/src/tree.rs")),
             ("cells", include_str!("../../geom-bvh/src/cells.rs")),
+        ],
+    ),
+    (
+        "geom_topo",
+        &[
+            ("column", include_str!("../../geom-topo/src/column.rs")),
+            ("builder", include_str!("../../geom-topo/src/builder.rs")),
+        ],
+    ),
+    (
+        "geom_name",
+        &[("classes", include_str!("../../geom-name/src/classes.rs"))],
+    ),
+    (
+        "geom_op",
+        &[("batch", include_str!("../../geom-op/src/batch.rs"))],
+    ),
+    (
+        "geom_mesh",
+        &[
+            ("cdt", include_str!("../../geom-mesh/src/cdt.rs")),
+            ("boolean", include_str!("../../geom-mesh/src/boolean.rs")),
+            ("classify", include_str!("../../geom-mesh/src/classify.rs")),
+            ("contact", include_str!("../../geom-mesh/src/contact.rs")),
+            ("hull", include_str!("../../geom-mesh/src/hull.rs")),
+            ("slice", include_str!("../../geom-mesh/src/slice.rs")),
+            ("envelope", include_str!("../../geom-mesh/src/envelope.rs")),
+            (
+                "exact::build",
+                include_str!("../../geom-mesh/src/exact/build.rs"),
+            ),
         ],
     ),
     (

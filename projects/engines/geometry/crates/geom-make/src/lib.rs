@@ -26,6 +26,33 @@
 //! Its direct dependencies are its row in chapter 30.5's amendment to chapter 27's crate table,
 //! checked by the scaffold test in `engine-geometry` (`tests/scaffold`).
 //!
-//! Status: scaffold only; built by pieces G101.
+//! Modules (piece G101):
+//!
+//! - `build`: a solid's rows, named by role, published in name order, checked, with its history;
+//!   [`Made`], what every operation here returns, and [`PER_ROW`], their charge schedule.
+//! - [`primitive`]: box, prism, cylinder, cone, sphere and torus.
+//! - [`transform`]: move, rotate, mirror and scale.
+//! - [`pattern`]: copies of a body, one per transform, each keyed by the caller.
+//! - [`placed`]: a placed instance's materialised body, re-validated, and the caller's cache of
+//!   them (G145).
+//!
+//! Status: built by piece G101: every primitive and transform of 10.2 with its schema in the
+//! facade; scales that are not uniform on curved bodies wait for G177's checker.
 #![cfg_attr(not(test), no_std)]
 #![forbid(unsafe_code)]
+
+extern crate alloc;
+
+mod build;
+pub mod pattern;
+pub mod placed;
+pub mod primitive;
+pub mod transform;
+
+pub use build::{Made, Motion, PER_ROW, PHASE};
+pub use pattern::{Copies, Instance, pattern};
+pub use primitive::{
+    BoxInput, PrismInput, RoundInput, SphereInput, TorusInput, cone, cylinder, make_box, prism,
+    sphere, torus,
+};
+pub use transform::{Moved, mirror, move_by, rotate, scale};

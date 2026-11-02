@@ -16,6 +16,18 @@ geom-num = { path = "../geom-num" }
 geom-op = { path = "../geom-op" }
 geom-topo = { path = "../geom-topo" }
 
+[dev-dependencies]
+# The golden store and the thread counts of tests/commit_determinism.rs (ours, MPL-2.0).
+geom-test = { path = "../geom-test" }
+# The surfaces of the bodies tests/publish.rs publishes. Ours, MPL-2.0.
+geom-surface = { path = "../geom-surface" }
+# The big-integer oracle of the arrangement predicates, the one chapter 29.3 names. MIT OR
+# Apache-2.0.
+num-bigint = "0.4.8"
+# Property tests only, never linked into the kernel. MIT OR Apache-2.0. Without its default fork and
+# timeout features, so the tests also run on wasm32-wasip1.
+proptest = { version = "1.12.0", default-features = false, features = ["std", "bit-set"] }
+
 [lints.rust]
 unsafe_code = "forbid"
 missing_docs = "warn"

@@ -1,0 +1,348 @@
+{
+  "format": 1,
+  "about": "The corpus register (chapter 28.12): every outside collection of models the tests run over, with its source, version, SHA-256, licence, and whether we may store it. geom_test::corpus holds the rules; `corpus digest` prints what a new entry needs.",
+  "corpora": [
+    {
+      "id": "manifold-models",
+      "what": "Manifold's test models and samples",
+      "used_for": "Mesh booleans, degenerate cases",
+      "source": "https://github.com/elalish/manifold",
+      "version": "d056b8fb70de8c8e6d6bee2e639b71c20aa08d01",
+      "licence": "Apache-2.0",
+      "storage": "stored",
+      "sha256": "2d46e79e97a27227c37caff88ec7ea93e60dcf7182357fe22685ef414c634d36",
+      "credit": "Manifold, Emmett Lalish and contributors, Apache-2.0",
+      "fetch": {
+        "git": {
+          "url": "https://github.com/elalish/manifold.git",
+          "commit": "d056b8fb70de8c8e6d6bee2e639b71c20aa08d01",
+          "paths": [
+            "test/models"
+          ]
+        }
+      },
+      "decision": null
+    },
+    {
+      "id": "thingi10k",
+      "what": "10,000 models from a 3D-printing site, many of them broken, each under its own licence",
+      "used_for": "Mesh import, repair, booleans, fuzz seeds",
+      "source": "https://github.com/Thingi10K/Thingi10K",
+      "version": "cbac53559cfade2c4ffb2ef1ae8cae88462eaed4",
+      "licence": "LicenseRef-Per-Model",
+      "storage": "not-used",
+      "sha256": null,
+      "credit": null,
+      "fetch": null,
+      "decision": "an owner clears each model's own licence before it is fetched (28.12, 29.15)"
+    },
+    {
+      "id": "ember-pairs",
+      "what": "EMBER's 1,000 boolean pairs: the list, stored; its meshes are Thingi10K's and wait with it",
+      "used_for": "Mesh booleans and their benchmark",
+      "source": "https://github.com/elalish/manifold/tree/d056b8fb70de8c8e6d6bee2e639b71c20aa08d01/extras/ember_tests",
+      "version": "d056b8fb70de8c8e6d6bee2e639b71c20aa08d01",
+      "licence": "Apache-2.0",
+      "storage": "stored",
+      "sha256": "4156135d0722d34b218a451637c2bcba21d57a35dda13a3d67d4c757227c150e",
+      "credit": "Manifold's benchmark harness, Apache-2.0",
+      "fetch": {
+        "git": {
+          "url": "https://github.com/elalish/manifold.git",
+          "commit": "d056b8fb70de8c8e6d6bee2e639b71c20aa08d01",
+          "paths": [
+            "extras/ember_tests"
+          ]
+        }
+      },
+      "decision": null
+    },
+    {
+      "id": "ssi-corpus",
+      "what": "119 surface-intersection cases with exact truth",
+      "used_for": "Section 12's acceptance gate",
+      "source": "https://github.com/jyviko/ssi-corpus",
+      "version": "b04c8a6093a8b3505d865d1dd874ec3879ccb1f9",
+      "licence": "(MIT OR Apache-2.0) AND CC-BY-4.0",
+      "storage": "stored",
+      "sha256": "6177c974b2d953c8710f304a34bd48f968d9293722b7a40062b9d635e714d1c3",
+      "credit": "jyviko/ssi-corpus, MIT or Apache-2.0; its 25 y23_* cases derive from Yang, Jia and Yan 2023, CC BY",
+      "fetch": {
+        "git": {
+          "url": "https://github.com/jyviko/ssi-corpus.git",
+          "commit": "b04c8a6093a8b3505d865d1dd874ec3879ccb1f9",
+          "paths": [
+            "."
+          ]
+        }
+      },
+      "decision": null
+    },
+    {
+      "id": "nist-cad-models",
+      "what": "NIST CAD models and STEP files with PMI",
+      "used_for": "STEP import, B-rep validity",
+      "source": "https://doi.org/10.18434/mds2-1452",
+      "version": "doi:10.18434/mds2-1452",
+      "licence": "LicenseRef-US-Government-Work",
+      "storage": "not-used",
+      "sha256": null,
+      "credit": null,
+      "fetch": null,
+      "decision": "an owner confirms NIST's terms, then it is fetched by pinned hash (29.15)"
+    },
+    {
+      "id": "step-conformance",
+      "what": "27 STEP parts, 19 of exactly known shape; the corpus only, never its code or adapters",
+      "used_for": "STEP import scored against exact shape",
+      "source": "https://github.com/dan335/step-conformance",
+      "version": "96f30bbe09549ef37dbd0a956d70bd8a183fd5d2",
+      "licence": "CC0-1.0",
+      "storage": "stored",
+      "sha256": "8156b703d4f98e00af6d29372f1537882ea83032a673db433b5d770981169352",
+      "credit": "dan335/step-conformance, corpus under CC0-1.0",
+      "fetch": {
+        "git": {
+          "url": "https://github.com/dan335/step-conformance.git",
+          "commit": "96f30bbe09549ef37dbd0a956d70bd8a183fd5d2",
+          "paths": [
+            "corpus"
+          ]
+        }
+      },
+      "decision": null
+    },
+    {
+      "id": "abc-dataset",
+      "what": "About a million CAD models, each belonging to its creator",
+      "used_for": "Import robustness at scale",
+      "source": "https://deep-geometry.github.io/abc-dataset/",
+      "version": "none",
+      "licence": "LicenseRef-Each-Creator",
+      "storage": "not-used",
+      "sha256": null,
+      "credit": null,
+      "fetch": null,
+      "decision": "an owner decides before any use (29.15)"
+    },
+    {
+      "id": "cadquery-cases",
+      "what": "CadQuery's test cases",
+      "used_for": "Mechanical parts and features",
+      "source": "https://github.com/CadQuery/cadquery",
+      "version": "rebuilt, nothing copied",
+      "licence": "Apache-2.0",
+      "storage": "rebuilt",
+      "sha256": null,
+      "credit": null,
+      "fetch": null,
+      "decision": null
+    },
+    {
+      "id": "openscad-csg",
+      "what": "OpenSCAD's CSG test files",
+      "used_for": "CSG trees",
+      "source": "https://github.com/openscad/openscad",
+      "version": "none",
+      "licence": "GPL-2.0-only",
+      "storage": "not-used",
+      "sha256": null,
+      "credit": null,
+      "fetch": null,
+      "decision": "not read, not vendored, pending the owner decision of 29.8 and 29.15"
+    },
+    {
+      "id": "buildingsmart-sample-test-files",
+      "what": "buildingSMART's Sample-Test-Files",
+      "used_for": "IFC",
+      "source": "https://github.com/buildingSMART/Sample-Test-Files",
+      "version": "80d976a9b193a26a8e928c3e79bff67af1de68a8",
+      "licence": "CC-BY-4.0",
+      "storage": "stored",
+      "sha256": "4e23be4d219cf4f922717d27926d18cf1e00574e00abc3ed7e2ecb36158813f3",
+      "credit": "buildingSMART International, Sample-Test-Files, CC BY 4.0",
+      "fetch": {
+        "git": {
+          "url": "https://github.com/buildingSMART/Sample-Test-Files.git",
+          "commit": "80d976a9b193a26a8e928c3e79bff67af1de68a8",
+          "paths": [
+            "."
+          ]
+        }
+      },
+      "decision": null
+    },
+    {
+      "id": "ifc43-sample-models",
+      "what": "IFC 4.3 sample models, fetched unmodified, which CC BY-ND allows",
+      "used_for": "Advanced B-rep, alignments, tessellation",
+      "source": "https://github.com/buildingSMART/IFC4.3.x-sample-models",
+      "version": "ef22440ec501551ccc9689309560bbc7e26aa9d7",
+      "licence": "CC-BY-ND-4.0",
+      "storage": "fetched",
+      "sha256": "f65b69f9a3dddf68642a8d9c4c301b62e6c9c18dd6d3e2b8e2488e422531fcf5",
+      "credit": "buildingSMART International, IFC4.3.x-sample-models, CC BY-ND",
+      "fetch": {
+        "git": {
+          "url": "https://github.com/buildingSMART/IFC4.3.x-sample-models.git",
+          "commit": "ef22440ec501551ccc9689309560bbc7e26aa9d7",
+          "paths": [
+            "."
+          ]
+        }
+      },
+      "decision": null
+    },
+    {
+      "id": "ifc4x-alignment-set",
+      "what": "The IFC 4.x alignment atomic test set; it states no licence",
+      "used_for": "Spirals, cant, gradients",
+      "source": "https://github.com/buildingSMART/IFC4.x-IF",
+      "version": "none",
+      "licence": "LicenseRef-None",
+      "storage": "not-used",
+      "sha256": null,
+      "credit": null,
+      "fetch": null,
+      "decision": "an owner decides before any use, once buildingSMART gives a licence (29.15, 29.21)"
+    },
+    {
+      "id": "jts-xml-suite",
+      "what": "JTS's XML conformance suite",
+      "used_for": "2D overlay",
+      "source": "https://github.com/locationtech/jts",
+      "version": "3460207216f3091cd7f72d48d6ddd1b561b2b8fd",
+      "licence": "EDL-1.0",
+      "storage": "stored",
+      "sha256": "f4a33dd316ef786b0b8306209d2c318838461bf3602e96cf0420e8bb09bccd89",
+      "credit": "LocationTech JTS Topology Suite, Eclipse Distribution License 1.0",
+      "fetch": {
+        "git": {
+          "url": "https://github.com/locationtech/jts.git",
+          "commit": "3460207216f3091cd7f72d48d6ddd1b561b2b8fd",
+          "paths": [
+            "modules/tests/src/test/resources/testxml"
+          ]
+        }
+      },
+      "decision": null
+    },
+    {
+      "id": "ezdxf-examples",
+      "what": "ezdxf's example DXF files",
+      "used_for": "DXF reading, 2D drafting",
+      "source": "https://github.com/mozman/ezdxf",
+      "version": "none",
+      "licence": "MIT",
+      "storage": "not-used",
+      "sha256": null,
+      "credit": null,
+      "fetch": null,
+      "decision": "each file's origin must be checked first, recorded in 29.15"
+    },
+    {
+      "id": "pdal-las-samples",
+      "what": "PDAL and las-rs sample point clouds",
+      "used_for": "Point-cloud reading, indexing, fitting",
+      "source": "https://github.com/PDAL/PDAL",
+      "version": "none",
+      "licence": "BSD-3-Clause AND MIT",
+      "storage": "not-used",
+      "sha256": null,
+      "credit": null,
+      "fetch": null,
+      "decision": "each file's origin must be checked first, recorded in 29.15"
+    },
+    {
+      "id": "rhino3dm-samples",
+      "what": "rhino3dm's sample 3dm files; openNURBS code is never read",
+      "used_for": "3dm reading",
+      "source": "https://github.com/mcneel/rhino3dm",
+      "version": "none",
+      "licence": "MIT",
+      "storage": "not-used",
+      "sha256": null,
+      "credit": null,
+      "fetch": null,
+      "decision": "each file's origin must be checked first, recorded in 29.15"
+    },
+    {
+      "id": "threemf-test-suites",
+      "what": "The 3MF Consortium's conformance suites",
+      "used_for": "3MF reading",
+      "source": "https://github.com/3MFConsortium/test_suites",
+      "version": "f483d3beee069e7adbac125d1f7baa36b5b3e5bf",
+      "licence": "BSD-2-Clause",
+      "storage": "not-used",
+      "sha256": null,
+      "credit": null,
+      "fetch": null,
+      "decision": "3MF reading's piece pins the suites it reads (24.12): the whole repository is over a gigabyte at depth 1, too much to fetch nightly"
+    },
+    {
+      "id": "kicad-gerber",
+      "what": "KiCad demo boards and Gerber reference files",
+      "used_for": "Circuit boards",
+      "source": "https://gitlab.com/kicad/code/kicad",
+      "version": "none",
+      "licence": "LicenseRef-Unverified",
+      "storage": "not-used",
+      "sha256": null,
+      "credit": null,
+      "fetch": null,
+      "decision": "fetched only after a licence check (28.12)"
+    },
+    {
+      "id": "failure-catalogues",
+      "what": "Failure catalogues: Truck #57, #114, #134, #135; SolidCraft's vendor notes; GeoRust's boolean issues; IfcOpenShell and web-ifc issues; Manifold's tie-rule changes and the regression fixed in #1898; SMLib's known issues; solidcore's defect catalogue and fixtures",
+      "used_for": "Adversarial fixtures",
+      "source": "chapter 28.12 and 29.15",
+      "version": "rebuilt from the descriptions, no fixture copied",
+      "licence": "MPL-2.0",
+      "storage": "rebuilt",
+      "sha256": null,
+      "credit": null,
+      "fetch": null,
+      "decision": null
+    },
+    {
+      "id": "k1-spike-corpus",
+      "what": "The K.1 spike corpus (getcadcraft partcraft)",
+      "used_for": "Spike comparisons",
+      "source": "chapter 29.15",
+      "version": "rebuilt, nothing copied",
+      "licence": "Apache-2.0",
+      "storage": "rebuilt",
+      "sha256": null,
+      "credit": null,
+      "fetch": null,
+      "decision": null
+    },
+    {
+      "id": "generated",
+      "what": "Generated buildings, cities, 50 km corridors, parts, assemblies, boards and Class-A surface sets",
+      "used_for": "Scale, determinism, benchmarks",
+      "source": "this repository's generators",
+      "version": "each generator's seed",
+      "licence": "MPL-2.0",
+      "storage": "generated",
+      "sha256": null,
+      "credit": null,
+      "fetch": null,
+      "decision": null
+    },
+    {
+      "id": "recorded-oracle-outputs",
+      "what": "Recorded oracle outputs, with each tool's name and version and the inputs",
+      "used_for": "Fixtures an oracle settled",
+      "source": "this repository's oracle runs",
+      "version": "each tool's pinned version",
+      "licence": "MPL-2.0",
+      "storage": "generated",
+      "sha256": null,
+      "credit": null,
+      "fetch": null,
+      "decision": null
+    }
+  ]
+}
