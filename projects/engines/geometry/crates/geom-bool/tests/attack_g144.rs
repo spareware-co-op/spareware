@@ -19,13 +19,15 @@ use geom_bool::operand::{Operand, OperandKey, OperandKind, Selection};
 use geom_check::{Level, check};
 use geom_make::{BoxInput, make_box};
 use geom_num::{Exactness, P3, Steps};
+use geom_op::NameId;
 use geom_op::history::{ChangeClass, LoopChange, TopologyChange};
 use geom_op::local::{AllowSet, LocalDetail};
 use geom_op::{ErrorKind, OpContext, OpErrorDetail, OpId, OpPath};
 use geom_poly::merge::Merge;
 use geom_run::{Budget, Exec, WorkMeter};
-use geom_topo::Body;
+use geom_topo::ix::Arena;
 use geom_topo::query::volume;
+use geom_topo::{Body, RegionKind};
 
 const SERIAL: Exec<'static> = Exec::serial();
 
@@ -80,6 +82,36 @@ fn step<'b>(
         plan,
     };
     local_step(&ctx(9), &SERIAL, &input).map(|out| out.result)
+}
+
+/// The step's diagnostics, as text.
+fn notes(target: &Body, tool: &Body, plan: Plan) -> String {
+    let input = LocalInput {
+        target: solid(1, target),
+        tools: vec![solid(2, tool)],
+        select: Selection::Unite,
+        merge: Merge::RemoveRedundant,
+        accept: None,
+        may: AllowSet::ALL,
+        plan,
+    };
+    format!(
+        "{:?}",
+        local_step(&ctx(9), &SERIAL, &input).unwrap().diagnostics
+    )
+}
+
+/// How many changes of `class` a step made.
+fn count(local: &Local, class: ChangeClass) -> usize {
+    classes(local).iter().filter(|c| **c == class).count()
+}
+
+#[test]
+fn only_the_fast_path_records_its_skip() {
+    let target = cuboid(1, [0, 0, 0], [10, 20, 30]);
+    let on_top = cuboid(2, [0, 0, 30], [10, 20, 10]);
+    assert!(notes(&target, &on_top, Plan::Glued).contains("bool.arrangement_skipped"));
+    assert!(!notes(&target, &on_top, Plan::Arrange).contains("bool.arrangement_skipped"));
 }
 
 fn subtract() -> Selection {
@@ -190,7 +222,30 @@ fn an_extrusion_adds_its_far_face_and_merges_its_sides() {
     )
     .unwrap();
     let found = classes(&done);
-    assert!(found.contains(&ChangeClass::FaceAdded), "{found:?}");
+    let tool_faces: Vec<NameId> = on_top
+        .names()
+        .unwrap()
+        .faces
+        .iter()
+        .map(|k| NameId::from_bytes(k.0))
+        .collect();
+    let added: Vec<NameId> = done
+        .history
+        .changes()
+        .iter()
+        .filter_map(|c| match c {
+            TopologyChange::FaceAdded { face, .. } => Some(*face),
+            _ => None,
+        })
+        .collect();
+    assert_eq!(added.len(), 1, "its far face alone: {found:?}");
+    assert!(
+        tool_faces.contains(&added[0]),
+        "a face of the tool: {added:?}"
+    );
+    for none in [ChangeClass::ClashTrimmed, ChangeClass::VertexSplit] {
+        assert_eq!(count(&done, none), 0, "{found:?}");
+    }
     assert_eq!(
         found
             .iter()
@@ -277,6 +332,19 @@ fn a_slab_through_the_middle_splits_the_body() {
     let found = classes(&done);
     assert!(found.contains(&ChangeClass::BodySplit), "{found:?}");
     assert!(found.contains(&ChangeClass::FaceAdded), "{found:?}");
+    assert_eq!(count(&done, ChangeClass::VertexSplit), 0, "{found:?}");
+    let a = done.body.arenas();
+    let names = done.body.names().unwrap();
+    let solids: Vec<NameId> = (0..a.rows(Arena::Region))
+        .filter_map(geom_topo::Ix::<geom_topo::Region>::new)
+        .filter(|r| *a.regions.kind.get(*r).unwrap() == RegionKind::Solid)
+        .map(|r| NameId::from_bytes(names.regions[r.to_usize()].0))
+        .collect();
+    let lumps = done.history.changes().iter().find_map(|c| match c {
+        TopologyChange::BodySplit { lumps } => Some(lumps.names().to_vec()),
+        _ => None,
+    });
+    assert_eq!(lumps, Some(solids));
 }
 
 #[test]
@@ -323,6 +391,58 @@ fn a_face_left_outside_the_selection_vanishes() {
             .iter()
             .any(|c| matches!(c, TopologyChange::FaceVanished { .. })),
         "the target's top face: {changes:?}"
+    );
+}
+
+/// The block of 10 by 20 by 30 with a 4 by 4 hole through it.
+fn holed() -> Body {
+    let block = cuboid(1, [0, 0, 0], [10, 20, 30]);
+    let pillar = cuboid(5, [3, 3, -1], [4, 4, 32]);
+    let input = geom_bool::operand::BooleanInput {
+        operands: vec![solid(1, &block), solid(2, &pillar)],
+        select: vec![subtract()],
+        merge: Merge::RemoveRedundant,
+        accept: None,
+    };
+    geom_bool::combine::combine(&ctx(6), &SERIAL, &input)
+        .unwrap()
+        .result
+        .remove(0)
+        .remove(0)
+        .body
+}
+
+#[test]
+fn a_blind_plug_closes_the_top_hole_alone() {
+    let target = holed();
+    let plug = cuboid(7, [3, 3, 20], [4, 4, 10]);
+    let done = step(
+        &target,
+        &[&plug],
+        Selection::Unite,
+        Plan::Arrange,
+        AllowSet::ALL,
+    )
+    .unwrap();
+    checked(&done.body);
+    let closed: Vec<&TopologyChange> = done
+        .history
+        .changes()
+        .iter()
+        .filter(|c| {
+            matches!(
+                c,
+                TopologyChange::LoopChanged {
+                    change: LoopChange::HoleClosed,
+                    ..
+                }
+            )
+        })
+        .collect();
+    assert_eq!(
+        closed.len(),
+        1,
+        "the top face's hole, not the bottom's: {closed:?}"
     );
 }
 

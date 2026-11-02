@@ -279,7 +279,9 @@ fn same_planes(a: &[Plane], b: &[Plane]) -> bool {
         x.iter()
             .all(|p| y.iter().any(|q| relation(p, q) == Some(Relation::Same)))
     };
-    a.len() == b.len() && within(a, b) && within(b, a)
+    // A piece's bounds are distinct planes, so two lists of one length, one within the other, are
+    // the same list.
+    a.len() == b.len() && within(a, b)
 }
 
 /// The fast path's pieces (module documentation): each polygon whole, outside every operand in
@@ -333,8 +335,6 @@ struct Fate {
     buried: u32,
     /// Pieces dropped where another operand's face is the same plane facing the other way.
     shared: u32,
-    /// Pieces dropped otherwise.
-    dropped: u32,
 }
 
 /// The operands of a step, for reading names.
@@ -393,13 +393,12 @@ impl Inputs<'_> {
                 .front
                 .pairs()
                 .iter()
-                .any(|(entry, n)| *n > 0 && Some(*entry) != own);
+                // A winding keeps a pair only while its count is not zero.
+                .any(|(entry, _)| Some(*entry) != own);
             if shared {
                 fate.shared = fate.shared.saturating_add(1);
             } else if buried {
                 fate.buried = fate.buried.saturating_add(1);
-            } else {
-                fate.dropped = fate.dropped.saturating_add(1);
             }
         }
         fates
@@ -503,7 +502,7 @@ impl Inputs<'_> {
                 trimmed.push(face);
             } else if gone && mine && fate.buried > 0 {
                 overshoot.push(face);
-            } else if gone && mine && fate.dropped > 0 && fate.shared == 0 {
+            } else if gone && mine && fate.shared == 0 {
                 out.push(TopologyChange::FaceVanished {
                     face,
                     why: Vanish::Collapsed,
@@ -531,10 +530,10 @@ fn closed_holes(target: &Body, body: &Body, history: &History) -> Option<Vec<Top
     let mut out = Vec::new();
     for (row, key) in inn.faces.iter().enumerate() {
         let name = id(*key);
-        // The face it became: itself, one modified from it alone, or one it merged into.
+        // The face it became: itself, under its own name (a one-to-one change keeps it, 20.2), or
+        // one it merged into.
         let carried = out_faces.contains(&name).then_some(name).or_else(|| {
             history.records().iter().find_map(|r| match &r.origin {
-                Origin::Modified { from } if from.names() == [name] => Some(r.output),
                 Origin::Merged { of } if of.names().contains(&name) => Some(r.output),
                 _ => None,
             })
@@ -573,15 +572,15 @@ fn split_vertices(
         if around.len() < 4 {
             continue;
         }
+        // Every face around a deleted vertex changed, so each has a record saying from what.
         let descends = |face: NameId| {
-            around.contains(&face)
-                || origin.get(&face).is_some_and(|o| match o {
-                    Origin::Modified { from } | Origin::Merged { of: from } => {
-                        from.names().iter().any(|f| around.contains(f))
-                    }
-                    Origin::Split { of, .. } => around.contains(of),
-                    Origin::Unchanged | Origin::Generated { .. } => false,
-                })
+            origin.get(&face).is_some_and(|o| match o {
+                Origin::Modified { from } | Origin::Merged { of: from } => {
+                    from.names().iter().any(|f| around.contains(f))
+                }
+                Origin::Split { of, .. } => around.contains(of),
+                Origin::Unchanged | Origin::Generated { .. } => false,
+            })
         };
         let mut new = BTreeSet::new();
         for (at, key) in outn.vertices.iter().enumerate() {
@@ -592,14 +591,11 @@ fn split_vertices(
             let faces = faces_at(body, at)?;
             let names: Vec<NameId> = faces
                 .iter()
-                .filter_map(|f| outn.faces.get(*f).map(|k| id(*k)))
-                .collect();
+                .map(|f| outn.faces.get(*f).map(|k| id(*k)))
+                .collect::<Option<_>>()?;
             let generated = |f: &NameId| matches!(origin.get(f), Some(Origin::Generated { .. }));
             let from_v = names.iter().filter(|f| descends(**f)).count();
-            if names.len() == faces.len()
-                && from_v >= 2
-                && names.iter().all(|f| descends(*f) || generated(f))
-            {
+            if from_v >= 2 && names.iter().all(|f| descends(*f) || generated(f)) {
                 new.insert(at);
             }
         }
