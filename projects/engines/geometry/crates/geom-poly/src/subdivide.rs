@@ -18,9 +18,9 @@
 //!
 //! Guarantees:
 //!
-//! - **The same pieces whatever the threads.** The top levels of the tree are one phase each of
-//!   the parallel helper, until it holds a fixed number of boxes; then each box's subtree, and each
-//!   leaf found on the way, is one task of another, in tree order. So the output is the same bits
+//! - **The same pieces whatever the threads.** Each level of boxes holding many polygons is one
+//!   phase of the parallel helper; a box holding few, a fixed number, is then one task of another,
+//!   its whole subtree, as is each leaf found on the way, in tree order. So the output is the same bits
 //!   on any number of threads, and a failure the one a walk of those units in tree order meets
 //!   first (23.4).
 //! - **No recursion.** The top levels are walked level by level and each subtree on an explicit
@@ -85,10 +85,10 @@ const SPLITS: Phase = Phase::new("arrangement: split boxes");
 /// The leaves, and the subtrees below the level-by-level splits.
 const LEAVES: Phase = Phase::new("arrangement: solve leaves");
 
-/// Boxes enough to share among threads: the tree is split level by level, one phase a level, until
-/// it holds this many, and then each box's subtree is one task, so the deep levels cost no phase
-/// of their own. A fixed count, so the work does not depend on the threads.
-const SUBTREES: usize = 64;
+/// The polygons a box may hold and be one task, its whole subtree: a box holding more is split
+/// level by level, one phase a level, so the heavy boxes are shared out and the deep levels cost
+/// no phase of their own. A fixed count, so the work does not depend on the threads.
+const SUBTREE_POLYGONS: usize = 128;
 
 /// A box of the tree.
 struct Node {
@@ -435,7 +435,7 @@ pub fn arrange_with(
     let points = exec.try_map(meter, POINTS, CORNER_PLAN, polygons, |_, polygon, _| {
         Ok::<_, TraceError>(meetings(&polygon.piece))
     })?;
-    let mut level = alloc::vec![Node {
+    let root = alloc::vec![Node {
         key: 0,
         depth: 0,
         cell,
@@ -444,10 +444,13 @@ pub fn arrange_with(
         sources: (0..polygons.len()).collect(),
         points,
     }];
-    // Level by level until there are boxes enough to share, each a leaf found on the way or a
-    // box whose whole subtree is then one task.
+    // Level by level while a box holds many polygons; a leaf found on the way, or a box small
+    // enough, is then one task, its whole subtree.
     let mut units: Vec<(Node, bool)> = Vec::new();
-    while !level.is_empty() && level.len() < SUBTREES {
+    let small = |node: &Node| node.polygons.len() <= SUBTREE_POLYGONS;
+    let (held, mut level): (Vec<Node>, Vec<Node>) = root.into_iter().partition(|n| small(n));
+    units.extend(held.into_iter().map(|node| (node, false)));
+    while !level.is_empty() {
         let outcomes = exec.try_map(meter, SPLITS, ONE_BOX, &level, |_, node, m| {
             divide(node, (leaf, solids), tests, m)
         })?;
@@ -458,14 +461,18 @@ pub fn arrange_with(
                 Outcome::Leaf => units.push((node, true)),
                 Outcome::Split(children) => {
                     let (under, over) = *children;
-                    next.push(under);
-                    next.push(over);
+                    for child in [under, over] {
+                        if small(&child) {
+                            units.push((child, false));
+                        } else {
+                            next.push(child);
+                        }
+                    }
                 }
             }
         }
         level = next;
     }
-    units.extend(level.into_iter().map(|node| (node, false)));
     // A subtree's leaves lie between its box's key and the next unit's, so this is tree order.
     units.sort_unstable_by_key(|(node, _)| node.key);
     let solved = exec.try_map(meter, LEAVES, ONE_BOX, &units, |_, (node, whole), m| {
