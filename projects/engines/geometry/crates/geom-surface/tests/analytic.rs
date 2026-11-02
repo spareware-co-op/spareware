@@ -259,6 +259,21 @@ fn a_uniform_whole_scale_moves_every_round_kind_exactly() {
                 assert_eq!(axial, factor, "{k:?} under {t:?}");
             }
         }
+        // Moved twice, a cylinder's and a cone's axial factor is the product of the scales: after
+        // the first it is no longer ±1, so the second multiplies it, and the twice-moved kind's
+        // points are the second map's images of the once-moved one's.
+        for k in &kinds[..2] {
+            let once = k.transformed(&scales[0].0, m).unwrap().value;
+            let twice = once.transformed(&scales[2].0, m).unwrap().value;
+            let axial = match &twice {
+                SurfaceKind::Cylinder(c) => c.axial_sign(),
+                SurfaceKind::Cone(c) => c.axial_sign(),
+                other => panic!("a similarity keeps the kind: {other:?}"),
+            };
+            assert_eq!(axial, -6.0, "{k:?}");
+            check(&once, &params(once.domain()), &scales[2].0, m)
+                .unwrap_or_else(|e| panic!("{once:?} moved again: {e}"));
+        }
         // A scale that is not uniform still gives the moved NURBS form, certified.
         let squash = TypedTransform::from(
             RationalTransform::new([[2, 0, 0], [0, 1, 0], [0, 0, 1]], [0; 3], 1).unwrap(),
