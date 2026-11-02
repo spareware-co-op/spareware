@@ -428,8 +428,8 @@ impl<'a> Scene<'a> {
                 Combined {
                     body,
                     history: None,
-                    cell: None,
                     names: Vec::new(),
+                    cell: None,
                 },
                 false,
             ));
@@ -891,13 +891,13 @@ impl<'a> Scene<'a> {
         };
         let names = naming.as_ref().map(|held| &held.names);
         let body = wire(&curves, names, meter)?;
+        let (history, made) =
+            naming.map_or((None, Vec::new()), |held| (Some(held.history), held.made));
         Ok(Picked {
             results: alloc::vec![Combined {
                 body,
-                names: naming
-                    .as_ref()
-                    .map_or_else(Vec::new, |held| held.made.clone()),
-                history: naming.map(|held| held.history),
+                history,
+                names: made,
                 cell: None,
             }],
             separated: true,

@@ -1131,19 +1131,20 @@ pub fn name_curves(
         },
     });
     let deleted = deleted_names(sources, &records, &BTreeSet::new(), &BTreeSet::new())?;
+    let names = Names {
+        regions: alloc::vec![key_of(outside)],
+        faces: Vec::new(),
+        edges: edges.into_iter().map(key_of).collect(),
+        vertices: vertices.into_iter().map(key_of).collect(),
+    };
     let made = mint.reached(
-        [outside]
+        [&names.regions, &names.faces, &names.edges, &names.vertices]
             .into_iter()
-            .chain(edges.iter().copied())
-            .chain(vertices.iter().copied()),
+            .flatten()
+            .map(|key| NameId::from_bytes(key.0)),
     )?;
     Ok(Naming {
-        names: Names {
-            regions: alloc::vec![key_of(outside)],
-            faces: Vec::new(),
-            edges: edges.into_iter().map(key_of).collect(),
-            vertices: vertices.into_iter().map(key_of).collect(),
-        },
+        names,
         made,
         history: History::new(records, deleted, [])?,
         qualified: false,
@@ -1213,21 +1214,20 @@ pub fn name_fresh(
     let vertices = name_vertices(merged, &faces, &[], &sources, &mut alive, &mut mint)?
         .finished(&mut records, &mut mint)?;
     let regions = name_regions(op, merged, &faces.names, None, &mut records, &mut mint)?;
+    let names = Names {
+        regions: regions.into_iter().map(key_of).collect(),
+        faces: faces.names.iter().copied().map(key_of).collect(),
+        edges: edges.into_iter().map(key_of).collect(),
+        vertices: vertices.into_iter().map(key_of).collect(),
+    };
     let made = mint.reached(
-        regions
-            .iter()
-            .chain(&faces.names)
-            .chain(&edges)
-            .chain(&vertices)
-            .copied(),
+        [&names.regions, &names.faces, &names.edges, &names.vertices]
+            .into_iter()
+            .flatten()
+            .map(|key| NameId::from_bytes(key.0)),
     )?;
     Ok(Naming {
-        names: Names {
-            regions: regions.into_iter().map(key_of).collect(),
-            faces: faces.names.iter().copied().map(key_of).collect(),
-            edges: edges.into_iter().map(key_of).collect(),
-            vertices: vertices.into_iter().map(key_of).collect(),
-        },
+        names,
         made,
         history: History::new(records, NameSet::new([])?, [])?,
         qualified: false,
