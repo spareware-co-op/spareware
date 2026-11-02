@@ -830,12 +830,23 @@ fn key_of_piece(piece: &Piece) -> PieceKey {
 /// and place. A later merge takes the parts of a piece it holds again, and starts its sorts from
 /// those orders, so they find the old pieces in order and sort only the new ones in; as the sorts
 /// end in one total order whatever order they start from, the merge is the one it would be without.
+///
+/// With them, each edge's radial order, by what the order reads: an edge that reads the same takes
+/// its order from here rather than turning its fins about it again.
 #[derive(Clone, Debug, Default, PartialEq)]
 pub struct Memo {
     pieces: Vec<(PieceKey, Arc<Parts>)>,
     corners: Vec<(usize, usize)>,
     sides: Vec<(usize, usize)>,
+    radial: Radials,
 }
+
+/// What an edge's radial order reads: its first fin's bound, then each fin's face plane and
+/// whether the fin runs up the edge, in the edge's order.
+type RadialKey = (([i128; 3], i128), Vec<(([i128; 3], i128), bool)>);
+
+/// Edges' radial orders, each as places in the edge's list of fins, by what the order reads.
+type Radials = BTreeMap<RadialKey, Vec<usize>>;
 
 impl Memo {
     /// How many pieces it holds.
@@ -1166,12 +1177,52 @@ fn rings(fins: &[Fin], of_face: &[usize], plane: &Plane) -> Result<Vec<Vec<usize
 /// The fins of an edge in radial order, the faces each solid wedge joins put in one set; on a sheet
 /// every face at an edge is in one set.
 fn radial(
-    edge: &[usize],
-    fins: &[Fin],
-    planes: &[Plane],
+    (edge, fins, planes): (&[usize], &[Fin], &[Plane]),
     open: bool,
     parents: &mut [usize],
+    (last, kept): (Option<&Radials>, &mut Radials),
 ) -> Result<Vec<usize>, MergeError> {
+    let key = radial_key(edge, fins, planes)?;
+    let held = last.and_then(|last| last.get(&key)).map(|places| {
+        places
+            .iter()
+            .map(|place| edge.get(*place).copied())
+            .collect::<Option<Vec<usize>>>()
+    });
+    let order = match held {
+        Some(order) => order.ok_or(MergeError::Open)?,
+        None => radial_order(edge, fins, planes)?,
+    };
+    let mut positions = Vec::with_capacity(order.len());
+    for at in &order {
+        positions.push(
+            edge.iter()
+                .position(|one| one == at)
+                .ok_or(MergeError::Open)?,
+        );
+    }
+    kept.insert(key, positions);
+    joined(&order, fins, open, parents)?;
+    Ok(order)
+}
+
+/// What `edge`'s radial order reads of it.
+fn radial_key(edge: &[usize], fins: &[Fin], planes: &[Plane]) -> Result<RadialKey, MergeError> {
+    let first = edge
+        .first()
+        .and_then(|at| fins.get(*at))
+        .ok_or(MergeError::Open)?;
+    let mut list = Vec::with_capacity(edge.len());
+    for at in edge {
+        let fin = fins.get(*at).ok_or(MergeError::Open)?;
+        let plane = planes.get(fin.face).ok_or(MergeError::Open)?;
+        list.push(((plane.n(), plane.d()), fin.from < fin.to));
+    }
+    Ok(((first.bound.n(), first.bound.d()), list))
+}
+
+/// The fins of `edge` in turn about it, from its first.
+fn radial_order(edge: &[usize], fins: &[Fin], planes: &[Plane]) -> Result<Vec<usize>, MergeError> {
     let plane_of = |at: usize| -> Result<(Fin, Plane), MergeError> {
         let fin = *fins.get(at).ok_or(MergeError::Open)?;
         Ok((fin, *planes.get(fin.face).ok_or(MergeError::Open)?))
@@ -1215,10 +1266,23 @@ fn radial(
         }
         order.insert(place, *at);
     }
-    // Turning about the line, past a fin that runs against it lies the fin's material.
+    Ok(order)
+}
+
+/// Joins the faces of fins next in `order` that hold material between them into one shell:
+/// turning about the line, past a fin that runs against it lies the fin's material.
+fn joined(
+    order: &[usize],
+    fins: &[Fin],
+    open: bool,
+    parents: &mut [usize],
+) -> Result<(), MergeError> {
+    let fin = |at: &usize| fins.get(*at).copied().ok_or(MergeError::Open);
+    let rising = |fin: &Fin| fin.from < fin.to;
+    let start = fin(order.first().ok_or(MergeError::Open)?)?;
     let next = order.iter().cycle().skip(1);
     for (at, after) in order.iter().zip(next) {
-        let (this, other) = (plane_of(*at)?.0, plane_of(*after)?.0);
+        let (this, other) = (fin(at)?, fin(after)?);
         if open {
             join(parents, this.face, other.face);
         } else if rising(&this) == rising(&start) {
@@ -1228,7 +1292,7 @@ fn radial(
             join(parents, this.face, other.face);
         }
     }
-    Ok(order)
+    Ok(())
 }
 
 /// `pieces` as polygons of one shell, each with `entry`.
@@ -1606,10 +1670,11 @@ pub fn merge_with_reusing(
             .filter_map(|i| at_piece.get(*i).copied())
             .collect()
     };
-    let state = Memo {
+    let mut state = Memo {
         corners: by_piece(&corner_order),
         sides: by_piece(&side_order),
         pieces: keys.into_iter().zip(parts).collect(),
+        radial: BTreeMap::new(),
     };
     held.truncate(kept);
 
@@ -1694,7 +1759,12 @@ pub fn merge_with_reusing(
         edges.push(Edge {
             low: vertex(run.low)?,
             high: vertex(run.high)?,
-            fins: radial(here, &fins, &planes, rules.open, &mut same_shell)?,
+            fins: radial(
+                (here, &fins, &planes),
+                rules.open,
+                &mut same_shell,
+                (reuse.map(|old| &old.radial), &mut state.radial),
+            )?,
         });
     }
     let same_shell = flattened(same_shell);
