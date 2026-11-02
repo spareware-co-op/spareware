@@ -39,8 +39,8 @@ use geom_2d::accept::Accept;
 use geom_2d::carrier::{Carriers, Circle2, Curve2, CurveIx, Line2};
 use geom_2d::point::{Place, PointError, Pt2};
 use geom_2d::tangent::{
-    Corner, Fillet, TangentLine, Touch, common_tangent, fillet, fillet_all, semicircle,
-    tangent_circle, tangent_from,
+    Corner, Fillet, TangentCircle, TangentLine, Touch, common_tangent, fillet, fillet_all,
+    semicircle, tangent_circle, tangent_from,
 };
 use geom_num::arc::{Circle2 as GridCircle, Contact, Disc};
 use geom_num::conic::{Ellipse2, Meeting};
@@ -1272,3 +1272,139 @@ const PINNED: &[&str] = &[
     "Fine(FineLine { a: -5985699785787572224, b: 9031490230007365632, c: -9751466471112930397092 }) [Crossing { a: CurveIx(4), b: CurveIx(0), root: First }, Crossing { a: CurveIx(4), b: CurveIx(1), root: Second }] 0x3dc859fa20fe48ed Certified { bound: Steps(1), step: Q0 }",
     "Fine(FineLine { a: 357239489107591168, b: 12447001810340675584, c: 11206914563632291095270 }) [Crossing { a: CurveIx(5), b: CurveIx(0), root: First }, Crossing { a: CurveIx(5), b: CurveIx(1), root: Second }] 0x3dc662d5ad36ac2c Certified { bound: Steps(1), step: Q0 }",
 ];
+
+/// The touches of `c`, each join on its curve and the circle.
+fn three_joined(carriers: &Carriers, c: &TangentCircle, curves: [CurveIx; 3]) {
+    for (join, name) in c.joins.iter().zip(curves) {
+        joined(carriers, &join.leaving, name, c.circle);
+        joined(carriers, &join.arriving, name, c.circle);
+    }
+    assert!(
+        0.0 < c.gap.get() && c.gap.get() <= ANGULAR.get(),
+        "{}",
+        c.gap.get()
+    );
+}
+
+#[test]
+fn caps_on_opposite_sides_of_the_circle_are_clear() {
+    // A circle on a floor, under a ceiling of each kind, against a wall: its caps on the floor and
+    // the ceiling are opposite, the way from the centre to each pointing away from the other, so
+    // they are as far apart as caps can be. The ceiling is a circle from outside, a circle from
+    // inside, and an ellipse; each cap's way is the curve's own, which this proves the right way
+    // round.
+    let touch = |curve, side, near| Touch { curve, side, near };
+    let floor = line(p2(-50_000, 0), p2(50_000, 0));
+    let wall = line(p2(1_000, 50_000), p2(1_000, -50_000));
+    // The circle of radius 1,000 about (0, 1,000): the round ceiling above it about (0, 3,000) of
+    // radius 1,000; the round room about it, about (0, 500) of radius 1,500, whose top it touches
+    // from inside; the elliptical ceiling of semi-axes 20,000 and 12,000 about (0, 14,000).
+    let cases = [
+        (
+            circle(p2(0, 3_000), 1_000),
+            Sign::Positive,
+            p2(0, 2_000),
+            wall,
+            p2(1_000, 1_000),
+        ),
+        (
+            circle(p2(0, 500), 1_500),
+            Sign::Negative,
+            p2(0, 2_000),
+            wall,
+            p2(1_000, 1_000),
+        ),
+        (
+            Curve2::Ellipse(Ellipse2::new(p2(0, 14_000), [20_000, 0], 3, 5).unwrap()),
+            Sign::Positive,
+            p2(0, 2_000),
+            wall,
+            p2(1_000, 1_000),
+        ),
+    ];
+    for (ceiling, side, top, wall, beside) in cases {
+        let (mut carriers, [low, high, right]) = table([floor, ceiling, wall]);
+        let touches = [
+            touch(low, Sign::Positive, p2(0, 0)),
+            touch(high, side, top),
+            touch(right, Sign::Negative, beside),
+        ];
+        let c = tangent_circle(&mut carriers, &touches, GridStep::Q0, &certified())
+            .unwrap_or_else(|e| panic!("{ceiling:?}: {e:?}"));
+        three_joined(&carriers, &c, [low, high, right]);
+    }
+}
+
+#[test]
+fn caps_too_near_to_tell_apart_are_refused() {
+    // Two lines that turn by 2^−38 of a radian: a fillet's two caps are that far apart about its
+    // centre, under the sum of their gaps, so no exact question can say which comes first.
+    let (mut carriers, _, [first, second]) = left_corner(1 << 38, p2(1 << 39, 1));
+    let before = carriers.len();
+    assert_eq!(
+        fillet(
+            &mut carriers,
+            &first,
+            &second,
+            1_000,
+            GridStep::Q0,
+            &certified()
+        )
+        .err(),
+        Some(PointError::Num(NumError::Degenerate))
+    );
+    assert_eq!(carriers.len(), before);
+}
+
+#[test]
+fn a_circle_about_another_touches_it_at_its_far_side() {
+    // The fillet of radius 15,000 of the circle of radius 10,000 about the origin, from inside it,
+    // and the line y = 15,000: about (5,000, 0), it holds the smaller circle and touches it at
+    // (−10,000, 0), the point of it farthest from its own centre, so the circle that crosses there
+    // is the smaller one; each way round, its joins are the crossings either side of each touch.
+    let touch = |curve, side, near| Touch { curve, side, near };
+    let (mut carriers, [inner, high]) = table([
+        circle(p2(0, 0), 10_000),
+        line(p2(50_000, 15_000), p2(-50_000, 15_000)),
+    ]);
+    let (around, below) = (
+        touch(inner, Sign::Negative, p2(-10_000, 0)),
+        touch(high, Sign::Positive, p2(5_000, 15_000)),
+    );
+    let done = fillet(
+        &mut carriers,
+        &around,
+        &below,
+        15_000,
+        GridStep::Q0,
+        &certified(),
+    )
+    .unwrap();
+    sound(&carriers, &done, inner, high);
+    let disc = disc_of(&carriers, done.circle);
+    let ([x, y], w) = disc.centre().coordinates();
+    assert!(((x as f64 / w as f64) - 5_000.0).abs() < 1e-3, "{x} {w}");
+    assert!((y as f64 / w as f64).abs() < 1e-3, "{y} {w}");
+    let root = |p: &Pt2| match p {
+        Pt2::Crossing { root, .. } => *root,
+        other => panic!("{other:?}"),
+    };
+    assert_eq!(
+        (root(&done.start), root(&done.end)),
+        (Root::First, Root::First)
+    );
+    let back = fillet(
+        &mut carriers,
+        &below,
+        &around,
+        15_000,
+        GridStep::Q0,
+        &certified(),
+    )
+    .unwrap();
+    sound(&carriers, &back, high, inner);
+    assert_eq!(
+        (root(&back.start), root(&back.end)),
+        (Root::Second, Root::Second)
+    );
+}

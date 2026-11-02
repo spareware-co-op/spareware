@@ -1419,3 +1419,70 @@ fn name_corner(table: &mut Carriers, corner: &Filleted) -> Result<Fillet, PointE
         gap: corner.plan.gap,
     })
 }
+
+#[cfg(test)]
+#[allow(
+    clippy::unwrap_used,
+    clippy::panic,
+    clippy::float_cmp,
+    reason = "a failed test is its own report, and the pins are exact"
+)]
+mod tests {
+    use super::*;
+
+    fn at(c: f64, s: f64) -> [Interval; 2] {
+        [Interval::point(c).unwrap(), Interval::point(s).unwrap()]
+    }
+
+    #[test]
+    fn an_angle_is_at_least_the_one_its_sine_says() {
+        let angle = |s: f64| angle_of_sine(Interval::point(s).unwrap()).unwrap();
+        // Below 2^−10 the angle is within a millionth of its sine; from there up, 1.6 bounds
+        // arcsin x / x on all of (0, 1].
+        let tiny = angle(1e-12);
+        assert!((1e-12..=1.000_002e-12).contains(&tiny), "{tiny}");
+        assert_eq!(angle(-1e-12), tiny);
+        let edge = angle(1.0 / 1_024.0);
+        assert!(edge >= 1.6 / 1_024.0, "{edge}");
+        let half = angle(0.5);
+        assert!(half >= 0.8, "{half}");
+        assert!(angle(1.0) >= core::f64::consts::FRAC_PI_2);
+    }
+
+    #[test]
+    fn the_nearest_two_angles_are_by_distance_then_by_order() {
+        let four = [at(1.0, 0.0), at(0.6, 0.8), at(-0.6, 0.8), at(0.0, -1.0)];
+        assert_eq!(nearest_two(&four, [0.95, 0.31]), (0, 1));
+        assert_eq!(nearest_two(&four, [0.6, -0.3]), (0, 3));
+        assert_eq!(nearest_two(&four, [-0.5, 0.05]), (2, 3));
+        // Ties keep the earlier.
+        let square = [at(1.0, 0.0), at(0.0, 1.0), at(-1.0, 0.0), at(0.0, -1.0)];
+        assert_eq!(nearest_two(&square, [0.0, 0.0]), (0, 1));
+    }
+
+    #[test]
+    fn a_disc_exactly_tangent_to_an_ellipse_meets_it_at_one_root() {
+        // The ellipse of semi-axes 20,000 and 12,000 along x, and the circle of radius 8,000 about
+        // (0, 20,000): it touches the top of the ellipse, t = 1, twice.
+        let ellipse = Ellipse2::new(P2::new(0, 0).unwrap(), [20_000, 0], 3, 5).unwrap();
+        let disc = Disc::new(
+            Rational2::new(0, 20_000, 1).unwrap(),
+            I256::from_i128(64_000_000),
+        )
+        .unwrap();
+        let origin = P2::new(0, 20_000).unwrap();
+        let foot = Foot {
+            at: [DD::from_i64(0), DD::from_i64(-8_000)],
+            normal: [DD::from_i64(0), DD::from_i64(1)],
+            curvature: DD::from_i64(0),
+        };
+        for side in [Sign::Positive, Sign::Negative] {
+            let meet = ellipse_meet(&ellipse, &disc, side, &foot, origin).unwrap();
+            assert_eq!((meet.gap, meet.reach), (0.0, 0.0));
+            let (Way::Conic(leaving), Way::Conic(arriving)) = (meet.leaving, meet.arriving) else {
+                panic!("{meet:?}")
+            };
+            assert_eq!((leaving, arriving), (0, 0));
+        }
+    }
+}
