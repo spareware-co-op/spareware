@@ -3,15 +3,31 @@ name = "engine-geometry"
 version = "0.0.0"
 edition.workspace = true
 publish.workspace = true
+license.workspace = true
 
 [dependencies]
 # kit-core for permanent IDs and units at the boundary (section 5), every kernel crate this
-# facade re-exports (none yet: G100 adds them), and geom-pool behind the `threads` feature. Checked
-# by tests/scaffold, which holds the kernel's crate table (chapter 27).
+# facade re-exports (src/value.rs and src/schema.rs, piece G100), and geom-pool behind the
+# `threads` feature. Checked by tests/scaffold, which holds the kernel's crate table (chapter 27).
 kit-core = { path = "../../../kit/crates/kit-core" }
+geom-check = { path = "../../geometry/crates/geom-check" }
+geom-curve = { path = "../../geometry/crates/geom-curve" }
+geom-make = { path = "../../geometry/crates/geom-make" }
+geom-math = { path = "../../geometry/crates/geom-math" }
+geom-name = { path = "../../geometry/crates/geom-name" }
+geom-num = { path = "../../geometry/crates/geom-num" }
+geom-op = { path = "../../geometry/crates/geom-op" }
+geom-run = { path = "../../geometry/crates/geom-run" }
+geom-surface = { path = "../../geometry/crates/geom-surface" }
+geom-topo = { path = "../../geometry/crates/geom-topo" }
 geom-pool = { path = "../../geometry/crates/geom-pool", optional = true }
 
 [dev-dependencies]
+# The contract laws of chapter 28.2 (piece G103), which tests/contract_laws.rs runs on every registered
+# operation. Ours, MPL-2.0; a development crate, so tests only.
+geom-test = { path = "../../geometry/crates/geom-test" }
+# Every test build runs all four checker groups (chapter 28.4), release builds included.
+geom-check = { path = "../../geometry/crates/geom-check", features = ["full"] }
 # The scaffold check and the merge gate (tests/scaffold) read TOML, cargo's metadata and messages,
 # JSON and Rust source with the standard crates for each, in place of readers written there (piece
 # G12a; chapter 29.1, the owner's direction of 2026-10-22). Tests only, never shipped. Each pinned:

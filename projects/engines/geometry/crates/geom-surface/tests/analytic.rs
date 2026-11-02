@@ -2,6 +2,9 @@
 //! plane, cylinder, cone, sphere and torus keeps every law under exact, rational, certified,
 //! non-uniform and mirroring transforms; a whole cylinder converts exactly; a non-uniform scale
 //! changes a kind to NURBS explicitly; a sphere's pole keeps its normal; a torus knows its form.
+//!
+//! Covers: `SurfaceKind::Plane`, `SurfaceKind::Cylinder`, `SurfaceKind::Cone`,
+//! `SurfaceKind::Sphere`, `SurfaceKind::Torus`.
 
 #![allow(
     clippy::arithmetic_side_effects,

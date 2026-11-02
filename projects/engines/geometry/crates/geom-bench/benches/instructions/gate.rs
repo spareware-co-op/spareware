@@ -2571,6 +2571,78 @@ pub mod bvh {
     );
 }
 
+/// geom-topo's hot paths (piece G80; decision 32.44).
+pub mod topo {
+    use super::*;
+
+    #[library_benchmark(teardown = verify)]
+    #[bench::typical(leak("topo/column_edit/typical"))]
+    fn column_edit(run: &'static mut Named) -> &'static mut Named {
+        run.bench.measure();
+        run
+    }
+
+    #[library_benchmark(teardown = verify)]
+    #[bench::typical(leak("topo/publish/typical"))]
+    fn publish(run: &'static mut Named) -> &'static mut Named {
+        run.bench.measure();
+        run
+    }
+
+    library_benchmark_group!(
+        name = topo;
+        benchmarks = column_edit, publish
+    );
+}
+
+/// The attribute step's hot path (piece G90; decision 32.44).
+pub mod attributes {
+    use super::*;
+
+    #[library_benchmark(teardown = verify)]
+    #[bench::typical(leak("attributes/apply/typical"))]
+    fn apply(run: &'static mut Named) -> &'static mut Named {
+        run.bench.measure();
+        run
+    }
+
+    library_benchmark_group!(
+        name = attributes;
+        benchmarks = apply
+    );
+}
+
+/// The batch runner's hot paths (piece G104; decision 32.44).
+pub mod batch {
+    use super::*;
+
+    #[library_benchmark(teardown = verify)]
+    #[bench::typical(leak("batch/run_items/typical"))]
+    fn run_items(run: &'static mut Named) -> &'static mut Named {
+        run.bench.measure();
+        run
+    }
+
+    #[library_benchmark(teardown = verify)]
+    #[bench::typical(leak("batch/curve_points/typical"))]
+    fn curve_points(run: &'static mut Named) -> &'static mut Named {
+        run.bench.measure();
+        run
+    }
+
+    #[library_benchmark(teardown = verify)]
+    #[bench::typical(leak("batch/surface_points/typical"))]
+    fn surface_points(run: &'static mut Named) -> &'static mut Named {
+        run.bench.measure();
+        run
+    }
+
+    library_benchmark_group!(
+        name = batch;
+        benchmarks = run_items, curve_points, surface_points
+    );
+}
+
 /// geom-nurbs's hot paths (pieces G56, G58 and G59; decision 32.44).
 pub mod nurbs {
     use super::*;
@@ -2644,6 +2716,37 @@ pub mod curve {
     library_benchmark_group!(
         name = curve;
         benchmarks = helix_point, helix_enclose, bulge_to_nurbs, transition_point, transition_to_nurbs
+    );
+}
+
+/// geom-format's hot paths (piece G105; decision 32.44).
+pub mod format {
+    use super::*;
+
+    #[library_benchmark(teardown = verify)]
+    #[bench::typical(leak("format/cache_key/typical"))]
+    fn cache_key(run: &'static mut Named) -> &'static mut Named {
+        run.bench.measure();
+        run
+    }
+
+    #[library_benchmark(teardown = verify)]
+    #[bench::typical(leak("format/memo_get/typical"))]
+    fn memo_get(run: &'static mut Named) -> &'static mut Named {
+        run.bench.measure();
+        run
+    }
+
+    #[library_benchmark(teardown = verify)]
+    #[bench::typical(leak("format/next_version/typical"))]
+    fn next_version(run: &'static mut Named) -> &'static mut Named {
+        run.bench.measure();
+        run
+    }
+
+    library_benchmark_group!(
+        name = format;
+        benchmarks = cache_key, memo_get, next_version
     );
 }
 
@@ -2723,5 +2826,43 @@ pub mod quadrature {
     library_benchmark_group!(
         name = quadrature;
         benchmarks = gauss_legendre
+    );
+}
+
+/// geom-make's hot paths (piece G101; decision 32.44).
+pub mod make {
+    use super::*;
+
+    #[library_benchmark(teardown = verify)]
+    #[bench::typical(leak("make/build_box/typical"))]
+    fn build_box(run: &'static mut Named) -> &'static mut Named {
+        run.bench.measure();
+        run
+    }
+
+    #[library_benchmark(teardown = verify)]
+    #[bench::typical(leak("make/cylinder/typical"))]
+    fn cylinder(run: &'static mut Named) -> &'static mut Named {
+        run.bench.measure();
+        run
+    }
+
+    #[library_benchmark(teardown = verify)]
+    #[bench::typical(leak("make/move_box/typical"))]
+    fn move_box(run: &'static mut Named) -> &'static mut Named {
+        run.bench.measure();
+        run
+    }
+
+    #[library_benchmark(teardown = verify)]
+    #[bench::typical(leak("make/turn_box/typical"))]
+    fn turn_box(run: &'static mut Named) -> &'static mut Named {
+        run.bench.measure();
+        run
+    }
+
+    library_benchmark_group!(
+        name = make;
+        benchmarks = build_box, cylinder, move_box, turn_box
     );
 }

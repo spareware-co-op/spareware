@@ -26,10 +26,22 @@ name = "geom-bench-counts"
 test = false
 bench = false
 
+# The reference runner's records and report (piece G107): assembling a night, checking records,
+# writing the report from the history.
+[[bin]]
+name = "geom-bench-timings"
+test = false
+bench = false
+required-features = ["reference"]
+
 [dependencies]
 geom-num = { path = "../geom-num" }
 # The work meter the root-isolation engine runs under (its benchmarks, G53).
 geom-run = { path = "../geom-run" }
+# Cache keys, the memo store and body versions (piece G105), with the crates their inputs need.
+geom-format = { path = "../geom-format" }
+geom-op = { path = "../geom-op" }
+geom-topo = { path = "../geom-topo" }
 # The math types of phase 2 (pieces G45, G46 and G48): their count benchmarks, as decision 32.44
 # asks of every phase-2 code piece.
 geom-math = { path = "../geom-math" }
@@ -43,6 +55,11 @@ geom-curve = { path = "../geom-curve" }
 geom-surface = { path = "../geom-surface" }
 # The dense linear algebra of phase 2 (pieces G49 and G50), for the same count benchmarks.
 geom-linalg = { path = "../geom-linalg" }
+# The attribute step of phase 3 (piece G90) and the types it takes, for the same count benchmarks.
+geom-name = { path = "../geom-name" }
+# The primitives and transforms of phase 3 (piece G101), and the context and output they take and
+# give, for the same count benchmarks.
+geom-make = { path = "../geom-make" }
 # SHA-256 (FIPS 180-4) for the golden digests, and their hexadecimal form in golden.txt: standard
 # crates in place of the copy this crate held (piece G12a; chapter 29.1, a development crate).
 # sha2 0.11.0: MIT OR Apache-2.0, RustCrypto, without its default alloc and oid features, which
@@ -64,12 +81,17 @@ gungraun-runner = { version = "=0.20.0", default-features = false, features = ["
 serde_json = { version = "1.0.154", optional = true }
 
 [features]
-default = ["judge"]
+default = ["judge", "reference"]
 # The judge of the instruction-and-cache gate (`geom_bench::callgrind`), on by default. The gate's
 # measured runs build without it (`cargo bench --no-default-features`): Gungraun's runner crate is
 # also a dependency of the benchmark binary, so turning on its summary model would change the
 # binary being measured, and a measurement must not change with the tool that judges it.
 judge = ["dep:gungraun-runner", "dep:serde_json"]
+# The reference runner's nightly records and report (`geom_bench::timings`, piece G107), on by
+# default, on Unix and Windows only. Like the judge, the measured runs leave it out
+# (`--no-default-features`) and the WebAssembly guest never has it, so no measured binary changes
+# with it. It needs no dependency.
+reference = []
 
 [dev-dependencies]
 geom-test = { path = "../geom-test" }

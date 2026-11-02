@@ -62,6 +62,10 @@ name: Kernel development crates
 #   verus/wide.rs (piece G37), the twin of src/wide.rs's arithmetic, which proves add, subtract,
 #   negate, multiply and compare exact for every width; tests/verus_twin.rs holds it to the code
 #   token for token too.
+# - Verus on geom-topo's model of the Euler operators (chapter 28.7, "Topology, by a model"; piece
+#   G111), projects/engines/geometry/crates/geom-topo/verus/lib.rs: a body's loops and vertex fans
+#   as rings of fins, and every operator proved to keep every fin's partner, every loop and
+#   Euler's formula.
 #
 # The dependency rule, the fuzz target, the generator check, the map check, the ledger check and the
 # banned-source scan run natively on every operating system kernel.yml tests, the same six runners,
@@ -249,3 +253,5 @@ jobs:
           verus --crate-type=lib projects/engines/geometry/crates/geom-num/verus/lib.rs
       - name: Verus verifies geom-num's twins (the wide integers and the four explicit-point predicates)
         run: verus --crate-type=lib projects/engines/geometry/crates/geom-num/verus/lib.rs
+      - name: Verus verifies geom-topo's model of the Euler operators
+        run: verus --crate-type=lib projects/engines/geometry/crates/geom-topo/verus/lib.rs

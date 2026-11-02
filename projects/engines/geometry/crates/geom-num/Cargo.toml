@@ -10,6 +10,11 @@ publish.workspace = true
 license = "MPL-2.0 AND MIT"
 description = "Spare Kit geometry kernel: the numbers layer. Grid coordinates, fixed-width integers, exact predicates, intervals, deterministic maths and the tolerance ladder."
 
+[features]
+# Reference mode (23.13; piece G106): the generated filters off, every predicate answering from its
+# exact path, so CI can show that a fast path changes nothing. Never in a shipped build.
+reference = []
+
 [dependencies]
 geom-run = { path = "../geom-run", default-features = false }
 # The source of the unproven maths functions, the fused multiply-add, the correctly rounded
