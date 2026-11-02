@@ -11,22 +11,6 @@
       "reason": "The numbers layer refuses nothing a plane within budget can reach (6.2), so no test can make this arm run. Without it the error would come out as ResultInvalid instead of the numbers layer's own: still an error, never a body."
     },
     {
-      "file": "projects/engines/geometry/crates/geom-bool/src/half_space.rs",
-      "mutant": "replace > with >= in cap",
-      "line_text": "if largest(k) > largest(axis) {",
-      "occurrences": 1,
-      "kind": "equivalent",
-      "reason": "On a tie the mutant takes the later of two axes with equal largest components. Either way the axis has a non-zero component, so the four sides around it bound the plane and the other two clip it to the same polygon of the range box."
-    },
-    {
-      "file": "projects/engines/geometry/crates/geom-bool/src/half_space.rs",
-      "mutant": "replace < with <= in cap",
-      "line_text": "if n.get(axis).is_some_and(|v| *v < 0) {",
-      "occurrences": 1,
-      "kind": "equivalent",
-      "reason": "axis holds the normal's largest component, and a plane's normal is not zero, so the component is never 0."
-    },
-    {
       "file": "projects/engines/geometry/crates/geom-bool/src/operand.rs",
       "mutant": "replace != with == in side_of_fin",
       "line_text": "while at != own {",
@@ -609,6 +593,30 @@
       "occurrences": 1,
       "kind": "equivalent",
       "reason": "from and to are equal only for a side shrunk to a point, whose low equals its high. A stretch runs between two different marks, so such a side is along no stretch and its direction is never read."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-poly/src/merge.rs",
+      "mutant": "replace < with > in radial",
+      "line_text": "let rising = |fin: &Fin| fin.from < fin.to;",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "radial orders the fins of one edge, and every fin of an edge runs between the edge's two ends, one way or the other, so the mutant turns every fin's rising over together (or, for ends that were one vertex, none of them). radial only compares one fin's rising with another's (each flap's reversed, turned, and the joins after the order), and turning all of them over keeps every comparison."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-poly/src/merge.rs",
+      "mutant": "replace < with <= in radial",
+      "line_text": "let rising = |fin: &Fin| fin.from < fin.to;",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "radial orders the fins of one edge, and every fin of an edge runs between the edge's two ends, one way or the other, so the mutant differs only where the two ends are one vertex, and then for every fin of the edge alike. radial only compares one fin's rising with another's, so every comparison comes out the same."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-poly/src/merge.rs",
+      "mutant": "replace == with != in radial",
+      "line_text": "reversed: rising(&fin) == rising(&start),",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "The mutant turns over every flap's reversed, the reference flap's too. The flaps go only to geom_poly::order::about, which reads reversed only as a.reversed != b.reversed (turn_about and same_flap), and that is the same with both turned over; turned reads rising, not the flaps."
     },
     {
       "file": "projects/engines/geometry/crates/geom-poly/src/subdivide.rs",

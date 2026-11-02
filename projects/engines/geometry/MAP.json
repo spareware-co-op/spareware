@@ -1406,7 +1406,8 @@
           "guarantees": [
             "**The same bytes however the boxes fell.** Every row comes in the order [`merge`] numbers the shape, which depends on the shape alone (11.3; tested).",
             "**Plane-based.** A vertex on the grid is a grid point. Any other is `Meet`, its lowest valid triple of the planes around it. Its edges' lines are shadows between rounded ends, as 8.3 allows: the fins decide. An edge's two planes are its two faces' planes, read through its fins, so the body stores them once.",
-            "**Refused, never guessed.** What [`merge`] refuses and what the arenas refuse are a [`RebuildError`]."
+            "**Refused, never guessed.** What [`merge`] refuses and what the arenas refuse are a [`RebuildError`].",
+            "**Nothing is a valid body.** Pieces that make no face give a general body with no faces, which the checker passes: a solid body must hold a solid region (8.3; tested)."
           ],
           "job": "The canonical rebuild: merged pieces published as a body (11.3, step 5).",
           "method": {

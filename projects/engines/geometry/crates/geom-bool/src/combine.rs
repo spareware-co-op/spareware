@@ -120,6 +120,10 @@ pub const COMBINE: OpSchema = OpSchema {
             code: "bool.empty_result",
             doc: "A selection keeps nothing.",
         },
+        DiagnosticSpec {
+            code: "bool.touching_only",
+            doc: "An intersection keeps nothing, and two of its operands touch at a face.",
+        },
     ],
     classes: &[Class::Exact, Class::Certified],
     charges: &[Charge::new(ARRANGEMENT, "polygon a split clips", 1)],
@@ -254,6 +258,20 @@ impl Scene<'_> {
     /// Whether `polygon` belongs to the operand at `owner`.
     fn owned(&self, polygon: usize, owner: Option<usize>) -> bool {
         self.ready.owners.get(polygon).copied() == owner
+    }
+
+    /// Whether two operands touch at a face: a piece with one's material in front and another's
+    /// behind, each on its side alone (11.5). Contact along an edge or at a corner alone has no
+    /// such piece, and is not found here.
+    fn touching(&self) -> bool {
+        let alone = |here: &Winding, there: &Winding| {
+            here.pairs()
+                .iter()
+                .any(|(entry, count)| *count > 0 && there.count(*entry) <= 0)
+        };
+        self.classified
+            .iter()
+            .any(|c| alone(&c.front, &c.back) && alone(&c.back, &c.front))
     }
 
     /// Every piece of the operands other than the one at `target`.
@@ -519,6 +537,12 @@ pub fn combine(
                 "bool.empty_result",
                 "the selection keeps nothing",
             ));
+            if matches!(selection, Selection::Intersect) && scene.touching() {
+                notes.extend(Diagnostic::new(
+                    "bool.touching_only",
+                    "the operands touch at a face and share no volume",
+                ));
+            }
         }
         lists.push(bodies);
     }

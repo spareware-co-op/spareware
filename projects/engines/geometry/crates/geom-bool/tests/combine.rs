@@ -23,11 +23,11 @@ use geom_check::{Level, check};
 use geom_make::{BoxInput, Made, cylinder, make_box, prism};
 use geom_num::plane::Plane;
 use geom_num::{Exactness, NumError, P3, Steps};
-use geom_op::{CombineDetail, ErrorKind, OpContext, OpErrorDetail, OpId, OpPath};
+use geom_op::{CombineDetail, ErrorKind, OpContext, OpErrorDetail, OpId, OpPath, RunDetail};
 use geom_poly::convex::Piece;
 use geom_poly::merge::{Merge, Outward, Rules};
 use geom_poly::winding::Winding;
-use geom_run::{Budget, Exec, WorkMeter};
+use geom_run::{Budget, Exec, Phase, WorkMeter};
 use geom_topo::query::volume;
 use geom_topo::{Body, BodyKind, Builder, FlatSurface, Sense, SurfaceKind};
 use proptest::prelude::*;
@@ -595,6 +595,109 @@ fn a_section_is_the_curve_where_operands_meet() {
     );
 }
 
+/// Faces, edges, vertices and shells.
+fn counted(body: &Body) -> [u32; 4] {
+    let a = body.arenas();
+    [
+        a.faces.len(),
+        a.edges.len(),
+        a.vertices.len(),
+        a.shells.len(),
+    ]
+}
+
+fn noted(out: &geom_op::OpOutput<Body>, code: &str) -> bool {
+    out.diagnostics.iter().any(|d| d.code == code)
+}
+
+#[test]
+fn a_box_less_itself_or_a_box_around_it_is_nothing_and_goes_back_in() {
+    // A less A is empty (11.17), and so is a box less one around it: a valid general body with no
+    // faces, which says so and goes straight back in.
+    let a = cuboid([0, 0, 0], [10, 10, 10]);
+    let around = cuboid([-5, -5, -5], [20, 20, 20]);
+    for tool in [&a, &around] {
+        let out = subtract(&ctx(), &SERIAL, key(1), &[solid(1, &a), solid(2, tool)]).unwrap();
+        assert!(noted(&out, "bool.empty_result") && !noted(&out, "bool.touching_only"));
+        let nothing = out.result;
+        assert_eq!(counted(&nothing), [0, 0, 0, 0]);
+        assert_eq!(nothing.kind(), BodyKind::General);
+        checked(&nothing);
+        let back = unite(&ctx(), &SERIAL, &[solid(1, &nothing), solid(2, &a)]).unwrap();
+        assert_eq!(
+            (counted(&back.result), sixfold(&back.result)),
+            (counted(&a), sixfold(&a))
+        );
+        let less = subtract(&ctx(), &SERIAL, key(1), &[solid(1, &nothing), solid(2, &a)]);
+        assert_eq!(counted(&less.unwrap().result), [0, 0, 0, 0]);
+    }
+}
+
+#[test]
+fn a_walls_end_on_anothers_side_follows_the_shared_face_table() {
+    // Wall A's end face lies on wall B's side face, facing the other way (11.5's table).
+    let a = cuboid([0, 0, 0], [100, 10, 30]);
+    let b = cuboid([100, -20, 0], [10, 50, 30]);
+    let both = [solid(1, &a), solid(2, &b)];
+    // Unite: inside on both sides, the face goes, and one solid stands.
+    let one = unite(&ctx(), &SERIAL, &both).unwrap().result;
+    assert_eq!(one.arenas().shells.len(), 1);
+    assert_eq!(sixfold(&one), sixfold(&a) + sixfold(&b));
+    checked(&one);
+    // Subtract A less B: A is unchanged there.
+    let cut = subtract(&ctx(), &SERIAL, key(1), &both).unwrap().result;
+    assert_eq!((counted(&cut), sixfold(&cut)), (counted(&a), sixfold(&a)));
+    // Intersect: an empty body, which says the walls only touch.
+    let met = intersect(&ctx(), &SERIAL, &both).unwrap();
+    assert!(noted(&met, "bool.empty_result") && noted(&met, "bool.touching_only"));
+    assert_eq!(counted(&met.result), [0, 0, 0, 0]);
+    checked(&met.result);
+    // Apart, or touching along an edge alone, they share no face: nothing is said of touching.
+    for low in [[200, 0, 0], [100, 10, 0]] {
+        let c = cuboid(low, [10, 10, 30]);
+        let out = intersect(&ctx(), &SERIAL, &[solid(1, &a), solid(2, &c)]).unwrap();
+        assert!(noted(&out, "bool.empty_result") && !noted(&out, "bool.touching_only"));
+        checked(&out.result);
+    }
+}
+
+#[test]
+fn a_box_inside_another_unites_cuts_and_meets() {
+    let outer = cuboid([0, 0, 0], [40, 40, 40]);
+    let inner = cuboid([10, 10, 10], [10, 10, 10]);
+    let both = [solid(1, &outer), solid(2, &inner)];
+    let whole = unite(&ctx(), &SERIAL, &both).unwrap().result;
+    assert_eq!(
+        (counted(&whole), sixfold(&whole)),
+        (counted(&outer), sixfold(&outer))
+    );
+    // Clear of every face, the inner box leaves a cavity: a second shell.
+    let hollow = subtract(&ctx(), &SERIAL, key(1), &both).unwrap().result;
+    assert_eq!(counted(&hollow), [12, 24, 16, 2]);
+    assert_eq!(sixfold(&hollow), sixfold(&outer) - sixfold(&inner));
+    checked(&hollow);
+    let none = subtract(&ctx(), &SERIAL, key(2), &both).unwrap();
+    assert!(noted(&none, "bool.empty_result"));
+    checked(&none.result);
+    let met = intersect(&ctx(), &SERIAL, &both).unwrap().result;
+    assert_eq!(
+        (counted(&met), sixfold(&met)),
+        (counted(&inner), sixfold(&inner))
+    );
+    // On one of the outer box's faces, it leaves a pocket in one shell.
+    let flush = cuboid([0, 10, 10], [10, 10, 10]);
+    let both = [solid(1, &outer), solid(2, &flush)];
+    let pocket = subtract(&ctx(), &SERIAL, key(1), &both).unwrap().result;
+    assert_eq!(pocket.arenas().shells.len(), 1);
+    assert_eq!(sixfold(&pocket), sixfold(&outer) - sixfold(&flush));
+    checked(&pocket);
+    let met = intersect(&ctx(), &SERIAL, &both).unwrap().result;
+    assert_eq!(
+        (counted(&met), sixfold(&met)),
+        (counted(&flush), sixfold(&flush))
+    );
+}
+
 #[test]
 fn a_refused_preparation_says_why() {
     let k = key(1);
@@ -700,6 +803,53 @@ fn a_budget_that_runs_out_at_the_very_end_stops_cleanly() {
     for budget in high.saturating_sub(400)..high {
         let e = run(budget).unwrap_err();
         assert_eq!(e.kind(), ErrorKind::BudgetExceeded, "{e:?}");
+    }
+}
+
+#[test]
+fn a_budget_that_runs_out_in_the_rebuild_stops_cleanly() {
+    // The rebuild's publication charges a few units between the merge and the checker, which the
+    // stepped sweep above steps over and the tail sweep never reaches. It charges once at least
+    // for each of a body's 22 link columns, so a stride of 11 from the arrangement's end to the
+    // answer lands in it, and each budget tried must be a budget stop.
+    let a = cuboid([0, 0, 0], [40, 40, 40]);
+    let b = cuboid([20, 20, 20], [40, 40, 40]);
+    let run = |budget: u64| {
+        let small = OpContext::new(
+            OpPath::new(OpId::from_bytes([7; 16])),
+            Budget::new(budget, u64::MAX),
+        );
+        unite(&small, &SERIAL, &[solid(1, &a), solid(2, &b)])
+    };
+    let arranging = |budget: u64| {
+        run(budget).is_err_and(|e| {
+            matches!(
+                e.detail(),
+                OpErrorDetail::Run(RunDetail::BudgetExceeded(x))
+                    if x.phase == Phase::new("arrangement")
+            )
+        })
+    };
+    // The first budget past `pass`: `pass(low)` holds and `pass(high)` does not.
+    let first = |pass: &dyn Fn(u64) -> bool| {
+        let (mut low, mut high) = (0u64, 1 << 24);
+        assert!(pass(low) && !pass(high));
+        while high - low > 1 {
+            let middle = low + (high - low) / 2;
+            if pass(middle) {
+                low = middle;
+            } else {
+                high = middle;
+            }
+        }
+        high
+    };
+    let rebuilding = first(&arranging);
+    let answered = first(&|budget| run(budget).is_err());
+    assert!(rebuilding < answered);
+    for budget in (rebuilding..answered).step_by(11) {
+        let e = run(budget).unwrap_err();
+        assert_eq!(e.kind(), ErrorKind::BudgetExceeded, "{budget}: {e:?}");
     }
 }
 
