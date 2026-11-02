@@ -558,3 +558,278 @@ pub fn ssi_side_value(a: P2, b: P2, c: P2, d: P2, p: P2, q: P2) -> Option<I256> 
     let s = s_1.checked_sub(&s_2)?;
     Some(s)
 }
+
+/// `line_sphere`'s exact value in plain `i128` (chapter 23.3): each step in `i128`, or in its
+/// certificate's wide type with both operands widened to it, with checked arithmetic; `None` only
+/// if a step overflowed, which the certificate rules out; `None` also for a rounded input outside
+/// its declared range.
+#[inline]
+#[must_use]
+#[allow(
+    clippy::many_single_char_names,
+    clippy::similar_names,
+    reason = "names, parameters and lines follow the description: one per input and step"
+)]
+pub fn line_sphere_value(a: P3, b: P3, c: P3, r: i128) -> Option<I256> {
+    let d_x = i128::from(b.x.get()).checked_sub(i128::from(a.x.get()))?;
+    let d_y = i128::from(b.y.get()).checked_sub(i128::from(a.y.get()))?;
+    let d_z = i128::from(b.z.get()).checked_sub(i128::from(a.z.get()))?;
+    let w_x = i128::from(a.x.get()).checked_sub(i128::from(c.x.get()))?;
+    let w_y = i128::from(a.y.get()).checked_sub(i128::from(c.y.get()))?;
+    let w_z = i128::from(a.z.get()).checked_sub(i128::from(c.z.get()))?;
+    let u_x_1 = d_y.checked_mul(w_z)?;
+    let u_x_2 = d_z.checked_mul(w_y)?;
+    let u_x = u_x_1.checked_sub(u_x_2)?;
+    let u_y_1 = d_z.checked_mul(w_x)?;
+    let u_y_2 = d_x.checked_mul(w_z)?;
+    let u_y = u_y_1.checked_sub(u_y_2)?;
+    let u_z_1 = d_x.checked_mul(w_y)?;
+    let u_z_2 = d_y.checked_mul(w_x)?;
+    let u_z = u_z_1.checked_sub(u_z_2)?;
+    let dd_1 = d_x.checked_mul(d_x)?;
+    let dd_2 = d_y.checked_mul(d_y)?;
+    let dd_3 = dd_1.checked_add(dd_2)?;
+    let dd_4 = d_z.checked_mul(d_z)?;
+    let dd = dd_3.checked_add(dd_4)?;
+    let uu_1 = I256::from_i128(u_x).checked_mul(&I256::from_i128(u_x))?;
+    let uu_2 = I256::from_i128(u_y).checked_mul(&I256::from_i128(u_y))?;
+    let uu_3 = uu_1.checked_add(&uu_2)?;
+    let uu_4 = I256::from_i128(u_z).checked_mul(&I256::from_i128(u_z))?;
+    let uu = uu_3.checked_add(&uu_4)?;
+    let r = within(r, 41)?;
+    let delta_1 = r.checked_mul(r)?;
+    let delta_2 = I256::from_i128(delta_1).checked_mul(&I256::from_i128(dd))?;
+    let delta = delta_2.checked_sub(&uu)?;
+    Some(delta)
+}
+
+/// `line_cylinder`'s exact value in plain `i128` (chapter 23.3): each step in `i128`, or in its
+/// certificate's wide type with both operands widened to it, with checked arithmetic; `None` only
+/// if a step overflowed, which the certificate rules out; `None` also for a rounded input outside
+/// its declared range.
+#[inline]
+#[must_use]
+#[allow(
+    clippy::many_single_char_names,
+    clippy::similar_names,
+    reason = "names, parameters and lines follow the description: one per input and step"
+)]
+pub fn line_cylinder_value(a: P3, b: P3, c: P3, f: P3, r: i128) -> Option<I256> {
+    let d_x = i128::from(b.x.get()).checked_sub(i128::from(a.x.get()))?;
+    let d_y = i128::from(b.y.get()).checked_sub(i128::from(a.y.get()))?;
+    let d_z = i128::from(b.z.get()).checked_sub(i128::from(a.z.get()))?;
+    let e_x = i128::from(f.x.get()).checked_sub(i128::from(c.x.get()))?;
+    let e_y = i128::from(f.y.get()).checked_sub(i128::from(c.y.get()))?;
+    let e_z = i128::from(f.z.get()).checked_sub(i128::from(c.z.get()))?;
+    let w_x = i128::from(a.x.get()).checked_sub(i128::from(c.x.get()))?;
+    let w_y = i128::from(a.y.get()).checked_sub(i128::from(c.y.get()))?;
+    let w_z = i128::from(a.z.get()).checked_sub(i128::from(c.z.get()))?;
+    let n_x_1 = d_y.checked_mul(e_z)?;
+    let n_x_2 = d_z.checked_mul(e_y)?;
+    let n_x = n_x_1.checked_sub(n_x_2)?;
+    let n_y_1 = d_z.checked_mul(e_x)?;
+    let n_y_2 = d_x.checked_mul(e_z)?;
+    let n_y = n_y_1.checked_sub(n_y_2)?;
+    let n_z_1 = d_x.checked_mul(e_y)?;
+    let n_z_2 = d_y.checked_mul(e_x)?;
+    let n_z = n_z_1.checked_sub(n_z_2)?;
+    let nn_1 = I256::from_i128(n_x).checked_mul(&I256::from_i128(n_x))?;
+    let nn_2 = I256::from_i128(n_y).checked_mul(&I256::from_i128(n_y))?;
+    let nn_3 = nn_1.checked_add(&nn_2)?;
+    let nn_4 = I256::from_i128(n_z).checked_mul(&I256::from_i128(n_z))?;
+    let nn = nn_3.checked_add(&nn_4)?;
+    let det_1 = n_x.checked_mul(w_x)?;
+    let det_2 = n_y.checked_mul(w_y)?;
+    let det_3 = det_1.checked_add(det_2)?;
+    let det_4 = n_z.checked_mul(w_z)?;
+    let det = det_3.checked_add(det_4)?;
+    let r = within(r, 41)?;
+    let delta_1 = r.checked_mul(r)?;
+    let delta_2 = I256::from_i128(delta_1).checked_mul(&nn)?;
+    let delta_3 = I256::from_i128(det).checked_mul(&I256::from_i128(det))?;
+    let delta = delta_2.checked_sub(&delta_3)?;
+    Some(delta)
+}
+
+/// `line_cone`'s exact value in plain `i128` (chapter 23.3): each step in `i128`, or in its
+/// certificate's wide type with both operands widened to it, with checked arithmetic; `None` only
+/// if a step overflowed, which the certificate rules out; `None` also for a rounded input outside
+/// its declared range.
+#[inline]
+#[must_use]
+#[allow(
+    clippy::many_single_char_names,
+    clippy::similar_names,
+    reason = "names, parameters and lines follow the description: one per input and step"
+)]
+pub fn line_cone_value(a: P3, b: P3, c: P3, f: P3, s: i128, t: i128) -> Option<I384> {
+    let d_x = i128::from(b.x.get()).checked_sub(i128::from(a.x.get()))?;
+    let d_y = i128::from(b.y.get()).checked_sub(i128::from(a.y.get()))?;
+    let d_z = i128::from(b.z.get()).checked_sub(i128::from(a.z.get()))?;
+    let e_x = i128::from(f.x.get()).checked_sub(i128::from(c.x.get()))?;
+    let e_y = i128::from(f.y.get()).checked_sub(i128::from(c.y.get()))?;
+    let e_z = i128::from(f.z.get()).checked_sub(i128::from(c.z.get()))?;
+    let w_x = i128::from(a.x.get()).checked_sub(i128::from(c.x.get()))?;
+    let w_y = i128::from(a.y.get()).checked_sub(i128::from(c.y.get()))?;
+    let w_z = i128::from(a.z.get()).checked_sub(i128::from(c.z.get()))?;
+    let n_x_1 = w_y.checked_mul(d_z)?;
+    let n_x_2 = w_z.checked_mul(d_y)?;
+    let n_x = n_x_1.checked_sub(n_x_2)?;
+    let n_y_1 = w_z.checked_mul(d_x)?;
+    let n_y_2 = w_x.checked_mul(d_z)?;
+    let n_y = n_y_1.checked_sub(n_y_2)?;
+    let n_z_1 = w_x.checked_mul(d_y)?;
+    let n_z_2 = w_y.checked_mul(d_x)?;
+    let n_z = n_z_1.checked_sub(n_z_2)?;
+    let nn_1 = I256::from_i128(n_x).checked_mul(&I256::from_i128(n_x))?;
+    let nn_2 = I256::from_i128(n_y).checked_mul(&I256::from_i128(n_y))?;
+    let nn_3 = nn_1.checked_add(&nn_2)?;
+    let nn_4 = I256::from_i128(n_z).checked_mul(&I256::from_i128(n_z))?;
+    let nn = nn_3.checked_add(&nn_4)?;
+    let ee_1 = e_x.checked_mul(e_x)?;
+    let ee_2 = e_y.checked_mul(e_y)?;
+    let ee_3 = ee_1.checked_add(ee_2)?;
+    let ee_4 = e_z.checked_mul(e_z)?;
+    let ee = ee_3.checked_add(ee_4)?;
+    let en_1 = e_x.checked_mul(n_x)?;
+    let en_2 = e_y.checked_mul(n_y)?;
+    let en_3 = en_1.checked_add(en_2)?;
+    let en_4 = e_z.checked_mul(n_z)?;
+    let en = en_3.checked_add(en_4)?;
+    let s = within(s, 40)?;
+    let ss = s.checked_mul(s)?;
+    let delta_1 = I256::from_i128(ss).checked_mul(&I256::from_i128(ee))?;
+    let delta_2 = delta_1.resize::<6>()?.checked_mul(&nn.resize::<6>()?)?;
+    let t = within(t, 40)?;
+    let delta_3 = t.checked_mul(t)?;
+    let delta_4 = ss.checked_add(delta_3)?;
+    let delta_5 = I256::from_i128(delta_4).checked_mul(&I256::from_i128(en))?;
+    let delta_6 = delta_5.resize::<6>()?.checked_mul(&I384::from_i128(en))?;
+    let delta = delta_2.checked_sub(&delta_6)?;
+    Some(delta)
+}
+
+/// `line_cone_lead`'s exact value in plain `i128` (chapter 23.3): each step in `i128`, or in its
+/// certificate's wide type with both operands widened to it, with checked arithmetic; `None` only
+/// if a step overflowed, which the certificate rules out; `None` also for a rounded input outside
+/// its declared range.
+#[inline]
+#[must_use]
+#[allow(
+    clippy::many_single_char_names,
+    clippy::similar_names,
+    reason = "names, parameters and lines follow the description: one per input and step"
+)]
+pub fn line_cone_lead_value(a: P3, b: P3, c: P3, f: P3, s: i128, t: i128) -> Option<I256> {
+    let d_x = i128::from(b.x.get()).checked_sub(i128::from(a.x.get()))?;
+    let d_y = i128::from(b.y.get()).checked_sub(i128::from(a.y.get()))?;
+    let d_z = i128::from(b.z.get()).checked_sub(i128::from(a.z.get()))?;
+    let e_x = i128::from(f.x.get()).checked_sub(i128::from(c.x.get()))?;
+    let e_y = i128::from(f.y.get()).checked_sub(i128::from(c.y.get()))?;
+    let e_z = i128::from(f.z.get()).checked_sub(i128::from(c.z.get()))?;
+    let u_x_1 = d_y.checked_mul(e_z)?;
+    let u_x_2 = d_z.checked_mul(e_y)?;
+    let u_x = u_x_1.checked_sub(u_x_2)?;
+    let u_y_1 = d_z.checked_mul(e_x)?;
+    let u_y_2 = d_x.checked_mul(e_z)?;
+    let u_y = u_y_1.checked_sub(u_y_2)?;
+    let u_z_1 = d_x.checked_mul(e_y)?;
+    let u_z_2 = d_y.checked_mul(e_x)?;
+    let u_z = u_z_1.checked_sub(u_z_2)?;
+    let uu_1 = I256::from_i128(u_x).checked_mul(&I256::from_i128(u_x))?;
+    let uu_2 = I256::from_i128(u_y).checked_mul(&I256::from_i128(u_y))?;
+    let uu_3 = uu_1.checked_add(&uu_2)?;
+    let uu_4 = I256::from_i128(u_z).checked_mul(&I256::from_i128(u_z))?;
+    let uu = uu_3.checked_add(&uu_4)?;
+    let de_1 = d_x.checked_mul(e_x)?;
+    let de_2 = d_y.checked_mul(e_y)?;
+    let de_3 = de_1.checked_add(de_2)?;
+    let de_4 = d_z.checked_mul(e_z)?;
+    let de = de_3.checked_add(de_4)?;
+    let t = within(t, 40)?;
+    let lead_1 = t.checked_mul(t)?;
+    let lead_2 = I256::from_i128(lead_1).checked_mul(&uu)?;
+    let s = within(s, 40)?;
+    let lead_3 = s.checked_mul(s)?;
+    let lead_4 = I256::from_i128(lead_3).checked_mul(&I256::from_i128(de))?;
+    let lead_5 = lead_4.checked_mul(&I256::from_i128(de))?;
+    let lead = lead_2.checked_sub(&lead_5)?;
+    Some(lead)
+}
+
+/// `cross_norm`'s exact value in plain `i128` (chapter 23.3): each step in `i128`, or in its
+/// certificate's wide type with both operands widened to it, with checked arithmetic; `None` only
+/// if a step overflowed, which the certificate rules out.
+#[inline]
+#[must_use]
+#[allow(
+    clippy::similar_names,
+    reason = "each name is a step of the description, named by the language's rule"
+)]
+pub fn cross_norm_value(a: P3, b: P3, c: P3, d: P3) -> Option<I256> {
+    let p_x = i128::from(b.x.get()).checked_sub(i128::from(a.x.get()))?;
+    let p_y = i128::from(b.y.get()).checked_sub(i128::from(a.y.get()))?;
+    let p_z = i128::from(b.z.get()).checked_sub(i128::from(a.z.get()))?;
+    let q_x = i128::from(d.x.get()).checked_sub(i128::from(c.x.get()))?;
+    let q_y = i128::from(d.y.get()).checked_sub(i128::from(c.y.get()))?;
+    let q_z = i128::from(d.z.get()).checked_sub(i128::from(c.z.get()))?;
+    let n_x_1 = p_y.checked_mul(q_z)?;
+    let n_x_2 = p_z.checked_mul(q_y)?;
+    let n_x = n_x_1.checked_sub(n_x_2)?;
+    let n_y_1 = p_z.checked_mul(q_x)?;
+    let n_y_2 = p_x.checked_mul(q_z)?;
+    let n_y = n_y_1.checked_sub(n_y_2)?;
+    let n_z_1 = p_x.checked_mul(q_y)?;
+    let n_z_2 = p_y.checked_mul(q_x)?;
+    let n_z = n_z_1.checked_sub(n_z_2)?;
+    let nn_1 = I256::from_i128(n_x).checked_mul(&I256::from_i128(n_x))?;
+    let nn_2 = I256::from_i128(n_y).checked_mul(&I256::from_i128(n_y))?;
+    let nn_3 = nn_1.checked_add(&nn_2)?;
+    let nn_4 = I256::from_i128(n_z).checked_mul(&I256::from_i128(n_z))?;
+    let nn = nn_3.checked_add(&nn_4)?;
+    Some(nn)
+}
+
+/// `axis_gap`'s exact value in plain `i128` (chapter 23.3): each step in `i128`, or in its
+/// certificate's wide type with both operands widened to it, with checked arithmetic; `None` only
+/// if a step overflowed, which the certificate rules out; `None` also for a rounded input outside
+/// its declared range.
+#[inline]
+#[must_use]
+#[allow(
+    clippy::many_single_char_names,
+    clippy::similar_names,
+    reason = "names, parameters and lines follow the description: one per input and step"
+)]
+pub fn axis_gap_value(a: P3, b: P3, c: P3, g: i128) -> Option<I256> {
+    let e_x = i128::from(b.x.get()).checked_sub(i128::from(a.x.get()))?;
+    let e_y = i128::from(b.y.get()).checked_sub(i128::from(a.y.get()))?;
+    let e_z = i128::from(b.z.get()).checked_sub(i128::from(a.z.get()))?;
+    let w_x = i128::from(c.x.get()).checked_sub(i128::from(a.x.get()))?;
+    let w_y = i128::from(c.y.get()).checked_sub(i128::from(a.y.get()))?;
+    let w_z = i128::from(c.z.get()).checked_sub(i128::from(a.z.get()))?;
+    let u_x_1 = w_y.checked_mul(e_z)?;
+    let u_x_2 = w_z.checked_mul(e_y)?;
+    let u_x = u_x_1.checked_sub(u_x_2)?;
+    let u_y_1 = w_z.checked_mul(e_x)?;
+    let u_y_2 = w_x.checked_mul(e_z)?;
+    let u_y = u_y_1.checked_sub(u_y_2)?;
+    let u_z_1 = w_x.checked_mul(e_y)?;
+    let u_z_2 = w_y.checked_mul(e_x)?;
+    let u_z = u_z_1.checked_sub(u_z_2)?;
+    let uu_1 = I256::from_i128(u_x).checked_mul(&I256::from_i128(u_x))?;
+    let uu_2 = I256::from_i128(u_y).checked_mul(&I256::from_i128(u_y))?;
+    let uu_3 = uu_1.checked_add(&uu_2)?;
+    let uu_4 = I256::from_i128(u_z).checked_mul(&I256::from_i128(u_z))?;
+    let uu = uu_3.checked_add(&uu_4)?;
+    let ee_1 = e_x.checked_mul(e_x)?;
+    let ee_2 = e_y.checked_mul(e_y)?;
+    let ee_3 = ee_1.checked_add(ee_2)?;
+    let ee_4 = e_z.checked_mul(e_z)?;
+    let ee = ee_3.checked_add(ee_4)?;
+    let g = within(g, 42)?;
+    let delta_1 = g.checked_mul(g)?;
+    let delta_2 = I256::from_i128(delta_1).checked_mul(&I256::from_i128(ee))?;
+    let delta = uu.checked_sub(&delta_2)?;
+    Some(delta)
+}

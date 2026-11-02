@@ -416,6 +416,49 @@ pub static OPS: &[Op] = &[
     Op { group: "surface", name: "offset_point", measures: "geom_surface::SurfaceKind::point", classes: T, prepare: |c| bind(inputs::surface::offset_point(c), kernels::surface::offset_point) },
     Op { group: "surface", name: "torus_second_bound", measures: "geom_surface::ParamSurface::second_derivative_bound", classes: T, prepare: |c| bind(inputs::surface::torus_second_bound(c), kernels::surface::torus_second_bound) },
     Op { group: "surface", name: "torus_normal_bound", measures: "geom_surface::ParamSurface::normal_derivative_bound", classes: T, prepare: |c| bind(inputs::surface::torus_normal_bound(c), kernels::surface::torus_normal_bound) },
+    // The exact decisions on lines and quadrics (piece G159; decision 32.44).
+    Op { group: "quadric", name: "line_sphere", measures: "quadric::line_sphere", classes: T, prepare: |c| bind(inputs::quadric::spheres(c), kernels::quadric::spheres) },
+    Op { group: "quadric", name: "line_cylinder", measures: "quadric::line_cylinder", classes: T, prepare: |c| bind(inputs::quadric::cylinders(c), kernels::quadric::cylinders) },
+    Op { group: "quadric", name: "line_cone", measures: "quadric::line_cone", classes: T, prepare: |c| bind(inputs::quadric::cones(c), kernels::quadric::cones) },
+    Op { group: "quadric", name: "line_torus", measures: "quadric::roots", classes: T, prepare: |c| bind(inputs::quadric::tori(c), kernels::quadric::tori) },
+    Op { group: "quadric", name: "parallel", measures: "quadric::parallel", classes: T, prepare: |c| bind(inputs::quadric::directions(c), kernels::quadric::directions) },
+    Op { group: "quadric", name: "axis_gap", measures: "quadric::axis_gap", classes: T, prepare: |c| bind(inputs::quadric::gaps(c), kernels::quadric::gaps) },
+    Op { group: "quadric", name: "tangent", measures: "quadric::tangent_cylinder_cone", classes: T, prepare: |c| bind(inputs::quadric::tangents(c), kernels::quadric::tangents) },
+    // geom-intersect's canonical order (piece G158; decision 32.44): a list of items sorted and
+    // proven disjoint, a key read through a circle's NURBS form, and a pair of keys put in order.
+    Op { group: "intersect", name: "sort_items", measures: "geom_intersect::Intersection::new", classes: T, prepare: |c| bind(inputs::intersect::items(c), kernels::intersect::sorted) },
+    Op { group: "intersect", name: "key_circle", measures: "geom_intersect::CanonicalKey::of_curve", classes: T, prepare: |c| bind(inputs::intersect::circles(c), kernels::intersect::keys) },
+    Op { group: "intersect", name: "pair_lines", measures: "geom_intersect::order::pair", classes: T, prepare: |c| bind(inputs::intersect::lines(c), kernels::intersect::paired) },
+    Op { group: "intersect", name: "curve_segments", measures: "geom_intersect::curve::curves", classes: T, prepare: |c| bind(inputs::intersect::segment_pairs(c), kernels::intersect::met) },
+    Op { group: "intersect", name: "curve_circles", measures: "geom_intersect::curve::curves", classes: T, prepare: |c| bind(inputs::intersect::circle_pairs(c), kernels::intersect::met) },
+    Op { group: "intersect", name: "curve_line_circle", measures: "geom_intersect::curve::curves", classes: T, prepare: |c| bind(inputs::intersect::line_circles(c), kernels::intersect::met) },
+    Op { group: "intersect", name: "curve_cubics", measures: "geom_intersect::curve::curves", classes: T, prepare: |c| bind(inputs::intersect::cubic_pairs(c), kernels::intersect::met) },
+    Op { group: "intersect", name: "curve_loop", measures: "geom_intersect::curve::self_crossings", classes: T, prepare: |c| bind(inputs::intersect::loops(c), kernels::intersect::crossed) },
+    Op { group: "intersect", name: "surface_plane", measures: "geom_intersect::curve_surface::curve_surface", classes: T, prepare: |c| bind(inputs::intersect::line_planes(c), kernels::intersect::pierced) },
+    Op { group: "intersect", name: "surface_torus", measures: "geom_intersect::curve_surface::curve_surface", classes: T, prepare: |c| bind(inputs::intersect::line_tori(c), kernels::intersect::pierced) },
+    Op { group: "intersect", name: "surface_patch", measures: "geom_intersect::curve_surface::curve_surface", classes: T, prepare: |c| bind(inputs::intersect::cubic_patches(c), kernels::intersect::pierced) },
+    // geom-intersect's projection (piece G162; decision 32.44): the search on an arc and on a band
+    // of a sphere.
+    Op { group: "intersect", name: "project_arc", measures: "geom_intersect::project::project_curve", classes: T, prepare: |c| bind(inputs::intersect::arcs(c), kernels::intersect::on_arcs) },
+    Op { group: "intersect", name: "project_sphere", measures: "geom_intersect::project::project_surface", classes: T, prepare: |c| bind(inputs::intersect::spheres(c), kernels::intersect::on_spheres) },
+    // The tracer (piece G168; decision 32.44): a sphere through a plane patch, and a torus's
+    // silhouette.
+    Op { group: "intersect", name: "trace_patch", measures: "geom_intersect::level::trace", classes: T, prepare: |c| bind(inputs::intersect::patches(c), kernels::intersect::cut_patches) },
+    // Subdivision (piece G169; decision 32.44): a sphere through a plane patch.
+    Op { group: "intersect", name: "subdivide_patch", measures: "geom_intersect::general::subdivide", classes: T, prepare: |c| bind(inputs::intersect::sheets(c), kernels::intersect::subdivided) },
+    // Marching (piece G170; decision 32.44): the branches of a sphere through a plane patch.
+    Op { group: "intersect", name: "march_plate", measures: "geom_intersect::march::march", classes: T, prepare: |c| bind(inputs::intersect::plates(c), kernels::intersect::marched) },
+    // Poles and seams (piece G173; decision 32.44): a whole sphere through a plane holding both its
+    // poles, one loop joined through each.
+    Op { group: "intersect", name: "march_poles", measures: "geom_intersect::march::march", classes: T, prepare: |c| bind(inputs::intersect::poles(c), kernels::intersect::through_poles) },
+    // Known curves (piece G174; decision 32.44): sheets tangent to a plane along a known line,
+    // the tube about it proven and taken out of the search.
+    Op { group: "intersect", name: "known_tangent", measures: "geom_intersect::known::subdivide_known", classes: T, prepare: |c| bind(inputs::intersect::tangents(c), kernels::intersect::known_cut) },
+    // The intersection curve (piece G175; decision 32.44): marched crossings fitted, every span certified.
+    Op { group: "intersect", name: "fit_curve", measures: "geom_intersect::fit::fit", classes: T, prepare: |c| bind(inputs::intersect::crossings(c), kernels::intersect::fit_curve) },
+    // Contact analysis (piece G171; decision 32.44): a sphere resting on a plane patch.
+    Op { group: "intersect", name: "analyse_rest", measures: "geom_intersect::contact::analyse", classes: T, prepare: |c| bind(inputs::intersect::rests(c), kernels::intersect::touched) },
+    Op { group: "intersect", name: "trace_silhouette", measures: "geom_intersect::level::trace", classes: T, prepare: |c| bind(inputs::intersect::tori(c), kernels::intersect::silhouettes) },
     // Root finding and quadrature (piece G51; decision 32.44).
     Op { group: "brent", name: "zero", measures: "brent::zero", classes: T, prepare: |c| bind(inputs::roots::zero(c), kernels::roots::zero) },
     Op { group: "quadrature", name: "gauss_legendre", measures: "quadrature::gauss_legendre", classes: T, prepare: |c| bind(inputs::roots::gauss_legendre(c), kernels::roots::gauss_legendre) },
@@ -423,7 +466,7 @@ pub static OPS: &[Op] = &[
 ];
 
 /// The groups of [`OPS`], in order.
-pub const GROUPS: [&str; 30] = [
+pub const GROUPS: [&str; 32] = [
     "predicate",
     "sign",
     "wide",
@@ -454,6 +497,8 @@ pub const GROUPS: [&str; 30] = [
     "brent",
     "quadrature",
     "linalg",
+    "intersect",
+    "quadric",
 ];
 
 /// The group of the growth checks.
@@ -603,6 +648,49 @@ pub fn prepare_named(name: &str) -> Option<Prepared> {
 /// `tests/coverage.rs` checks that each constant still refuses, so its entry cannot outlive it.
 #[rustfmt::skip]
 pub static UNMEASURED: &[(&str, &str)] = &[
+    ("generated::line_sphere::filter", "measured through its caller in `quadric`, on typical inputs"),
+    ("generated::line_sphere::value", "measured through its caller in `quadric`, where the filter cannot tell"),
+    ("generated::line_sphere::exact", "one call to `value`, and the sign of the value"),
+    ("generated::line_cylinder::filter", "measured through its caller in `quadric`, on typical inputs"),
+    ("generated::line_cylinder::value", "measured through its caller in `quadric`, where the filter cannot tell"),
+    ("generated::line_cylinder::exact", "one call to `value`, and the sign of the value"),
+    ("generated::line_cone::filter", "measured through its caller in `quadric`, on typical inputs"),
+    ("generated::line_cone::value", "measured through its caller in `quadric`, where the filter cannot tell"),
+    ("generated::line_cone::exact", "one call to `value`, and the sign of the value"),
+    ("generated::line_cone_lead::filter", "measured through its caller in `quadric`, on typical inputs"),
+    ("generated::line_cone_lead::value", "measured through its caller in `quadric`, where the filter cannot tell"),
+    ("generated::line_cone_lead::exact", "one call to `value`, and the sign of the value"),
+    ("generated::cross_norm::filter", "measured through its caller in `quadric`, on typical inputs"),
+    ("generated::cross_norm::value", "measured through its caller in `quadric`, where the filter cannot tell"),
+    ("generated::cross_norm::exact", "one call to `value`, and the sign of the value"),
+    ("generated::axis_gap::filter", "measured through its caller in `quadric`, on typical inputs"),
+    ("generated::axis_gap::value", "measured through its caller in `quadric`, where the filter cannot tell"),
+    ("generated::axis_gap::exact", "one call to `value`, and the sign of the value"),
+    ("quadric::line_cone_steep", "one generated predicate, like `quadric::line_cone`, measured"),
+    ("quadric::tangent_cone_cone", "the same interval then exact path as `quadric::tangent_cylinder_cone`, measured"),
+    ("quadric::polar", "a few products; the Bernstein coefficients it feeds are charged to their meter"),
+    ("quadric::polynomial", "the first step of `quadric::roots`, measured"),
+    ("quadric::roots_between", "`quadric::roots` with the chain read at two points"),
+    ("generated::plain::line_sphere_value", "the same exact path, measured through its caller in `quadric` where the filter cannot tell"),
+    ("generated::limbs::line_sphere_value", "the same exact path, measured through its caller in `quadric` where the filter cannot tell"),
+    ("generated::plain::line_cylinder_value", "the same exact path, measured through its caller in `quadric` where the filter cannot tell"),
+    ("generated::limbs::line_cylinder_value", "the same exact path, measured through its caller in `quadric` where the filter cannot tell"),
+    ("generated::plain::line_cone_value", "the same exact path, measured through its caller in `quadric` where the filter cannot tell"),
+    ("generated::limbs::line_cone_value", "the same exact path, measured through its caller in `quadric` where the filter cannot tell"),
+    ("generated::plain::line_cone_lead_value", "the same exact path, measured through its caller in `quadric` where the filter cannot tell"),
+    ("generated::limbs::line_cone_lead_value", "the same exact path, measured through its caller in `quadric` where the filter cannot tell"),
+    ("generated::plain::cross_norm_value", "the same exact path, measured through its caller in `quadric` where the filter cannot tell"),
+    ("generated::limbs::cross_norm_value", "the same exact path, measured through its caller in `quadric` where the filter cannot tell"),
+    ("generated::plain::axis_gap_value", "the same exact path, measured through its caller in `quadric` where the filter cannot tell"),
+    ("generated::limbs::axis_gap_value", "the same exact path, measured through its caller in `quadric` where the filter cannot tell"),
+    ("newton::inverse", "the small inverse a Krawczyk step takes, measured through `newton::krawczyk`"),
+    ("Point::whole", "a constructor"),
+    ("Chain::of", "the slow path of `quadric::roots`, measured through it near repeated roots only"),
+    ("Chain::roots", "reads a built chain"),
+    ("Chain::roots_between", "reads a built chain at two points"),
+    ("sturm::filtered", "the first step of `quadric::roots`, measured"),
+    ("sturm::filtered_between", "the first step of `quadric::roots_between`"),
+    ("sturm::div_exact", "part of `sturm::Chain::of`"),
     ("Coord::get", "field accessor"),
     ("Steps::get", "field accessor"),
     ("Real::get", "field accessor"),

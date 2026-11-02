@@ -40,7 +40,9 @@
 //! The kinds that hold curves (piece G62): [`BulgePolyline`] in [`bulge`]; [`Trimmed`] in
 //! [`trimmed`]; [`Composite`] in [`composite`]; [`Offset`] in [`offset`], with interval Taylor
 //! jets (`jet`); [`OnSurface`] in [`on_surface`]; all built on the leaves of [`Basis`] in
-//! [`basis`], so no kind contains itself.
+//! [`basis`], so no kind contains itself. [`IntersectionCurve`] in [`intersection`] (piece G175)
+//! holds two surfaces' branch by its definition, with its 3D curve and pcurves as certified
+//! caches.
 //!
 //! The transition curves of road and rail alignments (pieces G63 and G64): [`Transition`] in
 //! [`transition`], one kind with the closed set of [`CurvatureLaw`]s, its heading exact and its
@@ -76,6 +78,7 @@ pub mod extent;
 mod form;
 pub mod frame;
 pub mod helix;
+pub mod intersection;
 pub mod involute;
 mod jet;
 pub mod line;
@@ -100,6 +103,7 @@ pub use conic::{Circle, Ellipse, HYPERBOLA_REACH, Hyperbola, Parabola};
 pub use error::{ContractError, CurveError, Law};
 pub use frame::Frame;
 pub use helix::Helix;
+pub use intersection::{IntersectionCurve, Marched, Span};
 pub use involute::Involute;
 pub use line::{Extent, Line};
 pub use map::{LocalMap, MapPiece, NurbsForm, ParamMap};
