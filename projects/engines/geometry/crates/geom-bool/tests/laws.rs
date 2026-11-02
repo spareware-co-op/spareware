@@ -1,6 +1,7 @@
 //! The flat boolean's laws over random grid boxes, against an exact count of unit cells: the
-//! volume of every selection, inclusion and exclusion, A less A, and translation by a grid vector
-//! (G140; 11.17's polyhedral verification corpus, the exact-volume pattern of csgrs' hypermesh).
+//! volume of every selection, inclusion and exclusion, A less A, and commutation with the exact
+//! transforms, translation by a grid vector and a quarter turn (G140; 11.17's polyhedral
+//! verification corpus, the exact-volume pattern of csgrs' hypermesh).
 
 #![allow(
     clippy::arithmetic_side_effects,
@@ -109,12 +110,26 @@ fn any_block() -> impl Strategy<Value = Block> {
     ([-6i64..6, -6i64..6, -6i64..6], [1u64..7, 1u64..7, 1u64..7])
 }
 
+/// `block` turned a quarter about the z axis: (x, y, z) to (-y, x, z).
+fn turned((low, size): &Block) -> Block {
+    (
+        [-(low[1] + size[1] as i64), low[0], low[2]],
+        [size[1], size[0], size[2]],
+    )
+}
+
 /// The three selections of `blocks`, the first the target, moved by `by`.
 fn selections(blocks: &[Block], by: [i64; 3]) -> [Result<OpOutput<Combined>, OpError>; 3] {
-    let moved: Vec<Body> = blocks
+    let moved: Vec<Block> = blocks
         .iter()
-        .map(|(l, s)| cuboid(([l[0] + by[0], l[1] + by[1], l[2] + by[2]], *s)))
+        .map(|(l, s)| ([l[0] + by[0], l[1] + by[1], l[2] + by[2]], *s))
         .collect();
+    selected(&moved)
+}
+
+/// The three selections of `blocks`, the first the target.
+fn selected(blocks: &[Block]) -> [Result<OpOutput<Combined>, OpError>; 3] {
+    let moved: Vec<Body> = blocks.iter().map(|b| cuboid(*b)).collect();
     let operands: Vec<Operand<'_>> = moved.iter().enumerate().map(|(i, b)| solid(i, b)).collect();
     let target = operands[0].key;
     [
@@ -147,6 +162,23 @@ proptest! {
             // Moved by a grid vector, the result is the same shape moved, and as valid.
             prop_assert_eq!(sixfold(moved), sixfold(got));
             prop_assert_eq!(corners(moved, by), corners(got, [0; 3]));
+        }
+    }
+
+    #[test]
+    fn every_selection_turns_with_its_operands(blocks in prop::collection::vec(any_block(), 2..5)) {
+        // Turned a quarter about z, each selection is the same shape turned, and as valid.
+        let here = selected(&blocks);
+        let there = selected(&blocks.iter().map(turned).collect::<Vec<_>>());
+        for (got, turn) in here.iter().zip(&there) {
+            let (got, turn) = (got.as_ref().unwrap(), turn.as_ref().unwrap());
+            prop_assert_eq!(sixfold(turn), sixfold(got));
+            let mut back: Vec<[i64; 3]> = corners(turn, [0; 3])
+                .into_iter()
+                .map(|[x, y, z]| [y, -x, z])
+                .collect();
+            back.sort_unstable();
+            prop_assert_eq!(back, corners(got, [0; 3]));
         }
     }
 
