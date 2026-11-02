@@ -238,6 +238,38 @@ struct Picked {
     leaks: Vec<Option<Passage>>,
 }
 
+impl Picked {
+    /// What it says beside its results: a split that separated nothing, each leak where it is
+    /// narrowest, and names qualified by their operands' keys.
+    fn note(&self, notes: &mut Vec<Diagnostic>) {
+        if !self.separated {
+            notes.extend(Diagnostic::new(
+                "bool.cutter_does_not_separate",
+                "nothing cuts the target right through",
+            ));
+        }
+        for leak in &self.leaks {
+            let at = leak.map_or_else(String::new, |passage| {
+                alloc::format!(
+                    ": narrowest {} steps, near {:?}, approximately",
+                    passage.width,
+                    passage.at
+                )
+            });
+            notes.extend(Diagnostic::new(
+                "bool.seeds_share_cell",
+                alloc::format!("two seeds lie in one cell{at}"),
+            ));
+        }
+        if self.qualified {
+            notes.extend(Diagnostic::new(
+                "bool.names_qualified",
+                "two operands brought one name, so each face is qualified by its operand's key",
+            ));
+        }
+    }
+}
+
 /// Why a selection gave no body.
 #[derive(Clone, Copy)]
 enum Refused {
@@ -1007,31 +1039,7 @@ pub fn combine(
             | Selection::Where(_) => scene.kept(test, &[], *target, &mut meter),
         };
         let picked = found.map_err(|e| refused(ctx, e, &mut meter))?;
-        if !picked.separated {
-            notes.extend(Diagnostic::new(
-                "bool.cutter_does_not_separate",
-                "nothing cuts the target right through",
-            ));
-        }
-        for leak in &picked.leaks {
-            let at = leak.map_or_else(String::new, |passage| {
-                alloc::format!(
-                    ": narrowest {} steps, near {:?}, approximately",
-                    passage.width,
-                    passage.at
-                )
-            });
-            notes.extend(Diagnostic::new(
-                "bool.seeds_share_cell",
-                alloc::format!("two seeds lie in one cell{at}"),
-            ));
-        }
-        if picked.qualified {
-            notes.extend(Diagnostic::new(
-                "bool.names_qualified",
-                "two operands brought one name, so each face is qualified by its operand's key",
-            ));
-        }
+        picked.note(&mut notes);
         let results = picked.results;
         for body in results.iter().map(|result| &result.body) {
             let report = check(body, exactness, Level::Cheap, &mut meter)
