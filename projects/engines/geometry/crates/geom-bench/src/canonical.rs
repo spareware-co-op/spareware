@@ -32,7 +32,7 @@ use geom_num::grid::{Coord, GridStep, P2, P3, Rounded, Steps};
 use geom_num::interval::Interval;
 use geom_num::isolate::{Flagged, IsolateError, Isolation, Reason, Zero};
 use geom_num::newton::{NewtonError, Precision, Verdict};
-use geom_num::plane::{Lpi, Plane, Tpi};
+use geom_num::plane::{Lpi, Moving, Plane, Tpi};
 use geom_num::real::Real;
 use geom_num::rng::{Philox, RngError, Seed, Stream, StreamId, StreamRange};
 use geom_num::wide::Wide;
@@ -196,6 +196,14 @@ impl Canonical for Tpi {
         for plane in self.planes() {
             plane.encode(h);
         }
+    }
+}
+
+impl Canonical for Moving {
+    // A moving plane is exactly its plane and its speed (piece G251).
+    fn encode(&self, h: &mut Sha256) {
+        self.plane().encode(h);
+        self.speed().encode(h);
     }
 }
 

@@ -465,6 +465,8 @@ fn width(bits: u32) -> &'static str {
         ("I320", geom_num::I320::ZERO.to_le_limbs().len()),
         ("I384", geom_num::I384::ZERO.to_le_limbs().len()),
         ("I512", geom_num::I512::ZERO.to_le_limbs().len()),
+        ("I576", geom_num::I576::ZERO.to_le_limbs().len()),
+        ("I768", geom_num::I768::ZERO.to_le_limbs().len()),
     ];
     limbs
         .iter()
@@ -479,6 +481,8 @@ fn limbs_of(width: &str) -> usize {
         "I320" => 5,
         "I384" => 6,
         "I512" => 8,
+        "I576" => 9,
+        "I768" => 12,
         _ => 2,
     }
 }
@@ -1816,7 +1820,7 @@ const PLAIN: &str = include_str!("../../geom-num/src/generated/plain.rs");
 
 /// The committed modules, built into the test so it also runs on wasm32. A test ties this list to
 /// `PREDICATES`.
-const COMMITTED: [(&str, &str); 11] = [
+const COMMITTED: [(&str, &str); 13] = [
     (
         "orient2d",
         include_str!("../../geom-num/src/generated/orient2d.rs"),
@@ -1860,6 +1864,14 @@ const COMMITTED: [(&str, &str); 11] = [
     (
         "ssi_side",
         include_str!("../../geom-num/src/generated/ssi_side.rs"),
+    ),
+    (
+        "tpi_height",
+        include_str!("../../geom-num/src/generated/tpi_height.rs"),
+    ),
+    (
+        "mitre_time",
+        include_str!("../../geom-num/src/generated/mitre_time.rs"),
     ),
 ];
 

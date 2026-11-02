@@ -29,7 +29,7 @@ use crate::predicates;
 use crate::quadrature;
 
 /// Every generator, in the order they run.
-pub const GENERATORS: [Generator; 55] = [
+pub const GENERATORS: [Generator; 61] = [
     Generator {
         name: grid_steps::NAME,
         output: grid_steps::OUTPUT,
@@ -109,6 +109,18 @@ pub const GENERATORS: [Generator; 55] = [
         generate: Generate::Plain(predicates::generate_ssi_side),
     },
     Generator {
+        name: "predicate-tpi-height",
+        output: "projects/engines/geometry/crates/geom-num/src/generated/tpi_height.rs",
+        about: "tpi_height's f64 filter, exact path and bit-range certificate, from its description",
+        generate: Generate::Plain(predicates::generate_tpi_height),
+    },
+    Generator {
+        name: "predicate-mitre-time",
+        output: "projects/engines/geometry/crates/geom-num/src/generated/mitre_time.rs",
+        about: "mitre_time's f64 filter, exact path and bit-range certificate, from its description",
+        generate: Generate::Plain(predicates::generate_mitre_time),
+    },
+    Generator {
         name: predicates::PLAIN_GENERATOR,
         output: predicates::PLAIN_OUTPUT,
         about: "every predicate's exact path in plain i128, the baseline of chapter 23.3's variants",
@@ -185,6 +197,18 @@ pub const GENERATORS: [Generator; 55] = [
         output: "projects/engines/geometry/crates/geom-num/verus/generated/lpi_side.rs",
         about: "lpi_side's exact path as a Verus-annotated twin, which Verus verifies in CI",
         generate: Generate::Plain(predicates::generate_verus_lpi_side),
+    },
+    Generator {
+        name: "verus-tpi-height",
+        output: "projects/engines/geometry/crates/geom-num/verus/generated/tpi_height.rs",
+        about: "tpi_height's exact path as a Verus-annotated twin, which Verus verifies in CI",
+        generate: Generate::Plain(predicates::generate_verus_tpi_height),
+    },
+    Generator {
+        name: "verus-mitre-time",
+        output: "projects/engines/geometry/crates/geom-num/verus/generated/mitre_time.rs",
+        about: "mitre_time's exact path as a Verus-annotated twin, which Verus verifies in CI",
+        generate: Generate::Plain(predicates::generate_verus_mitre_time),
     },
     Generator {
         name: "gappa-orient2d",
@@ -353,6 +377,18 @@ pub const GENERATORS: [Generator; 55] = [
         output: "projects/engines/geometry/crates/geom-gen/generated/fptaylor-ssi-side.fpt",
         about: "ssi_side's normalised f64 filter for FPTaylor, whose certificate HOL Light checks",
         generate: Generate::Plain(predicates::generate_fptaylor_ssi_side),
+    },
+    Generator {
+        name: "fptaylor-tpi-height",
+        output: "projects/engines/geometry/crates/geom-gen/generated/fptaylor-tpi-height.fpt",
+        about: "tpi_height's normalised f64 filter for FPTaylor, whose certificate HOL Light checks",
+        generate: Generate::Plain(predicates::generate_fptaylor_tpi_height),
+    },
+    Generator {
+        name: "fptaylor-mitre-time",
+        output: "projects/engines/geometry/crates/geom-gen/generated/fptaylor-mitre-time.fpt",
+        about: "mitre_time's normalised f64 filter for FPTaylor, whose certificate HOL Light checks",
+        generate: Generate::Plain(predicates::generate_fptaylor_mitre_time),
     },
     Generator {
         name: quadrature::NAME,
