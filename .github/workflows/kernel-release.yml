@@ -23,7 +23,8 @@ name: Kernel release
 # compares the store with the one already attached and fails if they differ, so a release's record
 # never changes.
 #
-# Not here yet, and why: the format museum (28.13) has no files before the native format's first
+# The format museum (28.13) runs here as a golden and a test of geom-test, with every other golden.
+# Not here yet, and why: nothing in the museum is a released version before the native format's first
 # version (chapter 24), and a tag cannot yet name a frozen edition of the store, because editions
 # begin with the first Stable release (board piece G482; chapter 32.12): until then the store has
 # one open edition, `pre-edition`, and a tag records it as it stands.
@@ -74,6 +75,54 @@ jobs:
     uses: ./.github/workflows/kernel-quality.yml
   nightly:
     uses: ./.github/workflows/kernel-nightly.yml
+
+  # The facade's public interface against the release before this one (chapter 25; piece G100):
+  # cargo-semver-checks reads engine-geometry's public items at both commits and fails on a breaking
+  # change the version number does not admit. The first release has no baseline, and says so. A
+  # failure turns the tag's run red, which the owner reads before publishing the draft release.
+  semver:
+    name: The facade's public interface against the last release
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    env:
+      # cargo-semver-checks 0.51.0 (Apache-2.0 OR MIT), released 2026-10-03, the first release with
+      # lints for Rust 1.99's new items: the x86_64 Linux build's archive,
+      # cargo-semver-checks-x86_64-unknown-linux-gnu.tar.gz, checked against GitHub's SHA-256 of it.
+      SEMVER_CHECKS_VERSION: "0.51.0"
+      SEMVER_CHECKS_SHA256: "cacadafaa5cd27ae6d05a74a103266917ebab4c5e43c898360e177d4fbf06a65"
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          # Every tag, to find the release before this one.
+          fetch-depth: 0
+      - uses: dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8 # master, 2026-10-16
+        with:
+          toolchain: ${{ env.RUST_TOOLCHAIN }}
+      - name: Install cargo-semver-checks ${{ env.SEMVER_CHECKS_VERSION }}
+        run: |
+          set -euo pipefail
+          f=cargo-semver-checks-x86_64-unknown-linux-gnu.tar.gz
+          curl --fail --silent --show-error --location --retry 3 --output "$RUNNER_TEMP/$f" "https://github.com/obi1kenobi/cargo-semver-checks/releases/download/v$SEMVER_CHECKS_VERSION/$f"
+          echo "$SEMVER_CHECKS_SHA256  $RUNNER_TEMP/$f" | sha256sum --check --strict
+          mkdir -p "$RUNNER_TEMP/semver"
+          tar -xzf "$RUNNER_TEMP/$f" -C "$RUNNER_TEMP/semver"
+          echo "$RUNNER_TEMP/semver" >> "$GITHUB_PATH"
+      - name: engine-geometry against the release before this one
+        env:
+          TAG: ${{ github.ref_name }}
+        run: |
+          set -euo pipefail
+          previous="$(git tag --list 'geom-v*' --merged HEAD --sort=-version:refname | grep -vxF "$TAG" | head -n 1 || true)"
+          if [ -z "$previous" ]; then
+            echo "No release before $TAG: its public interface is the first baseline." | tee -a "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+          echo "engine-geometry at $TAG against $previous" | tee -a "$GITHUB_STEP_SUMMARY"
+          cargo semver-checks --package engine-geometry --baseline-rev "$previous"
 
   freeze:
     name: The golden store, recorded with the release

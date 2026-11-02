@@ -3,6 +3,8 @@
 //! moved by d is the same kind with its radius changed by d); offset by d and then by −d is the
 //! base; its NURBS cache is certified, within a tolerance asked for or refused, and smaller after
 //! knot removal; split, reversal and grid transforms keep the kind; every refusal is typed.
+//!
+//! Covers: `SurfaceKind::Offset`.
 
 #![allow(
     clippy::arithmetic_side_effects,

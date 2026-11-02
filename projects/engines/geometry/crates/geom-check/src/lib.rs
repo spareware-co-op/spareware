@@ -22,6 +22,53 @@
 //! Its direct dependencies are its row of chapter 27's crate table, checked by the
 //! scaffold test in `engine-geometry` (`tests/scaffold`).
 //!
-//! Status: scaffold only; built by pieces G84, G85, G102, G134, G177, G322.
+//! Modules today (pieces G84, the framework and groups 1 and 4, G85, groups 2 and 3 for primitive
+//! bodies, and G102, loop sense, stored boxes, shell orientation and nesting for flat bodies):
+//!
+//! - [`check`], in `run`: one check of a body at a [`Level`], returning a [`Report`].
+//! - [`report`]: the [`Group`]s of 8.3, the [`Level`]s, the [`Entity`] a [`Fault`] is at, its
+//!   [`FaultKind`], the [`Report`], and the checker's [`VERSION`], which validation stamps record
+//!   (G108).
+//! - `combinatorial`: group 1, loops close, fin partners, shells closed and oriented, regions,
+//!   Euler's formula.
+//! - `geometric`: group 2, vertices on their faces' surfaces and at their edges' curve ends, and
+//!   edges on their faces, within the body's bound: exactly on flat faces given by integers,
+//!   certified on lines, circles, planes, cylinders, cones, spheres and ring tori; every other
+//!   carrier is reported unchecked, never passed.
+//! - `flat`: flat faces' stored boxes holding every vertex (group 2) and their loops running the
+//!   right way round (group 3) (G102).
+//! - `curved`: the closed forms group 2 and group 3 certify their bounds with.
+//! - `self_intersection`: group 3 for primitive bodies, a face's edges meeting only at shared
+//!   vertices and faces only along shared edges; exact on segments and flat convex polygons,
+//!   certified on circles; every other pair is reported unchecked, never passed.
+//! - `orientation`: group 3 on the flat shells of a solid, each facing the way its place says, and
+//!   each lying where its region allows (G102).
+//! - `exactness`: group 4, the exactness record against the geometry.
+//! - [`query`]: the exactness report and the validity report, as operations (G102).
+//! - `sink`: the faults found so far, capped at [`MAX_FAULTS`], and the caller's meter.
+//!
+//! Status: the framework and groups 1 and 4 (G84) and groups 2 and 3 for primitive bodies (G85)
+//! built. Group 3 tests primitives with its own exact predicates and closed forms, as
+//! `geom-intersect` is not built yet. Flat bodies' orientation and nesting are built (G102);
+//! plane-based bodies, pcurves, general surfaces and the same checks on curved faces come in G134,
+//! G177 and G322, and a report counts what it left for them ([`Report::deferred`]).
 #![cfg_attr(not(test), no_std)]
 #![forbid(unsafe_code)]
+
+extern crate alloc;
+
+mod combinatorial;
+mod curved;
+mod exactness;
+mod flat;
+mod geometric;
+mod orientation;
+pub mod query;
+pub mod report;
+mod run;
+mod self_intersection;
+mod sink;
+
+pub use report::{Entity, Fault, FaultKind, Group, Level, Report, VERSION};
+pub use run::check;
+pub use sink::MAX_FAULTS;

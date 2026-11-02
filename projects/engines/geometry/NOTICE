@@ -460,6 +460,13 @@ CGAL `FPU.h`
     projects/engines/geometry/crates/geom-num/src/interval.rs
       for its widening with `nextafter` when the rounding mode cannot change, which the Method above names.
 
+ciborium-ll
+  Licence:      Apache-2.0
+  Link:         https://github.com/enarx/ciborium/blob/fdf3ec5c53256000f8e12f06c361ca18026a8d99/ciborium-ll/src/hdr.rs
+  Consulted by:
+    projects/engines/geometry/crates/geom-op/src/cbor.rs
+      its choice of the shortest float that keeps a double's bits; used as a test oracle only.
+
 Clippy's `clippy_dev` token cursor
   Licence:      MIT OR Apache-2.0
   Link:         https://github.com/rust-lang/rust-clippy/blob/3583eb8a9ae1161bd7d80907acfa09b3612a93f9/clippy_dev/src/parse/cursor.rs
@@ -515,6 +522,13 @@ Geogram's PCK `_SOS` predicates
   Consulted by:
     projects/engines/geometry/crates/geom-gen/src/predicate_derive.rs
       for its compile-time bit counting, a cross-check of the certificate here. No code copied.
+
+github-action-benchmark
+  Licence:      MIT
+  Link:         https://github.com/benchmark-action/github-action-benchmark/blob/84ec6ea748925b6580796c05ce7a1c8fd0d15f3b/README.md
+  Consulted by:
+    projects/engines/geometry/crates/geom-bench/src/timings.rs
+      for keeping benchmark history in a branch of the repository it measures. No code copied.
 
 Gitiles
   Licence:      Apache-2.0
@@ -672,6 +686,13 @@ SPDX License List 3.29.0
     projects/engines/geometry/crates/geom-test/src/map/classes.rs
       to check that every identifier in the tables below is a real SPDX licence identifier, and to list the deprecated GPL, LGPL and AGPL forms and the non-commercial licences.
 
+the Model Context Protocol specification
+  Licence:      Apache-2.0 AND MIT
+  Link:         https://github.com/modelcontextprotocol/modelcontextprotocol/blob/271ecc9accafdd9b83a3c869fa67c22953b2af80/schema/2026-07-28/schema.ts
+  Consulted by:
+    projects/engines/geometry/crates/geom-gen/src/facade.rs
+      for the fields of a tool description and their rules. No code copied.
+
 Vigna's SplitMix64 reference code
   Licence:      public domain
   Link:         https://prng.di.unimi.it/splitmix64.c
@@ -695,6 +716,9 @@ PUBLISHED CRATES
 The published crates the kernel crates depend on (DEPEND, section 29.1). Their notices, and those of
 every other crate compiled into a shipped binary, go in the generated third-party notices file.
 
+  crc 3.4.0 (Apache-2.0 OR MIT), https://crates.io/crates/crc/3.4.0, named by projects/engines/geometry/crates/geom-format/Cargo.toml
   libm 0.2.16 (MIT), https://crates.io/crates/libm/0.2.16, named by projects/engines/geometry/crates/geom-num/Cargo.toml
   libm 0.2.16 (MIT), https://crates.io/crates/libm/0.2.16, named by projects/engines/geometry/crates/geom-num/Cargo.toml
   rayon 1.12.0 (Apache-2.0 OR MIT), https://crates.io/crates/rayon/1.12.0, named by projects/engines/geometry/crates/geom-pool/Cargo.toml
+  sha2 0.11.0 (Apache-2.0 OR MIT), https://crates.io/crates/sha2/0.11.0, named by projects/engines/geometry/crates/geom-op/Cargo.toml
+  unicode-normalization =0.1.26 ((Apache-2.0 OR MIT) AND Unicode-3.0), https://crates.io/crates/unicode-normalization, named by projects/engines/geometry/crates/geom-op/Cargo.toml

@@ -1254,6 +1254,176 @@ fn error_doc() {
     );
 }
 
+/// The good error module with a `kind` function for `XError` whose match arms are `arms`, written
+/// as a trait implementation so the module still defines no function of its own.
+fn with_kind(arms: &'static str) -> Input {
+    with("error.rs", move |t| {
+        format!(
+            "{t}
+impl Detail for XError {{
+    fn kind(&self) -> ErrorKind {{
+{arms}
+    }}
+}}
+"
+        )
+    })
+}
+
+/// The base kinds, as an `ErrorKind` enum the map finds.
+const ERROR_KIND: &str = "
+/// The base kinds.
+pub enum ErrorKind {
+    /// Degenerate.
+    Degenerate,
+    /// Out of range.
+    FrameRangeExceeded,
+}
+";
+
+#[test]
+fn error_base() {
+    let good_arms = "        match self {
+            XError::Degenerate => ErrorKind::Degenerate,
+                                 Self::OutOfRange { .. } => { ErrorKind::FrameRangeExceeded }
+        }";
+    // With no `ErrorKind` enum in the map, no kind is a base kind.
+    breaks(&with_kind(good_arms), Rule::ErrorBase, "error.rs");
+    let bad = [
+        // The body is not one `match self`.
+        "        let k = ErrorKind::Degenerate;
+        k",
+        // An arm in another form.
+        "        match self {
+            XError::Degenerate => other(),
+                     XError::OutOfRange { .. } => ErrorKind::FrameRangeExceeded,
+        }",
+        // A pattern in another form.
+        "        match self {
+            _ => ErrorKind::Degenerate,
+        }",
+        // A variant with no arm.
+        "        match self {
+            XError::Degenerate => ErrorKind::Degenerate,
+        }",
+        // A variant with two.
+        "        match self {
+            XError::Degenerate | XError::Degenerate => ErrorKind::Degenerate,
+                     XError::OutOfRange { .. } => ErrorKind::FrameRangeExceeded,
+        }",
+        // A variant that does not exist.
+        "        match self {
+            XError::Degenerate => ErrorKind::Degenerate,
+                     XError::OutOfRange { .. } => ErrorKind::FrameRangeExceeded,
+                     XError::Gone => ErrorKind::Degenerate,
+        }",
+        // A kind that is not a variant of `ErrorKind`.
+        "        match self {
+            XError::Degenerate => ErrorKind::Degenerate,
+                     XError::OutOfRange { .. } => ErrorKind::NoSolution,
+        }",
+    ];
+    for arms in bad {
+        let input = with_kind(arms);
+        let input = {
+            let mut input = input;
+            for f in &mut input.crates[0].files {
+                if f.path.ends_with("/error.rs") {
+                    f.text = Ok(format!("{}{ERROR_KIND}", f.text.clone().unwrap()));
+                }
+            }
+            input
+        };
+        breaks(&input, Rule::ErrorBase, "error.rs");
+    }
+}
+
+#[test]
+fn base_kinds_are_read_from_the_kind_function() {
+    let arms = "        match *self {
+            XError::Degenerate => crate::ErrorKind::Degenerate,
+                            Self::OutOfRange { .. } => {
+                ErrorKind::FrameRangeExceeded
+            }
+        }";
+    let mut input = with_kind(arms);
+    for f in &mut input.crates[0].files {
+        if f.path.ends_with("/error.rs") {
+            f.text = Ok(format!(
+                "{}{ERROR_KIND}
+/// A detail that holds another.
+pub enum HeldError {{
+                     /// The held one.
+    X(XError),
+}}
+
+impl HeldError {{
+                     pub fn kind(&self) -> ErrorKind {{
+        match self {{
+                             HeldError::X(detail) => detail.kind(),
+        }}
+    }}
+}}
+",
+                f.text.clone().unwrap()
+            ));
+        }
+    }
+    // The inherent `kind` makes the module define a function, so its Method needs a link.
+    let generated = build(&input, &[]);
+    let problems: Vec<String> = generated
+        .problems
+        .iter()
+        .filter(|p| p.rule != Rule::Method)
+        .map(ToString::to_string)
+        .collect();
+    assert_eq!(problems, Vec::<String>::new());
+    let map: serde_json::Value = serde_json::from_str(&generated.text).unwrap();
+    let krate = map["crates"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|c| c["name"] == "geom-x")
+        .unwrap();
+    let errors = krate["errors"].as_array().unwrap();
+    let kinds = |name: &str| -> Vec<(String, Option<String>)> {
+        errors.iter().find(|e| e["name"] == name).unwrap()["kinds"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|k| {
+                (
+                    k["name"].as_str().unwrap().to_owned(),
+                    k.get("base_kind").map(|b| b.as_str().unwrap().to_owned()),
+                )
+            })
+            .collect()
+    };
+    assert_eq!(
+        kinds("XError"),
+        [
+            ("Degenerate".to_owned(), Some("Degenerate".to_owned())),
+            (
+                "OutOfRange".to_owned(),
+                Some("FrameRangeExceeded".to_owned())
+            ),
+        ]
+    );
+    assert_eq!(
+        kinds("HeldError"),
+        [("X".to_owned(), Some("held detail".to_owned()))]
+    );
+    assert_eq!(
+        kinds("ErrorKind"),
+        [
+            ("Degenerate".to_owned(), None),
+            ("FrameRangeExceeded".to_owned(), None),
+        ]
+    );
+    // An enum without a `kind` function lists no base kinds.
+    assert_eq!(kinds("SweepFailure"), [("MitreMismatch".to_owned(), None)]);
+}
+
 #[test]
 fn stale() {
     let text = build(&good(), &[]).text;
@@ -1331,6 +1501,8 @@ fn every_rule_has_a_seeded_fixture_and_a_label() {
         Rule::Uncredited,
         Rule::ErrorEnum,
         Rule::ErrorDoc,
+        Rule::ErrorBase,
+        Rule::Covers,
         Rule::Stale,
         Rule::GapStale,
     ];
@@ -1366,4 +1538,28 @@ fn print_the_fixture_map() {
         "--- begin map ---\n{}--- end map ---",
         build(&good(), &[]).text
     );
+}
+
+/// A `Covers:` claim must name something real.
+#[test]
+fn covers() {
+    let tools = r#"{"tools": [{"name": "make.box", "_meta": {"org.spareware/kernel":
+        {"family": "Make", "tier": "Stable", "version": 1}}}]}"#;
+    let claim = |list: &str| {
+        let mut input = good();
+        input.registry = Some(geom_test::map::Registry {
+            tools: tools.to_owned(),
+            evidence: vec![SourceFile {
+                path: "a/tests/b.rs".to_owned(),
+                text: Ok(format!("//! Tests.\n//!\n//! Covers: {list}\n")),
+            }],
+        });
+        build(&input, &[])
+    };
+    let good_claim = claim("make.box.");
+    assert!(good_claim.problems.is_empty(), "{:?}", good_claim.problems);
+    assert!(good_claim.text.contains("\"unit\""));
+    let found = claim("make.nothing.").problems;
+    assert_eq!(found.len(), 1, "{found:?}");
+    assert_eq!(found[0].rule, Rule::Covers);
 }

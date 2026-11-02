@@ -294,6 +294,8 @@
   "gaps": [],
   "generated_by": "cargo run -p geom-test --bin map -- write",
   "grammar": "projects/engines/geometry/HEADERS.md",
+  "kinds": [],
+  "operations": [],
   "pending": [],
   "sources": [
     {

@@ -2,6 +2,8 @@
 //! the `ImplicitBound` of an exact plane: every random NURBS surface keeps every law under exact,
 //! rational and certified transforms; a cone's apex keeps its normals' direction; a wrong normal
 //! bound is caught; and the plane's enclosure holds the exact value at every corner.
+//!
+//! Covers: `SurfaceKind::Nurbs`.
 
 #![allow(
     clippy::arithmetic_side_effects,
