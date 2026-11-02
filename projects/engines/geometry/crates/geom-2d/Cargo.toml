@@ -20,6 +20,11 @@ geom-num = { path = "../geom-num" }
 geom-op = { path = "../geom-op" }
 geom-topo = { path = "../geom-topo" }
 
+
+[dev-dependencies]
+# Splines for the contact tests (piece G195). Ours, MPL-2.0.
+geom-nurbs = { path = "../geom-nurbs" }
+
 [lints.rust]
 unsafe_code = "forbid"
 missing_docs = "warn"

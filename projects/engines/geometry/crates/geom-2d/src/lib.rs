@@ -25,7 +25,8 @@
 //! Its direct dependencies are its row of chapter 27's crate table, checked by the
 //! scaffold test in `engine-geometry` (`tests/scaffold`).
 //!
-//! Status: carriers, points and commits (G192); built on by pieces G193, G194, G195, G196, G197,
+//! Status: carriers, points and commits (G192), and contacts read from the certified curve-curve
+//! intersection (G195); built on by pieces G193, G194, G196, G197,
 //! G198, G199, G200, G201, G202, G203, G204, G205, G206, G207, G208, G209, G210, G211, G212, G213,
 //! G359, G360, G361.
 #![cfg_attr(not(test), no_std)]
@@ -36,4 +37,5 @@ extern crate alloc;
 pub mod accept;
 pub mod carrier;
 pub mod commit;
+pub mod contact;
 pub mod point;

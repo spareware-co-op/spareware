@@ -160,6 +160,29 @@
           "target": "lib"
         },
         {
+          "cost": "the search's (12.5), and one pass over its items. Recursion: none.",
+          "does": "[`contacts`] asks `geom_intersect::curve::curves` where two curves meet. That search is certified, closed form where one exists and otherwise subdivision and Krawczyk (chapter 12.5). It reads each item it gives as a [`Contact`]: where on each curve, where in the plane, and of which [`Kind`]:",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-2d/src/contact.rs",
+          "guarantees": [
+            "**Undecided is never either.** A contact is Crossing or Touching only where the search proved it so. Anything flagged, and a singular point, is Undecided, and [`Contact::cuts`] and [`Contact::closes`] refuse it.",
+            "**Nothing dropped.** Every item the search gives becomes one contact, in its order (12.15), so the list accounts for every place the two curves can meet.",
+            "**Deterministic.** The search is, and so is this reading."
+          ],
+          "job": "Contacts between two curves of the plane, for the kinds the exact predicates do not cover: splines, spirals and procedural offsets (chapter 14.2 and 14.4; piece G195).",
+          "method": {
+            "links": [
+              "projects/engines/geometry/architecture/14-2d-drafting.md",
+              "projects/engines/geometry/architecture/12-intersections.md"
+            ],
+            "text": "chapter 14.2's rule for spline and spiral crossings and 14.4's for contacts that cannot be ordered (`projects/engines/geometry/architecture/14-2d-drafting.md`), on chapter 12.5's certified curve-curve intersection (`projects/engines/geometry/architecture/12-intersections.md`)."
+          },
+          "path": "geom_2d::contact",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
           "cost": "reading a one-root point is one `Crossing2` construction, a few dozen products; reading a conic root is a quartic and its roots, as [`geom_num::quartic`] says. No allocation.",
           "does": "a [`Pt2`] is one of chapter 14.2's four classes. A grid point is whole steps and a rational point homogeneous integers. The other two are implicit: where two carriers cross, stored as the carriers and which crossing, or where an ellipse meets another conic, stored as the two and which root. [`Pt2::place`] reads a point's definition into exact numbers each time it is asked, and every question is asked of those: a rounded copy is never kept, so nothing decided here can differ from what the definition says (chapter 6.3).",
           "family": [],
@@ -187,7 +210,7 @@
       "provenance": [],
       "sections": "14 and 17.2; open questions OQ-12.1 and OQ-14.9, in the kernel architecture (`projects/engines/geometry/architecture/`).",
       "spdx": null,
-      "status": "carriers, points and commits (G192); built on by pieces G193, G194, G195, G196, G197, G198, G199, G200, G201, G202, G203, G204, G205, G206, G207, G208, G209, G210, G211, G212, G213, G359, G360, G361.",
+      "status": "carriers, points and commits (G192), and contacts read from the certified curve-curve intersection (G195); built on by pieces G193, G194, G196, G197, G198, G199, G200, G201, G202, G203, G204, G205, G206, G207, G208, G209, G210, G211, G212, G213, G359, G360, G361.",
       "summary": "Spare Kit geometry kernel: 2D drafting."
     },
     {
