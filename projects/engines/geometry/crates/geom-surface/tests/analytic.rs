@@ -5,8 +5,8 @@
 //! a cylinder's and a cone's axial term with it; a sphere's pole keeps its normal; a torus knows
 //! its form.
 //!
-//! Covers: SurfaceKind::Plane, SurfaceKind::Cylinder, SurfaceKind::Cone, SurfaceKind::Sphere,
-//! SurfaceKind::Torus.
+//! Covers: `SurfaceKind::Plane`, `SurfaceKind::Cylinder`, `SurfaceKind::Cone`,
+//! `SurfaceKind::Sphere`, `SurfaceKind::Torus`.
 
 #![allow(
     clippy::arithmetic_side_effects,

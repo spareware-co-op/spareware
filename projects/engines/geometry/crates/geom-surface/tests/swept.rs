@@ -3,7 +3,7 @@
 //! rational, certified, non-uniform and mirroring transforms, and convert to NURBS within their
 //! stated error.
 //!
-//! Covers: SurfaceKind::Revolution, SurfaceKind::Extrusion, SurfaceKind::Ruled.
+//! Covers: `SurfaceKind::Revolution`, `SurfaceKind::Extrusion`, `SurfaceKind::Ruled`.
 
 #![allow(
     clippy::arithmetic_side_effects,
