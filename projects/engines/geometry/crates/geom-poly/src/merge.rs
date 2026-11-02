@@ -936,11 +936,8 @@ fn numbered(
         Ok::<_, MergeError>(out)
     });
     let made = made.map_err(|e| phase_error(e, meter))?;
-    let mut corners: Vec<Option<Corner>> = made.into_iter().flatten().map(Some).collect();
-    let keys: Option<Vec<&[Cell; 3]>> = corners
-        .iter()
-        .map(|c| c.as_ref().and_then(|c| c.cells.as_ref()))
-        .collect();
+    let corners: Vec<Corner> = made.into_iter().flatten().collect();
+    let keys: Option<Vec<&[Cell; 3]>> = corners.iter().map(|c| c.cells.as_ref()).collect();
     let order = if let Some(keys) = keys {
         // Equal points keep their order, as the serial stable sort keeps it.
         let sorted = exec.sort_stable(meter, SORT_CORNERS, SORT_PLAN, &keys, |k| CellKey(k));
@@ -948,7 +945,7 @@ fn numbered(
     } else {
         let mut order: Vec<usize> = (0..corners.len()).collect();
         let mut failed = false;
-        let at = |i: &usize| corners.get(*i).and_then(Option::as_ref);
+        let at = |i: &usize| corners.get(*i);
         order.sort_by(|a, b| {
             let found = at(a).zip(at(b)).and_then(|(p, q)| point_order(p, q));
             noted(found, &mut failed)
@@ -956,22 +953,33 @@ fn numbered(
         (!failed).then_some(()).ok_or(NumError::BudgetExceeded)?;
         order
     };
+    // Each run of equal points in that order is one place: the first corner's point and cells, and
+    // every corner's planes in turn, gathered once.
     let mut number = alloc::vec![0usize; corners.len()];
     let mut places: Vec<Corner> = Vec::new();
-    for i in order {
-        let held = corners.get_mut(i).and_then(Option::take);
-        let held = held.ok_or(MergeError::Open)?;
-        match places.last_mut() {
-            Some(last) if point_order(last, &held) == Some(Ordering::Equal) => {
-                last.through.extend(held.through);
+    let mut start = 0usize;
+    while let Some(first) = order.get(start) {
+        let leader = corners.get(*first).ok_or(MergeError::Open)?;
+        let mut end = start.saturating_add(1);
+        while let Some(next) = order.get(end) {
+            let other = corners.get(*next).ok_or(MergeError::Open)?;
+            if point_order(leader, other) != Some(Ordering::Equal) {
+                break;
             }
-            _ => places.push(held),
+            end = end.saturating_add(1);
         }
-        number
-            .iter_mut()
-            .skip(i)
-            .take(1)
-            .for_each(|slot| *slot = places.len().saturating_sub(1));
+        let group = order.get(start..end).ok_or(MergeError::Open)?;
+        let mut through = Vec::with_capacity(group.len().saturating_mul(3));
+        for at in group {
+            through.extend_from_slice(&corners.get(*at).ok_or(MergeError::Open)?.through);
+            *number.get_mut(*at).ok_or(MergeError::Open)? = places.len();
+        }
+        places.push(Corner {
+            point: leader.point,
+            cells: leader.cells,
+            through,
+        });
+        start = end;
     }
     Ok((number, places))
 }
