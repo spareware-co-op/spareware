@@ -26,8 +26,8 @@
 //!   never guessed; a bound on the points still holds there, from the basis's bound widened by
 //!   the offset's largest size.
 //! - **Converted wherever it is defined.** Where the normal vanishes, or cannot be told from zero
-//!   even over the narrowest piece the conversion cuts (the domain's width times 2^−52), the
-//!   offset is undefined (a cusp of the basis, or a tangent parallel to the reference direction),
+//!   even over the narrowest piece the conversion cuts (the domain's width times 2^−52, or two
+//!   neighbouring doubles where those are farther apart), the offset is undefined (a cusp of the basis, or a tangent parallel to the reference direction),
 //!   and the NURBS form is refused as `Degenerate`, never as `Unbounded`, which names an infinite
 //!   domain. A normal that only comes near zero, as on a nearly flat helix offset along its axis,
 //!   is cut finer there until its pieces are bounded (issue #526); only a remainder that
@@ -48,8 +48,8 @@
 //! the cache is the Taylor conversion of `crate::taylor`, eight to 128 pieces per smooth interval
 //! of the basis, narrower pieces tried where wider ones cannot bound the offset's derivatives;
 //! where even 128 cannot, only the pieces that need it are halved, each at most about 52 times
-//! (to 2^−52 of the domain), depth first on an explicit stack of at most one piece per halving,
-//! every piece examined charged to the meter.
+//! (to 2^−52 of the domain, or to neighbouring doubles), depth first on an explicit stack of at
+//! most one piece per halving, every piece examined charged to the meter.
 
 #![allow(
     clippy::many_single_char_names,
@@ -119,6 +119,17 @@ const CACHE_DEGREE: usize = 9;
 enum At {
     Point(f64, Limit),
     Span(f64, f64),
+}
+
+/// What the cache's halving makes of a piece (`Offset::halved`).
+#[derive(Clone, Copy)]
+enum Verdict {
+    /// Keep it.
+    Keep,
+    /// Halve it, or keep it once it is as narrow as the domain resolves.
+    Finer,
+    /// Halve it, or refuse with the error once it is as narrow as the domain resolves.
+    FinerOr(CurveError),
 }
 
 impl<const D: usize> Offset<D> {
@@ -467,31 +478,30 @@ impl<const D: usize> Offset<D> {
         target: f64,
         meter: &mut WorkMeter<'_>,
     ) -> Result<Vec<f64>, CurveError> {
-        let defined = self.halved(coarse, meter, |o, piece, halves, m| {
-            if o.defined_over(piece, m)? {
-                Ok(false)
-            } else if halves {
-                Ok(true)
+        let defined = self.halved(coarse, meter, |o, piece, m| {
+            Ok(if o.defined_over(piece, m)? {
+                Verdict::Keep
             } else {
-                Err(CurveError::Degenerate)
-            }
+                Verdict::FinerOr(CurveError::Degenerate)
+            })
         })?;
-        self.halved(
-            &defined,
-            meter,
-            |o, piece, halves, m| match taylor::remainder(o, piece, CACHE_DEGREE, m) {
-                Ok(r) => Ok(halves && r.is_some_and(|r| r.hi() > target)),
-                Err(CurveError::Unbounded | CurveError::NotFinite) if halves => Ok(true),
-                Err(CurveError::Unbounded) => Err(CurveError::Degenerate),
-                Err(e) => Err(e),
-            },
-        )
+        // A remainder that overflows may come from a piece whose normal pass 1 only just
+        // separated from zero, its enclosure's lower end far below the normal itself: halves of
+        // it bound tighter.
+        self.halved(&defined, meter, |o, piece, m| {
+            Ok(match taylor::remainder(o, piece, CACHE_DEGREE, m) {
+                Ok(r) if r.is_some_and(|r| r.hi() > target) => Verdict::Finer,
+                Ok(_) => Verdict::Keep,
+                Err(CurveError::Unbounded) => Verdict::FinerOr(CurveError::Degenerate),
+                Err(CurveError::NotFinite) => Verdict::FinerOr(CurveError::NotFinite),
+                Err(e) => return Err(e),
+            })
+        })
     }
 
-    /// The cuts `cuts` (strictly increasing) with each piece halved, depth first, while `halve`
-    /// asks: it is given the piece and whether it can still be halved (wider than the domain's
-    /// width times 2^−52, its middle a double strictly inside), and answers whether to halve it,
-    /// or refuses.
+    /// The cuts `cuts` (strictly increasing) with each piece halved, depth first, as `judge`'s
+    /// [`Verdict`] on it says, while it can be: while it is wider than the domain's width times
+    /// 2^−52 and its middle is a double strictly inside it.
     ///
     /// Depth first with the left half on top, so the cuts come out in order. Each halving pushes
     /// two pieces and pops one, so the stack holds at most one piece per halving, and a piece no
@@ -500,12 +510,13 @@ impl<const D: usize> Offset<D> {
     ///
     /// # Errors
     ///
-    /// `halve`'s; [`CurveError::Stopped`].
+    /// `judge`'s, and the error of a [`Verdict::FinerOr`] on a piece that cannot be halved;
+    /// [`CurveError::Stopped`].
     fn halved(
         &self,
         cuts: &[f64],
         meter: &mut WorkMeter<'_>,
-        mut halve: impl FnMut(&Self, (f64, f64), bool, &mut WorkMeter<'_>) -> Result<bool, CurveError>,
+        mut judge: impl FnMut(&Self, (f64, f64), &mut WorkMeter<'_>) -> Result<Verdict, CurveError>,
     ) -> Result<Vec<f64>, CurveError> {
         let (a, b) = self.domain();
         let narrowest = (b - a) * f64::EPSILON;
@@ -523,11 +534,13 @@ impl<const D: usize> Offset<D> {
                 meter.charge(1)?;
                 let mid = f64::midpoint(lo, hi);
                 let halves = hi - lo > narrowest && lo < mid && mid < hi;
-                if halve(self, (lo, hi), halves, meter)? && halves {
-                    stack.push((mid, hi));
-                    stack.push((lo, mid));
-                } else {
-                    out.push(hi);
+                match judge(self, (lo, hi), meter)? {
+                    Verdict::Finer | Verdict::FinerOr(_) if halves => {
+                        stack.push((mid, hi));
+                        stack.push((lo, mid));
+                    }
+                    Verdict::FinerOr(e) => return Err(e),
+                    Verdict::Keep | Verdict::Finer => out.push(hi),
                 }
             }
         }

@@ -15,7 +15,9 @@
 //!   whose normal comes within 0.08 of zero but never reaches it, was refused so. Now the pieces
 //!   that need it are halved until they are bounded, and the conversion refuses only where the
 //!   normal vanishes even on the narrowest piece, as `Degenerate`: a cusp of the basis, or a
-//!   tangent parallel to the reference direction.
+//!   tangent parallel to the reference direction. The halving stops exactly where the module
+//!   header says (2^−52 of the domain, or two neighbouring doubles), and runs within a stated
+//!   budget of work, so a halving that never stopped fails rather than hangs.
 //! - **The contract kit steps past huge ends.** Testing that a kind refuses outside its domain, the
 //!   kit stepped one unit past each end, which beyond 2^53 in magnitude rounds back to the end
 //!   itself, inside: `geom-fuzz`'s `curves` target found it reporting kinds that rightly accepted
@@ -42,6 +44,11 @@ use geom_run::{Budget, WorkMeter};
 fn meter() -> WorkMeter<'static> {
     WorkMeter::new(Budget::UNLIMITED)
 }
+
+/// The work an offset's conversion is given in the tests of its halving (issue #526): about
+/// twice what the most costly of them takes (254 282, the offset turning within 2^−45), so a
+/// halving that never stops is stopped by the meter and fails its test, rather than hanging.
+const WITHIN: Budget = Budget::of_work(500_000);
 
 fn grid() -> [TypedTransform; 3] {
     [
@@ -168,7 +175,8 @@ fn an_offset_through_a_cusp_is_degenerate_even_on_the_finest_pieces() {
     .unwrap();
     let basis = Trimmed::new(Basis::Polynomial(cusp), (-1.0, 1.0)).unwrap();
     let o = Offset::new(basis, OffsetLaw::Planar { distance: 0.25 }).unwrap();
-    assert_eq!(o.to_nurbs(&mut meter()).err(), Some(CurveError::Degenerate));
+    let m = &mut WorkMeter::new(WITHIN);
+    assert_eq!(o.to_nurbs(m).err(), Some(CurveError::Degenerate));
 }
 
 /// The helix the law catalogue built at its default seed once one more kind joined its corpus
@@ -235,8 +243,10 @@ fn a_nearly_flat_helix_offset_along_its_axis_converts() {
         })
         .count();
     assert!(unbounded > 0, "the finest even cut must fail somewhere");
-    // Converted, within the conversion's aim of 10⁻¹⁰ of the offset's size.
-    let n = o.to_nurbs(m).unwrap();
+    // Converted, within the conversion's aim of 10⁻¹⁰ of the offset's size, and within the
+    // halving tests' budget (it takes 122 389): halving that ran away, cutting pieces already
+    // within the aim, would need billions, and stops there rather than hanging.
+    let n = o.to_nurbs(&mut WorkMeter::new(WITHIN)).unwrap();
     let b = o.bound((-1.0, 1.0), m).unwrap();
     let scale =
         b.lo.iter()
@@ -277,7 +287,84 @@ fn an_offset_whose_tangent_meets_its_reference_direction_is_degenerate() {
         },
     )
     .unwrap();
-    assert_eq!(o.to_nurbs(&mut meter()).err(), Some(CurveError::Degenerate));
+    let m = &mut WorkMeter::new(WITHIN);
+    assert_eq!(o.to_nurbs(m).err(), Some(CurveError::Degenerate));
+}
+
+/// C(t) = (t²/2, t²/2 − δ·t) on (−1, 1), offset by 0.25: C′(t) = (t, t − δ) never vanishes, but
+/// turns through a right angle between t = 0 and t = δ, where its length is about δ/√2.
+fn turning_at(delta: f64) -> Offset<2> {
+    let p = Polynomial::new(vec![[0.0, 0.0], [0.0, -delta], [0.5, 0.5]], (-1.0, 1.0)).unwrap();
+    let basis = Trimmed::new(Basis::Polynomial(p), (-1.0, 1.0)).unwrap();
+    Offset::new(basis, OffsetLaw::Planar { distance: 0.25 }).unwrap()
+}
+
+#[test]
+fn an_offset_is_halved_down_to_the_narrowest_piece_and_no_further() {
+    // The narrowest piece on (−1, 1) is 2·2^−52 = 2^−51 wide, [0, 2^−51] beside t = 0, and its
+    // normal is bounded over each quarter of it, the first [0, 2^−53]. The normal there is certain
+    // apart from zero only if that quarter ends before δ (the tangent's y is t − δ < 0 on it).
+    // At δ = 2^−53 it does not: the normal cannot be told from zero, so the offset is degenerate.
+    // Halving one step further, or below the narrowest width, would separate it.
+    let m = &mut WorkMeter::new(WITHIN);
+    assert_eq!(
+        turning_at(f64::EPSILON / 2.0).to_nurbs(m).err(),
+        Some(CurveError::Degenerate)
+    );
+    // At δ = 2^−50 the narrowest piece separates the normal from zero, so the offset is defined,
+    // but it turns through a right angle within 2^−50, and the Taylor remainder over the
+    // narrowest piece overflows the doubles: not finite, not degenerate.
+    let m = &mut WorkMeter::new(WITHIN);
+    assert_eq!(
+        turning_at(f64::EPSILON * 4.0).to_nurbs(m).err(),
+        Some(CurveError::NotFinite)
+    );
+    // At δ = 2^−45 it converts, within the conversion's aim, but only because a remainder that
+    // overflows is halved too: the pieces that first separate the normal from zero there bound
+    // it so loosely that the remainder leaves the doubles, and their halves bound it.
+    let m = &mut WorkMeter::new(WITHIN);
+    let n = turning_at(f64::EPSILON * 128.0).to_nurbs(m).unwrap();
+    assert!(n.deviation <= 1e-9, "deviation {}", n.deviation);
+}
+
+/// A helix with u = 2x̂, v = 2ŷ and w = (a, b, 0) in their plane, about t = 1000, offset along w:
+/// C′ × w = (0, 0, −2π·(a·cos πt + b·sin πt)) vanishes where tan πt = −a/b, which is no double.
+fn flat_near_1000(a: f64, b: f64) -> Offset<3> {
+    let helix = Helix::new(
+        [0.0; 3],
+        HelixAxes::Vectors {
+            u: [2.0, 0.0, 0.0],
+            v: [0.0, 2.0, 0.0],
+            w: [a, b, 0.0],
+        },
+        (999.0, 1001.0),
+    )
+    .unwrap();
+    let basis = Trimmed::new(Basis::Helix(helix), (999.7, 1000.55)).unwrap();
+    Offset::new(
+        basis,
+        OffsetLaw::Reference {
+            distance: 0.5,
+            direction: [a, b, 0.0],
+        },
+    )
+    .unwrap()
+}
+
+#[test]
+fn an_offset_is_halved_down_to_neighbouring_doubles_and_no_further() {
+    // Near t = 1000 the doubles are 2^−43 apart, far wider than the narrowest piece (0.85·2^−52),
+    // so halving the piece that holds the vanishing normal stops at two neighbouring doubles,
+    // whose middle rounds to one of them, the even one: the left end for some of these zeros and
+    // the right end for others. Either way the offset is degenerate there, and the halving ends.
+    for (a, b) in [(0.001, 1.0), (-0.001, 1.0), (0.003, 1.0), (-0.2, 1.0)] {
+        let m = &mut WorkMeter::new(WITHIN);
+        assert_eq!(
+            flat_near_1000(a, b).to_nurbs(m).err(),
+            Some(CurveError::Degenerate),
+            "w = ({a}, {b}, 0)"
+        );
+    }
 }
 
 #[test]
