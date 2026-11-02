@@ -10987,6 +10987,12 @@
               "doc": "A refusal of the per-entity bounds: what a step or a history may spend (13.2, piece G143).",
               "name": "Bound",
               "shape": "tuple"
+            },
+            {
+              "base_kind": "held detail",
+              "doc": "A refusal of a local operation's topology changes (13.14, 13.20; piece G144).",
+              "name": "Local",
+              "shape": "tuple"
             }
           ],
           "module": "geom_op::detail",
@@ -11297,6 +11303,60 @@
           "non_exhaustive": true
         },
         {
+          "doc": "One topology change a local operation made (13.14), recorded with its history.",
+          "file": "projects/engines/geometry/crates/geom-op/src/history.rs",
+          "kinds": [
+            {
+              "doc": "`vertex` became several, joined by `edges`.",
+              "name": "VertexSplit",
+              "shape": "struct"
+            },
+            {
+              "doc": "`face` vanished, and was deleted.",
+              "name": "FaceVanished",
+              "shape": "struct"
+            },
+            {
+              "doc": "Part of `face` was cut away along `along`.",
+              "name": "SelfOverlapCut",
+              "shape": "struct"
+            },
+            {
+              "doc": "`faces` were trimmed against each other.",
+              "name": "ClashTrimmed",
+              "shape": "struct"
+            },
+            {
+              "doc": "`faces` passed through each other and were deleted.",
+              "name": "OvershootRemoved",
+              "shape": "struct"
+            },
+            {
+              "doc": "`faces` became the one face `into`.",
+              "name": "FacesMerged",
+              "shape": "struct"
+            },
+            {
+              "doc": "`face` was added in `role`.",
+              "name": "FaceAdded",
+              "shape": "struct"
+            },
+            {
+              "doc": "`face`'s loops changed.",
+              "name": "LoopChanged",
+              "shape": "struct"
+            },
+            {
+              "doc": "One solid became `lumps`.",
+              "name": "BodySplit",
+              "shape": "struct"
+            }
+          ],
+          "module": "geom_op::history",
+          "name": "TopologyChange",
+          "non_exhaustive": false
+        },
+        {
           "doc": "Why records cannot make a history.",
           "file": "projects/engines/geometry/crates/geom-op/src/history.rs",
           "kinds": [
@@ -11416,6 +11476,21 @@
           ],
           "module": "geom_op::kind",
           "name": "ErrorKind",
+          "non_exhaustive": false
+        },
+        {
+          "doc": "A refusal of a local operation's changes (13.20).",
+          "file": "projects/engines/geometry/crates/geom-op/src/local.rs",
+          "kinds": [
+            {
+              "base_kind": "NoSolution",
+              "doc": "The operation would make a change of `class`, which the call does not allow.",
+              "name": "TopologyChangeNotAllowed",
+              "shape": "struct"
+            }
+          ],
+          "module": "geom_op::local",
+          "name": "LocalDetail",
           "non_exhaustive": false
         },
         {
@@ -11766,6 +11841,29 @@
             "text": "chapter 22's table of base kinds (`projects/engines/geometry/architecture/22-errors-queries-ai.md`), with chapter 23.10's rule that cancellation and refused allocations are never stored."
           },
           "path": "geom_op::kind",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
+          "cost": "a set is one word; [`allowed`] is linear in the changes. No allocation but the remedy list. Recursion: none.",
+          "does": "an [`AllowSet`] is a set of chapter 13.14's [`ChangeClass`]es. Each local operation declares the set it may make, its [`LocalSchema`] beside its [`OpSchema`], and a caller narrows it ([`AllowSet::narrowed`]). [`allowed`] holds the changes an operation made to the set and returns the first it does not allow as a [`LocalDetail::TopologyChangeNotAllowed`], which names the class; the error built from it names the entities.",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-op/src/local.rs",
+          "guarantees": [
+            "**Never wider than declared.** [`AllowSet::narrowed`] keeps only what both sets hold, so a caller can take classes away and never add one the operation does not declare.",
+            "**The first refusal, in order.** [`allowed`] reads the changes in the order given, which a [`History`](crate::history::History) keeps by name, so the same changes give the same refusal.",
+            "**One kind.** A change outside the set is `NoSolution`: no result exists within the changes the caller allows, and its remedy is to allow the class (13.20)."
+          ],
+          "job": "What a local operation may change, and its refusal of anything else (13.14; piece G144).",
+          "method": {
+            "links": [
+              "projects/engines/geometry/architecture/13-sweeps-blends-offsets.md",
+              "projects/engines/geometry/architecture/22-errors-queries-ai.md"
+            ],
+            "text": "chapter 13.14's taxonomy and allow-sets and 13.20's `TopologyChangeNotAllowed` (`projects/engines/geometry/architecture/13-sweeps-blends-offsets.md`), on chapter 22's error kinds (`projects/engines/geometry/architecture/22-errors-queries-ai.md`)."
+          },
+          "path": "geom_op::local",
           "provenance": [],
           "spdx": null,
           "target": "lib"

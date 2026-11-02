@@ -50,6 +50,7 @@ use geom_num::{Exactness, GridStep, Steps};
 use crate::batch::BatchDetail;
 use crate::evidence::Value;
 use crate::kind::ErrorKind;
+use crate::local::LocalDetail;
 use crate::remedy::{Bound, Remedy};
 
 /// The operation's own typed failure (chapter 22): one variant per family of details, each holding
@@ -73,6 +74,8 @@ pub enum OpErrorDetail {
     Combine(CombineDetail),
     /// A refusal of the per-entity bounds: what a step or a history may spend (13.2, piece G143).
     Bound(BoundDetail),
+    /// A refusal of a local operation's topology changes (13.14, 13.20; piece G144).
+    Local(LocalDetail),
 }
 
 impl OpErrorDetail {
@@ -87,6 +90,7 @@ impl OpErrorDetail {
             OpErrorDetail::Query(detail) => detail.kind(),
             OpErrorDetail::Combine(detail) => detail.kind(),
             OpErrorDetail::Bound(detail) => detail.kind(),
+            OpErrorDetail::Local(detail) => detail.kind(),
         }
     }
 
@@ -101,6 +105,7 @@ impl OpErrorDetail {
             OpErrorDetail::Query(detail) => detail.remedies(),
             OpErrorDetail::Combine(detail) => detail.remedies(),
             OpErrorDetail::Bound(detail) => detail.remedies(),
+            OpErrorDetail::Local(detail) => detail.remedies(),
         }
     }
 }
@@ -115,6 +120,7 @@ impl fmt::Display for OpErrorDetail {
             OpErrorDetail::Query(detail) => fmt::Display::fmt(detail, f),
             OpErrorDetail::Combine(detail) => fmt::Display::fmt(detail, f),
             OpErrorDetail::Bound(detail) => fmt::Display::fmt(detail, f),
+            OpErrorDetail::Local(detail) => fmt::Display::fmt(detail, f),
         }
     }
 }
