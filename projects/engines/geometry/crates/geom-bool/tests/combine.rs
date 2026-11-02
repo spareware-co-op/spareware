@@ -747,6 +747,135 @@ fn a_wire_edge_is_split_in_order_once_at_each_crossing_and_not_beside_a_face() {
     );
 }
 
+/// How many edges of `wire` Keep keeps inside `solid`, and how many with Not.
+fn kept_in(solid_body: &Body, wire: &Body) -> [u32; 2] {
+    [
+        vec![Term::Inside(key(1))],
+        vec![Term::Inside(key(1)), Term::Not],
+    ]
+    .map(|test| {
+        let selection = Selection::Keep {
+            target: key(2),
+            test,
+        };
+        let out = picked(vec![solid(1, solid_body), cutter(2, wire)], selection);
+        out.result[0][0].body.arenas().edges.len()
+    })
+}
+
+#[test]
+fn a_wire_lying_in_a_face_falls_the_same_side_whichever_way_it_runs() {
+    // Moved off the face a step towards +x, then +y, then +z: inside the block on its three low
+    // faces and outside on its three high ones, along either axis of the face or across it, drawn
+    // either way.
+    let block = cuboid([0, 0, 0], [20, 20, 20]);
+    for axis in 0..3 {
+        let (u, v) = ((axis + 1) % 3, (axis + 2) % 3);
+        for (at, want) in [(0, [1, 0]), (20, [0, 1])] {
+            let point = |(s, t): (i64, i64)| {
+                let mut q = [0; 3];
+                q[axis] = at;
+                q[u] = s;
+                q[v] = t;
+                q
+            };
+            for [from, to] in [
+                [(5, 5), (15, 5)],
+                [(5, 5), (5, 15)],
+                [(5, 5), (15, 15)],
+                [(5, 15), (15, 5)],
+            ] {
+                for ends in [[from, to], [to, from]] {
+                    let bar = polyline(&ends.map(point));
+                    assert_eq!(
+                        kept_in(&block, &bar),
+                        want,
+                        "{ends:?} at {at} on axis {axis}"
+                    );
+                }
+            }
+        }
+    }
+    // In a tilted face the step towards +x decides first: a wire in the plane x = y falls as one a
+    // step towards +x does, upright or across, though the material lies towards +y.
+    let wedge = half_space([p(0, 0, 0), p(10, 10, 0), p(0, 0, 10)], &mut meter()).unwrap();
+    for (ends, beside) in [
+        ([[5, 5, 2], [5, 5, 8]], [[6, 5, 2], [6, 5, 8]]),
+        ([[5, 5, 8], [5, 5, 2]], [[6, 5, 2], [6, 5, 8]]),
+        ([[2, 2, 5], [8, 8, 5]], [[3, 2, 5], [9, 8, 5]]),
+    ] {
+        let lying = kept_in(&wedge, &polyline(&ends));
+        assert_eq!(lying, kept_in(&wedge, &polyline(&beside)), "{ends:?}");
+        assert_eq!(lying, [0, 1], "{ends:?}");
+    }
+}
+
+#[test]
+fn a_wire_runs_back_along_an_axis_and_to_the_edge_of_the_range() {
+    // Edges drawn towards −x are cut and chosen as those drawn towards +x.
+    let block = cuboid([-20, 0, 0], [10, 10, 10]);
+    let bar = polyline(&[[15, 5, 5], [5, 5, 5], [-15, 5, 5]]);
+    let inside = picked(
+        vec![solid(1, &block), cutter(2, &bar)],
+        Selection::Keep {
+            target: key(2),
+            test: vec![Term::Inside(key(1))],
+        },
+    );
+    assert_eq!(
+        wire_shape(&inside.result[0][0].body),
+        (vec![[-15, 5, 5], [-10, 5, 5]], 1)
+    );
+    // A wire on the last grid plane, where no point lies a step further.
+    let far = geom_num::grid::COORD_MAX;
+    let edge = polyline(&[[far, 0, 0], [far, 10, 0], [far - 10, 10, 10]]);
+    assert_eq!(kept_in(&block, &edge), [0, 2]);
+}
+
+#[test]
+fn a_wire_vertex_on_a_face_ends_a_run_and_its_free_ends_hold_seeds() {
+    // The line turns at nothing, but its middle vertex lies on the block's face: neither edge is
+    // split there, Keep keeps the edge inside whole, a seed on either side or on that side's free
+    // end keeps that side's edge alone, and a seed on the vertex is refused.
+    let block = cuboid([0, 0, 0], [20, 20, 20]);
+    let line = polyline(&[[-10, 5, 5], [0, 5, 5], [10, 5, 5]]);
+    let operands = || vec![solid(1, &block), cutter(2, &line)];
+    let inside = Selection::Keep {
+        target: key(2),
+        test: vec![Term::Inside(key(1))],
+    };
+    let kept = &picked(operands(), inside).result[0][0].body;
+    assert_eq!(wire_shape(kept), (vec![[0, 5, 5], [10, 5, 5]], 1));
+    checked(kept);
+    let trim = |seed| Selection::Trim {
+        target: key(2),
+        seeds: vec![seed],
+    };
+    for (seed, shape) in [
+        (p(5, 5, 5), [[0, 5, 5], [10, 5, 5]]),
+        (p(10, 5, 5), [[0, 5, 5], [10, 5, 5]]),
+        (p(-5, 5, 5), [[-10, 5, 5], [0, 5, 5]]),
+        (p(-10, 5, 5), [[-10, 5, 5], [0, 5, 5]]),
+    ] {
+        let out = picked(operands(), trim(seed));
+        assert_eq!(
+            wire_shape(&out.result[0][0].body),
+            (shape.to_vec(), 1),
+            "{seed:?}"
+        );
+    }
+    let input = BooleanInput {
+        operands: operands(),
+        select: vec![trim(p(0, 5, 5))],
+        merge: Merge::RemoveRedundant,
+        accept: None,
+    };
+    assert_eq!(
+        *combine(&ctx(), &SERIAL, &input).unwrap_err().detail(),
+        OpErrorDetail::Combine(CombineDetail::SeedOnBoundary)
+    );
+}
+
 #[test]
 fn a_section_is_the_curve_where_operands_meet() {
     let a = cuboid([0, 0, 0], [40, 40, 40]);
@@ -883,6 +1012,40 @@ fn boxes_that_share_only_an_edge_or_a_corner_are_not_nudged_apart() {
         assert!(noted(&met, "bool.empty_result"));
         assert_eq!(counted(&met.result.body), [0, 0, 0, 0]);
     }
+}
+
+#[test]
+fn three_boxes_whose_union_pinches_at_a_corner_give_a_general_body() {
+    // Each pair shares part of a face, and around (-1, 4, 0) the empty space is two opposite
+    // octants: the union's one shell pinches there, non-manifold (11.6), so it is a general body,
+    // which the checker passes. United at once or one after another, it is the same shape.
+    let boxes = [
+        ([-1, 1, -1], [1, 3, 2]),
+        ([-2, 4, -1], [2, 1, 1]),
+        ([-2, 0, 0], [1, 5, 1]),
+    ];
+    let bodies: Vec<Body> = boxes
+        .iter()
+        .map(|(low, size)| cuboid(*low, *size))
+        .collect();
+    let operands: Vec<Operand<'_>> = bodies
+        .iter()
+        .enumerate()
+        .map(|(i, b)| solid(i as u8, b))
+        .collect();
+    let all = unite(&ctx(), &SERIAL, &operands).unwrap().result.body;
+    assert_eq!(
+        (all.kind(), all.arenas().shells.len()),
+        (BodyKind::General, 1)
+    );
+    checked(&all);
+    let two = unite(&ctx(), &SERIAL, &operands[..2]).unwrap().result.body;
+    assert_eq!(two.kind(), BodyKind::Solid);
+    let after = unite(&ctx(), &SERIAL, &[solid(0, &two), solid(2, &bodies[2])])
+        .unwrap()
+        .result
+        .body;
+    assert_eq!(counted(&after), counted(&all));
 }
 
 #[test]
