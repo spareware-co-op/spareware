@@ -37,6 +37,7 @@ mod euler;
 mod named;
 
 pub use euler::{Euler, NewEdge, NewFace, NewVertex, Wire};
+pub use named::Order;
 
 use geom_run::WorkMeter;
 

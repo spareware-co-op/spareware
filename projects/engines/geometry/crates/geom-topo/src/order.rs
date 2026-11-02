@@ -97,8 +97,26 @@ impl Permutation {
     ///
     /// As [`Permutation::by_name`].
     pub fn by_key<T: Ord>(keys: &[T]) -> Result<Permutation, OrderError> {
+        Permutation::by_key_from(keys, None)
+    }
+
+    /// [`Permutation::by_key`], its sort starting from the order of `start` when `start` moves as
+    /// many rows (G139a): the permutation an earlier call found for keys that have changed little
+    /// since, so the sort finds them nearly in order. Ties are broken by row, so the result is the
+    /// one [`Permutation::by_key`] gives, whatever `start` is.
+    ///
+    /// # Errors
+    ///
+    /// As [`Permutation::by_key`].
+    pub fn by_key_from<T: Ord>(
+        keys: &[T],
+        start: Option<&Permutation>,
+    ) -> Result<Permutation, OrderError> {
         let n = u32::try_from(keys.len()).map_err(|_| OrderError::TooManyRows)?;
-        let mut old_of_new: Vec<u32> = (0..n).collect();
+        let mut old_of_new: Vec<u32> = match start {
+            Some(start) if start.old_of_new.len() == keys.len() => start.old_of_new.clone(),
+            _ => (0..n).collect(),
+        };
         // Rows are distinct, so the order is total even before duplicates are refused.
         old_of_new.sort_by(|&a, &b| key(keys, a).cmp(&key(keys, b)).then(a.cmp(&b)));
         for pair in old_of_new.windows(2) {

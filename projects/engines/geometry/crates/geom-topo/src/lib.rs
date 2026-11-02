@@ -70,7 +70,7 @@ pub mod query_ops;
 
 pub use arenas::{Arenas, Pool};
 pub use body::{Body, BodyKind};
-pub use builder::{Builder, Euler, NewEdge, NewFace, NewVertex, Wire};
+pub use builder::{Builder, Euler, NewEdge, NewFace, NewVertex, Order, Wire};
 pub use column::{CHUNK_ROWS, Column, Memory};
 pub use entity::{
     CurveIx, Edge, EdgeIx, Edges, Face, FaceIx, Faces, Fin, FinIx, Fins, Link, Loop, LoopIx, Loops,

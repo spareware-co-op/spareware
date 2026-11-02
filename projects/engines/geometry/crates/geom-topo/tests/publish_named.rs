@@ -20,8 +20,8 @@ use geom_run::{Budget, BudgetKind, Stop, WorkMeter};
 use geom_surface::SurfaceKind;
 use geom_topo::order::{NameKey, Names};
 use geom_topo::{
-    Arena, Arenas, Body, BodyKind, Builder, Edge, Euler, Face, Fin, Ix, Link, Loop, PointKind,
-    Region, RegionKind, Sense, Shell, TopoError, Vertex,
+    Arena, Arenas, Body, BodyKind, Builder, Edge, Euler, Face, Fin, Ix, Link, Loop, Order,
+    PointKind, Region, RegionKind, Sense, Shell, TopoError, Vertex,
 };
 
 /// Every row of a body, as plain vectors a test can reorder.
@@ -542,6 +542,33 @@ fn any_order_of_the_rows_publishes_the_same_body() {
         for seed in 0..16 {
             let (r, sn) = shuffle(&w, &n, mix(salt << 8 | seed));
             assert_eq!(publish(&r, &sn).unwrap(), body, "salt {salt}, seed {seed}");
+        }
+    }
+}
+
+#[test]
+fn a_publication_from_any_start_is_the_publication_without_it() {
+    // G139a: the sorts start from another publication's order, of the same rows in another order,
+    // of the same rows under other names, or of nothing alike, and end where they end without.
+    fn from(r: &Rows, n: &Names, start: Option<&Order>) -> (Body, Order) {
+        builder(r)
+            .publish_named_from(n, (BodyKind::Solid, outside(r)), start, &mut meter())
+            .unwrap()
+    }
+    let w = wall();
+    for salt in 0..4 {
+        let n = names(&w, salt);
+        let (body, order) = from(&w, &n, None);
+        assert_eq!(body, publish(&w, &n).unwrap());
+        let (again, same) = from(&w, &n, Some(&order));
+        assert_eq!((&again, &same), (&body, &order));
+        let other = from(&w, &names(&w, salt + 100), None).1;
+        let (moved, moved_order) = from(&w, &n, Some(&other));
+        assert_eq!((&moved, &moved_order), (&body, &order));
+        for seed in 0..8 {
+            let (r, sn) = shuffle(&w, &n, mix(salt << 8 | seed));
+            let (shuffled, _) = from(&r, &sn, Some(&order));
+            assert_eq!(shuffled, body, "salt {salt}, seed {seed}");
         }
     }
 }

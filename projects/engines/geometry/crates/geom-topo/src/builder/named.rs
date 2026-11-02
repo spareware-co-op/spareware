@@ -88,13 +88,33 @@ impl Builder {
         outside: RegionIx,
         meter: &mut WorkMeter<'_>,
     ) -> Result<Body, TopoError> {
+        self.publish_named_from(names, (kind, outside), None, meter)
+            .map(|(body, _)| body)
+    }
+
+    /// [`Builder::publish_named`], each arena's sort starting from `start`, the order an earlier
+    /// publication of mostly the same rows found (G139a), and giving back the order this one
+    /// found. The body is the one [`Builder::publish_named`] gives, whatever `start` is: every sort
+    /// breaks ties by row, so it ends where it would from any start, and a start nearly in order
+    /// saves most of its comparisons.
+    ///
+    /// # Errors
+    ///
+    /// As [`Builder::publish_named`].
+    pub fn publish_named_from(
+        self,
+        names: &Names,
+        (kind, outside): (BodyKind, RegionIx),
+        start: Option<&Order>,
+        meter: &mut WorkMeter<'_>,
+    ) -> Result<(Body, Order), TopoError> {
         let a = &self.arenas;
         even_columns(a)?;
         inside(a, meter)?;
         if a.regions.kind.get(outside) != Some(&RegionKind::Void) {
             return Err(TopoError::Outside);
         }
-        let moves = Moves::new(a, names)?;
+        let moves = Moves::new(a, names, start.map(|order| &order.0))?;
         let arenas = rechain(moves.arenas(a, meter)?)?;
         let sorted = Names {
             regions: in_order(&moves.regions, &names.regions),
@@ -104,22 +124,36 @@ impl Builder {
         };
         let outside = to(&moves.regions, outside)?;
         let body = Builder { arenas }.publish(kind, outside, meter)?;
-        Ok(body.named(sorted))
+        Ok((body.named(sorted), Order(moves)))
     }
 }
 
-/// The move into name order of a named arena of `rows` rows.
-fn by_name(names: &[NameKey], rows: u32, arena: Arena) -> Result<Permutation, TopoError> {
+/// The moves a publication in name order made, for a later one of mostly the same rows to start
+/// its sorts from (G139a, [`Builder::publish_named_from`]).
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct Order(Moves<Permutation>);
+
+/// The move into name order of a named arena of `rows` rows, its sort starting from `start`.
+fn by_name(
+    names: &[NameKey],
+    rows: u32,
+    arena: Arena,
+    start: Option<&Permutation>,
+) -> Result<Permutation, TopoError> {
     if u32::try_from(names.len()).ok() != Some(rows) {
         return Err(TopoError::Names(arena));
     }
-    order(names, arena, true)
+    order(names, (arena, true), start)
 }
 
-/// The move into the order of `keys`; equal keys are refused, as [`TopoError::DuplicateName`]
-/// in a `named` arena and as [`TopoError::Unordered`] in any other.
-fn order<T: Ord>(keys: &[T], arena: Arena, named: bool) -> Result<Permutation, TopoError> {
-    Permutation::by_key(keys).map_err(|e| e.in_arena(arena, named))
+/// The move into the order of `keys`, its sort starting from `start`; equal keys are refused, as
+/// [`TopoError::DuplicateName`] in a `named` arena and as [`TopoError::Unordered`] in any other.
+fn order<T: Ord>(
+    keys: &[T],
+    (arena, named): (Arena, bool),
+    start: Option<&Permutation>,
+) -> Result<Permutation, TopoError> {
+    Permutation::by_key_from(keys, start).map_err(|e| e.in_arena(arena, named))
 }
 
 /// For each of `owners` rows, the least place among its members, or `None` with none. Each pair
@@ -149,6 +183,7 @@ fn pool(
     rows: u32,
     pairs: impl Iterator<Item = (Option<u32>, Option<u32>)>,
     arena: Arena,
+    start: Option<&Permutation>,
 ) -> Result<Permutation, TopoError> {
     let keys = least(rows, pairs);
     if let Some(row) = (0_u32..)
@@ -157,7 +192,7 @@ fn pool(
     {
         return Err(TopoError::Unused { arena, row });
     }
-    order(&keys, arena, false)
+    order(&keys, (arena, false), start)
 }
 
 /// A fin's place among a loop's fins: its edge's place, then its sense.
@@ -309,6 +344,7 @@ fn moved_pool<T: Kind + Clone, P: Place>(
 }
 
 /// Every arena's move.
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub(crate) struct Moves<P> {
     pub(crate) regions: P,
     pub(crate) shells: P,
@@ -325,12 +361,41 @@ pub(crate) struct Moves<P> {
 }
 
 impl Moves<Permutation> {
-    /// Every arena's move into name order, from `names` and the keys of the module's rule.
-    fn new(a: &Arenas, names: &Names) -> Result<Moves<Permutation>, TopoError> {
-        let regions = by_name(&names.regions, a.regions.len(), Arena::Region)?;
-        let faces = by_name(&names.faces, a.faces.len(), Arena::Face)?;
-        let edges = by_name(&names.edges, a.edges.len(), Arena::Edge)?;
-        let vertices = by_name(&names.vertices, a.vertices.len(), Arena::Vertex)?;
+    /// Every arena's move into name order, from `names` and the keys of the module's rule, each
+    /// sort starting from `start`'s move of the same arena.
+    #[allow(
+        clippy::too_many_lines,
+        reason = "one key and one sort per arena, in the module's order, each short"
+    )]
+    fn new(
+        a: &Arenas,
+        names: &Names,
+        start: Option<&Moves<Permutation>>,
+    ) -> Result<Moves<Permutation>, TopoError> {
+        let regions = by_name(
+            &names.regions,
+            a.regions.len(),
+            Arena::Region,
+            start.map(|s| &s.regions),
+        )?;
+        let faces = by_name(
+            &names.faces,
+            a.faces.len(),
+            Arena::Face,
+            start.map(|s| &s.faces),
+        )?;
+        let edges = by_name(
+            &names.edges,
+            a.edges.len(),
+            Arena::Edge,
+            start.map(|s| &s.edges),
+        )?;
+        let vertices = by_name(
+            &names.vertices,
+            a.vertices.len(),
+            Arena::Vertex,
+            start.map(|s| &s.vertices),
+        )?;
 
         let shell_faces = least(
             a.shells.len(),
@@ -347,7 +412,7 @@ impl Moves<Permutation> {
             .map(|r| regions.new_of(r.row()))
             .zip(shell_faces)
             .collect();
-        let shells = order(&shell_keys, Arena::Shell, false)?;
+        let shells = order(&shell_keys, (Arena::Shell, false), start.map(|s| &s.shells))?;
 
         let loop_edges = least(
             a.loops.len(),
@@ -366,7 +431,7 @@ impl Moves<Permutation> {
             .map(|f| faces.new_of(f.row()))
             .zip(loop_edges)
             .collect();
-        let loops = order(&loop_keys, Arena::Loop, false)?;
+        let loops = order(&loop_keys, (Arena::Loop, false), start.map(|s| &s.loops))?;
 
         let fin_keys: Vec<(Option<u32>, Option<u32>, u8)> = a
             .fins
@@ -376,7 +441,7 @@ impl Moves<Permutation> {
             .zip(a.fins.sense.iter())
             .map(|((e, l), s)| (edges.new_of(e.row()), loops.new_of(l.row()), sense(*s)))
             .collect();
-        let fins = order(&fin_keys, Arena::Fin, false)?;
+        let fins = order(&fin_keys, (Arena::Fin, false), start.map(|s| &s.fins))?;
 
         let surfaces = pool(
             a.surfaces.len(),
@@ -386,6 +451,7 @@ impl Moves<Permutation> {
                 .map(|s| Some(s.row()))
                 .zip(faces.iter().map(Some)),
             Arena::Surface,
+            start.map(|s| &s.surfaces),
         )?;
         let curves = pool(
             a.curves.len(),
@@ -395,6 +461,7 @@ impl Moves<Permutation> {
                 .map(|c| Some(c.row()))
                 .zip(edges.iter().map(Some)),
             Arena::Curve,
+            start.map(|s| &s.curves),
         )?;
         let pcurves = pool(
             a.pcurves.len(),
@@ -404,6 +471,7 @@ impl Moves<Permutation> {
                 .map(|p| p.map(Ix::row))
                 .zip(fins.iter().map(Some)),
             Arena::Pcurve,
+            start.map(|s| &s.pcurves),
         )?;
         let points = pool(
             a.points.len(),
@@ -413,10 +481,11 @@ impl Moves<Permutation> {
                 .map(|p| Some(p.row()))
                 .zip(vertices.iter().map(Some)),
             Arena::Point,
+            start.map(|s| &s.points),
         )?;
         // No plane belongs to one entity, so the pool is in the order of the coefficients (19.2).
         let keys: Vec<([i128; 3], i128)> = a.planes.iter().map(|p| (p.n(), p.d())).collect();
-        let planes = order(&keys, Arena::Plane, false)?;
+        let planes = order(&keys, (Arena::Plane, false), start.map(|s| &s.planes))?;
 
         Ok(Moves {
             regions,
