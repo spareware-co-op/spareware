@@ -900,10 +900,13 @@ constraint 2.5 driving 0 distance 1.1 1.2 {d}
 
 #[test]
 fn a_step_halved_at_a_failure_is_doubled_back_after_a_success() {
-    // From 0.1 to 1.5 half-turns the whole jump and its first halves land on the other branch.
-    // Measured, four steps: the schedule is the path's contract (15.7), and a path that never
-    // doubled its step back, or that jumped back to the whole, takes another number.
+    // From 0.1 to 1.1 and to 1.5 half-turns the whole jump and its first halves land on the other
+    // branch. Measured, three steps and four: the schedule is the path's contract (15.7), and a
+    // path that never doubled its step back (four to 1.1), or that jumped back to the whole,
+    // takes another number.
     let from = solve(&hand(0.1), &mut meter()).unwrap().sketch;
+    let done = continue_to(&from, &with_angle(&from, 1.1), &mut meter()).unwrap();
+    assert_eq!(done.report.steps, 3);
     let done = continue_to(&from, &with_angle(&from, 1.5), &mut meter()).unwrap();
     assert_eq!(done.report.steps, 4);
     let angle = 1.5 * core::f64::consts::PI;
