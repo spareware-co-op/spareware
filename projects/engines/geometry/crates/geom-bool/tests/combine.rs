@@ -989,6 +989,39 @@ fn boxes_that_share_only_an_edge_or_a_corner_are_not_nudged_apart() {
 }
 
 #[test]
+fn three_boxes_whose_union_pinches_at_a_corner_give_a_general_body() {
+    // Each pair shares part of a face, and around (-1, 4, 0) the empty space is two opposite
+    // octants: the union's one shell pinches there, non-manifold (11.6), so it is a general body,
+    // which the checker passes. United at once or one after another, it is the same shape.
+    let boxes = [
+        ([-1, 1, -1], [1, 3, 2]),
+        ([-2, 4, -1], [2, 1, 1]),
+        ([-2, 0, 0], [1, 5, 1]),
+    ];
+    let bodies: Vec<Body> = boxes
+        .iter()
+        .map(|(low, size)| cuboid(*low, *size))
+        .collect();
+    let operands: Vec<Operand<'_>> = bodies
+        .iter()
+        .enumerate()
+        .map(|(i, b)| solid(i as u8, b))
+        .collect();
+    let all = unite(&ctx(), &SERIAL, &operands).unwrap().result;
+    assert_eq!(
+        (all.kind(), all.arenas().shells.len()),
+        (BodyKind::General, 1)
+    );
+    checked(&all);
+    let two = unite(&ctx(), &SERIAL, &operands[..2]).unwrap().result;
+    assert_eq!(two.kind(), BodyKind::Solid);
+    let after = unite(&ctx(), &SERIAL, &[solid(0, &two), solid(2, &bodies[2])])
+        .unwrap()
+        .result;
+    assert_eq!(counted(&after), counted(&all));
+}
+
+#[test]
 fn a_box_inside_another_unites_cuts_and_meets() {
     let outer = cuboid([0, 0, 0], [40, 40, 40]);
     let inner = cuboid([10, 10, 10], [10, 10, 10]);
