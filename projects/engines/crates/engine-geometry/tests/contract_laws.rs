@@ -7,8 +7,9 @@
 //! healing lands, so "No tolerance grows" joins here with the first operation that takes one; the
 //! law itself is seeded in `geom-test/tests/contract_kit.rs`.
 //!
-//! Covers: make.box, make.cone, make.cylinder, make.prism, make.sphere, make.torus,
-//! transform.mirror, transform.move, transform.pattern, transform.rotate, transform.scale.
+//! Covers: `make.box`, `make.cone`, `make.cylinder`, `make.prism`, `make.sphere`, `make.torus`,
+//! `transform.mirror`, `transform.move`, `transform.pattern`, `transform.rotate`,
+//! `transform.scale`.
 
 #![allow(
     clippy::unwrap_used,

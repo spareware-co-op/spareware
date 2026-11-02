@@ -6,8 +6,9 @@
 //! the grid is the numbers layer's error, never a defect; a stop publishes nothing; bad input gets
 //! a typed error with its remedy.
 //!
-//! Covers: make.box, make.cone, make.cylinder, make.prism, make.sphere, make.torus,
-//! transform.mirror, transform.move, transform.pattern, transform.rotate, transform.scale.
+//! Covers: `make.box`, `make.cone`, `make.cylinder`, `make.prism`, `make.sphere`, `make.torus`,
+//! `transform.mirror`, `transform.move`, `transform.pattern`, `transform.rotate`,
+//! `transform.scale`.
 //!
 //! Family laws: Make, Transform.
 
