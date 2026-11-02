@@ -3861,7 +3861,7 @@
           "target": "lib"
         },
         {
-          "cost": "constant for the analytic kinds; one pass over the control net and the knots for a NURBS. Each pole line costs one projection to an eighth of the floor and one run of the engine along the line, once per subdivision (`Poles`); each pair then filters what it read. Recursion: none.",
+          "cost": "constant for the analytic kinds; one pass over the control net and the knots for a NURBS. Each pole line costs one projection to an eighth of the floor and one run of the engine along the line, once per subdivision (`Poles`); each pair then filters what it read.",
           "does": "[`charts`] reads, from a kind's own stored data and exactly, which ends of its domain are one curve (a whole turn of a round kind, a NURBS whose first and last rows of control points are one row), which lines of its domain are each one point of space (a sphere's poles, a cone's apex, a NURBS edge whose control points are one point), and the lines inside where it is not proven tangent-continuous (a NURBS knot of full multiplicity). [`crate::general::subdivide`] cuts each domain at its creases and inner poles before anything else ([`cuts`]), and tests a patch edge on a pole line as the one point it is: the point against the other surface (12.4), then the directions a branch leaves it by. [`crate::march`] and [`crate::level`] join a branch across a closing seam, through a pole and across a knot line, recording the point once and saying where in [`Pass`].",
           "family": [],
           "file": "projects/engines/geometry/crates/geom-intersect/src/seam.rs",
