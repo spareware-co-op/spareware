@@ -46,7 +46,7 @@ use geom_run::{Exec, Phase, RunError, Stopped, WorkMeter};
 use geom_topo::Body;
 
 use crate::certificate::{Fault, certify, labelled};
-use crate::names::{Named, Naming, NamingError, Sources, name, name_curves};
+use crate::names::{NameIds, Named, Naming, NamingError, Sources, name, name_curves};
 use crate::operand::{
     BooleanInput, CellSeed, Operand, OperandKey, PrepareError, Prepared, Selection, prepare,
 };
@@ -188,9 +188,13 @@ struct Scene<'a> {
     classified: &'a [Classified],
     /// What merges.
     merge: Merge,
-    /// What an earlier merge of mostly the same pieces kept, for a merge to start from (G139).
-    reuse: Option<&'a Memo>,
+    /// What an earlier merge and naming of mostly the same pieces kept, for a merge to start
+    /// from and a naming to take ids from (G139).
+    reuse: Option<Again<'a>>,
 }
+
+/// What an earlier merge and naming kept: the merge's memo and the names' ids (G139).
+pub(crate) type Again<'a> = (&'a Memo, &'a NameIds);
 
 /// What one result of a selection is told.
 #[derive(Clone, Copy)]
@@ -235,8 +239,8 @@ struct Picked {
     qualified: bool,
     /// One entry per cell that holds two seeds: where it is narrowest.
     leaks: Vec<Option<Passage>>,
-    /// What its merge kept for the next, where it merged once.
-    memo: Option<Memo>,
+    /// What its merge and naming kept for the next, where it merged once.
+    memo: Option<(Memo, NameIds)>,
 }
 
 /// Why a selection gave no body.
@@ -422,7 +426,7 @@ impl<'a> Scene<'a> {
         job: Job<'_>,
         pieces: &[Outward],
         meter: &mut WorkMeter<'_>,
-    ) -> Result<(Combined, bool), Refused> {
+    ) -> Result<(Combined, bool, NameIds), Refused> {
         let carriers: &[Carrier] = &self.ready.carriers;
         let Some(named) = self.named(job.target) else {
             let body = publish(merged, carriers, job.open, None, meter)?;
@@ -434,6 +438,7 @@ impl<'a> Scene<'a> {
                     cell: None,
                 },
                 false,
+                NameIds::default(),
             ));
         };
         let sources = Sources {
@@ -443,12 +448,14 @@ impl<'a> Scene<'a> {
             planes: &self.planes,
             split: job.split,
             seed: job.seed,
+            known: self.reuse.map(|(_, ids)| ids),
         };
         let Naming {
             names,
             made,
             history,
             qualified,
+            ids,
         } = name(self.op, merged, pieces, &sources)?;
         let body = publish(merged, carriers, job.open, Some(&names), meter)?;
         let history = Some(history);
@@ -460,6 +467,7 @@ impl<'a> Scene<'a> {
                 cell: None,
             },
             qualified,
+            ids,
         ))
     }
 
@@ -474,20 +482,21 @@ impl<'a> Scene<'a> {
         let kept = self.sourced(select(test, self.classified)?);
         labelled(&kept, test, meter)?;
         let rules = Rules { cuts, open: false };
-        let (merged, memo) = merge_with_reusing(&kept, self.merge, rules, self.reuse, meter)?;
+        let reuse = self.reuse.map(|(memo, _)| memo);
+        let (merged, memo) = merge_with_reusing(&kept, self.merge, rules, reuse, meter)?;
         let job = Job {
             target,
             open: false,
             split: &BTreeSet::new(),
             seed: None,
         };
-        let (result, qualified) = self.finished(&merged, job, &kept, meter)?;
+        let (result, qualified, ids) = self.finished(&merged, job, &kept, meter)?;
         Ok(Picked {
             results: alloc::vec![result],
             separated: true,
             qualified,
             leaks: Vec::new(),
-            memo: Some(memo),
+            memo: Some((memo, ids)),
         })
     }
 
@@ -576,7 +585,7 @@ impl<'a> Scene<'a> {
                 split: &split,
                 seed: None,
             };
-            let (result, qualified) = self.finished(&merged, job, &pieces, meter)?;
+            let (result, qualified, _) = self.finished(&merged, job, &pieces, meter)?;
             picked.results.push(result);
             picked.qualified = picked.qualified || qualified;
         }
@@ -703,7 +712,7 @@ impl<'a> Scene<'a> {
             split: &BTreeSet::new(),
             seed: None,
         };
-        let (result, qualified) = self.finished(&whole, job, &pieces, meter)?;
+        let (result, qualified, _) = self.finished(&whole, job, &pieces, meter)?;
         Ok(Picked {
             results: alloc::vec![result],
             separated: true,
@@ -748,7 +757,7 @@ impl<'a> Scene<'a> {
                 split: &split,
                 seed: seated.iter().map(|seed| seed.key).min(),
             };
-            let (mut result, qualified) = self.finished(&merged, job, &pieces, meter)?;
+            let (mut result, qualified, _) = self.finished(&merged, job, &pieces, meter)?;
             let mut keys: Vec<OperandKey> = seated.iter().map(|seed| seed.key).collect();
             keys.sort_unstable();
             result.cell = Some(self.report(&merged, list, keys));
@@ -819,7 +828,7 @@ impl<'a> Scene<'a> {
             split: &BTreeSet::new(),
             seed: None,
         };
-        let (result, qualified) = self.finished(&merged, job, pieces, meter)?;
+        let (result, qualified, _) = self.finished(&merged, job, pieces, meter)?;
         Ok(Picked {
             results: alloc::vec![result],
             separated: true,
@@ -891,6 +900,7 @@ impl<'a> Scene<'a> {
                     planes: &self.planes,
                     split: &split,
                     seed: None,
+                    known: None,
                 };
                 Some(name_curves(self.op, &curves, &polygons, &sources)?)
             }
@@ -1014,14 +1024,16 @@ pub(crate) fn arranged_input(
     Ok((classified, exactness, solved))
 }
 
-/// Each selection's bodies, and what the last selection that merged once kept for the next merge.
-pub(crate) type Selected = (OpOutput<Vec<Vec<Combined>>>, Option<Memo>);
+/// Each selection's bodies, and what the last selection that merged once kept for the next merge
+/// and naming.
+pub(crate) type Selected = (OpOutput<Vec<Vec<Combined>>>, Option<(Memo, NameIds)>);
 
-/// `input`'s selections, read from one arrangement, a merge starting from `reuse` where given.
+/// `input`'s selections, read from one arrangement, a merge and naming starting from `reuse` where
+/// given.
 pub(crate) fn selected(
     ctx: &OpContext<'_>,
     input: &BooleanInput<'_>,
-    (ready, classified, reuse): (&Prepared, &[Classified], Option<&Memo>),
+    (ready, classified, reuse): (&Prepared, &[Classified], Option<Again<'_>>),
     exactness: Exactness,
     meter: &mut WorkMeter<'_>,
 ) -> Result<Selected, OpError> {

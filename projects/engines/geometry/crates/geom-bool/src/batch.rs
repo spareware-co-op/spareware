@@ -33,6 +33,7 @@ use geom_poly::trace::Classified;
 use geom_run::{ChunkPlan, Exec, Phase, RunError, WorkMeter};
 
 use crate::combine::{Combined, arranged_input, fail, prepared, selected};
+use crate::names::NameIds;
 use crate::operand::{
     BooleanInput, Operand, OperandKey, Operands, PrepareError, Prepared, Selection, prepare_reusing,
 };
@@ -67,12 +68,13 @@ pub struct Cut<'b> {
 }
 
 /// What a cut keeps for the next cut of its host (G139): each operand's preparation and the boxes
-/// it solved, each keyed by what it was made from, and what its merge kept.
+/// it solved, each keyed by what it was made from, what its merge kept, and its names' ids.
 #[derive(Clone, Debug, Default, PartialEq)]
 pub struct Recut {
     operands: Operands,
     boxes: Solved,
     merge: Memo,
+    names: NameIds,
 }
 
 impl Recut {
@@ -92,6 +94,12 @@ impl Recut {
     #[must_use]
     pub const fn merge(&self) -> &Memo {
         &self.merge
+    }
+
+    /// The names' ids.
+    #[must_use]
+    pub const fn names(&self) -> &NameIds {
+        &self.names
     }
 }
 
@@ -175,12 +183,20 @@ fn one_cut(
         cut.reuse.map(Recut::boxes),
         meter,
     )?;
-    let scene = (&ready, &classified[..], cut.reuse.map(Recut::merge));
-    let (mut out, merge) = selected(ctx, &input, scene, exactness, meter)?;
+    let again = cut.reuse.map(|last| (&last.merge, &last.names));
+    let (mut out, kept) = selected(
+        ctx,
+        &input,
+        (&ready, &classified[..], again),
+        exactness,
+        meter,
+    )?;
+    let (merge, names) = kept.unwrap_or_default();
     let cache = Recut {
         operands,
         boxes,
-        merge: merge.unwrap_or_default(),
+        merge,
+        names,
     };
     let result = out
         .result

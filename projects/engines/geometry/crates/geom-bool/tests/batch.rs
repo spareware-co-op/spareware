@@ -11,7 +11,7 @@
     reason = "tests: native arithmetic, and a failure stops the test"
 )]
 
-use geom_bool::batch::{BatchRule, Cut, ToolReport, cut};
+use geom_bool::batch::{BatchRule, Cut, Recut, ToolReport, cut};
 use geom_bool::operand::{Operand, OperandKey, OperandKind};
 use geom_check::{Level, check};
 use geom_make::{BoxInput, RoundInput, cylinder, make_box};
@@ -348,6 +348,9 @@ fn a_moved_door_is_cut_again_from_the_last_cut_as_a_fresh_cut_would_be() {
     let (kept, all) = (merge.shared_with(last.merge()), merge.len());
     assert!(kept * 5 >= all * 4, "{kept} of {all} merged pieces reused");
     assert!(kept < all);
+    let names = local.result[0].cache.names();
+    assert!(names.len() > 1 && !names.is_empty());
+    assert!(Recut::default().names().is_empty());
     assert_eq!(least(&again), least(&cut_of(&wall, &doors)));
 }
 
