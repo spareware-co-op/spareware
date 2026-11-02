@@ -1,5 +1,6 @@
 //! The flat boolean's scenarios (piece G140): what each one builds, against closed forms, and
-//! 11.17's benchmark gate, three selections from one arrangement within 1.2 times the work of one.
+//! three selections from one arrangement within 1.2 times the work units of one (11.17's gate, in
+//! work units; in instructions it is not met yet).
 
 #![allow(
     clippy::unwrap_used,
@@ -98,12 +99,14 @@ fn work(host: &Host, select: &[Selection]) -> u64 {
 }
 
 #[test]
-fn three_selections_from_one_arrangement_cost_under_1_2_times_one() {
-    // 11.17's gate on the scenario's own wall of 30 doors, in the work units every operation
-    // charges (23.10), which do not depend on the machine: 166,493 against 140,251 (1.187) when
-    // written. Each selection adds its own rebuild, so the ratio falls as the arrangement grows:
-    // on 10 doors it is 45,583 against 36,453 (1.25). Timed, the 30 doors took about 2.2 times
-    // as long for three, as the rebuild takes more of the time than of the work units (23.10).
+fn three_selections_charge_under_1_2_times_the_work_units_of_one() {
+    // 11.17's gate asks that three selections from one arrangement cost under 1.2 times one. In
+    // the work units every operation charges (23.10) it holds on the scenario's 30-door wall:
+    // 166,493 against 140,251 (1.187) when written, and 1.25 on 10 doors. In instructions it does
+    // not: 913 million against 428 million (2.13), as each selection's merge and naming cost about
+    // 70% of one selection and the arrangement only 28% (Callgrind, G140). So this pins the work
+    // units, and the gate in cost stays open until the rebuild and naming get cheaper or the work
+    // units charge them what they cost.
     let host = scenario::wall(Class::Typical, scenario::reduced())
         .pop()
         .unwrap();
