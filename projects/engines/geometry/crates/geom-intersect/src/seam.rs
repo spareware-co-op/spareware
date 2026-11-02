@@ -56,8 +56,16 @@
 //!
 //! Cost: constant for the analytic kinds; one pass over the control net and the knots for a NURBS.
 //! Each pole line costs one projection to an eighth of the floor and one run of the engine along
-//! the line, once per subdivision (`Poles`); each pair then filters what it read. Recursion:
-//! none.
+//! the line, once per subdivision (`Poles`); each pair then filters what it read.
+//!
+//! Recursion:
+//!
+//! - Cycle: `charts`.
+//!   Bound: 5.
+//!   Why: each call goes one base down an offset, and `Offset::new` refuses a base already
+//!   `MAX_NESTING` (4) offsets deep, so at most four offsets and the base they end on are charted
+//!   at once.
+//!   Test: `charts_at_their_bound`.
 
 #![allow(
     clippy::many_single_char_names,
