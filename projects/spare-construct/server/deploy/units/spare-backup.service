@@ -1,0 +1,9 @@
+[Unit]
+Description=Backs up every key and file, one slot per weekday
+After=spare-tikv.service spare-rustfs.service
+
+[Service]
+Type=oneshot
+User=spare
+EnvironmentFile=/etc/spare-stack/stack.env
+ExecStart=/bin/sh -c 'exec /opt/spare-stack/bin/spare-server backup "$(date +%%a)"'

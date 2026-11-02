@@ -23,6 +23,9 @@ geom-topo = { path = "../../geometry/crates/geom-topo" }
 geom-pool = { path = "../../geometry/crates/geom-pool", optional = true }
 
 [dev-dependencies]
+# The contract laws of chapter 28.2 (piece G103), which tests/contract_laws.rs runs on every registered
+# operation. Ours, MPL-2.0; a development crate, so tests only.
+geom-test = { path = "../../geometry/crates/geom-test" }
 # Every test build runs all four checker groups (chapter 28.4), release builds included.
 geom-check = { path = "../../geometry/crates/geom-check", features = ["full"] }
 # The scaffold check and the merge gate (tests/scaffold) read TOML, cargo's metadata and messages,

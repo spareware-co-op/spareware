@@ -1491,21 +1491,6 @@
               "kind": "InvalidInput"
             },
             {
-              "detail": "NotAccepted",
-              "doc": "The result would be less exact than the class the caller accepted.",
-              "kind": "ExactnessNotAccepted"
-            },
-            {
-              "detail": "KindNotCertified",
-              "doc": "A transform that does not keep circles would turn a curved face or edge into a kind the checker cannot certify yet.",
-              "kind": "Unsupported"
-            },
-            {
-              "detail": "NotCertifiedYet",
-              "doc": "Rounded corners or curved faces moved by a certified deviation gave a body the checker cannot certify yet.",
-              "kind": "Unsupported"
-            },
-            {
               "detail": "BudgetExceeded",
               "doc": "The operation's budget ran out; nothing is returned.",
               "kind": "BudgetExceeded"
@@ -1641,21 +1626,6 @@
               "detail": "BodyNotNamed",
               "doc": "The body was not published in name order, so its entities cannot keep their names.",
               "kind": "InvalidInput"
-            },
-            {
-              "detail": "NotAccepted",
-              "doc": "The result would be less exact than the class the caller accepted.",
-              "kind": "ExactnessNotAccepted"
-            },
-            {
-              "detail": "KindNotCertified",
-              "doc": "A transform that does not keep circles would turn a curved face or edge into a kind the checker cannot certify yet.",
-              "kind": "Unsupported"
-            },
-            {
-              "detail": "NotCertifiedYet",
-              "doc": "Rounded corners or curved faces moved by a certified deviation gave a body the checker cannot certify yet.",
-              "kind": "Unsupported"
             },
             {
               "detail": "BudgetExceeded",
@@ -1938,11 +1908,6 @@
               "detail": "NotAccepted",
               "doc": "The result would be less exact than the class the caller accepted.",
               "kind": "ExactnessNotAccepted"
-            },
-            {
-              "detail": "KindNotCertified",
-              "doc": "A transform that does not keep circles would turn a curved face or edge into a kind the checker cannot certify yet.",
-              "kind": "Unsupported"
             },
             {
               "detail": "NotCertifiedYet",

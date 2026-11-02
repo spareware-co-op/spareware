@@ -211,15 +211,14 @@
 //!   `.github/workflows/kernel-quality.yml` as YAML.
 //! - `dashu-int` 0.6 and `dashu-ratio` 0.6 (G57), without their default features: the exact
 //!   rationals of [`nurbs_reference`] and the fixed point of [`fixed`] (G69).
-//! - `geom-nurbs` and `geom-run` (MPL-2.0, ours), development dependencies: the curves
-//!   `tests/nurbs_reference.rs` (G57) compares with the reference, the work meter they take, and
-//!   `oracle::geomdl` (G113) with the first outside oracle.
-//! - `geom-curve`, `geom-surface` and `geom-math` (MPL-2.0, ours), development dependencies (G69):
-//!   the kinds and transforms the law catalogue checks.
+//! - `geom-nurbs` (MPL-2.0, ours), a development dependency: the curves `tests/nurbs_reference.rs`
+//!   (G57) compares with the reference, and `oracle::geomdl` (G113) with the first outside oracle.
 //! - `geom-format` and `geom-run` (MPL-2.0, ours), dependencies (G97): a fixture's operation log is
 //!   a standalone native file, and the meter its readers take.
 //! - `geom-intersect` (MPL-2.0, ours), a dependency (G160): the result type [`ssi`] reads an
 //!   answer from.
+//! - `geom-curve`, `geom-surface` and `geom-math` (MPL-2.0, ours), development dependencies (G69):
+//!   the kinds and transforms the law catalogue checks.
 //!
 //! Licences of every outside package this crate brings into a build, its own and its dependencies'
 //! on every target (`cargo tree --target all`), each record checked by `tests/licences.rs`. Where a
@@ -247,6 +246,8 @@
 #![forbid(unsafe_code)]
 
 pub mod canonical;
+pub mod completeness;
+pub mod contract;
 pub mod corpus;
 pub mod coverage;
 pub mod deps;

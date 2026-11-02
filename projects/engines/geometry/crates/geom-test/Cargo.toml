@@ -122,15 +122,12 @@ yaml-rust2 = { version = "0.13.0", default-features = false }
 # tests/nurbs_reference.rs): geom-nurbs's curves and the work meter its operations take. Ours,
 # MPL-2.0; development dependencies, so no kernel crate comes to depend on this one.
 geom-nurbs = { path = "../geom-nurbs" }
-geom-run = { path = "../geom-run" }
 # The kinds and transforms the law catalogue checks on every pull request and nightly (G69,
 # tests/laws_curves.rs and tests/laws_surfaces.rs). Ours, MPL-2.0; development dependencies, as
 # above.
 geom-curve = { path = "../geom-curve" }
 geom-surface = { path = "../geom-surface" }
 geom-math = { path = "../geom-math" }
-# The closed-form bodies attack_g110 breaks (piece G110).
-geom-make = { path = "../geom-make" }
 
 [lints.rust]
 unsafe_code = "forbid"

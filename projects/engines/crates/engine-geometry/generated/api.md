@@ -644,9 +644,6 @@ A body mirrored across the plane through a point, perpendicular to an axis. Ever
 | --- | --- | --- | --- |
 | `OutOfRange` | `FrameRangeExceeded` | `value: i128` | A corner, a box or an offset would leave the grid's range. |
 | `BodyNotNamed` | `InvalidInput` | - | The body was not published in name order, so its entities cannot keep their names. |
-| `NotAccepted` | `ExactnessNotAccepted` | `would: Exactness` | The result would be less exact than the class the caller accepted. |
-| `KindNotCertified` | `Unsupported` | - | A transform that does not keep circles would turn a curved face or edge into a kind the checker cannot certify yet. |
-| `NotCertifiedYet` | `Unsupported` | `piece: &str` | Rounded corners or curved faces moved by a certified deviation gave a body the checker cannot certify yet. |
 | `BudgetExceeded` | `BudgetExceeded` | - | The operation's budget ran out; nothing is returned. |
 | `ResultInvalid` | `Internal` | - | The result did not pass the checker. A defect: nothing is returned. |
 | `BuildFailed` | `Internal` | - | The body could not be assembled from its rows. A defect. |
@@ -697,9 +694,6 @@ A body moved by whole grid steps. Every entity keeps its name.
 | --- | --- | --- | --- |
 | `OutOfRange` | `FrameRangeExceeded` | `value: i128` | A corner, a box or an offset would leave the grid's range. |
 | `BodyNotNamed` | `InvalidInput` | - | The body was not published in name order, so its entities cannot keep their names. |
-| `NotAccepted` | `ExactnessNotAccepted` | `would: Exactness` | The result would be less exact than the class the caller accepted. |
-| `KindNotCertified` | `Unsupported` | - | A transform that does not keep circles would turn a curved face or edge into a kind the checker cannot certify yet. |
-| `NotCertifiedYet` | `Unsupported` | `piece: &str` | Rounded corners or curved faces moved by a certified deviation gave a body the checker cannot certify yet. |
 | `BudgetExceeded` | `BudgetExceeded` | - | The operation's budget ran out; nothing is returned. |
 | `ResultInvalid` | `Internal` | - | The result did not pass the checker. A defect: nothing is returned. |
 | `BuildFailed` | `Internal` | - | The body could not be assembled from its rows. A defect. |
@@ -809,7 +803,6 @@ A body rotated about a line along an axis. Quarter turns keep an Exact body Exac
 | `OutOfRange` | `FrameRangeExceeded` | `value: i128` | A corner, a box or an offset would leave the grid's range. |
 | `BodyNotNamed` | `InvalidInput` | - | The body was not published in name order, so its entities cannot keep their names. |
 | `NotAccepted` | `ExactnessNotAccepted` | `would: Exactness` | The result would be less exact than the class the caller accepted. |
-| `KindNotCertified` | `Unsupported` | - | A transform that does not keep circles would turn a curved face or edge into a kind the checker cannot certify yet. |
 | `NotCertifiedYet` | `Unsupported` | `piece: &str` | Rounded corners or curved faces moved by a certified deviation gave a body the checker cannot certify yet. |
 | `BudgetExceeded` | `BudgetExceeded` | - | The operation's budget ran out; nothing is returned. |
 | `ResultInvalid` | `Internal` | - | The result did not pass the checker. A defect: nothing is returned. |

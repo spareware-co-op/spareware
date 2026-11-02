@@ -25,6 +25,9 @@
 //! Cost: at most [`MAX_STEPS`] transforms, each of at most [`MAX_COPIES`] copies, on a body of at
 //! most [`MAX_CORNERS`] base corners, each run twice and checked in full; at most
 //! [`MAX_INPUT_BYTES`] bytes read.
+//!
+//! Covers: make.box, make.cone, make.cylinder, make.prism, make.sphere, make.torus,
+//! transform.mirror, transform.move, transform.pattern, transform.rotate, transform.scale.
 
 use geom_check::{Level, check as full_check};
 use geom_make::{
