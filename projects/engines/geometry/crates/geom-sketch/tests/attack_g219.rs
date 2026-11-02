@@ -83,8 +83,8 @@ fn every_kind_is_zero_where_it_holds_and_reads_back() {
     let s = scene();
     let mut a = Assembly::new(&s).unwrap();
     a.evaluate(&s).unwrap();
-    // One row each, but two for each point at a parameter.
-    assert_eq!(a.residuals().len(), rules().len() + 2);
+    // One row each, but two for each point at a parameter, and two for each end of the arc.
+    assert_eq!(a.residuals().len(), rules().len() + 2 + 4);
     for (i, r) in a.residuals().iter().enumerate() {
         assert!(r.abs() < 1e-12, "row {i}: {r}");
     }
@@ -92,13 +92,14 @@ fn every_kind_is_zero_where_it_holds_and_reads_back() {
     assert_eq!(parse(&write(&s).unwrap()).unwrap(), s);
 }
 
-/// What `rule`'s rows read when its items move, each worked by hand.
+/// What `rule`'s rows read when its items move, each worked by hand. The rules of the arc's own ends
+/// come first, so the rule's rows are the last.
 fn holds_at(rule: &str, moves: &[(ItemId, u8, f64)], expected: &[f64]) {
     let s = with(&[rule]).unwrap();
     let mut a = Assembly::new(&s).unwrap();
     a.evaluate_at(&moved(&a, moves)).unwrap();
     let rows = a.residuals();
-    assert_eq!(rows.len(), expected.len(), "{rule}");
+    let rows = &rows[rows.len() - expected.len()..];
     for (got, want) in rows.iter().zip(expected) {
         assert!(
             (got - want).abs() < 1e-12,
@@ -146,14 +147,49 @@ fn each_kind_reads_what_it_should_off_its_solution() {
 }
 
 #[test]
+fn an_elliptical_arc_keeps_each_end_at_its_parameter() {
+    // The arc about (200, 0), axis (10, 0) and minor radius 5, from its parameter 0 to ½: its ends
+    // are (210, 0) and (200, 5), each two rows, first in the assembly.
+    let s = with(&[]).unwrap();
+    let mut a = Assembly::new(&s).unwrap();
+    a.evaluate(&s).unwrap();
+    assert_eq!(a.residuals(), &[0.0; 4]);
+    // The start moved by (1, 2): off its parameter by that.
+    a.evaluate_at(&moved(&a, &[(id(1, 8), 0, 1.0), (id(1, 8), 1, 2.0)]))
+        .unwrap();
+    assert_eq!(a.residuals(), &[1.0, 2.0, 0.0, 0.0]);
+    // The axis grown to 11: the start, at c + a, is one short of it; the end, at the top, stays.
+    a.evaluate_at(&moved(&a, &[(id(7, 0), 0, 1.0)])).unwrap();
+    for (got, want) in a.residuals().iter().zip([-1.0, 0.0, 0.0, 0.0]) {
+        assert!((got - want).abs() < 1e-12, "{:?}", a.residuals());
+    }
+    // An arc is an ellipse to every ellipse rule.
+    holds_at("major-radius 7.0 10", &[(id(7, 0), 0, 1.0)], &[1.05]);
+    holds_at("on-ellipse 1.9 7.0", &[], &[0.0]);
+    // Its ends must be points, and a parameter it names must be there by the assembly.
+    let bad_end = bare().replace(
+        "elliptical-arc 1.7 10 0 5 1.8 1.9",
+        "elliptical-arc 1.7 10 0 5 2.0 1.9",
+    );
+    assert!(matches!(parse(&bad_end), Err(SketchError::WrongKind(_))));
+    let missing = bare().replace(
+        "entity 8.1 parameter 7.0 0.5 31.5
+",
+        "",
+    );
+    let s = parse(&missing).unwrap();
+    assert!(matches!(Assembly::new(&s), Err(SketchError::Unknown(_))));
+}
+
+#[test]
 fn a_point_inside_or_outside_an_ellipse_reads_with_the_sign_of_the_side() {
     // (6, 4) moved out along y, then in: the residual is positive outside, negative inside.
     let s = with(&["on-ellipse 1.1 5.0"]).unwrap();
     let mut a = Assembly::new(&s).unwrap();
     a.evaluate_at(&moved(&a, &[(id(1, 1), 1, 0.5)])).unwrap();
-    assert!(a.residuals()[0] > 0.0);
+    assert!(*a.residuals().last().unwrap() > 0.0);
     a.evaluate_at(&moved(&a, &[(id(1, 1), 1, -0.5)])).unwrap();
-    assert!(a.residuals()[0] < 0.0);
+    assert!(*a.residuals().last().unwrap() < 0.0);
 }
 
 /// The start of `a`, each variable moved by a fixed pseudo-random amount within ±1.
@@ -276,8 +312,8 @@ fn the_radii_are_dimensions_and_measure() {
     let [major, minor] = [find(0), find(1)];
     assert_eq!(measure(&s, major).unwrap(), 10.0);
     assert_eq!(measure(&s, minor).unwrap(), 5.0);
-    // A reference is measured, never solved: no rows.
-    assert_eq!(Assembly::new(&s).unwrap().residuals().len(), 0);
+    // A reference is measured, never solved: no rows but the arc's own four.
+    assert_eq!(Assembly::new(&s).unwrap().residuals().len(), 4);
     // A point on an ellipse is no dimension.
     let point = parse(&format!(
         "{}constraint 20.0 reference 0 on-ellipse 1.1 5.0\n",

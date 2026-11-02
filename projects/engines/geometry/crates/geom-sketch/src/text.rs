@@ -109,6 +109,32 @@ fn put_kind(out: &mut String, tag: &str, ids: &[ItemId]) -> Result<(), SketchErr
     Ok(())
 }
 
+/// An elliptical arc's words: its tag, centre, axis and minor radius, then its start, end and their
+/// parameters; nothing for any other kind.
+fn write_elliptical_arc(out: &mut String, kind: &EntityKind) -> Result<(), SketchError> {
+    let EntityKind::EllipticalArc {
+        centre,
+        axis,
+        minor,
+        start,
+        end,
+        from,
+        to,
+    } = kind
+    else {
+        return Ok(());
+    };
+    out.push_str(" elliptical-arc");
+    put_id(out, *centre)?;
+    put(out, axis[0])?;
+    put(out, axis[1])?;
+    put(out, minor)?;
+    for id in [start, end, from, to] {
+        put_id(out, *id)?;
+    }
+    Ok(())
+}
+
 fn write_entity(out: &mut String, entity: &Entity) -> Result<(), SketchError> {
     out.push_str("entity");
     put_id(out, entity.id)?;
@@ -155,6 +181,7 @@ fn write_entity(out: &mut String, entity: &Entity) -> Result<(), SketchError> {
             put(out, axis[1])?;
             put(out, minor)?;
         }
+        arc @ EntityKind::EllipticalArc { .. } => write_elliptical_arc(out, arc)?,
         EntityKind::Spline {
             degree,
             points,
@@ -586,6 +613,15 @@ fn read_entity(words: &mut Words<'_>) -> Result<Entity, SketchError> {
             centre: words.id()?,
             axis: [words.real()?, words.real()?],
             minor: words.real()?,
+        },
+        "elliptical-arc" => EntityKind::EllipticalArc {
+            centre: words.id()?,
+            axis: [words.real()?, words.real()?],
+            minor: words.real()?,
+            start: words.id()?,
+            end: words.id()?,
+            from: words.id()?,
+            to: words.id()?,
         },
         "spline" => EntityKind::Spline {
             degree: words.whole()?,

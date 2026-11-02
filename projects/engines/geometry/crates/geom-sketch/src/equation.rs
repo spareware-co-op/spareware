@@ -933,8 +933,22 @@ pub struct Assembly {
     jacobian: Sparse,
 }
 
-/// What each arc contributes: its two ends on its circle, as rules with the arc's own id.
+/// What each arc contributes: its two ends on its circle, or an elliptical arc's each at its
+/// parameter, as rules with the arc's own id.
 fn arc_rules(entity: &Entity, out: &mut Vec<(ItemId, ConstraintKind)>) -> Result<(), SketchError> {
+    if let EntityKind::EllipticalArc {
+        start,
+        end,
+        from,
+        to,
+        ..
+    } = entity.kind
+    {
+        out.try_reserve(2).map_err(|_| SketchError::OutOfMemory)?;
+        for (point, parameter) in [(start, from), (end, to)] {
+            out.push((entity.id, ConstraintKind::AtParameter { point, parameter }));
+        }
+    }
     if let EntityKind::Arc { start, end, .. } = entity.kind {
         out.try_reserve(2).map_err(|_| SketchError::OutOfMemory)?;
         for point in [start, end] {

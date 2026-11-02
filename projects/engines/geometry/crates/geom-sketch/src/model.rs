@@ -204,6 +204,24 @@ pub enum EntityKind {
         /// The minor radius.
         minor: f64,
     },
+    /// An elliptical arc: an ellipse's variables, and its two ends, each a point and a parameter on
+    /// the arc, which the arc keeps together (piece G219; chapter 15.2).
+    EllipticalArc {
+        /// Its centre, a point.
+        centre: ItemId,
+        /// The major-axis vector.
+        axis: [f64; 2],
+        /// The minor radius.
+        minor: f64,
+        /// Its start, a point.
+        start: ItemId,
+        /// Its end, a point.
+        end: ItemId,
+        /// The parameter of its start, on the arc; it may come after the arc.
+        from: ItemId,
+        /// The parameter of its end, on the arc; it may come after the arc.
+        to: ItemId,
+    },
     /// A spline: its control points are points; degree, knots and weights stay fixed in a solve.
     Spline {
         /// The degree.
@@ -843,7 +861,8 @@ impl EntityKind {
             EntityKind::Circle { radius, .. } | EntityKind::Arc { radius, .. } => {
                 push(out, (*radius, 1.0))
             }
-            EntityKind::Ellipse { axis, minor, .. } => {
+            EntityKind::Ellipse { axis, minor, .. }
+            | EntityKind::EllipticalArc { axis, minor, .. } => {
                 push(out, (axis[0], 1.0))?;
                 push(out, (axis[1], 1.0))?;
                 push(out, (*minor, 1.0))
@@ -898,6 +917,23 @@ impl EntityKind {
                 finite(axis[1])?;
                 positive(*minor)?;
                 point(*centre)
+            }
+            // Its parameters name it as their curve, so they come after it: the assembly reads them
+            // when it lays out the rules of its ends.
+            EntityKind::EllipticalArc {
+                centre,
+                axis,
+                minor,
+                start,
+                end,
+                ..
+            } => {
+                finite(axis[0])?;
+                finite(axis[1])?;
+                positive(*minor)?;
+                point(*centre)?;
+                point(*start)?;
+                point(*end)
             }
             EntityKind::Spline {
                 points,
@@ -1027,17 +1063,23 @@ impl Sketch {
         }
     }
 
-    /// The ellipse `id`'s centre, major-axis vector and minor radius.
+    /// The ellipse or elliptical arc `id`'s centre, major-axis vector and minor radius.
     ///
     /// # Errors
     ///
-    /// [`SketchError::Unknown`]; [`SketchError::WrongKind`] if it is not an ellipse.
+    /// [`SketchError::Unknown`]; [`SketchError::WrongKind`] if it is neither.
     pub fn ellipse(&self, id: ItemId) -> Result<(ItemId, [f64; 2], f64), SketchError> {
         match self.entity(id)?.kind {
             EntityKind::Ellipse {
                 centre,
                 axis,
                 minor,
+            }
+            | EntityKind::EllipticalArc {
+                centre,
+                axis,
+                minor,
+                ..
             } => Ok((centre, axis, minor)),
             _ => Err(SketchError::WrongKind(id)),
         }
