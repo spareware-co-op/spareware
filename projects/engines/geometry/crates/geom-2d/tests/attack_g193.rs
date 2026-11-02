@@ -941,3 +941,330 @@ fn fillet_all_stops_at_its_budget() {
     assert!(run.is_err());
     assert_eq!(carriers.len(), 0);
 }
+
+/// What a construction made, in full: its circle or line, its joins, its gap's bits and its class;
+/// each join checked on the curve it joins and on what was made, and the gap within the ladder's
+/// angle, and above 0 where the result is Certified, not Exact.
+fn made(
+    carriers: &Carriers,
+    circle: CurveIx,
+    joins: &[(&Pt2, CurveIx)],
+    gap: f64,
+    exactness: Exactness,
+) -> String {
+    for (point, curve) in joins {
+        joined(carriers, point, *curve, circle);
+    }
+    assert!(gap <= ANGULAR.get(), "{gap}");
+    match exactness {
+        Exactness::Certified { .. } => assert!(gap > 0.0, "{exactness:?}"),
+        _ => assert_eq!(gap, 0.0),
+    }
+    let joins: Vec<&Pt2> = joins.iter().map(|(p, _)| *p).collect();
+    format!(
+        "{:?} {joins:?} {:#018x} {exactness:?}",
+        carriers.get(circle).unwrap(),
+        gap.to_bits()
+    )
+}
+
+/// One construction of each kind, each pairing of curves and each way round, by what it makes. The
+/// pins hold the solver's aims, the rounding of the centre and every bound the gaps and the classes
+/// come from. Each was read once and is checked against the exact questions by the tests above
+/// (every join on both its carriers, every gap within the ladder's angle, every cap off the arc), so
+/// a change to any of them is a change to what is made.
+#[test]
+fn every_construction_makes_what_it_made() {
+    let mut out: Vec<String> = Vec::new();
+    let touch = |curve, side, near| Touch { curve, side, near };
+    // Two lines whose normals have no whole length, at a sharp corner and an open one.
+    for (s, to, r) in [
+        (10_000, p2(10_301, 703), 900),
+        (50_000, p2(40_000, 30_000), 7_000),
+    ] {
+        let (mut carriers, _, [first, second]) = left_corner(s, to);
+        let f = fillet(
+            &mut carriers,
+            &first,
+            &second,
+            r,
+            GridStep::Q0,
+            &certified(),
+        )
+        .unwrap();
+        out.push(made(
+            &carriers,
+            f.circle,
+            &[(&f.start, first.curve), (&f.end, second.curve)],
+            f.gap.get(),
+            f.exactness,
+        ));
+    }
+    // A line and a circle: outside it, either way round, and inside it, against a chord.
+    let (mut carriers, [ground, wheel]) = table([
+        line(p2(-100_000, 0), p2(100_000, 0)),
+        circle(p2(0, 40_000), 30_000),
+    ]);
+    let (a, b) = (
+        touch(wheel, Sign::Positive, p2(16_000, 16_000)),
+        touch(ground, Sign::Positive, p2(20_000, 0)),
+    );
+    for (first, second) in [(&a, &b), (&b, &a)] {
+        match fillet(
+            &mut carriers,
+            first,
+            second,
+            8_000,
+            GridStep::Q0,
+            &certified(),
+        ) {
+            Ok(f) => out.push(made(
+                &carriers,
+                f.circle,
+                &[(&f.start, first.curve), (&f.end, second.curve)],
+                f.gap.get(),
+                f.exactness,
+            )),
+            Err(e) => out.push(format!("refused {e:?}")),
+        }
+    }
+    let (mut carriers, [chord, wheel]) = table([
+        line(p2(-100_000, 10_000), p2(100_000, 10_000)),
+        circle(p2(0, 0), 30_000),
+    ]);
+    let (inside, above) = (
+        touch(wheel, Sign::Negative, p2(26_000, 14_500)),
+        touch(chord, Sign::Positive, p2(23_600, 10_000)),
+    );
+    let f = fillet(
+        &mut carriers,
+        &above,
+        &inside,
+        3_000,
+        GridStep::Q0,
+        &certified(),
+    )
+    .unwrap();
+    out.push(made(
+        &carriers,
+        f.circle,
+        &[(&f.start, above.curve), (&f.end, inside.curve)],
+        f.gap.get(),
+        f.exactness,
+    ));
+    // Two circles, the fillet outside both.
+    let (mut carriers, [left, right]) =
+        table([circle(p2(0, 0), 3_000), circle(p2(8_000, 1_000), 4_000)]);
+    let (a, b) = (
+        touch(left, Sign::Positive, p2(2_000, 2_200)),
+        touch(right, Sign::Positive, p2(5_000, 3_600)),
+    );
+    let f = fillet(&mut carriers, &a, &b, 2_000, GridStep::Q0, &certified()).unwrap();
+    out.push(made(
+        &carriers,
+        f.circle,
+        &[(&f.start, a.curve), (&f.end, b.curve)],
+        f.gap.get(),
+        f.exactness,
+    ));
+    // A line and an ellipse.
+    let (mut carriers, [ground, oval]) = table([
+        line(p2(-100_000, -2_000), p2(100_000, -2_000)),
+        Curve2::Ellipse(Ellipse2::new(p2(0, 4_000), [20_000, 0], 3, 5).unwrap()),
+    ]);
+    let (over, beside) = (
+        touch(ground, Sign::Positive, p2(20_000, -2_000)),
+        touch(oval, Sign::Positive, p2(16_000, -3_000)),
+    );
+    let f = fillet(
+        &mut carriers,
+        &over,
+        &beside,
+        2_000,
+        GridStep::Q0,
+        &certified(),
+    )
+    .unwrap();
+    out.push(made(
+        &carriers,
+        f.circle,
+        &[(&f.start, over.curve), (&f.end, beside.curve)],
+        f.gap.get(),
+        f.exactness,
+    ));
+    // A fine line, the tangent from far away to a small circle, and a grid line across it.
+    let (mut carriers, [wheel, cross]) = table([
+        circle(p2(1 << 39, 1 << 38), 1_000),
+        line(p2((1 << 39) - 100_000, 0), p2((1 << 39) - 100_000, 1 << 39)),
+    ]);
+    let t = tangent_from(
+        &mut carriers,
+        p2(-(1 << 39), -(1 << 38)),
+        wheel,
+        Sign::Positive,
+        GridStep::Q0,
+        &certified(),
+    )
+    .unwrap();
+    out.push(made(
+        &carriers,
+        t.line,
+        &[(&t.start, t.line), (&t.end, wheel)],
+        t.gap.get(),
+        t.exactness,
+    ));
+    for sides in [
+        (Sign::Positive, Sign::Positive),
+        (Sign::Negative, Sign::Negative),
+        (Sign::Positive, Sign::Negative),
+        (Sign::Negative, Sign::Positive),
+    ] {
+        let mut copy = carriers.clone();
+        let near = p2((1 << 39) - 100_000, (1 << 38) - 50_000);
+        let (a, b) = (touch(t.line, sides.0, near), touch(cross, sides.1, near));
+        match fillet(&mut copy, &a, &b, 5_000, GridStep::Q0, &certified()) {
+            Ok(f) => out.push(made(
+                &copy,
+                f.circle,
+                &[(&f.start, a.curve), (&f.end, b.curve)],
+                f.gap.get(),
+                f.exactness,
+            )),
+            Err(e) => out.push(format!("refused {e:?}")),
+        }
+    }
+    // Three lines, and the tangent circles at two ends of an ellipse's axes.
+    let (mut carriers, [base, up, down]) = table([
+        line(p2(0, 0), p2(60_000, 0)),
+        line(p2(30_000, 40_000), p2(0, 0)),
+        line(p2(60_000, 0), p2(30_000, 40_000)),
+    ]);
+    let touches = [
+        touch(base, Sign::Positive, p2(30_000, 0)),
+        touch(up, Sign::Positive, p2(12_000, 16_000)),
+        touch(down, Sign::Positive, p2(48_000, 16_000)),
+    ];
+    let c = tangent_circle(&mut carriers, &touches, GridStep::Q0, &certified()).unwrap();
+    let joins: Vec<(&Pt2, CurveIx)> = c
+        .joins
+        .iter()
+        .zip([base, up, down])
+        .flat_map(|(j, k)| [(&j.leaving, k), (&j.arriving, k)])
+        .collect();
+    out.push(made(&carriers, c.circle, &joins, c.gap.get(), c.exactness));
+    type Wedge = (P2, [P2; 4], [P2; 2]);
+    let wedges: [Wedge; 2] = [
+        (
+            p2(-20_000, 0),
+            [
+                p2(-40_000, 0),
+                p2(0, 20_000),
+                p2(0, -20_000),
+                p2(-40_000, 0),
+            ],
+            [p2(-28_000, 6_000), p2(-28_000, -6_000)],
+        ),
+        (
+            p2(0, 12_000),
+            [p2(0, 30_000), p2(40_000, 0), p2(-40_000, 0), p2(0, 30_000)],
+            [p2(12_000, 21_000), p2(-12_000, 21_000)],
+        ),
+    ];
+    for (end, [a, b, cc, d], [one, two]) in wedges {
+        for side in [Sign::Positive, Sign::Negative] {
+            let (mut carriers, [oval, upper, lower]) = table([
+                Curve2::Ellipse(Ellipse2::new(p2(0, 0), [20_000, 0], 3, 5).unwrap()),
+                line(a, b),
+                line(cc, d),
+            ]);
+            let touches = [
+                touch(oval, side, end),
+                touch(upper, Sign::Negative, one),
+                touch(lower, Sign::Negative, two),
+            ];
+            let c = tangent_circle(&mut carriers, &touches, GridStep::Q0, &certified()).unwrap();
+            let joins: Vec<(&Pt2, CurveIx)> = c
+                .joins
+                .iter()
+                .zip([oval, upper, lower])
+                .flat_map(|(j, k)| [(&j.leaving, k), (&j.arriving, k)])
+                .collect();
+            out.push(made(&carriers, c.circle, &joins, c.gap.get(), c.exactness));
+        }
+    }
+    // A tangent from a point, each way, and the common tangents of two circles, each kind.
+    let (mut carriers, [wheel]) = table([circle(p2(1_000, 2_000), 700)]);
+    for side in [Sign::Positive, Sign::Negative] {
+        let t = tangent_from(
+            &mut carriers,
+            p2(-3_000, 500),
+            wheel,
+            side,
+            GridStep::Q0,
+            &certified(),
+        )
+        .unwrap();
+        out.push(made(
+            &carriers,
+            t.line,
+            &[(&t.start, t.line), (&t.end, wheel)],
+            t.gap.get(),
+            t.exactness,
+        ));
+    }
+    let (mut carriers, [one, two]) =
+        table([circle(p2(0, 0), 900), circle(p2(7_000, 2_000), 1_300)]);
+    for sides in [
+        [Sign::Positive, Sign::Positive],
+        [Sign::Negative, Sign::Negative],
+        [Sign::Positive, Sign::Negative],
+        [Sign::Negative, Sign::Positive],
+    ] {
+        let t = common_tangent(&mut carriers, one, two, sides, GridStep::Q0, &certified()).unwrap();
+        out.push(made(
+            &carriers,
+            t.line,
+            &[(&t.start, one), (&t.end, two)],
+            t.gap.get(),
+            t.exactness,
+        ));
+    }
+    for (k, line) in out.iter().enumerate() {
+        println!("{k}: {line}");
+    }
+    assert_eq!(
+        out.len(),
+        PINNED.len(),
+        "the pins are the lines printed above"
+    );
+    for (k, (got, want)) in out.iter().zip(PINNED).enumerate() {
+        assert_eq!(got, want, "construction {k}");
+    }
+}
+
+/// What [`every_construction_makes_what_it_made`] read.
+const PINNED: &[&str] = &[
+    "Circle(Disc(Disc { centre: Rational2 { x: 347032018456251748475488, y: 33204139332677192908772, w: 36893488147419103232 }, rr: Wide<4>(0x0000000000000000000000000031704000000000000000000000000000000000) })) [Crossing { a: CurveIx(0), b: CurveIx(2), root: Second }, Crossing { a: CurveIx(1), b: CurveIx(2), root: First }] 0x3dc693bcc90bae75 Certified { bound: Steps(1), step: Q0 }",
+    "Circle(Disc(Disc { centre: Rational2 { x: 185795692977543314095699, y: 32281802128991715327973, w: 4611686018427387904 }, rr: Wide<4>(0x000000000000000000000000002ebae400000000000000000000000000000000) })) [Crossing { a: CurveIx(0), b: CurveIx(2), root: Second }, Crossing { a: CurveIx(1), b: CurveIx(2), root: First }] 0x3dc67c192c8760c1 Certified { bound: Steps(1), step: Q0 }",
+    "Circle(Disc(Disc { centre: Rational2 { x: 94511439157779386054008, y: 36893488147419103231969, w: 4611686018427387904 }, rr: Wide<4>(0x000000000000000000000000003d090000000000000000000000000000000000) })) [Crossing { a: CurveIx(2), b: CurveIx(1), root: First }, Crossing { a: CurveIx(0), b: CurveIx(2), root: First }] 0x3dc6896841a002df Certified { bound: Steps(1), step: Q0 }",
+    "Circle(Disc(Disc { centre: Rational2 { x: 94511439157779386054008, y: 36893488147419103231969, w: 4611686018427387904 }, rr: Wide<4>(0x000000000000000000000000003d090000000000000000000000000000000000) })) [Crossing { a: CurveIx(0), b: CurveIx(3), root: Second }, Crossing { a: CurveIx(3), b: CurveIx(1), root: Second }] 0x3dc6896841a002df Certified { bound: Steps(1), step: Q0 }",
+    "Circle(Disc(Disc { centre: Rational2 { x: 218264819356971463544617, y: 119903836479112085503977, w: 9223372036854775808 }, rr: Wide<4>(0x0000000000000000000000000022551000000000000000000000000000000000) })) [Crossing { a: CurveIx(0), b: CurveIx(2), root: Second }, Crossing { a: CurveIx(2), b: CurveIx(1), root: First }] 0x3dc66a4e1af619ae Certified { bound: Steps(1), step: Q0 }",
+    "Circle(Disc(Disc { centre: Rational2 { x: 52805008463364199722017, y: 75622022283244295855894, w: 18446744073709551616 }, rr: Wide<4>(0x000000000000000000000000003d090000000000000000000000000000000000) })) [Crossing { a: CurveIx(2), b: CurveIx(0), root: First }, Crossing { a: CurveIx(2), b: CurveIx(1), root: Second }] 0x3dc6683b7952d71f Certified { bound: Steps(1), step: Q0 }",
+    "Circle(Disc(Disc { centre: Rational2 { x: 99685302156899410986465950, y: -7840, w: 4722366482869645213696 }, rr: Wide<4>(0x00000000000000000000003d0900000000000000000000000000000000000000) })) [Crossing { a: CurveIx(0), b: CurveIx(2), root: Second }, ConicRoot { a: CurveIx(1), b: CurveIx(2), k: 1 }] 0x3dc66667ccccccd5 Certified { bound: Steps(1), step: Q0 }",
+    "Fine(FineLine { a: -1052665063990798, b: 2105330132263189, c: -1176915322226081792 }) [Grid(P2 { x: Coord(-549755813888), y: Coord(-274877906944) }), Crossing { a: CurveIx(2), b: CurveIx(0), root: Second }] 0x3dc5ea7c05f28ab2 Certified { bound: Steps(1), step: Q0 }",
+    "Circle(Disc(Disc { centre: Rational2 { x: 2535300716229426868117676490771, y: 1267650378738800774232519619996, w: 4611686018427387904 }, rr: Wide<4>(0x0000000000000000000000000017d78400000000000000000000000000000000) })) [Crossing { a: CurveIx(2), b: CurveIx(3), root: Second }, Crossing { a: CurveIx(1), b: CurveIx(3), root: First }] 0x3dc6810ccdc29b41 Certified { bound: Steps(1), step: Q0 }",
+    "Circle(Disc(Disc { centre: Rational2 { x: 2535300762346287052391555530733, y: 1267650350237013700002299087128, w: 4611686018427387904 }, rr: Wide<4>(0x0000000000000000000000000017d78400000000000000000000000000000000) })) [Crossing { a: CurveIx(2), b: CurveIx(3), root: First }, Crossing { a: CurveIx(1), b: CurveIx(3), root: Second }] 0x3dc6514d2d4334d4 Certified { bound: Steps(1), step: Q0 }",
+    "Circle(Disc(Disc { centre: Rational2 { x: 2535300762346287052391555530733, y: 1267650401797230819475714847554, w: 4611686018427387904 }, rr: Wide<4>(0x0000000000000000000000000017d78400000000000000000000000000000000) })) [Crossing { a: CurveIx(2), b: CurveIx(3), root: Second }, Crossing { a: CurveIx(1), b: CurveIx(3), root: Second }] 0x3dc68dee3962c563 Certified { bound: Steps(1), step: Q0 }",
+    "Circle(Disc(Disc { centre: Rational2 { x: 2535300716229426868117676490771, y: 1267650327178583654759103859570, w: 4611686018427387904 }, rr: Wide<4>(0x0000000000000000000000000017d78400000000000000000000000000000000) })) [Crossing { a: CurveIx(2), b: CurveIx(3), root: First }, Crossing { a: CurveIx(1), b: CurveIx(3), root: First }] 0x3dc6514d2d4334d4 Certified { bound: Steps(1), step: Q0 }",
+    "Circle(Disc(Disc { centre: Rational2 { x: 69175290276410818560000, y: 34587645138205409280000, w: 2305843009213693952 }, rr: Wide<4>(0x0000000000000000000000000035a4e9000000000001a8ce0000000000000349) })) [Crossing { a: CurveIx(0), b: CurveIx(3), root: Second }, Crossing { a: CurveIx(0), b: CurveIx(3), root: First }, Crossing { a: CurveIx(1), b: CurveIx(3), root: Second }, Crossing { a: CurveIx(1), b: CurveIx(3), root: First }, Crossing { a: CurveIx(2), b: CurveIx(3), root: Second }, Crossing { a: CurveIx(2), b: CurveIx(3), root: First }] 0x3dc683334380968f Certified { bound: Steps(1), step: Q0 }",
+    "Circle(Disc(Disc { centre: Rational2 { x: -61816579797430146198986414, y: 0, w: 2361183241434822606848 }, rr: Wide<4>(0x000000000000000000000091b55e48002c1a968e362766a06753533f5c9f7c40) })) [ConicRoot { a: CurveIx(0), b: CurveIx(3), k: 1 }, ConicRoot { a: CurveIx(0), b: CurveIx(3), k: 0 }, Crossing { a: CurveIx(1), b: CurveIx(3), root: First }, Crossing { a: CurveIx(1), b: CurveIx(3), root: Second }, Crossing { a: CurveIx(2), b: CurveIx(3), root: First }, Crossing { a: CurveIx(2), b: CurveIx(3), root: Second }] 0x3dc6667a93e6e584 Certified { bound: Steps(1), step: Q0 }",
+    "Circle(Disc(Disc { centre: Rational2 { x: -2254729361403633001601097, y: 0, w: 590295810358705651712 }, rr: Wide<4>(0x00000000000000000000003e6b361b7ffd3e569ac480ccd95ff2ea6568248584) })) [ConicRoot { a: CurveIx(0), b: CurveIx(3), k: 0 }, ConicRoot { a: CurveIx(0), b: CurveIx(3), k: 3 }, Crossing { a: CurveIx(1), b: CurveIx(3), root: First }, Crossing { a: CurveIx(1), b: CurveIx(3), root: Second }, Crossing { a: CurveIx(2), b: CurveIx(3), root: First }, Crossing { a: CurveIx(2), b: CurveIx(3), root: Second }] 0x3dc6665f719c4c40 Certified { bound: Steps(1), step: Q0 }",
+    "Circle(Disc(Disc { centre: Rational2 { x: 0, y: 23611832414348226068484342, w: 1180591620717411303424 }, rr: Wide<4>(0x00000000000000000000003d09000000000000010a8a6000000000000122fee1) })) [ConicRoot { a: CurveIx(0), b: CurveIx(3), k: 0 }, ConicRoot { a: CurveIx(0), b: CurveIx(3), k: 1 }, Crossing { a: CurveIx(1), b: CurveIx(3), root: First }, Crossing { a: CurveIx(1), b: CurveIx(3), root: Second }, Crossing { a: CurveIx(2), b: CurveIx(3), root: First }, Crossing { a: CurveIx(2), b: CurveIx(3), root: Second }] 0x3dc6669ff9026b08 Certified { bound: Steps(1), step: Q0 }",
+    "Circle(Disc(Disc { centre: Rational2 { x: 0, y: -8854437155380584775724249, w: 147573952589676412928 }, rr: Wide<4>(0x00000000000000000000004d3f6400000000000bdc471c0000000000748bd099) })) [ConicRoot { a: CurveIx(0), b: CurveIx(3), k: 1 }, ConicRoot { a: CurveIx(0), b: CurveIx(3), k: 0 }, Crossing { a: CurveIx(1), b: CurveIx(3), root: First }, Crossing { a: CurveIx(1), b: CurveIx(3), root: Second }, Crossing { a: CurveIx(2), b: CurveIx(3), root: First }, Crossing { a: CurveIx(2), b: CurveIx(3), root: Second }] 0x3dcaf3ecaa98ba3f Certified { bound: Steps(1), step: Q0 }",
+    "Line(Carrier { a: -9652409441, b: 49084602782, c: 53499529714000 }) [Grid(P2 { x: Coord(-3000), y: Coord(500) }), Crossing { a: CurveIx(1), b: CurveIx(0), root: Second }] 0x3dc2e7a0bdb10117 Certified { bound: Steps(1), step: Q0 }",
+    "Line(Carrier { a: -39226815521, b: 67978666024, c: 151669779575000 }) [Grid(P2 { x: Coord(-3000), y: Coord(500) }), Crossing { a: CurveIx(2), b: CurveIx(0), root: Second }] 0x3dc4d28a9fea362a Certified { bound: Steps(1), step: Q0 }",
+    "Fine(FineLine { a: -3027466529831649280, b: 13330033756296183808, c: -12302554058484350975984 }) [Crossing { a: CurveIx(2), b: CurveIx(0), root: First }, Crossing { a: CurveIx(2), b: CurveIx(1), root: Second }] 0x3dc61427d2ca09b3 Certified { bound: Steps(1), step: Q0 }",
+    "Fine(FineLine { a: -4779958608018276352, b: 13807551382837788672, c: 13150366853517803519990 }) [Crossing { a: CurveIx(3), b: CurveIx(0), root: First }, Crossing { a: CurveIx(3), b: CurveIx(1), root: Second }] 0x3dc5e18ee717eac2 Certified { bound: Steps(1), step: Q0 }",
+    "Fine(FineLine { a: -5985699785787572224, b: 9031490230007365632, c: -9751466471112930397092 }) [Crossing { a: CurveIx(4), b: CurveIx(0), root: First }, Crossing { a: CurveIx(4), b: CurveIx(1), root: Second }] 0x3dc859fa20fe48ed Certified { bound: Steps(1), step: Q0 }",
+    "Fine(FineLine { a: 357239489107591168, b: 12447001810340675584, c: 11206914563632291095270 }) [Crossing { a: CurveIx(5), b: CurveIx(0), root: First }, Crossing { a: CurveIx(5), b: CurveIx(1), root: Second }] 0x3dc662d5ad36ac2c Certified { bound: Steps(1), step: Q0 }",
+];
