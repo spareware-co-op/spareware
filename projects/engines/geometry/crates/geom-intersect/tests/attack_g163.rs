@@ -20,6 +20,8 @@ use geom_curve::{Axes, Circle, CurveKind, Ellipse, Frame, Hyperbola, Line, Parab
 use geom_intersect::IntersectError;
 use geom_intersect::curve::{curves, self_crossings};
 use geom_intersect::result::{Coincidence, Coverage, Intersection, Item, PointContact, Unresolved};
+use geom_intersect::solve::{Field, solve};
+use geom_num::interval::Interval;
 use geom_nurbs::{Basis, Curve};
 use geom_run::{Budget, CancelToken, WorkMeter};
 use geom_test::{Seed, SplitMix64};
@@ -1379,7 +1381,16 @@ fn a_crossing_through_a_closed_curve_s_join_is_kept_flagged() {
         .items()
         .iter()
         .map(|i| {
-            assert!(matches!(i, Item::Flagged { .. }), "{i:?}");
+            assert!(
+                matches!(
+                    i,
+                    Item::Flagged {
+                        why: Unresolved::UndecidedAtFloor { .. },
+                        ..
+                    }
+                ),
+                "{i:?}"
+            );
             let s = i.at().spans();
             (
                 s[0].lo() * 0.5 + s[0].hi() * 0.5,
@@ -1612,10 +1623,10 @@ fn a_crossing_on_a_whole_circle_s_join_is_found_wherever_its_turn_starts() {
 
 #[test]
 fn a_meeting_at_the_grid_s_edge_is_on_the_grid() {
-    // The lines cross at (2^40 - 2, 0): the grid box around the crossing, rounded outward, reaches
+    // The lines cross at (2^40 - 1.5, 0): the grid box around the crossing, rounded outward, reaches
     // 2^40 - 1, the last grid coordinate, and is a box of the grid, not out of its range.
     let reach = 2.0_f64.powi(40) - 1.0;
-    let x = reach - 1.0;
+    let x = reach - 0.5;
     let r = meet(
         &segment([x, -1.0], [x, 1.0]),
         &segment([0.0, 0.0], [reach, 0.0]),
@@ -1876,4 +1887,74 @@ fn a_ray_meets_what_lies_ahead_of_it() {
     let hump = bezier(&[[1.0, -1.0], [2.0, 3.0], [3.0, -1.0]]);
     assert_eq!(meet(&ray, &hump).items().len(), 2);
     assert_eq!(meet(&hump, &ray).items().len(), 2);
+}
+
+/// The residuals (x² - 0.09, y - 0.7): one simple zero in the unit square, at (0.3, 0.7), and no
+/// clipping of its own, so the solver takes its default narrowing, the box as it is. Over the whole
+/// square x² slopes from 0 to 2, too much for the operator to prove the zero at first.
+struct Bent;
+
+impl Field<2> for Bent {
+    fn at(&self, [x, y]: [f64; 2], _: &mut WorkMeter<'_>) -> Result<[Interval; 2], IntersectError> {
+        Ok([
+            Interval::point(x)?.square()?.sub(Interval::point(0.09)?)?,
+            Interval::point(y)?.sub(Interval::point(0.7)?)?,
+        ])
+    }
+
+    fn over(
+        &self,
+        [x, y]: &[Interval; 2],
+        _: &mut WorkMeter<'_>,
+    ) -> Result<Option<[Interval; 2]>, IntersectError> {
+        Ok(Some([
+            x.square()?.sub(Interval::point(0.09)?)?,
+            y.sub(Interval::point(0.7)?)?,
+        ]))
+    }
+
+    fn slope(
+        &self,
+        [x, _]: &[Interval; 2],
+        _: &mut WorkMeter<'_>,
+    ) -> Result<Option<[[Interval; 2]; 2]>, IntersectError> {
+        let (one, zero) = (Interval::point(1.0)?, Interval::point(0.0)?);
+        Ok(Some([[x.mul(Interval::point(2.0)?)?, zero], [zero, one]]))
+    }
+
+    fn reach(&self, [x, y]: &[Interval; 2], _: &mut WorkMeter<'_>) -> Result<f64, IntersectError> {
+        let (w, h) = (x.hi() - x.lo(), y.hi() - y.lo());
+        Ok(if w > h { w } else { h } * 1000.0)
+    }
+}
+
+#[test]
+fn a_field_without_clipping_keeps_its_zero() {
+    let side = Interval::new(0.0, 1.0).unwrap();
+    let solved = solve(&Bent, [side, side], |_, _| Ok(true), &mut meter()).unwrap();
+    assert_eq!(solved.zeros.len(), 1);
+    let [x, y] = solved.zeros[0].enclosure;
+    assert!(x.contains(0.3) && y.contains(0.7), "{x:?} {y:?}");
+}
+
+#[test]
+fn a_line_tangent_at_the_grid_s_edge_is_an_isolated_tangent() {
+    // A circle of radius 5 whose centre is 10 steps in from the grid's edge, and the line x = 5 in
+    // from it, through a point 1 in from the bottom running up 2: both on the grid, so the exact
+    // count says tangent. One step back from that point the line leaves the grid.
+    let reach = 2.0_f64.powi(40) - 1.0;
+    let c = circle([-reach + 10.0, 0.0], 5.0);
+    let line = infinite([-reach + 5.0, -reach + 1.0], [0.0, 2.0]);
+    let r = meet(&line, &c);
+    assert!(
+        matches!(
+            r.items(),
+            [Item::Point {
+                contact: PointContact::IsolatedTangent,
+                ..
+            }]
+        ),
+        "{:?}",
+        r.items()
+    );
 }

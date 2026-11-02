@@ -5665,6 +5665,30 @@
       "occurrences": 2,
       "kind": "equivalent",
       "reason": "b is a side of a box the solver holds or of its widened copy, and no such side is a single point: the domain's sides have ordered, different ends; halves cuts a side only strictly inside it; grown and widened add width; and BernsteinCurve::clip rounds its range's ends outward and clamps them to a domain of positive width. So b.hi() > b.lo() always, and > and >= agree."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-intersect/src/solve.rs",
+      "mutant": "replace < with <= in step",
+      "line_text": "if contraction < 1.0 && x.iter().zip(&image).all(|(a, b)| inside(*b, *a)) {",
+      "occurrences": 1,
+      "kind": "harmless",
+      "reason": "The two differ only when contraction is exactly 1.0, where the mutant takes the image as proof of one zero, which Krawczyk's test asks a contraction below 1 for. contraction is the largest row sum of the absolute bounds of I - Y.J(X), each entry an outward-rounded interval product and difference, so it is exactly 1.0 only by a coincidence of rounding. Every box whose contraction is below or above 1 is judged alike."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-intersect/src/solve.rs",
+      "mutant": "replace < with <= in step",
+      "line_text": "let why = if contraction < 1.0 {",
+      "occurrences": 1,
+      "kind": "harmless",
+      "reason": "The two differ only when contraction is exactly 1.0, where the mutant names a box it could not prove Unproven where the original names it Singular. contraction is the largest row sum of the absolute bounds of I - Y.J(X), each entry an outward-rounded interval product and difference, so it is exactly 1.0 only by a coincidence of rounding. Only the reason a run is flagged with changes there."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-intersect/src/solve.rs",
+      "mutant": "replace < with <= in refined",
+      "line_text": "if field.reach(&x, meter)? < floor {",
+      "occurrences": 1,
+      "kind": "harmless",
+      "reason": "The two differ only when a zero's box reaches exactly the floor, one grid step, where the mutant stops refining one step sooner. The zero stays proven, and only how tight its enclosure is changes (below a step either way, after at most one more step), which the crate does not promise; reach is a widest side of outward-rounded bounds, so it is exactly the floor only by coincidence."
     }
   ],
   "coverage_off": [
