@@ -29,7 +29,7 @@ use crate::predicates;
 use crate::quadrature;
 
 /// Every generator, in the order they run.
-pub const GENERATORS: [Generator; 60] = [
+pub const GENERATORS: [Generator; 61] = [
     Generator {
         name: grid_steps::NAME,
         output: grid_steps::OUTPUT,
@@ -203,6 +203,12 @@ pub const GENERATORS: [Generator; 60] = [
         output: "projects/engines/geometry/crates/geom-num/verus/generated/tpi_height.rs",
         about: "tpi_height's exact path as a Verus-annotated twin, which Verus verifies in CI",
         generate: Generate::Plain(predicates::generate_verus_tpi_height),
+    },
+    Generator {
+        name: "verus-mitre-time",
+        output: "projects/engines/geometry/crates/geom-num/verus/generated/mitre_time.rs",
+        about: "mitre_time's exact path as a Verus-annotated twin, which Verus verifies in CI",
+        generate: Generate::Plain(predicates::generate_verus_mitre_time),
     },
     Generator {
         name: "gappa-orient2d",

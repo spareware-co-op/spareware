@@ -5,8 +5,8 @@
 //! `predicate-variant-limbs`: the kernel's predicates, from their
 //! descriptions; `verus-orient2d`, `verus-orient3d`, `verus-incircle`, `verus-insphere`,
 //! `verus-plane-side`, `verus-tpi-weight`, `verus-tpi-side`, `verus-lpi-weight`, `verus-lpi-side`,
-//! `verus-ssi-weight`, `verus-ssi-side` and `verus-tpi-height`, the Verus twins of the
-//! predicates' exact paths; and
+//! `verus-ssi-weight`, `verus-ssi-side`, `verus-tpi-height` and `verus-mitre-time`, the Verus
+//! twins of the predicates' exact paths; and
 //! `gappa-orient2d`, `gappa-orient3d`, `gappa-incircle-x`, `gappa-incircle-y`, `gappa-insphere-x`,
 //! `gappa-insphere-y`, `gappa-insphere-z`, `gappa-plane-side-d`, `gappa-plane-side-z-n`,
 //! `gappa-plane-side-y-n`, `gappa-plane-side-x-n`, `gappa-tpi-weight`, `gappa-ssi-weight`,
@@ -818,11 +818,8 @@ pub fn generate_mitre_time() -> Result<Vec<u8>, GenError> {
 /// `kernel-dev.yml`'s `verus` job verifies the crate.
 pub const VERUS_DIR: &str = "projects/engines/geometry/crates/geom-num/verus/generated";
 
-/// The predicates with a Verus twin (pieces G36, G38, G39 and G251), by name. `mitre_time`
-/// (G251) has none: its twin, some 250 steps in 12-limb integers, overflowed Verus's stack in
-/// `kernel-dev.yml` (pull request #558), so its exact path rests on the generator's certificate and
-/// the independent checker of `tests/predicate_checker.rs`, as every predicate's does besides.
-pub const VERUS_TWINS: [&str; 12] = [
+/// The predicates with a Verus twin (pieces G36, G38 and G39), by name.
+pub const VERUS_TWINS: [&str; 13] = [
     "orient2d",
     "orient3d",
     "incircle",
@@ -835,6 +832,7 @@ pub const VERUS_TWINS: [&str; 12] = [
     "lpi_weight",
     "lpi_side",
     "tpi_height",
+    "mitre_time",
 ];
 
 /// The twin of the predicate called `name`, as bytes.
@@ -854,6 +852,16 @@ fn twin_of(name: &str) -> Result<Vec<u8>, GenError> {
 /// [`GenError::Generator`] if the derivation or the emission fails.
 pub fn generate_verus_tpi_height() -> Result<Vec<u8>, GenError> {
     twin_of("tpi_height")
+}
+
+/// Generator `verus-mitre-time`: `mitre_time`'s exact path as a Verus-annotated twin (piece
+/// G251).
+///
+/// # Errors
+///
+/// [`GenError::Generator`] if the derivation or the emission fails.
+pub fn generate_verus_mitre_time() -> Result<Vec<u8>, GenError> {
+    twin_of("mitre_time")
 }
 
 /// Generator `verus-orient2d`: orient2d's exact path as a Verus-annotated twin (piece G36).
