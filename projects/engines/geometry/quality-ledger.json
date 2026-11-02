@@ -43,6 +43,14 @@
       "reason": "A list of rows holds at least one, so the pass renames nothing, names that repeat stay repeated and the loop never ends, and the tests stop it by their timeout. It hangs; it never returns a repeated name."
     },
     {
+      "file": "projects/engines/geometry/crates/geom-bool/src/names.rs",
+      "mutant": "replace <impl WeakOrder for Rank>::direction -> Option<Ordering> with None",
+      "line_text": "Some(Ordering::Equal)",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "direction is read only by geom_name's compare, as the last of its three steps: Some(Equal) there ends the loop and compare returns None, which is what None returns at once."
+    },
+    {
       "file": "projects/engines/geometry/crates/geom-bool/src/operand.rs",
       "mutant": "replace != with == in side_of_fin",
       "line_text": "while at != own {",

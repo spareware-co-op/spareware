@@ -12,6 +12,7 @@
 use std::collections::BTreeSet;
 
 use geom_bool::combine::{Combined, combine, subtract, unite};
+use geom_bool::names::NamingError;
 use geom_bool::operand::{BooleanInput, Operand, OperandKey, OperandKind, Selection};
 use geom_check::{Level, check};
 use geom_make::{BoxInput, make_box};
@@ -444,4 +445,80 @@ fn two_doors_of_one_type_rename_none_of_the_walls_own_edges_and_corners() {
     // The doors' own edges, brought by both, are not kept by either.
     let (door_edges, _) = names(&one);
     assert!(door_edges.is_disjoint(&both_edges));
+}
+
+fn split_of(operands: Vec<Operand<'_>>) -> OpOutput<Vec<Vec<Combined>>> {
+    let input = BooleanInput {
+        operands,
+        select: vec![Selection::Split { target: key(1) }],
+        merge: Merge::RemoveRedundant,
+        accept: None,
+    };
+    combine(&ctx(), &SERIAL, &input).unwrap()
+}
+
+#[test]
+fn a_split_names_only_the_faces_it_cuts_across_cells_by_their_pieces() {
+    // A beam split by a column through its middle: its front, back, top and bottom run through
+    // every cell, and each piece is named as a split of its face; its two ends lie in one cell
+    // each and keep their names.
+    let beam = cuboid(1, [0, 0, 0], [100, 10, 60]);
+    let column = cuboid(2, [40, -5, -5], [20, 20, 70]);
+    let out = split_of(vec![solid(1, &beam), solid(2, &column)]);
+    let cells = &out.result[0];
+    assert_eq!(cells.len(), 3);
+    let ends: BTreeSet<NameId> = faces(&beam)
+        .into_iter()
+        .filter(|name| {
+            cells
+                .iter()
+                .filter(|cell| faces(&cell.body).contains(name))
+                .count()
+                == 1
+        })
+        .collect();
+    assert_eq!(
+        ends.len(),
+        2,
+        "the two ends keep their names, in one cell each"
+    );
+    let mut split = 0;
+    for cell in cells {
+        let history = lawful(cell, &[&beam, &column]);
+        for name in faces(&cell.body) {
+            match origin_of(history, name) {
+                Origin::Unchanged => assert!(ends.contains(&name)),
+                Origin::Split { of, .. } => {
+                    assert!(faces(&beam).contains(of) && !ends.contains(of));
+                    split += 1;
+                }
+                _ => {}
+            }
+        }
+    }
+    // Front, back, top and bottom, each in three.
+    assert_eq!(split, 12);
+}
+
+#[test]
+fn a_split_by_a_copy_of_its_target_qualifies_the_names_and_says_so() {
+    // The second box is made by the same operation, so it brings the same names.
+    let one = cuboid(1, [0, 0, 0], [100, 10, 60]);
+    let copy = cuboid(1, [40, -5, -5], [20, 20, 70]);
+    let out = split_of(vec![solid(1, &one), solid(2, &copy)]);
+    assert!(
+        out.diagnostics
+            .iter()
+            .any(|d| d.code == "bool.names_qualified")
+    );
+}
+
+#[test]
+fn a_naming_failure_says_what_failed() {
+    assert_eq!(NamingError::Broken.to_string(), "naming lost a row");
+    assert!(
+        NamingError::Num(geom_num::NumError::Degenerate)
+            .to_string()
+            .starts_with("naming met ")
+    );
 }
