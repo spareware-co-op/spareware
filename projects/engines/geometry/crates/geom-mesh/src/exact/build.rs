@@ -3,9 +3,11 @@
 //! What it does: [`build`] takes [`Polygons`], whose vertices are grid points or three planes and
 //! whose faces are loops of vertices, and works out what the mesh stores. A face made from grid
 //! points gets its plane from its area vector; each edge between grid points gets the plane through
-//! it that holds the face's dominant axis. Faces and edges off the grid bring their planes with
-//! them. The planes go into one sorted pool, the vertices and faces into canonical order, and each
-//! half-edge finds its opposite, in exact radial order where more than two meet.
+//! it that holds the face's dominant axis; where the faces on both sides share that axis, the
+//! plane is made once for both half-edges, which differ only in facing. Faces and edges off the
+//! grid bring their planes with them. The planes go into one sorted pool, the vertices and faces
+//! into canonical order, and each half-edge finds its opposite, in exact radial order where more
+//! than two meet.
 //!
 //! Guarantees:
 //!
@@ -27,7 +29,8 @@
 //!
 //! Cost: O(n log n) in the half-edges for the sorts of the planes and faces, with a few allocations
 //! per array and none per face but for faces with holes. A face's plane takes up to three greatest
-//! common divisors, an edge plane's one or two.
+//! common divisors, an edge plane's one or two, made once for an edge whose two faces share an
+//! axis; finding those edges is one more counting sort of the half-edges.
 
 #![allow(
     clippy::many_single_char_names,
@@ -47,11 +50,20 @@ use geom_poly::plane::canonical;
 use geom_run::{ChunkPlan, Exec, Phase, RunError, WorkMeter};
 
 use super::{
-    ExactMesh, Facing, MeshError, MeshFault, MeshKind, NONE, PLAN, Parts, PropTable, Role, Run,
-    Vertex, at, gcd, index, morton,
+    ExactMesh, Facing, MeshError, MeshFault, MeshKind, NONE, Parts, PropTable, Role, Run, Vertex,
+    at, gcd, index, morton,
 };
 
+const ROUND_VERTICES: Phase = Phase::new("exact mesh: round vertices");
+const SORT_VERTICES: Phase = Phase::new("exact mesh: sort vertices");
+/// Items a block of [`map_blocks`] holds.
+const BLOCK: usize = 1024;
+
+/// One block a task.
+const ONE_BLOCK: ChunkPlan = ChunkPlan::fixed::<1>();
+
 const FACE_PLANES: Phase = Phase::new("exact mesh: face planes");
+const EDGE_SHARES: Phase = Phase::new("exact mesh: shared edge planes");
 const EDGE_PLANES: Phase = Phase::new("exact mesh: edge planes");
 const PLANE_RANKS: Phase = Phase::new("exact mesh: rank planes");
 const SORT_PLANES: Phase = Phase::new("exact mesh: sort planes");
@@ -123,6 +135,13 @@ struct Turned {
 }
 
 impl Turned {
+    /// A slot an edge's other half-edge fills.
+    const UNSET: Turned = Turned {
+        n: [0; 3],
+        d: 0,
+        flipped: false,
+    };
+
     /// The canonical form of a plane given.
     fn given(plane: &Plane) -> Result<Self, MeshError> {
         let c = canonical(plane)?;
@@ -241,6 +260,40 @@ fn edge_plane(a: P3, b: P3, n: [i128; 3], k: usize) -> Result<Turned, MeshError>
     Turned::reduced(m, a)
 }
 
+/// `f(i, &items[i])` for every item, in item order, as one phase of `meter`, a block of
+/// [`BLOCK`] items to a task: the helper's own cost for an item, a meter and a sum, is paid once a
+/// block, where these items are a few dozen instructions each. The same values, and the error of
+/// the lowest-numbered item that fails; each item still charges `charge` units.
+fn map_blocks<T, U, F>(
+    exec: &Exec<'_>,
+    (meter, phase, charge): (&mut WorkMeter<'_>, Phase, u64),
+    items: &[T],
+    f: F,
+) -> Result<Vec<U>, RunError<MeshError>>
+where
+    T: Sync,
+    U: Send,
+    F: Fn(usize, &T) -> Result<U, MeshError> + Sync,
+{
+    let blocks: Vec<&[T]> = items.chunks(BLOCK).collect();
+    let done = exec.try_map(meter, phase, ONE_BLOCK, &blocks, |b, block, m| {
+        let base = b.saturating_mul(BLOCK);
+        let mut out = Vec::with_capacity(block.len());
+        for (k, item) in block.iter().enumerate() {
+            if charge > 0 {
+                m.charge(charge)?;
+            }
+            out.push(f(base.saturating_add(k), item)?);
+        }
+        Ok(out)
+    })?;
+    let mut all = Vec::with_capacity(items.len());
+    for block in done {
+        all.extend(block);
+    }
+    Ok(all)
+}
+
 /// The vertices once the grid points are sorted and merged, and what each input vertex became.
 struct Vertices {
     /// The distinct grid points, by Morton code.
@@ -253,43 +306,60 @@ struct Vertices {
     point: Vec<Option<P3>>,
 }
 
-/// Sorts the grid points and turns any three-plane point on the grid into one.
-fn vertices(input: &Polygons, meter: &mut WorkMeter<'_>) -> Result<Vertices, MeshError> {
+/// Sorts the grid points and turns any three-plane point on the grid into one. The sort is
+/// [`Exec`]'s: keys are (Morton code, input vertex), all different, so any sort gives one order.
+fn vertices(
+    input: &Polygons,
+    exec: &Exec<'_>,
+    meter: &mut WorkMeter<'_>,
+) -> Result<Vertices, MeshError> {
+    // Each vertex on its own, a block at a time: its grid point where it rounds exactly, else its
+    // three planes in canonical form.
+    let made = map_blocks(
+        exec,
+        (meter, ROUND_VERTICES, 1),
+        &input.vertices,
+        |_, corner| match corner {
+            Corner::Grid(p) => Ok((Some(*p), None)),
+            Corner::Planes([p, q, r]) => {
+                let rounded = Tpi::meeting(*p, *q, *r)?.to_grid()?;
+                if rounded.is_exact() {
+                    return Ok((Some(rounded.value()), None));
+                }
+                let planes = [
+                    canonical(p)?.plane,
+                    canonical(q)?.plane,
+                    canonical(r)?.plane,
+                ];
+                Ok((None, Some(planes)))
+            }
+        },
+    );
     let mut keyed = Vec::with_capacity(input.vertices.len());
     let mut implicit = Vec::new();
     let mut point = Vec::with_capacity(input.vertices.len());
     let mut sides: Vec<Option<u32>> = Vec::with_capacity(input.vertices.len());
-    for (v, corner) in (0_u32..).zip(&input.vertices) {
-        meter.charge(1)?;
-        let on_grid = match corner {
-            Corner::Grid(p) => Some(*p),
-            Corner::Planes([p, q, r]) => {
-                let rounded = Tpi::meeting(*p, *q, *r)?.to_grid()?;
-                rounded.is_exact().then(|| rounded.value())
-            }
-        };
+    for (v, (on_grid, planes)) in (0_u32..).zip(phase(made)?) {
         point.push(on_grid);
-        match (on_grid, corner) {
+        match (on_grid, planes) {
             (Some(p), _) => {
                 keyed.push((morton(p), v));
                 sides.push(None);
             }
-            (None, Corner::Planes([p, q, r])) => {
+            (None, Some(planes)) => {
                 sides.push(Some(index(implicit.len())?));
-                implicit.push([
-                    canonical(p)?.plane,
-                    canonical(q)?.plane,
-                    canonical(r)?.plane,
-                ]);
+                implicit.push(planes);
             }
-            (None, Corner::Grid(_)) => return Err(MeshFault::Shape.into()),
+            (None, None) => return Err(MeshFault::Shape.into()),
         }
     }
-    keyed.sort_unstable();
+    let order: Result<Vec<usize>, RunError<MeshError>> =
+        exec.sort_stable(meter, SORT_VERTICES, SORT_PLAN, &keyed, |k| *k);
     let mut grid = Vec::with_capacity(keyed.len());
     let mut of_input = alloc::vec![0_u32; input.vertices.len()];
     let mut last = None;
-    for (key, v) in keyed {
+    for i in phase(order)? {
+        let (key, v) = *keyed.get(i).ok_or(MeshFault::Shape)?;
         if last != Some(key) {
             grid.push((*at(&point, v)?).ok_or(MeshFault::Shape)?);
             last = Some(key);
@@ -412,6 +482,163 @@ fn corner_links(input: &Polygons, faces: u32) -> Result<(Vec<u32>, Vec<u32>), Me
     Ok((face_of, after))
 }
 
+/// A face's normal as it faces: its dominant axis, and whether the normal points down that axis.
+fn normal_axis(face: &Turned) -> (usize, bool) {
+    let n = if face.flipped {
+        face.n.map(i128::wrapping_neg)
+    } else {
+        face.n
+    };
+    let k = dominant(n);
+    (k, n.get(k).copied().unwrap_or(0).is_negative())
+}
+
+/// Each corner's leader: itself, or the earlier corner of its edge, the other way round, whose
+/// edge plane it shares. Two corners share when neither is given its plane, both ends are grid
+/// points, the edge has those two corners alone, and both faces have the same dominant axis k: then
+/// both planes are the one through the edge that holds k, and [`edge_plane`] faces them alike
+/// exactly when the faces' normals point opposite ways along k, as each turns its m by its own
+/// normal's sign and the two edges run opposite ways. So one is made, and pooled, per such edge.
+fn edge_leaders(
+    input: &Polygons,
+    verts: &Vertices,
+    faces: &[Turned],
+    (face_of, after): (&[u32], &[u32]),
+    corner_vertex: &[u32],
+) -> Result<Vec<u32>, MeshError> {
+    let mut leader: Vec<u32> = (0..index(corner_vertex.len())?).collect();
+    let mut ends = Vec::with_capacity(corner_vertex.len());
+    for &next in after {
+        ends.push(*at(corner_vertex, next)?);
+    }
+    let count = verts.grid.len().saturating_add(verts.implicit.len());
+    let (first, uses) = grouped(corner_vertex, &ends, count)?;
+    let axis = |c: u32| -> Result<Option<usize>, MeshFault> {
+        let given = input
+            .edge_plane
+            .get(c as usize)
+            .copied()
+            .flatten()
+            .is_some();
+        let grid = |c: u32| -> Result<bool, MeshFault> {
+            Ok(at(&verts.point, *at(&input.corners, c)?)?.is_some())
+        };
+        if given || !grid(c)? || !grid(*at(after, c)?)? {
+            return Ok(None);
+        }
+        Ok(Some(normal_axis(at(faces, *at(face_of, c)?)?).0))
+    };
+    for bucket in first.windows(2) {
+        let &[start, end] = bucket else {
+            return Err(MeshFault::Shape.into());
+        };
+        let mut rest = uses
+            .get(start as usize..end as usize)
+            .ok_or(MeshFault::Shape)?;
+        while let Some(group) = next_group(&mut rest) {
+            let &[p, q] = group else {
+                continue;
+            };
+            let (a, b) = (p.half_edge.min(q.half_edge), p.half_edge.max(q.half_edge));
+            if p.forward != q.forward && axis(a)?.is_some() && axis(a)? == axis(b)? {
+                *leader.get_mut(b as usize).ok_or(MeshFault::Shape)? = a;
+            }
+        }
+    }
+    Ok(leader)
+}
+
+/// Every corner's edge plane, each edge's made once for both of its half-edges where
+/// [`edge_leaders`] lets them share it.
+struct EdgePlanes {
+    /// Each corner's plane, as it faces.
+    all: Vec<Turned>,
+    /// The planes to pool: one for each pair that shares.
+    unique: Vec<Turned>,
+    /// Where each corner's plane is in `unique`.
+    index: Vec<u32>,
+}
+
+impl EdgePlanes {
+    /// Every given plane's row, faces' then corners' then `own`'s, from the rows of a pool given
+    /// the faces' planes, `unique` and `own`'s.
+    fn rows(&self, faces: usize, pooled: &[u32]) -> Result<Vec<u32>, MeshError> {
+        let own = pooled
+            .get(faces.saturating_add(self.unique.len())..)
+            .ok_or(MeshFault::Shape)?;
+        let mut rows = Vec::with_capacity(
+            faces
+                .saturating_add(self.all.len())
+                .saturating_add(own.len()),
+        );
+        rows.extend_from_slice(pooled.get(..faces).ok_or(MeshFault::Shape)?);
+        for &i in &self.index {
+            rows.push(*at(pooled, index(faces)?.saturating_add(i))?);
+        }
+        rows.extend_from_slice(own);
+        Ok(rows)
+    }
+}
+
+/// [`EdgePlanes`] for every corner.
+fn edge_planes(
+    input: &Polygons,
+    (verts, by_face): (&Vertices, &[Turned]),
+    (face_of, after): (&[u32], &[u32]),
+    corner_vertex: &[u32],
+    (exec, meter): (&Exec<'_>, &mut WorkMeter<'_>),
+) -> Result<EdgePlanes, MeshError> {
+    let leaders = edge_leaders(input, verts, by_face, (face_of, after), corner_vertex)?;
+    let corner_ids: Vec<u32> = (0..index(input.corners.len())?).collect();
+    let by_edge: Result<Vec<Turned>, RunError<MeshError>> =
+        map_blocks(exec, (meter, EDGE_PLANES, 1), &corner_ids, |_, &corner| {
+            if leaders.get(corner as usize) != Some(&corner) {
+                return Ok(Turned::UNSET);
+            }
+            corner_plane(input, verts, by_face, (face_of, after), corner)
+        });
+    let made = phase(by_edge)?;
+    // Where each corner's plane is among the pooled ones: a leader's own, a follower's leader's.
+    let mut edge_index = alloc::vec![0_u32; made.len()];
+    let mut unique = Vec::with_capacity(made.len());
+    for (corner, &leader) in (0_u32..).zip(&leaders) {
+        let at_leader = if leader == corner {
+            unique.push(*at(&made, corner)?);
+            index(unique.len())?.saturating_sub(1)
+        } else {
+            *at(&edge_index, leader)?
+        };
+        *edge_index
+            .get_mut(corner as usize)
+            .ok_or(MeshFault::Shape)? = at_leader;
+    }
+    // Whether a corner's face's normal points down its dominant axis.
+    let down =
+        |c: u32| -> Result<bool, MeshFault> { Ok(normal_axis(at(by_face, *at(face_of, c)?)?).1) };
+    let all: Result<Vec<Turned>, RunError<MeshError>> = map_blocks(
+        exec,
+        (meter, EDGE_SHARES, 0),
+        &leaders,
+        |corner, &leader| {
+            let corner = index(corner)?;
+            let source = *at(&made, leader)?;
+            if leader == corner {
+                return Ok(source);
+            }
+            Ok(Turned {
+                flipped: source.flipped ^ (down(leader)? == down(corner)?),
+                ..source
+            })
+        },
+    );
+    let by_edge = phase(all)?;
+    Ok(EdgePlanes {
+        all: by_edge,
+        unique,
+        index: edge_index,
+    })
+}
+
 /// One corner's edge plane: the one given, or the plane through its edge along the face's
 /// dominant axis.
 fn corner_plane(
@@ -464,7 +691,7 @@ fn pool(
 ) -> Result<(Vec<Plane>, Vec<u32>), MeshError> {
     let plain: Vec<&Turned> = given.iter().copied().flatten().collect();
     let keyed: Result<Vec<[u64; 4]>, RunError<MeshError>> =
-        exec.try_map(meter, PLANE_RANKS, PLAN, &plain, |_, t, _| {
+        map_blocks(exec, (meter, PLANE_RANKS, 0), &plain, |_, t| {
             let [x, y, z] = t.n;
             Ok([rank(x), rank(y), rank(z), rank(t.d)])
         });
@@ -475,7 +702,7 @@ fn pool(
     let whole = |i: usize| plain.get(i).map(|t| (t.n, t.d));
     // Equal ranks are rare but for repeated planes, so most runs are one plane.
     let tied: Result<Vec<bool>, RunError<MeshError>> =
-        exec.try_map(meter, PLANE_RUNS, PLAN, &order, |j, &i, _| {
+        map_blocks(exec, (meter, PLANE_RUNS, 0), &order, |j, &i| {
             let before = j.checked_sub(1).and_then(|b| order.get(b)).copied();
             Ok(before.is_some_and(|b| ranks.get(b) == ranks.get(i)))
         });
@@ -490,7 +717,7 @@ fn pool(
     }
 
     let fresh: Result<Vec<bool>, RunError<MeshError>> =
-        exec.try_map(meter, PLANE_RUNS, PLAN, &order, |j, &i, _| {
+        map_blocks(exec, (meter, PLANE_RUNS, 0), &order, |j, &i| {
             let before = j.checked_sub(1).and_then(|b| order.get(b)).copied();
             Ok(before.is_none_or(|b| whole(b) != whole(i)))
         });
@@ -983,8 +1210,7 @@ fn sorted_faces(
     meter: &mut WorkMeter<'_>,
 ) -> Result<Vec<FaceKey>, MeshError> {
     let keys: Result<Vec<FaceKey>, RunError<MeshError>> =
-        exec.try_map(meter, FACE_KEYS, PLAN, ids, |_, &face, m| {
-            m.charge(1)?;
+        map_blocks(exec, (meter, FACE_KEYS, 1), ids, |_, &face| {
             Ok(face_key(input, corner_vertex, face, run_rank)?)
         });
     let keys = phase(keys)?;
@@ -1012,33 +1238,35 @@ pub fn build(
     meter: &mut WorkMeter<'_>,
 ) -> Result<ExactMesh, MeshError> {
     let (faces, loops) = fits(input)?;
-    let verts = vertices(input, meter)?;
+    let verts = vertices(input, exec, meter)?;
     let face_ids: Vec<u32> = (0..faces).collect();
     let by_face: Result<Vec<Turned>, RunError<MeshError>> =
-        exec.try_map(meter, FACE_PLANES, PLAN, &face_ids, |_, &face, m| {
-            m.charge(1)?;
+        map_blocks(exec, (meter, FACE_PLANES, 1), &face_ids, |_, &face| {
             face_plane(input, &verts, face)
         });
     let by_face = phase(by_face)?;
     let (face_of, after) = corner_links(input, faces)?;
-    let corner_ids: Vec<u32> = (0..index(input.corners.len())?).collect();
-    let by_edge: Result<Vec<Turned>, RunError<MeshError>> =
-        exec.try_map(meter, EDGE_PLANES, PLAN, &corner_ids, |_, &corner, m| {
-            m.charge(1)?;
-            corner_plane(input, &verts, &by_face, (&face_of, &after), corner)
-        });
-    let by_edge = phase(by_edge)?;
-    let mut own = Vec::with_capacity(verts.implicit.len().saturating_mul(3));
-    for plane in verts.implicit.iter().flatten() {
-        own.push(Turned::given(plane)?);
-    }
-    let (pooled, rows) = pool(&[&by_face, &by_edge, &own], exec, meter)?;
-    let own_base = by_face.len().saturating_add(by_edge.len());
-
     let mut corner_vertex: Vec<u32> = Vec::with_capacity(input.corners.len());
     for &v in &input.corners {
         corner_vertex.push(*at(&verts.of_input, v)?);
     }
+    let edges = edge_planes(
+        input,
+        (&verts, &by_face),
+        (&face_of, &after),
+        &corner_vertex,
+        (exec, meter),
+    )?;
+    let mut own = Vec::with_capacity(verts.implicit.len().saturating_mul(3));
+    for plane in verts.implicit.iter().flatten() {
+        own.push(Turned::given(plane)?);
+    }
+    // One plane per edge that shares goes into the pool, and every corner gets its row back.
+    let (pooled, pooled_rows) = pool(&[&by_face, &edges.unique, &own], exec, meter)?;
+    let rows = edges.rows(by_face.len(), &pooled_rows)?;
+    let by_edge = edges.all;
+    let own_base = by_face.len().saturating_add(by_edge.len());
+
     let mut triples = Vec::new();
     if !verts.implicit.is_empty() {
         let row_of = |i: usize| rows.get(i).copied().ok_or(MeshFault::Shape);

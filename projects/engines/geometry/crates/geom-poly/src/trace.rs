@@ -680,9 +680,15 @@ pub fn classify(
     for face in faces.iter().flatten() {
         boxes.push(canonical(&face.plane)?);
     }
+    // A span costs a point a corner, which pays only where many paths read the polygon: for one
+    // piece, reading each polygon on its few segments costs less.
+    let mut paths = 0usize;
+    for list in pieces {
+        paths = paths.saturating_add(list.len());
+    }
     let mut held = Vec::with_capacity(polygons.len());
     for polygon in polygons {
-        let span = piece_span(&polygon.piece);
+        let span = (paths > 1).then(|| piece_span(&polygon.piece)).flatten();
         held.push((polygon, canonical(&polygon.piece.face)?, span));
     }
     let mut out = Vec::new();
