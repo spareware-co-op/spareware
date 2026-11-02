@@ -642,3 +642,110 @@ fn each_search_takes_the_work_it_always_took() {
     }
     assert_eq!(work, pins);
 }
+
+/// The line from `from` along `along` over [0, 1], turned a full turn about the z axis.
+fn turned(from: [f64; 3], along: [f64; 3]) -> SurfaceKind {
+    let profile = geom_curve::Trimmed::whole(geom_curve::Basis::Line(
+        Line::new(from, along, (0.0, 1.0)).unwrap(),
+    ))
+    .unwrap();
+    let frame = Frame::standard().unwrap();
+    SurfaceKind::Revolution(
+        geom_surface::Revolution::new(profile, [0.0; 3], frame, (0.0, TURN)).unwrap(),
+    )
+}
+
+#[test]
+fn a_point_on_a_revolutions_axis_has_its_nearest_parallel() {
+    // A funnel: the line from the axis at the origin out to (4, 0, 8), turned about z. Seen from
+    // its axis every meridian is as near, so the answer is a parallel, found along one meridian
+    // and within the meter, never a search round the whole turn.
+    let funnel = turned([0.0; 3], [4.0, 0.0, 8.0]);
+    let below = project_surface(&funnel, &[0.0, 0.0, -3.0], FLOOR, &mut meter()).unwrap();
+    let Projection::Set {
+        set: Continuum::Parallel { v },
+        distance,
+    } = below
+    else {
+        panic!("{below:?}");
+    };
+    // The profile's start on the axis: the parallel is the funnel's point.
+    assert!(
+        v.contains(0.0) && distance.contains(3.0),
+        "{v:?} {distance:?}"
+    );
+    // From (0, 0, 5) the nearest point of the line z = 2x is (2, 0, 4), half way along it.
+    let inside = project_surface(&funnel, &[0.0, 0.0, 5.0], FLOOR, &mut meter()).unwrap();
+    let Projection::Set {
+        set: Continuum::Parallel { v },
+        distance,
+    } = inside
+    else {
+        panic!("{inside:?}");
+    };
+    assert!(
+        v.contains(0.5) && distance.contains(5.0_f64.sqrt()),
+        "{v:?} {distance:?}"
+    );
+}
+
+/// A spline profile, the line's x always positive, turned a full turn about the z axis: its
+/// partials' bounds leave the boxes at the seam undecided at the floor.
+fn vase() -> SurfaceKind {
+    let b = Basis::new(3, vec![0.0, 0.0, 0.0, 0.0, 0.5, 1.0, 1.0, 1.0, 1.0]).unwrap();
+    let pts = [
+        [2.0, 0.0, 0.0],
+        [2.5, 0.0, 0.5],
+        [2.2, 0.0, 1.0],
+        [2.8, 0.0, 1.5],
+        [2.4, 0.0, 2.0],
+    ];
+    let profile =
+        geom_curve::Trimmed::whole(geom_curve::Basis::Nurbs(Curve::new(b, &pts).unwrap())).unwrap();
+    let frame = Frame::standard().unwrap();
+    SurfaceKind::Revolution(
+        geom_surface::Revolution::new(profile, [0.0; 3], frame, (0.0, TURN)).unwrap(),
+    )
+}
+
+#[test]
+fn a_point_beside_a_seam_is_one_point_not_a_continuum() {
+    // The vase's seam is its meridian in the half-plane y = 0, x > 0, at u = 0 and u = 2. A point
+    // in that half-plane, inside the vase or outside it, has its nearest point there: undecided
+    // boxes at both ends of u hold it, one point, not the whole turn between them.
+    let vase = vase();
+    for p in [[2.2, 0.0, 1.0], [4.0, 0.0, 1.0]] {
+        let found = project_surface(&vase, &p, FLOOR, &mut meter()).unwrap();
+        let Projection::Points(points) = &found else {
+            panic!("{p:?}: {found:?}");
+        };
+        assert!(!points.is_empty(), "{found:?}");
+        for n in points {
+            let [x, y, _] = n.point;
+            assert!(y.lo() >= -FLOOR && y.hi() <= FLOOR && x.lo() > 0.0, "{n:?}");
+            let [u, _] = n.at;
+            assert!(u.hi() <= FLOOR || u.lo() >= TURN - FLOOR, "{n:?}");
+        }
+    }
+    // A cylinder and a sphere seen beside their seams, whose boxes there decide.
+    let wall = turned([3.0, 0.0, 0.0], [0.0, 0.0, 4.0]);
+    let frame = Frame::standard().unwrap();
+    let ball =
+        SurfaceKind::Sphere(Sphere::new([0.0; 3], 5.0, frame, ((0.0, TURN), (-0.5, 0.5))).unwrap());
+    for (s, p, near, d) in [
+        (&wall, [5.0, 0.0, 2.0], [3.0, 0.0, 2.0], 2.0),
+        (&ball, [8.0, 0.0, 6.0], [4.0, 0.0, 3.0], 5.0),
+    ] {
+        let found = project_surface(s, &p, FLOOR, &mut meter()).unwrap();
+        let Projection::Points(points) = &found else {
+            panic!("{found:?}");
+        };
+        assert!(!points.is_empty(), "{found:?}");
+        for n in points {
+            assert!(n.distance.contains(d), "{n:?}");
+            for (x, want) in n.point.iter().zip(near) {
+                assert!(x.lo() - FLOOR <= want && want <= x.hi() + FLOOR, "{n:?}");
+            }
+        }
+    }
+}
