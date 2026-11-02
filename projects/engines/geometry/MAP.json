@@ -22,12 +22,67 @@
       "job": "The stable facade: schemas, stable value types, re-exports; no kernel logic.",
       "kind": "facade",
       "layer": "13",
-      "modules": [],
+      "modules": [
+        {
+          "cost": "none at run time.",
+          "does": "[`OPERATIONS`] lists one [`Operation`] per operation, in name order: its schema and its tier. `geom-gen` writes the API documentation (`generated/api.md`) and the MCP tool descriptions (`generated/mcp-tools.json`) from this list, and CI fails if a committed file has not been regenerated after the list changed, so the interfaces never drift from the kernel and no AI tool is written by hand (22; EXTENDING.md, section 2.2). The operations themselves are re-exported beside the list, so a program reaches them here and never from a `geom-*` crate.",
+          "family": [],
+          "file": "projects/engines/crates/engine-geometry/src/operations.rs",
+          "guarantees": [
+            "**One entry per operation, in name order.** `tests/attack_g100.rs` checks the names are unique, ascending, and valid MCP tool names, that each schema's version is at least 1, and that every preview's date is a real date.",
+            "**The schemas tell the truth.** `tests/attack_g101.rs` runs each operation and fails on an error, a role, a class or a charge its schema does not list, and on a listed detail whose base kind is not the one the kernel gives it."
+          ],
+          "job": "Every operation the kernel offers, its schema held as data (chapter 22, \"Every operation is described as data\").",
+          "method": {
+            "none": "a list of constants (`projects/engines/geometry/architecture/22-errors-queries-ai.md`)."
+          },
+          "path": "engine_geometry::operations",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
+          "cost": "none at run time: entries are constants.",
+          "does": "re-exports `geom-op`'s schema vocabulary ([`OpSchema`] and its parts), and defines [`Operation`], one entry of [`crate::operations::OPERATIONS`]: an operation's schema and its [`Tier`]. A Stable operation keeps its schema under semantic versioning; a Preview one is being tried, may change, is not usable by published plugins, and graduates or is dropped within 12 months of the day it was added (25), which its tier records.",
+          "family": [],
+          "file": "projects/engines/crates/engine-geometry/src/schema.rs",
+          "guarantees": [
+            "**Data only.** [`Operation`] and [`Tier`] are constants made of `&'static` data, with no method and no trait implementation beyond derived ones.",
+            "**A preview's age is recorded.** [`Tier::Preview`] holds the day the operation entered the facade, `YYYY-MM-DD`, so a release check can find any preview older than 12 months."
+          ],
+          "job": "The schema types of chapter 22, and the entry that places one operation's schema in a stability tier of chapter 25.",
+          "method": {
+            "none": "types for chapter 22's operation schemas and chapter 25's tiers (`projects/engines/geometry/architecture/22-errors-queries-ai.md`, `projects/engines/geometry/architecture/25-public-interface.md`)."
+          },
+          "path": "engine_geometry::schema",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
+          "cost": "none at run time.",
+          "does": "re-exports, grouped as chapter 25 lists the Stable tier's value types: grid points and steps ([`grid`]), exactness ([`Exactness`]), curves ([`curve`]), surfaces ([`surface`]), bodies ([`body`]), transforms ([`transform`]), names and history ([`name`]), errors ([`error`]), and an operation's context and output ([`op`]). Anything not re-exported here is internal.",
+          "family": [],
+          "file": "projects/engines/crates/engine-geometry/src/value.rs",
+          "guarantees": [
+            "**Only re-exports.** Every item is a `pub use` of a kernel crate's public item, so the types are the kernel's own and a value passes between the facade and the kernel unchanged.",
+            "**One name each.** No type is re-exported under two paths, and the two kinds named `Offset` keep their own modules ([`curve::Offset`], [`surface::Offset`])."
+          ],
+          "job": "The stable value types: what a program holds, passes to an operation and reads back. Each is a kernel crate's own type, re-exported here, so a program names it from this crate and never from a `geom-*` crate (25).",
+          "method": {
+            "none": "re-exports only, as chapter 25 sets the Stable tier's value types (`projects/engines/geometry/architecture/25-public-interface.md`)."
+          },
+          "path": "engine_geometry::value",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        }
+      ],
       "name": "engine-geometry",
       "provenance": [],
       "sections": "5, 22, 25 and 27 of the kernel architecture (`projects/engines/geometry/architecture/`).",
       "spdx": null,
-      "status": "scaffold only; built by pieces G100 and G482, and every operation piece adds its schema here (chapter 30.1, the standard bar).",
+      "status": null,
       "summary": "Shared engine: geometry core, the stable public facade of the Spare Kit geometry kernel."
     },
     {
@@ -695,6 +750,26 @@
           "target": "lib"
         },
         {
+          "cost": "a few draws of [`SplitMix64`] per input and, for the transforms, one box built, once per batch, outside every measured run.",
+          "does": null,
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-bench/src/inputs/make.rs",
+          "guarantees": [
+            "every batch is full and the same on every target, and every result of a typical batch is `Ok` (`tests/inputs.rs`); every result is the operation's own, run directly (`tests/attack_g06.rs`)."
+          ],
+          "job": "Inputs for `geom-make`'s hot paths (piece G101, decision 32.44): a box and a cylinder built from their inputs, and a box moved and quarter-turned, each with its checker postcondition.",
+          "method": {
+            "links": [
+              "projects/engines/geometry/architecture/28-testing.md"
+            ],
+            "text": "the operations of `geom-make`'s attack tests (`tests/attack_g101.rs`), under an unlimited budget, in the build a program ships. Each is measured as chapter 28.14 sets benchmarks out, `projects/engines/geometry/architecture/28-testing.md`."
+          },
+          "path": "geom_bench::inputs::make",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
           "cost": "a few draws of [`crate::rng::SplitMix64`] per input, once per batch, outside every measured run.",
           "does": null,
           "family": [],
@@ -843,9 +918,9 @@
           "family": [],
           "file": "projects/engines/geometry/crates/geom-bench/src/inputs/plane.rs",
           "guarantees": [
-            "every batch is full, the same on every target, and its classes are what they claim (`tests/inputs.rs`); every result is checked against exact cross products, Cramer's rule and exact rounding by `tests/attack_g06.rs`."
+            "every batch is full, the same on every target, and its classes are what they claim (`tests/inputs.rs`); every result is checked against exact cross products, Cramer's rule, exact determinants and exact rounding by `tests/attack_g06.rs`."
           ],
-          "job": "Inputs for plane-based geometry: [`through`] (`Plane::through`), [`side`] (`Plane::side`), [`tpi_new`] (`Tpi::new`), [`tpi_homogeneous`] (`Tpi::homogeneous`), [`side_of_tpi`] (`Plane::side_of_tpi`), [`to_grid`] (`Tpi::to_grid`), and for the point where a line meets a plane (G29) [`lpi_new`] (`Lpi::new`), [`lpi_homogeneous`] (`Lpi::homogeneous`), [`side_of_lpi`] (`Plane::side_of_lpi`) and [`lpi_to_grid`] (`Lpi::to_grid`).",
+          "job": "Inputs for plane-based geometry: [`through`] (`Plane::through`), [`side`] (`Plane::side`), [`tpi_new`] (`Tpi::new`), [`tpi_meeting`] (`Tpi::meeting`), [`normals_sign`] and [`normals_sign_faces`] (`plane::normals_sign`), [`tpi_homogeneous`] (`Tpi::homogeneous`), [`side_of_tpi`] (`Plane::side_of_tpi`), [`determinant_sign`] and [`determinant_sign_faces`] (`plane::determinant_sign`), [`to_grid`] (`Tpi::to_grid`), and for the point where a line meets a plane (G29) [`lpi_new`] (`Lpi::new`), [`lpi_homogeneous`] (`Lpi::homogeneous`), [`side_of_lpi`] (`Plane::side_of_lpi`) and [`lpi_to_grid`] (`Lpi::to_grid`).",
           "method": {
             "links": [
               "https://doi.org/10.1111/j.1467-8659.2009.01609.x",
@@ -1182,7 +1257,154 @@
         23
       ],
       "depends": [],
-      "errors": [],
+      "errors": [
+        {
+          "doc": "What a result failed to show.",
+          "file": "projects/engines/geometry/crates/geom-bool/src/certificate.rs",
+          "kinds": [
+            {
+              "doc": "An edge's fins do not pair up: an odd number, or two neighbours running the same way.",
+              "name": "Fins",
+              "shape": "struct"
+            },
+            {
+              "doc": "An edge starts where it ends, or has no ends.",
+              "name": "ZeroLength",
+              "shape": "struct"
+            },
+            {
+              "doc": "A face has a loop of fewer than three fins, or no loop.",
+              "name": "ZeroArea",
+              "shape": "struct"
+            },
+            {
+              "doc": "A kept piece does not separate two cells the test tells apart.",
+              "name": "Label",
+              "shape": "struct"
+            },
+            {
+              "doc": "The meter stopped the run.",
+              "name": "Stopped",
+              "shape": "tuple"
+            }
+          ],
+          "module": "geom_bool::certificate",
+          "name": "Fault",
+          "non_exhaustive": false
+        },
+        {
+          "doc": "Why a result could not be named: a defect, or a name the scheme refuses.",
+          "file": "projects/engines/geometry/crates/geom-bool/src/names.rs",
+          "kinds": [
+            {
+              "doc": "A row past the end of a list.",
+              "name": "Broken",
+              "shape": "unit"
+            },
+            {
+              "doc": "The numbers layer refused.",
+              "name": "Num",
+              "shape": "tuple"
+            },
+            {
+              "doc": "A name could not be formed.",
+              "name": "Name",
+              "shape": "tuple"
+            },
+            {
+              "doc": "A history could not be formed.",
+              "name": "History",
+              "shape": "tuple"
+            },
+            {
+              "doc": "Two entities tied under 20.2's order.",
+              "name": "Order",
+              "shape": "tuple"
+            }
+          ],
+          "module": "geom_bool::names",
+          "name": "NamingError",
+          "non_exhaustive": false
+        },
+        {
+          "doc": "Why a boolean's input was refused.",
+          "file": "projects/engines/geometry/crates/geom-bool/src/operand.rs",
+          "kinds": [
+            {
+              "doc": "Two operands share a key.",
+              "name": "DuplicateOperand",
+              "shape": "tuple"
+            },
+            {
+              "doc": "A selection names a key that no solid operand has.",
+              "name": "UnknownOperand",
+              "shape": "tuple"
+            },
+            {
+              "doc": "A test does not leave one answer, or is too deep.",
+              "name": "BadTest",
+              "shape": "tuple"
+            },
+            {
+              "doc": "A face of this operand is not flat on integers.",
+              "name": "NotPlaneBased",
+              "shape": "tuple"
+            },
+            {
+              "doc": "A face that cannot enter: an edge with no fins of its own, or a corner with no planes.",
+              "name": "Broken",
+              "shape": "tuple"
+            },
+            {
+              "doc": "The numbers layer refused.",
+              "name": "Num",
+              "shape": "tuple"
+            },
+            {
+              "doc": "The meter stopped the run.",
+              "name": "Stopped",
+              "shape": "tuple"
+            }
+          ],
+          "module": "geom_bool::operand",
+          "name": "PrepareError",
+          "non_exhaustive": false
+        },
+        {
+          "doc": "Why pieces could not be made into a body.",
+          "file": "projects/engines/geometry/crates/geom-bool/src/rebuild.rs",
+          "kinds": [
+            {
+              "doc": "The merge refused.",
+              "name": "Merge",
+              "shape": "tuple"
+            },
+            {
+              "doc": "The numbers layer refused.",
+              "name": "Num",
+              "shape": "tuple"
+            },
+            {
+              "doc": "The topology refused.",
+              "name": "Topo",
+              "shape": "tuple"
+            },
+            {
+              "doc": "A name could not be formed.",
+              "name": "Naming",
+              "shape": "tuple"
+            },
+            {
+              "doc": "A row past the end of a list: a defect, reported instead of a wrong body.",
+              "name": "Broken",
+              "shape": "unit"
+            }
+          ],
+          "module": "geom_bool::rebuild",
+          "name": "RebuildError",
+          "non_exhaustive": false
+        }
+      ],
       "family": [
         "Combine"
       ],
@@ -1198,12 +1420,195 @@
       "job": "The arrangement engine: booleans, imprint, split, cells, batch cuts, the arrangement step of local operations, `close_near_contacts`.",
       "kind": "kernel",
       "layer": "6",
-      "modules": [],
+      "modules": [
+        {
+          "cost": "one arrangement per host, linear in its faces plus local work around each tool.",
+          "does": "[`cut`] subtracts each [`Cut`]'s tools from its host in one arrangement, with the tools summed into one entry, so a winding vector stays two entries long however many tools there are, and tools that overlap or share a jamb need no union first. Each host gives one [`CutResult`], in input order, which accounts for every tool.",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-bool/src/batch.rs",
+          "guarantees": [
+            "**Every tool is accounted for.** Each is reported, and one that touched nothing inside the host is marked and named in `bool.tool_misses_host`. A subtraction cannot go missing silently.",
+            "**Atomic by default.** A tool that cannot enter fails the call and names itself. Under [`BatchRule::SkipFailedTools`] it is left out and listed beside the result, and which tools are left out depends only on the inputs.",
+            "**Hosts run in parallel, and the threads do not show.** Results come in input order, and one host alone has the threads for its boxes."
+          ],
+          "job": "Batch cutting: any number of tools through any number of hosts (11.6).",
+          "method": {
+            "links": [
+              "projects/engines/geometry/architecture/11-booleans.md"
+            ],
+            "text": "chapter 11.6 (`projects/engines/geometry/architecture/11-booleans.md`)."
+          },
+          "path": "geom_bool::batch",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
+          "cost": "linear in the body's fins, and in the pieces. Charges the meter one unit per edge, face and piece.",
+          "does": "[`certify`] holds a rebuilt body to chapter 11.10's closure checks, cheap enough to run on every result: every edge's fins pair up, in radial order alternating which way they run, so each wedge around an edge is one cell; no edge has zero length; and every face has an area. [`labelled`] holds the pieces of a winding selection to the last: each separates two cells the test tells apart, the result's material behind it. Planes within budget need no check: a plane outside its budget cannot be made. A sheet's edge may have one fin, and a wire has no fins at all, so only bodies that bound something pair up.",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-bool/src/certificate.rs",
+          "guarantees": [
+            "**Reports, never repairs.** A fault names what broke and the row it broke at; the body is not changed.",
+            "**The first fault in a fixed order.** Fins by edge, then edges, then faces, then pieces, each ascending, the same on every machine."
+          ],
+          "job": "The arrangement certificate: what a result must show before it is returned (11.10).",
+          "method": {
+            "links": [
+              "projects/engines/geometry/architecture/11-booleans.md"
+            ],
+            "text": "chapter 11.10 (`projects/engines/geometry/architecture/11-booleans.md`), which cites the closure certificate it follows."
+          },
+          "path": "geom_bool::certificate",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
+          "cost": "what [`prepare`], [`arrange`] and [`rebuild`] cost, and the checker per result.",
+          "does": "[`combine`] prepares its operands, arranges their polygons, and for each selection rebuilds what it keeps and holds the body to the checker. [`unite`], [`subtract`] and [`intersect`] are its three commonest calls. [`COMBINE`] is its schema.",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-bool/src/combine.rs",
+          "guarantees": [
+            "**One arrangement, several results.** The selections share every clip, cut and trace (11.1).",
+            "**One list per selection.** Most selections give one body, split one per cell, and each selection's list stands in its place.",
+            "**Inputs are never changed, and nothing is returned unchecked.** A result that fails the checker or the arrangement certificate is an error, never a body, and a failure leaves the operands as they were: they are shared borrows (11.10).",
+            "**As exact as the least exact operand.** A flat arrangement adds no error of its own (11.3).",
+            "**The same bytes on any threads, and in any order of the operands.** The order is the keys', and the work is deterministic (23.4)."
+          ],
+          "job": "The boolean's entry: one arrangement, one body per selection (11.1).",
+          "method": {
+            "links": [
+              "projects/engines/geometry/architecture/11-booleans.md",
+              "https://doi.org/10.1145/3528223.3530181"
+            ],
+            "text": "chapter 11.1's selections on 11.3's exact polyhedral path (`projects/engines/geometry/architecture/11-booleans.md`), EMBER (Trettner, Nehring-Wirxel and Kobbelt 2022, <https://doi.org/10.1145/3528223.3530181>)."
+          },
+          "path": "geom_bool::combine",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
+          "cost": "constant, and what [`rebuild`] costs on seven pieces.",
+          "does": "[`half_space`] builds the solid bounded by a plane and the frame's range box, with corners at ±(2^40 − 1) steps. It is a body like any other, so it enters a boolean as a solid and stays exact: IFC's half-space that clips a wall under a roof is one of these, and its boxed half-space is the same one, since the box there is only a search aid.",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-bool/src/half_space.rs",
+          "guarantees": [
+            "**Exact.** The plane is the one through three grid points, and every corner is a meeting of integer planes.",
+            "**Below the normal.** The material lies on the plane's negative side, so a plane through `a`, `b`, `c` keeps what is behind (b − a) × (c − a).",
+            "**Refused, never guessed.** Three points on one line are [`RebuildError::Num`]."
+          ],
+          "job": "Half-spaces: everything on one side of a plane, as a solid operand (11.1).",
+          "method": {
+            "links": [
+              "projects/engines/geometry/architecture/11-booleans.md"
+            ],
+            "text": "chapter 11.1 (`projects/engines/geometry/architecture/11-booleans.md`), which cites the IFC half-space entities."
+          },
+          "path": "geom_bool::half_space",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
+          "cost": "`O(n log n)` in the entities of the result and the operands. Charges the meter nothing of its own: the rows it writes are charged by the publication.",
+          "does": "[`name`] gives every region, face, edge and vertex of a merged result its persistent name and its history record, from the names of the faces it came from. A target's face that passes through keeps its name; a tool's is `Created { op, role: tool(key), from }`; several kept pieces of one face are `Split { of, piece: ByTools }`; flush faces become `Merged { of }`. An edge or vertex that was already there keeps its name and a new one is `Bounded` by the faces around it. Names two operands both bring are qualified by the operand's key, and those that would still collide take a weak ordinal.",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-bool/src/names.rs",
+          "guarantees": [
+            "**Ordered by name, never by address, hash order or thread timing.** Every list follows the operands' keys and the names; the rows of a result are the shape's own (11.9, 11.3).",
+            "**An unchanged entity keeps its name, and the history says so** (28.3).",
+            "**A qualified face is Generated.** Its name changes, so its history is never Unchanged or Modified: it is generated from its source, which is listed as deleted (11.9).",
+            "**Every input is accounted for.** It has descendants or it is listed as deleted (20.3)."
+          ],
+          "job": "Names and history of a boolean's result (11.9).",
+          "method": {
+            "links": [
+              "projects/engines/geometry/architecture/11-booleans.md"
+            ],
+            "text": "chapter 11.9 (`projects/engines/geometry/architecture/11-booleans.md`) on chapter 20's names and histories."
+          },
+          "path": "geom_bool::names",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
+          "cost": "linear in the operands' fins, and what [`convex_pieces`] costs per face. Charges the meter what that does.",
+          "does": "an [`Operand`] is a body with a stable key and a kind, and a [`Selection`] says what to keep. [`prepare`] checks them, orders the operands by key, gives each solid an entry of the arrangement, turns each selection into a [`WindingTest`], and converts every face into the convex [`Polygon`]s the arrangement takes, each with the [`Carrier`] its pieces will return to.",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-bool/src/operand.rs",
+          "guarantees": [
+            "**The order of the operands does not count.** Entries follow the keys, and every later step follows the entries (11.1).",
+            "**Refused, never guessed.** Two operands with one key are [`PrepareError::DuplicateOperand`], a target that is no operand is [`PrepareError::UnknownOperand`], and a face that is not flat on integers is [`PrepareError::NotPlaneBased`], which the curved path will take (11.4).",
+            "**Nothing new.** Every bound of every polygon is a plane of the operand, or one stood on a seam between grid points, so 6.2's budget holds."
+          ],
+          "job": "Operands and selections: what a boolean takes, and an operand's faces as polygons (11.1, 11.3).",
+          "method": {
+            "links": [
+              "projects/engines/geometry/architecture/11-booleans.md",
+              "https://doi.org/10.1145/3528223.3530181"
+            ],
+            "text": "chapter 11.1 and 11.3's \"How faces enter\" (`projects/engines/geometry/architecture/11-booleans.md`), after EMBER's section 3.2 (Trettner, Nehring-Wirxel and Kobbelt 2022, <https://doi.org/10.1145/3528223.3530181>)."
+          },
+          "path": "geom_bool::operand",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
+          "cost": "O(b log b) over the b blocks walked, each traced through every polygon. Charges the meter one unit per polygon per path segment.",
+          "does": "two seeds in one cell mean the rooms they name leak into each other. [`narrowest`] finds the path between them whose narrowest point is widest, and reports that point and its width, so a gap of 0.003 mm where two walls fail to meet shows up at once, in its place.",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-bool/src/passage.rs",
+          "guarantees": [
+            "**A measurement for people, not a decision.** Nothing here changes a result. On walls square to the axes the blocks fit the cell and the width is exact; on slanted walls a block is judged by its centre, so the width is approximate, and it is labelled so (11.7).",
+            "**Exact where it decides, deterministic everywhere.** Each block is placed by exact winding numbers; ties fall to the lowest block.",
+            "**The gap is in the grid.** Every corner's coordinates are grid lines, so a gap of any width between two walls is a row of blocks of that width."
+          ],
+          "job": "The narrowest passage between two seeds of one cell (11.7).",
+          "method": {
+            "links": [
+              "projects/engines/geometry/architecture/11-booleans.md",
+              "https://doi.org/10.1287/opre.8.5.733"
+            ],
+            "text": "chapter 11.7 (`projects/engines/geometry/architecture/11-booleans.md`); the widest path is the maximum bottleneck path of Pollack, \"The maximum capacity route through a network\", Operations Research 8, 1960, <https://doi.org/10.1287/opre.8.5.733>, here over Dijkstra's walk."
+          },
+          "path": "geom_bool::passage",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
+          "cost": "linear in what [`merge`] returns, after its cost.",
+          "does": "[`rebuild`] takes the pieces a selection keeps, has [`merge`] make them faces, edges and shells, and writes those into arenas: every face on the surface of the polygon it came from, every vertex a grid point or the lowest meeting of its planes, every edge a straight shadow between rounded ends, and regions nested as the shells are.",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-bool/src/rebuild.rs",
+          "guarantees": [
+            "**The same bytes however the boxes fell.** Every row comes in the order [`merge`] numbers the shape, which depends on the shape alone (11.3; tested).",
+            "**Plane-based.** A vertex on the grid is a grid point. Any other is `Meet`, its lowest valid triple of the planes around it. Its edges' lines are shadows between rounded ends, as 8.3 allows: the fins decide. An edge's two planes are its two faces' planes, read through its fins, so the body stores them once.",
+            "**Refused, never guessed.** What [`merge`] refuses and what the arenas refuse are a [`RebuildError`]."
+          ],
+          "job": "The canonical rebuild: merged pieces published as a body (11.3, step 5).",
+          "method": {
+            "links": [
+              "projects/engines/geometry/architecture/11-booleans.md",
+              "https://doi.org/10.1145/3528223.3530181"
+            ],
+            "text": "chapter 11.3's rebuild (`projects/engines/geometry/architecture/11-booleans.md`), into the Parasolid model structure of chapter 8.1, after EMBER (Trettner, Nehring-Wirxel and Kobbelt 2022, <https://doi.org/10.1145/3528223.3530181>)."
+          },
+          "path": "geom_bool::rebuild",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        }
+      ],
       "name": "geom-bool",
       "provenance": [],
       "sections": "10.2, 11, 13 (introduction), 13.14, 16.1, 22, 23.5 and 23.6, in the kernel architecture (`projects/engines/geometry/architecture/`).",
       "spdx": null,
-      "status": "scaffold only; built by pieces G129, G130, G131, G132, G133, G137, G138, G139, G144, G242, G243, G244, G245, G246, G247, G248, G249, G250, G324.",
+      "status": "the rebuild (G129), operands and selections (G130) and the entry (G131) built; the rest by pieces G132, G133, G137, G138, G139, G144, G242, G243, G244, G245, G246, G247, G248, G249, G250, G324.",
       "summary": "Spare Kit geometry kernel: the arrangement engine."
     },
     {
@@ -1460,12 +1865,302 @@
       "job": "The B-rep validity checker.",
       "kind": "kernel",
       "layer": "5",
-      "modules": [],
+      "modules": [
+        {
+          "cost": "linear in the body's rows, plus each set operation's time with path halving, logarithmic amortised at worst (Tarjan and van Leeuwen); memory: a few words per row of each arena, reserved before use.",
+          "does": "the check runs in two stages, as Parasolid gates its body check. The first follows every list and ring of the body once: each region's shells, each shell's faces and each face's loops (a first child and a `next` chain, each child naming its parent), each loop's fins (a ring both ways), each edge's fins (a radial ring), and each edge's two ends. It finds a list that comes back on itself, a child listed twice or by the wrong parent or by none, a ring that does not close, a fin off its edge's ring, and an edge with one end. Only a body whose lists and rings are sound goes on to the second stage, which reads them:",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-check/src/combinatorial.rs",
+          "guarantees": [
+            "**Finite on any body.** Every walk of the first stage marks each row it visits and stops at the first row it meets twice, so it visits each row at most once, however the links are broken; the second stage walks only rings and lists the first found sound.",
+            "**The second stage reads only sound structure.** It runs only when the first found nothing, so a fault it reports is real, never an echo of a broken list.",
+            "**Every fault, in a fixed order.** The checks run in the order above, rows ascending, so the same body gives the same faults in the same order on every machine.",
+            "**Charged.** One work unit per row visited, to the caller's meter."
+          ],
+          "job": "Group 1 of chapter 8.3, combinatorial: every loop closes, every fin has a partner or is a boundary, shells are closed and consistently oriented, regions nest correctly, and Euler's formula holds.",
+          "method": {
+            "links": [
+              "projects/kit/notes/G01-evidence/02-occt-parasolid-acis.md",
+              "http://www.q-solid.com/Parasolid_Docs/chapters/fd_chap.09.html",
+              "https://pi.math.cornell.edu/~hatcher/AT/AT.pdf",
+              "https://doi.org/10.1145/62.2160"
+            ],
+            "text": "Parasolid's published body check, its loop, fin and shell checks and its gating (`projects/kit/notes/G01-evidence/02-occt-parasolid-acis.md`, section 5, and the checking chapter it links, <http://www.q-solid.com/Parasolid_Docs/chapters/fd_chap.09.html>); the shell check of Open CASCADE, each edge used exactly twice in a closed shell (`BRepCheck_Shell`, linked from the same section); and the Euler–Poincaré formula for boundary representations, V − E + F − (L − F) = 2(S − G): M. Mäntylä, *An Introduction to Solid Modeling*, Computer Science Press, 1988, chapter 3. A. Hatcher, *Algebraic Topology*, Cambridge University Press, 2002, section 2.2 (the Euler characteristic of a compact surface, 2 − 2g − b), <https://pi.math.cornell.edu/~hatcher/AT/AT.pdf>. R. E. Tarjan and J. van Leeuwen, \"Worst-case analysis of set union algorithms\", *Journal of the ACM* 31 (1984), 245–281, <https://doi.org/10.1145/62.2160>, for the connected sets (path halving)."
+          },
+          "path": "geom_check::combinatorial",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
+          "cost": "a few dozen interval operations per check; no loop. Recursion: none.",
+          "does": "[`carrier`] turns a face's surface into its closed form ([`Carrier`]), and each check bounds a distance from above and compares it with the body's bound b. With w = p − c, h = w · n̂ (height along the axis) and ρ = |w × n̂| (distance from it), the distance of a point from each kind is:",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-check/src/curved.rs",
+          "guarantees": [
+            "**Upper bounds, certified.** Every distance is bounded from above in interval arithmetic that stays exact where the doubles are (`geom_curve::tight`), on the exact unit vectors' enclosures (`geom_curve::Frame::unit_vectors`) and certified sines and cosines of half-turns (`geom_num::Interval::{sinpi, cospi}`).",
+            "**Exact on exact data.** A grid point on a plane given by doubles, a cylinder, a sphere or a torus whose data are small integers on an axis-aligned frame is measured exactly, so a vertex exactly at the bound passes and one a step beyond fails. A circle's points come from `sinpi` and `cospi`, which widen by a step even where exact: its checks hold to that step.",
+            "**Fails closed.** A value that cannot be enclosed, a cone point whose radius may be negative, a torus that is not a ring, a surface kind without a closed form here: not certified, never passed.",
+            "**Nothing allocates; nothing is sampled.**"
+          ],
+          "job": "Certified bounds for group 2 on every carrier it measures against: how far a grid point, a line segment or a circle can lie from a plane, cylinder, cone, sphere or ring torus, and how far a grid point lies from a circle's end. Never sampled.",
+          "method": {
+            "links": [
+              "https://doi.org/10.1137/1.9780898717716",
+              "projects/engines/geometry/architecture/08-topology.md"
+            ],
+            "text": "the closed forms of the elementary surfaces of ISO 10303-42 as `geom_surface::analytic` parametrises them, the Lipschitz bound of the distance function, and interval arithmetic (R. E. Moore, R. B. Kearfott and M. J. Cloud, *Introduction to Interval Analysis*, SIAM 2009, <https://doi.org/10.1137/1.9780898717716>), for chapter 8.3's group 2 (`projects/engines/geometry/architecture/08-topology.md`)."
+          },
+          "path": "geom_check::curved",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
+          "cost": "linear in the body's faces, edges and fins; no allocation.",
+          "does": "a body recorded [`Exactness::Exact`] must be one its geometry can make exact. Chapter 9 makes a B-rep exact for flat faces and certified for curved ones, so every face of an exact body lies on a plane, every edge on a line, and every pcurve it holds is a line; any other kind of carrier is a fault at the entity that uses it. A body recorded [`Exactness::Certified`] or [`Exactness::Approximate`] may use any carrier: its stated bound is judged against the geometry by group 2, which certifies every vertex and edge against its carriers at that bound (11.12), and the record's own arithmetic, the least exact class of the inputs with their bounds added, is `geom_num::Exactness`'s, proven there.",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-check/src/exactness.rs",
+          "guarantees": [
+            "**An exact record is flat.** A body recorded exact passes only when every face's surface is a plane, every edge's curve a line and every pcurve a line.",
+            "**Every fault, in a fixed order.** Faces, then edges, then fins, rows ascending.",
+            "**Charged.** One work unit per row visited, to the caller's meter."
+          ],
+          "job": "Group 4 of chapter 8.3, the exactness record: the body's exactness class is consistent with its geometry.",
+          "method": {
+            "links": [
+              "projects/engines/geometry/architecture/09-representations.md",
+              "projects/engines/geometry/architecture/08-topology.md"
+            ],
+            "text": "chapter 9's exactness classes and the kinds that keep a B-rep exact (`projects/engines/geometry/architecture/09-representations.md`), checked as chapter 8.3's fourth group (`projects/engines/geometry/architecture/08-topology.md`)."
+          },
+          "path": "geom_check::exactness",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
+          "cost": "each linear in faces and fins; nothing allocated. Recursion: none.",
+          "does": "[`boxes`] tests every vertex of every flat face's loops against its stored box, by its exact side of each face of the box. [`sense`] takes each loop's exact twice-area vector (`geom_topo::query::loop_area`), or a loop with such a vertex its certified one (`geom_topo::query::certified_loop_area`), against the plane's normal turned by the face's sense. Exactly one loop must run counter-clockwise seen from outside the material, the face's outer loop; every other must run clockwise, a hole; none may enclose no area. And a holed face's whole area, its loops' added, must be positive: turn a face with one hole and its hole runs counter-clockwise and its outer loop clockwise, which the count alone cannot tell from a right one. The sense of a loop means something only for a loop that does not cross itself, so it runs after group 3's own tests, on a body they passed. A face on another surface, and a flat face with a curved edge in a loop, is left for G177 and counted in the report ([`crate::Report::deferred`]); a flat face's box is still tested against the vertices it has.",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-check/src/flat.rs",
+          "guarantees": [
+            "**Exact on planes given by integers.** The area vector is below 2^114 in each component and an integer plane's normal below 2^83, so the dot product, below 2^199, fits 256 bits: its sign is exact, and the test holds at every coordinate at ±(2^40 − 1). A plane not given by integers has its normal and the dot product in certified intervals, as has a loop with a vertex where three planes meet; a sign they cannot decide is [`FaultKind::Unchecked`], never a pass.",
+            "**Runs on sound rings.** It runs only on a body group 1 passed, so every walk ends.",
+            "**Charged.** One meter unit per face and fin in each pass."
+          ],
+          "job": "Chapter 8.3 on flat faces: the face's stored box holds every vertex (group 2), and each loop runs the right way round its face (group 3) (issue #438's flat half, with G177 for curved faces).",
+          "method": {
+            "links": [
+              "doi:10.1016/B978-0-08-050754-5.50043-8",
+              "projects/engines/geometry/architecture/08-topology.md"
+            ],
+            "text": "chapter 8.3's rule, on the vector area of a polygon (Goldman, \"Area of planar polygons and volume of polyhedra\", Graphics Gems II, 1991, doi:10.1016/B978-0-08-050754-5.50043-8) as `geom_topo::query` computes it; the signs are the ones 8.1's sense gives a face (`projects/engines/geometry/architecture/08-topology.md`)."
+          },
+          "path": "geom_check::flat",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
+          "cost": "linear in faces, fins and edges, one meter unit each; constant work per row; nothing allocated. Recursion: none.",
+          "does": "[`check`] walks the faces, fins and edges in row order. A face's surface is a plane, cylinder, cone, sphere or ring torus (`crate::curved::Carrier`); any other kind is reported as [`FaultKind::Unchecked`], never passed (8.3: \"certified with bounds, not sampled\"). For each fin, the vertex it starts at must lie on its face's surface, and its edge's line or circle on that surface; for each edge, its vertices must lie at its line's or circle's ends. An edge on another kind of curve, and a fin's pcurve, are reported unchecked. A vertex where three planes meet must have three that do meet ([`FaultKind::MeetSingular`]).",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-check/src/geometric.rs",
+          "guarantees": [
+            "**Exact on flat faces.** A plane given by integer-valued doubles (its origin and two spanning vectors within ±(2^40 − 1)) becomes the integer plane through three grid points, and a vertex passes exactly when (n · p + d)^2 ≤ b^2 · |n|^2, compared in 320-bit integers; for b = 0 that is the orient test, n · p + d = 0. A line whose ends are grid points passes the same way, end by end: a segment is never farther from a plane than its farther end, and no double holds the squared normal of a long edge's plane, so an interval could not say 0. A plane not given by integers is unchecked in a body recorded Exact, and measured in certified intervals otherwise.",
+            "**Exact on plane-based bodies.** A vertex where three planes meet lies exactly on an integer plane or it is a fault, in every class: `geom_num::plane::Plane::side_of_tpi`, the sign of a determinant within 384 bits (6.3, 8.3). A line with such an end is only a shadow of the edge, which is the two planes it lies on: the vertices decide what the edge lies on, and the line's end must be within a step of the vertex rounded to the grid, or of the body's bound.",
+            "**Certified on lines and curved carriers.** Every other distance is a certified upper bound (`crate::curved`, and a line's end points enclosed with `geom_curve::tight`, exact where the doubles are), so a vertex exactly on the bound passes where the data are exact and one a step beyond fails.",
+            "**Fails closed.** Every comparison whose operands cannot be formed (a value out of its range, an overflow, a cone past its apex) is a fault, never a pass.",
+            "**No sampling, nothing allocated.** Each check is an exact predicate or one interval evaluation of a closed form."
+          ],
+          "job": "Group 2 of chapter 8.3, geometric consistency: every vertex lies on its faces' surfaces and at its edges' curve ends, and every edge on its faces, within the bound the body is recorded with.",
+          "method": {
+            "links": [
+              "projects/engines/geometry/architecture/08-topology.md",
+              "https://doi.org/10.1111/j.1467-8659.2009.01609.x",
+              "https://doi.org/10.1137/1.9780898717716"
+            ],
+            "text": "chapter 8.3's group 2 and its certified-bounds rule (`projects/engines/geometry/architecture/08-topology.md`), on the exact integer plane of 6.3 (`geom_num::plane`, after Campen and Kobbelt 2010, <https://doi.org/10.1111/j.1467-8659.2009.01609.x>) and interval enclosures that stay exact where the doubles are (R. E. Moore, R. B. Kearfott and M. J. Cloud, *Introduction to Interval Analysis*, SIAM 2009, <https://doi.org/10.1137/1.9780898717716>)."
+          },
+          "path": "geom_check::geometric",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
+          "cost": "linear in faces and fins for the volumes; quadratic in shells, each pair linear in the second shell's fins, for the nesting; nothing allocated (one word per shell of the shared scratch). Recursion: none.",
+          "does": "[`check`] takes the sign of each shell's exact six-times volume (`geom_topo::query::shell_volume`), or for a shell with a vertex where three planes meet its certified one (`geom_topo::query::certified_shell_volume`): positive faces outward, and anything else is a cavity's. A solid region must have exactly one shell facing outward. Then, on a body with no fault so far, it compares shells by which side of each other they lie (`geom_topo::query::shell_side`, and for such a shell `crate::planar::shell_side`): a cavity lies inside its region's outer shell and outside the region's other cavities, and a solid region's outer shell inside another's lies inside one of that region's cavities. A shell with a curved face or edge is left for G177 and counted in the report ([`crate::Report::deferred`]), and judges nothing else.",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-check/src/orientation.rs",
+          "guarantees": [
+            "**Exact.** Signs of exact integers and the exact predicates behind `shell_side`; no double decides anything here, but for the sign of a shell with a vertex where three planes meet, a certified interval measured from the shell's own corner. A sign that cannot decide is [`FaultKind::Unchecked`], never a pass.",
+            "**Runs on bodies that do not cross.** It runs only on a solid body that passed everything before it, so each shell is closed, its loops run true, and two shells lie wholly on one side of each other: one vertex decides.",
+            "**Fails closed.** Two shells where every vertex of one is a vertex of the other have no vertex to decide by, and are [`FaultKind::PairUnchecked`], never a pass.",
+            "**Charged.** One meter unit per shell and per ordered pair; the walks charge their own rows."
+          ],
+          "job": "Group 3 of chapter 8.3 on a solid's flat shells: each faces the way its place says, and each lies where its region allows (issue #438's flat half, with G177 for curved shells).",
+          "method": {
+            "links": [
+              "projects/engines/geometry/architecture/08-topology.md",
+              "doi:10.1016/S0097-8493(96"
+            ],
+            "text": "chapter 8.1's regions and shells and 8.3's rule that regions nest correctly (`projects/engines/geometry/architecture/08-topology.md`), by signed volume and point-in-shell classification as `geom_topo::query` computes them (Feito and Torres, \"Inclusion test for general polyhedra\", doi:10.1016/S0097-8493(96)00028-8)."
+          },
+          "path": "geom_check::orientation",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
+          "cost": "an outline is linear in its face's fins, a pair of faces linear in their sides plus the sorting of their crossings, a pair of faces on one plane the product of their sides. Each test allocates a short list, reserved fallibly with its logical bytes on the meter. Recursion: none.",
+          "does": "an [`Outline`] is a flat face as this module reads it: its integer plane, and for each fin the edge's two ends and a plane that crosses the face's along the edge. That plane is the other face's across the edge, or, along a seam, a plane the edge's ends both lie on, or for two grid points one stood on them; so a side of the polygon is a pair of planes, as EMBER keeps it, and no test here ever needs the orientation of three implicit points, about 840 bits a term (19.2).",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-check/src/planar.rs",
+          "guarantees": [
+            "**Exact.** Every decision is the sign of a plane at a grid point or at a meeting of three planes (`geom_num::plane::Plane::side` and `side_of_tpi`, within 384 bits), or the sign of a 3 × 3 determinant of normals (`geom_num::plane::Tpi::weight`). No double is read and nothing is sampled.",
+            "**Any polygon.** A face that is not convex, has holes, or has several outer loops is cut like any other. A vertex on the line, an edge along it and a touch from one side all fall to the moved line, which sees each as ordinary crossings at one mark.",
+            "**Fails closed.** A step that cannot be decided is [`Meet::Unknown`], which the caller reports, never a pass. A face without a plane or a plane for each side has no outline, and its pairs are the caller's to report.",
+            "**Runs on bodies that passed group 2.** Every vertex is on every face it bounds, so a shared edge lies on both faces' planes and the other face's plane crosses along it.",
+            "**Charged.** One meter unit per side visited and per pair of sides or stretches compared."
+          ],
+          "job": "Group 3 of chapter 8.3 on faces that lie exactly on integer planes, whatever their shape and whether their vertices are grid points or the meetings of three planes (G134).",
+          "method": {
+            "links": [
+              "doi:10.1145/3528223.3530181",
+              "doi:10.1016/j.cad.2021.103015",
+              "doi:10.1145/77635.77639"
+            ],
+            "text": "the plane-based polygon of EMBER, a supporting plane and one bounding plane per side (Trettner, Nehring-Wirxel and Kobbelt, \"EMBER: exact mesh booleans via efficient and robust local arrangements\", ACM TOG 41(4) 2022, doi:10.1145/3528223.3530181), on integer plane arithmetic (Nehring-Wirxel, Trettner and Kobbelt, \"Fast exact booleans for iterated CSG using octree-embedded BSPs\", Computer-Aided Design 135 (2021), doi:10.1016/j.cad.2021.103015); the moved line is Simulation of Simplicity's idea (Edelsbrunner and Mücke 1990, doi:10.1145/77635.77639), applied to the query alone, as `geom_topo::query` applies it."
+          },
+          "path": "geom_check::planar",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
+          "cost": "[`check`]'s at the level asked; [`exactness`] adds a pass over the faces and edges and runs the cheap groups. Recursion: none.",
+          "does": "[`validity`] runs [`check`] at the level asked and returns its [`Report`]. [`exactness`] says what the body's record claims and what its geometry allows: the record, how many of its faces lie on planes and how many on other surfaces, how many of its edges on lines and how many on other curves, and how group 4 judged the record against them. A body does not hold its own exactness (24.4 stores it beside the body), so each query is given it.",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-check/src/query.rs",
+          "guarantees": [
+            "**The contract.** Each runs inside its context's budget and cancellation, and a stop is that error, never a partial report; the record comes back with the answer.",
+            "**Never changes the body.** Each reads it through `&Body` only.",
+            "**Counts in one fixed order.** One unit of work per face and edge counted, on top of what the checker charges, so the report is the same everywhere."
+          ],
+          "job": "The queries chapter 22 asks of the checker: a body's exactness report and its validity report, each as an operation (22: \"exactness class and bounds, validity report\"; piece G102).",
+          "method": {
+            "links": [
+              "projects/engines/geometry/architecture/22-errors-queries-ai.md",
+              "projects/engines/geometry/architecture/08-topology.md"
+            ],
+            "text": "chapter 22's list of queries and chapter 8.3's groups (`projects/engines/geometry/architecture/22-errors-queries-ai.md`, `projects/engines/geometry/architecture/08-topology.md`)."
+          },
+          "path": "geom_check::query",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
+          "cost": "constant time per accessor; a report holds one fault per thing found wrong.",
+          "does": "[`Group`] names the four groups of 8.3; [`Level`] says which run ([`Level::Cheap`] after every operation in every build, [`Level::Full`] in debug builds, in continuous integration, on every import and on request); [`Entity`] names one entity of a body by its index; [`Fault`] is one thing found wrong, of a [`FaultKind`], at one entity and possibly naming a second; [`Report`] holds the faults of one check in the order they were found (the first [`crate::MAX_FAULTS`], and a count of the rest), the groups that ran, and the groups the level asked for that this checker does not have yet.",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-check/src/report.rs",
+          "guarantees": [
+            "**Nothing hidden.** A [`Report`] passes only when it found no fault, kept or counted; a group the level asked for but which is not built yet is listed in [`Report::missing`], never counted as passed, and what a curved face or shell leaves unjudged is counted in [`Report::deferred`].",
+            "**One order.** Faults are listed in the order the checks find them, which is fixed (each check runs over rows in ascending order), so the same body gives the same report everywhere.",
+            "**Plain words.** Every [`FaultKind`] has a sentence saying what is wrong ([`FaultKind::what`]), and [`Fault`]'s `Display` names its entities by arena and row."
+          ],
+          "job": "What the checker reports: the groups of chapter 8.3, how many of them a check runs, and each fault with the entities it involves.",
+          "method": {
+            "links": [
+              "projects/kit/notes/G01-evidence/02-occt-parasolid-acis.md",
+              "projects/engines/geometry/architecture/08-topology.md"
+            ],
+            "text": "Parasolid's published body check, which runs in gated groups and reports each fault with the entities involved (`projects/kit/notes/G01-evidence/02-occt-parasolid-acis.md`, section 5), as chapter 8.3 sets out (`projects/engines/geometry/architecture/08-topology.md`)."
+          },
+          "path": "geom_check::report",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
+          "cost": "the sum of the groups run, each linear in the body's rows except group 3, quadratic in faces and in shells; it reserves [`crate::MAX_FAULTS`] faults and one scratch buffer of a few words per row (at most three per vertex and one per edge), shared by every check.",
+          "does": "[`check`] runs, for each group of [`Group::ALL`] the [`Level`] asks for, the group's checks on the body and the exactness the body is recorded with, and reports every fault in the order found. A group the level asks for that this checker does not have yet is listed as missing in the report, never run and never counted as passed. An operation calls it on its result before returning it, at [`Level::of_build`] (8.3; principle 4); an import, and any caller who asks, call it at [`Level::Full`].",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-check/src/run.rs",
+          "guarantees": [
+            "**Never changes the body.** The check reads the body through `&Body` only.",
+            "**The same report everywhere.** The groups run in 8.3's order and each in a fixed order, so one body gives one report on every machine and thread count.",
+            "**Stoppable.** Every row visited is charged to the caller's meter, so the caller's budget or cancellation stops a check like any operation (23.10), and a refused allocation stops it as the meter's `OutOfMemory`, never as an abort."
+          ],
+          "job": "One check of a body: the groups its level asks for, in chapter 8.3's order, each charged to the caller's meter, into one report.",
+          "method": {
+            "links": [
+              "projects/kit/notes/G01-evidence/02-occt-parasolid-acis.md",
+              "projects/engines/geometry/architecture/08-topology.md",
+              "projects/engines/geometry/architecture/28-testing.md"
+            ],
+            "text": "Parasolid's body check in gated groups, reporting each fault with its entities (`projects/kit/notes/G01-evidence/02-occt-parasolid-acis.md`, section 5), as chapter 8.3 and 28.4 run it (`projects/engines/geometry/architecture/08-topology.md`, `projects/engines/geometry/architecture/28-testing.md`)."
+          },
+          "path": "geom_check::run",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
+          "cost": "one meter unit per face, per pair of a face's edges and per pair of faces, and `crate::planar`'s; quadratic in a face's edges and in the faces. Recursion: none.",
+          "does": "[`check`] runs on a body groups 1 and 2 passed, so every face lies on a plane, cylinder, cone, sphere or ring torus and every edge is a line or a circle on its faces.",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-check/src/self_intersection.rs",
+          "guarantees": [
+            "**Exact on segments and polygons.** Their tests are integer predicates on the vertices (`geom_num::predicate::orient3d`, 2D orientations in `i128`, checked, and `crate::planar`'s signs of planes).",
+            "**Certified elsewhere, and fails closed.** A pair no exact or certified test separates is a [`FaultKind::PairUnchecked`] fault, never a pass (8.3: \"certified with bounds, not sampled\").",
+            "**A segment is its vertices.** A line edge is tested as the segment between its vertices, which group 2 has certified within the body's bound of the line's ends.",
+            "**One outline per flat face.** Every list is walked again where it is needed, but for the flat faces' outlines, read once and reserved on the meter."
+          ],
+          "job": "Group 3 of chapter 8.3, self-intersection, for primitive bodies: no face crosses itself, and no two faces cross except along shared edges.",
+          "method": {
+            "links": [
+              "projects/engines/geometry/architecture/08-topology.md",
+              "https://doi.org/10.1007/PL00009321",
+              "https://doi.org/10.1017/CBO9780511804120"
+            ],
+            "text": "chapter 8.3's group 3 (`projects/engines/geometry/architecture/08-topology.md`), on J. R. Shewchuk's exact orientation predicates (\"Adaptive precision floating-point arithmetic and fast robust geometric predicates\", Discrete & Computational Geometry 18 (1997), <https://doi.org/10.1007/PL00009321>) and the segment tests built on them (J. O'Rourke, *Computational Geometry in C*, 2nd ed., Cambridge University Press 1998, <https://doi.org/10.1017/CBO9780511804120>)."
+          },
+          "path": "geom_check::self_intersection",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
+          "cost": "constant time per charge and per fault; [`Sink::new`] reserves [`MAX_FAULTS`] faults.",
+          "does": "[`Sink`] holds the faults of one check and the caller's [`WorkMeter`]. It reserves room for [`MAX_FAULTS`] faults before the check starts, as Parasolid's body check takes a largest number of faults to return, so recording a fault never allocates; a fault past the cap is counted, not kept. Each check charges one work unit per row it visits ([`Sink::charge`]), so a check of a huge body can be stopped by the caller's budget or cancellation like any operation (23.10). The checks' scratch space is reserved once, by [`crate::check`], so a refused allocation stops the check through the meter instead of aborting ([`Sink::out_of_memory`]).",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-check/src/sink.rs",
+          "guarantees": [
+            "**The first faults kept, in order, and the rest counted.** [`Sink::push`] keeps a fault while fewer than [`MAX_FAULTS`] are kept, and counts it otherwise; it never allocates.",
+            "**Never aborts on memory.** A refused reservation is the meter's [`geom_run::Stop::OutOfMemory`]."
+          ],
+          "job": "Where a check puts what it finds, and how it pays for its work: the faults found so far, the count of those past the cap, and the caller's meter.",
+          "method": {
+            "links": [
+              "projects/engines/geometry/architecture/23-performance.md",
+              "projects/kit/notes/G01-evidence/02-occt-parasolid-acis.md"
+            ],
+            "text": "the work meter of chapter 23.10 (`geom_run::WorkMeter`), charged per row as `geom_topo::Builder::publish` charges per chunk (`projects/engines/geometry/architecture/23-performance.md`, section 23.10), and the cap on returned faults of Parasolid's body check (`projects/kit/notes/G01-evidence/02-occt-parasolid-acis.md`, section 5)."
+          },
+          "path": "geom_check::sink",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        }
+      ],
       "name": "geom-check",
       "provenance": [],
       "sections": "8.3, 10.2, 16.1, 18.10, 19.2, 22, 24.7 and 28.4, in the kernel architecture (`projects/engines/geometry/architecture/`).",
       "spdx": null,
-      "status": "scaffold only; built by pieces G84, G85, G102, G134, G177, G322.",
+      "status": "the framework and groups 1 and 4 (G84) and groups 2 and 3 for primitive bodies (G85) built. Group 3 tests primitives with its own exact predicates and closed forms, as `geom-intersect` is not built yet. Flat bodies' orientation and nesting are built (G102), and plane-based bodies, with their vertices where three planes meet and faces of any shape (G134); pcurves, general surfaces and the same checks on curved faces come in G177 and G322, and a report counts what it left for them ([`Report::deferred`]).",
       "summary": "Spare Kit geometry kernel: the validity checker."
     },
     {
@@ -2476,6 +3171,28 @@
       "layer": "Development",
       "modules": [
         {
+          "cost": "at most [`MAX_ROWS`] rows per arena and [`MAX_EDITS`] edits: a few hundred column writes and one publish per version; at most [`MAX_INPUT_BYTES`] bytes read.",
+          "does": "[`decode`] turns a fuzzer's bytes into a [`Case`]: a row count for each of the eleven arenas, a value for every link of every row (inside its arena, at its end, far past it, or absent where the link may be), a column that is one row longer or shorter than its arena, the outside region, and edits to make to a published body. [`check`] fills the arenas, publishes them, and compares the answer with an independent reading of `geom-topo`'s rules (the length of every column, then every link in the order of `Link::ALL`, then the outside region): the same body or the same first fault. When the body publishes, it checks that every index it holds is inside its arenas, that an edit starting from it publishes the same body, and that the edits leave the first version unchanged. [`harness`] is `decode` then `check`.",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-fuzz/src/arenas.rs",
+          "guarantees": [
+            "**Any bytes are a case.** Every byte string, the empty one included, decodes to a case. Each link is read through a rule byte that makes the boundaries common: the last row, the first row past the end, `u32::MAX − 1`, or absent.",
+            "**A bounded input.** [`decode`] reads at most [`MAX_INPUT_BYTES`] bytes, derived below; a unit test builds the input that reaches it.",
+            "**A panic is a failure; a disagreement is a [`Finding`]** naming the law and the case."
+          ],
+          "job": "Fuzz target: `geom-topo`'s arenas publish exactly the bodies their rules allow, and a body's versions never see each other's edits.",
+          "method": {
+            "links": [
+              "projects/engines/geometry/architecture/08-topology.md"
+            ],
+            "text": "differential testing against an independent reading of chapter 8.2's rules as `geom-topo`'s `builder` module states them (`projects/engines/geometry/architecture/08-topology.md`), written here from the rules, not from the code: lengths per arena from region to edge, then the links in their published order, rows ascending, then the outside region."
+          },
+          "path": "geom_fuzz::arenas",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
           "cost": "at most [`MAX_POINTS`] points and [`MAX_CONSTRAINTS`] constraints, two triangulations, and one pass over each edge and constraint of the result.",
           "does": "[`decode`] turns a fuzzer's bytes into a [`Case`]: up to [`MAX_POINTS`] points on an 8 × 8 lattice, where ties and collinear points are the rule, scaled by one of [`SCALES`], and up to [`MAX_CONSTRAINTS`] constraints between them. [`check`] triangulates the case, holds the result to the definitions of chapter 17.3, written here without the code's help, and triangulates it again with the sites turned and the constraints reversed. [`harness`] is `decode` then `check`, the function every fuzzing engine drives (the crate README sets out the layout).",
           "family": [],
@@ -2538,6 +3255,28 @@
             "text": "[`Finding::new`] leaves a finding's detail unwritten under Kani, as Kani's own `std` leaves the messages of `assert!` and `panic!` unformatted during verification (<https://github.com/model-checking/kani/blob/0d2328a93f0e0ff66132d6bfa1a7d884877cf862/library/std/src/lib.rs>, credited below): Kani reports a failed proof with a trace of every value, and formatting symbolic values would only enlarge the problem it solves. The rest of this root is the [`Finding`] type, its `Display` and `Error` implementations and the [`Harness`] alias, whose shape 28.5 gives. Each harness module names the method it follows."
           },
           "path": "geom_fuzz",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
+          "cost": "at most [`MAX_STEPS`] transforms, each of at most [`MAX_COPIES`] copies, on a body of at most [`MAX_CORNERS`] base corners, each run twice and checked in full; at most [`MAX_INPUT_BYTES`] bytes read.",
+          "does": "[`decode`] turns a fuzzer's bytes into a [`Case`]: a primitive, its inputs placed on the hard cases of chapter 28.5 (one-step sizes, coarse sub-grids, coordinates at the grid's edge), and a short list of transforms and patterns, each with the class the caller accepts and a work budget. [`check`] builds the primitive and runs the list, each step on the last result, and holds every outcome to the laws below. [`harness`] is `decode` then `check`.",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-fuzz/src/make.rs",
+          "guarantees": [
+            "**Any bytes are a case.** Every byte string, the empty one included, decodes to a case.",
+            "**A bounded input.** [`decode`] reads at most [`MAX_INPUT_BYTES`] bytes, derived below; a unit test builds the input that reaches it.",
+            "**A panic is a failure; a broken law is a [`Finding`]** naming the law and the case: a result the full checker rejects, a result without names, a history that breaks its laws, a transform that loses a name, a class that rises, a flat solid that turns inside out, a rerun that gives another answer, a budget that changes a result instead of stopping it, a defect on valid input, or an error of a kind no schema lists."
+          ],
+          "job": "Fuzz target: `geom-make`'s primitives and transforms, on any bytes, return only what the full checker passes, keep their laws, and refuse with a typed error, never a defect.",
+          "method": {
+            "links": [
+              "projects/engines/geometry/architecture/28-testing.md"
+            ],
+            "text": "chapter 28.5's oracle stack and its generators aimed at the hard cases (`projects/engines/geometry/architecture/28-testing.md`), with the volume of a flat solid computed from its loops as an oracle the checker does not share."
+          },
+          "path": "geom_fuzz::make",
           "provenance": [],
           "spdx": null,
           "target": "lib"
@@ -2796,6 +3535,41 @@
           },
           "path": "geom_gen::exact",
           "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
+          "cost": "linear in the schemas' fields.",
+          "does": "[`api`] writes Markdown, one section per operation of `engine_geometry::operations::OPERATIONS`: its name, version, family and tier, what it does, its inputs and outputs (each with its type, unit and whether it may be left out), the roles it names, the errors it can return (each detail with its base kind and its data), the warnings it can give, the exactness classes it can return, its charge schedule, whether it has a batch entry, and its example. [`mcp`] writes JSON: the MCP protocol version the descriptions follow ([`MCP_VERSION`]) and one `Tool` per operation, as MCP's `tools/list` describes a tool: its `name`, `title` and `description`, an `inputSchema` and an `outputSchema` in JSON Schema 2020-12 (MCP's default dialect) built from its fields, `annotations` (a kernel operation is pure, 10.1: it reads nothing outside its inputs and changes nothing, so it is read-only, idempotent and closed-world to the program that calls it), and the kernel's own data under `_meta` (`org.spareware/kernel`: version, family, tier, exactness classes, errors with base kinds, warnings, charges, batch entry, roles). The command layer that serves the tools adds the program's side (sign-in scopes, the program's units), as EXTENDING.md, section 2.2, sets out.",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-gen/src/facade.rs",
+          "guarantees": [
+            "**From the schemas, never by hand.** Both files hold only what the operation list says, so the documentation and the tools cannot drift from the kernel; CI fails until the committed files are regenerated after the list changes.",
+            "**Valid tool descriptions.** Every tool's `name` is the operation's name, which `engine-geometry`'s tests hold to MCP's rule for tool names; every `inputSchema` is an object schema, which MCP requires, closed to fields the schema does not name.",
+            "**Deterministic.** Operations in the list's order (name order); JSON objects with their keys sorted (`serde_json`'s ordered map); `\\n` line ends; nothing read from the world."
+          ],
+          "job": "Generators `facade-api` and `facade-mcp`: the facade's API documentation and its MCP tool descriptions, from every operation's schema (piece G100; chapter 22, \"Every operation is described as data\").",
+          "method": {
+            "links": [
+              "https://modelcontextprotocol.io/specification/2026-07-28/server/tools",
+              "https://github.com/modelcontextprotocol/modelcontextprotocol/blob/271ecc9accafdd9b83a3c869fa67c22953b2af80/schema/2026-07-28/schema.ts",
+              "https://json-schema.org/draft/2020-12/json-schema-core"
+            ],
+            "text": "MCP's tool description, version 2026-07-28 (<https://modelcontextprotocol.io/specification/2026-07-28/server/tools>; the `Tool` interface in <https://github.com/modelcontextprotocol/modelcontextprotocol/blob/271ecc9accafdd9b83a3c869fa67c22953b2af80/schema/2026-07-28/schema.ts>), with JSON Schema 2020-12 (<https://json-schema.org/draft/2020-12/json-schema-core>) for the inputs and outputs, written with `serde_json`."
+          },
+          "path": "geom_gen::facade",
+          "provenance": [
+            {
+              "licence": "Apache-2.0 AND MIT",
+              "link": "https://github.com/modelcontextprotocol/modelcontextprotocol/blob/271ecc9accafdd9b83a3c869fa67c22953b2af80/schema/2026-07-28/schema.ts",
+              "method_note": null,
+              "name": "the Model Context Protocol specification",
+              "notice": [],
+              "pinned": true,
+              "purpose": "for the fields of a tool description and their rules. No code copied.",
+              "take": "port-method"
+            }
+          ],
           "spdx": null,
           "target": "lib"
         },
@@ -3511,12 +4285,108 @@
       "job": "The Make and Transform families of 10.2: primitives, transforms and patterns.",
       "kind": "kernel",
       "layer": "9",
-      "modules": [],
+      "modules": [
+        {
+          "cost": "linear in the part's rows, plus publishing (a sort by name) and the checker's own cost. Recursion: none.",
+          "does": "a [`Part`] lists a solid's vertices, edges and faces, each with its geometry and the role it is named by (20.2), and each face's loops as edges and senses. [`assemble`] names every region, face, edge and vertex `Created { op, role, from }` (`geom_op::TopoName`), builds the rows (one solid region and the void outside it, one shell, a ring of fins round each edge), publishes them in name order (`geom_topo::Builder::publish_named`), runs the checker on the result as the operation's postcondition (8.3) and records each entity's origin. [`Made`] is what comes back: the body, its history and, from a transform, which one it was.",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-make/src/build.rs",
+          "guarantees": [
+            "**Names, not positions.** Every index of the body follows its entities' names, and every name comes from the operation's path, a role and the names it is relative to: never from the order the rows were written in (8.2, 20.2).",
+            "**Checked before returned.** A body that does not pass the checker at the build's level is never returned; the operation fails with [`MakeDetail::ResultInvalid`], a defect, instead.",
+            "**Charged by what it builds.** One meter unit per row built ([`PER_ROW`]), before it is built (23.10), and the publishing and the checker charge their own rows to the same meter.",
+            "**Transactional.** Nothing the caller holds is changed; a failure, or a stop the operation did not report, returns no body (`OpContext::run`)."
+          ],
+          "job": "Assembling what a Make or Transform operation returns: a body's rows, each entity named by its role, published in name order, checked, and the history that says where each entity came from.",
+          "method": {
+            "links": [
+              "projects/engines/geometry/architecture/08-topology.md",
+              "projects/engines/geometry/architecture/20-naming-history.md"
+            ],
+            "text": "chapter 8's arenas and name order (8.2), chapter 20's names by role and history records (20.2, 20.3), and the checker's postcondition (8.3) (`projects/engines/geometry/architecture/08-topology.md`, `projects/engines/geometry/architecture/20-naming-history.md`)."
+          },
+          "path": "geom_make::build",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
+          "cost": "one transform of the body per instance. Recursion: none.",
+          "does": "[`pattern`] runs one copy per [`Instance`], in key order: the body moved by the instance's transform as the Transform family moves it, each entity named `Created { op: the operation's path with the instance's key, role: copy(source), from: source }` and recorded as generated from its source with that role. It returns one [`Made`] per instance, keyed as given, and the least exact of their records.",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-make/src/pattern.rs",
+          "guarantees": [
+            "**One answer per key, whatever the order given.** Instances run in key order; two with one key are refused ([`MakeDetail::RepeatedKey`]), and so is an empty pattern.",
+            "**Copies, not the body.** Every copy's entities have names of their own, distinct across instances (each instance's path differs), and trace to the body's entities as copies.",
+            "**Each copy checked.** Every copy passes the checker before the pattern returns; one failure fails the whole pattern, which returns nothing.",
+            "**The transform states its own stretch.** Each copy's bound grows by what its transform can do to a length, read from the transform, never taken on the caller's word."
+          ],
+          "job": "Patterns: copies of one body, each by its own transform and keyed by the caller, each copy's entities named as copies of the body's (8.4's `Copied`, which a pattern's schema declares).",
+          "method": {
+            "links": [
+              "projects/engines/geometry/architecture/10-operations.md",
+              "projects/engines/geometry/architecture/08-topology.md"
+            ],
+            "text": "chapter 10.1's batch rule (an item's path is the operation's path and its key) and chapter 8.4's `Copied` event (`projects/engines/geometry/architecture/10-operations.md`, `projects/engines/geometry/architecture/08-topology.md`)."
+          },
+          "path": "geom_make::pattern",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
+          "cost": "constant per primitive; O(n log n) for a prism of n corners, whose edges are found through an ordered map. Recursion: none.",
+          "does": "each function checks its input, writes the solid as a [`Part`] and hands it to [`assemble`], which names, publishes, checks and records it. Lengths are whole grid steps of the frame (`geom_num::Steps`) and every vertex is a grid point; round shapes stand on the z axis through the point given, and other orientations come from the Transform family.",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-make/src/primitive.rs",
+          "guarantees": [
+            "**Outward and counter-clockwise.** Every face's surface normal, with its sense, points out of the solid, and every loop runs counter-clockwise seen from outside.",
+            "**Exact where it can be.** A box and a prism are recorded Exact: their planes are given by integers through grid corners. Round shapes are recorded Certified with a bound of one step of the step given, as 10.2 asks: their circles' points come from certified sines and cosines.",
+            "**Typed refusals.** A zero length, a base that is not strictly convex or not level, and a torus that would not be a ring are input errors that name the input and the nearest value that works; a corner past the grid's range is the numbers layer's `OutOfRange`."
+          ],
+          "job": "The primitives of chapter 10.2's Make family: box, prism, cylinder, cone, sphere and torus, each the shape 10.2's \"Primitive topology\" fixes, its faces, edges and vertices named by role.",
+          "method": {
+            "links": [
+              "projects/engines/geometry/architecture/10-operations.md"
+            ],
+            "text": "chapter 10.2's primitives and their topology, accepted with piece G85 (`projects/engines/geometry/architecture/10-operations.md`), on chapter 7's analytic surfaces (`geom_surface::analytic`)."
+          },
+          "path": "geom_make::primitive",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
+          "cost": "linear in the body's rows, one meter unit each, plus each curve's and surface's transform and the checker. Recursion: none.",
+          "does": "each function turns its input into a `geom_math::TypedTransform` and hands it to [`moved_copy`], which copies every row of the body with its points, curves, surfaces and face boxes moved, publishes the copy under the same names, checks it and records each entity as modified from itself (20.2: a one-to-one change keeps the name). [`Motion`], in the result, says which of the four it was, for the attribute event `Transformed` (8.4).",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-make/src/transform.rs",
+          "guarantees": [
+            "**Exact where the transform is.** A move by whole steps, quarter turns, mirrors across grid planes and whole-number uniform scales map grid points to grid points and keep planes given by integers: an Exact body stays Exact.",
+            "**Rounded once, and said so.** Any other rotation or scale rounds each vertex to the grid once (at most √3/2 of a step), and moves curves and surfaces by their own typed transforms, each with a certified deviation. The result's bound is the input's, stretched by the most the transform can stretch a length, plus one step if any vertex rounded, plus the largest deviation, rounded up.",
+            "**The class never rises.** The result keeps the input's class or a less exact one: an Approximate body stays Approximate whatever its bound does (principle 3).",
+            "**Accepted, or refused.** A result less exact than the input is returned only when the caller accepts it ([`Moved::accept`]): a class at least as loose and a ceiling at least the result's bound; otherwise [`MakeDetail::NotAccepted`] names the class the result would have.",
+            "**Kinds change only where the checker can follow.** A transform that does not keep circles turns them into ellipses and analytic surfaces into affine ones, which the checker cannot certify yet: on a body with curved geometry it is [`MakeDetail::KindNotCertified`] (G177).",
+            "**Mirrors keep the outside outside.** A mirror reverses orientation, so every face's sense and every loop's direction is reversed with it."
+          ],
+          "job": "The Transform family of chapter 10.2: move, rotate, mirror and scale a body, its entities keeping their names, its geometry changing kind only as chapter 7's typed transforms say.",
+          "method": {
+            "links": [
+              "projects/engines/geometry/architecture/07-geometry-types.md"
+            ],
+            "text": "chapter 7's typed transforms and their kind changes (`projects/engines/geometry/architecture/07-geometry-types.md`), applied as `geom-math`, `geom-curve` and `geom-surface` define them; chapter 20.2's naming rule for one-to-one changes."
+          },
+          "path": "geom_make::transform",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        }
+      ],
       "name": "geom-make",
       "provenance": [],
       "sections": "7, 8.4, 10.2 and 30.5, in the kernel architecture (`projects/engines/geometry/architecture/`).",
       "spdx": null,
-      "status": "scaffold only; built by pieces G101.",
+      "status": "built by piece G101: every primitive and transform of 10.2 with its schema in the facade; scales that are not uniform on curved bodies wait for G177's checker.",
       "summary": "Spare Kit geometry kernel: primitives and transforms."
     },
     {
@@ -4250,9 +5120,19 @@
               "shape": "unit"
             },
             {
-              "doc": "Inside and outside are undefined for an open mesh.",
+              "doc": "Inside and outside are undefined for an open mesh. Heal it first.",
               "name": "NotClosed",
               "shape": "unit"
+            },
+            {
+              "doc": "A boolean's pieces would not merge, which closed inputs should never cause.",
+              "name": "Merge",
+              "shape": "tuple"
+            },
+            {
+              "doc": "The outside passes this test of a boolean, so its result has no finite boundary. Intersect it with a box first.",
+              "name": "UnboundedResult",
+              "shape": "struct"
             },
             {
               "doc": "The box tree refused.",
@@ -4306,6 +5186,32 @@
       "kind": "kernel",
       "layer": "7",
       "modules": [
+        {
+          "cost": "the arrangement's, in `geom-poly`, then the merge's O(n log n) exact comparisons for n sides of kept pieces, for each test, and the mesh's build. G148's budgets, timed apart: the soup within 3 times EMBER's 1.6 ms on `Thingi10K` pairs, and the merge and build within 0.5 µs for each kept piece and each result face, two of G146's builds, whose done-when is a million faces built and checked in 0.5 s (`projects/kit/notes/G148-stage-budgets.md`).",
+          "does": "[`boolean`] hands the faces of closed meshes and their planes to `geom-poly`'s arrangement, and for each [`WindingTest`] keeps the pieces its indicator keeps, merges them into maximal faces with `geom-poly`'s merge, and builds an [`ExactMesh`] with the history of its runs. Cutting 300 openings is one call, and several results share one arrangement. [`soup`] stops after the selection, with the kept pieces as a polygon soup, the stage EMBER times.",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-mesh/src/boolean.rs",
+          "guarantees": [
+            "**Closed inputs only.** The arrangement needs a whole winding number everywhere, so an open mesh is [`MeshError::NotClosed`], whose remedy is healing. Self-intersections are fine.",
+            "**A result is a solid** ([`ExactMesh::is_solid`]): its winding is its test's, 0 or 1, and no two of its faces cross. A solid operand's boxes away from the others are solved without cuts or tracing (11.3 step 4): fewer pieces, the same vectors, the same mesh.",
+            "**Bounded results only.** A test the outside passes, such as \"not A\", has no finite boundary: [`MeshError::UnboundedResult`] names which test, and the remedy is to intersect it with a box.",
+            "**Conforming and exact.** The merge gives maximal faces and edges that end where other edges do, so no T-junction is left. Nothing is rounded, however often a mesh is cut: a corner off the grid stays three planes. Each result passes the mesh checker on the way out.",
+            "**The same mesh however it was reached.** The boxes, the threads and the order of the faces do not show. A corner off the grid takes the lowest three planes around it, not the three that happened to cut a piece.",
+            "**Run-level history.** Each output run is unchanged, modified, split or merged, with deleted runs listed (20.3). A split run's pieces are named by the runs that cut them and the side, as `Split { piece: ByTools { tools, side } }`, and pieces those leave the same take weak ordinals in the order of their faces (20.2). Faces inside a run have no names of their own, so references should target runs."
+          ],
+          "job": "Mesh booleans (19.5): the arrangement's pieces a selection keeps, as one exact mesh per test.",
+          "method": {
+            "links": [
+              "projects/engines/geometry/architecture/19-meshes-spatial-clash.md",
+              "https://doi.org/10.1145/3528223.3530181"
+            ],
+            "text": "19.5 and 11.3 (`projects/engines/geometry/architecture/19-meshes-spatial-clash.md`, `11-booleans.md`): EMBER's plane-based arrangement (Trettner, Nehring-Wirxel and Kobbelt 2022, <https://doi.org/10.1145/3528223.3530181>), and hypermesh's many operands with a small expression over their winding numbers, rewritten from 19.5's description."
+          },
+          "path": "geom_mesh::boolean",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
         {
           "cost": "Points are inserted along a Morton curve, each walked to from the last, O(n log n) expected on points that are not adversarial (sorting, then a short walk and a few flips each). Each constraint costs its length in triangles. Crossings cost a box tree of the constraints per round. Nothing recurses.",
           "does": "[`triangulate`] takes grid points in the plane, each with a key from the caller, and constraints between them, and returns the triangles that keep every constraint as edges and are otherwise as close to equal-sided as the points allow. Constraints that cross are cut where they cross, each crossing constructed exactly from the two constraints' ends and committed to the grid before any circle test, so every circle test runs on grid points. With a [`Quality`] it then adds points until every triangle meets it.",
@@ -4418,8 +5324,8 @@
           "target": "lib"
         },
         {
-          "cost": "O(n log n) in the half-edges for the sorts of the planes and faces, with a few allocations per array and none per face but for faces with holes. A face's plane takes up to three greatest common divisors, an edge plane's one or two.",
-          "does": "[`build`] takes [`Polygons`], whose vertices are grid points or three planes and whose faces are loops of vertices, and works out what the mesh stores. A face made from grid points gets its plane from its area vector; each edge between grid points gets the plane through it that holds the face's dominant axis. Faces and edges off the grid bring their planes with them. The planes go into one sorted pool, the vertices and faces into canonical order, and each half-edge finds its opposite, in exact radial order where more than two meet.",
+          "cost": "O(n log n) in the half-edges for the sorts of the planes and faces, with a few allocations per array and none per face but for faces with holes. A face's plane takes up to three greatest common divisors, an edge plane's one or two, made once for an edge whose two faces share an axis; finding those edges is one more counting sort of the half-edges.",
+          "does": "[`build`] takes [`Polygons`], whose vertices are grid points or three planes and whose faces are loops of vertices, and works out what the mesh stores. A face made from grid points gets its plane from its area vector; each edge between grid points gets the plane through it that holds the face's dominant axis; where the faces on both sides share that axis, the plane is made once for both half-edges, which differ only in facing. Faces and edges off the grid bring their planes with them. The planes go into one sorted pool, the vertices and faces into canonical order, and each half-edge finds its opposite, in exact radial order where more than two meet.",
           "family": [],
           "file": "projects/engines/geometry/crates/geom-mesh/src/exact/build.rs",
           "guarantees": [
@@ -4658,6 +5564,28 @@
       "layer": "3",
       "modules": [
         {
+          "cost": "for each face, linear in the entries its name reaches, each one lookup in a history (a binary search); the lists allocate. Recursion: none; an explicit stack.",
+          "does": "[`faces`] lists every face of a body as `geom_topo::query::faces` does, with its persistent name and the roles that name goes back to. A name does not hold its role in a form the body keeps, so the roles are read from the histories of the operations that made the body, oldest first, the same records attributes follow (20.3): a generated entity has its role, a modified one the roles of what it carries on, a split piece those of what it was split from, and a merged entity those of everything merged into it. [`roles_of`] is that walk for one name.",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-name/src/faces.rs",
+          "guarantees": [
+            "**Read from history, never guessed.** A name no history covers has no roles; nothing is inferred from a face's place, shape or position in a list (20.4).",
+            "**One answer.** Roles are listed sorted and without repeats, so the answer does not depend on the order the walk met them.",
+            "**Ends.** Each step moves to an earlier history or finishes, so the walk visits at most one entry per name and history, each charged one unit."
+          ],
+          "job": "A body's faces with their names and roles (22: \"list a body's faces with their names and roles\"; piece G102).",
+          "method": {
+            "links": [
+              "projects/engines/geometry/architecture/20-naming-history.md"
+            ],
+            "text": "chapter 20.3's history records read backward, as `crate::resolve` reads them forward (`projects/engines/geometry/architecture/20-naming-history.md`)."
+          },
+          "path": "geom_name::faces",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
           "cost": "interning is one encoding and one SHA-256 of a few hundred bytes, then a `BTreeMap` lookup, O(log n). [`NameGraph::is_weak`] visits each reachable node once, O(r log n) for r reachable nodes, with a stack and a visited set of at most r entries. Recursion: none.",
           "does": "a [`NameGraph`] holds name nodes keyed by their [`NameId`]. [`NameGraph::intern`] encodes a [`TopoName`], hashes it under `NameScheme v1` and keeps the node; interning the same name again returns the same `NameId` and stores nothing new. A name refers to its parents by `NameId` ([`parents`]), so the nodes form a shared graph rather than nested trees. [`NameGraph::is_weak`] says whether a name is a `Weak` node or is built on one at any depth.",
           "family": [],
@@ -4706,6 +5634,31 @@
           "target": "lib"
         },
         {
+          "cost": "for s recorded steps, r records per step and m names in the walk's vector, O(s · r log(r m)), searched by bisection, never with hashed sets; the weak checks visit the name graph's reachable nodes once per name asked about, and the base candidates scan the body's names once. Recursion: none.",
+          "does": "a [`Reference`] holds the document it points into ([`DocRef`], or none for the reference's own document), the element, the entity's [`NameId`], its [`EntityKind`], what it wants ([`Want`]: one entity, every piece, or the carrier), and the stored [`Signature`]. [`resolve`] answers it from a [`Lookup`]: the element's [`Body`] as the program has it (its current names, the carrier of each face and edge that has one, the history recorded since the reference was made, oldest first, and the name graph), or why the element cannot be read. It takes 20.4's steps in order:",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-name/src/resolve.rs",
+          "guarantees": [
+            "**No geometric guessing (20.4 step 5).** [`resolve`] reads a reference's document, name and want, and never its signature, kind or element: the signature only suggests a repair in the interface, and an accepted repair is a new operation in the log. `tests/attack_g89.rs` changes each of them and finds every result unchanged, and checks that this module's code never reads the signature.",
+            "**Model state, the same on every machine.** Every outcome is computed from names and recorded history alone, every set of names is in name order, and nothing depends on an address, a hash map's order or the machine.",
+            "**Pruned is never Deleted.** A walk that reaches a pruned step while it still has names to follow answers `HistoryPruned`, whatever the later steps hold (24.4).",
+            "**Generated is not followed.** Only modified images are descendants: an entity generated from the referenced one is a new entity, not the referenced one in a new form.",
+            "**Unknown is never guessed.** A name the graph cannot classify, or that no recorded step and not the body holds, is `Unresolved` with `NameUnknown`.",
+            "**No recursion.** The walk is one loop over the steps, holding a sorted vector of names."
+          ],
+          "job": "References and how they resolve (chapter 20.4): a reference names an entity of an element, and resolving it against the element's current body and the history recorded since gives one value of the closed [`Resolution`] type.",
+          "method": {
+            "links": [
+              "projects/engines/geometry/architecture/20-naming-history.md"
+            ],
+            "text": "chapter 20.4's resolution, with the history contract of 20.3 as `geom_op::history` carries it (piece G88; `OpenCascade`'s `BRepTools_History` contract, adopted as a tested invariant), all in `projects/engines/geometry/architecture/20-naming-history.md`."
+          },
+          "path": "geom_name::resolve",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
           "cost": "O(n log n) time and one copy of the list. Recursion: none.",
           "does": "[`first_duplicate`] finds the lowest name that appears more than once in a list. [`expect_unique`] is what an operation calls on the names it made before publishing them: in a build with debug assertions, every test build, it refuses a list with a duplicate; in a release build it checks nothing, because there a collision still becomes a `Weak` name, never a random suffix (20.2), and the operation's own naming has already done that.",
           "family": [],
@@ -4731,7 +5684,7 @@
       "provenance": [],
       "sections": "8.4, 17.12, 20 and 24.4, in the kernel architecture (`projects/engines/geometry/architecture/`).",
       "spdx": null,
-      "status": "the hash-consed name graph ([`graph`]), the ordinal order of `Weak` names ([`ordinal`]) and the duplicate-name detector ([`unique`]) built (G87); references and their resolution in G89, attribute classes in G90, `PruneHistory` in G109 and placement references in G374.",
+      "status": "faces with their names and roles ([`mod@faces`]) built (G102); the hash-consed name graph ([`graph`]), the ordinal order of `Weak` names ([`ordinal`]) and the duplicate-name detector ([`unique`]) built (G87); references and their resolution ([`resolve`]) built (G89); attribute classes in G90, `PruneHistory` in G109 and placement references in G374.",
       "summary": "Spare Kit geometry kernel: persistent names and references."
     },
     {
@@ -7393,6 +8346,24 @@
               "doc": "A failure of the numbers layer, wrapped by meaning.",
               "name": "Num",
               "shape": "tuple"
+            },
+            {
+              "base_kind": "held detail",
+              "doc": "A failure of the Make and Transform families: primitives, transforms and patterns (`geom-make`, piece G101).",
+              "name": "Make",
+              "shape": "tuple"
+            },
+            {
+              "base_kind": "held detail",
+              "doc": "A failure of a query (chapter 22; piece G102).",
+              "name": "Query",
+              "shape": "tuple"
+            },
+            {
+              "base_kind": "held detail",
+              "doc": "A failure of the Combine family (`geom-bool`, chapter 11.11).",
+              "name": "Combine",
+              "shape": "tuple"
             }
           ],
           "module": "geom_op::detail",
@@ -7511,6 +8482,198 @@
           ],
           "module": "geom_op::detail",
           "name": "NumDetail",
+          "non_exhaustive": false
+        },
+        {
+          "doc": "A failure of the Make and Transform families (`geom-make`, piece G101): an input the shape cannot be made from, a transform the result could not keep exact or certified, or a defect found before anything was returned.",
+          "file": "projects/engines/geometry/crates/geom-op/src/detail.rs",
+          "kinds": [
+            {
+              "base_kind": "Degenerate",
+              "doc": "A length the shape needs to be positive is zero: an extent, a radius or a height, the input `input` names.",
+              "name": "ZeroLength",
+              "shape": "struct"
+            },
+            {
+              "base_kind": "InvalidInput",
+              "doc": "A prism's base has fewer than three corners.",
+              "name": "TooFewCorners",
+              "shape": "struct"
+            },
+            {
+              "base_kind": "InvalidInput",
+              "doc": "A prism's base corners do not all lie in one plane perpendicular to the z axis.",
+              "name": "BaseNotLevel",
+              "shape": "unit"
+            },
+            {
+              "base_kind": "InvalidInput",
+              "doc": "A prism's base is not a strictly convex polygon running counter-clockwise seen from above: three corners in a row on one line, a turn the other way, or corners repeated.",
+              "name": "BaseNotConvex",
+              "shape": "unit"
+            },
+            {
+              "base_kind": "InvalidInput",
+              "doc": "A torus's minor radius is not below its major radius: it would be a horn or spindle torus, not a primitive (chapter 10.2).",
+              "name": "MinorNotBelowMajor",
+              "shape": "struct"
+            },
+            {
+              "base_kind": "ExactnessNotAccepted",
+              "doc": "A transform would leave the body less exact than the class the caller accepted.",
+              "name": "NotAccepted",
+              "shape": "struct"
+            },
+            {
+              "base_kind": "Unsupported",
+              "doc": "A transform would turn a curved face or edge into a kind the checker cannot certify yet: a scale that is not uniform makes cylinders, cones, spheres and tori affine surfaces and circles ellipses.",
+              "name": "KindNotCertified",
+              "shape": "unit"
+            },
+            {
+              "base_kind": "Unsupported",
+              "doc": "A transform that rounds corners or moves curved geometry by a certified deviation gave a body the checker cannot certify yet: rounded corners leave their faces' planes, and a tilted curved face meets its caps where only exact data is followed today.",
+              "name": "NotCertifiedYet",
+              "shape": "struct"
+            },
+            {
+              "base_kind": "InvalidInput",
+              "doc": "The body given carries no names: it was not published in name order, so its entities cannot keep their names through the transform.",
+              "name": "BodyNotNamed",
+              "shape": "unit"
+            },
+            {
+              "base_kind": "InvalidInput",
+              "doc": "A pattern has no instance.",
+              "name": "EmptyPattern",
+              "shape": "unit"
+            },
+            {
+              "base_kind": "InvalidInput",
+              "doc": "Two instances of a pattern have one key.",
+              "name": "RepeatedKey",
+              "shape": "unit"
+            },
+            {
+              "base_kind": "InvalidInput",
+              "doc": "A pattern's transform has no inverse: it would collapse the body onto a plane, a line or a point.",
+              "name": "SingularTransform",
+              "shape": "unit"
+            },
+            {
+              "base_kind": "Internal",
+              "doc": "The result did not pass the checker. A defect: nothing was returned.",
+              "name": "ResultInvalid",
+              "shape": "unit"
+            },
+            {
+              "base_kind": "Internal",
+              "doc": "The body could not be assembled from its rows. A defect.",
+              "name": "BuildFailed",
+              "shape": "unit"
+            }
+          ],
+          "module": "geom_op::detail",
+          "name": "MakeDetail",
+          "non_exhaustive": false
+        },
+        {
+          "doc": "Why a query could not answer (chapter 22).",
+          "file": "projects/engines/geometry/crates/geom-op/src/detail.rs",
+          "kinds": [
+            {
+              "base_kind": "InvalidInput",
+              "doc": "A link into a row its arena does not have, or a list that does not end: never in a body published by the builder and passed by the checker.",
+              "name": "Malformed",
+              "shape": "unit"
+            },
+            {
+              "base_kind": "Unsupported",
+              "doc": "An edge is not a straight line between two vertices, and the query needs polygons.",
+              "name": "CurvedEdge",
+              "shape": "struct"
+            },
+            {
+              "base_kind": "Unsupported",
+              "doc": "A vertex is where three planes meet, and the query's exact sums need a grid point.",
+              "name": "ImplicitVertex",
+              "shape": "struct"
+            },
+            {
+              "base_kind": "Unsupported",
+              "doc": "A face is not on a plane, and the query needs polygons.",
+              "name": "CurvedFace",
+              "shape": "struct"
+            },
+            {
+              "base_kind": "Unsupported",
+              "doc": "A face has no loop, and the query needs polygons.",
+              "name": "NoLoops",
+              "shape": "struct"
+            },
+            {
+              "base_kind": "InvalidInput",
+              "doc": "A volume asked of a body that is not a solid.",
+              "name": "NotSolid",
+              "shape": "unit"
+            },
+            {
+              "base_kind": "Internal",
+              "doc": "A sum past its integer's width: never for a body within its arenas' limits.",
+              "name": "Overflow",
+              "shape": "unit"
+            }
+          ],
+          "module": "geom_op::detail",
+          "name": "QueryDetail",
+          "non_exhaustive": false
+        },
+        {
+          "doc": "Why records cannot make a history.",
+          "file": "projects/engines/geometry/crates/geom-op/src/history.rs",
+          "kinds": [
+            {
+              "doc": "Two records for one output.",
+              "name": "RepeatedOutput",
+              "shape": "struct"
+            },
+            {
+              "doc": "A `Modified` record from no input: an output made from nothing is `Generated`.",
+              "name": "ModifiedFromNothing",
+              "shape": "struct"
+            },
+            {
+              "doc": "A `Merged` record of fewer than two inputs: one input changed is `Modified`.",
+              "name": "MergeOfOne",
+              "shape": "struct"
+            }
+          ],
+          "module": "geom_op::history",
+          "name": "HistoryError",
+          "non_exhaustive": false
+        },
+        {
+          "doc": "Which law of chapter 20.3 (or 13.14's recording rule) a history breaks, and where.",
+          "file": "projects/engines/geometry/crates/geom-op/src/history.rs",
+          "kinds": [
+            {
+              "doc": "Law 1: a deleted input has a modified output (or passed through unchanged).",
+              "name": "DeletedButModified",
+              "shape": "struct"
+            },
+            {
+              "doc": "Law 3: a record or the deleted set names something that is not an input.",
+              "name": "NotAnInput",
+              "shape": "struct"
+            },
+            {
+              "doc": "13.14: a topology change the records and the deleted set do not show.",
+              "name": "ChangeNotRecorded",
+              "shape": "struct"
+            }
+          ],
+          "module": "geom_op::history",
+          "name": "LawBreak",
           "non_exhaustive": false
         },
         {
@@ -7790,6 +8953,32 @@
           "target": "lib"
         },
         {
+          "cost": "making a history sorts its records and changes, `O(n log n)` in their number; a check and a composition are `O(m log m)` in the number of relation pairs, on sorted vectors searched by bisection, never hashed sets. Recursion: none.",
+          "does": "a [`History`] holds one [`Record`] per output entity, sorted by name, saying whether the output passed through unchanged, was modified from inputs, generated from inputs (or from nothing) in a role, split from one input by cutting faces, or merged from several (chapter 20.3); the set of inputs it deleted; and the [`TopologyChange`]s of chapter 13.14 it made. [`History::check`] tests the laws every operation's history keeps. [`Relations`] is the same history as three relations between inputs and outputs (modified, generated, deleted), the form in which histories compose ([`Relations::then`]) across a chain of operations.",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-op/src/history.rs",
+          "guarantees": [
+            "**Sorted by name, never by report order.** Records are in output-name order, each output once; changes and every set in them are in name order (20.2). Two operations that report the same history in different orders hold equal histories.",
+            "**The four laws hold** for every history and composition. Law 1 (a deleted input has no modified output) and law 3 (every output traces to an input or is generated, and every input a record names is an input of the operation) are checked ([`History::check`], [`Relations::check`]). Law 2 (an input's generated and modified outputs do not overlap) holds by construction: a history gives each output one origin, and composition takes the modified pairs out of the generated ones. Law 4 (histories compose, keeping the others) is [`Relations::then`]; `geom-test`'s history kit checks laws 2 and 4 on generated chains.",
+            "**Every topology change is recorded in the history** (13.14): a vanished face or an overshoot removed is deleted, faces merged are one `Merged` output of exactly those faces, and a face added is generated in the role the change gives.",
+            "**Composition is associative and keeps the laws.** Composing follows the method note's three rules, with one more where a part reaches an input by both relations through a chain: there it is modified, not generated, because it carries on a part of that input (the \"two paths\" case, decided here and written into 20.3). Grouping a chain either way gives the same relations."
+          ],
+          "job": "History: how every output of an operation relates to its inputs, which inputs it removed and what topology changes it made; the four laws of chapter 20.3; and how histories compose.",
+          "method": {
+            "links": [
+              "projects/engines/geometry/architecture/20-naming-history.md",
+              "projects/engines/geometry/architecture/13-sweeps-blends-offsets.md",
+              "projects/engines/geometry/methods/occt-history-contract.md",
+              "doi:10.1016/S0010-4485(96"
+            ],
+            "text": "chapter 20.3's history contract and 13.14's topology-change records (`projects/engines/geometry/architecture/20-naming-history.md`, `projects/engines/geometry/architecture/13-sweeps-blends-offsets.md`), after OCCT's history contract as the method note records it, its composition rules derived there (`projects/engines/geometry/methods/occt-history-contract.md`), and Kripac's face history graph (doi:10.1016/S0010-4485(96)00040-1)."
+          },
+          "path": "geom_op::history",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
           "cost": "IDs and names are sixteen bytes, copied by value. A path holds its labels in one vector; a child path copies its parent's labels once and adds one, so it allocates once.",
           "does": "an [`OpId`] is the permanent 128-bit ID of one operation, set when the operation is authored and kept in the operation log forever (architecture chapter 20.1). An [`OpPath`] adds sub-step labels to it: a [`Label::Step`] named by the operation, or a [`Label::Key`], the stable key the caller gives a batch item (chapter 10.1), so an item's path is the batch's path plus that key and never its position. A [`NameId`] is the 128-bit value of a persistent name (chapter 20.1), held here as its sixteen bytes so that errors and diagnostics can name the entities they concern; computing one from a `TopoName` under `NameScheme v1` is piece G87's.",
           "family": [],
@@ -7905,8 +9094,31 @@
           "target": "lib"
         },
         {
+          "cost": "[`Charge::charge`] is constant: at most two charges on the meter whatever the count. [`reserve`] is one charge and one allocation. [`OpContext::run`] adds one meter and one read of the cancellation to the body.",
+          "does": "every operation runs inside the budgets its [`OpContext`] carries (chapter 23.10). A [`Charge`] is one line of an operation version's charge schedule: in one phase, so many work units per counted thing (an input face, a pair of overlapping boxes, a Newton step), fixed by the operation's version and listed in its schema (chapter 26.2). [`Charge::charge`] charges a count of them exactly as a serial loop charging one at a time would. [`reserve`] reserves room for a number of values: their logical bytes on the meter first, then the real allocation, fallibly. [`OpContext::run`] runs an operation's body with a meter over the context's budget and cancellation, and publishes its result only if the meter never stopped and no cancellation was asked for by the time it returned.",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-op/src/run.rs",
+          "guarantees": [
+            "**Counts a serial loop would make.** Charging `count` things at `units` each passes exactly when charging them one by one would, and on failure the meter has used exactly what that loop had used up to and including the first thing over the cap: never more, never a saturated total. So a `BudgetExceeded` is the same on every target, thread count and build, and may be stored (chapter 23.10).",
+            "**Large reservations are fallible.** [`reserve`] charges the logical bytes first, so a budget failure comes before any allocation and is the same everywhere; a count the target cannot address, or an allocation the machine refuses, stops the meter with `OutOfMemory`, which is never stored. Nothing aborts.",
+            "**A stopped operation publishes nothing.** [`OpContext::run`] returns the body's result only when the body succeeded, its meter never stopped, and a last read of the caller's cancellation finds no request; otherwise it returns the stop as an error at the context's path. A body that ignored a stop cannot publish a result past it."
+          ],
+          "job": "Running an operation inside its context's budgets: the charge schedule, fallible reservations, and a run that publishes nothing once stopped.",
+          "method": {
+            "links": [
+              "projects/engines/geometry/architecture/23-performance.md",
+              "projects/engines/geometry/architecture/32-decisions.md"
+            ],
+            "text": "chapter 23.10's budgets and cancellation, with owner action G71's reading that time reaches an operation only as the caller's cancellation (section 32.15) (`projects/engines/geometry/architecture/23-performance.md`, `projects/engines/geometry/architecture/32-decisions.md`), on `geom-run`'s meter, which the chapter's fuel accounting follows."
+          },
+          "path": "geom_op::run",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
           "cost": "none at run time: schemas are constants.",
-          "does": "an [`OpSchema`] is chapter 22's description of one operation: its name, version and family; its inputs and outputs, each with a type and a unit; the roles it names; the errors it can return, each detail with its base kind and its data; the warnings it can give; the exactness classes it can return; whether it has a batch entry; and an example. The types here are the vocabulary; the facade, `engine-geometry`, holds every operation's schema as data and generates from them (piece G100).",
+          "does": "an [`OpSchema`] is chapter 22's description of one operation: its name, version and family; its inputs and outputs, each with a type and a unit; the roles it names; the errors it can return, each detail with its base kind and its data; the warnings it can give; the exactness classes it can return; its charge schedule; whether it has a batch entry; and an example. The types here are the vocabulary; the facade, `engine-geometry`, holds every operation's schema as data and generates from them (piece G100).",
           "family": [],
           "file": "projects/engines/geometry/crates/geom-op/src/schema.rs",
           "guarantees": [
@@ -7933,7 +9145,7 @@
       "provenance": [],
       "sections": "10.1, 13.2, 13.14, 20, 22, 23.10 and 24.3; chapter 27 (\"Who owns what\"), in the kernel architecture (`projects/engines/geometry/architecture/`).",
       "spdx": null,
-      "status": "the context, the error base and its details for the parallel helper and the numbers layer, the exactness class and warnings of an output, operation identity and the schema types built (G82); the canonical CBOR encoder ([`cbor`]) and SHA-256 ([`hash`]) built (G86); persistent names and their `NameId`s under `NameScheme v1` ([`name`]) built (G87); budgets in the contract to come in G83, history in G88, the batch runner in G104, per-entity bounds in G143, the local-operation driver in G144 and preview precision in G459.",
+      "status": "the context, the error base and its details for the parallel helper and the numbers layer, the exactness class and warnings of an output, operation identity and the schema types built (G82); budgets in the contract, the charge schedule and fallible reservations (G83); the canonical CBOR encoder ([`cbor`]) and SHA-256 ([`hash`]) built (G86); persistent names and their `NameId`s under `NameScheme v1` ([`name`]) built (G87); history records, their laws and their composition ([`history`]) built (G88); the batch runner to come in G104, per-entity bounds in G143, the local-operation driver in G144 and preview precision in G459.",
       "summary": "Spare Kit geometry kernel: the operation contract."
     },
     {
@@ -8019,6 +9231,50 @@
           ],
           "module": "geom_poly::convex",
           "name": "ConvexError",
+          "non_exhaustive": false
+        },
+        {
+          "doc": "Why pieces could not be merged.",
+          "file": "projects/engines/geometry/crates/geom-poly/src/merge.rs",
+          "kinds": [
+            {
+              "doc": "The numbers layer refused.",
+              "name": "Num",
+              "shape": "tuple"
+            },
+            {
+              "doc": "A trace failed.",
+              "name": "Trace",
+              "shape": "tuple"
+            },
+            {
+              "doc": "The meter stopped the run.",
+              "name": "Stopped",
+              "shape": "tuple"
+            },
+            {
+              "doc": "Two pieces of one sheet overlap.",
+              "name": "Overlap",
+              "shape": "unit"
+            },
+            {
+              "doc": "A stretch of boundary has no partner across it: the pieces do not close.",
+              "name": "Open",
+              "shape": "unit"
+            },
+            {
+              "doc": "A shell faces inward with no shell around it.",
+              "name": "Inside",
+              "shape": "unit"
+            },
+            {
+              "doc": "The parallel helper broke one of its own rules: a defect, reported instead of a wrong merge.",
+              "name": "Defect",
+              "shape": "unit"
+            }
+          ],
+          "module": "geom_poly::merge",
+          "name": "MergeError",
           "non_exhaustive": false
         },
         {
@@ -8114,7 +9370,7 @@
       "layer": "6",
       "modules": [
         {
-          "cost": "for n edges, at most n cuts, each classifying the edges left in its cell: O(n²) exact predicates at worst, and a piece of k bounds takes O(k²) more to put in order. Charges the meter one unit per edge classified and per bound ordered.",
+          "cost": "for n edges, at most n cuts, each classifying the edges left in its cell: O(n²) exact predicates at worst, and a piece of k bounds takes O(k²) more to put in order. A lone convex triangle or quadrilateral, the common face, takes one predicate per corner and one more. Charges the meter one unit per edge classified, per bound ordered and per corner checked.",
           "does": "EMBER takes convex polygons, each a supporting plane and one bounding plane per edge. [`convex_pieces`] takes a face as its plane and its rings, each ring a cycle of [`Side`]s, and splits it along its own edges' planes only: a binary space partition of the face, by each edge in the order given, which a caller makes name order. Every piece is a [`Piece`]: the face's plane and its bounding planes in turn around it, each with the interior on its positive side.",
           "family": [],
           "file": "projects/engines/geometry/crates/geom-poly/src/convex.rs",
@@ -8122,6 +9378,7 @@
             "**Nothing new.** Every plane of a piece is the face's or one of its sides': each edge of a piece lies on an existing plane, and each corner is the meeting of three, so 6.2's budget holds, as EMBER's section 3.2 needs.",
             "**A partition of the face.** The pieces are convex, cover the face and overlap nowhere, each side of the partition being a half-plane of the cut (tested against exact areas).",
             "**The same pieces every time.** Pieces depend only on the planes and the order of the sides; nothing is hashed, and every decision is an exact predicate.",
+            "**A convex face is itself.** A lone ring of three or four sides that turns left at every corner, inside on the left, is one piece with the ring's bounds in the ring's order, as the partition gives it, found without cuts (tested against the partition).",
             "**No recursion.** The tree is an explicit stack, so its depth never threatens a WebAssembly stack (principle 13).",
             "**Refused, never guessed.** A side parallel to the face is `Degenerate`; so are two adjacent sides on one line, which leave a corner undefined. Merge such sides first: the corner they share is no corner. So are rings that leave a piece without an end, such as a hole with no outline around it."
           ],
@@ -8141,7 +9398,7 @@
           "target": "lib"
         },
         {
-          "cost": "[`clip`] classifies each corner once, O(k) exact predicates for k bounds. [`crosses`] is O(k + m) classifications and O(k + m) comparisons along a line. [`local_cuts`] is O(n²) pairs of polygons at worst, in a box the subdivision keeps small. Charges the meter one unit per pair of pieces compared.",
+          "cost": "[`clip`] classifies each corner once, O(k) exact predicates for k bounds. [`crosses`] is O(k + m) classifications and O(k + m) comparisons along a line. [`local_cuts`] is O(n²) pairs of polygons at worst, in a box the subdivision keeps small; a pair whose planes cannot cut is told from the two polygons whole, O(k + m), and its pieces are not compared, and a pair whose grid spans miss (`crate::order`'s `Span`) is told in a few comparisons. Charges the meter one unit per pair of pieces, compared or not.",
           "does": "[`clip`] splits a convex [`Piece`] by a plane. [`crosses`] says whether two pieces on different planes truly pass through each other: each has points on both sides of the other's plane, and their stretches of the line the planes share overlap by a length. [`local_cuts`] takes the polygons of one box and cuts each by every polygon that crosses it or ends on it, keeping each as a list of convex pieces of the polygon, the leaves of the small tree of EMBER's section 4.3.",
           "family": [],
           "file": "projects/engines/geometry/crates/geom-poly/src/cut.rs",
@@ -8163,6 +9420,34 @@
             "text": "chapter 11.3's \"Local cuts\" (`projects/engines/geometry/architecture/11-booleans.md`), after EMBER's section 4.3 (Trettner, Nehring-Wirxel and Kobbelt 2022, <https://doi.org/10.1145/3528223.3530181>); [`clip`] is Sutherland and Hodgman's clip of a convex polygon by one plane, 1974, <https://doi.org/10.1145/360767.360802>, on implicit corners."
           },
           "path": "geom_poly::cut",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
+          "cost": "O(n log n) exact comparisons for n sides of pieces, and a sweep of each line. Charges the meter one unit per side of a piece, per fin and per shell.",
+          "does": "[`select`] reads a test over classified pieces and turns each kept piece to face out of the result. [`merge`] merges those pieces into maximal faces, finds the edges between the faces as maximal runs on one line, makes rings, orders the fins around each edge, joins faces into shells, and says which shells are cavities of which.",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-poly/src/merge.rs",
+          "guarantees": [
+            "**The same numbers however the boxes fell.** Faces, edges and vertices are numbered by exact keys that depend on the shape alone: not on the boxes, the leaf size, the threads, or the order the pieces came in (11.3; tested).",
+            "**Exact.** Points are compared by cross-multiplying their homogeneous coordinates, lines by their Plücker coordinates, in at most 576 bits, and nothing is rounded.",
+            "**Refused, never guessed.** Pieces that overlap on one sheet, and a stretch with a fin that has no partner across it, mean the pieces are no closed boundary: [`MergeError`].",
+            "**Each fin knows its piece.** [`Fin::piece`] is an index into the pieces given, whose [`Outward::polygon`] names where it came from, for a caller's history.",
+            "**Told where to keep a seam.** [`merge_with`] takes pieces it does not keep, whose sides hold a seam open where they lie along a face: an imprint's outline, and the walls of a split. A cut that ends inside a face leaves it whole, with no slit.",
+            "**No recursion.** Disjoint sets and rings are walked in loops (principle 13)."
+          ],
+          "job": "The maximal-face merge: the pieces a selection keeps, as faces, edges, rings and shells (11.3, step 5), shared by `geom-bool` and `geom-mesh` (19.5, 27).",
+          "method": {
+            "links": [
+              "projects/engines/geometry/architecture/11-booleans.md",
+              "https://doi.org/10.1145/3528223.3530181",
+              "https://doi.org/10.1098/rstl.1865.0017",
+              "https://doi.org/10.1109/MCG.1985.276271"
+            ],
+            "text": "chapter 11.3's rebuild (`projects/engines/geometry/architecture/11-booleans.md`), which goes further than EMBER's section 6, whose output keeps T-junctions (Trettner, Nehring-Wirxel and Kobbelt 2022, <https://doi.org/10.1145/3528223.3530181>); a line's coordinates are Plücker's, <https://doi.org/10.1098/rstl.1865.0017>; radial order at an edge is Weiler's radial edge structure, 1985, <https://doi.org/10.1109/MCG.1985.276271>."
+          },
+          "path": "geom_poly::merge",
           "provenance": [],
           "spdx": null,
           "target": "lib"
@@ -8215,12 +9500,36 @@
           "target": "lib"
         },
         {
-          "cost": "at most five segments per piece, each testing each polygon: one or two sign evaluations, and one per bound of a polygon the segment's line crosses. Charges the meter one unit per polygon a segment tests.",
+          "cost": "O(n) clips per level for n polygons across the level's boxes, and at most 123 levels: a box of the frame halves 41 times along each axis. Each leaf costs what [`local_cuts`] and [`classify`] cost on its polygons, and a solid's leaf one copy of each. A polygon's corner points are made once and carried into every box it enters whole; only a split's two parts make theirs. Charges the meter one unit per polygon a split clips, and one per polygon of a solid's leaf.",
+          "does": "[`arrange`] takes the polygons of an arrangement and classifies every piece. A box is split in two along its longest axis until it holds few polygons; polygons across the split are clipped exactly, and the upper box's reference point is walked up from the lower's, adding up the polygons it crosses, so each leaf can be solved on its own: [`local_cuts`], then [`classify`]. A box whose every test is settled by its reference vector alone, whatever the polygons in it do, is dropped (step 4). [`arrange_with`] is also told which entries are solids: no two of their faces cross, and their winding is 1 just behind every face and 0 just in front, EMBER's no-self-intersection and no-nested-parts flags (its section 4.5.1, 11.3 step 4). A box whose polygons all bound one solid entry is a leaf at once, however many it holds, and is solved without cuts or tracing.",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-poly/src/subdivide.rs",
+          "guarantees": [
+            "**The same pieces whatever the threads.** Each level of boxes holding many polygons is one phase of the parallel helper; a box holding few, a fixed number, is then one task of another, its whole subtree, as is each leaf found on the way, in tree order. So the output is the same bits on any number of threads, and a failure the one a walk of those units in tree order meets first (23.4).",
+            "**No recursion.** The top levels are walked level by level and each subtree on an explicit stack, so the tree's depth never threatens a WebAssembly stack (principle 13). A box holding polygons that a split no longer separates, such as many faces on one plane, stops as a leaf instead of dividing down to the grid.",
+            "**Early outs are mechanical.** A box is dropped only when every test takes the same answer for every count of every entry with a polygon in it (11.3, step 4). A box with a cutter in it is kept, and with no tests nothing is dropped.",
+            "**A solid's leaf is what tracing would give.** In a leaf whose polygons all bound one solid entry, no polygon crosses another, so each is one piece; the solid's count is 0 in front of each and 1 behind, and every other entry's is the reference's, as nothing of theirs is in the box. Each piece is the first of its plane, as no face of a solid overlaps another. Such a box is not split, so its pieces are fewer than tracing's leaves give, with the same vectors at every point (tested against the traced arrangement and the blocks' own counts). The caller vouches for the flag: a wrong one gives wrong pieces."
+          ],
+          "job": "Adaptive subdivision and the parallel task tree: steps 1 and 4 of 11.3, around the local work.",
+          "method": {
+            "links": [
+              "projects/engines/geometry/architecture/11-booleans.md",
+              "https://doi.org/10.1145/3528223.3530181"
+            ],
+            "text": "chapter 11.3's five steps (`projects/engines/geometry/architecture/11-booleans.md`), after EMBER's sections 4.1, 4.2 and 4.5 (Trettner, Nehring-Wirxel and Kobbelt 2022, <https://doi.org/10.1145/3528223.3530181>); Kleene's three-valued logic for the early outs, in [`crate::winding`]; the phases of chapter 23.4."
+          },
+          "path": "geom_poly::subdivide",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
+          "cost": "at most five segments per piece, each testing each polygon: one or two sign evaluations, and one per bound of a polygon the segment's line crosses. The last three run along the box's edges and are the same for every piece of a polygon that leaves the box by the same faces, so they are walked once for each. A pair whose spans miss costs a few comparisons. Charges the meter one unit per polygon a segment tests, walked, passed over or not.",
           "does": "[`classify`] takes the polygons of one box, the box and the winding vector at its reference point, and gives every piece of those polygons its two vectors. The vector just off a piece comes from a path to the reference point, adding up the signed crossings of the polygons on the way. No piece is crossed by another (11.3, step 2), so one path answers for a whole piece.",
           "family": [],
           "file": "projects/engines/geometry/crates/geom-poly/src/trace.rs",
           "guarantees": [
-            "**Exact, within 6.2's budget.** Every sign is a 4 × 4 determinant of plane coefficients, at most 384 bits, or a 3 × 3 determinant of normals, at most 252. Nothing is rounded, and the path's points are never computed.",
+            "**Exact, within 6.2's budget.** Every sign is a 4 × 4 determinant of plane coefficients, at most 384 bits, or a 3 × 3 determinant of normals, at most 252. Nothing is rounded, and the path's points are never computed for a sign. A segment and a polygon whose grid cells, the floors of their corners a step wider each way, do not meet share no point, so the segment cannot cross it, and the pair is passed over: a filter that never decides a crossing.",
             "**Ties are settled by moving the path, never by a tolerance.** Every plane of the path is moved by its own infinitesimal, in a fixed order, so the path misses every edge and corner of every polygon, and each sign that would be zero is decided by the determinant's first term in those infinitesimals (Edelsbrunner and Mücke's Simulation of Simplicity, in the order of `Rank`). Real ties, faces on one plane, are counted, not moved apart: a piece's two vectors differ by every coincident face over it, whichever way that face looks (11.5).",
             "**One emission of an overlap.** Where polygons on one plane overlap, [`Classified::first`] marks the copy of the lowest polygon in the order given, which a caller makes (operand key, name).",
             "**Cutters change nothing.** A polygon with no entry cuts but counts no crossing (11.1).",
@@ -8270,7 +9579,7 @@
       "provenance": [],
       "sections": "6.2, 11.3, 11.12, 11.14, 13.2, 19.5 and 23.2; open questions OQ-11.2 and OQ-19.4, in the kernel architecture (`projects/engines/geometry/architecture/`).",
       "spdx": null,
-      "status": "canonical planes ([`plane`]) and the arrangement predicates ([`order`]) built (G123); faces into convex pieces ([`convex`]) built (G125); clipping and local cuts ([`cut`]) built (G126); winding vectors ([`winding`]) and tracing ([`trace`]) built (G127); the rest by pieces G124, G128, G142.",
+      "status": "canonical planes ([`plane`]) and the arrangement predicates ([`order`]) built (G123); faces into convex pieces ([`convex`]) built (G125); clipping and local cuts ([`cut`]) built (G126); winding vectors ([`winding`]) and tracing ([`trace`]) built (G127); the subdivision ([`subdivide`]) built (G128); the maximal-face merge ([`merge`]) built (G129); the rest by pieces G124, G142.",
       "summary": "Spare Kit geometry kernel: exact plane-based polyhedra."
     },
     {
@@ -9876,6 +11185,30 @@
           "target": "lib"
         },
         {
+          "cost": "linear in a history's records, times the composition's ordered-set operations; a chain of `k` steps composes twice, `O(k)` compositions.",
+          "does": "[`check_laws`] checks one operation's history against laws 1 to 3 and 13.14's recording rule. [`check_chain`] checks every step of a chain, composes it, checks the composition against the chain's first inputs (law 4: histories compose and keep laws 1 to 3), and checks that composing left to right and right to left give the same relations; it says which step or which part failed ([`ChainBreak`]). [`step`] and [`chain`] are proptest strategies of valid histories: every input unchanged, modified, split, merged with others, deleted, or deleted while generating, plus outputs generated from nothing, each output under a fresh name.",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-test/src/history.rs",
+          "guarantees": [
+            "**Every law is checked through `geom-op`'s own checker**, so the kit and the contract cannot disagree; the kit adds the chain's composition and its associativity.",
+            "**The generators only make histories the laws allow**, so a law break the kit reports on them is a defect of `geom-op`'s checker or composition; its tests seed one break of each law to show the checker finds it.",
+            "**Seeded and repeatable**: names are made from the step and position, never drawn at random beyond proptest's own seeded runner."
+          ],
+          "job": "The history laws as a kit every operation's tests run: chapter 20.3's four laws checked on one history and on a chain, and seeded generators of valid histories and chains.",
+          "method": {
+            "links": [
+              "projects/engines/geometry/architecture/20-naming-history.md",
+              "projects/engines/geometry/methods/occt-history-contract.md",
+              "https://proptest-rs.github.io/proptest/proptest/tutorial/strategy-basics.html"
+            ],
+            "text": "chapter 20.3's laws and the method note's composition rules (`projects/engines/geometry/architecture/20-naming-history.md`, `projects/engines/geometry/methods/occt-history-contract.md`), as property-based tests in proptest's strategies (<https://proptest-rs.github.io/proptest/proptest/tutorial/strategy-basics.html>)."
+          },
+          "path": "geom_test::history",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
           "cost": "linear in the map's records, the licence texts and the notes, plus sorting them.",
           "does": "[`build`] takes the map as a value ([`crate::map::Generated::map`], the records `MAP.json` holds), the hand-kept licence texts under `projects/engines/geometry/notices/` ([`notices`]) and the method notes under `projects/engines/geometry/methods/` ([`methods`]), and returns the text of both files with every [`Problem`]: a ported source with no licence text, a licence text no port uses, a method note that breaks its template, a record whose method note credits another source, or a map whose headers are incomplete. [`repo`] reads the inputs from a workspace on disk and writes or checks the committed files; the binary `provenance` (`cargo run -p geom-test --bin provenance -- check`) runs it in CI.",
           "family": [],
@@ -11034,7 +12367,150 @@
         23
       ],
       "depends": [],
-      "errors": [],
+      "errors": [
+        {
+          "doc": "Why an arena could not change, or arenas could not be published as a body.",
+          "file": "projects/engines/geometry/crates/geom-topo/src/error.rs",
+          "kinds": [
+            {
+              "doc": "The arena already holds `u32::MAX` rows, the most a 32-bit index addresses.",
+              "name": "Full",
+              "shape": "tuple"
+            },
+            {
+              "doc": "The arena has no row at this index.",
+              "name": "NoSuchRow",
+              "shape": "struct"
+            },
+            {
+              "doc": "The columns of one arena hold different numbers of rows.",
+              "name": "Ragged",
+              "shape": "tuple"
+            },
+            {
+              "doc": "A link column holds an index past the end of the arena it points into.",
+              "name": "Dangling",
+              "shape": "struct"
+            },
+            {
+              "doc": "The body's outside region is not a void region of its region arena.",
+              "name": "Outside",
+              "shape": "unit"
+            },
+            {
+              "doc": "The meter stopped: its budget ran out, the caller cancelled, or memory was refused.",
+              "name": "Stopped",
+              "shape": "tuple"
+            },
+            {
+              "doc": "A large allocation (a chunk of rows, or a column's list of chunks) was refused.",
+              "name": "OutOfMemory",
+              "shape": "unit"
+            },
+            {
+              "doc": "The names given for a named arena are not one per row.",
+              "name": "Names",
+              "shape": "tuple"
+            },
+            {
+              "doc": "Two rows of a named arena have the same name: the first such pair in name order.",
+              "name": "DuplicateName",
+              "shape": "struct"
+            },
+            {
+              "doc": "Two rows of an arena with no names (shells, loops, fins) or of a geometry pool get the same key from what they join, so name order cannot place them: the first such pair.",
+              "name": "Unordered",
+              "shape": "struct"
+            },
+            {
+              "doc": "An Euler operator refused its arguments.",
+              "name": "Euler",
+              "shape": "tuple"
+            },
+            {
+              "doc": "A row of a geometry pool that no entity uses, so name order cannot place it.",
+              "name": "Unused",
+              "shape": "struct"
+            }
+          ],
+          "module": "geom_topo::error",
+          "name": "TopoError",
+          "non_exhaustive": false
+        },
+        {
+          "doc": "Why an arena's rows could not be put in name order.",
+          "file": "projects/engines/geometry/crates/geom-topo/src/order.rs",
+          "kinds": [
+            {
+              "doc": "Two rows carry the same name: the first such pair in name order, the lower row first.",
+              "name": "DuplicateName",
+              "shape": "struct"
+            },
+            {
+              "doc": "More rows than a 32-bit index addresses.",
+              "name": "TooManyRows",
+              "shape": "unit"
+            }
+          ],
+          "module": "geom_topo::order",
+          "name": "OrderError",
+          "non_exhaustive": false
+        },
+        {
+          "doc": "Why a query could not answer.",
+          "file": "projects/engines/geometry/crates/geom-topo/src/query.rs",
+          "kinds": [
+            {
+              "doc": "A link into a row its arena does not have; a published body never holds one.",
+              "name": "NoSuchRow",
+              "shape": "unit"
+            },
+            {
+              "doc": "A loop's ring of fins, or a list of loops or faces, that does not come back or end within its arena.",
+              "name": "Ring",
+              "shape": "unit"
+            },
+            {
+              "doc": "An edge that is not a straight line between two vertices, where a polygon is needed.",
+              "name": "Curved",
+              "shape": "tuple"
+            },
+            {
+              "doc": "A face whose surface is not a plane, where a polygon is needed.",
+              "name": "NotPlanar",
+              "shape": "tuple"
+            },
+            {
+              "doc": "A face with no loop, where a polygon is needed.",
+              "name": "Loopless",
+              "shape": "tuple"
+            },
+            {
+              "doc": "A vertex where three planes meet, where a grid point is needed.",
+              "name": "Implicit",
+              "shape": "tuple"
+            },
+            {
+              "doc": "A volume asked of a body that is not a solid.",
+              "name": "NotSolid",
+              "shape": "unit"
+            },
+            {
+              "doc": "A sum past its integer's width, or an exact predicate that could not finish: never for a body within its arenas' limits.",
+              "name": "Overflow",
+              "shape": "unit"
+            },
+            {
+              "doc": "The meter stopped the work.",
+              "name": "Stopped",
+              "shape": "tuple"
+            }
+          ],
+          "module": "geom_topo::query",
+          "name": "QueryError",
+          "non_exhaustive": false
+        }
+      ],
       "family": [],
       "file": "projects/engines/geometry/crates/geom-topo/src/lib.rs",
       "folder": "projects/engines/geometry/crates/geom-topo",
@@ -11050,12 +12526,349 @@
       "job": "Bodies to vertices in arenas; the builder; attributes and continuity records; regions and cells; the instance record.",
       "kind": "kernel",
       "layer": "3",
-      "modules": [],
+      "modules": [
+        {
+          "cost": "[`Arenas::rows`] is constant time; [`Arenas::memory`] is linear in the number of chunks.",
+          "does": "[`Arenas`] holds a body's entities ([`crate::entity`]) and the pools their geometry is kept in: surfaces ([`SurfaceKind`]), 3D curves ([`CurveKind<3>`]), pcurves ([`CurveKind<2>`]), points ([`PointKind`]) and integer planes ([`Plane`]), each a [`Pool`], a column whose rows are the geometry itself. Faces, edges, fins and vertices attach to geometry by index into these pools (8.1), and a vertex where three planes meet names them in the plane pool through its point (6.3). [`crate::Builder`] edits arenas and publishes them as an immutable [`crate::Body`].",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-topo/src/arenas.rs",
+          "guarantees": [
+            "**Vectors only.** Every container is a column in row order; there is no map, so nothing can be iterated in an order that depends on hashing or memory (8.2, 21).",
+            "**Cheap versions.** Cloning arenas copies one pointer per chunk; later writes to either copy only the chunks they land in ([`Column`]).",
+            "**Values are all that count.** Two arena sets are equal when every column's values are equal in row order."
+          ],
+          "job": "Every arena of one body: the seven entity arenas and the five geometry pools.",
+          "method": {
+            "links": [
+              "projects/kit/notes/G01-evidence/03-rust-kernels-crates.md"
+            ],
+            "text": "one arena per entity kind and one pool per kind of geometry, addressed by typed 32-bit indices, as chapter 8.2 and evidence report 03 lay out (`projects/kit/notes/G01-evidence/03-rust-kernels-crates.md`, section 5)."
+          },
+          "path": "geom_topo::arenas",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
+          "cost": "a lookup or an insert is `O(log n)` in the number of values; a split or a merge visits the values of its inputs only. Nothing recurses.",
+          "does": "an [`Attributes`] holds each attribute's [`Class`] and every value, keyed by the entity's [`NameKey`] and the attribute's [`AttrId`]. Values are canonical bytes ([`Value`]), carried whether or not this kernel understands them. [`Attributes::split`] and [`Attributes::merge`] give the values an operation's split and merged entities carry, by each attribute's class; the other events of section 8.4 (changed, transformed, copied, generated) come with the history records (pieces G88 and G90).",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-topo/src/attributes.rs",
+          "guarantees": [
+            "**Keyed by name, never by index.** Values follow names, so they survive every re-indexing a publish makes (8.2), and only named entities carry them (8.4).",
+            "**Ordered.** Every map iterates by key: attribute ids, then names, as bytes, the same on every machine (8.2, 21).",
+            "**Values are bytes.** Two values are equal exactly when their bytes are (8.4); a merge that keeps a value only when every input carries an equal one compares bytes.",
+            "**Immutable.** Every operation returns a new [`Attributes`]; nothing is changed in place, as for bodies (8.2)."
+          ],
+          "job": "Attributes: data hung on a body or on one of its named entities, keyed by persistent name, with the class that says what a value does when its entity is split or merged (8.4).",
+          "method": {
+            "links": [
+              "projects/engines/geometry/architecture/08-topology.md",
+              "projects/kit/notes/G01-evidence/07-persistent-naming.md"
+            ],
+            "text": "Parasolid's published attribute classes, taken as a concept only and rebuilt on persistent names (`projects/engines/geometry/architecture/08-topology.md`, 8.4; `projects/kit/notes/G01-evidence/07-persistent-naming.md`, section 5)."
+          },
+          "path": "geom_topo::attributes",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
+          "cost": "every accessor is constant time; cloning is linear in the number of chunks; [`Body::memory`] is linear in the number of chunks.",
+          "does": "a [`Body`] is a kind ([`BodyKind`]), the index of its infinite outside region, and its [`Arenas`]. Only [`crate::Builder::publish`] makes one, after checking that every link points inside the body; nothing changes a body afterwards. An edit starts a builder from the body ([`crate::Builder::edit`]) and publishes a new version, which shares every chunk the edit did not touch with the old one (8.2, 23.9).",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-topo/src/body.rs",
+          "guarantees": [
+            "**Immutable.** No method takes `&mut self`; a published body's values never change.",
+            "**No dangling index.** Every index a body's columns hold is a row of the arena it points into, the columns of each arena hold equally many rows, and the outside region is a void region of the body ([`crate::Builder::publish`]).",
+            "**Values are all that count.** Two bodies are equal when their kinds, outside regions and arenas' values are; which chunks they share is a memory detail ([`Body::memory`])."
+          ],
+          "job": "The body: one shape, immutable once published.",
+          "method": {
+            "links": [
+              "projects/kit/notes/G01-evidence/02-occt-parasolid-acis.md",
+              "projects/kit/notes/G01-evidence/03-rust-kernels-crates.md"
+            ],
+            "text": "Parasolid's body kinds and its infinite void region (`projects/kit/notes/G01-evidence/02-occt-parasolid-acis.md`, section 8), made immutable after building as chapter 8.2 asks, with versions sharing `Arc` chunks as report 03 advises (`projects/kit/notes/G01-evidence/03-rust-kernels-crates.md`, section 5)."
+          },
+          "path": "geom_topo::body",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
+          "cost": "[`Builder::new`] and [`Builder::edit`] are linear in the number of chunks (one pointer each); [`Builder::publish`] is linear in the number of rows of the link columns, one comparison each, and allocates nothing. Nothing recurses.",
+          "does": "a [`Builder`] holds [`Arenas`] to fill or edit: [`Builder::new`] starts empty, [`Builder::edit`] starts from a published body and shares all of its chunks. [`Builder::publish`] checks the arenas and returns them as an immutable [`Body`]: the columns of each arena hold equally many rows, every link points inside the arena it names, and the outside region is a void region. Piece G81 adds the Euler operators, persistent-name order and attributes on top of this; piece G84's checker judges topology (loops close, shells close, Euler's formula), which publishing does not.",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-topo/src/builder.rs",
+          "guarantees": [
+            "**Bodies come only from here.** [`Body`] has no other public constructor, so every body has passed [`Builder::publish`]'s checks.",
+            "**Every link inside the body.** A published body holds no index past the end of the arena it points into, so following any link of a body never fails.",
+            "**One answer, the first fault.** The checks run in a fixed order: each arena's column lengths from region to vertex, then each link column in [`Link::ALL`]'s order, rows ascending, then the outside region. The error is the first fault in that order, the same on every machine.",
+            "**Edits copy only what they touch.** A builder made by [`Builder::edit`] shares every chunk with the body; each write copies only the chunk it lands in, so a version made by editing ten faces of a million-face body shares all but at most ten chunks per column written (23.9).",
+            "**Metered.** Publishing charges one work unit for every chunk of every link column it checks, and of the meetings of planes in the point pool, which are links too, to the caller's meter, which polls the caller's cancellation (23.10)."
+          ],
+          "job": "The builder: the one way to make a body, by editing arenas and publishing them.",
+          "method": {
+            "links": [
+              "projects/kit/notes/G01-evidence/02-occt-parasolid-acis.md",
+              "projects/kit/notes/G01-evidence/03-rust-kernels-crates.md"
+            ],
+            "text": "Parasolid's model structure, made immutable after building (chapter 8.2; `projects/kit/notes/G01-evidence/02-occt-parasolid-acis.md`, section 8), with the validation layer evidence report 03 recommends copying from Fornjot, every object checked as it enters (`projects/kit/notes/G01-evidence/03-rust-kernels-crates.md`, section 2)."
+          },
+          "path": "geom_topo::builder",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
+          "cost": "each operator is constant time but for the fins it moves to another loop, which it visits once; [`Euler::publish`] is linear in the rows, then [`Builder::publish_named`]'s cost. Nothing recurses.",
+          "does": "an [`Euler`] editor holds arenas, one name per region, face, edge and vertex, and which rows are live. It starts empty ([`Euler::new`]) or from a body published by name ([`Euler::edit`]). The operators come in pairs, each undoing the other:",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-topo/src/builder/euler.rs",
+          "guarantees": [
+            "**Euler's formula is kept.** Each operator changes the counts by its row of the table above, so V − E + F − R = 2 (S − H) holds after it when it held before; `R` is loops less faces, and `H` is the count the model of `tests/euler_model.rs` keeps.",
+            "**Loops stay closed and rings stay paired.** Every operator leaves each loop's fins one cycle by `next` and `prev`, each the inverse of the other, each fin's start the end of the fin before it, and each edge it makes with two fins, each the other's radial neighbour.",
+            "**A refusal changes nothing.** Every operator checks its arguments before it changes a row; one it cannot apply is a [`TopoError::Euler`] with the [`Refusal`]. An arena that is full or an allocation refused part-way leaves the editor part-way, to be dropped.",
+            "**Rows only grow while editing.** A killed row is marked dead, so every handle the editor gave stays the row it named; [`Euler::publish`] drops dead rows and the geometry no live entity uses, then assigns every index in name order.",
+            "**Lists are made when publishing.** The editor keeps no list of a region's shells, a shell's faces or a face's loops ([`Builder::publish_named`] rebuilds them from the owner links), only each loop's and each edge's first fin."
+          ],
+          "job": "Euler operators (piece G81): edits that change a body's topology one step at a time, each keeping Euler's formula, on an editor whose rows are removed by marking them dead.",
+          "method": {
+            "links": [
+              "https://doi.org/10.1109/MCG.1982.1674396"
+            ],
+            "text": "Mäntylä and Sulonen's GWB operators on half-edges (MVFS, MEV, MEF, KEMR, KFMRH and their inverses; \"GWB: a solid modeler with Euler operators\", IEEE Computer Graphics and Applications 2(7), 17-31, 1982, <https://doi.org/10.1109/MCG.1982.1674396>), with fins as half-edges. A fin needs an edge here (8.1), so the first operator makes a wire of one edge and two vertices, Mäntylä's MVFS followed by MEV, and no operator leaves a loop without a fin."
+          },
+          "path": "geom_topo::builder::euler",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
+          "cost": "one sort of each arena's keys, `O(n log n)` in its rows, and one pass that copies every row once into new chunks, and one more pass over the owner links to rebuild the lists. Nothing recurses.",
+          "does": "[`Builder::publish_named`] takes one name per region, face, edge and vertex, checks the arenas as [`Builder::publish`] does, moves every named arena's rows into name order, places the arenas without names (shells, loops, fins) and the geometry pools by a fixed rule from those names, rewrites every link through the moves, rebuilds every list from the back-links, and publishes the result, carrying its names in name order.",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-topo/src/builder/named.rs",
+          "guarantees": [
+            "**Index order is name order.** Every named arena's rows are in name order, and every other arena's rows are in the order of their keys above; so any order of the same rows, with their links moved to match, publishes the same body (32.17).",
+            "**Every link follows its row.** A link that pointed at a row points at that row's new place, so the body joins the same entities as the arenas given.",
+            "**Lists follow the back-links, in name order.** Each region's shells, each shell's faces and each face's loops are chained from the least row up, and each loop's and each edge's first fin is its least fin, all read from the links each entity holds to its owner (a shell's region, a face's shell, a loop's face, a fin's loop and edge). What the lists given held is replaced, so they never depend on the order a body was built in either. A loop's cycle of fins and an edge's radial ring are kept as given: their order is the shape's.",
+            "**Checked as published.** The arenas pass [`Builder::publish`]'s checks before anything is read, and the moved arenas pass them again as they are published.",
+            "**One answer, the first fault.** Faults are reported in a fixed order: [`Builder::publish`]'s checks; then, for regions, faces, edges and vertices in turn, a count of names other than one per row or two rows of one name; then equal keys among shells, loops and fins in turn; then an unused row of the surface, curve, pcurve and point pools in turn.",
+            "**Metered.** Besides what [`Builder::publish`] charges, twice (on the arenas given and on the moved ones), publishing by name charges one unit for every chunk of rows it moves."
+          ],
+          "job": "Publishing in name order (piece G81): a body's arena indices assigned in persistent-name order, so its arenas depend only on what it contains, never on how it was built (8.2, 32.17).",
+          "method": {
+            "links": [
+              "projects/engines/geometry/architecture/32-decisions.md",
+              "projects/engines/geometry/architecture/08-topology.md"
+            ],
+            "text": "the boolean rebuild's renumbering in name order (`projects/engines/geometry/architecture/ 11-booleans.md`, 11.3), done for every body by the builder, as decided in `projects/engines/geometry/architecture/32-decisions.md`, 32.17, and laid out in `projects/engines/geometry/architecture/08-topology.md`, 8.2."
+          },
+          "path": "geom_topo::builder::named",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
+          "cost": "[`Column::get`] is constant time. [`Column::set`] is constant time, plus a copy of one chunk (at most [`CHUNK_ROWS`] rows) when that chunk is shared. [`Column::push`] is amortised constant time, plus at most one chunk copy. Cloning is linear in the number of chunks, one pointer each. [`Column::filled`] allocates one chunk, however many rows it fills. Nothing recurses.",
+          "does": "a [`Column<K, V>`] holds one field (of type `V`) of every row of the arena of `K`, in row order: all face boxes together, all fin links together (structure of arrays, chapter 23.9). The column is cut into chunks of [`CHUNK_ROWS`] rows, each held behind a shared pointer, so cloning a column (a new body version) copies only the list of chunks, and changing a row copies only the chunk that holds it, if another version still shares it (copy on write).",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-topo/src/column.rs",
+          "guarantees": [
+            "**Fixed chunks, cut by row number only.** Row r is in chunk r / [`CHUNK_ROWS`] at place r mod [`CHUNK_ROWS`]. Every chunk but the last is full, and no chunk is empty, so where a chunk starts never depends on how the column was built or edited (23.9, 24.2).",
+            "**Versions never see each other's edits.** After a clone, [`Column::set`] and [`Column::push`] on either column leave the other's values unchanged; a write copies the chunk it lands in when that chunk is shared, and only that chunk.",
+            "**Values are all that count.** Equality, iteration and every answer depend on the rows' values in row order only. Which chunks are shared is a memory detail that [`Column::memory`] reports for measurement and never reaches a result (23.8, 23.9).",
+            "**Large allocations are fallible.** A chunk's rows, and the list of chunks, are reserved with `try_reserve`, so a refusal returns [`TopoError::OutOfMemory`] instead of aborting (23.10). Only a chunk's small shared header is allocated infallibly, as the standard library's `Arc` allows no other way.",
+            "**At most `u32::MAX` rows,** the most a 32-bit index addresses: one more is [`TopoError::Full`]."
+          ],
+          "job": "One field of one arena, as a column cut into fixed chunks that body versions share.",
+          "method": {
+            "links": [
+              "projects/kit/notes/G01-evidence/01-manifold-mesh-booleans.md",
+              "projects/kit/notes/G01-evidence/03-rust-kernels-crates.md",
+              "https://doc.rust-lang.org/alloc/sync/struct.Arc.html#method.make_mut"
+            ],
+            "text": "structure of arrays as Manifold stores its halfedges (`projects/kit/notes/G01-evidence/01-manifold-mesh-booleans.md`, section 2), cut into the fixed chunks of chapter 23.9 and shared between versions through `Arc` chunks, as report 03 advises for immutable snapshots (`projects/kit/notes/G01-evidence/03-rust-kernels-crates.md`, section 5; `Arc::make_mut`, <https://doc.rust-lang.org/alloc/sync/struct.Arc.html#method.make_mut>). No vetted crate does this under `no_std` with fixed chunk boundaries: persistent vectors such as imbl's and rpds's cut their trees where edits happened, which chapter 24.2 rules out, and only `libm` may ship in a kernel crate (`deny-no-std.toml`)."
+          },
+          "path": "geom_topo::column",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
+          "cost": "as [`Column`]'s operations, once per field: a push is amortised constant time per field, a row read is one lookup per field.",
+          "does": "for each entity of chapter 8.1 a row type ([`Region`], [`Shell`], [`Face`], [`Loop`], [`Fin`], [`Edge`], [`Vertex`]) and its arena ([`Regions`], [`Shells`], [`Faces`], [`Loops`], [`Fins`], [`Edges`], [`Vertices`]): one [`Column`] per field, so a scan reads only the fields it needs (chapter 23.9). Entities refer to each other, and to the geometry pools, by typed index only. [`Link`] names every column that holds an index, with the arena it points from and the arena it points into.",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-topo/src/entity.rs",
+          "guarantees": [
+            "**Columns, not records.** Every field is a column of its own; a row exists only as the same index in each column.",
+            "**Typed links.** Every link is an [`Ix`] of the arena it points into, and an absent link is `None` at no extra size.",
+            "**Rows are values.** Two arenas are equal when their columns' values are equal in row order, whatever memory they share.",
+            "**Whole rows or an error.** [`Faces::push`] and the others add one value to each column, in field order. Only a refused allocation can stop them part way, and the arenas are then ragged, which publishing refuses ([`TopoError::Ragged`])."
+          ],
+          "job": "The entities of a body, region to vertex, each stored as a table of columns.",
+          "method": {
+            "links": [
+              "projects/kit/notes/G01-evidence/02-occt-parasolid-acis.md",
+              "projects/kit/notes/G01-evidence/01-manifold-mesh-booleans.md"
+            ],
+            "text": "Parasolid's published model structure: body, region, shell, face, loop, fin, edge and vertex, with fins in radial order around their edge (`projects/kit/notes/G01-evidence/02-occt-parasolid-acis.md`, section 8; chapter 8.1), stored as structure of arrays as Manifold stores its halfedges (`projects/kit/notes/G01-evidence/01-manifold-mesh-booleans.md`, section 2)."
+          },
+          "path": "geom_topo::entity",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
+          "cost": "constant.",
+          "does": "[`TopoError`] names each failure of the arenas ([`crate::column`], [`crate::entity`], [`crate::arenas`]) and of publishing them as a body ([`crate::builder`]), and maps `geom-run`'s stops onto them, so a caller sees one error type.",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-topo/src/error.rs",
+          "guarantees": [
+            "**Typed and placed.** Every failure is one of these kinds, and each kind that comes from one row names the arena or link column and the row, so a caller can find it without searching.",
+            "**Stops keep their reason.** A meter's stop (budget, cancellation, memory) keeps `geom-run`'s own record of it."
+          ],
+          "job": "Why an arena could not change, or arenas could not be published as a body.",
+          "method": {
+            "links": [
+              "projects/engines/geometry/architecture/23-performance.md"
+            ],
+            "text": "an error enum and its conversions, with `geom-run`'s stops (`projects/engines/geometry/architecture/23-performance.md`, 23.10)."
+          },
+          "path": "geom_topo::error",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
+          "cost": "every operation is constant time and allocates nothing.",
+          "does": "[`Ix<K>`] is the index of one row of the arena whose rows are of kind `K`: `Ix<Face>` ([`crate::FaceIx`]) indexes faces, `Ix<SurfaceKind>` ([`crate::SurfaceIx`]) the surface pool, and so on (chapter 8.2). [`Kind`] says which arena a kind's rows live in, and [`Arena`] names the eleven arenas: seven of topology and four geometry pools.",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-topo/src/ix.rs",
+          "guarantees": [
+            "**Typed.** An `Ix<Face>` can only index the face arena; mixing kinds is a compile error, not a wrong row.",
+            "**Thirty-two bits, and an absent link costs nothing.** `Ix<K>` and `Option<Ix<K>>` are both four bytes: the row is stored plus one, so zero is free for `None`. Rows run from 0 to [`Ix::MAX_ROW`], `u32::MAX − 1`, so an arena holds at most `u32::MAX` rows.",
+            "**Ordered as rows, never as addresses.** Equality, order and hashing are those of the row, so sorting indices sorts them in arena order, which is persistent-name order (8.2; 32.17). An index holds no pointer and nothing about where memory lies.",
+            "**Valid inside one body version only.** An index is a position, not a name; references and files hold persistent names (8.2, 20.1)."
+          ],
+          "job": "Typed 32-bit indices into a body's arenas, and the names of the arenas.",
+          "method": {
+            "links": [
+              "projects/kit/notes/G01-evidence/03-rust-kernels-crates.md",
+              "https://doc.rust-lang.org/core/num/type.NonZeroU32.html"
+            ],
+            "text": "one arena per entity kind addressed by a `u32` newtype index, never by address, the design Fornjot ended on after losing determinism to address identity (`projects/kit/notes/G01-evidence/03-rust-kernels-crates.md`, sections 2 and 5); the free value for `None` is `core::num::NonZeroU32`'s niche (<https://doc.rust-lang.org/core/num/type.NonZeroU32.html>)."
+          },
+          "path": "geom_topo::ix",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
+          "cost": "linear in the corners; 16 limbs per product, about a thousand limb multiplications per term. Nothing allocated. Recursion: none.",
+          "does": "a [`Corner`] is a grid point or an implicit point: three planes (`Tpi`) or a line and a plane (`Lpi`), kept exactly (6.3). [`loop_area`] gives twice a loop's area vector and [`shell_volume`] six times the signed volume of a closed shell given as its loops, each as a certified interval. Each term of a sum is an exact fraction; adding fractions with different denominators needs integers that grow without bound (19.2), so each term is rounded outward and the intervals are added. `crate::query`'s exact sums cannot take a vertex where three planes meet (G134), so it gives its corners to these functions as a list. [`Corner::side`] says which side of a plane a corner lies on, exactly.",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-topo/src/mass.rs",
+          "guarantees": [
+            "**Contains the true value.** Every term's numerator and denominator are computed exactly, each enclosed by the doubles either side of its nearest double, and divided in outward-rounded interval arithmetic; the sum adds in the same arithmetic. So the interval holds the exact rational value, within a few units in the last place per term.",
+            "**Exact to the budget.** A corner's homogeneous coordinates are below 2^294 and its weight below 2^252 (`geom_num::plane`), so a volume term's numerator, six products of three coordinates, is below 2^885, and its denominator, three weights, below 2^756; every partial result fits the 1024 bits used here, and every step is checked. Measuring [`about`] a grid point subtracts a weight of 2^252 times a coordinate of 2^40 from each coordinate, a numerator two bits wider at most, which the same width holds. [`QueryError::Overflow`] reports what cannot happen, never a wrong value.",
+            "**As sharp far from the origin as near it.** The area of a closed loop and the volume of a closed shell do not depend on where they are measured from, so measured from a grid point of its own ([`about`]), with [`loop_area_from`] and [`add_loop_volume`], a small shape far from the origin keeps its sign: rounded terms are the shape's size, not the distance to the origin.",
+            "**Charged, nothing allocated.** One unit of work per corner visited."
+          ],
+          "job": "Certified mass properties of flat polygons whose corners may be implicit points (10.2, 19.2; piece G102).",
+          "method": {
+            "links": [
+              "projects/engines/geometry/architecture/19-meshes-spatial-clash.md",
+              "doi:10.1016/B978-0-08-050754-5.50043-8",
+              "doi:10.1007/PL00009321"
+            ],
+            "text": "chapter 19.2's mass properties for implicit vertices (`projects/engines/geometry/architecture/19-meshes-spatial-clash.md`): the sums of `crate::query` (Goldman, Graphics Gems II, doi:10.1016/B978-0-08-050754-5.50043-8) on homogeneous coordinates, with `geom_num::ExactSum`'s correctly rounded sum (Shewchuk, \"Adaptive Precision Floating-Point Arithmetic\", doi:10.1007/PL00009321) giving each integer's nearest double, and `geom_num::interval`'s outward rounding."
+          },
+          "path": "geom_topo::mass",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
+          "cost": "`O(n log n)` comparisons of 16 bytes and two vectors of `n` indices; nothing recurses.",
+          "does": "[`NameKey`] is a persistent name's 16 bytes as the caller supplies them (this crate never makes names; `geom-name` does, 20.1). [`Permutation::by_name`] sorts one arena's rows by their keys and gives, for every row, the row it moves to, so that the builder can move the arena and rewrite every index that points into it before a body is published.",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-topo/src/order.rs",
+          "guarantees": [
+            "**Index order is name order.** After [`Permutation::apply`], row `i` holds the entity with the `i`-th smallest key, compared as bytes, so a body's arenas depend only on the names it holds, never on the order an operation produced them in (32.17).",
+            "**Names are unique per arena.** Two rows with the same key are refused with [`OrderError::DuplicateName`], naming the two rows that come first in name order, never ordered by a guess (20.2: a duplicate the contract does not expect is a bug).",
+            "**A bijection.** [`Permutation::new_of`] maps `0..len` onto `0..len`, one to one, and [`Permutation::old_of`] is its inverse."
+          ],
+          "job": "Name order: the key every named entity is sorted by, and the permutation that moves an arena's rows into that order (8.2, accepted in 32.17).",
+          "method": {
+            "links": [
+              "projects/engines/geometry/architecture/08-topology.md",
+              "projects/engines/geometry/architecture/32-decisions.md"
+            ],
+            "text": "a sort by key, then by row to keep the order total, as section 23.4's builder sorts its scratch arrays before publishing (`projects/engines/geometry/architecture/08-topology.md`, 8.2; `projects/engines/geometry/architecture/32-decisions.md`, 32.17)."
+          },
+          "path": "geom_topo::order",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
+          "cost": "linear in the rows visited; each list is walked once per query. [`shell_side`] is one [`side_of_shell`] for each vertex of the first shell the second holds, plus one. Recursion: none.",
+          "does": "[`faces`] lists every face with its shell, surface, sense, loops and name. [`loop_area`] and [`face_area`] give twice the area vector of a loop and of a face, Σ pᵢ × pᵢ₊₁ over the loop's vertices in fin order; [`shell_volume`] and [`volume`] give six times the signed volume enclosed, Σ over faces of the face's twice-area vector dotted with one of its vertices. [`bounding_box`] gives the box of every vertex, joined with the stored box of each face that is not a polygon. [`side_of_shell`] says which side of a closed flat shell a grid point lies on, and [`shell_side`] which side of one shell another lies on. A loop's vertex at each fin is where the fin starts: its edge's start for a forward fin, its end for a reversed one. A vertex where three planes meet has no grid point, so these exact sums refuse it; [`corner`] gives it as an implicit point, and [`certified_loop_area`] and [`certified_shell_volume`] measure such a loop and shell in certified intervals (`crate::mass`).",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-topo/src/query.rs",
+          "guarantees": [
+            "**Exact.** Integers throughout, never rounded: an area vector's components are `i128` (each below n·2⁸¹ for a loop of n fins, so below 2¹¹⁴ for any arena), a volume is an `I256` (below 2¹⁸⁷). A face's area vector is normal to its plane and points the way its loops run counter-clockwise; with outer loops counter-clockwise seen from outside the material, a closed solid shell's volume is positive and a cavity's shell's negative.",
+            "**Flat only, said so.** A loop with an edge that is not a straight line between two vertices is refused with [`QueryError::Curved`] naming the edge, a face not on a plane with [`QueryError::NotPlanar`], a face with no loop with [`QueryError::Loopless`], and the volume of a body that is not a solid with [`QueryError::NotSolid`], and a vertex with no grid point with [`QueryError::Implicit`]. Certified mass properties of curved bodies come with later pieces.",
+            "**Exact sides, every tie decided.** [`side_of_shell`] is a signed count of a ray's crossings with the fan triangles of the shell's loops, decided by `orient2d` and `orient3d` on grid points, with the query point moved symbolically so that no tie is left. It is the point's winding number, so a shell inside out, a face with holes and a loop that is not convex all count correctly. A point at one of the shell's vertices is reported as such, never classified.",
+            "**Ends on any body.** Every list and ring walk is bounded by its arena's length, so a ring that does not come back is [`QueryError::Ring`], never a hang; a link out of its arena is [`QueryError::NoSuchRow`], never a panic.",
+            "**Charged, and nothing allocated but its lists.** One unit of work per face listed, per vertex boxed and per loop, face and fin visited. Only [`faces`] and the certified measures allocate: a list, reserved fallibly with its logical bytes on the meter first."
+          ],
+          "job": "Core queries on a body's topology and points (10.2, 22; piece G102): its faces listed, its bounding box, the exact mass properties of a flat body whose vertices are grid points, and which side of a flat shell a point or another shell lies on.",
+          "method": {
+            "links": [
+              "doi:10.1016/B978-0-08-050754-5.50043-8",
+              "doi:10.1016/S0097-8493(96",
+              "doi:10.1145/77635.77639"
+            ],
+            "text": "the vector area of a polygon in space and a closed polyhedron's volume by the divergence theorem over its faces, `6V = Σ A_f · p_f` (Goldman, \"Area of planar polygons and volume of polyhedra\", Graphics Gems II, 1991, pp. 170–171, doi:10.1016/B978-0-08-050754-5.50043-8). The side of a shell is the winding number by signed crossings (Feito and Torres, \"Inclusion test for general polyhedra\", Computers and Graphics 21(1), 1997, doi:10.1016/S0097-8493(96)00028-8), on a ray along +x from p + (ε³, ε, ε²): Simulation of Simplicity's idea (Edelsbrunner and Mücke 1990, doi:10.1145/77635.77639) applied to the query point alone. `geom_num::perturb` is not used because its form of the test needs a far end of the ray inside the grid, which a shell filling the grid's range leaves no room for, and its 2D and 3D answers are signs of different perturbations; moving one point needs only the leading terms written at `crossing`."
+          },
+          "path": "geom_topo::query",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
+          "cost": "`crate::query`'s, plus one meter. Recursion: none.",
+          "does": "[`bounding_box`], [`twice_area`] and [`six_volume`] run `crate::query`'s functions inside [`OpContext::run`]. Each takes the exactness its body is recorded with, since a body does not hold its own (24.4 stores it beside the body), and returns it with the answer: the number is exact on the body's vertices, and the class says how far those vertices may lie from the true shape. [`failed`] turns a [`QueryError`] into the contract's error, for every crate that offers a query.",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-topo/src/query_ops.rs",
+          "guarantees": [
+            "**The contract.** A stop is the context's budget or cancellation error, never a partial answer; a body the query cannot read is a typed error with its base kind (22), naming the edge or face and the piece that adds the route.",
+            "**The class is the body's.** Principle 3: a result is as exact as its inputs, so a query never claims more than the record it was given.",
+            "**Charged by row.** One work unit per row visited in [`PHASE`], a schedule fixed by each operation's version and listed in its schema (23.10)."
+          ],
+          "job": "The core queries as operations: each in the contract chapter 10.1 gives every operation, with its context's budget and cancellation, its result stating its class, and a typed error (22: \"Queries are first-class operations\"; piece G102).",
+          "method": {
+            "links": [
+              "projects/engines/geometry/architecture/10-operations.md",
+              "projects/engines/geometry/architecture/22-errors-queries-ai.md"
+            ],
+            "text": "chapter 10.1's contract and chapter 22's rule that queries are operations (`projects/engines/geometry/architecture/10-operations.md`, `projects/engines/geometry/architecture/22-errors-queries-ai.md`), by the methods `crate::query` names."
+          },
+          "path": "geom_topo::query_ops",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        }
+      ],
       "name": "geom-topo",
       "provenance": [],
       "sections": "8, 10.2, 13.2, 18.7, 19.12, 22 and 23.9, in the kernel architecture (`projects/engines/geometry/architecture/`).",
       "spdx": null,
-      "status": "scaffold only; built by pieces G80, G81, G90, G102, G111, G112, G143, G145, G247, G398.",
+      "status": "the arenas, their typed indices and the publishing builder (G80) and the core queries (G102) built; the Euler operators, name order, attributes, regions and cells, proofs and instances to come in G81, G90, G111, G112, G143, G145, G247 and G398.",
       "summary": "Spare Kit geometry kernel: topology."
     }
   ],
@@ -11514,6 +13327,17 @@
       "take": "port-method",
       "used_by": [
         "projects/engines/geometry/crates/geom-fuzz/src/lib.rs"
+      ]
+    },
+    {
+      "licence": "Apache-2.0 AND MIT",
+      "link": "https://github.com/modelcontextprotocol/modelcontextprotocol/blob/271ecc9accafdd9b83a3c869fa67c22953b2af80/schema/2026-07-28/schema.ts",
+      "method_note": null,
+      "name": "the Model Context Protocol specification",
+      "pinned": true,
+      "take": "port-method",
+      "used_by": [
+        "projects/engines/geometry/crates/geom-gen/src/facade.rs"
       ]
     },
     {

@@ -91,9 +91,9 @@ impl fmt::Display for Case {
     }
 }
 
-/// Classes of the predicates, `Plane::side` and `Plane::side_of_tpi`.
+/// Classes of the predicates, `Plane::side`, `Plane::side_of_tpi` and `plane::determinant_sign`.
 const TDNE: &[Class] = &[Typical, Degenerate, NearlyDegenerate, Extreme];
-/// Classes of `Plane::through` and `Tpi::new`.
+/// Classes of `Plane::through`, `Tpi::new`, `Tpi::meeting` and `plane::normals_sign`.
 const TDE: &[Class] = &[Typical, Degenerate, Extreme];
 /// Classes of checked wide-integer arithmetic, of the random draws and of cutting stream ranges.
 const TEO: &[Class] = &[Typical, Extreme, Overflow];
@@ -104,6 +104,8 @@ const TE: &[Class] = &[Typical, Extreme];
 /// out of range.
 const TO: &[Class] = &[Typical, Overflow];
 /// Classes of the perturbed predicates: the exact path, and an exact tie the perturbation decides.
+/// Also of the face planes of `plane::determinant_sign` and `plane::normals_sign`: a nonzero sign
+/// and a zero, both decided by the machine-word rung.
 const TD: &[Class] = &[Typical, Degenerate];
 /// The class of operations with a single path, or whose paths one batch covers in rotation.
 const T: &[Class] = &[Typical];
@@ -198,8 +200,13 @@ pub static OPS: &[Op] = &[
     Op { group: "plane", name: "through", measures: "Plane::through", classes: TDE, prepare: |c| bind(inputs::plane::through(c), kernels::plane::through) },
     Op { group: "plane", name: "side", measures: "Plane::side", classes: TDNE, prepare: |c| bind(inputs::plane::side(c), kernels::plane::side) },
     Op { group: "plane", name: "tpi_new", measures: "Tpi::new", classes: TDE, prepare: |c| bind(inputs::plane::tpi_new(c), kernels::plane::tpi_new) },
+    Op { group: "plane", name: "tpi_meeting", measures: "Tpi::meeting", classes: TDE, prepare: |c| bind(inputs::plane::tpi_meeting(c), kernels::plane::tpi_meeting) },
+    Op { group: "plane", name: "normals_sign", measures: "plane::normals_sign", classes: TDE, prepare: |c| bind(inputs::plane::normals_sign(c), kernels::plane::normals_sign) },
+    Op { group: "plane", name: "normals_sign_faces", measures: "plane::normals_sign", classes: TD, prepare: |c| bind(inputs::plane::normals_sign_faces(c), kernels::plane::normals_sign_faces) },
     Op { group: "plane", name: "tpi_homogeneous", measures: "Tpi::homogeneous", classes: TE, prepare: |c| bind(inputs::plane::tpi_homogeneous(c), kernels::plane::tpi_homogeneous) },
     Op { group: "plane", name: "side_of_tpi", measures: "Plane::side_of_tpi", classes: TDNE, prepare: |c| bind(inputs::plane::side_of_tpi(c), kernels::plane::side_of_tpi) },
+    Op { group: "plane", name: "determinant_sign", measures: "plane::determinant_sign", classes: TDNE, prepare: |c| bind(inputs::plane::determinant_sign(c), kernels::plane::determinant_sign) },
+    Op { group: "plane", name: "determinant_sign_faces", measures: "plane::determinant_sign", classes: TD, prepare: |c| bind(inputs::plane::determinant_sign_faces(c), kernels::plane::determinant_sign_faces) },
     Op { group: "plane", name: "to_grid", measures: "Tpi::to_grid", classes: &[Typical, OnGrid, Extreme, Overflow], prepare: |c| bind(inputs::plane::to_grid(c), kernels::plane::to_grid) },
     Op { group: "plane", name: "lpi_new", measures: "Lpi::new", classes: TDE, prepare: |c| bind(inputs::plane::lpi_new(c), kernels::plane::lpi_new) },
     Op { group: "plane", name: "lpi_homogeneous", measures: "Lpi::homogeneous", classes: TE, prepare: |c| bind(inputs::plane::lpi_homogeneous(c), kernels::plane::lpi_homogeneous) },
@@ -400,6 +407,7 @@ pub static OPS: &[Op] = &[
     Op { group: "mesh", name: "cdt", measures: "geom_mesh::cdt::triangulate", classes: T, prepare: |c| bind(inputs::mesh::cdt(c), kernels::mesh::cdt) },
     Op { group: "mesh", name: "exact_build", measures: "geom_mesh::exact::build::build", classes: T, prepare: |c| bind(inputs::mesh::exact_build(c), kernels::mesh::exact_build) },
     Op { group: "mesh", name: "locate", measures: "geom_mesh::Classifier::locate_all", classes: T, prepare: |c| bind(inputs::mesh::locate(c), kernels::mesh::locate) },
+    Op { group: "mesh", name: "boolean", measures: "geom_mesh::boolean::boolean", classes: T, prepare: |c| bind(inputs::mesh::boolean(c), kernels::mesh::boolean) },
     Op { group: "mesh", name: "point_point", measures: "distance::point_point", classes: T, prepare: |c| bind(inputs::mesh::point_point(c), kernels::mesh::point_point) },
     Op { group: "mesh", name: "point_line", measures: "distance::point_line", classes: T, prepare: |c| bind(inputs::mesh::point_line(c), kernels::mesh::point_line) },
     Op { group: "mesh", name: "point_plane", measures: "distance::point_plane", classes: T, prepare: |c| bind(inputs::mesh::point_plane(c), kernels::mesh::point_plane) },
@@ -427,6 +435,12 @@ pub static OPS: &[Op] = &[
     Op { group: "surface", name: "offset_point", measures: "geom_surface::SurfaceKind::point", classes: T, prepare: |c| bind(inputs::surface::offset_point(c), kernels::surface::offset_point) },
     Op { group: "surface", name: "torus_second_bound", measures: "geom_surface::ParamSurface::second_derivative_bound", classes: T, prepare: |c| bind(inputs::surface::torus_second_bound(c), kernels::surface::torus_second_bound) },
     Op { group: "surface", name: "torus_normal_bound", measures: "geom_surface::ParamSurface::normal_derivative_bound", classes: T, prepare: |c| bind(inputs::surface::torus_normal_bound(c), kernels::surface::torus_normal_bound) },
+    // geom-make's hot paths (piece G101; decision 32.44): a primitive built and a body moved, named,
+    // published and checked.
+    Op { group: "make", name: "build_box", measures: "geom_make::primitive::make_box", classes: T, prepare: |c| bind(inputs::make::boxes(c), kernels::make::boxes) },
+    Op { group: "make", name: "cylinder", measures: "geom_make::primitive::cylinder", classes: T, prepare: |c| bind(inputs::make::cylinders(c), kernels::make::cylinders) },
+    Op { group: "make", name: "move_box", measures: "geom_make::transform::move_by", classes: T, prepare: |c| bind(inputs::make::moved_boxes(c), kernels::make::moved_boxes) },
+    Op { group: "make", name: "turn_box", measures: "geom_make::transform::rotate", classes: T, prepare: |c| bind(inputs::make::turned_boxes(c), kernels::make::turned_boxes) },
     // Root finding and quadrature (piece G51; decision 32.44).
     Op { group: "brent", name: "zero", measures: "brent::zero", classes: T, prepare: |c| bind(inputs::roots::zero(c), kernels::roots::zero) },
     Op { group: "quadrature", name: "gauss_legendre", measures: "quadrature::gauss_legendre", classes: T, prepare: |c| bind(inputs::roots::gauss_legendre(c), kernels::roots::gauss_legendre) },
@@ -434,7 +448,7 @@ pub static OPS: &[Op] = &[
 ];
 
 /// The groups of [`OPS`], in order.
-pub const GROUPS: [&str; 31] = [
+pub const GROUPS: [&str; 32] = [
     "predicate",
     "sign",
     "wide",
@@ -466,6 +480,7 @@ pub const GROUPS: [&str; 31] = [
     "brent",
     "quadrature",
     "linalg",
+    "make",
 ];
 
 /// The group of the growth checks.
@@ -625,9 +640,9 @@ pub static UNMEASURED: &[(&str, &str)] = &[
     ("Interval::hi", "field accessor"),
     ("Plane::n", "field accessor"),
     ("Plane::d", "field accessor"),
+    ("Plane::new", "four magnitude comparisons on a plane already made"),
     ("Tpi::planes", "field accessor"),
     ("Tpi::weight", "field accessor"),
-    ("Plane::new", "four magnitude comparisons on a plane already made"),
     ("Lpi::points", "field accessor"),
     ("Lpi::plane", "field accessor"),
     ("Ssi::points", "field accessor"),

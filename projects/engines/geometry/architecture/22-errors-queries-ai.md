@@ -55,6 +55,8 @@ Where two kinds sit close, the line between them is fixed:
 
 **Everything can be asked.** Queries are first-class operations: classify a point, list a body's faces with their names and roles, measure, find the distance or clearance between two things, area and volume, exactness class and bounds, validity report, curvature, section a body to get a plan. An AI can check its own work the way a person looks at the screen.
 
+**As built (G102).** The first queries are `query.faces`, `query.bounding_box`, `query.area`, `query.volume`, `query.exactness` and `query.validity`, each listed in the facade's `OPERATIONS` with its charge schedule, on the preview tier until the surface of chapter 25 settles. Their errors are `QueryDetail`'s: `Malformed` and `NotSolid` (`InvalidInput`), `CurvedEdge`, `CurvedFace` and `NoLoops` (`Unsupported`, with piece G177's route) and `Overflow` (`Internal`).
+
 **Every operation is described as data.** Each operation has a schema: inputs with types and units, outputs, roles it names, errors it can return (each detail with its base kind and data), its exactness, and an example. Spare Kit's command layer generates the API, the MCP tools and the documentation from these schemas (EXTENDING.md, section 2.1), so AI tools are never written by hand and never drift from the kernel.
 
 **Determinism makes AI work safe.** An agent can try an operation, inspect the result, and replay or undo it, and get exactly the same answer every time.

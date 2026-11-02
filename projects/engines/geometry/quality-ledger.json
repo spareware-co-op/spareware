@@ -3,6 +3,78 @@
   "about": "The geometry kernel's quality ledger (kernel architecture 28.8). survivors: every mutant cargo-mutants makes that the kernel's tests do not catch and the kernel keeps, keyed by file, cargo-mutants' description and the trimmed text of the mutated line, with why; in the foundation set only equivalent mutants (no input through the crate's public interface can tell them from the original) may be kept. coverage_off: every coverage(off) mark in a kernel crate, with the Kani or Verus proof that the code it hides cannot run. awaiting_proof: every foundation line the tests do not run yet, by its file, its trimmed text and how many missed lines have it, with the piece that proves it unreachable or tests it (the coverage gate landed before those proofs: owner decision of 2026-10-27); the list can only shrink. geom-test's kernel-quality binary checks both in .github/workflows/kernel-quality.yml; geom_test::quality_ledger documents the format.",
   "survivors": [
     {
+      "file": "projects/engines/geometry/crates/geom-bool/src/certificate.rs",
+      "mutant": "replace == with != in pairs_up",
+      "line_text": "if at == first {",
+      "occurrences": 1,
+      "kind": "hangs",
+      "reason": "The radial walk stops when it comes back to the edge's first fin. The mutant stops at the second fin and otherwise walks the ring for ever, on any edge with more than two fins, so the tests stop it by their timeout. It hangs; it never passes a body."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-bool/src/combine.rs",
+      "mutant": "delete match arm RebuildError::Merge(MergeError::Num(e)) | RebuildError::Num(e) in rebuilt",
+      "line_text": "RebuildError::Merge(MergeError::Num(e)) | RebuildError::Num(e) => numbers(ctx, e),",
+      "occurrences": 1,
+      "kind": "harmless",
+      "reason": "The numbers layer refuses nothing a plane within budget can reach (6.2), so no test can make this arm run. Without it the error would come out as ResultInvalid instead of the numbers layer's own: still an error, never a body."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-bool/src/half_space.rs",
+      "mutant": "replace > with >= in cap",
+      "line_text": "if largest(k) > largest(axis) {",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "On a tie the mutant takes the later of two axes with equal largest components. Either way the axis has a non-zero component, so the four sides around it bound the plane and the other two clip it to the same polygon of the range box."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-bool/src/half_space.rs",
+      "mutant": "replace < with <= in cap",
+      "line_text": "if n.get(axis).is_some_and(|v| *v < 0) {",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "axis holds the normal's largest component, and a plane's normal is not zero, so the component is never 0."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-bool/src/names.rs",
+      "mutant": "replace == with != in told_apart",
+      "line_text": "if rows.len() == out.len() {",
+      "occurrences": 1,
+      "kind": "hangs",
+      "reason": "The loop ends when no two rows share a name. The mutant goes on while they all differ, and there is then nothing to change, so it never ends and the tests stop it by their timeout. It hangs; it never returns a repeated name."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-bool/src/names.rs",
+      "mutant": "replace > with == in told_apart",
+      "line_text": "for (name, list) in rows.iter().filter(|(_, list)| list.len() > 1) {",
+      "occurrences": 1,
+      "kind": "hangs",
+      "reason": "The pass renames only rows that hold a name alone, so names that repeat stay repeated and the loop never ends, and the tests stop it by their timeout. It hangs; it never returns a repeated name."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-bool/src/names.rs",
+      "mutant": "replace > with < in told_apart",
+      "line_text": "for (name, list) in rows.iter().filter(|(_, list)| list.len() > 1) {",
+      "occurrences": 1,
+      "kind": "hangs",
+      "reason": "A list of rows holds at least one, so the pass renames nothing, names that repeat stay repeated and the loop never ends, and the tests stop it by their timeout. It hangs; it never returns a repeated name."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-bool/src/operand.rs",
+      "mutant": "replace != with == in side_of_fin",
+      "line_text": "while at != own {",
+      "occurrences": 1,
+      "kind": "hangs",
+      "reason": "The radial walk stops when it comes back to the fin it started from. The mutant skips the walk at once for that fin and for every other one walks past it for ever, or until the same fin comes round, so the tests stop it by their timeout. It hangs; it never returns a wrong side."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-bool/src/rebuild.rs",
+      "mutant": "replace < with <= in arenas",
+      "line_text": "sense: if fin.from < fin.to {",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "A fin's two vertices are its edge's two ends, numbers of two different points, because a run's low is below its high. They are never equal."
+    },
+    {
       "file": "projects/engines/geometry/crates/geom-linalg/src/matrix.rs",
       "mutant": "replace || with && in Matrix::row_pair",
       "line_text": "if i == j || i >= self.rows || j >= self.rows {",
@@ -545,6 +617,78 @@
       "occurrences": 1,
       "kind": "harmless",
       "reason": "The two differ only at t0 == t1. Every range end is an outward-rounded interval end strictly beyond the exact one, or the exact 0 or 1 of a clamp or a constant, so a tie is a lower end of one side's range meeting an upper end of the other's: then the exact ranges are disjoint, the piece misses the slab, and the mutant's None is right where the original keeps a range of zero width; 3,120 probe clips against thin and zero-width slabs never met one."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-poly/src/merge.rs",
+      "mutant": "replace == with != in root",
+      "line_text": "if up == at {",
+      "occurrences": 1,
+      "kind": "hangs",
+      "reason": "The walk stops at a set's root, whose parent is itself. The mutant stops anywhere else and walks on from a root for ever, and every merge calls it on a root, so the tests stop it by their timeout. It hangs; it never returns a wrong set."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-poly/src/merge.rs",
+      "mutant": "replace < with <= in sides_of",
+      "line_text": "rising: from < to,",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "from and to are equal only for a side shrunk to a point, whose low equals its high. A stretch runs between two different marks, so such a side is along no stretch and its direction is never read."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-poly/src/subdivide.rs",
+      "mutant": "replace splits -> [(usize, Option<i64>); 3] with [(0, Some(0)); 3]",
+      "line_text": "let at = |axis: usize| {",
+      "occurrences": 1,
+      "kind": "hangs",
+      "reason": "A split at half step 0 on axis 0 outside the box leaves one child the whole box, which splits the same way for ever, so the tests stop it by their timeout. It hangs; it never returns a wrong arrangement."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-poly/src/subdivide.rs",
+      "mutant": "replace splits -> [(usize, Option<i64>); 3] with [(1, Some(0)); 3]",
+      "line_text": "let at = |axis: usize| {",
+      "occurrences": 1,
+      "kind": "hangs",
+      "reason": "A split at half step 0 on axis 1 outside the box leaves one child the whole box, which splits the same way for ever, so the tests stop it by their timeout. It hangs; it never returns a wrong arrangement."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-poly/src/subdivide.rs",
+      "mutant": "replace | with ^ in splits",
+      "line_text": "let odd = middle | 1;",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "The mutant moves an odd middle one half step down, onto a whole step, and leaves an even one as it was. The split is then on a plane of the grid, where a corner can lie. A polygon in that plane goes on as the in-plane test sends it, a path that meets the plane is settled by the moved planes of Simulation of Simplicity, and a box's vectors do not depend on where it was split (a_small_leaf_gives_the_vectors_a_large_one_does, and the body tests at every leaf size). Odd steps only keep those ties from arising, so no result changes."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-poly/src/subdivide.rs",
+      "mutant": "replace == with != in divide",
+      "line_text": "corner.map(|v| if i.next() == Some(axis) { at } else { v })",
+      "occurrences": 1,
+      "kind": "hangs",
+      "reason": "The children's corners move on the two axes the split is not on, so a child keeps the width along the axis it was split on and splits there for ever, and the tests stop it by their timeout. It hangs; it never returns a wrong arrangement."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-poly/src/subdivide.rs",
+      "mutant": "replace | with ^ in divide",
+      "line_text": "key: node.key | bit,",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "bit is the bit of this node's depth, and a node's key has only the bits of the depths above it, so the bit is clear and | and ^ give one value."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-poly/src/subdivide.rs",
+      "mutant": "replace splits -> [(usize, Option<i64>); 3] with [(0, Some(-1)); 3]",
+      "line_text": "let at = |axis: usize| {",
+      "occurrences": 1,
+      "kind": "hangs",
+      "reason": "A split at half step -1 on axis 0 outside the box leaves one child the whole box, which splits the same way for ever, so the tests stop it by their timeout. It hangs; it never returns a wrong arrangement."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-poly/src/subdivide.rs",
+      "mutant": "replace splits -> [(usize, Option<i64>); 3] with [(1, Some(-1)); 3]",
+      "line_text": "let at = |axis: usize| {",
+      "occurrences": 1,
+      "kind": "hangs",
+      "reason": "A split at half step -1 on axis 1 outside the box leaves one child the whole box, which splits the same way for ever, so the tests stop it by their timeout. It hangs; it never returns a wrong arrangement."
     },
     {
       "file": "projects/engines/geometry/crates/geom-surface/src/contract.rs",
@@ -3797,7 +3941,7 @@
     {
       "file": "projects/engines/geometry/crates/geom-num/src/plane.rs",
       "mutant": "replace tpi_routed -> Option<Sign> with None",
-      "line_text": "let [p, q, r] = t.planes;",
+      "line_text": "let [p, q, r] = &t.planes;",
       "occurrences": 1,
       "kind": "equivalent",
       "reason": "On None, Plane::side_of_tpi takes side_of_tpi_hand, which computes the same sign exactly: n . X + d . w from Tpi::homogeneous in I384 (then I512) times the sign of w, the 4 x 4 determinant the generated tpi_side evaluates. Both paths are exact, so the answer is the same for every input; only the time taken changes."
@@ -5228,14 +5372,6 @@
     },
     {
       "file": "projects/engines/geometry/crates/geom-mesh/src/exact/mod.rs",
-      "mutant": "replace | with ^ in gcd",
-      "line_text": "return u128::from(x | y);",
-      "occurrences": 1,
-      "kind": "equivalent",
-      "reason": "One of x and y is 0 on this line, so or and exclusive or give one number."
-    },
-    {
-      "file": "projects/engines/geometry/crates/geom-mesh/src/exact/mod.rs",
       "mutant": "replace >>= with <<= in gcd",
       "line_text": "x >>= x.trailing_zeros();",
       "occurrences": 1,
@@ -5395,6 +5531,102 @@
       "reason": "Spread coordinates hold every third bit, and the shifts by 1 and 2 keep them apart."
     },
     {
+      "file": "projects/engines/geometry/crates/geom-topo/src/column.rs",
+      "mutant": "replace > with >= in Column<K, V>::filled",
+      "line_text": "if full > 0 {",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "full is a u32, so full >= 0 always holds. When the column needs no full chunk (fewer than CHUNK_ROWS rows), the mutant builds one full chunk anyway and then places it zero times: column.chunks.resize(0, chunk) leaves the list empty with the capacity reserved before, and the chunk is dropped. The column's rows, chunks, values and Memory report are the same as the original's for every rows and value. Only a temporary allocation of one chunk differs, which a machine out of memory could refuse (OutOfMemory, never stored or replayed, 23.10) where the original needs none."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-check/src/curved.rs",
+      "mutant": "replace * with / in same_side",
+      "line_text": "[a.lo() * a.hi(), b.lo() * b.hi(), a.lo() * b.lo()]",
+      "occurrences": 3,
+      "kind": "equivalent",
+      "reason": "same_side answers whether the smallest of the three numbers is above 0. Interval bounds are finite and a zero bound is +0, so x / y has the sign of x * y whenever y is not zero, and the answer can differ only where a divisor is 0. Then: in a.lo() / a.hi() and b.lo() / b.hi(), hi = 0 means lo <= 0, giving -inf or NaN where the product gave 0; in a.lo() / b.lo(), b.lo() = 0 makes b.lo() * b.hi() = 0 in the same list. In each case another number of the list, or the replaced one, is at most 0 (a NaN is the largest in tight::smaller's total order, so it never becomes the smallest), and the answer stays false."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-check/src/report.rs",
+      "mutant": "replace Group::built -> bool with true",
+      "line_text": "matches!(",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "Since G85 every group of 8.3 is built: the matches! lists all four Group variants, so built returns true for each, as the mutant does. It stays a function so that a group added later, or a level that drops one, can say it is not built."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-check/src/combinatorial.rs",
+      "mutant": "replace != with == in check",
+      "line_text": "if sink.found() != before {",
+      "occurrences": 1,
+      "kind": "hangs",
+      "reason": "Group 1's first stage is what proves every list and ring finite before anything walks them again (combinatorial.rs header, 23.11). The mutant lets a broken body through to the second stage (it runs exactly when the first stage found faults) through, or never ends a walk, so a test body with a broken ring (faults.rs, and the gating tests in attack_g85.rs, the first test binary cargo-mutants runs) walks it forever: the run times out rather than failing an assertion. Caught as a hang."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-check/src/combinatorial.rs",
+      "mutant": "replace != with == in ring",
+      "line_text": "(n != first).then_some(n)",
+      "occurrences": 1,
+      "kind": "hangs",
+      "reason": "Group 1's first stage is what proves every list and ring finite before anything walks them again (combinatorial.rs header, 23.11). The mutant lets a broken ring walk: a ring of one fin (each edge of a sheet) yields its fin forever through, or never ends a walk, so a test body with a broken ring (faults.rs, and the gating tests in attack_g85.rs, the first test binary cargo-mutants runs) walks it forever: the run times out rather than failing an assertion. Caught as a hang."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-check/src/combinatorial.rs",
+      "mutant": "replace fin_rings -> Result<(), Stopped> with Ok(())",
+      "line_text": "let (owner, _) = take(scratch, a.rows(Arena::Fin));",
+      "occurrences": 1,
+      "kind": "hangs",
+      "reason": "Group 1's first stage is what proves every list and ring finite before anything walks them again (combinatorial.rs header, 23.11). The mutant lets a broken loop ring (its check is skipped) through, or never ends a walk, so a test body with a broken ring (faults.rs, and the gating tests in attack_g85.rs, the first test binary cargo-mutants runs) walks it forever: the run times out rather than failing an assertion. Caught as a hang."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-check/src/combinatorial.rs",
+      "mutant": "replace radial_rings -> Result<(), Stopped> with Ok(())",
+      "line_text": "let (on, _) = take(scratch, a.rows(Arena::Fin));",
+      "occurrences": 1,
+      "kind": "hangs",
+      "reason": "Group 1's first stage is what proves every list and ring finite before anything walks them again (combinatorial.rs header, 23.11). The mutant lets a broken radial ring (its check is skipped) through, or never ends a walk, so a test body with a broken ring (faults.rs, and the gating tests in attack_g85.rs, the first test binary cargo-mutants runs) walks it forever: the run times out rather than failing an assertion. Caught as a hang."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-check/src/combinatorial.rs",
+      "mutant": "replace == with != in Sets<'s>::find",
+      "line_text": "if up == row {",
+      "occurrences": 1,
+      "kind": "hangs",
+      "reason": "The mutant's find returns only from a row that is not a root and loops at a root, where up == row makes grand = row forever. shells() calls find on every valid body (attack_g85.rs's first test builds cubes), so the first test binary never ends: caught as a hang."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-check/src/curved.rs",
+      "mutant": "replace * with / in carrier",
+      "line_text": "slope: slope * s.axial_sign(),",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "A surface's axial sign is exactly +1 or -1 (geom_surface::analytic, Cone::axial_sign), and for s = +1 or -1, slope / s and slope * s are the same double: both are slope or -slope exactly."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-check/src/curved.rs",
+      "mutant": "replace * with / in away",
+      "line_text": "a.lo() * a.hi() > 0.0",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "Interval bounds are finite with lo <= hi and a zero bound stored as +0. Where hi is not zero, lo / hi has the sign of lo * hi; where hi is zero, lo <= 0, so lo / hi is -inf or NaN and lo * hi is 0, and none of them is above 0. So the comparison with 0 is the same for every interval."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-make/src/pattern.rs",
+      "mutant": "replace > with >= in less_exact",
+      "line_text": "if key(b) > key(a) { b } else { a }",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "Two records with equal keys, the same class and the same bound, are the same record here: every copy of a pattern takes its grid step from the input, or from the one ceiling the caller gave, so a and b differ in nothing either branch could return."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-mesh/src/exact/mod.rs",
+      "mutant": "replace | with ^ in gcd",
+      "line_text": "return u128::from(x | y);",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "One of x and y is 0 on this line, so or and exclusive or give one number."
+    },
+    {
       "file": "projects/engines/geometry/crates/geom-mesh/src/classify.rs",
       "mutant": "replace < with <= in grid_edge",
       "line_text": "let (ai, aj, bi, bj) = if uj < vj {",
@@ -5451,12 +5683,108 @@
       "reason": "Either sign of the ε² move is a valid perturbation: both faces of an edge flip together, and the ray counts one of them."
     },
     {
+      "file": "projects/engines/geometry/crates/geom-mesh/src/boolean.rs",
+      "mutant": "replace == with != in root",
+      "line_text": "if up == at {",
+      "occurrences": 1,
+      "kind": "hangs",
+      "reason": "A walk up the forest that stops at the wrong test goes round its root for ever, which the timeout catches."
+    },
+    {
       "file": "projects/engines/geometry/crates/geom-mesh/src/exact/build.rs",
       "mutant": "replace != with == in radial",
       "line_text": "reversed: facing.flipped != against,",
       "occurrences": 1,
       "kind": "equivalent",
       "reason": "The mutant turns every flap over at once, which moves each by half a circle about the edge and leaves their order round it, and so the pairs, as they were."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-check/src/planar.rs",
+      "mutant": "replace == with != in Cut::order",
+      "line_text": "Ok(ordering(if rising == Sign::Positive {",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "It reverses every order along every line at once, which is each line run the other way. Stretches, overlaps, covering and sorted crossings ask only how marks on one line lie against each other, and a ray run the other way from a point off the shell crosses it the same number of times modulo two: orientation only asks a body with no fault, so the point is on no face, and a tie falls on one edge, in both its faces at once, so its two changes cancel."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-check/src/planar.rs",
+      "mutant": "replace Cut::holds -> bool with true",
+      "line_text": "[&self.first, &self.second]",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "Group 3 runs only on a body groups 1 and 2 passed, and joins asks it only of a vertex or edge the two faces share. Group 2 held each vertex to the plane of each of its faces, so such a corner lies on both planes and on their line: the answer is always true where it is asked."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-check/src/planar.rs",
+      "mutant": "replace > with >= in stood_on",
+      "line_text": "v.saturating_sub(if v > 0 { 1 } else { -1 })",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "It differs only at v = 0, where the third point moves one step down the axis instead of up. That point, p and q span the same plane, with its normal turned at worst; every use asks whether a corner is on that plane, whether two signs on it agree, or where it crosses a line, and none of those changes with the way it faces."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-check/src/planar.rs",
+      "mutant": "replace != with == in point_side",
+      "line_text": "if ray.at(&o.plane).is_none() || ray.order(&Mark(z), &Mark(o.plane))? != Ordering::Less {",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "It counts the faces behind the point instead of those ahead of it. Orientation asks only a body with no fault, so the point lies on no face of the closed shell, and a ray each way from a point off a closed shell crosses it the same number of times modulo two. A face whose plane holds the point is crossed nowhere on the face either way."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-check/src/planar.rs",
+      "mutant": "replace == with != in point_side",
+      "line_text": "let rising = known(line.at(&y))?.weight() == Sign::Positive;",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "It moves the ray infinitely little to the other side of y, in every face at once. That is another ray from a point infinitely near the first, which orientation's precondition keeps off the shell, so it lies on the same side of it, and the parity of a ray that meets no edge is that side."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-mesh/src/exact/build.rs",
+      "mutant": "replace > with >= in map_blocks",
+      "line_text": "if charge > 0 {",
+      "occurrences": 1,
+      "kind": "harmless",
+      "reason": "With a charge of 0 the mutant calls charge(0), which adds no work and only counts toward the meter's next cancellation poll: every result and every budget stop is the same, and a cancellation is noticed a few items sooner."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-mesh/src/exact/build.rs",
+      "mutant": "replace || with && in edge_leaders",
+      "line_text": "if given || !grid(c)? || !grid(*at(after, c)?)? {",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "Read as given || (!grid(c) && !grid(after)), it lets an edge with one end off the grid and no given plane share; corner_plane refuses such an edge as EdgePlaneNeeded at its lower half-edge, which the leader is, so the same error comes first either way. (The other || on this line is caught by given_edge_planes_are_never_shared.)"
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-mesh/src/exact/build.rs",
+      "mutant": "delete ! in edge_leaders",
+      "line_text": "if given || !grid(c)? || !grid(*at(after, c)?)? {",
+      "occurrences": 2,
+      "kind": "harmless",
+      "reason": "Either deletion stops grid edges from sharing, so each half-edge makes its own plane, the same plane its twin would have given it; and it lets only one half of an edge with an end off the grid ask to share, while its twin's axis stays None, so no pair shares. The mesh is the same; only more planes are made and pooled."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-mesh/src/exact/build.rs",
+      "mutant": "replace != with == in edge_leaders",
+      "line_text": "if p.forward != q.forward && axis(a)?.is_some() && axis(a)? == axis(b)? {",
+      "occurrences": 1,
+      "kind": "harmless",
+      "reason": "The mutant never pairs twins, so each half-edge makes its own plane, the same one; and it pairs two half-edges running one way, which make the same plane from the same ends and which the build refuses as UnevenEdge either way. The mesh or the error is the same; only more planes are made."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-mesh/src/exact/build.rs",
+      "mutant": "replace next_group -> Option<&'a[Use]> with Some(Vec::leak(Vec::new()))",
+      "line_text": "let head = rest.first()?;",
+      "occurrences": 1,
+      "kind": "hangs",
+      "reason": "Every call then gives an empty group and leaves the rest as it was, so the loops that take groups until none is left never end."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-mesh/src/exact/build.rs",
+      "mutant": "replace == with != in next_group",
+      "line_text": "let same = rest.iter().take_while(|u| u.high == head.high).count();",
+      "occurrences": 1,
+      "kind": "hangs",
+      "reason": "The first use always has its own end, so nothing is taken: an empty group, the rest unchanged, and the loops that take groups never end."
     }
   ],
   "coverage_off": [

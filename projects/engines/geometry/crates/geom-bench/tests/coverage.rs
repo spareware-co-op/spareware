@@ -505,6 +505,19 @@ const OTHER_CRATES: &[(&str, &[(&str, &str)])] = &[
         ],
     ),
     (
+        "geom_make",
+        &[
+            (
+                "primitive",
+                include_str!("../../geom-make/src/primitive.rs"),
+            ),
+            (
+                "transform",
+                include_str!("../../geom-make/src/transform.rs"),
+            ),
+        ],
+    ),
+    (
         "geom_bvh",
         &[
             ("tree", include_str!("../../geom-bvh/src/tree.rs")),
@@ -515,6 +528,7 @@ const OTHER_CRATES: &[(&str, &[(&str, &str)])] = &[
         "geom_mesh",
         &[
             ("cdt", include_str!("../../geom-mesh/src/cdt.rs")),
+            ("boolean", include_str!("../../geom-mesh/src/boolean.rs")),
             ("classify", include_str!("../../geom-mesh/src/classify.rs")),
             ("contact", include_str!("../../geom-mesh/src/contact.rs")),
             ("envelope", include_str!("../../geom-mesh/src/envelope.rs")),

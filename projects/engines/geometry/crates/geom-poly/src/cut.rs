@@ -32,8 +32,10 @@
 //!
 //! Cost: [`clip`] classifies each corner once, O(k) exact predicates for k bounds. [`crosses`] is
 //! O(k + m) classifications and O(k + m) comparisons along a line. [`local_cuts`] is O(n²) pairs
-//! of polygons at worst, in a box the subdivision keeps small. Charges the meter one unit per pair
-//! of pieces compared.
+//! of polygons at worst, in a box the subdivision keeps small; a pair whose planes cannot cut is
+//! told from the two polygons whole, O(k + m), and its pieces are not compared, and a pair whose
+//! grid spans miss (`crate::order`'s `Span`) is told in a few comparisons. Charges the meter one
+//! unit per pair of pieces, compared or not.
 
 use alloc::vec::Vec;
 use core::cmp::Ordering;
@@ -43,7 +45,7 @@ use geom_num::{NumError, Sign};
 use geom_run::WorkMeter;
 
 use crate::convex::{ConvexError, Piece, opposite};
-use crate::order::{Line, along, normals_det};
+use crate::order::{Line, Meeting, Span, along, normals_det};
 use crate::plane::canonical;
 
 /// What a plane does to a piece.
@@ -59,14 +61,19 @@ pub enum Clipped {
     Split(Piece, Piece),
 }
 
-/// The sign of `plane` at each corner of `piece`, corner i being where bounds i and i + 1 meet.
+/// The sign of `plane` at each corner of `piece`, corner i being where bounds i and i + 1 meet:
+/// each corner a [`Meeting`] in machine words where it fits, which costs less to make and read
+/// once than the predicate does, and the predicate where it does not.
 fn corners(piece: &Piece, plane: &Plane) -> Result<Vec<Sign>, NumError> {
     let after = piece.bounds.iter().cycle().skip(1);
     piece
         .bounds
         .iter()
         .zip(after)
-        .map(|(bound, next)| plane.side_of_tpi(&Tpi::new(piece.face, *bound, *next)?))
+        .map(|(bound, next)| {
+            let point = Meeting::new(&piece.face, bound, next);
+            corner_sign(piece, (bound, next), point.as_ref(), plane)
+        })
         .collect()
 }
 
@@ -109,15 +116,29 @@ fn part(piece: &Piece, signs: &[Sign], keep: Sign, away: Sign, cut: Plane) -> Pi
 /// [`NumError::Degenerate`] for a piece whose adjacent bounds do not meet, and what
 /// [`Plane::side_of_tpi`] gives, which planes within budget cannot reach.
 pub fn clip(piece: &Piece, plane: &Plane) -> Result<Clipped, NumError> {
-    let signs = corners(piece, plane)?;
+    split(piece, &corners(piece, plane)?, plane)
+}
+
+/// [`clip`], reading the corners from `at`, the points of `piece`'s corners as [`meetings`]
+/// makes them: the same signs, without making the points again.
+pub(crate) fn clip_at(
+    piece: &Piece,
+    at: &[Option<Meeting>],
+    plane: &Plane,
+) -> Result<Clipped, NumError> {
+    split(piece, &corners_at(piece, at, plane)?, plane)
+}
+
+/// `piece` against `plane`, whose signs at its corners are `signs`.
+fn split(piece: &Piece, signs: &[Sign], plane: &Plane) -> Result<Clipped, NumError> {
     let front = signs.contains(&Sign::Positive);
     let back = signs.contains(&Sign::Negative);
     Ok(match (front, back) {
         (true, true) => Clipped::Split(
-            part(piece, &signs, Sign::Positive, Sign::Negative, *plane),
+            part(piece, signs, Sign::Positive, Sign::Negative, *plane),
             part(
                 piece,
-                &signs,
+                signs,
                 Sign::Negative,
                 Sign::Positive,
                 opposite(plane)?,
@@ -201,6 +222,83 @@ fn reaches(piece: &Piece, other: &Piece) -> Result<bool, NumError> {
         && along(&line, &b_in, &a_out)? == Ordering::Less)
 }
 
+/// The points of `piece`'s corners, corner i where bounds i and i + 1 meet, in machine words where
+/// they fit, for reading against many planes.
+pub(crate) fn meetings(piece: &Piece) -> Vec<Option<Meeting>> {
+    let after = piece.bounds.iter().cycle().skip(1);
+    piece
+        .bounds
+        .iter()
+        .zip(after)
+        .map(|(bound, next)| Meeting::new(&piece.face, bound, next))
+        .collect()
+}
+
+/// The sign of `plane` at the corner of `piece` where `bound` and `next` meet, read from `point`
+/// where it has one: what [`corners`] gives there.
+fn corner_sign(
+    piece: &Piece,
+    (bound, next): (&Plane, &Plane),
+    point: Option<&Meeting>,
+    plane: &Plane,
+) -> Result<Sign, NumError> {
+    let read = point
+        .filter(|p| p.weight() != Sign::Zero)
+        .and_then(|p| Some(p.reading(plane)?.mul(p.weight())));
+    match read {
+        Some(sign) => Ok(sign),
+        None => plane.side_of_tpi(&Tpi::meeting(piece.face, *bound, *next)?),
+    }
+}
+
+/// [`corners`], read from the points `at` of `piece`'s corners where they have them.
+fn corners_at(piece: &Piece, at: &[Option<Meeting>], plane: &Plane) -> Result<Vec<Sign>, NumError> {
+    let after = piece.bounds.iter().cycle().skip(1);
+    piece
+        .bounds
+        .iter()
+        .zip(after)
+        .zip(at)
+        .map(|((bound, next), point)| corner_sign(piece, (bound, next), point.as_ref(), plane))
+        .collect()
+}
+
+/// Which signs `plane` takes at the corners of `piece`, whose points are `at`, as whether it is
+/// positive, negative and zero at any: [`corners`]'s signs, each read from its point where that
+/// fits, else by the predicate as [`corners`] does.
+fn signs_seen(piece: &Piece, at: &[Option<Meeting>], plane: &Plane) -> Result<[bool; 3], NumError> {
+    let mut seen = [false; 3];
+    let after = piece.bounds.iter().cycle().skip(1);
+    for ((bound, next), point) in piece.bounds.iter().zip(after).zip(at) {
+        let sign = corner_sign(piece, (bound, next), point.as_ref(), plane)?;
+        let at = match sign {
+            Sign::Positive => 0,
+            Sign::Negative => 1,
+            Sign::Zero => 2,
+        };
+        if let Some(slot) = seen.get_mut(at) {
+            *slot = true;
+        }
+    }
+    Ok(seen)
+}
+
+/// Whether `other`, on another plane, can cut any piece of `polygon`, whose corners' points are
+/// `at`: `polygon` has corners on both sides of `other`'s plane, and `other` crosses `polygon`'s
+/// plane or ends on it. A piece lies in its polygon, so where the first fails [`clip`] splits no
+/// piece, and where the second fails [`reaches`] holds for none, whatever the piece.
+fn can_cut(
+    (polygon, other): (&Piece, &Piece),
+    at: (&[Option<Meeting>], &[Option<Meeting>]),
+) -> Result<bool, NumError> {
+    let [positive, negative, _] = signs_seen(polygon, at.0, &other.face)?;
+    if !positive || !negative {
+        return Ok(false);
+    }
+    let [positive, negative, zero] = signs_seen(other, at.1, &polygon.face)?;
+    Ok(zero || (positive && negative))
+}
+
 /// `piece`, cut by the bounds of `other`, on its plane, where the two overlap: the parts beyond each
 /// bound in turn, then the part inside them all. If they share no area, `piece` whole.
 fn carve(piece: &Piece, other: &Piece) -> Result<Vec<Piece>, NumError> {
@@ -230,32 +328,73 @@ pub fn local_cuts(
     polygons: &[Piece],
     meter: &mut WorkMeter<'_>,
 ) -> Result<Vec<Vec<Piece>>, ConvexError> {
+    let points: Vec<Vec<Option<Meeting>>> = polygons.iter().map(meetings).collect();
+    local_cuts_at(polygons, &points, meter)
+}
+
+/// [`local_cuts`], with each polygon's corner points, as [`meetings`] makes them, given.
+pub(crate) fn local_cuts_at(
+    polygons: &[Piece],
+    points: &[Vec<Option<Meeting>>],
+    meter: &mut WorkMeter<'_>,
+) -> Result<Vec<Vec<Piece>>, ConvexError> {
+    let mut planes = Vec::with_capacity(polygons.len());
+    for polygon in polygons {
+        planes.push(canonical(&polygon.face)?.plane);
+    }
+    let spans: Vec<Option<Span>> = points.iter().map(|p| Span::of(p.iter().copied())).collect();
     let mut out: Vec<Vec<Piece>> = Vec::with_capacity(polygons.len());
-    for (at, polygon) in polygons.iter().enumerate() {
-        let mut pieces = alloc::vec![polygon.clone()];
-        for (other_at, other) in polygons.iter().enumerate() {
+    let mine = polygons
+        .iter()
+        .enumerate()
+        .zip(&planes)
+        .zip(points)
+        .zip(&spans);
+    for ((((at, polygon), own), own_points), own_span) in mine {
+        // Each piece with its corners' points, made once for every plane it is read against.
+        let mut pieces = alloc::vec![(polygon.clone(), own_points.clone())];
+        let others = polygons
+            .iter()
+            .enumerate()
+            .zip(&planes)
+            .zip(points)
+            .zip(&spans);
+        for ((((other_at, other), plane), other_points), other_span) in others {
             if other_at == at {
                 continue;
             }
-            let coplanar = canonical(&polygon.face)?.plane == canonical(&other.face)?.plane;
+            let coplanar = own == plane;
+            // Polygons whose spans miss share no point, so neither reaches into the other.
+            let apart = matches!((own_span, other_span), (Some(a), Some(b)) if a.misses(b));
+            if !coplanar && (apart || !can_cut((polygon, other), (own_points, other_points))?) {
+                // Charged as if each piece had been compared, so the work counted is the same.
+                meter.charge(u64::try_from(pieces.len()).unwrap_or(u64::MAX))?;
+                continue;
+            }
             let mut next = Vec::with_capacity(pieces.len());
-            for piece in pieces {
+            for (piece, at) in pieces {
                 meter.charge(1)?;
                 if coplanar {
-                    next.extend(carve(&piece, other)?);
+                    for part in carve(&piece, other)? {
+                        let points = meetings(&part);
+                        next.push((part, points));
+                    }
                     continue;
                 }
-                match clip(&piece, &other.face)? {
+                let signs = corners_at(&piece, &at, &other.face)?;
+                match split(&piece, &signs, &other.face)? {
                     Clipped::Split(front, back) if reaches(&piece, other)? => {
-                        next.push(front);
-                        next.push(back);
+                        for part in [front, back] {
+                            let points = meetings(&part);
+                            next.push((part, points));
+                        }
                     }
-                    _ => next.push(piece),
+                    _ => next.push((piece, at)),
                 }
             }
             pieces = next;
         }
-        out.push(pieces);
+        out.push(pieces.into_iter().map(|(piece, _)| piece).collect());
     }
     Ok(out)
 }

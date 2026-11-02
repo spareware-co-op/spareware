@@ -276,6 +276,28 @@ pub mod plane {
         run(batch, out, |&[p, q, r]| Tpi::new(p, q, r));
     }
 
+    /// `Tpi::meeting` on each plane triple.
+    #[inline(never)]
+    pub fn tpi_meeting(batch: &[[Plane; 3]], out: &mut Vec<Result<Tpi, NumError>>) {
+        run(batch, out, |&[p, q, r]| Tpi::meeting(p, q, r));
+    }
+
+    /// `plane::normals_sign` on each plane triple.
+    #[inline(never)]
+    pub fn normals_sign(batch: &[[Plane; 3]], out: &mut Vec<Result<Sign, NumError>>) {
+        run(batch, out, |[p, q, r]| {
+            geom_num::plane::normals_sign(p, q, r)
+        });
+    }
+
+    /// `plane::normals_sign` on each face triple.
+    #[inline(never)]
+    pub fn normals_sign_faces(batch: &[[Plane; 3]], out: &mut Vec<Result<Sign, NumError>>) {
+        run(batch, out, |[p, q, r]| {
+            geom_num::plane::normals_sign(p, q, r)
+        });
+    }
+
     /// `Tpi::homogeneous` on each meeting point.
     #[inline(never)]
     pub fn tpi_homogeneous(batch: &[Tpi], out: &mut Vec<Result<([I320; 3], I256), NumError>>) {
@@ -286,6 +308,22 @@ pub mod plane {
     #[inline(never)]
     pub fn side_of_tpi(batch: &[(Plane, Tpi)], out: &mut Vec<Result<Sign, NumError>>) {
         run(batch, out, |(p, t)| p.side_of_tpi(t));
+    }
+
+    /// `plane::determinant_sign` on each four planes.
+    #[inline(never)]
+    pub fn determinant_sign(batch: &[[Plane; 4]], out: &mut Vec<Result<Sign, NumError>>) {
+        run(batch, out, |[p, q, r, s]| {
+            geom_num::plane::determinant_sign(p, q, r, s)
+        });
+    }
+
+    /// `plane::determinant_sign` on each four face planes.
+    #[inline(never)]
+    pub fn determinant_sign_faces(batch: &[[Plane; 4]], out: &mut Vec<Result<Sign, NumError>>) {
+        run(batch, out, |[p, q, r, s]| {
+            geom_num::plane::determinant_sign(p, q, r, s)
+        });
     }
 
     /// `Tpi::to_grid` on each meeting point.
@@ -1773,6 +1811,7 @@ pub mod bvh {
 
 /// The triangulation's hot path (piece G153, decision 32.44).
 pub mod mesh {
+    use geom_mesh::boolean::{Outcome, boolean as combine};
     use geom_mesh::classify::{Classifier, Located};
     use geom_mesh::envelope::TriangleEnvelope;
     use geom_mesh::exact::build::{Polygons, build};
@@ -1780,6 +1819,8 @@ pub mod mesh {
     use geom_mesh::{Cdt, CdtError, contact, triangulate};
     use geom_num::grid::P3;
     use geom_num::{NumError, Sign, distance};
+    use geom_op::{OpId, OpPath};
+    use geom_poly::winding::WindingTest;
     use geom_run::{Budget, Exec, WorkMeter};
 
     use super::run;
@@ -1868,6 +1909,25 @@ pub mod mesh {
             Classifier::new(&probe.solid, &exec, &mut meter)?.locate_all(
                 &probe.points,
                 &exec,
+                &mut meter,
+            )
+        });
+    }
+
+    /// `geom_mesh::boolean::boolean`: each pair united, serially, under an unlimited budget.
+    #[inline(never)]
+    pub fn boolean(
+        batch: &[crate::inputs::mesh::Pair],
+        out: &mut Vec<Result<Vec<Outcome>, MeshError>>,
+    ) {
+        let step = OpPath::new(OpId::from_bytes([7; 16]));
+        run(batch, out, |pair| {
+            let mut meter = WorkMeter::new(Budget::UNLIMITED);
+            combine(
+                &[&pair.first, &pair.second],
+                &[WindingTest::unite()],
+                &step,
+                &Exec::serial(),
                 &mut meter,
             )
         });
@@ -2134,6 +2194,82 @@ pub mod roots {
     pub fn gauss_legendre(batch: &[(Real, Real)], out: &mut Vec<Result<Real, QuadError>>) {
         run(batch, out, |&(a, b)| {
             quadrature::gauss_legendre(crate::inputs::roots::quintic, a, b, 8)
+        });
+    }
+}
+
+/// `geom-make`'s hot paths (piece G101, decision 32.44): a primitive built and a body moved, named,
+/// published and checked as the operation does it, under an unlimited budget.
+pub mod make {
+    use geom_make::{BoxInput, Made, Moved, RoundInput, cylinder, make_box, move_by, rotate};
+    use geom_math::{Axis, Rotation};
+    use geom_num::grid::P3;
+    use geom_op::{OpContext, OpError, OpId, OpOutput, OpPath};
+    use geom_run::Budget;
+    use geom_topo::Arena;
+
+    use super::run;
+
+    /// A context of one operation, under no limit.
+    fn context() -> OpContext<'static> {
+        OpContext::new(OpPath::new(OpId::from_bytes([2; 16])), Budget::UNLIMITED)
+    }
+
+    /// What a result is read by: its faces, edges and vertices, and its class's rank.
+    fn counts(made: Result<OpOutput<Made>, OpError>) -> Result<[u32; 4], OpError> {
+        made.map(|out| {
+            let a = out.result.body.arenas();
+            [
+                a.rows(Arena::Face),
+                a.rows(Arena::Edge),
+                a.rows(Arena::Vertex),
+                u32::from(out.exactness.rank()),
+            ]
+        })
+    }
+
+    /// A body to move, recorded as it was built, accepting no less.
+    fn moved(out: &OpOutput<Made>) -> Moved<'_> {
+        Moved {
+            body: &out.result.body,
+            exactness: out.exactness,
+            accept: None,
+        }
+    }
+
+    /// `make_box` on each input.
+    #[inline(never)]
+    pub fn boxes(batch: &[BoxInput], out: &mut Vec<Result<[u32; 4], OpError>>) {
+        let ctx = context();
+        run(batch, out, |input| counts(make_box(&ctx, input)));
+    }
+
+    /// `cylinder` on each input.
+    #[inline(never)]
+    pub fn cylinders(batch: &[RoundInput], out: &mut Vec<Result<[u32; 4], OpError>>) {
+        let ctx = context();
+        run(batch, out, |input| counts(cylinder(&ctx, input)));
+    }
+
+    /// `move_by` on each body.
+    #[inline(never)]
+    pub fn moved_boxes(
+        batch: &[(OpOutput<Made>, [i64; 3])],
+        out: &mut Vec<Result<[u32; 4], OpError>>,
+    ) {
+        let ctx = context();
+        run(batch, out, |(body, offset)| {
+            counts(move_by(&ctx, moved(body), *offset))
+        });
+    }
+
+    /// A quarter turn about z by `rotate` on each body.
+    #[inline(never)]
+    pub fn turned_boxes(batch: &[(OpOutput<Made>, P3)], out: &mut Vec<Result<[u32; 4], OpError>>) {
+        let ctx = context();
+        let turn = Rotation::quarter_turns(1);
+        run(batch, out, |(body, center)| {
+            counts(rotate(&ctx, moved(body), Axis::Z, turn, *center))
         });
     }
 }

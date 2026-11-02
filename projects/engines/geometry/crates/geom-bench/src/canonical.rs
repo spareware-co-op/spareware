@@ -740,6 +740,18 @@ impl Canonical for crate::inputs::mesh::Terrain {
     }
 }
 
+impl Canonical for geom_mesh::boolean::Outcome {
+    fn encode(&self, h: &mut Sha256) {
+        debug_text(self, h);
+    }
+}
+
+impl Canonical for crate::inputs::mesh::Pair {
+    fn encode(&self, h: &mut Sha256) {
+        debug_text(self, h);
+    }
+}
+
 impl Canonical for crate::inputs::mesh::Probe {
     fn encode(&self, h: &mut Sha256) {
         debug_text(self, h);
@@ -907,6 +919,51 @@ impl<const D: usize> Canonical for geom_nurbs::Changed<geom_curve::NurbsForm<D>>
 }
 
 impl<T: Canonical> Canonical for Result<T, geom_curve::CurveError> {
+    fn encode(&self, h: &mut Sha256) {
+        match self {
+            Ok(v) => {
+                h.update(&[0]);
+                v.encode(h);
+            }
+            Err(e) => {
+                h.update(&[1]);
+                debug_text(e, h);
+            }
+        }
+    }
+}
+
+// `geom-make`'s operations (decision 32.44's count benchmarks for piece G101).
+
+impl Canonical for geom_make::BoxInput {
+    fn encode(&self, h: &mut Sha256) {
+        self.min.encode(h);
+        self.size.map(geom_num::Steps::get).encode(h);
+    }
+}
+
+impl Canonical for geom_make::RoundInput {
+    fn encode(&self, h: &mut Sha256) {
+        self.base.encode(h);
+        self.radius.get().encode(h);
+        self.height.get().encode(h);
+        self.step.rung().encode(h);
+    }
+}
+
+impl Canonical for geom_op::OpOutput<geom_make::Made> {
+    // A built body, as a transform's input: its corners, then its class's rank.
+    fn encode(&self, h: &mut Sha256) {
+        for point in self.result.body.arenas().points.iter() {
+            if let Some(p) = point.grid() {
+                p.encode(h);
+            }
+        }
+        u32::from(self.exactness.rank()).encode(h);
+    }
+}
+
+impl<T: Canonical> Canonical for Result<T, geom_op::OpError> {
     fn encode(&self, h: &mut Sha256) {
         match self {
             Ok(v) => {
