@@ -38,7 +38,7 @@ use geom_poly::convex::Piece;
 use geom_poly::merge::{
     Merge, MergeError, Merged, Outward, Rules, as_kept, both_ways, merge_with, section, select,
 };
-use geom_poly::subdivide::{LEAF_POLYGONS, around, arrange};
+use geom_poly::subdivide::{LEAF_POLYGONS, Solved, around, arrange_reusing};
 use geom_poly::trace::{Classified, Polygon, TraceError, winding_at};
 use geom_poly::winding::{Entry, Winding, WindingTest};
 use geom_run::{Exec, Phase, RunError, Stopped, WorkMeter};
@@ -939,18 +939,20 @@ pub fn combine(
 ) -> Result<OpOutput<Vec<Vec<Combined>>>, OpError> {
     let mut meter = ctx.meter();
     let ready = prepare(input, &mut meter).map_err(|e| prepared(ctx, e, &meter))?;
-    let (classified, exactness) = arranged_input(ctx, exec, input, &ready, &mut meter)?;
+    let (classified, exactness, _) = arranged_input(ctx, exec, input, &ready, None, &mut meter)?;
     selected(ctx, input, &ready, &classified, exactness, &mut meter)
 }
 
-/// The arrangement of `ready`, and how exact it is.
+/// The arrangement of `ready`, taking each box's answer from `reuse` where it holds one; how exact
+/// it is; and the boxes it solved.
 pub(crate) fn arranged_input(
     ctx: &OpContext<'_>,
     exec: &Exec<'_>,
     input: &BooleanInput<'_>,
     ready: &Prepared,
+    reuse: Option<&Solved>,
     meter: &mut WorkMeter<'_>,
-) -> Result<(Vec<Classified>, Exactness), OpError> {
+) -> Result<(Vec<Classified>, Exactness, Solved), OpError> {
     let mut exactness = Exactness::Exact;
     for operand in &input.operands {
         exactness = exactness
@@ -961,17 +963,18 @@ pub(crate) fn arranged_input(
         return Err(fail(ctx, CombineDetail::NotAccepted { would: exactness }));
     }
     let cell = around(&ready.polygons).map_err(|e| numbers(ctx, e))?;
-    let classified = arrange(
+    let (classified, solved) = arrange_reusing(
         exec,
         cell,
         Winding::new(),
         &ready.polygons,
         LEAF_POLYGONS,
         &ready.tests,
+        reuse,
         meter,
     )
     .map_err(|e| arranged(ctx, e, meter))?;
-    Ok((classified, exactness))
+    Ok((classified, exactness, solved))
 }
 
 /// `input`'s selections, read from one arrangement.

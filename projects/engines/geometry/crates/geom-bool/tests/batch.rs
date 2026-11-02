@@ -94,6 +94,7 @@ fn a_wall_takes_its_openings_in_one_call() {
     let one = Cut {
         host: solid(0, &wall),
         tools,
+        reuse: None,
     };
     let out = cut(&ctx(), &SERIAL, &[one], BatchRule::Atomic).unwrap();
     let result = &out.result[0];
@@ -116,6 +117,7 @@ fn openings_that_share_a_jamb_or_overlap_need_no_union() {
     let one = Cut {
         host: solid(0, &wall),
         tools: vec![solid(1, &left), solid(2, &right), solid(3, &over)],
+        reuse: None,
     };
     let out = cut(&ctx(), &SERIAL, &[one], BatchRule::Atomic).unwrap();
     assert_eq!(
@@ -134,6 +136,7 @@ fn a_tool_that_misses_or_only_touches_is_named() {
     let one = Cut {
         host: solid(0, &wall),
         tools: vec![solid(1, &door), solid(2, &far), solid(3, &touching)],
+        reuse: None,
     };
     let out = cut(&ctx(), &SERIAL, &[one], BatchRule::Atomic).unwrap();
     assert_eq!(
@@ -180,6 +183,7 @@ fn a_tool_that_cannot_enter_fails_the_call_or_is_listed() {
         [Cut {
             host: solid(0, &wall),
             tools: vec![solid(1, &door), solid(2, &drill)],
+            reuse: None,
         }]
     };
     let refused = cut(&ctx(), &SERIAL, &cuts(), BatchRule::Atomic).unwrap_err();
@@ -194,6 +198,7 @@ fn a_tool_that_cannot_enter_fails_the_call_or_is_listed() {
     let host_fails = [Cut {
         host: solid(2, &drill),
         tools: vec![solid(1, &door)],
+        reuse: None,
     }];
     let refused = cut(&ctx(), &SERIAL, &host_fails, BatchRule::SkipFailedTools).unwrap_err();
     assert_eq!(refused.kind(), ErrorKind::Unsupported);
@@ -214,6 +219,7 @@ fn many_hosts_come_back_in_input_order_on_any_threads() {
         .map(|(i, (wall, door))| Cut {
             host: solid(2 * i as u16, wall),
             tools: vec![solid(2 * i as u16 + 1, door)],
+            reuse: None,
         })
         .collect();
     let out = cut(&ctx(), &SERIAL, &cuts, BatchRule::Atomic).unwrap();
@@ -247,6 +253,7 @@ fn a_winding_vector_stays_two_entries_long() {
     let one = Cut {
         host: solid(0, &wall),
         tools,
+        reuse: None,
     };
     let out = cut(&ctx(), &SERIAL, &[one], BatchRule::Atomic).unwrap();
     assert_eq!(
@@ -272,12 +279,18 @@ fn cut_of<'b>(wall: &'b Body, doors: &'b [Body]) -> Cut<'b> {
             .enumerate()
             .map(|(i, door)| solid(1 + i as u16, door))
             .collect(),
+        reuse: None,
     }
 }
 
 /// The least budget a wall of `openings` needs, which is the work it takes.
 fn work_of(openings: i64) -> u64 {
     let (wall, doors) = wall_of(openings);
+    least(&cut_of(&wall, &doors))
+}
+
+/// The least budget `one` needs, which is the work it takes.
+fn least(one: &Cut<'_>) -> u64 {
     let (mut low, mut high) = (0u64, 1 << 32);
     while high - low > 1 {
         let middle = low + (high - low) / 2;
@@ -285,14 +298,49 @@ fn work_of(openings: i64) -> u64 {
             OpPath::new(OpId::from_bytes([7; 16])),
             Budget::new(middle, u64::MAX),
         );
-        let one = cut_of(&wall, &doors);
-        if cut(&small, &SERIAL, &[one], BatchRule::Atomic).is_ok() {
+        if cut(
+            &small,
+            &SERIAL,
+            std::slice::from_ref(one),
+            BatchRule::Atomic,
+        )
+        .is_ok()
+        {
             high = middle;
         } else {
             low = middle;
         }
     }
     high
+}
+
+#[test]
+fn a_moved_door_is_cut_again_from_the_last_cut_as_a_fresh_cut_would_be() {
+    // A wall of twenty doors, and one moved along it: the boxes about its old and new places are
+    // solved again, the rest come from the last cut, and the body, the report, the cache and the
+    // work are those of a fresh cut (11.6).
+    let (wall, mut doors) = wall_of(20);
+    let first = cut(&ctx(), &SERIAL, &[cut_of(&wall, &doors)], BatchRule::Atomic).unwrap();
+    let last = &first.result[0].cache;
+    doors[9] = cuboid([10 + 30 * 9 + 5, -5, 10], [20, 20, 30]);
+    let fresh = cut(&ctx(), &SERIAL, &[cut_of(&wall, &doors)], BatchRule::Atomic).unwrap();
+    let again = Cut {
+        reuse: Some(last),
+        ..cut_of(&wall, &doors)
+    };
+    let local = cut(
+        &ctx(),
+        &SERIAL,
+        std::slice::from_ref(&again),
+        BatchRule::Atomic,
+    )
+    .unwrap();
+    assert_eq!(local.result, fresh.result);
+    assert_eq!(local.diagnostics, fresh.diagnostics);
+    let (kept, all) = (last.shared_with(&local.result[0].cache), last.len());
+    assert!(kept * 5 >= all * 4, "{kept} of {all} boxes reused");
+    assert!(kept < all);
+    assert_eq!(least(&again), least(&cut_of(&wall, &doors)));
 }
 
 #[test]
@@ -316,5 +364,34 @@ fn a_wall_of_three_hundred_openings_timed() {
         let out = cut(&ctx(), &exec, &[cut_of(&wall, &doors)], BatchRule::Atomic).unwrap();
         println!("300 openings, {label}: {:?}", started.elapsed());
         assert_eq!(out.result[0].tools.len(), 300);
+    }
+}
+
+/// A door of the 300-opening wall moved and the wall cut again from its last cut, timed by hand;
+/// G140's gate counts its instructions.
+#[test]
+#[ignore = "a timing to read, not a check"]
+#[allow(clippy::print_stdout, reason = "the timing is the output")]
+fn a_door_moved_in_a_wall_of_three_hundred_openings_timed() {
+    let (wall, mut doors) = wall_of(300);
+    for (label, exec) in [
+        ("one thread", SERIAL),
+        ("threads", Exec::with_pool(&Threads)),
+    ] {
+        let first = cut(&ctx(), &exec, &[cut_of(&wall, &doors)], BatchRule::Atomic).unwrap();
+        doors[150] = cuboid([10 + 30 * 150 + 5, -5, 10], [20, 20, 30]);
+        let again = Cut {
+            reuse: Some(&first.result[0].cache),
+            ..cut_of(&wall, &doors)
+        };
+        let started = std::time::Instant::now();
+        let out = cut(&ctx(), &exec, &[again], BatchRule::Atomic).unwrap();
+        println!(
+            "a door moved in 300 openings, {label}: {:?}, {} of {} boxes reused",
+            started.elapsed(),
+            first.result[0].cache.shared_with(&out.result[0].cache),
+            out.result[0].cache.len()
+        );
+        doors[150] = cuboid([10 + 30 * 150, -5, 10], [20, 20, 30]);
     }
 }

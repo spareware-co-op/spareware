@@ -12,6 +12,9 @@
 //! - **Atomic by default.** A tool that cannot enter fails the call and names itself. Under
 //!   [`BatchRule::SkipFailedTools`] it is left out and listed beside the result, and which tools
 //!   are left out depends only on the inputs.
+//! - **A cut again is a cut afresh.** A [`Cut`] may carry the last cut's [`CutResult::cache`]:
+//!   boxes it holds the same polygons for are not solved again, and the result, its report and
+//!   the work are what a cut without it gives (11.6; tested on a moved door).
 //! - **Hosts run in parallel, and the threads do not show.** Results come in input order, and one
 //!   host alone has the threads for its boxes.
 //!
@@ -23,6 +26,7 @@ use alloc::vec::Vec;
 
 use geom_op::{CombineDetail, Diagnostic, OpContext, OpError, OpOutput, RunDetail};
 use geom_poly::merge::Merge;
+use geom_poly::subdivide::Solved;
 use geom_poly::trace::Classified;
 use geom_run::{ChunkPlan, Exec, Phase, RunError, WorkMeter};
 
@@ -53,6 +57,10 @@ pub struct Cut<'b> {
     pub host: Operand<'b>,
     /// The tools.
     pub tools: Vec<Operand<'b>>,
+    /// What an earlier cut solved, from its [`CutResult::cache`]: a box holding the same polygons
+    /// is not solved again, and is charged what it cost (11.6). Boxes it does not match are
+    /// ignored, so any cache gives the answer and the work of none.
+    pub reuse: Option<&'b Solved>,
 }
 
 /// What one tool did.
@@ -73,6 +81,8 @@ pub struct CutResult {
     pub tools: Vec<ToolReport>,
     /// The tools left out under [`BatchRule::SkipFailedTools`], by key.
     pub skipped: Vec<OperandKey>,
+    /// The boxes this cut solved, for the next cut of the host to reuse.
+    pub cache: Solved,
 }
 
 /// Whether the tool at `owner` took anything out: a piece of it with the host behind it. A tool
@@ -125,7 +135,8 @@ fn one_cut(
     meter: &mut WorkMeter<'_>,
 ) -> Result<OpOutput<CutResult>, OpError> {
     let (skipped, input, ready) = entered(ctx, cut, rule, meter)?;
-    let (classified, exactness) = arranged_input(ctx, exec, &input, &ready, meter)?;
+    let (classified, exactness, cache) =
+        arranged_input(ctx, exec, &input, &ready, cut.reuse, meter)?;
     let mut out = selected(ctx, &input, &ready, &classified, exactness, meter)?;
     let result = out
         .result
@@ -154,6 +165,7 @@ fn one_cut(
             result,
             tools,
             skipped,
+            cache,
         },
         exactness,
     );
