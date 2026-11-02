@@ -33,8 +33,9 @@ fn every_filter_call_goes_through_the_switch() {
         assert_eq!(unfiltered(text), Vec::<String>::new(), "{name}");
         calls += text.matches("filtered(||").count();
     }
-    // The four explicit predicates, the line-plane pair, the three-plane side and the crossing pair.
-    assert_eq!(calls, 9);
+    // The four explicit predicates, three of them again in their step reports (G124), the line-plane
+    // pair, the three-plane side, the four-plane determinant (G127) and the crossing pair.
+    assert_eq!(calls, 13);
 }
 
 #[test]
