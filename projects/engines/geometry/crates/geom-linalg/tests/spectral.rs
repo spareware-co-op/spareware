@@ -339,6 +339,48 @@ fn both_svds_are_backward_stable_and_bracket_the_exact_values() {
     }
 }
 
+/// Issue #542, in the Golub–Kahan SVD: a bidiagonal whose two diagonal entries' magnitudes sum
+/// past the largest double. Its deflation test added them before scaling, so the threshold
+/// overflowed and took the 10^300 between them for zero: a residual of 10^300. Scaled first, the
+/// step resolves it, and both methods are within their bound.
+#[test]
+fn an_svd_pair_whose_magnitudes_sum_past_the_largest_double_is_not_deflated() {
+    let a = Matrix::from_rows(2, 2, &[1e308, 1e300, 0.0, 1e308]).unwrap();
+    let ae = ex(&a);
+    let p = RBig::from(4);
+    let tol = &p * &p * unit() * RBig::from(8);
+    for (method, f) in METHODS {
+        let svd = f(&a, &mut plenty()).unwrap();
+        let (res, orth) = defects(&ae, &svd);
+        assert!(res <= &tol * max_abs(&ae), "{method}: residual {res}");
+        assert!(orth <= tol, "{method}: orthogonality {orth}");
+    }
+}
+
+/// Issue #542's second input, from the `linalg` fuzz target's libFuzzer run: a 5 × 5 matrix whose
+/// second row, (−1.797…·10^308, −2.55·10^306, −5.67·10^303, 0, 0), has a norm beyond the largest
+/// double, and so does the largest singular value, which is at least every row's norm. No finite
+/// Σ is within the bound of it, and both methods refuse it as not finite. Before the fix
+/// Golub–Kahan's deflation test overflowed, dropped the entry −2.55·10^306 and returned a factor
+/// that far from A.
+#[test]
+fn a_singular_value_beyond_the_largest_double_is_refused() {
+    let mut e = [0.0; 25];
+    e[2] = -5.642_832_201_317_031e303;
+    e[4] = 1.0;
+    e[5] = -1.797_693_134_861_865_2e308;
+    e[6] = -2.545_561_565_328_433_7e306;
+    e[7] = -5.674_977_440_532_53e303;
+    let a = Matrix::from_rows(5, 5, &e).unwrap();
+    for (method, f) in METHODS {
+        assert_eq!(
+            f(&a, &mut plenty()).err(),
+            Some(LinalgError::NotFinite),
+            "{method}"
+        );
+    }
+}
+
 #[test]
 fn jacobi_keeps_relative_accuracy_on_graded_matrices() {
     for (name, a, graded) in matrices() {

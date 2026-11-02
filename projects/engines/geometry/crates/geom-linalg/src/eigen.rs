@@ -25,8 +25,9 @@
 //! - **Refused beyond the doubles.** A matrix with an eigenvalue beyond the largest double (which
 //!   needs an entry above the largest double over n, as |λ| ≤ n·max|`a_ij`|) has no factorisation
 //!   within the bound above in finite doubles: it is [`LinalgError::NotFinite`], as is any whose
-//!   reduction or QR step overflows. The deflation test scales each diagonal magnitude before adding the two, so
-//!   it cannot overflow and take an entry beside them for zero (issue #542).
+//!   reduction or QR step overflows. The deflation test scales each diagonal magnitude before
+//!   adding the two (`crate::matrix`'s `negligible`), so it cannot overflow and take an entry
+//!   beside them for zero (issue #542).
 //! - **Bounded.** At most 30·n QR steps, then [`LinalgError::NoConvergence`]; each step charges its
 //!   work before it runs, the reduction its own first.
 //!
@@ -51,12 +52,9 @@ extern crate alloc;
 use alloc::vec::Vec;
 
 use crate::cols::{Cols, add, at, at_mut, mul, sub};
-use crate::matrix::{LinalgError, Matrix, Work, cost3, finite, wide, zeros};
+use crate::matrix::{LinalgError, Matrix, Work, cost3, finite, negligible, wide, zeros};
 use crate::qr::householder;
 use crate::rotation::{givens, hypot, rotate_slices};
-
-/// Twice the unit roundoff, 2^−52: the relative size below which a subdiagonal entry is zero.
-const EPS: f64 = f64::from_bits(0x3CB0_0000_0000_0000);
 
 /// The eigenvalues and eigenvectors of a symmetric matrix.
 #[derive(Clone, Debug, PartialEq)]
@@ -255,19 +253,6 @@ fn symmetric_qr(
         work.charge(wide(block).saturating_mul(wide(add(mul(len, 4)?, 12)?)))?;
         qr_step(a, b, q, (lo, hi))?;
     }
-}
-
-/// Whether the subdiagonal entry `e` is negligible beside the diagonal entries `p` and `t` on either
-/// side of it: |e| ≤ 2^−52·(|p| + |t|), Golub and Van Loan's deflation test (algorithm 8.3.3).
-///
-/// Each magnitude is scaled before the two are added. 2^−52·|x| is exact for |x| ≥ 2^−970, so
-/// where both magnitudes are at least that and their sum is a finite double, this threshold is
-/// 2^−52 times the rounded sum, bit for bit; below, the two forms can differ only in the last bit
-/// of a subnormal product. Adding first overflowed once |p| + |t| passed the largest double: the
-/// threshold became infinite and the entry beside them was taken for zero (issue #542). Scaled
-/// first, the threshold is at most 2^−51 times the largest double.
-fn negligible(e: f64, p: f64, t: f64) -> bool {
-    e.abs() <= EPS * p.abs() + EPS * t.abs()
 }
 
 /// One implicit symmetric QR step with Wilkinson's shift on the block lo..=hi (Golub and Van
