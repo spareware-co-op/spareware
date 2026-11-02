@@ -390,9 +390,26 @@ fn input(a: &Arenas) -> Result<Input<'_>, NumError> {
     })
 }
 
-/// The input vertex of `one` exactly at `point`.
-fn found_vertex(one: &Input<'_>, point: &Tpi) -> Result<Option<u32>, NumError> {
-    let key = grid_key(point.to_grid()?.value());
+/// A grid key, as [`grid_key`] gives it.
+type GridKey = (i64, i64, i64);
+
+/// Each merged vertex's grid key, rounded once for the lookups in every operand: a vertex rounds
+/// the same whichever operand it is looked for in.
+fn grid_keys(merged: &Merged) -> Vec<Result<GridKey, NumError>> {
+    merged
+        .vertices
+        .iter()
+        .map(|point| Ok(grid_key(point.to_grid()?.value())))
+        .collect()
+}
+
+/// The grid key of merged vertex `at`.
+fn key_at(keys: &[Result<GridKey, NumError>], at: usize) -> Result<GridKey, NumError> {
+    keys.get(at).copied().ok_or(NumError::BudgetExceeded)?
+}
+
+/// The input vertex of `one` exactly at `point`, whose grid key is `key`.
+fn found_vertex(one: &Input<'_>, point: &Tpi, key: GridKey) -> Result<Option<u32>, NumError> {
     for row in one.near.get(&key).into_iter().flatten() {
         let place = match Ix::<Vertex>::new(*row) {
             Some(ix) => at_vertex(one.arenas, ix)?,
@@ -640,6 +657,7 @@ fn face_ranks(merged: &Merged) -> Vec<Rank> {
 /// fin starting at one of the input face's own vertices.
 fn untouched(
     merged: &Merged,
+    keys: &[Result<GridKey, NumError>],
     face: usize,
     source: (usize, u32),
     inputs: &[Input<'_>],
@@ -679,7 +697,7 @@ fn untouched(
         let Some(point) = merged.vertices.get(from) else {
             return Ok(false);
         };
-        match found_vertex(one, point)? {
+        match found_vertex(one, point, key_at(keys, from)?)? {
             Some(row) if corners.contains(&row) => {}
             _ => return Ok(false),
         }
@@ -717,6 +735,7 @@ impl Rows {
 /// its operand and row, and whether its ends are the input's own.
 fn edge_sources(
     merged: &Merged,
+    keys: &[Result<GridKey, NumError>],
     faces: &FacesDone,
     inputs: &[Input<'_>],
 ) -> Result<Vec<Option<EdgeSource>>, NamingError> {
@@ -739,7 +758,11 @@ fn edge_sources(
         {
             let low = merged.vertices.get(edge.low).ok_or(NamingError::Broken)?;
             let high = merged.vertices.get(edge.high).ok_or(NamingError::Broken)?;
-            let ends_at = found_vertex(one, low)?.zip(found_vertex(one, high)?);
+            let ends_at = found_vertex(one, low, key_at(keys, edge.low)?)?.zip(found_vertex(
+                one,
+                high,
+                key_at(keys, edge.high)?,
+            )?);
             for row in list {
                 let same = ends(one.arenas, *row).is_some_and(|(s, e)| {
                     let (s, e) = (s.row(), e.row());
@@ -761,6 +784,7 @@ fn edge_sources(
 /// Every edge of `merged`, kept or `Bounded`.
 fn name_edges(
     merged: &Merged,
+    keys: &[Result<GridKey, NumError>],
     faces: &FacesDone,
     inputs: &[Input<'_>],
     sources: &Sources<'_>,
@@ -768,7 +792,7 @@ fn name_edges(
     mint: &mut Mint,
 ) -> Result<Rows, NamingError> {
     let shared = shared_names(sources.operands.iter().map(|o| o.names.edges.as_slice()));
-    let hits = edge_sources(merged, faces, inputs)?;
+    let hits = edge_sources(merged, keys, faces, inputs)?;
     let mut users: BTreeMap<(usize, u32), usize> = BTreeMap::new();
     for (source, _) in hits.iter().flatten() {
         let slot = users.entry(*source).or_insert(0);
@@ -845,6 +869,7 @@ fn name_edges(
 /// `Bounded` by the faces around it.
 fn name_vertices(
     merged: &Merged,
+    keys: &[Result<GridKey, NumError>],
     faces: &FacesDone,
     inputs: &[Input<'_>],
     sources: &Sources<'_>,
@@ -878,7 +903,7 @@ fn name_vertices(
             let operand = sources.operands.get(place).ok_or(NamingError::Broken)?;
             if own.is_none()
                 && operand.keeps
-                && let Some(row) = found_vertex(one, point)?
+                && let Some(row) = found_vertex(one, point, key_at(keys, at)?)?
             {
                 // Not a name two operands brought (per name, as for edges).
                 let name = name_at(&operand.names.vertices, row)?;
@@ -999,6 +1024,7 @@ pub fn name(
     for operand in sources.operands {
         inputs.push(input(operand.body.arenas())?);
     }
+    let keys = grid_keys(merged);
     let mut mint = Mint::default();
     let mut faces = name_faces(op, merged, pieces, sources, &mut mint)?;
     faces.names = told_apart(&faces.names, &face_ranks(merged), &mut mint)?;
@@ -1006,7 +1032,7 @@ pub fn name(
         record.output = *name;
         if let (Origin::Modified { .. }, Some([source])) =
             (&record.origin, faces.sources.get(at).map(Vec::as_slice))
-            && untouched(merged, at, *source, &inputs)?
+            && untouched(merged, &keys, at, *source, &inputs)?
         {
             record.origin = Origin::Unchanged;
         }
@@ -1017,10 +1043,14 @@ pub fn name(
         .filter(|r| matches!(r.origin, Origin::Unchanged | Origin::Modified { .. }))
         .map(|r| r.output)
         .collect();
-    let edges = name_edges(merged, &faces, &inputs, sources, &mut alive, &mut mint)?
-        .finished(&mut records, &mut mint)?;
-    let vertices = name_vertices(merged, &faces, &inputs, sources, &mut alive, &mut mint)?
-        .finished(&mut records, &mut mint)?;
+    let edges = name_edges(
+        merged, &keys, &faces, &inputs, sources, &mut alive, &mut mint,
+    )?
+    .finished(&mut records, &mut mint)?;
+    let vertices = name_vertices(
+        merged, &keys, &faces, &inputs, sources, &mut alive, &mut mint,
+    )?
+    .finished(&mut records, &mut mint)?;
     let regions = name_regions(
         op,
         merged,
@@ -1207,9 +1237,9 @@ pub fn name_fresh(
     };
     let mut records = core::mem::take(&mut faces.records);
     let mut alive = BTreeSet::new();
-    let edges = name_edges(merged, &faces, &[], &sources, &mut alive, &mut mint)?
+    let edges = name_edges(merged, &[], &faces, &[], &sources, &mut alive, &mut mint)?
         .finished(&mut records, &mut mint)?;
-    let vertices = name_vertices(merged, &faces, &[], &sources, &mut alive, &mut mint)?
+    let vertices = name_vertices(merged, &[], &faces, &[], &sources, &mut alive, &mut mint)?
         .finished(&mut records, &mut mint)?;
     let regions = name_regions(op, merged, &faces.names, None, &mut records, &mut mint)?;
     let names = Names {
