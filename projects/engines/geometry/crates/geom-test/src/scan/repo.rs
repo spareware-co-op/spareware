@@ -56,7 +56,9 @@ pub struct Exempt {
     pub reason: &'static str,
 }
 
-/// The scanner's own files, which hold every marker on purpose.
+/// The scanner's own files, which hold every marker on purpose. A file ported from SMLib or
+/// solidcore joins them with decision 32.44 as its reason: the routines chapter 29.6 lists are
+/// accepted from those two sources.
 pub const EXEMPT: &[Exempt] = &[
     Exempt {
         file: "projects/engines/geometry/crates/geom-test/src/scan.rs",
