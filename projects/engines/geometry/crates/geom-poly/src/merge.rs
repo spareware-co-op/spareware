@@ -290,8 +290,71 @@ struct Corner {
     point: Tpi,
     x: [I320; 3],
     w: I256,
+    /// X and w in machine words, when all four fit: taken once, for the comparisons and tests that
+    /// try machine words first.
+    words: Option<([i128; 3], i128)>,
     /// The planes of every corner at this point: its own, until [`numbered`] joins them.
     through: Vec<Plane>,
+}
+
+/// `v` in machine words, when every one fits.
+fn in_words<const L: usize, const N: usize>(v: &[Wide<L>; N]) -> Option<[i128; N]> {
+    let mut out = [0i128; N];
+    for (slot, one) in out.iter_mut().zip(v) {
+        *slot = one.to_i128()?;
+    }
+    Some(out)
+}
+
+/// The sign of a / b − c / d for b and d positive, in checked machine words: `None`, to step aside
+/// to the wide path, when a product does not fit.
+fn words_ratio(a: i128, b: i128, c: i128, d: i128) -> Option<Ordering> {
+    Some(a.checked_mul(d)?.cmp(&c.checked_mul(b)?))
+}
+
+/// [`point_order`] in machine words, over each corner's [`Corner::words`].
+fn point_words(a: &Corner, b: &Corner) -> Option<Ordering> {
+    let ((ax, aw), (bx, bw)) = (a.words?, b.words?);
+    for (p, q) in ax.iter().zip(&bx) {
+        let order = words_ratio(*p, aw, *q, bw)?;
+        if order != Ordering::Equal {
+            return Some(order);
+        }
+    }
+    Some(Ordering::Equal)
+}
+
+/// Corners `a` and `b` along `axis`.
+fn axis_order(a: &Corner, b: &Corner, axis: usize) -> Option<Ordering> {
+    let words = a
+        .words
+        .zip(b.words)
+        .and_then(|((ax, aw), (bx, bw))| words_ratio(*ax.get(axis)?, aw, *bx.get(axis)?, bw));
+    match words {
+        Some(order) => Some(order),
+        None => ratio_order::<5, 4, 9>(a.x.get(axis)?, &a.w, b.x.get(axis)?, &b.w),
+    }
+}
+
+/// Whether `corner` lies on `plane`: n · X + d · w = 0 in machine words when they hold it, else
+/// [`Plane::side_of_tpi`].
+fn lies_on(corner: &Corner, plane: &Plane) -> Result<bool, NumError> {
+    let in_words = corner.words.and_then(|(x, w)| {
+        let [nx, ny, nz] = plane.n();
+        let terms = [
+            nx.checked_mul(*x.first()?)?,
+            ny.checked_mul(*x.get(1)?)?,
+            nz.checked_mul(*x.get(2)?)?,
+            plane.d().checked_mul(w)?,
+        ];
+        terms
+            .iter()
+            .try_fold(0i128, |sum, term| sum.checked_add(*term))
+    });
+    match in_words {
+        Some(sum) => Ok(sum == 0),
+        None => Ok(plane.side_of_tpi(&corner.point)? == Sign::Zero),
+    }
 }
 
 /// The sign of a / b − c / d for b and d positive: in machine words when they hold it, else in
@@ -327,6 +390,9 @@ fn ratio_in_words<const A: usize, const B: usize>(
 /// Points lexicographically: at most 2^294 · 2^252, in 576 bits. A coordinate is compared only
 /// while those before it are equal.
 fn point_order(a: &Corner, b: &Corner) -> Option<Ordering> {
+    if let Some(order) = point_words(a, b) {
+        return Some(order);
+    }
     for (p, q) in a.x.iter().zip(&b.x) {
         let order = ratio_order::<5, 4, 9>(p, &a.w, q, &b.w)?;
         if order != Ordering::Equal {
@@ -347,19 +413,20 @@ fn corner(face: Plane, p: Plane, q: Plane) -> Result<Corner, NumError> {
     let turn = |v: &I320| v.checked_neg().ok_or(NumError::BudgetExceeded);
     let [a, b, c] = &x;
     let through = alloc::vec![face, p, q];
-    Ok(match point.weight() {
-        Sign::Negative => Corner {
-            point,
-            x: [turn(a)?, turn(b)?, turn(c)?],
-            w: w.checked_neg().ok_or(NumError::BudgetExceeded)?,
-            through,
-        },
-        Sign::Positive | Sign::Zero => Corner {
-            point,
-            x,
-            w,
-            through,
-        },
+    let (x, w) = match point.weight() {
+        Sign::Negative => (
+            [turn(a)?, turn(b)?, turn(c)?],
+            w.checked_neg().ok_or(NumError::BudgetExceeded)?,
+        ),
+        Sign::Positive | Sign::Zero => (x, w),
+    };
+    let words = in_words(&x).zip(w.to_i128());
+    Ok(Corner {
+        point,
+        x,
+        w,
+        words,
+        through,
     })
 }
 
@@ -369,6 +436,8 @@ fn corner(face: Plane, p: Plane, q: Plane) -> Result<Corner, NumError> {
 struct LineKey {
     coordinates: [I256; 6],
     first: usize,
+    /// The coordinates in machine words, when all six fit.
+    words: Option<[i128; 6]>,
 }
 
 /// The line where `p` and `q` meet: direction `n_p` × `n_q`, moment `d_p` `n_q` − `d_q` `n_p`, which
@@ -402,7 +471,11 @@ fn line_key(p: &Plane, q: &Plane) -> Result<LineKey, NumError> {
             *slot = slot.checked_neg().ok_or(NumError::BudgetExceeded)?;
         }
     }
-    Ok(LineKey { coordinates, first })
+    Ok(LineKey {
+        coordinates,
+        first,
+        words: in_words(&coordinates),
+    })
 }
 
 /// The order of two lines, equal when they are one line: by which component of the direction comes
@@ -414,8 +487,25 @@ fn line_order(a: &LineKey, b: &LineKey) -> Option<Ordering> {
     if first != Ordering::Equal {
         return Some(first);
     }
+    if let Some(order) = line_words(a, b) {
+        return Some(order);
+    }
     for (p, q) in a.coordinates.iter().zip(&b.coordinates) {
         let order = ratio_order::<4, 4, 8>(p, over_a, q, over_b)?;
+        if order != Ordering::Equal {
+            return Some(order);
+        }
+    }
+    Some(Ordering::Equal)
+}
+
+/// [`line_order`] for lines whose first components agree, in machine words, over each line's
+/// [`LineKey::words`].
+fn line_words(a: &LineKey, b: &LineKey) -> Option<Ordering> {
+    let (aw, bw) = (a.words?, b.words?);
+    let (over_a, over_b) = (*aw.get(a.first)?, *bw.get(b.first)?);
+    for (p, q) in aw.iter().zip(&bw) {
+        let order = words_ratio(*p, over_a, *q, over_b)?;
         if order != Ordering::Equal {
             return Some(order);
         }
@@ -981,8 +1071,7 @@ fn cut_at_ends(runs: Vec<Run>, places: &[Corner]) -> Result<Vec<Run>, MergeError
         let mut low = run.low;
         for mark in ends.iter().filter(|e| **e > run.low && **e < run.high) {
             let place = places.get(*mark).ok_or(MergeError::Open)?;
-            let side = |plane: &Plane| plane.side_of_tpi(&place.point);
-            if side(&p)? == Sign::Zero && side(&q)? == Sign::Zero {
+            if lies_on(place, &p)? && lies_on(place, &q)? {
                 edges.push(Run {
                     low,
                     high: *mark,
@@ -1152,11 +1241,7 @@ fn shell_cells(
             for (axis, [low, high]) in ends.iter_mut().enumerate() {
                 let along = |place: usize| -> Result<Ordering, MergeError> {
                     let other = points.get(place).ok_or(MergeError::Open)?;
-                    let (p, q) = (at.x.get(axis), other.x.get(axis));
-                    let order = p
-                        .zip(q)
-                        .and_then(|(p, q)| ratio_order::<5, 4, 9>(p, &at.w, q, &other.w));
-                    Ok(order.ok_or(NumError::BudgetExceeded)?)
+                    Ok(axis_order(at, other, axis).ok_or(NumError::BudgetExceeded)?)
                 };
                 if along(*low)? == Ordering::Less {
                     *low = *id;
