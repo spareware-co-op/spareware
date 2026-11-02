@@ -150,7 +150,12 @@ fn the_table_names_what_it_holds() {
     let a = carriers.push(l).unwrap();
     assert!(matches!(carriers.get(a), Some(Curve2::Line(_))));
     assert_eq!(carriers.len(), 1);
+    assert!(!carriers.is_empty());
     assert_eq!(a.get(), 0);
+    // The next name is the next place, and an error says which name it could not find.
+    let b = carriers.push(circle(p2(0, 0), 1)).unwrap();
+    assert_eq!(b.get(), 1);
+    assert_eq!(PointError::NoCarrier(b).to_string(), "no carrier at 1");
     let other = Carriers::new();
     assert!(other.get(a).is_none());
     let point = Pt2::Crossing {
