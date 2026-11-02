@@ -566,15 +566,37 @@ fn root(parents: &[usize], mut at: usize) -> usize {
     }
 }
 
-/// Joins the sets of `a` and `b`, the lower root on top.
+/// Joins the sets of `a` and `b`, the lower root on top. Every element on the way from `a` or `b`
+/// to the root points at the root after, so later walks are short; no set or root changes.
 fn join(parents: &mut [usize], a: usize, b: usize) {
-    let (a, b) = (root(parents, a), root(parents, b));
-    let (low, high) = (a.min(b), a.max(b));
+    let (ra, rb) = (root(parents, a), root(parents, b));
+    let (low, high) = (ra.min(rb), ra.max(rb));
+    for (mut at, top) in [(a, ra), (b, rb)] {
+        while at != top {
+            let Some(slot) = parents.get_mut(at) else {
+                break;
+            };
+            at = core::mem::replace(slot, low);
+        }
+    }
     parents
         .iter_mut()
         .skip(high)
         .take(1)
         .for_each(|slot| *slot = low);
+}
+
+/// Every element of `parents` pointing straight at its root. A root is the lowest element of its
+/// set, so each parent comes before its child and one pass in order does it.
+fn flattened(mut parents: Vec<usize>) -> Vec<usize> {
+    for at in 0..parents.len() {
+        let up = parents.get(at).copied().unwrap_or(at);
+        let top = parents.get(up).copied().unwrap_or(up);
+        if let Some(slot) = parents.get_mut(at) {
+            *slot = top;
+        }
+    }
+    parents
 }
 
 /// The sheet of a side no face owns: a cut's, which only holds seams open.
@@ -1069,7 +1091,9 @@ fn cut_at_ends(runs: Vec<Run>, places: &[Corner]) -> Result<Vec<Run>, MergeError
     for run in runs {
         let [p, q] = run.on;
         let mut low = run.low;
-        for mark in ends.iter().filter(|e| **e > run.low && **e < run.high) {
+        let between =
+            ends.partition_point(|e| *e <= run.low)..ends.partition_point(|e| *e < run.high);
+        for mark in ends.get(between).into_iter().flatten() {
             let place = places.get(*mark).ok_or(MergeError::Open)?;
             if lies_on(place, &p)? && lies_on(place, &q)? {
                 edges.push(Run {
@@ -1601,6 +1625,7 @@ pub fn merge_with_reusing(
             start = end;
         }
     }
+    let same_piece = flattened(same_piece);
     let runs = without_slits(runs, &same_piece);
     let runs = cut_at_ends(whole_runs(runs, &same_piece), &points)?;
 
@@ -1672,6 +1697,7 @@ pub fn merge_with_reusing(
             fins: radial(here, &fins, &planes, rules.open, &mut same_shell)?,
         });
     }
+    let same_shell = flattened(same_shell);
     let mut tops: Vec<usize> = (0..face_list.len()).map(|f| root(&same_shell, f)).collect();
     tops.sort_unstable();
     tops.dedup();
