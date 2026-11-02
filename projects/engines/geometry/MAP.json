@@ -642,7 +642,7 @@
           "guarantees": [
             "every batch is full and the same on every target, and every result of a typical batch is `Ok` (`tests/inputs.rs`); every result is the call's own, run directly (`tests/attack_g06.rs`)."
           ],
-          "job": "Inputs for `geom-intersect`'s hot paths (pieces G158, G162 and G163, decision 32.44): a list of items put in canonical order, a circle's canonical key, a pair of lines put in canonical order, a point projected on an arc and on a band of a sphere, and pairs of curves that meet, each path of 12.5 once.",
+          "job": "Inputs for `geom-intersect`'s hot paths (pieces G158, G162 and G163, decision 32.44): a list of items put in canonical order, a circle's canonical key, a pair of lines put in canonical order, a point projected on an arc and on a band of a sphere, pairs of curves that meet, each path of 12.5 once, and curves through surfaces, each path of 12.6 once.",
           "method": {
             "links": [
               "projects/engines/geometry/architecture/28-testing.md"
@@ -2590,6 +2590,29 @@
           "target": "lib"
         },
         {
+          "cost": "a closed form, or the engine up to [`WORK`]; at most [`MAX_INPUT_BYTES`] bytes read.",
+          "does": "[`decode`] turns a fuzzer's bytes into a [`Case`]: a curve, a segment or cubic, and a surface, a plane, sphere, cylinder, cone, torus or biquadratic graph, on a coarse lattice so that tangencies and lines lying in surfaces are common. [`check`] asks where they meet and holds the answer to the laws below. [`harness`] is `decode` then `check`.",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-fuzz/src/piercing.rs",
+          "guarantees": [
+            "**Any bytes are a case.** Every byte string, the empty one included, decodes to a case.",
+            "**A bounded input.** [`decode`] reads at most [`MAX_INPUT_BYTES`] bytes, derived below; a unit test builds the input that reaches it.",
+            "**A panic is a failure; a broken law is a [`Finding`]** naming the law and the case: an answer that changes between two runs, a point where the curve and surface are apart, a segment across a graph that changes sides between its ends with no item on it, or a smaller budget that changes an answer instead of stopping it."
+          ],
+          "job": "Fuzz target: `geom-intersect` says where any curve meets any surface, and what it says is so.",
+          "method": {
+            "links": [
+              "projects/engines/geometry/architecture/12-intersections.md",
+              "projects/engines/geometry/architecture/28-testing.md"
+            ],
+            "text": "chapter 12.6 (`projects/engines/geometry/architecture/12-intersections.md`), with chapter 28.5's oracle stack (`projects/engines/geometry/architecture/28-testing.md`): the sides are read from the graph's Bernstein sum, which shares nothing with the solver it judges."
+          },
+          "path": "geom_fuzz::piercing",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
           "cost": "4 + 3 + 6 + 6 + 10 = 29 predicate calls per input, each constant time, and at most [`MAX_INPUT_BYTES`] bytes read.",
           "does": "[`decode`] turns a fuzzer's bytes into grid points with `geom-test`'s [`GridSampler`] (four 2D points, then five 3D points). [`check`] calls every exact predicate on them: `orient2d`, `incircle`, `orient3d` and `insphere`. For each, it checks that the predicate answers, then swaps every pair of points and checks that the sign flips, `Zero` staying `Zero`. [`harness`] is `decode` then `check`, the function every fuzzing engine drives (the crate README sets out the layout).",
           "family": [],
@@ -3339,6 +3362,31 @@
             "text": "chapter 12.5 (`projects/engines/geometry/architecture/12-intersections.md`): Bézier clipping ([Sederberg and Nishita 1990](https://doi.org/10.1016/0010-4485(90)90039-F)), bisecting when a clip removes too little, finished by Krawczyk's test; exact signs of products by error-free transformations ([Shewchuk 1997](https://doi.org/10.1007/PL00009321))."
           },
           "path": "geom_intersect::curve",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
+          "cost": "a closed form is a few predicates. The engine's boxes are near the logarithm of the kinds' reach for a transversal root, each a few evaluations; a clip is O(p·q). Recursion: none.",
+          "does": "[`curve_surface`] answers for any curve and surface. A line with a plane is a linear equation, a line with a sphere, cylinder or cone a quadratic in the surface's own coordinates, and a line with a torus a quartic, isolated by [`crate::solve`], each with its count from an exact sign or a Sturm chain where the data are whole. A helix on a coaxial cylinder of its radius is an overlap. Every other pair runs [`crate::solve`] on C(t) − S(u, v), with the Interval Projected Polyhedron step narrowing the boxes of NURBS pieces.",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-intersect/src/curve_surface.rs",
+          "guarantees": [
+            "**Every root found or flagged.** A box is discarded only on a proof, so a meeting no item reports does not exist.",
+            "**Exact where the data are.** On whole-number data the count, and whether a root is double, come from exact signs, within the budgets of chapter 6.2. Elsewhere an interval decides, and what it cannot tell goes to the engine.",
+            "**Grazing is read, not guessed.** Where the tangent cannot be excluded from the surface's tangent plane the box is a candidate, and the second order test compares the curve's normal curvature with the surface's: [`Unresolved::TangentBand`] with its width where they differ, [`Unresolved::HigherOrderContact`] where they cannot be told apart, and [`Unresolved::NearCoincident`] for a long run, a curve lying near the surface.",
+            "**Overlap by identity.** A line in a plane or along a ruling, and a helix on a coaxial cylinder of its radius, are [`Item::Overlap`]s with [`Coincidence::Identical`].",
+            "**A join is no boundary.** A root on a closed kind's join (a round kind's u = 0, a torus's v = 0, a closed curve's start) crosses like any other; only a true end of a domain makes a [`PointContact::BoundaryTouch`]. Every enclosure is rounded outward, so one whose bound lands exactly on an end holds a value past it, and misses."
+          ],
+          "job": "Where a curve meets a surface (chapter 12.6).",
+          "method": {
+            "links": [
+              "projects/engines/geometry/architecture/12-intersections.md",
+              "https://doi.org/10.1016/0167-8396(93"
+            ],
+            "text": "chapter 12.6 (`projects/engines/geometry/architecture/12-intersections.md`): the Interval Projected Polyhedron solver ([Sherbrooke and Patrikalakis 1993](https://doi.org/10.1016/0167-8396(93)90019-Y)), projecting a patch's coefficients on each parameter axis against the thin slabs around a curve piece, and a curve piece against the patch's fat plane; Krawczyk's test finishes every box."
+          },
+          "path": "geom_intersect::curve_surface",
           "provenance": [],
           "spdx": null,
           "target": "lib"

@@ -434,6 +434,9 @@ pub static OPS: &[Op] = &[
     Op { group: "intersect", name: "curve_line_circle", measures: "geom_intersect::curve::curves", classes: T, prepare: |c| bind(inputs::intersect::line_circles(c), kernels::intersect::met) },
     Op { group: "intersect", name: "curve_cubics", measures: "geom_intersect::curve::curves", classes: T, prepare: |c| bind(inputs::intersect::cubic_pairs(c), kernels::intersect::met) },
     Op { group: "intersect", name: "curve_loop", measures: "geom_intersect::curve::self_crossings", classes: T, prepare: |c| bind(inputs::intersect::loops(c), kernels::intersect::crossed) },
+    Op { group: "intersect", name: "surface_plane", measures: "geom_intersect::curve_surface::curve_surface", classes: T, prepare: |c| bind(inputs::intersect::line_planes(c), kernels::intersect::pierced) },
+    Op { group: "intersect", name: "surface_torus", measures: "geom_intersect::curve_surface::curve_surface", classes: T, prepare: |c| bind(inputs::intersect::line_tori(c), kernels::intersect::pierced) },
+    Op { group: "intersect", name: "surface_patch", measures: "geom_intersect::curve_surface::curve_surface", classes: T, prepare: |c| bind(inputs::intersect::cubic_patches(c), kernels::intersect::pierced) },
     // geom-intersect's projection (piece G162; decision 32.44): the search on an arc and on a band
     // of a sphere.
     Op { group: "intersect", name: "project_arc", measures: "geom_intersect::project::project_curve", classes: T, prepare: |c| bind(inputs::intersect::arcs(c), kernels::intersect::on_arcs) },
