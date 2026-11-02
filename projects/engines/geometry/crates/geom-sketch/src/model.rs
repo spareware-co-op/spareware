@@ -543,6 +543,44 @@ pub enum ConstraintKind {
         /// The shared point.
         point: ItemId,
     },
+    /// A point is on an ellipse (piece G219).
+    OnEllipse {
+        /// The point.
+        point: ItemId,
+        /// The ellipse.
+        ellipse: ItemId,
+    },
+    /// A point is where a parameter on an ellipse puts it: c + cos πt · a + sin πt · (b / |a|) · a⊥,
+    /// for the ellipse's centre c, major-axis vector a and minor radius b (piece G219).
+    AtParameter {
+        /// The point.
+        point: ItemId,
+        /// The parameter, on an ellipse.
+        parameter: ItemId,
+    },
+    /// An ellipse's major radius, the length of its major-axis vector (piece G219).
+    MajorRadius {
+        /// The ellipse.
+        ellipse: ItemId,
+        /// The radius, above zero.
+        radius: Amount,
+    },
+    /// An ellipse's minor radius (piece G219).
+    MinorRadius {
+        /// The ellipse.
+        ellipse: ItemId,
+        /// The radius, above zero.
+        radius: Amount,
+    },
+    /// A line touches an ellipse, on a stored side of the line (piece G219).
+    TangentEllipse {
+        /// The line.
+        line: ItemId,
+        /// The ellipse.
+        ellipse: ItemId,
+        /// The side of the line the ellipse's centre is on.
+        side: Side,
+    },
     /// Two points are mirror images in a line.
     Symmetric {
         /// The first.
@@ -642,6 +680,8 @@ impl ConstraintKind {
                 | ConstraintKind::Heading { .. }
                 | ConstraintKind::Sweep { .. }
                 | ConstraintKind::ArcLength { .. }
+                | ConstraintKind::MajorRadius { .. }
+                | ConstraintKind::MinorRadius { .. }
         )
     }
 
@@ -987,6 +1027,39 @@ impl Sketch {
         }
     }
 
+    /// The ellipse `id`'s centre, major-axis vector and minor radius.
+    ///
+    /// # Errors
+    ///
+    /// [`SketchError::Unknown`]; [`SketchError::WrongKind`] if it is not an ellipse.
+    pub fn ellipse(&self, id: ItemId) -> Result<(ItemId, [f64; 2], f64), SketchError> {
+        match self.entity(id)?.kind {
+            EntityKind::Ellipse {
+                centre,
+                axis,
+                minor,
+            } => Ok((centre, axis, minor)),
+            _ => Err(SketchError::WrongKind(id)),
+        }
+    }
+
+    /// The ellipse the parameter `id` is on.
+    ///
+    /// # Errors
+    ///
+    /// [`SketchError::Unknown`]; [`SketchError::WrongKind`] if it is not a parameter, or its curve
+    /// is not an ellipse.
+    pub fn parameter_ellipse(&self, id: ItemId) -> Result<ItemId, SketchError> {
+        match self.entity(id)?.kind {
+            EntityKind::Parameter { curve, .. } => {
+                self.ellipse(curve)
+                    .map_err(|_| SketchError::WrongKind(id))?;
+                Ok(curve)
+            }
+            _ => Err(SketchError::WrongKind(id)),
+        }
+    }
+
     /// The arc `id`'s centre, start and end, swept anticlockwise from its start.
     ///
     /// # Errors
@@ -1179,6 +1252,28 @@ impl Sketch {
             } => {
                 line(l)?;
                 round(circle)
+            }
+            ConstraintKind::OnEllipse { point: p, ellipse } => {
+                point(p)?;
+                self.ellipse(ellipse).map(|_| ())
+            }
+            ConstraintKind::AtParameter {
+                point: p,
+                parameter,
+            } => {
+                point(p)?;
+                self.parameter_ellipse(parameter).map(|_| ())
+            }
+            ConstraintKind::MajorRadius { ellipse, radius }
+            | ConstraintKind::MinorRadius { ellipse, radius } => {
+                self.check_amount(radius, true)?;
+                self.ellipse(ellipse).map(|_| ())
+            }
+            ConstraintKind::TangentEllipse {
+                line: l, ellipse, ..
+            } => {
+                line(l)?;
+                self.ellipse(ellipse).map(|_| ())
             }
             ConstraintKind::TangentAtEnd {
                 line: l,

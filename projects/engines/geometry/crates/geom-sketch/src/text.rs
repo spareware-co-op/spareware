@@ -310,6 +310,28 @@ fn write_constraint(out: &mut String, constraint: &Constraint) -> Result<(), Ske
             put_kind(out, "tangent-line", &[line, circle])?;
             put(out, side_name(side))?;
         }
+        ConstraintKind::OnEllipse { point, ellipse } => {
+            put_kind(out, "on-ellipse", &[point, ellipse])?;
+        }
+        ConstraintKind::AtParameter { point, parameter } => {
+            put_kind(out, "at-parameter", &[point, parameter])?;
+        }
+        ConstraintKind::MajorRadius { ellipse, radius } => {
+            put_kind(out, "major-radius", &[ellipse])?;
+            put_amount(out, radius)?;
+        }
+        ConstraintKind::MinorRadius { ellipse, radius } => {
+            put_kind(out, "minor-radius", &[ellipse])?;
+            put_amount(out, radius)?;
+        }
+        ConstraintKind::TangentEllipse {
+            line,
+            ellipse,
+            side,
+        } => {
+            put_kind(out, "tangent-ellipse", &[line, ellipse])?;
+            put(out, side_name(side))?;
+        }
         ConstraintKind::TangentCircles { a, b, outside } => {
             put_kind(out, "tangent-circles", &[a, b])?;
             put(out, outside_name(outside))?;
@@ -727,6 +749,27 @@ fn read_constraint(words: &mut Words<'_>) -> Result<Constraint, SketchError> {
         "tangent-line" => ConstraintKind::TangentLine {
             line: words.id()?,
             circle: words.id()?,
+            side: words.side()?,
+        },
+        "on-ellipse" => ConstraintKind::OnEllipse {
+            point: words.id()?,
+            ellipse: words.id()?,
+        },
+        "at-parameter" => ConstraintKind::AtParameter {
+            point: words.id()?,
+            parameter: words.id()?,
+        },
+        "major-radius" => ConstraintKind::MajorRadius {
+            ellipse: words.id()?,
+            radius: words.amount()?,
+        },
+        "minor-radius" => ConstraintKind::MinorRadius {
+            ellipse: words.id()?,
+            radius: words.amount()?,
+        },
+        "tangent-ellipse" => ConstraintKind::TangentEllipse {
+            line: words.id()?,
+            ellipse: words.id()?,
             side: words.side()?,
         },
         "tangent-circles" => ConstraintKind::TangentCircles {

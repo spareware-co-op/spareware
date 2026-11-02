@@ -19,8 +19,10 @@
 //! - **Every residual is a length, with a gradient near one.** A distance's gradient has length one
 //!   at its solution; an angle's or an incidence's is scaled by a characteristic length of its lines,
 //!   a power of two fixed at the start, so one tolerance serves every constraint.
-//! - **Smooth forms.** A distance d uses (|PQ|² − d²) / 2d, a polynomial in the points. Square roots
-//!   appear only in a point's distance from a line, and a sweep's length.
+//! - **Smooth forms.** A distance d uses (|PQ|² − d²) / 2d, a polynomial in the points, and a point
+//!   on an ellipse its implicit equation, a polynomial too (piece G219). Square roots appear only in
+//!   a point's distance from a line, a sweep's length, an ellipse's major radius at a parameter and
+//!   its reach across a tangent line.
 //! - **Singular sets are declared.** [`Residual::singular`] is checked before differentiating, and an
 //!   input on one is [`SketchError::Degenerate`], naming the constraint. The remedy of section 15.4,
 //!   a perturbation derived from keys, is the solver's (G222).
@@ -70,6 +72,9 @@ pub enum Singular {
     ZeroLengthLine,
     /// A circle of no radius, or a distance of zero, has no smooth form.
     ZeroRadius,
+    /// An ellipse whose radii are equal is a circle: its axis has no direction to follow (section
+    /// 15.4).
+    EqualRadii,
 }
 
 /// One input of a kind: a sketch variable, by its index, or a constant.
@@ -112,6 +117,109 @@ fn minus<S: Scalar>(p: [S; 2], q: [S; 2]) -> Result<[S; 2], NumError> {
 /// (|p|² − d²) / 2d.
 fn smooth<S: Scalar>(p: [S; 2], d: S) -> Result<S, NumError> {
     dot(p, p)?.sub(d.square()?)?.div(d.add(d)?)
+}
+
+/// An ellipse's inputs: centre c, major-axis vector a and minor radius b, and its singular set: no
+/// axis or no minor radius has no smooth form, and equal radii no axis direction.
+fn oval_singular(cx: f64, cy: f64, ax: f64, ay: f64, b: f64) -> Option<Singular> {
+    let _ = (cx, cy);
+    let a2 = ax * ax + ay * ay;
+    if a2 == 0.0 || b == 0.0 {
+        Some(Singular::ZeroRadius)
+    } else if a2 == b * b {
+        Some(Singular::EqualRadii)
+    } else {
+        None
+    }
+}
+
+/// `p` is on the ellipse of centre c, major-axis vector a and minor radius b (piece G219). With
+/// d = p − c and A² = a · a, the point's coordinates along the axes are d · a / A and d × a / A, so
+/// it is on the ellipse when (d · a)² b² + (d × a)² A² − A⁴ b² = 0, a polynomial with no square
+/// root. Over the scale `s`, a power of two near 2 A^3.5 b^1.5 fixed at the start, its gradient is
+/// near one on the ellipse: 2 A³ b² / s at the ends of the major axis and 2 A⁴ b / s at the ends of
+/// the minor, within √(A / b) of one either side.
+pub struct OnEllipse;
+
+impl Residual<8, 1> for OnEllipse {
+    fn residuals<S: Scalar>(&self, x: [S; 8]) -> Result<[S; 1], NumError> {
+        let [px, py, cx, cy, ax, ay, b, s] = x;
+        let d = minus([px, py], [cx, cy])?;
+        let a = [ax, ay];
+        let a2 = dot(a, a)?;
+        let b2 = b.square()?;
+        let along = dot(d, a)?.square()?.mul(b2)?;
+        let across = cross(d, a)?.square()?.mul(a2)?;
+        let size = a2.square()?.mul(b2)?;
+        Ok([along.add(across)?.sub(size)?.div(s)?])
+    }
+
+    fn singular(&self, x: &[f64; 8]) -> Option<Singular> {
+        let [_, _, cx, cy, ax, ay, b, _] = *x;
+        oval_singular(cx, cy, ax, ay, b)
+    }
+}
+
+/// `p` is the ellipse's point at the parameter t, in half-turns from the end of its major axis
+/// (piece G219): p − (c + cos πt · a + sin πt · (b / |a|) · a⊥), a⊥ being a turned a quarter turn
+/// anticlockwise. Two residuals, each a length, with gradient one in p.
+pub struct AtParameter;
+
+impl Residual<8, 2> for AtParameter {
+    fn residuals<S: Scalar>(&self, x: [S; 8]) -> Result<[S; 2], NumError> {
+        let [px, py, cx, cy, ax, ay, b, t] = x;
+        let (cos, sin) = (t.cospi()?, t.sinpi()?);
+        let ratio = b.div(dot([ax, ay], [ax, ay])?.sqrt()?)?;
+        let side = sin.mul(ratio)?;
+        let qx = cx.add(cos.mul(ax)?)?.sub(side.mul(ay)?)?;
+        let qy = cy.add(cos.mul(ay)?)?.add(side.mul(ax)?)?;
+        Ok([px.sub(qx)?, py.sub(qy)?])
+    }
+
+    fn singular(&self, x: &[f64; 8]) -> Option<Singular> {
+        let [_, _, cx, cy, ax, ay, b, _] = *x;
+        oval_singular(cx, cy, ax, ay, b)
+    }
+}
+
+/// The line through s and e touches the ellipse of centre c, major-axis vector a and minor radius
+/// b, the centre on the side `sign` (+1 left, −1 right) of it (piece G219). With w the line's
+/// direction turned a quarter turn anticlockwise, the centre's distance from the line is
+/// w · (c − s) / |w|, and the ellipse reaches (w · a)² + b² (w · a⊥)² / A² = h² |w|² from its
+/// centre across it (its support distance h): the residual is (w · (c − s) − sign · h |w|) / |w|,
+/// the gap, a length with gradient one in the centre.
+pub struct TangentEllipse {
+    /// +1 for the centre on the line's left, −1 for its right.
+    pub sign: f64,
+}
+
+impl Residual<9, 1> for TangentEllipse {
+    fn residuals<S: Scalar>(&self, x: [S; 9]) -> Result<[S; 1], NumError> {
+        let [sx, sy, ex, ey, cx, cy, ax, ay, b] = x;
+        let u = minus([ex, ey], [sx, sy])?;
+        let w = [u[1].neg(), u[0]];
+        let a = [ax, ay];
+        let turned = [ay.neg(), ax];
+        let reach = dot(w, a)?
+            .square()?
+            .add(
+                b.square()?
+                    .mul(dot(w, turned)?.square()?)?
+                    .div(dot(a, a)?)?,
+            )?
+            .sqrt()?;
+        let gap = dot(w, minus([cx, cy], [sx, sy])?)?;
+        let signed = S::constant(Real::new(self.sign)?).mul(reach)?;
+        Ok([gap.sub(signed)?.div(dot(w, w)?.sqrt()?)?])
+    }
+
+    fn singular(&self, x: &[f64; 9]) -> Option<Singular> {
+        let [sx, sy, ex, ey, cx, cy, ax, ay, b] = *x;
+        if sx == ex && sy == ey {
+            return Some(Singular::ZeroLengthLine);
+        }
+        oval_singular(cx, cy, ax, ay, b)
+    }
 }
 
 /// The two points are one: also concentric circles, by their centres.
@@ -497,6 +605,15 @@ impl Inputs<'_> {
         self.point(centre)?;
         self.variable(id, 0)
     }
+
+    /// An ellipse's centre, major-axis vector and minor radius.
+    fn oval(&mut self, id: ItemId) -> Result<(), SketchError> {
+        let (centre, _, _) = self.sketch.ellipse(id)?;
+        self.point(centre)?;
+        self.variable(id, 0)?;
+        self.variable(id, 1)?;
+        self.variable(id, 2)
+    }
 }
 
 /// `kind`'s inputs, in the order its residual reads them, and how many equations it has.
@@ -756,6 +873,38 @@ pub(crate) fn inputs_of(
             i.amount(angle)?;
             2
         }
+        ConstraintKind::OnEllipse { point, ellipse } => {
+            i.point(point)?;
+            i.oval(ellipse)?;
+            i.constant(unit)?;
+            1
+        }
+        ConstraintKind::AtParameter { point, parameter } => {
+            i.point(point)?;
+            i.oval(sketch.parameter_ellipse(parameter)?)?;
+            i.variable(parameter, 0)?;
+            2
+        }
+        ConstraintKind::MajorRadius { ellipse, radius } => {
+            // As a distance from the origin to the point a: (a · a − r²) / 2r.
+            i.variable(ellipse, 0)?;
+            i.variable(ellipse, 1)?;
+            i.constant(0.0)?;
+            i.constant(0.0)?;
+            i.amount(radius)?;
+            1
+        }
+        ConstraintKind::MinorRadius { ellipse, radius } => {
+            i.constant(0.0)?;
+            i.variable(ellipse, 2)?;
+            i.amount(radius)?;
+            1
+        }
+        ConstraintKind::TangentEllipse { line, ellipse, .. } => {
+            i.line(line)?;
+            i.oval(ellipse)?;
+            1
+        }
         ConstraintKind::Linear { a, b, ratio, plus } => {
             i.amount(Amount::Named(a))?;
             i.amount(Amount::Named(b))?;
@@ -984,6 +1133,13 @@ impl Assembly {
                     (6, characteristic(line(s, 0)?, far))
                 }
                 ConstraintKind::Symmetric { .. } => (8, characteristic(line(s, 4)?, 0.0)),
+                ConstraintKind::OnEllipse { .. } => {
+                    // 2 A^3.5 b^1.5, as a power of two: OnEllipse's scale.
+                    let a = span(0.0, 0.0, value(s, 4)?, value(s, 5)?);
+                    let b = value(s, 6)?;
+                    let size = 2.0 * a * a * a * Real::new(a * b)?.sqrt()?.get() * b;
+                    (7, power_of_two(if size > 0.0 { size } else { 1.0 }))
+                }
                 ConstraintKind::ArcLength { .. } => {
                     let (cx, cy) = (value(s, 0)?, value(s, 1)?);
                     let (sx, sy) = (value(s, 2)? - cx, value(s, 3)? - cy);
@@ -1088,6 +1244,7 @@ impl Assembly {
             | ConstraintKind::Across { .. }
             | ConstraintKind::Upward { .. }
             | ConstraintKind::Radius { .. }
+            | ConstraintKind::MinorRadius { .. }
             | ConstraintKind::EqualRadius { .. }
             | ConstraintKind::Fix { .. } => self.run(&Apart { sign: 1.0 }, row, x),
             ConstraintKind::Offset { grows, .. } => {
@@ -1099,7 +1256,8 @@ impl Assembly {
             ConstraintKind::Collinear { .. } => self.run(&Collinear, row, x),
             ConstraintKind::OnCircle { .. }
             | ConstraintKind::Distance { .. }
-            | ConstraintKind::Length { .. } => self.run(&AtDistance, row, x),
+            | ConstraintKind::Length { .. }
+            | ConstraintKind::MajorRadius { .. } => self.run(&AtDistance, row, x),
             ConstraintKind::FromCircle { outside, .. }
             | ConstraintKind::TangentCircles { outside, .. } => {
                 let sign = if outside { 1.0 } else { -1.0 };
@@ -1125,6 +1283,11 @@ impl Assembly {
             ConstraintKind::Symmetric { .. } => self.run(&Mirror, row, x),
             ConstraintKind::LinearPattern { .. } => self.run(&SameStep, row, x),
             ConstraintKind::CircularPattern { .. } => self.run(&TurnedAbout, row, x),
+            ConstraintKind::OnEllipse { .. } => self.run(&OnEllipse, row, x),
+            ConstraintKind::AtParameter { .. } => self.run(&AtParameter, row, x),
+            ConstraintKind::TangentEllipse { side, .. } => {
+                self.run(&TangentEllipse { sign: side.sign() }, row, x)
+            }
             ConstraintKind::Linear { .. } => self.run(&Linear, row, x),
             ConstraintKind::Product { .. } => self.run(&Product, row, x),
         }
@@ -1197,6 +1360,11 @@ pub fn measure(sketch: &Sketch, constraint: &Constraint) -> Result<f64, SketchEr
         ConstraintKind::Upward { a, b, .. } => Ok(at(b)?[1] - at(a)?[1]),
         ConstraintKind::Radius { circle, .. } => sketch.radius(circle),
         ConstraintKind::Diameter { circle, .. } => Ok(sketch.radius(circle)? * 2.0),
+        ConstraintKind::MajorRadius { ellipse, .. } => {
+            let (_, [ax, ay], _) = sketch.ellipse(ellipse)?;
+            Ok(Real::new(ax * ax + ay * ay)?.sqrt()?.get())
+        }
+        ConstraintKind::MinorRadius { ellipse, .. } => Ok(sketch.ellipse(ellipse)?.2),
         ConstraintKind::Turned { a, b, .. } => angle_between(along(a)?, along(b)?),
         ConstraintKind::Heading { line, .. } => angle_between([1.0, 0.0], along(line)?),
         ConstraintKind::Sweep { arc, .. } => sweep(arc),
