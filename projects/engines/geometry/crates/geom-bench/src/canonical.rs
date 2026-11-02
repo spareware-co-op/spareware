@@ -863,6 +863,67 @@ impl Canonical for geom_num::brent::Zero {
     }
 }
 
+// `geom-intersect`'s results (decision 32.44's count benchmarks for piece G158), each through its
+// debug text: their fields are public only as far as the kernel needs, and a double's debug text
+// is the same on every target.
+
+impl Canonical for geom_curve::CurveKind<3> {
+    fn encode(&self, h: &mut Sha256) {
+        debug_text(self, h);
+    }
+}
+
+impl Canonical for geom_surface::SurfaceKind {
+    fn encode(&self, h: &mut Sha256) {
+        debug_text(self, h);
+    }
+}
+
+impl<const N: usize, const D: usize> Canonical for geom_intersect::Projection<N, D> {
+    fn encode(&self, h: &mut Sha256) {
+        debug_text(self, h);
+    }
+}
+
+impl Canonical for geom_intersect::LevelCurves {
+    fn encode(&self, h: &mut Sha256) {
+        debug_text(self, h);
+    }
+}
+
+impl Canonical for geom_intersect::Item {
+    fn encode(&self, h: &mut Sha256) {
+        debug_text(self, h);
+    }
+}
+
+impl Canonical for geom_intersect::Intersection {
+    fn encode(&self, h: &mut Sha256) {
+        debug_text(self, h);
+    }
+}
+
+impl Canonical for geom_intersect::CanonicalKey {
+    fn encode(&self, h: &mut Sha256) {
+        debug_text(self, h);
+    }
+}
+
+impl<T: Canonical> Canonical for Result<T, geom_intersect::IntersectError> {
+    fn encode(&self, h: &mut Sha256) {
+        match self {
+            Ok(v) => {
+                h.update(&[0]);
+                v.encode(h);
+            }
+            Err(e) => {
+                h.update(&[1]);
+                debug_text(e, h);
+            }
+        }
+    }
+}
+
 impl<T: Canonical> Canonical for Result<T, geom_num::brent::BrentError> {
     fn encode(&self, h: &mut Sha256) {
         match self {

@@ -1259,6 +1259,75 @@ fn direct_digest(group: &str, name: &str, class: Class) -> Option<Digest> {
                     .map(|(a, b)| geom_num::brent::zero(inputs::roots::cubic, a, b, tol, 100)),
             )
         }
+        ("intersect", "sort_items") => {
+            fold(inputs::intersect::items(class).into_iter().map(|items| {
+                geom_intersect::Intersection::new(
+                    items,
+                    geom_intersect::Coverage::CompleteOutsideFlagged,
+                    Vec::new(),
+                    &mut geom_run::WorkMeter::new(geom_run::Budget::UNLIMITED),
+                )
+            }))
+        }
+        ("intersect", "trace_patch") => fold(inputs::intersect::patches(class).iter().map(
+            |(surface, centre)| {
+                let frame = geom_curve::Frame::standard().unwrap();
+                let domain = ((0.0, 2.0), (-0.5, 0.5));
+                let sphere = geom_surface::Sphere::new(*centre, 5.0, frame, domain)?;
+                let mut meter = geom_run::WorkMeter::new(geom_run::Budget::UNLIMITED);
+                let level = geom_intersect::OnImplicit(&sphere);
+                geom_intersect::trace(surface, &level, 1e-3, 1e-1, &mut meter)
+            },
+        )),
+        ("intersect", "trace_silhouette") => fold(inputs::intersect::tori(class).iter().map(
+            |(surface, direction)| {
+                let mut meter = geom_run::WorkMeter::new(geom_run::Budget::UNLIMITED);
+                let level = geom_intersect::Silhouette {
+                    direction: *direction,
+                };
+                geom_intersect::trace(surface, &level, 1e-3, 1e-1, &mut meter)
+            },
+        )),
+        ("intersect", "project_arc") => {
+            fold(inputs::intersect::arcs(class).iter().map(|(curve, p)| {
+                let mut meter = geom_run::WorkMeter::new(geom_run::Budget::UNLIMITED);
+                geom_intersect::project_curve(curve, p, 1e-6, &mut meter)
+            }))
+        }
+        ("intersect", "project_sphere") => fold(inputs::intersect::spheres(class).iter().map(
+            |(surface, p)| {
+                let mut meter = geom_run::WorkMeter::new(geom_run::Budget::UNLIMITED);
+                geom_intersect::project_surface(surface, p, 1e-6, &mut meter)
+            },
+        )),
+        ("intersect", "key_circle") => fold(inputs::intersect::circles(class).iter().map(|c| {
+            let mut meter = geom_run::WorkMeter::new(geom_run::Budget::UNLIMITED);
+            geom_intersect::CanonicalKey::of_curve(c, &mut meter)
+        })),
+        ("intersect", "pair_lines") => {
+            fold(inputs::intersect::lines(class).iter().map(|(a, b)| {
+                let operand = |curve| {
+                    let mut meter = geom_run::WorkMeter::new(geom_run::Budget::UNLIMITED);
+                    geom_intersect::CanonicalKey::of_curve(curve, &mut meter).map(|key| {
+                        geom_intersect::Operand {
+                            geom: geom_intersect::Geom::Curve(curve),
+                            domain: None,
+                            bound: Steps(0),
+                            key,
+                        }
+                    })
+                };
+                let (x, y) = (operand(a)?, operand(b)?);
+                geom_intersect::pair(&x, &y, |_, _| {
+                    geom_intersect::Intersection::new(
+                        Vec::new(),
+                        geom_intersect::Coverage::TopologyCertified,
+                        Vec::new(),
+                        &mut geom_run::WorkMeter::new(geom_run::Budget::UNLIMITED),
+                    )
+                })
+            }))
+        }
         ("quadrature", "gauss_legendre") => fold(
             inputs::roots::gauss_legendre(class)
                 .into_iter()

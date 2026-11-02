@@ -635,6 +635,26 @@
           "target": "lib"
         },
         {
+          "cost": "a few draws of [`SplitMix64`] per input, outside every measured run.",
+          "does": null,
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-bench/src/inputs/intersect.rs",
+          "guarantees": [
+            "every batch is full and the same on every target, and every result of a typical batch is `Ok` (`tests/inputs.rs`); every result is the call's own, run directly (`tests/attack_g06.rs`)."
+          ],
+          "job": "Inputs for `geom-intersect`'s hot paths (pieces G158, G162 and G168, decision 32.44): a list of items put in canonical order, a circle's canonical key, a pair of lines put in canonical order, and a point projected on an arc and on a band of a sphere.",
+          "method": {
+            "links": [
+              "projects/engines/geometry/architecture/28-testing.md"
+            ],
+            "text": "the calls of `geom-intersect`'s attack tests (`tests/attack_g158.rs`), under an unlimited budget. Each is measured as chapter 28.14 sets benchmarks out, `projects/engines/geometry/architecture/28-testing.md`."
+          },
+          "path": "geom_bench::inputs::intersect",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
           "cost": "a few draws of [`SplitMix64`] per input, once per batch, outside every measured run.",
           "does": null,
           "family": [],
@@ -2502,6 +2522,52 @@
           "target": "lib"
         },
         {
+          "cost": "at most [`MAX_ITEMS`] items, compared pairwise by the oracle; at most [`MAX_INPUT_BYTES`] bytes read.",
+          "does": "[`decode`] turns a fuzzer's bytes into a [`Case`]: up to [`MAX_ITEMS`] items whose enclosures sit on a coarse lattice, so ties, touches and overlaps are common, a coverage, and two operands, each a line, a circle, a plane or a sphere. [`check`] builds the intersection and holds it to the laws below, with an all-pairs oracle that shares nothing with the sweep it judges. [`harness`] is `decode` then `check`.",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-fuzz/src/intersect.rs",
+          "guarantees": [
+            "**Any bytes are a case.** Every byte string, the empty one included, decodes to a case.",
+            "**A bounded input.** [`decode`] reads at most [`MAX_INPUT_BYTES`] bytes, derived below; a unit test builds the input that reaches it.",
+            "**A panic is a failure; a broken law is a [`Finding`]** naming the law and the case: a set of items accepted or refused against the oracle, an order that is not 12.15's, an answer that depends on the order of the items given, swaps that do not undo, a budget that changes an answer instead of stopping it, or two operand orders that make different calls."
+          ],
+          "job": "Fuzz target: `geom-intersect`'s result types keep their invariants and its operand order is one order, on any bytes.",
+          "method": {
+            "links": [
+              "projects/engines/geometry/architecture/12-intersections.md",
+              "projects/engines/geometry/architecture/28-testing.md"
+            ],
+            "text": "chapter 12's result rules and canonical order (`projects/engines/geometry/architecture/12-intersections.md`), with chapter 28.5's oracle stack (`projects/engines/geometry/architecture/28-testing.md`)."
+          },
+          "path": "geom_fuzz::intersect",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
+          "cost": "one trace and one budgeted rerun (chapter 12.8's cost), and [`CELLS`] squared evaluations.",
+          "does": "[`decode`] turns a fuzzer's bytes into a [`Case`]: one of five surfaces on small lattice sizes, and one of six functions on it. [`check`] traces the zero set and holds the answer to the laws below, with a dense grid of the function's own value as the oracle: the trace bounds and prunes, and the oracle only evaluates. [`harness`] is `decode` then `check`.",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-fuzz/src/level.rs",
+          "guarantees": [
+            "**Any bytes are a case.** Every byte string, the empty one included, decodes to a case.",
+            "**A bounded input.** [`decode`] reads at most [`MAX_INPUT_BYTES`] bytes; a unit test builds the input that reaches it.",
+            "**A panic is a failure; a broken law is a [`Finding`]** naming the law and the case: a sign change on the grid with no branch and no flag near it, a vertex off the curve or out of the domain, a branch with a chord further out than the ceiling lets it, an internal error, or a budget that changes an answer instead of stopping it."
+          ],
+          "job": "Fuzz target: `geom-intersect`'s level curves miss nothing a dense grid can see, on any bytes.",
+          "method": {
+            "links": [
+              "projects/engines/geometry/architecture/12-intersections.md",
+              "projects/engines/geometry/architecture/28-testing.md"
+            ],
+            "text": "chapter 12.8's implicit tracer and 12.13's level curves (`projects/engines/geometry/architecture/12-intersections.md`) with chapter 28.5's oracle stack (`projects/engines/geometry/architecture/28-testing.md`). A sign change between neighbours proves a zero between them, so the law cannot be broken by a true answer; the grid sees nothing smaller than a cell, which is why [`crate::level`]'s own tests carry small loops."
+          },
+          "path": "geom_fuzz::level",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
           "cost": "none at run time for the alias; [`Finding::new`] runs its detail closure once, except under Kani; displaying a [`Finding`] writes its two strings.",
           "does": null,
           "family": [],
@@ -2639,6 +2705,29 @@
             "text": "the algebraic laws of section 28.6 of the kernel architecture (`projects/engines/geometry/architecture/28-testing.md`, \"Swapping two points flips the sign\"). Each predicate is the sign of a determinant with one row per point (the points lifted onto the paraboloid z = |p|² for in-circle and in-sphere), as in Shewchuk, \"Adaptive Precision Floating-Point Arithmetic and Fast Robust Geometric Predicates\", Discrete & Computational Geometry 18, 1997 (<https://doi.org/10.1007/PL00009321>), which `geom_num::predicate` follows. Exchanging two points exchanges two rows, and by the Leibniz formula an exchange of two rows negates a determinant, so every transposition must flip the sign. The board names orient2d's swap; the same law is checked on the other three predicates, whose points the harness decodes anyway."
           },
           "path": "geom_fuzz::predicates",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
+          "cost": "one search and one budgeted rerun (chapter 12.4's cost), and at most [`CURVE_SAMPLES`] or [`SURFACE_SAMPLES`] squared evaluations of the kind.",
+          "does": "[`decode`] turns a fuzzer's bytes into a [`Case`]: one of eight kinds on small lattice sizes and domains, and a point on a coarse lattice, so points on an axis, ties and feet on an end are common. [`check`] projects the point and holds the answer to the laws below, with a dense sample of the kind as the oracle: the search bounds and prunes, and the oracle only evaluates, so the two share nothing but the kind. [`harness`] is `decode` then `check`.",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-fuzz/src/project.rs",
+          "guarantees": [
+            "**Any bytes are a case.** Every byte string, the empty one included, decodes to a case.",
+            "**A bounded input.** [`decode`] reads at most [`MAX_INPUT_BYTES`] bytes; a unit test builds the input that reaches it.",
+            "**A panic is a failure; a broken law is a [`Finding`]** naming the law and the case: a sample nearer than the distance reported, a nearest point that is not on the kind where it says or not in the domain, points out of parameter order, a typed set whose members are not all at its distance, an internal error, or a budget that changes an answer instead of stopping it."
+          ],
+          "job": "Fuzz target: `geom-intersect`'s nearest points are never beaten by a sample, on any bytes.",
+          "method": {
+            "links": [
+              "projects/engines/geometry/architecture/12-intersections.md",
+              "projects/engines/geometry/architecture/28-testing.md"
+            ],
+            "text": "chapter 12.4's projection (`projects/engines/geometry/architecture/12-intersections.md`) with chapter 28.5's oracle stack (`projects/engines/geometry/architecture/28-testing.md`). A sample bounds the minimum from above, which is all a sample can do: the law cannot be broken by a true answer, and a wrong one is caught once a sample lands nearer than it."
+          },
+          "path": "geom_fuzz::project",
           "provenance": [],
           "spdx": null,
           "target": "lib"
@@ -3291,7 +3380,47 @@
         23
       ],
       "depends": [],
-      "errors": [],
+      "errors": [
+        {
+          "doc": "Why an intersection could not be computed.",
+          "file": "projects/engines/geometry/crates/geom-intersect/src/error.rs",
+          "kinds": [
+            {
+              "doc": "The caller asked to stop.",
+              "name": "Cancelled",
+              "shape": "unit"
+            },
+            {
+              "doc": "The pair's own budget ran out, or an allocation was refused.",
+              "name": "BudgetExceeded",
+              "shape": "unit"
+            },
+            {
+              "doc": "The operands do not fit the finer frame's range (12.1).",
+              "name": "FrameRange",
+              "shape": "unit"
+            },
+            {
+              "doc": "The pair needs a maths function that has no proven error bound yet (12.3).",
+              "name": "UnprovenMaths",
+              "shape": "unit"
+            },
+            {
+              "doc": "A broken precondition, such as an operand with no domain. The checker should already have caught it.",
+              "name": "InvalidInput",
+              "shape": "unit"
+            },
+            {
+              "doc": "A proof did not close, a derived cap was hit, or an invariant failed. A bug, never a success.",
+              "name": "Internal",
+              "shape": "unit"
+            }
+          ],
+          "module": "geom_intersect::error",
+          "name": "IntersectError",
+          "non_exhaustive": false
+        }
+      ],
       "family": [],
       "file": "projects/engines/geometry/crates/geom-intersect/src/lib.rs",
       "folder": "projects/engines/geometry/crates/geom-intersect",
@@ -3305,12 +3434,132 @@
       "job": "Certified curve-curve, curve-surface and surface-surface intersection; level curves, isoclines and contour generators; closed-form distances.",
       "kind": "kernel",
       "layer": "4",
-      "modules": [],
+      "modules": [
+        {
+          "cost": "constant.",
+          "does": "[`IntersectError`] names each failure of a pair. Every pair of kinds is supported, so there is no \"unsupported\" error. A flagged region is not one of these: it is part of a complete, honest answer.",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-intersect/src/error.rs",
+          "guarantees": [
+            "**Never a partial answer.** A failure returns no items: every error replaces the whole result.",
+            "**A stop keeps its reason.** A meter's stop is [`IntersectError::Cancelled`] or [`IntersectError::BudgetExceeded`], so a caller can tell a request from a limit."
+          ],
+          "job": "Why an intersection could not be computed (12.16).",
+          "method": {
+            "links": [
+              "projects/engines/geometry/architecture/12-intersections.md"
+            ],
+            "text": "chapter 12.16's error kinds, with `geom-run`'s stops (`projects/engines/geometry/architecture/12-intersections.md`)."
+          },
+          "path": "geom_intersect::error",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
+          "cost": "each box or span takes two reads of the surface's partials and the function, charged to the meter. Boxes along a branch of length L number about L·√(κ/ceiling) for curvature κ, with their neighbours; a side's crossing takes log₂(side/floor) reads more. Recursion: none.",
+          "does": "[`trace`] finds every branch of g(u, v) = 0 on a surface. g is a [`Level`]: an implicit surface F substituted into the parametric one ([`OnImplicit`]), or a function of the surface's own normal, for silhouettes ([`Silhouette`], [`Perspective`]), isoclines ([`Isocline`]) and envelopes ([`Envelope`]). The domain is cut at the surface's breaks, then each box is excluded, settled or split, and the settled boxes' crossings are joined across their shared sides into branches.",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-intersect/src/level.rs",
+          "guarantees": [
+            "**Nothing is missed.** A box is dropped only where g is proven nonzero (Snyder's exclusion), or where g is monotone in one parameter and no side holds a root: a monotone box holds no closed loop, so any curve in it would cross a side.",
+            "**No branch is jumped.** In a settled box the curve is a graph over one parameter, so its arcs lie over disjoint spans of that parameter, and sorting the crossings along it pairs them.",
+            "**Everything is accounted for.** Each crossing is met by one crossing across its side, or ends at the domain's boundary, at a break, or at a flagged box. Any other crossing is [`IntersectError::Internal`], never a branch quietly ended.",
+            "**What cannot be decided is flagged.** A box at the floor that holds a possible singular point, a crease, or a side whose roots cannot be told apart is a [`FlaggedBox`] (for 12.9).",
+            "**Each branch has a bound.** [`Branch::deviation`] bounds, in space, how far the exact branch is from the surface's image of the straight parameter chords through its vertices.",
+            "**Deterministic.** A fixed cut position, first part first, and branches in the order of their first vertices."
+          ],
+          "job": "Level curves and the implicit-parametric tracer: the zero set of a function on a surface's parameter plane, traced with proofs (12.8, 12.13).",
+          "method": {
+            "links": [
+              "https://doi.org/10.1145/142920.134024",
+              "https://doi.org/10.1145/1057432.1057465",
+              "https://doi.org/10.1137/1.9780898717716"
+            ],
+            "text": "J. M. Snyder, Interval analysis for computer graphics, SIGGRAPH (1992), <https://doi.org/10.1145/142920.134024>, for the exclusion and parameterisability tests, as 12.8 sets them out. S. Plantinga and G. Vegter's small-normal-variation test (2004, <https://doi.org/10.1145/1057432.1057465>) needs no code of its own: if both partials' enclosures span zero, the enclosure of the gradient's inner product with itself spans zero as well, so a box it accepts is one Snyder's test accepts already. Values take the mean-value form over a box (R. E. Moore, R. B. Kearfott and M. J. Cloud, *Introduction to Interval Analysis*, SIAM (2009), <https://doi.org/10.1137/1.9780898717716>, section 6.4), so exclusion tightens with the square of a box's width. An arc over a span w whose slopes lie in an interval of width m leaves its chord by at most m·w/4, which with the surface's speed across the arc is [`Branch::deviation`]."
+          },
+          "path": "geom_intersect::level",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
+          "cost": "a key is one conversion to NURBS, charged to the meter; ordering a pair compares two keys, linear in their lengths. Recursion: none.",
+          "does": "a [`CanonicalKey`] orders operands by kind, then by a kernel-internal encoding of their defining data: each kind's NURBS form, which is a function of that data alone, or, for a line or plane that has no such form because it may be unbounded, the data itself. [`pair`] puts two [`Operand`]s in that order, runs a method on them and gives its answer back in the caller's roles. [`pairs`] does so for many pairs on the kernel's parallel helper, each under an equal share of the budget, in canonical pair order.",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-intersect/src/order.rs",
+          "guarantees": [
+            "**The same items with the roles swapped.** A method only ever sees the canonical order, so `pair(a, b)` and `pair(b, a)` make the same call, and differ only in which operand's unknowns come first in each item's enclosure.",
+            "**No address and no file format.** The key reads the defining data's values and nothing else, so it never depends on memory addresses, nor on file-format bytes, whose version can change independently (12.15). It is versioned with the kernel edition (26.2).",
+            "**The same answers on any thread count.** Pairs run in chunks fixed by [`PLAN`], each under its own budget, and come back in the caller's order. A pair's budget never depends on the others' costs, only on how many pairs there are, so the shares of 12.15 are the same in any order."
+          ],
+          "job": "The canonical order of a pair: which operand goes first, and how a batch of pairs runs (12.15).",
+          "method": {
+            "links": [
+              "projects/engines/geometry/architecture/12-intersections.md"
+            ],
+            "text": "chapter 12.15's canonical operand order and per-pair budgets (`projects/engines/geometry/architecture/12-intersections.md`), on `geom-run`'s batch rule."
+          },
+          "path": "geom_intersect::order",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
+          "cost": "spans are halved, so a curve takes O(log(length/floor)) spans per foot, plus those near the distance's other turning points, each a bound on the point and two derivatives. A surface takes four such curves for its edges, then boxes in the same way, each a set of partials to the second order. All of it is charged to the meter. Recursion: none.",
+          "does": "[`project_curve`] and [`project_surface`] find every nearest point of a kind to a point. A line's foot and a plane's are closed forms. Everything else takes Ma and Hewitt's pruning, made certified: a work list of parameter spans, each dropped once a box around it lies further than the best distance so far, or once its distance's derivative cannot vanish, and the ends of a curve and the edges of a surface added as candidates, since a minimum on the boundary need not be a foot. [`invert_curve`] and [`invert_surface`] find the parameters of a point known to lie on a kind. A point on a round kind's axis has a continuum of nearest points, returned as a typed [`Continuum`] rather than found by search.",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-intersect/src/project.rs",
+          "guarantees": [
+            "**The minimum is proven.** Every span dropped has a lower bound above the reported distance, or a derivative that cannot vanish, by certified bounds on the kind. Nothing is sampled.",
+            "**Ties are kept.** Candidates whose distance enclosures overlap are all returned, in parameter order; [`Projection::tie_broken`] says so, and the first is the lowest parameter.",
+            "**Nothing is guessed at the floor.** Spans at the floor that the test cannot decide are joined. If their hull's image is within twice the floor it is one nearest point, since nothing in it can be told apart on the grid (a sphere's pole, a foot on a split); a longer one is [`Projection::NonIsolated`], never a foot.",
+            "**Enclosures, never numbers.** Each parameter, point and distance is an interval holding the exact value.",
+            "**Deterministic.** Midpoint splits, and a fixed work order, first half first."
+          ],
+          "job": "Projection and inversion: the nearest points of a curve or surface to a point, proven (12.4).",
+          "method": {
+            "links": [
+              "https://doi.org/10.1016/S0167-8396(03",
+              "projects/engines/geometry/architecture/12-intersections.md"
+            ],
+            "text": "X. Ma and W. Hewitt, Point inversion and projection for NURBS curve and surface, Computer Aided Geometric Design 20 (2003), <https://doi.org/10.1016/S0167-8396(03)00021-9>, for the pruning, with convex-hull distance replaced by each kind's certified bound; chapter 12.4 (`projects/engines/geometry/architecture/12-intersections.md`). A span's convexity test is the sign of the second derivative of half the squared distance, an interval of the kind's certified derivative bounds, so a span it passes holds at most one foot, by Rolle's theorem. Circles, spheres, cylinders, cones and tori go through the same search: their certified bounds are their own closed forms, and the search adds what a closed form alone lacks, a trimmed domain."
+          },
+          "path": "geom_intersect::project",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
+          "cost": "O(n log n) comparisons to order n items, then a sweep to prove them disjoint: for each item, one comparison per later item of its kind that starts before it ends in the first unknown, n²/2 at worst and each charged to the meter. Recursion: none.",
+          "does": "an [`Intersection`] is the items of one pair in canonical order, with its [`Coverage`], its diagnostics and the work it took. An [`Item`] is a point, a curve, an overlap or a flagged region, each with its enclosure on the operands' parameters and in space. A [`ParamBox`] holds one interval per unknown of the pair, the canonical first operand's first, so [`Intersection::swapped`] gives the same items with the roles changed.",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-intersect/src/result.rs",
+          "guarantees": [
+            "**One order.** [`Intersection::new`] sorts the items by kind, then by their enclosure on the parameters: lower corner, then upper corner, coordinate by coordinate, compared exactly (12.15). Two items of one kind whose enclosures overlap are refused: distinct items are disjoint, so the order is total.",
+            "**Nothing unproven is called certified.** [`Coverage::TopologyCertified`] with a flagged item is refused: a flagged region is what such a result does not have.",
+            "**One shape of box.** Every item of an intersection has as many unknowns as the pair, and a [`ParamBox`] has two, three or four.",
+            "**Flagged items carry no class.** The type gives them none (12.2).",
+            "**Swapping twice is nothing.** [`Intersection::swapped`] moves the unknowns and keeps the items' order, the order of the canonical pair, whichever way round the caller asked."
+          ],
+          "job": "What an intersection returns: its items, how each pair meets, and how much of the answer is proven (12.2).",
+          "method": {
+            "links": [
+              "projects/engines/geometry/architecture/12-intersections.md"
+            ],
+            "text": "chapter 12.2's result types and 12.15's output order (`projects/engines/geometry/architecture/12-intersections.md`)."
+          },
+          "path": "geom_intersect::result",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        }
+      ],
       "name": "geom-intersect",
       "provenance": [],
       "sections": "12, 16.1, 17.8, 18.5, 19.10, 19.14 and 23.7; open questions OQ-12.1 and OQ-19.7, in the kernel architecture (`projects/engines/geometry/architecture/`).",
       "spdx": null,
-      "status": "scaffold only; built by pieces G158, G159, G162, G163, G164, G165, G166, G167, G168, G169, G170, G171, G172, G173, G174, G175, G176, G292, G320, G321, G372, G390, G392, G393, G466, G467, G468.",
+      "status": "the result types and canonical order built by piece G158, projection and inversion by G162, the implicit tracer and level curves by G168; the other methods come with G159, G163, G164, G165, G166, G167, G169, G170, G171, G172, G173, G174, G175, G176, G292, G320, G321, G372, G390, G392, G393, G466, G467, G468.",
       "summary": "Spare Kit geometry kernel: certified intersections."
     },
     {
@@ -7669,7 +7918,7 @@
         },
         {
           "cost": "constant for a plane: nine interval operations.",
-          "does": "[`ImplicitBound::enclose_box`] gives enclosures of F and of its gradient over a box of points, and whether F is smooth throughout it. `geom-num`'s exact [`Plane`] implements it, F(x) = n·x + d, its first implementor; quadrics and tori come with their kinds (G65) and fields with `geom-field`.",
+          "does": "[`ImplicitBound::enclose_box`] gives enclosures of F and of its gradient over a box of points, and whether F is smooth throughout it. `geom-num`'s exact [`Plane`] implements it, F(x) = n·x + d, its first implementor; the analytic kinds implement it in `analytic`, each with the equation of its whole untrimmed shape (G168), and fields do with `geom-field`.",
           "family": [],
           "file": "projects/engines/geometry/crates/geom-surface/src/implicit.rs",
           "guarantees": [
