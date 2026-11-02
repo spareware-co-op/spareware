@@ -635,6 +635,26 @@
           "target": "lib"
         },
         {
+          "cost": "a few draws of [`SplitMix64`] per input, outside every measured run.",
+          "does": null,
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-bench/src/inputs/intersect.rs",
+          "guarantees": [
+            "every batch is full and the same on every target, and every result of a typical batch is `Ok` (`tests/inputs.rs`); every result is the call's own, run directly (`tests/attack_g06.rs`)."
+          ],
+          "job": "Inputs for `geom-intersect`'s hot paths (pieces G158, G162, G163, G168, G169 and G173, decision 32.44): a list of items put in canonical order, a circle's canonical key, a pair of lines put in canonical order, a point projected on an arc and on a band of a sphere, pairs of curves that meet, each path of 12.5 once, curves through surfaces, each path of 12.6 once, surfaces cut by a sphere and seen in silhouette, and planes through a whole sphere's poles.",
+          "method": {
+            "links": [
+              "projects/engines/geometry/architecture/28-testing.md"
+            ],
+            "text": "the calls of `geom-intersect`'s attack tests (`tests/attack_g158.rs`), under an unlimited budget. Each is measured as chapter 28.14 sets benchmarks out, `projects/engines/geometry/architecture/28-testing.md`."
+          },
+          "path": "geom_bench::inputs::intersect",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
           "cost": "a few draws of [`SplitMix64`] per input, once per batch, outside every measured run.",
           "does": null,
           "family": [],
@@ -855,6 +875,26 @@
             "text": "Shewchuk's three input classes (random, nearly degenerate, exactly degenerate; 1997, section 6, <https://doi.org/10.1007/PL00009321>) and the extremes of the frame; unimodular bases from the extended Euclidean algorithm (Knuth, volume 2, section 4.5.2); Pythagorean triples and quadruples for integer circles and spheres (<https://en.wikipedia.org/wiki/Pythagorean_quadruple>)."
           },
           "path": "geom_bench::inputs::predicate",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
+          "cost": "a few draws of [`SplitMix64`] per input, outside every measured run.",
+          "does": null,
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-bench/src/inputs/quadric.rs",
+          "guarantees": [
+            "every batch is full and the same on every target, and every result of a typical batch is `Ok` (`tests/inputs.rs`); every result is the call's own, run directly (`tests/attack_g06.rs`)."
+          ],
+          "job": "Inputs for the exact decisions on lines and quadrics (piece G159, decision 32.44): lines against a sphere, a cylinder, a cone and a torus, parallel axes, and pairs whose axes meet.",
+          "method": {
+            "links": [
+              "projects/engines/geometry/architecture/28-testing.md"
+            ],
+            "text": "the calls of `geom-num`'s attack test, under no budget. Each is measured as chapter 28.14 sets benchmarks out, `projects/engines/geometry/architecture/28-testing.md`."
+          },
+          "path": "geom_bench::inputs::quadric",
           "provenance": [],
           "spdx": null,
           "target": "lib"
@@ -2479,6 +2519,29 @@
           "target": "lib"
         },
         {
+          "cost": "a closed form, or the engine up to [`WORK`]; at most [`MAX_INPUT_BYTES`] bytes read.",
+          "does": "[`decode`] turns a fuzzer's bytes into a [`Case`]: two curves, each a segment, a circle or arc, an ellipse or a cubic graph over the same span, on a coarse lattice so that shared ends, tangencies and copies are common. [`check`] asks where they meet and holds the answer to the laws below. [`harness`] is `decode` then `check`.",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-fuzz/src/crossings.rs",
+          "guarantees": [
+            "**Any bytes are a case.** Every byte string, the empty one included, decodes to a case.",
+            "**A bounded input.** [`decode`] reads at most [`MAX_INPUT_BYTES`] bytes, derived below; a unit test builds the input that reaches it.",
+            "**A panic is a failure; a broken law is a [`Finding`]** naming the law and the case: an answer that changes between two runs, a point where the curves are apart, two cubic graphs that change sides between two samples with no item between them, a pair asked either way round that finds a different number of proven points, or a smaller budget that changes an answer instead of stopping it. Self-crossings are held to the first two."
+          ],
+          "job": "Fuzz target: `geom-intersect` says where any two curves meet, and what it says is so.",
+          "method": {
+            "links": [
+              "projects/engines/geometry/architecture/12-intersections.md",
+              "projects/engines/geometry/architecture/28-testing.md"
+            ],
+            "text": "chapter 12.5 (`projects/engines/geometry/architecture/12-intersections.md`), with chapter 28.5's oracle stack (`projects/engines/geometry/architecture/28-testing.md`): the sign changes are read from the curves' Bernstein sums, which share nothing with the solver they judge."
+          },
+          "path": "geom_fuzz::crossings",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
           "cost": "one kind built and one contract check per input, each bounded by [`WORK`] work units; at most [`MAX_INPUT_BYTES`] bytes read.",
           "does": "[`decode`] turns a fuzzer's bytes into a [`Case`]: a curve kind (one of the 15 of `geom_curve::CurveKind`, in two or three dimensions as the kind allows), the doubles it is built from, up to four parameters in its domain and a typed transform. [`check`] builds the kind and runs `geom_curve::contract::check` on it, the kind contract kit every kind is held to (piece G60, with G68's derivative laws), under a bounded work meter. [`harness`] is `decode` then `check`, the function every fuzzing engine drives (the crate README sets out the layout). It reaches pieces G60 to G64, G67 and G68 (Gate 2, 32.44).",
           "family": [],
@@ -2497,6 +2560,75 @@
             "text": "the kind contract of chapter 7 as `geom_curve::contract` states it, driven by coverage-guided fuzzing (chapter 28.5), with inputs aimed at the hard cases 28.5 lists (`projects/engines/geometry/architecture/28-testing.md`)."
           },
           "path": "geom_fuzz::curves",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
+          "cost": "one subdivision, one budgeted rerun, one march and one analysis, and [`CELLS`] squared evaluations.",
+          "does": "[`decode`] turns a fuzzer's bytes into a [`Case`]: one of four surfaces on small lattice sizes, some over a whole turn and some cones with an apex (G173's seams and poles), and a sphere or a plane through it. [`check`] subdivides the pair and holds the answer to the laws below, with a dense grid of the implicit form of the second surface on the first as the oracle: a sign change between neighbours proves the surfaces cross there, and [`crate::general`]'s pairs must cover it. [`harness`] is `decode` then `check`.",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-fuzz/src/general.rs",
+          "guarantees": [
+            "**Any bytes are a case.** Every byte string, the empty one included, decodes to a case.",
+            "**A bounded input.** [`decode`] reads at most [`MAX_INPUT_BYTES`] bytes; a unit test builds the input that reaches it.",
+            "**A panic is a failure; a broken law is a [`Finding`]** naming the law and the case: a crossing no pair covers, a start point or a branch's vertex off a surface, a settled pair with an odd count, a chord past its ceiling, a pass named at a vertex off its seam or pole, two branch ends left apart across a closing seam, a contact whose point is on one surface only, a bound past its ceiling, a region off its surface, an internal error, or a budget that changes an answer instead of stopping it."
+          ],
+          "job": "Fuzz target: `geom-intersect`'s subdivision leaves no crossing outside its settled or flagged pairs, its marching stays on both surfaces, and its analysis of the flagged pairs says nothing the surfaces deny, on any bytes.",
+          "method": {
+            "links": [
+              "projects/engines/geometry/architecture/12-intersections.md",
+              "projects/engines/geometry/architecture/28-testing.md"
+            ],
+            "text": "chapter 12.8's subdivision (`projects/engines/geometry/architecture/12-intersections.md`) with chapter 28.5's oracle stack (`projects/engines/geometry/architecture/28-testing.md`). The grid proves a crossing, so the law cannot be broken by a true answer."
+          },
+          "path": "geom_fuzz::general",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
+          "cost": "at most [`MAX_ITEMS`] items, compared pairwise by the oracle; at most [`MAX_INPUT_BYTES`] bytes read.",
+          "does": "[`decode`] turns a fuzzer's bytes into a [`Case`]: up to [`MAX_ITEMS`] items whose enclosures sit on a coarse lattice, so ties, touches and overlaps are common, a coverage, and two operands, each a line, a circle, a plane or a sphere. [`check`] builds the intersection and holds it to the laws below, with an all-pairs oracle that shares nothing with the sweep it judges. [`harness`] is `decode` then `check`.",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-fuzz/src/intersect.rs",
+          "guarantees": [
+            "**Any bytes are a case.** Every byte string, the empty one included, decodes to a case.",
+            "**A bounded input.** [`decode`] reads at most [`MAX_INPUT_BYTES`] bytes, derived below; a unit test builds the input that reaches it.",
+            "**A panic is a failure; a broken law is a [`Finding`]** naming the law and the case: a set of items accepted or refused against the oracle, an order that is not 12.15's, an answer that depends on the order of the items given, swaps that do not undo, a budget that changes an answer instead of stopping it, or two operand orders that make different calls."
+          ],
+          "job": "Fuzz target: `geom-intersect`'s result types keep their invariants and its operand order is one order, on any bytes.",
+          "method": {
+            "links": [
+              "projects/engines/geometry/architecture/12-intersections.md",
+              "projects/engines/geometry/architecture/28-testing.md"
+            ],
+            "text": "chapter 12's result rules and canonical order (`projects/engines/geometry/architecture/12-intersections.md`), with chapter 28.5's oracle stack (`projects/engines/geometry/architecture/28-testing.md`)."
+          },
+          "path": "geom_fuzz::intersect",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
+          "cost": "one trace and one budgeted rerun (chapter 12.8's cost), and [`CELLS`] squared evaluations.",
+          "does": "[`decode`] turns a fuzzer's bytes into a [`Case`]: one of five surfaces on small lattice sizes, and one of six functions on it. [`check`] traces the zero set and holds the answer to the laws below, with a dense grid of the function's own value as the oracle: the trace bounds and prunes, and the oracle only evaluates. [`harness`] is `decode` then `check`.",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-fuzz/src/level.rs",
+          "guarantees": [
+            "**Any bytes are a case.** Every byte string, the empty one included, decodes to a case.",
+            "**A bounded input.** [`decode`] reads at most [`MAX_INPUT_BYTES`] bytes; a unit test builds the input that reaches it.",
+            "**A panic is a failure; a broken law is a [`Finding`]** naming the law and the case: a sign change on the grid with no branch and no flag near it, a vertex off the curve or out of the domain, a branch with a chord further out than the ceiling lets it, an internal error, or a budget that changes an answer instead of stopping it."
+          ],
+          "job": "Fuzz target: `geom-intersect`'s level curves miss nothing a dense grid can see, on any bytes.",
+          "method": {
+            "links": [
+              "projects/engines/geometry/architecture/12-intersections.md",
+              "projects/engines/geometry/architecture/28-testing.md"
+            ],
+            "text": "chapter 12.8's implicit tracer and 12.13's level curves (`projects/engines/geometry/architecture/12-intersections.md`) with chapter 28.5's oracle stack (`projects/engines/geometry/architecture/28-testing.md`). A sign change between neighbours proves a zero between them, so the law cannot be broken by a true answer; the grid sees nothing smaller than a cell, which is why [`crate::level`]'s own tests carry small loops."
+          },
+          "path": "geom_fuzz::level",
           "provenance": [],
           "spdx": null,
           "target": "lib"
@@ -2619,6 +2751,29 @@
           "target": "lib"
         },
         {
+          "cost": "a closed form, or the engine up to [`WORK`]; at most [`MAX_INPUT_BYTES`] bytes read.",
+          "does": "[`decode`] turns a fuzzer's bytes into a [`Case`]: a curve, a segment or cubic, and a surface, a plane, sphere, cylinder, cone, torus or biquadratic graph, on a coarse lattice so that tangencies and lines lying in surfaces are common. [`check`] asks where they meet and holds the answer to the laws below. [`harness`] is `decode` then `check`.",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-fuzz/src/piercing.rs",
+          "guarantees": [
+            "**Any bytes are a case.** Every byte string, the empty one included, decodes to a case.",
+            "**A bounded input.** [`decode`] reads at most [`MAX_INPUT_BYTES`] bytes, derived below; a unit test builds the input that reaches it.",
+            "**A panic is a failure; a broken law is a [`Finding`]** naming the law and the case: an answer that changes between two runs, a point where the curve and surface are apart, a segment across a graph that changes sides between its ends with no item on it, or a smaller budget that changes an answer instead of stopping it."
+          ],
+          "job": "Fuzz target: `geom-intersect` says where any curve meets any surface, and what it says is so.",
+          "method": {
+            "links": [
+              "projects/engines/geometry/architecture/12-intersections.md",
+              "projects/engines/geometry/architecture/28-testing.md"
+            ],
+            "text": "chapter 12.6 (`projects/engines/geometry/architecture/12-intersections.md`), with chapter 28.5's oracle stack (`projects/engines/geometry/architecture/28-testing.md`): the sides are read from the graph's Bernstein sum, which shares nothing with the solver it judges."
+          },
+          "path": "geom_fuzz::piercing",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
           "cost": "4 + 3 + 6 + 6 + 10 = 29 predicate calls per input, each constant time, and at most [`MAX_INPUT_BYTES`] bytes read.",
           "does": "[`decode`] turns a fuzzer's bytes into grid points with `geom-test`'s [`GridSampler`] (four 2D points, then five 3D points). [`check`] calls every exact predicate on them: `orient2d`, `incircle`, `orient3d` and `insphere`. For each, it checks that the predicate answers, then swaps every pair of points and checks that the sign flips, `Zero` staying `Zero`. [`harness`] is `decode` then `check`, the function every fuzzing engine drives (the crate README sets out the layout).",
           "family": [],
@@ -2639,6 +2794,51 @@
             "text": "the algebraic laws of section 28.6 of the kernel architecture (`projects/engines/geometry/architecture/28-testing.md`, \"Swapping two points flips the sign\"). Each predicate is the sign of a determinant with one row per point (the points lifted onto the paraboloid z = |p|² for in-circle and in-sphere), as in Shewchuk, \"Adaptive Precision Floating-Point Arithmetic and Fast Robust Geometric Predicates\", Discrete & Computational Geometry 18, 1997 (<https://doi.org/10.1007/PL00009321>), which `geom_num::predicate` follows. Exchanging two points exchanges two rows, and by the Leibniz formula an exchange of two rows negates a determinant, so every transposition must flip the sign. The board names orient2d's swap; the same law is checked on the other three predicates, whose points the harness decodes anyway."
           },
           "path": "geom_fuzz::predicates",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
+          "cost": "one search and one budgeted rerun (chapter 12.4's cost), and at most [`CURVE_SAMPLES`] or [`SURFACE_SAMPLES`] squared evaluations of the kind.",
+          "does": "[`decode`] turns a fuzzer's bytes into a [`Case`]: one of eight kinds on small lattice sizes and domains, and a point on a coarse lattice, so points on an axis, ties and feet on an end are common. [`check`] projects the point and holds the answer to the laws below, with a dense sample of the kind as the oracle: the search bounds and prunes, and the oracle only evaluates, so the two share nothing but the kind. [`harness`] is `decode` then `check`.",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-fuzz/src/project.rs",
+          "guarantees": [
+            "**Any bytes are a case.** Every byte string, the empty one included, decodes to a case.",
+            "**A bounded input.** [`decode`] reads at most [`MAX_INPUT_BYTES`] bytes; a unit test builds the input that reaches it.",
+            "**A panic is a failure; a broken law is a [`Finding`]** naming the law and the case: a sample nearer than the distance reported, a nearest point that is not on the kind where it says or not in the domain, points out of parameter order, a typed set whose members are not all at its distance, an internal error, or a budget that changes an answer instead of stopping it."
+          ],
+          "job": "Fuzz target: `geom-intersect`'s nearest points are never beaten by a sample, on any bytes.",
+          "method": {
+            "links": [
+              "projects/engines/geometry/architecture/12-intersections.md",
+              "projects/engines/geometry/architecture/28-testing.md"
+            ],
+            "text": "chapter 12.4's projection (`projects/engines/geometry/architecture/12-intersections.md`) with chapter 28.5's oracle stack (`projects/engines/geometry/architecture/28-testing.md`). A sample bounds the minimum from above, which is all a sample can do: the law cannot be broken by a true answer, and a wrong one is caught once a sample lands nearer than it."
+          },
+          "path": "geom_fuzz::project",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
+          "cost": "a handful of predicates and two Sturm chains per case; at most [`MAX_INPUT_BYTES`] bytes read.",
+          "does": "[`decode`] turns a fuzzer's bytes into a [`Case`]: a line, a sphere, a cylinder and a cone at small sizes or at the grid's edge, a torus, and four factors of a quartic. [`check`] holds each discriminant to the same polynomial's discriminant in `num-bigint`, each filter to its exact path, the torus's filter to its chain, and a chain to the roots of the factors it was built from.",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-fuzz/src/quadric.rs",
+          "guarantees": [
+            "**Any bytes are a case.** Every byte string, the empty one included, decodes to a case.",
+            "**A bounded input.** [`decode`] reads at most [`MAX_INPUT_BYTES`] bytes, derived below; a unit test builds the input that reaches it.",
+            "**A panic is a failure; a broken law is a [`Finding`]** naming the law and the case."
+          ],
+          "job": "Fuzz target: `geom-num`'s exact decisions on lines and quadrics agree with big integers, and its Sturm chains count the roots a polynomial was built from, on any bytes.",
+          "method": {
+            "links": [
+              "projects/engines/geometry/architecture/28-testing.md"
+            ],
+            "text": "chapter 28.5's oracle stack (`projects/engines/geometry/architecture/28-testing.md`), with `num-bigint` as the exact oracle of 29.3, sharing no code with `geom-num`'s wide integers."
+          },
+          "path": "geom_fuzz::quadric",
           "provenance": [],
           "spdx": null,
           "target": "lib"
@@ -3137,7 +3337,7 @@
           "target": "lib"
         },
         {
-          "cost": "each generator derives one predicate, or all eleven for the parent module and each variant: a few hundred exact operations each.",
+          "cost": "each generator derives one predicate, or all seventeen for the parent module and each variant: a few hundred exact operations each.",
           "does": "holds the description of each predicate on explicit grid points (chapter 6.2: orientation in 2D and 3D, in-circle and in-sphere), of the side of a plane, whose coefficients are wider integers whose `f64` copies are rounded (chapter 23.2), and of the predicates on implicit points (chapter 6.3, piece G29): the sign of the weight of a three-plane point, of a line-plane point and of a 2D crossing point, and which side of a plane (or, in 2D, of a line) each lies on, in the language of [`crate::predicate_lang`], and the generators that derive each one ([`crate::predicate_derive`]) and write its module into `geom-num` ([`crate::predicate_emit`]): [`OUTPUT_DIR`]`/<name>.rs` for each predicate and [`OUTPUT_DIR`]`/mod.rs` for the module that holds them, and [`PLAIN_OUTPUT`] and [`LIMBS_OUTPUT`] for every exact path in plain `i128` and in width-aware 32-bit limbs, two of chapter 23.3's variants (piece G42), which the benchmarks compare with the shipped paths. `geom-num`'s `predicate.rs` calls the four explicit-point ones, `plane.rs` the side of a plane and the three-plane and line-plane ones, and `crossing.rs` the 2D crossing ones.",
           "family": [],
           "file": "projects/engines/geometry/crates/geom-gen/src/predicates.rs",
@@ -3145,7 +3345,7 @@
             "**The same formulas as `predicate.rs`, `plane.rs` and `crossing.rs`.** Each description evaluates the determinant that `geom-num`'s hand-written fast path evaluates, term for term and with the same signs, so the generated exact value equals the hand-written one (tested in `geom-num`), and the generated filter's sign, when it gives one, is that value's sign. In-sphere shares the three cross products its four 3 × 3 determinants need instead of recomputing them; the values are the same. `plane_side` evaluates n · p + d as `geom-num`'s `Plane::side` does, term for term; `tpi_weight` and `tpi_side` evaluate the three-plane point's weight and its classification as `Tpi::homogeneous` and `Plane::side_of_tpi` do, except that the classification subtracts n · (−X) where `plane.rs` adds n · X, the same value; and the line-plane and crossing descriptions evaluate what `plane.rs` and `crossing.rs` document for them, step for step.",
             "**Pure.** No input but the descriptions and `geom-num`'s constants; the same bytes on every target."
           ],
-          "job": "Generators `predicate-module`, `predicate-orient2d`, `predicate-orient3d`, `predicate-incircle`, `predicate-insphere`, `predicate-plane-side`, `predicate-tpi-weight`, `predicate-tpi-side`, `predicate-lpi-weight`, `predicate-lpi-side`, `predicate-ssi-weight`, `predicate-ssi-side`, `predicate-variant-plain` and `predicate-variant-limbs`: the kernel's predicates, from their descriptions; `verus-orient2d`, `verus-orient3d`, `verus-incircle`, `verus-insphere`, `verus-plane-side`, `verus-tpi-weight`, `verus-tpi-side`, `verus-lpi-weight`, `verus-lpi-side`, `verus-ssi-weight` and `verus-ssi-side`, the Verus twins of the predicates' exact paths; and `gappa-orient2d`, `gappa-orient3d`, `gappa-incircle-x`, `gappa-incircle-y`, `gappa-insphere-x`, `gappa-insphere-y`, `gappa-insphere-z`, `gappa-plane-side-d`, `gappa-plane-side-z-n`, `gappa-plane-side-y-n`, `gappa-plane-side-x-n`, `gappa-tpi-weight`, `gappa-ssi-weight`, `gappa-ssi-side`, `gappa-lpi-weight-z-n`, `gappa-lpi-weight-y-n`, `gappa-lpi-weight-x-n`, `fptaylor-orient2d`, `fptaylor-orient3d`, `fptaylor-incircle`, `fptaylor-insphere`, `fptaylor-plane-side`, `fptaylor-tpi-weight`, `fptaylor-tpi-side`, `fptaylor-lpi-weight`, `fptaylor-lpi-side`, `fptaylor-ssi-weight` and `fptaylor-ssi-side`, the problems that machine-check the filters' error bounds ([`crate::predicate_certificates`]).",
+          "job": "Generators `predicate-module`, `predicate-orient2d`, `predicate-orient3d`, `predicate-incircle`, `predicate-insphere`, `predicate-plane-side`, `predicate-tpi-weight`, `predicate-tpi-side`, `predicate-lpi-weight`, `predicate-lpi-side`, `predicate-ssi-weight`, `predicate-ssi-side`, `predicate-line-sphere`, `predicate-line-cylinder`, `predicate-line-cone`, `predicate-line-cone-lead`, `predicate-cross-norm`, `predicate-axis-gap`, `predicate-variant-plain` and `predicate-variant-limbs`: the kernel's predicates, from their descriptions; `verus-orient2d`, `verus-orient3d`, `verus-incircle`, `verus-insphere`, `verus-plane-side`, `verus-tpi-weight`, `verus-tpi-side`, `verus-lpi-weight`, `verus-lpi-side`, `verus-ssi-weight` and `verus-ssi-side`, the Verus twins of the predicates' exact paths; and `gappa-orient2d`, `gappa-orient3d`, `gappa-incircle-x`, `gappa-incircle-y`, `gappa-insphere-x`, `gappa-insphere-y`, `gappa-insphere-z`, `gappa-plane-side-d`, `gappa-plane-side-z-n`, `gappa-plane-side-y-n`, `gappa-plane-side-x-n`, `gappa-tpi-weight`, `gappa-ssi-weight`, `gappa-ssi-side`, `gappa-lpi-weight-z-n`, `gappa-lpi-weight-y-n`, `gappa-lpi-weight-x-n`, `fptaylor-line-sphere`, `fptaylor-line-cylinder`, `fptaylor-line-cone`, `fptaylor-line-cone-lead`, `fptaylor-cross-norm`, `fptaylor-axis-gap`, `fptaylor-orient2d`, `fptaylor-orient3d`, `fptaylor-incircle`, `fptaylor-insphere`, `fptaylor-plane-side`, `fptaylor-tpi-weight`, `fptaylor-tpi-side`, `fptaylor-lpi-weight`, `fptaylor-lpi-side`, `fptaylor-ssi-weight` and `fptaylor-ssi-side`, the problems that machine-check the filters' error bounds ([`crate::predicate_certificates`]).",
           "method": {
             "links": [
               "https://doi.org/10.1016/j.cad.2015.10.004",
@@ -3291,7 +3491,47 @@
         23
       ],
       "depends": [],
-      "errors": [],
+      "errors": [
+        {
+          "doc": "Why an intersection could not be computed.",
+          "file": "projects/engines/geometry/crates/geom-intersect/src/error.rs",
+          "kinds": [
+            {
+              "doc": "The caller asked to stop.",
+              "name": "Cancelled",
+              "shape": "unit"
+            },
+            {
+              "doc": "The pair's own budget ran out, or an allocation was refused.",
+              "name": "BudgetExceeded",
+              "shape": "unit"
+            },
+            {
+              "doc": "The operands do not fit the finer frame's range (12.1).",
+              "name": "FrameRange",
+              "shape": "unit"
+            },
+            {
+              "doc": "The pair needs a maths function that has no proven error bound yet (12.3).",
+              "name": "UnprovenMaths",
+              "shape": "unit"
+            },
+            {
+              "doc": "A broken precondition, such as an operand with no domain. The checker should already have caught it.",
+              "name": "InvalidInput",
+              "shape": "unit"
+            },
+            {
+              "doc": "A proof did not close, a derived cap was hit, or an invariant failed. A bug, never a success.",
+              "name": "Internal",
+              "shape": "unit"
+            }
+          ],
+          "module": "geom_intersect::error",
+          "name": "IntersectError",
+          "non_exhaustive": false
+        }
+      ],
       "family": [],
       "file": "projects/engines/geometry/crates/geom-intersect/src/lib.rs",
       "folder": "projects/engines/geometry/crates/geom-intersect",
@@ -3305,12 +3545,354 @@
       "job": "Certified curve-curve, curve-surface and surface-surface intersection; level curves, isoclines and contour generators; closed-form distances.",
       "kind": "kernel",
       "layer": "4",
-      "modules": [],
+      "modules": [
+        {
+          "cost": "constant. Recursion: none.",
+          "does": "[`settle`] gives an item the bound `ε_out` that [`Terms`] prove for it, and flags it `BoundExceeded` if that passes the ceiling. An operand's bound is zero when the crate intersects exact defining data, and a cache's certified error when it intersects a cache.",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-intersect/src/bound.rs",
+          "guarantees": [
+            "**Never a wider Certified item.** An item comes back Certified within the ceiling, or flagged with the bound it needed.",
+            "**Rounds up.** `ε_out` is an upper bound of an interval sum, rounded up to whole steps.",
+            "**Exact stays exact only on exact operands.** Any operand's bound makes an Exact item Certified.",
+            "**Approximate stays Approximate.** Its deviation grows by the same terms, and proves nothing, so the ceiling does not judge it.",
+            "**No angle, no bound.** Where the angle cannot carry the operands' bounds through, as it cannot near tangency, the item is flagged with a bound of `u64::MAX` steps. 12.9's square root is the tangent case's bound, and that is [`crate::contact`]'s."
+          ],
+          "job": "How an item's bound adds up: the crate's own error, the operands' bounds and the angle at which the shapes meet (12.2).",
+          "method": {
+            "links": [
+              "projects/engines/geometry/architecture/12-intersections.md"
+            ],
+            "text": "chapter 12.2 (`projects/engines/geometry/architecture/12-intersections.md`). Two shapes moved by `ε_A` and `ε_B`, whose sum is e, meeting at an angle whose sine is at least s, move their crossing by at most r = e/s to first order. Over a distance r the normals of shapes of curvature at most κ each turn by at most κ·r, so the angle there is within 2κ·r of θ, and sine being 1-Lipschitz, r ≤ e/(s − 2κ·r). Take r₀ = 2e/s. If s − 2κ·r₀ ≥ s/2, that map takes [0, r₀] into itself, so the crossing lies within e/(s − 2κ·r₀) of where it was. That quotient is both terms of `ε_out` at once: e/s, and the second-order rest. If not, the curvature can undo the angle inside the distance moved, and no bound of this form exists."
+          },
+          "path": "geom_intersect::bound",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
+          "cost": "a few predicates per call, each one filter and at most one exact path. [`line_torus`] and [`between`] add at most one Sturm chain. [`collapsed`] is linear. No allocation. Recursion: none.",
+          "does": "on the exact data of 12.7, [`line_sphere`], [`line_cylinder`] and [`line_cone`] say how a line meets a quadric as a [`Meeting`], with no square root anywhere, and [`line_torus`] counts its real points on a torus. [`between`] counts them on a stretch of the line. [`position`] decides which of Goldman and Miller's special positions two natural quadrics stand in. [`collapsed`] decides whether the control points along a patch's edge are one point.",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-intersect/src/closed.rs",
+          "guarantees": [
+            "**Exact on exact data.** Every decision here is a sign from `geom-num`'s `quadric` and `sturm` modules, each with its budget written there: no double decides anything.",
+            "**Every degenerate case named.** A line along a cylinder or a cone's ruling is [`Meeting::Within`], one through a cone's apex and nothing else is [`Meeting::Apex`], and a line parallel to a ruling that crosses once is [`Meeting::Once`]. A shape with no size is [`IntersectError::InvalidInput`], never an answer.",
+            "**Positions in order of how much they share.** [`position`] reports the strongest position the pair holds: one axis, then a shared apex, parallel axes, axes meeting with a tangent sphere, and axes meeting."
+          ],
+          "job": "Exact decisions in closed form: how a line meets a quadric or a torus, where two natural quadrics stand, and whether a patch's edge collapses (12.6, 12.7, 12.10).",
+          "method": {
+            "links": [
+              "doi:10.1145/112515.112545",
+              "doi:10.1006/gmip.1995.1006",
+              "projects/engines/geometry/architecture/12-intersections.md"
+            ],
+            "text": "the closed forms of 12.6 and 12.7, on Goldman and Miller's geometric conditions (SMA '91, doi:10.1145/112515.112545; GMIP 57(1), 1995, doi:10.1006/gmip.1995.1006), whose planar sections are the two quadrics' rotational symmetry and a sphere tangent to both about the meeting of their axes. `projects/engines/geometry/architecture/12-intersections.md` holds the table."
+          },
+          "path": "geom_intersect::closed",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
+          "cost": "each cluster is one run of [`crate::solve`] on the collinear-normal system, boxes in four unknowns, each a read of both surfaces to the second order; joining and covering are quadratic in the flagged pairs. All of it is charged to the meter. Recursion: none.",
+          "does": "[`analyse`] joins the flagged pairs that touch into clusters. Near a contact most of them are flagged for starts that could not be proven, so a cluster is taken whole, and one with no pair at the floor is left as it was flagged. Each other cluster is read:",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-intersect/src/contact.rs",
+          "guarantees": [
+            "**Every flagged pair is accounted for.** Each one is in a cluster with at least one [`Reading`], or is proven to hold nothing, or is read as it was flagged, and a cluster's points explain all the branches that reach it.",
+            "**Nothing is called tangent on a gap not proven small.** A zero's gap is an enclosure, and only one that contains zero goes on to the second-order test.",
+            "**The form's sign is proven.** The determinant of the forms' difference is an interval. One that spans zero is a contact of higher order, whatever its middle says.",
+            "**A band is an upper bound.** Its width comes from what the cluster's boxes reach and the least its pairs' forms can differ by, and a band past the ceiling is a [`Unresolved::TangentBand`].",
+            "**Overlap is by identity or by a covered area.** Two surfaces are identical only if their data are equal, and a cluster overlaps only if patches of both surfaces cover its hulls, so that every point of each has a box of the other within reach, and its hull ends at an edge: a contact in the open, where the surfaces part on every side, is not an overlap however flat."
+          ],
+          "job": "Tangent, singular and coincident analysis: what the flagged pairs of [`crate::general::subdivide`] are (12.9).",
+          "method": {
+            "links": [
+              "projects/engines/geometry/architecture/12-intersections.md"
+            ],
+            "text": "chapter 12.9 (`projects/engines/geometry/architecture/12-intersections.md`). The forms are Dupin's comparison of two indicatrices, re-derived there, and written here as the difference H₁ − H₂ of each surface's form in one orthonormal frame of the tangent plane: H = A⁻ᵀ·II·A⁻¹, for A the first partials in that frame. Two surfaces at a contact are graphs z = ½xᵀHx over that plane, so H₁ − H₂ is the Hessian of their gap. The chapter's third-order test asks whether branches leave a contact whose form is degenerate. Here that is read directly, from the proven starts of the settled pairs around the cluster, which needs no frame at a contact that cannot be isolated and also reaches the contacts of fourth order and past. The section's limit to analytic pairs stands, because only their data can make a form exactly degenerate; on other pairs a degenerate form is as likely a pair of near crossings, so it stays flagged."
+          },
+          "path": "geom_intersect::contact",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
+          "cost": "a closed form is a few predicates. The engine's boxes are near the logarithm of the curves' reach for a transversal crossing, and each is a few evaluations; a clip is O(p²). Recursion: none.",
+          "does": "[`curves`] answers for any two kinds. Two lines, two circles, and a line with any conic have closed forms, in the plane; two lines also in space. Every other pair runs [`crate::solve`] on A(s) − B(t) in two coordinates, with Bézier clipping narrowing the boxes of NURBS pieces. In 3D the coordinate left out decides: a meeting is reported only where it is proven, and a pair whose gap cannot be told from zero is flagged [`Unresolved::NearMiss`]. Two conics that are not both circles run the engine too: their exact counts are the fixed-integer predicates of chapter 14's piece G190. [`self_crossings`] runs the same engine on a curve and itself, above the diagonal, dropping every span whose tangents stay in one half-plane, since such a span cannot cross itself.",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-intersect/src/curve.rs",
+          "guarantees": [
+            "**Every crossing found or flagged.** The engine discards a box only on a proof, so a meeting that no item reports does not exist; one that could not be isolated is a flagged region.",
+            "**Tangency is never a guess.** Two circles, and a line with a circle on whole-number data, decide it by an exact sign. Elsewhere a tangency is what the operator cannot separate, and 12.9's second order test reads it: curvatures that differ give [`Unresolved::TangentBand`], with the band's width, and curvatures that cannot be told apart [`Unresolved::HigherOrderContact`]. Whether a contact exists there is an equality no interval can prove.",
+            "**Overlap by identity.** The same carrier, two pieces of one line, or two arcs of one circle are an [`Item::Overlap`] with [`Coincidence::Identical`]. A near overlap stays flagged.",
+            "**Circles of very different radii.** The count of crossings comes from exact signs of the squared distances, never from a relative threshold, so a small circle on a large one has its two points."
+          ],
+          "job": "Where two curves meet, and where a curve meets itself (chapter 12.5).",
+          "method": {
+            "links": [
+              "projects/engines/geometry/architecture/12-intersections.md",
+              "https://doi.org/10.1016/0010-4485(90",
+              "https://doi.org/10.1007/PL00009321"
+            ],
+            "text": "chapter 12.5 (`projects/engines/geometry/architecture/12-intersections.md`): Bézier clipping ([Sederberg and Nishita 1990](https://doi.org/10.1016/0010-4485(90)90039-F)), bisecting when a clip removes too little, finished by Krawczyk's test; exact signs of products by error-free transformations ([Shewchuk 1997](https://doi.org/10.1007/PL00009321))."
+          },
+          "path": "geom_intersect::curve",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
+          "cost": "a closed form is a few predicates. The engine's boxes are near the logarithm of the kinds' reach for a transversal root, each a few evaluations; a clip is O(p·q). Recursion: none.",
+          "does": "[`curve_surface`] answers for any curve and surface. A line with a plane is a linear equation, a line with a sphere, cylinder or cone a quadratic in the surface's own coordinates, and a line with a torus a quartic, isolated by [`crate::solve`], each with its count from an exact sign or a Sturm chain where the data are whole. A helix on a coaxial cylinder of its radius is an overlap. Every other pair runs [`crate::solve`] on C(t) − S(u, v), with the Interval Projected Polyhedron step narrowing the boxes of NURBS pieces.",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-intersect/src/curve_surface.rs",
+          "guarantees": [
+            "**Every root found or flagged.** A box is discarded only on a proof, so a meeting no item reports does not exist.",
+            "**Exact where the data are.** On whole-number data the count, and whether a root is double, come from exact signs, within the budgets of chapter 6.2. Elsewhere an interval decides, and what it cannot tell goes to the engine.",
+            "**Grazing is read, not guessed.** Where the tangent cannot be excluded from the surface's tangent plane the box is a candidate, and the second order test compares the curve's normal curvature with the surface's: [`Unresolved::TangentBand`] with its width where they differ, [`Unresolved::HigherOrderContact`] where they cannot be told apart, and [`Unresolved::NearCoincident`] for a long run, a curve lying near the surface.",
+            "**Overlap by identity.** A line in a plane or along a ruling, and a helix on a coaxial cylinder of its radius, are [`Item::Overlap`]s with [`Coincidence::Identical`].",
+            "**A join is no boundary.** A root on a closed kind's join (a round kind's u = 0, a torus's v = 0, a closed curve's start) crosses like any other; only a true end of a domain makes a [`PointContact::BoundaryTouch`]. Every enclosure is rounded outward, so one whose bound lands exactly on an end holds a value past it, and misses."
+          ],
+          "job": "Where a curve meets a surface (chapter 12.6).",
+          "method": {
+            "links": [
+              "projects/engines/geometry/architecture/12-intersections.md",
+              "https://doi.org/10.1016/0167-8396(93"
+            ],
+            "text": "chapter 12.6 (`projects/engines/geometry/architecture/12-intersections.md`): the Interval Projected Polyhedron solver ([Sherbrooke and Patrikalakis 1993](https://doi.org/10.1016/0167-8396(93)90019-Y)), projecting a patch's coefficients on each parameter axis against the thin slabs around a curve piece, and a curve piece against the patch's fat plane; Krawczyk's test finishes every box."
+          },
+          "path": "geom_intersect::curve_surface",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
+          "cost": "constant.",
+          "does": "[`IntersectError`] names each failure of a pair. Every pair of kinds is supported, so there is no \"unsupported\" error. A flagged region is not one of these: it is part of a complete, honest answer.",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-intersect/src/error.rs",
+          "guarantees": [
+            "**Never a partial answer.** A failure returns no items: every error replaces the whole result.",
+            "**A stop keeps its reason.** A meter's stop is [`IntersectError::Cancelled`] or [`IntersectError::BudgetExceeded`], so a caller can tell a request from a limit."
+          ],
+          "job": "Why an intersection could not be computed (12.16).",
+          "method": {
+            "links": [
+              "projects/engines/geometry/architecture/12-intersections.md"
+            ],
+            "text": "chapter 12.16's error kinds, with `geom-run`'s stops (`projects/engines/geometry/architecture/12-intersections.md`)."
+          },
+          "path": "geom_intersect::error",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
+          "cost": "a pair takes two bounds, and two sets of partials if neither culls it; pairs number about the length of the intersection over the patch size where the normals part, near one per step of a branch. Each settled pair's eight edges run the engine of [`crate::solve`]. All of it is charged to the meter. Recursion: none.",
+          "does": "[`subdivide`] keeps pairs of patches on a work list. A pair is culled when the patches are proven apart, settled when one coordinate of n₁ × n₂ keeps its sign over it, and split otherwise. Where each settled pair's patch edges meet the other patch are its start points, which G170 marches between.",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-intersect/src/general.rs",
+          "guarantees": [
+            "**A settled pair holds no loop.** n₁ × n₂ is the tangent of any intersection branch. Where one of its coordinates keeps its sign that coordinate of space moves strictly one way along every branch, so no branch closes, and the normals are never parallel, so there is no tangent or singular point in the pair.",
+            "**Every component reaches a start point, or a flag.** A pair is dropped only when its patches are proven apart. So every branch lies in settled pairs or flagged ones, and a branch in a settled pair, being no loop, crosses the pair's boundary.",
+            "**Everything is accounted for.** A branch through a settled pair enters and leaves, so each pair holds an even number of start points, or its count goes to [`Subdivided::flagged`].",
+            "**Nothing is decided below the floor.** A pair still undecided there is flagged, for 12.9."
+          ],
+          "job": "General surface with surface, first part: subdivision until no pair of patches can hide a loop, and the start points every branch must pass (12.8, steps 1 to 5).",
+          "method": {
+            "links": [
+              "https://www2.eecs.berkeley.edu/Pubs/TechRpts/1992/6140.html"
+            ],
+            "text": "Hohmeyer's subdivision (UCB/CSD-92-681, 1992, <https://www2.eecs.berkeley.edu/Pubs/TechRpts/1992/6140.html>) with Patrikalakis and Maekawa's structure (12.8). Chapter 12.8 asked this piece to re-derive Hohmeyer's weaker criterion, Gauss maps a plane can separate. As the chapter states it, it is false: the lens between z = x² + y² − 1 and z = 1 − x² − y² has outward normals a plane separates, and meets in a closed circle. It is not used. What is used needs no thesis: the test above is the tangent's own."
+          },
+          "path": "geom_intersect::general",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
+          "cost": "each box or span takes two reads of the surface's partials and the function, charged to the meter. Boxes along a branch of length L number about L·√(κ/ceiling) for curvature κ, with their neighbours; a side's crossing takes log₂(side/floor) reads more. Recursion: none.",
+          "does": "[`trace`] finds every branch of g(u, v) = 0 on a surface. g is a [`Level`]: an implicit surface F substituted into the parametric one ([`OnImplicit`]), or a function of the surface's own normal, for silhouettes ([`Silhouette`], [`Perspective`]), isoclines ([`Isocline`]) and envelopes ([`Envelope`]). The domain is cut at the surface's breaks, then each box is excluded, settled or split, and the settled boxes' crossings are joined across their shared sides into branches.",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-intersect/src/level.rs",
+          "guarantees": [
+            "**Nothing is missed.** A box is dropped only where g is proven nonzero (Snyder's exclusion), or where g is monotone in one parameter and no side holds a root: a monotone box holds no closed loop, so any curve in it would cross a side.",
+            "**No branch is jumped.** In a settled box the curve is a graph over one parameter, so its arcs lie over disjoint spans of that parameter, and sorting the crossings along it pairs them.",
+            "**Everything is accounted for.** Each crossing is met by one crossing across its side, or ends at the domain's boundary, at a break, or at a flagged box. Any other crossing is [`IntersectError::Internal`], never a branch quietly ended.",
+            "**What cannot be decided is flagged.** A box at the floor that holds a possible singular point, a crease, or a side whose roots cannot be told apart is a [`FlaggedBox`] (for 12.9).",
+            "**Each branch has a bound.** [`Branch::deviation`] bounds, in space, how far the exact branch is from the surface's image of the straight parameter chords through its vertices.",
+            "**Deterministic.** A fixed cut position, first part first, and branches in the order of their first vertices."
+          ],
+          "job": "Level curves and the implicit-parametric tracer: the zero set of a function on a surface's parameter plane, traced with proofs (12.8, 12.13).",
+          "method": {
+            "links": [
+              "https://doi.org/10.1145/142920.134024",
+              "https://doi.org/10.1145/1057432.1057465",
+              "https://doi.org/10.1137/1.9780898717716"
+            ],
+            "text": "J. M. Snyder, Interval analysis for computer graphics, SIGGRAPH (1992), <https://doi.org/10.1145/142920.134024>, for the exclusion and parameterisability tests, as 12.8 sets them out. S. Plantinga and G. Vegter's small-normal-variation test (2004, <https://doi.org/10.1145/1057432.1057465>) needs no code of its own: if both partials' enclosures span zero, the enclosure of the gradient's inner product with itself spans zero as well, so a box it accepts is one Snyder's test accepts already. Values take the mean-value form over a box (R. E. Moore, R. B. Kearfott and M. J. Cloud, *Introduction to Interval Analysis*, SIAM (2009), <https://doi.org/10.1137/1.9780898717716>, section 6.4), so exclusion tightens with the square of a box's width. An arc over a span w whose slopes lie in an interval of width m leaves its chord by at most m·w/4, which with the surface's speed across the arc is [`Branch::deviation`]."
+          },
+          "path": "geom_intersect::level",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
+          "cost": "each step is two reads of both surfaces and one 4 × 4 inverse. Steps along a branch of length L number about L·√(κ/ceiling), and stitching is quadratic in the start points of a line of pairs. All of it is charged to the meter. Recursion: none.",
+          "does": "[`march`] traces each branch through each settled pair, from one start point to another, then joins the pieces across the pairs' shared boundaries into whole branches. In a settled pair one coordinate of space, c, moves one way along every branch, so c parameterises it: the unknowns are the four surface parameters, and the equations are S₁ − S₂ = 0 and S₁[k] − c = 0.",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-intersect/src/march.rs",
+          "guarantees": [
+            "**A step cannot jump to another branch.** Each step is one Krawczyk test over a box and a whole interval of c at once: passing proves that for every c in it the box holds exactly one point, so the branch through the step's start is the only one in the box.",
+            "**Each branch ends for a reason.** It ends at a start point the box proves it reaches, or, at a domain's edge, where no box can stand across the point, within the floor of one, and a march leaves such a point a floor along: nothing there can be told apart on the grid. That point lies on the domain's boundary, or joins the next pair, or sits beside a flagged pair.",
+            "**Everything is accounted for.** Every start point of a traced pair is used exactly once. A start that reaches no other, in either direction, leaves its whole pair in [`Traced::unproven`], with none of its pieces kept: never a branch quietly ended.",
+            "**Each branch has a bound.** [`Branch::deviation`] bounds, in space, how far the exact branch is from the chords through its vertices. A step is kept only within the ceiling.",
+            "**Deterministic.** Pairs in the order subdivision left them, starts in the order found, and a step size that follows only from what the tests said.",
+            "**Joined across a closing seam (G173).** Where a domain's two ends are one curve ([`crate::seam`]), a branch that reaches one end goes on from the other: the point is kept once, and [`Branch::passes`] says where."
+          ],
+          "job": "General surface with surface, second part: certified marching between the start points of [`crate::general::subdivide`] (12.8, steps 6 to 8).",
+          "method": {
+            "links": [
+              "https://doi.org/10.1016/0167-8396(90",
+              "https://doi.org/10.1137/0731048"
+            ],
+            "text": "the predictor along the tangent n₁ × n₂ and the corrector's four-unknown system are Barnhill and Kersey's (<https://doi.org/10.1016/0167-8396(90)90035-P>), with the proof of each step after Kearfott and Xing (<https://doi.org/10.1137/0731048>): Krawczyk's operator, chapter 12.3, with the parameter an interval. An arc over a span w of c whose slopes dx/dc lie in an interval of width m leaves its chord by at most m·w/4. That slope comes from the tangent's own enclosure over the step's box, which is a bound of the same strength as 12.8's h²κ/8 and needs no curvature formula."
+          },
+          "path": "geom_intersect::march",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
+          "cost": "a key is one conversion to NURBS, charged to the meter; ordering a pair compares two keys, linear in their lengths. Recursion: none.",
+          "does": "a [`CanonicalKey`] orders operands by kind, then by a kernel-internal encoding of their defining data: each kind's NURBS form, which is a function of that data alone, or, for a line or plane that has no such form because it may be unbounded, the data itself. [`pair`] puts two [`Operand`]s in that order, runs a method on them and gives its answer back in the caller's roles. [`pairs`] does so for many pairs on the kernel's parallel helper, each under an equal share of the budget, in canonical pair order.",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-intersect/src/order.rs",
+          "guarantees": [
+            "**The same items with the roles swapped.** A method only ever sees the canonical order, so `pair(a, b)` and `pair(b, a)` make the same call, and differ only in which operand's unknowns come first in each item's enclosure.",
+            "**No address and no file format.** The key reads the defining data's values and nothing else, so it never depends on memory addresses, nor on file-format bytes, whose version can change independently (12.15). It is versioned with the kernel edition (26.2).",
+            "**The same answers on any thread count.** Pairs run in chunks fixed by [`PLAN`], each under its own budget, and come back in the caller's order. A pair's budget never depends on the others' costs, only on how many pairs there are, so the shares of 12.15 are the same in any order."
+          ],
+          "job": "The canonical order of a pair: which operand goes first, and how a batch of pairs runs (12.15).",
+          "method": {
+            "links": [
+              "projects/engines/geometry/architecture/12-intersections.md"
+            ],
+            "text": "chapter 12.15's canonical operand order and per-pair budgets (`projects/engines/geometry/architecture/12-intersections.md`), on `geom-run`'s batch rule."
+          },
+          "path": "geom_intersect::order",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
+          "cost": "spans are halved, so a curve takes O(log(length/floor)) spans per foot, plus those near the distance's other turning points, each a bound on the point and two derivatives. A surface takes four such curves for its edges, then boxes in the same way, each a set of partials to the second order. All of it is charged to the meter. Recursion: none.",
+          "does": "[`project_curve`] and [`project_surface`] find every nearest point of a kind to a point. A line's foot and a plane's are closed forms. Everything else takes Ma and Hewitt's pruning, made certified: a work list of parameter spans, each dropped once a box around it lies further than the best distance so far, or once its distance's derivative cannot vanish, and the ends of a curve and the edges of a surface added as candidates, since a minimum on the boundary need not be a foot. [`invert_curve`] and [`invert_surface`] find the parameters of a point known to lie on a kind. A point on a round kind's axis has a continuum of nearest points, returned as a typed [`Continuum`] rather than found by search.",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-intersect/src/project.rs",
+          "guarantees": [
+            "**The minimum is proven.** Every span dropped has a lower bound above the reported distance, or a derivative that cannot vanish, by certified bounds on the kind. Nothing is sampled.",
+            "**Ties are kept.** Candidates whose distance enclosures overlap are all returned, in parameter order; [`Projection::tie_broken`] says so, and the first is the lowest parameter.",
+            "**Nothing is guessed at the floor.** Spans at the floor that the test cannot decide are joined. If their hull's image is within twice the floor it is one nearest point, since nothing in it can be told apart on the grid (a sphere's pole, a foot on a split); a longer one is [`Projection::NonIsolated`], never a foot.",
+            "**Enclosures, never numbers.** Each parameter, point and distance is an interval holding the exact value.",
+            "**Deterministic.** Midpoint splits, and a fixed work order, first half first."
+          ],
+          "job": "Projection and inversion: the nearest points of a curve or surface to a point, proven (12.4).",
+          "method": {
+            "links": [
+              "https://doi.org/10.1016/S0167-8396(03",
+              "projects/engines/geometry/architecture/12-intersections.md"
+            ],
+            "text": "X. Ma and W. Hewitt, Point inversion and projection for NURBS curve and surface, Computer Aided Geometric Design 20 (2003), <https://doi.org/10.1016/S0167-8396(03)00021-9>, for the pruning, with convex-hull distance replaced by each kind's certified bound; chapter 12.4 (`projects/engines/geometry/architecture/12-intersections.md`). A span's convexity test is the sign of the second derivative of half the squared distance, an interval of the kind's certified derivative bounds, so a span it passes holds at most one foot, by Rolle's theorem. Circles, spheres, cylinders, cones and tori go through the same search: their certified bounds are their own closed forms, and the search adds what a closed form alone lacks, a trimmed domain."
+          },
+          "path": "geom_intersect::project",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
+          "cost": "O(n log n) comparisons to order n items, then a sweep to prove them disjoint: for each item, one comparison per later item of its kind that starts before it ends in the first unknown, n²/2 at worst and each charged to the meter. Recursion: none.",
+          "does": "an [`Intersection`] is the items of one pair in canonical order, with its [`Coverage`], its diagnostics and the work it took. An [`Item`] is a point, a curve, an overlap or a flagged region, each with its enclosure on the operands' parameters and in space. A [`ParamBox`] holds one interval per unknown of the pair, the canonical first operand's first, so [`Intersection::swapped`] gives the same items with the roles changed.",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-intersect/src/result.rs",
+          "guarantees": [
+            "**One order.** [`Intersection::new`] sorts the items by kind, then by their enclosure on the parameters: lower corner, then upper corner, coordinate by coordinate, compared exactly (12.15). Two items of one kind whose enclosures overlap are refused: distinct items are disjoint, so the order is total.",
+            "**Nothing unproven is called certified.** [`Coverage::TopologyCertified`] with a flagged item is refused: a flagged region is what such a result does not have.",
+            "**One shape of box.** Every item of an intersection has as many unknowns as the pair, and a [`ParamBox`] has two, three or four.",
+            "**Flagged items carry no class.** The type gives them none (12.2).",
+            "**Swapping twice is nothing.** [`Intersection::swapped`] moves the unknowns and keeps the items' order, the order of the canonical pair, whichever way round the caller asked."
+          ],
+          "job": "What an intersection returns: its items, how each pair meets, and how much of the answer is proven (12.2).",
+          "method": {
+            "links": [
+              "projects/engines/geometry/architecture/12-intersections.md"
+            ],
+            "text": "chapter 12.2's result types and 12.15's output order (`projects/engines/geometry/architecture/12-intersections.md`)."
+          },
+          "path": "geom_intersect::result",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
+          "cost": "constant for the analytic kinds; one pass over the control net and the knots for a NURBS. Each pole line costs one projection to an eighth of the floor and one run of the engine along the line, once per subdivision (`Poles`); each pair then filters what it read. Recursion: none.",
+          "does": "[`charts`] reads, from a kind's own stored data and exactly, which ends of its domain are one curve (a whole turn of a round kind, a NURBS whose first and last rows of control points are one row), which lines of its domain are each one point of space (a sphere's poles, a cone's apex, a NURBS edge whose control points are one point), and the lines inside where it is not proven tangent-continuous (a NURBS knot of full multiplicity). [`crate::general::subdivide`] cuts each domain at its creases and inner poles before anything else ([`cuts`]), and tests a patch edge on a pole line as the one point it is: the point against the other surface (12.4), then the directions a branch leaves it by. [`crate::march`] and [`crate::level`] join a branch across a closing seam, through a pole and across a knot line, recording the point once and saying where in [`Pass`].",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-intersect/src/seam.rs",
+          "guarantees": [
+            "**Exact, or not claimed.** Ends close only when the data proves them one curve: a span of exactly two half-turns (an error-free sum), or control rows of identical doubles and weights on a clamped basis. A line is a pole only when the data makes it one point: v exactly ±1/2 on a sphere; r₀ + k·v exactly 0 on a cone (an error-free product); R + r·cos πv exactly 0 at a v whose cosine is exact (a multiple of a half-turn) on a torus; identical control points along a clamped NURBS edge (`geom_nurbs::Surface::collapsed_edges`). Anything else is an ordinary edge, and a branch that ends there ends at the boundary: a join is never made that is not proven.",
+            "**One point, recorded once.** Two ends are joined across a seam only when one sits on each end of a closing parameter, exactly (a start on an edge holds the edge's value as a point), and their other parameters' enclosures meet: both are then roots of one edge system, the same standard [`crate::march`] joins pairs by. Ends held on one pole line are its one point whatever the line's free parameter. The joined branch keeps one of the enclosures.",
+            "**A pole joins two, or none.** Where exactly two half-branches end at a pole, the curve goes through it as one branch (a sphere's meridians, a cone's two generators in a plane through its apex, a turn there allowed). Any other number makes it a singular point, where each ends ([`crate::result::CurveEnd::Singular`]), as 12.8's step 8 asks.",
+            "**A pole is decided as a point.** It is proven apart from the other surface, or proven within the floor of it at a foot in the pair; otherwise the pair is undecided. A pole within the floor is treated as on it, the same resolution floor every other test stops at (12.3).",
+            "**A lone pole is never lost.** A pole on the other surface that no branch leaves (a cone's apex resting on a plane) is kept to the floor by subdivision, flagged `NonSmooth { at: Pole }`, and read by [`crate::contact::analyse`] as one singular point there."
+          ],
+          "job": "Seams, poles and knot lines: where a surface's parameterisation stops being regular, and how a branch passes them (12.10).",
+          "method": {
+            "links": [
+              "projects/engines/geometry/architecture/12-intersections.md",
+              "https://doi.org/10.1007/978-3-642-59223-2"
+            ],
+            "text": "chapter 12.10 (`projects/engines/geometry/architecture/12-intersections.md`); each kind's closed form in `geom_surface` (its table of S(u, v)); knot multiplicity and continuity from L. Piegl and W. Tiller, *The NURBS Book*, 2nd ed., section 2.2: a knot of multiplicity k leaves a degree-p basis C^(p−k) there, so k ≥ p is at most C⁰ (<https://doi.org/10.1007/978-3-642-59223-2>). The directions out of a pole are 12.10's division of the vanishing factor: on a pole line the partial along the line is zero, so a step off it moves along the partial across, and a branch leaves along those of its values that lie in the other surface's tangent plane. This is our derivation; the engine of [`crate::solve`] proves each such value once."
+          },
+          "path": "geom_intersect::seam",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
+          "cost": "each box is one residual range and at most one operator step, each a few evaluations of the kind; O(N³) doubles for the inverse. One allocation for each list. Recursion: none.",
+          "does": "a [`Field`] gives a system's residuals at a point and over a box, its Jacobian over a box, and how far a box reaches in space, from whatever a kind can bound. [`solve`] keeps boxes on a work list, discards each one a caller's test rules out or whose residuals exclude zero, takes a Krawczyk step, and splits what is left. `geom_num::isolate` does this for a system that is written once over its scalars; kinds that are bounded through their own traits come here.",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-intersect/src/solve.rs",
+          "guarantees": [
+            "**A zero is proven.** A [`Zero`] has passed Krawczyk's test: K(X) ⊆ X with ‖I − Y·J(X)‖ < 1, so its `proof` box holds exactly one zero, and its `enclosure` holds that zero.",
+            "**Nothing is lost.** A box is dropped only when its residuals exclude zero, when the operator proves it empty, when the caller's test rules it out, or when a proven zero's box covers it. Everything else ends as a [`Zero`] or a [`Flagged`] region.",
+            "**Zeros on split lines are found once.** Each step runs on the box widened a little inside the domain, and a zero whose enclosure meets an earlier proof box is that zero.",
+            "**Bounded.** The list is explicit, each box is charged, and a box that reaches less than the resolution floor, or cannot be split, is flagged rather than split again.",
+            "**Enclosures apart.** A zero's enclosure reaches less than a step, and two zeros nearer than that are refined until the doubles part them.",
+            "**Deterministic.** Boxes are taken lower first, the longest side split at its middle."
+          ],
+          "job": "The interval engine: every zero of a small system over a box, each proven alone in a box of its own or flagged where it could not be decided (chapter 12.3).",
+          "method": {
+            "links": [
+              "https://doi.org/10.1007/BF02234767",
+              "projects/engines/geometry/architecture/12-intersections.md"
+            ],
+            "text": "Krawczyk's operator ([Krawczyk 1969](https://doi.org/10.1007/BF02234767)) on a subdivision work list, as `geom_num::isolate` runs it, and the small inverse is that module's (Golub and Van Loan, algorithm 3.4.1). Chapter 12.3, `projects/engines/geometry/architecture/12-intersections.md`, sets out the tests."
+          },
+          "path": "geom_intersect::solve",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        }
+      ],
       "name": "geom-intersect",
       "provenance": [],
       "sections": "12, 16.1, 17.8, 18.5, 19.10, 19.14 and 23.7; open questions OQ-12.1 and OQ-19.7, in the kernel architecture (`projects/engines/geometry/architecture/`).",
       "spdx": null,
-      "status": "scaffold only; built by pieces G158, G159, G162, G163, G164, G165, G166, G167, G168, G169, G170, G171, G172, G173, G174, G175, G176, G292, G320, G321, G372, G390, G392, G393, G466, G467, G468.",
+      "status": "the result types and canonical order built by piece G158, projection and inversion by G162, the implicit tracer and level curves by G168, subdivision by G169, marching by G170, seams, poles and knot lines by G173; the other methods come with G159, G163, G164, G165, G166, G167, G170, G171, G172, G174, G175, G176, G292, G320, G321, G372, G390, G392, G393, G466, G467, G468.",
       "summary": "Spare Kit geometry kernel: certified intersections."
     },
     {
@@ -4692,6 +5274,46 @@
           "target": "lib"
         },
         {
+          "cost": "the filter is 28 `f64` operations, after 1 rounded input(s) converted to `f64`, then 7 magnitudes and their maxima and the bound's 19 multiplication(s); the exact path, run only when the filter cannot decide, is 28 checked integer operations.",
+          "does": null,
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-num/src/generated/axis_gap.rs",
+          "guarantees": [
+            "when `filter` returns `Some(sign)`, `sign` is the sign of the exact value for every input in the domain below, and it returns `None` when it cannot tell, never a guess; `value` returns the exact value for every input in the domain, each step in the type the certificate below shows holds it and every step a checked method, so a step that did not fit would give `None`, never a wrapped value; and `exact` is that value's sign. Its filter's bound is checked, not proven (chapter 28.6): derived exactly, re-derived by geom-gen's independent checker, and tested; `FPTaylor` bounds it and HOL Light checks its certificate (`fptaylor-axis-gap.fpt`, in `projects/engines/geometry/crates/geom-gen/generated`), but that certificate is about `FPTaylor`'s error model, and Gappa's problems, the proof of record, cannot state this filter yet (issue #292); `kernel-certificates.yml` runs the check on every change and every night."
+          ],
+          "job": "Generated by geom-gen, generator `predicate-axis-gap` (seed: none, it uses no randomness), from the description `AXIS_GAP` in `projects/engines/geometry/crates/geom-gen/src/predicates.rs`. Do not edit: change the description or the generator and run `cargo run -p geom-gen -- write`. CI runs `cargo run -p geom-gen -- check` and fails on any difference.",
+          "method": {
+            "links": [
+              "https://inria.hal.science/inria-00344297"
+            ],
+            "text": "Meyer and Pion's semi-static filters (FPG, <https://inria.hal.science/inria-00344297>), with the error analysis derived exactly, as [`super`] sets out, and the exact path in integers."
+          },
+          "path": "geom_num::generated::axis_gap",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
+          "cost": "the filter is 20 `f64` operations, then 6 magnitudes and their maxima and the bound's 10 multiplication(s); the exact path, run only when the filter cannot decide, is 20 checked integer operations.",
+          "does": null,
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-num/src/generated/cross_norm.rs",
+          "guarantees": [
+            "when `filter` returns `Some(sign)`, `sign` is the sign of the exact value for every input in the domain below, and it returns `None` when it cannot tell, never a guess; `value` returns the exact value for every input in the domain, each step in the type the certificate below shows holds it and every step a checked method, so a step that did not fit would give `None`, never a wrapped value; and `exact` is that value's sign. Its filter's bound is checked, not proven (chapter 28.6): derived exactly, re-derived by geom-gen's independent checker, and tested; `FPTaylor` bounds it and HOL Light checks its certificate (`fptaylor-cross-norm.fpt`, in `projects/engines/geometry/crates/geom-gen/generated`), but that certificate is about `FPTaylor`'s error model, and Gappa's problems, the proof of record, cannot state this filter yet (issue #292); `kernel-certificates.yml` runs the check on every change and every night."
+          ],
+          "job": "Generated by geom-gen, generator `predicate-cross-norm` (seed: none, it uses no randomness), from the description `CROSS_NORM` in `projects/engines/geometry/crates/geom-gen/src/predicates.rs`. Do not edit: change the description or the generator and run `cargo run -p geom-gen -- write`. CI runs `cargo run -p geom-gen -- check` and fails on any difference.",
+          "method": {
+            "links": [
+              "https://inria.hal.science/inria-00344297"
+            ],
+            "text": "Meyer and Pion's semi-static filters (FPG, <https://inria.hal.science/inria-00344297>), with the error analysis derived exactly, as [`super`] sets out, and the exact path in integers."
+          },
+          "path": "geom_num::generated::cross_norm",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
           "cost": "the filter is 29 `f64` operations, then 6 magnitudes and their maxima and the bound's 5 multiplication(s); the exact path, run only when the filter cannot decide, is 29 checked integer operations.",
           "does": null,
           "family": [],
@@ -4747,6 +5369,86 @@
             "text": "each predicate's steps as its module's certificate derives them, each held in as many 32-bit limbs as its operands' certified bits need, chapter 23.3's width-aware limbs, `projects/engines/geometry/architecture/23-performance.md`, with the schoolbook limb arithmetic of `crate::wide32`."
           },
           "path": "geom_num::generated::limbs",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
+          "cost": "the filter is 41 `f64` operations, after 2 rounded input(s) converted to `f64`, then 11 magnitudes and their maxima and the bound's 38 multiplication(s); the exact path, run only when the filter cannot decide, is 41 checked integer operations.",
+          "does": null,
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-num/src/generated/line_cone.rs",
+          "guarantees": [
+            "when `filter` returns `Some(sign)`, `sign` is the sign of the exact value for every input in the domain below, and it returns `None` when it cannot tell, never a guess; `value` returns the exact value for every input in the domain, each step in the type the certificate below shows holds it and every step a checked method, so a step that did not fit would give `None`, never a wrapped value; and `exact` is that value's sign. Its filter's bound is checked, not proven (chapter 28.6): derived exactly, re-derived by geom-gen's independent checker, and tested; `FPTaylor` bounds it and HOL Light checks its certificate (`fptaylor-line-cone.fpt`, in `projects/engines/geometry/crates/geom-gen/generated`), but that certificate is about `FPTaylor`'s error model, and Gappa's problems, the proof of record, cannot state this filter yet (issue #292); `kernel-certificates.yml` runs the check on every change and every night."
+          ],
+          "job": "Generated by geom-gen, generator `predicate-line-cone` (seed: none, it uses no randomness), from the description `LINE_CONE` in `projects/engines/geometry/crates/geom-gen/src/predicates.rs`. Do not edit: change the description or the generator and run `cargo run -p geom-gen -- write`. CI runs `cargo run -p geom-gen -- check` and fails on any difference.",
+          "method": {
+            "links": [
+              "https://inria.hal.science/inria-00344297"
+            ],
+            "text": "Meyer and Pion's semi-static filters (FPG, <https://inria.hal.science/inria-00344297>), with the error analysis derived exactly, as [`super`] sets out, and the exact path in integers."
+          },
+          "path": "geom_num::generated::line_cone",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
+          "cost": "the filter is 31 `f64` operations, after 2 rounded input(s) converted to `f64`, then 8 magnitudes and their maxima and the bound's 21 multiplication(s); the exact path, run only when the filter cannot decide, is 31 checked integer operations.",
+          "does": null,
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-num/src/generated/line_cone_lead.rs",
+          "guarantees": [
+            "when `filter` returns `Some(sign)`, `sign` is the sign of the exact value for every input in the domain below, and it returns `None` when it cannot tell, never a guess; `value` returns the exact value for every input in the domain, each step in the type the certificate below shows holds it and every step a checked method, so a step that did not fit would give `None`, never a wrapped value; and `exact` is that value's sign. Its filter's bound is checked, not proven (chapter 28.6): derived exactly, re-derived by geom-gen's independent checker, and tested; `FPTaylor` bounds it and HOL Light checks its certificate (`fptaylor-line-cone-lead.fpt`, in `projects/engines/geometry/crates/geom-gen/generated`), but that certificate is about `FPTaylor`'s error model, and Gappa's problems, the proof of record, cannot state this filter yet (issue #292); `kernel-certificates.yml` runs the check on every change and every night."
+          ],
+          "job": "Generated by geom-gen, generator `predicate-line-cone-lead` (seed: none, it uses no randomness), from the description `LINE_CONE_LEAD` in `projects/engines/geometry/crates/geom-gen/src/predicates.rs`. Do not edit: change the description or the generator and run `cargo run -p geom-gen -- write`. CI runs `cargo run -p geom-gen -- check` and fails on any difference.",
+          "method": {
+            "links": [
+              "https://inria.hal.science/inria-00344297"
+            ],
+            "text": "Meyer and Pion's semi-static filters (FPG, <https://inria.hal.science/inria-00344297>), with the error analysis derived exactly, as [`super`] sets out, and the exact path in integers."
+          },
+          "path": "geom_num::generated::line_cone_lead",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
+          "cost": "the filter is 32 `f64` operations, after 1 rounded input(s) converted to `f64`, then 10 magnitudes and their maxima and the bound's 21 multiplication(s); the exact path, run only when the filter cannot decide, is 32 checked integer operations.",
+          "does": null,
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-num/src/generated/line_cylinder.rs",
+          "guarantees": [
+            "when `filter` returns `Some(sign)`, `sign` is the sign of the exact value for every input in the domain below, and it returns `None` when it cannot tell, never a guess; `value` returns the exact value for every input in the domain, each step in the type the certificate below shows holds it and every step a checked method, so a step that did not fit would give `None`, never a wrapped value; and `exact` is that value's sign. Its filter's bound is checked, not proven (chapter 28.6): derived exactly, re-derived by geom-gen's independent checker, and tested; `FPTaylor` bounds it and HOL Light checks its certificate (`fptaylor-line-cylinder.fpt`, in `projects/engines/geometry/crates/geom-gen/generated`), but that certificate is about `FPTaylor`'s error model, and Gappa's problems, the proof of record, cannot state this filter yet (issue #292); `kernel-certificates.yml` runs the check on every change and every night."
+          ],
+          "job": "Generated by geom-gen, generator `predicate-line-cylinder` (seed: none, it uses no randomness), from the description `LINE_CYLINDER` in `projects/engines/geometry/crates/geom-gen/src/predicates.rs`. Do not edit: change the description or the generator and run `cargo run -p geom-gen -- write`. CI runs `cargo run -p geom-gen -- check` and fails on any difference.",
+          "method": {
+            "links": [
+              "https://inria.hal.science/inria-00344297"
+            ],
+            "text": "Meyer and Pion's semi-static filters (FPG, <https://inria.hal.science/inria-00344297>), with the error analysis derived exactly, as [`super`] sets out, and the exact path in integers."
+          },
+          "path": "geom_num::generated::line_cylinder",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
+          "cost": "the filter is 28 `f64` operations, after 1 rounded input(s) converted to `f64`, then 7 magnitudes and their maxima and the bound's 19 multiplication(s); the exact path, run only when the filter cannot decide, is 28 checked integer operations.",
+          "does": null,
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-num/src/generated/line_sphere.rs",
+          "guarantees": [
+            "when `filter` returns `Some(sign)`, `sign` is the sign of the exact value for every input in the domain below, and it returns `None` when it cannot tell, never a guess; `value` returns the exact value for every input in the domain, each step in the type the certificate below shows holds it and every step a checked method, so a step that did not fit would give `None`, never a wrapped value; and `exact` is that value's sign. Its filter's bound is checked, not proven (chapter 28.6): derived exactly, re-derived by geom-gen's independent checker, and tested; `FPTaylor` bounds it and HOL Light checks its certificate (`fptaylor-line-sphere.fpt`, in `projects/engines/geometry/crates/geom-gen/generated`), but that certificate is about `FPTaylor`'s error model, and Gappa's problems, the proof of record, cannot state this filter yet (issue #292); `kernel-certificates.yml` runs the check on every change and every night."
+          ],
+          "job": "Generated by geom-gen, generator `predicate-line-sphere` (seed: none, it uses no randomness), from the description `LINE_SPHERE` in `projects/engines/geometry/crates/geom-gen/src/predicates.rs`. Do not edit: change the description or the generator and run `cargo run -p geom-gen -- write`. CI runs `cargo run -p geom-gen -- check` and fails on any difference.",
+          "method": {
+            "links": [
+              "https://inria.hal.science/inria-00344297"
+            ],
+            "text": "Meyer and Pion's semi-static filters (FPG, <https://inria.hal.science/inria-00344297>), with the error analysis derived exactly, as [`super`] sets out, and the exact path in integers."
+          },
+          "path": "geom_num::generated::line_sphere",
           "provenance": [],
           "spdx": null,
           "target": "lib"
@@ -5538,6 +6240,31 @@
           "target": "lib"
         },
         {
+          "cost": "each predicate is one filter, and one exact path where the filter cannot tell. [`roots`] is at most 60 interval operations, and a [`crate::sturm::Chain`] where those cannot tell. No allocation. Recursion: none.",
+          "does": "a [`Line`] runs through two grid points; a [`Sphere`], [`Cylinder`], [`Cone`] or [`Torus`] is held by grid points and whole numbers of steps, which is what chapter 12.7 calls exact data. [`line_sphere`], [`line_cylinder`] and [`line_cone`] give the sign of a line's discriminant with each, in a form with no square root and no division, through generated filters and exact paths. [`polynomial`] writes a line's equation with a surface as whole-number coefficients of a degree-2 or degree-4 polynomial in the line's parameter, and [`roots`] and [`roots_between`] count its real roots with [`crate::sturm`]. [`parallel`], [`axis_gap`], [`tangent_cylinder_cone`] and [`tangent_cone_cone`] are the tests of Goldman and Miller's special positions.",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-num/src/quadric.rs",
+          "guarantees": [
+            "**Discriminants within their budgets.** Each generated module carries the bound of every step: line with sphere 169 bits, with cylinder 253, with cone 334. `None` from a generated path can only mean an input outside its declared range, and is [`NumError::BudgetExceeded`].",
+            "**The tangent spheres' budgets.** |u|² is below 2^170 and each L below 2^170, for sizes of at most 2^41 and slopes of at most 2^40: a cylinder and a cone are below 2^(82+81+340) = 2^503, in `Wide<8>`, and two cones below 2^(80+81+84+340) = 2^585, in `Wide<10>`. Both are past chapter 6.2's 384 bits and wait for an owner's acceptance for these rows (31.7), with [`crate::sturm`]'s `Wide<54>`.",
+            "**A line with a torus has B = 256.** With D = d·d, H = d·w, W = w·w, E = e·e, all below 2^84, and k = R² − r² below 2^82 in size: E·P(t)² has coefficients below 2^84·2^171 = 2^255, for P = D·t² + 2H·t + W + k, whose square's largest coefficient is H² + ... below 2^171; and 4R²·M(t) has coefficients below 2^84·2^170 = 2^254, for M = E·|x|² − (x·e)². So every coefficient of [`polynomial`] is below 2^256, as [`crate::sturm`]'s budget asks, and each step fits an `I320`.",
+            "**The same polynomial in two arithmetics.** [`polynomial`] is one generic function over [`Ring`], so the interval filter's coefficients enclose the exact path's by construction.",
+            "**Decided or refused.** A filter's answer is proven (each generated module says how, and an interval's sign is proven by outward rounding); otherwise the exact path answers."
+          ],
+          "job": "Exact decisions about lines and the surfaces of revolution on grid data: how a line meets a sphere, cylinder, cone or torus, and the positions of two axes (chapter 12.6 and 12.7).",
+          "method": {
+            "links": [
+              "doi:10.1145/112515.112545",
+              "doi:10.1006/gmip.1995.1006"
+            ],
+            "text": "Lagrange's identity for each discriminant, written out in the descriptions in `crates/geom-gen/src/predicates.rs`, with no square root or division; the torus's implicit equation (|x|² + R² − r²)² = 4R²(|x|² − (x·ê)²) with the axis cleared of its length; the special positions of Goldman and Miller (SMA '91, doi:10.1145/112515.112545; GMIP 57(1), 1995, doi:10.1006/gmip.1995.1006), including the sphere tangent to both quadrics about the point where their axes meet."
+          },
+          "path": "geom_num::quadric",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
           "cost": "constant: one finiteness check to make a `Real`, and one comparison of bits to compare two.",
           "does": null,
           "family": [],
@@ -5643,6 +6370,31 @@
             "text": "the sign of an exactly computed quantity, as chapter 6.2's exact predicates return it (`projects/engines/geometry/architecture/06-numbers.md`): a comparison with zero, and the sign rules of negation and multiplication of the reals."
           },
           "path": "geom_num::sign",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
+          "cost": "a chain is at most 24 products and 15 exact divisions of [`LIMBS`]-limb integers, on the stack, each O(`LIMBS`²). The filter is at most 60 interval operations. Recursion: none.",
+          "does": "[`Chain::of`] builds the Sturm chain of an integer polynomial as a subresultant chain, whose coefficients stay near the size of determinants of the polynomial's own. From it [`Chain::roots`] counts the distinct real roots and says whether any is repeated, and [`Chain::roots_between`] counts them between two rational points, ends excluded. [`filtered`] and [`filtered_between`] give the same answers in `f64` intervals where those decide, so that the wide path only runs near a repeated root (chapter 12.6).",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-num/src/sturm.rs",
+          "guarantees": [
+            "**A Sturm chain.** Each element after the first two is a positive multiple of minus the remainder of the two before it, so Sturm's theorem counts the real roots: the multiplier of each pseudo-remainder is |lc|^(δ+1), and each exact divisor is a magnitude. Every multiple being positive is what lets the classical algorithm's quotients be read as Sturm's.",
+            "**The budget, B ≤ 256.** By Hadamard's bound, on subresultants as determinants of 3, 5 and 7 rows of coefficients below 2^(B+2), the chain's coefficients stay below 2^(3B+9), 2^(5B+17) and 2^(7B+27). The largest value computed is a pseudo-remainder of the last step, at most 8·lc²·|u|·... ≤ 2^(13B+50) = 2^3378 at B = 256, inside [`Big`]'s limit of 2^3455: [`LIMBS`] holds it, and every step is checked, so a wrong budget is `None`, never a wrong count. A line with a torus has B = 256 ([`crate::quadric`]'s derivation).",
+            "**Exact division, proven at each use.** [`div_exact`] multiplies its quotient back by the divisor and compares, so a value that was not divisible is refused, never rounded.",
+            "**The filter never guesses.** [`filtered`] returns `None` unless every leading coefficient of its chain has a certain sign, each proven by outward rounding, and then the chain has full length, so no root is repeated.",
+            "**Ends excluded.** [`Chain::roots_between`] takes each element's sign just inside each end, so a root at an end is not counted, however often it repeats."
+          ],
+          "job": "How many real roots a polynomial of degree at most four has, exactly, by Sturm's method.",
+          "method": {
+            "links": [
+              "doi:10.1145/321662.321664",
+              "doi:10.1006/jsco.1993.1017"
+            ],
+            "text": "Sturm's theorem (Basu, Pollack and Roy, *Algorithms in Real Algebraic Geometry*, 2006, chapter 2) on the subresultant polynomial remainder sequence (Brown and Traub 1971, doi:10.1145/321662.321664; Cohen, *A Course in Computational Algebraic Number Theory*, algorithm 3.3.1), with Hadamard's bound for the budget. Exact division digit by digit from the low end (Jebelean 1993, doi:10.1006/jsco.1993.1017). The filter is the same chain in [`crate::interval`]: a chain branches on its degrees, so it has no straight-line form for `geom-gen`, and outward rounding proves each sign with no constant to derive."
+          },
+          "path": "geom_num::sturm",
           "provenance": [],
           "spdx": null,
           "target": "lib"
@@ -6257,6 +7009,7 @@
           "file": "projects/engines/geometry/crates/geom-nurbs/src/exact.rs",
           "guarantees": [
             "**Plane coefficients within 2^126.** [`Plane`] holds |`n_i`| < 2^83 and |d| < 2^125 (checked at construction). Each |`n_i`·`x_i`| < 2^83·2^40 = 2^123, the sum of three below 3·2^123 < 2^125, and with d below 2^126: in `i128` (limit 2^127), every step checked.",
+            "**Quadric coefficients within 2^305.** [`geom_num::quadric::polar`] holds |Q| below 2^249, and Σ C(p, i)·C(p, j) over i + j = k is C(2p, k), at most 2^(2p) ≤ 2^56 for p ≤ 28 ([`crate::MAX_DEGREE`]): in [`I320`] (limit 2^319), every step checked. The sign of a scaled coefficient is the sign of the true one, since the binomial C(2p, k) it is scaled by is positive.",
             "**Normal coefficients within 2^193.** In scaled form the partial derivatives' coefficients are C(p − 1, i)·C(q, j)·(`P_(i+1,j)` − `P_ij`) and C(p, i)·C(q − 1, j)·(`P_(i,j+1)` − `P_ij`), differences of at most 2M < 2^41. Products of scaled forms are plain convolutions (the binomials are already inside), and a cross product's component is a difference of two products, so coefficient (a, b) is at most 2·(2M)²·Σ C(p − 1, i1)·C(p, i2)·C(q, j1)·C(q − 1, j2) = 2·(2M)²·C(2p − 1, a)·C(2q − 1, b) < 2^83·2^(2p−1)·2^(2q−1) = 2^(81+2p+2q) ≤ 2^193 for p, q ≤ 28 ([`crate::MAX_DEGREE`]), and every partial sum below the same bound: in `geom-num`'s [`I256`] (limit 2^255), every step checked. A check that fails would be a defect in this derivation, reported as [`NurbsError::Defect`], never a wrong sign.",
             "**Collapsed edges, exactly.** An edge counts only when its grid points are equal; then the normal patch's row along it is zero (checked), and in scaled form dividing by the factor that vanishes there is dropping that row: f = Σ `c_k`·t^k·(1 − t)^(n−k) with `c_0` = 0 is t·Σ `c_(k+1)`·t^k·(1 − t)^(n−1−k), and with `c_n` = 0 it is (1 − t)·Σ `c_k`·t^k·(1 − t)^(n−1−k).",
             "**Deterministic.** Integer arithmetic only."
@@ -7669,7 +8422,7 @@
         },
         {
           "cost": "constant for a plane: nine interval operations.",
-          "does": "[`ImplicitBound::enclose_box`] gives enclosures of F and of its gradient over a box of points, and whether F is smooth throughout it. `geom-num`'s exact [`Plane`] implements it, F(x) = n·x + d, its first implementor; quadrics and tori come with their kinds (G65) and fields with `geom-field`.",
+          "does": "[`ImplicitBound::enclose_box`] gives enclosures of F and of its gradient over a box of points, and whether F is smooth throughout it. `geom-num`'s exact [`Plane`] implements it, F(x) = n·x + d, its first implementor; the analytic kinds implement it in `analytic`, each with the equation of its whole untrimmed shape (G168), and fields do with `geom-field`.",
           "family": [],
           "file": "projects/engines/geometry/crates/geom-surface/src/implicit.rs",
           "guarantees": [
