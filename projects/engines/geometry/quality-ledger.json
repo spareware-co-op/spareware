@@ -5164,14 +5164,6 @@
     },
     {
       "file": "projects/engines/geometry/crates/geom-intersect/src/curve.rs",
-      "mutant": "replace && with || in strip",
-      "line_text": "if dx == 0.0 && dy == 0.0 {",
-      "occurrences": 1,
-      "kind": "harmless",
-      "reason": "strip picks the normal and origin of the fat line a piece is clipped against: the slab BernsteinCurve::slab returns bounds n . (p - origin) over the piece's control points for whatever n and origin it is given, so it holds the whole piece, and clipping the other piece against it keeps every point the two share; a strip with no direction is None and the box stands as it was. So the answer stays complete and certified, and only how fast boxes shrink changes, with the work and the enclosures' widths, none of which the crate promises."
-    },
-    {
-      "file": "projects/engines/geometry/crates/geom-intersect/src/curve.rs",
       "mutant": "replace == with != in strip",
       "line_text": "if dx == 0.0 && dy == 0.0 {",
       "occurrences": 2,
@@ -5629,10 +5621,10 @@
     {
       "file": "projects/engines/geometry/crates/geom-intersect/src/curve.rs",
       "mutant": "replace && with || in curves",
-      "line_text": "let turned = matches!(b, CurveKind::Line(_)) && !matches!(a, CurveKind::Line(_));",
+      "line_text": "if matches!(b, CurveKind::Line(_)) && !matches!(a, CurveKind::Line(_)) {",
       "occurrences": 1,
       "kind": "harmless",
-      "reason": "turned only says the closed forms take the pair as (b, a), the answer swapped back. The mutant also turns pairs with no line, or two lines, and every closed form answers the pair one way round as it answers the other, swapped: the same items, up to the order the closed form computed them in and the rounding of their enclosures. The tests' pairs in either order give the same answers."
+      "reason": "The turn only says the closed forms take the pair as (b, a), the answer swapped back. The mutant also turns pairs with no line, or two lines, and every closed form answers the pair one way round as it answers the other, swapped: the same items, up to the order the closed form computed them in and the rounding of their enclosures. One that cannot decide the pair one way cannot the other, so the route's record is the same too. The tests' pairs in either order give the same answers."
     },
     {
       "file": "projects/engines/geometry/crates/geom-intersect/src/solve.rs",
@@ -5689,6 +5681,30 @@
       "occurrences": 1,
       "kind": "harmless",
       "reason": "The two differ only when a zero's box reaches exactly the floor, one grid step, where the mutant stops refining one step sooner. The zero stays proven, and only how tight its enclosure is changes (below a step either way, after at most one more step), which the crate does not promise; reach is a widest side of outward-rounded bounds, so it is exactly the floor only by coincidence."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-intersect/src/curve.rs",
+      "mutant": "replace > with >= in items_of",
+      "line_text": "apart |= difference.lo() > 0.0 || difference.hi() < 0.0;",
+      "occurrences": 1,
+      "kind": "harmless",
+      "reason": "A tie at the bound: the run is apart in a third coordinate only if the difference of the two enclosures is certainly one sign. Both enclosures are rounded outward, even at an exact value (a touch at z = 0 of a line at z = 0 and a cubic leaves z in [-3e-323, 0.0156], a_touch_at_a_shared_level_is_kept), so the difference ends exactly at 0 only by a coincidence of two rounded bounds, where either answer keeps the run's other checks."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-intersect/src/curve.rs",
+      "mutant": "replace < with <= in items_of",
+      "line_text": "apart |= difference.lo() > 0.0 || difference.hi() < 0.0;",
+      "occurrences": 1,
+      "kind": "harmless",
+      "reason": "A tie at the bound: the run is apart in a third coordinate only if the difference of the two enclosures is certainly one sign. Both enclosures are rounded outward, even at an exact value (a touch at z = 0 of a line at z = 0 and a cubic leaves z in [-3e-323, 0.0156], a_touch_at_a_shared_level_is_kept), so the difference ends exactly at 0 only by a coincidence of two rounded bounds, where either answer keeps the run's other checks."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-intersect/src/curve.rs",
+      "mutant": "replace plane -> Result<[usize; 2], IntersectError> with Ok([1; 2])",
+      "line_text": "if D < 3 {",
+      "occurrences": 1,
+      "kind": "hangs",
+      "reason": "Both coordinates of the solve the same: every pair in space projects onto one line, so no box ever proves a zero or its absence and the solver halves each to its floor, past the run's timeout (300 s on the full run of curve.rs)."
     }
   ],
   "coverage_off": [

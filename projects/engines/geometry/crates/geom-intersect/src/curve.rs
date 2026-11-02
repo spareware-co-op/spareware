@@ -1494,21 +1494,38 @@ fn level<const D: usize>(a: &Circle<D>, b: &Circle<D>) -> Option<[usize; 2]> {
     })
 }
 
-/// The closed form for `a` and `b`, in that order, if there is one that decides.
+/// What a pair's closed form does with it.
+enum Closed {
+    /// It decides: the answer.
+    Decided(Intersection),
+    /// It applies but cannot decide, and the engine takes the pair: a change of route, which 12.7
+    /// puts on the record.
+    Undecided,
+    /// The pair has none, and the engine takes it from the start.
+    Absent,
+}
+
+/// A closed form's answer, `None` where it could not decide.
+fn decided(answer: Option<Intersection>) -> Closed {
+    answer.map_or(Closed::Undecided, Closed::Decided)
+}
+
+/// The closed form for `a` and `b`, in that order: lines with lines and with conics, in the plane
+/// or in one plane of space, and circles in one level plane.
 fn closed_form<const D: usize>(
     a: &CurveKind<D>,
     b: &CurveKind<D>,
     meter: &mut WorkMeter<'_>,
-) -> Result<Option<Intersection>, IntersectError> {
+) -> Result<Closed, IntersectError> {
     let flat = D == 2;
     match (a, b) {
         (CurveKind::Line(x), CurveKind::Line(y)) if flat => {
-            line_line(x, y, [0, 1], meter).map(Some)
+            line_line(x, y, [0, 1], meter).map(Closed::Decided)
         }
-        (CurveKind::Line(x), CurveKind::Line(y)) => lines_in_space(x, y, meter),
+        (CurveKind::Line(x), CurveKind::Line(y)) => lines_in_space(x, y, meter).map(decided),
         (CurveKind::Circle(x), CurveKind::Circle(y)) => match level(x, y) {
-            Some(axes) => circle_circle(x, y, axes, meter).map(Some),
-            None => Ok(None),
+            Some(axes) => circle_circle(x, y, axes, meter).map(Closed::Decided),
+            None => Ok(Closed::Absent),
         },
         (CurveKind::Line(x), other) => {
             let axes = if flat {
@@ -1517,18 +1534,18 @@ fn closed_form<const D: usize>(
                 shared_plane(a, b).map(across)
             };
             let Some(axes) = axes else {
-                return Ok(None);
+                return Ok(Closed::Absent);
             };
             let Some(conic) = conic_of(other, axes)? else {
-                return Ok(None);
+                return Ok(Closed::Absent);
             };
             let exact = match other {
                 CurveKind::Circle(c) => exactly(x, c),
                 _ => None,
             };
-            line_conic(x, &conic, axes, exact, meter)
+            line_conic(x, &conic, axes, exact, meter).map(decided)
         }
-        _ => Ok(None),
+        _ => Ok(Closed::Absent),
     }
 }
 
@@ -1600,17 +1617,20 @@ pub fn curves<const D: usize>(
     if a == b {
         return whole_overlap(a.domain(), b.domain(), meter);
     }
-    if let Some(answer) = closed_form(a, b, meter)? {
-        return Ok(answer);
+    // 12.7: every change of route is on the record, so a pair whose closed form could not decide
+    // says it came to the engine for that reason; one with none does not.
+    let mut routed = false;
+    match closed_form(a, b, meter)? {
+        Closed::Decided(answer) => return Ok(answer),
+        Closed::Undecided => routed = true,
+        Closed::Absent => {}
     }
-    let turned = matches!(b, CurveKind::Line(_)) && !matches!(a, CurveKind::Line(_));
-    let answer = if turned {
-        closed_form(b, a, meter)?
-    } else {
-        None
-    };
-    if let Some(answer) = answer {
-        return Ok(answer.swapped(1));
+    if matches!(b, CurveKind::Line(_)) && !matches!(a, CurveKind::Line(_)) {
+        match closed_form(b, a, meter)? {
+            Closed::Decided(answer) => return Ok(answer.swapped(1)),
+            Closed::Undecided => routed = true,
+            Closed::Absent => {}
+        }
     }
     let (s, t) = (finite(a)?, finite(b)?);
     let shared = if D == 3 { shared_plane(a, b) } else { None };
@@ -1630,22 +1650,7 @@ pub fn curves<const D: usize>(
     let [first, second] = seams;
     let domain = [first.side()?, second.side()?];
     let solved = solve(&gap, domain, |_, _| Ok(true), meter)?;
-    // 12.7: every change of route is on the record. A pair with a closed form that could not decide
-    // came here for that reason.
-    let line = |c: &CurveKind<D>| matches!(c, CurveKind::Line(_));
-    let conic = |c: &CurveKind<D>| {
-        matches!(
-            c,
-            CurveKind::Circle(_)
-                | CurveKind::Ellipse(_)
-                | CurveKind::Hyperbola(_)
-                | CurveKind::Parabola(_)
-        )
-    };
-    let circle = |c: &CurveKind<D>| matches!(c, CurveKind::Circle(_));
-    let closed =
-        (line(a) && (line(b) || conic(b))) || (conic(a) && line(b)) || (circle(a) && circle(b));
-    let route = if closed {
+    let route = if routed {
         alloc::vec![Diag { code: ROUTE.into() }]
     } else {
         Vec::new()
