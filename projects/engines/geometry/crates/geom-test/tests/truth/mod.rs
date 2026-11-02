@@ -20,7 +20,6 @@ use geom_curve::{
     Axes, Basis, BulgePolyline, Circle, Composite, CurveKind, Ellipse, Frame, Helix, HelixAxes,
     Hyperbola, Involute, Line, Parabola, Polynomial, Transition,
 };
-use geom_curve::{IntersectionCurve, Span};
 use geom_math::{Axis, GridTransform, RationalTransform, Rotation, Transform, TypedTransform};
 use geom_nurbs::Basis as Knots;
 use geom_run::{Budget, WorkMeter};
