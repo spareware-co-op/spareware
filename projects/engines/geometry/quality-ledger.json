@@ -875,46 +875,6 @@
       "reason": "from and to are equal only for a side shrunk to a point, whose low equals its high. A stretch runs between two different marks, so such a side is along no stretch and its direction is never read."
     },
     {
-      "file": "projects/engines/geometry/crates/geom-poly/src/merge.rs",
-      "mutant": "delete ! in rings",
-      "line_text": ".filter(|o| !used.contains_key(o))",
-      "occurrences": 1,
-      "kind": "hangs",
-      "reason": "The ring walk goes on to a fin leaving the last fin's end that it has not used yet. The mutant takes only used ones, so each of a face's fins but the last ends a ring of its own at once, and the last, whose way on is a used fin, then follows used fins round the face for ever, pushing each onto its ring. Every merge meets it, so the tests stop it by their timeout. It hangs; it never returns wrong rings."
-    },
-    {
-      "file": "projects/engines/geometry/crates/geom-poly/src/merge.rs",
-      "mutant": "replace < with > in radial",
-      "line_text": "let rising = |fin: &Fin| fin.from < fin.to;",
-      "occurrences": 1,
-      "kind": "equivalent",
-      "reason": "rising is read only to compare one fin's with another's: the flap's reversed, turned, and the test before each join. A fin's two ends are its edge's low and high, numbers of two different points, so > is the negation of < on every fin, every rising turns over together, and every comparison comes out the same."
-    },
-    {
-      "file": "projects/engines/geometry/crates/geom-poly/src/merge.rs",
-      "mutant": "replace < with <= in radial",
-      "line_text": "let rising = |fin: &Fin| fin.from < fin.to;",
-      "occurrences": 1,
-      "kind": "equivalent",
-      "reason": "A fin's two vertices are its edge's two ends, numbers of two different points, because a run's low is below its high. They are never equal."
-    },
-    {
-      "file": "projects/engines/geometry/crates/geom-poly/src/merge.rs",
-      "mutant": "replace == with != in radial",
-      "line_text": "reversed: rising(&fin) == rising(&start),",
-      "occurrences": 1,
-      "kind": "equivalent",
-      "reason": "The mutant turns every flap's reversed over, the reference's with the rest, since all of them come from flap. about reads reversed only through turn_about and same_flap, each of which asks only whether two flaps' reversed differ, so every order about gives, and with it last, is the same; turned and the joins read rising, not the flaps."
-    },
-    {
-      "file": "projects/engines/geometry/crates/geom-poly/src/merge.rs",
-      "mutant": "replace ratio_in_words -> Option<Ordering> with None",
-      "line_text": "let left = a.to_i128()?.checked_mul(d.to_i128()?)?;",
-      "occurrences": 1,
-      "kind": "equivalent",
-      "reason": "ratio_in_words only answers what ratio_order's wide path would: the sign of a · d − c · b, exactly, in i128 when everything fits. Returning None sends every comparison to the wide path, which gives the same sign; only the time changes."
-    },
-    {
       "file": "projects/engines/geometry/crates/geom-surface/src/contract.rs",
       "mutant": "replace + with * in check",
       "line_text": "let outside = beyond + 1.0;",
