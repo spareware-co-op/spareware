@@ -960,15 +960,23 @@ fn far_tilted_solids_merge_in_wide_integers_and_the_boxes_do_not_show() {
     };
     let a = far([[0, 0, 0], [90, 10, 0], [10, 80, 10], [20, 10, 70]], 3);
     let b = far([[10, 10, 10], [80, 30, 20], [30, 90, 40], [40, 20, 90]], -5);
+    // And the same mirrored in x, which turns the sign of every three planes' determinant.
+    let mirror = |c: [[i64; 3]; 4]| c.map(|[x, y, z]| [-x, y, z]);
     let test = WindingTest::unite();
-    let whole = tilted(&[a, b], &test, 1000).unwrap();
-    assert!(whole.vertices.iter().any(wide));
-    for leaf in [1, 4, 16] {
-        let m = tilted(&[a, b], &test, leaf).unwrap();
-        assert_eq!(m.vertices, whole.vertices, "leaf {leaf}");
-        assert_eq!(m.edges, whole.edges, "leaf {leaf}");
+    for (a, b) in [(a, b), (mirror(a), mirror(b))] {
+        let whole = tilted(&[a, b], &test, 1000).unwrap();
+        assert!(whole.vertices.iter().any(wide));
+        for leaf in [1, 4, 16] {
+            let m = tilted(&[a, b], &test, leaf).unwrap();
+            assert_eq!(m.vertices, whole.vertices, "leaf {leaf}");
+            assert_eq!(m.edges, whole.edges, "leaf {leaf}");
+        }
+        sorted_on_the_grid(&whole);
     }
-    // The points come in lexicographic order, as the wide comparison decides it.
+}
+
+/// The points come in lexicographic order, as the wide comparison decides it.
+fn sorted_on_the_grid(whole: &Merged) {
     for pair in whole.vertices.windows(2) {
         let (p, q) = (
             pair[0].to_grid().unwrap().value(),
@@ -976,6 +984,49 @@ fn far_tilted_solids_merge_in_wide_integers_and_the_boxes_do_not_show() {
         );
         assert!((p.x.get(), p.y.get(), p.z.get()) <= (q.x.get(), q.y.get(), q.z.get()));
     }
+}
+
+#[test]
+fn two_tilted_solids_moved_to_the_frame_s_far_corner_merge_the_same() {
+    // Small tilted solids, their edges a few thousand steps, so their normals are near 2^24; moved
+    // by a grid vector to within 10^4 steps of the frame's corner, their planes' offsets pass
+    // `i64` while their normals and meeting points still fit `i128`. Moving every input by a grid
+    // vector moves every vertex by it and changes nothing else.
+    let a = [
+        [0, 0, 0],
+        [4999, 701, 3],
+        [607, 4801, 903],
+        [1301, 599, 4703],
+    ];
+    let b = [
+        [701, 803, 599],
+        [5303, 2101, 1409],
+        [2003, 5897, 2609],
+        [2707, 1301, 5801],
+    ];
+    let t = (1i64 << 40) - 7001;
+    let moved = |c: [[i64; 3]; 4]| c.map(|p| p.map(|v| v + t));
+    let test = WindingTest::unite();
+    let near = tilted(&[a, b], &test, LEAF_POLYGONS).unwrap();
+    let far = tilted(&[moved(a), moved(b)], &test, LEAF_POLYGONS).unwrap();
+    assert!(
+        far.sheets
+            .iter()
+            .any(|s| i64::try_from(s.face.d()).is_err())
+    );
+    assert_eq!(near.vertices.len(), far.vertices.len());
+    for (p, q) in near.vertices.iter().zip(&far.vertices) {
+        let (p, q) = (p.to_grid().unwrap(), q.to_grid().unwrap());
+        assert_eq!(p.is_exact(), q.is_exact());
+        let (p, q) = (p.value(), q.value());
+        assert_eq!(
+            [p.x.get() + t, p.y.get() + t, p.z.get() + t],
+            [q.x.get(), q.y.get(), q.z.get()]
+        );
+    }
+    let ends = |m: &Merged| m.edges.iter().map(|e| (e.low, e.high)).collect::<Vec<_>>();
+    assert_eq!(ends(&near), ends(&far));
+    assert_eq!(near.faces.len(), far.faces.len());
 }
 
 #[test]

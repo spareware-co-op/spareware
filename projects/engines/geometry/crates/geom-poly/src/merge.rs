@@ -484,20 +484,9 @@ impl<const N: usize> Ord for CellKey<'_, N> {
     }
 }
 
-/// A parallel phase's error as the merge's: the item's own, or the meter's stop, which the helper
-/// latches; a stop it did not latch is the helper's defect.
-fn phase_error(error: RunError<MergeError>, meter: &mut WorkMeter<'_>) -> MergeError {
-    match error {
-        RunError::Failed(e) => e,
-        _ => meter
-            .poll()
-            .err()
-            .map_or(MergeError::Defect, MergeError::Stopped),
-    }
-}
-
-/// A parallel arrangement step's error as the merge's, as [`phase_error`] reads the merge's own.
-fn traced(error: RunError<TraceError>, meter: &mut WorkMeter<'_>) -> MergeError {
+/// A parallel phase's error as the merge's: the item's own, the merge's or the arrangement's, or
+/// the meter's stop, which the helper latches; a stop it did not latch is the helper's defect.
+fn phase_error<E: Into<MergeError>>(error: RunError<E>, meter: &mut WorkMeter<'_>) -> MergeError {
     match error {
         RunError::Failed(e) => e.into(),
         _ => meter
@@ -892,9 +881,13 @@ fn sheets_of<'p>(
         .zip(pieces)
         .map(|(key, piece)| (key, (piece.turned, piece.polygon)))
         .collect();
-    let sorted = exec.sort_stable(meter, SORT_SHEETS, SORT_PLAN, &keyed, |(key, source)| {
-        (*key, *source)
-    });
+    let sorted = exec.sort_stable::<_, _, MergeError, _>(
+        meter,
+        SORT_SHEETS,
+        SORT_PLAN,
+        &keyed,
+        |(key, source)| (*key, *source),
+    );
     let order = sorted.map_err(|e| phase_error(e, meter))?;
     let mut sheets: Vec<Sheet> = Vec::new();
     let mut held = Vec::with_capacity(order.len());
@@ -940,7 +933,10 @@ fn numbered(
     let keys: Option<Vec<&[Cell; 3]>> = corners.iter().map(|c| c.cells.as_ref()).collect();
     let order = if let Some(keys) = keys {
         // Equal points keep their order, as the serial stable sort keeps it.
-        let sorted = exec.sort_stable(meter, SORT_CORNERS, SORT_PLAN, &keys, |k| CellKey(k));
+        let sorted =
+            exec.sort_stable::<_, _, MergeError, _>(meter, SORT_CORNERS, SORT_PLAN, &keys, |k| {
+                CellKey(k)
+            });
         sorted.map_err(|e| phase_error(e, meter))?
     } else {
         let mut order: Vec<usize> = (0..corners.len()).collect();
@@ -1040,8 +1036,8 @@ fn grid_point(corner: &Corner) -> Result<Option<Tpi>, NumError> {
         [p.x.get(), p.y.get(), p.z.get()].map(i128::from)
     };
     let [x, y, z] = at;
-    let axis =
-        |n: [i128; 3], v: i128| Plane::new(n, v.checked_neg().ok_or(NumError::BudgetExceeded)?);
+    // A grid point's coordinates are within 2^40, so negating one cannot saturate.
+    let axis = |n: [i128; 3], v: i128| Plane::new(n, v.saturating_neg());
     Ok(Some(Tpi::meeting(
         axis([1, 0, 0], x)?,
         axis([0, 1, 0], y)?,
@@ -1094,9 +1090,13 @@ fn sides_of(
         .collect();
     if let Some(keys) = keys {
         // Sides on one line keep their order, as the serial stable sort keeps it.
-        let sorted = exec.sort_stable(meter, SORT_SIDES, SORT_PLAN, &keys, |(first, cells)| {
-            (*first, CellKey(cells))
-        });
+        let sorted = exec.sort_stable::<_, _, MergeError, _>(
+            meter,
+            SORT_SIDES,
+            SORT_PLAN,
+            &keys,
+            |(first, cells)| (*first, CellKey(cells)),
+        );
         let order = sorted.map_err(|e| phase_error(e, meter))?;
         return Ok((sides, order));
     }
@@ -1356,7 +1356,7 @@ fn sides_of_first(
     exec: &Exec<'_>,
     meter: &mut WorkMeter<'_>,
 ) -> Result<(Winding, Winding), MergeError> {
-    let cell = around_on(exec, polygons, meter).map_err(|e| traced(e, meter))?;
+    let cell = around_on(exec, polygons, meter).map_err(|e| phase_error(e, meter))?;
     let lists: Vec<Vec<Piece>> = polygons
         .iter()
         .take(1)
