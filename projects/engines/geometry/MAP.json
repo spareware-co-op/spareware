@@ -2494,7 +2494,7 @@
         },
         {
           "cost": "for each parameter, a few enclosures and bounds of the kind, a split, a reversal and a transform: the kind's own costs, a few dozen times.",
-          "does": "[`check`] runs a kind through every law of [`Law`] at the parameters given and returns the first law broken, with where. The laws compare certified objects with each other: two enclosures of one exact value must overlap, so a bound, an enclosure, a conversion, a split, a reversal or a transform that is wrong by more than its own stated error is caught wherever a sample lands on it. Evaluation in doubles is compared with the certified enclosure within a relative 2^−30, which catches a wrong formula, not rounding.",
+          "does": "[`check`] runs a kind through every law of [`Law`] at the parameters given and returns the first law broken, with where. The laws compare certified objects with each other: two enclosures of one exact value must overlap, so a bound, an enclosure, a conversion, a split, a reversal or a transform that is wrong by more than its own stated error is caught wherever a sample lands on it. Evaluation in doubles is compared with the certified enclosure within 2^−30 of the largest value at that parameter, which catches a wrong formula, not rounding.",
           "family": [],
           "file": "projects/engines/geometry/crates/geom-curve/src/contract.rs",
           "guarantees": [
@@ -3192,6 +3192,29 @@
           "target": "lib"
         },
         {
+          "cost": "building and querying trees of at most [`MAX_BOXES`] boxes and an index of at most [`MAX_POINTS`] points, and brute force over them, O(n²); at most [`MAX_INPUT_BYTES`] bytes.",
+          "does": "[`decode`] turns a fuzzer's bytes into a [`Case`]: up to [`MAX_BOXES`] boxes in two or three dimensions, a query box, a second set of boxes, a set of moved boxes, up to [`MAX_POINTS`] grid points, a centre and a radius. [`check`] builds `geom_bvh::BoxTree`s and a `geom_bvh::CellIndex` and holds every query to the answer of a brute force written here, from the boxes' corners and exact integer distances, never from `geom-bvh`'s own tests: overlapping a box, all overlapping pairs, pairs across two trees, a refit's answers (piece G54), and the points within a radius of a point and all pairs within a radius (G55). [`harness`] is `decode` then `check`.",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-fuzz/src/boxtree.rs",
+          "guarantees": [
+            "**Any bytes are a case.** Coordinates are small whole numbers most of the time, so boxes touch, nest and coincide often, with the frame's far reaches through a rule byte; keys are distinct. A tree or index `geom-bvh` refuses to build is legal.",
+            "**A panic is a failure; a different answer is a [`Finding`].**",
+            "**No hang.** Every call runs under a work meter of [`WORK`] units, serially.",
+            "**A bounded input.** [`decode`] reads at most [`MAX_INPUT_BYTES`] bytes, derived below."
+          ],
+          "job": "Fuzz target: the box tree and the cell index answer every query as brute force does, on any bytes.",
+          "method": {
+            "links": [
+              "projects/engines/geometry/architecture/19-meshes-spatial-clash.md"
+            ],
+            "text": "the queries' definitions in chapter 19 (closed boxes meet when they meet on every axis; Euclidean distance at most r, compared as squared integers; `projects/engines/geometry/architecture/19-meshes-spatial-clash.md`), checked by all-pairs brute force as 28.3's row for spatial queries asks, driven by coverage-guided fuzzing (28.5)."
+          },
+          "path": "geom_fuzz::boxtree",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
           "cost": "at most [`MAX_POINTS`] points and [`MAX_CONSTRAINTS`] constraints, two triangulations, and one pass over each edge and constraint of the result.",
           "does": "[`decode`] turns a fuzzer's bytes into a [`Case`]: up to [`MAX_POINTS`] points on an 8 × 8 lattice, where ties and collinear points are the rule, scaled by one of [`SCALES`], and up to [`MAX_CONSTRAINTS`] constraints between them. [`check`] triangulates the case, holds the result to the definitions of chapter 17.3, written here without the code's help, and triangulates it again with the sites turned and the constraints reversed. [`harness`] is `decode` then `check`, the function every fuzzing engine drives (the crate README sets out the layout).",
           "family": [],
@@ -3210,6 +3233,29 @@
             "text": "the laws, by exact predicates and exact integers. Every triangle is counter-clockwise, no edge is used twice one way, and the triangles' area is the hull's, so they fill it without overlap. Every edge that is not constrained is locally Delaunay: the far corner is outside the circle, and at a tie the edge misses the lowest-ranked of the four corners, which simulation of simplicity raises most (chapter 17.3, `projects/engines/geometry/architecture/17-survey-terrain-civil.md`). Each constraint's two ends are joined by constrained edges. The turned input gives the same result: the same value, so the same bytes."
           },
           "path": "geom_fuzz::cdt",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
+          "cost": "one kind built and one contract check per input, each bounded by [`WORK`] work units; at most [`MAX_INPUT_BYTES`] bytes read.",
+          "does": "[`decode`] turns a fuzzer's bytes into a [`Case`]: a curve kind (one of the 15 of `geom_curve::CurveKind`, in two or three dimensions as the kind allows), the doubles it is built from, up to four parameters in its domain and a typed transform. [`check`] builds the kind and runs `geom_curve::contract::check` on it, the kind contract kit every kind is held to (piece G60, with G68's derivative laws), under a bounded work meter. [`harness`] is `decode` then `check`, the function every fuzzing engine drives (the crate README sets out the layout). It reaches pieces G60 to G64, G67 and G68 (Gate 2, 32.44).",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-fuzz/src/curves.rs",
+          "guarantees": [
+            "**Any bytes are a case.** Every byte string, the empty one included, decodes to a case. Each double is read through a rule byte that makes the hard values common: 0, ±1, a whole number or a short binary fraction on a coarse grid (so coincident and parallel data come up), a tiny or huge power of two, or a double read from the input (non-finite ones replaced by 0).",
+            "**What is a finding.** A law of the contract broken with no error behind it, or any call failing as `CurveError::Defect` (an internal step the kernel says cannot fail), is a [`Finding`]; a kind that refuses to be built, or a call that refuses with a typed error (an overflow at an extreme size, a budget stop), is legal. A panic fails every engine.",
+            "**No hang.** Every call runs under a work meter of [`WORK`] units; running out is a typed stop, which is legal.",
+            "**A bounded input.** [`decode`] reads at most [`MAX_INPUT_BYTES`] bytes, derived below; a unit test builds the input that reaches it."
+          ],
+          "job": "Fuzz target: every curve kind keeps the kind contract on any bytes.",
+          "method": {
+            "links": [
+              "projects/engines/geometry/architecture/28-testing.md"
+            ],
+            "text": "the kind contract of chapter 7 as `geom_curve::contract` states it, driven by coverage-guided fuzzing (chapter 28.5), with inputs aimed at the hard cases 28.5 lists (`projects/engines/geometry/architecture/28-testing.md`)."
+          },
+          "path": "geom_fuzz::curves",
           "provenance": [],
           "spdx": null,
           "target": "lib"
@@ -3259,6 +3305,29 @@
           "target": "lib"
         },
         {
+          "cost": "each decomposition of a matrix of at most [`MAX_DIM`]² entries, and their exact residuals, O(n³) rational operations; at most [`MAX_INPUT_BYTES`] bytes read.",
+          "does": "[`decode`] turns a fuzzer's bytes into a [`Case`]: a matrix of up to [`MAX_DIM`] × [`MAX_DIM`] entries. [`check`] runs `geom-linalg`'s decompositions on it and holds each to its stated guarantees:",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-fuzz/src/linalg.rs",
+          "guarantees": [
+            "**Any bytes are a case**, through the rule bytes of the `curves` target: 0, ±1, whole numbers and quarters, tiny and huge powers of two, or a double read from the input.",
+            "**What is a finding.** A law above broken, decided exactly in dashu's rationals. Every typed error is legal (the guarantees say which refusals each method makes); a panic fails.",
+            "**No hang.** Each call has a work budget of [`WORK`] units.",
+            "**A bounded input.** [`decode`] reads at most [`MAX_INPUT_BYTES`] bytes, derived below."
+          ],
+          "job": "Fuzz target: the dense decompositions are refused or finite, and the spectral ones backward stable, on any bytes.",
+          "method": {
+            "links": [
+              "projects/engines/geometry/architecture/28-testing.md"
+            ],
+            "text": "the guarantees in `geom_linalg::solve`, `qr`, `svd` and `eigen`, checked exactly as their tests do, driven by coverage-guided fuzzing (chapter 28.5, `projects/engines/geometry/architecture/28-testing.md`)."
+          },
+          "path": "geom_fuzz::linalg",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
           "cost": "at most [`MAX_STEPS`] transforms, each of at most [`MAX_COPIES`] copies, on a body of at most [`MAX_CORNERS`] base corners, each run twice and checked in full; at most [`MAX_INPUT_BYTES`] bytes read.",
           "does": "[`decode`] turns a fuzzer's bytes into a [`Case`]: a primitive, its inputs placed on the hard cases of chapter 28.5 (one-step sizes, coarse sub-grids, coordinates at the grid's edge), and a short list of transforms and patterns, each with the class the caller accepts and a work budget. [`check`] builds the primitive and runs the list, each step on the last result, and holds every outcome to the laws below. [`harness`] is `decode` then `check`.",
           "family": [],
@@ -3276,6 +3345,52 @@
             "text": "chapter 28.5's oracle stack and its generators aimed at the hard cases (`projects/engines/geometry/architecture/28-testing.md`), with the volume of a flat solid computed from its loops as an oracle the checker does not share."
           },
           "path": "geom_fuzz::make",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
+          "cost": "one function call and at most a dozen 400-bit Newton steps or series per input.",
+          "does": "[`decode`] turns a fuzzer's bytes into a [`Case`]: a function (sinpi, cospi, exp, ln or atan2, piece G47) and its argument or arguments. [`check`] calls it in `geom_num::math` and holds it to its table's claim, \"correctly rounded\": the result is the double nearest the exact value. The exact value comes from `geom_test::fixed`'s 400-bit fixed point: cos and sin of πt and e^x by their series, ln x by Newton's method on e^y, and atan2 by Newton's method on x·sin θ − y·cos θ. Typed refusals (a NaN or infinite argument, an overflow, a logarithm of a non-positive number) are legal where the table says so.",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-fuzz/src/maths.rs",
+          "guarantees": [
+            "**Any bytes are a case.** Arguments come through the rule bytes of the `curves` target, and for sinpi and cospi also near whole numbers and halves, where the results are exact or tiny.",
+            "**Decided only where 400 bits can.** A result smaller than 2^−250 in magnitude, or an exact value within the oracle's error of a midpoint between two doubles, is not judged: the oracle could not tell. Everywhere else a result that is not the nearest double is a [`Finding`].",
+            "**A panic is a failure.**",
+            "**A bounded input.** [`decode`] reads at most [`MAX_INPUT_BYTES`] bytes."
+          ],
+          "job": "Fuzz target: the proven maths functions are correctly rounded, on any bytes.",
+          "method": {
+            "links": [
+              "projects/engines/geometry/architecture/28-testing.md"
+            ],
+            "text": "correct rounding as `geom_num::math`'s table states it, checked against independent high-precision evaluation (chapter 28.9's reference implementations; `projects/engines/geometry/architecture/28-testing.md`), driven by coverage-guided fuzzing (28.5)."
+          },
+          "path": "geom_fuzz::maths",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
+          "cost": "one curve, one insertion, one Bernstein decomposition and one interpolation of at most [`MAX_POINTS`] points per input, each bounded by [`WORK`] work units, and their exact evaluations; at most [`MAX_INPUT_BYTES`] bytes read.",
+          "does": "[`decode`] turns a fuzzer's bytes into a [`Case`]: a NURBS curve in two or three dimensions (degree 1 to 4, a clamped or uniform knot vector with repeated knots, rational or not), a parameter, a knot to insert and the curve's control points again as data to interpolate. [`check`] builds it with `geom-nurbs` and holds four laws against `geom_test::nurbs_reference`, which computes the same curves in exact rationals:",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-fuzz/src/nurbs.rs",
+          "guarantees": [
+            "**Any bytes are a case**, through the rule bytes of the `curves` target: 0, ±1, whole numbers and quarters on a coarse grid, tiny and huge powers of two, or a double read from the input. Knot spans and weights are drawn positive; a curve or a fit `geom-nurbs` refuses is legal.",
+            "**What is a finding.** A law above broken, decided exactly, or any call failing as `NurbsError::Defect`; typed refusals (an overflow, a singular fit, a budget stop) are legal.",
+            "**No hang.** Every call runs under a work meter of [`WORK`] units.",
+            "**A bounded input.** [`decode`] reads at most [`MAX_INPUT_BYTES`] bytes, derived below."
+          ],
+          "job": "Fuzz target: NURBS curves keep their stated bounds against exact rational evaluation on any bytes.",
+          "method": {
+            "links": [
+              "projects/engines/geometry/architecture/28-testing.md"
+            ],
+            "text": "the bounds `geom-nurbs` states, checked exactly against the reference implementation of chapter 28.9 (`projects/engines/geometry/architecture/28-testing.md`), as piece G69's law catalogue does, driven here by coverage-guided fuzzing (28.5)."
+          },
+          "path": "geom_fuzz::nurbs",
           "provenance": [],
           "spdx": null,
           "target": "lib"
@@ -3353,6 +3468,29 @@
           "target": "lib"
         },
         {
+          "cost": "one isolation, one Brent search and one quadrature of a polynomial of degree at most [`MAX_ROOTS`], each bounded; at most [`MAX_INPUT_BYTES`] bytes read.",
+          "does": "[`decode`] turns a fuzzer's bytes into a [`Case`]: a polynomial in one unknown, the product of x − rᵢ for up to [`MAX_ROOTS`] roots on a grid of quarters (repeated roots included), a domain, the Newton operator to use, and a bracket's half-width. [`check`] holds three laws, decided exactly from the roots (the sign of the polynomial at a double is the product of the signs of x − rᵢ, each an exact comparison):",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-fuzz/src/roots.rs",
+          "guarantees": [
+            "**Any bytes are a case.** Roots are quarters in [−8, 8], so repeated roots, roots on the domain's ends and roots on the engine's split lines come up often.",
+            "**A panic is a failure; a broken law is a [`Finding`]**; every typed error is legal.",
+            "**No hang.** Each call runs under a work meter of [`WORK`] units, or an evaluation cap.",
+            "**A bounded input.** [`decode`] reads at most [`MAX_INPUT_BYTES`] bytes."
+          ],
+          "job": "Fuzz target: the root engine misses no root and proves none twice, and Brent's method brackets its zero, on any bytes.",
+          "method": {
+            "links": [
+              "projects/engines/geometry/architecture/28-testing.md"
+            ],
+            "text": "the engine's and Brent's stated guarantees (`geom_num::isolate`, `geom_num::brent`), checked against the exact roots, as `geom-num`'s `tests/attack_g53.rs` does on seeded systems, driven by coverage-guided fuzzing (chapter 28.5, `projects/engines/geometry/architecture/28-testing.md`)."
+          },
+          "path": "geom_fuzz::roots",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
           "cost": "`cases` runs of the harness, plus one `SplitMix64` word per eight bytes drawn and one or two words per length.",
           "does": "[`run`] resolves a seed with `geom_test::seed::resolve` (the test's default, or `SPAREKIT_SEED`; printed as `seed: <hex>`), then for each case draws a length in `0..=max_len` and that many bytes from `geom-test`'s `SplitMix64`, and runs the harness on them.",
           "family": [],
@@ -3395,6 +3533,51 @@
             "text": "chapter 19's laws (`projects/engines/geometry/architecture/19-meshes-spatial-clash.md`), by counting. Each box is a set of whole cells, so what covers a cell is a matter of three comparisons, written here without the code's help. A union, an intersection and a difference have the volumes their cells say; a cell's middle is inside what covers it; a slice has the area of the cells under it; a hull holds every corner; the sum of two boxes adds their sides; a text file carries the mesh with nothing rounded; a corner of a box is inside its envelope; and boxes with a cell between them are apart."
           },
           "path": "geom_fuzz::solids",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
+          "cost": "one kind built and one contract check per input, each bounded by [`WORK`] work units; at most [`MAX_INPUT_BYTES`] bytes read.",
+          "does": "[`decode`] turns a fuzzer's bytes into a [`Case`]: a surface kind (one of the 11 of `geom_surface::SurfaceKind`), the doubles it is built from, up to four parameter pairs in its domain and a typed transform. [`check`] builds the kind and runs `geom_surface::contract::check` on it, the kind contract kit every surface kind is held to (piece G60, with G68's derivative laws), under a bounded work meter. [`harness`] is `decode` then `check`, the function every fuzzing engine drives (the crate README sets out the layout). It reaches pieces G60 and G65 to G68 (Gate 2, 32.44).",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-fuzz/src/surfaces.rs",
+          "guarantees": [
+            "**Any bytes are a case.** Every byte string, the empty one included, decodes to a case, through the same rule bytes as the `curves` target: 0, ±1, whole numbers and quarters on a coarse grid, tiny and huge powers of two, or a double read from the input.",
+            "**What is a finding.** A law of the contract broken with no error behind it, or any call failing as `CurveError::Defect`, is a [`Finding`]; a kind that refuses to be built, or a call that refuses with a typed error (an overflow, a normal that cannot be separated from zero, a budget stop), is legal. A panic fails every engine.",
+            "**No hang.** Every call runs under a work meter of [`WORK`] units; running out is a typed stop, which is legal.",
+            "**A bounded input.** [`decode`] reads at most [`MAX_INPUT_BYTES`] bytes, derived below; a unit test builds the input that reaches it."
+          ],
+          "job": "Fuzz target: every surface kind keeps the kind contract on any bytes.",
+          "method": {
+            "links": [
+              "projects/engines/geometry/architecture/28-testing.md"
+            ],
+            "text": "the kind contract of chapter 7 as `geom_surface::contract` states it, driven by coverage-guided fuzzing (chapter 28.5), with inputs aimed at the hard cases 28.5 lists (`projects/engines/geometry/architecture/28-testing.md`)."
+          },
+          "path": "geom_fuzz::surfaces",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
+          "cost": "a handful of transform applications and one decimal parse per input; at most [`MAX_INPUT_BYTES`] bytes read.",
+          "does": "[`decode`] turns a fuzzer's bytes into a [`Case`]: a grid point, two grid transforms (signed permutations with whole-step translations), a rational transform (p ↦ (M·p + t)/d with small integers), a rational rotation (an integer quaternion), and a short text. [`check`] holds four laws, each decided exactly in rationals:",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-fuzz/src/transforms.rs",
+          "guarantees": [
+            "**Any bytes are a case.** Coordinates are drawn through rule bytes that make the frame's limits ±(2^40 − 1), 0 and ±1 common; a transform the constructors refuse, or an image out of the frame's range, is a typed error and legal.",
+            "**A panic is a failure; a broken law is a [`Finding`].**",
+            "**A bounded input.** [`decode`] reads at most [`MAX_INPUT_BYTES`] bytes, derived below."
+          ],
+          "job": "Fuzz target: the typed transforms move grid points exactly as their definitions say, and decimals round-trip, on any bytes.",
+          "method": {
+            "links": [
+              "projects/engines/geometry/architecture/07-geometry-types.md"
+            ],
+            "text": "each transform's definition in `geom-math` (chapter 7's typed transforms, `projects/engines/geometry/architecture/07-geometry-types.md`), evaluated exactly in dashu's rationals, and round-half-to-even read from the exact quotient; coverage-guided fuzzing (chapter 28.5)."
+          },
+          "path": "geom_fuzz::transforms",
           "provenance": [],
           "spdx": null,
           "target": "lib"
@@ -7849,6 +8032,7 @@
           "guarantees": [
             "**Well formed or refused.** A curve has exactly as many control points (and weights) as its basis has functions, every coordinate finite, every weight positive and finite, and every weighted coordinate w·P finite.",
             "**Points.** A nonrational point is within `γ_(7p+1)` · Σ `N_j`·|`P_j`| of the exact point: the basis values carry `γ_(6p)` each, and one product and p sums add p + 1 roundings. A rational point is within `γ_(14p+3)` · (Σ `N_j`·|`w_j`·`P_j`|) / (Σ `N_j`·`w_j`): the sums carry `γ_(7p+1)`, the weight sum relative to itself because every term is positive, and the division one more. On a clamped curve the ends are the end control points exactly (for a rational curve, the quotient w·P / w, rounded once).",
+            "**Underflow.** The bounds here are relative, so where a product falls below 2^−1022 (gradual underflow) a rounding may also err by up to 2^−1075 absolutely: each bound gains n·2^−1074 for its count n of roundings (7p + 1 for a point, 7p + 3 or e below for a derivative); for a rational curve, whose weights are taken in the normal range, n·2^−1074·(1 + 1 / Σ `N_j`·`w_j`), the roundings before the division scaled by it and the division's own not (piece G69's fuzz target found the point bound broken without it, at results near 2^−1074).",
             "**Derivatives.** A nonrational derivative of order k ≥ 1 is within `γ_(7p+3)` · Σ `M_j`·|`P_j`|. A rational derivative of order k is within `γ_e` · `MC_k`, e = (k + 1)(14p + 8 + k), where `MC_k` = (Σ `M_(k,j)`·|`w_j`·`P_j`| + `Σ_(i=1..k)` C(k, i) · (Σ `M_(i,j)`·`w_j`) · `MC_(k−i)`) / Σ `N_j`·`w_j` is Leibniz's recurrence run on magnitudes: each step adds the error of the sums, two products, k subtractions and the division to the error of the lower orders. The value of order 0 has the same bits as [`Curve::point`].",
             "**Derivative curves.** The k-th derivative curve's control points are each within `γ_(4k)` of the same differences run on magnitudes (each difference of two points replaced by the sum of their absolute values); each level adds a rounded knot difference, a quotient, two products and a sum. Its value at a parameter is the k-th derivative of the curve.",
             "**Typed failures.** A result that overflows is [`NurbsError::NotFinite`]; a derivative curve across a knot where a lower derivative jumps is [`NurbsError::Discontinuous`], where `NLib` reports a numerical error; derivative curves of rational curves are [`NurbsError::Rational`] (their symbolic form needs products of B-splines, piece G59).",
@@ -8398,6 +8582,7 @@
           "guarantees": [
             "**Well formed or refused.** A surface has exactly one control point (and one weight) per pair of basis functions, every coordinate finite, every weight positive and finite, and every weighted coordinate finite.",
             "**Points.** A nonrational point is within `γ_(7p+7q+2)` · `Σ_i` `NU_i` `Σ_j` `NV_j`·|`P_ij`|; a rational one within `γ_(14p+14q+5)` times the same sum over |w·P| divided by Σ `NU_i` `NV_j` `w_ij`. Each inner sum carries `γ_(7q+1)`, and each product with a u basis value and the outer sum add `γ_(6p)` and p + 1 roundings.",
+            "**Underflow.** These bounds are relative, so where a product falls below 2^−1022 (gradual underflow) a rounding may also err by up to 2^−1075 absolutely: each bound gains n·2^−1074 for its count n of roundings (7p + 7q + 2 for a point, 7p + 7q + 6 or e below for a derivative); for a rational surface, whose weights are taken in the normal range, n·2^−1074·(1 + 1 / `Σ_i` `NU_i` `Σ_j` `NV_j`·`w_ij`) (piece G69).",
             "**Derivatives.** A nonrational derivative is within `γ_(7p+7q+6)` · `Σ_i` `MU_(k,i)` `Σ_j` `MV_(l,j)`·|`P_ij`|. A rational one is within `γ_e` · `MS_(k,l)`, e = (D + 1)(14p + 14q + 2D + 12), where `MS` is A4.4's recurrence run on magnitudes (every subtraction an addition, with the magnitude sums in place of A and of the weight derivatives); each step of the recurrence adds the error of the sums, two products per term, its sums and subtractions and the division to the largest error of the lower orders, and a chain of steps from order (0, 0) has at most D of them. The value of order (0, 0) has the same bits as [`Surface::point`].",
             "**Typed failures.** A parameter outside its domain is [`NurbsError::ParameterOutside`], a result that overflows [`NurbsError::NotFinite`], an order above [`MAX_DEGREE`] [`NurbsError::DerivativeOrder`].",
             "**Deterministic.** Fixed summation order (v inside u, by increasing index), no fused multiply-add, no platform maths."
@@ -10592,7 +10777,7 @@
         },
         {
           "cost": "for each parameter pair, a few enclosures and bounds (the partials to order 2 among them), a split, a reversal and a transform.",
-          "does": "[`check`] runs a kind through the laws of `geom-curve`'s [`Law`], read for surfaces, at the parameter pairs given, and returns the first law broken. As for curves, the laws compare certified objects: enclosures of one exact value must overlap after widening by the stated deviations (the partials of every order among them: [`ParamSurface::partials_over`]'s first three are the enclosure's, and its partials at a pair meet those over the box around it, as the second partials' and the unit normal's partials' bounds do, piece G68); the normal bound must keep the sign of every coordinate it decides; doubles must lie in the certified enclosures within a relative 2^−30 (a wrong formula, not rounding).",
+          "does": "[`check`] runs a kind through the laws of `geom-curve`'s [`Law`], read for surfaces, at the parameter pairs given, and returns the first law broken. As for curves, the laws compare certified objects: enclosures of one exact value must overlap after widening by the stated deviations (the partials of every order among them: [`ParamSurface::partials_over`]'s first three are the enclosure's, and its partials at a pair meet those over the box around it, as the second partials' and the unit normal's partials' bounds do, piece G68); the normal bound must keep the sign of every coordinate it decides; doubles must lie in the certified enclosures within 2^−30 of the largest value there (a wrong formula, not rounding).",
           "family": [],
           "file": "projects/engines/geometry/crates/geom-surface/src/contract.rs",
           "guarantees": [
@@ -11056,6 +11241,7 @@
             "**Test code is not counted.** Lines of items behind `#[cfg(test)]` are left out of both the lines found and the lines run, so tests cannot pad a crate's numbers.",
             "**A line with no code is not counted.** llvm-cov can give a line holding only a comment or an attribute (`#[must_use]` above a `const fn`) a count of 0 though the function runs ([`no_code_lines`]); such a line has nothing to run, so it is left out of both counts.",
             "**Nothing is skipped silently.** A source file that defines a function but has no coverage data was never compiled into the measured tests, and fails; so does a crate with no LCOV file at all, and a foundation crate whose code has `if` or `while` but whose data holds no branch record (the run was made without `--branch`).",
+            "**A branch outcome the LCOV lines cannot place counts as missed.** `BRF` can count outcomes that no `BRDA` line lists, where llvm-cov writes branch regions that start at one place as one pair (rustc's copies of a match guard, one for each alternative of an or-pattern). They are in the file's own code, so they are counted as found and never as hit, and they fail the foundation bar, since no ledger entry can name their line.",
             "**A missing foundation module fails.** A crate of [`crate::foundation::FOUNDATION_MODULES`] with code but no file of its foundation module fails, so moving the module cannot drop it from the foundation bar.",
             "**Every mark cites a checked proof.** A `coverage(off)` mark must have a comment right above it citing `proof: <path>::<name>`, the same proof as its ledger entry, and the cited file must define that function as a Kani harness (`#[kani::proof]`) or a Verus `proof fn`. A ledger entry with no mark is stale and fails.",
             "**Waiting lines are named, and can only go.** A foundation line the tests do not run passes only while the ledger's `awaiting_proof` names it, with the piece that proves it unreachable or tests it ([`excuse_awaiting`]); an entry that matches more or fewer missed lines than it says fails. When every kernel branch outcome of a file with a count of 0 waits so, which of them llvm-cov folded no longer matters, and the file's folding note is not a failure.",
@@ -11072,7 +11258,28 @@
             "text": "the LCOV tracefile records (`SF`, `DA`, `BRDA`, `BRF`, `end_of_record`) that `llvm-cov export -format=lcov` writes (<https://llvm.org/docs/CommandGuide/llvm-cov.html#llvm-cov-export>), each read by the `lcov` crate 0.8 (MIT OR Apache-2.0, <https://docs.rs/lcov/0.8.2/lcov/>); cargo-llvm-cov 0.9.1 (<https://docs.rs/crate/cargo-llvm-cov/0.9.1>) runs it. Branch coverage is rustc's `-Z coverage-options=branch`, nightly only (<https://doc.rust-lang.org/rustc/instrument-coverage.html>), which cargo-llvm-cov's `--branch` turns on."
           },
           "path": "geom_test::coverage",
-          "provenance": [],
+          "provenance": [
+            {
+              "licence": "Apache-2.0 WITH LLVM-exception",
+              "link": "https://github.com/rust-lang/llvm-project/blob/1b9c0d5ff9bbe7634aead059efe6b11a7eeba145/llvm/tools/llvm-cov/CoverageExporterLcov.cpp",
+              "method_note": null,
+              "name": "LLVM's llvm-cov",
+              "notice": [],
+              "pinned": true,
+              "purpose": "with `CoverageSummaryInfo.cpp` and `CodeCoverage.cpp` beside it at the same commit (the LLVM 23.1.1 the pinned nightly ships), for how its LCOV export counts `BRF` and writes `BRDA`. No code copied.",
+              "take": "port-method"
+            },
+            {
+              "licence": "MIT OR Apache-2.0",
+              "link": "https://github.com/rust-lang/rust/blob/21b707e3f97e0b522ebd2f277a862339625ad83f/compiler/rustc_mir_build/src/builder/matches/mod.rs",
+              "method_note": null,
+              "name": "rustc",
+              "notice": [],
+              "pinned": true,
+              "purpose": "with `compiler/rustc_mir_transform/src/coverage/mappings.rs` and `compiler/rustc_codegen_llvm/src/coverageinfo/mapgen/covfun.rs` at the same commit (the pinned nightly), for which branch regions it writes and where. No code copied.",
+              "take": "port-method"
+            }
+          ],
           "spdx": null,
           "target": "lib"
         },
@@ -13652,6 +13859,17 @@
       ]
     },
     {
+      "licence": "Apache-2.0 WITH LLVM-exception",
+      "link": "https://github.com/rust-lang/llvm-project/blob/1b9c0d5ff9bbe7634aead059efe6b11a7eeba145/llvm/tools/llvm-cov/CoverageExporterLcov.cpp",
+      "method_note": null,
+      "name": "LLVM's llvm-cov",
+      "pinned": true,
+      "take": "port-method",
+      "used_by": [
+        "projects/engines/geometry/crates/geom-test/src/coverage.rs"
+      ]
+    },
+    {
       "licence": "MIT OR Apache-2.0",
       "link": "https://github.com/rust-lang/rust-clippy/blob/3583eb8a9ae1161bd7d80907acfa09b3612a93f9/clippy_dev/src/parse/cursor.rs",
       "method_note": null,
@@ -13671,6 +13889,17 @@
       "take": "port-method",
       "used_by": [
         "projects/engines/geometry/crates/geom-test/src/map.rs"
+      ]
+    },
+    {
+      "licence": "MIT OR Apache-2.0",
+      "link": "https://github.com/rust-lang/rust/blob/21b707e3f97e0b522ebd2f277a862339625ad83f/compiler/rustc_mir_build/src/builder/matches/mod.rs",
+      "method_note": null,
+      "name": "rustc",
+      "pinned": true,
+      "take": "port-method",
+      "used_by": [
+        "projects/engines/geometry/crates/geom-test/src/coverage.rs"
       ]
     },
     {
