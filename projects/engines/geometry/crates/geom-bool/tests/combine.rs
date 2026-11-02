@@ -681,6 +681,53 @@ fn trim_keeps_the_runs_of_a_wire_that_hold_the_seeds() {
 }
 
 #[test]
+fn a_wire_edge_is_split_in_order_once_at_each_crossing_and_not_beside_a_face() {
+    // One straight edge through two blocks that share a face: it is split where it enters, where
+    // the blocks meet (both their faces there, one split) and where it leaves, in that order.
+    let near = cuboid([0, 0, 0], [20, 20, 20]);
+    let far = cuboid([20, 0, 0], [20, 20, 20]);
+    let line = polyline(&[[-10, 5, 5], [50, 5, 5]]);
+    let operands = || vec![solid(1, &near), solid(2, &far), cutter(3, &line)];
+    let keep = |test| Selection::Keep {
+        target: key(3),
+        test,
+    };
+    let either = picked(
+        operands(),
+        keep(vec![Term::Inside(key(1)), Term::Inside(key(2)), Term::Or]),
+    );
+    assert_eq!(
+        wire_shape(&either.result[0][0]),
+        (vec![[0, 5, 5], [40, 5, 5]], 1)
+    );
+    let second = picked(operands(), keep(vec![Term::Inside(key(2))]));
+    assert_eq!(
+        wire_shape(&second.result[0][0]),
+        (vec![[20, 5, 5], [40, 5, 5]], 1)
+    );
+    let trim = |seed| Selection::Trim {
+        target: key(3),
+        seeds: vec![seed],
+    };
+    let middle = picked(operands(), trim(p(30, 5, 5)));
+    assert_eq!(
+        wire_shape(&middle.result[0][0]),
+        (vec![[20, 5, 5], [40, 5, 5]], 1)
+    );
+    // Beside a block, the edge crosses the planes of two of its faces, outside them: no split, and
+    // a seed keeps the whole edge.
+    let beside = polyline(&[[-10, 30, 5], [50, 30, 5]]);
+    let whole = picked(
+        vec![solid(1, &near), cutter(3, &beside)],
+        trim(p(10, 30, 5)),
+    );
+    assert_eq!(
+        wire_shape(&whole.result[0][0]),
+        (vec![[-10, 30, 5], [50, 30, 5]], 1)
+    );
+}
+
+#[test]
 fn a_section_is_the_curve_where_operands_meet() {
     let a = cuboid([0, 0, 0], [40, 40, 40]);
     let b = cuboid([20, 20, 20], [40, 40, 40]);
