@@ -967,6 +967,13 @@ fn far_tilted_solids_merge_in_wide_integers_and_the_boxes_do_not_show() {
         for (a, b) in [(a, b), (mirror(a), mirror(b))] {
             let whole = tilted(&[a, b], &test, 1000).unwrap();
             assert!(whole.vertices.iter().any(wide));
+            // Where faces cross, the points are off the grid, and named as such.
+            assert!(
+                whole
+                    .vertices
+                    .iter()
+                    .any(|v| !v.to_grid().unwrap().is_exact())
+            );
             for leaf in [1, 4, 16] {
                 let m = tilted(&[a, b], &test, leaf).unwrap();
                 assert_eq!(m.vertices, whole.vertices, "leaf {leaf}");
@@ -1029,6 +1036,64 @@ fn two_tilted_solids_moved_to_the_frame_s_far_corner_merge_the_same() {
     let ends = |m: &Merged| m.edges.iter().map(|e| (e.low, e.high)).collect::<Vec<_>>();
     assert_eq!(ends(&near), ends(&far));
     assert_eq!(near.faces.len(), far.faces.len());
+}
+
+#[test]
+fn a_point_off_the_grid_is_named_by_the_first_three_planes_through_it() {
+    // A box on odd steps crossed by a tilted solid: points off the grid on the box's faces and
+    // the solid's. Each is named by three planes in plane order, never a corner's own three.
+    let mut polygons = scene(&[block([1, 1, 1], [5, 5, 5])]);
+    tetrahedron(
+        [[-2, 0, 2], [7, 1, 3], [2, 8, 2], [3, 2, 9]],
+        1,
+        &mut polygons,
+    )
+    .unwrap();
+    let key = |p: &Plane| (p.n(), p.d());
+    for leaf in [1, 4, LEAF_POLYGONS] {
+        let pieces = kept(&polygons, &WindingTest::unite(), leaf);
+        let m = merge(&pieces, Merge::RemoveRedundant, &mut meter()).unwrap();
+        closed(&m, &pieces);
+        let mut seen = false;
+        for v in m
+            .vertices
+            .iter()
+            .filter(|v| !v.to_grid().unwrap().is_exact())
+        {
+            seen = true;
+            let [p, q, r] = v.planes();
+            assert!(key(p) < key(q) && key(q) < key(r), "leaf {leaf}: {v:?}");
+        }
+        assert!(seen, "leaf {leaf}: no point off the grid");
+    }
+}
+
+#[test]
+fn a_line_read_in_words_and_in_wide_integers_is_one_line() {
+    // A box at the frame's far corner and a wedge whose face holds one of the box's edges. The
+    // box's own faces fit machine words, so that edge's line is read in words from them; the
+    // wedge's face has an offset past `i64`, so the same line is read in wide integers from it.
+    // Both readings must be one line, or the edge's fins would not meet.
+    let t = (1i64 << 40) - (1 << 27);
+    let at = |p: [i64; 3]| p.map(|v| v + t);
+    let mut polygons = scene(&[block(at([0, 0, 0]), at([4, 4, 4]))]);
+    let wedge = [
+        at([0, 0, 0]),
+        at([0, 0, 4]),
+        at([-33_554_393, 16_777_259, 1]),
+        at([16_777_213, -33_554_467, 3]),
+    ];
+    tetrahedron(wedge, 1, &mut polygons).unwrap();
+    for leaf in [1, LEAF_POLYGONS] {
+        let pieces = kept(&polygons, &WindingTest::unite(), leaf);
+        assert!(
+            pieces
+                .iter()
+                .any(|o| i64::try_from(o.piece.face.d()).is_err())
+        );
+        let m = merge(&pieces, Merge::RemoveRedundant, &mut meter()).unwrap();
+        closed(&m, &pieces);
+    }
 }
 
 #[test]

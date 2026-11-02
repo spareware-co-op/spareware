@@ -560,6 +560,13 @@ fn line_key(p: &Plane, q: &Plane) -> Result<LineKey, NumError> {
     }
 }
 
+/// Whether a line's coordinates are turned round, so that the first non-zero component of its
+/// direction is positive: one rule for keys in machine words and in [`I256`], which compare with
+/// each other.
+fn turned(first: Sign) -> bool {
+    first == Sign::Negative
+}
+
 /// [`line_key`] in [`I256`], for any two planes: each product below 2^250.
 fn wide_line_key(p: &Plane, q: &Plane) -> Result<LineKey, NumError> {
     let wide = I256::from_i128;
@@ -585,7 +592,7 @@ fn wide_line_key(p: &Plane, q: &Plane) -> Result<LineKey, NumError> {
         .take(3)
         .position(|v| !v.is_zero())
         .ok_or(NumError::Degenerate)?;
-    if coordinates.get(first).is_some_and(I256::is_negative) {
+    if coordinates.get(first).is_some_and(|v| turned(v.signum())) {
         for slot in &mut coordinates {
             *slot = slot.checked_neg().ok_or(NumError::BudgetExceeded)?;
         }
@@ -613,7 +620,10 @@ fn line_in_words(p: &Plane, q: &Plane) -> Option<([i128; 6], usize)> {
         minor(pd, qz, qd, pz)?,
     ];
     let first = coordinates.iter().take(3).position(|v| *v != 0)?;
-    if coordinates.get(first).is_some_and(|v| *v < 0) {
+    if coordinates
+        .get(first)
+        .is_some_and(|v| turned(Sign::of_i128(*v)))
+    {
         for slot in &mut coordinates {
             *slot = slot.checked_neg()?;
         }
