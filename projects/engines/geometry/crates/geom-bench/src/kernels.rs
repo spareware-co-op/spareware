@@ -2600,3 +2600,173 @@ pub mod roots {
         });
     }
 }
+
+/// `geom-intersect`'s hot paths (pieces G158 and G162, decision 32.44): items put in canonical
+/// order, a key read, a pair put in order, and a point projected, under an unlimited budget.
+pub mod intersect {
+    use geom_curve::CurveKind;
+    use geom_intersect::curve::{curves, self_crossings};
+    use geom_intersect::{
+        CanonicalKey, Coverage, Geom, IntersectError, Intersection, Item, Operand, Projection,
+        pair, project_curve, project_surface,
+    };
+    use geom_num::Steps;
+    use geom_run::{Budget, WorkMeter};
+    use geom_surface::SurfaceKind;
+
+    use super::run;
+
+    /// The floor of a projection: a micrometre, in metres.
+    const FLOOR: f64 = 1e-6;
+
+    /// A meter of its own, under no limit.
+    fn meter() -> WorkMeter<'static> {
+        WorkMeter::new(Budget::UNLIMITED)
+    }
+
+    /// `curves` on each pair.
+    #[inline(never)]
+    pub fn met(
+        batch: &[(CurveKind<2>, CurveKind<2>)],
+        out: &mut Vec<Result<Intersection, IntersectError>>,
+    ) {
+        run(batch, out, |(a, b)| curves(a, b, &mut meter()));
+    }
+
+    /// `self_crossings` on each curve.
+    #[inline(never)]
+    pub fn crossed(batch: &[CurveKind<2>], out: &mut Vec<Result<Intersection, IntersectError>>) {
+        run(batch, out, |curve| self_crossings(curve, &mut meter()));
+    }
+
+    /// `Intersection::new` on each list.
+    #[inline(never)]
+    pub fn sorted(batch: &[Vec<Item>], out: &mut Vec<Result<Intersection, IntersectError>>) {
+        run(batch, out, |items| {
+            Intersection::new(
+                items.clone(),
+                Coverage::CompleteOutsideFlagged,
+                Vec::new(),
+                &mut meter(),
+            )
+        });
+    }
+
+    /// `CanonicalKey::of_curve` on each curve.
+    #[inline(never)]
+    pub fn keys(batch: &[CurveKind<3>], out: &mut Vec<Result<CanonicalKey, IntersectError>>) {
+        run(batch, out, |curve| {
+            CanonicalKey::of_curve(curve, &mut meter())
+        });
+    }
+
+    /// An operand of `curve`.
+    fn operand(curve: &CurveKind<3>) -> Result<Operand<'_>, IntersectError> {
+        Ok(Operand {
+            geom: Geom::Curve(curve),
+            domain: None,
+            bound: Steps(0),
+            key: CanonicalKey::of_curve(curve, &mut meter())?,
+        })
+    }
+
+    /// The empty answer of a method that finds nothing.
+    fn nothing(_: &Operand<'_>, _: &Operand<'_>) -> Result<Intersection, IntersectError> {
+        Intersection::new(
+            Vec::new(),
+            Coverage::TopologyCertified,
+            Vec::new(),
+            &mut meter(),
+        )
+    }
+
+    /// `pair` on each pair of curves, their keys read first.
+    #[inline(never)]
+    pub fn paired(
+        batch: &[(CurveKind<3>, CurveKind<3>)],
+        out: &mut Vec<Result<Intersection, IntersectError>>,
+    ) {
+        run(batch, out, |(a, b)| {
+            pair(&operand(a)?, &operand(b)?, nothing)
+        });
+    }
+
+    /// `project_curve` on each arc and point.
+    #[inline(never)]
+    pub fn on_arcs(
+        batch: &[(CurveKind<3>, [f64; 3])],
+        out: &mut Vec<Result<Projection<1, 3>, IntersectError>>,
+    ) {
+        run(batch, out, |(curve, p)| {
+            project_curve(curve, p, FLOOR, &mut meter())
+        });
+    }
+
+    /// `project_surface` on each band and point.
+    #[inline(never)]
+    pub fn on_spheres(
+        batch: &[(SurfaceKind, [f64; 3])],
+        out: &mut Vec<Result<Projection<2, 3>, IntersectError>>,
+    ) {
+        run(batch, out, |(surface, p)| {
+            project_surface(surface, p, FLOOR, &mut meter())
+        });
+    }
+}
+
+/// The exact decisions on lines and quadrics (piece G159, decision 32.44): each discriminant through
+/// its filter, a torus's roots, and the tangent sphere of a cylinder and a cone.
+pub mod quadric {
+    use geom_num::quadric::{
+        Cone, Cylinder, Line, Sphere, Surface, Torus, axis_gap, line_cone, line_cylinder,
+        line_sphere, parallel, roots, tangent_cylinder_cone,
+    };
+    use geom_num::sturm::Roots;
+    use geom_num::{NumError, Sign};
+
+    use super::run;
+
+    /// `line_sphere` on each pair.
+    #[inline(never)]
+    pub fn spheres(batch: &[(Line, Sphere)], out: &mut Vec<Result<Sign, NumError>>) {
+        run(batch, out, |(l, s)| line_sphere(l, s));
+    }
+
+    /// `line_cylinder` on each pair.
+    #[inline(never)]
+    pub fn cylinders(batch: &[(Line, Cylinder)], out: &mut Vec<Result<Sign, NumError>>) {
+        run(batch, out, |(l, c)| line_cylinder(l, c));
+    }
+
+    /// `line_cone` on each pair.
+    #[inline(never)]
+    pub fn cones(batch: &[(Line, Cone)], out: &mut Vec<Result<Sign, NumError>>) {
+        run(batch, out, |(l, c)| line_cone(l, c));
+    }
+
+    /// `roots` on each line and torus.
+    #[inline(never)]
+    pub fn tori(batch: &[(Line, Torus)], out: &mut Vec<Result<Roots, NumError>>) {
+        run(batch, out, |(l, t)| roots(l, &Surface::Torus(*t)));
+    }
+
+    /// `parallel` on each pair of directions.
+    #[inline(never)]
+    pub fn directions(batch: &[(Line, Line)], out: &mut Vec<Result<bool, NumError>>) {
+        run(batch, out, |(u, v)| parallel(u.a, u.b, v.a, v.b));
+    }
+
+    /// `axis_gap` on each line's points and the other's first.
+    #[inline(never)]
+    pub fn gaps(batch: &[(Line, Line)], out: &mut Vec<Result<Sign, NumError>>) {
+        run(batch, out, |(u, v)| {
+            axis_gap(u.a, u.b, v.a, geom_num::grid::Steps(1024))
+        });
+    }
+
+    /// `tangent_cylinder_cone` on each pair.
+    #[inline(never)]
+    pub fn tangents(batch: &[(Cylinder, Cone)], out: &mut Vec<Result<Sign, NumError>>) {
+        run(batch, out, |(c, k)| tangent_cylinder_cone(c, k));
+    }
+}

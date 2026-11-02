@@ -981,9 +981,46 @@ fn growth_digest(name: &str, limbs: usize) -> Option<Digest> {
 /// The digest of the catalogued benchmark `group/name/class`, computed by calling the `geom-num`
 /// operation directly, or `None` for an operation this table does not know.
 fn direct_digest(group: &str, name: &str, class: Class) -> Option<Digest> {
+    use geom_num::quadric;
+    use inputs::quadric as iv;
     use inputs::{eft as ie, grid as ig, interval as ii, plane as ip, predicate as iq};
     use inputs::{exactness as ix, real as ir, sign as is};
     Some(match (group, name) {
+        ("quadric", "line_sphere") => fold(
+            iv::spheres(class)
+                .iter()
+                .map(|(l, s)| quadric::line_sphere(l, s)),
+        ),
+        ("quadric", "line_cylinder") => fold(
+            iv::cylinders(class)
+                .iter()
+                .map(|(l, c)| quadric::line_cylinder(l, c)),
+        ),
+        ("quadric", "line_cone") => fold(
+            iv::cones(class)
+                .iter()
+                .map(|(l, c)| quadric::line_cone(l, c)),
+        ),
+        ("quadric", "line_torus") => fold(
+            iv::tori(class)
+                .iter()
+                .map(|(l, t)| quadric::roots(l, &quadric::Surface::Torus(*t))),
+        ),
+        ("quadric", "parallel") => fold(
+            iv::directions(class)
+                .iter()
+                .map(|(u, v)| quadric::parallel(u.a, u.b, v.a, v.b)),
+        ),
+        ("quadric", "axis_gap") => fold(
+            iv::gaps(class)
+                .iter()
+                .map(|(u, v)| quadric::axis_gap(u.a, u.b, v.a, geom_num::grid::Steps(1024))),
+        ),
+        ("quadric", "tangent") => fold(
+            iv::tangents(class)
+                .iter()
+                .map(|(c, k)| quadric::tangent_cylinder_cone(c, k)),
+        ),
         ("predicate", "orient2d") => fold(
             iq::orient2d(class)
                 .into_iter()
@@ -1361,6 +1398,86 @@ fn direct_digest(group: &str, name: &str, class: Class) -> Option<Digest> {
                     .into_iter()
                     .map(|(a, b)| geom_num::brent::zero(inputs::roots::cubic, a, b, tol, 100)),
             )
+        }
+        ("intersect", "curve_segments") => fold(
+            inputs::intersect::segment_pairs(class)
+                .iter()
+                .map(|(a, b)| {
+                    let mut meter = geom_run::WorkMeter::new(geom_run::Budget::UNLIMITED);
+                    geom_intersect::curve::curves(a, b, &mut meter)
+                }),
+        ),
+        ("intersect", "curve_circles") => {
+            fold(inputs::intersect::circle_pairs(class).iter().map(|(a, b)| {
+                let mut meter = geom_run::WorkMeter::new(geom_run::Budget::UNLIMITED);
+                geom_intersect::curve::curves(a, b, &mut meter)
+            }))
+        }
+        ("intersect", "curve_line_circle") => {
+            fold(inputs::intersect::line_circles(class).iter().map(|(a, b)| {
+                let mut meter = geom_run::WorkMeter::new(geom_run::Budget::UNLIMITED);
+                geom_intersect::curve::curves(a, b, &mut meter)
+            }))
+        }
+        ("intersect", "curve_cubics") => {
+            fold(inputs::intersect::cubic_pairs(class).iter().map(|(a, b)| {
+                let mut meter = geom_run::WorkMeter::new(geom_run::Budget::UNLIMITED);
+                geom_intersect::curve::curves(a, b, &mut meter)
+            }))
+        }
+        ("intersect", "curve_loop") => fold(inputs::intersect::loops(class).iter().map(|c| {
+            let mut meter = geom_run::WorkMeter::new(geom_run::Budget::UNLIMITED);
+            geom_intersect::curve::self_crossings(c, &mut meter)
+        })),
+        ("intersect", "sort_items") => {
+            fold(inputs::intersect::items(class).into_iter().map(|items| {
+                geom_intersect::Intersection::new(
+                    items,
+                    geom_intersect::Coverage::CompleteOutsideFlagged,
+                    Vec::new(),
+                    &mut geom_run::WorkMeter::new(geom_run::Budget::UNLIMITED),
+                )
+            }))
+        }
+        ("intersect", "project_arc") => {
+            fold(inputs::intersect::arcs(class).iter().map(|(curve, p)| {
+                let mut meter = geom_run::WorkMeter::new(geom_run::Budget::UNLIMITED);
+                geom_intersect::project_curve(curve, p, 1e-6, &mut meter)
+            }))
+        }
+        ("intersect", "project_sphere") => fold(inputs::intersect::spheres(class).iter().map(
+            |(surface, p)| {
+                let mut meter = geom_run::WorkMeter::new(geom_run::Budget::UNLIMITED);
+                geom_intersect::project_surface(surface, p, 1e-6, &mut meter)
+            },
+        )),
+        ("intersect", "key_circle") => fold(inputs::intersect::circles(class).iter().map(|c| {
+            let mut meter = geom_run::WorkMeter::new(geom_run::Budget::UNLIMITED);
+            geom_intersect::CanonicalKey::of_curve(c, &mut meter)
+        })),
+        ("intersect", "pair_lines") => {
+            fold(inputs::intersect::lines(class).iter().map(|(a, b)| {
+                let operand = |curve| {
+                    let mut meter = geom_run::WorkMeter::new(geom_run::Budget::UNLIMITED);
+                    geom_intersect::CanonicalKey::of_curve(curve, &mut meter).map(|key| {
+                        geom_intersect::Operand {
+                            geom: geom_intersect::Geom::Curve(curve),
+                            domain: None,
+                            bound: Steps(0),
+                            key,
+                        }
+                    })
+                };
+                let (x, y) = (operand(a)?, operand(b)?);
+                geom_intersect::pair(&x, &y, |_, _| {
+                    geom_intersect::Intersection::new(
+                        Vec::new(),
+                        geom_intersect::Coverage::TopologyCertified,
+                        Vec::new(),
+                        &mut geom_run::WorkMeter::new(geom_run::Budget::UNLIMITED),
+                    )
+                })
+            }))
         }
         ("quadrature", "gauss_legendre") => fold(
             inputs::roots::gauss_legendre(class)

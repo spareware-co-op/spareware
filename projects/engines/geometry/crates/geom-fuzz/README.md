@@ -9,8 +9,14 @@ how each engine runs a target, on your machine and in CI. The first target built
 `orient2d` (`src/orient2d.rs`): `geom-num`'s orient2d, its exact path and its `f64` filter must
 agree with the exact determinant of orient2d's definition, computed from scratch. The others:
 `predicates` (`src/predicates.rs`, G11), every exact predicate answers and swapping two points
-flips its sign; and `wide` (`src/wide.rs`, G26), the wide integers agree with `num-bigint` on
-every operation at every width, `I128` to the reserved 768 bits.
+flips its sign; `wide` (`src/wide.rs`, G26), the wide integers agree with `num-bigint` on
+every operation at every width, `I128` to the reserved 768 bits; `intersect`
+(`src/intersect.rs`, G158), an intersection's items keep their invariants against an all-pairs
+oracle, and a pair asked either way round makes one call; `quadric` (`src/quadric.rs`, G159), every
+exact decision on a line and a quadric agrees with big integers, and a Sturm chain counts the roots
+a polynomial was built from; `project` (`src/project.rs`, G162), a nearest point is never beaten
+by a sample of the kind; and `crossings` (`src/crossings.rs`, G163), every point of any two curves lies
+on both, and two cubic graphs that change sides have an item between them.
 
 ## One law, four engines
 
