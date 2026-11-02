@@ -34,6 +34,10 @@ geom-curve = { path = "../geom-curve" }
 geom-surface = { path = "../geom-surface" }
 # The intersection harness (G160): the result type an answer comes back in. Ours, MPL-2.0.
 geom-intersect = { path = "../geom-intersect" }
+# The naming fixtures (G141): the boolean that cuts their openings and the resolver their references
+# go through. Ours, MPL-2.0.
+geom-bool = { path = "../geom-bool" }
+geom-name = { path = "../geom-name" }
 proptest = { version = "1.12.0", default-features = false, features = ["std", "bit-set"] }
 # float_roundtrip: a corpus double read back is the double the corpus wrote (G160).
 serde_json = { version = "1.0.149", features = ["float_roundtrip"] }

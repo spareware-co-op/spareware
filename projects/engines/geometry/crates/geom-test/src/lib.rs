@@ -69,6 +69,9 @@
 //! - [`museum`]: the format museum (28.13, 24.6; G99): sample files and operation logs of every
 //!   released format version and edition, compiled in and held to their recorded hashes on every
 //!   target.
+//! - [`naming`]: the naming and reference fixtures (28.3; G141): parametric walls built by the
+//!   kernel's operations, every stored reference resolved after each upstream edit and held to its
+//!   expected outcome, and their names a golden on every target.
 //! - [`guard`]: the proof that the toolchain and dependency guard of 28.13 trips: `libm`'s `sin`
 //!   changed by one bit must fail the golden `geom-num/determinism`. The binary `guard` patches
 //!   that change in and runs the golden (`-- prove`); `kernel.yml` runs it.
@@ -265,6 +268,7 @@ pub mod map;
 pub mod miri;
 pub mod museum;
 pub mod mutants;
+pub mod naming;
 pub mod nurbs_reference;
 pub mod oracle;
 pub mod plane_bodies;

@@ -662,6 +662,16 @@
           "sha256": "72833e2e0e317cd26acba70110f485d2ad8a6bc8b8ed6f2cdcf04beadc0031db"
         },
         {
+          "id": "geom-test/naming-fixtures",
+          "what": "The naming and reference fixtures (piece G141): every reference of 13 parametric walls with doors and openings, resolved by geom_name::resolve after each upstream edit (regenerations, later cuts, a fill, a move and a mirror, the element deleted, the history pruned), one line each as geom_test::naming::report writes them: the NameIds compared on every target of the determinism matrix.",
+          "check": {
+            "crate": "geom-test",
+            "test": "naming",
+            "function": "the_names_are_the_same_on_every_target"
+          },
+          "sha256": "b0535c4ba04a79882804f8656f5e359da1df62128b9121b59d2b415a337ef900"
+        },
+        {
           "id": "geom-mesh/cdt",
           "what": "The constrained Delaunay triangulation of geom-mesh (piece G153): cocircular grids of 2 to 32 points a side, plain and with crossing constraints; 16 scatters with constraints between random points; 8 outlines refined to a quality. Vertices, triangles and constrained edges in canonical order.",
           "check": {

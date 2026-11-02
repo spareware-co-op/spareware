@@ -14982,6 +14982,30 @@
           "target": "lib"
         },
         {
+          "cost": "each fixture builds its model once per regeneration: a few boxes and one boolean.",
+          "does": "a [`Model`] is a wall with door openings, built from its [`Params`] by the kernel's own operations: the wall and each door a box (`geom_make::make_box`), the openings cut by one `geom_bool::subtract`. Every operation runs under its own path, so a regeneration names what it makes exactly as the first build did, and the model keeps its final body, its name graph (every name each operation reported making, after the names it refers to) and each operation's history. A [`Fixture`] is a model, the references stored against its final body (the way a program stores a dimension's or a hosted element's), and its edits: a [`Edit::Regenerate`] with other parameters, as an upstream feature edited and the model rebuilt, or an operation run after the references were made ([`Edit::Then`]: a cut, a fill, a move, a mirror), or the element deleted, or the history pruned. After each edit every reference is resolved with `geom_name::resolve` and held to its [`Expect`]. [`fixtures`] is the catalogue, and [`report`] writes every resolution as text, whose SHA-256 is a golden: the names compared on every target and mode of the determinism matrix (28.13).",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-test/src/naming.rs",
+          "guarantees": [
+            "**Real names.** Every name comes from the operations themselves, with the name nodes they report, so a fixture breaks when an operation's naming changes, never when a test's copy of it does.",
+            "**Nothing resolves differently without saying so** (28.3): every reference after every edit has an expectation, and a run fails on the first that does not hold, naming the fixture, the edit and the reference.",
+            "**Deterministic.** No randomness: the parameters are written in the catalogue."
+          ],
+          "job": "Naming and reference fixtures (chapter 28.3; piece G141): parametric models with the expected resolution of every stored reference after each upstream edit (20.4).",
+          "method": {
+            "links": [
+              "projects/engines/geometry/architecture/28-testing.md",
+              "projects/engines/geometry/architecture/20-naming-history.md",
+              "projects/engines/geometry/architecture/11-booleans.md"
+            ],
+            "text": "chapter 28.3's naming fixtures and 20.4's resolution (`projects/engines/geometry/architecture/28-testing.md`, `projects/engines/geometry/architecture/20-naming-history.md`), on chapter 11.9's names of booleans (`projects/engines/geometry/architecture/11-booleans.md`)."
+          },
+          "path": "geom_test::naming",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
           "cost": "a blossom is O(p²·d) rational operations for dimension d; a point one blossom; insertion and refinement one blossom per new control point; elevation C(p + t, p) blossoms per new control point, which this reference accepts because it runs on small cases only. The rationals grow with the knots' and points' binary expansions; no recursion.",
           "does": "a [`Spline`] holds a degree, a knot vector and control points as exact rationals, in homogeneous form for a rational curve (w·P and then w), converted exactly from the doubles a kernel curve holds: every finite double is a binary fraction, so nothing rounds. Everything else comes from one function, the blossom of a polynomial piece: the symmetric, multi-affine function of p arguments whose value at (u, …, u) is the piece at u. De Boor's algorithm computes it, taking its r-th argument at its r-th level. [`Spline::homogeneous_point`] is the blossom at (u, …, u); [`Spline::point`] divides by the weight. [`Spline::homogeneous_derivative`] is the blossom with k of its arguments the unit direction (u + 1) − u, times p!/(p − k)!: the k-th derivative of the homogeneous curve (piece G68). A [`Patch`] is the tensor product of two bases, each a spline whose control points are the unit vectors, so its point lists the basis values; the law catalogue checks surfaces against it (piece G69). A new knot vector over the same domain, finer or of higher degree, gets its control points from the dual functional property: control point i of a spline of degree q is the blossom of any of its pieces in that point's support, at the q knots that follow knot i. [`Spline::insert`] and [`Spline::refine`] read the original pieces' blossoms that way. [`Spline::elevate`] reads the blossom of each piece seen as a polynomial of degree p + t, which is the mean of the original blossom over every choice of p of its p + t arguments, on the knot vector with each distinct knot repeated t more times.",
           "family": [],
