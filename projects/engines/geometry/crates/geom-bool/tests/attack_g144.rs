@@ -414,9 +414,8 @@ fn cutting_off_an_apex_of_four_faces_splits_the_vertex() {
 
 #[test]
 fn every_class_is_found_by_some_test_here() {
-    // The classes each test above asserts, against 13.14's list; a self-overlap cut needs a
-    // target crossing itself, which the checker refuses as an operand, so it is classified from
-    // the history's split records and has no body to make it here (the PR names the gap).
+    // The classes each test above asserts, against 13.14's list. A self-overlap cut is a face
+    // crossing itself, which a planar face cannot; the curved arrangement decides it.
     let asserted = [
         ChangeClass::VertexSplit,
         ChangeClass::FaceVanished,

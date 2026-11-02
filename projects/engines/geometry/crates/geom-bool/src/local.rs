@@ -32,8 +32,8 @@
 //! - **Face vanishes:** a target face whose every piece is dropped with none buried and none shared:
 //!   collapsed. A face that turns inside out is the geometry step's to find and report, since its
 //!   pieces arrive the right way round.
-//! - **Self-overlap cut:** a target face split along the target's own faces, where it crosses
-//!   itself, with the new edges it was cut along.
+//! - **Self-overlap cut:** never on a flat body, whose faces are planar and cannot cross
+//!   themselves; the curved arrangement decides it, from a face's self-intersection (G176).
 //! - **Vertex split:** a target vertex of four or more faces deleted, where two or more new vertices
 //!   lie on at least two faces descended from its faces and otherwise only on faces the step
 //!   generated, joined by the new edges between them.
@@ -66,7 +66,7 @@ use geom_num::Exactness;
 use geom_num::plane::Plane;
 use geom_op::history::{LoopChange, Origin, Record, TopologyChange, Vanish};
 use geom_op::local::{AllowSet, allowed};
-use geom_op::name::{NameList, NameSet, PieceKey};
+use geom_op::name::{NameList, NameSet};
 use geom_op::{CombineDetail, Diagnostic, History, NameId, OpContext, OpError, OpOutput, TopoName};
 use geom_poly::merge::Merge;
 use geom_poly::plane::canonical;
@@ -424,7 +424,7 @@ impl Inputs<'_> {
     ) -> Option<Vec<TopologyChange>> {
         let mut out = Vec::new();
         let target = self.target_body()?;
-        let (inn, outn) = (target.names()?, body.names()?);
+        let outn = body.names()?;
         let out_faces: BTreeSet<NameId> = outn.faces.iter().map(|k| id(*k)).collect();
         let out_vertices: BTreeSet<NameId> = outn.vertices.iter().map(|k| id(*k)).collect();
         let origin: BTreeMap<NameId, &Origin> = history
@@ -466,22 +466,8 @@ impl Inputs<'_> {
                 }
             }
         }
-        let target_faces: BTreeSet<NameId> = inn.faces.iter().map(|k| id(*k)).collect();
         for (of, pieces) in &splits {
-            let own = pieces.iter().any(|r| match &r.origin {
-                Origin::Split {
-                    piece: PieceKey::ByTools { tools, .. },
-                    ..
-                } => tools
-                    .names()
-                    .iter()
-                    .any(|t| target_faces.contains(t) && t != of),
-                _ => false,
-            });
-            if own && target_faces.contains(of) {
-                let along = new_edges_of(body, pieces.iter().map(|r| r.output), &origin)?;
-                out.push(TopologyChange::SelfOverlapCut { face: *of, along });
-            } else if pieces.len() >= 2 {
+            if pieces.len() >= 2 {
                 out.push(TopologyChange::LoopChanged {
                     face: *of,
                     change: LoopChange::FaceSplit,
@@ -642,29 +628,6 @@ fn split_vertices(
     Some(out)
 }
 
-/// The new edges of the faces `pieces`: those the history generated.
-fn new_edges_of(
-    body: &Body,
-    pieces: impl Iterator<Item = NameId>,
-    origin: &BTreeMap<NameId, &Origin>,
-) -> Option<NameList> {
-    let names = body.names()?;
-    let wanted: BTreeSet<NameId> = pieces.collect();
-    let mut edges = BTreeSet::new();
-    for (row, key) in names.faces.iter().enumerate() {
-        if !wanted.contains(&id(*key)) {
-            continue;
-        }
-        for e in edges_of(body, row)? {
-            let name = id(*names.edges.get(e)?);
-            if matches!(origin.get(&name), Some(Origin::Generated { .. })) {
-                edges.insert(name);
-            }
-        }
-    }
-    Some(NameList::new(edges))
-}
-
 /// The loops of face `row`.
 fn loops(body: &Body, row: usize) -> Option<u32> {
     let a = body.arenas();
@@ -677,19 +640,6 @@ fn loops(body: &Body, row: usize) -> Option<u32> {
         at = a.loops.next.get(l).copied().flatten();
     }
     None
-}
-
-/// The rows of the edges of face `row`.
-fn edges_of(body: &Body, row: usize) -> Option<Vec<usize>> {
-    let a = body.arenas();
-    let mut out = Vec::new();
-    for n in (0..a.rows(Arena::Fin)).filter_map(Ix::<geom_topo::Fin>::new) {
-        let l = *a.fins.loop_.get(n)?;
-        if a.loops.face.get(l)?.to_usize() == row {
-            out.push(a.fins.edge.get(n)?.to_usize());
-        }
-    }
-    Some(out)
 }
 
 /// The rows of the faces around vertex `row`.

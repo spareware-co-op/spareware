@@ -373,10 +373,10 @@ Every class is decided from the arrangement (section 11): exact on flat bodies, 
 - More solid lumps is Body splits.
 - Faces partly buried are Clash trimmed, and target faces wholly buried are Overshoot removed.
 - A target face dropped with nothing buried or shared is Face vanishes.
-- A face split by its own body's faces is Self-overlap cut.
+- A self-overlap cut never happens on a flat body, whose planar faces cannot cross themselves: the curved arrangement decides it, from a face's self-intersection (G176).
 - A deleted vertex of four or more faces, replaced by new vertices joined by new edges, is Vertex split.
 
-A face shared by a tool and the target is replaced, and is no change. A face turning inside out is the geometry step's to report, since its pieces arrive the right way round. A test makes every class but the self-overlap cut, which needs a target crossing itself that the operand check refuses. The fast path's benchmark joins G140's flat boolean benchmarks, as G130's and G137's did.
+A face shared by a tool and the target is replaced, and is no change. A face turning inside out is the geometry step's to report, since its pieces arrive the right way round. A test makes every other class. The fast path's benchmark joins G140's flat boolean benchmarks, as G130's and G137's did.
 
 ## 13.15 Straight skeletons and roofs (`geom-skeleton`)
 
