@@ -91,13 +91,10 @@ pub fn quantise(
 }
 
 /// `value` times `scale` rounded to the nearest step, ties to even, with how far it moved when it
-/// moved; `None` outside the frame. `value` is finite and `scale` at least 1.
+/// moved; `None` outside the frame. `value` is finite, so the product is `None` only when it
+/// overflows.
 fn rounded(value: f64, scale: f64) -> Option<(Coord, Option<f64>)> {
-    let Some(product) = DD::exact_product(value, scale) else {
-        // An overflow, or a product below 2^−969, which rounds to 0. With `scale` at least 1,
-        // only a value below 1 in size can underflow.
-        return (value < 1.0 && value > -1.0).then_some((Coord::ZERO, Some(0.0)));
-    };
+    let product = DD::exact_product(value, scale)?;
     let near = product.round_shifted(0)?;
     let coord = Coord::from_i128(near.value()).ok()?;
     if near.is_exact() {

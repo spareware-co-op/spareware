@@ -331,8 +331,10 @@ fn shape(looped: &[u32], points: &[P3], meter: &mut WorkMeter<'_>) -> Result<Sha
 }
 
 /// Whether the flat loop `looped` on `plane` is simple: no two sides meet but two neighbours at
-/// their shared corner, and no corner turns straight back. Tested in the plane of the normal's
-/// largest component, onto which the loop's plane projects one to one.
+/// their shared corner. Tested in the plane of the normal's largest component, onto which the
+/// loop's plane projects one to one. Neighbours that overlap need no test of their own: a corner
+/// that turns straight back puts an end of one of them inside the side beyond the other, which
+/// is not its neighbour once the loop has four corners.
 fn simple(
     looped: &[u32],
     points: &[P3],
@@ -366,36 +368,13 @@ fn simple(
         for j in i.saturating_add(1)..k {
             meter.charge(1)?;
             let (r, s) = side(j).ok_or(MeshError::Defect)?;
-            let meets = if j == i.saturating_add(1) {
-                folds(p, q, s)?
-            } else if i == 0 && j == k.saturating_sub(1) {
-                folds(q, p, r)?
-            } else {
-                meet(p, q, r, s)?
-            };
-            if meets {
+            let neighbours = j == i.saturating_add(1) || (i == 0 && j == k.saturating_sub(1));
+            if !neighbours && meet(p, q, r, s)? {
                 return Ok(false);
             }
         }
     }
     Ok(true)
-}
-
-/// Whether the sides a → b and b → c, which share b, overlap: c lies on the ray from b back
-/// through a.
-fn folds(a: P2, b: P2, c: P2) -> Result<bool, HealError> {
-    if orient2d(a, b, c)? != Sign::Zero {
-        return Ok(false);
-    }
-    let along = |p: P2, q: P2| {
-        let (x, y) = (
-            i128::from(q.x.get()).saturating_sub(i128::from(p.x.get())),
-            i128::from(q.y.get()).saturating_sub(i128::from(p.y.get())),
-        );
-        (x, y)
-    };
-    let ((ux, uy), (vx, vy)) = (along(b, a), along(b, c));
-    Ok(ux.saturating_mul(vx).saturating_add(uy.saturating_mul(vy)) > 0)
 }
 
 /// Whether the closed segments p–q and r–s share a point.

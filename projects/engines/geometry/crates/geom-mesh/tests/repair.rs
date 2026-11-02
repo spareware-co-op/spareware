@@ -201,6 +201,8 @@ fn a_weld_distance_of_zero_joins_only_equal_points() {
     assert_eq!(w.mesh.vertices().len(), 8);
     assert_eq!(w.log.joined.len(), 8);
     assert_eq!(w.log.movement, Steps(1));
+    // The first two faces use only exact corners; each later one has copies that moved.
+    assert_eq!(w.moved, [false, false, true, true, true, true]);
 }
 
 #[test]
@@ -382,6 +384,16 @@ fn a_hole_wider_than_the_cap_exceeds_the_tolerance() {
 }
 
 #[test]
+fn a_hole_as_wide_as_the_cap_is_still_within_it() {
+    // 4,525 √2 = 6,399.4, rounded up to the cap itself: not over it.
+    let e = heal_at(&cube_with_a_corner_hole(10 * MM, 4525), 640).unwrap_err();
+    let HealError::NotClosed { boundaries } = &e else {
+        panic!("{e:?}");
+    };
+    assert_eq!(boundaries[0].width, Steps(6400));
+}
+
+#[test]
 fn an_epsilon_over_the_cap_is_refused() {
     let e = heal_at(&cube(MM), 6401).unwrap_err();
     assert_eq!(e, HealError::AboveCap { asked: Steps(6401) });
@@ -399,6 +411,58 @@ fn an_epsilon_over_the_cap_is_refused() {
         }]
     );
     assert!(heal_at(&cube(MM), 6400).is_ok());
+}
+
+#[test]
+fn two_t_junctions_on_one_edge_go_in_in_order() {
+    // The front is three faces, meeting at x = side and x = 2 side; the bottom and top each run
+    // past both corners, one each way round.
+    let s = MM;
+    let mut points = corners([0; 3], [3 * s; 3]);
+    points.extend([[s, 0, 0], [2 * s, 0, 0], [s, 0, 3 * s], [2 * s, 0, 3 * s]]);
+    let mut faces = sides(0);
+    faces[2] = vec![0, 8, 10, 4];
+    faces.push(vec![8, 9, 11, 10]);
+    faces.push(vec![9, 1, 5, 11]);
+    let h = heal_at(&raw(&points, &faces), 640).unwrap();
+    assert_eq!(h.log.holes.stitched.len(), 4);
+    assert_eq!(six_volume(&h.mesh), cube_volume(3 * s));
+    assert_eq!(h.mesh.faces(), 6);
+}
+
+#[test]
+fn two_boxes_on_one_face_are_open_patches_left_as_they_face() {
+    // Each box lists the face they share, the other way round from its neighbour's copy: its five
+    // other faces, and each copy, are patches open on their own, which no volume turns.
+    let mut points = corners([0; 3], [MM; 3]);
+    points.extend(corners([MM, 0, 0], [2 * MM, MM, MM]));
+    let mut faces = sides(0);
+    faces.extend(sides(8));
+    let h = heal_at(&raw(&points, &faces), 640).unwrap();
+    assert_eq!(h.log.orient.patches, 4);
+    assert!(h.log.orient.turned.is_empty());
+    assert_eq!(
+        six_volume(&h.mesh),
+        cube_volume(MM).checked_add(&cube_volume(MM)).unwrap()
+    );
+}
+
+#[test]
+fn a_missing_face_is_one_open_boundary_of_four_corners() {
+    let mut faces = sides(0);
+    faces.pop();
+    let e = heal_at(&raw(&corners([0; 3], [MM; 3]), &faces), 640).unwrap_err();
+    // 6,400 √2 = 9,050.97, over the cap.
+    assert_eq!(
+        e,
+        HealError::ToleranceExceeded {
+            boundaries: vec![Boundary {
+                at: p(0, 0, MM),
+                corners: 4,
+                width: Steps(9051),
+            }]
+        }
+    );
 }
 
 #[test]
@@ -531,15 +595,35 @@ fn a_face_that_crosses_itself_is_split_and_a_simple_one_kept() {
     let w = weld_one(&[[0, 0, 0], [MM, MM, 0], [MM, 0, 0], [0, MM, 0]]);
     let split: Vec<(u32, u32)> = w.log.split.iter().map(|s| (s.face, s.into)).collect();
     assert_eq!(split, [(0, 2)]);
-    // A face whose corner touches a side it does not end: split.
-    let w = weld_one(&[
-        [0, 0, 0],
-        [2 * MM, 0, 0],
-        [2 * MM, MM, 0],
-        [MM, 0, 0],
-        [0, MM, 0],
-    ]);
-    assert_eq!(w.log.split.len(), 1);
+    // A face whose corner touches a side it does not end, met from either end: the touching
+    // corner ends a side after the one it touches, ends one before it, or is the first corner.
+    for touching in [
+        vec![
+            [0, 0, 0],
+            [2 * MM, 0, 0],
+            [2 * MM, MM, 0],
+            [MM, 0, 0],
+            [0, MM, 0],
+        ],
+        vec![
+            [3 * MM, 2 * MM, 0],
+            [2 * MM, 0, 0],
+            [MM, 2 * MM, 0],
+            [0, 0, 0],
+            [4 * MM, 0, 0],
+            [4 * MM, 2 * MM, 0],
+        ],
+        vec![
+            [MM, 0, 0],
+            [MM, MM, 0],
+            [2 * MM, MM, 0],
+            [2 * MM, 0, 0],
+            [0, 0, 0],
+        ],
+    ] {
+        let w = weld_one(&touching);
+        assert_eq!(w.log.split.len(), 1, "{touching:?}");
+    }
     // An L, not convex but simple, with a corner on a straight side: kept as it is.
     let w = weld_one(&[
         [0, 0, 0],
