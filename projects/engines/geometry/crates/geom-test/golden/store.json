@@ -306,17 +306,29 @@
             {
               "sha256": "eaa79854dc3f526e985192c0b919aad740f1e29f934bb17121102c8227d15e3e",
               "kind": "corpus",
+              "piece": "G148",
+              "why": "Count benchmarks of two stacks joined: main's geom-run helper (#538) and this stack's; no existing digest moved"
+            },
+            {
+              "sha256": "57fb849de9d6eb8003fe3ff677db5373da1b40984777f2d573018b64e5601c1b",
+              "kind": "corpus",
+              "piece": "G148",
+              "why": "Count benchmarks of two stacks joined: main's geom-run helper (#538) and this stack's; no existing digest moved"
+            },
+            {
+              "sha256": "fb85bdc3a9a3ac6755daa281d6c4c3a845bb8e7e93aa329334de45a77352d090",
+              "kind": "corpus",
               "piece": "G149",
               "why": "2 new count benchmarks on exact hulls and plane slices (decision 32.44): mesh/hull and mesh/slice; no existing digest moved"
             },
             {
-              "sha256": "bf47c2eec429cf70455f69f0eaea2580c606360d8b1c997c87c03ce6f87643ef",
+              "sha256": "baac643f845957f016cf37e67d51f531c9d9b5bc745ceed3e4bd0edf35fbd99f",
               "kind": "corpus",
               "piece": "G294",
               "why": "1 new count benchmark of the certified GJK filter (decision 32.44): spatial/gjk_filter; no existing digest moved"
             }
           ],
-          "sha256": "3af860fb7a23bf3d135f0cc0a4d36dce3f2653435bd704de9c6df12cbf5284aa"
+          "sha256": "bde3e8812263578837599be4f7661628bd4f6f66dfc222973bd92f7532b5623f"
         },
         {
           "id": "geom-nurbs/operations",

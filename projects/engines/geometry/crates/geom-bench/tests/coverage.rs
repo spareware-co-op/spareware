@@ -566,6 +566,10 @@ const OTHER_CRATES: &[(&str, &[(&str, &str)])] = &[
         &[("param", include_str!("../../geom-surface/src/param.rs"))],
     ),
     (
+        "geom_run",
+        &[("exec", include_str!("../../geom-run/src/exec.rs"))],
+    ),
+    (
         "geom_spatial",
         &[("gjk", include_str!("../../geom-spatial/src/gjk.rs"))],
     ),

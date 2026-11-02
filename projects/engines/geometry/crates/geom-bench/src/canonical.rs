@@ -883,6 +883,23 @@ impl<T: Canonical> Canonical for Result<T, geom_bvh::BvhError> {
     }
 }
 
+// `geom-run`'s helper (decision 32.44's count benchmark of a lone wave).
+
+impl<T: Canonical> Canonical for Result<T, geom_run::RunError> {
+    fn encode(&self, h: &mut Sha256) {
+        match self {
+            Ok(v) => {
+                h.update(&[0]);
+                v.encode(h);
+            }
+            Err(e) => {
+                h.update(&[1]);
+                debug_text(e, h);
+            }
+        }
+    }
+}
+
 // `geom-spatial`'s certified GJK filter (decision 32.44's count benchmark for piece G294).
 
 impl Canonical for Result<geom_spatial::gjk::Filter, geom_spatial::gjk::GjkError> {

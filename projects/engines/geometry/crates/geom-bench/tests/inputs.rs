@@ -2498,6 +2498,15 @@ fn mesh_typical_batches_all_succeed() {
     all_ok("envelope", k::envelope, &m::envelope(Typical));
 }
 
+/// Every typical batch of `geom-run`'s helper benchmarks (decision 32.44) maps every list.
+#[test]
+fn helper_typical_batches_all_succeed() {
+    use geom_bench::inputs::helper as m;
+    use geom_bench::kernels::helper as k;
+    all_ok("lone_serial", k::lone_serial, &m::lone_serial(Typical));
+    all_ok("lone_pool", k::lone_pool, &m::lone_pool(Typical));
+}
+
 /// Every typical batch of `geom-spatial`'s GJK filter (piece G294) proves its two clouds apart.
 #[test]
 fn spatial_typical_batches_are_all_clear() {
