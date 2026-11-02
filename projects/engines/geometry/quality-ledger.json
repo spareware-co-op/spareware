@@ -907,6 +907,14 @@
       "reason": "The mutant turns every flap's reversed over, the reference's with the rest, since all of them come from flap. about reads reversed only through turn_about and same_flap, each of which asks only whether two flaps' reversed differ, so every order about gives, and with it last, is the same; turned and the joins read rising, not the flaps."
     },
     {
+      "file": "projects/engines/geometry/crates/geom-poly/src/merge.rs",
+      "mutant": "replace ratio_in_words -> Option<Ordering> with None",
+      "line_text": "let left = a.to_i128()?.checked_mul(d.to_i128()?)?;",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "ratio_in_words only answers what ratio_order's wide path would: the sign of a · d − c · b, exactly, in i128 when everything fits. Returning None sends every comparison to the wide path, which gives the same sign; only the time changes."
+    },
+    {
       "file": "projects/engines/geometry/crates/geom-surface/src/contract.rs",
       "mutant": "replace + with * in check",
       "line_text": "let outside = beyond + 1.0;",

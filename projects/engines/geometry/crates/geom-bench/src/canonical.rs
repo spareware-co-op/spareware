@@ -978,7 +978,7 @@ impl Canonical for crate::inputs::scenario::Recut {
     // wall, which the tools before the move would give.
     fn encode(&self, h: &mut Sha256) {
         self.host.encode(h);
-        u64::try_from(self.cache.len())
+        u64::try_from(self.cache.boxes().len())
             .unwrap_or(u64::MAX)
             .encode(h);
     }

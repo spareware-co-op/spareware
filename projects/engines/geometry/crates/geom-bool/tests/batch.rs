@@ -11,7 +11,7 @@
     reason = "tests: native arithmetic, and a failure stops the test"
 )]
 
-use geom_bool::batch::{BatchRule, Cut, ToolReport, cut};
+use geom_bool::batch::{BatchRule, Cut, Recut, ToolReport, cut};
 use geom_bool::operand::{Operand, OperandKey, OperandKind};
 use geom_check::{Level, check};
 use geom_make::{BoxInput, RoundInput, cylinder, make_box};
@@ -22,6 +22,7 @@ use geom_run::Pool;
 use geom_run::{Budget, Exec, WorkMeter};
 use geom_topo::Body;
 use geom_topo::query::volume;
+use proptest::prelude::*;
 
 const SERIAL: Exec<'static> = Exec::serial();
 
@@ -337,10 +338,88 @@ fn a_moved_door_is_cut_again_from_the_last_cut_as_a_fresh_cut_would_be() {
     .unwrap();
     assert_eq!(local.result, fresh.result);
     assert_eq!(local.diagnostics, fresh.diagnostics);
-    let (kept, all) = (last.shared_with(&local.result[0].cache), last.len());
+    let (kept, all) = (
+        last.boxes().shared_with(local.result[0].cache.boxes()),
+        last.boxes().len(),
+    );
     assert!(kept * 5 >= all * 4, "{kept} of {all} boxes reused");
     assert!(kept < all);
+    let merge = &local.result[0].cache.merge();
+    let (kept, all) = (merge.shared_with(last.merge()), merge.len());
+    assert!(kept * 5 >= all * 4, "{kept} of {all} merged pieces reused");
+    assert!(kept < all);
+    let names = local.result[0].cache.names();
+    assert!(names.len() > 1 && !names.is_empty());
+    assert!(Recut::default().names().is_empty());
     assert_eq!(least(&again), least(&cut_of(&wall, &doors)));
+}
+
+/// A door's change: moved by steps along the wall and up it, made wider or narrower, taken out, or
+/// a door put in.
+#[derive(Clone, Copy, Debug)]
+enum Change {
+    Moved(usize, i64, i64, i64),
+    Out(usize),
+    In(i64, i64),
+}
+
+fn any_change() -> impl Strategy<Value = Change> {
+    prop_oneof![
+        4 => (0usize..8, -40i64..40, -15i64..15, -10i64..10)
+            .prop_map(|(at, along, up, wider)| Change::Moved(at, along, up, wider)),
+        1 => (0usize..8).prop_map(Change::Out),
+        1 => (-10i64..200, 0i64..40).prop_map(|(along, up)| Change::In(along, up)),
+    ]
+}
+
+/// The doors after `change`, as their corners and sizes.
+fn changed(doors: &mut Vec<([i64; 3], [u64; 3])>, change: Change) {
+    match change {
+        Change::Moved(at, along, up, wider) if !doors.is_empty() => {
+            let count = doors.len();
+            let (low, size) = &mut doors[at % count];
+            low[0] += along;
+            low[2] += up;
+            size[0] = size[0].saturating_add_signed(wider).max(1);
+        }
+        Change::Out(at) if doors.len() > 1 => {
+            doors.remove(at % doors.len());
+        }
+        Change::In(along, up) => doors.push(([along, -5, up], [20, 20, 30])),
+        Change::Moved(..) | Change::Out(_) => {}
+    }
+}
+
+proptest! {
+    #![proptest_config(ProptestConfig::with_cases(12))]
+
+    #[test]
+    fn any_run_of_changes_cuts_again_as_fresh_cuts_would(
+        changes in prop::collection::vec(any_change(), 1..4),
+    ) {
+        // G139's law: each cut from the last is the fresh cut, bit for bit, cache and all.
+        let wall = cuboid([0, 0, 0], [190, 10, 60]);
+        let mut doors: Vec<([i64; 3], [u64; 3])> =
+            (0..6).map(|i| ([10 + 30 * i, -5, 10], [20, 20, 30])).collect();
+        let bodies = |doors: &[([i64; 3], [u64; 3])]| -> Vec<Body> {
+            doors.iter().map(|(low, size)| cuboid(*low, *size)).collect()
+        };
+        let first = bodies(&doors);
+        let mut last = cut(&ctx(), &SERIAL, &[cut_of(&wall, &first)], BatchRule::Atomic).unwrap();
+        for change in changes {
+            changed(&mut doors, change);
+            let now = bodies(&doors);
+            let fresh = cut(&ctx(), &SERIAL, &[cut_of(&wall, &now)], BatchRule::Atomic);
+            let again = Cut {
+                reuse: Some(&last.result[0].cache),
+                ..cut_of(&wall, &now)
+            };
+            let local = cut(&ctx(), &SERIAL, &[again], BatchRule::Atomic);
+            prop_assert_eq!(&local, &fresh, "after {:?}", change);
+            let Ok(local) = local else { break };
+            last = local;
+        }
+    }
 }
 
 #[test]
@@ -389,8 +468,11 @@ fn a_door_moved_in_a_wall_of_three_hundred_openings_timed() {
         println!(
             "a door moved in 300 openings, {label}: {:?}, {} of {} boxes reused",
             started.elapsed(),
-            first.result[0].cache.shared_with(&out.result[0].cache),
-            out.result[0].cache.len()
+            first.result[0]
+                .cache
+                .boxes()
+                .shared_with(out.result[0].cache.boxes()),
+            out.result[0].cache.boxes().len()
         );
         doors[150] = cuboid([10 + 30 * 150, -5, 10], [20, 20, 30]);
     }

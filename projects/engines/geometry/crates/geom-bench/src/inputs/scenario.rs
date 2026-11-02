@@ -3,7 +3,7 @@
 //!
 //! - A wall and its doors, cut in one call: [`FULL_OPENINGS`] at full size, the 300 openings of
 //!   chapter 10's batch rule and 11.17's gate.
-//! - The same wall with one door moved along it, cut again from the first cut's arrangement cache:
+//! - The same wall with one door moved along it, cut again from the first cut's cache (G139's):
 //!   the door move of Spare Construct's 16 ms target (28.14).
 //! - A slab and its holes, in rows: [`FULL_HOLES`], 11.6's 10,000 holes, square here, as the flat
 //!   boolean takes them (round holes take the curved path, a later piece).
@@ -25,13 +25,12 @@
 //!
 //! Cost: one box built per body, outside every measured run.
 
-use geom_bool::batch::{BatchRule, Cut, cut};
+use geom_bool::batch::{self, BatchRule, Cut, cut};
 use geom_bool::operand::{CellSeed, Operand, OperandKey, OperandKind, Selection};
 use geom_make::{BoxInput, make_box};
 use geom_num::Exactness;
 use geom_num::grid::{P3, Steps};
 use geom_op::{OpContext, OpId, OpPath};
-use geom_poly::subdivide::Solved;
 use geom_run::{Budget, Exec};
 use geom_topo::Body;
 
@@ -69,8 +68,8 @@ pub struct Host {
 pub struct Recut {
     /// The host and its tools after the move.
     pub host: Host,
-    /// The first cut's arrangement cache.
-    pub cache: Solved,
+    /// What the first cut kept for the next.
+    pub cache: batch::Recut,
 }
 
 /// A host and its tools, and how many of the selections [`selections`] lists to read from their
@@ -187,7 +186,7 @@ pub fn solid(n: usize, body: &Body) -> Operand<'_> {
 
 /// The host keyed 0 and its tools keyed 1 and on, cut afresh or from `reuse`.
 #[must_use]
-pub fn cut_of<'h>(host: &'h Host, reuse: Option<&'h Solved>) -> Cut<'h> {
+pub fn cut_of<'h>(host: &'h Host, reuse: Option<&'h batch::Recut>) -> Cut<'h> {
     Cut {
         host: solid(0, &host.host),
         tools: host

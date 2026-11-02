@@ -579,6 +579,16 @@ fn reusing(
     leaf: usize,
     reuse: Option<&Solved>,
 ) -> (Vec<Classified>, Solved, u128) {
+    reusing_under(blocks, leaf, &[], reuse)
+}
+
+/// [`reusing`], under `tests`.
+fn reusing_under(
+    blocks: &[Block],
+    leaf: usize,
+    tests: &[WindingTest],
+    reuse: Option<&Solved>,
+) -> (Vec<Classified>, Solved, u128) {
     let list = polygons(blocks);
     let cell = around(&list).unwrap();
     let mut m = meter();
@@ -588,7 +598,7 @@ fn reusing(
         Winding::new(),
         &list,
         leaf,
-        &[],
+        tests,
         reuse,
         &mut m,
     )
@@ -626,6 +636,35 @@ fn an_edit_far_from_a_box_leaves_its_answer_to_be_reused() {
         solved.len()
     );
     assert_eq!(run(&now, 1, &[]), full);
+    // The boxes about the near block are taken whole from the last tree, not divided again.
+    let (held, fresh) = (
+        again.divisions_shared_with(&before),
+        solved.divisions_shared_with(&before),
+    );
+    assert!(held > 0, "no box taken");
+    assert_eq!(fresh, 0);
+    assert!(before.divisions_shared_with(&before) > held);
+}
+
+#[test]
+fn a_tree_divided_for_other_tests_or_leaves_is_divided_again() {
+    // A tree divided with no tests keeps every box; under a test that drops boxes, or with another
+    // leaf size, the boxes divide otherwise, so the tree is not taken, and the answer is the full one.
+    let blocks = [A, B];
+    let test = WindingTest::intersect(2);
+    let (_, plain, _) = reusing(&blocks, 1, None);
+    let (full, solved, work) = reusing_under(&blocks, 1, std::slice::from_ref(&test), None);
+    let (local, again, local_work) =
+        reusing_under(&blocks, 1, std::slice::from_ref(&test), Some(&plain));
+    assert_eq!((local, again.clone(), local_work), (full, solved, work));
+    assert_eq!(again.divisions_shared_with(&plain), 0);
+    let (full, solved, work) = reusing(&blocks, 3, None);
+    let (local, again, local_work) = reusing(&blocks, 3, Some(&plain));
+    assert_eq!((local, again.clone(), local_work), (full, solved, work));
+    assert_eq!(again.divisions_shared_with(&plain), 0);
+    // The same tests and leaf take the whole tree.
+    let (_, all, _) = reusing(&blocks, 1, Some(&plain));
+    assert!(all.divisions_shared_with(&plain) > 0);
 }
 
 #[test]
