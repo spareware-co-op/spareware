@@ -465,6 +465,14 @@ impl Inputs<'_> {
                 }
             }
         }
+        // The step's own faces: those it added, the tools' among them.
+        let own: BTreeSet<NameId> = out
+            .iter()
+            .filter_map(|c| match c {
+                TopologyChange::FaceAdded { face, .. } => Some(*face),
+                _ => None,
+            })
+            .collect();
         for (of, pieces) in &splits {
             if pieces.len() >= 2 {
                 out.push(TopologyChange::LoopChanged {
@@ -483,7 +491,7 @@ impl Inputs<'_> {
                 lumps: NameList::new(regions),
             });
         }
-        out.extend(split_vertices(target, body, &origin, &out_vertices)?);
+        out.extend(split_vertices(target, body, &origin, &own, &out_vertices)?);
         Some(out)
     }
 
@@ -526,19 +534,23 @@ impl Inputs<'_> {
 /// The target's faces that came through with fewer loops than they had: a hole closed.
 fn closed_holes(target: &Body, body: &Body, history: &History) -> Option<Vec<TopologyChange>> {
     let (inn, outn) = (target.names()?, body.names()?);
-    let out_faces: BTreeSet<NameId> = outn.faces.iter().map(|k| id(*k)).collect();
+    // The face each input became: itself, under its own name (a one-to-one change keeps it,
+    // 20.2), or the one it merged into.
+    let mut became: BTreeMap<NameId, NameId> =
+        outn.faces.iter().map(|k| (id(*k), id(*k))).collect();
+    for r in history.records() {
+        if let Origin::Merged { of } = &r.origin {
+            for input in of.names() {
+                became.entry(*input).or_insert(r.output);
+            }
+        }
+    }
     let mut out = Vec::new();
     for (row, key) in inn.faces.iter().enumerate() {
         let name = id(*key);
-        // The face it became: itself, under its own name (a one-to-one change keeps it, 20.2), or
-        // one it merged into.
-        let carried = out_faces.contains(&name).then_some(name).or_else(|| {
-            history.records().iter().find_map(|r| match &r.origin {
-                Origin::Merged { of } if of.names().contains(&name) => Some(r.output),
-                _ => None,
-            })
-        });
-        let Some(now) = carried else { continue };
+        let Some(&now) = became.get(&name) else {
+            continue;
+        };
         let after = outn.faces.iter().position(|k| id(*k) == now)?;
         if loops(body, after)? < loops(target, row)? {
             out.push(TopologyChange::LoopChanged {
@@ -556,6 +568,7 @@ fn split_vertices(
     target: &Body,
     body: &Body,
     origin: &BTreeMap<NameId, &Origin>,
+    own: &BTreeSet<NameId>,
     out_vertices: &BTreeSet<NameId>,
 ) -> Option<Vec<TopologyChange>> {
     let (inn, outn) = (target.names()?, body.names()?);
@@ -593,15 +606,12 @@ fn split_vertices(
                 .iter()
                 .map(|f| outn.faces.get(*f).map(|k| id(*k)))
                 .collect::<Option<_>>()?;
-            let generated = |f: &NameId| matches!(origin.get(f), Some(Origin::Generated { .. }));
             let from_v = names.iter().filter(|f| descends(**f)).count();
-            if from_v >= 2 && names.iter().all(|f| descends(*f) || generated(f)) {
+            if from_v >= 2 && names.iter().all(|f| descends(*f) || own.contains(f)) {
                 new.insert(at);
             }
         }
-        if new.len() < 2 {
-            continue;
-        }
+        // It became several only if new edges join them.
         let mut edges = Vec::new();
         let a = body.arenas();
         for e in (0..a.rows(Arena::Edge)).filter_map(Ix::<geom_topo::Edge>::new) {
@@ -615,6 +625,9 @@ fn split_vertices(
             {
                 edges.push(id(*outn.edges.get(e.to_usize())?));
             }
+        }
+        if edges.is_empty() {
+            continue;
         }
         out.push(TopologyChange::VertexSplit {
             vertex,

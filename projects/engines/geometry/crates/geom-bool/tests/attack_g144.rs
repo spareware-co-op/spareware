@@ -243,7 +243,11 @@ fn an_extrusion_adds_its_far_face_and_merges_its_sides() {
         tool_faces.contains(&added[0]),
         "a face of the tool: {added:?}"
     );
-    for none in [ChangeClass::ClashTrimmed, ChangeClass::VertexSplit] {
+    for none in [
+        ChangeClass::ClashTrimmed,
+        ChangeClass::VertexSplit,
+        ChangeClass::BodySplit,
+    ] {
         assert_eq!(count(&done, none), 0, "{found:?}");
     }
     assert_eq!(
@@ -530,6 +534,70 @@ fn cutting_off_an_apex_of_four_faces_splits_the_vertex() {
         _ => None,
     });
     assert_eq!(split, Some(4), "the cut's four edges: {changes:?}");
+    // The same cut by a half-space the pyramid is intersected with: its face is the tool's own.
+    let below = half_space(
+        &OpPath::new(OpId::from_bytes([41; 16])),
+        [p(0, 0, 18), p(1, 0, 18), p(0, 1, 18)],
+        &mut meter(),
+    )
+    .unwrap();
+    let done = step(
+        &target,
+        &[&below],
+        Selection::Intersect,
+        Plan::Arrange,
+        AllowSet::ALL,
+    )
+    .unwrap();
+    checked(&done.body);
+    assert_eq!(split_edges(&done), Some(4), "{:?}", done.history.changes());
+}
+
+/// The edge count of the step's vertex split, if it made one.
+fn split_edges(local: &Local) -> Option<usize> {
+    local.history.changes().iter().find_map(|c| match c {
+        TopologyChange::VertexSplit { edges, .. } => Some(edges.names().len()),
+        _ => None,
+    })
+}
+
+#[test]
+fn an_apex_cut_off_centre_splits_along_the_cut_edges_alone() {
+    // The box [6, 14] by [9, 14] from z = 16 holds the apex but not the faces' corners at y < 9:
+    // two new edges join the apex's new vertices, (8, 12, 16) to (12, 12, 16) and (9, 9, 18) to
+    // (11, 9, 18). The cut's corners at y = 9, z = 16 lie on one old face each, so they are the
+    // tool's, not the apex's.
+    let target = pyramid();
+    let tip = cuboid(2, [6, 9, 16], [8, 5, 9]);
+    let done = step(&target, &[&tip], subtract(), Plan::Arrange, AllowSet::ALL).unwrap();
+    checked(&done.body);
+    assert_eq!(split_edges(&done), Some(2), "{:?}", done.history.changes());
+}
+
+#[test]
+fn cutting_off_a_corner_of_three_faces_adds_a_face_and_splits_no_vertex() {
+    // The plane through (14, 20, 20), (20, 14, 20) and (20, 20, 14), keeping the origin's side.
+    let target = cuboid(1, [0, 0, 0], [20, 20, 20]);
+    let half = half_space(
+        &OpPath::new(OpId::from_bytes([40; 16])),
+        [p(14, 20, 20), p(20, 14, 20), p(20, 20, 14)],
+        &mut meter(),
+    )
+    .unwrap();
+    let done = step(
+        &target,
+        &[&half],
+        Selection::Intersect,
+        Plan::Arrange,
+        AllowSet::ALL,
+    )
+    .unwrap();
+    checked(&done.body);
+    assert_eq!(sixfold(&done.body), 6 * 20 * 20 * 20 - 6 * 6 * 6);
+    let found = classes(&done);
+    assert_eq!(count(&done, ChangeClass::FaceAdded), 1, "{found:?}");
+    // A vertex of three faces becomes a face, not several vertices: only four or more split.
+    assert_eq!(count(&done, ChangeClass::VertexSplit), 0, "{found:?}");
 }
 
 #[test]
