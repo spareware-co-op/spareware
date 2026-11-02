@@ -182,6 +182,46 @@ impl Residual<8, 2> for AtParameter {
     }
 }
 
+/// The ellipse's point at t and its tangent there over π: c + cos πt · a + sin πt · r a⊥ and
+/// −sin πt · a + cos πt · r a⊥, for r = b / |a| and a⊥ the axis turned a quarter turn anticlockwise.
+fn at_parameter<S: Scalar>(c: [S; 2], a: [S; 2], b: S, t: S) -> Result<([S; 2], [S; 2]), NumError> {
+    let (cos, sin) = (t.cospi()?, t.sinpi()?);
+    let r = b.div(dot(a, a)?.sqrt()?)?;
+    let turned = [a[1].neg(), a[0]];
+    let point = [
+        c[0].add(cos.mul(a[0])?)?.add(sin.mul(r)?.mul(turned[0])?)?,
+        c[1].add(cos.mul(a[1])?)?.add(sin.mul(r)?.mul(turned[1])?)?,
+    ];
+    let tangent = [
+        cos.mul(r)?.mul(turned[0])?.sub(sin.mul(a[0])?)?,
+        cos.mul(r)?.mul(turned[1])?.sub(sin.mul(a[1])?)?,
+    ];
+    Ok((point, tangent))
+}
+
+/// `p` is `d` from the ellipse, at its foot, the ellipse's point Q at the parameter t (piece G219):
+/// p − Q is across the tangent there, its part along the unit tangent zero, and
+/// (|p − Q|² − d²) / 2d is zero. Two lengths, each with gradient one in p.
+pub struct FromEllipse;
+
+impl Residual<9, 2> for FromEllipse {
+    fn residuals<S: Scalar>(&self, x: [S; 9]) -> Result<[S; 2], NumError> {
+        let [px, py, cx, cy, ax, ay, b, t, d] = x;
+        let (q, tangent) = at_parameter([cx, cy], [ax, ay], b, t)?;
+        let gap = minus([px, py], q)?;
+        let along = dot(gap, tangent)?.div(dot(tangent, tangent)?.sqrt()?)?;
+        Ok([along, smooth(gap, d)?])
+    }
+
+    fn singular(&self, x: &[f64; 9]) -> Option<Singular> {
+        let [_, _, cx, cy, ax, ay, b, _, d] = *x;
+        if d == 0.0 {
+            return Some(Singular::ZeroRadius);
+        }
+        oval_singular(cx, cy, ax, ay, b)
+    }
+}
+
 /// The line through s and e touches the ellipse of centre c, major-axis vector a and minor radius
 /// b, the centre on the side `sign` (+1 left, −1 right) of it (piece G219). With w the line's
 /// direction turned a quarter turn anticlockwise, the centre's distance from the line is
@@ -1022,6 +1062,17 @@ pub(crate) fn inputs_of(
             i.variable(parameter, 0)?;
             2
         }
+        ConstraintKind::FromEllipse {
+            point,
+            parameter,
+            distance,
+        } => {
+            i.point(point)?;
+            i.oval(sketch.parameter_ellipse(parameter)?)?;
+            i.variable(parameter, 0)?;
+            i.amount(distance)?;
+            2
+        }
         ConstraintKind::MajorRadius { ellipse, radius } => {
             // As a distance from the origin to the point a: (a · a − r²) / 2r.
             i.variable(ellipse, 0)?;
@@ -1512,6 +1563,7 @@ impl Assembly {
             ConstraintKind::LinearPattern { .. } => self.run(&SameStep, row, x),
             ConstraintKind::CircularPattern { .. } => self.run(&TurnedAbout, row, x),
             ConstraintKind::OnEllipse { .. } => self.run(&OnEllipse, row, x),
+            ConstraintKind::FromEllipse { .. } => self.run(&FromEllipse, row, x),
             ConstraintKind::TangentAtPoint { .. } => {
                 let [a, b] = row.shapes;
                 self.run(&TangentAtPoint { a, b }, row, x)
@@ -1597,6 +1649,25 @@ pub fn measure(sketch: &Sketch, constraint: &Constraint) -> Result<f64, SketchEr
             Ok(Real::new(ax * ax + ay * ay)?.sqrt()?.get())
         }
         ConstraintKind::MinorRadius { ellipse, .. } => Ok(sketch.ellipse(ellipse)?.2),
+        ConstraintKind::FromEllipse {
+            point, parameter, ..
+        } => {
+            let (centre, axis, minor) = sketch.ellipse(sketch.parameter_ellipse(parameter)?)?;
+            let real = |v: f64| Real::new(v);
+            let EntityKind::Parameter { t, .. } = sketch.entity(parameter)?.kind else {
+                return Err(SketchError::WrongKind(parameter));
+            };
+            let [cx, cy] = at(centre)?;
+            let (q, _) = at_parameter(
+                [real(cx)?, real(cy)?],
+                [real(axis[0])?, real(axis[1])?],
+                real(minor)?,
+                real(t)?,
+            )?;
+            let [px, py] = at(point)?;
+            let gap = [real(px)?.sub(q[0])?, real(py)?.sub(q[1])?];
+            Ok(dot(gap, gap)?.sqrt()?.get())
+        }
         ConstraintKind::Turned { a, b, .. } => angle_between(along(a)?, along(b)?),
         ConstraintKind::Heading { line, .. } => angle_between([1.0, 0.0], along(line)?),
         ConstraintKind::Sweep { arc, .. } => sweep(arc),

@@ -83,8 +83,9 @@ fn every_kind_is_zero_where_it_holds_and_reads_back() {
     let s = scene();
     let mut a = Assembly::new(&s).unwrap();
     a.evaluate(&s).unwrap();
-    // One row each, but two for each point at a parameter, and two for each end of the arc.
-    assert_eq!(a.residuals().len(), rules().len() + 2 + 4);
+    // One row each, but two for each point at a parameter and for the point's distance, and two
+    // for each end of the arc.
+    assert_eq!(a.residuals().len(), rules().len() + 3 + 4);
     for (i, r) in a.residuals().iter().enumerate() {
         assert!(r.abs() < 1e-12, "row {i}: {r}");
     }
@@ -121,6 +122,13 @@ fn each_kind_reads_what_it_should_off_its_solution() {
         "at-parameter 1.6 6.1",
         &[(id(5, 1), 0, 1.0), (id(5, 1), 1, -1.0)],
         &[-1.0, 1.0],
+    );
+    // (13, 0) raised one: its foot at the vertex (10, 0), where the tangent is upright, is one off
+    // across it, and (10 − 9) / 6 off the distance of 3.
+    holds_at(
+        "point-ellipse 1.13 6.2 3",
+        &[(id(1, 13), 1, 1.0)],
+        &[1.0, 1.0 / 6.0],
     );
     // An axis of 11: (121 − 100) / 20.
     holds_at("major-radius 5.0 10", &[(id(5, 0), 0, 1.0)], &[1.05]);
@@ -353,6 +361,14 @@ fn the_radii_are_dimensions_and_measure() {
     let [major, minor] = [find(0), find(1)];
     assert_eq!(measure(&s, major).unwrap(), 10.0);
     assert_eq!(measure(&s, minor).unwrap(), 5.0);
+    // The point's distance, 3 from its foot at the vertex.
+    let apart = parse(&format!(
+        "{}constraint 20.0 reference 0 point-ellipse 1.13 6.2 7\n",
+        bare()
+    ))
+    .unwrap();
+    let last = apart.constraints().last().unwrap();
+    assert!((measure(&apart, last).unwrap() - 3.0).abs() < 1e-12);
     // A reference is measured, never solved: no rows but the arc's own four.
     assert_eq!(Assembly::new(&s).unwrap().residuals().len(), 4);
     // A point on an ellipse is no dimension.

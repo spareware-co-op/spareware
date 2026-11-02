@@ -576,6 +576,17 @@ pub enum ConstraintKind {
         /// The parameter, on an ellipse.
         parameter: ItemId,
     },
+    /// A point is `distance` from an ellipse, along the ellipse's normal at a parameter, its foot
+    /// (piece G219). Which foot, of an ellipse's up to four, is the parameter's start: the stored root
+    /// choice of section 15.3.
+    FromEllipse {
+        /// The point.
+        point: ItemId,
+        /// The foot, a parameter on the ellipse.
+        parameter: ItemId,
+        /// The distance, above zero.
+        distance: Amount,
+    },
     /// An ellipse's major radius, the length of its major-axis vector (piece G219).
     MajorRadius {
         /// The ellipse.
@@ -711,6 +722,7 @@ impl ConstraintKind {
                 | ConstraintKind::ArcLength { .. }
                 | ConstraintKind::MajorRadius { .. }
                 | ConstraintKind::MinorRadius { .. }
+                | ConstraintKind::FromEllipse { .. }
         )
     }
 
@@ -1314,6 +1326,15 @@ impl Sketch {
                 point: p,
                 parameter,
             } => {
+                point(p)?;
+                self.parameter_ellipse(parameter).map(|_| ())
+            }
+            ConstraintKind::FromEllipse {
+                point: p,
+                parameter,
+                distance,
+            } => {
+                self.check_amount(distance, true)?;
                 point(p)?;
                 self.parameter_ellipse(parameter).map(|_| ())
             }
