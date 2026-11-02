@@ -56,13 +56,17 @@ About 60 of the 76 million a move, by estimate from the profile above (unmeasure
 | --- | --- | --- |
 | c11d6d73 (G139) | The starting point | 1.296G |
 | c1d9ac20, 035ead4c | The publication's order: each arena's sort into name order starts from the last cut's, and ends where a plain sort would (ties broken by row) | 1.267G |
+| 90129ed9, fa79dd63, 89dbeb63 | The patch: when the merge's shape and the names are the last cut's, the changed rows of points, faces' boxes, surfaces and curves are written into the last body by their places in the last order, every other chunk shared, at the last publication's work | 1.200G |
 
-Swapping the last body's equal chunks into the new one saves memory but no instructions: the
-rows are still built, and the new chunks are freed instead of the old. The rest of what the note
-estimates needs the rows of unchanged entities never built: the merge would have to say which of
-its faces, edges and vertices are the last cut's, unchanged, so that only the others' rows are
-written. That is change tracking through the merge's topology (G139's item 4), not a geom-topo
-change.
+The body now costs about 44 million a move: publishing 18 (was 51), dropping the last result 14,
+the checker 9 and the certificate 3. The rest of the move is the merge (162 million a move),
+naming (118) and the arrangement (44).
+
+Swapping the last body's equal chunks into a freshly built body saves memory but no instructions;
+the patch instead never builds the rows a move leaves alone. What it still pays for is computing
+every vertex's point, face's box and edge's shadow to compare them, the shape to compare, and the
+checker and certificate over the whole body; those follow the merge, whose change tracking is the
+next step (G139's item 4).
 
 ## Open risks
 
