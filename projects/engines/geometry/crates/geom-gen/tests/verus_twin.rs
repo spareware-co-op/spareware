@@ -259,7 +259,7 @@ fn the_twin_is_current() {
 const MODEL: &str = include_str!("../../geom-num/verus/model.rs");
 
 /// Every predicate twin of the Verus crate (pieces G36 and G38) and the module it shadows.
-const PREDICATE_TWINS: [(&str, &str, &str); 21] = [
+const PREDICATE_TWINS: [(&str, &str, &str); 23] = [
     (
         "orient2d",
         include_str!("../../geom-num/verus/generated/orient2d.rs"),
@@ -365,6 +365,16 @@ const PREDICATE_TWINS: [(&str, &str, &str); 21] = [
         include_str!("../../geom-num/verus/generated/circle_gap.rs"),
         include_str!("../../geom-num/src/generated/circle_gap.rs"),
     ),
+    (
+        "ellipse_side",
+        include_str!("../../geom-num/verus/generated/ellipse_side.rs"),
+        include_str!("../../geom-num/src/generated/ellipse_side.rs"),
+    ),
+    (
+        "ellipse_line",
+        include_str!("../../geom-num/verus/generated/ellipse_line.rs"),
+        include_str!("../../geom-num/src/generated/ellipse_line.rs"),
+    ),
 ];
 
 /// The Verus crate's root, which must hold every predicate twin as a module.
@@ -394,6 +404,8 @@ fn every_predicate_twin_is_its_shipped_value_token_for_token() {
         geom_gen::predicates::generate_verus_circle_side,
         geom_gen::predicates::generate_verus_circle_line,
         geom_gen::predicates::generate_verus_circle_gap,
+        geom_gen::predicates::generate_verus_ellipse_side,
+        geom_gen::predicates::generate_verus_ellipse_line,
     ];
     for ((name, twin, shipped), generate) in PREDICATE_TWINS.iter().zip(shipped_generators) {
         let t = find_fn(&tokens(twin), "value").unwrap_or_else(|| panic!("{name}: no value"));
