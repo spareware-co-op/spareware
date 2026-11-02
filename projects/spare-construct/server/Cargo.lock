@@ -1128,6 +1128,16 @@ dependencies = [
 name = "engine-geometry"
 version = "0.0.0"
 dependencies = [
+ "geom-check",
+ "geom-curve",
+ "geom-make",
+ "geom-math",
+ "geom-name",
+ "geom-num",
+ "geom-op",
+ "geom-run",
+ "geom-surface",
+ "geom-topo",
  "kit-core",
 ]
 
@@ -1364,6 +1374,148 @@ dependencies = [
  "typenum",
  "version_check",
  "zeroize",
+]
+
+[[package]]
+name = "geom-bvh"
+version = "0.0.0"
+dependencies = [
+ "geom-math",
+ "geom-num",
+ "geom-run",
+]
+
+[[package]]
+name = "geom-check"
+version = "0.0.0"
+dependencies = [
+ "geom-curve",
+ "geom-intersect",
+ "geom-num",
+ "geom-op",
+ "geom-run",
+ "geom-topo",
+]
+
+[[package]]
+name = "geom-curve"
+version = "0.0.0"
+dependencies = [
+ "geom-math",
+ "geom-num",
+ "geom-nurbs",
+ "geom-op",
+ "geom-run",
+]
+
+[[package]]
+name = "geom-intersect"
+version = "0.0.0"
+dependencies = [
+ "geom-bvh",
+ "geom-curve",
+ "geom-math",
+ "geom-num",
+ "geom-nurbs",
+ "geom-op",
+ "geom-run",
+ "geom-surface",
+]
+
+[[package]]
+name = "geom-linalg"
+version = "0.0.0"
+dependencies = [
+ "geom-num",
+]
+
+[[package]]
+name = "geom-make"
+version = "0.0.0"
+dependencies = [
+ "geom-check",
+ "geom-curve",
+ "geom-math",
+ "geom-num",
+ "geom-op",
+ "geom-run",
+ "geom-surface",
+ "geom-topo",
+]
+
+[[package]]
+name = "geom-math"
+version = "0.0.0"
+dependencies = [
+ "geom-num",
+ "geom-op",
+]
+
+[[package]]
+name = "geom-name"
+version = "0.0.0"
+dependencies = [
+ "geom-num",
+ "geom-op",
+ "geom-run",
+ "geom-topo",
+]
+
+[[package]]
+name = "geom-num"
+version = "0.0.0"
+dependencies = [
+ "geom-run",
+ "libm",
+]
+
+[[package]]
+name = "geom-nurbs"
+version = "0.0.0"
+dependencies = [
+ "geom-linalg",
+ "geom-math",
+ "geom-num",
+ "geom-op",
+ "geom-run",
+]
+
+[[package]]
+name = "geom-op"
+version = "0.0.0"
+dependencies = [
+ "geom-num",
+ "geom-run",
+ "sha2 0.11.0",
+ "unicode-normalization",
+]
+
+[[package]]
+name = "geom-run"
+version = "0.0.0"
+
+[[package]]
+name = "geom-surface"
+version = "0.0.0"
+dependencies = [
+ "geom-curve",
+ "geom-math",
+ "geom-num",
+ "geom-nurbs",
+ "geom-op",
+ "geom-run",
+]
+
+[[package]]
+name = "geom-topo"
+version = "0.0.0"
+dependencies = [
+ "geom-curve",
+ "geom-math",
+ "geom-num",
+ "geom-op",
+ "geom-run",
+ "geom-surface",
 ]
 
 [[package]]

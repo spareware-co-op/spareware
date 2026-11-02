@@ -1,6 +1,8 @@
 //! The exactness report and the validity report as operations (22; piece G102): what each says of
 //! a flat and a curved body, a stop as the context's error, and the record coming back with the
 //! answer.
+//!
+//! Covers: `query.exactness`, `query.validity`.
 
 #![allow(
     clippy::unwrap_used,
