@@ -5684,6 +5684,22 @@
       "occurrences": 1,
       "kind": "hangs",
       "reason": "The tests stop it by their timeout: the mutant offers a split only where the odd half step is the cell's own low face, so every polygon lies on one side, the child cell is the cell itself with every polygon, and the walk splits it there again for ever. It is a hang the tests catch; kept so that the judge counts it as one."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-poly/src/merge.rs",
+      "mutant": "delete ! in rings",
+      "line_text": ".filter(|o| !used.contains_key(o))",
+      "occurrences": 1,
+      "kind": "hangs",
+      "reason": "The ring walk goes on to a fin leaving the last fin's end that it has not used yet. The mutant takes only used ones, so each of a face's fins but the last ends a ring of its own at once, and the last, whose way on is a used fin, then follows used fins round the face for ever, pushing each onto its ring. Every merge meets it, so the tests stop it by their timeout. It hangs; it never returns wrong rings."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-poly/src/merge.rs",
+      "mutant": "replace == with != in nest",
+      "line_text": "(Some(at) == chosen)",
+      "occurrences": 1,
+      "kind": "hangs",
+      "reason": "nest classifies one piece of each shell, the shell's first, through every piece of the scene. The mutant classifies every piece but that one, a trace through all of them for each, so a merge's nesting grows with the square of its pieces and the tests stop it by their timeout."
     }
   ],
   "coverage_off": [],
