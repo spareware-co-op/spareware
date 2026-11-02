@@ -599,6 +599,17 @@ pub enum ConstraintKind {
         /// The side of the line the ellipse's centre is on.
         side: Side,
     },
+    /// Two curves (each a line, a circle or arc, or an ellipse or elliptical arc) are tangent at a
+    /// point on both, which other rules put there (piece G219). Tangency anywhere is this at a
+    /// construction point.
+    TangentAtPoint {
+        /// The first curve.
+        a: ItemId,
+        /// The second curve.
+        b: ItemId,
+        /// The point they touch at.
+        point: ItemId,
+    },
     /// Two points are mirror images in a line.
     Symmetric {
         /// The first.
@@ -1316,6 +1327,20 @@ impl Sketch {
             } => {
                 line(l)?;
                 self.ellipse(ellipse).map(|_| ())
+            }
+            ConstraintKind::TangentAtPoint { a, b, point: p } => {
+                point(p)?;
+                for curve in [a, b] {
+                    match self.entity(curve)?.kind {
+                        EntityKind::Line { .. }
+                        | EntityKind::Circle { .. }
+                        | EntityKind::Arc { .. }
+                        | EntityKind::Ellipse { .. }
+                        | EntityKind::EllipticalArc { .. } => {}
+                        _ => return Err(SketchError::WrongKind(curve)),
+                    }
+                }
+                Ok(())
             }
             ConstraintKind::TangentAtEnd {
                 line: l,

@@ -182,6 +182,47 @@ fn an_elliptical_arc_keeps_each_end_at_its_parameter() {
 }
 
 #[test]
+fn curves_tangent_at_a_point_read_how_far_their_normals_turn() {
+    // At (0, 5) the circle of radius 3 about (0, 8), the line y = 5 and the ellipse all have
+    // vertical normals; at (10, 0) the two ellipses horizontal ones. All hold.
+    for rule in [
+        "tangent-at-point 5.0 3.0 1.2",
+        "tangent-at-point 2.0 5.0 1.2",
+        "tangent-at-point 5.0 5.2 1.12",
+    ] {
+        holds_at(rule, &[], &[0.0]);
+    }
+    // The circle moved one to the right: its normal at (0, 5) is (−1, −3), the ellipse's (0, 50000),
+    // and the row turns positive, as the cross product does.
+    let s = with(&["tangent-at-point 5.0 3.0 1.2"]).unwrap();
+    let mut a = Assembly::new(&s).unwrap();
+    a.evaluate_at(&moved(&a, &[(id(1, 10), 0, 1.0)])).unwrap();
+    assert!(*a.residuals().last().unwrap() > 0.0, "{:?}", a.residuals());
+    a.evaluate_at(&moved(&a, &[(id(1, 10), 0, -1.0)])).unwrap();
+    assert!(*a.residuals().last().unwrap() < 0.0, "{:?}", a.residuals());
+    // At the circle's centre, or the ellipse's, a curve has no normal: refused, naming the rule.
+    for moves in [vec![(id(1, 2), 1, 3.0)], vec![(id(1, 2), 1, -5.0)]] {
+        let mut a = Assembly::new(&s).unwrap();
+        assert_eq!(
+            a.evaluate_at(&moved(&a, &moves)),
+            Err(SketchError::Degenerate(id(20, 0))),
+            "{moves:?}"
+        );
+    }
+    // Only curves can be tangent.
+    for rule in [
+        "tangent-at-point 1.0 5.0 1.2",
+        "tangent-at-point 5.0 6.0 1.2",
+        "tangent-at-point 5.0 3.0 3.0",
+    ] {
+        assert!(
+            matches!(with(&[rule]), Err(SketchError::WrongKind(_))),
+            "{rule}"
+        );
+    }
+}
+
+#[test]
 fn a_point_inside_or_outside_an_ellipse_reads_with_the_sign_of_the_side() {
     // (6, 4) moved out along y, then in: the residual is positive outside, negative inside.
     let s = with(&["on-ellipse 1.1 5.0"]).unwrap();

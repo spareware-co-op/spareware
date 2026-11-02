@@ -10,9 +10,14 @@ entity 1.6 point 106 8
 entity 1.7 point 200 0
 entity 1.8 point 210 0
 entity 1.9 point 200 5
+entity 1.10 point 0 8
+entity 1.11 point 14 0
+entity 1.12 point 10 0
 entity 2.0 line 1.3 1.4 segment
+entity 3.0 circle 1.10 3
 entity 5.0 ellipse 1.0 10 0 5
 entity 5.1 ellipse 1.5 6 8 5
+entity 5.2 ellipse 1.11 4 0 2
 entity 6.0 parameter 5.0 0.5 31.5
 entity 6.1 parameter 5.1 0 31.5
 entity 7.0 elliptical-arc 1.7 10 0 5 1.8 1.9 8.0 8.1
@@ -25,3 +30,6 @@ constraint 20.3 driving 0 major-radius 5.0 10
 constraint 20.4 driving 0 minor-radius 5.0 5
 constraint 20.5 driving 0 tangent-ellipse 2.0 5.0 right
 constraint 20.6 driving 0 on-ellipse 1.6 5.1
+constraint 20.7 driving 0 tangent-at-point 5.0 3.0 1.2
+constraint 20.8 driving 0 tangent-at-point 2.0 5.0 1.2
+constraint 20.9 driving 0 tangent-at-point 5.0 5.2 1.12

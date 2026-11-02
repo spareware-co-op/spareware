@@ -340,6 +340,9 @@ fn write_constraint(out: &mut String, constraint: &Constraint) -> Result<(), Ske
         ConstraintKind::OnEllipse { point, ellipse } => {
             put_kind(out, "on-ellipse", &[point, ellipse])?;
         }
+        ConstraintKind::TangentAtPoint { a, b, point } => {
+            put_kind(out, "tangent-at-point", &[a, b, point])?;
+        }
         ConstraintKind::AtParameter { point, parameter } => {
             put_kind(out, "at-parameter", &[point, parameter])?;
         }
@@ -786,6 +789,11 @@ fn read_constraint(words: &mut Words<'_>) -> Result<Constraint, SketchError> {
             line: words.id()?,
             circle: words.id()?,
             side: words.side()?,
+        },
+        "tangent-at-point" => ConstraintKind::TangentAtPoint {
+            a: words.id()?,
+            b: words.id()?,
+            point: words.id()?,
         },
         "on-ellipse" => ConstraintKind::OnEllipse {
             point: words.id()?,
