@@ -635,6 +635,26 @@
           "target": "lib"
         },
         {
+          "cost": "[`LIST`] draws of [`SplitMix64`] per input, once per batch, outside every measured run.",
+          "does": null,
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-bench/src/inputs/helper.rs",
+          "guarantees": [
+            "every batch is full and the same on every target, and every result of a typical batch is `Ok` (`tests/inputs.rs`); every result is the operation's own, run directly (`tests/attack_g06.rs`)."
+          ],
+          "job": "Inputs for `geom-run`'s parallel helper (decision 32.44): lists of [`LIST`] words, each one call of `Exec::map` whose items fit a single chunk, so its one wave is a lone task.",
+          "method": {
+            "links": [
+              "projects/engines/geometry/architecture/28-testing.md"
+            ],
+            "text": "the shape of the kernel's own calls that fit one chunk (a mesh's handful of faces, a sort of a few keys): one map over a short list, under an unlimited budget, on the serial executor and on a pool. Each is measured as chapter 28.14 sets benchmarks out, `projects/engines/geometry/architecture/28-testing.md`."
+          },
+          "path": "geom_bench::inputs::helper",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
           "cost": "a few draws of [`SplitMix64`] per input, once per batch, outside every measured run.",
           "does": null,
           "family": [],
@@ -3448,6 +3468,7 @@
             "**Symmetric or refused.** A matrix that is not square is [`LinalgError::Shape`]; one whose entries are not exactly symmetric, `a_ij` ≠ `a_ji` for some pair, is [`LinalgError::NotSymmetric`]. Only the lower triangle is read after that check.",
             "**Deterministic.** Fixed order of reflections, rotations and deflation tests; the shift from the trailing 2 × 2 block, computed on the block scaled to magnitude 1; IEEE 754 operations in the order written and the correctly rounded square root; a stable sort of the eigenvalues with ties broken by position.",
             "**Accuracy, checked against exact rationals.** The method is backward stable: Q·Λ·Qᵀ is a symmetric matrix within a small multiple of u·‖A‖ of A, so each eigenvalue is within that of an exact one (Golub and Van Loan, section 8.3.6). The tests check the residual and Q's orthogonality exactly and bracket each eigenvalue by exact inertia counts of A − x·I.",
+            "**Refused beyond the doubles.** A matrix with an eigenvalue beyond the largest double (which needs an entry above the largest double over n, as |λ| ≤ n·max|`a_ij`|) has no factorisation within the bound above in finite doubles: it is [`LinalgError::NotFinite`], as is any whose reduction or QR step overflows. The deflation test scales each diagonal magnitude before adding the two (`crate::matrix`'s `negligible`), so it cannot overflow and take an entry beside them for zero (issue #542).",
             "**Bounded.** At most 30·n QR steps, then [`LinalgError::NoConvergence`]; each step charges its work before it runs, the reduction its own first."
           ],
           "job": "The symmetric eigenproblem: A = Q·Λ·Qᵀ for a symmetric matrix, by Householder tridiagonalisation and the implicit symmetric QR algorithm with Wilkinson's shift.",
@@ -3561,7 +3582,7 @@
             "**Deterministic.** Fixed sweep order (pairs (p, q), p < q, row by row), fixed deflation and shift rules, IEEE 754 operations in the order written, the correctly rounded square root of `geom_num::math`, no fused multiply-add, and a stable sort with ties broken by column index. The same input gives the same bits on every target.",
             "**Accuracy, checked against exact rationals.** Both are backward stable: the computed factors are those of a matrix A + E with ‖E‖ a small multiple of u·‖A‖ (Golub and Van Loan, 8.6.3), so each singular value is within that of the exact one. Jacobi does better on graded matrices A = B·D with B well conditioned: each singular value to a small multiple of u·κ(B) in relative terms, however small (Demmel and Veselić, theorem 4.4). The tests check both claims with exact rational arithmetic: the residual and the orthogonality of U and V, and each singular value bracketed by exact inertia counts of Aᵀ·A.",
             "**Bounded.** Jacobi stops after [`MAX_SWEEPS`] sweeps and Golub–Kahan after 6·k² QR steps with [`LinalgError::NoConvergence`]; neither has ever needed it in the tests. Each sweep or step charges its work before it runs; the reductions charge theirs first.",
-            "**Typed failures.** Columns whose norms differ by more than the doubles can hold (a rotation angle that is not finite) are [`LinalgError::NotFinite`], never a silently wrong factor."
+            "**Typed failures.** Columns whose norms differ by more than the doubles can hold (a rotation angle that is not finite) are [`LinalgError::NotFinite`], never a silently wrong factor. So is a matrix with a singular value beyond the largest double (as when a row or column's norm passes it), which has no factorisation within the bound above in finite doubles, and any whose reduction or QR step overflows. Golub–Kahan's deflation test scales each diagonal magnitude before adding the two (`crate::matrix`'s `negligible`), so it cannot overflow and take an entry beside them for zero (issue #542)."
           ],
           "job": "The singular value decomposition, two ways: one-sided Jacobi, accurate to the last bits of tiny singular values of graded matrices, and Golub–Kahan, the fast general method.",
           "method": {
@@ -7301,12 +7322,12 @@
           "target": "lib"
         },
         {
-          "cost": "a phase of c chunks runs in at most 7 + ⌈c / `WAVE_MAX`⌉ waves (six doublings from `WAVE_FIRST` reach `WAVE_MAX`). Each wave of w chunks costs two lists of w entries (the tasks and the handles passed to the pool) and one barrier; the slots of the current wave, each a chunk's payload and output, are the only other storage. With no pool there is no list and no barrier: each chunk runs just before it is read.",
+          "cost": "a phase of c chunks runs in at most 7 + ⌈c / `WAVE_MAX`⌉ waves (six doublings from `WAVE_FIRST` reach `WAVE_MAX`). Each wave of w > 1 chunks costs two lists of w entries (the tasks and the handles passed to the pool) and one barrier, and a wave of one task neither. The slots of the current wave, each a chunk's payload and output, are the only other storage. With no pool there is no list and no barrier: each chunk runs just before it is read.",
           "does": null,
           "family": [],
           "file": "projects/engines/geometry/crates/geom-run/src/pool.rs",
           "guarantees": [
-            "Whatever a pool does, the answer is right. A task run twice writes its slot once (a filled slot is skipped); a task never run is run on the calling thread when its result is read. Only a panic inside the pool escapes, and pools must not panic.",
+            "Whatever a pool does, the answer is right. A task run twice writes its slot once (a filled slot is skipped); a task never run, as a wave's only task never is, runs on the calling thread when its result is read, with the same payload and so the same meter. Only a panic inside the pool escapes, and pools must not panic.",
             "Results are read in index order, never in the order tasks finished."
           ],
           "job": "Threads come from the caller: the [`Pool`] trait, and how the helper hands a pool its work.",

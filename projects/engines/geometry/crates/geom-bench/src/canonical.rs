@@ -770,6 +770,23 @@ impl<T: Canonical> Canonical for Result<T, geom_bvh::BvhError> {
     }
 }
 
+// `geom-run`'s helper (decision 32.44's count benchmark of a lone wave).
+
+impl<T: Canonical> Canonical for Result<T, geom_run::RunError> {
+    fn encode(&self, h: &mut Sha256) {
+        match self {
+            Ok(v) => {
+                h.update(&[0]);
+                v.encode(h);
+            }
+            Err(e) => {
+                h.update(&[1]);
+                debug_text(e, h);
+            }
+        }
+    }
+}
+
 // `geom-nurbs`'s types (decision 32.44's count benchmarks for pieces G56, G58 and G59).
 
 impl<const D: usize> Canonical for geom_nurbs::Bounds<D> {

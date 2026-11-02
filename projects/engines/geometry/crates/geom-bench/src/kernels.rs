@@ -2025,3 +2025,53 @@ pub mod roots {
         });
     }
 }
+
+/// `geom-run`'s parallel helper (decision 32.44): `Exec::map` over a list that fits one chunk, on
+/// the serial executor and on a pool, under an unlimited budget. The pool runs its tasks on the
+/// calling thread, in order, so the two counts differ by the helper's own dispatch only, never by
+/// a thread's wake-up: a lone wave runs on the calling thread on either, so they should match.
+pub mod helper {
+    use geom_run::{Budget, ChunkPlan, Exec, Phase, Pool, RunError, Stopped, WorkMeter};
+
+    use super::run;
+
+    /// The phase every call runs as.
+    const PHASE: Phase = Phase::new("bench");
+    /// The chunk size: above every list's length, so each list is one chunk.
+    const PLAN: ChunkPlan = ChunkPlan::fixed::<64>();
+
+    /// A pool that runs every task on the calling thread, in order.
+    struct InOrder;
+
+    impl Pool for InOrder {
+        fn run_all(&self, tasks: &mut [&mut (dyn FnMut() + Send)]) {
+            for task in tasks.iter_mut() {
+                task();
+            }
+        }
+    }
+
+    /// One item's work: a unit of the budget and a multiply.
+    fn item(_: usize, x: &u64, meter: &mut WorkMeter<'_>) -> Result<u64, Stopped> {
+        meter.charge(1)?;
+        Ok(x.wrapping_mul(3))
+    }
+
+    /// `Exec::map` of each list on the serial executor.
+    #[inline(never)]
+    pub fn lone_serial(batch: &[Vec<u64>], out: &mut Vec<Result<Vec<u64>, RunError>>) {
+        run(batch, out, |items| {
+            let mut meter = WorkMeter::new(Budget::UNLIMITED);
+            Exec::serial().map(&mut meter, PHASE, PLAN, items, item)
+        });
+    }
+
+    /// `Exec::map` of each list on a pool.
+    #[inline(never)]
+    pub fn lone_pool(batch: &[Vec<u64>], out: &mut Vec<Result<Vec<u64>, RunError>>) {
+        run(batch, out, |items| {
+            let mut meter = WorkMeter::new(Budget::UNLIMITED);
+            Exec::with_pool(&InOrder).map(&mut meter, PHASE, PLAN, items, item)
+        });
+    }
+}
