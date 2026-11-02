@@ -631,7 +631,7 @@ fn counted(body: &Body) -> [u32; 4] {
     ]
 }
 
-fn noted(out: &geom_op::OpOutput<Body>, code: &str) -> bool {
+fn noted(out: &geom_op::OpOutput<Combined>, code: &str) -> bool {
     out.diagnostics.iter().any(|d| d.code == code)
 }
 
@@ -644,17 +644,17 @@ fn a_box_less_itself_or_a_box_around_it_is_nothing_and_goes_back_in() {
     for tool in [&a, &around] {
         let out = subtract(&ctx(), &SERIAL, key(1), &[solid(1, &a), solid(2, tool)]).unwrap();
         assert!(noted(&out, "bool.empty_result") && !noted(&out, "bool.touching_only"));
-        let nothing = out.result;
+        let nothing = out.result.body;
         assert_eq!(counted(&nothing), [0, 0, 0, 0]);
         assert_eq!(nothing.kind(), BodyKind::General);
         checked(&nothing);
         let back = unite(&ctx(), &SERIAL, &[solid(1, &nothing), solid(2, &a)]).unwrap();
         assert_eq!(
-            (counted(&back.result), sixfold(&back.result)),
+            (counted(&back.result.body), sixfold(&back.result.body)),
             (counted(&a), sixfold(&a))
         );
         let less = subtract(&ctx(), &SERIAL, key(1), &[solid(1, &nothing), solid(2, &a)]);
-        assert_eq!(counted(&less.unwrap().result), [0, 0, 0, 0]);
+        assert_eq!(counted(&less.unwrap().result.body), [0, 0, 0, 0]);
     }
 }
 
@@ -665,24 +665,27 @@ fn a_walls_end_on_anothers_side_follows_the_shared_face_table() {
     let b = cuboid([100, -20, 0], [10, 50, 30]);
     let both = [solid(1, &a), solid(2, &b)];
     // Unite: inside on both sides, the face goes, and one solid stands.
-    let one = unite(&ctx(), &SERIAL, &both).unwrap().result;
+    let one = unite(&ctx(), &SERIAL, &both).unwrap().result.body;
     assert_eq!(one.arenas().shells.len(), 1);
     assert_eq!(sixfold(&one), sixfold(&a) + sixfold(&b));
     checked(&one);
     // Subtract A less B: A is unchanged there.
-    let cut = subtract(&ctx(), &SERIAL, key(1), &both).unwrap().result;
+    let cut = subtract(&ctx(), &SERIAL, key(1), &both)
+        .unwrap()
+        .result
+        .body;
     assert_eq!((counted(&cut), sixfold(&cut)), (counted(&a), sixfold(&a)));
     // Intersect: an empty body, which says the walls only touch.
     let met = intersect(&ctx(), &SERIAL, &both).unwrap();
     assert!(noted(&met, "bool.empty_result") && noted(&met, "bool.touching_only"));
-    assert_eq!(counted(&met.result), [0, 0, 0, 0]);
-    checked(&met.result);
+    assert_eq!(counted(&met.result.body), [0, 0, 0, 0]);
+    checked(&met.result.body);
     // Apart, or touching along an edge alone, they share no face: nothing is said of touching.
     for low in [[200, 0, 0], [100, 10, 0]] {
         let c = cuboid(low, [10, 10, 30]);
         let out = intersect(&ctx(), &SERIAL, &[solid(1, &a), solid(2, &c)]).unwrap();
         assert!(noted(&out, "bool.empty_result") && !noted(&out, "bool.touching_only"));
-        checked(&out.result);
+        checked(&out.result.body);
     }
 }
 
@@ -691,20 +694,23 @@ fn a_box_inside_another_unites_cuts_and_meets() {
     let outer = cuboid([0, 0, 0], [40, 40, 40]);
     let inner = cuboid([10, 10, 10], [10, 10, 10]);
     let both = [solid(1, &outer), solid(2, &inner)];
-    let whole = unite(&ctx(), &SERIAL, &both).unwrap().result;
+    let whole = unite(&ctx(), &SERIAL, &both).unwrap().result.body;
     assert_eq!(
         (counted(&whole), sixfold(&whole)),
         (counted(&outer), sixfold(&outer))
     );
     // Clear of every face, the inner box leaves a cavity: a second shell.
-    let hollow = subtract(&ctx(), &SERIAL, key(1), &both).unwrap().result;
+    let hollow = subtract(&ctx(), &SERIAL, key(1), &both)
+        .unwrap()
+        .result
+        .body;
     assert_eq!(counted(&hollow), [12, 24, 16, 2]);
     assert_eq!(sixfold(&hollow), sixfold(&outer) - sixfold(&inner));
     checked(&hollow);
     let none = subtract(&ctx(), &SERIAL, key(2), &both).unwrap();
     assert!(noted(&none, "bool.empty_result"));
-    checked(&none.result);
-    let met = intersect(&ctx(), &SERIAL, &both).unwrap().result;
+    checked(&none.result.body);
+    let met = intersect(&ctx(), &SERIAL, &both).unwrap().result.body;
     assert_eq!(
         (counted(&met), sixfold(&met)),
         (counted(&inner), sixfold(&inner))
@@ -712,11 +718,14 @@ fn a_box_inside_another_unites_cuts_and_meets() {
     // On one of the outer box's faces, it leaves a pocket in one shell.
     let flush = cuboid([0, 10, 10], [10, 10, 10]);
     let both = [solid(1, &outer), solid(2, &flush)];
-    let pocket = subtract(&ctx(), &SERIAL, key(1), &both).unwrap().result;
+    let pocket = subtract(&ctx(), &SERIAL, key(1), &both)
+        .unwrap()
+        .result
+        .body;
     assert_eq!(pocket.arenas().shells.len(), 1);
     assert_eq!(sixfold(&pocket), sixfold(&outer) - sixfold(&flush));
     checked(&pocket);
-    let met = intersect(&ctx(), &SERIAL, &both).unwrap().result;
+    let met = intersect(&ctx(), &SERIAL, &both).unwrap().result.body;
     assert_eq!(
         (counted(&met), sixfold(&met)),
         (counted(&flush), sixfold(&flush))
