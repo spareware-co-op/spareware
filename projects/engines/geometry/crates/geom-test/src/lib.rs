@@ -42,6 +42,15 @@
 //!   The binary `golden` lists the
 //!   store, checks it against the repository (`-- check`), runs every golden in one CI leg's
 //!   configuration (`-- run`) and holds a pull request's edits to the approval rule (`-- diff`).
+//! - [`second_check`]: chapter 8.3's rules again, for flat bodies, in exact rationals, sharing no
+//!   code with `geom-check` (chapter 28.4; G135).
+//! - [`plane_bodies`]: polyhedra whose every vertex is the meeting of three planes, moved a step off
+//!   the grid (G135).
+//! - [`refute`]: the refutation checker for curved bodies (chapter 28.4; G178): curves, pcurves
+//!   and surfaces sampled densely in fixed point and exact rationals, sharing no code with
+//!   `geom-intersect` or `geom-check`, which can only ever say "found invalid".
+//! - [`faults`]: checker fault injection (chapter 28.4; G110): valid bodies broken one fault at a
+//!   time, each caught with the right kind, and every valid body passed.
 //! - [`history`]: chapter 20.3's history laws as a kit every operation's tests run (G88):
 //!   one history and a chain checked through `geom-op`'s checker, composition from both ends, and
 //!   proptest generators of valid histories and chains.
@@ -212,6 +221,7 @@
 
 pub mod coverage;
 pub mod deps;
+pub mod faults;
 pub mod fixed;
 pub mod foundation;
 pub mod golden;
@@ -224,12 +234,15 @@ pub mod map;
 pub mod miri;
 pub mod mutants;
 pub mod nurbs_reference;
+pub mod plane_bodies;
 pub mod prop;
 pub mod quality_ledger;
 pub mod recursion;
+pub mod refute;
 pub mod rng;
 pub mod rust_source;
 pub mod scan;
+pub mod second_check;
 pub mod seed;
 pub mod trip;
 
