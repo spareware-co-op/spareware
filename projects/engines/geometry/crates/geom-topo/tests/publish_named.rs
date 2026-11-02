@@ -562,6 +562,35 @@ fn a_publication_from_any_start_is_the_publication_without_it() {
         assert_eq!(body, publish(&w, &n).unwrap());
         let (again, same) = from(&w, &n, Some(&order));
         assert_eq!((&again, &same), (&body, &order));
+        // Each named row's place in name order holds its name; a row past the end has none.
+        let sorted = body.names().unwrap();
+        for (list, arena, rows) in [
+            (&n.faces, Arena::Face, &sorted.faces),
+            (&n.edges, Arena::Edge, &sorted.edges),
+            (&n.vertices, Arena::Vertex, &sorted.vertices),
+            (&n.regions, Arena::Region, &sorted.regions),
+        ] {
+            for (row, name) in (0_u32..).zip(list) {
+                let place = order.place(arena, row).unwrap();
+                assert_eq!(rows[place as usize], *name);
+            }
+            assert_eq!(order.place(arena, list.len() as u32), None);
+        }
+        for arena in [
+            Arena::Shell,
+            Arena::Loop,
+            Arena::Fin,
+            Arena::Surface,
+            Arena::Curve,
+            Arena::Pcurve,
+            Arena::Point,
+            Arena::Plane,
+        ] {
+            let rows = body.arenas().rows(arena);
+            let mut places: Vec<u32> = (0..rows).map(|r| order.place(arena, r).unwrap()).collect();
+            places.sort_unstable();
+            assert_eq!(places, (0..rows).collect::<Vec<u32>>(), "{arena:?}");
+        }
         let other = from(&w, &names(&w, salt + 100), None).1;
         let (moved, moved_order) = from(&w, &n, Some(&other));
         assert_eq!((&moved, &moved_order), (&body, &order));

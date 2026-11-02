@@ -133,6 +133,29 @@ impl Builder {
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Order(Moves<Permutation>);
 
+impl Order {
+    /// Where the row at `row` of `arena`, in the order the builder held them, went in name order.
+    #[must_use]
+    pub fn place(&self, arena: Arena, row: u32) -> Option<u32> {
+        let moves = &self.0;
+        let of = match arena {
+            Arena::Region => &moves.regions,
+            Arena::Shell => &moves.shells,
+            Arena::Face => &moves.faces,
+            Arena::Loop => &moves.loops,
+            Arena::Fin => &moves.fins,
+            Arena::Edge => &moves.edges,
+            Arena::Vertex => &moves.vertices,
+            Arena::Surface => &moves.surfaces,
+            Arena::Curve => &moves.curves,
+            Arena::Pcurve => &moves.pcurves,
+            Arena::Point => &moves.points,
+            Arena::Plane => &moves.planes,
+        };
+        of.new_of(row)
+    }
+}
+
 /// The move into name order of a named arena of `rows` rows, its sort starting from `start`.
 fn by_name(
     names: &[NameKey],
