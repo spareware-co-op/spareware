@@ -501,6 +501,42 @@ fn symmetric() -> Vec<(String, Matrix)> {
     out
 }
 
+/// Checks `eig` against `a` exactly: its values sorted, the residual A·Q − Q·Λ within
+/// 8·(2n)²·u·max|a_ij| and QᵀQ − I within 8·(2n)²·u. Returns that tolerance, 8·(2n)²·u.
+fn backward_stable(name: &str, a: &Matrix, eig: &SymmetricEigen) -> RBig {
+    let n = a.rows();
+    let ae = ex(a);
+    let scale = max_abs(&ae);
+    let (vals, q) = (eig.values(), ex(eig.vectors()));
+    assert!(vals.windows(2).all(|w| w[0] <= w[1]), "{name}: not sorted");
+    let p = RBig::from((2 * n) as i64);
+    let tol = &p * &p * unit() * RBig::from(8);
+    // A·Q − Q·Λ and QᵀQ − I, exactly.
+    let mut res = RBig::ZERO;
+    let mut orth = RBig::ZERO;
+    for i in 0..n {
+        for k in 0..n {
+            let mut r = -(&q[i][k] * exact(vals[k]));
+            for j in 0..n {
+                r += &ae[i][j] * &q[j][k];
+            }
+            if abs(&r) > res {
+                res = abs(&r);
+            }
+            let mut d = (0..n).fold(RBig::ZERO, |acc, t| acc + &q[t][i] * &q[t][k]);
+            if i == k {
+                d -= RBig::ONE;
+            }
+            if abs(&d) > orth {
+                orth = abs(&d);
+            }
+        }
+    }
+    assert!(res <= &tol * &scale, "{name}: residual {res}");
+    assert!(orth <= tol, "{name}: orthogonality {orth}");
+    tol
+}
+
 #[test]
 fn the_eigensolver_is_backward_stable_and_brackets_the_exact_values() {
     for (name, a) in symmetric() {
@@ -508,33 +544,8 @@ fn the_eigensolver_is_backward_stable_and_brackets_the_exact_values() {
         let ae = ex(&a);
         let scale = max_abs(&ae);
         let eig = SymmetricEigen::factor(&a, &mut plenty()).unwrap();
-        let (vals, q) = (eig.values(), ex(eig.vectors()));
-        assert!(vals.windows(2).all(|w| w[0] <= w[1]), "{name}: not sorted");
-        let p = RBig::from((2 * n) as i64);
-        let tol = &p * &p * unit() * RBig::from(8);
-        // A·Q − Q·Λ and QᵀQ − I, exactly.
-        let mut res = RBig::ZERO;
-        let mut orth = RBig::ZERO;
-        for i in 0..n {
-            for k in 0..n {
-                let mut r = -(&q[i][k] * exact(vals[k]));
-                for j in 0..n {
-                    r += &ae[i][j] * &q[j][k];
-                }
-                if abs(&r) > res {
-                    res = abs(&r);
-                }
-                let mut d = (0..n).fold(RBig::ZERO, |acc, t| acc + &q[t][i] * &q[t][k]);
-                if i == k {
-                    d -= RBig::ONE;
-                }
-                if abs(&d) > orth {
-                    orth = abs(&d);
-                }
-            }
-        }
-        assert!(res <= &tol * &scale, "{name}: residual {res}");
-        assert!(orth <= tol, "{name}: orthogonality {orth}");
+        let vals = eig.values();
+        let tol = backward_stable(&name, &a, &eig);
         // Eigenvalue i of A lies within δ of λ̂ᵢ, by inertia counts of A − x·I.
         let delta = &tol * &scale * RBig::from(n as i64);
         for (i, &x) in vals.iter().enumerate() {
@@ -546,6 +557,62 @@ fn the_eigensolver_is_backward_stable_and_brackets_the_exact_values() {
             );
         }
     }
+}
+
+/// Issue #542: two diagonal entries whose magnitudes sum past the largest double. The deflation
+/// test added them before scaling, so its threshold overflowed to infinity and took the entry
+/// between them, 10^300, for zero: eigenvalues −10^308 twice, a residual of 10^300 against a bound
+/// of about 1.4·10^294. Scaled first, the threshold stays finite, and the step resolves the pair
+/// into −10^308 ± 10^300, both doubles.
+#[test]
+fn a_pair_whose_magnitudes_sum_past_the_largest_double_is_not_deflated() {
+    let a = Matrix::from_rows(2, 2, &[-1e308, 1e300, 1e300, -1e308]).unwrap();
+    let eig = SymmetricEigen::factor(&a, &mut plenty()).unwrap();
+    backward_stable("pair near the largest double", &a, &eig);
+    assert!(eig.values()[0] < eig.values()[1], "{:?}", eig.values());
+}
+
+/// Issue #542, the `linalg` fuzz target's input: the symmetric part of its 5 × 5 matrix, exactly.
+/// Its corner, −(2 − 2^−52)·2^1023, the largest double negated, couples to −2.5·10^306 through
+/// −2.8·10^303, and that pushes one eigenvalue below the largest double: exact inertia counts put
+/// it between −f64::MAX − 5·10^298 and −f64::MAX − 4·10^298, where the doubles end. No finite Λ is
+/// within the bound of it, so the factorisation is refused as not finite. Before the fix the
+/// deflation test overflowed and dropped the coupling, and the solver returned −f64::MAX itself.
+#[test]
+fn an_eigenvalue_beyond_the_largest_double_is_refused() {
+    let s = [
+        -1.797_693_134_862_315_7e308,
+        0.5,
+        -2.837_488_730_405_057e303,
+        2.389_154_861_369_150_3e-299,
+        -1.625,
+        0.5,
+        5.662_754_536_843_83e250,
+        3.5,
+        1.027_347_530_224_469_3e-81,
+        -1.625,
+        -2.837_488_730_405_057e303,
+        3.5,
+        -2.505_975_417_776_819e306,
+        0.0,
+        -1.625,
+        2.389_154_861_369_150_3e-299,
+        1.027_347_530_224_469_3e-81,
+        0.0,
+        -3.189_956_675_896_514e-248,
+        -1.072_777_411_927_435_5e110,
+        -1.625,
+        -1.625,
+        -1.625,
+        -1.072_777_411_927_435_5e110,
+        -3.25,
+    ];
+    assert_eq!(s[0], -f64::MAX);
+    let a = Matrix::from_rows(5, 5, &s).unwrap();
+    assert_eq!(
+        SymmetricEigen::factor(&a, &mut plenty()),
+        Err(LinalgError::NotFinite)
+    );
 }
 
 #[test]
