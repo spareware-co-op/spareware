@@ -50,7 +50,7 @@ use geom_run::{Stopped, WorkMeter};
 use crate::convex::{Piece, opposite};
 use crate::order::{Flap, Line, Ray, about, around};
 use crate::plane::canonical;
-use crate::trace::{Cell, Classified, Polygon, TraceError, classify};
+use crate::trace::{Cell, Classified, Polygon, TraceError, classify_inside};
 use crate::winding::{Entry, Kept, Winding, WindingTest, kept};
 
 /// What merges (11.5).
@@ -1407,7 +1407,7 @@ fn sides_of_first(
         .take(1)
         .map(|polygon| alloc::vec![polygon.piece.clone()])
         .collect();
-    let found = classify(&cell, &Winding::new(), polygons, &lists, meter)?;
+    let found = classify_inside(&cell, &Winding::new(), polygons, &lists, meter)?;
     let first = found.into_iter().next();
     Ok(first.map_or_else(|| (Winding::new(), Winding::new()), |c| (c.front, c.back)))
 }
