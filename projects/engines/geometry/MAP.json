@@ -8066,6 +8066,7 @@
             "**Test code is not counted.** Lines of items behind `#[cfg(test)]` are left out of both the lines found and the lines run, so tests cannot pad a crate's numbers.",
             "**A line with no code is not counted.** llvm-cov can give a line holding only a comment or an attribute (`#[must_use]` above a `const fn`) a count of 0 though the function runs ([`no_code_lines`]); such a line has nothing to run, so it is left out of both counts.",
             "**Nothing is skipped silently.** A source file that defines a function but has no coverage data was never compiled into the measured tests, and fails; so does a crate with no LCOV file at all, and a foundation crate whose code has `if` or `while` but whose data holds no branch record (the run was made without `--branch`).",
+            "**A branch outcome the LCOV lines cannot place counts as missed.** `BRF` can count outcomes that no `BRDA` line lists, where llvm-cov writes branch regions that start at one place as one pair (rustc's copies of a match guard, one for each alternative of an or-pattern). They are in the file's own code, so they are counted as found and never as hit, and they fail the foundation bar, since no ledger entry can name their line.",
             "**A missing foundation module fails.** A crate of [`crate::foundation::FOUNDATION_MODULES`] with code but no file of its foundation module fails, so moving the module cannot drop it from the foundation bar.",
             "**Every mark cites a checked proof.** A `coverage(off)` mark must have a comment right above it citing `proof: <path>::<name>`, the same proof as its ledger entry, and the cited file must define that function as a Kani harness (`#[kani::proof]`) or a Verus `proof fn`. A ledger entry with no mark is stale and fails.",
             "**Waiting lines are named, and can only go.** A foundation line the tests do not run passes only while the ledger's `awaiting_proof` names it, with the piece that proves it unreachable or tests it ([`excuse_awaiting`]); an entry that matches more or fewer missed lines than it says fails. When every kernel branch outcome of a file with a count of 0 waits so, which of them llvm-cov folded no longer matters, and the file's folding note is not a failure.",
@@ -8082,7 +8083,28 @@
             "text": "the LCOV tracefile records (`SF`, `DA`, `BRDA`, `BRF`, `end_of_record`) that `llvm-cov export -format=lcov` writes (<https://llvm.org/docs/CommandGuide/llvm-cov.html#llvm-cov-export>), each read by the `lcov` crate 0.8 (MIT OR Apache-2.0, <https://docs.rs/lcov/0.8.2/lcov/>); cargo-llvm-cov 0.9.1 (<https://docs.rs/crate/cargo-llvm-cov/0.9.1>) runs it. Branch coverage is rustc's `-Z coverage-options=branch`, nightly only (<https://doc.rust-lang.org/rustc/instrument-coverage.html>), which cargo-llvm-cov's `--branch` turns on."
           },
           "path": "geom_test::coverage",
-          "provenance": [],
+          "provenance": [
+            {
+              "licence": "Apache-2.0 WITH LLVM-exception",
+              "link": "https://github.com/rust-lang/llvm-project/blob/1b9c0d5ff9bbe7634aead059efe6b11a7eeba145/llvm/tools/llvm-cov/CoverageExporterLcov.cpp",
+              "method_note": null,
+              "name": "LLVM's llvm-cov",
+              "notice": [],
+              "pinned": true,
+              "purpose": "with `CoverageSummaryInfo.cpp` and `CodeCoverage.cpp` beside it at the same commit (the LLVM 23.1.1 the pinned nightly ships), for how its LCOV export counts `BRF` and writes `BRDA`. No code copied.",
+              "take": "port-method"
+            },
+            {
+              "licence": "MIT OR Apache-2.0",
+              "link": "https://github.com/rust-lang/rust/blob/21b707e3f97e0b522ebd2f277a862339625ad83f/compiler/rustc_mir_build/src/builder/matches/mod.rs",
+              "method_note": null,
+              "name": "rustc",
+              "notice": [],
+              "pinned": true,
+              "purpose": "with `compiler/rustc_mir_transform/src/coverage/mappings.rs` and `compiler/rustc_codegen_llvm/src/coverageinfo/mapgen/covfun.rs` at the same commit (the pinned nightly), for which branch regions it writes and where. No code copied.",
+              "take": "port-method"
+            }
+          ],
           "spdx": null,
           "target": "lib"
         },
@@ -10091,6 +10113,17 @@
       ]
     },
     {
+      "licence": "Apache-2.0 WITH LLVM-exception",
+      "link": "https://github.com/rust-lang/llvm-project/blob/1b9c0d5ff9bbe7634aead059efe6b11a7eeba145/llvm/tools/llvm-cov/CoverageExporterLcov.cpp",
+      "method_note": null,
+      "name": "LLVM's llvm-cov",
+      "pinned": true,
+      "take": "port-method",
+      "used_by": [
+        "projects/engines/geometry/crates/geom-test/src/coverage.rs"
+      ]
+    },
+    {
       "licence": "MIT OR Apache-2.0",
       "link": "https://github.com/rust-lang/rust-clippy/blob/3583eb8a9ae1161bd7d80907acfa09b3612a93f9/clippy_dev/src/parse/cursor.rs",
       "method_note": null,
@@ -10110,6 +10143,17 @@
       "take": "port-method",
       "used_by": [
         "projects/engines/geometry/crates/geom-test/src/map.rs"
+      ]
+    },
+    {
+      "licence": "MIT OR Apache-2.0",
+      "link": "https://github.com/rust-lang/rust/blob/21b707e3f97e0b522ebd2f277a862339625ad83f/compiler/rustc_mir_build/src/builder/matches/mod.rs",
+      "method_note": null,
+      "name": "rustc",
+      "pinned": true,
+      "take": "port-method",
+      "used_by": [
+        "projects/engines/geometry/crates/geom-test/src/coverage.rs"
       ]
     },
     {

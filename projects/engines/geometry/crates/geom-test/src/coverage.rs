@@ -20,6 +20,11 @@
 //!   data was never compiled into the measured tests, and fails; so does a crate with no LCOV file
 //!   at all, and a foundation crate whose code has `if` or `while` but whose data holds no branch
 //!   record (the run was made without `--branch`).
+//! - **A branch outcome the LCOV lines cannot place counts as missed.** `BRF` can count outcomes
+//!   that no `BRDA` line lists, where llvm-cov writes branch regions that start at one place as one
+//!   pair (rustc's copies of a match guard, one for each alternative of an or-pattern). They are in
+//!   the file's own code, so they are counted as found and never as hit, and they fail the
+//!   foundation bar, since no ledger entry can name their line.
 //! - **A missing foundation module fails.** A crate of [`crate::foundation::FOUNDATION_MODULES`]
 //!   with code but no file of its foundation module fails, so moving the module cannot drop it from
 //!   the foundation bar.
@@ -43,6 +48,17 @@
 //! turns on.
 //!
 //! Cost: linear in the size of the LCOV files and the crates' sources.
+//!
+//! Consulted: LLVM's llvm-cov, Apache-2.0 WITH LLVM-exception,
+//!   <https://github.com/rust-lang/llvm-project/blob/1b9c0d5ff9bbe7634aead059efe6b11a7eeba145/llvm/tools/llvm-cov/CoverageExporterLcov.cpp>,
+//!   with `CoverageSummaryInfo.cpp` and `CodeCoverage.cpp` beside it at the same commit (the LLVM
+//!   23.1.1 the pinned nightly ships), for how its LCOV export counts `BRF` and writes `BRDA`. No
+//!   code copied.
+//! Consulted: rustc, MIT OR Apache-2.0,
+//!   <https://github.com/rust-lang/rust/blob/21b707e3f97e0b522ebd2f277a862339625ad83f/compiler/rustc_mir_build/src/builder/matches/mod.rs>,
+//!   with `compiler/rustc_mir_transform/src/coverage/mappings.rs` and
+//!   `compiler/rustc_codegen_llvm/src/coverageinfo/mapgen/covfun.rs` at the same commit (the pinned
+//!   nightly), for which branch regions it writes and where. No code copied.
 
 use core::fmt;
 use std::collections::{BTreeMap, BTreeSet};
@@ -87,9 +103,10 @@ pub struct FileData {
     pub lines: BTreeMap<usize, u64>,
     /// Times taken per branch outcome (`BRDA`); `None` when its condition never ran (`-`).
     pub branches: BTreeMap<BranchId, Option<u64>>,
-    /// The branch outcomes llvm-cov counts (`BRF`). It leaves out folded outcomes (a condition
-    /// that is a constant, such as `while false`), which `BRDA` still lists, always as 0, so
-    /// `branches.len() − found` is the number of folded outcomes.
+    /// The branch outcomes llvm-cov counts (`BRF`): each outcome of each branch region, except
+    /// folded ones (a condition that is a constant, such as `while false`). `BRDA` still lists a
+    /// folded outcome, always as 0, but writes branch regions that start at one place as one pair,
+    /// so either can be the larger; the gate reads only their difference.
     pub found: Option<u64>,
 }
 
@@ -239,7 +256,10 @@ pub struct FileReport {
     pub awaiting_branches: Vec<usize>,
     /// Whether the file has `if` or `while` outside test code.
     pub has_branch_sites: bool,
-    /// Why its branch count is not exact, when folded outcomes cannot be placed (see
+    /// Branch outcomes `BRF` counts beyond the `BRDA` lines, which no line can be given: in
+    /// `counts` as found and never as hit, and no ledger entry can excuse them.
+    pub unplaced_branches: u64,
+    /// Why its branch count is not exact, when folded or unplaced outcomes cannot be placed (see
     /// [`measure`]); the foundation bar then fails the file.
     pub branch_note: Option<String>,
 }
@@ -370,6 +390,8 @@ struct Branches {
     found: u64,
     hit: u64,
     missed_lines: Vec<usize>,
+    /// Outcomes counted in `found` and missed that no line can be given.
+    unplaced: u64,
     problem: Option<String>,
 }
 
@@ -379,21 +401,41 @@ fn to_u64(n: usize) -> u64 {
 
 /// Counts a file's branch outcomes outside test code, leaving out folded ones.
 ///
-/// LCOV lists every outcome in `BRDA`, folded ones (a constant condition) as 0, while `BRF`
-/// counts only those that are not folded; so the file has `folded = BRDA lines − BRF` folded
-/// outcomes, each with a count of 0, but which ones is not written. When every outcome with a
-/// count of 0 is folded, or all of them are outside test code, the outcomes outside test code are
-/// counted exactly. Otherwise the folded ones cannot be placed, so every outcome of 0 outside test
-/// code is counted as missed and the file is reported, which can only make the gate stricter.
+/// `BRF` and the `BRDA` lines are two different counts in llvm-cov's LCOV export (LLVM 23.1.1, as
+/// the pinned nightly ships it), and they can differ either way:
+///
+/// - **Folded outcomes make `BRDA` the longer.** An outcome folded away (a constant condition)
+///   is listed in `BRDA`, as 0, but `sumBranches` leaves it out of `BRF`
+///   (<https://github.com/rust-lang/llvm-project/blob/1b9c0d5ff9bbe7634aead059efe6b11a7eeba145/llvm/tools/llvm-cov/CoverageSummaryInfo.cpp#L19-L37>).
+/// - **Merged regions make `BRF` the larger.** `BRF` counts each branch region of each function,
+///   but `BRDA` writes all the regions that start at one line and column as one pair with their
+///   counts added (`combineInstanceCounts`,
+///   <https://github.com/rust-lang/llvm-project/blob/1b9c0d5ff9bbe7634aead059efe6b11a7eeba145/llvm/tools/llvm-cov/CoverageExporterLcov.cpp#L161-L179>,
+///   which export's default `-unify-instantiations` turns on to join a generic function's
+///   copies). rustc lowers a match guard on an or-pattern once for each alternative, each copy a
+///   region with the guard's own span
+///   (<https://github.com/rust-lang/rust/blob/21b707e3f97e0b522ebd2f277a862339625ad83f/compiler/rustc_mir_build/src/builder/matches/mod.rs#L491-L551>),
+///   so `Err(A | B) if g` has four outcomes in `BRF` and two in `BRDA`.
+///
+/// LCOV gives only the difference. When `BRDA` lists more, the file has `folded = BRDA lines −
+/// BRF` folded outcomes, each with a count of 0, but which ones is not written. When every outcome
+/// with a count of 0 is folded, or all of them are outside test code, the outcomes outside test
+/// code are counted exactly. Otherwise the folded ones cannot be placed, so every outcome of 0
+/// outside test code is counted as missed and the file is reported, which can only make the gate
+/// stricter.
+///
+/// When `BRF` counts more, the outcomes beyond the `BRDA` lines are copies merged into a pair on
+/// the same line, so in the file's own code, never in a macro of `core` or `std`: rustc writes no
+/// expansion regions and drops every branch span a macro introduces
+/// (<https://github.com/rust-lang/rust/blob/21b707e3f97e0b522ebd2f277a862339625ad83f/compiler/rustc_mir_transform/src/coverage/mappings.rs#L81-L86>),
+/// and a guard written inside `matches!` is the file's own text. Which line holds them is not
+/// written, nor whether each copy ran (a sum can hide a copy that never did), so unless every
+/// `BRDA` line is test code they are counted as found and never as hit, and the file is reported.
 fn branch_counts(rel: &str, d: &FileData, scanned: &Scan) -> Result<Branches, CoverageError> {
     let all = to_u64(d.branches.len());
-    let folded = match d.found {
-        Some(found) => all.checked_sub(found).ok_or_else(|| {
-            cov_err(format!(
-                "{rel}: BRF says {found} branch outcomes but BRDA lists {all}"
-            ))
-        })?,
-        None if all == 0 => 0,
+    let (folded, beyond) = match d.found {
+        Some(found) => (all.saturating_sub(found), found.saturating_sub(all)),
+        None if all == 0 => (0, 0),
         None => return Err(cov_err(format!("{rel}: BRDA lines without a BRF line"))),
     };
     let zero = |t: &Option<u64>| !t.is_some_and(|t| t > 0);
@@ -410,8 +452,26 @@ fn branch_counts(rel: &str, d: &FileData, scanned: &Scan) -> Result<Branches, Co
             missed_lines.push(*line);
         }
     }
+    // A merged copy shares its line with a BRDA record, so it is test code only when every BRDA
+    // line is; with no BRDA line at all it cannot be placed.
+    let unplaced = if kernel.is_empty() && !test.is_empty() {
+        0
+    } else {
+        beyond
+    };
     let all_zero = kernel_zero.saturating_add(test_zero);
-    let (found, problem) = if folded == 0 {
+    let (found, problem) = if unplaced > 0 {
+        (
+            to_u64(kernel.len()).saturating_add(unplaced),
+            Some(format!(
+                "{rel}: BRF counts {unplaced} branch outcome(s) that no BRDA line lists: llvm-cov \
+                 writes the branch regions that start at one place as one BRDA pair, such as \
+                 rustc's copy of a match guard for each alternative of an or-pattern; they cannot \
+                 be placed, so they are counted as missed (give each alternative an arm and guard \
+                 of its own, or test the condition inside the arm)"
+            )),
+        )
+    } else if folded == 0 {
         (to_u64(kernel.len()), None)
     } else if all_zero == folded {
         missed_lines.clear();
@@ -432,6 +492,7 @@ fn branch_counts(rel: &str, d: &FileData, scanned: &Scan) -> Result<Branches, Co
         found,
         hit,
         missed_lines,
+        unplaced,
         problem,
     })
 }
@@ -517,6 +578,7 @@ pub fn measure(repo: &Path, krate: &str, lcov: &str) -> Result<CrateReport, Cove
             awaiting_lines: Vec::new(),
             awaiting_branches: Vec::new(),
             has_branch_sites: !scanned.branch_sites.is_empty(),
+            unplaced_branches: branches.unplaced,
             branch_note: branches.problem,
         });
     }
@@ -569,7 +631,10 @@ pub fn judge(reports: &[CrateReport]) -> Vec<String> {
             ));
         }
         for x in foundation_files {
-            let branches_wait = x.missed_branches.is_empty() && !x.awaiting_branches.is_empty();
+            // Unplaced outcomes have no line for an entry to name, so they never wait.
+            let branches_wait = x.unplaced_branches == 0
+                && x.missed_branches.is_empty()
+                && !x.awaiting_branches.is_empty();
             if let Some(note) = &x.branch_note
                 && !branches_wait
             {
@@ -971,6 +1036,93 @@ mod tests {
         ] {
             assert!(parse_lcov(bad).is_err(), "{bad:?}");
         }
+    }
+
+    /// Code on lines `first` to `last` is test code.
+    fn tests_on(first: usize, last: usize) -> Scan {
+        Scan {
+            test_lines: vec![(first, last)],
+            ..Scan::default()
+        }
+    }
+
+    #[test]
+    fn outcomes_brf_counts_beyond_the_brda_lines_are_missed() {
+        // What the pinned nightly's llvm-cov writes for `Err(E::A | E::B) if g => true` on line 10,
+        // its guard run once by way of `E::A`, and `Err(E::A) if g => true` on line 18, never
+        // run: rustc lowers the first guard once for each alternative, and LCOV writes the two
+        // copies as one pair, so BRF counts six outcomes and BRDA lists four.
+        let text = "SF:/a/lib.rs\nBRDA:10,0,0,1\nBRDA:10,0,1,0\nBRDA:18,0,0,-\nBRDA:18,0,1,-\n\
+                    BRF:6\nBRH:1\nend_of_record\n";
+        let data = parse_lcov(text).unwrap();
+        let d = &data["/a/lib.rs"];
+        let b = branch_counts("lib.rs", d, &Scan::default()).unwrap();
+        assert_eq!((b.found, b.hit, b.unplaced), (6, 1, 2));
+        assert_eq!(b.missed_lines, vec![10, 18]);
+        assert!(b.problem.is_some_and(|p| p.contains("no BRDA line lists")));
+        // A merged pair taken both ways can still hide a copy that never ran: never a hit.
+        let taken = "SF:/a/lib.rs\nBRDA:10,0,0,3\nBRDA:10,0,1,2\nBRF:4\nend_of_record\n";
+        let data = parse_lcov(taken).unwrap();
+        let b = branch_counts("lib.rs", &data["/a/lib.rs"], &Scan::default()).unwrap();
+        assert_eq!((b.found, b.hit, b.unplaced), (4, 2, 2));
+        assert!(b.missed_lines.is_empty() && b.problem.is_some());
+        // While some BRDA line is kernel code the copies may be its, so they count against it.
+        let b = branch_counts("lib.rs", d, &tests_on(15, 20)).unwrap();
+        assert_eq!((b.found, b.hit, b.unplaced), (4, 1, 2));
+        assert_eq!(b.missed_lines, vec![10]);
+        // A copy shares its line with a BRDA record, so when every one is test code, so is it.
+        let b = branch_counts("lib.rs", d, &tests_on(1, 20)).unwrap();
+        assert_eq!((b.found, b.hit, b.unplaced), (0, 0, 0));
+        assert!(b.missed_lines.is_empty() && b.problem.is_none());
+        // With no BRDA line at all, BRF's outcomes have nowhere to be placed.
+        let data = parse_lcov("SF:/a/lib.rs\nBRF:2\nend_of_record\n").unwrap();
+        let b = branch_counts("lib.rs", &data["/a/lib.rs"], &tests_on(1, 20)).unwrap();
+        assert_eq!((b.found, b.hit, b.unplaced), (2, 0, 2));
+        assert!(b.problem.is_some());
+        // BRDA lines without BRF are still not data the gate can use.
+        let data = parse_lcov("SF:/a/lib.rs\nBRDA:10,0,0,1\nend_of_record\n").unwrap();
+        assert!(branch_counts("lib.rs", &data["/a/lib.rs"], &Scan::default()).is_err());
+    }
+
+    #[test]
+    fn unplaced_outcomes_fail_the_foundation_bar_whatever_waits() {
+        let file = |unplaced: u64, set: Set| FileReport {
+            file: "lib.rs".to_owned(),
+            set,
+            counts: Counts {
+                lines_found: 3,
+                lines_hit: 3,
+                branches_found: 4_u64.saturating_add(unplaced),
+                branches_hit: 3,
+            },
+            missed_lines: Vec::new(),
+            missed_branches: Vec::new(),
+            awaiting_lines: Vec::new(),
+            awaiting_branches: vec![2],
+            has_branch_sites: true,
+            unplaced_branches: unplaced,
+            branch_note: (unplaced > 0).then(|| "lib.rs: unplaced".to_owned()),
+        };
+        let report = |f: FileReport| CrateReport {
+            krate: "geom-num".to_owned(),
+            files: vec![f],
+            problems: Vec::new(),
+        };
+        // Every listed miss waits for its proof: the file passes.
+        assert_eq!(
+            judge(&[report(file(0, Set::Foundation))]),
+            Vec::<String>::new()
+        );
+        // The same file with two outcomes no line can be given: no entry names them, so it fails,
+        // with the note and the bar.
+        let f = judge(&[report(file(2, Set::Foundation))]);
+        assert_eq!(f.len(), 2, "{f:?}");
+        assert!(f.iter().any(|x| x == "lib.rs: unplaced"), "{f:?}");
+        // Outside the foundation set branches have no bar, so they are only counted.
+        assert_eq!(
+            judge(&[report(file(2, Set::Elsewhere))]),
+            Vec::<String>::new()
+        );
     }
 
     #[test]
