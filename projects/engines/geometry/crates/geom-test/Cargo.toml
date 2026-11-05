@@ -90,6 +90,12 @@ yaml-rust2 = { version = "0.13.0", default-features = false }
 # tests/nurbs_reference.rs): geom-nurbs's curves and the work meter its operations take. Ours,
 # MPL-2.0; development dependencies, so no kernel crate comes to depend on this one.
 geom-nurbs = { path = "../geom-nurbs" }
+# The kernel's certified curves, surfaces and bodies, held to the closed-form truth corpus (G179,
+# tests/truth.rs).
+geom-curve = { path = "../geom-curve" }
+geom-make = { path = "../geom-make" }
+geom-surface = { path = "../geom-surface" }
+geom-topo = { path = "../geom-topo" }
 geom-run = { path = "../geom-run" }
 
 [lints.rust]

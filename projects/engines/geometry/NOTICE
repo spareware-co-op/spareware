@@ -672,6 +672,13 @@ shuffling-allocator
     projects/engines/geometry/crates/geom-test/src/golden/perturb.rs
       for its size classes and shuffling layer and to judge whether it could be used; not taken, for the reasons above. No code copied.
 
+`SolidCraft`
+  Licence:      Apache-2.0
+  Link:         https://github.com/tangency-labs/solidcraft/tree/6029a38ea05da8f37517da6b06624a8bec18adf5/tools/oracle-analytic
+  Consulted by:
+    projects/engines/geometry/crates/geom-test/src/truth/oracle.rs
+      for the shapes, parameters and method formulas of its 70 analytic oracle cases, which are re-derived here; its stored values are used only to cross-check the derivation. No code copied.
+
 SPDX License List 3.29.0
   Licence:      CC-BY-3.0
   Link:         https://github.com/spdx/license-list-data/blob/31ba1a50e5397e00a304dbadc76531740e89ee48/json/licenses.json
