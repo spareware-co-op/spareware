@@ -5309,30 +5309,6 @@
     {
       "file": "projects/engines/geometry/crates/geom-intersect/src/curve.rs",
       "mutant": "replace > with >= in one_circle",
-      "line_text": "let [low, high] = if sign > 0.0 {",
-      "occurrences": 1,
-      "kind": "equivalent",
-      "reason": "sign is 1.0 or -1.0, set on the line before, never 0.0, the one value where > and >= differ."
-    },
-    {
-      "file": "projects/engines/geometry/crates/geom-intersect/src/curve.rs",
-      "mutant": "replace < with <= in one_circle",
-      "line_text": "if lo.lo() < s.0 { s.0 } else { lo.lo() },",
-      "occurrences": 1,
-      "kind": "equivalent",
-      "reason": "Where lo.lo() equals s.0 both branches give the same double, so the start of the part is the same."
-    },
-    {
-      "file": "projects/engines/geometry/crates/geom-intersect/src/curve.rs",
-      "mutant": "replace > with >= in one_circle",
-      "line_text": "if hi.hi() > s.1 { s.1 } else { hi.hi() },",
-      "occurrences": 1,
-      "kind": "equivalent",
-      "reason": "Where hi.hi() equals s.1 both branches give the same double, so the end of the part is the same."
-    },
-    {
-      "file": "projects/engines/geometry/crates/geom-intersect/src/curve.rs",
-      "mutant": "replace > with >= in one_circle",
       "line_text": "if start > end {",
       "occurrences": 1,
       "kind": "harmless",
@@ -5428,22 +5404,6 @@
     },
     {
       "file": "projects/engines/geometry/crates/geom-intersect/src/curve.rs",
-      "mutant": "replace < with <= in self_crossings",
-      "line_text": "if s.lo() < t.lo() { s.lo() } else { t.lo() },",
-      "occurrences": 1,
-      "kind": "equivalent",
-      "reason": "Where s.lo() equals t.lo() both branches give the same double, so the hull is the same."
-    },
-    {
-      "file": "projects/engines/geometry/crates/geom-intersect/src/curve.rs",
-      "mutant": "replace > with >= in self_crossings",
-      "line_text": "if s.hi() > t.hi() { s.hi() } else { t.hi() },",
-      "occurrences": 1,
-      "kind": "equivalent",
-      "reason": "Where s.hi() equals t.hi() both branches give the same double, so the hull is the same."
-    },
-    {
-      "file": "projects/engines/geometry/crates/geom-intersect/src/curve.rs",
       "mutant": "replace > with == in self_crossings",
       "line_text": "if s.hi() > t.hi() { s.hi() } else { t.hi() },",
       "occurrences": 1,
@@ -5497,14 +5457,6 @@
       "occurrences": 1,
       "kind": "equivalent",
       "reason": "difference does not hold 0 here, the test before having returned where it does, so difference.lo() is never 0.0 and > and >= agree."
-    },
-    {
-      "file": "projects/engines/geometry/crates/geom-intersect/src/curve.rs",
-      "mutant": "replace * with / in second_order",
-      "line_text": "let band = Interval::point(2.0 * RESOLUTION_FLOOR.get())?",
-      "occurrences": 1,
-      "kind": "equivalent",
-      "reason": "RESOLUTION_FLOOR is one step (geom_num::isolate), so 2 x 1 and 2 / 1 are the same double. The floor is named, not an accepted rung (6.5), and a change to it would be a decision with its own tests."
     },
     {
       "file": "projects/engines/geometry/crates/geom-intersect/src/curve.rs",
