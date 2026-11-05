@@ -480,6 +480,11 @@ fn near(value: &Enclosed, stored: f64, tolerance: f64, what: &str) {
     tight(value);
 }
 
+/// `x`, or 1 if that is more.
+fn at_least_one(x: f64) -> f64 {
+    if x > 1.0 { x } else { 1.0 }
+}
+
 #[test]
 fn solidcraft_cases_agree_with_their_stored_values() {
     let table = stored();
@@ -492,16 +497,14 @@ fn solidcraft_cases_agree_with_their_stored_values() {
         let number = |v: &serde_json::Value| v.as_f64().unwrap();
         let low: Vec<f64> = (0..3).map(|i| number(&want["bbox"]["min"][i])).collect();
         let high: Vec<f64> = (0..3).map(|i| number(&want["bbox"]["max"][i])).collect();
-        let diagonal = low
-            .iter()
-            .zip(&high)
-            .map(|(l, h)| (h - l) * (h - l))
-            .sum::<f64>()
-            .sqrt();
+        let mut squares = 0.0_f64;
+        for (l, h) in low.iter().zip(&high) {
+            squares += (h - l) * (h - l);
+        }
         // SolidCraft's tolerances: relative 1e-3 on volume and area, and 1e-3 of the box's
-        // diagonal on the centre and the box.
-        let spatial = 1e-3 * diagonal.max(1.0);
-        let relative = |x: f64| 1e-3 * x.abs().max(1.0);
+        // diagonal on the centre and the box, each against at least 1.
+        let spatial = 1e-3 * at_least_one(squares.sqrt());
+        let relative = |x: f64| 1e-3 * at_least_one(x.abs());
         let (volume, area) = (number(&want["volume_mm3"]), number(&want["area_mm2"]));
         if let Some(v) = &derived.volume {
             near(v, volume, relative(volume), &case.name);
