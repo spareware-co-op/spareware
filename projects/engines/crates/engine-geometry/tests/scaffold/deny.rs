@@ -1659,7 +1659,13 @@ pub mod rules {
         fn graph(extra: &[(&str, &str, &str, &str)], kinds: &[&str]) -> Value {
             // extra: (name, source or "", licence, publish: "null" or "[]")
             let mut packages = vec![
-                package("a", "geom-a", &Value::Null, &json!("Apache-2.0"), &json!([])),
+                package(
+                    "a",
+                    "geom-a",
+                    &Value::Null,
+                    &json!("Apache-2.0"),
+                    &json!([]),
+                ),
                 package("k", "kit-x", &Value::Null, &Value::Null, &json!([])),
             ];
             let mut deps =

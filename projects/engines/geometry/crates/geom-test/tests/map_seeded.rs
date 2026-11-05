@@ -1078,7 +1078,10 @@ fn spdx() {
         "ported.rs",
     );
     breaks(
-        &with("ported.rs", replace("Apache-2.0 AND BSD-3-Clause", "Apache-2.0")),
+        &with(
+            "ported.rs",
+            replace("Apache-2.0 AND BSD-3-Clause", "Apache-2.0"),
+        ),
         Rule::Spdx,
         "ported.rs",
     );
