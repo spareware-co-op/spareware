@@ -32,7 +32,7 @@
     reason = "tests: native arithmetic, casts and indexing, platform maths on an independent oracle (the formula as it is written), prose that names defect files, and a failure stops the test"
 )]
 
-use std::sync::mpsc;
+use std::sync::{Arc, Mutex, mpsc};
 use std::thread;
 use std::time::Duration;
 
@@ -62,12 +62,22 @@ fn long_meter() -> WorkMeter<'static> {
 const FLOOR: f64 = 1e-6;
 
 /// Runs `work` on its own thread and fails the test if it panics or has not finished in
-/// `seconds`: a hang is a failure, not a stuck test run.
+/// `seconds`: a hang is a failure, not a stuck test run. Where the target has no threads
+/// (wasm32), `work` runs in place and the meter alone bounds it.
 fn within<T: Send + 'static>(seconds: u64, work: impl FnOnce() -> T + Send + 'static) -> T {
     let (sender, receiver) = mpsc::channel();
-    thread::spawn(move || {
-        let _ = sender.send(work());
+    let slot = Arc::new(Mutex::new(Some(work)));
+    let theirs = Arc::clone(&slot);
+    let spawned = thread::Builder::new().spawn(move || {
+        let taken = theirs.lock().unwrap().take();
+        if let Some(work) = taken {
+            let _ = sender.send(work());
+        }
     });
+    if spawned.is_err() {
+        let taken = slot.lock().unwrap().take();
+        return taken.expect("the work was not taken")();
+    }
     match receiver.recv_timeout(Duration::from_secs(seconds)) {
         Ok(done) => done,
         Err(mpsc::RecvTimeoutError::Timeout) => panic!("no answer in {seconds} s: a hang"),
