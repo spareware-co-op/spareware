@@ -72,7 +72,9 @@ impl<const D: usize> Curve<D> {
     ) -> Result<Changed<Curve<D>>, NurbsError> {
         let basis = self.basis();
         let p = basis.degree();
-        let q = add(p, t)?;
+        // p + t past the limit is a degree refusal, and so is a count that overflows the sum
+        // (it saturates, so the refusal names usize::MAX).
+        let q = p.saturating_add(t);
         if q > MAX_DEGREE {
             return Err(NurbsError::Degree { degree: q });
         }
