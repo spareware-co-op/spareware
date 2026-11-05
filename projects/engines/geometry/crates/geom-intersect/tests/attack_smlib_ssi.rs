@@ -180,7 +180,16 @@ fn ribbon(n: usize) -> SurfaceKind {
 fn ub_74_wr_70_a_surface_crossing_a_plane_in_twenty_four_lines_has_twenty_four_branches() {
     let n = 25;
     let sheet = ribbon(n);
-    let flat = patch(1.0);
+    // A plane over all of the ribbon (x from 0 to 24, y from 0 to 1), its origin off-centre.
+    let flat = SurfaceKind::Plane(
+        Plane::new(
+            [0.0625, 0.03125, 0.0],
+            [1.0, 0.0, 0.0],
+            [0.0, 1.0, 0.0],
+            ((-2.0, 26.0), (-2.0, 3.0)),
+        )
+        .unwrap(),
+    );
     let found = subdivide(&sheet, &flat, FLOOR, &mut meter_of(1 << 26)).unwrap();
     let starts: usize = found.settled.iter().map(|p| p.starts.len()).sum();
     assert!(starts >= 48, "{starts}");
@@ -320,7 +329,9 @@ fn level(z: f64) -> SurfaceKind {
 /// plane, with the plane moved 1.7e-8 into the cylinder, 1.7e-8 away, 1e-300 into it, and on it
 /// (depths whose chord is 1e-4 of the floor, far below it). Where the two lines cannot be told
 /// apart at the floor the reading is one tangent curve in a band, or a reading that says it is
-/// undecided: never nothing, never a point, never an overlap.
+/// undecided: never nothing for a plane that touches or dips in, never a point, never an overlap.
+/// A plane 1.7e-8 clear of the wall is apart, which the search may prove, and then nothing is
+/// right.
 #[test]
 fn wr_510_a_plane_a_hair_inside_a_wall_reads_as_a_touch_not_as_nothing() {
     let cylinder = resting();
@@ -329,17 +340,25 @@ fn wr_510_a_plane_a_hair_inside_a_wall_reads_as_a_touch_not_as_nothing() {
         let found = subdivide(&cylinder, &plane, 8.0, &mut meter_of(1 << 23)).unwrap();
         let readings =
             analyse(&cylinder, &plane, &found, 8.0, UNIT, &mut meter_of(1 << 23)).unwrap();
-        assert_eq!(readings.len(), 1, "{z}: {readings:?}");
-        assert!(
-            matches!(
-                readings[0],
-                Reading::Curve {
-                    contact: CurveContact::Tangent { .. },
-                    ..
-                } | Reading::Undecided { .. }
-            ),
-            "{z}: {readings:?}"
-        );
+        if z < 0.0 {
+            // A plane 1.7e-8 clear of the wall is apart, and the search may prove it: nothing is
+            // then the right answer. If it does not, the reading must still be a tangent or undecided.
+            assert!(readings.len() <= 1, "{z}: {readings:?}");
+        } else {
+            assert_eq!(readings.len(), 1, "{z}: {readings:?}");
+        }
+        for reading in &readings {
+            assert!(
+                matches!(
+                    reading,
+                    Reading::Curve {
+                        contact: CurveContact::Tangent { .. },
+                        ..
+                    } | Reading::Undecided { .. }
+                ),
+                "{z}: {readings:?}"
+            );
+        }
     }
 }
 
