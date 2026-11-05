@@ -1,5 +1,6 @@
-//! The recursion check's model of the standard library, of `libm` and of the part of `rayon`
-//! that `geom-pool` calls: Rust source the check reads in place of theirs, so a call into them is
+//! The recursion check's model of the standard library, of `libm`, of the part of `rayon`
+//! that `geom-pool` calls, and of the parts of `sha2` and `unicode-normalization` that `geom-op`
+//! calls: Rust source the check reads in place of theirs, so a call into them is
 //! checked as any other call is.
 //!
 //! What it does: the kernel's crates call `core`, `alloc` (and `std` in tests) and `libm`
@@ -50,6 +51,12 @@ pub const LIBM: &str = include_str!("stdlib/libm.rs.txt");
 /// The model of the part of `rayon` that `geom-pool` calls.
 pub const RAYON: &str = include_str!("stdlib/rayon.rs.txt");
 
+/// The model of `unicode-normalization`'s `is_nfc`, which `geom-op` calls.
+pub const UNICODE_NORMALIZATION: &str = include_str!("stdlib/unicode_normalization.rs.txt");
+
+/// The model of the part of `sha2` that `geom-op` calls.
+pub const SHA2: &str = include_str!("stdlib/sha2.rs.txt");
+
 /// Where the model of `core` is, relative to the workspace root (its text is [`CORE`]).
 pub const CORE_PATH: &str =
     "projects/engines/geometry/crates/geom-test/src/recursion/stdlib/core.rs.txt";
@@ -62,10 +69,19 @@ pub const LIBM_PATH: &str =
 pub const RAYON_PATH: &str =
     "projects/engines/geometry/crates/geom-test/src/recursion/stdlib/rayon.rs.txt";
 
+/// Where the model of `unicode-normalization` is, relative to the workspace root (its text is
+/// [`UNICODE_NORMALIZATION`]).
+pub const UNICODE_NORMALIZATION_PATH: &str =
+    "projects/engines/geometry/crates/geom-test/src/recursion/stdlib/unicode_normalization.rs.txt";
+
+/// Where the model of `sha2` is, relative to the workspace root (its text is [`SHA2`]).
+pub const SHA2_PATH: &str =
+    "projects/engines/geometry/crates/geom-test/src/recursion/stdlib/sha2.rs.txt";
+
 /// The folder of the model's files.
 pub const FOLDER: &str = "projects/engines/geometry/crates/geom-test/src/recursion/stdlib";
 
-/// The model's crates, for the loader: `core`, `libm` and `rayon`.
+/// The model's crates, for the loader: `core`, `libm`, `rayon`, `sha2` and `unicode-normalization`.
 #[must_use]
 pub fn sources() -> Vec<CrateSource> {
     vec![
@@ -90,6 +106,20 @@ pub fn sources() -> Vec<CrateSource> {
             root: RAYON_PATH.to_owned(),
             role: Role::Model,
         },
+        CrateSource {
+            package: "sha2".to_owned(),
+            lib: "sha2".to_owned(),
+            folder: FOLDER.to_owned(),
+            root: SHA2_PATH.to_owned(),
+            role: Role::Model,
+        },
+        CrateSource {
+            package: "unicode-normalization".to_owned(),
+            lib: "unicode_normalization".to_owned(),
+            folder: FOLDER.to_owned(),
+            root: UNICODE_NORMALIZATION_PATH.to_owned(),
+            role: Role::Model,
+        },
     ]
 }
 
@@ -100,6 +130,8 @@ pub fn read_model(path: &str) -> Option<String> {
         CORE_PATH => Some(CORE.to_owned()),
         LIBM_PATH => Some(LIBM.to_owned()),
         RAYON_PATH => Some(RAYON.to_owned()),
+        SHA2_PATH => Some(SHA2.to_owned()),
+        UNICODE_NORMALIZATION_PATH => Some(UNICODE_NORMALIZATION.to_owned()),
         _ => None,
     }
 }
@@ -145,6 +177,8 @@ mod tests {
             CORE_PATH.starts_with(FOLDER)
                 && LIBM_PATH.starts_with(FOLDER)
                 && RAYON_PATH.starts_with(FOLDER)
+                && SHA2_PATH.starts_with(FOLDER)
+                && UNICODE_NORMALIZATION_PATH.starts_with(FOLDER)
         );
         assert_eq!(read_model(CORE_PATH).as_deref(), Some(CORE));
         assert!(read_model("elsewhere.rs").is_none());
