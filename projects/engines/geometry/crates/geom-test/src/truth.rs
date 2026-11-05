@@ -2,14 +2,18 @@
 //! arbitrary precision, to hold the Certified paths to their bounds (chapter 28.9; piece G179).
 //!
 //! What it does: an [`Enclosed`] is a real number held between two binary fractions of [`BITS`]
-//! bits, in exact rational arithmetic that rounds outward. [`pi`], [`sinpi`] and [`cospi`] and
-//! [`fresnel`] are computed from their series with their remainders bounded, and the closed forms
-//! are built on them: [`box_volume`], [`steinmetz`], [`sphere`], [`sphere_cap`], [`torus`],
-//! [`pappus`], [`capsule`] and [`villarceau`], the last a grid point on a circle a plane through a
-//! torus's centre cuts from it. [`judge`] holds one certified result to one truth: each result must
-//! contain the truth, and a bound more than [`LOOSE`] times the real error is reported. [`CORPUS`]
-//! lists every family, what checks it today and the board piece that brings the operation still
-//! missing; `tests/truth.rs` runs what exists, so the corpus grows with each curved family.
+//! bits, in exact rational arithmetic that rounds outward, with quotients and square roots.
+//! [`pi`], [`sinpi`] and [`cospi`], [`sin`] and [`cos`], [`atan`] and [`fresnel`] are computed from
+//! their series with their remainders bounded, [`tan`], [`asin`], [`acos`] and [`atan2`] follow from
+//! them, and the closed forms are built on these: [`box_volume`], [`steinmetz`], [`sphere`],
+//! [`sphere_cap`], [`torus`], [`pappus`], [`capsule`] and [`villarceau`], the last a grid point on a
+//! circle a plane through a torus's centre cuts from it. [`judge`] holds one certified result to one
+//! truth: each result must contain the truth, and a bound more than [`LOOSE`] times the real error
+//! is reported. [`oracle`] holds the 70 analytic cases of `SolidCraft`'s oracle as a table of
+//! formulas, each derived here as enclosures and cross-checked against `SolidCraft`'s stored
+//! numbers. [`CORPUS`] lists every family, what checks it today and the board piece that brings the
+//! operation still missing; `tests/truth.rs` runs what exists, so the corpus grows with each curved
+//! family.
 //!
 //! Guarantees:
 //!
@@ -20,13 +24,17 @@
 //!   how tightly: below 2^-280 for every value in the corpus's range.
 //! - **A broken bound is named.** [`judge`] says [`Verdict::Broken`] whenever a result does not
 //!   hold the whole truth, and never rounds in the result's favour.
+//! - **Nobody else's number is the truth.** `SolidCraft`'s stored values are only compared with,
+//!   within its own tolerance; every value in [`oracle`] is derived here from its formula.
 //!
 //! Method: chapter 28.9's closed-form truth
 //! (`projects/engines/geometry/architecture/28-testing.md`); π by Machin's formula
 //! (W. Jones, *Synopsis Palmariorum Matheseos*, 1706), sine and cosine by their Taylor series, and
 //! the Fresnel integrals by their term-by-term integrated series (DLMF 7.6.4, 7.6.6,
 //! <https://dlmf.nist.gov/7.6>), each alternating with terms that fall, so the first term left out
-//! bounds the remainder.
+//! bounds the remainder; the inverse tangent by its Maclaurin series (DLMF 4.24.3,
+//! <https://dlmf.nist.gov/4.24>) after the tangent half-angle formula has brought its argument
+//! below 1/8, and the square root by Newton's iteration on whole numbers.
 //!
 //! Cost: a few thousand big-number operations a value; the rationals are trimmed to [`BITS`] bits
 //! at every step, so they do not grow. Recursion: none.
@@ -38,6 +46,8 @@
     clippy::arithmetic_side_effects,
     reason = "exact rational arithmetic, which cannot overflow; divisors are shown nonzero"
 )]
+
+pub mod oracle;
 
 use dashu_int::{IBig, UBig};
 use dashu_ratio::RBig;
@@ -208,6 +218,61 @@ impl Enclosed {
         abs(&self.lo).max(abs(&self.hi))
     }
 
+    /// `self / other`; `None` if `other` holds zero.
+    #[must_use]
+    pub fn div(&self, other: &Enclosed) -> Option<Enclosed> {
+        if other.lo <= RBig::ZERO && other.hi >= RBig::ZERO {
+            return None;
+        }
+        let corners = [
+            &self.lo / &other.lo,
+            &self.lo / &other.hi,
+            &self.hi / &other.lo,
+            &self.hi / &other.hi,
+        ];
+        let least = corners.iter().min().cloned().unwrap_or(RBig::ZERO);
+        let most = corners.iter().max().cloned().unwrap_or(RBig::ZERO);
+        Some(Enclosed {
+            lo: down(&least),
+            hi: up(&most),
+        })
+    }
+
+    /// The square root of `self`; `None` if every value in `self` is below zero.
+    #[must_use]
+    pub fn sqrt(&self) -> Option<Enclosed> {
+        if self.hi < RBig::ZERO {
+            return None;
+        }
+        let least = if self.lo < RBig::ZERO {
+            RBig::ZERO
+        } else {
+            self.lo.clone()
+        };
+        let (below, _) = root_bounds(&least);
+        let (_, above) = root_bounds(&self.hi);
+        Some(Enclosed {
+            lo: below,
+            hi: above,
+        })
+    }
+
+    /// `self` to the whole power `n`.
+    #[must_use]
+    pub fn powi(&self, n: u32) -> Enclosed {
+        let mut result = Enclosed::from_whole(1);
+        for _ in 0..n {
+            result = result.mul(self);
+        }
+        result
+    }
+
+    /// Whether every value in `self` is within `tolerance` of `x`.
+    #[must_use]
+    pub fn within(&self, x: &RBig, tolerance: &RBig) -> bool {
+        self.lo >= x - tolerance && self.hi <= x + tolerance
+    }
+
     /// Whether `self` holds `x`.
     #[must_use]
     pub fn holds(&self, x: &RBig) -> bool {
@@ -346,6 +411,141 @@ pub fn fresnel(k: &Enclosed, s: &RBig) -> [Enclosed; 2] {
     }
 }
 
+/// sin x, for an enclosure `x` of any size, by the Taylor series.
+#[must_use]
+pub fn sin(x: &Enclosed) -> Enclosed {
+    circular(x, false)
+}
+
+/// cos x, for an enclosure `x` of any size, by the Taylor series.
+#[must_use]
+pub fn cos(x: &Enclosed) -> Enclosed {
+    circular(x, true)
+}
+
+/// tan x; `None` if cos x may be zero.
+#[must_use]
+pub fn tan(x: &Enclosed) -> Option<Enclosed> {
+    sin(x).div(&cos(x))
+}
+
+/// The floor of the square root of a whole number `n` of zero or more, by Newton's iteration from
+/// a power of two at or above the root.
+fn isqrt(n: &IBig) -> IBig {
+    if *n <= IBig::ONE {
+        return n.clone();
+    }
+    let two = IBig::from(2);
+    let mut x = IBig::ONE;
+    while &x * &x < *n {
+        x = &x * &two;
+    }
+    loop {
+        let quotient = n / &x;
+        let next = &(&x + &quotient) / &two;
+        if next >= x {
+            return x;
+        }
+        x = next;
+    }
+}
+
+/// Two multiples of `2^-BITS` with the square root of `x` between them, for `x` of zero or more.
+fn root_bounds(x: &RBig) -> (RBig, RBig) {
+    let scaled = x.numerator() * IBig::from(UBig::ONE << (2 * BITS));
+    let whole_part = &scaled / &IBig::from(x.denominator().clone());
+    let root = isqrt(&whole_part);
+    let above = root.clone() + IBig::ONE;
+    (
+        RBig::from_parts(root, UBig::ONE << BITS),
+        RBig::from_parts(above, UBig::ONE << BITS),
+    )
+}
+
+/// atan x for an enclosure between 0 and 1: the angle is halved, x becoming x / (1 + sqrt(1 + x²)),
+/// until x is below 1/8, then the series x − x³/3 + x⁵/5 − ... (alternating, with falling terms)
+/// is summed and the result doubled back.
+fn atan_unit(x: &Enclosed) -> Option<Enclosed> {
+    let eighth = RBig::from_parts(IBig::ONE, UBig::from(8_u8));
+    let one = Enclosed::from_whole(1);
+    let mut arg = x.clone();
+    let mut halvings = 0_u32;
+    while arg.hi > eighth {
+        let root = one.add(&arg.square()).sqrt()?;
+        arg = arg.div(&one.add(&root))?;
+        halvings += 1;
+    }
+    let square = arg.square();
+    let mut power = arg;
+    let mut sum = Enclosed::of(&RBig::ZERO);
+    let mut k = 0_u64;
+    loop {
+        let term = power.div_whole(2 * k + 1);
+        sum = if k % 2 == 0 {
+            sum.add(&term)
+        } else {
+            sum.sub(&term)
+        };
+        if spent(&term.size()) {
+            let angle = sum.plus_or_minus(&term.size());
+            return Some(angle.mul(&Enclosed::from_whole(1_u64 << halvings)));
+        }
+        power = power.mul(&square);
+        k += 1;
+    }
+}
+
+/// atan of the exact rational `q`.
+fn atan_point(q: &RBig) -> Option<Enclosed> {
+    if *q < RBig::ZERO {
+        return atan_point(&-q.clone()).map(|angle| angle.neg());
+    }
+    if *q > RBig::ONE {
+        let inverse = Enclosed::of(&(RBig::ONE / q.clone()));
+        let right = pi().div_whole(2);
+        return atan_unit(&inverse).map(|angle| right.sub(&angle));
+    }
+    atan_unit(&Enclosed::of(q))
+}
+
+/// The inverse tangent of `x`, between −π/2 and π/2; `None` only if a step fails to divide.
+#[must_use]
+pub fn atan(x: &Enclosed) -> Option<Enclosed> {
+    let low = atan_point(&x.lo)?;
+    if x.lo == x.hi {
+        return Some(low);
+    }
+    let high = atan_point(&x.hi)?;
+    Some(Enclosed {
+        lo: low.lo,
+        hi: high.hi,
+    })
+}
+
+/// The inverse sine of `x`, for `x` strictly between −1 and 1: atan(x / sqrt(1 − x²)); `None`
+/// outside that.
+#[must_use]
+pub fn asin(x: &Enclosed) -> Option<Enclosed> {
+    let root = Enclosed::from_whole(1).sub(&x.square()).sqrt()?;
+    atan(&x.div(&root)?)
+}
+
+/// The inverse cosine of `x`, for `x` strictly between −1 and 1: π/2 − asin x.
+#[must_use]
+pub fn acos(x: &Enclosed) -> Option<Enclosed> {
+    asin(x).map(|angle| pi().div_whole(2).sub(&angle))
+}
+
+/// The angle of the point (`x`, `y`) from the x axis, for `x` above zero: atan(y / x); `None`
+/// otherwise.
+#[must_use]
+pub fn atan2(y: &Enclosed, x: &Enclosed) -> Option<Enclosed> {
+    if x.lo <= RBig::ZERO {
+        return None;
+    }
+    atan(&y.div(x)?)
+}
+
 /// The volume of a box of sides `a`, `b` and `c`.
 #[must_use]
 pub fn box_volume(a: &RBig, b: &RBig, c: &RBig) -> RBig {
@@ -457,8 +657,8 @@ pub struct Family {
     pub status: Status,
 }
 
-/// Chapter 28.9's families.
-pub const CORPUS: [Family; 10] = [
+/// Chapter 28.9's families, and the groups of `SolidCraft`'s analytic cases ([`oracle`]).
+pub const CORPUS: &[Family] = &[
     Family {
         name: "box",
         form: "abc, exactly",
@@ -508,5 +708,65 @@ pub const CORPUS: [Family; 10] = [
         name: "capsule",
         form: "πr²L + 4πr³/3",
         status: Status::Awaits("G256"),
+    },
+    Family {
+        name: "SolidCraft analytic cases, derived",
+        form: "volume, area, centre of mass and bounding box of each part, from its formula, held to SolidCraft's stored numbers within its own tolerance",
+        status: Status::Checked("solidcraft_cases_agree_with_their_stored_values"),
+    },
+    Family {
+        name: "SolidCraft boxes",
+        form: "abc, held to the kernel's exact volume of a made box",
+        status: Status::Checked("solidcraft_box_cases_hold_in_the_kernel"),
+    },
+    Family {
+        name: "SolidCraft extrusions, revolves and their booleans",
+        form: "a part built from extrusions, revolves, holes, patterns and combines, its certified volume, area, centre and box held to the derived truth (with G247's certified mass properties)",
+        status: Status::Awaits("G255"),
+    },
+    Family {
+        name: "SolidCraft constant fillets and chamfers",
+        form: "a part with constant rounds and chamfers, held to the derived truth",
+        status: Status::Awaits("G263"),
+    },
+    Family {
+        name: "SolidCraft flat shells",
+        form: "a part shelled by flat bodies, held to the derived truth",
+        status: Status::Awaits("G275"),
+    },
+    Family {
+        name: "SolidCraft curved shell",
+        form: "a part with a curved face shelled, held to the derived truth",
+        status: Status::Awaits("G277"),
+    },
+    Family {
+        name: "SolidCraft draft",
+        form: "a drafted box, held to the derived truth",
+        status: Status::Awaits("G278"),
+    },
+    Family {
+        name: "SolidCraft general sweeps",
+        form: "a disc swept along lines and bends, held to the derived truth (Pappus)",
+        status: Status::Awaits("G256"),
+    },
+    Family {
+        name: "SolidCraft helical sweep",
+        form: "a coil, held to its derived volume, centre and box; its side area is an elliptic integral, which a certified quadrature would enclose",
+        status: Status::Awaits("G257"),
+    },
+    Family {
+        name: "SolidCraft loft",
+        form: "a ruled loft from a square to a circle, whose volume and area need an enclosed quadrature of its mixed area",
+        status: Status::Awaits("G259"),
+    },
+    Family {
+        name: "SolidCraft variable-radius rounds",
+        form: "an edge rounded at a radius that varies along it (the union of rolled balls), whose volume, area and centre need an enclosed quadrature; only its box is derived",
+        status: Status::Awaits("G266"),
+    },
+    Family {
+        name: "SolidCraft sheet metal",
+        form: "folded sheet as flats and bends of annular sectors, held to the derived truth",
+        status: Status::Awaits("G472"),
     },
 ];

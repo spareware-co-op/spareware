@@ -13,6 +13,7 @@
     clippy::cast_possible_wrap,
     clippy::cast_sign_loss,
     clippy::many_single_char_names,
+    clippy::needless_range_loop,
     reason = "test code: a failure should stop loudly"
 )]
 
@@ -27,12 +28,15 @@ use geom_nurbs::Limit;
 use geom_op::{OpContext, OpId, OpPath};
 use geom_run::{Budget, WorkMeter};
 use geom_surface::{Cone, Cylinder, ParamSurface, Sphere, Torus};
+use geom_test::truth::oracle::{self, RegionSpec};
 use geom_test::truth::{
-    BITS, CORPUS, Enclosed, Status, Verdict, box_volume, capsule, cospi, fresnel, judge, pappus,
-    pi, sinpi, sphere, sphere_cap, steinmetz, torus, villarceau,
+    BITS, CORPUS, Enclosed, Status, Verdict, acos, asin, atan, atan2, box_volume, capsule, cos,
+    cospi, fresnel, judge, pappus, pi, sin, sinpi, sphere, sphere_cap, steinmetz, tan, torus,
+    villarceau,
 };
 use geom_topo::mass::{Corner, shell_volume};
 use geom_topo::query;
+use std::collections::BTreeMap;
 
 fn meter() -> WorkMeter<'static> {
     WorkMeter::new(Budget::UNLIMITED)
@@ -371,5 +375,222 @@ fn clothoid_points_hold_their_fresnel_integrals() {
                 "y {end} {length} {share}"
             );
         }
+    }
+}
+
+/// `a` and `b` enclose the same real number, as far as either can tell, and both are tight.
+fn same(a: &Enclosed, b: &Enclosed) {
+    assert!(a.sub(b).holds(&RBig::ZERO), "{a:?} {b:?}");
+    tight(a);
+}
+
+#[test]
+fn roots_quotients_and_inverse_circular_functions_meet_their_identities() {
+    let one = Enclosed::from_whole(1);
+    let root = Enclosed::from_whole(2).sqrt().unwrap();
+    agrees(
+        &root,
+        "1.41421356237309504880168872420969807856967187537694",
+    );
+    tight(&root);
+    assert!(root.square().holds(&whole(2)));
+    assert!(
+        one.div(&Enclosed::from_whole(3))
+            .unwrap()
+            .holds(&fraction(1, 3))
+    );
+    assert!(one.div(&Enclosed::of(&RBig::ZERO)).is_none());
+    assert!(one.sub(&Enclosed::from_whole(2)).sqrt().is_none());
+    let quarter = pi().div_whole(4);
+    let half = Enclosed::of(&fraction(1, 2));
+    let third = Enclosed::of(&fraction(1, 3));
+    same(&atan(&one).unwrap(), &quarter);
+    same(&atan(&one.neg()).unwrap().neg(), &quarter);
+    same(&atan(&half).unwrap().add(&atan(&third).unwrap()), &quarter);
+    // atan 2 is a right angle less atan 1/2, which is past the unit interval's own series.
+    same(
+        &atan(&Enclosed::from_whole(2)).unwrap(),
+        &pi().div_whole(2).sub(&atan(&half).unwrap()),
+    );
+    same(&atan2(&one, &one).unwrap(), &quarter);
+    assert!(atan2(&one, &one.neg()).is_none());
+    same(&asin(&half).unwrap(), &pi().div_whole(6));
+    same(&acos(&half).unwrap(), &pi().div_whole(3));
+    assert!(asin(&one).is_none());
+    assert!(tan(&quarter).unwrap().holds(&RBig::ONE));
+    assert!(tan(&pi().div_whole(3)).unwrap().square().holds(&whole(3)));
+    assert!(sin(&pi().div_whole(6)).holds(&fraction(1, 2)));
+    let angle = pi().div_whole(7);
+    let unit = sin(&angle).square().add(&cos(&angle).square());
+    assert!(unit.holds(&RBig::ONE));
+    tight(&unit);
+}
+
+/// A segment of a region's loop, from its kind and formulas.
+fn seg(parts: &[&str]) -> Vec<String> {
+    parts.iter().map(|p| (*p).to_owned()).collect()
+}
+
+#[test]
+fn region_moments_meet_their_closed_forms() {
+    let names = BTreeMap::new();
+    let region = |loops: Vec<Vec<Vec<String>>>| RegionSpec {
+        name: "r".to_owned(),
+        loops,
+    };
+    // The rectangle 1..3 by 2..5: area 6, centroid (2, 7/2), mixed moment 4 times 21/2, perimeter
+    // 10, and the boundary's first moment in x 4 + 9 + 4 + 3.
+    let rectangle = region(vec![vec![seg(&["R", "1", "3", "2", "5"])]]);
+    let m = oracle::region_moments(&rectangle, &names).unwrap();
+    same(&m.area, &Enclosed::from_whole(6));
+    same(&m.mx, &Enclosed::from_whole(12));
+    same(&m.my, &Enclosed::from_whole(21));
+    same(&m.mxy, &Enclosed::from_whole(42));
+    same(&m.perimeter, &Enclosed::from_whole(10));
+    same(&m.px, &Enclosed::from_whole(20));
+    // The disc of radius 3 about (2, -1), as one arc through a full turn.
+    let disc = region(vec![vec![seg(&["A", "2", "-1", "3", "0", "2*pi"])]]);
+    let m = oracle::region_moments(&disc, &names).unwrap();
+    let times = |n: u64| pi().mul(&Enclosed::from_whole(n));
+    same(&m.area, &times(9));
+    same(&m.mx, &times(18));
+    same(&m.my, &times(9).neg());
+    same(&m.mxy, &times(18).neg());
+    same(&m.perimeter, &times(6));
+    same(&m.px, &times(12));
+    // The half annulus between radii 1 and 3 above the x axis.
+    let annulus = region(vec![vec![seg(&["S", "0", "0", "1", "3", "0", "pi"])]]);
+    let m = oracle::region_moments(&annulus, &names).unwrap();
+    same(&m.area, &times(4));
+    same(&m.mx, &Enclosed::from_whole(0));
+    same(&m.my, &Enclosed::from_whole(52).div_whole(3));
+    same(&m.perimeter, &times(4).add(&Enclosed::from_whole(4)));
+}
+
+/// The stored numbers of `SolidCraft`'s analytic cases.
+fn stored() -> serde_json::Value {
+    serde_json::from_str(include_str!("data/solidcraft-stored.json")).unwrap()
+}
+
+/// Whether the derived `value` is within `tolerance` of the stored number, and tight.
+fn near(value: &Enclosed, stored: f64, tolerance: f64, what: &str) {
+    let want = RBig::try_from(stored).unwrap();
+    let allowed = RBig::try_from(tolerance).unwrap();
+    assert!(value.within(&want, &allowed), "{what}: stored {stored}");
+    tight(value);
+}
+
+#[test]
+fn solidcraft_cases_agree_with_their_stored_values() {
+    let table = stored();
+    let cases = oracle::cases().unwrap();
+    assert_eq!(cases.len(), 70);
+    let mut complete = 0;
+    for case in &cases {
+        let derived = oracle::derive(case).unwrap();
+        let want = &table[case.name.as_str()];
+        let number = |v: &serde_json::Value| v.as_f64().unwrap();
+        let low: Vec<f64> = (0..3).map(|i| number(&want["bbox"]["min"][i])).collect();
+        let high: Vec<f64> = (0..3).map(|i| number(&want["bbox"]["max"][i])).collect();
+        let diagonal = low
+            .iter()
+            .zip(&high)
+            .map(|(l, h)| (h - l) * (h - l))
+            .sum::<f64>()
+            .sqrt();
+        // SolidCraft's tolerances: relative 1e-3 on volume and area, and 1e-3 of the box's
+        // diagonal on the centre and the box.
+        let spatial = 1e-3 * diagonal.max(1.0);
+        let relative = |x: f64| 1e-3 * x.abs().max(1.0);
+        let (volume, area) = (number(&want["volume_mm3"]), number(&want["area_mm2"]));
+        if let Some(v) = &derived.volume {
+            near(v, volume, relative(volume), &case.name);
+        }
+        if let Some(a) = &derived.area {
+            near(a, area, relative(area), &case.name);
+        }
+        for k in 0..3 {
+            if let Some(c) = &derived.com[k] {
+                near(c, number(&want["center_of_mass"][k]), spatial, &case.name);
+            }
+            if let Some(m) = &derived.min[k] {
+                near(m, low[k], spatial, &case.name);
+            }
+            if let Some(m) = &derived.max[k] {
+                near(m, high[k], spatial, &case.name);
+            }
+        }
+        if case.complete() {
+            complete += 1;
+        }
+    }
+    // 64 are derived whole; the helical sweep lacks its side area, and the loft and the four
+    // variable-radius rounds lack everything but their boxes.
+    assert_eq!(complete, 64);
+}
+
+#[test]
+fn every_solidcraft_case_is_held_or_awaits_a_board_piece() {
+    let board = include_str!("../../../architecture/30-build-order.md");
+    let cases = oracle::cases().unwrap();
+    let mut by_piece: BTreeMap<String, usize> = BTreeMap::new();
+    for case in &cases {
+        *by_piece.entry(case.needs.clone()).or_default() += 1;
+        if case.needs == "kernel" {
+            continue;
+        }
+        assert!(
+            CORPUS
+                .iter()
+                .any(|f| matches!(f.status, Status::Awaits(p) if p == case.needs)),
+            "{}",
+            case.name
+        );
+        assert!(
+            board.contains(&format!("| {} |", case.needs)),
+            "{}",
+            case.name
+        );
+    }
+    let counts: Vec<(&str, usize)> = by_piece.iter().map(|(k, v)| (k.as_str(), *v)).collect();
+    assert_eq!(
+        counts,
+        [
+            ("G255", 37),
+            ("G256", 2),
+            ("G257", 1),
+            ("G259", 1),
+            ("G263", 8),
+            ("G266", 4),
+            ("G275", 3),
+            ("G277", 1),
+            ("G278", 1),
+            ("G472", 10),
+            ("kernel", 2),
+        ]
+    );
+}
+
+#[test]
+fn solidcraft_box_cases_hold_in_the_kernel() {
+    let cases = oracle::cases().unwrap();
+    for (name, (a, b, c)) in [
+        ("01-box", (40, 30, 20)),
+        ("06-symmetric-extrude", (50, 30, 20)),
+    ] {
+        let case = cases.iter().find(|case| case.name == name).unwrap();
+        assert_eq!(case.needs, "kernel");
+        let truth = oracle::derive(case).unwrap().volume.unwrap();
+        let input = BoxInput {
+            min: P3::new(-3, 4, -5).unwrap(),
+            size: [Steps(a), Steps(b), Steps(c)],
+        };
+        let made = make_box(&ctx(), &input).unwrap();
+        let six = query::volume(&made.result.body, &mut meter()).unwrap();
+        let mut got = UBig::ZERO;
+        for limb in six.to_le_limbs().iter().rev() {
+            got = (got << 64) + UBig::from(*limb);
+        }
+        assert!(truth.holds(&(RBig::from(got) / whole(6))), "{name}");
     }
 }
