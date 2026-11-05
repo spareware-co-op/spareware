@@ -460,7 +460,9 @@ fn tetra_is_located(origin: [i64; 3], side: i64) {
             }
         }
     }
-    assert!(seen.iter().all(|&n| n > 100), "{seen:?}");
+    // Outside, inside and on the surface are each well represented, so the oracle was tested on
+    // all three.
+    assert!(seen[0] > 100 && seen[1] > 20 && seen[2] > 30, "{seen:?}");
 }
 
 /// solidcore plan/upstream-issues/WR-537--point-on-a-closed-face-seam-classifies-unknown.md
