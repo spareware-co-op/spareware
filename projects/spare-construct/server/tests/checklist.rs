@@ -150,6 +150,9 @@ struct Live {
     counter: u64,
     /// The log entries it was sent on the way in.
     replayed: Vec<Value>,
+    /// What a wait read past, so a later wait can still find it: an entry can arrive while the
+    /// test waits for an earlier edit's reply (issue #498, on a slow runner).
+    seen: Vec<Value>,
 }
 
 impl Live {
@@ -175,6 +178,7 @@ impl Live {
             client: client.to_owned(),
             counter: 0,
             replayed: Vec::new(),
+            seen: Vec::new(),
         };
         let hello =
             json!({ "t": "hello", "client": client, "documents": documents, "since": since });
@@ -227,7 +231,16 @@ impl Live {
             if wanted(&message) {
                 return Some(message);
             }
+            self.seen.push(message);
         }
+    }
+
+    /// The first message `wanted` accepts, among those a wait read past or still to come.
+    async fn find(&mut self, wanted: impl Fn(&Value) -> bool) -> Option<Value> {
+        if let Some(i) = self.seen.iter().position(&wanted) {
+            return Some(self.seen.remove(i));
+        }
+        self.until(wanted).await
     }
 
     async fn reply_to(&mut self, counter: u64) -> Value {
@@ -560,15 +573,20 @@ async fn shapes_follow_the_log(base: &str) {
     let c = live
         .op(model, "element.move", at("W-900", 3100, 3000))
         .await;
-    live.reply_to(c).await;
+    let moved = live.reply_to(c).await["seq"]
+        .as_u64()
+        .expect("the move's place in the log");
     let c = live
         .op(model, "element.release", json!({ "element": "W-900" }))
         .await;
     live.reply_to(c).await;
+    // The checkpoint can come before the release's reply, so look at what that wait read past
+    // too; it must reach the move, so an earlier checkpoint naming the wall can't stand in.
     let entry = live
-        .until(|m| {
+        .find(|m| {
             m["t"] == "entry"
                 && m["entry"]["cmd"] == "document.checkpoint"
+                && m["entry"]["args"]["through"].as_u64() >= Some(moved)
                 && m["entry"]["args"]["bodies"].get("W-900").is_some()
         })
         .await

@@ -36,7 +36,18 @@ async function signIn(person, blocked) {
   return page;
 }
 
-const box = (page, id) => page.locator(`g.element[data-id="${id}"] .body`).boundingBox();
+// An element's box on screen. A redraw (after Escape, a claim or an edit) replaces the element's
+// drawing, and boundingBox() is null while it is away, so wait until it is drawn again (a slow
+// runner caught it away once, between Escape and the click on the wall).
+async function box(page, id) {
+  const body = page.locator(`g.element[data-id="${id}"] .body`);
+  for (let tries = 0; tries < 20; tries += 1) {
+    await body.waitFor({ state: 'visible' });
+    const found = await body.boundingBox();
+    if (found) return found;
+  }
+  throw new Error(`${id} never stayed drawn long enough to find its box`);
+}
 const position = (page, id) =>
   page
     .locator(`g.element[data-id="${id}"]`)
