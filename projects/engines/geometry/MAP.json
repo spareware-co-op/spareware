@@ -5182,7 +5182,7 @@
               "take": "port"
             }
           ],
-          "spdx": "MPL-2.0 AND MIT",
+          "spdx": "Apache-2.0 AND MIT",
           "target": "lib"
         },
         {
@@ -5241,7 +5241,7 @@
               "take": "port"
             }
           ],
-          "spdx": "MPL-2.0 AND MIT",
+          "spdx": "Apache-2.0 AND MIT",
           "target": "lib"
         },
         {
@@ -5302,7 +5302,7 @@
               "take": "port"
             }
           ],
-          "spdx": "MPL-2.0 AND MIT",
+          "spdx": "Apache-2.0 AND MIT",
           "target": "lib"
         },
         {
@@ -5336,7 +5336,7 @@
               "take": "port"
             }
           ],
-          "spdx": "MPL-2.0 AND MIT",
+          "spdx": "Apache-2.0 AND MIT",
           "target": "lib"
         },
         {
@@ -5957,7 +5957,7 @@
               "take": "port"
             }
           ],
-          "spdx": "MPL-2.0 AND Apache-2.0",
+          "spdx": "Apache-2.0",
           "target": "lib"
         },
         {
@@ -6042,7 +6042,7 @@
               "take": "port"
             }
           ],
-          "spdx": "MPL-2.0 AND Apache-2.0",
+          "spdx": "Apache-2.0",
           "target": "lib"
         },
         {
@@ -6103,7 +6103,7 @@
               "take": "port"
             }
           ],
-          "spdx": "MPL-2.0 AND Apache-2.0",
+          "spdx": "Apache-2.0",
           "target": "lib"
         },
         {
@@ -6166,7 +6166,7 @@
               "take": "port"
             }
           ],
-          "spdx": "MPL-2.0 AND Apache-2.0",
+          "spdx": "Apache-2.0",
           "target": "lib"
         },
         {
@@ -6189,7 +6189,7 @@
           },
           "path": "geom_nurbs::deboor",
           "provenance": [],
-          "spdx": "MPL-2.0",
+          "spdx": "Apache-2.0",
           "target": "lib"
         },
         {
@@ -6227,7 +6227,7 @@
               "take": "port"
             }
           ],
-          "spdx": "MPL-2.0 AND Apache-2.0",
+          "spdx": "Apache-2.0",
           "target": "lib"
         },
         {
@@ -6338,7 +6338,7 @@
               "take": "port-method"
             }
           ],
-          "spdx": "MPL-2.0 AND Apache-2.0",
+          "spdx": "Apache-2.0",
           "target": "lib"
         },
         {
@@ -6395,7 +6395,7 @@
               "take": "port"
             }
           ],
-          "spdx": "MPL-2.0 AND Apache-2.0",
+          "spdx": "Apache-2.0",
           "target": "lib"
         },
         {
@@ -6431,7 +6431,7 @@
               "take": "port"
             }
           ],
-          "spdx": "MPL-2.0 AND Apache-2.0",
+          "spdx": "Apache-2.0",
           "target": "lib"
         },
         {
@@ -6467,7 +6467,7 @@
               "take": "port"
             }
           ],
-          "spdx": "MPL-2.0 AND Apache-2.0",
+          "spdx": "Apache-2.0",
           "target": "lib"
         },
         {
@@ -6502,7 +6502,7 @@
               "take": "port"
             }
           ],
-          "spdx": "MPL-2.0 AND Apache-2.0",
+          "spdx": "Apache-2.0",
           "target": "lib"
         },
         {
@@ -6579,7 +6579,7 @@
               "take": "port"
             }
           ],
-          "spdx": "MPL-2.0 AND Apache-2.0",
+          "spdx": "Apache-2.0",
           "target": "lib"
         },
         {
@@ -6616,7 +6616,7 @@
               "take": "port"
             }
           ],
-          "spdx": "MPL-2.0 AND Apache-2.0",
+          "spdx": "Apache-2.0",
           "target": "lib"
         },
         {
@@ -6653,7 +6653,7 @@
               "take": "port"
             }
           ],
-          "spdx": "MPL-2.0 AND Apache-2.0",
+          "spdx": "Apache-2.0",
           "target": "lib"
         },
         {
@@ -6714,7 +6714,7 @@
               "take": "port"
             }
           ],
-          "spdx": "MPL-2.0 AND Apache-2.0",
+          "spdx": "Apache-2.0",
           "target": "lib"
         }
       ],
@@ -8630,7 +8630,7 @@
           "file": "projects/engines/geometry/crates/geom-test/src/licence.rs",
           "guarantees": [
             "**Exact grammar, or an error.** An expression with an unknown character, an unbalanced parenthesis, a missing operand or a stray operator is an [`ExprError`], never a pass.",
-            "**Permissive means every licence of one way to comply is permissive.** An `OR` needs one permissive branch, an `AND` needs both, and `WITH` may add only an exception in [`EXCEPTIONS`], which grant permissions and take none away. So `MIT OR Apache-2.0 OR LGPL-2.1-or-later` is permissive, taken under MIT or Apache-2.0, and `MIT AND GPL-3.0-only` is not. The permissive licences are exactly [`PERMISSIVE`]: the list the development crates may take (MIT, Apache-2.0, BSD, ISC, Zlib, Unicode). The Unlicense is not on it (chapter 32.6 takes it only beside another licence), nor is MPL-2.0, which is ours and is checked separately.",
+            "**Permissive means every licence of one way to comply is permissive.** An `OR` needs one permissive branch, an `AND` needs both, and `WITH` may add only an exception in [`EXCEPTIONS`], which grant permissions and take none away. So `MIT OR Apache-2.0 OR LGPL-2.1-or-later` is permissive, taken under MIT or Apache-2.0, and `MIT AND GPL-3.0-only` is not. The permissive licences are exactly [`PERMISSIVE`]: the list the development crates may take (MIT, Apache-2.0, BSD, ISC, Zlib, Unicode). The Unlicense is not on it (chapter 32.6 takes it only beside another licence), nor is MPL-2.0, which is copyleft per file and so not permissive, though 29.2 allows it.",
             "**One form per meaning.** [`Expr::canonical`] flattens nested `OR`s and `AND`s and sorts and deduplicates their operands, so `MIT OR Apache-2.0`, `Apache-2.0 OR MIT` and Cargo's legacy `MIT/Apache-2.0` compare equal."
           ],
           "job": "Licences: whether a package's licence expression is permissive, and the licence records every development crate keeps in its header.",
@@ -8888,7 +8888,7 @@
           "guarantees": [
             "**A `Source:` record is the whole notice, of code 29.2 lets us port.** It reads `Source: PORT from <name>, <licence>,` with a licence met by 29.2's allow-list ([`classes::Class::Allowed`]), a link pinned to a full commit, at least one copyright line (a line before `Changed for Spare Kit:` that opens with `Copyright`, `©`, `(c)` or `SPDX-FileCopyrightText:`, as the REUSE specification writes copyright notices), and a `Changed for Spare Kit: ` line that says what changed; the header carries an `SPDX-License-Identifier:` line met by the allow-list whose expression is that licence or has it as an `AND` operand. Anything else is a [`Rule::Source`] or [`Rule::Spdx`] problem.",
             "**A `Consulted:` record names a real licence and a read 29.2 allows.** It reads `Consulted: <name>, <licence>, <link>, <what for>`, the link a web address or a DOI; the licence is classified by [`classes`] (an identifier 29.2 does not classify is a problem); a link on a code-hosting site is pinned to a full commit; and code under a licence 29.2 never lets us read (AGPL, non-commercial or custom terms) is a problem, while LGPL code, and GPL code an owner allowed, carry a `Method note:` line naming the method-only procedure's note under `projects/engines/geometry/methods/` (rule 6). Anything else is a [`Rule::Consulted`] problem.",
-            "**A module that ports nothing is ours.** Without a `Source:` record, an `SPDX-License-Identifier:` line, if any, is `MPL-2.0` (29.20, rule 4: \"A PORT METHOD module is MPL-2.0 and ours\").",
+            "**A module that ports nothing is ours.** Without a `Source:` record, an `SPDX-License-Identifier:` line, if any, is `Apache-2.0` (29.20, rule 4: \"A PORT METHOD module is Apache-2.0 and ours\").",
             "**Every link to outside code is credited.** A link to source code ([`links::is_code`]) anywhere else in the header or in the file's doc comments needs a `Source:` or `Consulted:` record in the same header for the same repository (on a code-hosting site) or the same file (elsewhere), and a commit named by an abbreviated name (the word \"commit\" and its first seven to 39 hexadecimal digits) is a source read but not credited with a pinned link; either is a [`Rule::Uncredited`] problem."
           ],
           "job": "The provenance lines of a header: `Source:` for a ported file, `Consulted:` for a source a module consulted, `SPDX-License-Identifier:`, and the rule that every link to outside code is credited.",

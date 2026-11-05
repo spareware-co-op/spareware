@@ -11,7 +11,7 @@
 //!   flags or `errno`; the overflow and underflow results returned directly; the canonical NaN for
 //!   a NaN; a written proof of the error bound. Every change is listed under "Changes from the C
 //!   source" below; none changes a result.
-//! SPDX-License-Identifier: MPL-2.0 AND MIT
+//! SPDX-License-Identifier: Apache-2.0 AND MIT
 //!
 //! The original notice of `exp.c`, reproduced as the MIT licence requires:
 //!

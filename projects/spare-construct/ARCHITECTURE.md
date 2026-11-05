@@ -773,9 +773,10 @@ A new subsystem gets a short written design note first, reviewed before any code
 - Apache-2.0: permissive, with a patent grant.
 - MIT: permissive and shortest.
 - MPL-2.0: changes to our own files must be shared back, but add-ins and products built on top can stay closed.
-- Decided (2026-10-19): MPL-2.0 for the core so improvements come back, and Apache-2.0 for the SDK, examples and plugin templates.
-- Never relicensed: the licence will never be changed to a closed, paid or subscription licence.
-- Contributors keep the copyright to their own work and sign off each commit with the Developer Certificate of Origin. There is no contributor licence agreement, so nobody can relicense what the community builds.
+- Apache-2.0: permissive, with a patent grant and a NOTICE file; anyone can build on it, free or paid.
+- Decided (2026-10-19): MPL-2.0 for the core and Apache-2.0 for the SDK, examples and plugin templates. Changed (2026-11-05): Apache-2.0 for everything, to match NVIDIA's USD BRep and solidcore so code can move both ways (32.45).
+- Never closed: the licence will never be changed to a closed, paid or subscription licence.
+- Contributors keep the copyright to their own work and sign off each commit with the Developer Certificate of Origin. There is no contributor licence agreement, so no one is given extra rights over what the community builds.
 
 **Discuss**
 
@@ -823,7 +824,7 @@ Twenty-one choices to settle, each with my lean; change the status as they are a
 | DWG | ODA licence; our own writer; DXF only | DXF first, DWG decided later | Open |
 | Hosting | One co-op cloud holds every firm's hub and project | One co-op cloud | Decided (K08) |
 | Python bindings | At launch; later | Later (the C interface makes it cheap) | Open |
-| Licence | MPL-2.0 core with Apache-2.0 SDK; Apache-2.0 for all; MIT | MPL-2.0 core, Apache-2.0 SDK | Open |
+| Licence | MPL-2.0 core with Apache-2.0 SDK; Apache-2.0 for all; MIT | Apache-2.0 for all (2026-11-05) | Decided |
 | Visibility and ownership | Public now; private until firm sign-off and the first spike | Private until the firm signs off, then public | Open |
 
 ## Sources

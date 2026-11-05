@@ -85,11 +85,11 @@ num-rational = "0.4.2"
 yaml-rust2 = { version = "0.13.0", default-features = false }
 # The kernel crates the NURBS reference is compared with on every pull request (G57,
 # tests/nurbs_reference.rs): geom-nurbs's curves and the work meter its operations take. Ours,
-# MPL-2.0; development dependencies, so no kernel crate comes to depend on this one.
+# Apache-2.0; development dependencies, so no kernel crate comes to depend on this one.
 geom-nurbs = { path = "../geom-nurbs" }
 geom-run = { path = "../geom-run" }
 # The kinds and transforms the law catalogue checks on every pull request and nightly (G69,
-# tests/laws_curves.rs and tests/laws_surfaces.rs). Ours, MPL-2.0; development dependencies, as
+# tests/laws_curves.rs and tests/laws_surfaces.rs). Ours, Apache-2.0; development dependencies, as
 # above.
 geom-curve = { path = "../geom-curve" }
 geom-surface = { path = "../geom-surface" }

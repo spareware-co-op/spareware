@@ -26,7 +26,7 @@
 //!   manifest says `publish = false` (`Krate::is_private` in `src/lib.rs` reads `publish` only), a
 //!   crate from crates.io or from a folder outside the workspace included: the rules refuse every
 //!   such crate that is not of this workspace, and read our own crates' licence fields themselves
-//!   (29.2's identifiers only, and a crate of the family's naming MPL-2.0, Spare Kit's own licence,
+//!   (29.2's identifiers only, and a crate of the family's naming Apache-2.0, Spare Kit's own licence,
 //!   beside any ported file's, as rule 4 asks). Its bans match crate names only and its sources
 //!   check never reads a path crate: the rules refuse every crate that is neither of this
 //!   workspace nor from crates.io (a `[patch]` to a local folder included), every crate outside
@@ -1392,7 +1392,7 @@ pub mod rules {
     }
 
     /// The licence rules: no crate outside the workspace skips the licence check as private; our
-    /// own crates' licence fields hold 29.2's identifiers only, the family's naming MPL-2.0; and
+    /// own crates' licence fields hold 29.2's identifiers only, the family's naming Apache-2.0; and
     /// every choice a licence offers is recorded.
     fn licences(
         view: &View<'_>,
@@ -1427,7 +1427,7 @@ pub mod rules {
             }
             if member {
                 // A workspace crate with no licence field is ours, under the repository's
-                // LICENSE (MPL-2.0); one that names a licence names what it holds (rule 4).
+                // LICENSE (Apache-2.0); one that names a licence names what it holds (rule 4).
                 let Some(licence) = licence else {
                     continue;
                 };
@@ -1441,16 +1441,16 @@ pub mod rules {
                 let in_family = family.contains(name);
                 let bad = ways
                     .iter()
-                    .any(|w| !allowed(w) || (in_family && !w.contains("MPL-2.0")));
+                    .any(|w| !allowed(w) || (in_family && !w.contains("Apache-2.0")));
                 if bad {
                     refuse(
                         "gate-own-licence",
                         format!(
                             "its licence field {licence:?} names a licence 29.2 leaves out{}: a \
                              crate of ours names only 29.2's identifiers, and a crate of the \
-                             kernel's family names MPL-2.0, Spare Kit's own licence, beside any \
+                             kernel's family names Apache-2.0, Spare Kit's own licence, beside any \
                              ported file's (29.2; 29.20, rule 4)",
-                            if in_family { ", or not MPL-2.0" } else { "" }
+                            if in_family { ", or not Apache-2.0" } else { "" }
                         ),
                     );
                 }
@@ -1654,12 +1654,12 @@ pub mod rules {
             })
         }
 
-        /// A small graph: the workspace crates `geom-a` (MPL-2.0) and `kit-x` (no licence), and
+        /// A small graph: the workspace crates `geom-a` (Apache-2.0) and `kit-x` (no licence), and
         /// the crates `extra` adds; edges from `geom-a` to every other package, of `kind` each.
         fn graph(extra: &[(&str, &str, &str, &str)], kinds: &[&str]) -> Value {
             // extra: (name, source or "", licence, publish: "null" or "[]")
             let mut packages = vec![
-                package("a", "geom-a", &Value::Null, &json!("MPL-2.0"), &json!([])),
+                package("a", "geom-a", &Value::Null, &json!("Apache-2.0"), &json!([])),
                 package("k", "kit-x", &Value::Null, &Value::Null, &json!([])),
             ];
             let mut deps =
@@ -1828,7 +1828,7 @@ pub mod rules {
 
         #[test]
         fn our_own_licences_are_read() {
-            // geom-a is of the family: GPL, or no MPL-2.0, is refused; kit-x is ours, outside it.
+            // geom-a is of the family: GPL, or no Apache-2.0, is refused; kit-x is ours, outside it.
             let g = graph(&[], &[]);
             let set = |g: &mut Value, id: &str, licence: &str| {
                 let packages = g.get_mut("packages").and_then(Value::as_array_mut).unwrap();
@@ -1841,8 +1841,8 @@ pub mod rules {
             for (id, licence, refused) in [
                 ("a", "GPL-3.0-only", true),
                 ("a", "MIT", true),
-                ("a", "MPL-2.0 OR GPL-3.0-only", true),
-                ("a", "MPL-2.0 AND BSD-3-Clause", false),
+                ("a", "Apache-2.0 OR GPL-3.0-only", true),
+                ("a", "Apache-2.0 AND BSD-3-Clause", false),
                 ("k", "Apache-2.0", false),
                 ("k", "LGPL-2.1-only", true),
             ] {
