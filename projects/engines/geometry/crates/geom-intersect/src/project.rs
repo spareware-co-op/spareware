@@ -839,21 +839,7 @@ fn closes(surface: &SurfaceKind) -> [bool; 2] {
 fn hulls(surface: &SurfaceKind, open: &[([Interval; 2], f64)]) -> Option<Vec<ParamBox>> {
     let ((a, b), (c, d)) = surface.domain();
     let ends = [(a, b), (c, d)];
-    let span = |boxes: &mut dyn Iterator<Item = &[Interval; 2]>| -> Option<ParamBox> {
-        let mut out: Option<ParamBox> = None;
-        for at in boxes {
-            let [u, v] = at;
-            out = Some(match out {
-                None => ((u.lo(), u.hi()), (v.lo(), v.hi())),
-                Some(((p, q), (r, s))) => (
-                    (smaller(p, u.lo()), larger(q, u.hi())),
-                    (smaller(r, v.lo()), larger(s, v.hi())),
-                ),
-            });
-        }
-        out
-    };
-    let whole = span(&mut open.iter().map(|(at, _)| at))?;
+    let whole = hull_of(open, None)?;
     for (k, closed) in closes(surface).into_iter().enumerate() {
         let (lo, hi) = ends.get(k).copied()?;
         let side = |at: &[Interval; 2]| at.get(k).copied();
@@ -867,14 +853,36 @@ fn hulls(surface: &SurfaceKind, open: &[([Interval; 2], f64)]) -> Option<Vec<Par
             continue;
         }
         let middle = halfway((lo, hi))?;
-        let near = |high: bool| {
-            move |at: &&[Interval; 2]| side(at).is_some_and(|x| (x.lo() >= middle) == high)
-        };
-        let low = span(&mut open.iter().map(|(at, _)| at).filter(near(false)))?;
-        let high = span(&mut open.iter().map(|(at, _)| at).filter(near(true)))?;
+        let low = hull_of(open, Some((k, middle, false)))?;
+        let high = hull_of(open, Some((k, middle, true)))?;
         return Some(alloc::vec![low, high]);
     }
     Some(alloc::vec![whole])
+}
+
+/// The hull of the boxes in `open`, or, given `(k, middle, high)`, of those whose direction `k`
+/// starts at or past `middle` (`high`) or before it (not `high`); `None` when no box is kept.
+/// A plain loop over the slice, not an iterator passed as `dyn Iterator`: the recursion check
+/// reads a `dyn` call as every implementation of the trait, the standard library's generic
+/// adapters among them.
+fn hull_of(open: &[([Interval; 2], f64)], side: Option<(usize, f64, bool)>) -> Option<ParamBox> {
+    let mut out: Option<ParamBox> = None;
+    for (at, _) in open {
+        if let Some((k, middle, high)) = side
+            && !at.get(k).is_some_and(|x| (x.lo() >= middle) == high)
+        {
+            continue;
+        }
+        let [u, v] = at;
+        out = Some(match out {
+            None => ((u.lo(), u.hi()), (v.lo(), v.hi())),
+            Some(((p, q), (r, s))) => (
+                (smaller(p, u.lo()), larger(q, u.hi())),
+                (smaller(r, v.lo()), larger(s, v.hi())),
+            ),
+        });
+    }
+    out
 }
 
 /// What the undecided boxes still in reach come to: one nearest point, pushed onto `points` from
