@@ -1482,6 +1482,21 @@ impl<'p> Index<'p> {
         infer: &mut Infer,
         sigs: ClosureSigs<'_>,
     ) -> (Vec<Pick>, Option<Ty>, Vec<Ty>) {
+        self.probe_in(recv, name, None, infer, sigs)
+    }
+
+    /// [`Index::probe`], kept to trait `only` when it is given: no inherent method, and only that
+    /// trait's implementations and bounds. A method call in a generic body is chosen there, once,
+    /// through the bounds of a generic receiver; an instance of the body, where the receiver has a
+    /// concrete type, dispatches the same trait's method and sees nothing else of that type's.
+    pub fn probe_in(
+        &self,
+        recv: &Ty,
+        name: &str,
+        only: Option<ItemId>,
+        infer: &mut Infer,
+        sigs: ClosureSigs<'_>,
+    ) -> (Vec<Pick>, Option<Ty>, Vec<Ty>) {
         let steps = self.autoderef(recv, infer, sigs);
         let mut heads: Vec<ImplId> = Vec::new();
         for s in &steps {
@@ -1500,7 +1515,11 @@ impl<'p> Index<'p> {
                     None => step.clone(),
                 };
                 for inherent in [true, false] {
-                    let picks = self.picks_at(step, &adjusted, name, inherent, &heads, infer, sigs);
+                    if inherent && only.is_some() {
+                        continue;
+                    }
+                    let picks =
+                        self.picks_at(step, &adjusted, name, inherent, only, &heads, infer, sigs);
                     if !picks.is_empty() {
                         return (
                             picks,
@@ -1516,14 +1535,19 @@ impl<'p> Index<'p> {
 
     /// The candidates at one step: implementation methods (inherent ones, or trait ones and
     /// derived ones) whose receiver unifies with `adjusted`; for a generic or trait-object step,
-    /// the methods of its bounds.
-    #[allow(clippy::too_many_arguments, reason = "the lookup's state at one step")]
+    /// the methods of its bounds. With `only`, trait `only`'s alone.
+    #[allow(
+        clippy::too_many_arguments,
+        clippy::too_many_lines,
+        reason = "the lookup's state at one step, and its two kinds of candidate"
+    )]
     fn picks_at(
         &self,
         step: &Ty,
         adjusted: &Ty,
         name: &str,
         inherent: bool,
+        only: Option<ItemId>,
         heads: &[ImplId],
         infer: &mut Infer,
         sigs: ClosureSigs<'_>,
@@ -1534,6 +1558,9 @@ impl<'p> Index<'p> {
                 continue;
             };
             if info.trait_ref.is_some() == inherent {
+                continue;
+            }
+            if only.is_some() && info.trait_ref.as_ref().map(|tr| tr.id) != only {
                 continue;
             }
             let provides = info.methods.contains_key(name)
@@ -1578,7 +1605,7 @@ impl<'p> Index<'p> {
                     let Some(decl) = self.trait_declaring_method(tr.id, name) else {
                         continue;
                     };
-                    if decl != tr.id {
+                    if decl != tr.id || only.is_some_and(|o| o != tr.id) {
                         continue;
                     }
                     let Some((sig, generics)) = self.trait_method(tr.id, name) else {
@@ -1633,6 +1660,22 @@ impl<'p> Index<'p> {
             }
         }
         found.into_iter().map(|(p, _)| p).collect()
+    }
+
+    /// The trait whose method `pick` is: a bound's or trait object's trait, the trait a method of
+    /// an implementation implements, a default body's trait or a derived implementation's; none
+    /// for an inherent method or a free function.
+    #[must_use]
+    pub fn pick_trait(&self, pick: &Pick) -> Option<ItemId> {
+        match pick {
+            Pick::Bound { trait_ref, .. } | Pick::Dyn { trait_ref, .. } => Some(trait_ref.id),
+            Pick::Node { node, .. } => match &self.program.node(*node)?.kind {
+                NodeKind::Method(imp) => self.impls.get(imp.0)?.trait_ref.as_ref().map(|tr| tr.id),
+                NodeKind::TraitDefault(t) => Some(*t),
+                NodeKind::Derived { trait_name, .. } => self.lang.trait_named(trait_name),
+                NodeKind::Fn => None,
+            },
+        }
     }
 
     /// The blanket implementations of trait `t` (self type a bare generic parameter) that may
