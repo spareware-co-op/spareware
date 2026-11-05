@@ -5001,6 +5001,7 @@
       "occurrences": 1,
       "kind": "equivalent",
       "reason": "root_floor is next_down of the correctly rounded square root of floor, and floor is at least +0 (the sqrt above refuses floor < radius, and the radius is never negative). For floor = +0 or -0 the root is a zero and its next_down is -2^-1074; for floor > 0 the root is at least 2^-537 and its next_down is positive. So root_floor is never 0.0, and > and >= against 0.0 choose the same arm for every ball."
+<<<<<<< HEAD
     },
     {
       "file": "projects/engines/geometry/crates/geom-topo/src/column.rs",
@@ -5009,6 +5010,10 @@
       "occurrences": 1,
       "kind": "equivalent",
       "reason": "full is a u32, so full >= 0 always holds. When the column needs no full chunk (fewer than CHUNK_ROWS rows), the mutant builds one full chunk anyway and then places it zero times: column.chunks.resize(0, chunk) leaves the list empty with the capacity reserved before, and the chunk is dropped. The column's rows, chunks, values and Memory report are the same as the original's for every rows and value. Only a temporary allocation of one chunk differs, which a machine out of memory could refuse (OutOfMemory, never stored or replayed, 23.10) where the original needs none."
+||||||| merged common ancestors
+<<<<<<<<< Temporary merge branch 1
+=======
+>>>>>>> origin/piece/G129
     },
     {
       "file": "projects/engines/geometry/crates/geom-op/src/cbor.rs",
@@ -5273,6 +5278,7 @@
       "occurrences": 1,
       "kind": "equivalent",
       "reason": "Two records with equal keys, the same class and the same bound, are the same record here: every copy of a pattern takes its grid step from the input, or from the one ceiling the caller gave, so a and b differ in nothing either branch could return."
+<<<<<<< HEAD
     },
     {
       "file": "projects/engines/geometry/crates/geom-num/src/math/log.rs",
@@ -6369,6 +6375,11 @@
       "occurrences": 1,
       "kind": "equivalent",
       "reason": "On None, Plane::side_of_tpi takes side_of_tpi_hand, which computes the same sign exactly: n . X + d . w from Tpi::homogeneous in I384 (then I512) times the sign of w, the 4 x 4 determinant the generated tpi_side evaluates. Both paths are exact, so the answer is the same for every input; only the time taken changes."
+||||||| merged common ancestors
+||||||||| 14166379
+=========
+=======
+>>>>>>> origin/piece/G129
     },
     {
       "file": "projects/engines/geometry/crates/geom-poly/src/subdivide.rs",

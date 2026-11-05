@@ -331,11 +331,21 @@ struct Held<'p> {
 /// A corner of a piece.
 struct Corner {
     point: Tpi,
+<<<<<<< HEAD
     /// Each coordinate `X_i` / w, w made positive, as a [`Cell`], where X and w fit machine
     /// words; the wide coordinates are made only to compare a corner that has none.
     cells: Option<[Cell; 3]>,
     /// The planes of every corner at this point: its own, until [`numbered`] joins them.
     through: Vec<Plane>,
+||||||| merged common ancestors
+    x: [I320; 3],
+    w: I256,
+=======
+    x: [I320; 3],
+    w: I256,
+    /// The planes of every corner at this point: its own, until [`numbered`] joins them.
+    through: Vec<Plane>,
+>>>>>>> origin/piece/G129
 }
 
 /// The sign of a / b − c / d for b and d positive, in `Wide<M>`.
@@ -535,6 +545,7 @@ fn point_order(a: &Corner, b: &Corner) -> Option<Ordering> {
     reason = "p and q are planes, and x and w the point, as in Tpi::homogeneous"
 )]
 fn corner(face: Plane, p: Plane, q: Plane) -> Result<Corner, NumError> {
+<<<<<<< HEAD
     let point = Tpi::meeting(face, p, q)?;
     let cells = Meeting::new(&face, &p, &q).and_then(|at| {
         let (x, w) = at.coordinates();
@@ -544,6 +555,38 @@ fn corner(face: Plane, p: Plane, q: Plane) -> Result<Corner, NumError> {
         point,
         cells,
         through: alloc::vec![face, p, q],
+||||||| merged common ancestors
+    let point = Tpi::new(face, p, q)?;
+    let (x, w) = point.homogeneous()?;
+    let turn = |v: &I320| v.checked_neg().ok_or(NumError::BudgetExceeded);
+    let [a, b, c] = &x;
+    Ok(match point.weight() {
+        Sign::Negative => Corner {
+            point,
+            x: [turn(a)?, turn(b)?, turn(c)?],
+            w: w.checked_neg().ok_or(NumError::BudgetExceeded)?,
+        },
+        Sign::Positive | Sign::Zero => Corner { point, x, w },
+=======
+    let point = Tpi::new(face, p, q)?;
+    let (x, w) = point.homogeneous()?;
+    let turn = |v: &I320| v.checked_neg().ok_or(NumError::BudgetExceeded);
+    let [a, b, c] = &x;
+    let through = alloc::vec![face, p, q];
+    Ok(match point.weight() {
+        Sign::Negative => Corner {
+            point,
+            x: [turn(a)?, turn(b)?, turn(c)?],
+            w: w.checked_neg().ok_or(NumError::BudgetExceeded)?,
+            through,
+        },
+        Sign::Positive | Sign::Zero => Corner {
+            point,
+            x,
+            w,
+            through,
+        },
+>>>>>>> origin/piece/G129
     })
 }
 
@@ -957,6 +1000,7 @@ fn numbered(
     // every corner's planes in turn, gathered once.
     let mut number = alloc::vec![0usize; corners.len()];
     let mut places: Vec<Corner> = Vec::new();
+<<<<<<< HEAD
     let mut start = 0usize;
     while let Some(first) = order.get(start) {
         let leader = corners.get(*first).ok_or(MergeError::Open)?;
@@ -967,6 +1011,23 @@ fn numbered(
                 break;
             }
             end = end.saturating_add(1);
+||||||| merged common ancestors
+    for i in order {
+        let held = corners.get_mut(i).and_then(Option::take);
+        let held = held.ok_or(MergeError::Open)?;
+        let same = places.last().and_then(|last| point_order(last, &held));
+        if same != Some(Ordering::Equal) {
+            places.push(held);
+=======
+    for i in order {
+        let held = corners.get_mut(i).and_then(Option::take);
+        let held = held.ok_or(MergeError::Open)?;
+        match places.last_mut() {
+            Some(last) if point_order(last, &held) == Some(Ordering::Equal) => {
+                last.through.extend(held.through);
+            }
+            _ => places.push(held),
+>>>>>>> origin/piece/G129
         }
         let group = order.get(start..end).ok_or(MergeError::Open)?;
         let mut through = Vec::with_capacity(group.len().saturating_mul(3));
@@ -984,6 +1045,7 @@ fn numbered(
     Ok((number, places))
 }
 
+<<<<<<< HEAD
 /// Whether `plane` is a split of [`crate::subdivide`]'s, on an odd half step.
 fn splits_boxes(plane: &Plane) -> bool {
     let n = plane.n();
@@ -1020,6 +1082,59 @@ fn named(corner: &Corner, meter: &mut WorkMeter<'_>) -> Result<Tpi, MergeError> 
 
 /// Every side of `held`, sorted by line: made on `exec`'s pool, and sorted there where every side
 /// has its [`Cell`]s.
+||||||| merged common ancestors
+/// Every side of `held`, sorted by line.
+=======
+/// Whether `plane` is a split of [`crate::subdivide`]'s, on an odd half step.
+fn splits_boxes(plane: &Plane) -> bool {
+    let n = plane.n();
+    n.iter().filter(|v| **v != 0).count() == 1
+        && n.iter().any(|v| v.unsigned_abs() == 2)
+        && plane.d() & 1 != 0
+}
+
+/// `corner`'s point under a name the boxes cannot change. A grid point is named by its three axis
+/// planes: which corners it has, and so which planes reach it, depends on how far each box's
+/// cuts run (a face that only touches a corner of another solid is cut there in one box and not
+/// in a smaller one). A point off the grid takes the first three planes through it, in plane
+/// order and leaving out the boxes' own, that meet in one point; one with no such three, which
+/// only a seam has, keeps its corner's.
+fn named(corner: &Corner, meter: &mut WorkMeter<'_>) -> Result<Tpi, MergeError> {
+    let near = corner.point.to_grid()?;
+    if near.is_exact() {
+        let at = near.value();
+        let axis = |n: [i128; 3], v: i64| Plane::new(n, i128::from(v).saturating_neg());
+        return Ok(Tpi::new(
+            axis([1, 0, 0], at.x.get())?,
+            axis([0, 1, 0], at.y.get())?,
+            axis([0, 0, 1], at.z.get())?,
+        )?);
+    }
+    let mut list: Vec<Plane> = corner
+        .through
+        .iter()
+        .filter(|plane| !splits_boxes(plane))
+        .copied()
+        .collect();
+    list.sort_unstable_by_key(|plane| (plane.n(), plane.d()));
+    list.dedup();
+    for (i, a) in list.iter().enumerate() {
+        for (j, b) in list.iter().enumerate().skip(i.saturating_add(1)) {
+            for c in list.iter().skip(j.saturating_add(1)) {
+                meter.charge(1)?;
+                match Tpi::new(*a, *b, *c) {
+                    Ok(point) => return Ok(point),
+                    Err(NumError::Degenerate) => {}
+                    Err(e) => return Err(e.into()),
+                }
+            }
+        }
+    }
+    Ok(corner.point)
+}
+
+/// Every side of `held`, sorted by line.
+>>>>>>> origin/piece/G129
 fn sides_of(
     held: &[Held<'_>],
     number: &[usize],
@@ -1736,10 +1851,22 @@ pub fn merge_on(
             .take(1)
             .for_each(|s| s.faces.push(at));
     }
+<<<<<<< HEAD
     let vertices = exec.try_map(meter, NAMES, RUNS, &used, |_, id, m| {
         named(points.get(*id).ok_or(MergeError::Open)?, m)
     });
     let vertices = vertices.map_err(|e| phase_error(e, meter))?;
+||||||| merged common ancestors
+    let mut vertices = Vec::with_capacity(used.len());
+    for id in &used {
+        vertices.push(points.get(*id).ok_or(MergeError::Open)?.point);
+    }
+=======
+    let mut vertices = Vec::with_capacity(used.len());
+    for id in &used {
+        vertices.push(named(points.get(*id).ok_or(MergeError::Open)?, meter)?);
+    }
+>>>>>>> origin/piece/G129
     Ok(Merged {
         sheets,
         vertices,
