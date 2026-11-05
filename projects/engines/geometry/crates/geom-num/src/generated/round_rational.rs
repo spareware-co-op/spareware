@@ -210,7 +210,7 @@ pub fn filter(x: i128, y: i128, v: i128, q: P2, cx: i128, cy: i128, w: i128) -> 
     let m_w = largest_magnitude([w]);
     let scale = larger(m_p * m_v * m_c, m_p * m_p * m_w);
     let scale = larger(scale, m_y * m_v * m_v * m_c);
-    let scale = larger(scale, m_y * m_p * m_v * m_w);
+    let scale = larger(scale, m_y + m_p * m_v * m_w);
     let scale = larger(scale, m_y * m_y * m_v * m_v * m_w);
     let scale = larger(scale, m_x * m_v * m_v * m_c);
     let scale = larger(scale, m_x * m_p * m_v * m_w);
