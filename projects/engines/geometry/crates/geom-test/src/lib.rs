@@ -142,7 +142,7 @@
 //!
 //! Dependencies, every one permissive (29.1):
 //!
-//! - `geom-num` (MPL-2.0, ours), the numbers layer under test.
+//! - `geom-num` (Apache-2.0, ours), the numbers layer under test.
 //! - `proptest` 1.12, without its default `fork` and `timeout` features, as in `geom-num`. [`prop`]
 //!   always runs it from a fixed seed, so its operating-system random path is never taken.
 //! - `serde_json` 1.0, to read the golden store, cargo-mutants' output and the quality ledger, and
@@ -177,9 +177,9 @@
 //!   `.github/workflows/kernel-quality.yml` as YAML.
 //! - `dashu-int` 0.6 and `dashu-ratio` 0.6 (G57), without their default features: the exact
 //!   rationals of [`nurbs_reference`] and the fixed point of [`fixed`] (G69).
-//! - `geom-nurbs` and `geom-run` (MPL-2.0, ours), development dependencies (G57): the curves
+//! - `geom-nurbs` and `geom-run` (Apache-2.0, ours), development dependencies (G57): the curves
 //!   `tests/nurbs_reference.rs` compares with the reference, and the work meter they take.
-//! - `geom-curve`, `geom-surface` and `geom-math` (MPL-2.0, ours), development dependencies (G69):
+//! - `geom-curve`, `geom-surface` and `geom-math` (Apache-2.0, ours), development dependencies (G69):
 //!   the kinds and transforms the law catalogue checks.
 //!
 //! Licences of every outside package this crate brings into a build, its own and its dependencies'

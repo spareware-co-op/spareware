@@ -64,7 +64,7 @@
 //!   divided by their weights; a parameter outside the domain and a derivative order above the
 //!   maximum are typed errors; derivative curves keep the knots `u_k` to `u_(m−k)`, so unclamped
 //!   curves work too, where `NLib` rebuilds clamped ends; each overflow is checked.
-//! SPDX-License-Identifier: MPL-2.0 AND Apache-2.0
+//! SPDX-License-Identifier: Apache-2.0
 //!
 //! Cost: construction is linear in the control points and makes one allocation (two if
 //! rational). [`Curve::point`] takes O(p²) operations and [`Curve::derivs`] O(p² + k·p·D + k²·D)

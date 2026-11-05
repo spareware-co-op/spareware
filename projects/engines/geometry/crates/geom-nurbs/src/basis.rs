@@ -67,7 +67,7 @@
 //!   degree 12; the checks of `N_KnotVectorIsValid` are those of chapter 24.7, which also accept
 //!   unclamped knots and interior knots repeated p + 1 times; every result that could overflow is
 //!   checked.
-//! SPDX-License-Identifier: MPL-2.0 AND Apache-2.0
+//! SPDX-License-Identifier: Apache-2.0
 //!
 //! Cost: [`Basis::new`] is linear in the number of knots and keeps them (one allocation).
 //! [`Basis::span`] is a binary search, O(log m). [`Basis::eval`] and [`Basis::eval_one`] take

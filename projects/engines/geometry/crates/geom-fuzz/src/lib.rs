@@ -113,13 +113,13 @@
 //!
 //! Dependencies, every one permissive (29.1):
 //!
-//! - `geom-num` (MPL-2.0, ours), the code under test, and `geom-test` (MPL-2.0, ours), for seeds,
+//! - `geom-num` (Apache-2.0, ours), the code under test, and `geom-test` (Apache-2.0, ours), for seeds,
 //!   `SplitMix64` and the hard-case grid sampler. Their own dependencies are recorded in their
 //!   headers.
 //! - `bolero` 0.13.7, a development dependency only: the `check!` front end, with its test-mode
 //!   engine and, under cargo-bolero, the engine chosen (`bolero-libfuzzer`, `bolero-afl`,
 //!   `bolero-honggfuzz` or `bolero-kani`).
-//! - `geom-gen` (MPL-2.0, ours, development only), whose description parser the [`variants`]
+//! - `geom-gen` (Apache-2.0, ours, development only), whose description parser the [`variants`]
 //!   target reads the predicates with.
 //! - `dashu-ratio` 0.6.1 (MIT OR Apache-2.0), without its default features: the exact rationals
 //!   of the [`nurbs`] target's oracle, `geom-test`'s NURBS reference.
