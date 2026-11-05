@@ -1,0 +1,11 @@
+[package]
+name = "gate1-search"
+version = "0.0.0"
+edition = "2024"
+publish = false
+
+[dependencies]
+geom-num = { path = "../geom-num" }
+num-bigint = "0.4"
+num-integer = "0.1"
+num-traits = "0.2"
