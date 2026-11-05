@@ -776,3 +776,31 @@ fn the_filters_answer_where_intervals_can_and_stand_aside_elsewhere() {
     // A bound on a root leaves a sign no interval can give.
     assert_eq!(filtered_between(&quartic, 4, whole(1), whole(5)), None);
 }
+
+#[test]
+fn villarceau_s_angle_is_read_exactly() {
+    use geom_num::quadric::{Plane, villarceau};
+    let p = |x: i64, y: i64, z: i64| P3::new(x, y, z).unwrap();
+    let (o, up) = (p(0, 0, 0), p(0, 0, 1));
+    let plane = |c: P3| Plane {
+        a: o,
+        b: c,
+        c: p(0, 1, 0),
+    };
+    assert_eq!(
+        villarceau(&plane(p(4, 0, 3)), o, up, Steps(5), Steps(3)),
+        Ok(Sign::Zero)
+    );
+    assert_eq!(
+        villarceau(&plane(p(4, 0, 1)), o, up, Steps(5), Steps(3)),
+        Ok(Sign::Negative)
+    );
+    assert_eq!(
+        villarceau(&plane(p(1, 0, 3)), o, up, Steps(5), Steps(3)),
+        Ok(Sign::Positive)
+    );
+    assert_eq!(
+        villarceau(&plane(p(4, 0, 3)), o, up, Steps(1 << 63), Steps(3)),
+        Err(geom_num::NumError::BudgetExceeded)
+    );
+}
