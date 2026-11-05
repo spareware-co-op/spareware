@@ -370,13 +370,9 @@ fn wr_740_a_foot_on_a_cut_of_a_parabola_spline_is_one_point() {
     }
     assert!(
         bad.is_empty(),
-        "{} failures:
-{}",
+        "{} failures:\n{}",
         bad.len(),
-        bad.join(
-            "
-"
-        )
+        bad.join("\n")
     );
 }
 
