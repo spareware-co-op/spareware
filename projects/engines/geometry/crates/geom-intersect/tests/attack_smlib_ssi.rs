@@ -660,3 +660,31 @@ fn wr_495_545_344_the_edges_of_a_shelled_cylinder_and_frustum_are_their_exact_ci
         assert!(octants.iter().all(|x| *x), "z = {z}: {octants:?}");
     }
 }
+
+/// The same plane as a patch and as a plane with no ends is one overlap, whichever is first: a
+/// surface that runs on without end is never taken to be apart from another by its box. (Checks
+/// the guard of `boxes_apart` in the closed form, which an unbounded plane must pass whole.)
+#[test]
+fn a_bounded_patch_of_a_plane_overlaps_the_same_plane_without_ends() {
+    let inf = f64::INFINITY;
+    let whole = plane(
+        [0.0; 3],
+        [1.0, 0.0, 0.0],
+        [0.0, 1.0, 0.0],
+        ((-inf, inf), (-inf, inf)),
+    );
+    let part = plane(
+        [0.0; 3],
+        [1.0, 0.0, 0.0],
+        [0.0, 1.0, 0.0],
+        ((-2.0, 2.0), (-2.0, 2.0)),
+    );
+    for (a, b) in [(&whole, &part), (&part, &whole)] {
+        let r = found(a, b);
+        assert!(
+            matches!(r.items(), [Item::Overlap { .. }]),
+            "{:?}",
+            r.items()
+        );
+    }
+}
