@@ -329,17 +329,17 @@ fn ub_14_elevating_by_a_huge_count_is_a_degree_refusal() {
 /// UB-235--nlib-fitting-and-approximation-overflow-nl-index-on-huge.md (b4de2149): an elevation
 /// count whose sum with the degree overflows `usize`. `Curve::elevate` documents `Degree` when
 /// p + t exceeds the limit, so a count of `usize::MAX` must be a `Degree` refusal like any other
-/// too-large count. It returns `Defect`, the variant for a bug in the kernel, because the sum
-/// `p + t` is a checked addition whose failure is mapped to `Defect`.
+/// too-large count. It used to return `Defect`, the variant for a bug in the kernel, because the
+/// sum `p + t` was a checked addition whose failure maps to `Defect`; the sum now saturates, so
+/// the refusal is `Degree` naming `usize::MAX`.
 #[test]
-#[ignore = "defect: Curve::elevate with p + t overflowing usize returns NurbsError::Defect, not the documented Degree"]
 fn ub_14_elevating_by_a_count_that_overflows_the_degree_is_a_degree_refusal() {
     let c = bezier_curve(10);
     for t in [usize::MAX - 9, usize::MAX - 1, usize::MAX] {
         assert!(
             matches!(
                 c.elevate(t, &mut meter()).map(|r| r.value),
-                Err(NurbsError::Degree { .. })
+                Err(NurbsError::Degree { degree: usize::MAX })
             ),
             "t = {t}"
         );
