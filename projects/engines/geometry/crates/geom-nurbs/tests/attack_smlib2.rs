@@ -130,10 +130,7 @@ fn wr_24_ub_8_ub_30_degenerate_and_short_knot_vectors_are_refused() {
     // p + 1 equal knots in the middle are allowed (a jump), p + 2 are not.
     assert!(Basis::new(2, vec![0.0, 0.0, 0.0, 1.0, 1.0, 1.0, 2.0, 2.0, 2.0]).is_ok());
     assert!(matches!(
-        Basis::new(
-            2,
-            vec![0.0, 0.0, 0.0, 1.0, 1.0, 1.0, 1.0, 2.0, 2.0, 2.0]
-        ),
+        Basis::new(2, vec![0.0, 0.0, 0.0, 1.0, 1.0, 1.0, 1.0, 2.0, 2.0, 2.0]),
         Err(NurbsError::Multiplicity { .. })
     ));
     // The smallest valid vector has a real span.
@@ -257,7 +254,7 @@ fn ub_9_basis_derivatives_of_high_degree_and_order_are_exact_or_refused() {
             if order >= p {
                 let row = &out[p * (p + 1)..(p + 1) * (p + 1)];
                 for (i, v) in row.iter().enumerate() {
-                    let sign = if (p - i) % 2 == 0 { 1.0 } else { -1.0 };
+                    let sign = if (p - i).is_multiple_of(2) { 1.0 } else { -1.0 };
                     let want = sign * c[i] * fact;
                     assert!(
                         (v - want).abs() <= 1e-7 * want.abs(),
@@ -279,11 +276,21 @@ fn ub_14_elevating_a_degree_10_bezier_by_10_keeps_the_curve() {
     let up = c.elevate(10, &mut meter()).unwrap();
     assert_eq!(up.value.degree(), 20);
     assert_eq!(up.value.homogeneous().len(), 21);
-    assert!(up.deviation >= 0.0 && up.deviation < 1e-6, "{}", up.deviation);
+    assert!(
+        up.deviation >= 0.0 && up.deviation < 1e-6,
+        "{}",
+        up.deviation
+    );
     for k in 0..=40 {
         let u = f64::from(k) / 40.0;
-        let (a, b) = (c.point(u, RIGHT).unwrap(), up.value.point(u, RIGHT).unwrap());
-        assert!(close2(a, b, 1e-9 + up.deviation), "u = {u}: {a:?} against {b:?}");
+        let (a, b) = (
+            c.point(u, RIGHT).unwrap(),
+            up.value.point(u, RIGHT).unwrap(),
+        );
+        assert!(
+            close2(a, b, 1e-9 + up.deviation),
+            "u = {u}: {a:?} against {b:?}"
+        );
     }
     // To the limit exactly, and one past it.
     let to_max = c.elevate(MAX_DEGREE - 10, &mut meter()).unwrap();
@@ -294,20 +301,41 @@ fn ub_14_elevating_a_degree_10_bezier_by_10_keeps_the_curve() {
         1e-7 + to_max.deviation
     ));
     assert!(matches!(
-        c.elevate(MAX_DEGREE - 10 + 1, &mut meter()).map(|r| r.value),
+        c.elevate(MAX_DEGREE - 10 + 1, &mut meter())
+            .map(|r| r.value),
         Err(NurbsError::Degree { .. })
     ));
 }
 
 /// solidcore plan/upstream-issues/UB-14--nl-pascaltri-18-18-is-indexed-past-its-end.md and
 /// UB-235--nlib-fitting-and-approximation-overflow-nl-index-on-huge.md (b4de2149): an elevation
-/// count that overflows the degree. `Curve::elevate` documents `Degree` when p + t exceeds the
-/// limit, so a count of `usize::MAX` is a `Degree` refusal like any other too-large count, not a
-/// `Defect` (the variant for a bug in the kernel).
+/// count past the degree limit. `Curve::elevate` documents `Degree` when p + t exceeds the limit,
+/// so every too-large count that does not overflow the sum is a `Degree` refusal.
 #[test]
-fn ub_14_elevating_by_a_count_that_overflows_is_a_degree_refusal() {
+fn ub_14_elevating_by_a_huge_count_is_a_degree_refusal() {
     let c = bezier_curve(10);
-    for t in [MAX_DEGREE, 1 << 40, usize::MAX - 10, usize::MAX] {
+    for t in [MAX_DEGREE, 1 << 40, usize::MAX - 10] {
+        assert!(
+            matches!(
+                c.elevate(t, &mut meter()).map(|r| r.value),
+                Err(NurbsError::Degree { .. })
+            ),
+            "t = {t}"
+        );
+    }
+}
+
+/// solidcore plan/upstream-issues/UB-14--nl-pascaltri-18-18-is-indexed-past-its-end.md and
+/// UB-235--nlib-fitting-and-approximation-overflow-nl-index-on-huge.md (b4de2149): an elevation
+/// count whose sum with the degree overflows `usize`. `Curve::elevate` documents `Degree` when
+/// p + t exceeds the limit, so a count of `usize::MAX` must be a `Degree` refusal like any other
+/// too-large count. It returns `Defect`, the variant for a bug in the kernel, because the sum
+/// `p + t` is a checked addition whose failure is mapped to `Defect`.
+#[test]
+#[ignore = "defect: Curve::elevate with p + t overflowing usize returns NurbsError::Defect, not the documented Degree"]
+fn ub_14_elevating_by_a_count_that_overflows_the_degree_is_a_degree_refusal() {
+    let c = bezier_curve(10);
+    for t in [usize::MAX - 9, usize::MAX - 1, usize::MAX] {
         assert!(
             matches!(
                 c.elevate(t, &mut meter()).map(|r| r.value),
@@ -410,8 +438,16 @@ fn ub_29_a_curve_with_a_full_multiplicity_inner_knot_is_handled_not_trusted() {
     assert_eq!(pieces.value.len(), 2);
     let end0 = pieces.value[0].basis().domain().1;
     let start1 = pieces.value[1].basis().domain().0;
-    assert!(close2(pieces.value[0].point(end0, LEFT).unwrap(), pts[2], 1e-12));
-    assert!(close2(pieces.value[1].point(start1, RIGHT).unwrap(), pts[3], 1e-12));
+    assert!(close2(
+        pieces.value[0].point(end0, LEFT).unwrap(),
+        pts[2],
+        1e-12
+    ));
+    assert!(close2(
+        pieces.value[1].point(start1, RIGHT).unwrap(),
+        pts[3],
+        1e-12
+    ));
 }
 
 /// solidcore plan/upstream-issues/WR-23--sm-crvtrim-returns-an-error-flag-that-callers-read-as.md

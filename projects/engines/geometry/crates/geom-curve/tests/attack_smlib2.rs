@@ -33,7 +33,7 @@
 
 use geom_curve::{
     Axes, Basis, Circle, Composite, CurveError, Ellipse, Frame, Hyperbola, Line, Offset, OffsetLaw,
-    ParamCurve, Parabola, Trimmed,
+    Parabola, ParamCurve, Trimmed,
 };
 use geom_nurbs::Limit;
 use geom_run::{Budget, WorkMeter};
@@ -131,7 +131,10 @@ fn wr_34_the_box_of_a_composite_starting_at_t_5_is_the_box_of_its_points() {
         assert!(first.hi[1] < 1e-9 && first.lo[1] > -1e-9, "{first:?}");
         // The second alone: x is 6, y from 0 to 2.
         let second = c.bound((lo + 1.0, hi), &mut meter()).unwrap();
-        assert!(second.lo[0] > 6.0 - 1e-9 && second.hi[0] < 6.0 + 1e-9, "{second:?}");
+        assert!(
+            second.lo[0] > 6.0 - 1e-9 && second.hi[0] < 6.0 + 1e-9,
+            "{second:?}"
+        );
         assert!(second.lo[1] <= 0.0 && second.hi[1] >= 2.0 && second.hi[1] < 2.0 + 1e-9);
         // Sub-spans: each box holds the sampled points, and is as tight as the points need.
         for (s0, s1) in [(0.2, 0.7), (0.5, 1.5), (1.25, 2.75), (0.0, 3.0)] {
@@ -142,14 +145,23 @@ fn wr_34_the_box_of_a_composite_starting_at_t_5_is_the_box_of_its_points() {
                 let t = s0 + (s1 - s0) * f64::from(k) / 60.0;
                 let p = c.point(t, RIGHT).unwrap();
                 for d in 0..2 {
-                    assert!(b.lo[d] <= p[d] && p[d] <= b.hi[d], "t = {t}: {p:?} in {b:?}");
+                    assert!(
+                        b.lo[d] <= p[d] && p[d] <= b.hi[d],
+                        "t = {t}: {p:?} in {b:?}"
+                    );
                     seen[d][0] = seen[d][0].min(p[d]);
                     seen[d][1] = seen[d][1].max(p[d]);
                 }
             }
             for d in 0..2 {
-                assert!(b.lo[d] > seen[d][0] - 1e-6, "span {s0}..{s1}: {b:?} over {seen:?}");
-                assert!(b.hi[d] < seen[d][1] + 1e-6, "span {s0}..{s1}: {b:?} over {seen:?}");
+                assert!(
+                    b.lo[d] > seen[d][0] - 1e-6,
+                    "span {s0}..{s1}: {b:?} over {seen:?}"
+                );
+                assert!(
+                    b.hi[d] < seen[d][1] + 1e-6,
+                    "span {s0}..{s1}: {b:?} over {seen:?}"
+                );
             }
         }
         // A span that is not ordered, outside, or not finite is refused.
@@ -178,11 +190,17 @@ fn ub_58_ub_224_ub_59_composites_of_no_two_and_unconnected_segments() {
         Some(CurveError::Degenerate)
     );
     let seg = |a: [f64; 2], b: [f64; 2]| {
-        Trimmed::whole(Basis::Line(Line::new(a, [b[0] - a[0], b[1] - a[1]], (0.0, 1.0)).unwrap()))
-            .unwrap()
+        Trimmed::whole(Basis::Line(
+            Line::new(a, [b[0] - a[0], b[1] - a[1]], (0.0, 1.0)).unwrap(),
+        ))
+        .unwrap()
     };
     // Two connected segments: starts, one gap, the joint from each side.
-    let two = Composite::new(vec![seg([0.0, 0.0], [1.0, 0.0]), seg([1.0, 0.0], [1.0, 3.0])]).unwrap();
+    let two = Composite::new(vec![
+        seg([0.0, 0.0], [1.0, 0.0]),
+        seg([1.0, 0.0], [1.0, 3.0]),
+    ])
+    .unwrap();
     assert_eq!(two.starts(), &[0.0, 1.0, 2.0]);
     assert_eq!(two.gaps().len(), 1);
     assert_eq!(two.gaps()[0], 0.0);
@@ -246,15 +264,23 @@ fn wr_32_an_offset_against_the_antiparallel_reference_shrinks_the_circle() {
     for (d, v, radius) in cases {
         let o = offset(d, v);
         for (t, dir) in [(0.0, [1.0, 0.0]), (0.5, [0.0, 1.0]), (1.0, [-1.0, 0.0])] {
-            let p = o.point(t, RIGHT).unwrap_or_else(|_| o.point(t, LEFT).unwrap());
+            let p = o
+                .point(t, RIGHT)
+                .unwrap_or_else(|_| o.point(t, LEFT).unwrap());
             let want = [dir[0] * radius, dir[1] * radius, 0.0];
-            assert!(near3(p, want, 1e-9), "d = {d}, v = {v:?}, t = {t}: {p:?} against {want:?}");
+            assert!(
+                near3(p, want, 1e-9),
+                "d = {d}, v = {v:?}, t = {t}: {p:?} against {want:?}"
+            );
         }
         // A quarter and an eighth of the way round, at the right radius.
         for t in [0.25, 0.125, 0.8] {
             let p = o.point(t, RIGHT).unwrap();
             let rr = (p[0] * p[0] + p[1] * p[1]).sqrt();
-            assert!((rr - radius).abs() < 1e-9, "d = {d}, v = {v:?}, t = {t}: radius {rr}");
+            assert!(
+                (rr - radius).abs() < 1e-9,
+                "d = {d}, v = {v:?}, t = {t}: radius {rr}"
+            );
             assert!(p[2].abs() < 1e-12);
         }
     }
@@ -284,7 +310,10 @@ fn wr_31_an_ellipse_with_oblique_axes_keeps_both_its_axes() {
     let (u, v) = ([2.0, 0.0], [1.0, 1.5]);
     let e = Ellipse::<2>::new(c, Axes::Vectors { u, v }, (0.0, 2.0)).unwrap();
     let at = |t: f64| {
-        let (cs, sn) = ((std::f64::consts::PI * t).cos(), (std::f64::consts::PI * t).sin());
+        let (cs, sn) = (
+            (std::f64::consts::PI * t).cos(),
+            (std::f64::consts::PI * t).sin(),
+        );
         [c[0] + cs * u[0] + sn * v[0], c[1] + cs * u[1] + sn * v[1]]
     };
     for k in 0..=24 {
@@ -297,21 +326,52 @@ fn wr_31_an_ellipse_with_oblique_axes_keeps_both_its_axes() {
     let b = e.bound((0.0, 2.0), &mut meter()).unwrap();
     for k in 0..=200 {
         let p = at(f64::from(k) / 100.0);
-        assert!(b.lo[0] <= p[0] && p[0] <= b.hi[0] && b.lo[1] <= p[1] && p[1] <= b.hi[1], "{p:?}");
+        assert!(
+            b.lo[0] <= p[0] && p[0] <= b.hi[0] && b.lo[1] <= p[1] && p[1] <= b.hi[1],
+            "{p:?}"
+        );
     }
     let n = e.to_nurbs(&mut meter()).unwrap();
-    assert!(n.deviation.is_finite() && n.deviation < 1e-9, "{}", n.deviation);
+    assert!(
+        n.deviation.is_finite() && n.deviation < 1e-9,
+        "{}",
+        n.deviation
+    );
     // Parallel axes are not an ellipse: refused.
     assert_eq!(
-        Ellipse::<2>::new(c, Axes::Vectors { u: [1.0, 2.0], v: [-2.0, -4.0] }, (0.0, 2.0)).err(),
+        Ellipse::<2>::new(
+            c,
+            Axes::Vectors {
+                u: [1.0, 2.0],
+                v: [-2.0, -4.0]
+            },
+            (0.0, 2.0)
+        )
+        .err(),
         Some(CurveError::Degenerate)
     );
     assert_eq!(
-        Ellipse::<2>::new(c, Axes::Vectors { u: [1.0, 2.0], v: [1.0, 2.0] }, (0.0, 2.0)).err(),
+        Ellipse::<2>::new(
+            c,
+            Axes::Vectors {
+                u: [1.0, 2.0],
+                v: [1.0, 2.0]
+            },
+            (0.0, 2.0)
+        )
+        .err(),
         Some(CurveError::Degenerate)
     );
     assert_eq!(
-        Ellipse::<2>::new(c, Axes::Vectors { u: [0.0, 0.0], v: [1.0, 2.0] }, (0.0, 2.0)).err(),
+        Ellipse::<2>::new(
+            c,
+            Axes::Vectors {
+                u: [0.0, 0.0],
+                v: [1.0, 2.0]
+            },
+            (0.0, 2.0)
+        )
+        .err(),
         Some(CurveError::Degenerate)
     );
 }
@@ -329,9 +389,16 @@ fn wr_211_an_elliptical_arc_a_whole_turn_from_zero_is_not_collapsed() {
     for start in [2.0, 4.0, -2.0, -4.0, 1000.0, 1e6] {
         let arc = Ellipse::<2>::new(c, Axes::Frame { frame, a, b }, (start, start + 0.5)).unwrap();
         assert_eq!(arc.domain(), (start, start + 0.5));
-        assert!(near2(arc.point(start, RIGHT).unwrap(), [c[0] + a, c[1]], 1e-9), "start {start}");
         assert!(
-            near2(arc.point(start + 0.5, LEFT).unwrap(), [c[0], c[1] + b], 1e-9),
+            near2(arc.point(start, RIGHT).unwrap(), [c[0] + a, c[1]], 1e-9),
+            "start {start}"
+        );
+        assert!(
+            near2(
+                arc.point(start + 0.5, LEFT).unwrap(),
+                [c[0], c[1] + b],
+                1e-9
+            ),
             "start {start}"
         );
         let bx = arc.bound((start, start + 0.5), &mut meter()).unwrap();
@@ -339,11 +406,20 @@ fn wr_211_an_elliptical_arc_a_whole_turn_from_zero_is_not_collapsed() {
         assert!(bx.lo[1] <= c[1] && bx.hi[1] >= c[1] + b - 1e-9);
         // The arc is a quarter turn of the ellipse: its box is the quarter's, not a whole turn's.
         if start.abs() <= 4.0 {
-            assert!(bx.lo[0] > c[0] - 1e-6 && bx.hi[0] < c[0] + a + 1e-6, "{bx:?}");
-            assert!(bx.lo[1] > c[1] - 1e-6 && bx.hi[1] < c[1] + b + 1e-6, "{bx:?}");
+            assert!(
+                bx.lo[0] > c[0] - 1e-6 && bx.hi[0] < c[0] + a + 1e-6,
+                "{bx:?}"
+            );
+            assert!(
+                bx.lo[1] > c[1] - 1e-6 && bx.hi[1] < c[1] + b + 1e-6,
+                "{bx:?}"
+            );
         }
         match arc.to_nurbs(&mut meter()) {
-            Ok(n) => assert!(n.deviation.is_finite() && n.deviation >= 0.0, "start {start}"),
+            Ok(n) => assert!(
+                n.deviation.is_finite() && n.deviation >= 0.0,
+                "start {start}"
+            ),
             Err(e) => assert!(!matches!(e, CurveError::Defect), "start {start}: {e:?}"),
         }
     }
@@ -371,20 +447,41 @@ fn ub_46_ub_57_conics_from_extreme_finite_input_are_refused_or_finite() {
             sane(Ellipse::<2>::new(c, axes, (0.0, 2.0)), "full ellipse");
             sane(Hyperbola::<2>::new(c, axes, (-1.0, 1.0)), "hyperbola");
             sane(Parabola::<2>::new(c, axes, (-1.0, 1.0)), "parabola");
-            sane(Parabola::<2>::focal(c, s, frame, (-1.0, 1.0)), "focal parabola");
+            sane(
+                Parabola::<2>::focal(c, s, frame, (-1.0, 1.0)),
+                "focal parabola",
+            );
             let vectors = Axes::Vectors {
                 u: [s, 0.0],
                 v: [0.0, s],
             };
             sane(Ellipse::<2>::new(c, vectors, (0.0, 1.0)), "vector ellipse");
-            sane(Hyperbola::<2>::new(c, vectors, (-1.0, 1.0)), "vector hyperbola");
+            sane(
+                Hyperbola::<2>::new(c, vectors, (-1.0, 1.0)),
+                "vector hyperbola",
+            );
         }
         // A zero or negative size, and a degenerate pair of axes.
         for s in [0.0, -1.0, f64::NAN, f64::INFINITY] {
-            assert!(Circle::<2>::new(c, s, frame, (0.0, 1.0)).is_err(), "radius {s}");
-            assert!(Parabola::<2>::focal(c, s, frame, (-1.0, 1.0)).is_err(), "focal {s}");
             assert!(
-                Hyperbola::<2>::new(c, Axes::Frame { frame, a: s, b: 1.0 }, (-1.0, 1.0)).is_err(),
+                Circle::<2>::new(c, s, frame, (0.0, 1.0)).is_err(),
+                "radius {s}"
+            );
+            assert!(
+                Parabola::<2>::focal(c, s, frame, (-1.0, 1.0)).is_err(),
+                "focal {s}"
+            );
+            assert!(
+                Hyperbola::<2>::new(
+                    c,
+                    Axes::Frame {
+                        frame,
+                        a: s,
+                        b: 1.0
+                    },
+                    (-1.0, 1.0)
+                )
+                .is_err(),
                 "semi axis {s}"
             );
         }

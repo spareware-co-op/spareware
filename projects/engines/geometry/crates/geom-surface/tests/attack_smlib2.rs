@@ -69,15 +69,25 @@ fn ub_68_reversing_each_analytic_kind_and_a_plane_of_tiny_vectors() {
         (
             "plane",
             SurfaceKind::Plane(
-                Plane::new([1.0, 2.0, 3.0], [2.0, 0.0, 0.0], [0.0, 3.0, 0.0], ((0.0, 1.0), (0.0, 1.0)))
-                    .unwrap(),
+                Plane::new(
+                    [1.0, 2.0, 3.0],
+                    [2.0, 0.0, 0.0],
+                    [0.0, 3.0, 0.0],
+                    ((0.0, 1.0), (0.0, 1.0)),
+                )
+                .unwrap(),
             ),
         ),
         (
             "tiny plane",
             SurfaceKind::Plane(
-                Plane::new([0.0; 3], [1e-13, 0.0, 0.0], [0.0, 1e-13, 0.0], ((0.0, 1.0), (0.0, 2.0)))
-                    .unwrap(),
+                Plane::new(
+                    [0.0; 3],
+                    [1e-13, 0.0, 0.0],
+                    [0.0, 1e-13, 0.0],
+                    ((0.0, 1.0), (0.0, 2.0)),
+                )
+                .unwrap(),
             ),
         ),
         (
@@ -133,7 +143,11 @@ fn ub_68_reversing_each_analytic_kind_and_a_plane_of_tiny_vectors() {
             let back = rev.reversed(dir, &mut meter()).unwrap().value;
             assert_eq!(back.domain(), k.domain(), "{name} {dir:?}");
             let (u, v) = (u0 + 0.3 * (u1 - u0), v0 + 0.6 * (v1 - v0));
-            let scale = 1.0 + k.point(u, v, SIDES).unwrap().iter().fold(0.0_f64, |m, x| m.max(x.abs()));
+            let scale = 1.0
+                + k.point(u, v, SIDES)
+                    .unwrap()
+                    .iter()
+                    .fold(0.0_f64, |m, x| m.max(x.abs()));
             agree(
                 k.point(u, v, SIDES).unwrap(),
                 back.point(u, v, SIDES).unwrap(),
@@ -143,8 +157,13 @@ fn ub_68_reversing_each_analytic_kind_and_a_plane_of_tiny_vectors() {
         }
     }
     // The plane of tiny vectors gives the points its vectors say, exactly where they are exact.
-    let tiny = Plane::new([0.0; 3], [1e-13, 0.0, 0.0], [0.0, 1e-13, 0.0], ((0.0, 1.0), (0.0, 2.0)))
-        .unwrap();
+    let tiny = Plane::new(
+        [0.0; 3],
+        [1e-13, 0.0, 0.0],
+        [0.0, 1e-13, 0.0],
+        ((0.0, 1.0), (0.0, 2.0)),
+    )
+    .unwrap();
     let p = tiny.point(0.5, 1.5, SIDES).unwrap();
     agree(p, [0.5e-13, 1.5e-13, 0.0], 1e-28, "tiny plane");
     // Vectors parallel at any length, or with a zero one, are not a plane.
@@ -174,9 +193,17 @@ fn ub_172_the_partials_of_a_plane_to_any_order_are_its_vectors_and_zeros() {
     let plane = Plane::new(o, a, b, ((0.0, 1.0), (0.0, 1.0))).unwrap();
     let kind = SurfaceKind::Plane(plane.clone());
     for order in 0..=6usize {
-        for region in [((0.3, 0.3), (0.4, 0.4)), ((0.0, 1.0), (0.0, 1.0)), ((0.2, 0.7), (0.1, 0.1))] {
-            let direct = plane.partials_over(region, SIDES, order, &mut meter()).unwrap();
-            let through = kind.partials_over(region, SIDES, order, &mut meter()).unwrap();
+        for region in [
+            ((0.3, 0.3), (0.4, 0.4)),
+            ((0.0, 1.0), (0.0, 1.0)),
+            ((0.2, 0.7), (0.1, 0.1)),
+        ] {
+            let direct = plane
+                .partials_over(region, SIDES, order, &mut meter())
+                .unwrap();
+            let through = kind
+                .partials_over(region, SIDES, order, &mut meter())
+                .unwrap();
             assert_eq!(direct.len(), (order + 1) * (order + 2) / 2, "order {order}");
             assert_eq!(through.len(), direct.len());
             for i in 0..=order {
@@ -231,7 +258,13 @@ fn ub_88_ub_153_negative_radii_and_offsets_past_zero_are_refused_or_exact() {
         );
     }
     // Radius r(v) = r0 + slope v over v in [0, 2]: negative throughout, through zero, and from zero.
-    for (r0, slope) in [(0.0, -1.0), (-1.0, -0.5), (1.0, -1.0), (0.5, -0.25), (0.0, 1.0)] {
+    for (r0, slope) in [
+        (0.0, -1.0),
+        (-1.0, -0.5),
+        (1.0, -1.0),
+        (0.5, -0.25),
+        (0.0, 1.0),
+    ] {
         let cone = match Cone::new([0.0; 3], r0, slope, f, ((0.0, 2.0), (0.0, 2.0))) {
             Ok(c) => c,
             Err(e) => {
@@ -244,11 +277,17 @@ fn ub_88_ub_153_negative_radii_and_offsets_past_zero_are_refused_or_exact() {
             let p = kind.point(u, v, SIDES).unwrap();
             let radius = (r0 + slope * v).abs();
             assert!(p.iter().all(|x| x.is_finite()), "{r0} {slope}: {p:?}");
-            assert!((p[0].hypot(p[1]) - radius).abs() < 1e-12, "{r0} {slope} ({u}, {v}): {p:?}");
+            assert!(
+                (p[0].hypot(p[1]) - radius).abs() < 1e-12,
+                "{r0} {slope} ({u}, {v}): {p:?}"
+            );
             assert!((p[2] - v).abs() < 1e-12);
         }
         match kind.to_nurbs(&mut meter()) {
-            Ok(n) => assert!(n.deviation.is_finite() && n.deviation >= 0.0, "{r0} {slope}"),
+            Ok(n) => assert!(
+                n.deviation.is_finite() && n.deviation >= 0.0,
+                "{r0} {slope}"
+            ),
             Err(e) => assert!(!matches!(e, CurveError::Defect), "{r0} {slope}: {e:?}"),
         }
         // The offsets, including those that take the radius past zero: refused, or finite.
@@ -256,7 +295,10 @@ fn ub_88_ub_153_negative_radii_and_offsets_past_zero_are_refused_or_exact() {
             let off = match Offset::new(kind.clone(), distance) {
                 Ok(o) => o,
                 Err(e) => {
-                    assert!(!matches!(e, CurveError::Defect), "{r0} {slope} {distance}: {e:?}");
+                    assert!(
+                        !matches!(e, CurveError::Defect),
+                        "{r0} {slope} {distance}: {e:?}"
+                    );
                     continue;
                 }
             };
@@ -295,7 +337,11 @@ fn wr_408_a_torus_below_its_equator_converts_to_the_same_surface() {
     let at = |u: f64, v: f64| {
         let pi = std::f64::consts::PI;
         let ring = major + minor * (pi * v).cos();
-        [ring * (pi * u).cos(), ring * (pi * u).sin(), minor * (pi * v).sin()]
+        [
+            ring * (pi * u).cos(),
+            ring * (pi * u).sin(),
+            minor * (pi * v).sin(),
+        ]
     };
     for (du, dv) in [
         ((0.0, 0.5), (-0.5, 0.5)),
@@ -309,7 +355,12 @@ fn wr_408_a_torus_below_its_equator_converts_to_the_same_surface() {
         // The torus itself is the formula, at the corners and inside.
         for (su, sv) in [(0.0, 0.0), (0.37, 0.61), (1.0, 1.0), (0.5, 0.2)] {
             let (u, v) = (du.0 + su * (du.1 - du.0), dv.0 + sv * (dv.1 - dv.0));
-            agree(t.point(u, v, SIDES).unwrap(), at(u, v), 1e-12 * 10.0, "torus point");
+            agree(
+                t.point(u, v, SIDES).unwrap(),
+                at(u, v),
+                1e-12 * 10.0,
+                "torus point",
+            );
         }
         let n = match t.to_nurbs(&mut meter()) {
             Ok(n) => n,
@@ -375,7 +426,12 @@ fn ub_70_a_line_turned_about_an_axis_in_each_of_its_positions() {
         }
     }
     // A line along the axis has nothing to turn: refused, or every point is on the axis.
-    match Revolution::new(line([0.0, 0.0, 0.0], [0.0, 0.0, 2.0]), [0.0; 3], axis, (0.0, 2.0)) {
+    match Revolution::new(
+        line([0.0, 0.0, 0.0], [0.0, 0.0, 2.0]),
+        [0.0; 3],
+        axis,
+        (0.0, 2.0),
+    ) {
         Err(e) => assert!(!matches!(e, CurveError::Defect), "{e:?}"),
         Ok(s) => {
             for (u, v) in [(0.0, 0.0), (0.7, 0.5), (1.9, 1.0)] {
@@ -387,5 +443,13 @@ fn ub_70_a_line_turned_about_an_axis_in_each_of_its_positions() {
         }
     }
     // More than a turn is refused.
-    assert!(Revolution::new(line([1.0, 0.0, 0.0], [1.0, 0.0, 1.0]), [0.0; 3], axis, (0.0, 2.5)).is_err());
+    assert!(
+        Revolution::new(
+            line([1.0, 0.0, 0.0], [1.0, 0.0, 1.0]),
+            [0.0; 3],
+            axis,
+            (0.0, 2.5)
+        )
+        .is_err()
+    );
 }

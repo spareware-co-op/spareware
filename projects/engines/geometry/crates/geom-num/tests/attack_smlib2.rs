@@ -79,7 +79,10 @@ fn wr_19_addendum_roots_over_very_wide_or_lopsided_brackets_are_found() {
                 );
                 assert!(z.evaluations <= 4000, "{name}");
                 // The other end of the final bracket has the opposite sign, or f(x) is zero.
-                assert!(z.fx.get() == 0.0 || eval(kind, z.x.get()) * eval(kind, z.other.get()) <= 0.0, "{name}");
+                assert!(
+                    z.fx.get() == 0.0 || eval(kind, z.x.get()) * eval(kind, z.other.get()) <= 0.0,
+                    "{name}"
+                );
             }
             // The only refusal a bracket that holds the root may give is that the cap ran out.
             Err(e) => assert_eq!(e, BrentError::CapReached, "{name}"),

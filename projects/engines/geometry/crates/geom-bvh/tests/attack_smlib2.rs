@@ -144,7 +144,11 @@ fn wr_12_coincident_points_give_every_pair() {
         for radius in [0u64, 1, 5, 6, 2000, u64::MAX] {
             let want = brute_pairs(&points, radius);
             let got = index.pairs_within(radius, &exec, &mut meter()).unwrap();
-            assert_eq!(sorted_pairs(got.clone()), want, "{count} coincident, radius {radius}");
+            assert_eq!(
+                sorted_pairs(got.clone()),
+                want,
+                "{count} coincident, radius {radius}"
+            );
             assert_eq!(
                 other.pairs_within(radius, &exec, &mut meter()).unwrap(),
                 got,
@@ -152,7 +156,9 @@ fn wr_12_coincident_points_give_every_pair() {
             );
             for c in [[7, -3, 2], [8, -3, 2], [0, 0, 0]] {
                 assert_eq!(
-                    index.within(p3(c[0], c[1], c[2]), radius, &mut meter()).unwrap(),
+                    index
+                        .within(p3(c[0], c[1], c[2]), radius, &mut meter())
+                        .unwrap(),
                     brute_within(&points, c, radius),
                     "{count} coincident, centre {c:?}, radius {radius}"
                 );
@@ -176,18 +182,36 @@ fn ub_34_ub_39_any_size_and_any_flat_set_of_points_agrees_with_brute_force() {
     let mut rng = Lcg(0x5eed);
     for n in [1usize, 2, 3, 4, 5, 6, 7, 8, 9, 15, 16, 17, 100] {
         let layouts: [(&str, Box<dyn Fn(&mut Lcg) -> [i64; 3]>); 6] = [
-            ("cloud", Box::new(|r: &mut Lcg| [r.below(40) - 20, r.below(40) - 20, r.below(40) - 20])),
-            ("plane z = 0", Box::new(|r: &mut Lcg| [r.below(40) - 20, r.below(40) - 20, 0])),
-            ("line along x", Box::new(|r: &mut Lcg| [r.below(40) - 20, 5, 5])),
+            (
+                "cloud",
+                Box::new(|r: &mut Lcg| [r.below(40) - 20, r.below(40) - 20, r.below(40) - 20]),
+            ),
+            (
+                "plane z = 0",
+                Box::new(|r: &mut Lcg| [r.below(40) - 20, r.below(40) - 20, 0]),
+            ),
+            (
+                "line along x",
+                Box::new(|r: &mut Lcg| [r.below(40) - 20, 5, 5]),
+            ),
             ("one cell", Box::new(|_: &mut Lcg| [3, 3, 3])),
             (
                 "frame ends",
                 Box::new(|r: &mut Lcg| {
-                    let e = |r: &mut Lcg| if r.below(2) == 0 { COORD_MAX } else { -COORD_MAX };
+                    let e = |r: &mut Lcg| {
+                        if r.below(2) == 0 {
+                            COORD_MAX
+                        } else {
+                            -COORD_MAX
+                        }
+                    };
                     [e(r), e(r), e(r)]
                 }),
             ),
-            ("one cell column", Box::new(|r: &mut Lcg| [0, 0, r.below(1 << 20)])),
+            (
+                "one cell column",
+                Box::new(|r: &mut Lcg| [0, 0, r.below(1 << 20)]),
+            ),
         ];
         for (name, make) in &layouts {
             let points: Vec<Point> = (0..n)
@@ -232,7 +256,10 @@ fn ub_38_a_tree_over_boxes_of_zero_size_agrees_with_brute_force() {
     let mut rng = Lcg(77);
     for n in [1usize, 2, 5, 33, 200] {
         let layouts: [(&str, Box<dyn Fn(&mut Lcg) -> Aabb<3>>); 4] = [
-            ("one location", Box::new(|_: &mut Lcg| Aabb::<3>::new([4, 4, 4], [4, 4, 4]).unwrap())),
+            (
+                "one location",
+                Box::new(|_: &mut Lcg| Aabb::<3>::new([4, 4, 4], [4, 4, 4]).unwrap()),
+            ),
             (
                 "points on a line",
                 Box::new(|r: &mut Lcg| {
@@ -250,7 +277,11 @@ fn ub_38_a_tree_over_boxes_of_zero_size_agrees_with_brute_force() {
             (
                 "frame corners",
                 Box::new(|r: &mut Lcg| {
-                    let c = if r.below(2) == 0 { COORD_MAX } else { -COORD_MAX };
+                    let c = if r.below(2) == 0 {
+                        COORD_MAX
+                    } else {
+                        -COORD_MAX
+                    };
                     Aabb::<3>::new([c, c, c], [c, c, c]).unwrap()
                 }),
             ),
@@ -284,9 +315,15 @@ fn ub_38_a_tree_over_boxes_of_zero_size_agrees_with_brute_force() {
             let queries = [
                 b([4, 4, 4], [4, 4, 4]),
                 b([0, 0, 0], [29, 29, 7]),
-                b([-COORD_MAX, -COORD_MAX, -COORD_MAX], [COORD_MAX, COORD_MAX, COORD_MAX]),
+                b(
+                    [-COORD_MAX, -COORD_MAX, -COORD_MAX],
+                    [COORD_MAX, COORD_MAX, COORD_MAX],
+                ),
                 b([100, 100, 100], [101, 101, 101]),
-                b([COORD_MAX, COORD_MAX, COORD_MAX], [COORD_MAX, COORD_MAX, COORD_MAX]),
+                b(
+                    [COORD_MAX, COORD_MAX, COORD_MAX],
+                    [COORD_MAX, COORD_MAX, COORD_MAX],
+                ),
             ];
             for q in &queries {
                 let mut keys: Vec<u64> = entries

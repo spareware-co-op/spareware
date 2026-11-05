@@ -89,7 +89,10 @@ fn ub_21_a_non_symmetric_3x3_is_refused_and_a_symmetric_one_gets_real_eigenvecto
         assert!((norm - 1.0).abs() < 1e-12, "column {k} has norm {norm}");
         let av = a.mul_vec(&v).unwrap();
         for i in 0..3 {
-            assert!((av[i] - e.values()[k] * v[i]).abs() < 1e-12, "column {k}, row {i}");
+            assert!(
+                (av[i] - e.values()[k] * v[i]).abs() < 1e-12,
+                "column {k}, row {i}"
+            );
         }
         for j in 0..k {
             let w = column(e.vectors(), j);
@@ -141,7 +144,10 @@ fn wr_10_the_principal_direction_of_collinear_points_is_their_line() {
         let v = column(e.vectors(), 2);
         let len = d.iter().map(|x| x * x).sum::<f64>().sqrt();
         let dot: f64 = v.iter().zip(&d).map(|(x, y)| x * y / len).sum();
-        assert!((dot.abs() - 1.0).abs() < 1e-12, "{d:?}: principal vector {v:?}, dot {dot}");
+        assert!(
+            (dot.abs() - 1.0).abs() < 1e-12,
+            "{d:?}: principal vector {v:?}, dot {dot}"
+        );
     }
 }
 
@@ -171,7 +177,12 @@ fn ub_22_lu_of_matrices_beyond_a_fixed_buffer_solves_or_refuses() {
         let x = lu.solve(&b, &mut work()).unwrap();
         assert_eq!(x.len(), n);
         for i in 0..n {
-            assert!((x[i] - x0[i]).abs() < 1e-9, "n = {n}, entry {i}: {} against {}", x[i], x0[i]);
+            assert!(
+                (x[i] - x0[i]).abs() < 1e-9,
+                "n = {n}, entry {i}: {} against {}",
+                x[i],
+                x0[i]
+            );
         }
         // The right-hand side of the wrong length is refused, not read past.
         assert_eq!(lu.solve(&b[..n - 1], &mut work()), Err(LinalgError::Shape));
@@ -205,14 +216,26 @@ fn ub_17_triangular_and_tridiagonal_solves_refuse_the_wrong_shape() {
     let three_by_two = Matrix::from_rows(3, 2, &[1.0, 0.0, 1.0, 1.0, 1.0, 1.0]).unwrap();
     for m in [&two_by_three, &three_by_two] {
         for b in [vec![1.0, 2.0], vec![1.0, 2.0, 3.0]] {
-            assert_eq!(solve_lower(m, &b, false, &mut work()), Err(LinalgError::Shape));
-            assert_eq!(solve_lower(m, &b, true, &mut work()), Err(LinalgError::Shape));
+            assert_eq!(
+                solve_lower(m, &b, false, &mut work()),
+                Err(LinalgError::Shape)
+            );
+            assert_eq!(
+                solve_lower(m, &b, true, &mut work()),
+                Err(LinalgError::Shape)
+            );
             assert_eq!(solve_upper(m, &b, &mut work()), Err(LinalgError::Shape));
         }
     }
     let l = Matrix::from_rows(3, 3, &[2.0, 0.0, 0.0, 1.0, 4.0, 0.0, -1.0, 2.0, 8.0]).unwrap();
-    assert_eq!(solve_lower(&l, &[1.0, 2.0], false, &mut work()), Err(LinalgError::Shape));
-    assert_eq!(solve_upper(&l, &[1.0; 4], &mut work()), Err(LinalgError::Shape));
+    assert_eq!(
+        solve_lower(&l, &[1.0, 2.0], false, &mut work()),
+        Err(LinalgError::Shape)
+    );
+    assert_eq!(
+        solve_upper(&l, &[1.0; 4], &mut work()),
+        Err(LinalgError::Shape)
+    );
     // 2 x + 0 = 2; x + 4 y = 5; -x + 2 y + 8 z = 6 gives x = 1, y = 1, z = 5/8 (exact in binary).
     let x = solve_lower(&l, &[2.0, 5.0, 6.0], false, &mut work()).unwrap();
     assert_eq!(x, vec![1.0, 1.0, 0.625]);
@@ -222,8 +245,14 @@ fn ub_17_triangular_and_tridiagonal_solves_refuse_the_wrong_shape() {
     assert_eq!(x, vec![0.625, 1.0, 1.0]);
     // A zero on the diagonal is singular, not a division.
     let zero = Matrix::from_rows(2, 2, &[1.0, 0.0, 1.0, 0.0]).unwrap();
-    assert_eq!(solve_lower(&zero, &[1.0, 1.0], false, &mut work()), Err(LinalgError::Singular));
-    assert_eq!(solve_upper(&zero, &[1.0, 1.0], &mut work()), Err(LinalgError::Singular));
+    assert_eq!(
+        solve_lower(&zero, &[1.0, 1.0], false, &mut work()),
+        Err(LinalgError::Singular)
+    );
+    assert_eq!(
+        solve_upper(&zero, &[1.0, 1.0], &mut work()),
+        Err(LinalgError::Singular)
+    );
     // The unit diagonal does not need the stored one.
     let unit = solve_lower(&zero, &[1.0, 3.0], true, &mut work()).unwrap();
     assert_eq!(unit, vec![1.0, 2.0]);
@@ -234,7 +263,13 @@ fn ub_17_triangular_and_tridiagonal_solves_refuse_the_wrong_shape() {
         Err(LinalgError::Shape)
     );
     assert_eq!(
-        solve_tridiagonal(&[1.0, 1.0], &d, &[1.0, 1.0, 1.0], &[1.0, 2.0, 3.0], &mut work()),
+        solve_tridiagonal(
+            &[1.0, 1.0],
+            &d,
+            &[1.0, 1.0, 1.0],
+            &[1.0, 2.0, 3.0],
+            &mut work()
+        ),
         Err(LinalgError::Shape)
     );
     assert_eq!(
@@ -276,8 +311,14 @@ fn ub_222_a_matrix_whose_size_overflows_is_refused() {
         assert!(Matrix::from_rows(rows, cols, &[1.0, 2.0]).is_err());
     }
     // The identity of an overflowing size too.
-    assert_eq!(Matrix::identity(usize::MAX).map(|_| ()), Err(LinalgError::OutOfMemory));
-    assert_eq!(Matrix::identity(1usize << 40).map(|_| ()), Err(LinalgError::OutOfMemory));
+    assert_eq!(
+        Matrix::identity(usize::MAX).map(|_| ()),
+        Err(LinalgError::OutOfMemory)
+    );
+    assert_eq!(
+        Matrix::identity(1usize << 40).map(|_| ()),
+        Err(LinalgError::OutOfMemory)
+    );
     // A sane size still works and is all zero.
     let m = Matrix::zeros(3, 4).unwrap();
     assert_eq!((m.rows(), m.cols()), (3, 4));

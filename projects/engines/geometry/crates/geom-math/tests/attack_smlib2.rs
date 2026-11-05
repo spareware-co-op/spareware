@@ -83,15 +83,24 @@ fn wr_8_float_box_under_a_translation_is_the_translated_box() {
     let want_hi = [12.0, -15.0, 24.0];
     let axes = image.axes().unwrap();
     for (iv, (l, h)) in axes.iter().zip(want_lo.iter().zip(want_hi.iter())) {
-        assert!(iv.lo() <= *l && iv.hi() >= *h, "image must hold the moved box");
-        assert!(*l - iv.lo() < 1e-9 && iv.hi() - *h < 1e-9, "image must be tight");
+        assert!(
+            iv.lo() <= *l && iv.hi() >= *h,
+            "image must hold the moved box"
+        );
+        assert!(
+            *l - iv.lo() < 1e-9 && iv.hi() - *h < 1e-9,
+            "image must be tight"
+        );
     }
     // Scale by (2, 0.5, -1): the exact image of every corner is inside, the width is exact.
     let t = Transform::scale(2.0, 0.5, -1.0).unwrap();
     let image = b.transformed(&t).unwrap();
     for c in corners(lo, hi) {
         let p = t.apply_point(f3(c[0], c[1], c[2])).unwrap();
-        assert!(image.contains(p), "corner {c:?} maps outside the box of the image");
+        assert!(
+            image.contains(p),
+            "corner {c:?} maps outside the box of the image"
+        );
     }
     let [x, y, z] = image.axes().unwrap();
     assert!((x.hi() - x.lo() - 2.0).abs() < 1e-9);
@@ -102,11 +111,22 @@ fn wr_8_float_box_under_a_translation_is_the_translated_box() {
     let image = b.transformed(&t).unwrap();
     for c in corners(lo, hi) {
         let p = t.apply_point(f3(c[0], c[1], c[2])).unwrap();
-        assert!(image.contains(p), "corner {c:?} maps outside the box of the image");
+        assert!(
+            image.contains(p),
+            "corner {c:?} maps outside the box of the image"
+        );
     }
     let [x, y, _] = image.axes().unwrap();
-    assert!((x.hi() - x.lo() - 2.0).abs() < 1e-9, "x width {}", x.hi() - x.lo());
-    assert!((y.hi() - y.lo() - 1.0).abs() < 1e-9, "y width {}", y.hi() - y.lo());
+    assert!(
+        (x.hi() - x.lo() - 2.0).abs() < 1e-9,
+        "x width {}",
+        x.hi() - x.lo()
+    );
+    assert!(
+        (y.hi() - y.lo() - 1.0).abs() < 1e-9,
+        "y width {}",
+        y.hi() - y.lo()
+    );
 }
 
 /// solidcore plan/upstream-issues/WR-3--smextent3d-containslineseg3d-accepts-one-end-inside.md
@@ -120,7 +140,10 @@ fn wr_3_a_segment_with_one_end_outside_is_not_inside_the_box() {
     let far = p3(1_000_000, 5, 5);
     assert!(b.contains(inside) && !b.contains(far));
     let seg = Box3::from_points([inside, far]).unwrap();
-    assert!(!b.contains_box(&seg), "one end outside: the segment is not inside");
+    assert!(
+        !b.contains_box(&seg),
+        "one end outside: the segment is not inside"
+    );
     // Both ends inside: inside. Both ends outside, segment crossing through: not inside.
     let seg = Box3::from_points([inside, p3(1, 9, 3)]).unwrap();
     assert!(b.contains_box(&seg));
@@ -144,7 +167,10 @@ fn wr_3_a_segment_with_one_end_outside_is_not_inside_the_box() {
 #[test]
 fn wr_4_wr_9_unbounded_ends_are_refused_and_collapsed_axes_are_kept() {
     // An infinite min with a finite max: not a point of ours.
-    assert_eq!(F3::new(f64::NEG_INFINITY, 0.0, 0.0), Err(NumError::NotFinite));
+    assert_eq!(
+        F3::new(f64::NEG_INFINITY, 0.0, 0.0),
+        Err(NumError::NotFinite)
+    );
     assert_eq!(F3::new(0.0, f64::INFINITY, 0.0), Err(NumError::NotFinite));
     assert_eq!(F3::new(f64::NAN, 0.0, 1.0), Err(NumError::NotFinite));
     // The widest box a double allows: moving it so a bound overflows is a refusal, not infinity.
