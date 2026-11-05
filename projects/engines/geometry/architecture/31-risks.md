@@ -756,6 +756,7 @@ The questions the owner settles in section 32 are listed once, in the first tabl
 | Interval certification of Lifted Surfacing output, for general swept volumes | 13, 16 | Piece "Swept volumes: general route" |
 | G2 n-sided corners for more corner classes | 13 | Piece "Vertex blends and the corner matrix" |
 | A proven bound for rotation-minimising frames (Wang et al., with interval derivatives) | 13 | A new research piece in section 30 |
+| A proven bound on stored rotation-minimising frames for paths of exact lines and arcs only (OQ-13.8, 13.23), and the cell-and-Taylor bound as the template for a Sweep face's cache | 13 | Owner answer, then piece G254 and piece G256 |
 
 ### Chapter 14: 2D drafting
 
