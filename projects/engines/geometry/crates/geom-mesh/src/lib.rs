@@ -36,6 +36,11 @@
 
 extern crate alloc;
 
+extern crate std;
+#[allow(missing_docs, clippy::all, clippy::pedantic, clippy::restriction)]
+pub mod prof {
+    pub fn mark(name: &str, t0: &mut std::time::Instant) { std::eprintln!("  {name}: {:?}", t0.elapsed()); *t0 = std::time::Instant::now(); }
+}
 pub mod cdt;
 pub mod exact;
 

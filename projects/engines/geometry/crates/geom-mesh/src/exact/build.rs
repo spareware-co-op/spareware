@@ -536,7 +536,9 @@ fn edge_planes(
     corner_vertex: &[u32],
     (exec, meter): (&Exec<'_>, &mut WorkMeter<'_>),
 ) -> Result<EdgePlanes, MeshError> {
+    let mut t1 = std::time::Instant::now();
     let leaders = edge_leaders(input, verts, by_face, (face_of, after), corner_vertex)?;
+    crate::prof::mark("    leaders", &mut t1);
     let corner_ids: Vec<u32> = (0..index(input.corners.len())?).collect();
     let by_edge: Result<Vec<Turned>, RunError<MeshError>> =
         exec.try_map(meter, EDGE_PLANES, PLAN, &corner_ids, |_, &corner, m| {
@@ -547,6 +549,7 @@ fn edge_planes(
             corner_plane(input, verts, by_face, (face_of, after), corner)
         });
     let mut by_edge = phase(by_edge)?;
+    crate::prof::mark("    planes", &mut t1);
     let mut edge_index = alloc::vec![0_u32; by_edge.len()];
     let mut unique = Vec::with_capacity(by_edge.len());
     // Whether a corner's face's normal points down its dominant axis.
@@ -571,6 +574,7 @@ fn edge_planes(
             .get_mut(corner as usize)
             .ok_or(MeshFault::Shape)? = at_leader;
     }
+    crate::prof::mark("    fill", &mut t1);
     Ok(EdgePlanes {
         all: by_edge,
         unique,
@@ -628,6 +632,7 @@ fn pool(
     exec: &Exec<'_>,
     meter: &mut WorkMeter<'_>,
 ) -> Result<(Vec<Plane>, Vec<u32>), MeshError> {
+    let mut t1 = std::time::Instant::now();
     let plain: Vec<&Turned> = given.iter().copied().flatten().collect();
     let keyed: Result<Vec<[u64; 4]>, RunError<MeshError>> =
         exec.try_map(meter, PLANE_RANKS, PLAN, &plain, |_, t, _| {
@@ -635,9 +640,11 @@ fn pool(
             Ok([rank(x), rank(y), rank(z), rank(t.d)])
         });
     let ranks = phase(keyed)?;
+    crate::prof::mark("    ranks", &mut t1);
     let order: Result<Vec<usize>, RunError<MeshError>> =
         exec.sort_stable(meter, SORT_PLANES, SORT_PLAN, &ranks, |r| *r);
     let mut order = phase(order)?;
+    crate::prof::mark("    sort", &mut t1);
     let whole = |i: usize| plain.get(i).map(|t| (t.n, t.d));
     // Equal ranks are rare but for repeated planes, so most runs are one plane.
     let tied: Result<Vec<bool>, RunError<MeshError>> =
@@ -661,6 +668,7 @@ fn pool(
             Ok(before.is_none_or(|b| whole(b) != whole(i)))
         });
     let fresh = phase(fresh)?;
+    crate::prof::mark("    ties and fresh", &mut t1);
     let mut rows = alloc::vec![0_u32; plain.len()];
     let mut out: Vec<Plane> = Vec::new();
     for (&i, &new) in order.iter().zip(&fresh) {
@@ -670,6 +678,7 @@ fn pool(
         }
         *rows.get_mut(i).ok_or(MeshFault::Shape)? = index(out.len())?.saturating_sub(1);
     }
+    crate::prof::mark("    out and rows", &mut t1);
     Ok((out, rows))
 }
 
@@ -1177,8 +1186,11 @@ pub fn build(
     exec: &Exec<'_>,
     meter: &mut WorkMeter<'_>,
 ) -> Result<ExactMesh, MeshError> {
+    let mut t0 = std::time::Instant::now();
     let (faces, loops) = fits(input)?;
+    crate::prof::mark("fits", &mut t0);
     let verts = vertices(input, exec, meter)?;
+    crate::prof::mark("vertices", &mut t0);
     let face_ids: Vec<u32> = (0..faces).collect();
     let by_face: Result<Vec<Turned>, RunError<MeshError>> =
         exec.try_map(meter, FACE_PLANES, PLAN, &face_ids, |_, &face, m| {
@@ -1186,7 +1198,9 @@ pub fn build(
             face_plane(input, &verts, face)
         });
     let by_face = phase(by_face)?;
+    crate::prof::mark("face planes", &mut t0);
     let (face_of, after) = corner_links(input, faces)?;
+    crate::prof::mark("corner links", &mut t0);
     let mut corner_vertex: Vec<u32> = Vec::with_capacity(input.corners.len());
     for &v in &input.corners {
         corner_vertex.push(*at(&verts.of_input, v)?);
@@ -1198,6 +1212,7 @@ pub fn build(
         &corner_vertex,
         (exec, meter),
     )?;
+    crate::prof::mark("edge planes", &mut t0);
     let mut own = Vec::with_capacity(verts.implicit.len().saturating_mul(3));
     for plane in verts.implicit.iter().flatten() {
         own.push(Turned::given(plane)?);
@@ -1205,6 +1220,7 @@ pub fn build(
     // One plane per edge that shares goes into the pool, and every corner gets its row back.
     let (pooled, pooled_rows) = pool(&[&by_face, &edges.unique, &own], exec, meter)?;
     let rows = edges.rows(by_face.len(), &pooled_rows)?;
+    crate::prof::mark("pool", &mut t0);
     let by_edge = edges.all;
     let own_base = by_face.len().saturating_add(by_edge.len());
 
@@ -1239,6 +1255,7 @@ pub fn build(
             .ok_or(MeshFault::Shape)? = rank;
     }
     let keys = sorted_faces(input, &corner_vertex, &run_rank, &face_ids, exec, meter)?;
+    crate::prof::mark("sorted faces", &mut t0);
 
     let mut parts = Parts {
         planes: pooled,
@@ -1279,5 +1296,6 @@ pub fn build(
         &keys,
     )?;
     pair(&mut parts, meter)?;
+    crate::prof::mark("emit and pair", &mut t0);
     ExactMesh::new(parts, exec, meter)
 }
