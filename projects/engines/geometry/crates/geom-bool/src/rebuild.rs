@@ -463,8 +463,11 @@ pub fn publish(
     meter: &mut WorkMeter<'_>,
 ) -> Result<Body, RebuildError> {
     let (builder, outside) = arenas(merged, carriers, open)?;
+    // A solid body has material, so a selection that keeps nothing is a general one.
     let kind = if open {
         BodyKind::Sheet
+    } else if merged.edges.is_empty() {
+        BodyKind::General
     } else if merged.edges.iter().all(|e| e.fins.len() == 2) {
         BodyKind::Solid
     } else {

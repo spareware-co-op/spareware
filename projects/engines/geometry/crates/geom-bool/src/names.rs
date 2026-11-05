@@ -249,7 +249,7 @@ fn at_vertex(a: &Arenas, v: Ix<Vertex>) -> Result<Option<At>, NumError> {
         Some(PointKind::Meet([p, q, r])) => {
             let planes = [a.planes.get(p), a.planes.get(q), a.planes.get(r)];
             match planes {
-                [Some(p), Some(q), Some(r)] => Some(At::Meet(Tpi::new(*p, *q, *r)?)),
+                [Some(p), Some(q), Some(r)] => Some(At::Meet(Tpi::meeting(*p, *q, *r)?)),
                 _ => None,
             }
         }

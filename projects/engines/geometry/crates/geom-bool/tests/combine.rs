@@ -729,6 +729,24 @@ fn a_budget_that_runs_out_at_the_very_end_stops_cleanly() {
 }
 
 #[test]
+fn a_subtraction_that_leaves_nothing_is_an_empty_body() {
+    let small = cuboid([-1, -1, 1], [1, 1, 1]);
+    let tall = cuboid([-1, -1, 0], [1, 1, 2]);
+    for pair in [
+        [solid(0, &small), solid(1, &tall)],
+        [solid(0, &small), solid(1, &small)],
+    ] {
+        let out = subtract(&ctx(), &SERIAL, key(0), &pair).unwrap();
+        assert_eq!(out.result.body.arenas().faces.len(), 0);
+        assert!(
+            out.diagnostics
+                .iter()
+                .any(|d| d.code == "bool.empty_result")
+        );
+    }
+}
+
+#[test]
 fn keep_takes_a_sheet_that_lies_on_a_solids_face() {
     let block = cuboid([0, 0, 0], [40, 40, 40]);
     let on_face = sheet(0, 0, [10, 10], [30, 30]);

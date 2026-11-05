@@ -97,7 +97,7 @@ pub fn around(polygons: &[Polygon]) -> Result<Cell, NumError> {
         let Piece { face, bounds } = &polygon.piece;
         let after = bounds.iter().cycle().skip(1);
         for (bound, next) in bounds.iter().zip(after) {
-            let at = Tpi::new(*face, *bound, *next)?.to_grid()?.value();
+            let at = Tpi::meeting(*face, *bound, *next)?.to_grid()?.value();
             let coordinates = [at.x.get(), at.y.get(), at.z.get()];
             for ((l, h), v) in low.iter_mut().zip(&mut high).zip(coordinates) {
                 *l = (*l).min(v);
