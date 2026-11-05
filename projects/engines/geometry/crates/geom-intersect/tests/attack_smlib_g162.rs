@@ -310,12 +310,14 @@ fn wr_740_the_same_on_a_rational_spline_arc() {
 }
 
 /// Found by the test above: with the point on the spline arc's axis of symmetry the foot is at
-/// t = 0.5, exactly where the search cuts the domain, and CI gives `NonIsolated` with a box about
-/// 1e-6 wide for every distance from 0.1 down to 0.001 of the radius, where the foot is plainly
-/// one point (the same case on the circle kind is found). Not fixed here: the cause is not
-/// settled without running the search, which this branch cannot do. Kept as a failing test.
+/// t = 0.5, exactly where the search cuts the domain. The slope at a cut that is the foot cannot be
+/// told from zero, so neither half had a span with both ends signed, the search halved on, and
+/// below a width of about 1e-6 the second derivative's enclosure (a difference of control points
+/// divided by the width squared) is too wide to prove convexity, so a box of that width was left
+/// undecided and returned as `NonIsolated`. The search now refines a convex span that has one end
+/// signed and the other undecided, and the two halves' enclosures join at the cut. The same case
+/// on the circle kind was always found.
 #[test]
-#[ignore = "a foot exactly at a cut of the domain of a rational spline is NonIsolated, not one point"]
 fn wr_740_a_foot_at_the_middle_of_a_rational_spline_arc_is_one_point() {
     let mut bad: Vec<String> = Vec::new();
     for rho in [0.1, 1e-2, 1e-3] {
@@ -326,6 +328,55 @@ fn wr_740_a_foot_at_the_middle_of_a_rational_spline_arc_is_one_point() {
         "{} failures:\n{}",
         bad.len(),
         bad.join("\n")
+    );
+}
+
+/// The fix is not tuned to the arc: a parabola (t, t^2) as a non-rational quadratic spline, with
+/// test points whose foot is exactly a cut of the search, at t = 1/2 (the first cut) and at
+/// t = 3/4 (the cut of the upper half). Every coordinate is a binary fraction, so the slope at the
+/// cut is zero to the last bit. The foot must be the one nearest point, with nothing farther kept.
+#[test]
+fn wr_740_a_foot_on_a_cut_of_a_parabola_spline_is_one_point() {
+    let basis = Basis::new(2, vec![0.0, 0.0, 0.0, 1.0, 1.0, 1.0]).unwrap();
+    let parabola =
+        CurveKind::Nurbs(Curve::new(basis, &[[0.0, 0.0], [0.5, 0.0], [1.0, 1.0]]).unwrap());
+    // (test point, foot parameter, squared distance): the gap is normal to the tangent there.
+    let cases = [([0.25, 0.5], 0.5, 0.125), ([0.0, 1.0625], 0.75, 0.8125)];
+    let mut bad: Vec<String> = Vec::new();
+    for (p, t, squared) in cases {
+        let want = f64::sqrt(squared);
+        let foot_at = [t, t * t];
+        match project_curve(&parabola, &p, 1e-9, &mut meter()) {
+            Ok(Projection::Points(points)) => {
+                let Some(foot) = points.iter().find(|n| {
+                    (0..2).all(|d| {
+                        n.point[d].lo() - 1e-6 <= foot_at[d] && foot_at[d] <= n.point[d].hi() + 1e-6
+                    })
+                }) else {
+                    bad.push(format!("t {t}: no foot: {}", short(&points)));
+                    continue;
+                };
+                if !(foot.distance.lo() - 1e-6 <= want && want <= foot.distance.hi() + 1e-6) {
+                    bad.push(format!("t {t}: wrong distance: {foot:?}"));
+                }
+                for n in &points {
+                    if n.distance.lo() > want + 1e-6 {
+                        bad.push(format!("t {t}: a farther point {n:?}"));
+                    }
+                }
+            }
+            other => bad.push(format!("t {t}: {}", short(&other))),
+        }
+    }
+    assert!(
+        bad.is_empty(),
+        "{} failures:
+{}",
+        bad.len(),
+        bad.join(
+            "
+"
+        )
     );
 }
 
