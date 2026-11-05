@@ -1797,6 +1797,31 @@ fn spans_of(
     Ok(Some(ParamBox::new(&[p, q, r, s])?))
 }
 
+/// Whether the boxes in space of `a` and `b` over their domains are apart, so the patches share no
+/// point. A surface with a side that runs on without end is never apart by this test.
+fn boxes_apart(
+    a: &SurfaceKind,
+    b: &SurfaceKind,
+    meter: &mut WorkMeter<'_>,
+) -> Result<bool, IntersectError> {
+    let bounded = |s: &SurfaceKind| {
+        let ((p, q), (r, t)) = ParamSurface::domain(s);
+        [p, q, r, t].iter().all(|x| x.is_finite())
+    };
+    if !bounded(a) || !bounded(b) {
+        return Ok(false);
+    }
+    let (x, y) = (
+        a.bound(ParamSurface::domain(a), meter)?,
+        b.bound(ParamSurface::domain(b), meter)?,
+    );
+    Ok(x.lo
+        .iter()
+        .zip(&x.hi)
+        .zip(y.lo.iter().zip(&y.hi))
+        .any(|((xl, xh), (yl, yh))| xh < yl || yh < xl))
+}
+
 /// The items of a pair's pieces.
 fn items_of(
     found: Vec<Piece>,
@@ -1808,6 +1833,12 @@ fn items_of(
     for piece in found {
         match piece {
             Piece::Same => {
+                // One surface, but patches of it whose boxes in space are apart share nothing:
+                // two cylinders of one axis and radius over heights that do not meet are no
+                // overlap (the test ub_123 in tests/attack_smlib_ssi.rs).
+                if boxes_apart(a, b, meter)? {
+                    continue;
+                }
                 let side = |(lo, hi): (f64, f64)| -> Result<Interval, IntersectError> {
                     Ok(Interval::new(
                         tight::larger(lo, -REACH),

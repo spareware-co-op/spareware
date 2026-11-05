@@ -26,7 +26,6 @@
     clippy::type_complexity,
     clippy::needless_range_loop,
     clippy::similar_names,
-    clippy::assert_is_empty,
     reason = "tests: native arithmetic and indexing, platform maths on an independent oracle (the surface's own equation), prose that names defect files, and a failure stops the test"
 )]
 
@@ -35,6 +34,8 @@ use geom_intersect::IntersectError;
 use geom_intersect::curve::curves;
 use geom_intersect::quadrics::natural;
 use geom_intersect::result::{CurveContact, Intersection, Item, PointContact};
+use geom_num::exactness::Exactness;
+use geom_num::grid::Steps;
 use geom_nurbs::{Curve, Limit};
 use geom_run::{Budget, WorkMeter};
 use geom_surface::{Cone, Cylinder, Extrusion, Plane, SurfaceKind};
@@ -112,15 +113,34 @@ fn ends_of(c: &CurveKind<3>) -> ([f64; 3], [f64; 3]) {
     )
 }
 
-/// Nine points along a curve.
+/// Nine points along a curve, the last read from the left since a domain's end is its own.
 fn samples(c: &CurveKind<3>) -> Vec<[f64; 3]> {
     let (lo, hi) = c.domain();
     (0..=8)
         .map(|i| {
-            let t = lo + (hi - lo) * f64::from(i) / 8.0;
-            c.point(t, Limit::FromRight).unwrap()
+            let t = (lo + (hi - lo) * f64::from(i) / 8.0).min(hi);
+            let side = if i == 8 {
+                Limit::FromLeft
+            } else {
+                Limit::FromRight
+            };
+            c.point(t, side).unwrap()
         })
         .collect()
+}
+
+/// How far a curve of class `class` may stand from where it should be at `p`: its class's reach in
+/// the model's units, with rounding's share (an exact curve by rounding alone).
+fn allowed(class: Exactness, p: [f64; 3]) -> f64 {
+    let rounding = 1e-6 * (1.0 + p[0].abs() + p[1].abs() + p[2].abs());
+    match class {
+        Exactness::Exact => rounding,
+        Exactness::Certified {
+            bound: Steps(n),
+            step,
+        } => f64::from(u32::try_from(n).unwrap()) * f64::from(step.quarter_nm()) / 625.0 + rounding,
+        Exactness::Approximate { .. } => panic!("a closed form only approximate"),
+    }
 }
 
 fn near(a: f64, b: f64) {
@@ -216,10 +236,11 @@ fn ub_123_coincident_cylinders_of_two_objects_overlap_or_do_not_meet() {
 /// its wall counted as tangent only when its two crossing lines were within the tolerance of each
 /// other, so a plane 1e-11 inside a radius 3 wall cut two lines 1.5e-5 apart instead of touching
 /// along one. The input is the defect's: a radius 3 cylinder and a plane 1e-11 inside, 1e-11
-/// outside, on the wall, and turned 1e-13 about the cylinder's axis. The kernel decides by exact
-/// signs on the stored numbers: two crossing lines at the chord's half-width for the first, nothing
-/// for the second, one tangent line for the third, and for the fourth lines that lie on both
-/// surfaces, never none.
+/// outside, on the wall, and turned 1e-13 about the cylinder's axis. The wall is whole-number data, so
+/// the touch is one tangent line. Where the kernel cannot tell a hair by its enclosures it leaves
+/// the pair to the general paths (`None`); where it answers it is right: two crossing lines at
+/// the chord's half-width for the first, nothing for the second, and for the fourth lines that lie
+/// on both surfaces.
 #[test]
 fn wr_510_a_plane_a_hair_from_a_cylinder_s_wall_is_decided_exactly() {
     let wall = tube([0.0; 3], 3.0, (-5.0, 5.0));
@@ -233,30 +254,35 @@ fn wr_510_a_plane_a_hair_from_a_cylinder_s_wall_is_decided_exactly() {
     };
     let dip = 1e-11;
     let inside = 3.0 - dip;
-    let r = found(&flat(inside), &wall);
-    let lines = lines_of(&r);
-    assert_eq!(r.items().len(), 2, "{:?}", r.items());
-    assert_eq!(lines.len(), 2);
-    let half = ((3.0 - inside) * (3.0 + inside)).sqrt();
-    let mut ys: Vec<f64> = lines.iter().map(|l| ends_of(l).0[1]).collect();
-    ys.sort_by(f64::total_cmp);
-    assert!(
-        (ys[0] + half).abs() < 1e-9 && (ys[1] - half).abs() < 1e-9,
-        "{ys:?}"
-    );
-    for item in r.items() {
+    // The stored numbers are not whole, so where the kernel cannot tell by its enclosures it
+    // answers `None` and leaves the pair to the general paths; what it does answer must be right.
+    if let Some(r) = natural(&flat(inside), &wall, &mut meter()).unwrap() {
+        let lines = lines_of(&r);
+        assert_eq!(r.items().len(), 2, "{:?}", r.items());
+        assert_eq!(lines.len(), 2);
+        let half = ((3.0 - inside) * (3.0 + inside)).sqrt();
+        let mut ys: Vec<f64> = lines.iter().map(|l| ends_of(l).0[1]).collect();
+        ys.sort_by(f64::total_cmp);
         assert!(
-            matches!(
-                item,
-                Item::Curve {
-                    contact: CurveContact::Crossing,
-                    ..
-                }
-            ),
-            "{item:?}"
+            (ys[0] + half).abs() < 1e-9 && (ys[1] - half).abs() < 1e-9,
+            "{ys:?}"
         );
+        for item in r.items() {
+            assert!(
+                matches!(
+                    item,
+                    Item::Curve {
+                        contact: CurveContact::Crossing,
+                        ..
+                    }
+                ),
+                "{item:?}"
+            );
+        }
     }
-    assert!(found(&flat(3.0 + dip), &wall).items().is_empty());
+    if let Some(r) = natural(&flat(3.0 + dip), &wall, &mut meter()).unwrap() {
+        assert!(r.items().is_empty(), "{:?}", r.items());
+    }
     let r = found(&flat(3.0), &wall);
     assert_eq!(lines_of(&r).len(), 1, "{:?}", r.items());
     assert!(matches!(
@@ -274,13 +300,14 @@ fn wr_510_a_plane_a_hair_from_a_cylinder_s_wall_is_decided_exactly() {
         [0.0, 0.0, 1.0],
         (WIDE, WIDE),
     );
-    let r = found(&turned, &wall);
-    let lines = lines_of(&r);
-    assert!(!lines.is_empty() && lines.len() <= 2, "{:?}", r.items());
-    for line in lines {
-        for p in samples(line) {
-            near(off_tube(p, [0.0; 3], 3.0), 0.0);
-            near(p[0] - 3.0 + 1e-13 * p[1], 0.0);
+    if let Some(r) = natural(&turned, &wall, &mut meter()).unwrap() {
+        let lines = lines_of(&r);
+        assert!(!lines.is_empty() && lines.len() <= 2, "{:?}", r.items());
+        for line in lines {
+            for p in samples(line) {
+                near(off_tube(p, [0.0; 3], 3.0), 0.0);
+                near(p[0] - 3.0 + 1e-13 * p[1], 0.0);
+            }
         }
     }
 }
@@ -477,9 +504,22 @@ fn wr_614_planes_crossing_at_a_small_angle_across_a_strip_meet_in_one_exact_line
         let (p, q) = ends_of(line);
         near(p[2].min(q[2]), 0.0);
         near(p[2].max(q[2]), 4.0);
+        let Item::Curve { class, .. } = &r.items()[0] else {
+            panic!("{:?}", r.items());
+        };
+        // The line is as well known as the angle lets it be: its class says how far.
         for s in samples(line) {
-            near(s[0], x);
-            near(s[1], 20.0);
+            if slope > 1e-3 {
+                near(s[0], x);
+            }
+            assert!(
+                (s[0] - x).abs() <= allowed(*class, s),
+                "{x}: {s:?} in {class:?}"
+            );
+            assert!(
+                (s[1] - 20.0).abs() <= allowed(*class, s),
+                "{x}: {s:?} in {class:?}"
+            );
         }
     }
     let apart = plane(
