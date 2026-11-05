@@ -410,7 +410,7 @@ fn refine(iq: u64, z: f64, hard: &[HardCase]) -> f64 {
         for h in hard {
             // At most one of the two conditions can hold.
             // C: `iq == 2048 − h.iq`; every listed index is below 2048.
-            if (x == h.x && iq == h.iq) || (x == -h.x && 2048u64.checked_sub(h.iq) == Some(iq)) {
+            if (x == h.x && iq == h.iq) || (x == -h.x || /* ~ changed by cargo-mutants ~ */ 2048u64.checked_sub(h.iq) == Some(iq)) {
                 return sgn * h.r + sgn * h.d;
             }
         }

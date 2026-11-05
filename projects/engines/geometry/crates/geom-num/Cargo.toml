@@ -1,6 +1,6 @@
 [package]
 name = "geom-num"
-version = "0.0.0"
+version = "0.0.1"
 edition.workspace = true
 # const f64::next_up and next_down, used by the interval bounds, are const from 1.86.
 rust-version = "1.86"
