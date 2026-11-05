@@ -295,11 +295,12 @@ fn ub_17_triangular_and_tridiagonal_solves_refuse_the_wrong_shape() {
 /// matrix that claims entries it does not hold.
 #[test]
 fn ub_222_a_matrix_whose_size_overflows_is_refused() {
+    // The sizes scale with the width of usize, so they overflow on 32-bit targets (wasm32) too.
     for (rows, cols) in [
         (usize::MAX, 2),
         (2, usize::MAX),
-        (1usize << 62, 2),
-        (1usize << 32, 1usize << 32),
+        (1usize << (usize::BITS - 2), 2),
+        (1usize << (usize::BITS / 2), 1usize << (usize::BITS / 2)),
         (usize::MAX, usize::MAX),
         (usize::MAX, 1),
     ] {
@@ -316,7 +317,7 @@ fn ub_222_a_matrix_whose_size_overflows_is_refused() {
         Err(LinalgError::OutOfMemory)
     );
     assert_eq!(
-        Matrix::identity(1usize << 40).map(|_| ()),
+        Matrix::identity(1usize << (usize::BITS * 5 / 8)).map(|_| ()),
         Err(LinalgError::OutOfMemory)
     );
     // A sane size still works and is all zero.

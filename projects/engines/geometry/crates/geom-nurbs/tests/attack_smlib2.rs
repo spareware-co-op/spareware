@@ -314,7 +314,7 @@ fn ub_14_elevating_a_degree_10_bezier_by_10_keeps_the_curve() {
 #[test]
 fn ub_14_elevating_by_a_huge_count_is_a_degree_refusal() {
     let c = bezier_curve(10);
-    for t in [MAX_DEGREE, 1 << 40, usize::MAX - 10] {
+    for t in [MAX_DEGREE, 1 << (usize::BITS * 5 / 8), usize::MAX - 10] {
         assert!(
             matches!(
                 c.elevate(t, &mut meter()).map(|r| r.value),
@@ -530,7 +530,13 @@ fn ub_28_ub_235_fits_with_few_points_zero_derivatives_and_huge_degrees() {
         })
     );
     // Absurd degrees: refused as degrees, before any index is built from them.
-    for degree in [MAX_DEGREE + 1, 1 << 40, usize::MAX, i64::MAX as usize, 0] {
+    for degree in [
+        MAX_DEGREE + 1,
+        1 << (usize::BITS * 5 / 8),
+        usize::MAX,
+        i64::MAX as usize,
+        0,
+    ] {
         assert!(
             matches!(
                 Curve::<2>::interpolate(&pts, degree, Parametrization::Uniform, v, &mut meter()),
