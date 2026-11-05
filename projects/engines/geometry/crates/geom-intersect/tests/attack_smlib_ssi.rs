@@ -26,6 +26,7 @@
     clippy::type_complexity,
     clippy::needless_range_loop,
     clippy::similar_names,
+    clippy::assert_is_empty,
     reason = "tests: native arithmetic and indexing, platform maths on an independent oracle (the surface's own equation), prose that names defect files, and a failure stops the test"
 )]
 
