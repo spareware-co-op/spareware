@@ -75,6 +75,12 @@ fn within<T: Send + 'static>(seconds: u64, work: impl FnOnce() -> T + Send + 'st
     }
 }
 
+/// The start of a value's debug text, so a failure list stays readable.
+fn short(x: &impl core::fmt::Debug) -> String {
+    let text = format!("{x:?}");
+    text.chars().take(400).collect()
+}
+
 /// Whether a refusal is one the kernel documents: a limit, a range or a precondition, and not a
 /// failed proof (`Internal`, which is a bug) or a cancel nobody asked for.
 fn documented(e: IntersectError) -> bool {
@@ -130,53 +136,77 @@ fn near_centre(rho: f64, a: f64) -> [f64; 2] {
 #[test]
 fn wr_740_a_point_near_an_arcs_centre_has_its_foot_at_the_points_angle() {
     let quarter = arc([1.0, 2.0], 5.0, (0.0, 0.5));
+    let mut bad: Vec<String> = Vec::new();
     for rho in [0.1, 0.05, 1e-2, 1e-3, 1e-4, 1e-6] {
         for a in [0.05, 0.25, 0.45] {
             let p = near_centre(rho, a);
-            let found = project_curve(&quarter, &p, 1e-9, &mut meter()).unwrap();
+            let found = match project_curve(&quarter, &p, 1e-9, &mut meter()) {
+                Ok(found) => found,
+                Err(e) => {
+                    let again = project_curve(&quarter, &p, 1e-9, &mut long_meter());
+                    bad.push(format!(
+                        "rho {rho} a {a}: {e:?}; with 16 times the budget: {}",
+                        short(&again)
+                    ));
+                    continue;
+                }
+            };
             let Projection::Points(points) = &found else {
-                panic!("rho {rho} a {a}: {found:?}");
+                bad.push(format!("rho {rho} a {a}: {}", short(&found)));
+                continue;
             };
             let want = 5.0 - rho;
-            let foot = points
+            let Some(foot) = points
                 .iter()
                 .find(|n| n.at[0].lo() - 1e-7 <= a && a <= n.at[0].hi() + 1e-7)
-                .unwrap_or_else(|| panic!("rho {rho} a {a}: no foot at the angle: {points:?}"));
-            assert_eq!(foot.place, Place::Foot, "rho {rho} a {a}: {foot:?}");
-            assert!(
-                foot.distance.lo() - 1e-8 <= want && want <= foot.distance.hi() + 1e-8,
-                "rho {rho} a {a}: {foot:?}"
-            );
+            else {
+                bad.push(format!(
+                    "rho {rho} a {a}: no foot at the angle: {}",
+                    short(&points)
+                ));
+                continue;
+            };
+            if foot.place != Place::Foot {
+                bad.push(format!("rho {rho} a {a}: not a foot: {foot:?}"));
+            }
+            if !(foot.distance.lo() - 1e-8 <= want && want <= foot.distance.hi() + 1e-8) {
+                bad.push(format!("rho {rho} a {a}: wrong distance: {foot:?}"));
+            }
             for n in points {
-                assert!(
-                    n.distance.lo() <= want + 1e-8,
-                    "rho {rho} a {a}: a farther point {n:?}"
-                );
+                if n.distance.lo() > want + 1e-8 {
+                    bad.push(format!("rho {rho} a {a}: a farther point {n:?}"));
+                }
             }
         }
     }
     // A test point whose angle is past the arc's start: the start is nearest, on the boundary.
     for rho in [1e-2, 1e-3, 1e-6] {
         let p = near_centre(rho, -0.5);
-        let found = project_curve(&quarter, &p, 1e-9, &mut meter()).unwrap();
-        let end = found
-            .first()
-            .unwrap_or_else(|| panic!("rho {rho}: {found:?}"));
-        assert_eq!(end.place, Place::Boundary, "rho {rho}: {end:?}");
-        assert!(end.at[0].contains(0.0), "rho {rho}: {end:?}");
         let want = (25.0_f64 + rho * rho).sqrt();
-        assert!(
-            end.distance.lo() - 1e-8 <= want && want <= end.distance.hi() + 1e-8,
-            "rho {rho}: {end:?}"
-        );
+        match project_curve(&quarter, &p, 1e-9, &mut meter()) {
+            Ok(found) => match found.first() {
+                Some(end)
+                    if end.place == Place::Boundary
+                        && end.at[0].contains(0.0)
+                        && end.distance.lo() - 1e-8 <= want
+                        && want <= end.distance.hi() + 1e-8 => {}
+                other => bad.push(format!("past the start, rho {rho}: {}", short(&other))),
+            },
+            Err(e) => bad.push(format!("past the start, rho {rho}: {e:?}")),
+        }
     }
     // The centre itself: every point of the arc is nearest, and the answer says so.
-    let found = project_curve(&quarter, &[1.0, 2.0], 1e-9, &mut meter()).unwrap();
-    let Projection::Set { set, distance } = found else {
-        panic!("{found:?}");
-    };
-    assert_eq!(set, Continuum::Curve);
-    assert!(distance.contains(5.0), "{distance:?}");
+    match project_curve(&quarter, &[1.0, 2.0], 1e-9, &mut meter()) {
+        Ok(Projection::Set { set, distance })
+            if set == Continuum::Curve && distance.contains(5.0) => {}
+        other => bad.push(format!("the centre: {}", short(&other))),
+    }
+    assert!(
+        bad.is_empty(),
+        "{} failures:\n{}",
+        bad.len(),
+        bad.join("\n")
+    );
 }
 
 /// The same defect on a B-spline, where it was found (the rounded box's bottom loop was one): the
@@ -190,41 +220,46 @@ fn wr_740_the_same_on_a_rational_spline_arc() {
     let points = [[0.5, 0.0], [0.5, 0.5], [0.0, 0.5]];
     let weights = [1.0, core::f64::consts::FRAC_1_SQRT_2, 1.0];
     let spline = CurveKind::Nurbs(Curve::new_rational(basis, &points, &weights).unwrap());
+    let mut bad: Vec<String> = Vec::new();
     for rho in [0.1, 1e-2, 1e-3, 1e-5] {
         for a in [PI / 8.0, PI / 4.0, 3.0 * PI / 8.0] {
             let p = [rho * a.cos(), rho * a.sin()];
             let foot_at = [0.5 * a.cos(), 0.5 * a.sin()];
             let want = 0.5 - rho;
-            let found = project_curve(&spline, &p, 1e-9, &mut meter()).unwrap();
-            match &found {
-                Projection::Points(found_points) => {
-                    let foot = found_points
-                        .iter()
-                        .find(|n| {
-                            (0..2).all(|d| {
-                                n.point[d].lo() - 1e-6 <= foot_at[d]
-                                    && foot_at[d] <= n.point[d].hi() + 1e-6
-                            })
+            match project_curve(&spline, &p, 1e-9, &mut meter()) {
+                Ok(Projection::Points(found_points)) => {
+                    let Some(foot) = found_points.iter().find(|n| {
+                        (0..2).all(|d| {
+                            n.point[d].lo() - 1e-6 <= foot_at[d]
+                                && foot_at[d] <= n.point[d].hi() + 1e-6
                         })
-                        .unwrap_or_else(|| panic!("rho {rho} a {a}: no foot: {found_points:?}"));
-                    assert!(
-                        foot.distance.lo() - 1e-6 <= want && want <= foot.distance.hi() + 1e-6,
-                        "rho {rho} a {a}: {foot:?}"
-                    );
-                    for n in found_points {
-                        assert!(
-                            n.distance.lo() <= want + 1e-6,
-                            "rho {rho} a {a}: a farther point {n:?}"
-                        );
+                    }) else {
+                        bad.push(format!(
+                            "rho {rho} a {a}: no foot: {}",
+                            short(&found_points)
+                        ));
+                        continue;
+                    };
+                    if !(foot.distance.lo() - 1e-6 <= want && want <= foot.distance.hi() + 1e-6) {
+                        bad.push(format!("rho {rho} a {a}: wrong distance: {foot:?}"));
+                    }
+                    for n in &found_points {
+                        if n.distance.lo() > want + 1e-6 {
+                            bad.push(format!("rho {rho} a {a}: a farther point {n:?}"));
+                        }
                     }
                 }
-                Projection::NonIsolated { .. } => {
-                    assert!(rho < 1e-2, "rho {rho} a {a}: undecided too far out");
-                }
-                Projection::Set { .. } => panic!("rho {rho} a {a}: {found:?}"),
+                Ok(other) => bad.push(format!("rho {rho} a {a}: {}", short(&other))),
+                Err(e) => bad.push(format!("rho {rho} a {a}: {e:?}")),
             }
         }
     }
+    assert!(
+        bad.is_empty(),
+        "{} failures:\n{}",
+        bad.len(),
+        bad.join("\n")
+    );
 }
 
 /// A rational strip of four runs stacked 5 apart, the runs 40 long and joined by risers: the
