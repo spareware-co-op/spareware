@@ -4731,6 +4731,14 @@
       "reason": "The two differ only when the panels' remainder bounds sum to exactly L·2⁻⁵⁶, the tolerance: > keeps that panel count, >= doubles it. Both counts are certified, every enclosure carries its remainders either way, and the choice is the same on every target, so a tie changes how many panels a transition gets, never whether its results hold."
     },
     {
+      "file": "projects/engines/geometry/crates/geom-curve/src/offset.rs",
+      "mutant": "replace > with >= in Offset<D>::refined",
+      "line_text": "Ok(r) if r.is_some_and(|r| r.hi() > target) => Verdict::Finer,",
+      "occurrences": 1,
+      "kind": "harmless",
+      "reason": "The two differ only when a piece's Taylor remainder bound is exactly the cache's aim, 10⁻¹⁰ times the offset's size: > keeps that piece, >= halves it once more. Either way taylor::from_cuts then states the deviation of every piece it makes, from that piece's own certified remainder, and the choice is the same on every target, so a tie changes how many pieces the offset's NURBS cache has, never whether its stated deviation holds."
+    },
+    {
       "file": "projects/engines/geometry/crates/geom-curve/src/transition.rs",
       "mutant": "replace < with <= in <impl ParamCurve<D> for Transition<D>>::to_nurbs",
       "line_text": "return Ok(if n.deviation < b.deviation { n } else { b });",
