@@ -502,7 +502,7 @@ const NOTICES: &str = "projects/engines/geometry/notices";
 const METHODS: &str = "projects/engines/geometry/methods";
 
 const MANIFEST: &str =
-    "[package]\nname = \"geom-x\"\nversion = \"0.0.0\"\nlicense = \"MPL-2.0 AND MIT\"\n";
+    "[package]\nname = \"geom-x\"\nversion = \"0.0.0\"\nlicense = \"Apache-2.0 AND MIT\"\n";
 
 const LIB: &str = "//! Spare Kit geometry kernel: an example.
 //!
@@ -535,7 +535,7 @@ fn ported(origin: &str) -> String {
 //! Source: PORT from Ample `a.c` and `b.c`, MIT,
 //!   <https://github.com/ex/ample/blob/{SHA}/src/a.c>
 {origin}//!   Changed for Spare Kit: rewritten in Rust.
-//! SPDX-License-Identifier: MPL-2.0 AND MIT
+//! SPDX-License-Identifier: Apache-2.0 AND MIT
 "
     )
 }

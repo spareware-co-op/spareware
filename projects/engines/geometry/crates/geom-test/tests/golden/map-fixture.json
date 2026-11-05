@@ -163,7 +163,7 @@
               "take": "port-method"
             }
           ],
-          "spdx": "MPL-2.0",
+          "spdx": "Apache-2.0",
           "target": "lib"
         },
         {
@@ -278,7 +278,7 @@
               "take": "port"
             }
           ],
-          "spdx": "MPL-2.0 AND BSD-3-Clause",
+          "spdx": "Apache-2.0 AND BSD-3-Clause",
           "target": "lib"
         }
       ],

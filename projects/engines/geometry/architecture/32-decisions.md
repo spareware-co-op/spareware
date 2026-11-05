@@ -22,7 +22,7 @@ No agent acts on any of these, writes to anyone, or signs anything. The owner de
 | 32.8 | How closely we follow NLib | Methods from the books; NLib for failure cases only. **Decided 2026-10-24: A, for all of the SMLib release:** ported, notices kept; Numerical Recipes routines and fixtures still excluded | 4, 12, 13, 16, 29 | G56, the first NURBS piece |
 | 32.9 | Who we write to | EMBER, Schmidt and McNeel now; the rest in a stated order | 11, 14, 16, 17, 24, 29 | Varies |
 | 32.10 | Revit truth data, and watching proprietary programs | Co-op models only; watching only checks our results against our own rules | 14, 28, 29 | G460, the Revit harness |
-| 32.11 | The licence of our test cases | CC0 if the vote confirms test cases are not "core", otherwise MPL-2.0; strict rules for outside data | 28, 29 | G97, the fixture format |
+| 32.11 | The licence of our test cases | CC0 if the vote confirms test cases are not "core", otherwise Apache-2.0 (32.45); strict rules for outside data | 28, 29 | G97, the fixture format |
 | 32.12 | Pieces built ahead of the board: merge order, cost rises for correctness, goldens before the first edition | Merge in the board's order; accept a recorded rise; kernel owners approve goldens until the first Stable release | 23, 28, 30 | The next merge after G02 |
 
 The board (30.5) also turns into a piece every narrower question that chapters 6 to 29 leave to an owner. Each is decided in its own section below, under the owner's standing rule of 2026-10-27: "Research and choose the best options or use the research we have". The stored research comes first (`projects/kit/notes/G01-evidence/`, chapter 29), then the chapters the piece names, and fresh reading only where those are not enough; each section says which.
@@ -61,6 +61,7 @@ The board (30.5) also turns into a piece every narrower question that chapters 6
 | 32.41 | G448: AutoCAD truth tests | 32.10's ruling stands; no seat is bought or borrowed; G464 checks drafting by 28.3's laws, the one-root reference and LibreCAD and ezdxf, and adds AutoCAD when a co-op seat and a cleared terms check exist | 14, 28, 32 | G464, drafting truth tests |
 | 32.42 | G449: the wall-clock merge rule | Accepted: a nightly miss confirmed by a same-night rerun blocks merges to `main` except the fix or a revert; deliberate rises recorded as 32.12 says; no run, no block | 23, 28 | G452, wall-clock and scaling gates |
 | 32.44 | SMLib's and solidcore's Numerical Recipes routines and fixtures | Accepted (owner, 2026-11-03): the licensing points raised about SMLib and solidcore are not a concern; their Numerical Recipes-derived routines may be ported and compiled like the rest of the release | 12, 29 | geom-test's source scan exemptions |
+| 32.45 | The project's licence is Apache-2.0 | Decided (owner, 2026-11-05): every file of the project is relicensed from MPL-2.0 to Apache-2.0, to match NVIDIA's USD BRep (SMLib) and solidcore, so code can move both ways; ported files keep their origin's licence as an `AND` operand | 29 | the licence fields, headers, NOTICE and checkers |
 
 ## 32.1 The grid ladder (decision 1)
 
@@ -250,9 +251,9 @@ Why: one patent on the boolean core would touch every model ever saved, and a se
 | --- | --- | --- | --- |
 | EMBER's authors at RWTH Aachen (Philip Trettner, Julius Nehring-Wirxel, Leif Kobbelt) | To ask for reference code or test data under a permissive licence, and for their view on 40-bit bounds and deterministic parallel assembly | Write now. Leave any patent question to the lawyer of 32.7 | 11, 28 |
 | Tim Schmidt, author of csgrs and the Hyper crates | To compare certified-predicate methods and exact oracles, confirm hypermesh's history before any reuse, and swap hard test cases | Write now. It costs little, and nothing of theirs is planned for our code | 11, 29 |
-| Robert McNeel & Associates | For written confirmation that openNURBS's "no restrictions" grant covers the repository at a named commit, including use inside MPL-2.0 work | Write now. 3dm exchange and Rhino subdivision exchange wait for it | 16, 24, 29 |
+| Robert McNeel & Associates | For written confirmation that openNURBS's "no restrictions" grant covers the repository at a named commit, including use inside Apache-2.0 work | Write now. 3dm exchange and Rhino subdivision exchange wait for it | 16, 24, 29 |
 | NVIDIA | About who owns NLib and the IntegrityWare-lineage code, and about the Numerical Recipes routines | Open a GitHub issue once 32.8 is decided. 32.8 was decided on 2026-10-24 without waiting for NVIDIA, so the ownership question is now for the record only, and pointing out the Numerical Recipes routines is a courtesy. Nothing has been sent; the owner decides whether and when | 12, 29 |
-| tangency-labs (solidcore and SolidCraft) | As a courtesy, to point out the Numerical Recipes-derived routines in solidcore, and to swap hard test cases: their 337-entry defect log, the SSI corpus and our failures | Write after 32.11 is decided. Their deny.toml bans MPL-2.0, so anything we share must carry a licence they accept | 29 |
+| tangency-labs (solidcore and SolidCraft) | As a courtesy, to point out the Numerical Recipes-derived routines in solidcore, and to swap hard test cases: their 337-entry defect log, the SSI corpus and our failures | Write after 32.11 is decided. Their deny.toml bans MPL-2.0. Our licence is now Apache-2.0 (32.45), which they accept | 29 |
 | buildingSMART | For a licence on the IFC4.x-IF alignment test set, and agreement on spiral parameters in IfcCurveSegment | Write when the alignment pieces start | 17, 24 |
 | Pixar | About OpenSubdiv's licence (TOST 1.0) | First have a legal review of TOST, confirmed by the owner. Write to Pixar only if the review leaves a question. Until then OpenSubdiv is a test oracle only, and our evaluator comes from papers either way | 16, 29 |
 | CADCraft's maintainers, about issue #414 | To offer Spare Kit as the shared kernel #414 asks for | Last, and only after the clean-room questions in [12] and the "CadCraft" name conflict are settled. #414 asks for an MIT or Apache kernel built by observing SOLIDWORKS, and both are outside our rules (32.10) | 14, 29 |
@@ -287,7 +288,7 @@ Why: this protects clients and the co-op, and keeps the rule against learning fr
 
 ## 32.11 The licence of our test cases, and outside data with unclear terms
 
-**What it is.** Spare Kit will collect thousands of test cases: the shapes that once broke something, kept forever. They could carry MPL-2.0, like the code. Or they could carry CC0, a dedication to the public domain, so that other kernels can use them too; some kernels ban MPL-2.0 outright, solidcore among them. But the README says Spareware's licence is "Decided, and never to change": MPL-2.0 for the core, and Apache-2.0 for the SDK, examples and plugin templates. CC0 test cases would add a third licence. That fits only if test cases count as data outside the core, the way the SDK is carved out.
+**What it is.** Spare Kit will collect thousands of test cases: the shapes that once broke something, kept forever. They could carry Apache-2.0, like the code (32.45 changed the code's licence from MPL-2.0, which some kernels ban outright, solidcore among them). Or they could carry CC0, a dedication to the public domain, so that other kernels can use them too. The README says Spareware's licence is Apache-2.0 for everything. CC0 test cases would add a second licence. That fits only if test cases count as data outside the core.
 
 Separately, some outside test data has unclear terms:
 - the ABC dataset, whose models belong to their creators under Onshape's terms;
@@ -299,7 +300,7 @@ Separately, some outside test data has unclear terms:
 
 | Option | What it means |
 | --- | --- |
-| A. Our test cases under MPL-2.0 | Matches the code and the README as it stands. Projects that ban MPL-2.0, such as solidcore, cannot take them; we can still describe a hard case in plain words for them to rebuild |
+| A. Our test cases under Apache-2.0 | Matches the code and the README as it stands, and projects that ban MPL-2.0, such as solidcore, can take them, because it is their own licence |
 | B. Our test cases under CC0, decided before the first one merges | Anyone can use them. Needs the member vote to confirm that test cases are not "core" under the README's licence rule, and changes the licence line in AGENTS.md section 6 for test data |
 | For outside data: (i) a strict rule | Use only CC0, CC BY, permissive or public-domain data, and CC BY-ND data unmodified. Everything else is fetch-only once cleared, or not used at all |
 | For outside data: (ii) a looser rule | Also allow non-commercial data in tests |
@@ -525,7 +526,7 @@ Why: an independent NURBS implementation catches errors in our evaluation and kn
 - **Names are our own and descriptive** (for example `cut-45-single` or `insulation-batt`), never a vendor's pattern or linetype name. An import keeps whatever name its file gives, as data.
 - **Each entry's provenance log** records: who authored it and when; the rule it implements, by clause or page, or "own design"; how each value was derived from that rule; and a statement that no excluded source was opened. The log is committed beside the entry and the library's map lists it.
 - **Legal review** is a kernel owner's review of each entry's log in its pull request against these rules, recorded there; no lawyer is engaged and nothing is bought. An entry whose log is incomplete, or that cites an excluded source, does not merge. If anyone shows an entry matches a vendor's file, it is removed and re-authored by someone who has not seen that file.
-- **Licence:** the library is part of the kernel's data and carries the kernel's licence, MPL-2.0 (32.11 decides test cases separately).
+- **Licence:** the library is part of the kernel's data and carries the kernel's licence, Apache-2.0 (32.11 decides test cases separately).
 
 Why: patterns and linetypes are short lists of numbers, so the risk is not one value but a whole library's selection, names and values copied together. Authoring from written rules, naming our own way and logging every derivation is the evidence that ours is independent, and it costs only the log.
 
@@ -697,10 +698,10 @@ Why: drawings are a contract document; exact visibility makes every view the sam
 
 ## 32.37 openNURBS licence confirmation (owner action G407)
 
-**What it is.** Reading and writing Rhino's `.3dm` files (G438) means porting openNURBS, McNeel's toolkit for them. Its terms contradict each other: the repository's [LICENSE](https://github.com/mcneel/opennurbs/blob/eb92af3ba1806b0a34a99aba0d3bda83e3d46083/LICENSE) says "All Rights Reserved" and grants nothing, while McNeel's [developer page](https://developer.rhino3d.com/guides/opennurbs/what-is-opennurbs/) says "There are no restrictions. Neither copyright nor copyleft restrictions apply" and "Commercial use is encouraged" (both read 2026-10-28). 29.20's first rule stops on such a conflict, and 32.9 recommends writing to McNeel now for written confirmation that the grant covers the repository at a named commit, including use inside MPL-2.0 work.
+**What it is.** Reading and writing Rhino's `.3dm` files (G438) means porting openNURBS, McNeel's toolkit for them. Its terms contradict each other: the repository's [LICENSE](https://github.com/mcneel/opennurbs/blob/eb92af3ba1806b0a34a99aba0d3bda83e3d46083/LICENSE) says "All Rights Reserved" and grants nothing, while McNeel's [developer page](https://developer.rhino3d.com/guides/opennurbs/what-is-opennurbs/) says "There are no restrictions. Neither copyright nor copyleft restrictions apply" and "Commercial use is encouraged" (both read 2026-10-28). 29.20's first rule stops on such a conflict, and 32.9 recommends writing to McNeel now for written confirmation that the grant covers the repository at a named commit, including use inside Apache-2.0 work.
 
 **Decided 2026-10-28 (owner action G407): ask McNeel for written confirmation; port nothing until it arrives.**
-- **The request** is drafted in this piece's pull request. It names the commit, the use (porting the reader and writer into an MPL-2.0 kernel, with McNeel's notice kept) and the two texts that disagree. The owner sends it, since it is a letter to an outside company in the co-op's name; nothing has been sent.
+- **The request** is drafted in this piece's pull request. It names the commit, the use (porting the reader and writer into an Apache-2.0 kernel, with McNeel's notice kept) and the two texts that disagree. The owner sends it, since it is a letter to an outside company in the co-op's name; nothing has been sent.
 - **Until the reply,** openNURBS stays as 29 lists it: read for the format only, run out of process as an oracle, never ported. G438 does not start, and it does not gate its phase (30.5).
 - **When the reply comes,** it is recorded here, in 29's openNURBS row and in `geometry/NOTICE`, word for word with its date; a yes lets G438 port with McNeel's notice kept, and a no or a narrower grant is recorded and G438 is re-planned from the published format description alone.
 
@@ -867,3 +868,22 @@ What this changes:
 Nothing else changes. Ported code is rebuilt to section 3 and meets every gate of chapter 28, as 32.8 already requires; SMLib's tolerance globals and uncertified heuristics are still not ported as behaviour (12.17).
 
 **Changes:** this record; 32.6, 32.8 and 32.23; chapter 29 (29.4, 29.6, rule 8 of 29.20); 12.17; evidence report 13; the source scan's exemption list.
+
+## 32.45 The project's licence is Apache-2.0
+
+**What it is.** Until now the core was licensed under MPL-2.0 and the SDK and plugins under Apache-2.0. The two source projects Spare Kit ports from most, NVIDIA's USD BRep (SMLib) and its Rust port solidcore, are both Apache-2.0. solidcore's `deny.toml` bans MPL-2.0 outright, so none of our code could flow into it.
+
+**Decided by the owner, 2026-11-05: the project's licence is Apache-2.0.** The reason is to match SMLib and solidcore, so that code can move both ways between them and us. The owner checked the licensing himself, including the commits of the outside contributor.
+
+What this changes:
+- Every file of the project is relicensed from MPL-2.0 to Apache-2.0, with no exceptions and no carve-outs. The root `LICENSE` is the Apache License 2.0 text, and the separate `LICENSE-APACHE` is gone because it said the same thing.
+- The rules in 29 now name Apache-2.0 as ours: a PORT METHOD module is Apache-2.0 and ours, and a crate's `license` field names each ported licence beside Apache-2.0 (29.20, rule 4).
+- A ported file keeps its origin's licence as an `AND` operand, as `Apache-2.0 AND BSD-3-Clause` or `Apache-2.0 AND MIT`. Where the origin's licence is Apache-2.0 itself, such as NLib, the expression is just `Apache-2.0`: it never repeats an operand.
+- MPL-2.0 stays on the allow-list (29.2), so code under it may still be ported and kept as MPL-2.0 files, and dependencies under it are still accepted. It is no longer our licence.
+- `NOTICE` files stay, as Apache-2.0 expects. The kernel's `NOTICE` is regenerated from the headers as before and now names Apache-2.0 as ours.
+- The checkers in `geom-test` and the licence gate in `engine-geometry` expect Apache-2.0 as the base licence, and their tests were updated to match. `MAP.json` follows.
+- The licence of our test cases (32.11) is no longer a choice between a licence solidcore bans and CC0: our code now carries a licence solidcore accepts. 32.11 stays open for the data itself.
+
+Earlier records in this chapter that name MPL-2.0 as ours are kept as they were written; this record replaces them.
+
+**Changes:** this record; the root `LICENSE`, `README.md`, `NOTICE` files and every manifest's licence field; chapter 29 (29.1, 29.2, rule 4 of 29.20); the file headers' SPDX lines; `geom-test`'s map, provenance and licence checks; `engine-geometry`'s licence gate; `MAP.json`; the K07 note.

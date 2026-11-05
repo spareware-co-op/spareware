@@ -276,7 +276,7 @@ A corpus is a collection of models the tests run over. A manifest in `geom-test`
 | rhino3dm's sample 3dm files | MIT repository; each file's origin to check | Fetched | 3dm reading. openNURBS code is not ported until McNeel confirms in writing (29.7; [09](../../../kit/notes/G01-evidence/09-freeform-subd-implicit.md), section 1) |
 | KiCad demo boards; Gerber reference files | Unverified | Fetched only after a licence check | Circuit boards |
 | Failure catalogues: Truck #57, #114, #134, #135; SolidCraft's vendor notes; GeoRust's boolean issues; IfcOpenShell and web-ifc issues; Manifold's tie-rule changes and the regression fixed in #1898; SMLib's known issues | Rebuilt in our own files from the descriptions | Stored (ours) | Adversarial fixtures |
-| Generated buildings, cities, 50 km corridors, parts, assemblies, boards, and Class-A surface sets | MPL-2.0 (ours) | Generated | Scale, determinism, benchmarks |
+| Generated buildings, cities, 50 km corridors, parts, assemblies, boards, and Class-A surface sets | Apache-2.0 (ours) | Generated | Scale, determinism, benchmarks |
 
 Sources: [08](../../../kit/notes/G01-evidence/08-standards-coverage-testing.md) section D, [01](../../../kit/notes/G01-evidence/01-manifold-mesh-booleans.md) section 6, [10](../../../kit/notes/G01-evidence/10-github-sweep.md) section 2, [11](../../../kit/notes/G01-evidence/11-vetting-suggested-projects.md), [13](../../../kit/notes/G01-evidence/13-vetting-smlib.md). The manifest, not this table, is the maintained list.
 

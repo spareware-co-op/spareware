@@ -15,7 +15,7 @@ dashu-ratio = { version = "0.6.1", default-features = false, features = ["std"] 
 # The maths target's 400-bit fixed point (geom_test::fixed). MIT OR Apache-2.0.
 dashu-int = { version = "0.6.2", default-features = false, features = ["std"] }
 # The kinds and transforms the curves and surfaces targets hold to the kind contract (Gate 2, 32.44). Ours,
-# MPL-2.0.
+# Apache-2.0.
 geom-bvh = { path = "../geom-bvh" }
 geom-curve = { path = "../geom-curve" }
 geom-linalg = { path = "../geom-linalg" }
@@ -27,7 +27,7 @@ geom-test = { path = "../geom-test" }
 # Avnaim et al.'s reference signs (piece G42), without the bench judge's dependencies.
 geom-bench = { path = "../geom-bench", default-features = false }
 # The variants target (G42) reads the predicates' descriptions with geom-gen's own parser (ours,
-# MPL-2.0; development only).
+# Apache-2.0; development only).
 geom-gen = { path = "../geom-gen" }
 # The oracle of the wide-integer target (G26) and of the variants target (G42): exact
 # arbitrary-precision integers, the big-integer oracle chapter 29.3 names. MIT OR Apache-2.0.
