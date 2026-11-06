@@ -511,6 +511,13 @@ const OTHER_CRATES: &[(&str, &[(&str, &str)])] = &[
         ],
     ),
     (
+        "geom_topo",
+        &[
+            ("column", include_str!("../../geom-topo/src/column.rs")),
+            ("builder", include_str!("../../geom-topo/src/builder.rs")),
+        ],
+    ),
+    (
         "geom_nurbs",
         &[
             ("curve", include_str!("../../geom-nurbs/src/curve.rs")),
@@ -969,7 +976,9 @@ fn every_action_is_pinned_to_the_commit_kernel_yml_runs() {
     let uses = |text: &'static str| -> Vec<&'static str> {
         text.lines()
             .map(|line| line.trim().trim_start_matches("- "))
-            .filter(|line| line.starts_with("uses: "))
+            // A workflow of this repository at the same commit (`uses: ./.github/workflows/...`,
+            // the job `cheap`) is no action to pin.
+            .filter(|line| line.starts_with("uses: ") && !line.starts_with("uses: ./"))
             .collect()
     };
     let kernel = uses(KERNEL_WORKFLOW);

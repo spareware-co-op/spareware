@@ -191,7 +191,19 @@ impl Role {
     pub fn args(&self) -> &[RoleArg] {
         &self.args
     }
+
+    /// Whether its argument is an operand's key rather than a name: a role of [`KEYED_ROLES`].
+    #[must_use]
+    pub fn is_keyed(&self) -> bool {
+        KEYED_ROLES.contains(&self.name.as_str())
+    }
 }
+
+/// The roles a boolean qualifies names by an operand's key (chapter 11.9): `operand(key)`,
+/// `seed(key)` and `tool(key)`. A key is an element's permanent ID or an `OpPath` (11.1), written
+/// in a [`RoleArg::Name`] slot under `NameScheme v1` but not a name: no name graph holds it, so a
+/// walk over a name's parents skips it.
+pub const KEYED_ROLES: [&str; 3] = ["operand", "seed", "tool"];
 
 /// Which side of the cutting faces a split piece lies on.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
@@ -404,14 +416,13 @@ const fn kind_number(kind: EdgeOrVertex) -> u64 {
 
 /// Each name as a finished 16-byte byte-string item.
 fn items(names: &[NameId]) -> Result<Vec<Item>, NameError> {
-    names
-        .iter()
-        .map(|name| -> Result<Item, NameError> {
-            let mut e = Encoder::new();
-            e.bytes(&name.to_bytes())?;
-            Ok(e.finish()?)
-        })
-        .collect()
+    let mut out: Vec<Item> = Vec::with_capacity(names.len());
+    for name in names {
+        let mut e = Encoder::new();
+        e.bytes(&name.to_bytes()).map_err(NameError::Encode)?;
+        out.push(e.finish().map_err(NameError::Encode)?);
+    }
+    Ok(out)
 }
 
 /// The length of an array of `n` items after a first one.
