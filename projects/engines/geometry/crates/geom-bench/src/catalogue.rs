@@ -430,7 +430,7 @@ pub static OPS: &[Op] = &[
 ];
 
 /// The groups of [`OPS`], in order.
-pub const GROUPS: [&str; 31] = [
+pub const GROUPS: [&str; 32] = [
     "predicate",
     "sign",
     "wide",
