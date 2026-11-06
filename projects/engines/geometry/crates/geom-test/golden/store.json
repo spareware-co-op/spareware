@@ -234,86 +234,44 @@
             {
               "sha256": "046f3d4883d4a30f17d9366db22efdf83ea063bd38f04694be237bebcad8b8f6",
               "kind": "corpus",
+              "piece": "G148",
+              "why": "2 new count benchmarks of geom-run's helper (decision 32.44): Exec::map of a list that fits one chunk, on the serial executor and on a pool, for the fix that runs a wave of one task on the calling thread (found in G148's timings); no existing digest moved"
+            },
+            {
+              "sha256": "57fb849de9d6eb8003fe3ff677db5373da1b40984777f2d573018b64e5601c1b",
+              "kind": "corpus",
               "piece": "G153",
               "why": "1 new count benchmark on the triangulation (decision 32.44): mesh/cdt; no existing digest moved"
             },
             {
-              "sha256": "591c8cc8b5d9b5ed578aa5bbe8adb8ea6b3c26fbc7e7d8fac2581c29d1a92e5d",
+              "sha256": "cb20a86c14b161cfaa243f7b79c0c3001389766c4dd83e8cc4c3369f969fd989",
               "kind": "corpus",
               "piece": "G146",
               "why": "1 new count benchmark on the exact mesh (decision 32.44): mesh/exact_build; no existing digest moved"
             },
             {
-              "sha256": "44e285130ab619a15309b171ab80eae83a3a18313fa030ae693444465aa4a4a8",
+              "sha256": "904466411d7c00e37d524ab8bafa384813fb4f74669d4e63c983f1fa76e6b289",
               "kind": "corpus",
               "piece": "G151",
               "why": "7 new count benchmarks on the distance comparisons and triangle contact (decision 32.44): mesh/point_point and its fellows, mesh/triangles; no existing digest moved"
             },
             {
-              "sha256": "daa482b70da82e98c15be27f36420f402e7124760a9a4cb97b91c25bdbac566d",
+              "sha256": "16e1960d34803a94e54fc5e1d0b7033268530c2015e98bf0d13d2b6627561ae9",
               "kind": "corpus",
               "piece": "G152",
               "why": "1 new count benchmark on the polyhedral envelope (decision 32.44): mesh/envelope; no existing digest moved"
             },
             {
-              "sha256": "eea0530a5a913bdf5bb8182b502b8728699cb411e0bdbfcbb2b5ef6577eaf79e",
+              "sha256": "bcd0f63398e7f39b179ee070278c7265b12a2120c0f6528f953a47e79dc38fbc",
               "kind": "corpus",
               "piece": "G147",
               "why": "1 new count benchmark on point location (decision 32.44): mesh/locate; no existing digest moved"
             },
             {
-              "sha256": "046f3d4883d4a30f17d9366db22efdf83ea063bd38f04694be237bebcad8b8f6",
-              "kind": "corpus",
-              "piece": "G101",
-              "why": "4 new count benchmarks on geom-make's hot paths (decision 32.44): a box and a cylinder built, a box moved and quarter-turned; no existing digest moved"
-            },
-            {
-              "sha256": "22cad8b4b01285eb0e0b266618ac3af428eb3a759951bf7c58a1743b7c5f0fc4",
+              "sha256": "af5f21bde2e193693bbaa85d4721760b1fe886ba4653a5c82fcf4aacfd75c105",
               "kind": "corpus",
               "piece": "G148",
-              "why": "Count benchmarks of two stacks joined, and 1 new on mesh booleans (decision 32.44): mesh/boolean; no existing digest moved"
-            },
-            {
-              "sha256": "34578be2ad605ad7842a25d149edfcf271c21d869c257e8e4fdc00a19738e3b8",
-              "kind": "corpus",
-              "piece": "G148",
-              "why": "Count benchmarks of two stacks joined, and 1 new on mesh booleans (decision 32.44): mesh/boolean; no existing digest moved"
-            },
-            {
-              "sha256": "ceb24eae92c96874d12498f59b4b59878a426492bfbabbb4d4886226fd108d91",
-              "kind": "corpus",
-              "piece": "G148",
-              "why": "The boolean's count benchmark on small prisms: mesh/boolean; no existing digest moved"
-            },
-            {
-              "sha256": "38df307b44466d7d9759aa9108631825877573adc4e1742a3b60a831083a2edc",
-              "kind": "corpus",
-              "piece": "G138",
-              "why": "14 new benchmarks of geom-num's three new public functions (principle 12): plane::determinant_sign on side_of_tpi's four classes and on the planes of a building's faces, which its machine-word rung decides; plane::normals_sign on Tpi::new's three classes and on faces; Tpi::meeting on Tpi::new's three classes; no existing digest moved"
-            },
-            {
-              "sha256": "e7e4cc8c769f8227a9e33a693f4e7003abb5d62e300c259731c1b046a4530cb0",
-              "kind": "corpus",
-              "piece": "G148",
-              "why": "Count benchmarks of two stacks joined: G138's 14 on geom-num's new public functions and G148's mesh/boolean; no existing digest moved"
-            },
-            {
-              "sha256": "91e230c9be3ea00519aef334715657a4d3ff0d1393f929bb58a3a9e408b8d188",
-              "kind": "corpus",
-              "piece": "G148",
-              "why": "Count benchmarks of two stacks joined: G138's 14 on geom-num's new public functions and G148's mesh/boolean; no existing digest moved"
-            },
-            {
-              "sha256": "eaa79854dc3f526e985192c0b919aad740f1e29f934bb17121102c8227d15e3e",
-              "kind": "corpus",
-              "piece": "G148",
-              "why": "Count benchmarks of two stacks joined: main's geom-run helper (#538) and this stack's; no existing digest moved"
-            },
-            {
-              "sha256": "57fb849de9d6eb8003fe3ff677db5373da1b40984777f2d573018b64e5601c1b",
-              "kind": "corpus",
-              "piece": "G148",
-              "why": "Count benchmarks of two stacks joined: main's geom-run helper (#538) and this stack's; no existing digest moved"
+              "why": "Count benchmarks of the stack joined: geom-make's four (G101), geom-num's fourteen new functions (G138) and mesh/boolean (G148); no existing digest moved"
             }
           ],
           "sha256": "fb85bdc3a9a3ac6755daa281d6c4c3a845bb8e7e93aa329334de45a77352d090"

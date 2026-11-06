@@ -24,7 +24,7 @@ Sources were read on 22 October 2026: IfcOpenShell at `f44ef5a` (LGPL-3.0, metho
 | Narrow phase | Triangle against triangle in `f64` world coordinates | A boolean intersection, then triangle-to-triangle distance in floating point | Exact predicates on grid meshes; closed forms for planes, cylinders and spheres; certified tessellations for the rest |
 | Touch against overlap | A tolerance (2 mm by default) or an `allow_touching` switch | Not separated: touching counts as a gap of 0 | Decided exactly, with no tolerance |
 | Clearance | Smallest triangle distance below c | Smallest gap, capped at the search length | Exact decision, or a proven interval |
-| Licence | LGPL-3.0: method only | Apache-2.0 | Our own (MPL-2.0) |
+| Licence | LGPL-3.0: method only | Apache-2.0 | Our own (Apache-2.0) |
 
 ## Evidence
 
