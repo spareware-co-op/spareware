@@ -35,7 +35,10 @@
 //! - **Overlap is by identity or by a covered area.** Two surfaces are identical only if their data
 //!   are equal, and a cluster overlaps only if patches of both surfaces cover its hulls, so that
 //!   every point of each has a box of the other within reach, and its hull ends at an edge: a
-//!   contact in the open, where the surfaces part on every side, is not an overlap however flat.
+//!   contact in the open, where the surfaces part on every side, is not an overlap however flat. A
+//!   pair with no forms to read (a box at a pole or a crease) proves nothing of how the surfaces
+//!   bend, so a cluster holding one is neither an overlap nor a band: a sphere's pole touching a
+//!   torus' outer equator is not a coincidence.
 //!
 //! Method: chapter 12.9 (`projects/engines/geometry/architecture/12-intersections.md`). The forms
 //! are Dupin's comparison of two indicatrices, re-derived there, and written here as the difference
@@ -579,6 +582,9 @@ struct Cluster {
     /// The least that any pair at the floor has its forms differ by, in their largest term: 0 where
     /// they may not differ.
     bend: f64,
+    /// Whether some pair at the floor has no forms to read: a box at a pole or a crease, or one the
+    /// data cannot bound. What it holds is then unknown, so the cluster is neither flat nor a band.
+    unread: bool,
 }
 
 /// What `x` keeps away from zero.
@@ -599,7 +605,7 @@ fn gather(
         first = hull(first, pair.first);
         second = hull(second, pair.second);
     }
-    let (mut within, mut bend) = (0.0, f64::INFINITY);
+    let (mut within, mut bend, mut unread) = (0.0, f64::INFINITY, false);
     for pair in pairs {
         let (a, b) = (
             around(system.first, pair.first, meter)?,
@@ -615,19 +621,18 @@ fn gather(
             span(pair.second.0)?,
             span(pair.second.1)?,
         ];
-        let mut most = 0.0;
-        if let Some(r) = system.read(&x, meter)?
-            && let Ok(d) = difference(&r)
-        {
-            most = d.into_iter().map(clear).fold(0.0, larger);
-        }
-        bend = smaller(bend, most);
+        let Some(d) = system.read(&x, meter)?.and_then(|r| difference(&r).ok()) else {
+            unread = true;
+            continue;
+        };
+        bend = smaller(bend, d.into_iter().map(clear).fold(0.0, larger));
     }
     Ok(Cluster {
         first,
         second,
         within,
         bend,
+        unread,
     })
 }
 
@@ -640,7 +645,7 @@ fn read_contact(
 ) -> Result<Reading, IntersectError> {
     let (first, second, within) = (cluster.first, cluster.second, cluster.within);
     let undecided = |why| Reading::Undecided { first, second, why };
-    if ending == 0 && cluster.bend > 0.0 {
+    if ending == 0 && !cluster.unread && cluster.bend > 0.0 {
         let quotient = Interval::point(2.0 * within)?.div(Interval::point(cluster.bend)?)?;
         let width = quotient.sqrt()?.hi();
         return Ok(if width <= ceiling {
@@ -700,7 +705,8 @@ fn look(
     let cluster = gather(system, pairs, meter)?;
     let (a, b) = (cluster.first, cluster.second);
     let (first, second) = (system.first, system.second);
-    let flat = cluster.bend <= 0.0
+    let flat = !cluster.unread
+        && cluster.bend <= 0.0
         && (at_edge(a, first.domain()) || at_edge(b, second.domain()))
         && covered(pairs.iter().map(|p| p.first), a, meter)?
         && covered(pairs.iter().map(|p| p.second), b, meter)?;
