@@ -234,17 +234,23 @@
             {
               "sha256": "046f3d4883d4a30f17d9366db22efdf83ea063bd38f04694be237bebcad8b8f6",
               "kind": "corpus",
+              "piece": "G148",
+              "why": "2 new count benchmarks of geom-run's helper (decision 32.44): Exec::map of a list that fits one chunk, on the serial executor and on a pool, for the fix that runs a wave of one task on the calling thread (found in G148's timings); no existing digest moved"
+            },
+            {
+              "sha256": "57fb849de9d6eb8003fe3ff677db5373da1b40984777f2d573018b64e5601c1b",
+              "kind": "corpus",
               "piece": "G153",
               "why": "1 new count benchmark on the triangulation (decision 32.44): mesh/cdt; no existing digest moved"
             },
             {
-              "sha256": "591c8cc8b5d9b5ed578aa5bbe8adb8ea6b3c26fbc7e7d8fac2581c29d1a92e5d",
+              "sha256": "cb20a86c14b161cfaa243f7b79c0c3001389766c4dd83e8cc4c3369f969fd989",
               "kind": "corpus",
               "piece": "G146",
               "why": "1 new count benchmark on the exact mesh (decision 32.44): mesh/exact_build; no existing digest moved"
             }
           ],
-          "sha256": "44e285130ab619a15309b171ab80eae83a3a18313fa030ae693444465aa4a4a8"
+          "sha256": "904466411d7c00e37d524ab8bafa384813fb4f74669d4e63c983f1fa76e6b289"
         },
         {
           "id": "geom-nurbs/operations",

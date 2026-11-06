@@ -20,3 +20,4 @@ The three vetting reports checked one project in depth: one agent evaluated each
 | [12 Vetting: CADCraft](12-vetting-cadcraft.md) | Whether CADCraft's code or methods fit the kernel, its legal provenance, and what to learn from it |
 | [13 Vetting: NVIDIA SMLib and solidcore](13-vetting-smlib.md) | Whether NVIDIA's newly open NURBS B-rep kernel, or its Rust port, should be the foundation, and what to take from it |
 | [14 Spectral Labs' Quartz](14-spectral-labs-quartz.md) | A closed CAD product built for AI agents on a commercial kernel: what its public claims confirm, and the two failure cases that become our fixtures |
+| [15 What we take: solidcore and the Craft apps](15-take-map-solidcore-craft.md) | For each board piece where solidcore, SolidCraft, CADCraft or BIMCraft can help: what to take, what to re-derive, what not to take, whether the piece can start now; the kit and Spare Construct entries; and a ranked top ten |

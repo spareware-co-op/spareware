@@ -278,16 +278,18 @@ fn curve_points<const D: usize>(label: &str) {
         // Σ N_j·|h_j| per coordinate, and Σ N_j·w_j last for a rational curve.
         let mag = s.magnitudes();
         let rational = c.weights().is_some();
-        let g = gamma(if rational { 14 * p + 3 } else { 7 * p + 1 });
+        let n = if rational { 14 * p + 3 } else { 7 * p + 1 };
+        let g = gamma(n);
+        let tiny = q(f64::from_bits(1)) * RBig::from(n);
         for t in samples(rng, c.basis(), scale(16)) {
             let got = c.point(t, Limit::FromRight).unwrap();
             let exact = s.point(&q(t)).unwrap();
             let m = mag.homogeneous_point(&q(t)).unwrap();
             for d in 0..D {
                 let bound = if rational {
-                    &g * &m[d] / &m[D]
+                    (&g * &m[d] + &tiny) / &m[D] + &tiny
                 } else {
-                    &g * &m[d]
+                    &g * &m[d] + &tiny
                 };
                 if abs(&(q(got[d]) - &exact[d])) > bound {
                     found.add(
@@ -339,11 +341,13 @@ fn surface_points_are_within_their_bound() {
         let (exact_s, mag) = (patch_of(&s, false), patch_of(&s, true));
         let (p, qd) = (s.basis_u().degree(), s.basis_v().degree());
         let rational = s.weights().is_some();
-        let g = gamma(if rational {
+        let n = if rational {
             14 * p + 14 * qd + 5
         } else {
             7 * p + 7 * qd + 2
-        });
+        };
+        let g = gamma(n);
+        let tiny = q(f64::from_bits(1)) * RBig::from(n);
         let (us, vs) = (
             samples(rng, s.basis_u(), scale(4)),
             samples(rng, s.basis_v(), scale(4)),
@@ -355,9 +359,9 @@ fn surface_points_are_within_their_bound() {
                 let m = mag.homogeneous_point(&q(u), &q(v)).unwrap();
                 for d in 0..3 {
                     let bound = if rational {
-                        &g * &m[d] / &m[3]
+                        (&g * &m[d] + &tiny) / &m[3] + &tiny
                     } else {
-                        &g * &m[d]
+                        &g * &m[d] + &tiny
                     };
                     if abs(&(q(got[d]) - &exact[d])) > bound {
                         found.add(

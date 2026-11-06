@@ -38,7 +38,10 @@ use std::ffi::OsString;
 use std::path::{Path, PathBuf};
 
 use geom_fuzz::orient2d::{Case, PROOF_BOUND, ProofDraw, check, check_with, proof_case, reference};
-use geom_fuzz::{Harness, cdt, exact, orient2d, planes, predicates, variants, wide};
+use geom_fuzz::{
+    Harness, boxtree, cdt, curves, exact, linalg, maths, nurbs, orient2d, planes, predicates,
+    roots, surfaces, transforms, variants, wide,
+};
 use geom_num::Sign;
 use geom_num::generated::orient2d::{filter, value};
 use geom_num::grid::{COORD_MAX, P2};
@@ -49,12 +52,20 @@ use geom_test::{Seed, SplitMix64};
 
 /// Every target of the crate, by module name, with its harness. A target module that is not here,
 /// or a name here that is not a target module, fails `attack_every_target_is_listed_here`.
-const TARGETS: [(&str, Harness); 7] = [
+const TARGETS: [(&str, Harness); 15] = [
+    ("boxtree", boxtree::harness),
     ("cdt", cdt::harness),
+    ("curves", curves::harness),
     ("exact", exact::harness),
+    ("linalg", linalg::harness),
+    ("maths", maths::harness),
+    ("nurbs", nurbs::harness),
     ("orient2d", orient2d::harness),
     ("planes", planes::harness),
     ("predicates", predicates::harness),
+    ("roots", roots::harness),
+    ("surfaces", surfaces::harness),
+    ("transforms", transforms::harness),
     ("variants", variants::harness),
     ("wide", wide::harness),
 ];
@@ -540,8 +551,8 @@ fn attack_every_target_has_its_tests_and_is_in_both_ci_matrices() {
 
     // Seeded violations: each must be reported.
     let drop_fuzz = workflow.replace(
-        "[cdt_fuzz, exact_fuzz, orient2d_fuzz, planes_fuzz, predicates_fuzz, variants_fuzz, wide_fuzz]",
-        "[predicates_fuzz, variants_fuzz, wide_fuzz]",
+        "[boxtree_fuzz, cdt_fuzz, curves_fuzz, exact_fuzz, linalg_fuzz, maths_fuzz, nurbs_fuzz, orient2d_fuzz, planes_fuzz, predicates_fuzz, roots_fuzz, surfaces_fuzz, transforms_fuzz, variants_fuzz, wide_fuzz]",
+        "[boxtree_fuzz, cdt_fuzz, curves_fuzz, exact_fuzz, linalg_fuzz, maths_fuzz, nurbs_fuzz, planes_fuzz, predicates_fuzz, roots_fuzz, surfaces_fuzz, transforms_fuzz, variants_fuzz, wide_fuzz]",
     );
     assert_ne!(drop_fuzz, workflow);
     assert!(
