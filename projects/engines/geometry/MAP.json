@@ -981,6 +981,26 @@
           "target": "lib"
         },
         {
+          "cost": "[`ROWS`] draws of [`SplitMix64`] per column input, a few dozen rows per builder, once per batch, outside every measured run.",
+          "does": null,
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-bench/src/inputs/topo.rs",
+          "guarantees": [
+            "every batch is full and the same on every target, and every result of a typical batch is `Ok` (`tests/inputs.rs`); every result is the operation's own, run directly (`tests/attack_g06.rs`)."
+          ],
+          "job": "Inputs for `geom-topo`'s hot paths (piece G80, decision 32.44): a column filled, copied as a new version and written across a chunk boundary, and a small body's arenas published.",
+          "method": {
+            "links": [
+              "projects/engines/geometry/architecture/28-testing.md"
+            ],
+            "text": "the shape of `geom-topo`'s own arena tests (`tests/arena.rs`), at one scene size, measured as chapter 28.14 sets benchmarks out, `projects/engines/geometry/architecture/28-testing.md`."
+          },
+          "path": "geom_bench::inputs::topo",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
           "cost": "a few draws of [`crate::rng::SplitMix64`] per input, once per batch, outside every measured run.",
           "does": null,
           "family": [],
@@ -3325,6 +3345,28 @@
       "kind": "development",
       "layer": "Development",
       "modules": [
+        {
+          "cost": "at most [`MAX_ROWS`] rows per arena and [`MAX_EDITS`] edits: a few hundred column writes and one publish per version; at most [`MAX_INPUT_BYTES`] bytes read.",
+          "does": "[`decode`] turns a fuzzer's bytes into a [`Case`]: a row count for each of the eleven arenas, a value for every link of every row (inside its arena, at its end, far past it, or absent where the link may be), a column that is one row longer or shorter than its arena, the outside region, and edits to make to a published body. [`check`] fills the arenas, publishes them, and compares the answer with an independent reading of `geom-topo`'s rules (the length of every column, then every link in the order of `Link::ALL`, then the outside region): the same body or the same first fault. When the body publishes, it checks that every index it holds is inside its arenas, that an edit starting from it publishes the same body, and that the edits leave the first version unchanged. [`harness`] is `decode` then `check`.",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-fuzz/src/arenas.rs",
+          "guarantees": [
+            "**Any bytes are a case.** Every byte string, the empty one included, decodes to a case. Each link is read through a rule byte that makes the boundaries common: the last row, the first row past the end, `u32::MAX − 1`, or absent.",
+            "**A bounded input.** [`decode`] reads at most [`MAX_INPUT_BYTES`] bytes, derived below; a unit test builds the input that reaches it.",
+            "**A panic is a failure; a disagreement is a [`Finding`]** naming the law and the case."
+          ],
+          "job": "Fuzz target: `geom-topo`'s arenas publish exactly the bodies their rules allow, and a body's versions never see each other's edits.",
+          "method": {
+            "links": [
+              "projects/engines/geometry/architecture/08-topology.md"
+            ],
+            "text": "differential testing against an independent reading of chapter 8.2's rules as `geom-topo`'s `builder` module states them (`projects/engines/geometry/architecture/08-topology.md`), written here from the rules, not from the code: lengths per arena from region to edge, then the links in their published order, rows ascending, then the outside region."
+          },
+          "path": "geom_fuzz::arenas",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
         {
           "cost": "building and querying trees of at most [`MAX_BOXES`] boxes and an index of at most [`MAX_POINTS`] points, and brute force over them, O(n²); at most [`MAX_INPUT_BYTES`] bytes.",
           "does": "[`decode`] turns a fuzzer's bytes into a [`Case`]: up to [`MAX_BOXES`] boxes in two or three dimensions, a query box, a second set of boxes, a set of moved boxes, up to [`MAX_POINTS`] grid points, a centre and a radius. [`check`] builds `geom_bvh::BoxTree`s and a `geom_bvh::CellIndex` and holds every query to the answer of a brute force written here, from the boxes' corners and exact integer distances, never from `geom-bvh`'s own tests: overlapping a box, all overlapping pairs, pairs across two trees, a refit's answers (piece G54), and the points within a radius of a point and all pairs within a radius (G55). [`harness`] is `decode` then `check`.",
