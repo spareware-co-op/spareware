@@ -39,7 +39,7 @@ use std::path::{Path, PathBuf};
 
 use geom_fuzz::orient2d::{Case, PROOF_BOUND, ProofDraw, check, check_with, proof_case, reference};
 use geom_fuzz::{
-    Harness, arenas, boxtree, cbor, curves, linalg, make, maths, nurbs, orient2d, predicates,
+    Harness, arenas, boxtree, cache, cbor, curves, linalg, make, maths, nurbs, orient2d, predicates,
     roots, surfaces, transforms, variants, wide,
 };
 use geom_num::Sign;
@@ -55,6 +55,7 @@ use geom_test::{Seed, SplitMix64};
 const TARGETS: [(&str, Harness); 15] = [
     ("arenas", arenas::harness),
     ("boxtree", boxtree::harness),
+    ("cache", cache::harness),
     ("cbor", cbor::harness),
     ("curves", curves::harness),
     ("linalg", linalg::harness),
@@ -551,8 +552,8 @@ fn attack_every_target_has_its_tests_and_is_in_both_ci_matrices() {
 
     // Seeded violations: each must be reported.
     let drop_fuzz = workflow.replace(
-        "[arenas_fuzz, boxtree_fuzz, cbor_fuzz, curves_fuzz, linalg_fuzz, make_fuzz, maths_fuzz, nurbs_fuzz, orient2d_fuzz, predicates_fuzz, roots_fuzz, surfaces_fuzz, transforms_fuzz, variants_fuzz, wide_fuzz]",
-        "[arenas_fuzz, boxtree_fuzz, cbor_fuzz, curves_fuzz, linalg_fuzz, make_fuzz, maths_fuzz, nurbs_fuzz, predicates_fuzz, roots_fuzz, surfaces_fuzz, transforms_fuzz, variants_fuzz, wide_fuzz]",
+        "[arenas_fuzz, boxtree_fuzz, cache_fuzz, cbor_fuzz, curves_fuzz, linalg_fuzz, make_fuzz, maths_fuzz, nurbs_fuzz, orient2d_fuzz, predicates_fuzz, roots_fuzz, surfaces_fuzz, transforms_fuzz, variants_fuzz, wide_fuzz]",
+        "[arenas_fuzz, boxtree_fuzz, cache_fuzz, cbor_fuzz, curves_fuzz, linalg_fuzz, make_fuzz, maths_fuzz, nurbs_fuzz, predicates_fuzz, roots_fuzz, surfaces_fuzz, transforms_fuzz, variants_fuzz, wide_fuzz]",
     );
     assert_ne!(drop_fuzz, workflow);
     assert!(
