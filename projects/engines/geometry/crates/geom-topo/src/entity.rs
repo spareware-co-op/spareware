@@ -33,6 +33,15 @@
 //! structure of arrays as Manifold stores its halfedges
 //! (`projects/kit/notes/G01-evidence/01-manifold-mesh-booleans.md`, section 2).
 //!
+//! Recursion:
+//!
+//! - Types: `Edge`, `Face`, `Fin`, `Loop`, `Region`, `Shell`.
+//!   Bound: 1.
+//!   Why: they name each other only through `Ix`, a 32-bit row number whose marker
+//!   `PhantomData<fn() -> K>` holds no value of its kind, so no row holds another and their drop
+//!   glue and derived implementations go one level deep.
+//!   Test: `rows_clone_compare_hash_and_print_one_level_deep`.
+//!
 //! Cost: as [`Column`]'s operations, once per field: a push is amortised constant time per field,
 //! a row read is one lookup per field.
 
