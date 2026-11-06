@@ -104,6 +104,7 @@ fn resolved(
 const WANTS: [Want; 3] = [Want::One, Want::AllPieces, Want::Carrier];
 
 #[test]
+#[allow(clippy::too_many_lines, reason = "one scenario, built and then read back step by step")]
 fn a_pruned_step_keeps_what_held_walks_meet() {
     let mut graph = NameGraph::new();
     let [a, b, c, d, e, f, g] = ["a", "b", "c", "d", "e", "f", "g"].map(|r| face(&mut graph, r));
