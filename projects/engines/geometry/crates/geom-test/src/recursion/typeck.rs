@@ -4905,4 +4905,16 @@ mod tests {
              pub fn same(a: &M, b: &M) -> bool { a == b }",
         );
     }
+
+    #[test]
+    fn btree_ranges_entries_and_collections_are_read() {
+        reads(
+            "use alloc::collections::{BTreeMap, BTreeSet};
+             pub fn before(m: &BTreeMap<u32, u8>, k: u32) -> Option<u8> { m.range(..k).next_back().map(|(_, v)| *v) }
+             pub fn count(m: &mut BTreeMap<u32, u32>, k: u32) { *m.entry(k).or_insert(0) += 1; m.entry(k).and_modify(|v| *v += 1).or_default(); }
+             pub fn gather(v: &[u32]) -> BTreeSet<u32> { let mut s: BTreeSet<u32> = v.iter().copied().collect(); s.extend([1, 2]); s }
+             pub fn pairs(v: Vec<(u32, u8)>) -> usize { let m: BTreeMap<u32, u8> = v.into_iter().collect(); let mut n = 0; for (k, _) in &m { n += *k as usize; } for (_, b) in m { n += b as usize; } n }
+             pub fn within(s: &BTreeSet<u32>) -> usize { s.range(1..4).count() + s.into_iter().count() }",
+        );
+    }
 }

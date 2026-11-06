@@ -31,8 +31,8 @@
 //!   under `projects/engines/geometry/methods/` (rule 6). Anything else is a [`Rule::Consulted`]
 //!   problem.
 //! - **A module that ports nothing is ours.** Without a `Source:` record, an
-//!   `SPDX-License-Identifier:` line, if any, is `MPL-2.0` (29.20, rule 4: "A PORT METHOD module is
-//!   MPL-2.0 and ours").
+//!   `SPDX-License-Identifier:` line, if any, is `Apache-2.0` (29.20, rule 4: "A PORT METHOD module is
+//!   Apache-2.0 and ours").
 //! - **Every link to outside code is credited.** A link to source code ([`links::is_code`])
 //!   anywhere else in the header or in the file's doc comments needs a `Source:` or `Consulted:`
 //!   record in the same header for the same repository (on a code-hosting site) or the same file
@@ -328,7 +328,7 @@ fn source(lines: &[String], out: &mut Provenance) {
             Rule::Source,
             format!(
                 "{name} is public domain, which has no SPDX identifier, so chapter 29.2 takes it as \
-                 PORT METHOD: write a Consulted record and our own MPL-2.0 code"
+                 PORT METHOD: write a Consulted record and our own Apache-2.0 code"
             ),
         )),
         Ok(class) => out.problems.push((
@@ -460,7 +460,7 @@ pub fn read(header: &Header, docs: &[String]) -> Provenance {
 }
 
 /// A ported file's licence line names its origin's licence and only allow-listed licences; a
-/// file that ports nothing (no `Source:` line, even one the reader could not read) is MPL-2.0.
+/// file that ports nothing (no `Source:` line, even one the reader could not read) is Apache-2.0.
 fn check_spdx(out: &mut Provenance, source_lines: bool) {
     let ports: Vec<String> = out
         .records
@@ -472,13 +472,13 @@ fn check_spdx(out: &mut Provenance, source_lines: bool) {
     if ports.is_empty() {
         if !source_lines
             && let Some(spdx) = spdx
-            && spdx.canonical() != "MPL-2.0"
+            && spdx.canonical() != "Apache-2.0"
         {
             out.problems.push((
                 Rule::Spdx,
                 format!(
-                    "the SPDX line {:?} is not MPL-2.0, but nothing here is ported: a PORT METHOD \
-                     module is MPL-2.0 and ours (29.20, rule 4)",
+                    "the SPDX line {:?} is not Apache-2.0, but nothing here is ported: a PORT METHOD \
+                     module is Apache-2.0 and ours (29.20, rule 4)",
                     spdx.canonical()
                 ),
             ));
@@ -647,7 +647,7 @@ mod tests {
              \n\
              Consulted: NVIDIA USD BRep NLib, Apache-2.0, <https://github.com/NVIDIA-Omniverse/usd-brep/blob/0123456789abcdef0123456789abcdef01234567/NL_x.cpp>,\n\
              \x20 for failure cases only. No code copied.\n\
-             SPDX-License-Identifier: MPL-2.0");
+             SPDX-License-Identifier: Apache-2.0");
         let p = read(&consulted, &[]);
         assert_eq!(p.problems, []);
         assert_eq!(
@@ -655,7 +655,7 @@ mod tests {
             "for failure cases only. No code copied."
         );
         assert_eq!(p.records[0].take, Take::PortMethod);
-        assert_eq!(p.spdx.as_deref(), Some("MPL-2.0"));
+        assert_eq!(p.spdx.as_deref(), Some("Apache-2.0"));
     }
 
     #[test]
