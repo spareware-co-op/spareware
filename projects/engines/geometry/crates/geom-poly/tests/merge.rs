@@ -754,6 +754,10 @@ fn errors_say_what_was_wrong() {
     );
     assert_eq!(MergeError::Open.to_string(), "kept pieces do not close");
     assert_eq!(
+        MergeError::Slit.to_string(),
+        "an edge ends inside a face, which it would slit"
+    );
+    assert_eq!(
         MergeError::Inside.to_string(),
         "a shell faces inward with no shell around it"
     );

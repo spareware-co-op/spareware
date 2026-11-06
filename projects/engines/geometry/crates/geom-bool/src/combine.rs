@@ -318,6 +318,7 @@ fn rebuilt(ctx: &OpContext<'_>, error: RebuildError, meter: &mut WorkMeter<'_>) 
             MergeError::Stopped(stopped) | MergeError::Trace(TraceError::Stopped(stopped)),
         ) => ctx.stopped(meter, stopped, REBUILD),
         RebuildError::Merge(MergeError::Inside) => fail(ctx, CombineDetail::UnboundedResult),
+        RebuildError::Merge(MergeError::Slit) => fail(ctx, CombineDetail::ContactInsideFace),
         RebuildError::Merge(MergeError::Num(e)) | RebuildError::Num(e) => numbers(ctx, e),
         RebuildError::Topo(e) => match e.stop(meter) {
             Some(stopped) => ctx.stopped(meter, stopped, REBUILD),
@@ -337,9 +338,6 @@ fn refused(ctx: &OpContext<'_>, error: Refused, meter: &mut WorkMeter<'_>) -> Op
         }
         Refused::Trace(TraceError::Num(e)) => numbers(ctx, e),
         Refused::Trace(TraceError::Winding(_)) => fail(ctx, CombineDetail::ResultInvalid),
-        // A face with a loop of under three fins is the slit a contact edge ending inside a face
-        // would leave, which no face can have.
-        Refused::Fault(Fault::ZeroArea { .. }) => fail(ctx, CombineDetail::ContactInsideFace),
         Refused::Fault(fault) => {
             fail(ctx, CombineDetail::ResultInvalid).with_message(fault.to_string())
         }
