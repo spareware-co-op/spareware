@@ -1483,6 +1483,22 @@ pub fn scenarios() -> Result<Vec<Fixture>, NamingError> {
             )],
         ),
         fixture(
+            "naming/0025-a-slot-across-the-top-splits-the-top-and-its-edge",
+            "A slot cut down from the top across the whole thickness notches the exterior face and \
+             splits the top face and the top back edge in two: each is ambiguous for one wanted. \
+             What the slot does not reach keeps its name (SolidCraft: an upstream cut that splits \
+             a face keeps the edge that bounded it).",
+            doors(),
+            &refs_a,
+            vec![(
+                cut(62, 37, [150, -5, 45], [4, 20, 30]),
+                changed(
+                    &kept,
+                    &[(4, Expect::Ambiguous(2)), (7, Expect::Ambiguous(2))],
+                ),
+            )],
+        ),
+        fixture(
             "naming/0023-a-door-off-the-end-of-the-wall",
             "A door pushed past the wall's end no longer cuts it: its reveals are unknown, and \
              the wall's own names stay.",
