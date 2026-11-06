@@ -40,7 +40,7 @@ fn the_names_are_the_same_on_every_target() {
     );
 }
 
-/// SolidCraft's naming scenarios in this kernel's terms (take map item 15): every reference
+/// `SolidCraft`'s naming scenarios in this kernel's terms (take map item 15): every reference
 /// resolves as the chapter says after each edit.
 #[test]
 fn the_solidcraft_scenarios_resolve_as_expected() {

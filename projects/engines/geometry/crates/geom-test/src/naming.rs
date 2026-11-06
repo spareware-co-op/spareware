@@ -1482,7 +1482,8 @@ pub fn scenarios() -> Result<Vec<Fixture>, NamingError> {
         fixture(
             "naming/0025-a-slot-across-the-top-splits-the-top-and-its-edge",
             "A slot cut down from the top across the whole thickness notches the exterior face and \
-             splits the top face and the top back edge in two: each is ambiguous for one wanted. \
+             splits the top face in two, ambiguous for one wanted, and bounds the top back edge \
+             anew, so the cut deletes it. \
              What the slot does not reach keeps its name (SolidCraft: an upstream cut that splits \
              a face keeps the edge that bounded it).",
             doors(),
@@ -1491,7 +1492,7 @@ pub fn scenarios() -> Result<Vec<Fixture>, NamingError> {
                 cut(62, 37, [150, -5, 45], [4, 20, 30]),
                 changed(
                     &kept,
-                    &[(4, Expect::Ambiguous(2)), (7, Expect::Ambiguous(2))],
+                    &[(4, Expect::Ambiguous(2)), (7, Expect::Deleted([62; 16]))],
                 ),
             )],
         ),
