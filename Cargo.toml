@@ -13,8 +13,8 @@ members = [
 [workspace.package]
 edition = "2024"
 publish = false
-# Licence: MPL-2.0 for the core, Apache-2.0 for the SDK and plugins (README.md, Licence). Never relicensed.
-license = "MPL-2.0"
+# Licence: Apache-2.0 for everything (LICENSE, README.md, Licence). Decision 32.45.
+license = "Apache-2.0"
 
 # The profile cargo-bolero builds fuzz targets with (its --profile option defaults to fuzz), as the
 # bolero book asks: book/src/library-installation.md at commit

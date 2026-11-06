@@ -90,7 +90,7 @@ const MODULE: &str = "//! An example module.
 //!
 //! Cost: constant time and no allocation.
 //!
-//! SPDX-License-Identifier: MPL-2.0
+//! SPDX-License-Identifier: Apache-2.0
 
 /// A function.
 pub fn f() {}
@@ -122,8 +122,8 @@ fn file(folder: &str, rel: &str, text: &str) -> SourceFile {
 /// A workspace of one kernel crate `geom-x` with `lib` as its root and `modules` (path under
 /// `src/`, text) as its other files, and the development crate `geom-fuzz` with `dev_lib`.
 ///
-/// (Fixer, G15: `geom-x`'s manifest names `MPL-2.0 AND BSD-3-Clause`, because chapter 29.20,
-/// rule 4, asks a crate that ports a file to name the origin's licence beside MPL-2.0 in its
+/// (Fixer, G15: `geom-x`'s manifest names `Apache-2.0 AND BSD-3-Clause`, because chapter 29.20,
+/// rule 4, asks a crate that ports a file to name the origin's licence beside Apache-2.0 in its
 /// `license` field, which the map now checks; the control ports below are BSD-3-Clause.)
 fn workspace_with(lib: &str, modules: &[(&str, &str)], dev_lib: &str) -> Input {
     let mut files = vec![file(KERNEL, "lib.rs", lib)];
@@ -135,7 +135,7 @@ fn workspace_with(lib: &str, modules: &[(&str, &str)], dev_lib: &str) -> Input {
                 folder: KERNEL.into(),
                 manifest: Some(
                     "[package]\nname = \"geom-x\"\nversion = \"0.0.0\"\n\
-                     license = \"MPL-2.0 AND BSD-3-Clause\"\n"
+                     license = \"Apache-2.0 AND BSD-3-Clause\"\n"
                         .into(),
                 ),
                 files,
@@ -207,7 +207,7 @@ fn the_baseline_fixture_is_clean() {
     // So that every problem an attack below expects comes from the attack, not the fixture.
     let generated = build(&workspace(KERNEL_LIB, &[("a.rs", MODULE)]), &[]);
     assert_eq!(generated.problems, [], "{}", show(&generated.problems));
-    assert_eq!(tail_problems("SPDX-License-Identifier: MPL-2.0"), []);
+    assert_eq!(tail_problems("SPDX-License-Identifier: Apache-2.0"), []);
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -395,7 +395,7 @@ fn the_four_crate_fields_read_as_g09_reads_them() {
                 "",
                 "Layer: 6, Arrangements.",
                 "",
-                "SPDX-License-Identifier: MPL-2.0",
+                "SPDX-License-Identifier: Apache-2.0",
                 "Invariants this crate keeps:",
                 "- It keeps one.",
                 "",
@@ -557,10 +557,10 @@ fn code_that_may_never_be_read_cannot_be_consulted() {
     );
 }
 
-/// Chapter 29.20, rule 4: "A PORT METHOD module is MPL-2.0 and ours." A module that ports nothing
+/// Chapter 29.20, rule 4: "A PORT METHOD module is Apache-2.0 and ours." A module that ports nothing
 /// but declares another licence passes.
 #[test]
-fn a_module_that_ports_nothing_is_mpl() {
+fn a_module_that_ports_nothing_is_ours() {
     let problems = tail_problems(
         "Consulted: Foo, MIT, <https://example.org/foo.c>, for its signs.\n\
          SPDX-License-Identifier: GPL-3.0-only",

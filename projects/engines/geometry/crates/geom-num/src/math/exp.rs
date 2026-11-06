@@ -11,7 +11,7 @@
 //!   flags or `errno`; the overflow and underflow results returned directly; the canonical NaN for
 //!   a NaN; a written proof of the error bound. Every change is listed under "Changes from the C
 //!   source" below; none changes a result.
-//! SPDX-License-Identifier: MPL-2.0 AND MIT
+//! SPDX-License-Identifier: Apache-2.0 AND MIT
 //!
 //! The original notice of `exp.c`, reproduced as the MIT licence requires:
 //!
@@ -219,12 +219,10 @@ fn fma_dd(ah: f64, al: f64, bh: f64, bl: f64, ch: f64, cl: f64) -> (f64, f64) {
     (dh, l)
 }
 
-/// Horner evaluation of `Σ c[i]·x^i` in double-double with [`fma_dd`] (C: `opolydd`). The
-/// coefficient list is never empty; an empty one is treated as the zero polynomial.
-fn poly_dd(xh: f64, xl: f64, c: &[[f64; 2]]) -> (f64, f64) {
-    let Some((last, rest)) = c.split_last() else {
-        return (0.0, 0.0);
-    };
+/// Horner evaluation of `Σ c[i]·x^i` in double-double with [`fma_dd`] (C: `opolydd`): `last` is
+/// the leading coefficient and `rest` the others, lowest first, as the caller splits a fixed table
+/// (so no list is ever empty).
+fn poly_dd(xh: f64, xl: f64, last: &[f64; 2], rest: &[[f64; 2]]) -> (f64, f64) {
     let (mut ch, mut cl) = (last[0], last[1]);
     for ci in rest.iter().rev() {
         (ch, cl) = fma_dd(xh, xl, ch, cl, ci[0], ci[1]);
@@ -318,7 +316,8 @@ fn exp_accurate(x: f64) -> f64 {
     let dxll = L2LL * t + fma(L2L, t, -dxl);
     let (dxh, dxl) = fast_two_sum(dx, dxl);
     let dxl = dxl + dxll;
-    let (fh, fl) = poly_dd(dxh, dxl, &CH);
+    let [ch_rest @ .., ch_last] = &CH;
+    let (fh, fl) = poly_dd(dxh, dxl, ch_last, ch_rest);
     let (fh, fl) = mul_dd(dxh, dxl, fh, fl);
     let (fh, fl) = mul_dd(fh, fl, th, tl);
     let (fh, fl) = fast_sum(th, tl, fh, fl);
