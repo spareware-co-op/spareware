@@ -40,9 +40,6 @@ permissions:
   # kernel-golden.yml reads a pull request's reviews; called here it reads none, but a called
   # workflow may not ask for more than its caller grants.
   pull-requests: read
-  # cheap-checks.yml, which the heavy workflows call first, reads check runs; called here, on a tag,
-  # it reads none and passes at once, but a called workflow may not ask for more than its caller grants.
-  checks: read
 
 concurrency:
   group: kernel-release-${{ github.ref }}

@@ -14,7 +14,8 @@ name: Cheap checks first
 # the run. On any other event (a push to main, a schedule, a release tag) it passes at once.
 #
 # The workflow runs no repository code and needs no action: it reads check runs with the runner's
-# own gh, with a read-only token.
+# own gh. The repository is public, so the check runs of a commit are readable with the workflow's
+# default read-only token: no job here, or in its callers, asks for more than `contents: read`.
 
 on:
   workflow_call:
@@ -27,8 +28,6 @@ jobs:
     name: The cheap checks pass
     runs-on: ubuntu-latest
     timeout-minutes: 40
-    permissions:
-      checks: read
     defaults:
       run:
         shell: bash
@@ -53,9 +52,18 @@ jobs:
             "Every commit is signed off"
           )
           start=$(date +%s)
+          errors=0
           while true; do
-            runs=$(gh api "repos/$REPO/commits/$SHA/check-runs?per_page=100" --paginate \
-              --jq '.check_runs[] | [.id, .name, .status, (.conclusion // "")] | @tsv')
+            if ! runs=$(gh api "repos/$REPO/commits/$SHA/check-runs?per_page=100" --paginate \
+              --jq '.check_runs[] | [.id, .name, .status, (.conclusion // "")] | @tsv'); then
+              errors=$((errors + 1))
+              if [ "$errors" -ge 3 ]; then
+                echo "::warning::The check runs could not be read; the heavy jobs start without waiting."
+                exit 0
+              fi
+              sleep 20
+              continue
+            fi
             elapsed=$(( $(date +%s) - start ))
             waiting=()
             for name in "${names[@]}"; do

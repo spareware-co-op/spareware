@@ -123,9 +123,6 @@ jobs:
     name: Cheap checks first
     # Waits for format, lints, the scaffold and the sign-off (cheap-checks.yml), so a push that
     # fails one of them stops here; every heavy job below lists this job under `needs`.
-    permissions:
-      contents: read
-      checks: read
     uses: ./.github/workflows/cheap-checks.yml
 
   mutants-plan:
