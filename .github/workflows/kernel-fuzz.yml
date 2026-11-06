@@ -48,19 +48,32 @@ name: Kernel fuzzing and proofs
 on:
   pull_request:
     paths:
+      - "projects/engines/geometry/crates/geom-2d/**"
       - "projects/engines/geometry/crates/geom-bench/**"
       - "projects/engines/geometry/crates/geom-bvh/**"
+      - "projects/engines/geometry/crates/geom-cloud/**"
       - "projects/engines/geometry/crates/geom-curve/**"
+      - "projects/engines/geometry/crates/geom-draw/**"
+      - "projects/engines/geometry/crates/geom-field/**"
+      - "projects/engines/geometry/crates/geom-format/**"
       - "projects/engines/geometry/crates/geom-fuzz/**"
       - "projects/engines/geometry/crates/geom-gen/**"
+      - "projects/engines/geometry/crates/geom-intersect/**"
       - "projects/engines/geometry/crates/geom-linalg/**"
       - "projects/engines/geometry/crates/geom-math/**"
+      - "projects/engines/geometry/crates/geom-mesh/**"
+      - "projects/engines/geometry/crates/geom-name/**"
       - "projects/engines/geometry/crates/geom-num/**"
       - "projects/engines/geometry/crates/geom-nurbs/**"
       - "projects/engines/geometry/crates/geom-op/**"
+      - "projects/engines/geometry/crates/geom-poly/**"
       - "projects/engines/geometry/crates/geom-run/**"
+      - "projects/engines/geometry/crates/geom-sketch/**"
+      - "projects/engines/geometry/crates/geom-spatial/**"
+      - "projects/engines/geometry/crates/geom-subd/**"
       - "projects/engines/geometry/crates/geom-surface/**"
       - "projects/engines/geometry/crates/geom-test/**"
+      - "projects/engines/geometry/crates/geom-topo/**"
       - "Cargo.toml"
       - "Cargo.lock"
       - ".cargo/**"
@@ -71,19 +84,32 @@ on:
   push:
     branches: [main]
     paths:
+      - "projects/engines/geometry/crates/geom-2d/**"
       - "projects/engines/geometry/crates/geom-bench/**"
       - "projects/engines/geometry/crates/geom-bvh/**"
+      - "projects/engines/geometry/crates/geom-cloud/**"
       - "projects/engines/geometry/crates/geom-curve/**"
+      - "projects/engines/geometry/crates/geom-draw/**"
+      - "projects/engines/geometry/crates/geom-field/**"
+      - "projects/engines/geometry/crates/geom-format/**"
       - "projects/engines/geometry/crates/geom-fuzz/**"
       - "projects/engines/geometry/crates/geom-gen/**"
+      - "projects/engines/geometry/crates/geom-intersect/**"
       - "projects/engines/geometry/crates/geom-linalg/**"
       - "projects/engines/geometry/crates/geom-math/**"
+      - "projects/engines/geometry/crates/geom-mesh/**"
+      - "projects/engines/geometry/crates/geom-name/**"
       - "projects/engines/geometry/crates/geom-num/**"
       - "projects/engines/geometry/crates/geom-nurbs/**"
       - "projects/engines/geometry/crates/geom-op/**"
+      - "projects/engines/geometry/crates/geom-poly/**"
       - "projects/engines/geometry/crates/geom-run/**"
+      - "projects/engines/geometry/crates/geom-sketch/**"
+      - "projects/engines/geometry/crates/geom-spatial/**"
+      - "projects/engines/geometry/crates/geom-subd/**"
       - "projects/engines/geometry/crates/geom-surface/**"
       - "projects/engines/geometry/crates/geom-test/**"
+      - "projects/engines/geometry/crates/geom-topo/**"
       - "Cargo.toml"
       - "Cargo.lock"
       - ".cargo/**"
@@ -125,7 +151,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        target: [boxtree_fuzz, curves_fuzz, linalg_fuzz, maths_fuzz, nurbs_fuzz, orient2d_fuzz, predicates_fuzz, roots_fuzz, surfaces_fuzz, transforms_fuzz, variants_fuzz, wide_fuzz]
+        target: [boxtree_fuzz, cbor_fuzz, curves_fuzz, linalg_fuzz, maths_fuzz, nurbs_fuzz, orient2d_fuzz, predicates_fuzz, roots_fuzz, surfaces_fuzz, transforms_fuzz, variants_fuzz, wide_fuzz]
     defaults:
       run:
         shell: bash
@@ -418,12 +444,12 @@ jobs:
       - name: Cargo.lock is the reviewed one
         run: cargo metadata --locked --format-version 1 > /dev/null
       # Gate 1 (G43): on the first leg, Kani must first fail on a planted violation, the narrowing
-      # dropping a set bit (geom-test's trip module and binary).
+      # to a shorter float dropping a set bit (geom-test's trip module and binary).
       - name: Kani fails on a planted violation
         if: strategy.job-index == 0
         run: >-
           cargo run --locked -q -p geom-test --bin trip -- kani-op --
-          cargo kani -p geom-op --harness cbor::proofs::binary32_is_exact_and_shortest --exact
+          cargo kani -p geom-op --harness cbor::proofs::binary16_is_exact_and_shortest --exact
       - name: Prove ${{ matrix.proof }}
         run: |
           start=$(date +%s)

@@ -1026,7 +1026,9 @@ dependencies = [
  "geom-sketch",
  "geom-subd",
  "geom-surface",
+ "geom-test",
  "geom-topo",
+ "serde_json",
 ]
 
 [[package]]
@@ -1039,6 +1041,7 @@ dependencies = [
  "geom-bench",
  "geom-bvh",
  "geom-curve",
+ "geom-format",
  "geom-gen",
  "geom-linalg",
  "geom-math",

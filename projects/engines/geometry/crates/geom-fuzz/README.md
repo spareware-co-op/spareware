@@ -10,7 +10,9 @@ how each engine runs a target, on your machine and in CI. The first target built
 agree with the exact determinant of orient2d's definition, computed from scratch. The others:
 `predicates` (`src/predicates.rs`, G11), every exact predicate answers and swapping two points
 flips its sign; `wide` (`src/wide.rs`, G26), the wide integers agree with `num-bigint` on
-every operation at every width, `I128` to the reserved 768 bits; and, for Gate 2 (decision 32.44:
+every operation at every width, `I128` to the reserved 768 bits; `cbor` (`src/cbor.rs`, G91),
+`geom-format`'s strict CBOR decoder and its text form never panic, refuse inside their input and
+convert both ways bit for bit; and, for Gate 2 (decision 32.44:
 a target per phase-2 code piece), `curves` (`src/curves.rs`) and `surfaces` (`src/surfaces.rs`),
 every curve and surface kind built from any bytes keeps the kind contract kit
 (`geom_curve::contract`, `geom_surface::contract`) under any typed transform.
