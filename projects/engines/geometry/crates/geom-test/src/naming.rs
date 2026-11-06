@@ -1242,13 +1242,13 @@ fn never_made() -> Stored {
     )
 }
 
-/// The scenarios of SolidCraft's naming tests, written in this kernel's terms (take map item 15,
+/// The scenarios of `SolidCraft`'s naming tests, written in this kernel's terms (take map item 15,
 /// `projects/kit/notes/G01-evidence/15-take-map-solidcore-craft.md`): the parametric edit, the cut
 /// that splits, the face merged and parted again, the model evaluated again, the name no history
-/// holds. SolidCraft's tests of blends, fillets, shells, chamfers, sketches and thickened sheets
+/// holds. `SolidCraft`'s tests of blends, fillets, shells, chamfers, sketches and thickened sheets
 /// need operations this kernel has not built; each of those scenarios' question, whether a
 /// reference follows the entity it named or says it cannot, is asked here of what exists. Where
-/// SolidCraft finds a reference by geometry when its history is gone, this kernel says the name is
+/// `SolidCraft` finds a reference by geometry when its history is gone, this kernel says the name is
 /// unknown (20.4): `naming/0018`.
 ///
 /// Kept apart from [`fixtures`] so that catalogue's golden stands; these are held to their
