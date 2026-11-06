@@ -1357,6 +1357,17 @@ fn direct_digest(group: &str, name: &str, class: Class) -> Option<Digest> {
                         .bound(&mut geom_run::WorkMeter::new(geom_run::Budget::UNLIMITED))
                 }),
         ),
+        ("attributes", "apply") => fold(inputs::attributes::apply(class).iter().map(
+            |scene| -> Result<u64, geom_name::AttrError> {
+                let (after, notes) = geom_name::apply(
+                    &scene.defs,
+                    &scene.before,
+                    &scene.history,
+                    &geom_name::Step::default(),
+                )?;
+                Ok(after.iter().count() as u64 + notes.len() as u64)
+            },
+        )),
         ("topo", "column_edit") => fold(inputs::topo::column_edit(class).iter().map(
             |(values, row, value)| -> Result<u64, geom_topo::TopoError> {
                 let mut column: geom_topo::Column<geom_topo::Face, u64> = geom_topo::Column::new();
