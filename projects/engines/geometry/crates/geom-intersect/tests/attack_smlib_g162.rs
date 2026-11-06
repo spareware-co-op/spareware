@@ -219,31 +219,61 @@ fn wr_740_a_point_near_an_arcs_centre_has_its_foot_at_the_points_angle() {
     );
 }
 
-/// The same defect at 1e-6 of the radius from the centre, the nearest of the defect's points. A
-/// certified search costs about the radius over that distance in spans, which does not fit the
-/// meter at a floor of 1e-9 (CI: it stops with `BudgetExceeded` even with sixteen times the
-/// budget). That is a defined refusal, and the test takes it; an answer, if one comes, must be the
-/// foot at the point's angle. Reported on the pull request as a limit, not a wrong answer.
+/// The same defect at 1e-6 of the radius from the centre, the nearest of the defect's points, and
+/// what the search costs on the way there. Nothing in the kernel's guarantees promises an answer
+/// within a given budget: the search is certified, and a certified search that runs out of meter
+/// stops with `BudgetExceeded`, the typed refusal of every metered call. Near a centre of
+/// curvature the distance varies only by about the radius times the gap over the whole arc, so no
+/// span can be dropped until it is about the gap wide, and the cost is about the radius over the
+/// gap in spans: measured on the R5 quarter arc at a floor of 1e-9, the least budget that answers
+/// is 2^15 at 1e-2, 2^18 at 1e-3, 2^22 at 1e-4, 2^25 at 1e-5 and 2^28 at 1e-6 (about a minute in a
+/// release build), a factor of ten (three or four bits) a decade. So this is a limit of cost, not
+/// of the answer: with a budget of 2^28 the answer comes and is the foot at the point's angle. The
+/// test holds the refusal at the meter (sixteen times it, 2^26, is refused too, as CI first showed), and holds the cost law on the
+/// cheap decades (answered at 2^15 for 1e-2; refused at 2^16 and answered at 2^20 for 1e-3).
 #[test]
-fn wr_740_a_point_a_millionth_of_the_radius_from_the_centre_is_answered_or_stopped() {
+fn wr_740_a_point_a_millionth_of_the_radius_from_the_centre_is_stopped_by_the_budget() {
     let quarter = arc([1.0, 2.0], 5.0, (0.0, 0.5));
     for a in [0.05, 0.25, 0.45] {
         let p = near_centre(1e-6, a);
-        match project_curve(&quarter, &p, 1e-9, &mut meter()) {
-            Ok(Projection::Points(points)) => {
-                let want = 5.0 - 1e-6;
-                let foot = points
-                    .iter()
-                    .find(|n| n.at[0].lo() - 1e-7 <= a && a <= n.at[0].hi() + 1e-7)
-                    .unwrap_or_else(|| panic!("a {a}: no foot at the angle: {points:?}"));
-                assert!(
-                    foot.distance.lo() - 1e-8 <= want && want <= foot.distance.hi() + 1e-8,
-                    "a {a}: {foot:?}"
-                );
-            }
-            Err(IntersectError::BudgetExceeded) => {}
-            other => panic!("a {a}: {other:?}"),
-        }
+        let found = project_curve(&quarter, &p, 1e-9, &mut meter());
+        assert!(
+            matches!(found, Err(IntersectError::BudgetExceeded)),
+            "a {a}: {}",
+            short(&found)
+        );
+    }
+}
+
+/// The cost law behind the test above, on the decades that are cheap: the answer is the foot at
+/// the point's angle, and each decade closer to the centre costs about ten times the work.
+#[test]
+fn wr_740_the_cost_near_a_centre_grows_as_the_radius_over_the_gap() {
+    let quarter = arc([1.0, 2.0], 5.0, (0.0, 0.5));
+    let run = |rho: f64, bits: u32| {
+        let mut m = WorkMeter::new(Budget::of_work(1u64 << bits));
+        project_curve(&quarter, &near_centre(rho, 0.25), 1e-9, &mut m)
+    };
+    for (rho, enough, short_of) in [(1e-2, 15, 13), (1e-3, 20, 16)] {
+        let found = run(rho, enough);
+        let Ok(Projection::Points(points)) = &found else {
+            panic!("rho {rho} at 2^{enough}: {}", short(&found));
+        };
+        let foot = points
+            .iter()
+            .find(|n| n.at[0].lo() - 1e-7 <= 0.25 && 0.25 <= n.at[0].hi() + 1e-7)
+            .unwrap_or_else(|| panic!("rho {rho}: no foot at the angle: {points:?}"));
+        let want = 5.0 - rho;
+        assert!(
+            foot.distance.lo() - 1e-8 <= want && want <= foot.distance.hi() + 1e-8,
+            "rho {rho}: {foot:?}"
+        );
+        let found = run(rho, short_of);
+        assert!(
+            matches!(found, Err(IntersectError::BudgetExceeded)),
+            "rho {rho} at 2^{short_of}: {}",
+            short(&found)
+        );
     }
 }
 
@@ -376,19 +406,19 @@ fn wr_740_a_foot_on_a_cut_of_a_parabola_spline_is_one_point() {
     );
 }
 
-/// The spline arc at 1e-5 of the radius from its centre: like the circle at 1e-6, the search
-/// stops at the budget (CI), a defined refusal; an answer must be the foot.
+/// The spline arc at 1e-5 of the radius from its centre: like the circle at 1e-6, the search is
+/// stopped by the budget (see `wr_740_a_point_a_millionth_of_the_radius_from_the_centre_is_stopped_by_the_budget`
+/// for why that is a cost, not a wrong answer).
 #[test]
-fn wr_740_a_spline_arc_at_a_hundred_thousandth_of_the_radius_is_answered_or_stopped() {
+fn wr_740_a_spline_arc_at_a_hundred_thousandth_of_the_radius_is_stopped_by_the_budget() {
     for a in [PI / 8.0, 3.0 * PI / 8.0] {
-        let mut bad: Vec<String> = Vec::new();
         let p = [1e-5 * a.cos(), 1e-5 * a.sin()];
-        match project_curve(&spline_quarter(), &p, 1e-9, &mut meter()) {
-            Err(IntersectError::BudgetExceeded) => {}
-            Ok(Projection::Points(_)) => spline_foot_failures(1e-5, a, &mut bad),
-            other => bad.push(format!("a {a}: {}", short(&other))),
-        }
-        assert!(bad.is_empty(), "{}", bad.join("\n"));
+        let found = project_curve(&spline_quarter(), &p, 1e-9, &mut meter());
+        assert!(
+            matches!(found, Err(IntersectError::BudgetExceeded)),
+            "a {a}: {}",
+            short(&found)
+        );
     }
 }
 
