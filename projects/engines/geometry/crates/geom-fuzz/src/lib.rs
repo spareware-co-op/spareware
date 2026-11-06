@@ -10,9 +10,11 @@
 //! determinant of orient2d's definition, computed from scratch, which is also proven by Kani on a
 //! bounded domain; [`wide`] (G26), the wide integers agree with `num-bigint` on every
 //! operation at every width; [`variants`] (G42), every variant of every generated exact path
-//! returns the exact value of its description, evaluated in big integers; [`arenas`] (G80),
-//! `geom-topo` publishes exactly the arenas its rules allow, and a body's versions never see each
-//! other's edits; and [`make`] (G101), the primitives and transforms return only what the full checker passes, keep their laws,
+//! returns the exact value of its description, evaluated in big integers; [`cbor`] (G91),
+//! `geom-format`'s strict CBOR decoder and its text form never panic, refuse inside their input and
+//! convert both ways bit for bit; [`arenas`] (G80), `geom-topo` publishes exactly the arenas its
+//! rules allow, and a body's versions never see each other's edits; and [`make`] (G101), the
+//! primitives and transforms return only what the full checker passes, keep their laws,
 //! and refuse with a typed error. Gate 2 (32.44) adds
 //! [`curves`], every curve kind keeps the kind contract on any bytes (G60 to G64, G67, G68), and
 //! [`surfaces`], every surface kind likewise (G60, G65 to G68), and [`nurbs`], NURBS curves keep
@@ -124,6 +126,8 @@
 //!   `bolero-honggfuzz` or `bolero-kani`).
 //! - `geom-gen` (Apache-2.0, ours, development only), whose description parser the [`variants`]
 //!   target reads the predicates with.
+//! - `geom-format` and `geom-run` (Apache-2.0, ours), the code under test of the [`cbor`] target and
+//!   the work meter it reads with.
 //! - `geom-topo`, `geom-curve`, `geom-surface`, `geom-math` and `geom-run` (Apache-2.0, ours), the code
 //!   under test of the [`arenas`] target and the values that fill its arenas.
 //! - `geom-make`, `geom-check` and `geom-op` (Apache-2.0, ours), with the crates above, the code under
@@ -176,6 +180,7 @@ use core::fmt;
 
 pub mod arenas;
 pub mod boxtree;
+pub mod cbor;
 pub mod curves;
 pub mod linalg;
 pub mod make;
