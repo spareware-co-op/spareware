@@ -99,8 +99,10 @@ impl Category {
         match self {
             Category::NumericalRecipes => {
                 "Numerical Recipes code is never ported, read for porting or written from memory \
-                 (29.4, 29.6; 29.20 rule 7): write the routine from the primary source chapter \
-                 29.4 names, with its own names and constants derived and cited in the header"
+                 (29.4, 29.6; 29.20 rule 7), except SMLib's and solidcore's routines (32.44), \
+                 whose ported file is added to scan/repo.rs's exemptions: otherwise write the \
+                 routine from the primary source chapter 29.4 names, with its own names and \
+                 constants derived and cited in the header"
             }
             Category::CopyleftNotice => {
                 "no GPL, LGPL or AGPL code is ever copied into Spare Kit (29.2): remove what came \

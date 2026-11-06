@@ -6,6 +6,8 @@
 //!
 //! The Transport discipline is the first to be covered: see [`transport`].
 
+#[cfg(feature = "cloud")]
+pub mod cloud;
 pub mod error;
 pub mod schema;
 pub mod transport;

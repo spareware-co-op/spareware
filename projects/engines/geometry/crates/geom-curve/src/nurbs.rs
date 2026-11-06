@@ -5,7 +5,9 @@
 //! forms in interval arithmetic (piece G59): the piece holding the parameter, or each piece
 //! meeting the span cut down to it by de Casteljau subdivision at interval parameters, its box
 //! from the convex hull; derivatives from hodographs, and for a rational curve by Leibniz's rule on
-//! W·C = A, C^(k) = (A^(k) − Σ C(k, i)·W^(i)·C^(k−i)) / W, in interval boxes. Conversion to NURBS is
+//! W·C = A, C^(k) = (A^(k) − Σ C(k, i)·W^(i)·C^(k−i)) / W, in interval boxes, with C over a span
+//! taken from the piece's convex hull rather than from the boxes of A and W, which are far wider
+//! when the weights spread (chapter 19.3, piece G68). Conversion to NURBS is
 //! the curve itself, exactly. A split inserts the parameter until its multiplicity is the degree
 //! (A5.1) and parts the control points there. Reversal negates and reverses the knots, which is
 //! exact. A transform maps the control points (affine invariance) with the weights kept.
@@ -43,6 +45,7 @@ use crate::affine::Entries;
 use crate::error::CurveError;
 use crate::map::{NurbsForm, ParamMap};
 use crate::param::{CurveKind, DerivativeBound, ParamCurve};
+use crate::tight;
 
 /// `x` as a point interval.
 fn iv(x: f64) -> Result<Interval, CurveError> {
@@ -92,10 +95,13 @@ fn binomial(k: usize, i: usize) -> Result<Interval, CurveError> {
     Ok(c)
 }
 
-/// Leibniz's rule on W·C = A in intervals: C^(k) from A^(k), W^(1..=k) and C^(0..k), W > 0.
+/// Leibniz's rule on W·C = A in intervals: C^(k) from A^(k), W^(1..=k) and C^(0..k), W > 0; C
+/// itself cut to `value` when it is known from elsewhere (a piece's convex hull, chapter 19.3),
+/// which narrows every C^(k) after it.
 fn leibniz<const D: usize>(
     a: &[[Interval; D]],
     w: &[Interval],
+    value: Option<&Bounds<D>>,
 ) -> Result<Vec<[Interval; D]>, CurveError> {
     let w0 = at(w, 0)?;
     let mut c: Vec<[Interval; D]> = Vec::with_capacity(a.len());
@@ -110,6 +116,11 @@ fn leibniz<const D: usize>(
         }
         for x in &mut v {
             *x = x.div(w0)?;
+        }
+        if let (0, Some(b)) = (k, value) {
+            for (x, (&lo, &hi)) in v.iter_mut().zip(b.lo.iter().zip(&b.hi)) {
+                *x = tight::meet(*x, Interval::new(lo, hi)?)?;
+            }
         }
         c.push(v);
     }
@@ -209,7 +220,8 @@ fn piece_derivative_bound<const D: usize>(
     if let Some(w0) = ws.first_mut() {
         *w0 = Interval::new(range.lo[0], range.hi[0])?;
     }
-    let c = leibniz(&a, &ws)?;
+    // C itself lies in the hull of the piece's Euclidean control points.
+    let c = leibniz(&a, &ws, Some(&piece.bound(meter)?))?;
     Ok(hull_of(c.last().ok_or(CurveError::Defect)?))
 }
 
@@ -257,7 +269,7 @@ impl<const D: usize> ParamCurve<D> for Curve<D> {
             }
         }
         if piece.is_rational() {
-            leibniz(&values, &weights)
+            leibniz(&values, &weights, None)
         } else {
             Ok(values)
         }

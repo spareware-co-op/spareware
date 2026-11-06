@@ -51,7 +51,7 @@
 //! Consulted: NURBS-Python (geomdl), MIT,
 //!   <https://github.com/orbingol/NURBS-Python/blob/9d2555ae8217b5480ee83afb526a835ac3cc3c27/geomdl/fitting.py>,
 //!   for the book's equation numbers of the parameter rules and the least-squares knot placement.
-//! SPDX-License-Identifier: MPL-2.0 AND Apache-2.0
+//! SPDX-License-Identifier: Apache-2.0
 //!
 //! Cost: linear in the number of data points (times D for the distances), plus p additions per
 //! averaged knot; each result is one allocation, charged to the meter first.
