@@ -1357,6 +1357,30 @@ fn direct_digest(group: &str, name: &str, class: Class) -> Option<Digest> {
                         .bound(&mut geom_run::WorkMeter::new(geom_run::Budget::UNLIMITED))
                 }),
         ),
+        ("topo", "column_edit") => fold(inputs::topo::column_edit(class).iter().map(
+            |(values, row, value)| -> Result<u64, geom_topo::TopoError> {
+                let mut column: geom_topo::Column<geom_topo::Face, u64> = geom_topo::Column::new();
+                for &v in values {
+                    column.push(v)?;
+                }
+                let original = column.clone();
+                column.set(geom_topo::Ix::new(*row).unwrap(), *value)?;
+                let a: u64 = original.iter().fold(0, |s, v| s.wrapping_add(*v));
+                let b: u64 = column.iter().fold(0, |s, v| s.wrapping_add(*v));
+                Ok(a.wrapping_add(b))
+            },
+        )),
+        ("topo", "publish") => fold(inputs::topo::publish(class).iter().map(
+            |builder| -> Result<u32, geom_topo::TopoError> {
+                let mut meter = geom_run::WorkMeter::new(geom_run::Budget::UNLIMITED);
+                let body = builder.clone().publish(
+                    geom_topo::BodyKind::Solid,
+                    geom_topo::Ix::new(1).unwrap(),
+                    &mut meter,
+                )?;
+                Ok(body.arenas().fins.len())
+            },
+        )),
         ("bvh", "tree_build_query") => fold(inputs::bvh::tree_build_query(class).iter().map(
             |(entries, query)| {
                 let mut meter = geom_run::WorkMeter::new(geom_run::Budget::UNLIMITED);
