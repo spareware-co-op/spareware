@@ -542,10 +542,14 @@ fn regions_outside_are_refused() {
 enum Part {
     Second,
     Normal,
+    /// The partials over the box, each moved.
+    Partials,
+    /// The partials over the box, the last one missing.
+    Short,
 }
 
-/// A NURBS surface whose second-derivative or normal-derivative bound over any box wider than a
-/// point is moved a million units from the truth.
+/// A NURBS surface whose second-derivative, normal-derivative or partials' bound over any box wider
+/// than a point is moved a million units from the truth, or whose partials over it come one short.
 struct Moved(Surface<3>, Part);
 
 fn far(b: Bounds<3>) -> Bounds<3> {
@@ -592,7 +596,21 @@ impl ParamSurface for Moved {
         k: usize,
         m: &mut WorkMeter<'_>,
     ) -> Result<Vec<[Interval; 3]>, CurveError> {
-        self.0.partials_over(r, s, k, m)
+        let mut p = self.0.partials_over(r, s, k, m)?;
+        if r.0.0 < r.0.1 {
+            match self.1 {
+                Part::Partials => {
+                    for row in &mut p {
+                        *row = row.map(|x| Interval::new(x.lo() + 1e6, x.hi() + 1e6).unwrap());
+                    }
+                }
+                Part::Short => {
+                    p.pop();
+                }
+                Part::Second | Part::Normal => {}
+            }
+        }
+        Ok(p)
     }
     fn breaks(&self) -> (Vec<f64>, Vec<f64>) {
         self.0.breaks()
@@ -661,9 +679,9 @@ impl ParamSurface for Moved {
 }
 
 #[test]
-fn wrong_second_and_normal_bounds_are_caught() {
+fn wrong_partial_second_and_normal_bounds_are_caught() {
     // A gently curved biquadratic patch (z = x² + y² sampled on its net): every box the contract
-    // takes has bounded second and normal partials, so a moved one must be caught.
+    // takes has bounded partials of each kind, so a moved or missing one must be caught.
     let b = Basis::new(2, vec![0.0, 0.0, 0.0, 1.0, 1.0, 1.0]).unwrap();
     let mut pts = Vec::new();
     for i in 0..3 {
@@ -680,7 +698,7 @@ fn wrong_second_and_normal_bounds_are_caught() {
     let t = TypedTransform::Exact(GridTransform::quarter_turns(Axis::X, 1));
     let m = &mut meter();
     assert_eq!(check(&s, &params, &t, m), Ok(()));
-    for part in [Part::Second, Part::Normal] {
+    for part in [Part::Second, Part::Normal, Part::Partials, Part::Short] {
         let e = check(&Moved(s.clone(), part), &params, &t, m).unwrap_err();
         assert_eq!(e.law, Law::DerivativeBoundHoldsDerivatives, "{part:?}: {e}");
     }

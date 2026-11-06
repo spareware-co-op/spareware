@@ -32,7 +32,7 @@
 //!   the number type so the same steps give the pieces and their interval enclosure; an unclamped
 //!   curve is refused instead of `NLib`'s skipping of extra end knots as bad data; pieces are
 //!   returned as curves with their own knots.
-//! SPDX-License-Identifier: MPL-2.0 AND Apache-2.0
+//! SPDX-License-Identifier: Apache-2.0
 //!
 //! Cost: O(s·p²) operations for s spans, each twice; one allocation per piece and its enclosure.
 

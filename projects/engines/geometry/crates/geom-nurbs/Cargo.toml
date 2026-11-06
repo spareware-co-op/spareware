@@ -3,9 +3,9 @@ name = "geom-nurbs"
 version = "0.0.0"
 edition.workspace = true
 publish.workspace = true
-# MPL-2.0 for Spare Kit's code, and Apache-2.0 for the NLib routines ported from NVIDIA's USD BRep
+# Apache-2.0 for Spare Kit's code and for the NLib routines ported from NVIDIA's USD BRep
 # (rule 29.20(4); their notices are in projects/engines/geometry/NOTICE).
-license = "MPL-2.0 AND Apache-2.0"
+license = "Apache-2.0"
 description = "Spare Kit geometry kernel: NURBS algorithms."
 
 [dependencies]
@@ -43,7 +43,7 @@ unsafe_code = "forbid"
 missing_docs = "warn"
 # Kani sets `cfg(kani)` when it compiles a proof; proofs and the code they need sit beside the
 # code under it (chapter 28.7).
-unexpected_cfgs = { level = "warn", check-cfg = ["cfg(kani)"] }
+unexpected_cfgs = { level = "warn", check-cfg = ["cfg(coverage_nightly)", "cfg(kani)"] }
 
 [lints.clippy]
 # The kernel's one lint posture: exactly geom-num's settings, here and in clippy.toml (the scaffold
