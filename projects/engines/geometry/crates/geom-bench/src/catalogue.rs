@@ -405,6 +405,7 @@ pub static OPS: &[Op] = &[
     Op { group: "mesh", name: "line_line", measures: "distance::line_line", classes: T, prepare: |c| bind(inputs::mesh::line_line(c), kernels::mesh::line_line) },
     Op { group: "mesh", name: "closest_dots", measures: "distance::product_difference", classes: T, prepare: |c| bind(inputs::mesh::closest_dots(c), kernels::mesh::closest_dots) },
     Op { group: "mesh", name: "triangles", measures: "geom_mesh::contact::triangles", classes: T, prepare: |c| bind(inputs::mesh::triangles(c), kernels::mesh::triangles) },
+    Op { group: "mesh", name: "envelope", measures: "geom_mesh::TriangleEnvelope::contains", classes: T, prepare: |c| bind(inputs::mesh::envelope(c), kernels::mesh::envelope) },
     // geom-nurbs's hot paths (pieces G56, G58 and G59; decision 32.44): evaluation, interpolation
     // and the Bernstein bound.
     Op { group: "nurbs", name: "curve_point", measures: "geom_nurbs::Curve::point", classes: T, prepare: |c| bind(inputs::nurbs::curve_point(c), kernels::nurbs::curve_point) },

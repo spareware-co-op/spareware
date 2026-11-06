@@ -1395,6 +1395,11 @@ fn direct_digest(group: &str, name: &str, class: Class) -> Option<Digest> {
                 geom_mesh::contact::Contact::Cross => geom_num::Sign::Positive,
             })
         })),
+        ("mesh", "envelope") => fold(
+            inputs::mesh::envelope(class)
+                .iter()
+                .map(|&(t, p)| geom_mesh::envelope::TriangleEnvelope::new(t, 1 << 16)?.contains(p)),
+        ),
         ("mesh", "exact_build") => fold(inputs::mesh::exact_build(class).iter().map(|p| {
             let mut meter = geom_run::WorkMeter::new(geom_run::Budget::UNLIMITED);
             geom_mesh::exact::build::build(p, &geom_run::Exec::serial(), &mut meter)
