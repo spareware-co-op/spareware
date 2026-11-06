@@ -1,6 +1,7 @@
 # nextest profiles for the geometry kernel's weekly Miri run (kernel architecture, section 28.8;
-# .github/workflows/kernel-quality.yml runs them). Nothing else in the repository uses nextest, and
-# the default profile is left as nextest ships it.
+# .github/workflows/kernel-quality.yml runs them). The job `suite` of .github/workflows/kernel.yml
+# also runs nextest, with the default profile, left as nextest ships it, to run the test suite in
+# parts (`--partition count:k/n`).
 #
 # cargo-nextest 0.9.146 (Apache-2.0 OR MIT) is pinned in the workflow. `on-timeout = "pass"` needs
 # 0.9.115 (https://nexte.st/docs/features/slow-tests/), so older versions are refused.
