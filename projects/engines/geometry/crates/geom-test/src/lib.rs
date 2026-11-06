@@ -223,8 +223,8 @@
 pub mod canonical;
 pub mod coverage;
 pub mod deps;
-pub mod fixture;
 pub mod fixed;
+pub mod fixture;
 pub mod foundation;
 pub mod golden;
 pub mod grid;
