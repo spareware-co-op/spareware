@@ -535,19 +535,27 @@ fn reversed(terms: &[Big; TERMS], degree: usize) -> Option<[Big; TERMS]> {
 }
 
 impl Exact {
-    /// The arithmetic of the basis (C, S), of a pencil of `degree` by `degree` matrices.
-    fn new(c: &Form<Entry>, s: &Form<Entry>, degree: usize) -> Result<Exact, NumError> {
-        let sums = minors(c, s).ok_or(NumError::BudgetExceeded)?;
+    /// Nothing yet, for [`Exact::set`] to fill where the value will live: the chain makes it large,
+    /// and setting it in place saves the copies that returning it by value, and by `?`, makes.
+    const EMPTY: Exact = Exact {
+        minors: [[Entry::ZERO; TERMS]; 4],
+        degree: 0,
+        chain: Chain::EMPTY,
+        real: 0,
+    };
+
+    /// Sets `self` to the arithmetic of the basis (C, S), of a pencil of `degree` by `degree`
+    /// matrices.
+    #[inline(never)]
+    fn set(&mut self, c: &Form<Entry>, s: &Form<Entry>, degree: usize) -> Result<(), NumError> {
+        self.minors = minors(c, s).ok_or(NumError::BudgetExceeded)?;
         let top = degree.checked_sub(1).ok_or(NumError::Degenerate)?;
-        let determinant = sums.get(top).ok_or(NumError::Degenerate)?;
-        let chain = Chain::of(&widened(determinant).ok_or(NumError::BudgetExceeded)?)?;
-        let real = chain.roots().distinct;
-        Ok(Exact {
-            minors: sums,
-            degree,
-            chain,
-            real,
-        })
+        let determinant = self.minors.get(top).ok_or(NumError::Degenerate)?;
+        let terms = widened(determinant).ok_or(NumError::BudgetExceeded)?;
+        self.degree = degree;
+        self.chain.fill(&terms)?;
+        self.real = self.chain.roots().distinct;
+        Ok(())
     }
 
     /// The determinant.
@@ -577,30 +585,48 @@ impl Exact {
     /// Whether some gap between roots holds a definite member.
     fn definite(&self) -> Result<bool, NumError> {
         let size = u8::try_from(self.degree).map_err(|_| NumError::BudgetExceeded)?;
-        let full = |i: Inertia| i.rank() == size && i.one_sided();
         for side in [1, -1] {
-            let i = self
-                .inertia(&At::whole(side))
-                .ok_or(NumError::BudgetExceeded)?;
-            if full(i) {
+            if self.full_at(&At::whole(side), size)? {
                 return Ok(true);
             }
         }
+        if self.full_in_gaps(&self.chain, false, size)? {
+            return Ok(true);
+        }
+        let mut back = Chain::EMPTY;
+        self.reverse_into(&mut back)?;
+        self.full_in_gaps(&back, true, size)
+    }
+
+    /// Whether the member at `at` is definite: of full rank and of one sign.
+    #[inline(never)]
+    fn full_at(&self, at: &At, size: u8) -> Result<bool, NumError> {
+        let i = self.inertia(at).ok_or(NumError::BudgetExceeded)?;
+        Ok(i.rank() == size && i.one_sided())
+    }
+
+    /// The chain of the determinant reversed, whose roots are the inverses, set into `back`.
+    #[inline(never)]
+    fn reverse_into(&self, back: &mut Chain<LIMBS>) -> Result<(), NumError> {
         let terms = self.determinant().ok_or(NumError::Degenerate)?;
         let flipped = reversed(&terms, self.degree).ok_or(NumError::BudgetExceeded)?;
-        let back = Chain::of(&flipped)?;
-        for (chain, turned) in [(&self.chain, false), (&back, true)] {
-            let inside = between(chain, &At::whole(-1), &At::whole(1))?;
-            for gap in 1..inside {
-                let at = sample(chain, gap)?;
-                let point = if turned {
-                    upright(&at).ok_or(NumError::BudgetExceeded)?
-                } else {
-                    at
-                };
-                if full(self.inertia(&point).ok_or(NumError::BudgetExceeded)?) {
-                    return Ok(true);
-                }
+        back.fill(&flipped)
+    }
+
+    /// Whether a point in some gap between the roots of `chain` inside (-1, 1) is a definite
+    /// member; `turned` when `chain` is the reversed determinant's, whose points are inverted.
+    #[inline(never)]
+    fn full_in_gaps(&self, chain: &Chain<LIMBS>, turned: bool, size: u8) -> Result<bool, NumError> {
+        let inside = between(chain, &At::whole(-1), &At::whole(1))?;
+        for gap in 1..inside {
+            let at = sample(chain, gap)?;
+            let point = if turned {
+                upright(&at).ok_or(NumError::BudgetExceeded)?
+            } else {
+                at
+            };
+            if self.full_at(&point, size)? {
+                return Ok(true);
             }
         }
         Ok(false)
@@ -1155,17 +1181,15 @@ fn clear_three(m: &Form<Entry>) -> Option<bool> {
     Some(!rows.principal(7)?.is_zero())
 }
 
-/// One apex: the pencil of base conics, whose base points are the shared lines through it.
-fn one_apex(a: &Form<Entry>, b: &Form<Entry>, v: &[Big; 4]) -> Result<Pencil, NumError> {
-    let on = |f: &Form<Entry>| on_base(f, v).ok_or(NumError::BudgetExceeded);
-    let (p, q) = (on(a)?, on(b)?);
-    // A member of rank three on three coordinates makes the base determinant no zero polynomial.
-    let (c, s) = basis(&p, &q, clear_three)?.ok_or(NumError::Degenerate)?;
-    let pencil = Exact::new(&c, &s, 3)?;
-    let last = pencil.chain.last();
-    let (terms, degree) = last.ok_or(NumError::Degenerate)?;
+/// The apex's topology, by the degree of the base pencil's last polynomial.
+#[inline(never)]
+fn apex_topology(
+    pencil: &Exact,
+    terms: &[Big; TERMS],
+    degree: usize,
+) -> Result<Topology, NumError> {
     let apex = Topology { points: 1, ..EMPTY };
-    let topology = match degree {
+    Ok(match degree {
         0 if pencil.real == 3 && pencil.definite()? => apex,
         0 if pencil.real == 3 => Topology {
             lines: 4,
@@ -1177,58 +1201,81 @@ fn one_apex(a: &Form<Entry>, b: &Form<Entry>, v: &[Big; 4]) -> Result<Pencil, Nu
             meets: 1,
             ..EMPTY
         },
-        1 => {
-            let [g0, g1, ..] = primitive(terms).ok_or(NumError::BudgetExceeded)?;
-            let root = root_of(&g0, &g1).ok_or(NumError::BudgetExceeded)?;
-            let i = pencil.inertia(&root).ok_or(NumError::BudgetExceeded)?;
-            let left = pencil.beside(&root, true).ok_or(NumError::BudgetExceeded)?;
-            let right = pencil
-                .beside(&root, false)
-                .ok_or(NumError::BudgetExceeded)?;
-            match i.rank() {
-                2 if i.one_sided() => Topology {
-                    double_lines: 1,
-                    ..EMPTY
-                },
-                2 => Topology {
-                    double_lines: 1,
-                    lines: 2,
-                    meets: 1,
-                    ..EMPTY
-                },
-                _ if [left, right].iter().any(|i| i.rank() == 3 && i.one_sided()) => apex,
-                _ => Topology {
-                    double_lines: 2,
-                    meets: 1,
-                    ..EMPTY
-                },
-            }
-        }
-        _ => {
-            let [_, g1, g2, ..] = primitive(terms).ok_or(NumError::BudgetExceeded)?;
-            let twice = Big::from_i64(2)
-                .checked_mul(&g2)
-                .ok_or(NumError::BudgetExceeded)?;
-            let root = root_of(&g1, &twice).ok_or(NumError::BudgetExceeded)?;
-            let i = pencil.inertia(&root).ok_or(NumError::BudgetExceeded)?;
-            match i.rank() {
-                2 => Topology {
-                    lines: 2,
-                    meets: 1,
-                    ..EMPTY
-                },
-                1 => Topology {
-                    double_lines: 1,
-                    ..EMPTY
-                },
-                _ if pencil.definite()? => apex,
-                _ => Topology {
-                    same: true,
-                    ..EMPTY
-                },
-            }
-        }
-    };
+        1 => apex_one_double(pencil, terms)?,
+        _ => apex_more(pencil, terms)?,
+    })
+}
+
+/// The apex's topology when the last polynomial is of degree one.
+#[inline(never)]
+fn apex_one_double(pencil: &Exact, terms: &[Big; TERMS]) -> Result<Topology, NumError> {
+    let apex = Topology { points: 1, ..EMPTY };
+    let [g0, g1, ..] = primitive(terms).ok_or(NumError::BudgetExceeded)?;
+    let root = root_of(&g0, &g1).ok_or(NumError::BudgetExceeded)?;
+    let i = pencil.inertia(&root).ok_or(NumError::BudgetExceeded)?;
+    let left = pencil.beside(&root, true).ok_or(NumError::BudgetExceeded)?;
+    let right = pencil
+        .beside(&root, false)
+        .ok_or(NumError::BudgetExceeded)?;
+    Ok(match i.rank() {
+        2 if i.one_sided() => Topology {
+            double_lines: 1,
+            ..EMPTY
+        },
+        2 => Topology {
+            double_lines: 1,
+            lines: 2,
+            meets: 1,
+            ..EMPTY
+        },
+        _ if [left, right].iter().any(|i| i.rank() == 3 && i.one_sided()) => apex,
+        _ => Topology {
+            double_lines: 2,
+            meets: 1,
+            ..EMPTY
+        },
+    })
+}
+
+/// The apex's topology when the last polynomial is of degree two or more.
+#[inline(never)]
+fn apex_more(pencil: &Exact, terms: &[Big; TERMS]) -> Result<Topology, NumError> {
+    let apex = Topology { points: 1, ..EMPTY };
+    let [_, g1, g2, ..] = primitive(terms).ok_or(NumError::BudgetExceeded)?;
+    let twice = Big::from_i64(2)
+        .checked_mul(&g2)
+        .ok_or(NumError::BudgetExceeded)?;
+    let root = root_of(&g1, &twice).ok_or(NumError::BudgetExceeded)?;
+    let i = pencil.inertia(&root).ok_or(NumError::BudgetExceeded)?;
+    Ok(match i.rank() {
+        2 => Topology {
+            lines: 2,
+            meets: 1,
+            ..EMPTY
+        },
+        1 => Topology {
+            double_lines: 1,
+            ..EMPTY
+        },
+        _ if pencil.definite()? => apex,
+        _ => Topology {
+            same: true,
+            ..EMPTY
+        },
+    })
+}
+
+/// One apex: the pencil of base conics, whose base points are the shared lines through it.
+fn one_apex(a: &Form<Entry>, b: &Form<Entry>, v: &[Big; 4]) -> Result<Pencil, NumError> {
+    let on = |f: &Form<Entry>| on_base(f, v).ok_or(NumError::BudgetExceeded);
+    let (p, q) = (on(a)?, on(b)?);
+    // A member of rank three on three coordinates makes the base determinant no zero polynomial.
+    let (c, s) = basis(&p, &q, clear_three)?.ok_or(NumError::Degenerate)?;
+    let mut pencil = Exact::EMPTY;
+    pencil.set(&c, &s, 3)?;
+    let last = pencil.chain.last();
+    let (terms, degree) = last.ok_or(NumError::Degenerate)?;
+    let topology = apex_topology(&pencil, terms, degree)?;
     Ok(Pencil {
         segre: Segre::OneApex,
         real_roots: pencil.real,
@@ -1283,6 +1330,81 @@ fn flat_on_kernel(c: &Form<Entry>, s: &Form<Entry>, a: &At) -> Option<bool> {
     cofactors_vanish(c, s, &square)
 }
 
+/// The pencil's Segre symbol and topology, by the degree of its chain's last polynomial: each degree
+/// is read in a function of its own, so that none holds the integers of another's arm.
+#[inline(never)]
+fn by_degree(
+    pencil: &Exact,
+    c: &Form<Entry>,
+    s: &Form<Entry>,
+) -> Result<(Segre, Topology), NumError> {
+    let (terms, degree) = pencil.chain.last().ok_or(NumError::Degenerate)?;
+    match degree {
+        0 => Ok((Segre::Simple, simple(pencil)?)),
+        1 => with_one_double(pencil, terms),
+        2 => with_a_quadratic(pencil, c, s, terms),
+        _ => with_a_cubic(pencil, c, s, terms),
+    }
+}
+
+/// A last polynomial of degree one: one double root.
+#[inline(never)]
+fn with_one_double(pencil: &Exact, terms: &[Big; TERMS]) -> Result<(Segre, Topology), NumError> {
+    let [g0, g1, ..] = primitive(terms).ok_or(NumError::BudgetExceeded)?;
+    let root = root_of(&g0, &g1).ok_or(NumError::BudgetExceeded)?;
+    one_double(pencil, &root)
+}
+
+/// A last polynomial of degree two: a triple root, or two double roots.
+#[inline(never)]
+fn with_a_quadratic(
+    pencil: &Exact,
+    c: &Form<Entry>,
+    s: &Form<Entry>,
+    terms: &[Big; TERMS],
+) -> Result<(Segre, Topology), NumError> {
+    let [g0, g1, g2, ..] = primitive(terms).ok_or(NumError::BudgetExceeded)?;
+    let delta = g1
+        .checked_mul(&g1)
+        .zip(
+            Big::from_i64(4)
+                .checked_mul(&g2)
+                .and_then(|v| v.checked_mul(&g0)),
+        )
+        .and_then(|(x, y)| x.checked_sub(&y))
+        .ok_or(NumError::BudgetExceeded)?;
+    if delta.is_zero() {
+        let twice = Big::from_i64(2)
+            .checked_mul(&g2)
+            .ok_or(NumError::BudgetExceeded)?;
+        let root = root_of(&g1, &twice).ok_or(NumError::BudgetExceeded)?;
+        triple(pencil, &root)
+    } else {
+        two_doubles(pencil, c, s, &[g0, g1, g2])
+    }
+}
+
+/// A last polynomial of degree three or four: a fourfold root.
+#[inline(never)]
+fn with_a_cubic(
+    pencil: &Exact,
+    c: &Form<Entry>,
+    s: &Form<Entry>,
+    terms: &[Big; TERMS],
+) -> Result<(Segre, Topology), NumError> {
+    let [_, _, g2, g3, ..] = primitive(terms).ok_or(NumError::BudgetExceeded)?;
+    let thrice = Big::from_i64(3)
+        .checked_mul(&g3)
+        .ok_or(NumError::BudgetExceeded)?;
+    let root = root_of(&g2, &thrice).ok_or(NumError::BudgetExceeded)?;
+    let rank = pencil
+        .inertia(&root)
+        .ok_or(NumError::BudgetExceeded)?
+        .rank();
+    let flat = rank == 2 && flat_on_kernel(c, s, &root).ok_or(NumError::BudgetExceeded)?;
+    fourfold(pencil, &root, flat)
+}
+
 /// What the two quadrics `a` and `b` share, exactly.
 ///
 /// # Errors
@@ -1295,51 +1417,9 @@ pub fn classify(a: &Form<Entry>, b: &Form<Entry>) -> Result<Pencil, NumError> {
     let Some((c, s)) = basis(a, b, clear)? else {
         return singular(a, b);
     };
-    let pencil = Exact::new(&c, &s, 4)?;
-    let (terms, degree) = pencil.chain.last().ok_or(NumError::Degenerate)?;
-    let (segre, topology) = match degree {
-        0 => (Segre::Simple, simple(&pencil)?),
-        1 => {
-            let [g0, g1, ..] = primitive(terms).ok_or(NumError::BudgetExceeded)?;
-            let root = root_of(&g0, &g1).ok_or(NumError::BudgetExceeded)?;
-            one_double(&pencil, &root)?
-        }
-        2 => {
-            let [g0, g1, g2, ..] = primitive(terms).ok_or(NumError::BudgetExceeded)?;
-            let delta = g1
-                .checked_mul(&g1)
-                .zip(
-                    Big::from_i64(4)
-                        .checked_mul(&g2)
-                        .and_then(|v| v.checked_mul(&g0)),
-                )
-                .and_then(|(x, y)| x.checked_sub(&y))
-                .ok_or(NumError::BudgetExceeded)?;
-            if delta.is_zero() {
-                let twice = Big::from_i64(2)
-                    .checked_mul(&g2)
-                    .ok_or(NumError::BudgetExceeded)?;
-                let root = root_of(&g1, &twice).ok_or(NumError::BudgetExceeded)?;
-                triple(&pencil, &root)?
-            } else {
-                two_doubles(&pencil, &c, &s, &[g0, g1, g2])?
-            }
-        }
-        _ => {
-            let [_, _, g2, g3, ..] = primitive(terms).ok_or(NumError::BudgetExceeded)?;
-            let thrice = Big::from_i64(3)
-                .checked_mul(&g3)
-                .ok_or(NumError::BudgetExceeded)?;
-            let root = root_of(&g2, &thrice).ok_or(NumError::BudgetExceeded)?;
-            let rank = pencil
-                .inertia(&root)
-                .ok_or(NumError::BudgetExceeded)?
-                .rank();
-            let flat =
-                rank == 2 && flat_on_kernel(&c, &s, &root).ok_or(NumError::BudgetExceeded)?;
-            fourfold(&pencil, &root, flat)?
-        }
-    };
+    let mut pencil = Exact::EMPTY;
+    pencil.set(&c, &s, 4)?;
+    let (segre, topology) = by_degree(&pencil, &c, &s)?;
     Ok(Pencil {
         segre,
         real_roots: pencil.real,
