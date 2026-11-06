@@ -505,7 +505,7 @@ jobs:
         if: strategy.job-index == 0
         run: >-
           cargo run --locked -q -p geom-test --bin trip -- kani-format --
-          cargo kani -p geom-format --harness range::proofs::bits_is_the_magnitude_width --exact
+          cargo kani -p geom-format --harness range::proofs::real_accepts_exactly_the_finite_frame --exact
       - name: Prove ${{ matrix.proof }}
         run: |
           start=$(date +%s)

@@ -108,8 +108,8 @@ pub const VIOLATIONS: [Violation; 13] = [
         name: "kani-format",
         gate: "kernel-fuzz.yml kani-format",
         file: "projects/engines/geometry/crates/geom-format/src/range.rs",
-        anchor: "    v.unsigned_abs().bit_width()",
-        planted: "    v.unsigned_abs().bit_width() + 1",
+        anchor: "    (-REAL_LIMIT..=REAL_LIMIT).contains(&x)",
+        planted: "    (-REAL_LIMIT..REAL_LIMIT).contains(&x)",
         caught: &["VERIFICATION:- FAILED"],
     },
     Violation {
