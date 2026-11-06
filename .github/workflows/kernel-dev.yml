@@ -126,6 +126,11 @@ on:
 permissions:
   contents: read
 
+# A newer push to the same pull request cancels the runs it supersedes; a push to main does not.
+concurrency:
+  group: kernel-dev-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
 env:
   # The same pinned compiler as kernel.yml (chapter 28.13, the toolchain guard).
   RUST_TOOLCHAIN: "1.99.0"
