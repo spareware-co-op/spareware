@@ -989,7 +989,7 @@ mod tests {
             "Method: a method.",
             "Consulted: X, MIT, <https://example.org/x.c>,",
             "  for testing.",
-            "SPDX-License-Identifier: MPL-2.0",
+            "SPDX-License-Identifier: Apache-2.0",
             "",
             "```text",
             "- not an item",
@@ -1016,7 +1016,7 @@ mod tests {
                     "Consulted: X, MIT, <https://example.org/x.c>,".into(),
                     "  for testing.".into()
                 ]),
-                Block::Record(vec!["SPDX-License-Identifier: MPL-2.0".into()]),
+                Block::Record(vec!["SPDX-License-Identifier: Apache-2.0".into()]),
                 Block::Paragraph(vec![
                     "```text".into(),
                     "- not an item".into(),
@@ -1126,7 +1126,7 @@ mod tests {
             "",
             "Layer: 6.",
             "",
-            "SPDX-License-Identifier: MPL-2.0",
+            "SPDX-License-Identifier: Apache-2.0",
             "Invariants this crate keeps:",
             "- It keeps one.",
             "",

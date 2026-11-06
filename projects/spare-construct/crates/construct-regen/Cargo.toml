@@ -3,8 +3,26 @@ name = "construct-regen"
 version = "0.0.0"
 edition.workspace = true
 publish.workspace = true
+license.workspace = true
+
+[features]
+# The regenerator that keeps a server's derived shapes up to date. The browser needs only the
+# geometry, so its build leaves this out.
+server = ["dep:kit-store", "dep:kit-sync"]
 
 [dependencies]
 kit-core = { path = "../../../kit/crates/kit-core" }
 kit-ops = { path = "../../../kit/crates/kit-ops" }
+kit-store = { path = "../../../kit/crates/kit-store", optional = true }
+kit-sync = { path = "../../../kit/crates/kit-sync", optional = true }
 construct-model = { path = "../construct-model" }
+hex = "0.4.3"
+serde = { version = "1.0.229", features = ["derive"] }
+serde_json = "1.0.154"
+
+[dev-dependencies]
+# Fuzz harnesses: see kit-store's tests/fuzz_keys.rs. MIT.
+bolero = "0.13.7"
+construct-regen = { path = ".", features = ["server"] }
+kit-store = { path = "../../../kit/crates/kit-store", features = ["memory"] }
+tokio = { version = "1.54.1", features = ["macros", "rt-multi-thread"] }
