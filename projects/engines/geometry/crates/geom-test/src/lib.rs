@@ -47,6 +47,14 @@
 //! - [`history`]: chapter 20.3's history laws as a kit every operation's tests run (G88):
 //!   one history and a chain checked through `geom-op`'s checker, composition from both ends, and
 //!   proptest generators of valid histories and chains.
+//! - [`canonical`]: the canonical output of one case and its SHA-256, a fixture's golden hash
+//!   (28.13; G96): bodies, names, history, exactness and diagnostics, or an error's kind, entities
+//!   and evidence.
+//! - [`fixture`]: the stored test cases every failure ends as (28.16; G97): [`fixture::Fixture`],
+//!   its [`fixture::Expect`] per edition and operation versions and its [`fixture::Status`]; the
+//!   operation log in the native format; the runner's Pass, Fail and Improved; the operation-log
+//!   minimiser; what a pull request may do to a stored fixture; the fails-on-base list. The binary
+//!   `fixture` lists, checks and runs them.
 //! - [`guard`]: the proof that the toolchain and dependency guard of 28.13 trips: `libm`'s `sin`
 //!   changed by one bit must fail the golden `geom-num/determinism`. The binary `guard` patches
 //!   that change in and runs the golden (`-- prove`); `kernel.yml` runs it.
@@ -182,8 +190,10 @@
 //!   `.github/workflows/kernel-quality.yml` as YAML.
 //! - `dashu-int` 0.6 and `dashu-ratio` 0.6 (G57), without their default features: the exact
 //!   rationals of [`nurbs_reference`] and the fixed point of [`fixed`] (G69).
-//! - `geom-nurbs` and `geom-run` (Apache-2.0, ours), development dependencies (G57): the curves
-//!   `tests/nurbs_reference.rs` compares with the reference, and the work meter they take.
+//! - `geom-nurbs` (Apache-2.0, ours), a development dependency (G57): the curves
+//!   `tests/nurbs_reference.rs` compares with the reference.
+//! - `geom-format` and `geom-run` (Apache-2.0, ours), dependencies (G97): a fixture's operation log is
+//!   a standalone native file, and the meter its readers take.
 //! - `geom-curve`, `geom-surface` and `geom-math` (Apache-2.0, ours), development dependencies (G69):
 //!   the kinds and transforms the law catalogue checks.
 //!
@@ -197,7 +207,7 @@
 //!   `serde_derive`, `itoa`, `proc-macro2`, `quote`, `syn`, `toml`, `toml_datetime`, `toml_parser`,
 //!   `toml_writer`, `serde_spanned`, `camino`, `cargo-platform`, `semver`, `thiserror`,
 //!   `thiserror-impl`, `clap`, `clap_builder`, `clap_derive`, `clap_lex`, `anstyle`, `heck`,
-//!   `yaml-rust2`, `hashlink`, `sha2`, `digest`, `block-buffer`, `crypto-common`, `hybrid-array`,
+//!   `yaml-rust2`, `hashlink`, `hex`, `wait-timeout`, `sha2`, `digest`, `block-buffer`, `crypto-common`, `hybrid-array`,
 //!   `typenum`, `petgraph`, `fixedbitset`, `hashbrown`, `indexmap`, `equivalent`, `num-rational`,
 //!   `num-bigint`, `num-integer`, `dashu-int`, `dashu-ratio`, `dashu-base`, `regex-lite` and
 //!   `static_assertions`.
@@ -212,9 +222,11 @@
 //! - Zlib: `foldhash`.
 #![forbid(unsafe_code)]
 
+pub mod canonical;
 pub mod coverage;
 pub mod deps;
 pub mod faults;
+pub mod fixture;
 pub mod fixed;
 pub mod foundation;
 pub mod golden;

@@ -2467,47 +2467,37 @@
       ],
       "errors": [
         {
-          "doc": "Why a body could not be stored or read back.",
-          "file": "projects/engines/geometry/crates/geom-format/src/body.rs",
+          "doc": "Why an attributes record cannot be read or written.",
+          "file": "projects/engines/geometry/crates/geom-format/src/attributes.rs",
           "kinds": [
             {
-              "doc": "The encoder refused a value (writing).",
+              "doc": "The payload's shape or encoding is wrong.",
+              "name": "Payload",
+              "shape": "tuple"
+            },
+            {
+              "doc": "A definition the definition rules refuse, or one defined twice otherwise.",
+              "name": "Definition",
+              "shape": "tuple"
+            },
+            {
+              "doc": "A value of an attribute the record does not define.",
+              "name": "Undefined",
+              "shape": "tuple"
+            },
+            {
+              "doc": "The payload is not the attributes' one canonical encoding.",
+              "name": "NotCanonical",
+              "shape": "unit"
+            },
+            {
+              "doc": "The encoder failed; only a defect can cause it.",
               "name": "Encode",
-              "shape": "tuple"
-            },
-            {
-              "doc": "Bytes that break SKG's canonical CBOR.",
-              "name": "Cbor",
-              "shape": "tuple"
-            },
-            {
-              "doc": "A payload that is not what its table or the index needs.",
-              "name": "Shape",
-              "shape": "tuple"
-            },
-            {
-              "doc": "A chunk the index does not list, or listed in the wrong place or with another content ID.",
-              "name": "Chunk",
-              "shape": "struct"
-            },
-            {
-              "doc": "A geometry kind that could not be stored or read.",
-              "name": "Kind",
-              "shape": "tuple"
-            },
-            {
-              "doc": "The topology did not build back.",
-              "name": "Topo",
-              "shape": "tuple"
-            },
-            {
-              "doc": "The meter stopped the work.",
-              "name": "Stopped",
               "shape": "tuple"
             }
           ],
-          "module": "geom_format::body",
-          "name": "BodyError",
+          "module": "geom_format::attributes",
+          "name": "AttributesError",
           "non_exhaustive": false
         },
         {
@@ -2742,37 +2732,139 @@
           "non_exhaustive": false
         },
         {
-          "doc": "Why a kind could not be written or read back.",
-          "file": "projects/engines/geometry/crates/geom-format/src/kinds.rs",
+          "doc": "Why a history record cannot be read or written.",
+          "file": "projects/engines/geometry/crates/geom-format/src/history.rs",
           "kinds": [
             {
-              "doc": "The encoder refused a value: a double that is not finite where one must be.",
-              "name": "Encode",
+              "doc": "A part read as names are (the path, a role, a piece key, a set) is wrong.",
+              "name": "Names",
               "shape": "tuple"
             },
             {
-              "doc": "Bytes that break SKG's canonical CBOR.",
+              "doc": "The records break `History`'s own forms.",
+              "name": "History",
+              "shape": "tuple"
+            },
+            {
+              "doc": "The payload is not the history's one canonical encoding.",
+              "name": "NotCanonical",
+              "shape": "unit"
+            }
+          ],
+          "module": "geom_format::history",
+          "name": "HistoryRecordError",
+          "non_exhaustive": false
+        },
+        {
+          "doc": "Why a names record, or a name in it, cannot be read or written.",
+          "file": "projects/engines/geometry/crates/geom-format/src/names.rs",
+          "kinds": [
+            {
+              "doc": "The payload's shape or encoding is wrong.",
+              "name": "Payload",
+              "shape": "tuple"
+            },
+            {
+              "doc": "The file's header names a `NameScheme` this reader does not know.",
+              "name": "Scheme",
+              "shape": "tuple"
+            },
+            {
+              "doc": "A node out of `NameId` order, or a second node with one id, at this offset.",
+              "name": "Order",
+              "shape": "struct"
+            },
+            {
+              "doc": "A name stored in an encoding other than its one canonical encoding, at this offset.",
+              "name": "NotCanonical",
+              "shape": "struct"
+            },
+            {
+              "doc": "A node whose id is not the hash of its bytes under the recorded scheme.",
+              "name": "WrongId",
+              "shape": "struct"
+            },
+            {
+              "doc": "A name the name types refuse: an empty or non-NFC role, a repeated member of a set, an ordinal out of range.",
+              "name": "Name",
+              "shape": "tuple"
+            },
+            {
+              "doc": "The name graph refused a node.",
+              "name": "Graph",
+              "shape": "tuple"
+            },
+            {
+              "doc": "The encoder failed; only a defect can cause it.",
+              "name": "Encode",
+              "shape": "tuple"
+            }
+          ],
+          "module": "geom_format::names",
+          "name": "NamesError",
+          "non_exhaustive": false
+        },
+        {
+          "doc": "Why an operation record cannot be read or written.",
+          "file": "projects/engines/geometry/crates/geom-format/src/operation.rs",
+          "kinds": [
+            {
+              "doc": "The payload's shape or encoding is wrong.",
+              "name": "Payload",
+              "shape": "tuple"
+            },
+            {
+              "doc": "The path inside is wrong.",
+              "name": "Names",
+              "shape": "tuple"
+            },
+            {
+              "doc": "An input is wrong.",
+              "name": "Input",
+              "shape": "tuple"
+            },
+            {
+              "doc": "An operation name that is empty or not printable ASCII.",
+              "name": "Name",
+              "shape": "unit"
+            },
+            {
+              "doc": "Parameters that are not one item of SKG's canonical CBOR.",
+              "name": "Params",
+              "shape": "tuple"
+            },
+            {
+              "doc": "The payload is not the record's one canonical encoding.",
+              "name": "NotCanonical",
+              "shape": "unit"
+            },
+            {
+              "doc": "The encoder failed; only a defect can cause it.",
+              "name": "Encode",
+              "shape": "tuple"
+            }
+          ],
+          "module": "geom_format::operation",
+          "name": "OperationError",
+          "non_exhaustive": false
+        },
+        {
+          "doc": "Why a payload does not have the shape its record needs.",
+          "file": "projects/engines/geometry/crates/geom-format/src/payload.rs",
+          "kinds": [
+            {
+              "doc": "The bytes break SKG's canonical CBOR.",
               "name": "Cbor",
               "shape": "tuple"
             },
             {
-              "doc": "An item that is not the kind its code names.",
+              "doc": "Not the record's shape: what was expected, at which byte of the payload.",
               "name": "Shape",
-              "shape": "tuple"
-            },
-            {
-              "doc": "The kind's constructor refused the values.",
-              "name": "Curve",
-              "shape": "tuple"
-            },
-            {
-              "doc": "A NURBS constructor refused the values.",
-              "name": "Nurbs",
-              "shape": "tuple"
+              "shape": "struct"
             }
           ],
-          "module": "geom_format::kinds",
-          "name": "KindError",
+          "module": "geom_format::payload",
+          "name": "PayloadError",
           "non_exhaustive": false
         },
         {
@@ -2792,6 +2884,45 @@
           ],
           "module": "geom_format::range",
           "name": "RangeError",
+          "non_exhaustive": false
+        },
+        {
+          "doc": "Why a recipe cannot be read, written or re-run.",
+          "file": "projects/engines/geometry/crates/geom-format/src/recipe.rs",
+          "kinds": [
+            {
+              "doc": "The payload's shape or encoding is wrong.",
+              "name": "Payload",
+              "shape": "tuple"
+            },
+            {
+              "doc": "The path inside is wrong.",
+              "name": "Names",
+              "shape": "tuple"
+            },
+            {
+              "doc": "An owner namespace that is empty or not printable ASCII.",
+              "name": "Owner",
+              "shape": "unit"
+            },
+            {
+              "doc": "No owner present reads this recipe's schema, so it cannot be re-run (24.4). Its bodies still open and its payload is kept.",
+              "name": "RecipeOwnerMissing",
+              "shape": "struct"
+            },
+            {
+              "doc": "The payload is not the recipe's one canonical encoding.",
+              "name": "NotCanonical",
+              "shape": "unit"
+            },
+            {
+              "doc": "The encoder failed; only a defect can cause it.",
+              "name": "Encode",
+              "shape": "tuple"
+            }
+          ],
+          "module": "geom_format::recipe",
+          "name": "RecipeError",
           "non_exhaustive": false
         },
         {
@@ -2889,25 +3020,25 @@
       "layer": "12",
       "modules": [
         {
-          "cost": "linear in the body: one pass over each table to write, one to read, one SHA-256 pass over every chunk; memory for one chunk's payload at a time plus the body itself.",
-          "does": "[`write_body`] turns a `geom_topo::Body` into a [`StoredBody`]: one chunk record (type 4) per run of [`CHUNK_ROWS`] rows of each table, in arena order, and the index record (type 3) listing every table's row count and its chunks' content IDs in order. [`read_body`] reads them back through `geom_topo::Builder`, which checks the topology again before it publishes, so a stored body is never trusted further than a built one. The tables, by code in [`table`], are the arenas of chapter 8.2: regions, shells, faces, loops, fins, edges and vertices; the geometry pools (points, surfaces, curves and pcurves); and, for a body published by name, the names of its regions, faces, edges and vertices.",
+          "cost": "linear in the record; values are copied once.",
+          "does": "[`attributes_record`] writes a model's [`Definitions`] and its [`Attributes`] as one required record (tag [`ATTRIBUTES_TAG`]): each definition with its owner, name and version, the kinds of entity that may carry it, its value schema and its behaviour at section 8.4's events; then each attribute's values by name, a value as the owner's opaque bytes, or the values a merge combined. [`read_attributes`] reads them back: definitions, and attributes whose classes come from their definitions, so `geom-name`'s attribute step can carry the values through later edits without ever decoding them.",
           "family": [],
-          "file": "projects/engines/geometry/crates/geom-format/src/body.rs",
+          "file": "projects/engines/geometry/crates/geom-format/src/attributes.rs",
           "guarantees": [
-            "**Index for index.** A body read back equals the one written (`PartialEq`), every arena in the same order, so the next operation on either gives the same bits (24.3).",
-            "**Chunks are a pure function of their rows.** The runs are geom-topo's own chunks (`geom_topo::CHUNK_ROWS`, 4,096), so a chunk whose rows did not change encodes to the same bytes and the same content ID, whatever else changed: an edit to 1% of a body's rows rewrites only the chunks those rows are in.",
-            "**References are checked.** Every reference is stored as its row plus one, 0 for none; a required reference of 0, a row count that disagrees with the chunks, a chunk of the wrong table or position, or a content ID that does not match its chunk is refused before anything is built, and the builder then checks the topology itself."
+            "**No owner needed** (24.4; piece G95): a value is the owner's bytes, kept as they are; what a value does at each event is in its definition, which every reader reads.",
+            "**Every value has its definition**: a value whose attribute the record does not define is refused, and a definition is checked as `Definition::new` and `Definitions::define` check it.",
+            "**One encoding**: the record is read and encoded again, and the bytes must be the stored ones."
           ],
-          "job": "Body records: a body stored as one index record and a chunk record for every 4,096-row run of each of its tables, so a body's content ID is the root of a hash tree and a new version writes only the chunks that changed (24.2, 24.3).",
+          "job": "The attributes record: every attribute definition a model holds, and every value keyed by the persistent name of the entity that carries it, readable by a program that does not know the attribute's owner.",
           "method": {
             "links": [
               "projects/engines/geometry/architecture/24-file-format-exchange.md",
               "projects/engines/geometry/architecture/08-topology.md",
-              "https://doi.org/10.1007/3-540-48184-2_32"
+              "projects/kit/notes/G01-evidence/07-persistent-naming.md"
             ],
-            "text": "chapter 24.2 to 24.4 of the kernel architecture, `projects/engines/geometry/architecture/24-file-format-exchange.md`, and the arenas of chapter 8.2, `projects/engines/geometry/architecture/08-topology.md`; Merkle's hash tree, <https://doi.org/10.1007/3-540-48184-2_32>, for the content ID of the index over its chunks."
+            "text": "chapter 24.4's attributes record and section 8.4's events and actions (`projects/engines/geometry/architecture/24-file-format-exchange.md`, `projects/engines/geometry/architecture/08-topology.md`), after Parasolid's published attribute classes, as a concept only (`projects/kit/notes/G01-evidence/07-persistent-naming.md`)."
           },
-          "path": "geom_format::body",
+          "path": "geom_format::attributes",
           "provenance": [],
           "spdx": null,
           "target": "lib"
@@ -3203,24 +3334,93 @@
           "target": "lib"
         },
         {
-          "cost": "linear in a kind's values, plus, for an offset stored with its cache, the cost of fitting it again.",
-          "does": "[`write_curve`] and [`write_surface`] append one kind to an encoder; [`read_curve`] and [`read_surface`] read one back from a decoder, rebuilding it through the kind's own constructor, so a stored kind is checked as a built one is. The codes are in [`curve`] and [`surface`]; the fields of each are the values its constructor takes, in the order `format/cddl/kinds.cddl` gives them. Doubles are written in their shortest exact width, lists of doubles as RFC 8746 `f64` columns (tag 86), an absent value as `[]`, a present one as `[value]`, and a flag as 0 or 1.",
+          "cost": "linear in the record; the history is decoded and encoded once.",
+          "does": "[`history_record`] writes an operation's history as one required record (tag [`HISTORY_TAG`]) whose payload is `geom-op`'s canonical encoding of it ([`History::encode`]): the operation's path, its records in output-name order, its deleted inputs and its topology changes. [`read_history`] reads one back.",
           "family": [],
-          "file": "projects/engines/geometry/crates/geom-format/src/kinds.rs",
+          "file": "projects/engines/geometry/crates/geom-format/src/history.rs",
           "guarantees": [
-            "**Value for value.** A kind read back equals the one written (`PartialEq`), every double with its bits, a negative zero included: a kind keeps what defines it, never a refit.",
-            "**Caches are rebuilt, not stored.** An offset's fitted NURBS cache is a function of the offset; the item says whether it was there and reading computes it again (`Offset::cached`), which gives the same bits on every target (23.1). A curve on a surface keeps its 3D curve, which defines it.",
-            "**Infinite ends.** A parameter interval's end may be infinite only on its own side (a ray or line); it is written `[]`.",
-            "**Bounded.** Every kind nests at most [`DEPTH`] containers deep: a surface offset at most `geom_surface::offset::MAX_NESTING` (4) times, over a swept surface whose profile is a conic on axes on a frame."
+            "**What is read is what was written**: a payload is read into an `OpPath` and a `History`, which is encoded again; the bytes must be the stored ones, so a record out of order, a set out of order, an unknown origin or change, or any second spelling is refused.",
+            "**The history's own forms hold**: two records of one output, a modification from nothing or a merge of one are refused, as `History::new` refuses them."
           ],
-          "job": "Geometry kinds as canonical items: every curve and surface kind a body's pools hold, written as `[code, fields…]` and read back to the same value (24.2, 24.3).",
+          "job": "The history record: one operation's origins, deletions and topology changes (chapter 20.3), stored so that a reloaded model resolves its references through exactly the history it had.",
           "method": {
             "links": [
+              "projects/engines/geometry/architecture/20-naming-history.md",
               "projects/engines/geometry/architecture/24-file-format-exchange.md"
             ],
-            "text": "chapter 24.2 and 24.3 of the kernel architecture, `projects/engines/geometry/architecture/24-file-format-exchange.md`; the kinds are those of chapter 7, `07-curves-surfaces.md`."
+            "text": "chapter 20.3's records and 24.4's names and history record (`projects/engines/geometry/architecture/20-naming-history.md`, `projects/engines/geometry/architecture/24-file-format-exchange.md`), read by decoding and encoding again, as the names record is."
           },
-          "path": "geom_format::kinds",
+          "path": "geom_format::history",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
+          "cost": "linear in the record; each node is decoded, encoded and hashed once.",
+          "does": "[`names_record`] writes a name graph's nodes as one required record (tag [`NAMES_TAG`]): an array of `[id, name]` pairs in `NameId` order, each name in its canonical encoding (32.19). [`read_names`] reads one back into a fresh name graph. [`read_topo_name`] reads one canonical `TopoName` item.",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-format/src/names.rs",
+          "guarantees": [
+            "**Every `NameId` is verified under the recorded scheme** (24.4; piece G95): a file whose header names a scheme other than `NameScheme v1` is refused, and every node's id must be the hash of its own stored bytes, or the record is refused with the node's offset. A name is never trusted because a file says so.",
+            "**One encoding per name**: a node is read into a `TopoName` and encoded again, and the bytes must be the stored ones, so a set out of order, a repeated name, a non-NFC role or any other second spelling of a name is refused; the graph refuses a second node under one id.",
+            "**Order is name order**: nodes are in strictly increasing `NameId` order, or the record is refused."
+          ],
+          "job": "The names record: every name node a file keeps, each `NameId` checked against its bytes under the file's `NameScheme` as it is read.",
+          "method": {
+            "links": [
+              "projects/engines/geometry/architecture/24-file-format-exchange.md",
+              "projects/engines/geometry/architecture/32-decisions.md",
+              "https://www.rfc-editor.org/rfc/rfc8949#section-4.2"
+            ],
+            "text": "chapter 24.4's names record and decision 32.19's canonical encoding and hash (`projects/engines/geometry/architecture/24-file-format-exchange.md`, `projects/engines/geometry/architecture/32-decisions.md`), read by re-encoding, the way RFC 8949 section 4.2's deterministic encoding is checked: decode, encode, compare (<https://www.rfc-editor.org/rfc/rfc8949#section-4.2>)."
+          },
+          "path": "geom_format::names",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
+          "cost": "linear in the record; the parameters are checked once and copied once.",
+          "does": "an [`Operation`] is one authored operation (piece G96): its path (the permanent `OpId` from the log, and labels), its name and version in the operation schemas, its inputs by content ID and `NameId`, its parameters in SKG's canonical CBOR as its schema writes them, and the work and logical-memory budget it runs under (23.10: a budget that can fail an operation in a shared model is fixed by its version or recorded in the log). [`operation_record`] writes one as a required record (tag [`OPERATION_TAG`]); [`read_operation`] reads it back.",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-format/src/operation.rs",
+          "guarantees": [
+            "**Versioned twice**: the record type has its schema, and every record names the operation's own version, which fixes its results, its charge schedule and its error details (26.2).",
+            "**Parameters are canonical**: they are one item of SKG's canonical CBOR, checked on writing and on reading, so equal parameters are equal bytes and a log replays to the same bits.",
+            "**One encoding**: a record is read and encoded again, and the bytes must be the stored ones.",
+            "**No clock, no preview**: nothing timed and no precision is recorded; only final operations are logged, and a cancelled run writes nothing (10.1, 23.10)."
+          ],
+          "job": "The operation record: one entry of an operation log, everything a replay needs to run the operation again and get the same bits.",
+          "method": {
+            "links": [
+              "projects/engines/geometry/architecture/21-determinism.md",
+              "projects/engines/geometry/architecture/28-testing.md"
+            ],
+            "text": "chapter 21's replay and chapter 28.13's operation logs, with the recipe envelope's inputs (24.4) (`projects/engines/geometry/architecture/21-determinism.md`, `projects/engines/geometry/architecture/28-testing.md`)."
+          },
+          "path": "geom_format::operation",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
+          "cost": "linear in the payload; nothing is copied but the names it returns.",
+          "does": "a [`Reader`] steps through a payload that is already known to be canonical CBOR (the record layer checks it), one head or one whole item at a time, and turns a wrong shape into [`PayloadError::Shape`] with the byte offset and what was expected. The name, history, recipe and attribute records (piece G95) read their payloads with it.",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-format/src/payload.rs",
+          "guarantees": [
+            "**Every failure names its byte**: the offset in the payload of the item that did not fit, and what the record needs there.",
+            "**Containers are read head by head**, so a reader never holds more than one item at a time, and every whole item it returns is exactly the bytes the decoder measured."
+          ],
+          "job": "Reading a record's payload field by field: the next head, a whole item's bytes, names, and the end of the payload, each failure naming its byte.",
+          "method": {
+            "links": [
+              "projects/engines/geometry/format/SPEC.md",
+              "projects/engines/geometry/architecture/24-file-format-exchange.md"
+            ],
+            "text": "SKG's canonical CBOR (`projects/engines/geometry/format/SPEC.md`, section 3) read with this crate's decoder, as the header record's reader reads its payload (chapter 24.3, `projects/engines/geometry/architecture/24-file-format-exchange.md`)."
+          },
+          "path": "geom_format::payload",
           "provenance": [],
           "spdx": null,
           "target": "lib"
@@ -3245,6 +3445,29 @@
             "text": "chapter 24.7 of the kernel architecture, `projects/engines/geometry/architecture/24-file-format-exchange.md`, with the bit budgets of chapter 6.2 (`projects/engines/geometry/architecture/06-numbers.md`); the greatest common divisor by Euclid's algorithm (Knuth, TAOCP vol. 2, 4.5.2, Algorithm A)."
           },
           "path": "geom_format::range",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
+          "cost": "linear in the recipe; the payload is copied once.",
+          "does": "a [`Recipe`] is chapter 24.4's envelope every reader knows: the owner's namespace (`kit.geom` for kernel operations, `kit.geom.ifc`, a plugin's ID), the owner's schema version, the operation's path and version, its inputs by content ID and `NameId`, an opaque payload only the owner decodes, and the content IDs of the bodies it produced. [`recipe_record`] writes one as a required record (tag [`RECIPE_TAG`]); [`read_recipe`] reads it back. [`Recipe::owner_in`] finds the owner that can re-run it, or refuses with `RecipeOwnerMissing`.",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-format/src/recipe.rs",
+          "guarantees": [
+            "**The payload is never decoded here** and is kept byte for byte: a reader without the owner still has the evaluated bodies, by content ID, and writes the recipe back unchanged.",
+            "**Only re-running needs the owner**: [`Recipe::owner_in`] refuses with [`RecipeError::RecipeOwnerMissing`], naming the owner and its schema, and nothing else does.",
+            "**One encoding**: a recipe is read and encoded again, and the bytes must be the stored ones."
+          ],
+          "job": "The recipe envelope: how a shape was made, kept for whoever owns the recipe, so a file opens and draws where that owner is absent.",
+          "method": {
+            "links": [
+              "projects/engines/geometry/architecture/24-file-format-exchange.md",
+              "projects/engines/geometry/architecture/26-how-it-grows.md"
+            ],
+            "text": "chapter 24.4's recipe envelope and 26.1's promise that a file opens without the plugin that made a shape (`projects/engines/geometry/architecture/24-file-format-exchange.md`, `projects/engines/geometry/architecture/26-how-it-grows.md`)."
+          },
+          "path": "geom_format::recipe",
           "provenance": [],
           "spdx": null,
           "target": "lib"
@@ -5105,7 +5328,90 @@
         24
       ],
       "depends": [],
-      "errors": [],
+      "errors": [
+        {
+          "doc": "Why the attribute step or a set failed.",
+          "file": "projects/engines/geometry/crates/geom-name/src/classes.rs",
+          "kinds": [
+            {
+              "doc": "A value's attribute has no definition.",
+              "name": "Undefined",
+              "shape": "tuple"
+            },
+            {
+              "doc": "The attribute may not be carried by this kind of entity.",
+              "name": "WrongKind",
+              "shape": "struct"
+            },
+            {
+              "doc": "The attributes hold a split or merge class for the attribute other than its definition's.",
+              "name": "ClassMismatch",
+              "shape": "tuple"
+            },
+            {
+              "doc": "The entity set is not among the body's names.",
+              "name": "NotInBody",
+              "shape": "tuple"
+            },
+            {
+              "doc": "The history could not be made (a name list with a repeated name).",
+              "name": "History",
+              "shape": "tuple"
+            },
+            {
+              "doc": "The body's names could not be made into a set.",
+              "name": "Names",
+              "shape": "tuple"
+            }
+          ],
+          "module": "geom_name::classes",
+          "name": "AttrError",
+          "non_exhaustive": false
+        },
+        {
+          "doc": "Why the graph refused a name or could not answer.",
+          "file": "projects/engines/geometry/crates/geom-name/src/graph.rs",
+          "kinds": [
+            {
+              "doc": "A name whose `NameId` the graph already holds with different canonical bytes.",
+              "name": "Collision",
+              "shape": "tuple"
+            },
+            {
+              "doc": "A name the walk reached that the graph does not hold.",
+              "name": "Missing",
+              "shape": "tuple"
+            },
+            {
+              "doc": "The name could not be encoded.",
+              "name": "Name",
+              "shape": "tuple"
+            }
+          ],
+          "module": "geom_name::graph",
+          "name": "GraphError",
+          "non_exhaustive": false
+        },
+        {
+          "doc": "Why the colliding entities could not be given ordinals.",
+          "file": "projects/engines/geometry/crates/geom-name/src/ordinal.rs",
+          "kinds": [
+            {
+              "doc": "Two entities, by their positions in the input, whose order could not be decided exactly, or that tie on every step of the rule (20.2).",
+              "name": "UndecidedOrder",
+              "shape": "tuple"
+            },
+            {
+              "doc": "More entities than a `u32` ordinal counts.",
+              "name": "TooMany",
+              "shape": "unit"
+            }
+          ],
+          "module": "geom_name::ordinal",
+          "name": "OrderError",
+          "non_exhaustive": false
+        }
+      ],
       "family": [],
       "file": "projects/engines/geometry/crates/geom-name/src/lib.rs",
       "folder": "projects/engines/geometry/crates/geom-name",
@@ -5119,12 +5425,132 @@
       "job": "The name graph and its hash-consing; references, their resolution and the walk through history; surface groups and placement references.",
       "kind": "kernel",
       "layer": "3",
-      "modules": [],
+      "modules": [
+        {
+          "cost": "`O(r · a · log v)` for `r` records, `a` attributes and `v` values per attribute; a merge compares its inputs' values' bytes. Nothing recurses.",
+          "does": "[`apply`] reads each output's [`Record`] in an operation's [`History`] as one of section 8.4's events and gives the output the values the definitions' behaviours say:",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-name/src/classes.rs",
+          "guarantees": [
+            "**Pure, and one step for every operation.** The output depends only on the definitions, the input attributes, the history and the [`Step`] (the transform and the copy roles the operation's schema gives); no operation writes attribute code of its own, and nothing calls back into the operation (8.4, \"no callbacks\"): a [`Mover`] only moves values the kernel knows, by section 7's rules.",
+            "**Values of an unknown owner are carried.** A value whose schema this program does not read ([`ValueSchema::Opaque`]) follows its definition's behaviour like any other: kept, split, merged, copied or deleted, never moved and never dropped for being unknown.",
+            "**Every value has a definition.** An input value whose attribute has no definition is [`AttrError::Undefined`], never carried without a behaviour.",
+            "**Ordered.** The output's values are in attribute, then name order, and the notes in record order, the same on every machine whatever order the history was reported in (8.2, 21)."
+          ],
+          "job": "The one shared attribute step: an operation's output attributes from its input attributes, the definitions and its history (8.4); and setting a value as an operation of its own.",
+          "method": {
+            "links": [
+              "projects/engines/geometry/architecture/08-topology.md",
+              "projects/engines/geometry/architecture/20-naming-history.md",
+              "projects/kit/notes/G01-evidence/07-persistent-naming.md"
+            ],
+            "text": "section 8.4's events read from section 20.3's history records (`projects/engines/geometry/architecture/08-topology.md`, `projects/engines/geometry/architecture/20-naming-history.md`), after Parasolid's attribute classes, taken as a concept only (`projects/kit/notes/G01-evidence/07-persistent-naming.md`, section 5)."
+          },
+          "path": "geom_name::classes",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
+          "cost": "interning is one encoding and one SHA-256 of a few hundred bytes, then a `BTreeMap` lookup, O(log n). [`NameGraph::is_weak`] visits each reachable node once, O(r log n) for r reachable nodes, with a stack and a visited set of at most r entries. Recursion: none.",
+          "does": "a [`NameGraph`] holds name nodes keyed by their [`NameId`]. [`NameGraph::intern`] encodes a [`TopoName`], hashes it under `NameScheme v1` and keeps the node; interning the same name again returns the same `NameId` and stores nothing new. A name refers to its parents by `NameId` ([`parents`]), so the nodes form a shared graph rather than nested trees. [`NameGraph::is_weak`] says whether a name is a `Weak` node or is built on one at any depth.",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-name/src/graph.rs",
+          "guarantees": [
+            "**One encoding per `NameId`.** A node keeps its canonical bytes beside its `NameId`. A second, different encoding under a `NameId` already held is refused with [`GraphError::Collision`], never merged with the first (32.19).",
+            "**Name order.** Nodes are held and listed in the byte order of their `NameId`s (20.2: \"everything is sorted by name\"), whatever order they were interned in.",
+            "**Weakness is exact.** A name is weak exactly when it is a `Weak` node or reaches one through its parents. A parent the graph does not hold is [`GraphError::Missing`], never assumed strong.",
+            "**No recursion.** The walk through parents uses an explicit stack and visits each node once."
+          ],
+          "job": "The name graph: every persistent name once, hash-consed, with the canonical bytes its `NameId` was hashed from.",
+          "method": {
+            "links": [
+              "projects/engines/geometry/architecture/20-naming-history.md",
+              "projects/engines/geometry/architecture/32-decisions.md"
+            ],
+            "text": "hash-consing, as the shared name graph of chapter 20.1 (`projects/engines/geometry/architecture/20-naming-history.md`), with decision 32.19's rule that the graph keeps each node's canonical bytes and refuses a second encoding under one `NameId` (`projects/engines/geometry/architecture/32-decisions.md`); the weakness rule of 20.2."
+          },
+          "path": "geom_name::graph",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
+          "cost": "O(n log n) comparisons and two buffers of n (position, reference) pairs. Recursion: none.",
+          "does": "when an operation's names still collide, the colliding entities share the collided name as `base` and take `Weak { base, ord }` names, the `n`-th of `of` (chapter 20.2). [`ordinals`] puts the entities in 20.2's order and gives each its [`Ordinal`]; [`weak_names`] makes their `Weak` names. The order is the rule's table, step by step:",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-name/src/ordinal.rs",
+          "guarantees": [
+            "**The order is the entities', not the input's.** Any permutation of the same entities gives each entity the same ordinal: the order depends only on the keys the operation computes, never on the order an algorithm reported its results in (20.2).",
+            "**Ordinals are a permutation of `0..of`**, with `of` the number of entities, which must fit in a `u32` (20.2).",
+            "**Undecided or tied is an error.** If any comparison the sort makes is undecided, or two entities compare equal on every step, the result is [`OrderError::UndecidedOrder`] naming two such entities by their positions in the input.",
+            "**Deterministic and bounded.** A bottom-up merge sort, stable and without recursion, makes at most about n log2 n comparisons."
+          ],
+          "job": "The ordinal order of `NameScheme v1`: how entities that would share a name are told apart by `Weak` names, and the one order their ordinals follow.",
+          "method": {
+            "links": [
+              "projects/engines/geometry/architecture/20-naming-history.md",
+              "https://www-cs-faculty.stanford.edu/~knuth/taocp.html"
+            ],
+            "text": "chapter 20.2's ordinal order (the rule's four steps), `projects/engines/geometry/architecture/20-naming-history.md`; bottom-up merge sort, Knuth, *The Art of Computer Programming*, vol. 3, section 5.2.4 (straight two-way merging, <https://www-cs-faculty.stanford.edu/~knuth/taocp.html>)."
+          },
+          "path": "geom_name::ordinal",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
+          "cost": "for s recorded steps, r records per step and m names in the walk's vector, O(s · r log(r m)), searched by bisection, never with hashed sets; the weak checks visit the name graph's reachable nodes once per name asked about, and the base candidates scan the body's names once. Recursion: none.",
+          "does": "a [`Reference`] holds the document it points into ([`DocRef`], or none for the reference's own document), the element, the entity's [`NameId`], its [`EntityKind`], what it wants ([`Want`]: one entity, every piece, or the carrier), and the stored [`Signature`]. [`resolve`] answers it from a [`Lookup`]: the element's [`Body`] as the program has it (its current names, the carrier of each face and edge that has one, the history recorded since the reference was made, oldest first, and the name graph), or why the element cannot be read. It takes 20.4's steps in order:",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-name/src/resolve.rs",
+          "guarantees": [
+            "**No geometric guessing (20.4 step 5).** [`resolve`] reads a reference's document, name and want, and never its signature, kind or element: the signature only suggests a repair in the interface, and an accepted repair is a new operation in the log. `tests/attack_g89.rs` changes each of them and finds every result unchanged, and checks that this module's code never reads the signature.",
+            "**Model state, the same on every machine.** Every outcome is computed from names and recorded history alone, every set of names is in name order, and nothing depends on an address, a hash map's order or the machine.",
+            "**Pruned is never Deleted.** A walk that reaches a pruned step while it still has names to follow answers `HistoryPruned`, whatever the later steps hold (24.4).",
+            "**Generated is not followed.** Only modified images are descendants: an entity generated from the referenced one is a new entity, not the referenced one in a new form.",
+            "**Unknown is never guessed.** A name the graph cannot classify, or that no recorded step and not the body holds, is `Unresolved` with `NameUnknown`.",
+            "**No recursion.** The walk is one loop over the steps, holding a sorted vector of names."
+          ],
+          "job": "References and how they resolve (chapter 20.4): a reference names an entity of an element, and resolving it against the element's current body and the history recorded since gives one value of the closed [`Resolution`] type.",
+          "method": {
+            "links": [
+              "projects/engines/geometry/architecture/20-naming-history.md"
+            ],
+            "text": "chapter 20.4's resolution, with the history contract of 20.3 as `geom_op::history` carries it (piece G88; `OpenCascade`'s `BRepTools_History` contract, adopted as a tested invariant), all in `projects/engines/geometry/architecture/20-naming-history.md`."
+          },
+          "path": "geom_name::resolve",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
+          "cost": "O(n log n) time and one copy of the list. Recursion: none.",
+          "does": "[`first_duplicate`] finds the lowest name that appears more than once in a list. [`expect_unique`] is what an operation calls on the names it made before publishing them: in a build with debug assertions, every test build, it refuses a list with a duplicate; in a release build it checks nothing, because there a collision still becomes a `Weak` name, never a random suffix (20.2), and the operation's own naming has already done that.",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-name/src/unique.rs",
+          "guarantees": [
+            "**Exact.** [`first_duplicate`] returns `Some` exactly when a name appears twice, and the lowest such name, whatever the list's order.",
+            "**On in every test build.** Under `debug_assertions`, [`expect_unique`] is [`first_duplicate`]'s answer as an error; the kernel's test legs build with debug assertions on."
+          ],
+          "job": "The duplicate-name detector: a name an operation gives twice, which its contract does not expect, is a bug that tests must catch (chapter 20.2).",
+          "method": {
+            "links": [
+              "projects/engines/geometry/architecture/20-naming-history.md"
+            ],
+            "text": "sort and compare neighbours, the duplicate test any sorted sequence allows; chapter 20.2's rule that an unexpected duplicate name is a bug caught by tests, `projects/engines/geometry/architecture/20-naming-history.md`."
+          },
+          "path": "geom_name::unique",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        }
+      ],
       "name": "geom-name",
       "provenance": [],
       "sections": "8.4, 17.12, 20 and 24.4, in the kernel architecture (`projects/engines/geometry/architecture/`).",
       "spdx": null,
-      "status": "scaffold only; built by pieces G87, G89, G90, G109, G374.",
+      "status": "the hash-consed name graph ([`graph`]), the ordinal order of `Weak` names ([`ordinal`]) and the duplicate-name detector ([`unique`]) built (G87); the one shared attribute step, [`classes`], which applies attribute behaviours from an operation's history and sets a value as an operation of its own, built (G90); references and their resolution ([`resolve`]) built (G89); `PruneHistory` in G109 and placement references in G374.",
       "summary": "Spare Kit geometry kernel: persistent names and references."
     },
     {
@@ -7689,6 +8115,16 @@
           "pinned": false,
           "purpose": "0.11.0",
           "take": "depend"
+        },
+        {
+          "licence": "(Apache-2.0 OR MIT) AND Unicode-3.0",
+          "link": "https://crates.io/crates/unicode-normalization",
+          "manifest": "projects/engines/geometry/crates/geom-op/Cargo.toml",
+          "method_note": null,
+          "name": "unicode-normalization",
+          "pinned": false,
+          "purpose": "=0.1.26",
+          "take": "depend"
         }
       ],
       "errors": [
@@ -7740,6 +8176,297 @@
           "module": "geom_op::cbor",
           "name": "EncodeError",
           "non_exhaustive": false
+        },
+        {
+          "doc": "The operation's own typed failure (chapter 22): one variant per family of details, each holding that family's enum. Grows with the kernel; generic code reads an error's [`kind`](crate::OpError::kind) and the operation's schema instead of matching it.",
+          "file": "projects/engines/geometry/crates/geom-op/src/detail.rs",
+          "kinds": [
+            {
+              "base_kind": "held detail",
+              "doc": "A stop from the parallel helper, its budgets and its cancellation.",
+              "name": "Run",
+              "shape": "tuple"
+            },
+            {
+              "base_kind": "held detail",
+              "doc": "A failure of the numbers layer, wrapped by meaning.",
+              "name": "Num",
+              "shape": "tuple"
+            }
+          ],
+          "module": "geom_op::detail",
+          "name": "OpErrorDetail",
+          "non_exhaustive": true
+        },
+        {
+          "doc": "A stop from the parallel helper (`geom-run`): a budget, the caller's cancellation, the machine's memory, or a broken invariant of the helper.",
+          "file": "projects/engines/geometry/crates/geom-op/src/detail.rs",
+          "kinds": [
+            {
+              "base_kind": "BudgetExceeded",
+              "doc": "A deterministic budget of the operation, or of one batch item, ran out: which budget, which limit, in which phase, and what had been used, counted as a serial loop counts it.",
+              "name": "BudgetExceeded",
+              "shape": "tuple"
+            },
+            {
+              "base_kind": "BudgetExceeded",
+              "doc": "A batch's total ran out at or before this item, in key order. It belongs to the batch, not to the item, so it is never cached as the item's result (chapter 23.10).",
+              "name": "BatchTotal",
+              "shape": "tuple"
+            },
+            {
+              "base_kind": "Cancelled",
+              "doc": "The caller's cancellation stopped the operation. Not deterministic; never stored.",
+              "name": "Cancelled",
+              "shape": "unit"
+            },
+            {
+              "base_kind": "OutOfMemory",
+              "doc": "The machine refused a large allocation. Not deterministic; never stored.",
+              "name": "OutOfMemory",
+              "shape": "unit"
+            },
+            {
+              "base_kind": "Internal",
+              "doc": "An invariant of the helper broke: a bug, reported instead of a panic or a wrong answer.",
+              "name": "Internal",
+              "shape": "struct"
+            }
+          ],
+          "module": "geom_op::detail",
+          "name": "RunDetail",
+          "non_exhaustive": false
+        },
+        {
+          "doc": "A failure of the numbers layer (`geom-num`'s `NumError`), named and mapped by what it means for the operation (chapter 22).",
+          "file": "projects/engines/geometry/crates/geom-op/src/detail.rs",
+          "kinds": [
+            {
+              "base_kind": "FrameRangeExceeded",
+              "doc": "A coordinate would leave ±(2^40 − 1) grid steps of its frame's origin (`NumError::OutOfRange`).",
+              "name": "OutOfRange",
+              "shape": "struct"
+            },
+            {
+              "base_kind": "Degenerate",
+              "doc": "The inputs are degenerate for a construction: collinear points for a plane, or three planes that do not meet in exactly one point (`NumError::Degenerate`).",
+              "name": "Degenerate",
+              "shape": "unit"
+            },
+            {
+              "base_kind": "Degenerate",
+              "doc": "A value or a result was not finite: a pole, such as a division by zero or the logarithm of zero, or an overflow (`NumError::NotFinite`). Base kind `Degenerate`, decided by this piece: kernel values are bounded (coordinates within ±2^40 steps), so on valid input a computation leaves the finite doubles only at a singularity of the configuration, which is chapter 22's \"degenerate for this operation\"; an operation that reads a caller's number checks it first, and reports a non-finite one as its own `InvalidInput` detail.",
+              "name": "NotFinite",
+              "shape": "unit"
+            },
+            {
+              "base_kind": "NoSolution",
+              "doc": "A maths function was asked for a value it does not have: the square root or logarithm of a negative number, the arcsine of a number beyond ±1 (`NumError::OutsideDomain`). Base kind `NoSolution`, decided by this piece: no real value exists, so no result meets the input, which is chapter 22's `NoSolution`; it is not a malformed input, because the argument was computed from valid ones.",
+              "name": "OutsideDomain",
+              "shape": "unit"
+            },
+            {
+              "base_kind": "Undecided",
+              "doc": "An interval division by an interval that contains zero (`NumError::DivisorContainsZero`). Base kind `Undecided`, decided by this piece: the enclosure cannot say whether the divisor vanishes, so the decision cannot be certified at this resolution; an exact zero is found by the exact predicates first, and is `Degenerate`.",
+              "name": "DivisorContainsZero",
+              "shape": "unit"
+            },
+            {
+              "base_kind": "Undecided",
+              "doc": "An interval square root of an interval with negative values in it (`NumError::NegativeSqrt`). Base kind `Undecided`, decided by this piece for the reason [`NumDetail::DivisorContainsZero`] gives: the enclosure cannot say whether the value is negative.",
+              "name": "NegativeSqrt",
+              "shape": "unit"
+            },
+            {
+              "base_kind": "Internal",
+              "doc": "An empty interval was asked for: a lower bound above its upper bound (`NumError::EmptyInterval`). Base kind `Internal`, decided by this piece: the kernel builds intervals from bounds it computed, so an empty one is a defect; a range a caller gives is checked by the operation as its own input.",
+              "name": "EmptyInterval",
+              "shape": "unit"
+            },
+            {
+              "base_kind": "Internal",
+              "doc": "A conversion between grid steps was asked to go the wrong way (`NumError::WrongDirection`). Base kind `Internal`, decided by this piece: the direction is chosen by kernel code, never by data, so going the wrong way is a defect.",
+              "name": "WrongDirection",
+              "shape": "unit"
+            },
+            {
+              "base_kind": "Internal",
+              "doc": "An exact computation did not fit the width its proven bit budget gives it (`NumError::BudgetExceeded`). Only a defect can cause it, so its base kind is `Internal`, never `BudgetExceeded` (chapter 22).",
+              "name": "BitBudget",
+              "shape": "unit"
+            },
+            {
+              "base_kind": "ExactnessNotAccepted",
+              "doc": "A certified bound would pass the ceiling it was checked against (`NumError::ToleranceExceeded`): the result would be less exact than accepted, so its base kind is `ExactnessNotAccepted`, never `ToleranceExceeded` (chapter 22).",
+              "name": "BoundOverCeiling",
+              "shape": "unit"
+            },
+            {
+              "base_kind": "Unsupported",
+              "doc": "An enclosure needs a maths function whose error is not proven (`NumError::UnprovenMaths`). The wrapping operation names the function and the piece that adds its proof (chapters 12.16 and 22).",
+              "name": "UnprovenMaths",
+              "shape": "unit"
+            }
+          ],
+          "module": "geom_op::detail",
+          "name": "NumDetail",
+          "non_exhaustive": false
+        },
+        {
+          "doc": "Why records cannot make a history.",
+          "file": "projects/engines/geometry/crates/geom-op/src/history.rs",
+          "kinds": [
+            {
+              "doc": "Two records for one output.",
+              "name": "RepeatedOutput",
+              "shape": "struct"
+            },
+            {
+              "doc": "A `Modified` record from no input: an output made from nothing is `Generated`.",
+              "name": "ModifiedFromNothing",
+              "shape": "struct"
+            },
+            {
+              "doc": "A `Merged` record of fewer than two inputs: one input changed is `Modified`.",
+              "name": "MergeOfOne",
+              "shape": "struct"
+            }
+          ],
+          "module": "geom_op::history",
+          "name": "HistoryError",
+          "non_exhaustive": false
+        },
+        {
+          "doc": "Which law of chapter 20.3 (or 13.14's recording rule) a history breaks, and where.",
+          "file": "projects/engines/geometry/crates/geom-op/src/history.rs",
+          "kinds": [
+            {
+              "doc": "Law 1: a deleted input has a modified output (or passed through unchanged).",
+              "name": "DeletedButModified",
+              "shape": "struct"
+            },
+            {
+              "doc": "Law 3: a record or the deleted set names something that is not an input.",
+              "name": "NotAnInput",
+              "shape": "struct"
+            },
+            {
+              "doc": "13.14: a topology change the records and the deleted set do not show.",
+              "name": "ChangeNotRecorded",
+              "shape": "struct"
+            }
+          ],
+          "module": "geom_op::history",
+          "name": "LawBreak",
+          "non_exhaustive": false
+        },
+        {
+          "doc": "The shared base of every error (chapter 22): one of a closed set, each kind defined once.",
+          "file": "projects/engines/geometry/crates/geom-op/src/kind.rs",
+          "kinds": [
+            {
+              "doc": "An input breaks the operation's preconditions: it fails the checker, is malformed, or repeats a key. The caller can fix or replace the input.",
+              "name": "InvalidInput",
+              "shape": "unit"
+            },
+            {
+              "doc": "A valid input is degenerate for this operation: a zero length, angle or radius, coincident anchors, a folded arc, a singular start. The caller can change the value it names.",
+              "name": "Degenerate",
+              "shape": "unit"
+            },
+            {
+              "doc": "The input is valid, but no result meets it and the rules the caller set. The caller can change a value; the remedies give the nearest one that works.",
+              "name": "NoSolution",
+              "shape": "unit"
+            },
+            {
+              "doc": "More than one result fits, and nothing given chooses between them. The caller can choose, or add what decides.",
+              "name": "Ambiguous",
+              "shape": "unit"
+            },
+            {
+              "doc": "A decision the result needs can be neither made exactly nor certified at the data's own resolution. The caller can move things apart, close the gap explicitly, or take another route.",
+              "name": "Undecided",
+              "shape": "unit"
+            },
+            {
+              "doc": "The result would be less exact than the caller accepted: a lower class, a certified bound past the accepted one, or a commit to the grid that would flip a decision. The caller can accept explicitly the class and bound it would reach, or make the change that keeps it exact.",
+              "name": "ExactnessNotAccepted",
+              "shape": "unit"
+            },
+            {
+              "doc": "For Tolerant data only: an operation would need a larger tolerance than a Tolerant body carries, or healing would need to close a gap wider than `ε_heal` allows. The caller can heal first, or raise `ε_heal` up to its cap.",
+              "name": "ToleranceExceeded",
+              "shape": "unit"
+            },
+            {
+              "doc": "A coordinate would leave ±(2^40 − 1) steps of its frame's origin. The caller can work in a frame placed at the overlap or on the lattice, split, or ask for a coarser step.",
+              "name": "FrameRangeExceeded",
+              "shape": "unit"
+            },
+            {
+              "doc": "A deterministic work or logical-memory budget ran out. The caller can raise the budget, split the call, or ask for a preview.",
+              "name": "BudgetExceeded",
+              "shape": "unit"
+            },
+            {
+              "doc": "The caller's cancellation token, or a deadline it set, stopped the operation. Not deterministic, so never logged or cached; there is nothing to do.",
+              "name": "Cancelled",
+              "shape": "unit"
+            },
+            {
+              "doc": "The machine refused a large allocation. Not deterministic, so never logged or cached; there is nothing to do.",
+              "name": "OutOfMemory",
+              "shape": "unit"
+            },
+            {
+              "doc": "No route exists yet for this input. The caller can take a route that exists, or wait for the build piece that adds one.",
+              "name": "Unsupported",
+              "shape": "unit"
+            },
+            {
+              "doc": "An invariant broke: a bug, never a panic and never a success. The caller can report it, with what reproduces it.",
+              "name": "Internal",
+              "shape": "unit"
+            }
+          ],
+          "module": "geom_op::kind",
+          "name": "ErrorKind",
+          "non_exhaustive": false
+        },
+        {
+          "doc": "Why a name could not be made or encoded.",
+          "file": "projects/engines/geometry/crates/geom-op/src/name.rs",
+          "kinds": [
+            {
+              "doc": "A role name that is empty.",
+              "name": "EmptyRole",
+              "shape": "unit"
+            },
+            {
+              "doc": "A role name not in Unicode Normalization Form C (32.19).",
+              "name": "NotNfc",
+              "shape": "unit"
+            },
+            {
+              "doc": "A set with the same name twice.",
+              "name": "Repeated",
+              "shape": "unit"
+            },
+            {
+              "doc": "An ordinal whose `n` is not below its `of`.",
+              "name": "Ordinal",
+              "shape": "unit"
+            },
+            {
+              "doc": "The encoder refused a value; only a defect in this module can cause it.",
+              "name": "Encode",
+              "shape": "tuple"
+            }
+          ],
+          "module": "geom_op::name",
+          "name": "NameError",
+          "non_exhaustive": false
         }
       ],
       "family": [],
@@ -7757,6 +8484,28 @@
       "kind": "kernel",
       "layer": "1",
       "modules": [
+        {
+          "cost": "linear in what is encoded; one allocation for the encoding.",
+          "does": "[`encode_exactness`], [`encode_evidence`], [`encode_diagnostic`] and [`encode_error`] write each in SKG's canonical CBOR (24.3), the parts chapter 28.13's canonical output hashes: an output's exactness class and diagnostics, or an error's kind, entities and evidence. `geom-test`'s canonical-output hasher combines them with the bodies, names and history (piece G96).",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-op/src/canonical.rs",
+          "guarantees": [
+            "**Values, never words.** A warning is its code, entities and evidence; an error its base kind, entities and evidence (28.13). Messages are plain words that may be reworded or translated, so they are never hashed, and two runs that fail the same way hash the same.",
+            "**One encoding per value**: integers in the shortest form, doubles as the shortest finite float that holds them, lists in the order the operation gave them (a deterministic operation fixes it), and names as 16-byte strings."
+          ],
+          "job": "Canonical encodings of what an operation reports besides its bodies: exactness classes, evidence, warnings and errors, so a result and a failure hash the same on every machine.",
+          "method": {
+            "links": [
+              "projects/engines/geometry/architecture/28-testing.md",
+              "projects/engines/geometry/architecture/24-file-format-exchange.md"
+            ],
+            "text": "chapter 28.13's canonical output and 24.3's canonical CBOR (`projects/engines/geometry/architecture/28-testing.md`, `projects/engines/geometry/architecture/24-file-format-exchange.md`)."
+          },
+          "path": "geom_op::canonical",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
         {
           "cost": "linear in the bytes written, with one amortised `Vec` growth; [`Encoder::set`] and [`Encoder::sorted`] sort their elements, O(n log n) comparisons of their encodings. Memory is the output plus one small frame per open array or map. No recursion: open containers are an explicit stack.",
           "does": "an [`Encoder`] writes exactly one CBOR data item (RFC 8949) from SKG's subset of values, in the core deterministic encoding of RFC 8949 section 4.2.1 with chapter 24.3's rules on top, and [`Encoder::finish`] hands it back as an [`Item`]. The subset is what chapter 24.3 stores: unsigned and signed integers (big ones as bignums), finite doubles, byte strings, UTF-8 text, arrays, maps keyed by unsigned integers (24.3's extension maps), sets and sorted lists (arrays sorted by the bytes of each element's encoding, 32.19), and coordinate columns as RFC 8746 typed arrays of little-endian `i64` (tag 79) and `f64` (tag 86). An [`Item`] can only be made by an encoder, so an item placed inside another ([`Encoder::item`], [`Encoder::set`], [`Encoder::sorted`]) is canonical by construction. Persistent names (G87) and the native format's records and decoder (G91, G92) are built on it, and never encode a value a second way.",
@@ -7795,6 +8544,95 @@
           "target": "lib"
         },
         {
+          "cost": "a context is a path (one vector of labels) and a few machine words; making one and reading it never allocates beyond the path it is given.",
+          "does": "every operation has chapter 10.1's shape, `fn operation(ctx: &OpContext, input: &OpInput) -> Result<OpOutput, OpError>`. An [`OpContext`] carries the operation's [`OpPath`] (its permanent ID from the operation log, and the step or batch item it is), its [`Budget`] of work units and logical bytes (chapter 23.10), the caller's [`Cancel`], and its [`Precision`]: final, or a coarser preview the caller asked for (chapter 23.6).",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-op/src/context.rs",
+          "guarantees": [
+            "**No clock and no randomness.** An `OpContext` holds a path, a budget, a precision and the caller's cancellation, and nothing else; none of them reads a clock or draws a random number. A time limit reaches an operation only as the caller's [`Cancel`] (owner action G71, section 32.15), whose only effect is to stop it, and a stopped operation publishes nothing.",
+            "**Final unless asked.** A context is made with [`Precision::Final`]; only [`OpContext::with_precision`] asks for a preview.",
+            "**Shown as its value.** `Debug` prints the path, the budget, the precision and whether a cancellation is attached, never the cancellation's address or state."
+          ],
+          "job": "What every operation is given besides its input: which operation it is, its budgets, the caller's cancellation and the precision asked for.",
+          "method": {
+            "links": [
+              "projects/engines/geometry/architecture/10-operations.md",
+              "projects/engines/geometry/architecture/23-performance.md",
+              "projects/engines/geometry/architecture/32-decisions.md"
+            ],
+            "text": "chapter 10.1's operation contract and chapter 23.10's budgets and cancellation, as decided in owner action G71 (`projects/engines/geometry/architecture/10-operations.md`, `projects/engines/geometry/architecture/23-performance.md`, section 32.15 of `projects/engines/geometry/architecture/32-decisions.md`)."
+          },
+          "path": "geom_op::context",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
+          "cost": "constant; the details are a few machine words, and only [`OpErrorDetail::remedies`] allocates, the vector it returns.",
+          "does": "[`OpErrorDetail`] has one variant per family of details (chapter 22), and grows with the kernel: each operation family adds its own enum as a variant, as its piece lands. This module holds the two every operation can meet. [`RunDetail`] is a stop from `geom-run`: a budget that ran out, the caller's cancellation, a refused allocation, or a broken invariant of the helper. [`NumDetail`] is a failure of `geom-num`, wrapped by meaning rather than by name (chapter 22: \"A crate's own error type never reaches a caller\"). Every detail says its base kind through its `kind` function, which the map reads to list each detail with its base kind (chapter 26.3), and gives the remedies it knows.",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-op/src/detail.rs",
+          "guarantees": [
+            "**One base kind per detail.** Each variant maps to exactly one [`ErrorKind`] in its `kind` function, written as a match the map reads; a family variant of [`OpErrorDetail`] takes the kind of the detail it holds.",
+            "**The numbers layer maps by meaning** (chapter 22, and the open question of section 31.7 that names this piece): an exact computation over its proven bit budget is a defect, so [`NumDetail::BitBudget`] is `Internal`, never `BudgetExceeded`; a certified bound over its ceiling is [`NumDetail::BoundOverCeiling`], `ExactnessNotAccepted`; a coordinate past the frame is `FrameRangeExceeded`; a degenerate construction is `Degenerate`; maths with no proven enclosure is `Unsupported`. The six section 22 left open are decided here, each with its reason on its variant: a value that is not finite is `Degenerate`; an argument outside a function's domain is `NoSolution`; an interval divisor that contains zero and the square root of an interval with negative values are `Undecided`; an empty interval and a grid-step conversion the wrong way are `Internal`.",
+            "**The helper's stops keep their meaning.** A budget failure keeps its `{ budget, kind, phase, used }` record, and a batch's total stays the batch's ([`RunDetail::BatchTotal`]), never cached as an item's result; cancellation and refused allocations stay `Cancelled` and `OutOfMemory`, which are never stored (chapter 23.10)."
+          ],
+          "job": "Error details: each operation family's own typed failures, each mapped to one base kind; and the two the whole kernel shares, the parallel helper's stops and the numbers layer's failures.",
+          "method": {
+            "links": [
+              "projects/engines/geometry/architecture/22-errors-queries-ai.md",
+              "projects/engines/geometry/architecture/23-performance.md"
+            ],
+            "text": "chapter 22's shared base and per-operation detail, and its mapping of the numbers layer's errors (`projects/engines/geometry/architecture/22-errors-queries-ai.md`), with chapter 23.10's budget and batch rules (`projects/engines/geometry/architecture/23-performance.md`)."
+          },
+          "path": "geom_op::detail",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
+          "cost": "an error is one box holding its path, its message and three short vectors; making one allocates them, once. Errors are made only on failure, and the box keeps every operation's `Result` one pointer wide on the error side.",
+          "does": "an [`OpError`] is chapter 22's structured error, the same for people and for AI agents: `kind`, `detail`, `op`, `entities`, `at` (evidence), `message` and `remedies`. It is built from its detail ([`OpError::new`]), which fixes its kind, its first message and the remedies the detail knows; the operation then adds the entities it names, the values that explain it, a fuller message and the remedies only it knows.",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-op/src/error.rs",
+          "guarantees": [
+            "**The kind always agrees with the detail.** [`OpError::kind`] is the detail's base kind, read from the detail every time; nothing can set one without the other (chapter 22).",
+            "**Never empty of meaning.** Every error has a message in plain words, the detail's own until the operation gives a fuller one, and the remedies its detail knows.",
+            "**Additions keep their order.** Entities, evidence and remedies are kept in the order the operation gave them; a deterministic operation gives them in a deterministic order, so equal inputs give equal errors (chapters 21 and 28.13).",
+            "**Replayable unless stopped.** [`OpError::is_replayable`] is false exactly for `Cancelled` and `OutOfMemory`, which are never logged, stored or cached."
+          ],
+          "job": "The error every operation returns: its base kind, its own typed detail, where it happened, the entities and values involved, plain words, and what would make it succeed.",
+          "method": {
+            "links": [
+              "projects/engines/geometry/architecture/22-errors-queries-ai.md"
+            ],
+            "text": "chapter 22's `OpError`, a closed base kind with an open, typed detail that the kind is read from (`projects/engines/geometry/architecture/22-errors-queries-ai.md`)."
+          },
+          "path": "geom_op::error",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
+          "cost": "a few machine words per value; nothing allocates.",
+          "does": "an [`Evidence`] is one named [`Value`]: a point, a coordinate, a length, a parameter, an exactness class and its bound, or a count, such as \"largest radius: 4.2 mm\" or \"station: 3.40 m\" (chapter 22's `at: Vec<Evidence>`). Values are `geom-num` values only, so this crate needs no geometry crate (chapter 27, \"Who owns what\").",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-op/src/evidence.rs",
+          "guarantees": [
+            "**Numbers layer values only.** Every [`Value`] holds `geom-num` values or plain integers, in the kernel's own units: grid steps with their step, parameters as certified intervals.",
+            "**A length always carries its step.** A count of steps means nothing alone (64 steps of `Q0` are 10 µm, of `Q1` 0.4 µm), so [`Value::Length`] holds both, as an exactness bound does.",
+            "**Plain words.** `Display` writes the name and the value, a length with its step, so a message can be read without the code."
+          ],
+          "job": "Evidence: the values an error or a warning points at, each named for what it is.",
+          "method": {
+            "none": "the values chapter 22's `Evidence` carries, written as data (`projects/engines/geometry/architecture/22-errors-queries-ai.md`), in `geom-num`'s own types."
+          },
+          "path": "geom_op::evidence",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
           "cost": "linear in the message, one compression per 64-byte block; the state is a fixed 112 bytes or so, and nothing is allocated.",
           "does": "[`Sha256`] takes a message piece by piece and gives its 32-byte digest, or the digest's leftmost 16 bytes; [`sha256`] and [`sha256_128`] hash one buffer. The owner chose SHA-256 for both uses (owner action G79, 32.20): a content ID is algorithm 1, the whole digest of a record's payload (24.2), and a `NameId` is the leftmost 128 bits of the digest of a name's domain prefix and canonical bytes (32.19, piece G87). The hashing itself is the `RustCrypto` project's `sha2` crate, the implementation 32.20 approves, at the release `Cargo.lock` pins.",
           "family": [],
@@ -7819,13 +8657,178 @@
           "provenance": [],
           "spdx": null,
           "target": "lib"
+        },
+        {
+          "cost": "making a history sorts its records and changes, `O(n log n)` in their number; a check and a composition are `O(m log m)` in the number of relation pairs, on sorted vectors searched by bisection, never hashed sets. Recursion: none.",
+          "does": "a [`History`] holds one [`Record`] per output entity, sorted by name, saying whether the output passed through unchanged, was modified from inputs, generated from inputs (or from nothing) in a role, split from one input by cutting faces, or merged from several (chapter 20.3); the set of inputs it deleted; and the [`TopologyChange`]s of chapter 13.14 it made. [`History::check`] tests the laws every operation's history keeps. [`Relations`] is the same history as three relations between inputs and outputs (modified, generated, deleted), the form in which histories compose ([`Relations::then`]) across a chain of operations.",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-op/src/history.rs",
+          "guarantees": [
+            "**Sorted by name, never by report order.** Records are in output-name order, each output once; changes and every set in them are in name order (20.2). Two operations that report the same history in different orders hold equal histories.",
+            "**The four laws hold** for every history and composition. Law 1 (a deleted input has no modified output) and law 3 (every output traces to an input or is generated, and every input a record names is an input of the operation) are checked ([`History::check`], [`Relations::check`]). Law 2 (an input's generated and modified outputs do not overlap) holds by construction: a history gives each output one origin, and composition takes the modified pairs out of the generated ones. Law 4 (histories compose, keeping the others) is [`Relations::then`]; `geom-test`'s history kit checks laws 2 and 4 on generated chains.",
+            "**Every topology change is recorded in the history** (13.14): a vanished face or an overshoot removed is deleted, faces merged are one `Merged` output of exactly those faces, and a face added is generated in the role the change gives.",
+            "**Composition is associative and keeps the laws.** Composing follows the method note's three rules, with one more where a part reaches an input by both relations through a chain: there it is modified, not generated, because it carries on a part of that input (the \"two paths\" case, decided here and written into 20.3). Grouping a chain either way gives the same relations."
+          ],
+          "job": "History: how every output of an operation relates to its inputs, which inputs it removed and what topology changes it made; the four laws of chapter 20.3; and how histories compose.",
+          "method": {
+            "links": [
+              "projects/engines/geometry/architecture/20-naming-history.md",
+              "projects/engines/geometry/architecture/13-sweeps-blends-offsets.md",
+              "projects/engines/geometry/methods/occt-history-contract.md",
+              "doi:10.1016/S0010-4485(96"
+            ],
+            "text": "chapter 20.3's history contract and 13.14's topology-change records (`projects/engines/geometry/architecture/20-naming-history.md`, `projects/engines/geometry/architecture/13-sweeps-blends-offsets.md`), after OCCT's history contract as the method note records it, its composition rules derived there (`projects/engines/geometry/methods/occt-history-contract.md`), and Kripac's face history graph (doi:10.1016/S0010-4485(96)00040-1)."
+          },
+          "path": "geom_op::history",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
+          "cost": "IDs and names are sixteen bytes, copied by value. A path holds its labels in one vector; a child path copies its parent's labels once and adds one, so it allocates once.",
+          "does": "an [`OpId`] is the permanent 128-bit ID of one operation, set when the operation is authored and kept in the operation log forever (architecture chapter 20.1). An [`OpPath`] adds sub-step labels to it: a [`Label::Step`] named by the operation, or a [`Label::Key`], the stable key the caller gives a batch item (chapter 10.1), so an item's path is the batch's path plus that key and never its position. A [`NameId`] is the 128-bit value of a persistent name (chapter 20.1), held here as its sixteen bytes so that errors and diagnostics can name the entities they concern; computing one from a `TopoName` under `NameScheme v1` is piece G87's.",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-op/src/id.rs",
+          "guarantees": [
+            "**Nothing is named by position or by chance.** An [`OpPath`] holds only the [`OpId`] and the labels given to it, in the order given; a batch item's label is the caller's key, so adding an item to a batch changes no other item's path.",
+            "**Every label hashes the same everywhere.** A step label is 1 to [`STEP_MAX`] bytes of printable ASCII or spaces, not starting or ending with a space. ASCII text is in Unicode Normalization Form C under every Unicode version, so a step label meets section 32.19's rule for text hashed into a name without a normalisation table.",
+            "**Order is byte order.** IDs, names and paths compare by their bytes and labels (a step before a key at the same depth, then by bytes), the order section 32.19 sorts names in: the order of their canonical encodings, which for sixteen-byte strings is the order of the bytes.",
+            "**Shown as their value.** `Debug` and `Display` print an ID or a name as 32 lowercase hexadecimal digits, the most significant byte first, and a path as its ID followed by its labels; nothing prints an address."
+          ],
+          "job": "Operation identity: an operation's permanent ID, the path to one of its steps or batch items, and the value of a persistent name.",
+          "method": {
+            "links": [
+              "projects/engines/geometry/architecture/20-naming-history.md",
+              "projects/engines/geometry/architecture/32-decisions.md",
+              "projects/engines/geometry/architecture/10-operations.md"
+            ],
+            "text": "chapter 20.1's three kinds of identity and section 32.19's canonical form of an `OpPath` (\"an array of the `OpId`'s 16 bytes followed by its labels\"), in `projects/engines/geometry/architecture/20-naming-history.md` and `projects/engines/geometry/architecture/32-decisions.md`, with chapter 10.1's rule that a batch item is keyed by the caller's key (`projects/engines/geometry/architecture/10-operations.md`)."
+          },
+          "path": "geom_op::id",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
+          "cost": "constant; nothing allocates.",
+          "does": "[`ErrorKind`] is the shared base of every [`OpError`](crate::OpError). Generic code (the command layer, the MCP tools, AI agents, the test harness) can handle any error by its kind alone; each operation's own detail says the rest (chapter 22). Each kind's doc comment is its definition and what the caller can do, which the map lists as the base of the error catalogue (chapter 26.3).",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-op/src/kind.rs",
+          "guarantees": [
+            "**Closed.** `ErrorKind` is not `#[non_exhaustive]`, so callers handle every kind; a new failure is a new detail, never a new kind (chapter 22). [`ErrorKind::ALL`] lists every kind once, in chapter 22's table order.",
+            "**Only two kinds are not replayable.** [`ErrorKind::Cancelled`] and [`ErrorKind::OutOfMemory`] depend on the caller and the machine, so they are never logged, stored or cached; every other kind is a deterministic answer (chapters 22 and 23.10).",
+            "**Named as chapter 22 names them.** [`ErrorKind::name`] is the kind's name in chapter 22, for logs, schemas and the map."
+          ],
+          "job": "The base kinds of every error: chapter 22's closed set, each defined once.",
+          "method": {
+            "links": [
+              "projects/engines/geometry/architecture/22-errors-queries-ai.md"
+            ],
+            "text": "chapter 22's table of base kinds (`projects/engines/geometry/architecture/22-errors-queries-ai.md`), with chapter 23.10's rule that cancellation and refused allocations are never stored."
+          },
+          "path": "geom_op::kind",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
+          "cost": "encoding a name allocates its bytes once and one small item per element of each set; hashing is one SHA-256 pass over at most a few hundred bytes. The NFC check is linear in a role name's length. Recursion: none; a name refers to other names by `NameId`, never by nesting.",
+          "does": "a [`TopoName`] says how an entity was made: created by an operation step in a [`Role`], split from one input by cutting faces ([`PieceKey`]), merged from several, bounded by the faces it lies between and those that end it, or, where entities would still collide, the [`Ordinal`]-th of a [`TopoName::Weak`] group (chapter 20.2). [`TopoName::encode`] writes its canonical bytes and [`TopoName::id`] hashes them to the 128-bit [`NameId`] (32.19): the first 16 bytes of SHA-256 over [`NAME_SCHEME_V1_PREFIX`] and those bytes. Sets of names are [`NameSet`]s, sorted lists [`NameList`]s, both in name order.",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-op/src/name.rs",
+          "guarantees": [
+            "**One name, one encoding, one `NameId`.** A `TopoName` can only hold sets without repeats, lists in order, ordinals with `n < of` and role names in Normalization Form C, so its encoding is a pure function of the name, and so is its `NameId`, on every target.",
+            "**Text is NFC under Unicode 18.0.0** (32.19): a role name not in Normalization Form C is refused when the role is made, never normalised behind the caller's back. Step labels are printable ASCII ([`crate::id`]), which is NFC under every Unicode version.",
+            "**Names never collide with other hashes.** The prefix `SKG NameScheme v1` and a zero byte go before every name's bytes, so no name hashes like a content ID (32.20) or a later scheme."
+          ],
+          "job": "Persistent names: how an operation names what it makes, and the `NameId` each name hashes to under `NameScheme v1`.",
+          "method": {
+            "links": [
+              "projects/engines/geometry/architecture/20-naming-history.md",
+              "projects/engines/geometry/architecture/32-decisions.md",
+              "https://csrc.nist.gov/pubs/sp/800/107/r1/final",
+              "https://www.unicode.org/reports/tr15/"
+            ],
+            "text": "chapter 20.2's `TopoName` and decision 32.19 (`NameScheme v1`), `projects/engines/geometry/architecture/20-naming-history.md` and `projects/engines/geometry/architecture/32-decisions.md`; FIPS 180-4's SHA-256 truncated to its leftmost 128 bits as NIST SP 800-107 Rev. 1 section 5.1 allows (<https://csrc.nist.gov/pubs/sp/800/107/r1/final>); and Unicode's Normalization Form C, UAX #15 (<https://www.unicode.org/reports/tr15/>), checked with the `unicode-normalization` crate at 0.1.26, whose tables are Unicode 18.0.0."
+          },
+          "path": "geom_op::name",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
+          "cost": "an output is its result plus one vector of diagnostics; a diagnostic owns its message and two short vectors.",
+          "does": "an [`OpOutput`] is chapter 10.1's `OpOutput`: the operation's own result (bodies, meshes, a solved sketch: each crate's type), with the parts every operation shares. This piece builds two of them: the result's [`Exactness`] and its [`Diagnostic`]s, warnings with the entities they concern (\"a short edge\", \"a near-tangency handled\"). The other two shared parts, the new persistent names and the history of chapter 20.3, join it with their types, in pieces G87 and G88.",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-op/src/output.rs",
+          "guarantees": [
+            "**A result states its class.** Every output carries the exactness class and bound of its result (principle 3); an output is made only with one ([`OpOutput::new`]).",
+            "**Warnings are data.** A [`Diagnostic`] has a stable code, the entities it concerns, the values that explain it and plain words; its code is lowercase ASCII letters, digits, `.` and `_`, 1 to [`CODE_MAX`] bytes, so it hashes and compares the same everywhere.",
+            "**Order is the operation's.** Diagnostics keep the order the operation added them in, which a deterministic operation fixes (chapter 21).",
+            "**Room to grow.** `OpOutput` and `Diagnostic` are `#[non_exhaustive]`: made only by their constructors, so the shared parts still to come join without breaking a caller."
+          ],
+          "job": "What a successful operation returns besides its own result: the result's exactness class and the warnings it carries.",
+          "method": {
+            "links": [
+              "projects/engines/geometry/architecture/10-operations.md",
+              "projects/engines/geometry/architecture/27-crates-folders.md"
+            ],
+            "text": "chapter 10.1's `OpOutput` and chapter 27's split of it into shared parts and each crate's own result (`projects/engines/geometry/architecture/10-operations.md`, `projects/engines/geometry/architecture/27-crates-folders.md`)."
+          },
+          "path": "geom_op::output",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
+          "cost": "a few machine words per remedy, plus the candidates' vector for [`Remedy::Choose`].",
+          "does": "a [`Remedy`] is one of the things chapter 22's table says a caller can do about an error, with the values that make it concrete: change a named input, to at most or at least a value where one is known (\"radius at most 4.2 mm here\"); choose among candidates; take another route (\"use the mesh boolean\"); accept a less exact class; heal first; work in another frame or at a coarser step; raise a budget, split the call or ask for a preview; wait for the build piece that adds a route; or report a bug.",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-op/src/remedy.rs",
+          "guarantees": [
+            "**Every action chapter 22 names has a form.** Each kind's \"what the caller can do\" in chapter 22's table is one or more of these variants; `Cancelled` and `OutOfMemory` have none, because there is nothing to do.",
+            "**Concrete where the operation knows.** A value, a class, a bound or a budget is carried, never left for the reader to work out from the message.",
+            "**Plain words.** `Display` writes each remedy as an instruction."
+          ],
+          "job": "Remedies: what would make a failed operation succeed, as data a person or an AI agent can act on.",
+          "method": {
+            "none": "chapter 22's column \"What the caller can do\", written as data (`projects/engines/geometry/architecture/22-errors-queries-ai.md`)."
+          },
+          "path": "geom_op::remedy",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
+          "cost": "none at run time: schemas are constants.",
+          "does": "an [`OpSchema`] is chapter 22's description of one operation: its name, version and family; its inputs and outputs, each with a type and a unit; the roles it names; the errors it can return, each detail with its base kind and its data; the warnings it can give; the exactness classes it can return; whether it has a batch entry; and an example. The types here are the vocabulary; the facade, `engine-geometry`, holds every operation's schema as data and generates from them (piece G100).",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-op/src/schema.rs",
+          "guarantees": [
+            "**Constant data.** Every schema type is made of `&'static` strings and slices, so a schema is a constant, compiled in, with no allocation and nothing to initialise.",
+            "**Errors name their base kind.** An [`ErrorSpec`] gives each detail its [`ErrorKind`], as chapter 22 asks every error table and schema to.",
+            "**Classes without bounds.** A schema states which [`Class`]es its operation can return; the bound is a property of each result, and [`Class::of`] reads the class of one."
+          ],
+          "job": "Operation schemas: every operation described as data, from which the interfaces, the MCP tools and the documentation are generated.",
+          "method": {
+            "links": [
+              "projects/engines/geometry/architecture/22-errors-queries-ai.md",
+              "projects/engines/geometry/architecture/10-operations.md",
+              "projects/engines/geometry/architecture/09-representations.md"
+            ],
+            "text": "chapter 22's list of what each operation's schema states, chapter 10.2's families and chapter 9's exactness classes, written as types (`projects/engines/geometry/architecture/22-errors-queries-ai.md`, `projects/engines/geometry/architecture/10-operations.md`, `projects/engines/geometry/architecture/09-representations.md`)."
+          },
+          "path": "geom_op::schema",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
         }
       ],
       "name": "geom-op",
       "provenance": [],
       "sections": "10.1, 13.2, 13.14, 20, 22, 23.10 and 24.3; chapter 27 (\"Who owns what\"), in the kernel architecture (`projects/engines/geometry/architecture/`).",
       "spdx": null,
-      "status": "the canonical CBOR encoder ([`cbor`]) and SHA-256 ([`hash`]) are built (G86); the rest is built by pieces G82, G83, G87, G88, G104, G143, G144, G459.",
+      "status": "the context, the error base and its details for the parallel helper and the numbers layer, the exactness class and warnings of an output, operation identity and the schema types built (G82); the canonical CBOR encoder ([`cbor`]) and SHA-256 ([`hash`]) built (G86); persistent names and their `NameId`s under `NameScheme v1` ([`name`]) built (G87); history records, their laws and their composition ([`history`]) built (G88); budgets in the contract to come in G83, the batch runner in G104, per-entity bounds in G143, the local-operation driver in G144 and preview precision in G459.",
       "summary": "Spare Kit geometry kernel: the operation contract."
     },
     {
@@ -8981,6 +9984,23 @@
       "layer": "Development",
       "modules": [
         {
+          "cost": "`run` replays each fixture of the tier twice per key of the edition; the others read the fixtures once.",
+          "does": null,
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-test/src/bin/fixture.rs",
+          "guarantees": [
+            "only `improve` and `seeds` write a file, and `improve` only the fixture named. Exit codes: 0 when everything checked holds; 1 when a check fails; 2 for a usage error or a file or command that cannot be read or run."
+          ],
+          "job": "`fixture`: the fixtures' tool: list them, check them, run them, hold a pull request to their rules, and carry out what a run asks for.",
+          "method": {
+            "none": "it parses its arguments and calls [`geom_test::fixture`], whose module headers carry the methods."
+          },
+          "path": "fixture",
+          "provenance": [],
+          "spdx": null,
+          "target": "bin"
+        },
+        {
           "cost": "`run` costs one `cargo test` per crate and test target; the other commands read the store and, for `check`, the kernel's sources once.",
           "does": null,
           "family": [],
@@ -9118,6 +10138,27 @@
           "target": "bin"
         },
         {
+          "cost": "linear in the outcome; one encoding and one hash.",
+          "does": "[`canonical_output`] encodes one operation's [`Outcome`], a success or a failure, in SKG's canonical CBOR and hashes it with SHA-256 after the domain prefix [`PREFIX`]. A success is its result bodies (each by the SHA-256 of its native canonical encoding, in the operation's order), its new names (a set), its history with the operation's path, its exactness class and its diagnostics; a failure is its error's base kind, entities and evidence. [`canonical_bytes`] gives the encoding the hash is taken over, for a test that needs to see the difference.",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-test/src/canonical.rs",
+          "guarantees": [
+            "**Errors hash as deterministically as results**: an error is encoded from values only (kind, entities, evidence), never from its words, so the same failure hashes the same on every target, as 28.13 asks: AI agents replay errors.",
+            "**One hash per outcome**: every part has one encoding (`geom-op`'s canonical encodings and `History::encode`), names are a set, and the prefix keeps these hashes apart from names' (32.19) and content IDs (24.2)."
+          ],
+          "job": "The canonical output of one case and its SHA-256: what a fixture's golden hash is taken over (chapter 28.13; piece G96).",
+          "method": {
+            "links": [
+              "projects/engines/geometry/architecture/28-testing.md"
+            ],
+            "text": "chapter 28.13's canonical output (`projects/engines/geometry/architecture/28-testing.md`), hashed with SHA-256 (FIPS 180-4) as every golden is, through [`crate::golden::sha256`]."
+          },
+          "path": "geom_test::canonical",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
           "cost": "linear in the size of the LCOV files and the crates' sources.",
           "does": "[`parse_lcov`] reads the LCOV file cargo-llvm-cov writes for one crate (`cargo llvm-cov -p <crate> --branch --lcov`). [`measure`] counts, for every file under the crate's `src/`, the lines and branches outside test code (found by [`crate::rust_source`]) and how many of them the crate's tests ran. [`judge`] applies the bars of [`crate::foundation`]: in the foundation set every line run and every branch taken both ways; elsewhere at least 90% of lines. [`check_marks`] checks every `coverage(off)` mark in the kernel's crates against [`crate::quality_ledger::Ledger::coverage_off`].",
           "family": [],
@@ -9211,6 +10252,162 @@
             "text": "the Taylor series of cos, sin and exp in fixed point, the argument of exp halved until it is at most 1 and the result squared back (R. P. Brent, \"Fast multiple-precision evaluation of elementary functions\", *Journal of the ACM* 23 (1976), 242–251, <https://doi.org/10.1145/321941.321944>); the integer square root of dashu; the fixed point of piece G61's attack tests (`geom-curve`'s `tests/attack_g61.rs`), which this module generalises for the law catalogue of chapter 28.3 (`projects/engines/geometry/architecture/28-testing.md`)."
           },
           "path": "geom_test::fixed",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
+          "cost": "linear in the fixture for a parse or a write.",
+          "does": "a [`Fixture`] is one permanent test case: its [`Source`], its [`OpLog`] in the native format, one [`Expect`] per kernel edition and set of operation versions, and its [`Status`]. [`Fixture::parse`] reads one from its JSON text and checks every rule below; [`Fixture::to_json`] writes the one spelling that text may have. The submodules hold the rest:",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-test/src/fixture.rs",
+          "guarantees": [
+            "**Nothing ambiguous parses**, each break a [`FixtureError`], never a silent choice: unknown fields, a missing field, a malformed id, digest, name or edition label, a log that is not its one canonical encoding, two entries with one key, and text that is not [`Fixture::to_json`]'s one spelling are all refused.",
+            "**Only a typed error can be `Known`.** A `Known` fixture expects `Err` under every key, never of kind `Internal`, and wants a success. A panic, a hang, an invalid body, a broken law, a wrong but valid result, or a disagreement with an exact oracle can never be `Known` (28.16).",
+            "**Only what replays is stored.** `Cancelled` and `OutOfMemory` depend on the caller and the machine and are never logged (chapter 22), so no expectation may name them.",
+            "**The log and the keys agree.** Every key names exactly the operations the log runs, and the log's own versions are one of the keys."
+          ],
+          "job": "Fixtures: the stored test cases every failure ends as, and the rules they keep (chapter 28.16, piece G97).",
+          "method": {
+            "links": [
+              "projects/engines/geometry/architecture/28-testing.md",
+              "projects/kit/notes/G01-evidence/08-standards-coverage-testing.md"
+            ],
+            "text": "chapter 28.16's fixtures and statuses (`projects/engines/geometry/architecture/28-testing.md`), which follow `OpenCascade`'s test suite (`projects/kit/notes/G01-evidence/08-standards-coverage-testing.md`, section D). The records are JSON (RFC 8259), read and written with `serde`, as the golden store's are."
+          },
+          "path": "geom_test::fixture",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
+          "cost": "linear in the two sets.",
+          "does": "[`diff`] compares the fixtures of a base commit with a pull request's and sorts every change into refused, needing a kernel owner's approval, or free. `.github/workflows/` `kernel-golden.yml` runs it through the `fixture diff` binary and holds the pull request to its answer, with the golden store's own approval rule (`golden::diff::approved`).",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-test/src/fixture/diff.rs",
+          "guarantees": [
+            "every change to a stored fixture is sorted, so one that fits no rule is refused; the answer depends only on the two sets given; nothing reads a clock or the network."
+          ],
+          "job": "What a pull request may do to the fixtures already stored (chapters 28.13 and 28.16; piece G97).",
+          "method": {
+            "links": [
+              "projects/engines/geometry/architecture/28-testing.md"
+            ],
+            "text": "chapters 28.13 and 28.16 (`projects/engines/geometry/architecture/28-testing.md`), and the golden store's rules in `golden::diff`."
+          },
+          "path": "geom_test::fixture::diff",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
+          "cost": "one match per operation, plus the operation.",
+          "does": "[`Kernel`] finds an operation by its name and version and runs it. The table is empty until the first operations of the facade are replayable (G101 on), and each piece that adds an operation adds its row here, so until then every log is refused by name.",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-test/src/fixture/kernel.rs",
+          "guarantees": [
+            "**An unknown operation is refused, never guessed**: a name or version not in the table gives [`Ran::Refused`], which no status accepts.",
+            "**No state survives [`Engine::start`]**: a fresh run begins from the log's own inputs."
+          ],
+          "job": "The kernel as a fixture's [`Engine`]: one operation record in, the operation's canonical parts out (chapter 28.16; piece G97).",
+          "method": {
+            "links": [
+              "projects/engines/geometry/architecture/21-determinism.md"
+            ],
+            "text": "chapter 21's replay (`projects/engines/geometry/architecture/21-determinism.md`)."
+          },
+          "path": "geom_test::fixture::kernel",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
+          "cost": "linear in the log.",
+          "does": "an [`OpLog`] holds the document's healing distance, the records of its stored inputs (bodies a log starts from, by content ID) and its [`Operation`]s, in order. [`OpLog::encode`] writes the file: the header, the inputs, one operation record each, then END; [`OpLog::decode`] reads it back.",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-test/src/fixture/log.rs",
+          "guarantees": [
+            "**The native format, and nothing else.** The file is what `geom_format::file` writes, so a log also seeds the readers' fuzz corpora and lands in the format museum unchanged.",
+            "**One encoding.** Inputs come before operations, and [`OpLog::decode`] refuses bytes that are not [`OpLog::encode`]'s, so a log has one spelling and a fixture's text one form.",
+            "**Versions come from the log**: [`OpLog::versions`] and [`OpLog::at_versions`] are how a fixture's keys and a replay at another version are found."
+          ],
+          "job": "The operation log of a fixture: its stored inputs and its operations, as one standalone `.skgf` file (chapter 28.16: \"operations and inputs, in the native format\"; piece G97).",
+          "method": {
+            "links": [
+              "projects/engines/geometry/architecture/24-file-format-exchange.md",
+              "projects/engines/geometry/architecture/21-determinism.md"
+            ],
+            "text": "chapter 24.2's file and record layers, chapter 21's replay (`projects/engines/geometry/architecture/24-file-format-exchange.md`, `projects/engines/geometry/architecture/21-determinism.md`)."
+          },
+          "path": "geom_test::fixture::log",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
+          "cost": "each pass tries every unit once, so `O(n^2)` predicate calls for `n` units in the worst case and `n + 1` when nothing can go.",
+          "does": "[`minimise`] takes a log and a predicate that says whether a log still fails, and tries, in a fixed order, removing each operation, each input of each operation and each stored input, keeping every removal after which the predicate still holds. It repeats until a whole pass removes nothing. [`same_failure`] is the usual predicate: the log, run as the fixture's, fails in the same class of way.",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-test/src/fixture/minimise.rs",
+          "guarantees": [
+            "**The result still fails**: the predicate held for it, on the last removal kept or on the first call, which refuses a log that does not fail.",
+            "**1-minimal**: removing any one operation, input or stored input from the result makes the predicate false. The method is delta debugging's end state, reached by single removals, which is what the chapter asks for; a log is short, so nothing is gained from removing chunks.",
+            "**Deterministic**: the order of trials is fixed, so one failure minimises to one log.",
+            "**Removal only**: nothing is added or reordered, and no parameter is changed."
+          ],
+          "job": "The operation-log minimiser: `geom-test` removes operations and inputs one at a time while the failure persists (chapter 28.16, step 1; piece G97).",
+          "method": {
+            "links": [
+              "projects/engines/geometry/architecture/28-testing.md"
+            ],
+            "text": "Zeller and Hildebrandt, \"Simplifying and Isolating Failure-Inducing Input\", IEEE TSE 28(2), 2002, for 1-minimality; chapter 28.16 for the units removed (`projects/engines/geometry/architecture/28-testing.md`). Written here: the units are this crate's, and the loop is shorter than any adapter to a delta-debugging crate."
+          },
+          "path": "geom_test::fixture::minimise",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
+          "cost": "linear in the size of the folder.",
+          "does": "[`read_dir`] reads every `.json` file under the fixtures folder ([`DIR`]) from a working tree; [`embedded`] gives the copy compiled into this crate, which every fixture test reads, on every target (WebAssembly test runs have no file system, as for the golden store); [`parse_all`] parses a set of files and checks what no single fixture can: each sits at the path its id names, and no id repeats. [`must_fail_on_base`] lists the fixtures a pull request adds whose source records a fix.",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-test/src/fixture/repo.rs",
+          "guarantees": [
+            "**The compiled copy is the tree's**: `build.rs` walks the folder and reruns when it changes, and the binary's `check` compares the two, so a stale build cannot pass.",
+            "**Every problem is listed**, not only the first.",
+            "**Files in byte order**, so a run reads the same on every machine."
+          ],
+          "job": "The fixtures folder: every stored fixture, on disk and compiled in, and the list the fails-on-base check takes (chapter 28.16; piece G97).",
+          "method": {
+            "links": [
+              "projects/engines/geometry/architecture/28-testing.md"
+            ],
+            "text": "chapter 28.16 (`projects/engines/geometry/architecture/28-testing.md`)."
+          },
+          "path": "geom_test::fixture::repo",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
+          "cost": "the log's cost twice per key, plus the perturbations.",
+          "does": "[`replay`] runs a log through an [`Engine`], operation by operation, hashes each operation's canonical output ([`crate::canonical`]) and combines them into the log's hash; the first operation that fails ends the log. [`judge`] compares a [`Replayed`] with a fixture's expectation. [`run`] runs one fixture under every key of an edition, twice on two perturbed heaps, and returns its [`Verdict`].",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-test/src/fixture/run.rs",
+          "guarantees": [
+            "**Exact.** A `Pass` fixture must match `expect` exactly: hash and measures, or kind and entities in order.",
+            "**Only what 28.16 allows is `Known`.** A `Known` fixture passes while it gives its expected typed error, is [`Verdict::Improved`] once it gives its wanted result, and fails on anything else: another error, another success, a panic. A panic or a log the engine refuses is [`Replayed::Broken`], which no status accepts.",
+            "**Twice, on two heaps.** As every golden does (28.13), each key runs [`REPEATS`] times, each time from a fresh [`Engine::start`] on a differently perturbed heap, and every run must agree before the store's value is looked at; a run that differs is [`Failure::Repeat`].",
+            "**Nothing is written**: judging never changes a fixture."
+          ],
+          "job": "Replaying a fixture's log and judging it: Pass, Fail or Improved (chapter 28.16; piece G97).",
+          "method": {
+            "links": [
+              "projects/engines/geometry/architecture/28-testing.md"
+            ],
+            "text": "chapter 28.16's statuses, chapter 28.13's canonical output and perturbations (`projects/engines/geometry/architecture/28-testing.md`)."
+          },
+          "path": "geom_test::fixture::run",
           "provenance": [],
           "spdx": null,
           "target": "lib"
@@ -9540,6 +10737,30 @@
           "target": "lib"
         },
         {
+          "cost": "linear in a history's records, times the composition's ordered-set operations; a chain of `k` steps composes twice, `O(k)` compositions.",
+          "does": "[`check_laws`] checks one operation's history against laws 1 to 3 and 13.14's recording rule. [`check_chain`] checks every step of a chain, composes it, checks the composition against the chain's first inputs (law 4: histories compose and keep laws 1 to 3), and checks that composing left to right and right to left give the same relations; it says which step or which part failed ([`ChainBreak`]). [`step`] and [`chain`] are proptest strategies of valid histories: every input unchanged, modified, split, merged with others, deleted, or deleted while generating, plus outputs generated from nothing, each output under a fresh name.",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-test/src/history.rs",
+          "guarantees": [
+            "**Every law is checked through `geom-op`'s own checker**, so the kit and the contract cannot disagree; the kit adds the chain's composition and its associativity.",
+            "**The generators only make histories the laws allow**, so a law break the kit reports on them is a defect of `geom-op`'s checker or composition; its tests seed one break of each law to show the checker finds it.",
+            "**Seeded and repeatable**: names are made from the step and position, never drawn at random beyond proptest's own seeded runner."
+          ],
+          "job": "The history laws as a kit every operation's tests run: chapter 20.3's four laws checked on one history and on a chain, and seeded generators of valid histories and chains.",
+          "method": {
+            "links": [
+              "projects/engines/geometry/architecture/20-naming-history.md",
+              "projects/engines/geometry/methods/occt-history-contract.md",
+              "https://proptest-rs.github.io/proptest/proptest/tutorial/strategy-basics.html"
+            ],
+            "text": "chapter 20.3's laws and the method note's composition rules (`projects/engines/geometry/architecture/20-naming-history.md`, `projects/engines/geometry/methods/occt-history-contract.md`), as property-based tests in proptest's strategies (<https://proptest-rs.github.io/proptest/proptest/tutorial/strategy-basics.html>)."
+          },
+          "path": "geom_test::history",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
           "cost": "linear in the map's records, the licence texts and the notes, plus sorting them.",
           "does": "[`build`] takes the map as a value ([`crate::map::Generated::map`], the records `MAP.json` holds), the hand-kept licence texts under `projects/engines/geometry/notices/` ([`notices`]) and the method notes under `projects/engines/geometry/methods/` ([`methods`]), and returns the text of both files with every [`Problem`]: a ported source with no licence text, a licence text no port uses, a method note that breaks its template, a record whose method note credits another source, or a map whose headers are incomplete. [`repo`] reads the inputs from a workspace on disk and writes or checks the committed files; the binary `provenance` (`cargo run -p geom-test --bin provenance -- check`) runs it in CI.",
           "family": [],
@@ -9768,14 +10989,15 @@
           "target": "lib"
         },
         {
-          "cost": "linear in the number of tokens, times a search of the crate's error type names.",
+          "cost": "linear in the number of tokens, times a search of the crate's error type names, plus one pass over each top-level `impl` block for a `kind` function.",
           "does": "[`find`] reads one source file's tokens ([`crate::map::rust`]) and returns every public enum that is an error type, declared at the top level of the file, with its doc comment, whether it is `#[non_exhaustive]`, and each variant's name, shape and doc comment. An enum is an error type when its name contains `Error` (`NumError`, and chapter 22's `ErrorKind`, `OpErrorDetail` and `IntersectError` when they arrive), or when its crate implements a trait named `Error` for it or names it as the error of a `Result<_, E>` anywhere ([`crate::map::items`]), so a family's own detail enum is found whatever it is called. Items under `#[cfg(test)]` are skipped whole.",
           "family": [],
           "file": "projects/engines/geometry/crates/geom-test/src/map/errors.rs",
           "guarantees": [
             "**Found or reported.** A public error enum inside a function, an inline module or any other block that is not a `#[cfg(test)]` item is reported ([`Rule::ErrorEnum`]): error enums are declared at the top level of a module file, where the map finds them.",
             "**Every kind explained.** An error enum or a variant without a doc comment is reported ([`Rule::ErrorDoc`]), because the catalogue of 26.3 explains every error the kernel can return.",
-            "**Only real code.** The scan runs on tokens, so an enum inside a comment, a string or a doc example is never found; `pub(crate)` and private enums are not part of the crate's interface and are not listed."
+            "**Only real code.** The scan runs on tokens, so an enum inside a comment, a string or a doc example is never found; `pub(crate)` and private enums are not part of the crate's interface and are not listed.",
+            "**Every detail with its base kind.** Chapter 22 maps every detail to one base kind, and the catalogue lists both (26.3). For an error enum whose `impl` block in the same file has a function `kind` returning `ErrorKind`, each variant's base kind is read from that function's `match self`: an arm `Enum::Variant => ErrorKind::Kind` gives `Kind`, and an arm `Enum::Variant(detail) => detail.kind()` gives [`HELD`], the kind of the detail the variant holds. A body that is not one `match self`, an arm in another form, a variant with no arm or with two, or a base kind that is not a variant of an `ErrorKind` enum in the map, is reported ([`Rule::ErrorBase`]), never guessed."
           ],
           "job": "Finding a kernel crate's error kinds: the public error enums in its source, with every variant and its doc comment.",
           "method": {
@@ -10699,6 +11921,30 @@
       "depends": [],
       "errors": [
         {
+          "doc": "Why a definition is refused.",
+          "file": "projects/engines/geometry/crates/geom-topo/src/definition.rs",
+          "kinds": [
+            {
+              "doc": "No kind of entity may carry it.",
+              "name": "NoKinds",
+              "shape": "unit"
+            },
+            {
+              "doc": "Its behaviour moves values by this kind of transform, and its schema is opaque.",
+              "name": "CannotTransform",
+              "shape": "tuple"
+            },
+            {
+              "doc": "Another definition is already held under the same identity: a definition never changes.",
+              "name": "Redefined",
+              "shape": "tuple"
+            }
+          ],
+          "module": "geom_topo::definition",
+          "name": "DefinitionError",
+          "non_exhaustive": false
+        },
+        {
           "doc": "Why an arena could not change, or arenas could not be published as a body.",
           "file": "projects/engines/geometry/crates/geom-topo/src/error.rs",
           "kinds": [
@@ -10974,6 +12220,30 @@
           "target": "lib"
         },
         {
+          "cost": "a definition is a few words plus its strings; [`Definitions::define`] and [`Definitions::get`] are `O(log n)` in the number of definitions. Nothing recurses.",
+          "does": "a [`Definition`] gives an attribute's identity ([`AttrId`]: owner, name, version), the [`EntityKind`]s that may carry it, its [`ValueSchema`], and its [`Behaviour`]: an action for every event an operation's history can show (changed, transformed by each kind of transform, split, merged, copied). Unchanged, generated and deleted entities need no action: the value stays, starts absent, or goes with its entity. [`Definitions`] holds every definition of a model, in `AttrId` order, and refuses to change one: a new behaviour or value schema is a new version (8.4). `geom-name`'s attribute step applies these behaviours to an operation's history (piece G90).",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-topo/src/definition.rs",
+          "guarantees": [
+            "**A definition never changes.** [`Definitions::define`] accepts a definition already held only when it is identical; any difference is [`DefinitionError::Redefined`].",
+            "**Only movable values move.** A behaviour may choose [`TransformAction::Transform`] only for a schema the kernel knows how to move (points, directions, frames, lengths and fields, 8.4); for an opaque schema [`Definition::new`] refuses it with [`DefinitionError::CannotTransform`], naming the transform.",
+            "**Only named entities carry values.** The kinds are the body and its named entities: regions, faces, edges and vertices. Fins, loops and shells have no names and never carry attributes (8.4); a definition with no kind is [`DefinitionError::NoKinds`].",
+            "**Ordered.** Definitions iterate in `AttrId` order, and each definition's kinds in their order, the same on every machine (8.2, 21)."
+          ],
+          "job": "Attribute definitions: who owns an attribute, which entities may carry it, what its values are, and what a value does at each of the eight events of section 8.4.",
+          "method": {
+            "links": [
+              "projects/engines/geometry/architecture/08-topology.md",
+              "projects/kit/notes/G01-evidence/07-persistent-naming.md"
+            ],
+            "text": "section 8.4's events and actions, the proposal the owner accepted with the attribute pieces (`projects/engines/geometry/architecture/08-topology.md`), after Parasolid's published attribute classes, taken as a concept only (`projects/kit/notes/G01-evidence/07-persistent-naming.md`, section 5)."
+          },
+          "path": "geom_topo::definition",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
           "cost": "as [`Column`]'s operations, once per field: a push is amortised constant time per field, a row read is one lookup per field.",
           "does": "for each entity of chapter 8.1 a row type ([`Region`], [`Shell`], [`Face`], [`Loop`], [`Fin`], [`Edge`], [`Vertex`]) and its arena ([`Regions`], [`Shells`], [`Faces`], [`Loops`], [`Fins`], [`Edges`], [`Vertices`]): one [`Column`] per field, so a scan reads only the fields it needs (chapter 23.9). Entities refer to each other, and to the geometry pools, by typed index only. [`Link`] names every column that holds an index, with the arena it points from and the arena it points into.",
           "family": [],
@@ -11115,6 +12385,17 @@
       "link": "https://crates.io/crates/sha2/0.11.0",
       "method_note": null,
       "name": "sha2",
+      "pinned": false,
+      "take": "depend",
+      "used_by": [
+        "projects/engines/geometry/crates/geom-op/Cargo.toml"
+      ]
+    },
+    {
+      "licence": "(Apache-2.0 OR MIT) AND Unicode-3.0",
+      "link": "https://crates.io/crates/unicode-normalization",
+      "method_note": null,
+      "name": "unicode-normalization",
       "pinned": false,
       "take": "depend",
       "used_by": [
