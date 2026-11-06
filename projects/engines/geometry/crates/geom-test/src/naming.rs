@@ -1439,9 +1439,9 @@ pub fn scenarios() -> Result<Vec<Fixture>, NamingError> {
         ),
         fixture(
             "naming/0022-a-boss-on-top-keeps-the-walls-names",
-            "A box fused onto the top face leaves the wall's own faces named as they were; the \
-             top face, now carrying the boss, is the same face (SolidCraft: rounds on stacked \
-             boxes stay on their own box).",
+            "A box fused onto the top face, clear of its edges, leaves the wall's own faces named \
+             as they were; the top face, now carrying the boss, is the same face (SolidCraft: \
+             rounds on stacked boxes stay on their own box).",
             doors(),
             &refs_a,
             vec![(
@@ -1449,10 +1449,37 @@ pub fn scenarios() -> Result<Vec<Fixture>, NamingError> {
                     op: [58; 16],
                     made_by: [158; 16],
                     key: 35,
+                    low: [150, 3, 60],
+                    size: [20, 4, 10],
+                }),
+                kept.clone(),
+            )],
+        ),
+        fixture(
+            "naming/0024-a-boss-across-the-whole-thickness-merges-and-splits",
+            "A box fused across the whole thickness on top merges its front face into the wall's \
+             exterior face, which is followed to the merged face, and splits the top face in two, \
+             which is ambiguous for one wanted; the edge it bounds anew is deleted. What the box \
+             does not touch keeps its name.",
+            doors(),
+            &refs_a,
+            vec![(
+                Edit::Then(After::Fill {
+                    op: [60; 16],
+                    made_by: [160; 16],
+                    key: 36,
                     low: [150, 0, 60],
                     size: [20, 10, 10],
                 }),
-                kept.clone(),
+                changed(
+                    &kept,
+                    &[
+                        (0, Expect::Followed(None)),
+                        (1, Expect::Carrier(None)),
+                        (4, Expect::Ambiguous(2)),
+                        (7, Expect::Deleted([60; 16])),
+                    ],
+                ),
             )],
         ),
         fixture(
