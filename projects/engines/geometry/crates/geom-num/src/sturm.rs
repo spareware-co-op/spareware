@@ -445,57 +445,124 @@ impl<const L: usize> Chain<L> {
     /// [`NumError::BudgetExceeded`] if a step did not fit, which coefficients below
     /// 2^[`MAX_COEFFICIENT_BITS`] cannot cause (the module header).
     pub fn of(coefficients: &[Wide<L>; TERMS]) -> Result<Chain<L>, NumError> {
+        let mut chain = Self::EMPTY;
+        chain.fill(coefficients)?;
+        Ok(chain)
+    }
+
+    /// A chain of no polynomials, for [`Chain::fill`] to set up where the chain will live: a chain
+    /// is large, and building it in place saves the copies a return by value makes.
+    pub const EMPTY: Chain<L> = Chain {
+        polys: [Poly {
+            terms: [Wide::<L>::ZERO; TERMS],
+            degree: 0,
+        }; TERMS],
+        len: 0,
+    };
+
+    /// [`Chain::of`], into `self`.
+    ///
+    /// # Errors
+    ///
+    /// As [`Chain::of`].
+    #[inline(never)]
+    pub fn fill(&mut self, coefficients: &[Wide<L>; TERMS]) -> Result<(), NumError> {
         let degree = degree_of(coefficients).ok_or(NumError::Degenerate)?;
         if degree == 0 {
             return Err(NumError::Degenerate);
         }
-        Self::build(coefficients, degree).ok_or(NumError::BudgetExceeded)
+        self.seed(coefficients, degree)
+            .ok_or(NumError::BudgetExceeded)?;
+        let (mut lead, mut step) = (Wide::<L>::one(), Wide::<L>::one());
+        // A chain has at most TERMS polynomials, so TERMS steps always reach its end: the step that
+        // would add a sixth fails instead.
+        for _ in 0..TERMS {
+            if !self
+                .advance(&mut lead, &mut step)
+                .ok_or(NumError::BudgetExceeded)?
+            {
+                break;
+            }
+        }
+        Ok(())
     }
 
-    /// [`Chain::of`] past its checks.
-    fn build(terms: &[Wide<L>; TERMS], degree: usize) -> Option<Chain<L>> {
-        let first = Poly {
-            terms: *terms,
-            degree,
-        };
-        let slope = first.derivative()?;
-        let second = Poly {
+    /// The chain's first two polynomials, the polynomial and its derivative; every other slot
+    /// holds the first until a step replaces it.
+    #[inline(never)]
+    fn seed(&mut self, terms: &[Wide<L>; TERMS], degree: usize) -> Option<()> {
+        for slot in &mut self.polys {
+            slot.terms = *terms;
+            slot.degree = degree;
+        }
+        let slope = self.polys.first()?.derivative()?;
+        *self.polys.get_mut(1)? = Poly {
             terms: slope,
             degree: degree_of(&slope)?,
         };
-        let mut polys = [first; TERMS];
-        *polys.get_mut(1)? = second;
-        let mut len: usize = 2;
-        // Cohen's lead and step, as magnitudes.
-        let (mut lead, mut step) = (Wide::<L>::one(), Wide::<L>::one());
-        loop {
-            let above = *polys.get(len.checked_sub(2)?)?;
-            let below = *polys.get(len.checked_sub(1)?)?;
-            if below.degree == 0 {
-                break;
-            }
-            let gap = above.degree.checked_sub(below.degree)?;
-            let raw = remainder(&above, &below)?;
-            let divisor = lead.checked_mul(&power(&step, gap)?)?;
-            let mut next = [Wide::<L>::ZERO; TERMS];
-            for (slot, term) in next.iter_mut().zip(&raw) {
-                *slot = div_exact(term, &divisor)?.checked_neg()?;
-            }
-            let Some(degree) = degree_of(&next) else {
-                break;
-            };
-            *polys.get_mut(len)? = Poly {
-                terms: next,
-                degree,
-            };
-            len = len.checked_add(1)?;
-            lead = magnitude(&below.lead()?)?;
-            step = match gap.checked_sub(1)? {
-                0 => lead,
-                less => div_exact(&power(&lead, gap)?, &power(&step, less)?)?,
-            };
+        self.len = 2;
+        Some(())
+    }
+
+    /// The next polynomial of the chain, if there is one: `Some(true)` after adding it,
+    /// `Some(false)` when the chain is complete, `None` if a step did not fit.
+    #[inline(never)]
+    fn advance(&mut self, lead: &mut Wide<L>, step: &mut Wide<L>) -> Option<bool> {
+        let len = self.len;
+        let above = self.polys.get(len.checked_sub(2)?)?;
+        let below = self.polys.get(len.checked_sub(1)?)?;
+        if below.degree == 0 {
+            return Some(false);
         }
-        Some(Chain { polys, len })
+        let gap = above.degree.checked_sub(below.degree)?;
+        let next = Self::next_terms(above, below, lead, step, gap)?;
+        let Some(degree) = degree_of(&next) else {
+            return Some(false);
+        };
+        let below_lead = below.lead()?;
+        *self.polys.get_mut(len)? = Poly {
+            terms: next,
+            degree,
+        };
+        self.len = len.checked_add(1)?;
+        Self::follow(&below_lead, gap, lead, step)?;
+        Some(true)
+    }
+
+    /// The terms of the polynomial after `below`: the pseudo-remainder of `above` by it, divided
+    /// exactly and negated.
+    #[inline(never)]
+    fn next_terms(
+        above: &Poly<L>,
+        below: &Poly<L>,
+        lead: &Wide<L>,
+        step: &Wide<L>,
+        gap: usize,
+    ) -> Option<[Wide<L>; TERMS]> {
+        let raw = remainder(above, below)?;
+        let divisor = lead.checked_mul(&power(step, gap)?)?;
+        let mut next = [Wide::<L>::ZERO; TERMS];
+        for (slot, term) in next.iter_mut().zip(&raw) {
+            *slot = div_exact(term, &divisor)?.checked_neg()?;
+        }
+        Some(next)
+    }
+
+    /// Cohen's lead and step for the step after one whose divisor had leading coefficient
+    /// `below_lead` and degree gap `gap`.
+    #[inline(never)]
+    fn follow(
+        below_lead: &Wide<L>,
+        gap: usize,
+        lead: &mut Wide<L>,
+        step: &mut Wide<L>,
+    ) -> Option<()> {
+        *lead = magnitude(below_lead)?;
+        *step = match gap.checked_sub(1)? {
+            0 => *lead,
+            less => div_exact(&power(lead, gap)?, &power(step, less)?)?,
+        };
+        Some(())
     }
 
     /// The polynomials, first to last.
