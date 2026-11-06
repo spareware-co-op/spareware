@@ -82,8 +82,9 @@ struct Found {
     isolated: usize,
     /// Singular points.
     singular: usize,
-    /// Half-branches the singular points say meet at them, all together.
-    valence: usize,
+    /// Branch ends the tracer calls flagged that touch no flagged pair of subdivision: an arc that
+    /// stops with nothing to stop it.
+    stray: usize,
     /// Other points: crossings and boundary touches.
     other_points: usize,
     /// Coincident regions.
@@ -387,10 +388,7 @@ fn pipeline(
             Reading::Crossing(pair) => settled.push(pair),
             Reading::Point { contact, .. } => match contact {
                 PointContact::IsolatedTangent => out.isolated += 1,
-                PointContact::Singular { branches } => {
-                    out.singular += 1;
-                    out.valence += usize::from(branches);
-                }
+                PointContact::Singular { .. } => out.singular += 1,
                 PointContact::Crossing | PointContact::BoundaryTouch => out.other_points += 1,
             },
             Reading::Curve { contact, .. } => {
@@ -419,6 +417,29 @@ fn pipeline(
             );
         }
     }
+    let touches = |v: &[geom_num::interval::Interval; 4],
+                   f: &geom_intersect::general::FlaggedPair| {
+        let ((a0, a1), (b0, b1)) = f.first;
+        let ((c0, c1), (d0, d1)) = f.second;
+        [(a0, a1), (b0, b1), (c0, c1), (d0, d1)]
+            .iter()
+            .zip(v)
+            .all(|((lo, hi), x)| x.lo() <= *hi && *lo <= x.hi())
+    };
+    out.stray = traced
+        .branches
+        .iter()
+        .flat_map(|b| {
+            [
+                (b.ends[0], b.vertices.first()),
+                (b.ends[1], b.vertices.last()),
+            ]
+        })
+        .filter(|(end, v)| {
+            *end == CurveEnd::Flagged
+                && v.is_some_and(|v| !found.flagged.iter().any(|f| touches(v, f)))
+        })
+        .count();
     out.branches = traced.branches.len();
     out.closed = traced
         .branches
@@ -498,19 +519,14 @@ fn judge(case: &Case, ours: &Ours) -> Verdict {
     let mut differs = Vec::new();
     // Where the truth has singular points its branches pass through them, but ours are arcs that
     // end at them, so the branches and closed loops are not counted against each other. What is
-    // checked instead is that every arc end at a flagged region is a half-branch some singular
-    // point says it has.
+    // checked instead is that every arc end the tracer calls flagged touches a flagged pair of
+    // subdivision, as one next to a singular point does: the pairs about the point are flagged at
+    // the floor on both sides of a short arc.
     let through = !case.singular_points.is_empty();
-    let at_flagged = found
-        .ends
-        .iter()
-        .flatten()
-        .filter(|end| **end == CurveEnd::Flagged)
-        .count();
-    if through && at_flagged != found.valence {
+    if through && found.stray > 0 {
         differs.push(format!(
-            "{at_flagged} arc ends at flagged regions for {} half-branches at singular points",
-            found.valence
+            "{} arc end(s) stop at no flagged region",
+            found.stray
         ));
     }
     for (name, ours, truth) in [
