@@ -1269,13 +1269,16 @@ fn the_filter_counts_ovals_from_the_real_roots() {
 
 #[test]
 fn the_filter_reads_a_root_just_before_the_walk_s_start() {
-    // Roots at −0.01, 1/3, 2 and 5 of t, the first between the walk's last point and its first, so
-    // the walk's first and last runs differ and only four of the five gap points are set. With the
-    // signs of the leading coefficients alternating no member is definite, so all four are read.
-    let (a, b) = diagonal_pair([(-1, 100), (-1, -3), (2, 1), (-5, -1)]);
+    // The basis of this pencil is (b − 7a, a), so a root u of the diagonal is t = 1/(u + 7) of the
+    // walk: −1/93, 1/2, 2 and 5 for u = −100, −5, −13/2 and −34/5. The first lies between the walk's
+    // last point, −1/63, and its first, 0, so the first and last runs differ and only four of the
+    // five gap points are set. The signs of the leading coefficients make no member definite, so all
+    // four are read.
+    let (a, b) = diagonal_pair([(-100, 1), (-5, 1), (13, -2), (-34, 5)]);
     assert_eq!(filtered(&a, &b), Some(smooth(2)));
-    // With them in two pairs the member between the second and third is definite.
-    let (a, b) = diagonal_pair([(-1, 100), (1, 3), (-2, -1), (-5, -1)]);
+    // With the signs of the pairs of roots alike the member between the second and the third is
+    // definite.
+    let (a, b) = diagonal_pair([(-100, 1), (5, -1), (-13, 2), (-34, 5)]);
     assert_eq!(filtered(&a, &b), Some(NONE));
 }
 
