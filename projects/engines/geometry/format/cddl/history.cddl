@@ -1,4 +1,4 @@
-; The history record's payload (tag 17, schema 1): format 1 (draft), SPEC.md section 11.
+; The history record's payload (tag 17, schema 1): format 1 (draft), SPEC.md section 13.
 ; CDDL by RFC 8610. The first rule is the one a payload is validated against; paths, roles, piece
 ; keys and names are names.cddl's rules, read together with this file.
 history = [op: op-path, records: [* history-entry], deleted: [* name-id], changes: [* topology-change]]

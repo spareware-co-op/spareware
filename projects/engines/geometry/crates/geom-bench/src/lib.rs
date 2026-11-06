@@ -28,7 +28,7 @@
 //! evaluation, certified enclosures and conversion to NURBS in `geom-curve` and `geom-surface`,
 //! with, from phase 3, `geom-make`'s primitives and transforms,
 //! each named in the catalogue with its crate's path and checked to be a public function there;
-//! and, from phase 3, `geom-topo`'s columns and publishing.
+//! and, from phase 3, `geom-topo`'s columns and publishing and `geom-name`'s attribute step.
 //!
 //! Map: chapter 23.13 (benchmarks and regression gates) and 28.14 (benchmarks in the test suite)
 //! of the kernel architecture, `projects/engines/geometry/architecture/`; board entry G18, which

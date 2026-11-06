@@ -80,7 +80,7 @@ fn attack_the_real_allow_list_is_vetted_and_pinned_to_the_lock() {
             "typenum",
             "unicode-normalization"
         ],
-        "the list holds libm, sha2 with the crates it brings (G86), crc with its catalogue (G92), and unicode-normalization with tinyvec (G87)"
+        "the list holds libm, sha2 with the crates it brings (G86), unicode-normalization with tinyvec (G87), and crc with its catalogue (G92)"
     );
     let lock = fs::read_to_string(root().join("Cargo.lock")).unwrap();
     assert_eq!(vetted::against_lock(&list, &lock), Vec::<String>::new());
@@ -93,7 +93,7 @@ fn attack_the_real_allow_list_is_vetted_and_pinned_to_the_lock() {
             "unicode-normalization" | "tinyvec" => {
                 "projects/kit/notes/G87-unicode-normalization-audit.md"
             }
-            "crc" | "crc-catalog" => "projects/kit/notes/G92-crc-audit.md",
+            name if name.starts_with("crc") => "projects/kit/notes/G92-crc-audit.md",
             _ => "projects/kit/notes/G86-sha2-audit.md",
         };
         assert!(

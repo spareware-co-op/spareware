@@ -28,8 +28,8 @@
 //! graph ([`graph`]), the ordinal order of `Weak` names ([`ordinal`])
 //! and the duplicate-name detector ([`unique`]) built (G87); the one shared attribute step,
 //! [`classes`], which applies attribute behaviours from an operation's history and sets a value as
-//! an operation of its own, built (G90); references and their resolution ([`resolve`]) built
-//! (G89); `PruneHistory` in G109 and placement references in G374.
+//! an operation of its own, built (G90); references and their resolution ([`resolve`]) built (G89);
+//! `PruneHistory` in G109 and placement references in G374.
 #![cfg_attr(not(test), no_std)]
 #![forbid(unsafe_code)]
 
