@@ -42,8 +42,8 @@ pub mod ordinal;
 pub mod resolve;
 pub mod unique;
 
-pub use faces::{NamedFace, faces, roles_of};
 pub use classes::{AttrError, Mover, Note, Step, apply, set};
+pub use faces::{NamedFace, faces, roles_of};
 pub use graph::{GraphError, NameGraph, parents};
 pub use ordinal::{OrderError, WeakOrder, ordinals, reference, weak_names};
 pub use resolve::{
