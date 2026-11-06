@@ -2351,7 +2351,7 @@
       "provenance": [],
       "sections": "7, 12.1, 12.4, 17.8, 19.3 and 26.1, in the kernel architecture (`projects/engines/geometry/architecture/`).",
       "spdx": null,
-      "status": "the traits, the enum, the NURBS kind and the contract (G60), the analytic kinds (G61), the bulge, trimmed, composite, offset and curve-on-surface kinds (G62), the transition kind, its evaluation (G63) and its conversion, split, reversal and transforms (G64), the analytic and transcendental enclosures (G67), and rational curves' higher derivative bounds started from their control points (G68) built; the other kinds to come in G175, G361 and G371.",
+      "status": "the traits, the enum, the NURBS kind and the contract (G60), the analytic kinds (G61), the bulge, trimmed, composite, offset and curve-on-surface kinds (G62), the transition kind, its evaluation (G63) and its conversion, split, reversal and transforms (G64), the analytic and transcendental enclosures (G67), rational curves' higher derivative bounds started from their control points (G68) and many points per call (G104) built; the other kinds to come in G175, G361 and G371.",
       "summary": "Spare Kit geometry kernel: every curve kind."
     },
     {
@@ -2523,6 +2523,28 @@
       "kind": "development",
       "layer": "Development",
       "modules": [
+        {
+          "cost": "at most [`MAX_ITEMS`] items of at most 63 work units each, each run twice (in the batch and alone), and [`MAX_PARAMS`] parameters through three kinds twice; at most [`MAX_INPUT_BYTES`] bytes read.",
+          "does": "[`decode`] turns a fuzzer's bytes into a [`Case`]: up to [`MAX_ITEMS`] batch items (a key from a small alphabet, so keys repeat, the work each charges and whether it fails), each item's own budget, an optional batch total, and parameters for a line, a circle and a plane. [`check`] runs the batch and compares it with the rules of chapter 23.10 read independently: a repeated key refuses the whole batch; otherwise one result per item, at the batch's path plus the item's key, equal to the item run alone ([`geom_op::Batch::single`]) until the running sum of work in key order first passes the total, and the batch's total from that item on. It then evaluates the three geometry kinds at the case's parameters through `points` and through single calls and requires the same bits, and the same failures. [`harness`] is `decode` then `check`.",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-fuzz/src/batch.rs",
+          "guarantees": [
+            "**Any bytes are a case.** Every byte string, the empty one included, decodes to a case.",
+            "**A bounded input.** [`decode`] reads at most [`MAX_INPUT_BYTES`] bytes, derived below; a unit test builds the input that reaches it.",
+            "**A panic is a failure; a disagreement is a [`Finding`]** naming the law and the case."
+          ],
+          "job": "Fuzz target: `geom-op`'s batch driver gives one result per item, each the item's own, and every curve and surface kind's many-point call gives the single calls' bits.",
+          "method": {
+            "links": [
+              "projects/engines/geometry/architecture/23-performance.md"
+            ],
+            "text": "differential testing against chapter 23.10's batch rule read independently (`projects/engines/geometry/architecture/23-performance.md`), and of the flat-array calls against the single calls they are defined by (chapter 23.6)."
+          },
+          "path": "geom_fuzz::batch",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
         {
           "cost": "building and querying trees of at most [`MAX_BOXES`] boxes and an index of at most [`MAX_POINTS`] points, and brute force over them, O(n²); at most [`MAX_INPUT_BYTES`] bytes.",
           "does": "[`decode`] turns a fuzzer's bytes into a [`Case`]: up to [`MAX_BOXES`] boxes in two or three dimensions, a query box, a second set of boxes, a set of moved boxes, up to [`MAX_POINTS`] grid points, a centre and a radius. [`check`] builds `geom_bvh::BoxTree`s and a `geom_bvh::CellIndex` and holds every query to the answer of a brute force written here, from the boxes' corners and exact integer distances, never from `geom-bvh`'s own tests: overlapping a box, all overlapping pairs, pairs across two trees, a refit's answers (piece G54), and the points within a radius of a point and all pairs within a radius (G55). [`harness`] is `decode` then `check`.",
@@ -8359,7 +8381,7 @@
       "provenance": [],
       "sections": "7, 12.1, 13 (introduction), 13.9, 16.1, 16.5, 16.6, 19.3 and 26.1, in the kernel architecture (`projects/engines/geometry/architecture/`).",
       "spdx": null,
-      "status": "the traits, the enum, the NURBS kind, `ImplicitBound` and the contract built (G60); the analytic and swept kinds (G65); the offset kind, and every kind's partials of any order (G66); the analytic kinds' closed-form extents (G67); certified second-derivative and normal-derivative bounds for every kind (G68); the other kinds to come in G253, G254, G260, G264, G315, G316, G317, G318 and G470.",
+      "status": "the traits, the enum, the NURBS kind, `ImplicitBound` and the contract built (G60); the analytic and swept kinds (G65); the offset kind, and every kind's partials of any order (G66); the analytic kinds' closed-form extents (G67); certified second-derivative and normal-derivative bounds for every kind (G68); many points per call, every kind evaluating n parameter pairs into flat arrays through `ParamSurface::points` (G104); the other kinds to come in G253, G254, G260, G264, G315, G316, G317, G318 and G470.",
       "summary": "Spare Kit geometry kernel: every surface kind."
     },
     {
