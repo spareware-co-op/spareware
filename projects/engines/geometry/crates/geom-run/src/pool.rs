@@ -11,7 +11,8 @@
 //! Waves start at [`WAVE_FIRST`] chunks and double up to [`WAVE_MAX`], a schedule fixed by the
 //! chunk count alone. So the helper never holds more than `WAVE_MAX` tasks, its bookkeeping does
 //! not grow with the problem, and after a failure it runs at most one wave of chunks that the
-//! answer does not need.
+//! answer does not need. A wave of a single task, a phase of one chunk or a phase's last, runs on
+//! the calling thread as it is read: a pool could only add a wake-up and a barrier to it.
 //!
 //! Method: the superstep of Valiant's bulk-synchronous parallel model ("A bridging model for
 //! parallel computation", Communications of the ACM 33(8), 1990,
@@ -20,16 +21,17 @@
 //! only its own slot.
 //!
 //! Cost: a phase of c chunks runs in at most 7 + ⌈c / `WAVE_MAX`⌉ waves (six doublings from
-//! `WAVE_FIRST` reach `WAVE_MAX`). Each wave of w chunks costs two lists of w entries (the tasks
-//! and the handles passed to the pool) and one barrier; the slots of the current wave, each a
-//! chunk's payload and output, are the only other storage. With no pool there is no list and no
-//! barrier: each chunk runs just before it is read.
+//! `WAVE_FIRST` reach `WAVE_MAX`). Each wave of w > 1 chunks costs two lists of w entries (the
+//! tasks and the handles passed to the pool) and one barrier, and a wave of one task neither. The
+//! slots of the current wave, each a chunk's payload and output, are the only other storage. With
+//! no pool there is no list and no barrier: each chunk runs just before it is read.
 //!
 //! Invariants:
 //!
 //! - Whatever a pool does, the answer is right. A task run twice writes its slot once (a filled
-//!   slot is skipped); a task never run is run on the calling thread when its result is read. Only
-//!   a panic inside the pool escapes, and pools must not panic.
+//!   slot is skipped); a task never run, as a wave's only task never is, runs on the calling
+//!   thread when its result is read, with the same payload and so the same meter. Only a panic
+//!   inside the pool escapes, and pools must not panic.
 //! - Results are read in index order, never in the order tasks finished.
 
 use alloc::collections::TryReserveError;
@@ -39,7 +41,8 @@ use core::ops::ControlFlow;
 /// Threads for the helper, supplied by the caller (architecture chapter 23.4).
 ///
 /// Implementations live outside the kernel, in `std` code that may start threads. The helper's
-/// answer never depends on the pool: a pool decides only how fast the answer comes.
+/// answer never depends on the pool: a pool decides only how fast the answer comes. The helper
+/// hands it at least two tasks at a time, and runs a lone task itself.
 pub trait Pool: Sync {
     /// Run every task exactly once, on any threads, in any order, and return when all have
     /// finished. Must be re-entrant: a task may call the helper again with this pool, and that
@@ -115,9 +118,13 @@ where
         if slots.is_empty() {
             return Ok(());
         }
-        run_wave(pool, &mut slots, &fill)?;
+        // A wave of one task runs on the calling thread, when its result is read below: handing
+        // it to the pool would cost a wake-up and a barrier and change nothing else.
+        if slots.len() > 1 {
+            run_wave(pool, &mut slots, &fill)?;
+        }
         for (mut payload, done) in slots.drain(..) {
-            // `None` only if the pool broke its contract and skipped the task.
+            // `None` for a wave of one task, or if the pool broke its contract and skipped it.
             let out = done.unwrap_or_else(|| run(&mut payload));
             if absorb(out).is_break() {
                 return Ok(());
