@@ -56,8 +56,9 @@
 //!
 //! Status: the traits, the enum, the NURBS kind and the contract (G60), the analytic kinds (G61),
 //! the bulge, trimmed, composite, offset and curve-on-surface kinds (G62), the transition kind,
-//! its evaluation (G63) and its conversion, split, reversal and transforms (G64), and the analytic
-//! and transcendental enclosures (G67) built; the other kinds to come in G68, G175, G361 and G371.
+//! its evaluation (G63) and its conversion, split, reversal and transforms (G64), the analytic
+//! and transcendental enclosures (G67), and rational curves' higher derivative bounds started from
+//! their control points (G68) built; the other kinds to come in G175, G361 and G371.
 #![cfg_attr(not(test), no_std)]
 #![forbid(unsafe_code)]
 

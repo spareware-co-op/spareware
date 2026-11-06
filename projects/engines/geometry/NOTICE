@@ -1,8 +1,8 @@
 Spare Kit geometry kernel: notices
 ==================================
 
-The geometry kernel (projects/engines/geometry) is Spare Kit's own work under the Mozilla Public
-License 2.0 (LICENSE at the repository root), except where a file says it is ported from an
+The geometry kernel (projects/engines/geometry) is Spare Kit's own work under the Apache License
+2.0 (LICENSE at the repository root), except where a file says it is ported from an
 outside source. This file holds the licence text of every outside source the kernel takes code
 from, and the credit owed to every source the kernel takes code or a method from, as rule 4 of
 section 29.20 of the kernel's architecture (chapter 29, sources and licences) requires. It ships
@@ -41,19 +41,19 @@ Ported files, each with the origin files it ports and the origin's copyright lin
 copies them:
 
   projects/engines/geometry/crates/geom-num/src/math/atan2.rs
-    SPDX-License-Identifier: MPL-2.0 AND MIT
+    SPDX-License-Identifier: Apache-2.0 AND MIT
     https://gitlab.inria.fr/core-math/core-math/-/blob/0ce0cbc15935e24c656280e5a46c34e89f301b7a/src/binary64/atan2/atan2.c
       Copyright (c) 2024-2025 Paul Zimmermann and Alexei Sibidanov
     https://gitlab.inria.fr/core-math/core-math/-/blob/0ce0cbc15935e24c656280e5a46c34e89f301b7a/src/binary64/atan2/tint.h
       Copyright (c) 2023-2024 Paul Zimmermann and Alexei Sibidanov
 
   projects/engines/geometry/crates/geom-num/src/math/exp.rs
-    SPDX-License-Identifier: MPL-2.0 AND MIT
+    SPDX-License-Identifier: Apache-2.0 AND MIT
     https://gitlab.inria.fr/core-math/core-math/-/blob/0ce0cbc15935e24c656280e5a46c34e89f301b7a/src/binary64/exp/exp.c
       Copyright (c) 2022-2026 Alexei Sibidanov <sibid@uvic.ca>.
 
   projects/engines/geometry/crates/geom-num/src/math/log.rs
-    SPDX-License-Identifier: MPL-2.0 AND MIT
+    SPDX-License-Identifier: Apache-2.0 AND MIT
     https://gitlab.inria.fr/core-math/core-math/-/blob/0ce0cbc15935e24c656280e5a46c34e89f301b7a/src/binary64/log/log.c
       Copyright (c) 2022 INRIA and CERN.
       Authors: Paul Zimmermann and Tom Hubrecht.
@@ -62,7 +62,7 @@ copies them:
       Author: Tom Hubrecht
 
   projects/engines/geometry/crates/geom-num/src/math/sincospi.rs
-    SPDX-License-Identifier: MPL-2.0 AND MIT
+    SPDX-License-Identifier: Apache-2.0 AND MIT
     https://gitlab.inria.fr/core-math/core-math/-/blob/0ce0cbc15935e24c656280e5a46c34e89f301b7a/src/binary64/sinpi/sinpi.c
       Copyright (c) 2023-2026 Alexei Sibidanov <sibid@uvic.ca>.
     https://gitlab.inria.fr/core-math/core-math/-/blob/0ce0cbc15935e24c656280e5a46c34e89f301b7a/src/binary64/cospi/cospi.c
@@ -121,78 +121,78 @@ Ported files, each with the origin files it ports and the origin's copyright lin
 copies them:
 
   projects/engines/geometry/crates/geom-nurbs/src/approx.rs
-    SPDX-License-Identifier: MPL-2.0 AND Apache-2.0
+    SPDX-License-Identifier: Apache-2.0
     https://github.com/NVIDIA-Omniverse/usd-brep/blob/c9c5979f04cea8c38213004d4f04df0dcfb40d05/source/SMLib/src/NL_CrvFit.cpp
       SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 
   projects/engines/geometry/crates/geom-nurbs/src/basis.rs
-    SPDX-License-Identifier: MPL-2.0 AND Apache-2.0
+    SPDX-License-Identifier: Apache-2.0
     https://github.com/NVIDIA-Omniverse/usd-brep/blob/c9c5979f04cea8c38213004d4f04df0dcfb40d05/source/SMLib/src/NL_BasisBasic.cpp
       SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 
   projects/engines/geometry/crates/geom-nurbs/src/bezier.rs
-    SPDX-License-Identifier: MPL-2.0 AND Apache-2.0
+    SPDX-License-Identifier: Apache-2.0
     https://github.com/NVIDIA-Omniverse/usd-brep/blob/c9c5979f04cea8c38213004d4f04df0dcfb40d05/source/SMLib/src/NL_CrvTool.cpp
       SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 
   projects/engines/geometry/crates/geom-nurbs/src/curve.rs
-    SPDX-License-Identifier: MPL-2.0 AND Apache-2.0
+    SPDX-License-Identifier: Apache-2.0
     https://github.com/NVIDIA-Omniverse/usd-brep/blob/c9c5979f04cea8c38213004d4f04df0dcfb40d05/source/SMLib/src/NL_CrvNurb.cpp
       SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
     https://github.com/NVIDIA-Omniverse/usd-brep/blob/c9c5979f04cea8c38213004d4f04df0dcfb40d05/source/SMLib/src/NL_CrvAdv.cpp
       SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 
   projects/engines/geometry/crates/geom-nurbs/src/elevate.rs
-    SPDX-License-Identifier: MPL-2.0 AND Apache-2.0
+    SPDX-License-Identifier: Apache-2.0
     https://github.com/NVIDIA-Omniverse/usd-brep/blob/c9c5979f04cea8c38213004d4f04df0dcfb40d05/source/SMLib/src/NL_CrvTool.cpp
       SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
     https://github.com/NVIDIA-Omniverse/usd-brep/blob/c9c5979f04cea8c38213004d4f04df0dcfb40d05/source/SMLib/src/NL_Bezier.cpp
       SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 
   projects/engines/geometry/crates/geom-nurbs/src/fit.rs
-    SPDX-License-Identifier: MPL-2.0 AND Apache-2.0
+    SPDX-License-Identifier: Apache-2.0
     https://github.com/NVIDIA-Omniverse/usd-brep/blob/c9c5979f04cea8c38213004d4f04df0dcfb40d05/source/SMLib/src/NL_CrvFit.cpp
       SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 
   projects/engines/geometry/crates/geom-nurbs/src/insert.rs
-    SPDX-License-Identifier: MPL-2.0 AND Apache-2.0
+    SPDX-License-Identifier: Apache-2.0
     https://github.com/NVIDIA-Omniverse/usd-brep/blob/c9c5979f04cea8c38213004d4f04df0dcfb40d05/source/SMLib/src/NL_CrvTool.cpp
       SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 
   projects/engines/geometry/crates/geom-nurbs/src/interp.rs
-    SPDX-License-Identifier: MPL-2.0 AND Apache-2.0
+    SPDX-License-Identifier: Apache-2.0
     https://github.com/NVIDIA-Omniverse/usd-brep/blob/c9c5979f04cea8c38213004d4f04df0dcfb40d05/source/SMLib/src/NL_CrvFit.cpp
       SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 
   projects/engines/geometry/crates/geom-nurbs/src/lsq.rs
-    SPDX-License-Identifier: MPL-2.0 AND Apache-2.0
+    SPDX-License-Identifier: Apache-2.0
     https://github.com/NVIDIA-Omniverse/usd-brep/blob/c9c5979f04cea8c38213004d4f04df0dcfb40d05/source/SMLib/src/NL_CrvFit.cpp
       SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 
   projects/engines/geometry/crates/geom-nurbs/src/net.rs
-    SPDX-License-Identifier: MPL-2.0 AND Apache-2.0
+    SPDX-License-Identifier: Apache-2.0
     https://github.com/NVIDIA-Omniverse/usd-brep/blob/c9c5979f04cea8c38213004d4f04df0dcfb40d05/source/SMLib/src/NL_SrfTool.cpp
       SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 
   projects/engines/geometry/crates/geom-nurbs/src/product.rs
-    SPDX-License-Identifier: MPL-2.0 AND Apache-2.0
+    SPDX-License-Identifier: Apache-2.0
     https://github.com/NVIDIA-Omniverse/usd-brep/blob/c9c5979f04cea8c38213004d4f04df0dcfb40d05/source/SMLib/src/NL_Bezier.cpp
       SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 
   projects/engines/geometry/crates/geom-nurbs/src/reduce.rs
-    SPDX-License-Identifier: MPL-2.0 AND Apache-2.0
+    SPDX-License-Identifier: Apache-2.0
     https://github.com/NVIDIA-Omniverse/usd-brep/blob/c9c5979f04cea8c38213004d4f04df0dcfb40d05/source/SMLib/src/NL_CrvTool.cpp
       SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
     https://github.com/NVIDIA-Omniverse/usd-brep/blob/c9c5979f04cea8c38213004d4f04df0dcfb40d05/source/SMLib/src/NL_Bezier.cpp
       SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 
   projects/engines/geometry/crates/geom-nurbs/src/remove.rs
-    SPDX-License-Identifier: MPL-2.0 AND Apache-2.0
+    SPDX-License-Identifier: Apache-2.0
     https://github.com/NVIDIA-Omniverse/usd-brep/blob/c9c5979f04cea8c38213004d4f04df0dcfb40d05/source/SMLib/src/NL_CrvTool.cpp
       SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 
   projects/engines/geometry/crates/geom-nurbs/src/surface.rs
-    SPDX-License-Identifier: MPL-2.0 AND Apache-2.0
+    SPDX-License-Identifier: Apache-2.0
     https://github.com/NVIDIA-Omniverse/usd-brep/blob/c9c5979f04cea8c38213004d4f04df0dcfb40d05/source/SMLib/src/NL_SrfNurb.cpp
       SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 
@@ -571,6 +571,13 @@ libmalloc's xzone malloc
     projects/engines/geometry/crates/geom-test/src/golden/perturb.rs
       with `src/xzone_malloc/xzone_malloc.h` (MIT) at the same commit, for how macOS on arm64 pools and reuses small blocks (its last-freed-first chunk lists, its four pools per size class and its keyed choice of pool), to explain what CI measured. No code copied.
 
+LLVM's llvm-cov
+  Licence:      Apache-2.0 WITH LLVM-exception
+  Link:         https://github.com/rust-lang/llvm-project/blob/1b9c0d5ff9bbe7634aead059efe6b11a7eeba145/llvm/tools/llvm-cov/CoverageExporterLcov.cpp
+  Consulted by:
+    projects/engines/geometry/crates/geom-test/src/coverage.rs
+      with `CoverageSummaryInfo.cpp` and `CodeCoverage.cpp` beside it at the same commit (the LLVM 23.1.1 the pinned nightly ships), for how its LCOV export counts `BRF` and writes `BRDA`. No code copied.
+
 npm `hosted-git-info` 10.1.1
   Licence:      ISC
   Link:         https://github.com/npm/hosted-git-info/blob/8c3bebb5e42142b7bce06b085b4c1bd1adba7371/lib/hosts.js
@@ -634,6 +641,13 @@ rayon
       for the lowest-index rule of `find_first`, which this crate applies to failures. No code copied.
     projects/engines/geometry/crates/geom-run/src/phase.rs
       for the lowest-index rule of `find_first`, which this crate applies to failures. No code copied.
+
+rustc
+  Licence:      MIT OR Apache-2.0
+  Link:         https://github.com/rust-lang/rust/blob/21b707e3f97e0b522ebd2f277a862339625ad83f/compiler/rustc_mir_build/src/builder/matches/mod.rs
+  Consulted by:
+    projects/engines/geometry/crates/geom-test/src/coverage.rs
+      with `compiler/rustc_mir_transform/src/coverage/mappings.rs` and `compiler/rustc_codegen_llvm/src/coverageinfo/mapgen/covfun.rs` at the same commit (the pinned nightly), for which branch regions it writes and where. No code copied.
 
 rustc's tidy
   Licence:      MIT OR Apache-2.0
