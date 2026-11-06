@@ -327,7 +327,7 @@ How to read an entry:
 
 **Euler operators**: Operations that change a body's topology while keeping Euler's formula, the building blocks of the builder (piece G81; piece G111).
 
-**Euler's formula**: The relation between the numbers of vertices, edges, faces, loops and shells of a valid body and its genus (the Euler-Poincaré formula); checker group 1 checks it (8.3).
+**Euler's formula**: V − E + F − R = 2 (S − H), the relation between the numbers of vertices, edges, faces, rings (loops less faces), shells and holes of a valid body (the Euler-Poincaré formula); checker group 1 checks it (8.3), and `geom-topo`'s Verus model proves every Euler operator keeps it (28.7; piece G111).
 
 **Evidence**: The points, parameters, distances and bounds an error carries to say where and why it failed (22).
 
