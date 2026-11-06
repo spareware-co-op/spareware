@@ -17,6 +17,7 @@
 
 use geom_curve::affine::{Entries, int_interval};
 use geom_curve::contract::check;
+use geom_curve::tight::larger;
 use geom_curve::{
     ContractError, CurveError, CurveKind, DerivativeBound, Law, NurbsForm, ParamCurve, ParamMap,
 };
@@ -110,10 +111,14 @@ impl ParamCurve<3> for Faulty {
     fn derivatives(&self, t: f64, side: Limit, out: &mut [[f64; 3]]) -> Result<(), CurveError> {
         ParamCurve::derivatives(&self.inner, t, side, out)?;
         if let Fault::Evaluate(k, above) = self.fault {
-            let e = self.inner.enclose(t, side, 0, &mut meter())?;
-            let (lo, hi) = (e[0][0].lo(), e[0][0].hi());
+            let whole = self.inner.enclose(t, side, 2, &mut meter())?;
+            let (lo, hi) = (whole[0][0].lo(), whole[0][0].hi());
             let end = if above { hi } else { lo };
-            let scale = 1.0 + 2.0 * end.abs() + lo.abs() + hi.abs() - end.abs();
+            let largest = whole
+                .iter()
+                .flatten()
+                .fold(0.0, |m, i| larger(m, larger(i.lo().abs(), i.hi().abs())));
+            let scale = 1.0 + largest + 2.0 * end.abs() + lo.abs() + hi.abs() - end.abs();
             out[0][0] = if above {
                 hi + k * SLACK * scale
             } else {
@@ -216,8 +221,8 @@ fn a_conversion_passes_within_its_deviation_either_way_and_fails_beyond() {
     }
 }
 
-/// Claim: doubles may lie up to slack·(1 + |x| + |lo| + |hi|) outside the enclosure, on either
-/// side, and not further: just inside the margin passes, just outside fails.
+/// Claim: doubles may lie up to slack·(1 + the largest value + |x| + |lo| + |hi|) outside the
+/// enclosure, on either side, and not further: just inside the margin passes, just outside fails.
 #[test]
 fn evaluation_in_doubles_has_exactly_its_slack() {
     for above in [true, false] {

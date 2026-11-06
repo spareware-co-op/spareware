@@ -6546,7 +6546,7 @@
             {
               "id": "OS-A21-F1-P4",
               "name": "Licence policy for shipped software",
-              "what": "Writes down, for an owner's decision, where our code ends and separate programs begin: our own code stays under MPL-2.0, with the SDK and plugins under Apache-2.0, and for software that is not open source, such as NVIDIA's driver, device firmware files, the browser's streaming content protection module, game store apps and any Android store, which ship in the image, which are opt-in downloads the person chooses, and on what redistribution terms.",
+              "what": "Writes down, for an owner's decision, where our code ends and separate programs begin: our own code, SDK and plugins stay under Apache-2.0, and for software that is not open source, such as NVIDIA's driver, device firmware files, the browser's streaming content protection module, game store apps and any Android store, which ship in the image, which are opt-in downloads the person chooses, and on what redistribution terms.",
               "kind": "legal",
               "size": "medium",
               "depends_on": [

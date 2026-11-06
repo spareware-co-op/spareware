@@ -4,7 +4,7 @@ version = "0.0.0"
 edition = "2024"
 # Development only: never published, never a dependency of anything.
 publish = false
-license = "MPL-2.0"
+license = "Apache-2.0"
 description = "Spare Kit geometry kernel: the WebAssembly fuel gate's host, which counts the fuel of every geom-bench benchmark in Wasmtime."
 
 # A workspace of its own, with its own Cargo.lock: Wasmtime is a large dependency that only this
@@ -22,7 +22,7 @@ unsafe_code = "forbid"
 missing_docs = "warn"
 # Kani sets `cfg(kani)` when it compiles a proof; proofs and the code they need sit beside the
 # code under it (chapter 28.7).
-unexpected_cfgs = { level = "warn", check-cfg = ["cfg(kani)"] }
+unexpected_cfgs = { level = "warn", check-cfg = ["cfg(coverage_nightly)", "cfg(kani)"] }
 
 [lints.clippy]
 unwrap_used = "deny"
