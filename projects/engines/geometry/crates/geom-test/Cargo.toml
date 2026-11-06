@@ -16,12 +16,13 @@ geom-run = { path = "../geom-run" }
 # The operation contract, for the history-law kit (src/history.rs, piece G88): the kit checks
 # histories through geom-op's own checker, so every operation's tests use the same laws.
 geom-op = { path = "../geom-op" }
+# What the fixture runner replays (pieces G97, G101): the operations, and the types of their inputs.
+geom-make = { path = "../geom-make" }
 # The fault-injection catalogue (piece G110): the checker it attacks, with every group on in every
 # build (chapter 28.4), and the kernel crates whose rows and values it breaks.
 geom-check = { path = "../geom-check", features = ["full"] }
 geom-curve = { path = "../geom-curve" }
 geom-math = { path = "../geom-math" }
-geom-run = { path = "../geom-run" }
 geom-surface = { path = "../geom-surface" }
 geom-topo = { path = "../geom-topo" }
 proptest = { version = "1.12.0", default-features = false, features = ["std", "bit-set"] }
