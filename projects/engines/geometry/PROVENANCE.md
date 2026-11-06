@@ -8,7 +8,7 @@ This is the record of what the geometry kernel's code takes from outside sources
 
 | Class (29.1) | Sources | Files that take them |
 | --- | --- | --- |
-| PORT | 11 | 18 |
+| PORT | 12 | 19 |
 | PORT METHOD | 35 | 33 |
 | DEPEND | 2 | 2 |
 
@@ -38,6 +38,7 @@ Each row is one origin file at one commit, translated into a kernel file that ke
 | NVIDIA USD `BRep` `NLib` | Apache-2.0 | allowed | <https://github.com/NVIDIA-Omniverse/usd-brep/blob/c9c5979f04cea8c38213004d4f04df0dcfb40d05/source/SMLib/src/NL_CrvTool.cpp> | `projects/engines/geometry/crates/geom-nurbs/src/remove.rs` | translated to safe `no_std` Rust from `N_CrvRemoveKnot`, one removal at a time; the decision to keep a removal uses a certified bound from re-insertion in interval arithmetic in place of `NLib`'s distance test with basis maxima from a numerical search, its rescaled tolerance for rational curves and its weight range; a new curve is returned with the deviation instead of being edited in place. |
 | NVIDIA USD `BRep` `NLib` | Apache-2.0 | allowed | <https://github.com/NVIDIA-Omniverse/usd-brep/blob/c9c5979f04cea8c38213004d4f04df0dcfb40d05/source/SMLib/src/NL_SrfNurb.cpp> | `projects/engines/geometry/crates/geom-nurbs/src/surface.rs` | translated to safe `no_std` Rust from `N_SrfEvalPtImpl` and `N_SrfDerivs`, for any dimension D instead of `NLib`'s homogeneous 4D points with its "no z" and "no w" markers; derivatives summed in the same nested order as points (v inside u), where `N_ComputeDerivativeMatrixSpec` sums products of the two bases' derivatives in one double loop, so the value of order (0, 0) equals the point; rational derivatives by the book's A4.4 on the stored homogeneous points, where `NLib` forms rational basis derivatives against points divided by their weights; parameters outside the domains and orders above the maximum are typed errors; each overflow is checked. |
 | NVIDIA USD `BRep` `NLib` | Apache-2.0 | allowed | <https://github.com/NVIDIA-Omniverse/usd-brep/blob/c9c5979f04cea8c38213004d4f04df0dcfb40d05/source/SMLib/src/NL_SrfTool.cpp> | `projects/engines/geometry/crates/geom-nurbs/src/net.rs` | `NLib`'s surface insertion, refinement, Bezier extraction and elevation are rebuilt on the ported curve kernels applied line by line, in place of its separate surface loops, with the curve kernels' changes; every result carries its certified deviation. |
+| ssi-corpus (the 119 cases of `cases/data`) | MIT OR Apache-2.0 | allowed | <https://github.com/jyviko/ssi-corpus/tree/b04c8a6093a8b3505d865d1dd874ec3879ccb1f9/cases/data> | `projects/engines/geometry/crates/geom-test/src/ssi_corpus.rs` | slimmed to one file (every branch cut to at most nine points, each region to its point count, the truth functions left out), each case given `SMLib`'s result from solidcore issue #17, and read by this module in place of the corpus' Python scorer. |
 
 ## PORT METHOD: sources consulted for a method
 

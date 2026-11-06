@@ -80,6 +80,9 @@
 //!
 //! Gate 1 (piece G43) adds:
 //!
+//! - [`ssi_corpus`]: the 119 surface-surface intersection cases of jyviko's exact-ground-truth
+//!   corpus as data, with `SMLib`'s result on each, for the benchmark of `geom-intersect` in
+//!   `tests/ssi_corpus.rs` (12.17).
 //! - [`trip`]: one planted violation for each gate whose verdict is an outside tool's (rustfmt,
 //!   Verus, Kani, libFuzzer, `ClusterFuzzLite`, Gungraun, Wasmtime's fuel, Gappa with Rocq, and
 //!   HOL Light). The binary `trip` plants it, runs the gate's own command and requires the tool's
@@ -227,6 +230,7 @@ pub mod rng;
 pub mod rust_source;
 pub mod scan;
 pub mod seed;
+pub mod ssi_corpus;
 pub mod trip;
 
 pub use rng::{ByteSource, Entropy, SplitMix64};

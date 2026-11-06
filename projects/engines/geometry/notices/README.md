@@ -30,3 +30,4 @@ Licence text:
 | --- | --- |
 | [core-math.txt](core-math.txt) | CORE-MATH (Inria), ported into `geom-num`'s `math` module by piece G05 |
 | [usd-brep.txt](usd-brep.txt) | NLib, in NVIDIA's USD BRep, ported into `geom-nurbs` by piece G56 |
+| [ssi-corpus.txt](ssi-corpus.txt) | jyviko's surface/surface intersection corpus, its 119 cases read as data by `geom-test`'s `ssi_corpus` (piece S6) |
