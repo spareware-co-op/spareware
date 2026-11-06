@@ -255,6 +255,8 @@ Distance is the gap between two shapes. Clearance asks whether that gap is at le
 
 Triangle-to-triangle distance derivations are ported from GeometricTools (Boost licence, [10](../../../kit/notes/G01-evidence/10-github-sweep.md)) and re-certified with our predicates. Distances are reported as outward-rounded `f64` intervals; the decisions behind them are exact.
 
+As built (G151): `geom_num::distance` holds the 256-bit comparisons and `geom-mesh::contact` the triangle test and closest features. A contact with any zero sign is reported as `Touch`, and `Cross` only when every sign was strict.
+
 **Implicit vertices.** Touch and cross tests on plane-based polygons need only "which side of this plane is this point", exact within 384 bits. Distance comparisons on implicit vertices would need wider integers than section 6.2 allows. So, for distance only, such vertices are committed to the grid, widening the interval by at most (√3/2)·q per body.
 
 **Analytic pairs in closed form.** Spare Construct's map asks for the narrow phase to use exact kernel geometry, not triangles. Most building pairs are planes, cylinders and spheres: pipes, ducts, beams and slabs. With their data on the grid (points, integer directions, and radii and clearances in whole steps), the common closest-feature cases are decided exactly:
