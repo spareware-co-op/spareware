@@ -29,7 +29,16 @@
 //! plane's square. Symmetry reduces the rest to chapter 12.5.
 //!
 //! Cost: a curve-curve pair for each pair of meridian curves or cross-sections, and a curve-surface
-//! pair for each profile cut. Recursion: none.
+//! pair for each profile cut.
+//!
+//! Recursion:
+//!
+//! - Cycle: `Affine::image`.
+//!   Bound: 2.
+//!   Why: `Affine::image` calls itself only for a trimmed curve, on the curve the trim is of, and
+//!   that is a basis curve, which is never trimmed, so the second frame takes none of the
+//!   recursive arm.
+//!   Test: `the_image_of_a_trimmed_curve_runs_at_its_bound`.
 
 #![allow(
     clippy::many_single_char_names,
