@@ -12154,6 +12154,11 @@
               "shape": "unit"
             },
             {
+              "doc": "An edge of one sheet lies in a face of another and ends inside it: the face would need a slit with no area.",
+              "name": "Slit",
+              "shape": "unit"
+            },
+            {
               "doc": "The parallel helper broke one of its own rules: a defect, reported instead of a wrong merge.",
               "name": "Defect",
               "shape": "unit"
@@ -12372,6 +12377,7 @@
             "**Refused, never guessed.** Pieces that overlap on one sheet, and a stretch with a fin that has no partner across it, mean the pieces are no closed boundary: [`MergeError`].",
             "**Each fin knows its piece.** [`Fin::piece`] is an index into the pieces given, whose [`Outward::polygon`] names where it came from, for a caller's history.",
             "**Told where to keep a seam.** [`merge_with`] takes pieces it does not keep, whose sides hold a seam open where they lie along a face: an imprint's outline, and the walls of a split. A cut that ends inside a face leaves it whole, with no slit.",
+            "**A contact edge splits the face it lies in.** Where a face runs on through a stretch of a line and another sheet's fin lies along it, the face keeps a fin on each side, so the edge has all its faces (the radial order of 11.3). A contact that ends inside the face leaves a slit of no area, which the caller refuses.",
             "**No recursion.** Disjoint sets and rings are walked in loops (principle 13)."
           ],
           "job": "The maximal-face merge: the pieces a selection keeps, as faces, edges, rings and shells (11.3, step 5), shared by `geom-bool` and `geom-mesh` (19.5, 27).",
