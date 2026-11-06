@@ -95,6 +95,7 @@ A kernel crate may depend only on `libm` (29.1); the development crates' own dep
 | libm | MIT | allowed | <https://crates.io/crates/libm/0.2.16> | `projects/engines/geometry/crates/geom-num/Cargo.toml` | 0.2.16 |
 | rayon | Apache-2.0 OR MIT | allowed | <https://crates.io/crates/rayon/1.12.0> | `projects/engines/geometry/crates/geom-pool/Cargo.toml` | 1.12.0 |
 | sha2 | Apache-2.0 OR MIT | allowed | <https://crates.io/crates/sha2/0.11.0> | `projects/engines/geometry/crates/geom-op/Cargo.toml` | 0.11.0 |
+| unicode-normalization | (Apache-2.0 OR MIT) AND Unicode-3.0 | allowed | <https://crates.io/crates/unicode-normalization> | `projects/engines/geometry/crates/geom-op/Cargo.toml` | =0.1.26 |
 
 ## Method notes
 
