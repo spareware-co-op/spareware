@@ -283,8 +283,10 @@ pub fn gcd<const L: usize>(a: &Wide<L>, b: &Wide<L>) -> Option<Wide<L>> {
     let common = from_x.min(from_y);
     x = shifted(&x, from_x);
     y = shifted(&y, from_y);
-    // Both odd now. Each step clears a bit of one of them, so 2·64·L steps end it.
-    for _ in 0..L.checked_mul(128)? {
+    // Both odd now. Each step replaces the larger by the odd part of the difference, which is
+    // smaller than it, so x + y falls at every step and the loop ends, at the latest when x = y,
+    // after fewer than 2·64·L steps: there is no way out of it but the return.
+    loop {
         let (wide_x, wide_y) = (Wide::<L>::from_le_limbs(x), Wide::<L>::from_le_limbs(y));
         let difference = wide_x.checked_sub(&wide_y)?;
         if difference.is_zero() {
@@ -308,7 +310,6 @@ pub fn gcd<const L: usize>(a: &Wide<L>, b: &Wide<L>) -> Option<Wide<L>> {
             x = odd;
         }
     }
-    None
 }
 
 /// The whole square root of `v`, if it has one, by Newton's iteration from above. `None` if a step did
@@ -323,9 +324,8 @@ pub fn square_root<const L: usize>(v: &Wide<L>) -> Option<Wide<L>> {
     }
     let limbs = v.to_le_limbs();
     let used = limbs.iter().rposition(|l| *l != 0)?;
-    let bits = used.checked_mul(64)?.checked_add(
-        usize::try_from(64_u32.checked_sub(limbs.get(used)?.leading_zeros())?).ok()?,
-    )?;
+    let top = usize::try_from(64_u32.checked_sub(limbs.get(used)?.leading_zeros())?).ok()?;
+    let bits = used.checked_mul(64)?.checked_add(top)?;
     let two = Wide::<L>::from_i64(2);
     let mut guess = Wide::<L>::one();
     for _ in 0..bits.div_ceil(2) {

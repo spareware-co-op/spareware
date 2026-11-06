@@ -1228,7 +1228,9 @@ fn apex_one_double(pencil: &Exact, terms: &[Big; TERMS]) -> Result<Topology, Num
             meets: 1,
             ..EMPTY
         },
-        _ if [left, right].iter().any(|i| i.rank() == 3 && i.one_sided()) => apex,
+        // Beside the root the determinant, which is not zero, has a sign: the members there are of
+        // rank three, the base conics' full rank, and only their signs are left to read.
+        _ if [left, right].iter().any(|i| i.one_sided()) => apex,
         _ => Topology {
             double_lines: 2,
             meets: 1,
@@ -1508,12 +1510,13 @@ fn gaps(f: &[Interval; TERMS], steps: i64) -> Option<[(i64, i64); 5]> {
     let (mut runs, mut first, mut last) = (0_usize, None, None);
     for i in 0..steps.checked_mul(2)? {
         let (p, q) = walked(i, steps)?;
-        let Some(sign) = homogeneous_interval(f, 4, p, q)?.certain_sign() else {
+        // An interval that holds zero is no sign, and none is exactly zero: every operation widens
+        // its bounds outward, so a value read from at least one is never the point zero.
+        let Some(sign @ (Sign::Positive | Sign::Negative)) =
+            homogeneous_interval(f, 4, p, q)?.certain_sign()
+        else {
             continue;
         };
-        if sign == Sign::Zero {
-            continue;
-        }
         first = first.or(Some(sign));
         if last != Some(sign) {
             *out.get_mut(runs)? = (p, q);
@@ -1671,6 +1674,68 @@ mod tests {
             Some(false)
         );
         assert_eq!(definite_filtered(&sums_of([1, 0, 0, 0]), 0, 1), None);
+        // The same with the first sum negative: only the alternating pattern is left open.
+        assert_eq!(definite_filtered(&sums_of([-1, 0, 0, 0]), 0, 1), None);
+    }
+
+    /// 2^`at` as a [`Big`].
+    fn power_of_two(at: usize) -> Big {
+        let mut limbs = [0_u64; LIMBS];
+        limbs[at / 64] = 1 << (at % 64);
+        Big::from_le_limbs(limbs)
+    }
+
+    #[test]
+    fn a_minor_that_is_a_constant_beside_g_does_not_vanish() {
+        let (mut unit, mut form) = ([[Entry::ZERO; 4]; 4], [[Entry::ZERO; 4]; 4]);
+        for (i, v) in [7, 3, -2, 5].into_iter().enumerate() {
+            unit[i][i] = Entry::one();
+            form[i][i] = Entry::from_i64(v);
+        }
+        // The minor on the last three coordinates is (t + 3)(t − 2)(t + 5), which over t² − 1 leaves
+        // 0·t − 24: the remainder's first part is zero and its second is not.
+        let g = [big(-1), big(0), big(1)];
+        assert_eq!(cofactors_vanish(&unit, &form, &g), Some(false));
+    }
+
+    #[test]
+    fn a_sample_is_found_in_a_gap_or_refused_past_the_depth() {
+        // Roots at 0 and 2^-k: the gap between them is where the sample must fall.
+        let gap = |k: usize| {
+            let terms = [Big::ZERO, big(-1), power_of_two(k), Big::ZERO, Big::ZERO];
+            Chain::<LIMBS>::of(&terms).unwrap()
+        };
+        let wide = sample(&gap(8), 1).unwrap();
+        assert!(!wide.num.is_negative() && !wide.num.is_zero());
+        // A gap narrower than the depth reaches is the budget's edge, which no coefficient inside it
+        // makes.
+        let depth = usize::try_from(DEPTH).unwrap();
+        assert!(matches!(
+            sample(&gap(depth + 64), 1),
+            Err(NumError::BudgetExceeded)
+        ));
+    }
+
+    /// The pencil t·I + `diagonal`, in the exact arithmetic.
+    fn exact_of(diagonal: [i64; 4]) -> Box<Exact> {
+        let (mut unit, mut form) = ([[Entry::ZERO; 4]; 4], [[Entry::ZERO; 4]; 4]);
+        for (i, v) in diagonal.into_iter().enumerate() {
+            unit[i][i] = Entry::one();
+            form[i][i] = Entry::from_i64(v);
+        }
+        let mut pencil = Box::new(Exact::EMPTY);
+        pencil.set(&unit, &form, 4).unwrap();
+        pencil
+    }
+
+    #[test]
+    fn a_member_is_full_only_if_of_full_rank_and_of_one_sign() {
+        let here = At::whole(0);
+        // Of rank three, then of rank four with both signs, then definite.
+        assert!(!exact_of([1, 2, 3, 0]).full_at(&here, 4).unwrap());
+        assert!(!exact_of([1, 2, 3, -4]).full_at(&here, 4).unwrap());
+        assert!(exact_of([1, 2, 3, 4]).full_at(&here, 4).unwrap());
+        assert!(exact_of([-1, -2, -3, -4]).full_at(&here, 4).unwrap());
     }
 
     #[test]

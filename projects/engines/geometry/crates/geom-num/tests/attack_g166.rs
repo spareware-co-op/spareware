@@ -1228,3 +1228,64 @@ fn the_filter_answers_on_well_parted_roots_either_way_round() {
         }
     }
 }
+
+/// The filter on the pencil whose diagonal members are `y·t − x` for each `(x, y)`.
+fn diagonal_pair(roots: [(i64, i64); 4]) -> (Form<Interval>, Form<Interval>) {
+    let i = |v: i64| Interval::of(v).unwrap();
+    let (mut a, mut b) = ([[i(0); 4]; 4], [[i(0); 4]; 4]);
+    for (k, (x, y)) in roots.into_iter().enumerate() {
+        a[k][k] = i(y);
+        b[k][k] = i(-x);
+    }
+    (a, b)
+}
+
+#[test]
+fn the_filter_counts_ovals_from_the_real_roots() {
+    let i = |v: i64| Interval::of(v).unwrap();
+    // A block [[0, 1], [1, 0]] against diag(1, −1) has the roots ±i of t: not real.
+    let (mut a, mut b) = diagonal_pair([(2, 1), (3, 1), (0, 0), (0, 0)]);
+    a[0][0] = i(0);
+    a[1][1] = i(0);
+    a[0][1] = i(1);
+    a[1][0] = i(1);
+    b[0][0] = i(1);
+    b[1][1] = i(-1);
+    // Two real roots and a conjugate pair: one oval.
+    a[2][2] = i(1);
+    b[2][2] = i(-2);
+    a[3][3] = i(1);
+    b[3][3] = i(-3);
+    assert_eq!(filtered(&a, &b), Some(smooth(1)));
+    // No real root: two ovals.
+    a[2][2] = i(0);
+    a[3][3] = i(0);
+    a[2][3] = i(1);
+    a[3][2] = i(1);
+    b[2][2] = i(2);
+    b[3][3] = i(-2);
+    assert_eq!(filtered(&a, &b), Some(smooth(2)));
+}
+
+#[test]
+fn the_filter_reads_a_root_just_before_the_walk_s_start() {
+    // The basis of this pencil is (b − 7a, a), so a root u of the diagonal is t = 1/(u + 7) of the
+    // walk: −1/93, 1/2, 2 and 5 for u = −100, −5, −13/2 and −34/5. The first lies between the walk's
+    // last point, −1/63, and its first, 0, so the first and last runs differ and only four of the
+    // five gap points are set. The signs of the leading coefficients make no member definite, so all
+    // four are read.
+    let (a, b) = diagonal_pair([(-100, 1), (-5, 1), (13, -2), (-34, 5)]);
+    assert_eq!(filtered(&a, &b), Some(smooth(2)));
+    // With the signs of the pairs of roots alike the member between the second and the third is
+    // definite.
+    let (a, b) = diagonal_pair([(-100, 1), (5, -1), (-13, 2), (-34, 5)]);
+    assert_eq!(filtered(&a, &b), Some(NONE));
+}
+
+#[test]
+fn the_filter_gives_way_when_two_roots_are_too_close_for_every_walk() {
+    // Four real roots, told apart by the intervals: −3, 5, 1000 and 1016. The finest walk's points
+    // stand about 61 apart near 1000, and so never fall between the last two.
+    let (a, b) = diagonal_pair([(-3, 1), (5, 1), (1000, 1), (1016, 1)]);
+    assert_eq!(filtered(&a, &b), None);
+}
