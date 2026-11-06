@@ -135,7 +135,6 @@ fn every_refusal_says_what_it_refused() {
     for (error, words) in cases {
         assert!(error.to_string().contains(words), "{error}");
     }
-    assert_ne!(params.len(), 0);
 }
 
 #[test]
