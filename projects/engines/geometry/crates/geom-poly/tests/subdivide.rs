@@ -390,6 +390,52 @@ fn a_split_passes_over_a_plane_that_holds_a_polygon() {
 }
 
 #[test]
+fn a_box_a_multiple_of_four_half_steps_wide_splits_between_the_whole_steps() {
+    // A block from 1 to 6 sits in a box from -1/2 to 15/2, sixteen half steps wide on every axis,
+    // so each middle, 7, is already odd: the split falls at 3 1/2, between the whole steps where
+    // faces end and meet, never at 3. Every bound a split gives a piece is then 2x = odd, the form
+    // by which the merge leaves the boxes' own planes out of a point's name; the others are the
+    // input's planes, either way round.
+    let blocks = [Block {
+        low: [1, 1, 1],
+        high: [6, 6, 6],
+    }];
+    let list = polygons(&blocks);
+    let cell = around(&list).unwrap();
+    assert_eq!((cell.low, cell.high), ([-1; 3], [15; 3]));
+    let mut planes = Vec::new();
+    for polygon in &list {
+        planes.push(polygon.piece.face);
+        planes.extend(polygon.piece.bounds.iter().copied());
+    }
+    let input = |p: &Plane| {
+        planes
+            .iter()
+            .any(|q| q == p || (q.n().map(|v| -v) == p.n() && -q.d() == p.d()))
+    };
+    let split = |p: &Plane| {
+        let n = p.n();
+        n.iter().filter(|v| **v != 0).count() == 1
+            && n.iter().any(|v| v.abs() == 2)
+            && p.d() % 2 != 0
+    };
+    for leaf in [1, 2, 4] {
+        let got = run(&blocks, leaf, &[]);
+        agrees(&blocks, &got);
+        assert!(got.len() > list.len(), "leaf {leaf}: the box split");
+        for c in &got {
+            for bound in &c.piece.bounds {
+                assert!(
+                    input(bound) || split(bound),
+                    "leaf {leaf}: {bound:?} bounds {:?}",
+                    c.piece
+                );
+            }
+        }
+    }
+}
+
+#[test]
 fn twenty_cubes_on_one_top_and_bottom_stop_at_their_shared_planes() {
     // Each overlaps the next, all between z = 0 and z = 4 (EMBER's figure 25).
     let blocks: Vec<Block> = (0..20)
@@ -658,4 +704,58 @@ proptest! {
             prop_assert_eq!(volume(&test, &dropped), want);
         }
     }
+}
+
+#[test]
+fn a_box_over_the_subtree_size_splits_level_by_level() {
+    // 25 cubes of one solid, apart, and a cube of another far off: 156 polygons, more than one
+    // task solves at once, so the root is split level by level. The half that holds only the
+    // first solid is still too big; at the next level it is one solid's, a leaf at once, for a
+    // union, and settled, so dropped, for an intersection. Either way the pieces are those one
+    // leaf over the whole scene gives.
+    let mut blocks: Vec<Block> = (0..25)
+        .map(|i| {
+            let (x, y) = (4 * (i % 5), 4 * (i / 5));
+            Block {
+                low: [x, y, 0],
+                high: [x + 2, y + 2, 2],
+            }
+        })
+        .collect();
+    blocks.push(Block {
+        low: [40, 40, 40],
+        high: [42, 42, 42],
+    });
+    let mut list = polygons(&blocks);
+    for polygon in &mut list {
+        polygon.entry = Some(u32::from(polygon.entry == Some(25)));
+    }
+    for test in [WindingTest::unite(), WindingTest::intersect(2)] {
+        let tests = [test.clone()];
+        let at = |leaf: usize| {
+            let cell = around(&list).unwrap();
+            arrange_with(
+                &Exec::serial(),
+                (cell, Winding::new()),
+                &list,
+                (leaf, &tests),
+                &[0, 1],
+                &mut meter(),
+            )
+            .unwrap()
+        };
+        let (levels, one) = (at(LEAF_POLYGONS), at(1_000_000));
+        assert_eq!(volume(&test, &levels), volume(&test, &one), "{test:?}");
+        // The far cube is in the upper half, a task at the first level, while the lower half is
+        // split again: tree order still puts it last.
+        let far = 25 * 6;
+        if let Some(first) = levels.iter().position(|c| c.polygon >= far) {
+            assert!(first > 0, "{test:?}");
+            assert!(levels[first..].iter().all(|c| c.polygon >= far), "{test:?}");
+        }
+    }
+    assert_eq!(
+        volume(&WindingTest::unite(), &run(&blocks, 1_000_000, &[])),
+        26 * 64
+    );
 }

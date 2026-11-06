@@ -13,7 +13,7 @@
 //!   path's error constant raised from 2^−78 to `ER0 = 0x1.1p−78`, which the proof covers; a
 //!   written proof of the error bound. Every change is listed under "Changes from the C source"
 //!   below; none changes a correctly rounded result.
-//! SPDX-License-Identifier: MPL-2.0 AND MIT
+//! SPDX-License-Identifier: Apache-2.0 AND MIT
 //!
 //! The original notice of `sinpi.c`, reproduced as the MIT licence requires; `cospi.c` carries the
 //! same notice and author:

@@ -484,20 +484,9 @@ impl<const N: usize> Ord for CellKey<'_, N> {
     }
 }
 
-/// A parallel phase's error as the merge's: the item's own, or the meter's stop, which the helper
-/// latches; a stop it did not latch is the helper's defect.
-fn phase_error(error: RunError<MergeError>, meter: &mut WorkMeter<'_>) -> MergeError {
-    match error {
-        RunError::Failed(e) => e,
-        _ => meter
-            .poll()
-            .err()
-            .map_or(MergeError::Defect, MergeError::Stopped),
-    }
-}
-
-/// A parallel arrangement step's error as the merge's, as [`phase_error`] reads the merge's own.
-fn traced(error: RunError<TraceError>, meter: &mut WorkMeter<'_>) -> MergeError {
+/// A parallel phase's error as the merge's: the item's own, the merge's or the arrangement's, or
+/// the meter's stop, which the helper latches; a stop it did not latch is the helper's defect.
+fn phase_error<E: Into<MergeError>>(error: RunError<E>, meter: &mut WorkMeter<'_>) -> MergeError {
     match error {
         RunError::Failed(e) => e.into(),
         _ => meter
@@ -571,6 +560,13 @@ fn line_key(p: &Plane, q: &Plane) -> Result<LineKey, NumError> {
     }
 }
 
+/// Whether a line's coordinates are turned round, so that the first non-zero component of its
+/// direction is positive: one rule for keys in machine words and in [`I256`], which compare with
+/// each other.
+fn turned(first: Sign) -> bool {
+    first == Sign::Negative
+}
+
 /// [`line_key`] in [`I256`], for any two planes: each product below 2^250.
 fn wide_line_key(p: &Plane, q: &Plane) -> Result<LineKey, NumError> {
     let wide = I256::from_i128;
@@ -596,7 +592,7 @@ fn wide_line_key(p: &Plane, q: &Plane) -> Result<LineKey, NumError> {
         .take(3)
         .position(|v| !v.is_zero())
         .ok_or(NumError::Degenerate)?;
-    if coordinates.get(first).is_some_and(I256::is_negative) {
+    if coordinates.get(first).is_some_and(|v| turned(v.signum())) {
         for slot in &mut coordinates {
             *slot = slot.checked_neg().ok_or(NumError::BudgetExceeded)?;
         }
@@ -624,7 +620,10 @@ fn line_in_words(p: &Plane, q: &Plane) -> Option<([i128; 6], usize)> {
         minor(pd, qz, qd, pz)?,
     ];
     let first = coordinates.iter().take(3).position(|v| *v != 0)?;
-    if coordinates.get(first).is_some_and(|v| *v < 0) {
+    if coordinates
+        .get(first)
+        .is_some_and(|v| turned(Sign::of_i128(*v)))
+    {
         for slot in &mut coordinates {
             *slot = slot.checked_neg()?;
         }
@@ -664,14 +663,19 @@ fn line_order(a: &LineKey, b: &LineKey) -> Option<Ordering> {
     if order != Ordering::Equal {
         return Some(order);
     }
+    if let (Some(p), Some(q)) = (&a.cells, &b.cells) {
+        for (x, y) in p.iter().zip(q.iter()) {
+            let order = x.order(y)?;
+            if order != Ordering::Equal {
+                return Some(order);
+            }
+        }
+        return Some(Ordering::Equal);
+    }
     let over = a.first;
+    let (p, q) = (&a.coordinates, &b.coordinates);
     for i in 0..6 {
-        let order = if let (Some(p), Some(q)) = (&a.cells, &b.cells) {
-            p.get(i)?.order(q.get(i)?)?
-        } else {
-            let (p, q) = (&a.coordinates, &b.coordinates);
-            ratio_order::<4, 4, 8>(p.get(i)?, p.get(over)?, q.get(i)?, q.get(over)?)?
-        };
+        let order = ratio_order::<4, 4, 8>(p.get(i)?, p.get(over)?, q.get(i)?, q.get(over)?)?;
         if order != Ordering::Equal {
             return Some(order);
         }
@@ -867,23 +871,29 @@ fn sheets_of<'p>(
     meter: &mut WorkMeter<'_>,
 ) -> Result<(Vec<Sheet>, Vec<Held<'p>>), MergeError> {
     let seams = merge == Merge::KeepSeams;
-    let made = exec.try_map(meter, SHEETS, PIECES, pieces, |_, piece, _| {
-        let face = canonical(&piece.piece.face)?;
-        let pairs = |w: &Winding| {
-            if seams {
-                w.pairs().to_vec()
-            } else {
-                Vec::new()
-            }
-        };
-        Ok::<SheetKey, MergeError>((
-            (face.plane.d(), face.plane.n()),
-            face.flipped,
-            if seams { piece.source } else { 0 },
-            pairs(&piece.front),
-            pairs(&piece.back),
-        ))
-    });
+    let made = exec.try_map(
+        meter,
+        SHEETS,
+        PIECES,
+        pieces,
+        |_, piece, _| -> Result<SheetKey, MergeError> {
+            let face = canonical(&piece.piece.face)?;
+            let pairs = |w: &Winding| {
+                if seams {
+                    w.pairs().to_vec()
+                } else {
+                    Vec::new()
+                }
+            };
+            Ok((
+                (face.plane.d(), face.plane.n()),
+                face.flipped,
+                if seams { piece.source } else { 0 },
+                pairs(&piece.front),
+                pairs(&piece.back),
+            ))
+        },
+    );
     let keys = made.map_err(|e| phase_error(e, meter))?;
     // Equal keys by the sheet's source faces as the result does where one can, the lowest first
     // (11.5); the stable sort keeps the input's order past that, as the serial sort did.
@@ -892,9 +902,13 @@ fn sheets_of<'p>(
         .zip(pieces)
         .map(|(key, piece)| (key, (piece.turned, piece.polygon)))
         .collect();
-    let sorted = exec.sort_stable(meter, SORT_SHEETS, SORT_PLAN, &keyed, |(key, source)| {
-        (*key, *source)
-    });
+    let sorted = exec.sort_stable::<_, _, MergeError, _>(
+        meter,
+        SORT_SHEETS,
+        SORT_PLAN,
+        &keyed,
+        |(key, source)| (*key, *source),
+    );
     let order = sorted.map_err(|e| phase_error(e, meter))?;
     let mut sheets: Vec<Sheet> = Vec::new();
     let mut held = Vec::with_capacity(order.len());
@@ -926,21 +940,30 @@ fn numbered(
     exec: &Exec<'_>,
     meter: &mut WorkMeter<'_>,
 ) -> Result<(Vec<usize>, Vec<Corner>), MergeError> {
-    let made = exec.try_map(meter, CORNERS, PIECES, held, |_, piece, m| {
-        let after = piece.piece.bounds.iter().cycle().skip(1);
-        let mut out = Vec::with_capacity(piece.piece.bounds.len());
-        for (bound, next) in piece.piece.bounds.iter().zip(after) {
-            m.charge(1)?;
-            out.push(corner(piece.piece.face, *bound, *next)?);
-        }
-        Ok::<_, MergeError>(out)
-    });
+    let made = exec.try_map(
+        meter,
+        CORNERS,
+        PIECES,
+        held,
+        |_, piece, m| -> Result<Vec<Corner>, MergeError> {
+            let after = piece.piece.bounds.iter().cycle().skip(1);
+            let mut out = Vec::with_capacity(piece.piece.bounds.len());
+            for (bound, next) in piece.piece.bounds.iter().zip(after) {
+                m.charge(1)?;
+                out.push(corner(piece.piece.face, *bound, *next)?);
+            }
+            Ok(out)
+        },
+    );
     let made = made.map_err(|e| phase_error(e, meter))?;
     let corners: Vec<Corner> = made.into_iter().flatten().collect();
     let keys: Option<Vec<&[Cell; 3]>> = corners.iter().map(|c| c.cells.as_ref()).collect();
     let order = if let Some(keys) = keys {
         // Equal points keep their order, as the serial stable sort keeps it.
-        let sorted = exec.sort_stable(meter, SORT_CORNERS, SORT_PLAN, &keys, |k| CellKey(k));
+        let sorted =
+            exec.sort_stable::<_, _, MergeError, _>(meter, SORT_CORNERS, SORT_PLAN, &keys, |k| {
+                CellKey(k)
+            });
         sorted.map_err(|e| phase_error(e, meter))?
     } else {
         let mut order: Vec<usize> = (0..corners.len()).collect();
@@ -1010,17 +1033,19 @@ fn named(corner: &Corner, meter: &mut WorkMeter<'_>) -> Result<Tpi, MergeError> 
         .collect();
     list.sort_unstable_by_key(|plane| (plane.n(), plane.d()));
     list.dedup();
-    for (i, a) in list.iter().enumerate() {
+    let mut found = None;
+    'search: for (i, a) in list.iter().enumerate() {
         for (j, b) in list.iter().enumerate().skip(i.saturating_add(1)) {
             for c in list.iter().skip(j.saturating_add(1)) {
                 meter.charge(1)?;
                 if normals_sign(a, b, c)? != Sign::Zero {
-                    return Ok(Tpi::meeting(*a, *b, *c)?);
+                    found = Some(Tpi::meeting(*a, *b, *c)?);
+                    break 'search;
                 }
             }
         }
     }
-    Ok(corner.point)
+    Ok(found.unwrap_or(corner.point))
 }
 
 /// A corner's point named by its three axis planes, when it is a grid point: read from its cells,
@@ -1040,13 +1065,14 @@ fn grid_point(corner: &Corner) -> Result<Option<Tpi>, NumError> {
         [p.x.get(), p.y.get(), p.z.get()].map(i128::from)
     };
     let [x, y, z] = at;
-    let axis =
-        |n: [i128; 3], v: i128| Plane::new(n, v.checked_neg().ok_or(NumError::BudgetExceeded)?);
-    Ok(Some(Tpi::meeting(
+    // A grid point's coordinates are within 2^40, so negating one cannot saturate.
+    let axis = |n: [i128; 3], v: i128| Plane::new(n, v.saturating_neg());
+    let (on_x, on_y, on_z) = (
         axis([1, 0, 0], x)?,
         axis([0, 1, 0], y)?,
         axis([0, 0, 1], z)?,
-    )?))
+    );
+    Ok(Some(Tpi::meeting(on_x, on_y, on_z)?))
 }
 
 /// Every side of `held`, sorted by line: made on `exec`'s pool, and sorted there where every side
@@ -1064,28 +1090,34 @@ fn sides_of(
         bases.push(base);
         base = base.saturating_add(entry.piece.bounds.len());
     }
-    let made = exec.try_map(meter, SIDES, PIECES, held, |at, entry, m| {
-        let k = entry.piece.bounds.len();
-        let base = bases.get(at).copied().ok_or(MergeError::Open)?;
-        let mut out = Vec::with_capacity(k);
-        for (i, bound) in entry.piece.bounds.iter().enumerate() {
-            m.charge(1)?;
-            // Bound i runs from corner i − 1 to corner i.
-            let before = base.saturating_add(i.checked_sub(1).unwrap_or(k.saturating_sub(1)));
-            let from = number.get(before).copied().unwrap_or(0);
-            let to = number.get(base.saturating_add(i)).copied().unwrap_or(0);
-            out.push(Side {
-                key: line_key(&entry.piece.face, bound)?,
-                low: from.min(to),
-                high: from.max(to),
-                rising: from < to,
-                sheet: entry.sheet,
-                held: at,
-                bound: *bound,
-            });
-        }
-        Ok::<_, MergeError>(out)
-    });
+    let made = exec.try_map(
+        meter,
+        SIDES,
+        PIECES,
+        held,
+        |at, entry, m| -> Result<Vec<Side>, MergeError> {
+            let k = entry.piece.bounds.len();
+            let base = bases.get(at).copied().ok_or(MergeError::Open)?;
+            let mut out = Vec::with_capacity(k);
+            for (i, bound) in entry.piece.bounds.iter().enumerate() {
+                m.charge(1)?;
+                // Bound i runs from corner i − 1 to corner i.
+                let before = base.saturating_add(i.checked_sub(1).unwrap_or(k.saturating_sub(1)));
+                let from = number.get(before).copied().unwrap_or(0);
+                let to = number.get(base.saturating_add(i)).copied().unwrap_or(0);
+                out.push(Side {
+                    key: line_key(&entry.piece.face, bound)?,
+                    low: from.min(to),
+                    high: from.max(to),
+                    rising: from < to,
+                    sheet: entry.sheet,
+                    held: at,
+                    bound: *bound,
+                });
+            }
+            Ok(out)
+        },
+    );
     let made = made.map_err(|e| phase_error(e, meter))?;
     let sides: Vec<Side> = made.into_iter().flatten().collect();
     let keys: Option<Vec<(usize, &[Cell; 6])>> = sides
@@ -1094,9 +1126,13 @@ fn sides_of(
         .collect();
     if let Some(keys) = keys {
         // Sides on one line keep their order, as the serial stable sort keeps it.
-        let sorted = exec.sort_stable(meter, SORT_SIDES, SORT_PLAN, &keys, |(first, cells)| {
-            (*first, CellKey(cells))
-        });
+        let sorted = exec.sort_stable::<_, _, MergeError, _>(
+            meter,
+            SORT_SIDES,
+            SORT_PLAN,
+            &keys,
+            |(first, cells)| (*first, CellKey(cells)),
+        );
         let order = sorted.map_err(|e| phase_error(e, meter))?;
         return Ok((sides, order));
     }
@@ -1162,9 +1198,15 @@ fn cut_at_ends(
     ends.sort_unstable();
     ends.dedup();
     let cells: Vec<Option<[i128; 3]>> = places.iter().map(floors).collect();
-    let made = exec.try_map(meter, ENDS, RUNS, runs, |_, run, _| {
-        Ok::<_, MergeError>(cut_run(run, (&ends, &cells), places))
-    });
+    let made = exec.try_map(
+        meter,
+        ENDS,
+        RUNS,
+        runs,
+        |_, run, _| -> Result<Result<Vec<Run>, MergeError>, MergeError> {
+            Ok(cut_run(run, (&ends, &cells), places))
+        },
+    );
     let made = made.map_err(|e| phase_error(e, meter))?;
     // Each run's parts, in run order, and the first run's failure as a serial walk meets it.
     let mut edges: Vec<Run> = Vec::with_capacity(runs.len());
@@ -1356,7 +1398,7 @@ fn sides_of_first(
     exec: &Exec<'_>,
     meter: &mut WorkMeter<'_>,
 ) -> Result<(Winding, Winding), MergeError> {
-    let cell = around_on(exec, polygons, meter).map_err(|e| traced(e, meter))?;
+    let cell = around_on(exec, polygons, meter).map_err(|e| phase_error(e, meter))?;
     let lists: Vec<Vec<Piece>> = polygons
         .iter()
         .take(1)
@@ -1683,9 +1725,15 @@ pub fn merge_on(
 
     // Radial order, which joins faces into shells, numbered by their lowest face.
     // Each edge's order on the pool; the joins, and the first failure, in edge order as before.
-    let orders = exec.try_map(meter, RADIAL, RUNS, &around_edge, |_, here, _| {
-        Ok::<_, MergeError>(radial(here, &fins, &planes))
-    });
+    let orders = exec.try_map(
+        meter,
+        RADIAL,
+        RUNS,
+        &around_edge,
+        |_, here, _| -> Result<Result<Vec<usize>, MergeError>, MergeError> {
+            Ok(radial(here, &fins, &planes))
+        },
+    );
     let orders = orders.map_err(|e| phase_error(e, meter))?;
     let mut same_shell: Vec<usize> = (0..face_list.len()).collect();
     let mut edges = Vec::with_capacity(runs.len());
@@ -1745,14 +1793,18 @@ pub fn merge_on(
         .collect();
     // Each face's rings on the pool, each read in face order below, so a failure is the one a
     // walk of the faces meets first.
-    let traced = exec.try_map(meter, RINGS, RUNS, &own_fins, |at, list, _| {
-        Ok::<_, MergeError>(
-            planes
+    let traced = exec.try_map(
+        meter,
+        RINGS,
+        RUNS,
+        &own_fins,
+        |at, list, _| -> Result<Result<Vec<Vec<usize>>, MergeError>, MergeError> {
+            Ok(planes
                 .get(at)
                 .ok_or(MergeError::Open)
-                .and_then(|plane| rings(&fins, list, plane)),
-        )
-    });
+                .and_then(|plane| rings(&fins, list, plane)))
+        },
+    );
     let traced = traced.map_err(|e| phase_error(e, meter))?;
     for (at, (((sheet, ..), _), ring)) in face_list.iter().zip(traced).enumerate() {
         let shell = shell_of(at)?;
@@ -1799,7 +1851,7 @@ mod tests {
     use geom_num::plane::Plane;
     use geom_num::wide::I256;
 
-    use super::{Cell, line_in_words, wide_line_key};
+    use super::{Cell, CellKey, line_in_words, wide_line_key};
 
     /// a / b against c / d, b and d positive, by cross-multiplying big integers.
     fn exact(a: i128, b: i128, c: i128, d: i128) -> Ordering {
@@ -1813,6 +1865,23 @@ mod tests {
             Some(exact(a, b, c, d)),
             "{a} / {b} against {c} / {d}"
         );
+    }
+
+    #[test]
+    fn a_cell_key_is_equal_and_ordered_as_its_order_says() {
+        let cells = |a: i128| {
+            [
+                Cell::new(a, 3).unwrap(),
+                Cell::new(1, 2).unwrap(),
+                Cell::new(-a, 5).unwrap(),
+            ]
+        };
+        for (a, b) in [(1, 1), (1, 2), (4, -2)] {
+            let (p, q) = (cells(a), cells(b));
+            let (one, other) = (CellKey(&p), CellKey(&q));
+            assert_eq!(one == other, one.cmp(&other) == Ordering::Equal);
+            assert_eq!(one.partial_cmp(&other), Some(one.cmp(&other)));
+        }
     }
 
     proptest! {
