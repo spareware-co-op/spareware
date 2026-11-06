@@ -268,7 +268,7 @@ const ROWS: &[Row<'static>] = &[
     kernel("geom-run",       1, Amended27, Elsewhere("G04"), ""),
     kernel("geom-num",       1, Accepted,   Elsewhere("G02"), "run"),
     kernel("geom-linalg",    1, Amended27, Elsewhere("G49"), "num"),
-    kernel("geom-op",        1, Amended27, Here, "run num"),
+    kernel("geom-op",        1, Amended27, Elsewhere("G82"), "run num"),
     // 2. Geometry.
     kernel("geom-math",      2, Accepted,   Elsewhere("G03"), "num op"),
     kernel("geom-bvh",       2, Amended27, Elsewhere("G54"), "run num math"),
