@@ -27,8 +27,8 @@ use gate::{
     curve::curve, dd::dd, dual::dual, eft::eft, exact_sum::exact_sum, exactness::exactness,
     format::format, generated::generated, grid::grid, growth::growth, intersect::intersect,
     interval::interval, isolate::isolate, linalg::linalg, make::make, math::math,
-    math_types::math_types, mesh::mesh, newton::newton, nurbs::nurbs, perturb::perturb, plane::plane,
-    predicate::predicate, quadrature::quadrature, real::real, rng::rng, sign::sign,
+    math_types::math_types, mesh::mesh, newton::newton, nurbs::nurbs, perturb::perturb,
+    plane::plane, predicate::predicate, quadrature::quadrature, real::real, rng::rng, sign::sign,
     surface::surface, topo::topo, unproven::unproven, wide::wide, wide32::wide32,
 };
 
