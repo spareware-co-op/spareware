@@ -41,6 +41,10 @@
 //!   spans zero is a contact of higher order, whatever its middle says.
 //! - **A band is an upper bound.** Its width comes from what the cluster's boxes reach and the least
 //!   its pairs' forms can differ by, and a band past the ceiling is a [`Unresolved::TangentBand`].
+//! - **A point on a seam is one point.** Subdivision cuts a closing domain at its ends, so the two
+//!   sides of a seam are flagged as separate clusters, each seeing only the half-branches on its
+//!   side. Singular points whose boxes meet once one is moved a whole turn along the closing
+//!   parameters are joined into one, their half-branches added ([`Reading::Point`]).
 //! - **Overlap is by identity or by a covered area.** Two surfaces are identical only if their data
 //!   are equal, and a cluster overlaps only if patches of both surfaces cover its hulls, so that
 //!   every point of each has a box of the other within reach, and its hull ends at an edge: a
@@ -987,7 +991,103 @@ pub fn analyse(
     }
     let mut out = read_clusters(&system, &found.settled, rest, ceiling, meter)?;
     out.extend(turned);
-    Ok(out)
+    Ok(across_seams(first, second, out))
+}
+
+/// The length of a closing parameter's domain: a whole turn, in half-turns.
+const TURN: f64 = 2.0;
+
+/// The parameters (u₁, v₁, u₂, v₂) that close, by a whole turn: a point of the domain's one end is
+/// the point of the other.
+fn closing(first: &SurfaceKind, second: &SurfaceKind) -> [bool; 4] {
+    let (a, b) = (charts(first).closes, charts(second).closes);
+    [a[0], a[1], b[0], b[1]]
+}
+
+/// `x` moved by `by`, widened outward by one step of the grid of doubles for the rounding.
+fn moved(x: Interval, by: f64) -> Result<Interval, NumError> {
+    Interval::new((x.lo() + by).next_down(), (x.hi() + by).next_up())
+}
+
+/// The box of `b`, moved by whole turns of the closing parameters, that touches `a` in all four
+/// parameters; `None` if no such move exists or none is needed (then the clusters already met).
+fn wrapped(a: &[Interval; 4], b: &[Interval; 4], closes: [bool; 4]) -> Option<[Interval; 4]> {
+    let mut out = *b;
+    let mut moves = 0_usize;
+    for ((o, x), (y, close)) in out.iter_mut().zip(a).zip(b.iter().zip(closes)) {
+        let touching = |z: Interval| x.lo() <= z.hi() && z.lo() <= x.hi();
+        if touching(*y) {
+            continue;
+        }
+        if !close {
+            return None;
+        }
+        let shifted = [-TURN, TURN]
+            .into_iter()
+            .filter_map(|by| moved(*y, by).ok())
+            .find(|z| touching(*z))?;
+        *o = shifted;
+        moves = moves.saturating_add(1);
+    }
+    (moves > 0).then_some(out)
+}
+
+/// Point readings that are one point read in two charts across a closing seam, joined (12.10).
+///
+/// A point on a seam is flagged from both of its sides: subdivision cuts a domain at its ends, so
+/// the clusters of the two sides never touch in the parameters, and each is read alone, with
+/// only the half-branches that end on its side. Two singular points whose boxes touch once one is
+/// moved a whole turn along the closing parameters (an exact identity of the data, see
+/// [`crate::seam`]) are one point: the half-branches add, and the box is where the two enclosures
+/// meet, each holding the one point (the first's, if rounding made them miss).
+fn across_seams(first: &SurfaceKind, second: &SurfaceKind, readings: Vec<Reading>) -> Vec<Reading> {
+    let closes = closing(first, second);
+    if !closes.iter().any(|c| *c) {
+        return readings;
+    }
+    let mut out: Vec<Reading> = Vec::new();
+    for reading in readings {
+        let mut taken = false;
+        if let Reading::Point {
+            at,
+            gap,
+            contact: PointContact::Singular { branches },
+        } = &reading
+        {
+            for kept in &mut out {
+                if let Reading::Point {
+                    at: into,
+                    gap: into_gap,
+                    contact: PointContact::Singular { branches: held },
+                } = kept
+                    && let Some(there) = wrapped(into, at, closes)
+                    && let Some(sum) = held.checked_add(*branches)
+                {
+                    let mut met = *into;
+                    for ((m, a), b) in met.iter_mut().zip(into.iter()).zip(there) {
+                        let (lo, hi) = (larger(a.lo(), b.lo()), smaller(a.hi(), b.hi()));
+                        if let Ok(both) = Interval::new(lo, hi) {
+                            *m = both;
+                        }
+                    }
+                    *into = met;
+                    if let Ok(wider) = Interval::new(
+                        smaller(into_gap.lo(), gap.lo()),
+                        larger(into_gap.hi(), gap.hi()),
+                    ) {
+                        *into_gap = wider;
+                    }
+                    *held = sum;
+                    taken = true;
+                    break;
+                }
+            }
+        }
+        if !taken {
+            out.push(reading);
+        }
+    }
+    out
 }
 
 /// What each of `clusters` is, around the `settled` pairs of the same subdivision.
