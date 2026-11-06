@@ -270,7 +270,7 @@ fn built(
     let body = filled(&rows, part)
         .and_then(|b| b.publish_named(&names, BodyKind::Solid, outside_row, meter))
         .map_err(|e| unbuilt(ctx, meter, e))?;
-    finish(ctx, meter, body, records, made, None, exactness)
+    finish(ctx, body, records, made, None, exactness)
 }
 
 /// A solid's topology, as rows.
