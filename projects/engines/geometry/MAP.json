@@ -3627,7 +3627,7 @@
             "**Nothing is called tangent on a gap not proven small.** A zero's gap is an enclosure, and only one that contains zero goes on to the second-order test.",
             "**The form's sign is proven.** The determinant of the forms' difference is an interval. One that spans zero is a contact of higher order, whatever its middle says.",
             "**A band is an upper bound.** Its width comes from what the cluster's boxes reach and the least its pairs' forms can differ by, and a band past the ceiling is a [`Unresolved::TangentBand`].",
-            "**Overlap is by identity or by a covered area.** Two surfaces are identical only if their data are equal, and a cluster overlaps only if patches of both surfaces cover its hulls, so that every point of each has a box of the other within reach, and its hull ends at an edge: a contact in the open, where the surfaces part on every side, is not an overlap however flat."
+            "**Overlap is by identity or by a covered area.** Two surfaces are identical only if their data are equal, and a cluster overlaps only if patches of both surfaces cover its hulls, so that every point of each has a box of the other within reach, and its hull ends at an edge: a contact in the open, where the surfaces part on every side, is not an overlap however flat. A pair with no forms to read (a box at a pole or a crease) proves nothing of how the surfaces bend, so a cluster holding one is neither an overlap nor a band: a sphere's pole touching a torus' outer equator is not a coincidence."
           ],
           "job": "Tangent, singular and coincident analysis: what the flagged pairs of [`crate::general::subdivide`] are (12.9).",
           "method": {
@@ -3746,7 +3746,8 @@
             "**A settled pair holds no loop.** n₁ × n₂ is the tangent of any intersection branch. Where one of its coordinates keeps its sign that coordinate of space moves strictly one way along every branch, so no branch closes, and the normals are never parallel, so there is no tangent or singular point in the pair.",
             "**Every component reaches a start point, or a flag.** A pair is dropped only when its patches are proven apart. So every branch lies in settled pairs or flagged ones, and a branch in a settled pair, being no loop, crosses the pair's boundary.",
             "**Everything is accounted for.** A branch through a settled pair enters and leaves, so each pair holds an even number of start points, or its count goes to [`Subdivided::flagged`].",
-            "**Nothing is decided below the floor.** A pair still undecided there is flagged, for 12.9."
+            "**Nothing is decided below the floor.** A pair still undecided there is flagged, for 12.9.",
+            "**Coincidence is by data, and answered before any work.** Two surfaces with equal data, or two patches of one plane, cylinder, sphere or torus (equal centre, frame and radii, exactly, so no sampling is involved) are one carrier. [`subdivide`] spends nothing on them: it returns the one pair of the parameters they share, flagged as coincident at a gap of exactly zero, for G171's analysis to read as an overlap. It does so only where the shared parameters are one region: when a patch wraps round onto itself so that two regions would share, or the patches only touch, the pair goes the ordinary way."
           ],
           "job": "General surface with surface, first part: subdivision until no pair of patches can hide a loop, and the start points every branch must pass (12.8, steps 1 to 5).",
           "method": {
