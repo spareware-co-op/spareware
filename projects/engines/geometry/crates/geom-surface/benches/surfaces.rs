@@ -1,5 +1,6 @@
-//! The benchmark of piece G65 (chapter 30): the analytic and swept surface kinds' main
-//! operations, one timing each.
+//! The benchmark of pieces G65 and G68 (chapter 30): the analytic and swept surface kinds' main
+//! operations, one timing each, and every kind's second-derivative and normal-derivative bounds
+//! over a small box (with a rational NURBS patch whose weights run from 10⁻³ to 10³).
 //!
 //! Run with `cargo bench -p geom-surface --bench surfaces`. It uses the standard library's clock
 //! only (wall-clock time on this machine; the reference machine and instruction counts are
@@ -19,7 +20,7 @@ use std::time::Instant;
 
 use geom_curve::{Basis, Circle, Frame, Line, Trimmed};
 use geom_math::{Transform, TypedTransform};
-use geom_nurbs::{Direction, Limit};
+use geom_nurbs::{Basis as Knots, Direction, Limit, Surface};
 use geom_run::{Budget, WorkMeter};
 use geom_surface::{
     Cone, Cylinder, Extrusion, ParamSurface, Plane, Revolution, Ruled, Sphere, SurfaceKind, Torus,
@@ -98,6 +99,10 @@ fn main() {
             "ruled, line to arc",
             SurfaceKind::Ruled(Ruled::new(line, arc, (0.0, 1.0)).unwrap()),
         ),
+        (
+            "rational bicubic patch, weights 10⁻³ to 10³",
+            SurfaceKind::Nurbs(patch()),
+        ),
     ];
     let squash = TypedTransform::from(Transform::scale(2.0, 0.5, 3.0).unwrap());
     for (name, k) in &kinds {
@@ -132,4 +137,34 @@ fn bench(name: &str, k: &SurfaceKind, t: &TypedTransform) {
     time("  non-uniform scale", 1_000, || {
         black_box(k.transformed(t, &mut meter()).unwrap());
     });
+    let small = ((u, u + (b - u) / 64.0), (v, v + (d - v) / 64.0));
+    time("  second-derivative bound, 1/64 box", 1_000, || {
+        black_box(
+            k.second_derivative_bound(small, sides, &mut meter())
+                .unwrap(),
+        );
+    });
+    time("  normal-derivative bound, 1/64 box", 1_000, || {
+        black_box(
+            k.normal_derivative_bound(small, sides, &mut meter())
+                .unwrap(),
+        );
+    });
+}
+
+/// A bicubic patch on a 4 × 4 net, its weights from 10⁻³ to 10³.
+fn patch() -> Surface<3> {
+    let knots = || Knots::new(3, vec![0.0, 0.0, 0.0, 0.0, 1.0, 1.0, 1.0, 1.0]).unwrap();
+    let mut pts = Vec::new();
+    let mut w = Vec::new();
+    let weights = [1e-3, 0.5, 30.0, 1e3];
+    for i in 0..4u32 {
+        for j in 0..4u32 {
+            let (x, y) = (f64::from(i), f64::from(j));
+            pts.push([x, y, (x * y) * 0.25 - x + y * 0.5]);
+            let k = usize::try_from((i + j) % 4).unwrap();
+            w.push(*weights.get(k).unwrap());
+        }
+    }
+    Surface::new_rational(knots(), knots(), &pts, &w).unwrap()
 }

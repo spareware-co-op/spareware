@@ -5,8 +5,10 @@
 //! surfaces, at the parameter pairs given, and returns the first law broken. As for curves, the
 //! laws compare certified objects: enclosures of one exact value must overlap after widening by the
 //! stated deviations (the partials of every order among them: [`ParamSurface::partials_over`]'s
-//! first three are the enclosure's, and its partials at a pair meet those over the box around it); the normal bound must keep the sign of every coordinate it decides; doubles
-//! must lie in the certified enclosures within a relative 2^−30 (a wrong formula, not rounding).
+//! first three are the enclosure's, and its partials at a pair meet those over the box around it,
+//! as the second partials' and the unit normal's partials' bounds do, piece G68); the normal bound
+//! must keep the sign of every coordinate it decides; doubles must lie in the certified enclosures
+//! within 2^−30 of the largest value there (a wrong formula, not rounding).
 //!
 //! Guarantees:
 //!
@@ -35,6 +37,7 @@ use geom_num::interval::Interval;
 use geom_nurbs::{Bounds, Direction, Limit};
 use geom_run::WorkMeter;
 
+use crate::derivative::SecondDerivativeBound;
 use crate::param::{ParamSurface, SurfaceForm};
 
 /// The relative slack between doubles and the certified enclosure: 2^−30.
@@ -56,9 +59,16 @@ fn meets(a: &[Interval; 3], b: &Bounds<3>) -> bool {
         .all(|(x, (&lo, &hi))| x.lo() <= hi && lo <= x.hi())
 }
 
-fn near(v: &[f64; 3], a: &[Interval; 3]) -> bool {
+fn boxes_meet(a: &Bounds<3>, b: &Bounds<3>) -> bool {
+    a.lo.iter()
+        .zip(&a.hi)
+        .zip(b.lo.iter().zip(&b.hi))
+        .all(|((&al, &ah), (&bl, &bh))| al <= bh && bl <= ah)
+}
+
+fn near(v: &[f64; 3], a: &[Interval; 3], largest: f64) -> bool {
     v.iter().zip(a).all(|(&x, i)| {
-        let scale = 1.0 + x.abs() + i.lo().abs() + i.hi().abs();
+        let scale = 1.0 + largest + x.abs() + i.lo().abs() + i.hi().abs();
         i.lo() - SLACK * scale <= x && x <= i.hi() + SLACK * scale
     })
 }
@@ -93,12 +103,13 @@ pub fn check<K: ParamSurface>(
     let ((a, b), (c, d)) = kind.domain();
     let call = |law: Law, at: f64| move |e: CurveError| broken(law, at, Some(e));
     let sides = (Limit::FromRight, Limit::FromRight);
-    // One domain length and one unit past the end.
-    let beyond = b + (b - a);
-    let outside = beyond + 1.0;
+    // The first double past each end: a step of 1 rounds back inside beyond 2^53 in magnitude, which
+    // the fuzz target found the kit blaming a kind for, and nearer is the sharper test.
+    let outside = b.next_up();
+    let before = a.next_down();
     if kind.point(outside, c, sides) != Err(CurveError::ParameterOutside)
-        || kind.bound(((a - 1.0, b), (c, d)), meter) != Err(CurveError::SpanOutside)
-        || kind.partials_over(((a - 1.0, b), (c, d)), sides, 1, meter)
+        || kind.bound(((before, b), (c, d)), meter) != Err(CurveError::SpanOutside)
+        || kind.partials_over(((before, b), (c, d)), sides, 1, meter)
             != Err(CurveError::SpanOutside)
         || kind.split(Direction::U, a, meter).err() != Some(CurveError::ParameterOutside)
     {
@@ -132,7 +143,10 @@ pub fn check<K: ParamSurface>(
         let dbl = kind
             .partials(u, v, sides)
             .map_err(call(Law::EvaluationIsEnclosed, u))?;
-        if !dbl.iter().zip(&e).all(|(x, y)| near(x, y)) {
+        let largest = e.iter().flatten().fold(0.0, |m, i| {
+            tight::larger(m, tight::larger(i.lo().abs(), i.hi().abs()))
+        });
+        if !dbl.iter().zip(&e).all(|(x, y)| near(x, y, largest)) {
             return Err(broken(Law::EvaluationIsEnclosed, u, None));
         }
         let [p, su, sv] = e;
@@ -156,6 +170,32 @@ pub fn check<K: ParamSurface>(
             }
             Err(CurveError::Unbounded) => {}
             Err(err) => return Err(broken(Law::DerivativeBoundHoldsDerivatives, u, Some(err))),
+        }
+        // The second partials' bound over the box holds them at the pair, and the unit normal's
+        // partials over the box meet their bound at the pair (piece G68).
+        if let SecondDerivativeBound::Bounded(b) = kind
+            .second_derivative_bound(region, sides, meter)
+            .map_err(call(Law::DerivativeBoundHoldsDerivatives, u))?
+            && !pp
+                .iter()
+                .skip(3)
+                .zip([&b.uu, &b.uv, &b.vv])
+                .all(|(x, bx)| meets(x, bx))
+        {
+            return Err(broken(Law::DerivativeBoundHoldsDerivatives, u, None));
+        }
+        let point_normal = kind
+            .normal_derivative_bound(((u, u), (v, v)), sides, meter)
+            .map_err(call(Law::DerivativeBoundHoldsDerivatives, u))?;
+        let box_normal = kind
+            .normal_derivative_bound(region, sides, meter)
+            .map_err(call(Law::DerivativeBoundHoldsDerivatives, u))?;
+        for (x, b) in point_normal.iter().zip(&box_normal) {
+            if let (DerivativeBound::Bounded(x), DerivativeBound::Bounded(b)) = (x, b)
+                && !boxes_meet(x, b)
+            {
+                return Err(broken(Law::DerivativeBoundHoldsDerivatives, u, None));
+            }
         }
         let local = kind
             .bound(region, meter)

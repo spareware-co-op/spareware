@@ -35,7 +35,7 @@ const NOTICES: &str = "projects/engines/geometry/notices";
 const METHODS: &str = "projects/engines/geometry/methods";
 
 const MANIFEST: &str =
-    "[package]\nname = \"geom-x\"\nversion = \"0.0.0\"\nlicense = \"MPL-2.0 AND MIT\"\n";
+    "[package]\nname = \"geom-x\"\nversion = \"0.0.0\"\nlicense = \"Apache-2.0 AND MIT\"\n";
 
 const LIB: &str = "//! Spare Kit geometry kernel: an example.
 //!
@@ -71,7 +71,7 @@ fn ported() -> String {
 //!   <https://github.com/other/lib/blob/{SHA2}/b.h>
 //!   Copyright (c) 2021 B. Author
 //!   Changed for Spare Kit: rewritten in Rust.
-//! SPDX-License-Identifier: MPL-2.0 AND MIT
+//! SPDX-License-Identifier: Apache-2.0 AND MIT
 "
     )
 }
@@ -293,7 +293,7 @@ fn a_good_workspace_writes_every_record() {
         "Thanks to everyone.",
         &format!("Commit:    {SHA}"),
         &format!("Commit:    {SHA2}"),
-        "SPDX-License-Identifier: MPL-2.0 AND MIT",
+        "SPDX-License-Identifier: Apache-2.0 AND MIT",
         &format!(
             "    https://github.com/ex/ample/blob/{SHA}/src/a.c\n      Copyright (c) 2020 A. \
              Author\n      Authors: A. Author and C. Author.\n"
