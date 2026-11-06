@@ -119,6 +119,10 @@ jobs:
         with:
           toolchain: ${{ env.RUST_TOOLCHAIN }}
       - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
+        with:
+          # Only main saves the cache; a pull request restores main's (a pull request's own
+          # caches filled the repository's cache limit and evicted what main saved).
+          save-if: ${{ github.ref == 'refs/heads/main' }}
       - name: The compiler in use is the pinned one
         run: |
           set -euo pipefail
@@ -148,6 +152,10 @@ jobs:
         with:
           toolchain: ${{ env.RUST_TOOLCHAIN }}
       - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
+        with:
+          # Only main saves the cache; a pull request restores main's (a pull request's own
+          # caches filled the repository's cache limit and evicted what main saved).
+          save-if: ${{ github.ref == 'refs/heads/main' }}
       - name: Install cargo-deny ${{ env.CARGO_DENY_VERSION }}, checked against its SHA-256
         run: |
           set -euo pipefail
@@ -185,6 +193,10 @@ jobs:
           toolchain: ${{ env.RUST_TOOLCHAIN }}
           components: clippy
       - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
+        with:
+          # Only main saves the cache; a pull request restores main's (a pull request's own
+          # caches filled the repository's cache limit and evicted what main saved).
+          save-if: ${{ github.ref == 'refs/heads/main' }}
       - name: Every crate that ships, and a probe that breaks each rule once
         run: cargo test --locked --package engine-geometry --test scaffold -- --ignored gate_clippy --nocapture --test-threads 1
 
@@ -204,6 +216,10 @@ jobs:
           toolchain: ${{ env.RUST_TOOLCHAIN }}
           targets: wasm32v1-none, wasm32-unknown-unknown
       - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
+        with:
+          # Only main saves the cache; a pull request restores main's (a pull request's own
+          # caches filled the repository's cache limit and evicted what main saved).
+          save-if: ${{ github.ref == 'refs/heads/main' }}
       - name: Every kernel crate on its own, for wasm32v1-none and wasm32-unknown-unknown, and the probes
         run: cargo test --locked --package engine-geometry --test scaffold -- --ignored gate_build --nocapture --test-threads 1
 
@@ -223,6 +239,10 @@ jobs:
           toolchain: ${{ env.RUST_TOOLCHAIN }}
           targets: wasm32-wasip1
       - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
+        with:
+          # Only main saves the cache; a pull request restores main's (a pull request's own
+          # caches filled the repository's cache limit and evicted what main saved).
+          save-if: ${{ github.ref == 'refs/heads/main' }}
       - name: Install wasmtime ${{ env.WASMTIME_VERSION }}, checked against its SHA-256
         run: |
           set -euo pipefail
