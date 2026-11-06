@@ -21,6 +21,12 @@
 //! chapter 23.3 names (Avnaim et al.'s signs), which lives here because no kernel crate ships it.
 //! Public functions of `geom-num` without a benchmark of their own
 //! are listed with the reason in [`catalogue::UNMEASURED`], and a test keeps that list complete.
+//! It also measures the hot path of every phase-2 code piece in the crates above the numbers
+//! layer (decision 32.44): `geom-math`'s typed transforms, rational rotation, frames and decimal
+//! reader, `geom-linalg`'s pivoted QR and SVD, `geom-bvh`'s box tree and cell index,
+//! `geom-nurbs`'s evaluation, interpolation and Bernstein bound, and the curve and surface kinds'
+//! evaluation, certified enclosures and conversion to NURBS in `geom-curve` and `geom-surface`,
+//! each named in the catalogue with its crate's path and checked to be a public function there.
 //!
 //! Map: chapter 23.13 (benchmarks and regression gates) and 28.14 (benchmarks in the test suite)
 //! of the kernel architecture, `projects/engines/geometry/architecture/`; board entry G18, which
@@ -71,13 +77,11 @@
 //!   runs every benchmark under Valgrind's Callgrind
 //!   (<https://valgrind.org/docs/manual/cl-manual.html>), which executes the program on a
 //!   simulated processor and counts what it does. The gate fails if any benchmark's instructions
-//!   or estimated cycles rise by more than [`GATE_PERCENT`] on either processor, or one of its L1
-//!   or last-level cache misses (instruction reads, data reads, data writes: [`GATED_METRICS`])
-//!   does on a miss count large enough to show it: from 20 up, where one event is within 5%. A
-//!   smaller miss count cannot show a 5% change smaller than one event, and code layout alone
-//!   moves it by an event or two, so its changes are listed and judged through estimated cycles,
-//!   which weight every miss ([`callgrind`] derives the rule and applies it to Gungraun's
-//!   machine-readable summaries). The two processors run different instructions, so each compares
+//!   or estimated cycles rise by more than [`GATE_PERCENT`] on either processor. Its L1 and
+//!   last-level cache misses (instruction reads, data reads, data writes: [`GATED_METRICS`]) are
+//!   listed when they change and judged through estimated cycles, which price every miss: code
+//!   layout alone moves miss counts, at every size ([`callgrind`] states the rule and its evidence
+//!   and applies it to Gungraun's machine-readable summaries). The two processors run different instructions, so each compares
 //!   only its own two runs, under the same rule. With the fuel gate below,
 //!   every benchmark is measured on the three targets chapter 23.3 names, x86-64 and aarch64
 //!   natively and wasm32, so each predicate's filtered and exact cost is known on all three
@@ -131,6 +135,10 @@
 //!    The gate's build aligns every function to a 64-byte cache line
 //!    (`-C llvm-args=-align-all-functions=6`), so the little code run only once, the returns at the
 //!    end, sits on lines already fetched.
+//!    It also builds every crate as one codegen unit (`CARGO_PROFILE_BENCH_CODEGEN_UNITS=1`, and
+//!    `CARGO_PROFILE_RELEASE_CODEGEN_UNITS=1` for the fuel guest). In Cargo's default 16, how
+//!    rustc splits this crate into units moves whenever a benchmark module is added, and which
+//!    functions are inlined moves with it, in benchmarks the change never touched (chapter 23.13).
 //! 4. **Fixed addresses and environment.** Gungraun runs Valgrind with address-space randomisation
 //!    off and the environment cleared.
 //! 5. **Only the kernel is counted.** Building the inputs, hashing the results and freeing memory
@@ -184,7 +192,8 @@
 //! checked on wasm32 for every benchmark, and the growth check reads the counts:
 //!
 //! ```text
-//! cargo build --release -p geom-bench --bin geom-bench-guest --target wasm32-wasip1
+//! CARGO_PROFILE_RELEASE_CODEGEN_UNITS=1 cargo build --release -p geom-bench --bin geom-bench-guest \
+//!     --target wasm32-wasip1
 //! cargo run --release --manifest-path projects/engines/geometry/crates/geom-bench/fuel/Cargo.toml -- target/wasm32-wasip1/release/geom-bench-guest.wasm > fuel.txt
 //! cargo run --release -p geom-bench --bin geom-bench-counts -- growth fuel.txt
 //! ```
@@ -197,7 +206,8 @@
 //! ```text
 //! sudo apt-get install valgrind
 //! cargo install --locked gungraun-runner --version 0.20.0
-//! RUSTFLAGS="-C llvm-args=-align-all-functions=6" cargo bench -p geom-bench --bench instructions
+//! RUSTFLAGS="-C llvm-args=-align-all-functions=6" CARGO_PROFILE_BENCH_CODEGEN_UNITS=1 \
+//!     cargo bench -p geom-bench --bench instructions
 //! ```
 //!
 //! To compare a change with `main` as CI does, save a baseline on `main` and compare the branch
@@ -205,10 +215,11 @@
 //! instructions, estimated cycles or heap ends the run with `Gungraun result: Regressed`, the list
 //! of rises, and a failed bench (the harness exits with code 3); every Callgrind count is then
 //! judged from the summaries, and `geom-bench-counts` exits with 1 on a rise over 5% in
-//! instructions, in estimated cycles, or in a miss count of 20 or more:
+//! instructions or in estimated cycles, listing every miss count that changed:
 //!
 //! ```text
 //! export RUSTFLAGS="-C llvm-args=-align-all-functions=6"
+//! export CARGO_PROFILE_BENCH_CODEGEN_UNITS=1
 //! git switch main
 //! rm -rf target/gungraun
 //! cargo bench --no-default-features -p geom-bench --bench instructions -- --save-baseline=main
@@ -316,8 +327,8 @@ pub const GATED_HEAP_METRICS: [&str; 4] =
 /// The measures of [`GATED_METRICS`] that Gungraun gates itself, instructions and estimated cycles,
 /// at [`GATE_PERCENT`], as the workflow passes them to Gungraun (`--callgrind-limits`, which
 /// replaces the limits `benches/instructions/gate.rs` sets); a test checks the two agree. The miss
-/// counts are left out: a percentage limit cannot leave alone the counts too small to resolve it,
-/// so [`callgrind::judge`] gates them from Gungraun's summaries.
+/// counts are left out: [`callgrind::judge`] lists them from Gungraun's summaries and judges them
+/// through estimated cycles.
 pub const CALLGRIND_LIMITS: &str = "ir=5%,estimatedcycles=5%";
 
 /// [`GATED_HEAP_METRICS`] at [`GATE_PERCENT`], as the workflow passes them to Gungraun
