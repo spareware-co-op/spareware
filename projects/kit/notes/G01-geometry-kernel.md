@@ -74,7 +74,7 @@ The owner's requirements, in their words: the best-architected kernel possible f
 | Permanence | Files written today open in fifty years; references in them still find the right faces |
 | Readability | Anyone, person or AI, can find where a thing is done, what it guarantees and why |
 | Headless | Every capability is a function call with data in and data out. No dialog, no hidden state |
-| Owned by nobody | Open licence (MPL-2.0), permissive dependencies only, no method we are not free to use |
+| Owned by nobody | Open licence (Apache-2.0), permissive dependencies only, no method we are not free to use |
 
 Where the incumbents fall short, from the evidence:
 
@@ -336,7 +336,7 @@ Twelve choices need the owner, because each fixes a promise to users, spends mon
 | 32.8 | How closely we follow NLib | Methods from the books; NLib for failure cases only | 4, 12, 13, 16, 29 | G56, the first NURBS piece |
 | 32.9 | Who we write to | EMBER, Schmidt and McNeel now; the rest in a stated order | 11, 14, 16, 17, 24, 29 | Varies |
 | 32.10 | Revit truth data, and watching proprietary programs | Co-op models only; watching only checks our results against our own rules | 14, 28, 29 | G460, the Revit harness |
-| 32.11 | The licence of our test cases | CC0 if the vote confirms test cases are not "core", otherwise MPL-2.0; strict rules for outside data | 28, 29 | G97, the fixture format |
+| 32.11 | The licence of our test cases | CC0 if the vote confirms test cases are not "core", otherwise Apache-2.0 (32.45); strict rules for outside data | 28, 29 | G97, the fixture format |
 | 32.12 | Pieces built ahead of the board: merge order, cost rises for correctness, goldens before the first edition | Merge in the board's order; accept a recorded rise; kernel owners approve goldens until the first Stable release | 23, 28, 30 | The next merge after G02 |
 
 The board's owner actions are decided in their own sections from 32.13 on, beginning with the crate table and layers (G08, 32.13).
