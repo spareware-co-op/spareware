@@ -191,7 +191,19 @@ impl Role {
     pub fn args(&self) -> &[RoleArg] {
         &self.args
     }
+
+    /// Whether its argument is an operand's key rather than a name: a role of [`KEYED_ROLES`].
+    #[must_use]
+    pub fn is_keyed(&self) -> bool {
+        KEYED_ROLES.contains(&self.name.as_str())
+    }
 }
+
+/// The roles a boolean qualifies names by an operand's key (chapter 11.9): `operand(key)`,
+/// `seed(key)` and `tool(key)`. A key is an element's permanent ID or an `OpPath` (11.1), written
+/// in a [`RoleArg::Name`] slot under `NameScheme v1` but not a name: no name graph holds it, so a
+/// walk over a name's parents skips it.
+pub const KEYED_ROLES: [&str; 3] = ["operand", "seed", "tool"];
 
 /// Which side of the cutting faces a split piece lies on.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
@@ -377,6 +389,18 @@ impl TopoName {
     }
 }
 
+/// The canonical encoding of an `OpPath` (32.19): an array of the `OpId`'s 16 bytes, then each
+/// label, a step as text and a key as its 16 bytes.
+///
+/// # Errors
+///
+/// [`NameError::Encode`], which only a defect in this module can cause.
+pub fn encode_op_path(op: &OpPath) -> Result<Item, NameError> {
+    let mut e = Encoder::new();
+    op_path(&mut e, op)?;
+    Ok(e.finish()?)
+}
+
 /// The `NameId` of a name whose canonical encoding is `canonical`, under `NameScheme v1`.
 #[must_use]
 pub fn name_id(canonical: &[u8]) -> NameId {
@@ -387,7 +411,7 @@ pub fn name_id(canonical: &[u8]) -> NameId {
 }
 
 /// `Side`'s number for v1.
-const fn side_number(side: Side) -> u64 {
+pub(crate) const fn side_number(side: Side) -> u64 {
     match side {
         Side::Back => 0,
         Side::Front => 1,
@@ -403,7 +427,7 @@ const fn kind_number(kind: EdgeOrVertex) -> u64 {
 }
 
 /// Each name as a finished 16-byte byte-string item.
-fn items(names: &[NameId]) -> Result<Vec<Item>, NameError> {
+pub(crate) fn items(names: &[NameId]) -> Result<Vec<Item>, NameError> {
     let mut out: Vec<Item> = Vec::with_capacity(names.len());
     for name in names {
         let mut e = Encoder::new();
@@ -423,7 +447,7 @@ fn one_more(n: usize) -> Result<u64, NameError> {
 
 /// Writes an `OpPath`: its `OpId`'s 16 bytes, then each label, a step as text and a key as its 16
 /// bytes.
-fn op_path(e: &mut Encoder, op: &OpPath) -> Result<(), NameError> {
+pub(crate) fn op_path(e: &mut Encoder, op: &OpPath) -> Result<(), NameError> {
     let labels = op.labels();
     e.array(one_more(labels.len())?)?;
     e.bytes(&op.op().to_bytes())?;
@@ -437,7 +461,7 @@ fn op_path(e: &mut Encoder, op: &OpPath) -> Result<(), NameError> {
 }
 
 /// Writes a role: its name, then its arguments.
-fn role_item(e: &mut Encoder, role: &Role) -> Result<(), NameError> {
+pub(crate) fn role_item(e: &mut Encoder, role: &Role) -> Result<(), NameError> {
     e.array(one_more(role.args.len())?)?;
     e.text(&role.name)?;
     for arg in &role.args {

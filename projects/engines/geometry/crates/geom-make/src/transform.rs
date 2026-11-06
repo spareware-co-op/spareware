@@ -49,7 +49,7 @@ use geom_math::{
 use geom_num::interval::Interval;
 use geom_num::{Exactness, GridStep, NumError, P3, Steps};
 use geom_op::history::{Origin, Record};
-use geom_op::{MakeDetail, NameId, NameSet, OpContext, OpError, OpErrorDetail, OpOutput};
+use geom_op::{MakeDetail, NameId, NameSet, OpContext, OpError, OpErrorDetail, OpOutput, TopoName};
 use geom_run::WorkMeter;
 use geom_surface::{ParamSurface, SurfaceKind};
 use geom_topo::ix::Arena;
@@ -277,12 +277,13 @@ fn run(
         .names()
         .ok_or_else(|| fail(ctx, MakeDetail::BodyNotNamed))?
         .clone();
-    let keep = |name: NameId| -> Option<(NameId, Origin)> {
+    let keep = |name: NameId| -> Option<Renamed> {
         Some((
             name,
             Origin::Modified {
                 from: NameSet::new([name]).ok()?,
             },
+            None,
         ))
     };
     ctx.run(|meter| {
@@ -291,12 +292,17 @@ fn run(
     })
 }
 
-/// A moved copy before its check: the body, its records, its exactness, and, when the transform
-/// rounded a corner or moved curved geometry by a deviation, the piece that widens what the
-/// checker certifies for it.
+/// An entity's new name, its origin, and the name itself when the copy made it (a transform keeps
+/// its input's name and makes none).
+pub(crate) type Renamed = (NameId, Origin, Option<TopoName>);
+
+/// A moved copy before its check: the body, its records, the names it made, its exactness, and,
+/// when the transform rounded a corner or moved curved geometry by a deviation, the piece that
+/// widens what the checker certifies for it.
 pub(crate) struct Copied {
     body: Body,
     records: Vec<Record>,
+    names: Vec<TopoName>,
     exactness: Exactness,
     awaits: Option<&'static str>,
 }
@@ -310,13 +316,20 @@ pub(crate) fn settle(
     copy: Copied,
     motion: Option<Motion>,
 ) -> Result<OpOutput<Made>, OpError> {
-    finish(ctx, meter, copy.body, copy.records, motion, copy.exactness).map_err(|e| {
-        match (e.detail(), copy.awaits) {
-            (OpErrorDetail::Make(MakeDetail::ResultInvalid), Some(piece)) => {
-                fail(ctx, MakeDetail::NotCertifiedYet { piece }).with_message(e.message())
-            }
-            _ => e,
+    finish(
+        ctx,
+        meter,
+        copy.body,
+        copy.records,
+        copy.names,
+        motion,
+        copy.exactness,
+    )
+    .map_err(|e| match (e.detail(), copy.awaits) {
+        (OpErrorDetail::Make(MakeDetail::ResultInvalid), Some(piece)) => {
+            fail(ctx, MakeDetail::NotCertifiedYet { piece }).with_message(e.message())
         }
+        _ => e,
     })
 }
 
@@ -325,14 +338,15 @@ pub(crate) fn settle(
     reason = "one pass copies every arena's rows with their moved geometry; split, each piece would carry the same seven arguments"
 )]
 /// A copy of `input` moved by `t`, each entity renamed and recorded by `rename` (which gives the
-/// output's name and origin from the input's name), and the copy's exactness, accepted.
+/// output's name, its origin and any name it made from the input's name), and the copy's
+/// exactness, accepted.
 pub(crate) fn moved_copy(
     ctx: &OpContext<'_>,
     meter: &mut WorkMeter<'_>,
     input: Moved<'_>,
     t: &TypedTransform,
     names: &Names,
-    rename: &dyn Fn(NameId) -> Option<(NameId, Origin)>,
+    rename: &dyn Fn(NameId) -> Option<Renamed>,
 ) -> Result<Copied, OpError> {
     let defect = || fail(ctx, MakeDetail::BuildFailed);
     let num = |e| OpError::new(ctx.path().clone(), e);
@@ -515,10 +529,12 @@ pub(crate) fn moved_copy(
     fill().map_err(|e| unbuilt(ctx, meter, e))?;
     // Names: each renamed, and its record.
     let mut records = Vec::new();
+    let mut made = Vec::new();
     let mut rekey = |keys: &[NameKey]| -> Option<Vec<NameKey>> {
         keys.iter()
             .map(|k| {
-                let (name, origin) = rename(NameId::from_bytes(k.0))?;
+                let (name, origin, node) = rename(NameId::from_bytes(k.0))?;
+                made.extend(node);
                 records.push(Record {
                     output: name,
                     origin,
@@ -539,6 +555,7 @@ pub(crate) fn moved_copy(
     Ok(Copied {
         body,
         records,
+        names: made,
         exactness,
         awaits,
     })

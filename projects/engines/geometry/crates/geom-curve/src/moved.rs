@@ -19,7 +19,8 @@
 //!   from the images, x̂′ along M·x and ŷ′ = n̂′ × x̂′, is exactly the image of x̂ and ŷ under a
 //!   similarity M = s·R: (R·a) × (R·b) = det R · R·(a × b) for an orthogonal R.
 //! - **Exact where the arithmetic is.** The enclosed images use `tight`, so an exact transform of
-//!   exact data gives exact points.
+//!   exact data gives exact points, and [`Motion::exact_for`] says when a grid transform moves a
+//!   kind's stored points exactly, so that the kind rebuilt from them is exactly its image.
 //!
 //! Method: affine images of points and vectors, and the cross-product identity above for
 //! orthogonal matrices; the classification is `geom-math`'s (G03), and the rule that a transform
@@ -57,6 +58,8 @@ pub struct Motion {
     class: Classification,
     /// The factor a similarity multiplies lengths by: 1 when it keeps lengths.
     pub scale: f64,
+    /// Whether the transform is a grid transform (`TypedTransform::Exact`).
+    grid: bool,
 }
 
 impl Motion {
@@ -98,7 +101,38 @@ impl Motion {
             entries,
             class,
             scale,
+            grid: matches!(t, TypedTransform::Exact(_)),
         })
+    }
+
+    /// Whether the transform is a grid transform and every one of `points` moves to its exact
+    /// image. A grid transform's linear part is a signed permutation, which carries every stored
+    /// vector, and so every exact unit vector built from them, exactly; so a kind rebuilt from the
+    /// images of its stored doubles (a circle's centre and frame, a polyline's vertices) is then
+    /// exactly the image of the kind, deviation 0 (chapter 7: grid transforms stay exact; piece
+    /// G69 found circles and bulge polylines stating a rounding they did not make).
+    ///
+    /// # Errors
+    ///
+    /// [`CurveError::NotFinite`] if an image overflows.
+    pub fn exact_for<const D: usize>(&self, points: &[[f64; D]]) -> Result<bool, CurveError> {
+        if !self.grid {
+            return Ok(false);
+        }
+        for p in points {
+            let mut x = [point(0.0)?; D];
+            for (o, &v) in x.iter_mut().zip(p) {
+                *o = point(v)?;
+            }
+            if self
+                .apply_enclosed(&x, true)?
+                .iter()
+                .any(|e| e.lo() != e.hi())
+            {
+                return Ok(false);
+            }
+        }
+        Ok(true)
     }
 
     /// Whether circles stay circles.

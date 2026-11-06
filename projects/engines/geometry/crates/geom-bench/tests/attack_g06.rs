@@ -1424,6 +1424,30 @@ fn direct_digest(group: &str, name: &str, class: Class) -> Option<Digest> {
                     }),
             )
         }
+        ("topo", "column_edit") => fold(inputs::topo::column_edit(class).iter().map(
+            |(values, row, value)| -> Result<u64, geom_topo::TopoError> {
+                let mut column: geom_topo::Column<geom_topo::Face, u64> = geom_topo::Column::new();
+                for &v in values {
+                    column.push(v)?;
+                }
+                let original = column.clone();
+                column.set(geom_topo::Ix::new(*row).unwrap(), *value)?;
+                let a: u64 = original.iter().fold(0, |s, v| s.wrapping_add(*v));
+                let b: u64 = column.iter().fold(0, |s, v| s.wrapping_add(*v));
+                Ok(a.wrapping_add(b))
+            },
+        )),
+        ("topo", "publish") => fold(inputs::topo::publish(class).iter().map(
+            |builder| -> Result<u32, geom_topo::TopoError> {
+                let mut meter = geom_run::WorkMeter::new(geom_run::Budget::UNLIMITED);
+                let body = builder.clone().publish(
+                    geom_topo::BodyKind::Solid,
+                    geom_topo::Ix::new(1).unwrap(),
+                    &mut meter,
+                )?;
+                Ok(body.arenas().fins.len())
+            },
+        )),
         ("bvh", "tree_build_query") => fold(inputs::bvh::tree_build_query(class).iter().map(
             |(entries, query)| {
                 let mut meter = geom_run::WorkMeter::new(geom_run::Budget::UNLIMITED);
@@ -1440,6 +1464,27 @@ fn direct_digest(group: &str, name: &str, class: Class) -> Option<Digest> {
                 index.within(*center, *radius, &mut meter)
             },
         )),
+        // The pool's results must be the serial executor's, so both are recomputed serially.
+        ("helper", "lone_serial" | "lone_pool") => {
+            let lists = if name == "lone_serial" {
+                inputs::helper::lone_serial(class)
+            } else {
+                inputs::helper::lone_pool(class)
+            };
+            fold(lists.iter().map(|items| {
+                let mut meter = geom_run::WorkMeter::new(geom_run::Budget::UNLIMITED);
+                geom_run::Exec::serial().map(
+                    &mut meter,
+                    geom_run::Phase::new("bench"),
+                    geom_run::ChunkPlan::fixed::<64>(),
+                    items,
+                    |_, x, meter| {
+                        meter.charge(1)?;
+                        Ok(x.wrapping_mul(3))
+                    },
+                )
+            }))
+        }
         ("linalg", "pivoted_qr") => fold(
             inputs::linalg::pivoted_qr(class)
                 .iter()
