@@ -1,0 +1,5 @@
+# Caddy (Apache-2.0) takes the public ports, gets and renews a free https certificate by itself,
+# and passes everything to the server. install-on-server.sh fills in SITE.
+SITE {
+	reverse_proxy 127.0.0.1:8080
+}

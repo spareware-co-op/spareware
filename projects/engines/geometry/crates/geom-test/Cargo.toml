@@ -74,7 +74,7 @@ dashu-ratio = { version = "0.6.1", default-features = false, features = ["std"] 
 # GLOSSARY.md (their links, headings and code spans) as Markdown rather than by a home-made parser.
 # MIT (pulldown-cmark's manifest); without its default features, the HTML writer and the command
 # line, which the test does not use.
-pulldown-cmark = { version = "0.13.5", default-features = false }
+pulldown-cmark = { version = "0.13.6", default-features = false }
 # Unicode's canonical decomposition, so tests/attack_g17.rs sorts the glossary's headwords with
 # their accents set aside ("Bézier" as "Bezier"), as GLOSSARY.md states its order.
 # (MIT OR Apache-2.0) AND Unicode-3.0 (unicode-normalization's manifest), taken as MIT AND
@@ -88,16 +88,22 @@ num-rational = "0.4.2"
 yaml-rust2 = { version = "0.13.0", default-features = false }
 # The kernel crates the NURBS reference is compared with on every pull request (G57,
 # tests/nurbs_reference.rs): geom-nurbs's curves and the work meter its operations take. Ours,
-# MPL-2.0; development dependencies, so no kernel crate comes to depend on this one.
+# Apache-2.0; development dependencies, so no kernel crate comes to depend on this one.
 geom-nurbs = { path = "../geom-nurbs" }
 geom-run = { path = "../geom-run" }
+# The kinds and transforms the law catalogue checks on every pull request and nightly (G69,
+# tests/laws_curves.rs and tests/laws_surfaces.rs). Ours, Apache-2.0; development dependencies, as
+# above.
+geom-curve = { path = "../geom-curve" }
+geom-surface = { path = "../geom-surface" }
+geom-math = { path = "../geom-math" }
 
 [lints.rust]
 unsafe_code = "forbid"
 missing_docs = "warn"
 # Kani sets `cfg(kani)` when it compiles a proof; proofs and the code they need sit beside the
 # code under it (chapter 28.7).
-unexpected_cfgs = { level = "warn", check-cfg = ["cfg(kani)"] }
+unexpected_cfgs = { level = "warn", check-cfg = ["cfg(coverage_nightly)", "cfg(kani)"] }
 
 [lints.clippy]
 # The crate is written to clippy's pedantic idioms; CI denies every warning.
