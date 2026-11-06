@@ -246,13 +246,24 @@ pub fn fixture(
     replayed: &Replayed,
 ) -> Result<Fixture, String> {
     let expect = match replayed {
-        Replayed::Done { hash, measures } => Expect::Ok {
+        Replayed::Done {
+            hash,
+            measures,
+            work,
+        } => Expect::Ok {
             hash: Some(*hash),
+            work: Some(*work),
             measures: measures.clone(),
         },
-        Replayed::Failed { kind, entities, .. } => Expect::Err {
+        Replayed::Failed {
+            kind,
+            entities,
+            work,
+            ..
+        } => Expect::Err {
             kind: Kind(*kind),
             entities: entities.iter().copied().map(Name).collect(),
+            work: Some(*work),
         },
         Replayed::Broken(why) => return Err(format!("the run is broken: {why}")),
     };
