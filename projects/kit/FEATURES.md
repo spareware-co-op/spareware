@@ -849,7 +849,7 @@ The co-op's own home: joining for free once per person, the member register, mem
 | **KIT-A14-F13** See contributors credited | See contributions to the code credited to the members who made them. | later | P1 |
 | **KIT-A14-F14** Have a fair hearing before suspension or expulsion | Know a member is suspended or expelled only under the constitution, after a hearing, and separately from any app ban. | next | P1, P2 |
 | **KIT-A14-F15** Run the steward society | As a member of the steward society, see its register, committee, annual meeting, accounts and disputes procedure. | next | P1, P2 |
-| **KIT-A14-F16** Contribute with clear rights | Sign off my contributions with the Developer Certificate of Origin, keep the copyright to my work, and know Spareware will never be relicensed, with my employer's consent where I worked on their time. | core | P1, P2 |
+| **KIT-A14-F16** Contribute with clear rights | Sign off my contributions with the Developer Certificate of Origin, keep the copyright to my work, and know Spareware will never be moved to a closed, paid or subscription licence, with my employer's consent where I worked on their time. | core | P1, P2 |
 | **KIT-A14-F17** Know the co-op is insured | Know the co-op and its board carry the insurance they need, with the cost in the ledger. | core | P1 |
 | **KIT-A14-F18** Know the name is protected | Know Spareware's names, domains and accounts are held by the co-op's steward, not by any one person. | core | P1, P2 |
 | **KIT-A14-F19** Know what happens if an app or the co-op closes | Know I will get notice, my data and any money owed if an app or the co-op closes. | next | P1 |
@@ -971,7 +971,7 @@ Everything a person can do, a script or add-in can do: one command API per app, 
 | **KIT-A16-F1** Use every app from a script | Do anything I can do in an app through its API. | core | P1, P2, P3, P4, P5 |
 | **KIT-A16-F2** Be told when something changes | Have my own systems called when an order, payment or message changes. | core | P1 |
 | **KIT-A16-F3** Build with a ready-made library | Use ready-made libraries for common languages. | core | P1, P2, P3, P4, P5 |
-| **KIT-A16-F4** Know the licence | Know the core is under MPL-2.0 and the SDK and plugins under Apache-2.0, and that neither will ever be relicensed. | core | P1 |
+| **KIT-A16-F4** Know the licence | Know everything is under Apache-2.0, and that it will never be moved to a closed, paid or subscription licence. | core | P1 |
 | **KIT-A16-F5** Install an add-in | Add a plugin to an app and see what it will be allowed to do first. | core | P1, P2, P3, P4 |
 | **KIT-A16-F6** Find add-ins | Browse, rate and install plugins from one directory. | next | P1, P2 |
 | **KIT-A16-F7** Publish an add-in | Publish a plugin, and charge a fair price for it if I choose. | next | P1, P2 |
@@ -997,7 +997,7 @@ Everything a person can do, a script or add-in can do: one command API per app, 
 | KIT-A16-F3-P3 | **Test mode**: A sandbox with test accounts and test payments. | service | medium | KIT-A16-F1-P1, KIT-A3-F1-P2 |  |
 | KIT-A16-F3-P4 | **Marketplace simulator**: Runs simulated customers and workers on real map data through the same commands as people, so matching, dispatch, fee setting and fraud rules are measured before launch, with each app adding its own behaviours. | service | large | KIT-A16-F3-P3, KIT-A7-F3-P2, KIT-A6-F3-P2, KIT-A15-F1-P3 |  |
 | KIT-A16-F3-P5 | **Command-line tool**: One command-line tool generated from each app's command schemas, for scripts, batch conversion and checks from a terminal. Spare Construct, Spare Studio and Spare OS need it. | library | medium | KIT-A15-F1-P3, KIT-A16-F1-P2 |  |
-| KIT-A16-F4-P1 | **Licence decision**: The decided licences: MPL-2.0 for the core and Apache-2.0 for the SDK and plugins, never relicensed, with no contributor licence agreement and Developer Certificate of Origin sign-off only. | legal | small |  | [A14](../spare-construct/STATUS.md) |
+| KIT-A16-F4-P1 | **Licence decision**: The decided licence: Apache-2.0 for everything, never closed, paid or subscription, with no contributor licence agreement and Developer Certificate of Origin sign-off only. | legal | small |  | [A14](../spare-construct/STATUS.md) |
 | KIT-A16-F5-P1 | **Plugin method**: WebAssembly components on wasmtime: what authors in each language can use today. | research | medium |  | [A08](../spare-construct/STATUS.md) |
 | KIT-A16-F5-P2 | **Plugin host**: Runs plugins as sandboxed WebAssembly components with declared permissions. | library | large | KIT-A15-F1-P2, KIT-A16-F5-P1 | [A08](../spare-construct/STATUS.md) |
 | KIT-A16-F5-P3 | **Permission prompt**: Shows a plugin's permissions in plain words before it is installed. | interface | small | KIT-A16-F5-P2, KIT-A20-F1-P1 |  |

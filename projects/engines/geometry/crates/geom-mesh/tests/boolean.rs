@@ -20,6 +20,8 @@ use geom_mesh::boolean::{Outcome, boolean, soup as kept_pieces};
 use geom_mesh::exact::build::{Corner, Polygons, build};
 use geom_mesh::exact::mass::Volume;
 use geom_mesh::exact::{ExactMesh, MeshError, MeshKind};
+use geom_num::Exactness;
+use geom_num::grid::{GridStep, Steps};
 use geom_num::wide::I256;
 use geom_op::{NameId, NameSet, OpId, OpPath, Origin, PieceKey, Side, TopoName};
 use geom_poly::merge::{Merge, Rules, merge_on};
@@ -52,6 +54,43 @@ fn solid(low: [i64; 3], high: [i64; 3], name: u8) -> ExactMesh {
     }
     input.runs = vec![source(name)];
     build(&input, &Exec::serial(), &mut meter()).unwrap()
+}
+
+/// `mesh` with the class `class`, every face within its bound.
+fn classed(mesh: ExactMesh, class: Exactness) -> ExactMesh {
+    let mut parts = mesh.into_parts();
+    parts.class = class;
+    ExactMesh::new(parts, &Exec::serial(), &mut meter()).unwrap()
+}
+
+#[test]
+fn a_result_is_as_exact_as_its_least_exact_operand_with_the_bounds_added() {
+    let certified = |bound: u64, step| Exactness::Certified {
+        bound: Steps(bound),
+        step,
+    };
+    let a = classed(solid([0; 3], [4; 3], 1), certified(3, GridStep::Q0));
+    let b = classed(solid([2; 3], [6; 3], 2), certified(2, GridStep::Q1));
+    let c = solid([1; 3], [3; 3], 3);
+    // 3 steps of Q0 are 75 of Q1, the finer: with B's 2, 77.
+    let united = one(&[&a, &b, &c], WindingTest::unite());
+    assert_eq!(united.mesh.parts().class, certified(77, GridStep::Q1));
+    assert!(united.mesh.parts().face_dev.iter().all(|&d| d == Steps(77)));
+    assert_eq!(united.mesh.parts().face_dev.len(), united.mesh.faces());
+    let exact = one(&[&c, &solid([2; 3], [5; 3], 4)], WindingTest::unite());
+    assert_eq!(exact.mesh.parts().class, Exactness::Exact);
+    let approximate = Exactness::Approximate {
+        deviation: Steps(9),
+        step: GridStep::Q0,
+    };
+    let rough = one(&[&classed(c, approximate), &a], WindingTest::unite());
+    assert_eq!(
+        rough.mesh.parts().class,
+        Exactness::Approximate {
+            deviation: Steps(12),
+            step: GridStep::Q0
+        }
+    );
 }
 
 fn one(operands: &[&ExactMesh], test: WindingTest) -> Outcome {

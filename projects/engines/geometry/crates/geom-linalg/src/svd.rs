@@ -38,7 +38,11 @@
 //!   step charges its work before it runs; the reductions charge theirs first.
 //! - **Typed failures.** Columns whose norms differ by more than the doubles can hold
 //!   (a rotation angle that is not finite) are [`LinalgError::NotFinite`], never a silently wrong
-//!   factor.
+//!   factor. So is a matrix with a singular value beyond the largest double (as when a row or column's
+//!   norm passes it), which has no factorisation within the bound above in finite doubles, and
+//!   any whose reduction or QR step overflows. Golub–Kahan's deflation test scales each diagonal
+//!   magnitude before adding the two (`crate::matrix`'s `negligible`), so it cannot overflow and
+//!   take an entry beside them for zero (issue #542).
 //!
 //! Method:
 //!
@@ -71,7 +75,7 @@ use geom_num::math;
 use geom_num::real::Real;
 
 use crate::cols::{Cols, add, at, at_mut, mul, sub};
-use crate::matrix::{LinalgError, Matrix, Work, cost3, finite, wide, zeros};
+use crate::matrix::{LinalgError, Matrix, Work, cost3, finite, negligible, wide, zeros};
 use crate::qr::{householder, norm};
 use crate::rotation::{TINY, UP, givens, hypot, rotate_slices};
 
@@ -532,7 +536,7 @@ fn bidiagonal_qr(
         // Deflate from the bottom.
         while hi > 0 {
             let k = sub(hi, 1)?;
-            if at(e, k)?.abs() <= EPS * (at(d, k)?.abs() + at(d, hi)?.abs()) {
+            if negligible(at(e, k)?, at(d, k)?, at(d, hi)?) {
                 *at_mut(e, k)? = 0.0;
                 hi = k;
             } else {
@@ -545,7 +549,7 @@ fn bidiagonal_qr(
         let mut lo = sub(hi, 1)?;
         while lo > 0 {
             let k = sub(lo, 1)?;
-            if at(e, k)?.abs() <= EPS * (at(d, k)?.abs() + at(d, lo)?.abs()) {
+            if negligible(at(e, k)?, at(d, k)?, at(d, lo)?) {
                 *at_mut(e, k)? = 0.0;
                 break;
             }

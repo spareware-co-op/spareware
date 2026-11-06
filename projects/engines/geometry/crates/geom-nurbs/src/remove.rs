@@ -43,7 +43,7 @@
 //!   interval arithmetic in place of `NLib`'s distance test with basis maxima from a numerical
 //!   search, its rescaled tolerance for rational curves and its weight range; a new curve is
 //!   returned with the deviation instead of being edited in place.
-//! SPDX-License-Identifier: MPL-2.0 AND Apache-2.0
+//! SPDX-License-Identifier: Apache-2.0
 //!
 //! Cost: each removal takes O(n·D) operations to copy the points, O(p·D) to solve, and O(n + p²)
 //! in intervals to certify; at most min(times, multiplicity) removals are tried.

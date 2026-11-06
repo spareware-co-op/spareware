@@ -79,8 +79,8 @@
 //! seed discipline of 28.5 and 28.17 for its generators; and, for the first generator, the grid
 //! steps of 6.1 and the tolerance ladder of 6.5, tabulated from `geom-num`'s constants.
 //!
-//! Dependencies: `geom-num` (MPL-2.0, ours), whose constants the generators tabulate,
-//! `geom-test` (MPL-2.0, ours), for the seed type and `SplitMix64`, and `engine-geometry` (MPL-2.0,
+//! Dependencies: `geom-num` (Apache-2.0, ours), whose constants the generators tabulate,
+//! `geom-test` (Apache-2.0, ours), for the seed type and `SplitMix64`, and `engine-geometry` (Apache-2.0,
 //! ours), whose operation schemas the facade generators read. Their own dependencies are
 //! recorded in their headers. Its tests also use `proc-macro2` 1.0 (a development dependency,
 //! without its default `proc-macro` feature), to compare the Verus twin's tokens with the shipped

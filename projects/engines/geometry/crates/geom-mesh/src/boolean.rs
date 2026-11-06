@@ -13,6 +13,8 @@
 //! - **A result is a solid** ([`ExactMesh::is_solid`]): its winding is its test's, 0 or 1, and no
 //!   two of its faces cross. A solid operand's boxes away from the others are solved without
 //!   cuts or tracing (11.3 step 4): fewer pieces, the same vectors, the same mesh.
+//! - **As exact as its least exact operand.** A result's class is its operands' combined: the
+//!   least exact class, the bounds added (9, 19.13), and every face carries that bound.
 //! - **Bounded results only.** A test the outside passes, such as "not A", has no finite boundary:
 //!   [`MeshError::UnboundedResult`] names which test, and the remedy is to intersect it with a box.
 //! - **Conforming and exact.** The merge gives maximal faces and edges that end where other edges
@@ -46,8 +48,8 @@
 use alloc::collections::{BTreeMap, BTreeSet};
 use alloc::vec::Vec;
 
-use geom_num::Sign;
 use geom_num::plane::{Plane, Tpi};
+use geom_num::{Exactness, NumError, Sign};
 use geom_op::{
     History, NameId, NameSet, OpPath, Ordinal, Origin, PieceKey, Record, Side, TopoName,
 };
@@ -96,6 +98,8 @@ struct Gathered {
     /// The run of each polygon.
     run_of: Vec<u32>,
     inputs: Vec<Input>,
+    /// The operands' classes combined: the least exact, with the bounds added (9, 19.13).
+    class: Exactness,
 }
 
 /// Every face of `operands`, split into convex polygons on `exec`'s pool, in face order: the same
@@ -105,10 +109,17 @@ fn gather(
     exec: &Exec<'_>,
     meter: &mut WorkMeter<'_>,
 ) -> Result<Gathered, MeshError> {
+    let mut class = Exactness::Exact;
+    for mesh in operands {
+        class = class
+            .combine(mesh.parts().class)
+            .ok_or(MeshError::Num(NumError::BudgetExceeded))?;
+    }
     let mut gathered = Gathered {
         polygons: Vec::new(),
         run_of: Vec::new(),
         inputs: Vec::new(),
+        class,
     };
     // Every face up to the first open operand, which a walk would refuse once it got there.
     let open = operands.iter().position(|m| m.kind() == MeshKind::Open);
@@ -504,10 +515,11 @@ fn corners_of(
 /// face's lowest vertex is its outer ring, and it comes first.
 fn polygons_of(
     merged: &Merged,
-    (face_run, runs): (Vec<u32>, Vec<Source>),
+    (face_run, runs, class): (Vec<u32>, Vec<Source>, Exactness),
     exec: &Exec<'_>,
     meter: &mut WorkMeter<'_>,
 ) -> Result<Polygons, MeshError> {
+    let faces = face_run.len();
     let vertices = corners_of(merged, exec, meter)?;
     let on_grid = |v: usize| matches!(vertices.get(v), Some(Corner::Grid(_)));
     let mut corners = Vec::new();
@@ -551,8 +563,16 @@ fn polygons_of(
         edge_plane,
         corner_prop: Vec::new(),
         props: PropTable::default(),
-        face_dev: Vec::new(),
-        class: geom_num::Exactness::Exact,
+        face_dev: match class {
+            Exactness::Exact => Vec::new(),
+            Exactness::Certified { bound, .. }
+            | Exactness::Approximate {
+                deviation: bound, ..
+            } => {
+                alloc::vec![bound; faces]
+            }
+        },
+        class,
     })
 }
 
@@ -572,7 +592,7 @@ fn outcome(
         meter,
     )?;
     let (history, face_run, runs) = account(&merged, &kept, gathered, op)?;
-    let polygons = polygons_of(&merged, (face_run, runs), exec, meter)?;
+    let polygons = polygons_of(&merged, (face_run, runs, gathered.class), exec, meter)?;
     Ok(Outcome {
         // A result's winding is its test's, 0 or 1, and no two of its faces cross.
         mesh: build(&polygons, exec, meter)?.proven_solid(),
@@ -673,11 +693,12 @@ fn classified(
     }
     let gathered = gather(operands, exec, meter)?;
     // A solid operand's leaves away from the others need no cuts and no tracing (11.3 step 4).
-    let solids: Vec<Entry> = (0..)
-        .zip(operands)
-        .filter(|(_, mesh)| mesh.is_solid())
-        .map(|(entry, _)| entry)
-        .collect();
+    let mut solids: Vec<Entry> = Vec::new();
+    for (entry, mesh) in (0..).zip(operands) {
+        if mesh.is_solid() {
+            solids.push(entry);
+        }
+    }
     let classified = arranged((&gathered, &solids), tests, exec, meter)?;
     Ok((gathered, classified))
 }
