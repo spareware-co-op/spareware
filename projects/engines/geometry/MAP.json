@@ -432,6 +432,26 @@
           "target": "lib"
         },
         {
+          "cost": "a few hundred small allocations per input, once per batch, outside every measured run.",
+          "does": null,
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-bench/src/inputs/attributes.rs",
+          "guarantees": [
+            "every batch is full and the same on every target, and every result of a typical batch is `Ok` (`tests/inputs.rs`); every result is the operation's own, run directly (`tests/attack_g06.rs`)."
+          ],
+          "job": "Inputs for the attribute step's hot path (piece G90, decision 32.44): one attribute over a small body's entities, carried across an operation that leaves some unchanged, changes some and deletes the rest.",
+          "method": {
+            "links": [
+              "projects/engines/geometry/architecture/28-testing.md"
+            ],
+            "text": "the first scene of `geom-name`'s `tests/classes.rs`, at one size, measured as chapter 28.14 sets benchmarks out, `projects/engines/geometry/architecture/28-testing.md`."
+          },
+          "path": "geom_bench::inputs::attributes",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
           "cost": "about a hundred draws of [`SplitMix64`] per input, once per batch, outside every measured run.",
           "does": null,
           "family": [],
@@ -2501,6 +2521,50 @@
           "non_exhaustive": false
         },
         {
+          "doc": "Why a body could not be stored or read back.",
+          "file": "projects/engines/geometry/crates/geom-format/src/body.rs",
+          "kinds": [
+            {
+              "doc": "The encoder refused a value (writing).",
+              "name": "Encode",
+              "shape": "tuple"
+            },
+            {
+              "doc": "Bytes that break SKG's canonical CBOR.",
+              "name": "Cbor",
+              "shape": "tuple"
+            },
+            {
+              "doc": "A payload that is not what its table or the index needs.",
+              "name": "Shape",
+              "shape": "tuple"
+            },
+            {
+              "doc": "A chunk the index does not list, or listed in the wrong place or with another content ID.",
+              "name": "Chunk",
+              "shape": "struct"
+            },
+            {
+              "doc": "A geometry kind that could not be stored or read.",
+              "name": "Kind",
+              "shape": "tuple"
+            },
+            {
+              "doc": "The topology did not build back.",
+              "name": "Topo",
+              "shape": "tuple"
+            },
+            {
+              "doc": "The meter stopped the work.",
+              "name": "Stopped",
+              "shape": "tuple"
+            }
+          ],
+          "module": "geom_format::body",
+          "name": "BodyError",
+          "non_exhaustive": false
+        },
+        {
           "doc": "The rule of SKG's CBOR subset (24.3, RFC 8949 section 4.2.1) an input breaks.",
           "file": "projects/engines/geometry/crates/geom-format/src/cbor/error.rs",
           "kinds": [
@@ -2753,6 +2817,40 @@
           ],
           "module": "geom_format::history",
           "name": "HistoryRecordError",
+          "non_exhaustive": false
+        },
+        {
+          "doc": "Why a kind could not be written or read back.",
+          "file": "projects/engines/geometry/crates/geom-format/src/kinds.rs",
+          "kinds": [
+            {
+              "doc": "The encoder refused a value: a double that is not finite where one must be.",
+              "name": "Encode",
+              "shape": "tuple"
+            },
+            {
+              "doc": "Bytes that break SKG's canonical CBOR.",
+              "name": "Cbor",
+              "shape": "tuple"
+            },
+            {
+              "doc": "An item that is not the kind its code names.",
+              "name": "Shape",
+              "shape": "tuple"
+            },
+            {
+              "doc": "The kind's constructor refused the values.",
+              "name": "Curve",
+              "shape": "tuple"
+            },
+            {
+              "doc": "A NURBS constructor refused the values.",
+              "name": "Nurbs",
+              "shape": "tuple"
+            }
+          ],
+          "module": "geom_format::kinds",
+          "name": "KindError",
           "non_exhaustive": false
         },
         {
@@ -3039,6 +3137,30 @@
             "text": "chapter 24.4's attributes record and section 8.4's events and actions (`projects/engines/geometry/architecture/24-file-format-exchange.md`, `projects/engines/geometry/architecture/08-topology.md`), after Parasolid's published attribute classes, as a concept only (`projects/kit/notes/G01-evidence/07-persistent-naming.md`)."
           },
           "path": "geom_format::attributes",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
+          "cost": "linear in the body: one pass over each table to write, one to read, one SHA-256 pass over every chunk; memory for one chunk's payload at a time plus the body itself.",
+          "does": "[`write_body`] turns a `geom_topo::Body` into a [`StoredBody`]: one chunk record (type 4) per run of [`CHUNK_ROWS`] rows of each table, in arena order, and the index record (type 3) listing every table's row count and its chunks' content IDs in order. [`read_body`] reads them back through `geom_topo::Builder`, which checks the topology again before it publishes, so a stored body is never trusted further than a built one. The tables, by code in [`table`], are the arenas of chapter 8.2: regions, shells, faces, loops, fins, edges and vertices; the geometry pools (points, surfaces, curves and pcurves); and, for a body published by name, the names of its regions, faces, edges and vertices.",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-format/src/body.rs",
+          "guarantees": [
+            "**Index for index.** A body read back equals the one written (`PartialEq`), every arena in the same order, so the next operation on either gives the same bits (24.3).",
+            "**Chunks are a pure function of their rows.** The runs are geom-topo's own chunks (`geom_topo::CHUNK_ROWS`, 4,096), so a chunk whose rows did not change encodes to the same bytes and the same content ID, whatever else changed: an edit to 1% of a body's rows rewrites only the chunks those rows are in.",
+            "**References are checked.** Every reference is stored as its row plus one, 0 for none; a required reference of 0, a row count that disagrees with the chunks, a chunk of the wrong table or position, or a content ID that does not match its chunk is refused before anything is built, and the builder then checks the topology itself."
+          ],
+          "job": "Body records: a body stored as one index record and a chunk record for every 4,096-row run of each of its tables, so a body's content ID is the root of a hash tree and a new version writes only the chunks that changed (24.2, 24.3).",
+          "method": {
+            "links": [
+              "projects/engines/geometry/architecture/24-file-format-exchange.md",
+              "projects/engines/geometry/architecture/08-topology.md",
+              "https://doi.org/10.1007/3-540-48184-2_32"
+            ],
+            "text": "chapter 24.2 to 24.4 of the kernel architecture, `projects/engines/geometry/architecture/24-file-format-exchange.md`, and the arenas of chapter 8.2, `projects/engines/geometry/architecture/08-topology.md`; Merkle's hash tree, <https://doi.org/10.1007/3-540-48184-2_32>, for the content ID of the index over its chunks."
+          },
+          "path": "geom_format::body",
           "provenance": [],
           "spdx": null,
           "target": "lib"
@@ -3356,6 +3478,29 @@
           "target": "lib"
         },
         {
+          "cost": "linear in a kind's values, plus, for an offset stored with its cache, the cost of fitting it again.",
+          "does": "[`write_curve`] and [`write_surface`] append one kind to an encoder; [`read_curve`] and [`read_surface`] read one back from a decoder, rebuilding it through the kind's own constructor, so a stored kind is checked as a built one is. The codes are in [`curve`] and [`surface`]; the fields of each are the values its constructor takes, in the order `format/cddl/kinds.cddl` gives them. Doubles are written in their shortest exact width, lists of doubles as RFC 8746 `f64` columns (tag 86), an absent value as `[]`, a present one as `[value]`, and a flag as 0 or 1.",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-format/src/kinds.rs",
+          "guarantees": [
+            "**Value for value.** A kind read back equals the one written (`PartialEq`), every double with its bits, a negative zero included: a kind keeps what defines it, never a refit.",
+            "**Caches are rebuilt, not stored.** An offset's fitted NURBS cache is a function of the offset; the item says whether it was there and reading computes it again (`Offset::cached`), which gives the same bits on every target (23.1). A curve on a surface keeps its 3D curve, which defines it.",
+            "**Infinite ends.** A parameter interval's end may be infinite only on its own side (a ray or line); it is written `[]`.",
+            "**Bounded.** Every kind nests at most [`DEPTH`] containers deep: a surface offset at most `geom_surface::offset::MAX_NESTING` (4) times, over a swept surface whose profile is a conic on axes on a frame."
+          ],
+          "job": "Geometry kinds as canonical items: every curve and surface kind a body's pools hold, written as `[code, fields…]` and read back to the same value (24.2, 24.3).",
+          "method": {
+            "links": [
+              "projects/engines/geometry/architecture/24-file-format-exchange.md"
+            ],
+            "text": "chapter 24.2 and 24.3 of the kernel architecture, `projects/engines/geometry/architecture/24-file-format-exchange.md`; the kinds are those of chapter 7, `07-curves-surfaces.md`."
+          },
+          "path": "geom_format::kinds",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
           "cost": "linear in the record; each node is decoded, encoded and hashed once.",
           "does": "[`names_record`] writes a name graph's nodes as one required record (tag [`NAMES_TAG`]): an array of `[id, name]` pairs in `NameId` order, each name in its canonical encoding (32.19). [`read_names`] reads one back into a fresh name graph. [`read_topo_name`] reads one canonical `TopoName` item.",
           "family": [],
@@ -3586,6 +3731,29 @@
             "text": "differential testing against an independent reading of chapter 8.2's rules as `geom-topo`'s `builder` module states them (`projects/engines/geometry/architecture/08-topology.md`), written here from the rules, not from the code: lengths per arena from region to edge, then the links in their published order, rows ascending, then the outside region."
           },
           "path": "geom_fuzz::arenas",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
+          "cost": "at most [`MAX_RECORDS`] records, two attributes and [`MAX_NAMES`] values each; at most [`MAX_INPUT_BYTES`] bytes read.",
+          "does": "[`decode`] turns a fuzzer's bytes into a [`Case`]: two attributes with arbitrary behaviours (one opaque, of an unknown owner; one a point, which a transform may move), values on up to [`MAX_NAMES`] input names, a history of up to [`MAX_RECORDS`] outputs of every origin and some deleted inputs, and the step's transform and copy role. [`check`] runs the step and compares every output's value with 8.4's table, written here from the table; it checks that a note is given exactly for each value a merge or a transform dropped; and it sets a value with `geom_name::set` and checks that applying that operation's own history changes nothing. [`harness`] is `decode` then `check`.",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-fuzz/src/attributes.rs",
+          "guarantees": [
+            "**Any bytes are a case.** Every byte string, the empty one included, decodes to a case whose history `History` accepts.",
+            "**A bounded input.** [`decode`] reads at most [`MAX_INPUT_BYTES`] bytes, derived below; a unit test builds the input that reaches it.",
+            "**A panic is a failure; a disagreement is a [`Finding`]** naming the law and the case."
+          ],
+          "job": "Fuzz target: `geom-name`'s attribute step gives each output exactly the values section 8.4's table gives, and setting a value changes no entity.",
+          "method": {
+            "links": [
+              "projects/engines/geometry/architecture/08-topology.md",
+              "projects/engines/geometry/architecture/20-naming-history.md"
+            ],
+            "text": "differential testing against section 8.4's table read independently (`projects/engines/geometry/architecture/08-topology.md`), over histories of chapter 20.3's records (`projects/engines/geometry/architecture/20-naming-history.md`)."
+          },
+          "path": "geom_fuzz::attributes",
           "provenance": [],
           "spdx": null,
           "target": "lib"
@@ -11922,7 +12090,7 @@
           "family": [],
           "file": "projects/engines/geometry/crates/geom-test/src/trip.rs",
           "guarantees": [
-            "**Each violation is real and small.** One line changes, and the change breaks exactly the property the gate checks: a line rustfmt would format differently; a sign the Kani harness for signs asserts; a carry the Verus twin's proof of addition asserts; a bound the limb proofs assert; orient2d's exact path answering `Positive` whatever its points, which breaks the antisymmetry every orient2d harness checks (a sign flipped everywhere would not: the fuzz target holds orient2d to its laws, not to an oracle); the carry the wide-integer fuzz target compares with big integers under cargo-bolero's libFuzzer, and which `ClusterFuzzLite`'s own build and fuzzing must report through whichever target meets it first (each target's law names its own break, \"broken law: \"; its address sanitizer reports the abort that follows); `Sign::of_i128` reading its argument through an opaque copy (`core::hint::black_box`), the same answer for more work, which both count gates must report as a rise of more than 5% on its benchmark; the error bound orient2d's Gappa problem claims, halved, which Gappa must fail to prove, so that its Rocq output holds no theorem and Rocq refuses it; and the bounds of orient2d's `FPTaylor` certificate, every one halved as HOL Light's session loads it, which HOL Light must refuse to prove.",
+            "**Each violation is real and small.** One line changes, and the change breaks exactly the property the gate checks: a line rustfmt would format differently; a sign the Kani harness for signs asserts; a carry the Verus twin's proof of addition asserts; a bound the limb proofs assert; a set bit the canonical encoder's narrowing proofs keep; the frame's edge the file reader's range proofs accept; orient2d's exact path answering `Positive` whatever its points, which breaks the antisymmetry every orient2d harness checks (a sign flipped everywhere would not: the fuzz target holds orient2d to its laws, not to an oracle); the carry the wide-integer fuzz target compares with big integers under cargo-bolero's libFuzzer, and which `ClusterFuzzLite`'s own build and fuzzing must report through whichever target meets it first (each target's law names its own break, \"broken law: \"; its address sanitizer reports the abort that follows); `Sign::of_i128` reading its argument through an opaque copy (`core::hint::black_box`), the same answer for more work, which both count gates must report as a rise of more than 5% on its benchmark; the error bound orient2d's Gappa problem claims, halved, which Gappa must fail to prove, so that its Rocq output holds no theorem and Rocq refuses it; and the bounds of orient2d's `FPTaylor` certificate, every one halved as HOL Light's session loads it, which HOL Light must refuse to prove.",
             "**An anchor found once, or no run.** [`apply`] refuses a file that holds the anchor line other than exactly once, so a refactor that moves it fails `tests/attack_g43.rs` (which checks every anchor in the repository) and the job, loudly, instead of planting nothing.",
             "**A trip counts only for the right reason.** [`verdict`] accepts a run only when the command failed and printed every line [`Violation::caught`] names: the tool's own words for a found violation. A build error, a missing tool or any other failure proves nothing and is refused.",
             "**Line ends kept.** The anchor is matched on a line with its line end set aside, so a Windows checkout's CRLF files work the same, and the line end is kept."
