@@ -2141,6 +2141,10 @@ pub mod make {
         let turn = Rotation::quarter_turns(1);
         run(batch, out, |(body, center)| {
             counts(rotate(&ctx, moved(body), Axis::Z, turn, *center))
+        });
+    }
+}
+
 /// `geom-run`'s parallel helper (decision 32.44): `Exec::map` over a list that fits one chunk, on
 /// the serial executor and on a pool, under an unlimited budget. The pool runs its tasks on the
 /// calling thread, in order, so the two counts differ by the helper's own dispatch only, never by
