@@ -2384,3 +2384,139 @@ fn roots_typical_batches_all_succeed() {
         &m::gauss_legendre(Typical),
     );
 }
+
+/// Piece G251's classes: two meeting points apart in height, or at one height, or a sliver apart
+/// that `tpi_height`'s filter cannot order; two meetings of moving planes likewise in time; and
+/// the generated functions' batches, drawn from the same builders, take the paths their classes
+/// claim.
+#[test]
+fn the_wide_orders_classes_are_what_they_say() {
+    use core::cmp::Ordering;
+    use geom_num::generated as gp;
+    use geom_num::plane::Moving;
+    use inputs::generated as i;
+    use inputs::plane as p;
+    for class in [Typical, Degenerate, NearlyDegenerate, Extreme] {
+        assert_eq!(p::cmp_height(class).len(), BATCH, "{class}");
+        assert_eq!(p::cmp_meeting(class).len(), BATCH, "{class}");
+    }
+    let apart = |o: Result<Ordering, NumError>| matches!(o, Ok(Ordering::Less | Ordering::Greater));
+    assert!(
+        p::cmp_height(Typical)
+            .iter()
+            .all(|(a, b)| apart(a.cmp_height(b)))
+    );
+    assert!(
+        p::cmp_height(NearlyDegenerate)
+            .iter()
+            .all(|(a, b)| apart(a.cmp_height(b)))
+    );
+    assert!(
+        p::cmp_height(Degenerate)
+            .iter()
+            .all(|(a, b)| a.cmp_height(b) == Ok(Ordering::Equal) && a != b)
+    );
+    assert!(
+        p::cmp_height(Extreme)
+            .iter()
+            .all(|(a, b)| a.cmp_height(b).is_ok())
+    );
+    let meet = |a: &[Moving; 4], b: &[Moving; 4]| Moving::cmp_meeting(a, b);
+    assert!(
+        p::cmp_meeting(Typical)
+            .iter()
+            .all(|(a, b)| apart(meet(a, b)))
+    );
+    assert!(
+        p::cmp_meeting(NearlyDegenerate)
+            .iter()
+            .all(|(a, b)| apart(meet(a, b)))
+    );
+    assert!(
+        p::cmp_meeting(Degenerate)
+            .iter()
+            .all(|(a, b)| meet(a, b) == Ok(Ordering::Equal) && a != b)
+    );
+    assert!(p::cmp_meeting(Extreme).iter().all(|(a, b)| {
+        meet(a, b).is_ok()
+            && a.iter()
+                .chain(b)
+                .all(|m| m.speed().unsigned_abs() == p::SPEED_LIMIT.unsigned_abs())
+    }));
+
+    // The generated batches: the filter decides typical inputs and not nearly degenerate ones, and
+    // the exact value of degenerate ones is zero.
+    let h = |[
+        ([n1x, n1y, n1z], d1),
+        ([n2x, n2y, n2z], d2),
+        ([n3x, n3y, n3z], d3),
+        ([n4x, n4y, n4z], d4),
+        ([n5x, n5y, n5z], d5),
+        ([n6x, n6y, n6z], d6),
+    ]: [([i128; 3], i128); 6]| {
+        (
+            gp::tpi_height::filter(
+                n1x, n1y, n1z, d1, n2x, n2y, n2z, d2, n3x, n3y, n3z, d3, n4x, n4y, n4z, d4, n5x,
+                n5y, n5z, d5, n6x, n6y, n6z, d6,
+            ),
+            gp::tpi_height::exact(
+                n1x, n1y, n1z, d1, n2x, n2y, n2z, d2, n3x, n3y, n3z, d3, n4x, n4y, n4z, d4, n5x,
+                n5y, n5z, d5, n6x, n6y, n6z, d6,
+            ),
+        )
+    };
+    assert!(
+        i::tpi_height_filter(Typical)
+            .into_iter()
+            .all(|x| h(x).0.is_some())
+    );
+    assert!(
+        i::tpi_height_filter(NearlyDegenerate)
+            .into_iter()
+            .all(|x| h(x).0.is_none())
+    );
+    assert!(
+        i::tpi_height_value(Degenerate)
+            .into_iter()
+            .all(|x| h(x).1 == Some(Sign::Zero))
+    );
+    let t = |m: [(([i128; 3], i128), i128); 8]| {
+        let [
+            (([n1x, n1y, n1z], d1), s1),
+            (([n2x, n2y, n2z], d2), s2),
+            (([n3x, n3y, n3z], d3), s3),
+            (([n4x, n4y, n4z], d4), s4),
+            (([n5x, n5y, n5z], d5), s5),
+            (([n6x, n6y, n6z], d6), s6),
+            (([n7x, n7y, n7z], d7), s7),
+            (([n8x, n8y, n8z], d8), s8),
+        ] = m;
+        (
+            gp::mitre_time::filter(
+                n1x, n1y, n1z, d1, s1, n2x, n2y, n2z, d2, s2, n3x, n3y, n3z, d3, s3, n4x, n4y, n4z,
+                d4, s4, n5x, n5y, n5z, d5, s5, n6x, n6y, n6z, d6, s6, n7x, n7y, n7z, d7, s7, n8x,
+                n8y, n8z, d8, s8,
+            ),
+            gp::mitre_time::exact(
+                n1x, n1y, n1z, d1, s1, n2x, n2y, n2z, d2, s2, n3x, n3y, n3z, d3, s3, n4x, n4y, n4z,
+                d4, s4, n5x, n5y, n5z, d5, s5, n6x, n6y, n6z, d6, s6, n7x, n7y, n7z, d7, s7, n8x,
+                n8y, n8z, d8, s8,
+            ),
+        )
+    };
+    assert!(
+        i::mitre_time_filter(Typical)
+            .into_iter()
+            .all(|x| t(x).0.is_some())
+    );
+    assert!(
+        i::mitre_time_filter(NearlyDegenerate)
+            .into_iter()
+            .all(|x| t(x).0.is_none())
+    );
+    assert!(
+        i::mitre_time_value(Degenerate)
+            .into_iter()
+            .all(|x| t(x).1 == Some(Sign::Zero))
+    );
+}

@@ -882,6 +882,186 @@ fn tpi_routed(t: &Tpi, s: &Plane) -> Option<Sign> {
     Some(side.mul(t.weight))
 }
 
+impl Tpi {
+    /// Which of two three-plane points is higher: the order of their z coordinates, exactly
+    /// (chapter 13.15, the order of two straight-skeleton events by height; decision 32.29).
+    /// `Greater` means this point is higher.
+    ///
+    /// Each point is X / w with X = −mx ([`Tpi::homogeneous`]), so its height is −`mx_z` / w and
+    /// `z_a` − `z_b` = (`mx_bz` `w_a` − `mx_az` `w_b`) / (`w_a` `w_b`): the order is the sign of
+    /// `mx_bz` `w_a` − `mx_az` `w_b` times the signs of the two weights, which every `Tpi` holds.
+    /// Nothing is divided or rounded.
+    ///
+    /// Routing (chapter 6.2): the generated `tpi_height`, filter first, then its exact path.
+    ///
+    /// Bit budget, derived by `geom-gen` from the description and certified step by step in
+    /// `generated::tpi_height`'s header (|`n_i`| < 2^83, |d| < 2^125): w below 2^252, `mx_z`
+    /// below 2^294, each product below 2^546 and the difference below 2^547, 13B + 27 bits at
+    /// B = 40, in [`crate::wide::I576`] (limit 2^575), the one predicate that width serves.
+    ///
+    /// # Errors
+    ///
+    /// [`NumError::BudgetExceeded`] if a step of the exact path did not fit, which the certificate
+    /// rules out for planes within their budget.
+    pub fn cmp_height(&self, other: &Tpi) -> Result<Ordering, NumError> {
+        let [first, second, third] = self.planes;
+        let [fourth, fifth, sixth] = other.planes;
+        let [
+            ([n1x, n1y, n1z], d1),
+            ([n2x, n2y, n2z], d2),
+            ([n3x, n3y, n3z], d3),
+            ([n4x, n4y, n4z], d4),
+            ([n5x, n5y, n5z], d5),
+            ([n6x, n6y, n6z], d6),
+        ] = [first, second, third, fourth, fifth, sixth].map(|p| (p.n, p.d));
+        let sign = generated::tpi_height::filter(
+            n1x, n1y, n1z, d1, n2x, n2y, n2z, d2, n3x, n3y, n3z, d3, n4x, n4y, n4z, d4, n5x, n5y,
+            n5z, d5, n6x, n6y, n6z, d6,
+        )
+        .or_else(|| {
+            generated::tpi_height::exact(
+                n1x, n1y, n1z, d1, n2x, n2y, n2z, d2, n3x, n3y, n3z, d3, n4x, n4y, n4z, d4, n5x,
+                n5y, n5z, d5, n6x, n6y, n6z, d6,
+            )
+        })
+        .ok_or(NumError::BudgetExceeded)?;
+        Ok(order(sign.mul(self.weight).mul(other.weight)))
+    }
+}
+
+/// A plane moving along its normal: at time t, the points p with n · p + d + t s = 0, s its speed
+/// (chapter 13.11: in a mitre offset each face's plane moves at its own speed, a face's distance
+/// times its normal's length).
+///
+/// Made by [`Moving::at_speed`], which checks the speed against the offset's budget, |s| < 2^125.
+/// Speeds from 13.11's rule are smaller: a distance of at most 2^40 − 1 steps times a normal's
+/// length, below √3 · 2^83 < 2^84, is below 2^124.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub struct Moving {
+    /// The plane at time 0.
+    plane: Plane,
+    /// Its speed s: at time t it is n · p + d + t s = 0.
+    speed: i128,
+}
+
+impl Moving {
+    /// The plane moving at `speed`.
+    ///
+    /// # Errors
+    ///
+    /// [`NumError::BudgetExceeded`] if |`speed`| ≥ 2^125, the offset's budget, which every
+    /// predicate on moving planes is derived for.
+    pub const fn at_speed(plane: Plane, speed: i128) -> Result<Moving, NumError> {
+        if speed.unsigned_abs() < OFFSET_LIMIT {
+            Ok(Moving { plane, speed })
+        } else {
+            Err(NumError::BudgetExceeded)
+        }
+    }
+
+    /// The plane at time 0.
+    #[must_use]
+    pub const fn plane(&self) -> Plane {
+        self.plane
+    }
+
+    /// Its speed.
+    #[must_use]
+    pub const fn speed(&self) -> i128 {
+        self.speed
+    }
+
+    /// Which of two meetings of four moving planes comes first: the order of the times at which
+    /// planes `a` meet and planes `b` meet, exactly (chapter 13.11, the order of two mitre-offset
+    /// events; decision 32.29). `Less` means the meeting of `a` comes first.
+    ///
+    /// Four moving planes meet when the 4 × 4 determinant of their rows (n, d + t s) is zero. That
+    /// determinant is nd + t ns, where nd is the determinant of the rows (n, d), as
+    /// [`Plane::side_of_tpi`] evaluates it (`generated::tpi_side`), and ns the same with each
+    /// speed in place of its offset, so they meet at t = −nd / ns, and
+    /// `t_a` − `t_b` = (`nd_b` `ns_a` − `nd_a` `ns_b`) / (`ns_a` `ns_b`). The order is the sign of
+    /// `nd_b` `ns_a` − `nd_a` `ns_b` times the signs of `ns_a` and `ns_b`. Nothing is divided or
+    /// rounded.
+    ///
+    /// Routing (chapter 6.2): the signs of `ns_a` and `ns_b` by the generated `tpi_side`, and the
+    /// order by the generated `mitre_time`, each filter first, then its exact path.
+    ///
+    /// Bit budget, derived by `geom-gen` and certified step by step in `generated::mitre_time`'s
+    /// header (|`n_i`| < 2^83, |d| and |s| < 2^125): nd and ns below 2^379, each product below
+    /// 2^758 and the difference below 2^759, in [`crate::wide::I768`] (limit 2^767), the one
+    /// predicate that width serves. Chapter 13.11 estimated about 720 bits; the derivation gives
+    /// 759, and the type holds it.
+    ///
+    /// # Errors
+    ///
+    /// [`NumError::Degenerate`] when ns = 0 for either set: its four planes never meet at one
+    /// time, or meet at every time. [`NumError::BudgetExceeded`] if a step of an exact path did
+    /// not fit, which the certificates rule out for planes and speeds within their budgets.
+    pub fn cmp_meeting(a: &[Moving; 4], b: &[Moving; 4]) -> Result<Ordering, NumError> {
+        let ns_a = speeds_side(a)?;
+        let ns_b = speeds_side(b)?;
+        if ns_a == Sign::Zero || ns_b == Sign::Zero {
+            return Err(NumError::Degenerate);
+        }
+        let [
+            ([n1x, n1y, n1z], d1, s1),
+            ([n2x, n2y, n2z], d2, s2),
+            ([n3x, n3y, n3z], d3, s3),
+            ([n4x, n4y, n4z], d4, s4),
+        ] = a.map(|m| (m.plane.n, m.plane.d, m.speed));
+        let [
+            ([n5x, n5y, n5z], d5, s5),
+            ([n6x, n6y, n6z], d6, s6),
+            ([n7x, n7y, n7z], d7, s7),
+            ([n8x, n8y, n8z], d8, s8),
+        ] = b.map(|m| (m.plane.n, m.plane.d, m.speed));
+        let sign = generated::mitre_time::filter(
+            n1x, n1y, n1z, d1, s1, n2x, n2y, n2z, d2, s2, n3x, n3y, n3z, d3, s3, n4x, n4y, n4z, d4,
+            s4, n5x, n5y, n5z, d5, s5, n6x, n6y, n6z, d6, s6, n7x, n7y, n7z, d7, s7, n8x, n8y, n8z,
+            d8, s8,
+        )
+        .or_else(|| {
+            generated::mitre_time::exact(
+                n1x, n1y, n1z, d1, s1, n2x, n2y, n2z, d2, s2, n3x, n3y, n3z, d3, s3, n4x, n4y, n4z,
+                d4, s4, n5x, n5y, n5z, d5, s5, n6x, n6y, n6z, d6, s6, n7x, n7y, n7z, d7, s7, n8x,
+                n8y, n8z, d8, s8,
+            )
+        })
+        .ok_or(NumError::BudgetExceeded)?;
+        // t_a − t_b has the sign of the value times those of ns_a and ns_b; `Less` is a first.
+        Ok(order(sign.mul(ns_a).mul(ns_b)))
+    }
+}
+
+/// The sign of ns for four moving planes: the determinant of their rows (n, s), `tpi_side`'s value
+/// with each speed in place of its offset, filter first.
+fn speeds_side(m: &[Moving; 4]) -> Result<Sign, NumError> {
+    let [
+        ([ax, ay, az], ad),
+        ([bx, by, bz], bd),
+        ([cx, cy, cz], cd),
+        ([sx, sy, sz], sd),
+    ] = m.map(|p| (p.plane.n, p.speed));
+    generated::tpi_side::filter(
+        ax, ay, az, ad, bx, by, bz, bd, cx, cy, cz, cd, sx, sy, sz, sd,
+    )
+    .or_else(|| {
+        generated::tpi_side::exact(
+            ax, ay, az, ad, bx, by, bz, bd, cx, cy, cz, cd, sx, sy, sz, sd,
+        )
+    })
+    .ok_or(NumError::BudgetExceeded)
+}
+
+/// A sign read as an order: `Negative` is `Less`.
+const fn order(sign: Sign) -> Ordering {
+    match sign {
+        Sign::Negative => Ordering::Less,
+        Sign::Zero => Ordering::Equal,
+        Sign::Positive => Ordering::Greater,
+    }
+}
+
 /// The sign of n · X + d · w times the sign of w, in `Wide<L>`: [`I384`] on the budgeted path,
 /// [`I512`] on the total path. `None` if a step does not fit. Budgets for both on
 /// [`Plane::side_of_tpi`].

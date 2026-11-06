@@ -38,9 +38,11 @@
 //! Cost: a few draws of [`crate::rng::SplitMix64`] per input, once per batch, outside every
 //! measured run.
 
+use core::cmp::Ordering;
 use geom_num::Sign;
 use geom_num::grid::P3;
-use geom_num::plane::{Lpi, Plane, Tpi};
+
+use geom_num::plane::{Lpi, Moving, Plane, Tpi};
 
 use super::predicate::unimodular3;
 use super::{Class, M, TYPICAL_REACH, batch_of, extreme3, p3, rng, typical3, within};
@@ -302,6 +304,261 @@ pub(crate) fn side_of_tpi_from(op: &str, class: Class) -> Vec<(Plane, Tpi)> {
             Some((one_unit_off(&mut g, at)?, tpi_at(&mut g, at)?))
         }),
         Class::Extreme => batch_of(|_| Some((extreme_plane(&mut g)?, extreme_tpi(&mut g)?))),
+        Class::Overflow | Class::OnGrid | Class::WrongDirection => Vec::new(),
+    }
+}
+
+/// n · at + d for a plane and a grid point, exactly, or `None` past `i128`, which no plane within
+/// its budget and grid point reaches (|n · at + d| < 3 · 2^83 · 2^40 + 2^125 < 2^127).
+fn value_at(p: &Plane, at: P3) -> Option<i128> {
+    let [nx, ny, nz] = p.n();
+    let [x, y, z] = raw(at).map(i128::from);
+    nx.checked_mul(x)?
+        .checked_add(ny.checked_mul(y)?)?
+        .checked_add(nz.checked_mul(z)?)?
+        .checked_add(p.d())
+}
+
+/// Whether an order was decided either way: a tie, or an error, is rejected rather than guessed.
+fn apart(order: Result<Ordering, geom_num::NumError>) -> bool {
+    matches!(order, Ok(Ordering::Less | Ordering::Greater))
+}
+
+/// The planes of two meeting points as `generated::tpi_height` takes them, the first point's three
+/// then the second's.
+fn height_args(a: &Tpi, b: &Tpi) -> [i128; 24] {
+    let mut out = [0; 24];
+    for (k, q) in a.planes().iter().chain(b.planes()).enumerate() {
+        let [x, y, z] = q.n();
+        for (slot, v) in out.iter_mut().skip(4 * k).zip([x, y, z, q.d()]) {
+            *slot = v;
+        }
+    }
+    out
+}
+
+/// Whether `generated::tpi_height`'s filter cannot order the two points: the nearly degenerate
+/// class's claim.
+fn height_undecided(a: &Tpi, b: &Tpi) -> bool {
+    let [
+        n1x,
+        n1y,
+        n1z,
+        d1,
+        n2x,
+        n2y,
+        n2z,
+        d2,
+        n3x,
+        n3y,
+        n3z,
+        d3,
+        n4x,
+        n4y,
+        n4z,
+        d4,
+        n5x,
+        n5y,
+        n5z,
+        d5,
+        n6x,
+        n6y,
+        n6z,
+        d6,
+    ] = height_args(a, b);
+    geom_num::generated::tpi_height::filter(
+        n1x, n1y, n1z, d1, n2x, n2y, n2z, d2, n3x, n3y, n3z, d3, n4x, n4y, n4z, d4, n5x, n5y, n5z,
+        d5, n6x, n6y, n6z, d6,
+    )
+    .is_none()
+}
+
+/// Pairs of meeting points for [`Tpi::cmp_height`] (piece G251).
+#[must_use]
+pub fn cmp_height(class: Class) -> Vec<(Tpi, Tpi)> {
+    cmp_height_from("plane::cmp_height", class)
+}
+
+/// [`cmp_height`]'s classes drawn from the seed of `op`: the batch the generated `tpi_height`
+/// benchmarks measure ([`super::generated`]), on inputs of their own.
+///
+/// - `typical`: two meeting points of typical planes at different heights.
+/// - `degenerate`: two meeting points of planes through two grid points at one height, apart.
+/// - `nearly_degenerate`: a meeting point at a grid point, and the meeting of two planes through
+///   that point and a third one unit of n · p + d off it, a sliver away, which the filter cannot
+///   order.
+/// - `extreme`: two meeting points of extreme planes.
+pub(crate) fn cmp_height_from(op: &str, class: Class) -> Vec<(Tpi, Tpi)> {
+    let mut g = rng(op, class);
+    match class {
+        Class::Typical => batch_of(|_| {
+            let (a, b) = (typical_tpi(&mut g)?, typical_tpi(&mut g)?);
+            apart(a.cmp_height(&b)).then_some((a, b))
+        }),
+        Class::Degenerate => batch_of(|_| {
+            let at = typical3(&mut g);
+            let [_, _, z] = raw(at);
+            let level = p3(
+                within(&mut g, TYPICAL_REACH),
+                within(&mut g, TYPICAL_REACH),
+                z,
+            );
+            (level != at).then_some(())?;
+            Some((tpi_at(&mut g, at)?, tpi_at(&mut g, level)?))
+        }),
+        Class::NearlyDegenerate => batch_of(|_| {
+            let at = typical3(&mut g);
+            let a = tpi_at(&mut g, at)?;
+            let near = tpi([
+                plane_at(&mut g, at)?,
+                plane_at(&mut g, at)?,
+                one_unit_off(&mut g, at)?,
+            ])?;
+            (apart(a.cmp_height(&near)) && height_undecided(&a, &near)).then_some((a, near))
+        }),
+        Class::Extreme => batch_of(|_| Some((extreme_tpi(&mut g)?, extreme_tpi(&mut g)?))),
+        Class::Overflow | Class::OnGrid | Class::WrongDirection => Vec::new(),
+    }
+}
+
+/// The largest speed a moving plane may have, 2^125 − 1 (`Moving::at_speed`).
+pub const SPEED_LIMIT: i128 = (1 << 125) - 1;
+
+/// A plane moving at `speed`, if the speed is within its budget.
+fn moving(p: Plane, speed: i128) -> Option<Moving> {
+    Moving::at_speed(p, speed).ok()
+}
+
+/// Four typical planes at typical speeds, within ±2^60.
+fn typical_meeting(g: &mut SplitMix64) -> Option<[Moving; 4]> {
+    let mut one = || moving(typical_plane(g)?, i128::from(within(g, 1 << 60)));
+    Some([one()?, one()?, one()?, one()?])
+}
+
+/// Four extreme planes, each at the largest speed either way.
+fn extreme_meeting(g: &mut SplitMix64) -> Option<[Moving; 4]> {
+    let mut one = || moving(extreme_plane(g)?, i128::from(g.sign()) * SPEED_LIMIT);
+    Some([one()?, one()?, one()?, one()?])
+}
+
+/// Three planes standing still through the grid point `at`, meeting only there, and a typical
+/// plane moving at its own value at `at`, v = n · at + d, plus `nudge` away from zero: the four
+/// meet when the moving plane reaches `at`, at t = −v / (v ± `nudge`), so at t = −1 for no nudge.
+fn meeting_at(g: &mut SplitMix64, at: P3, nudge: i128) -> Option<[Moving; 4]> {
+    let still = [plane_at(g, at)?, plane_at(g, at)?, plane_at(g, at)?];
+    tpi(still)?;
+    let slant = typical_plane(g)?;
+    let v = value_at(&slant, at)?;
+    (v != 0).then_some(())?;
+    let speed = v.checked_add(nudge.checked_mul(v.signum())?)?;
+    let [p, q, r] = still.map(|s| moving(s, 0));
+    Some([p?, q?, r?, moving(slant, speed)?])
+}
+
+/// The planes and speeds of two meetings as `generated::mitre_time` takes them, the first four
+/// then the second's.
+fn meeting_args(a: &[Moving; 4], b: &[Moving; 4]) -> [i128; 40] {
+    let mut out = [0; 40];
+    for (k, m) in a.iter().chain(b).enumerate() {
+        let [x, y, z] = m.plane().n();
+        for (slot, v) in out
+            .iter_mut()
+            .skip(5 * k)
+            .zip([x, y, z, m.plane().d(), m.speed()])
+        {
+            *slot = v;
+        }
+    }
+    out
+}
+
+/// Whether `generated::mitre_time`'s filter cannot order the two meetings: the nearly degenerate
+/// class's claim.
+fn meeting_undecided(a: &[Moving; 4], b: &[Moving; 4]) -> bool {
+    let [
+        n1x,
+        n1y,
+        n1z,
+        d1,
+        s1,
+        n2x,
+        n2y,
+        n2z,
+        d2,
+        s2,
+        n3x,
+        n3y,
+        n3z,
+        d3,
+        s3,
+        n4x,
+        n4y,
+        n4z,
+        d4,
+        s4,
+        n5x,
+        n5y,
+        n5z,
+        d5,
+        s5,
+        n6x,
+        n6y,
+        n6z,
+        d6,
+        s6,
+        n7x,
+        n7y,
+        n7z,
+        d7,
+        s7,
+        n8x,
+        n8y,
+        n8z,
+        d8,
+        s8,
+    ] = meeting_args(a, b);
+    geom_num::generated::mitre_time::filter(
+        n1x, n1y, n1z, d1, s1, n2x, n2y, n2z, d2, s2, n3x, n3y, n3z, d3, s3, n4x, n4y, n4z, d4, s4,
+        n5x, n5y, n5z, d5, s5, n6x, n6y, n6z, d6, s6, n7x, n7y, n7z, d7, s7, n8x, n8y, n8z, d8, s8,
+    )
+    .is_none()
+}
+
+/// Pairs of meetings of four moving planes for [`Moving::cmp_meeting`] (piece G251).
+#[must_use]
+pub fn cmp_meeting(class: Class) -> Vec<([Moving; 4], [Moving; 4])> {
+    cmp_meeting_from("plane::cmp_meeting", class)
+}
+
+/// [`cmp_meeting`]'s classes drawn from the seed of `op`: the batch the generated `mitre_time`
+/// benchmarks measure ([`super::generated`]), on inputs of their own.
+///
+/// - `typical`: two meetings of typical planes at typical speeds, at different times.
+/// - `degenerate`: two meetings at one time: in each, three planes standing still through one grid
+///   point and a fourth moving at its own value there, so each meets at t = −1.
+/// - `nearly_degenerate`: the same, the second's speed one more away from zero, so it meets a
+///   sliver after −1, which the filter cannot order.
+/// - `extreme`: two meetings of extreme planes, each at the largest speed either way.
+pub(crate) fn cmp_meeting_from(op: &str, class: Class) -> Vec<([Moving; 4], [Moving; 4])> {
+    let mut g = rng(op, class);
+    match class {
+        Class::Typical => batch_of(|_| {
+            let (a, b) = (typical_meeting(&mut g)?, typical_meeting(&mut g)?);
+            apart(Moving::cmp_meeting(&a, &b)).then_some((a, b))
+        }),
+        Class::Degenerate => batch_of(|_| {
+            let (p, q) = (typical3(&mut g), typical3(&mut g));
+            Some((meeting_at(&mut g, p, 0)?, meeting_at(&mut g, q, 0)?))
+        }),
+        Class::NearlyDegenerate => batch_of(|_| {
+            let (p, q) = (typical3(&mut g), typical3(&mut g));
+            let (a, b) = (meeting_at(&mut g, p, 0)?, meeting_at(&mut g, q, 1)?);
+            (apart(Moving::cmp_meeting(&a, &b)) && meeting_undecided(&a, &b)).then_some((a, b))
+        }),
+        Class::Extreme => batch_of(|_| {
+            let (a, b) = (extreme_meeting(&mut g)?, extreme_meeting(&mut g)?);
+            Moving::cmp_meeting(&a, &b).is_ok().then_some((a, b))
+        }),
         Class::Overflow | Class::OnGrid | Class::WrongDirection => Vec::new(),
     }
 }
