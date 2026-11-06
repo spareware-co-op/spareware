@@ -1340,6 +1340,36 @@ fn direct_digest(group: &str, name: &str, class: Class) -> Option<Digest> {
                 geom_intersect::curve_surface::curve_surface(c, s, &mut meter)
             },
         )),
+        ("intersect", "natural_plane") => fold(
+            inputs::intersect::plane_cylinders(class)
+                .iter()
+                .map(|(a, b)| {
+                    let mut meter = geom_run::WorkMeter::new(geom_run::Budget::UNLIMITED);
+                    geom_intersect::quadrics::natural(a, b, &mut meter)
+                        .and_then(|found| found.ok_or(geom_intersect::IntersectError::Internal))
+                }),
+        ),
+        ("intersect", "natural_spheres") => {
+            fold(inputs::intersect::sphere_pairs(class).iter().map(|(a, b)| {
+                let mut meter = geom_run::WorkMeter::new(geom_run::Budget::UNLIMITED);
+                geom_intersect::quadrics::natural(a, b, &mut meter)
+                    .and_then(|found| found.ok_or(geom_intersect::IntersectError::Internal))
+            }))
+        }
+        ("intersect", "natural_tee") => {
+            fold(inputs::intersect::tees(class).iter().map(|(a, b)| {
+                let mut meter = geom_run::WorkMeter::new(geom_run::Budget::UNLIMITED);
+                geom_intersect::quadrics::natural(a, b, &mut meter)
+                    .and_then(|found| found.ok_or(geom_intersect::IntersectError::Internal))
+            }))
+        }
+        ("intersect", "natural_apex") => {
+            fold(inputs::intersect::apexes(class).iter().map(|(a, b)| {
+                let mut meter = geom_run::WorkMeter::new(geom_run::Budget::UNLIMITED);
+                geom_intersect::quadrics::natural(a, b, &mut meter)
+                    .and_then(|found| found.ok_or(geom_intersect::IntersectError::Internal))
+            }))
+        }
         ("intersect", "curve_loop") => fold(inputs::intersect::loops(class).iter().map(|c| {
             let mut meter = geom_run::WorkMeter::new(geom_run::Budget::UNLIMITED);
             geom_intersect::curve::self_crossings(c, &mut meter)

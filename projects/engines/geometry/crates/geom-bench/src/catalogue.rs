@@ -437,6 +437,10 @@ pub static OPS: &[Op] = &[
     Op { group: "intersect", name: "surface_plane", measures: "geom_intersect::curve_surface::curve_surface", classes: T, prepare: |c| bind(inputs::intersect::line_planes(c), kernels::intersect::pierced) },
     Op { group: "intersect", name: "surface_torus", measures: "geom_intersect::curve_surface::curve_surface", classes: T, prepare: |c| bind(inputs::intersect::line_tori(c), kernels::intersect::pierced) },
     Op { group: "intersect", name: "surface_patch", measures: "geom_intersect::curve_surface::curve_surface", classes: T, prepare: |c| bind(inputs::intersect::cubic_patches(c), kernels::intersect::pierced) },
+    Op { group: "intersect", name: "natural_plane", measures: "geom_intersect::quadrics::natural", classes: T, prepare: |c| bind(inputs::intersect::plane_cylinders(c), kernels::intersect::closed_forms) },
+    Op { group: "intersect", name: "natural_spheres", measures: "geom_intersect::quadrics::natural", classes: T, prepare: |c| bind(inputs::intersect::sphere_pairs(c), kernels::intersect::closed_forms) },
+    Op { group: "intersect", name: "natural_tee", measures: "geom_intersect::quadrics::natural", classes: T, prepare: |c| bind(inputs::intersect::tees(c), kernels::intersect::closed_forms) },
+    Op { group: "intersect", name: "natural_apex", measures: "geom_intersect::quadrics::natural", classes: T, prepare: |c| bind(inputs::intersect::apexes(c), kernels::intersect::closed_forms) },
     // geom-intersect's projection (piece G162; decision 32.44): the search on an arc and on a band
     // of a sphere.
     Op { group: "intersect", name: "project_arc", measures: "geom_intersect::project::project_curve", classes: T, prepare: |c| bind(inputs::intersect::arcs(c), kernels::intersect::on_arcs) },
@@ -650,6 +654,11 @@ pub static UNMEASURED: &[(&str, &str)] = &[
     ("generated::axis_gap::exact", "one call to `value`, and the sign of the value"),
     ("quadric::line_cone_steep", "one generated predicate, like `quadric::line_cone`, measured"),
     ("quadric::tangent_cone_cone", "the same interval then exact path as `quadric::tangent_cylinder_cone`, measured"),
+    ("quadric::plane_ball", "measured through its caller, `geom_intersect::quadrics::natural`, on typical inputs"),
+    ("quadric::plane_along", "measured through its caller, `geom_intersect::quadrics::natural`, on typical inputs"),
+    ("quadric::plane_across", "three products of `Wide<6>`, measured through `geom_intersect::quadrics::natural`"),
+    ("quadric::plane_cone", "measured through its caller, `geom_intersect::quadrics::natural`, on typical inputs"),
+    ("quadric::shared_apex", "measured through its caller, `geom_intersect::quadrics::natural`, on typical inputs"),
     ("quadric::polar", "a few products; the Bernstein coefficients it feeds are charged to their meter"),
     ("quadric::polynomial", "the first step of `quadric::roots`, measured"),
     ("quadric::roots_between", "`quadric::roots` with the chain read at two points"),

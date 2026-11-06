@@ -2032,6 +2032,7 @@ pub mod intersect {
     use geom_curve::CurveKind;
     use geom_intersect::curve::{curves, self_crossings};
     use geom_intersect::curve_surface::curve_surface;
+    use geom_intersect::quadrics::natural;
     use geom_intersect::{
         CanonicalKey, Coverage, Geom, IntersectError, Intersection, Item, Operand, Projection,
         pair, project_curve, project_surface,
@@ -2066,6 +2067,20 @@ pub mod intersect {
         out: &mut Vec<Result<Intersection, IntersectError>>,
     ) {
         run(batch, out, |(c, s)| curve_surface(c, s, &mut meter()));
+    }
+
+    /// `natural` on one pair that has a closed form.
+    fn closed_form(a: &SurfaceKind, b: &SurfaceKind) -> Result<Intersection, IntersectError> {
+        natural(a, b, &mut meter())?.ok_or(IntersectError::Internal)
+    }
+
+    /// `natural` on each pair.
+    #[inline(never)]
+    pub fn closed_forms(
+        batch: &[(SurfaceKind, SurfaceKind)],
+        out: &mut Vec<Result<Intersection, IntersectError>>,
+    ) {
+        run(batch, out, |(a, b)| closed_form(a, b));
     }
 
     /// `self_crossings` on each curve.

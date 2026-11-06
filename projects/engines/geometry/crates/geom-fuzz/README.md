@@ -16,8 +16,10 @@ oracle, and a pair asked either way round makes one call; `quadric` (`src/quadri
 exact decision on a line and a quadric agrees with big integers, and a Sturm chain counts the roots
 a polynomial was built from; `project` (`src/project.rs`, G162), a nearest point is never beaten
 by a sample of the kind; and `crossings` (`src/crossings.rs`, G163), every point of any two curves lies
-on both, and two cubic graphs that change sides have an item between them; and `piercing`
-(`src/piercing.rs`, G164), every point of a curve and a surface lies on both.
+on both, and two cubic graphs that change sides have an item between them; `piercing`
+(`src/piercing.rs`, G164), every point of a curve and a surface lies on both; and `natural`
+(`src/natural.rs`, G165), every curve two natural quadrics are said to share lies on each by its
+own equation.
 
 ## One law, four engines
 
