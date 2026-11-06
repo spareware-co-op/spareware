@@ -39,8 +39,9 @@
 //! Status: the traits, the enum, the NURBS kind, `ImplicitBound` and the contract built (G60); the
 //! analytic and swept kinds (G65); the offset kind, and every kind's partials of any order
 //! (G66); the analytic kinds' closed-form extents (G67); certified second-derivative and
-//! normal-derivative bounds for every kind (G68); the other kinds to come in G253, G254, G260,
-//! G264, G315, G316, G317, G318 and G470.
+//! normal-derivative bounds for every kind (G68); many points per call, every kind evaluating n
+//! parameter pairs into flat arrays through `ParamSurface::points` (G104); the other kinds to come
+//! in G253, G254, G260, G264, G315, G316, G317, G318 and G470.
 #![cfg_attr(not(test), no_std)]
 #![forbid(unsafe_code)]
 
