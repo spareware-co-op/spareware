@@ -620,7 +620,7 @@ fn each_search_takes_the_work_it_always_took() {
     );
     let curves: [(&CurveKind<2>, [f64; 2], u64); 3] = [
         (&arc, [4.0, 6.0], 165),
-        (&arc, [9.0, 2.0], 405),
+        (&arc, [9.0, 2.0], 165),
         (&ellipse, [1.0, 2.0], 191),
     ];
     let mut work = Vec::new();

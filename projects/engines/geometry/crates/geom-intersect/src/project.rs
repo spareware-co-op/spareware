@@ -15,6 +15,11 @@
 //!
 //! - **The minimum is proven.** Every span dropped has a lower bound above the reported distance,
 //!   or a derivative that cannot vanish, by certified bounds on the kind. Nothing is sampled.
+//! - **A foot on a cut is not lost.** Where the slope at a span's end cannot be told from zero, as
+//!   when the foot is exactly the midpoint the search cuts at, the span whose other end has a sign
+//!   is refined as a foot like any other, from both sides of the cut; the two enclosures touch and
+//!   are joined into one nearest point. Halving on would pass below the width at which the
+//!   convexity test holds, and leave the run undecided.
 //! - **Ties are kept.** Candidates whose distance enclosures overlap are all returned, in parameter
 //!   order; [`Projection::tie_broken`] says so, and the first is the lowest parameter.
 //! - **Nothing is guessed at the floor.** Spans at the floor that the test cannot decide are joined.
@@ -482,7 +487,12 @@ fn search<const D: usize>(
                     if positive(left) || negative(right) {
                         continue;
                     }
-                    if negative(left) && positive(right) {
+                    // The sign at one end may be undecided: a foot at the cut itself (or at a
+                    // parameter the slope there cannot tell from zero) leaves it so on the half
+                    // either side of the cut, and halving further only runs past the width at
+                    // which convexity can still be proven. The slope is monotone here, so the
+                    // other end's sign locates the root, and `refine` closes in on that end.
+                    if negative(left) || positive(right) {
                         let root = refine(path, p, span, floor, meter)?;
                         let point = nearest(path, p, root, Place::Foot, meter)?;
                         found.upper = smaller(found.upper, point.distance.hi());
@@ -859,7 +869,7 @@ fn hull_of(open: &[([Interval; 2], f64)], side: Option<(usize, f64, bool)>) -> O
     let mut out: Option<ParamBox> = None;
     for (at, _) in open {
         if let Some((k, middle, high)) = side
-            && !at.get(k).is_some_and(|x| (x.lo() >= middle) == high)
+            && at.get(k).is_none_or(|x| (x.lo() >= middle) != high)
         {
             continue;
         }
