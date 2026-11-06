@@ -1231,3 +1231,240 @@ pub fn fixtures() -> Result<Vec<Fixture>, NamingError> {
         ),
     ])
 }
+
+/// A reference to a name no operation ever made, the way a stale or hand-typed reference looks.
+fn never_made() -> Stored {
+    stored(
+        "a name no operation made",
+        NameId::from_bytes([0xEE; 16]),
+        EntityKind::Face,
+        Want::One,
+    )
+}
+
+/// The scenarios of SolidCraft's naming tests, written in this kernel's terms (take map item 15,
+/// `projects/kit/notes/G01-evidence/15-take-map-solidcore-craft.md`): the parametric edit, the cut
+/// that splits, the face merged and parted again, the model evaluated again, the name no history
+/// holds. SolidCraft's tests of blends, fillets, shells, chamfers, sketches and thickened sheets
+/// need operations this kernel has not built; each of those scenarios' question, whether a
+/// reference follows the entity it named or says it cannot, is asked here of what exists. Where
+/// SolidCraft finds a reference by geometry when its history is gone, this kernel says the name is
+/// unknown (20.4): `naming/0018`.
+///
+/// Kept apart from [`fixtures`] so that catalogue's golden stands; these are held to their
+/// expectations and to a second, identical evaluation.
+///
+/// # Errors
+///
+/// [`NamingError`] if a model cannot be built or holds no name a scenario picks.
+#[allow(
+    clippy::too_many_lines,
+    reason = "the catalogue: one entry per scenario, each with its edits and expectations"
+)]
+pub fn scenarios() -> Result<Vec<Fixture>, NamingError> {
+    let refs_a = door_references(&build(&doors())?)?;
+    let refs_b = opening_references(&build(&openings())?)?;
+    let kept = door_kept()?;
+    let kept_b = vec![
+        Expect::Exact,
+        Expect::Exact,
+        Expect::Carrier(None),
+        Expect::ExactWeak,
+    ];
+    let unknown = Expect::Unresolved(UnresolvedReason::NameUnknown);
+    let fixture = |id, about, params: Params, references: &Vec<Stored>, edits| Fixture {
+        id,
+        about,
+        params,
+        references: references.clone(),
+        edits,
+    };
+    Ok(vec![
+        fixture(
+            "naming/0014-the-lid-moves-up",
+            "A taller wall moves the top face and every edge and corner on it: each keeps its \
+             name, since a name says which faces bound it, not where they stand (SolidCraft: a \
+             blend follows its named edge to a moved lid).",
+            doors(),
+            &refs_a,
+            vec![(
+                Edit::Regenerate(Params {
+                    height: 90,
+                    ..doors()
+                }),
+                kept.clone(),
+            )],
+        ),
+        fixture(
+            "naming/0015-the-wall-gets-thicker",
+            "A thicker wall keeps every name, the reveals included, since the doors cut through \
+             whatever the thickness is.",
+            doors(),
+            &refs_a,
+            vec![(
+                Edit::Regenerate(Params {
+                    thickness: 25,
+                    ..doors()
+                }),
+                kept.clone(),
+            )],
+        ),
+        fixture(
+            "naming/0016-an-opening-narrows-and-moves",
+            "A piece keeps its identity when the opening that made it moves or shrinks: the \
+             exterior left of the first opening, and the weak piece between two openings, are \
+             named by the faces that bound them.",
+            openings(),
+            &refs_b,
+            vec![
+                (
+                    Edit::Regenerate(Params {
+                        doors: vec![
+                            Door {
+                                width: 10,
+                                ..door(11, 20, 80)
+                            },
+                            door(12, 120, 80),
+                            door(13, 220, 80),
+                        ],
+                        ..openings()
+                    }),
+                    kept_b.clone(),
+                ),
+                (
+                    Edit::Regenerate(Params {
+                        doors: vec![door(11, 60, 80), door(12, 120, 80), door(13, 220, 80)],
+                        ..openings()
+                    }),
+                    kept_b.clone(),
+                ),
+            ],
+        ),
+        fixture(
+            "naming/0017-evaluating-again-changes-nothing",
+            "A model evaluated again from the same parameters gives every reference the same \
+             answer, the weak name still weak: pieces of one cut keep their names (SolidCraft: \
+             pieces swapped names on re-evaluation).",
+            openings(),
+            &refs_b,
+            vec![
+                (Edit::Regenerate(openings()), kept_b.clone()),
+                (Edit::Regenerate(openings()), kept_b.clone()),
+            ],
+        ),
+        fixture(
+            "naming/0018-a-name-no-history-holds-is-not-guessed",
+            "A reference whose name was never made resolves to nothing, however the model is \
+             edited: no search by geometry stands in for the history (20.4, chapter 20's refusal \
+             to guess; SolidCraft finds such a body by its geometry and says so).",
+            doors(),
+            &vec![never_made()],
+            vec![
+                (Edit::Regenerate(doors()), vec![unknown.clone()]),
+                (
+                    Edit::Regenerate(Params {
+                        length: 360,
+                        ..doors()
+                    }),
+                    vec![unknown.clone()],
+                ),
+            ],
+        ),
+        fixture(
+            "naming/0019-a-filled-opening-is-opened-again",
+            "A face merged into another is not the face that was picked: after the fill the \
+             reveals are deleted by it; when the opening is cut again, the reference finds its \
+             face (SolidCraft: a merged face asks for its face again, and finds it when the faces \
+             part).",
+            doors(),
+            &refs_a,
+            vec![
+                (
+                    Edit::Then(After::Fill {
+                        op: [52; 16],
+                        made_by: [152; 16],
+                        key: 31,
+                        low: [20, 0, 0],
+                        size: [20, 10, 40],
+                    }),
+                    changed(
+                        &kept,
+                        &[
+                            (0, Expect::Followed(None)),
+                            (1, Expect::Carrier(None)),
+                            (2, Expect::Deleted([52; 16])),
+                            (6, Expect::Followed(None)),
+                            (7, Expect::Deleted([52; 16])),
+                        ],
+                    ),
+                ),
+                (Edit::Regenerate(doors()), kept.clone()),
+            ],
+        ),
+        fixture(
+            "naming/0020-a-slot-far-from-the-reference-leaves-it",
+            "A slot cut through the exterior piece between two openings splits that piece and \
+             leaves the piece left of the first opening alone.",
+            openings(),
+            &refs_b,
+            vec![(
+                cut(54, 34, [60, -5, -5], [4, 20, 90]),
+                vec![
+                    Expect::Exact,
+                    Expect::Exact,
+                    Expect::Carrier(None),
+                    Expect::Ambiguous(2),
+                ],
+            )],
+        ),
+        fixture(
+            "naming/0021-a-model-moved-and-edited-keeps-its-names",
+            "A move, then an upstream edit that rebuilds the model: the rebuilt model holds the \
+             names the references were made against.",
+            doors(),
+            &refs_a,
+            vec![
+                (
+                    Edit::Then(After::Move {
+                        op: [56; 16],
+                        by: [0, 100, 0],
+                    }),
+                    kept.clone(),
+                ),
+                (
+                    Edit::Regenerate(with_door(12, |d| d.x = 200)),
+                    kept.clone(),
+                ),
+            ],
+        ),
+        fixture(
+            "naming/0022-a-boss-on-top-keeps-the-walls-names",
+            "A box fused onto the top face leaves the wall's own faces named as they were; the \
+             top face, now carrying the boss, is the same face (SolidCraft: rounds on stacked \
+             boxes stay on their own box).",
+            doors(),
+            &refs_a,
+            vec![(
+                Edit::Then(After::Fill {
+                    op: [58; 16],
+                    made_by: [158; 16],
+                    key: 35,
+                    low: [150, 0, 60],
+                    size: [20, 10, 10],
+                }),
+                kept.clone(),
+            )],
+        ),
+        fixture(
+            "naming/0023-a-door-off-the-end-of-the-wall",
+            "A door pushed past the wall's end no longer cuts it: its reveals are unknown, and \
+             the wall's own names stay.",
+            doors(),
+            &refs_a,
+            vec![(
+                Edit::Regenerate(with_door(12, |d| d.x = 500)),
+                changed(&kept, &[(3, unknown.clone())]),
+            )],
+        ),
+    ])
+}
