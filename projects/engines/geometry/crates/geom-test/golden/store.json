@@ -260,9 +260,15 @@
               "kind": "corpus",
               "piece": "G152",
               "why": "1 new count benchmark on the polyhedral envelope (decision 32.44): mesh/envelope; no existing digest moved"
+            },
+            {
+              "sha256": "bcd0f63398e7f39b179ee070278c7265b12a2120c0f6528f953a47e79dc38fbc",
+              "kind": "corpus",
+              "piece": "G147",
+              "why": "1 new count benchmark on point location (decision 32.44): mesh/locate; no existing digest moved"
             }
           ],
-          "sha256": "bcd0f63398e7f39b179ee070278c7265b12a2120c0f6528f953a47e79dc38fbc"
+          "sha256": "af5f21bde2e193693bbaa85d4721760b1fe886ba4653a5c82fcf4aacfd75c105"
         },
         {
           "id": "geom-nurbs/operations",

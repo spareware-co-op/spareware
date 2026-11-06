@@ -1773,6 +1773,7 @@ pub mod bvh {
 
 /// The triangulation's hot path (piece G153, decision 32.44).
 pub mod mesh {
+    use geom_mesh::classify::{Classifier, Located};
     use geom_mesh::envelope::TriangleEnvelope;
     use geom_mesh::exact::build::{Polygons, build};
     use geom_mesh::exact::{ExactMesh, MeshError};
@@ -1851,6 +1852,24 @@ pub mod mesh {
         run(batch, out, |polygons| {
             let mut meter = WorkMeter::new(Budget::UNLIMITED);
             build(polygons, &Exec::serial(), &mut meter)
+        });
+    }
+
+    /// `geom_mesh::classify::Classifier::locate_all` on each solid's points, its tree built first,
+    /// serially, under an unlimited budget.
+    #[inline(never)]
+    pub fn locate(
+        batch: &[crate::inputs::mesh::Probe],
+        out: &mut Vec<Result<Vec<Located>, MeshError>>,
+    ) {
+        run(batch, out, |probe| {
+            let mut meter = WorkMeter::new(Budget::UNLIMITED);
+            let exec = Exec::serial();
+            Classifier::new(&probe.solid, &exec, &mut meter)?.locate_all(
+                &probe.points,
+                &exec,
+                &mut meter,
+            )
         });
     }
 
