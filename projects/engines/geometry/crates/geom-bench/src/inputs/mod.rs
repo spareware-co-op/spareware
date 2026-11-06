@@ -58,6 +58,7 @@ pub mod rng;
 pub mod roots;
 pub mod sign;
 pub mod surface;
+pub mod topo;
 pub mod wide;
 pub mod wide32;
 
