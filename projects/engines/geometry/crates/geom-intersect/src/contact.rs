@@ -5,7 +5,9 @@
 //! of them are flagged for starts that could not be proven, so a cluster is taken whole, and one
 //! with no pair at the floor is left as it was flagged. Each other cluster is read:
 //!
-//! 1. Two surfaces with the same data are one, whatever was flagged.
+//! 1. Two surfaces with the same data are one, whatever was flagged. So are two patches of one
+//!    plane, cylinder, sphere or torus: they overlap in the parameters they share, if that is one
+//!    region ([`crate::general::subdivide`] answers the same pairs before it searches).
 //! 2. A cluster that covers its patches from both sides, reaches an edge of one of them, and has no
 //!    pair whose surfaces are proven to bend apart is an overlap, or near-coincident if what its
 //!    boxes reach passes the ceiling.
@@ -75,6 +77,7 @@ use geom_surface::{ParamBox as Region, ParamSurface, SurfaceKind};
 
 use crate::IntersectError;
 use crate::curve::exact_steps;
+use crate::general::shared_carrier;
 use crate::general::{
     FlaggedPair, Settled, Subdivided, around, cross, ends, may_be_parallel, minus_box, normals,
     partials, point, same, span, speeds, starts_of,
@@ -823,6 +826,13 @@ pub fn analyse(
         return Ok(alloc::vec![Reading::Overlap {
             first: first.domain(),
             second: second.domain(),
+            coincidence: Coincidence::Identical,
+        }]);
+    }
+    if let Some(region) = shared_carrier(first, second) {
+        return Ok(alloc::vec![Reading::Overlap {
+            first: region,
+            second: region,
             coincidence: Coincidence::Identical,
         }]);
     }
