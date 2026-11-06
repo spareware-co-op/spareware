@@ -57,6 +57,7 @@ use serde::{Deserialize, Serialize};
 use crate::golden::Digest;
 use crate::golden::store::ChangeKind;
 
+pub mod calls;
 pub mod diff;
 pub mod kernel;
 pub mod log;
