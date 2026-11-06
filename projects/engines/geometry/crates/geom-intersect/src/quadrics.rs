@@ -1674,6 +1674,28 @@ fn trimmed(
     for run in runs(&stretches, loops) {
         out.extend(kept(curve, &stretches, &run, (lo, hi, loops), meter)?);
     }
+    // A piece with no stretch on both domains whose cut is on both is a meeting of zero width: the
+    // domains end at the same place on the curve (two cylinders over heights 0 to 5 and 5 to 10
+    // meet in a point on each line). It is a boundary touch, as a run no wider than [`STEP`] is,
+    // never nothing (the test wr_259_a_stretch_of_two_steps_or_less_is_a_point_and_more_is_a_line).
+    // Only where nothing else was kept: beside a kept part a cut on both domains is where that part
+    // ends or touches an edge, and the records of the closed forms hold no extra point there.
+    if out.is_empty() {
+        let mut last = f64::NEG_INFINITY;
+        for t in &cut {
+            let room = 1e-9 * (1.0 + t.abs());
+            if *t <= last + room {
+                continue;
+            }
+            last = *t;
+            if on_both(curve, *t, a, b, meter)? {
+                out.push(Part::Point {
+                    at: at_parameter(curve, *t, meter)?,
+                    width: 0.0,
+                });
+            }
+        }
+    }
     Ok(out)
 }
 

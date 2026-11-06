@@ -200,22 +200,74 @@ fn wr_259_parallel_cylinders_with_a_trimmed_domain_meet_in_both_lines() {
 /// solidcore plan/upstream-issues/WR-259--smcone-intersectwithcone-drops-the-line-of-two-parallel.md
 /// (b4de2149), the case its fix note says a test at the middle still drops: two domains that
 /// overlap in heights only away from the middle of each (the r 20 and r 3.04 cylinders, heights
-/// 0 to 5 and 3 to 10 from z = 2, share z from 5 to 7). Both lines run over that stretch. Real
-/// defect in the closed form, found by this test: it returns two points at z = 6, marked as
-/// touching at the boundary, and no line.
+/// 0 to 8 and 5 to 14 from z = 2, share z from 7 to 10; the middles are at 6 and 11.5). Both lines
+/// run over that stretch. (The defect's own heights, 0 to 5 and 3 to 10, share only two steps,
+/// which the closed form reads as a point at its resolution: see the next test.)
 #[test]
-#[ignore = "defect: the closed form keeps two boundary points at z = 6 and drops the two lines over z 5 to 7 when the heights overlap only away from both middles"]
 fn wr_259_domains_overlapping_only_away_from_each_middle_still_meet_in_both_lines() {
     let r = found(
-        &tube([0.0, 0.0, 2.0], 20.0, (0.0, 5.0)),
-        &tube([0.0, 20.0, 2.0], 3.04, (3.0, 10.0)),
+        &tube([0.0, 0.0, 2.0], 20.0, (0.0, 8.0)),
+        &tube([0.0, 20.0, 2.0], 3.04, (5.0, 14.0)),
     );
     let lines = lines_of(&r);
     assert_eq!(lines.len(), 2, "{:?}", r.items());
+    assert_eq!(r.items().len(), 2, "{:?}", r.items());
     for line in lines {
         let (p, q) = ends_of(line);
-        near(p[2].min(q[2]), 5.0);
-        near(p[2].max(q[2]), 7.0);
+        near(p[2].min(q[2]), 7.0);
+        near(p[2].max(q[2]), 10.0);
+    }
+}
+
+/// solidcore plan/upstream-issues/WR-259--smcone-intersectwithcone-drops-the-line-of-two-parallel.md
+/// (b4de2149), the heights of its fix note (0 to 5 and 3 to 10 from z = 2) and the widths around
+/// them. The closed form reads a stretch of no more than two grid steps as a point at its
+/// resolution (`STEP` in `quadrics.rs`), a boundary touch at the stretch's middle whose class
+/// reaches the stretch, never as nothing; a wider stretch is a line. So a shared stretch of 0
+/// (the domains end at the same height), 0.5, 1, 1.9 and 2 gives one touch on each of the two
+/// lines, and 2.1, 2.5 and 3 give the two lines over the stretch. Before this test the stretch of
+/// 0 gave nothing, though the two circles at the shared height are on both patches.
+#[test]
+fn wr_259_a_stretch_of_two_steps_or_less_is_a_point_and_more_is_a_line() {
+    for w in [0.0, 0.5, 1.0, 1.9, 2.0, 2.1, 2.5, 3.0] {
+        // The first domain ends at height 5 (z = 7); the second starts w below it.
+        let r = found(
+            &tube([0.0, 0.0, 2.0], 20.0, (0.0, 5.0)),
+            &tube([0.0, 20.0, 2.0], 3.04, (5.0 - w, 12.0)),
+        );
+        assert_eq!(r.items().len(), 2, "w = {w}: {:?}", r.items());
+        if w <= 2.0 {
+            for item in r.items() {
+                let Item::Point {
+                    at,
+                    contact,
+                    class:
+                        Exactness::Certified {
+                            bound: Steps(n), ..
+                        },
+                    ..
+                } = item
+                else {
+                    panic!("w = {w}: {item:?}");
+                };
+                assert_eq!(*contact, PointContact::BoundaryTouch, "w = {w}");
+                // The touch is at the stretch's middle, and its class reaches both ends.
+                let v = at.spans()[1];
+                assert!(
+                    v.lo() <= 5.0 - w / 2.0 + 1e-6 && v.hi() >= 5.0 - w / 2.0 - 1e-6,
+                    "w = {w}: {v:?}"
+                );
+                assert!(*n as f64 >= w / 2.0, "w = {w}: {n}");
+            }
+        } else {
+            let lines = lines_of(&r);
+            assert_eq!(lines.len(), 2, "w = {w}: {:?}", r.items());
+            for line in lines {
+                let (p, q) = ends_of(line);
+                near(p[2].min(q[2]), 7.0 - w);
+                near(p[2].max(q[2]), 7.0);
+            }
+        }
     }
 }
 
