@@ -45,7 +45,7 @@
 //!
 //! Method: chapter 24.4's `PruneHistory` (`projects/engines/geometry/architecture/24-file-format-exchange.md`)
 //! with chapter 20.4's walk; the kept set is the forward closure of the held names under each
-//! step's modified images, the marking FreeCAD's element map does for the names live entities and
+//! step's modified images, the marking `FreeCAD`'s element map does for the names live entities and
 //! references reach (the evidence note `kit/notes/G01-evidence/07-persistent-naming.md`).
 //!
 //! Cost: for s steps, r records per step and k names kept at a step, O(s · r log k), searched by
