@@ -69,6 +69,8 @@ fn attack_the_real_allow_list_is_vetted_and_pinned_to_the_lock() {
             "block-buffer",
             "cfg-if",
             "cpufeatures",
+            "crc",
+            "crc-catalog",
             "crypto-common",
             "digest",
             "hybrid-array",
@@ -76,7 +78,7 @@ fn attack_the_real_allow_list_is_vetted_and_pinned_to_the_lock() {
             "sha2",
             "typenum"
         ],
-        "the list holds libm, and sha2 with the crates it brings (G86)"
+        "the list holds libm, sha2 with the crates it brings (G86), and crc with its catalogue (G92)"
     );
     let lock = fs::read_to_string(root().join("Cargo.lock")).unwrap();
     assert_eq!(vetted::against_lock(&list, &lock), Vec::<String>::new());
@@ -85,6 +87,8 @@ fn attack_the_real_allow_list_is_vetted_and_pinned_to_the_lock() {
     for entry in &list {
         let audit = if entry.name == "libm" {
             "projects/kit/notes/G24-libm-audit.md"
+        } else if entry.name.starts_with("crc") {
+            "projects/kit/notes/G92-crc-audit.md"
         } else {
             "projects/kit/notes/G86-sha2-audit.md"
         };
