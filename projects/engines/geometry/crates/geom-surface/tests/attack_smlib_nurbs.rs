@@ -132,7 +132,11 @@ fn ub_unnumbered_an_extreme_net_evaluates_inside_its_box_or_is_refused() {
                 match point_at(&kind, pu, pv) {
                     Ok(p) => {
                         assert!(p.iter().all(|x| x.is_finite()), "net {big}: {p:?}");
-                        assert!(p.iter().all(|x| x.abs() <= big), "net {big}: outside {p:?}");
+                        // The enclosure's midpoint may lie a few ulps outside the net's box.
+                        assert!(
+                            p.iter().all(|x| x.abs() <= big * (1.0 + 1e-12)),
+                            "net {big}: outside {p:?}"
+                        );
                     }
                     Err(e) => assert!(!e.contains("Defect"), "net {big}: {e}"),
                 }
