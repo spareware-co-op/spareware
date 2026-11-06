@@ -51,7 +51,7 @@ fn one(name: NameId) -> NameSet {
 
 /// One step over `body`, its outputs named from `fresh` on: the step's history and the body after.
 fn step(rng: &mut SplitMix64, body: &[NameId], fresh: &mut u64) -> (History, Vec<NameId>) {
-    let mut new = |fresh: &mut u64| {
+    let new = |fresh: &mut u64| {
         *fresh += 1;
         n(*fresh)
     };
