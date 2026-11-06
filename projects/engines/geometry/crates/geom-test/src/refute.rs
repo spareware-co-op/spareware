@@ -341,7 +341,7 @@ fn curve_of<const D: usize>(kind: &CurveKind<D>) -> Option<(Curve<D>, (IBig, IBi
         },
         CurveKind::Nurbs(n) => {
             let b = n.basis();
-            let points: Vec<&[f64]> = n.homogeneous().iter().map(|p| p.as_slice()).collect();
+            let points: Vec<&[f64]> = n.homogeneous().iter().map(AsRef::<[f64]>::as_ref).collect();
             let spline = match n.weights() {
                 Some(w) => Spline::new_rational(b.degree(), b.knots(), &points, w),
                 None => Spline::new(b.degree(), b.knots(), &points),
@@ -517,7 +517,7 @@ fn surface_of(kind: &SurfaceKind) -> Option<Surface> {
         }
         SurfaceKind::Nurbs(s) => {
             let (bu, bv) = (s.basis_u(), s.basis_v());
-            let points: Vec<&[f64]> = s.homogeneous().iter().map(|p| p.as_slice()).collect();
+            let points: Vec<&[f64]> = s.homogeneous().iter().map(AsRef::<[f64]>::as_ref).collect();
             let (degrees, knots) = ((bu.degree(), bv.degree()), (bu.knots(), bv.knots()));
             let patch = match s.weights() {
                 Some(w) => Patch::new_rational(degrees, knots, &points, w),
