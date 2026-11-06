@@ -37,7 +37,7 @@ use geom_run::WorkMeter;
 use geom_topo::order::Names;
 
 use crate::build::{Made, fail};
-use crate::transform::{Moved, moved_copy, settle};
+use crate::transform::{Moved, Renamed, moved_copy, settle};
 
 /// The copies a pattern returns: each instance's key and what it made, in key order.
 pub type Copies = Vec<([u8; 16], Made)>;
@@ -94,17 +94,16 @@ fn copies(
     let mut least = Exactness::Exact;
     for instance in order {
         let op = ctx.path().item(instance.key);
-        let copy = |source| -> Option<_> {
+        let copy = |source| -> Option<Renamed> {
             let role = Role::new("copy", [RoleArg::Name(source)]).ok()?;
-            let name = TopoName::Created {
+            let node = TopoName::Created {
                 op: op.clone(),
                 role: role.clone(),
                 from: NameList::new([source]),
-            }
-            .id()
-            .ok()?;
+            };
+            let name = node.id().ok()?;
             let from = NameSet::new([source]).ok()?;
-            Some((name, Origin::Generated { from, role }))
+            Some((name, Origin::Generated { from, role }, Some(node)))
         };
         let copied = moved_copy(ctx, meter, input, &instance.transform, names, &copy)?;
         let made = settle(ctx, meter, copied, None)?;

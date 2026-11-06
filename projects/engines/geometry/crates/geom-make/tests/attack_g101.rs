@@ -1375,3 +1375,62 @@ proptest! {
         valid("torus", torus(&c, &ring).unwrap());
     }
 }
+
+/// A name graph holding `made`'s names after `brought`, in order: each name must come after those
+/// it refers to, or interning it would not find its parents' bytes to check against.
+fn graph_of(brought: &[TopoName], made: &[TopoName]) -> geom_name::NameGraph {
+    let mut graph = geom_name::NameGraph::new();
+    for name in brought.iter().chain(made) {
+        for parent in geom_name::graph::parents(name) {
+            assert!(
+                graph.name(parent).is_some(),
+                "{name:?} comes before its parent {parent:?}"
+            );
+        }
+        graph.intern(name.clone()).unwrap();
+    }
+    graph
+}
+
+#[test]
+fn every_operation_reports_the_names_it_made_and_no_other() {
+    // A primitive made every name its body holds: with them alone, a graph knows each.
+    for (what, out) in primitives() {
+        let made = &out.result;
+        let graph = graph_of(&[], &made.names);
+        let held = names(&made.body);
+        for name in &held {
+            assert_eq!(graph.is_weak(*name), Ok(false), "{what}: {name:?}");
+        }
+        for record in made.history.records() {
+            assert!(graph.name(record.output).is_some(), "{what}: {record:?}");
+        }
+        // Nothing reported that the body does not hold or refer to.
+        let ids: Vec<NameId> = made.names.iter().map(|n| n.id().unwrap()).collect();
+        assert!(ids.iter().all(|id| held.contains(id)), "{what}");
+        assert_eq!(ids.len(), held.len(), "{what}");
+    }
+    // A transform keeps its input's names, so it makes none.
+    let b = a_box();
+    let moved = Moved {
+        body: &b.result.body,
+        exactness: b.exactness,
+        accept: None,
+    };
+    let out = move_by(&ctx(), moved, [3, -4, 5]).unwrap();
+    assert_eq!(out.result.names, Vec::new());
+    assert_eq!(names(&out.result.body), names(&b.result.body));
+    // A pattern's copies make their own names, each from the input's.
+    let at = |k: u8, dx: i64| Instance {
+        key: [k; 16],
+        transform: TypedTransform::Exact(GridTransform::translation([dx, 0, 0]).unwrap()),
+    };
+    let copies = pattern(&ctx(), moved, &[at(1, 20), at(2, 40)]).unwrap();
+    for (_, made) in &copies.result {
+        let graph = graph_of(&b.result.names, &made.names);
+        for name in names(&made.body) {
+            assert_eq!(graph.is_weak(name), Ok(false), "{name:?}");
+        }
+        assert_eq!(made.names.len(), names(&made.body).len());
+    }
+}
