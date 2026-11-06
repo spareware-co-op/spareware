@@ -236,9 +236,15 @@
               "kind": "corpus",
               "piece": "G148",
               "why": "2 new count benchmarks of geom-run's helper (decision 32.44): Exec::map of a list that fits one chunk, on the serial executor and on a pool, for the fix that runs a wave of one task on the calling thread (found in G148's timings); no existing digest moved"
+            },
+            {
+              "sha256": "57fb849de9d6eb8003fe3ff677db5373da1b40984777f2d573018b64e5601c1b",
+              "kind": "corpus",
+              "piece": "G104",
+              "why": "3 new count benchmarks on the batch runner (decision 32.44): batch/run_items, batch/curve_points and batch/surface_points; no existing digest moved"
             }
           ],
-          "sha256": "57fb849de9d6eb8003fe3ff677db5373da1b40984777f2d573018b64e5601c1b"
+          "sha256": "5ec074380a40bc0560b94973bc64e2f6b29361e9329935849c4b9f340fff052d"
         },
         {
           "id": "geom-nurbs/operations",
