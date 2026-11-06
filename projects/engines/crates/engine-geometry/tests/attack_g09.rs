@@ -1270,10 +1270,6 @@ mod repository {
             "geom-terrain",
             "G362 G363 G364 G365 G366 G367 G368 G369 G370 G374 G377 G380",
         ),
-        (
-            "geom-topo",
-            "G80 G81 G90 G102 G111 G112 G143 G145 G247 G398",
-        ),
         ("engine-geometry", "G100 G482"),
     ];
 
@@ -1673,8 +1669,9 @@ mod repository {
             "os: windows-11-arm",
             "os: macos-latest",
             "os: macos-15-intel",
-            "run: cargo test $KERNEL_CRATES --release --locked --no-fail-fast",
-            "run: cargo test $KERNEL_CRATES --locked --no-fail-fast",
+            "run: cargo nextest run $KERNEL_CRATES --release --locked --no-fail-fast --partition count:${{ matrix.part.k }}/${{ matrix.part.n }}",
+            "run: cargo nextest run $KERNEL_CRATES --locked --no-fail-fast --partition count:${{ matrix.part.k }}/${{ matrix.part.n }}",
+            "run: cargo test $KERNEL_CRATES --doc --locked --no-fail-fast",
             "run: cargo test $KERNEL_CRATES --target wasm32-wasip1 --release --locked --no-fail-fast",
             "run: cargo fmt --check $KERNEL_CRATES",
             "run: cargo clippy $KERNEL_CRATES --all-targets --locked -- -D warnings",
