@@ -16,6 +16,8 @@ geom-run = { path = "../geom-run" }
 # The operation contract, for the history-law kit (src/history.rs, piece G88): the kit checks
 # histories through geom-op's own checker, so every operation's tests use the same laws.
 geom-op = { path = "../geom-op" }
+# What the fixture runner replays (pieces G97, G101): the operations, and the types of their inputs.
+geom-make = { path = "../geom-make" }
 # The fault-injection catalogue (piece G110): the checker it attacks, with every group on in every
 # build (chapter 28.4), and the kernel crates whose rows and values it breaks.
 geom-check = { path = "../geom-check", features = ["full"] }
@@ -110,8 +112,7 @@ yaml-rust2 = { version = "0.13.0", default-features = false }
 # tests/nurbs_reference.rs): geom-nurbs's curves and the work meter its operations take. Ours,
 # Apache-2.0; development dependencies, so no kernel crate comes to depend on this one.
 geom-nurbs = { path = "../geom-nurbs" }
-# The closed-form bodies attack_g110 breaks (piece G110).
-geom-make = { path = "../geom-make" }
+# The closed-form bodies attack_g110 breaks (piece G110) use geom-make, now a regular dependency.
 geom-run = { path = "../geom-run" }
 # The kinds and transforms the law catalogue checks on every pull request and nightly (G69,
 # tests/laws_curves.rs and tests/laws_surfaces.rs). Ours, Apache-2.0; development dependencies, as
