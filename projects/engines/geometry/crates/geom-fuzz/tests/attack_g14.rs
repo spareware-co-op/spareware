@@ -39,8 +39,8 @@ use std::path::{Path, PathBuf};
 
 use geom_fuzz::orient2d::{Case, PROOF_BOUND, ProofDraw, check, check_with, proof_case, reference};
 use geom_fuzz::{
-    Harness, arenas, boxtree, cache, cbor, curves, linalg, make, maths, nurbs, orient2d, predicates,
-    roots, sequence, surfaces, transforms, variants, wide,
+    Harness, arenas, boxtree, cache, cbor, curves, linalg, make, maths, nurbs, orient2d,
+    predicates, roots, sequence, surfaces, transforms, variants, wide,
 };
 use geom_num::Sign;
 use geom_num::generated::orient2d::{filter, value};
