@@ -13,9 +13,10 @@ flips its sign; `wide` (`src/wide.rs`, G26), the wide integers agree with `num-b
 every operation at every width, `I128` to the reserved 768 bits; and, for Gate 2 (decision 32.44:
 a target per phase-2 code piece), `curves` (`src/curves.rs`) and `surfaces` (`src/surfaces.rs`),
 every curve and surface kind built from any bytes keeps the kind contract kit
-(`geom_curve::contract`, `geom_surface::contract`) under any typed transform; and `arenas` (`src/arenas.rs`,
+(`geom_curve::contract`, `geom_surface::contract`) under any typed transform; `arenas` (`src/arenas.rs`,
 G80), `geom-topo` publishes exactly the arenas its rules allow, and a body's versions never see
-each other's edits.
+each other's edits; and `attributes` (`src/attributes.rs`, G90), `geom-name`'s attribute step gives
+each output exactly what section 8.4's table gives.
 
 ## One law, four engines
 
