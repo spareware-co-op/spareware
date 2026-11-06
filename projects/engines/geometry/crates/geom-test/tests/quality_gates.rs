@@ -1583,15 +1583,17 @@ fn folded_branches_are_left_out_only_when_they_can_be_placed() {
         f.iter().any(|x| x.contains("cannot be told apart")),
         "{f:?}"
     );
-    // More folded outcomes than branch records is not data the gate can use.
-    assert!(
-        measure(
-            &repo.root,
-            "geom-num",
-            &lcov_record(&repo, &rel, &lines, &one_zero, Some(9))
-        )
-        .is_err()
+    // BRF above the BRDA lines: llvm-cov wrote branch regions that start at one place as one pair
+    // (rustc's copies of a match guard on an or-pattern), so the outcomes beyond the lines cannot be
+    // placed, and count as missed even where every listed one was taken.
+    let all_taken = [(2, Some(1)), (2, Some(1)), (3, Some(1)), (3, Some(1))];
+    let f = judged(
+        &repo,
+        "geom-num",
+        &lcov_record(&repo, &rel, &lines, &all_taken, Some(6)),
     );
+    assert!(f.iter().any(|x| x.contains("no BRDA line lists")), "{f:?}");
+    assert!(f.iter().any(|x| x.contains("branches 4/6")), "{f:?}");
 }
 
 #[test]
@@ -1659,6 +1661,10 @@ fn a_foundation_line_waits_for_its_proof_only_with_an_exact_entry() {
         judge_with(&folded, vec![entry(missed, 1)]),
         Vec::<String>::new()
     );
+    // Outcomes BRF counts beyond the BRDA lines have no line, so no entry excuses them.
+    let unplaced = lcov_record(&repo, &rel, &lines, &branches, Some(branches.len() + 2));
+    let f = judge_with(&unplaced, vec![entry(missed, 1)]);
+    assert!(f.iter().any(|x| x.contains("no BRDA line lists")), "{f:?}");
 }
 
 #[cfg_attr(

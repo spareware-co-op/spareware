@@ -25,7 +25,7 @@
 //! corner cutting of Piegl and Tiller's algorithm A5.2 (The NURBS Book, 2nd ed., section 5.2,
 //! <https://doi.org/10.1007/978-3-642-59223-2>), written from the recurrence; the span is found by
 //! [`crate::basis`], so the domain's ends are evaluated inside it.
-//! SPDX-License-Identifier: MPL-2.0
+//! SPDX-License-Identifier: Apache-2.0
 //!
 //! Cost: O(p²·D) operations; nothing allocates.
 

@@ -1,0 +1,14 @@
+# TiKV on a small machine (2 cores, 12 GB). The cache is capped because TiKV otherwise takes 45%
+# of the machine's memory, and the server and RustFS share this one.
+[storage.block-cache]
+capacity = "2GB"
+
+[server]
+grpc-concurrency = 2
+
+[raftstore]
+store-pool-size = 1
+apply-pool-size = 1
+
+[readpool.unified]
+max-thread-count = 2

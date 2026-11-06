@@ -14,8 +14,12 @@ every operation at every width, `I128` to the reserved 768 bits; `cbor` (`src/cb
 `geom-format`'s strict CBOR decoder and its text form never panic, refuse inside their input and
 convert both ways bit for bit; `cache` (`src/cache.rs`, G105), `geom-format`'s memo store keeps to
 its bound, forgets the entry used longest ago first and answers only where the caller's budget
-covers the stored run; and `arenas` (`src/arenas.rs`, G80), `geom-topo` publishes exactly the
-arenas its rules allow, and a body's versions never see each other's edits.
+covers the stored run; and, for Gate 2 (decision 32.44:
+a target per phase-2 code piece), `curves` (`src/curves.rs`) and `surfaces` (`src/surfaces.rs`),
+every curve and surface kind built from any bytes keeps the kind contract kit
+(`geom_curve::contract`, `geom_surface::contract`) under any typed transform; and `arenas` (`src/arenas.rs`,
+G80), `geom-topo` publishes exactly the arenas its rules allow, and a body's versions never see
+each other's edits.
 
 ## One law, four engines
 
