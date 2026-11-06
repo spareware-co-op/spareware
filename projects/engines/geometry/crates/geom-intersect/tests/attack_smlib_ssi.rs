@@ -271,6 +271,39 @@ fn wr_259_a_stretch_of_two_steps_or_less_is_a_point_and_more_is_a_line() {
     }
 }
 
+/// The same meeting of zero width on a curve that closes: the top circle of the r 20 cylinder
+/// (z = 7) and a plane patch whose edge x = `x` is tangent to it at (20, 0, 7). Only that one point
+/// is on both patches, a boundary touch; a patch apart from the circle has nothing, and one that
+/// cuts it has the arc. (Before, the tangent patch gave nothing.)
+#[test]
+fn wr_259_a_patch_touching_a_circle_at_one_point_is_a_boundary_touch() {
+    let patch = |x: f64| {
+        plane(
+            [x, -5.0, 7.0],
+            [1.0, 0.0, 0.0],
+            [0.0, 1.0, 0.0],
+            ((0.0, 5.0), (0.0, 10.0)),
+        )
+    };
+    let wall = tube([0.0, 0.0, 2.0], 20.0, (0.0, 5.0));
+    let touch = found(&wall, &patch(20.0));
+    assert_eq!(touch.items().len(), 1, "{:?}", touch.items());
+    let Item::Point { contact, xyz, .. } = &touch.items()[0] else {
+        panic!("{:?}", touch.items());
+    };
+    assert_eq!(*contact, PointContact::BoundaryTouch);
+    assert!(
+        format!("{xyz:?}").contains("x: Coord(19)") || format!("{xyz:?}").contains("x: Coord(20)"),
+        "{xyz:?}"
+    );
+    assert!(found(&wall, &patch(21.0)).items().is_empty());
+    assert_eq!(lines_or_arcs(&found(&wall, &patch(19.0))), 1);
+}
+
+fn lines_or_arcs(r: &Intersection) -> usize {
+    lines_of(r).len()
+}
+
 /// solidcore plan/upstream-issues/UB-123--smcone-intersectwithcone-dereferences-an-absent-tolerance.md
 /// (b4de2149): two distinct objects holding coincident, overlapping cylinders, with no tolerance
 /// given, dereferenced a null tolerance. The input is the defect's: separate cylinders of one

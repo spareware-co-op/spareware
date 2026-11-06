@@ -1681,16 +1681,25 @@ fn trimmed(
     // Only where nothing else was kept: beside a kept part a cut on both domains is where that part
     // ends or touches an edge, and the records of the closed forms hold no extra point there.
     if out.is_empty() {
-        let mut last = f64::NEG_INFINITY;
-        for t in &cut {
-            let room = 1e-9 * (1.0 + t.abs());
-            if *t <= last + room {
-                continue;
-            }
-            last = *t;
-            if on_both(curve, *t, a, b, meter)? {
+        // The stretches' own ends are the cuts, already merged where two edges cut at one point; on
+        // a loop the first stretch also starts at a cut, which the last runs on into.
+        let mut cuts_off: Vec<f64> = stretches
+            .windows(2)
+            .filter_map(|pair| match pair {
+                [before, after] if !before.on && !after.on => Some(after.from),
+                _ => None,
+            })
+            .collect();
+        if let (true, Some(last), Some(first)) = (loops, stretches.last(), stretches.first())
+            && !last.on
+            && !first.on
+        {
+            cuts_off.push(first.from);
+        }
+        for t in cuts_off {
+            if on_both(curve, t, a, b, meter)? {
                 out.push(Part::Point {
-                    at: at_parameter(curve, *t, meter)?,
+                    at: at_parameter(curve, t, meter)?,
                     width: 0.0,
                 });
             }
