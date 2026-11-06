@@ -5065,6 +5065,22 @@
       "occurrences": 1,
       "kind": "equivalent",
       "reason": "root_floor is next_down of the correctly rounded square root of floor, and floor is at least +0 (the sqrt above refuses floor < radius, and the radius is never negative). For floor = +0 or -0 the root is a zero and its next_down is -2^-1074; for floor > 0 the root is at least 2^-537 and its next_down is positive. So root_floor is never 0.0, and > and >= against 0.0 choose the same arm for every ball."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-intersect/src/project.rs",
+      "mutant": "replace != with == in hull_of",
+      "line_text": "&& at.get(k).is_none_or(|x| (x.lo() >= middle) != high)",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "Either change reverses which boxes each side keeps, so `hulls` returns its two hulls the other way round, the high side first. The one caller, `undecided`, does not read the order: it joins the images of the parts, which is commutative; it takes the whole as the smaller of the starts and the larger of the ends, also commutative; and it pushes every part with one shared point, distance and `Place::Foot`, after which `project_surface` hands them to `settle`, which joins touching enclosures (`joined` hulls the spans, points and distances, and the place is `Foot` whichever comes second, since both are) and sorts what is kept by parameter. The same two boxes come out in the same order either way."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-intersect/src/project.rs",
+      "mutant": "replace >= with < in hull_of",
+      "line_text": "&& at.get(k).is_none_or(|x| (x.lo() >= middle) != high)",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "Either change reverses which boxes each side keeps, so `hulls` returns its two hulls the other way round, the high side first. The one caller, `undecided`, does not read the order: it joins the images of the parts, which is commutative; it takes the whole as the smaller of the starts and the larger of the ends, also commutative; and it pushes every part with one shared point, distance and `Place::Foot`, after which `project_surface` hands them to `settle`, which joins touching enclosures (`joined` hulls the spans, points and distances, and the place is `Foot` whichever comes second, since both are) and sorts what is kept by parameter. The same two boxes come out in the same order either way."
     }
   ],
   "coverage_off": [
