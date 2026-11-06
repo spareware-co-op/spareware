@@ -672,6 +672,29 @@ shuffling-allocator
     projects/engines/geometry/crates/geom-test/src/golden/perturb.rs
       for its size classes and shuffling layer and to judge whether it could be used; not taken, for the reasons above. No code copied.
 
+solidcore
+  Licence:      Apache-2.0
+  Link:         https://github.com/tangency-labs/solidcore/blob/b4de2149aadbd737268091c51d8390a7d3cdda70/crates/difftest/README.md
+  Consulted by:
+    projects/engines/geometry/crates/geom-test/src/oracle.rs
+      for the whole of the above. No code copied.
+    projects/engines/geometry/crates/geom-test/src/oracle/compare.rs
+      for the perturbation check of the comparator itself (the README's "Perturbation" section). No code copied.
+
+solidcore
+  Licence:      Apache-2.0
+  Link:         https://github.com/tangency-labs/solidcore/blob/b4de2149aadbd737268091c51d8390a7d3cdda70/crates/difftest/src/baseline.rs
+  Consulted by:
+    projects/engines/geometry/crates/geom-test/src/oracle/waiver.rs
+      for the ratchet against the earlier report, the waiver's fields and its strict reading, and the rule that a waiver is removed once it covers nothing. No code copied.
+
+solidcore
+  Licence:      Apache-2.0
+  Link:         https://github.com/tangency-labs/solidcore/blob/b4de2149aadbd737268091c51d8390a7d3cdda70/crates/difftest/src/known.rs
+  Consulted by:
+    projects/engines/geometry/crates/geom-test/src/oracle/triage.rs
+      for the evidence a defect blamed on the reference must carry (a confirmed upstream record and a record that names the case) and for never letting a listed case count as a pass. No code copied.
+
 SPDX License List 3.29.0
   Licence:      CC-BY-3.0
   Link:         https://github.com/spdx/license-list-data/blob/31ba1a50e5397e00a304dbadc76531740e89ee48/json/licenses.json
