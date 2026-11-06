@@ -18,7 +18,8 @@
 //!   parameter; each with a certified deviation, 0 when the doubles hold the conversion exactly.
 //! - **Transforms change kinds explicitly.** A similarity keeps a circle a circle (radius times its
 //!   scale, frame carried); any other transform makes it an [`Ellipse`] with conjugate axes, on the
-//!   same parameter; principal axes on a frame stay principal under a similarity.
+//!   same parameter; principal axes on a frame stay principal under a similarity. A grid
+//!   transform that moves the centre exactly is exact: deviation 0 (chapter 7; piece G69).
 //! - **Exact split and reversal.** A split changes only the domain; a reversal negates the domain
 //!   and v (a frame's normal), exactly.
 //!
@@ -382,6 +383,13 @@ impl<const D: usize> ParamCurve<D> for Circle<D> {
             let exact = e.form.exact;
             (CurveKind::Ellipse(e), exact)
         };
+        if m.exact_for(&[self.center])? {
+            // The frame's vectors, and so its unit vectors, move exactly too.
+            return Ok(Changed {
+                value,
+                deviation: 0.0,
+            });
+        }
         let deviation = form::distance(Shape::Trig, self.domain, &exact, &image)?;
         Ok(Changed { value, deviation })
     }
