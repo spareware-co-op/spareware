@@ -74,16 +74,10 @@ impl AllowSet {
     #[must_use]
     pub const fn of(classes: &[ChangeClass]) -> AllowSet {
         let mut bits = 0u16;
-        let mut i = 0;
-        while i < classes.len() {
-            // `i < len` holds, so the index is in range; a const fn cannot use `get` in a loop.
-            #[allow(
-                clippy::indexing_slicing,
-                reason = "i is below classes.len(), checked by the loop condition"
-            )]
-            let class = classes[i];
-            bits |= bit(class);
-            i = i.saturating_add(1);
+        let mut rest = classes;
+        while let [class, tail @ ..] = rest {
+            bits |= bit(*class);
+            rest = tail;
         }
         AllowSet(bits)
     }
