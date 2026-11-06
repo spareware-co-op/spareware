@@ -119,8 +119,18 @@ env:
   FILES: ${{ inputs.files }}
 
 jobs:
+  cheap:
+    name: Cheap checks first
+    # Waits for format, lints, the scaffold and the sign-off (cheap-checks.yml), so a push that
+    # fails one of them stops here; every heavy job below lists this job under `needs`.
+    permissions:
+      contents: read
+      checks: read
+    uses: ./.github/workflows/cheap-checks.yml
+
   mutants-plan:
     name: Mutants, the plan
+    needs: cheap
     runs-on: ubuntu-latest
     timeout-minutes: 60
     outputs:
@@ -142,6 +152,9 @@ jobs:
           toolchain: ${{ env.RUST_TOOLCHAIN }}
       - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
         with:
+          # Only main saves the cache; a pull request restores main's (a pull request's own
+          # caches filled the repository's cache limit and evicted what main saved).
+          save-if: ${{ github.ref == 'refs/heads/main' }}
           key: quality-tools
       - name: Install cargo-mutants ${{ env.CARGO_MUTANTS_VERSION }}
         run: cargo install --locked cargo-mutants --version "$CARGO_MUTANTS_VERSION"
@@ -222,6 +235,9 @@ jobs:
           toolchain: ${{ env.RUST_TOOLCHAIN }}
       - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
         with:
+          # Only main saves the cache; a pull request restores main's (a pull request's own
+          # caches filled the repository's cache limit and evicted what main saved).
+          save-if: ${{ github.ref == 'refs/heads/main' }}
           key: mutants
       - name: Install cargo-mutants ${{ env.CARGO_MUTANTS_VERSION }}
         run: cargo install --locked cargo-mutants --version "$CARGO_MUTANTS_VERSION"
@@ -303,6 +319,9 @@ jobs:
           toolchain: ${{ env.RUST_TOOLCHAIN }}
       - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
         with:
+          # Only main saves the cache; a pull request restores main's (a pull request's own
+          # caches filled the repository's cache limit and evicted what main saved).
+          save-if: ${{ github.ref == 'refs/heads/main' }}
           key: mutants
       - name: Install cargo-mutants ${{ env.CARGO_MUTANTS_VERSION }}
         run: cargo install --locked cargo-mutants --version "$CARGO_MUTANTS_VERSION"
@@ -374,6 +393,9 @@ jobs:
           toolchain: ${{ env.RUST_TOOLCHAIN }}
       - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
         with:
+          # Only main saves the cache; a pull request restores main's (a pull request's own
+          # caches filled the repository's cache limit and evicted what main saved).
+          save-if: ${{ github.ref == 'refs/heads/main' }}
           key: quality-tools
       - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
@@ -409,6 +431,7 @@ jobs:
 
   coverage:
     name: Coverage (lines, and branches on the pinned nightly)
+    needs: cheap
     # Every run but a narrowed mutation run.
     if: ${{ !inputs.files }}
     runs-on: ubuntu-latest
@@ -430,6 +453,9 @@ jobs:
           rustc "+$RUST_NIGHTLY" -vV
       - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
         with:
+          # Only main saves the cache; a pull request restores main's (a pull request's own
+          # caches filled the repository's cache limit and evicted what main saved).
+          save-if: ${{ github.ref == 'refs/heads/main' }}
           key: coverage
       - name: Install cargo-llvm-cov ${{ env.CARGO_LLVM_COV_VERSION }}
         run: cargo install --locked cargo-llvm-cov --version "$CARGO_LLVM_COV_VERSION"
@@ -486,6 +512,7 @@ jobs:
 
   gates-seeded:
     name: The gates fail on seeded faults
+    needs: cheap
     # Every run but a narrowed mutation run.
     if: ${{ !inputs.files }}
     runs-on: ubuntu-latest
@@ -504,6 +531,9 @@ jobs:
         run: rustup toolchain install "$RUST_NIGHTLY" --profile minimal --component llvm-tools-preview
       - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
         with:
+          # Only main saves the cache; a pull request restores main's (a pull request's own
+          # caches filled the repository's cache limit and evicted what main saved).
+          save-if: ${{ github.ref == 'refs/heads/main' }}
           key: quality-tools
       - name: Install cargo-mutants ${{ env.CARGO_MUTANTS_VERSION }} and cargo-llvm-cov ${{ env.CARGO_LLVM_COV_VERSION }}
         run: |
@@ -517,6 +547,7 @@ jobs:
 
   miri:
     name: Miri (partition ${{ matrix.partition }})
+    needs: cheap
     # Every run but a narrowed mutation run.
     if: ${{ !inputs.files }}
     runs-on: ubuntu-latest
@@ -567,6 +598,9 @@ jobs:
       - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
         if: env.NEEDED == 'true'
         with:
+          # Only main saves the cache; a pull request restores main's (a pull request's own
+          # caches filled the repository's cache limit and evicted what main saved).
+          save-if: ${{ github.ref == 'refs/heads/main' }}
           key: miri
       - name: Install cargo-nextest ${{ env.CARGO_NEXTEST_VERSION }}
         if: env.NEEDED == 'true'
