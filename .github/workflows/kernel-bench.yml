@@ -125,8 +125,15 @@ env:
   HEAD_SHA: ${{ github.event_name == 'push' && github.sha || github.event.pull_request.head.sha }}
 
 jobs:
+  cheap:
+    name: Cheap checks first
+    # Waits for format, lints, the scaffold and the sign-off (cheap-checks.yml), so a push that
+    # fails one of them stops here; every heavy job below lists this job under `needs`.
+    uses: ./.github/workflows/cheap-checks.yml
+
   scope:
     name: What the count gates measure
+    needs: cheap
     runs-on: ubuntu-24.04
     timeout-minutes: 10
     outputs:
@@ -237,6 +244,9 @@ jobs:
       - name: Cache the Rust build
         uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
         with:
+          # Only main saves the cache; a pull request restores main's (a pull request's own
+          # caches filled the repository's cache limit and evicted what main saved).
+          save-if: ${{ github.ref == 'refs/heads/main' }}
           workspaces: |
             . -> target
             projects/engines/geometry/crates/geom-bench/fuel -> target
@@ -334,6 +344,9 @@ jobs:
       - name: Cache the Rust build
         uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
         with:
+          # Only main saves the cache; a pull request restores main's (a pull request's own
+          # caches filled the repository's cache limit and evicted what main saved).
+          save-if: ${{ github.ref == 'refs/heads/main' }}
           workspaces: |
             head -> ../target
             base -> ../target-base
@@ -711,6 +724,9 @@ jobs:
       - name: Cache the Rust build
         uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
         with:
+          # Only main saves the cache; a pull request restores main's (a pull request's own
+          # caches filled the repository's cache limit and evicted what main saved).
+          save-if: ${{ github.ref == 'refs/heads/main' }}
           workspaces: |
             head -> ../target
             head/projects/engines/geometry/crates/geom-bench/fuel -> ../../../../../../../target/fuel-host
