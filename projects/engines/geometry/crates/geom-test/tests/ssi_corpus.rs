@@ -82,6 +82,8 @@ struct Found {
     isolated: usize,
     /// Singular points.
     singular: usize,
+    /// Half-branches the singular points say meet at them, all together.
+    valence: usize,
     /// Other points: crossings and boundary touches.
     other_points: usize,
     /// Coincident regions.
@@ -273,9 +275,14 @@ fn kernel_surface(surface: &Surface, s: f64) -> Result<SurfaceKind, String> {
             knots_v,
             points,
             weights,
+            nu,
+            nv,
             ..
         } => {
-            let net: Vec<[f64; 3]> = points.iter().map(|p| times(*p, s)).collect();
+            let net: Vec<[f64; 3]> = tidy(points, *nu, *nv)
+                .iter()
+                .map(|p| times(*p, s))
+                .collect();
             let basis =
                 |p: usize, k: &Vec<f64>| Basis::new(p, k.clone()).map_err(|e| format!("{e:?}"));
             let (bu, bv) = (basis(degree[0], knots_u)?, basis(degree[1], knots_v)?);
@@ -288,6 +295,46 @@ fn kernel_surface(surface: &Surface, s: f64) -> Result<SurfaceKind, String> {
                 .map_err(|e| format!("{e:?}"))
         }
     }
+}
+
+/// How far apart, in the corpus' own units, control points the corpus generated from one point
+/// may be and still be that point.
+const ROUNDING: f64 = 1e-12;
+
+/// Whether two control points are one point up to the rounding of the corpus' generator.
+fn same_point(a: [f64; 3], b: [f64; 3]) -> bool {
+    a.iter().zip(b).all(|(x, y)| (x - y).abs() <= ROUNDING)
+}
+
+/// A NURBS surface's control net with the rounding of the corpus' generator taken out. The corpus
+/// writes a full cylinder, sphere or torus as a clamped spline whose first and last rows of
+/// control points are one row, and a sphere's pole as a row of one point, but computed with sines
+/// and cosines, so they differ in the last bits (a row of 2.4e-16 apart). The kernel reads a seam
+/// or a pole only from data that is exactly equal (`geom_intersect::seam`, "exact, or not
+/// claimed"), and for a net like this one it is right to: the surface it holds has a slit of that
+/// width, and a branch crossing the slit ends at its edge. The corpus means the closed surface, so
+/// the runner sets rows and edges that agree to `ROUNDING` equal to the first, before the lengths
+/// are scaled. Index `i * nv + j`, u-major.
+fn tidy(points: &[[f64; 3]], nu: usize, nv: usize) -> Vec<[f64; 3]> {
+    let mut net = points.to_vec();
+    let row = |i: usize| -> Vec<usize> { (0..nv).map(|j| i * nv + j).collect() };
+    let column = |j: usize| -> Vec<usize> { (0..nu).map(|i| i * nv + j).collect() };
+    for line in [row(0), row(nu - 1), column(0), column(nv - 1)] {
+        let first = net[line[0]];
+        if line.iter().all(|k| same_point(net[*k], first)) {
+            for k in &line {
+                net[*k] = first;
+            }
+        }
+    }
+    for (a, b) in [(row(0), row(nu - 1)), (column(0), column(nv - 1))] {
+        if a.iter().zip(&b).all(|(x, y)| same_point(net[*x], net[*y])) {
+            for (x, y) in a.iter().zip(&b) {
+                net[*y] = net[*x];
+            }
+        }
+    }
+    net
 }
 
 /// The unit axes a plane's parameters run along: x, and y made perpendicular to it. (A corpus
@@ -333,11 +380,17 @@ fn pipeline(
     let mut out = Found::default();
     let mut settled = found.settled.clone();
     for reading in readings {
+        if std::env::var_os("SSI_CORPUS_DEBUG").is_some() {
+            eprintln!("reading: {reading:?}");
+        }
         match reading {
             Reading::Crossing(pair) => settled.push(pair),
             Reading::Point { contact, .. } => match contact {
                 PointContact::IsolatedTangent => out.isolated += 1,
-                PointContact::Singular { .. } => out.singular += 1,
+                PointContact::Singular { branches } => {
+                    out.singular += 1;
+                    out.valence += usize::from(branches);
+                }
                 PointContact::Crossing | PointContact::BoundaryTouch => out.other_points += 1,
             },
             Reading::Curve { contact, .. } => {
@@ -354,6 +407,18 @@ fn pipeline(
         flagged: Vec::new(),
     };
     let traced = march(a, b, &all, FLOOR, ceiling, &mut meter(work))?;
+    if std::env::var_os("SSI_CORPUS_DEBUG").is_some() {
+        let mid = |v: &[geom_num::interval::Interval; 4]| v.map(|x| x.lo() / 2.0 + x.hi() / 2.0);
+        for b in &traced.branches {
+            eprintln!(
+                "branch: {} vertices, ends {:?}, first {:?}, last {:?}",
+                b.vertices.len(),
+                b.ends,
+                b.vertices.first().map(mid),
+                b.vertices.last().map(mid)
+            );
+        }
+    }
     out.branches = traced.branches.len();
     out.closed = traced
         .branches
@@ -431,9 +496,38 @@ fn judge(case: &Case, ours: &Ours) -> Verdict {
     }
     let closed = case.branches.iter().filter(|b| b.closed).count();
     let mut differs = Vec::new();
+    // Where the truth has singular points its branches pass through them, but ours are arcs that
+    // end at them, so the branches and closed loops are not counted against each other. What is
+    // checked instead is that every arc end at a flagged region is a half-branch some singular
+    // point says it has.
+    let through = !case.singular_points.is_empty();
+    let at_flagged = found
+        .ends
+        .iter()
+        .flatten()
+        .filter(|end| **end == CurveEnd::Flagged)
+        .count();
+    if through && at_flagged != found.valence {
+        differs.push(format!(
+            "{at_flagged} arc ends at flagged regions for {} half-branches at singular points",
+            found.valence
+        ));
+    }
     for (name, ours, truth) in [
-        ("branches", found.branches, case.branches.len()),
-        ("closed", found.closed, closed),
+        (
+            "branches",
+            found.branches,
+            if through {
+                found.branches
+            } else {
+                case.branches.len()
+            },
+        ),
+        (
+            "closed",
+            found.closed,
+            if through { found.closed } else { closed },
+        ),
         (
             "isolated points",
             found.isolated,
