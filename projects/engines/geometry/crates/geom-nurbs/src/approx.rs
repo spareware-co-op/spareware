@@ -46,7 +46,7 @@
 //!   formula in doubles; the starting degree follows `NLib`'s advice (1 for multiple knots, which
 //!   keep corners, 2 otherwise); Newton's method keeps only steps that bring the point nearer,
 //!   with `NLib`'s limit of 50 steps (`NL_ITLIM`) and no tolerances; failure is an error.
-//! SPDX-License-Identifier: MPL-2.0 AND Apache-2.0
+//! SPDX-License-Identifier: Apache-2.0
 //!
 //! Cost: each removal pass tries O(n) knots, each try O(n·D) to remove and re-insert and O(m·p)
 //! to check the data; each least-squares step O(m·n²); each projection O(p²·D) a step. All of it

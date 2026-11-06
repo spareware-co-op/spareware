@@ -13,7 +13,16 @@
 //! returns the exact value of its description, evaluated in big integers; [`arenas`] (G80),
 //! `geom-topo` publishes exactly the arenas its rules allow, and a body's versions never see each
 //! other's edits; and [`make`] (G101), the primitives and transforms return only what the full checker passes, keep their laws,
-//! and refuse with a typed error. The layout every target follows, and how each engine runs it locally and in CI,
+//! and refuse with a typed error. Gate 2 (32.44) adds
+//! [`curves`], every curve kind keeps the kind contract on any bytes (G60 to G64, G67, G68), and
+//! [`surfaces`], every surface kind likewise (G60, G65 to G68), and [`nurbs`], NURBS curves keep
+//! their stated bounds against exact rational evaluation (G56, G58, G59), and [`transforms`], the
+//! typed transforms move grid points as their definitions say and decimals round-trip (G45, G46,
+//! G48), and [`boxtree`], the box tree and cell index answer as brute force does (G54, G55), and
+//! [`linalg`], the dense decompositions are refused or finite and the spectral ones backward stable
+//! (G49, G50), and [`roots`], the root engine misses no root and proves none twice, Brent's
+//! zero brackets its sign change (G51, G52, G53), and [`maths`], the proven maths functions are
+//! correctly rounded (G47). The layout every target follows, and how each engine runs it locally and in CI,
 //! is in this crate's `README.md`.
 //!
 //! Layer: Development, in chapter 27's crate table: a development crate, outside the
@@ -107,18 +116,20 @@
 //!
 //! Dependencies, every one permissive (29.1):
 //!
-//! - `geom-num` (MPL-2.0, ours), the code under test, and `geom-test` (MPL-2.0, ours), for seeds,
+//! - `geom-num` (Apache-2.0, ours), the code under test, and `geom-test` (Apache-2.0, ours), for seeds,
 //!   `SplitMix64` and the hard-case grid sampler. Their own dependencies are recorded in their
 //!   headers.
 //! - `bolero` 0.13.7, a development dependency only: the `check!` front end, with its test-mode
 //!   engine and, under cargo-bolero, the engine chosen (`bolero-libfuzzer`, `bolero-afl`,
 //!   `bolero-honggfuzz` or `bolero-kani`).
-//! - `geom-gen` (MPL-2.0, ours, development only), whose description parser the [`variants`]
+//! - `geom-gen` (Apache-2.0, ours, development only), whose description parser the [`variants`]
 //!   target reads the predicates with.
-//! - `geom-topo`, `geom-curve`, `geom-surface`, `geom-math` and `geom-run` (MPL-2.0, ours), the code
+//! - `geom-topo`, `geom-curve`, `geom-surface`, `geom-math` and `geom-run` (Apache-2.0, ours), the code
 //!   under test of the [`arenas`] target and the values that fill its arenas.
-//! - `geom-make`, `geom-check` and `geom-op` (MPL-2.0, ours), with the crates above, the code under
+//! - `geom-make`, `geom-check` and `geom-op` (Apache-2.0, ours), with the crates above, the code under
 //!   test of the [`make`] target and the checker it judges them by.
+//! - `dashu-ratio` 0.6.1 (MIT OR Apache-2.0), without its default features: the exact rationals
+//!   of the [`nurbs`] target's oracle, `geom-test`'s NURBS reference.
 //! - `num-bigint` 0.4.8 (MIT OR Apache-2.0), the oracle of the [`wide`] and [`variants`] targets:
 //!   exact arbitrary-precision integers, the big-integer oracle chapter 29.3 names, sharing no
 //!   code with `geom-num`.
@@ -135,8 +146,10 @@
 //!   `rand_chacha`, `rand_xoshiro`, `getrandom`, `libc`, `ppv-lite86`, `proc-macro-crate`,
 //!   `toml_edit`, `toml_datetime`, `indexmap`, `hashbrown`, `equivalent`, `serde`, `serde_core`,
 //!   `serde_derive`, `proc-macro2`, `quote`, `syn`, `cc`, `find-msvc-tools`, `shlex`,
-//!   `num-bigint`, `num-integer`, `num-traits` and `autocfg`.
+//!   `num-bigint`, `num-integer`, `num-traits`, `autocfg`, `dashu-base`, `dashu-int`,
+//!   `dashu-ratio` and `static_assertions`.
 //! - (MIT OR Apache-2.0) AND Unicode-3.0: `unicode-ident`.
+//! - Apache-2.0: `num-modular` (through `dashu-int`).
 //! - BSD-2-Clause OR Apache-2.0 OR MIT: `zerocopy` and `zerocopy-derive`.
 //! - Apache-2.0 WITH LLVM-exception OR Apache-2.0 OR MIT: `wasip2` and `wit-bindgen` (WASI targets
 //!   only).
@@ -162,10 +175,18 @@
 use core::fmt;
 
 pub mod arenas;
+pub mod boxtree;
+pub mod curves;
+pub mod linalg;
 pub mod make;
+pub mod maths;
+pub mod nurbs;
 pub mod orient2d;
 pub mod predicates;
+pub mod roots;
 pub mod seeded;
+pub mod surfaces;
+pub mod transforms;
 pub mod variants;
 pub mod wide;
 
