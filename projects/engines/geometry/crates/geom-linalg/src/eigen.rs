@@ -22,6 +22,12 @@
 //!   symmetric matrix within a small multiple of u·‖A‖ of A, so each eigenvalue is within that of
 //!   an exact one (Golub and Van Loan, section 8.3.6). The tests check the residual and Q's
 //!   orthogonality exactly and bracket each eigenvalue by exact inertia counts of A − x·I.
+//! - **Refused beyond the doubles.** A matrix with an eigenvalue beyond the largest double (which
+//!   needs an entry above the largest double over n, as |λ| ≤ n·max|`a_ij`|) has no factorisation
+//!   within the bound above in finite doubles: it is [`LinalgError::NotFinite`], as is any whose
+//!   reduction or QR step overflows. The deflation test scales each diagonal magnitude before
+//!   adding the two (`crate::matrix`'s `negligible`), so it cannot overflow and take an entry
+//!   beside them for zero (issue #542).
 //! - **Bounded.** At most 30·n QR steps, then [`LinalgError::NoConvergence`]; each step charges its
 //!   work before it runs, the reduction its own first.
 //!
@@ -46,12 +52,9 @@ extern crate alloc;
 use alloc::vec::Vec;
 
 use crate::cols::{Cols, add, at, at_mut, mul, sub};
-use crate::matrix::{LinalgError, Matrix, Work, cost3, finite, wide, zeros};
+use crate::matrix::{LinalgError, Matrix, Work, cost3, finite, negligible, wide, zeros};
 use crate::qr::householder;
 use crate::rotation::{givens, hypot, rotate_slices};
-
-/// Twice the unit roundoff, 2^−52: the relative size below which a subdiagonal entry is zero.
-const EPS: f64 = f64::from_bits(0x3CB0_0000_0000_0000);
 
 /// The eigenvalues and eigenvectors of a symmetric matrix.
 #[derive(Clone, Debug, PartialEq)]
@@ -223,7 +226,7 @@ fn symmetric_qr(
     loop {
         while hi > 0 {
             let k = sub(hi, 1)?;
-            if at(b, k)?.abs() <= EPS * (at(a, k)?.abs() + at(a, hi)?.abs()) {
+            if negligible(at(b, k)?, at(a, k)?, at(a, hi)?) {
                 *at_mut(b, k)? = 0.0;
                 hi = k;
             } else {
@@ -236,7 +239,7 @@ fn symmetric_qr(
         let mut lo = sub(hi, 1)?;
         while lo > 0 {
             let k = sub(lo, 1)?;
-            if at(b, k)?.abs() <= EPS * (at(a, k)?.abs() + at(a, lo)?.abs()) {
+            if negligible(at(b, k)?, at(a, k)?, at(a, lo)?) {
                 *at_mut(b, k)? = 0.0;
                 break;
             }
