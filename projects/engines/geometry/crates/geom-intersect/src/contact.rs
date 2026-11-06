@@ -5,7 +5,9 @@
 //! of them are flagged for starts that could not be proven, so a cluster is taken whole, and one
 //! with no pair at the floor is left as it was flagged. Each other cluster is read:
 //!
-//! 1. Two surfaces with the same data are one, whatever was flagged.
+//! 1. Two surfaces with the same data are one, whatever was flagged. So are two patches of one
+//!    plane, cylinder, sphere or torus: they overlap in the parameters they share, if that is one
+//!    region ([`crate::general::subdivide`] answers the same pairs before it searches).
 //! 2. A cluster that covers its patches from both sides, reaches an edge of one of them, and has no
 //!    pair whose surfaces are proven to bend apart is an overlap, or near-coincident if what its
 //!    boxes reach passes the ceiling.
@@ -39,10 +41,17 @@
 //!   spans zero is a contact of higher order, whatever its middle says.
 //! - **A band is an upper bound.** Its width comes from what the cluster's boxes reach and the least
 //!   its pairs' forms can differ by, and a band past the ceiling is a [`Unresolved::TangentBand`].
+//! - **A point on a seam is one point.** Subdivision cuts a closing domain at its ends, so the two
+//!   sides of a seam are flagged as separate clusters, each seeing only the half-branches on its
+//!   side. Singular points whose boxes meet once one is moved a whole turn along the closing
+//!   parameters are joined into one, their half-branches added ([`Reading::Point`]).
 //! - **Overlap is by identity or by a covered area.** Two surfaces are identical only if their data
 //!   are equal, and a cluster overlaps only if patches of both surfaces cover its hulls, so that
 //!   every point of each has a box of the other within reach, and its hull ends at an edge: a
-//!   contact in the open, where the surfaces part on every side, is not an overlap however flat.
+//!   contact in the open, where the surfaces part on every side, is not an overlap however flat. A
+//!   pair with no forms to read (a box at a pole or a crease) proves nothing of how the surfaces
+//!   bend, so a cluster holding one is neither an overlap nor a band: a sphere's pole touching a
+//!   torus' outer equator is not a coincidence.
 //!
 //! Method: chapter 12.9 (`projects/engines/geometry/architecture/12-intersections.md`). The forms
 //! are Dupin's comparison of two indicatrices, re-derived there, and written here as the difference
@@ -80,6 +89,7 @@ use geom_surface::{ParamBox as Region, ParamSurface, Sphere, SurfaceKind};
 
 use crate::IntersectError;
 use crate::curve::exact_steps;
+use crate::general::shared_carrier;
 use crate::general::{
     FlaggedPair, Settled, Starts, Subdivided, around, cross, ends, may_be_parallel, minus_box,
     normals, partials, point, same, span, speeds, starts_of, subdivide,
@@ -715,6 +725,9 @@ struct Cluster {
     /// The least that any pair at the floor has its forms differ by, in their largest term: 0 where
     /// they may not differ.
     bend: f64,
+    /// Whether some pair at the floor has no forms to read: a box at a pole or a crease, or one the
+    /// data cannot bound. What it holds is then unknown, so the cluster is neither flat nor a band.
+    unread: bool,
 }
 
 /// What `x` keeps away from zero.
@@ -735,7 +748,7 @@ fn gather(
         first = hull(first, pair.first);
         second = hull(second, pair.second);
     }
-    let (mut within, mut bend) = (0.0, f64::INFINITY);
+    let (mut within, mut bend, mut unread) = (0.0, f64::INFINITY, false);
     for pair in pairs {
         let (a, b) = (
             around(system.first, pair.first, meter)?,
@@ -751,19 +764,18 @@ fn gather(
             span(pair.second.0)?,
             span(pair.second.1)?,
         ];
-        let mut most = 0.0;
-        if let Some(r) = system.read(&x, meter)?
-            && let Ok(d) = difference(&r)
-        {
-            most = d.into_iter().map(clear).fold(0.0, larger);
-        }
-        bend = smaller(bend, most);
+        let Some(d) = system.read(&x, meter)?.and_then(|r| difference(&r).ok()) else {
+            unread = true;
+            continue;
+        };
+        bend = smaller(bend, d.into_iter().map(clear).fold(0.0, larger));
     }
     Ok(Cluster {
         first,
         second,
         within,
         bend,
+        unread,
     })
 }
 
@@ -776,7 +788,7 @@ fn read_contact(
 ) -> Result<Reading, IntersectError> {
     let (first, second, within) = (cluster.first, cluster.second, cluster.within);
     let undecided = |why| Reading::Undecided { first, second, why };
-    if ending == 0 && cluster.bend > 0.0 {
+    if ending == 0 && !cluster.unread && cluster.bend > 0.0 {
         let quotient = Interval::point(2.0 * within)?.div(Interval::point(cluster.bend)?)?;
         let width = quotient.sqrt()?.hi();
         return Ok(if width <= ceiling {
@@ -836,7 +848,8 @@ fn look(
     let cluster = gather(system, pairs, meter)?;
     let (a, b) = (cluster.first, cluster.second);
     let (first, second) = (system.first, system.second);
-    let flat = cluster.bend <= 0.0
+    let flat = !cluster.unread
+        && cluster.bend <= 0.0
         && (at_edge(a, first.domain()) || at_edge(b, second.domain()))
         && covered(pairs.iter().map(|p| p.first), a, meter)?
         && covered(pairs.iter().map(|p| p.second), b, meter)?;
@@ -957,6 +970,13 @@ pub fn analyse(
             coincidence: Coincidence::Identical,
         }]);
     }
+    if let Some(region) = shared_carrier(first, second) {
+        return Ok(alloc::vec![Reading::Overlap {
+            first: region,
+            second: region,
+            coincidence: Coincidence::Identical,
+        }]);
+    }
     let system = Collinear::of(first, second, floor, meter)?;
     let mut rest = Vec::new();
     let mut turned = Vec::new();
@@ -971,7 +991,103 @@ pub fn analyse(
     }
     let mut out = read_clusters(&system, &found.settled, rest, ceiling, meter)?;
     out.extend(turned);
-    Ok(out)
+    Ok(across_seams(first, second, out))
+}
+
+/// The length of a closing parameter's domain: a whole turn, in half-turns.
+const TURN: f64 = 2.0;
+
+/// The parameters (u₁, v₁, u₂, v₂) that close, by a whole turn: a point of the domain's one end is
+/// the point of the other.
+fn closing(first: &SurfaceKind, second: &SurfaceKind) -> [bool; 4] {
+    let (a, b) = (charts(first).closes, charts(second).closes);
+    [a[0], a[1], b[0], b[1]]
+}
+
+/// `x` moved by `by`, widened outward by one step of the grid of doubles for the rounding.
+fn moved(x: Interval, by: f64) -> Result<Interval, NumError> {
+    Interval::new((x.lo() + by).next_down(), (x.hi() + by).next_up())
+}
+
+/// The box of `b`, moved by whole turns of the closing parameters, that touches `a` in all four
+/// parameters; `None` if no such move exists or none is needed (then the clusters already met).
+fn wrapped(a: &[Interval; 4], b: &[Interval; 4], closes: [bool; 4]) -> Option<[Interval; 4]> {
+    let mut out = *b;
+    let mut moves = 0_usize;
+    for ((o, x), (y, close)) in out.iter_mut().zip(a).zip(b.iter().zip(closes)) {
+        let touching = |z: Interval| x.lo() <= z.hi() && z.lo() <= x.hi();
+        if touching(*y) {
+            continue;
+        }
+        if !close {
+            return None;
+        }
+        let shifted = [-TURN, TURN]
+            .into_iter()
+            .filter_map(|by| moved(*y, by).ok())
+            .find(|z| touching(*z))?;
+        *o = shifted;
+        moves = moves.saturating_add(1);
+    }
+    (moves > 0).then_some(out)
+}
+
+/// Point readings that are one point read in two charts across a closing seam, joined (12.10).
+///
+/// A point on a seam is flagged from both of its sides: subdivision cuts a domain at its ends, so
+/// the clusters of the two sides never touch in the parameters, and each is read alone, with
+/// only the half-branches that end on its side. Two singular points whose boxes touch once one is
+/// moved a whole turn along the closing parameters (an exact identity of the data, see
+/// [`crate::seam`]) are one point: the half-branches add, and the box is where the two enclosures
+/// meet, each holding the one point (the first's, if rounding made them miss).
+fn across_seams(first: &SurfaceKind, second: &SurfaceKind, readings: Vec<Reading>) -> Vec<Reading> {
+    let closes = closing(first, second);
+    if !closes.iter().any(|c| *c) {
+        return readings;
+    }
+    let mut out: Vec<Reading> = Vec::new();
+    for reading in readings {
+        let mut taken = false;
+        if let Reading::Point {
+            at,
+            gap,
+            contact: PointContact::Singular { branches },
+        } = &reading
+        {
+            for kept in &mut out {
+                if let Reading::Point {
+                    at: into,
+                    gap: into_gap,
+                    contact: PointContact::Singular { branches: held },
+                } = kept
+                    && let Some(there) = wrapped(into, at, closes)
+                    && let Some(sum) = held.checked_add(*branches)
+                {
+                    let mut met = *into;
+                    for ((m, a), b) in met.iter_mut().zip(into.iter()).zip(there) {
+                        let (lo, hi) = (larger(a.lo(), b.lo()), smaller(a.hi(), b.hi()));
+                        if let Ok(both) = Interval::new(lo, hi) {
+                            *m = both;
+                        }
+                    }
+                    *into = met;
+                    if let Ok(wider) = Interval::new(
+                        smaller(into_gap.lo(), gap.lo()),
+                        larger(into_gap.hi(), gap.hi()),
+                    ) {
+                        *into_gap = wider;
+                    }
+                    *held = sum;
+                    taken = true;
+                    break;
+                }
+            }
+        }
+        if !taken {
+            out.push(reading);
+        }
+    }
+    out
 }
 
 /// What each of `clusters` is, around the `settled` pairs of the same subdivision.
