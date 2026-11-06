@@ -61,7 +61,7 @@ use core::fmt;
 
 use crate::cbor::{EncodeError, Encoder, Item};
 use crate::hash::Sha256;
-use crate::id::{NameId, OpId, OpPath};
+use crate::id::{Label, NameId, OpId, OpPath};
 
 /// The bytes hashed before every name's canonical encoding under `NameScheme v1`: the 17 ASCII
 /// bytes `SKG NameScheme v1` and one zero byte (32.19).
