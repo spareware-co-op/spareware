@@ -6283,14 +6283,6 @@
       "reason": "A mesh that was built has rows that fit and corners inside the frame, so drawing it cannot end here, and the arm left in its place refuses as well."
     },
     {
-      "file": "projects/engines/geometry/crates/geom-bool/src/rebuild.rs",
-      "mutant": "replace < with <= in arenas",
-      "line_text": "sense: if fin.from < fin.to {",
-      "occurrences": 1,
-      "kind": "equivalent",
-      "reason": "A fin's two vertices are its edge's two ends, numbers of two different points, because a run's low is below its high. They are never equal."
-    },
-    {
       "file": "projects/engines/geometry/crates/geom-bool/src/local.rs",
       "mutant": "replace > with >= in glued",
       "line_text": "first: partner.is_none_or(|(j, _)| j > i),",
@@ -6323,14 +6315,6 @@
       "reason": "The mutant turns every flap about the line by half a turn, the reference with the rest. about orders flaps by their angle from the reference, and that does not change when all of them turn together."
     },
     {
-      "file": "projects/engines/geometry/crates/geom-surface/src/contract.rs",
-      "mutant": "replace + with * in check",
-      "line_text": "let outside = beyond + 1.0;",
-      "occurrences": 1,
-      "kind": "harmless",
-      "reason": "The probe moves from b + (b - a) + 1 to b + (b - a), still past the end since b > a. A kind keeping the contract refuses every parameter outside its domain, so both probes see the same refusal; a kind that refuses some parameters past its end and not others may slip past either."
-    },
-    {
       "file": "projects/engines/geometry/crates/geom-mesh/src/exact/build.rs",
       "mutant": "replace next_group -> Option<&'a[Use]> with Some(Vec::leak(Vec::new()))",
       "line_text": "let head = rest.first()?;",
@@ -6345,46 +6329,6 @@
       "occurrences": 1,
       "kind": "hangs",
       "reason": "The first use always has its own end, so nothing is taken: an empty group, the rest unchanged, and the loops that take groups never end."
-    },
-    {
-      "file": "projects/engines/geometry/crates/geom-check/src/combinatorial.rs",
-      "mutant": "replace Sets<'s>::size -> u32 with 0",
-      "line_text": "self.size.get(at(root)).copied().unwrap_or(1)",
-      "occurrences": 1,
-      "kind": "equivalent",
-      "reason": "Sets joins by size only to keep its trees shallow. Which root goes under which never changes the partition: join links two different roots, so no cycle forms whatever the order, find follows parents to the same root, and shells() reads only whether every face of a shell has one root. Nothing is charged to the meter inside Sets, so the reports and the meter's usage are the same for every body; only the depth of the trees, and the time, differ."
-    },
-    {
-      "file": "projects/engines/geometry/crates/geom-check/src/combinatorial.rs",
-      "mutant": "replace Sets<'s>::size -> u32 with 1",
-      "line_text": "self.size.get(at(root)).copied().unwrap_or(1)",
-      "occurrences": 1,
-      "kind": "equivalent",
-      "reason": "Sets joins by size only to keep its trees shallow. Which root goes under which never changes the partition: join links two different roots, so no cycle forms whatever the order, find follows parents to the same root, and shells() reads only whether every face of a shell has one root. Nothing is charged to the meter inside Sets, so the reports and the meter's usage are the same for every body; only the depth of the trees, and the time, differ."
-    },
-    {
-      "file": "projects/engines/geometry/crates/geom-check/src/combinatorial.rs",
-      "mutant": "replace < with == in Sets<'s>::join",
-      "line_text": "let (big, small) = if self.size(x) < self.size(y) {",
-      "occurrences": 1,
-      "kind": "equivalent",
-      "reason": "Sets joins by size only to keep its trees shallow. Which root goes under which never changes the partition: join links two different roots, so no cycle forms whatever the order, find follows parents to the same root, and shells() reads only whether every face of a shell has one root. Nothing is charged to the meter inside Sets, so the reports and the meter's usage are the same for every body; only the depth of the trees, and the time, differ."
-    },
-    {
-      "file": "projects/engines/geometry/crates/geom-check/src/combinatorial.rs",
-      "mutant": "replace < with > in Sets<'s>::join",
-      "line_text": "let (big, small) = if self.size(x) < self.size(y) {",
-      "occurrences": 1,
-      "kind": "equivalent",
-      "reason": "Sets joins by size only to keep its trees shallow. Which root goes under which never changes the partition: join links two different roots, so no cycle forms whatever the order, find follows parents to the same root, and shells() reads only whether every face of a shell has one root. Nothing is charged to the meter inside Sets, so the reports and the meter's usage are the same for every body; only the depth of the trees, and the time, differ."
-    },
-    {
-      "file": "projects/engines/geometry/crates/geom-check/src/combinatorial.rs",
-      "mutant": "replace < with <= in Sets<'s>::join",
-      "line_text": "let (big, small) = if self.size(x) < self.size(y) {",
-      "occurrences": 1,
-      "kind": "equivalent",
-      "reason": "Sets joins by size only to keep its trees shallow. Which root goes under which never changes the partition: join links two different roots, so no cycle forms whatever the order, find follows parents to the same root, and shells() reads only whether every face of a shell has one root. Nothing is charged to the meter inside Sets, so the reports and the meter's usage are the same for every body; only the depth of the trees, and the time, differ."
     },
     {
       "file": "projects/engines/geometry/crates/geom-format/src/cbor/decode.rs",
