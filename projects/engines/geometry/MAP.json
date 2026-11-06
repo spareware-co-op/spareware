@@ -3576,7 +3576,7 @@
           "target": "lib"
         },
         {
-          "cost": "a curve-curve pair for each pair of meridian curves or cross-sections, and a curve-surface pair for each profile cut. Recursion: none.",
+          "cost": "a curve-curve pair for each pair of meridian curves or cross-sections, and a curve-surface pair for each profile cut.",
           "does": "[`crate::quadrics::natural`] calls these for the rows of 12.7 past the natural quadrics. Two surfaces about one axis meet in circles, one at each crossing of their meridians in the half-plane of the axis, so [`rings`] is curve with curve in two dimensions (12.5). A plane square to the axis is a line of that half-plane. A plane through a torus's axis cuts two tube circles, and a plane through its centre at the bitangent angle two Villarceau circles. A plane through a revolution's axis cuts two copies of the profile, the second mirrored. An extrusion cut by a plane along its direction is lines at the profile's crossings with the plane's trace; by any other plane it is an affine copy of the profile, of the kind the map keeps; and two sweeps of one direction meet in lines at the crossings of their cross-sections. What is left is `None`.",
           "family": [],
           "file": "projects/engines/geometry/crates/geom-intersect/src/reduced.rs",
