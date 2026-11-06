@@ -26,6 +26,10 @@
 //! - **Told where to keep a seam.** [`merge_with`] takes pieces it does not keep, whose sides hold a
 //!   seam open where they lie along a face: an imprint's outline, and the walls of a split. A cut
 //!   that ends inside a face leaves it whole, with no slit.
+//! - **A contact edge splits the face it lies in.** Where a face runs on through a stretch of a
+//!   line and another sheet's fin lies along it, the face keeps a fin on each side, so the edge has
+//!   all its faces (the radial order of 11.3). A contact that ends inside the face leaves a slit
+//!   of no area, which the caller refuses.
 //! - **No recursion.** Disjoint sets and rings are walked in loops (principle 13).
 //!
 //! Method: chapter 11.3's rebuild (`projects/engines/geometry/architecture/11-booleans.md`), which
@@ -796,6 +800,9 @@ fn sweep(
                 *slot = (slot.0.saturating_sub(1), slot.1, Some(*side));
             }
         }
+        // A sheet that runs on through the stretch while another sheet ends on it holds a seam
+        // open: the other's edge lies in its face, and the edge belongs to both.
+        let meeting = held.values().any(|(net, ..)| *net != 0);
         let mut fins = Vec::new();
         for (sheet, (net, up, down)) in held {
             let fin = |side: &Side, rising: bool| RunFin {
@@ -805,7 +812,7 @@ fn sweep(
                 bound: side.bound,
             };
             match (net, up, down) {
-                (0, Some(a), Some(b)) if cut => {
+                (0, Some(a), Some(b)) if cut || meeting => {
                     fins.push(fin(a, true));
                     fins.push(fin(b, false));
                 }
@@ -1089,16 +1096,18 @@ fn in_order<'s>(sides: &'s [Side], order: &[usize]) -> Result<Vec<&'s Side>, Mer
 }
 
 /// `runs` without seams that have one face on both sides: a cut that ends inside a face leaves it
-/// whole. Only a seam can hold two fins of one sheet, so those two are the seam.
+/// whole. Only a seam can hold two fins of one sheet, so those two are the seam. A seam stays where
+/// another sheet's fin runs along it: that edge lies in the face, and the face is split along it.
 fn without_slits(mut runs: Vec<Run>, parents: &[usize]) -> Vec<Run> {
     for run in &mut runs {
         let fins = run.fins.clone();
         run.fins.retain(|fin| {
-            !fins.iter().any(|other| {
-                other.sheet == fin.sheet
-                    && other.rising != fin.rising
-                    && root(parents, other.held) == root(parents, fin.held)
-            })
+            fins.iter().any(|other| other.sheet != fin.sheet)
+                || !fins.iter().any(|other| {
+                    other.sheet == fin.sheet
+                        && other.rising != fin.rising
+                        && root(parents, other.held) == root(parents, fin.held)
+                })
         });
     }
     runs.retain(|run| !run.fins.is_empty());

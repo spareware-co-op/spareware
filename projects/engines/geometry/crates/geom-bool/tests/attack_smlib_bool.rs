@@ -34,12 +34,12 @@ use geom_check::{Level, check};
 use geom_make::{BoxInput, PrismInput, make_box, prism};
 use geom_num::plane::Plane;
 use geom_num::{Exactness, P3, Steps};
-use geom_op::{ErrorKind, OpContext, OpId, OpPath};
+use geom_op::{CombineDetail, ErrorKind, OpContext, OpErrorDetail, OpId, OpPath};
 use geom_poly::convex::Piece;
 use geom_poly::merge::{Merge, Outward, Rules};
 use geom_poly::winding::Winding;
 use geom_run::{Budget, Exec, WorkMeter};
-use geom_topo::query::volume;
+use geom_topo::query::shell_volume;
 use geom_topo::{Body, BodyKind, FlatSurface, RegionKind, Sense, SurfaceKind};
 
 const SERIAL: Exec<'static> = Exec::serial();
@@ -98,7 +98,17 @@ fn sixfold(body: &Body) -> i128 {
     if body.arenas().faces.is_empty() {
         return 0;
     }
-    volume(body, &mut meter()).unwrap().to_i128().unwrap()
+    // The sum over the shells, as `volume` takes it, also for a body of two lumps that touch at an
+    // edge, which is a general body.
+    (0..body.arenas().shells.len())
+        .map(|row| {
+            let shell = geom_topo::ShellIx::new(row).unwrap();
+            shell_volume(body, shell, &mut meter())
+                .unwrap()
+                .to_i128()
+                .unwrap()
+        })
+        .sum()
 }
 
 fn checked(body: &Body) {
@@ -468,13 +478,11 @@ fn wr_614_wr_619_a_slanted_face_that_only_touches_or_just_misses_adds_the_volume
 }
 
 /// The same defect class (WR-614, WR-619, WR-727) with B's lower edge lying in the interior of A's
-/// face. The union's volume is right, 6 * (A + B), but the body `unite` returns fails the full
-/// check: A's face is not split where B's edge lies on it, so its faces cross B's faces other
-/// than along an edge. `combine` checks only at `Level::Cheap`, so it returns this as a success.
-/// A real defect in the kernel; the fix is a rebuild that keeps the contact edge in A's face (or
-/// a refusal), which is a design change to the merge step, not a minimal one.
+/// face. The union's volume is right, 6 * (A + B), and A's face is split along B's edge, so the
+/// edge has four faces and the body passes the full check (it was returned as `Ok` with A's face
+/// whole, failing it with `FacesCross`). It is a general body: two lumps joined along an edge.
 #[test]
-#[ignore = "defect: a union where an edge of one solid lies in the interior of another's face is returned as Ok but fails the full check (FacesCross); combine runs only Level::Cheap"]
+
 fn wr_614_wr_619_union_of_an_edge_lying_in_a_face() {
     let a = cuboid([-200, 160, 0], [400, 40, 40]);
     let b = slanted(0);
@@ -803,4 +811,125 @@ fn wr_191_a_refused_boolean_leaves_nothing_behind_for_the_next() {
             .body;
         assert_eq!(after, fresh, "after a budget of {budget}");
     }
+}
+
+/// B's column (a parallelogram prism like [`slanted`]) standing on A's top face (y = 200) with its
+/// lower edge in that face at `x`, from height `z` up by `height`. Its slanted face rises away
+/// from A, so the two share only that edge.
+fn leaning_on_top(x: i64, z: i64, height: u64) -> Body {
+    column(
+        &[[x, 200], [x + 40, 204], [x + 40, 244], [x, 240]],
+        z,
+        height,
+    )
+}
+
+/// The mirror of [`leaning_on_top`] under A's bottom face (y = 160).
+fn leaning_under_bottom(x: i64, z: i64, height: u64) -> Body {
+    column(
+        &[[x, 160], [x, 120], [x + 40, 116], [x + 40, 156]],
+        z,
+        height,
+    )
+}
+
+/// Every operation on A (a 400 by 40 by 40 box) and `bodies`, each touching A along an edge that
+/// lies in the interior of one of A's faces. They share no volume, so the union is the sum, A less
+/// any of them leaves A whole, any of them less A is itself, and the intersection is empty. The
+/// union must pass the full check, with `faces` faces, as the contact edge is an edge of A's face
+/// too. Returns the union.
+fn edge_in_a_face_all_ways(a: &Body, bodies: &[&Body], faces: usize) -> Body {
+    let mut operands = vec![solid(1, a)];
+    for (at, body) in bodies.iter().enumerate() {
+        operands.push(solid(2 + at as u8, body));
+    }
+    let a_volume = 6 * 400 * 40 * 40;
+    let others: i128 = bodies.iter().map(|body| sixfold(body)).sum();
+    let u = unite(&ctx(), &SERIAL, &operands).unwrap().result.body;
+    assert_eq!(sixfold(&u), a_volume + others);
+    checked(&u);
+    assert_eq!(u.arenas().faces.len() as usize, faces);
+    let d = subtract(&ctx(), &SERIAL, key(1), &operands)
+        .unwrap()
+        .result
+        .body;
+    assert_eq!(sixfold(&d), a_volume);
+    checked(&d);
+    for (at, body) in bodies.iter().enumerate() {
+        let e = subtract(&ctx(), &SERIAL, key(2 + at as u8), &operands)
+            .unwrap()
+            .result
+            .body;
+        assert_eq!(sixfold(&e), sixfold(body), "operand {at} less the rest");
+        checked(&e);
+    }
+    let i = intersect(&ctx(), &SERIAL, &operands).unwrap().result.body;
+    assert_eq!(i.arenas().faces.len(), 0);
+    u
+}
+
+/// WR-614, WR-619 and WR-727's class: B's edge lies in the middle of A's face, and the edge runs
+/// the face's whole depth. The union is one body of two lumps that touch along that edge: A's top
+/// face is split along it, so the edge has four faces (A's two halves and B's two). Difference
+/// and intersection are as they were.
+#[test]
+fn an_edge_in_the_middle_of_a_face_splits_it_in_the_union_only() {
+    let a = cuboid([-200, 160, 0], [400, 40, 40]);
+    let b = leaning_on_top(0, 0, 40);
+    // A's six faces and the top's second half, B's six.
+    let u = edge_in_a_face_all_ways(&a, &[&b], 13);
+    assert_eq!(vef(&u), (16, 26, 13));
+    assert_eq!(regions(&u), (2, 1), "two lumps, joined only along the edge");
+}
+
+/// The same with the edge one step in from A's boundary: A's top keeps a strip one step wide.
+#[test]
+fn an_edge_near_the_boundary_of_a_face_splits_it_in_the_union_only() {
+    let a = cuboid([-200, 160, 0], [400, 40, 40]);
+    for x in [199, -199] {
+        // At -199 B stands over A's left part, a step from its end at -200.
+        let b = leaning_on_top(x, 0, 40);
+        let u = edge_in_a_face_all_ways(&a, &[&b], 13);
+        assert_eq!(vef(&u), (16, 26, 13), "x = {x}");
+    }
+}
+
+/// An edge in each of two faces of A, the top and the bottom: both split, nothing else changes.
+#[test]
+fn edges_in_two_faces_split_both_in_the_union_only() {
+    let a = cuboid([-200, 160, 0], [400, 40, 40]);
+    let above = leaning_on_top(0, 0, 40);
+    let below = leaning_under_bottom(60, 0, 40);
+    let u = edge_in_a_face_all_ways(&a, &[&above, &below], 20);
+    assert_eq!(vef(&u), (24, 40, 20));
+}
+
+/// B's edge ends inside A's face, a vertex of B in the face's interior as well: the edge covers
+/// only part of the face's depth, so the face would need a slit with no area. The union is a typed
+/// refusal, never a body the checker fails; the difference and the intersection are as they were.
+#[test]
+fn an_edge_that_ends_inside_a_face_is_refused_in_the_union_only() {
+    let a = cuboid([-200, 160, 0], [400, 40, 40]);
+    let b = leaning_on_top(0, 10, 20);
+    let both = [solid(1, &a), solid(2, &b)];
+    let refused = unite(&ctx(), &SERIAL, &both).unwrap_err();
+    assert_eq!(
+        refused.detail(),
+        &OpErrorDetail::Combine(CombineDetail::ContactInsideFace)
+    );
+    assert_eq!(refused.kind(), ErrorKind::Unsupported);
+    let d = subtract(&ctx(), &SERIAL, key(1), &both)
+        .unwrap()
+        .result
+        .body;
+    assert_eq!(sixfold(&d), sixfold(&a));
+    checked(&d);
+    let e = subtract(&ctx(), &SERIAL, key(2), &both)
+        .unwrap()
+        .result
+        .body;
+    assert_eq!(sixfold(&e), sixfold(&b));
+    checked(&e);
+    let i = intersect(&ctx(), &SERIAL, &both).unwrap().result.body;
+    assert_eq!(i.arenas().faces.len(), 0);
 }

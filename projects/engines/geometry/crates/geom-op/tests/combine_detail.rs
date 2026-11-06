@@ -43,6 +43,11 @@ fn every_combine_detail_says_what_went_wrong() {
             "the selection would include the outside",
         ),
         (
+            CombineDetail::ContactInsideFace,
+            ErrorKind::Unsupported,
+            "an edge of one operand ends inside a face of another",
+        ),
+        (
             CombineDetail::SeedOnBoundary,
             ErrorKind::InvalidInput,
             "a seed lies between two pieces",
@@ -75,6 +80,7 @@ fn every_combine_detail_offers_what_it_can() {
         CombineDetail::DuplicateOperand,
         CombineDetail::UnknownOperand,
         CombineDetail::InvalidOperand,
+        CombineDetail::ContactInsideFace,
     ] {
         assert_eq!(detail.remedies(), [change("operands")]);
     }

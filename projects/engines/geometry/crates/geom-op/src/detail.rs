@@ -622,6 +622,9 @@ pub enum CombineDetail {
     NotPlaneBased,
     /// The selection would include the outside.
     UnboundedResult,
+    /// An edge of one operand lies in the interior of a face of another and ends there: the face
+    /// would need a slit with no area, which no face has.
+    ContactInsideFace,
     /// A seed lies on the boundary between two pieces.
     SeedOnBoundary,
     /// A seed lies on no piece.
@@ -647,7 +650,9 @@ impl CombineDetail {
             | CombineDetail::SeedOnBoundary
             | CombineDetail::SeedOutside
             | CombineDetail::UnboundedResult => ErrorKind::InvalidInput,
-            CombineDetail::NotPlaneBased => ErrorKind::Unsupported,
+            CombineDetail::NotPlaneBased | CombineDetail::ContactInsideFace => {
+                ErrorKind::Unsupported
+            }
             CombineDetail::NotAccepted { .. } => ErrorKind::ExactnessNotAccepted,
             CombineDetail::ResultInvalid => ErrorKind::Internal,
         }
@@ -660,7 +665,8 @@ impl CombineDetail {
         match self {
             CombineDetail::DuplicateOperand
             | CombineDetail::UnknownOperand
-            | CombineDetail::InvalidOperand => vec![change("operands")],
+            | CombineDetail::InvalidOperand
+            | CombineDetail::ContactInsideFace => vec![change("operands")],
             CombineDetail::BadSelection
             | CombineDetail::UnboundedResult
             | CombineDetail::SeedOnBoundary
@@ -688,6 +694,9 @@ impl fmt::Display for CombineDetail {
             }
             CombineDetail::UnboundedResult => {
                 f.write_str("the selection would include the outside")
+            }
+            CombineDetail::ContactInsideFace => {
+                f.write_str("an edge of one operand ends inside a face of another")
             }
             CombineDetail::SeedOnBoundary => f.write_str("a seed lies between two pieces"),
             CombineDetail::SeedOutside => f.write_str("a seed lies on no piece"),
