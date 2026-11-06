@@ -629,7 +629,7 @@ How to read an entry:
 
 **Morton key**: An integer that interleaves the bits of a point's coordinates, so sorting by it keeps nearby points nearby (piece G55).
 
-**MPL-2.0**: The Mozilla Public License 2.0, Spare Kit's licence: copyleft per file only (29).
+**MPL-2.0**: The Mozilla Public License 2.0: copyleft per file only. Not Spare Kit's licence (that is Apache-2.0, 32.45), but allowed for code we port and for dependencies; a ported file keeps it (29).
 
 **Multiprecision oracle**: A test that computes a function in much higher precision to check the kernel's error bound (piece G47).
 

@@ -5,9 +5,9 @@ edition.workspace = true
 # const f64::next_up and next_down, used by the interval bounds, are const from 1.86.
 rust-version = "1.86"
 publish.workspace = true
-# MPL-2.0 for Spare Kit's code, and MIT for the CORE-MATH functions ported into src/math/
+# Apache-2.0 for Spare Kit's code, and MIT for the CORE-MATH functions ported into src/math/
 # (rule 29.20(4); their notices are in projects/engines/geometry/NOTICE).
-license = "MPL-2.0 AND MIT"
+license = "Apache-2.0 AND MIT"
 description = "Spare Kit geometry kernel: the numbers layer. Grid coordinates, fixed-width integers, exact predicates, intervals, deterministic maths and the tolerance ladder."
 
 [dependencies]
@@ -58,7 +58,7 @@ unsafe_code = "forbid"
 missing_docs = "warn"
 # Kani sets `cfg(kani)` when it compiles a proof; proofs and the code they need sit beside the
 # code under it (chapter 28.7).
-unexpected_cfgs = { level = "warn", check-cfg = ["cfg(kani)"] }
+unexpected_cfgs = { level = "warn", check-cfg = ["cfg(coverage_nightly)", "cfg(kani)"] }
 
 [lints.clippy]
 # The crate is written to clippy's pedantic idioms; CI denies every warning.

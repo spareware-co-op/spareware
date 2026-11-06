@@ -1,0 +1,20 @@
+# The licence gate for this stack: `cargo deny check licenses`.
+[graph]
+targets = ["x86_64-unknown-linux-gnu", "aarch64-unknown-linux-gnu"]
+all-features = true
+
+[licenses]
+allow = [
+  "MIT",
+  "Apache-2.0",
+  "BSD-2-Clause",
+  "BSD-3-Clause",
+  "ISC",
+  "Zlib",
+  # Two permissive additions no Rust program can avoid. Unicode's data licence is on unicode-ident,
+  # which every Rust macro needs, and on the icu_* crates behind web addresses. The LLVM exception
+  # only widens Apache-2.0, on one build tool under Cedar.
+  "Unicode-3.0",
+  "Apache-2.0 WITH LLVM-exception",
+]
+private = { ignore = true }

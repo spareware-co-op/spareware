@@ -49,7 +49,9 @@ pub enum CurveError {
     /// have certified enclosures that do not overlap.
     Disjoint,
     /// The data or a transform collapses the kind: parallel vectors where independent ones are
-    /// needed, a zero length or direction, or a singular transform.
+    /// needed, a zero length or direction, or a singular transform; or an offset whose normal
+    /// vanishes somewhere on its domain (its basis's tangent zero there, or parallel to its
+    /// reference direction), where the offset is not defined.
     Degenerate,
     /// The work meter stopped the operation (chapter 23.10).
     Stopped(Stopped),
