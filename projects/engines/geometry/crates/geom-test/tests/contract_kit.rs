@@ -50,6 +50,7 @@ const SCHEMA: OpSchema = OpSchema {
     classes: &[Class::Exact],
     charges: &[],
     batch: false,
+    name_free: false,
     example: "seeded.op { size: 3 } gives a solid of 6 faces and 8 vertices, Exact.",
 };
 
