@@ -9,7 +9,7 @@
 //! [`orient2d`] (G14), orient2d, its exact path and its `f64` filter agree with the exact
 //! determinant of orient2d's definition, computed from scratch, which is also proven by Kani on a
 //! bounded domain; [`wide`] (G26), the wide integers agree with `num-bigint` on every
-//! operation at every width; [`variants`] (G42), every variant of every generated exact path
+//! operation at every width; and [`variants`] (G42), every variant of every generated exact path
 //! returns the exact value of its description, evaluated in big integers; [`cbor`] (G91),
 //! `geom-format`'s strict CBOR decoder and its text form never panic, refuse inside their input
 //! and convert both ways bit for bit; [`cache`] (G105), `geom-format`'s memo store keeps to its
@@ -128,8 +128,8 @@
 //!   target reads the predicates with.
 //! - `geom-format` and `geom-run` (Apache-2.0, ours), the code under test of the [`cbor`] target and
 //!   the work meter it reads with, and of the [`cache`] target with `geom-op`.
-//! - `geom-topo`, `geom-curve`, `geom-surface`, `geom-math` and `geom-run` (Apache-2.0, ours), the code
-//!   under test of the [`arenas`] target and the values that fill its arenas.
+//! - `geom-topo`, `geom-curve`, `geom-surface` and `geom-math` (Apache-2.0, ours), the code under
+//!   test of the [`arenas`] target and the values that fill its arenas.
 //! - `dashu-ratio` 0.6.1 (MIT OR Apache-2.0), without its default features: the exact rationals
 //!   of the [`nurbs`] target's oracle, `geom-test`'s NURBS reference.
 //! - `num-bigint` 0.4.8 (MIT OR Apache-2.0), the oracle of the [`wide`] and [`variants`] targets:
