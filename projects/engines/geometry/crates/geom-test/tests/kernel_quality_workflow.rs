@@ -94,7 +94,12 @@ fn text(y: &Yaml) -> &str {
 fn steps(w: &Yaml) -> Vec<(String, Yaml)> {
     let mut out = Vec::new();
     for job in keys(&w["jobs"]) {
-        for step in w["jobs"][job.as_str()]["steps"].as_vec().unwrap() {
+        // A job that calls a reusable workflow (`cheap`) has no steps of its own.
+        for step in w["jobs"][job.as_str()]["steps"]
+            .as_vec()
+            .into_iter()
+            .flatten()
+        {
             out.push((job.clone(), step.clone()));
         }
     }
@@ -117,10 +122,11 @@ fn action_pins(w: &Yaml) -> BTreeMap<String, Vec<String>> {
 
 /// The `run:` scripts of a job, joined.
 fn runs(w: &Yaml, job: &str) -> String {
+    // A job that calls a reusable workflow (`cheap`) has no steps of its own.
     w["jobs"][job]["steps"]
         .as_vec()
-        .unwrap()
-        .iter()
+        .into_iter()
+        .flatten()
         .filter_map(|s| s["run"].as_str())
         .collect::<Vec<_>>()
         .join("\n")
@@ -182,6 +188,7 @@ fn each_job_runs_on_the_events_its_gate_names() {
     assert_eq!(
         keys(jobs),
         [
+            "cheap",
             "mutants-plan",
             "mutants",
             "mutants-2",
@@ -276,7 +283,13 @@ fn permissions_are_read_only_and_credentials_are_not_kept() {
             );
         }
     }
-    assert_eq!(checkouts, keys(&w["jobs"]).len(), "one checkout per job");
+    // Every job that has steps (the job `cheap` only calls cheap-checks.yml, a workflow of this
+    // repository at the same commit, which runs no repository code).
+    let with_steps = keys(&w["jobs"])
+        .iter()
+        .filter(|job| !w["jobs"][job.as_str()]["steps"].is_badvalue())
+        .count();
+    assert_eq!(checkouts, with_steps, "one checkout per job");
 }
 
 #[cfg_attr(
