@@ -1441,7 +1441,7 @@ input:focus, select:focus, textarea:focus { outline: 2px solid var(--app-strong)
             <span>Breaking changes</span><span class="t">12 months' notice</span>
             <span>Webhooks</span><span>order, payment, message</span>
             <span>Libraries</span><span class="t">Rust, TypeScript, Python</span>
-            <span>Licence (lean)</span><span>MPL-2.0 core, Apache-2.0 SDK</span>
+            <span>Licence (lean)</span><span>Apache-2.0</span>
           </div>
           <div class="note small">Programs depend on named kit parts, never on another program. Kit services may use engines; kit-core never does.</div>
           <div class="row"><button class="btn sm" data-panel="api">Try a command</button><button class="btn sm" data-toast="Webhook test sent to your sample endpoint: 200 OK">Test a webhook</button></div>
@@ -2051,7 +2051,7 @@ const PANELS = {
   decide: () => ['How decisions are made', `<p class="small muted">Version 1.2, agreed 2 Jun 2026. <button class="link" data-toast="Showing version 1.1 side by side (sample)">Compare with 1.1</button></p>
     <ol class="stack"><li><b>Free for everyone.</b> Every Spareware app is free to use, anywhere in the world.</li><li><b>Workers keep the profit.</b> On the apps where people earn a living, workers keep all of the profit except the running costs. Nobody takes a cut on top.</li><li><b>Workers set their app's fees and rules.</b> Each app's workers vote on that app's fees and rules. At least 10% of them must vote.</li><li><b>Major changes go to every member.</b> Starting or dropping an app, or changing how fees work, goes to a poll of all members. At least 5% must vote.</li><li><b>One person, one vote.</b> AI agents never vote.</li><li><b>Open books.</b> Every running cost is published in the ledger, line by line.</li></ol>
     <div class="note small">Sample wording only. The real rules wait on piece K01 and a lawyer's check.</div>`],
-  contrib: () => ['Your contributor agreement', `<p>Signed 4 Apr 2026. You keep the copyright in your work. You let Spareware use it under its open licences.</p><div class="kv"><span>Signed by</span><span>Kiri Walker</span><span>Employer consent</span><span>On file</span><span>Licence</span><span>MPL-2.0 core</span></div>`],
+  contrib: () => ['Your contributor agreement', `<p>Signed 4 Apr 2026. You keep the copyright in your work. You let Spareware use it under its open licences.</p><div class="kv"><span>Signed by</span><span>Kiri Walker</span><span>Employer consent</span><span>On file</span><span>Licence</span><span>Apache-2.0</span></div>`],
   install: () => ['Install on your phone', `<div class="row" style="align-items:flex-start"><svg class="qr" id="qrInstall" viewBox="0 0 25 25" role="img" aria-label="Sample install code"></svg><div class="stack"><p>Scan with your phone camera. The apps install from the browser or the phone's app store, with push and location like any other app.</p><div class="small muted">Works on phones from 2018 and on slow connections.</div></div></div>`,
     `<button class="btn primary" data-toast="Install link sent to your phone by text">Text me the link</button>`, () => qr($('#qrInstall'), 77)],
   status: () => ['Your status in Spare Ride', `<p><b>Contractor.</b> The law's tests look at control, how you are paid and whether you run your own business. In Spare Ride:</p>

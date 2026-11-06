@@ -19,11 +19,10 @@ name: Kernel benchmarks
 # them:
 #  - instructions: every benchmark under Valgrind, through Gungraun. Callgrind counts instructions,
 #    L1 and last-level cache misses and estimated cycles; DHAT counts the heap the measured function
-#    uses. A rise over 5% in instructions, estimated cycles or heap fails, and so does one in a miss
-#    count of 20 or more at the merge base. A miss count below 20 cannot show a 5% change smaller
-#    than one event, and code layout alone moves it by one or two, so its changes are listed and
-#    judged through estimated cycles, which weight every miss (chapter 23.13; piece G18a;
-#    geom_bench::callgrind judges them from Gungraun's summary files). It runs twice, on Linux
+#    uses. A rise over 5% in instructions, estimated cycles or heap fails. Code layout alone moves
+#    miss counts, at every size, so every miss count's changes are listed and judged through
+#    estimated cycles, which price every miss (chapter 23.13; geom_bench::callgrind judges them
+#    from Gungraun's summary files). It runs twice, on Linux
 #    x86-64 and on Linux aarch64, each leg a gate of its own under the same rule, so with the fuel
 #    job every benchmark is measured on the three targets chapter 23.3 names: x86-64 and aarch64
 #    natively, and wasm32 (piece G28).
@@ -44,6 +43,10 @@ name: Kernel benchmarks
 #  - The measured function runs its kernel twice and Callgrind's costs are zeroed at the start of
 #    each pass, so the counts are those of a warm second pass; every function is aligned to a cache
 #    line (RUSTFLAGS below), so no count depends on where code or data happened to be placed.
+#  - Each tree's measured build is one codegen unit per crate (CARGO_PROFILE_BENCH_CODEGEN_UNITS
+#    and, for the fuel guest, CARGO_PROFILE_RELEASE_CODEGEN_UNITS below). With Cargo's default 16,
+#    rustc's split of geom-bench into units moves whenever a benchmark module is added, and
+#    inlining moves with it in benchmarks nobody touched (chapter 23.13).
 #  - Base and change are built with the toolchains pinned in their own geom-bench/toolchain.txt
 #    (the same one unless the change bumps it; a test keeps it equal to kernel.yml's), installed
 #    with dtolnay/rust-toolchain, on one runner, in one job, and only those two runs are compared.
@@ -113,8 +116,7 @@ env:
   LIST_PERCENT: "1"
   # Gungraun's soft limits for the measures it gates itself (geom_bench::CALLGRIND_LIMITS and
   # DHAT_LIMITS; a test checks they agree). They replace the tree's own. The miss counts are not
-  # here: geom-bench-counts judges them from the summaries, gated at GATE_PERCENT only on counts
-  # that can resolve it.
+  # here: geom-bench-counts lists them from the summaries and judges them through estimated cycles.
   CALLGRIND_LIMITS: "ir=5%,estimatedcycles=5%"
   DHAT_LIMITS: "totalbytes=5%,totalblocks=5%,attgmaxbytes=5%,maximumbytes=5%"
   # What is compared: a pull request's base branch and head, or the main a push replaced and the
@@ -297,6 +299,10 @@ jobs:
       # Every function on its own cache line, so the code the measured pass runs only once sits on
       # lines it already fetched (geom_bench::harness).
       RUSTFLAGS: "-C llvm-args=-align-all-functions=6"
+      # Both trees' benchmark binaries in one codegen unit per crate, so which functions are inlined
+      # does not depend on how rustc splits geom-bench into units (chapter 23.13). Set here, not in
+      # a Cargo profile, so the merge base, which has no such profile, is built the same way.
+      CARGO_PROFILE_BENCH_CODEGEN_UNITS: "1"
       MERGE_BASE: ${{ needs.scope.outputs.merge_base }}
       HAS_BASE: ${{ needs.scope.outputs.base_gate }}
       BASE_TOOLCHAIN: ${{ needs.scope.outputs.base_toolchain }}
@@ -422,10 +428,9 @@ jobs:
 
       # The miss counts (and instructions and estimated cycles again, exactly), judged from the
       # summaries the gate saved, by one rule on both legs (geom_bench::callgrind; chapter 23.13):
-      # a rise over 5% fails on instructions, on estimated cycles, and on a miss count of 20 or more
-      # at the merge base, the smallest count on which one event is within 5%. A smaller miss count
-      # would fail on any single event, which code layout alone causes, so its changes are listed
-      # and judged through estimated cycles. Every benchmark the run lists must have exactly one
+      # a rise over 5% fails on instructions and on estimated cycles. Code layout alone moves miss
+      # counts, so every miss count's changes are listed and judged through estimated cycles, which
+      # price every miss. Every benchmark the run lists must have exactly one
       # summary with every count, or the judgement fails. It runs after a failed gate too, to
       # report everything.
       - name: Judge instructions, cycles and cache misses from the summaries
@@ -463,8 +468,7 @@ jobs:
       # When the gate or the judge finds a rise, each regressed benchmark's Callgrind output for the
       # merge base and the pull request, function by function (`callgrind_annotate`, part of
       # Valgrind), so the rise can be traced to the code that costs it from the job log alone: the
-      # gate's regressions, and the judge's rises over the limit, which include miss counts the
-      # gate does not judge. It measures nothing and only reads the saved runs; `-e` is off so one
+      # gate's regressions, and the judge's rises over the limit. It measures nothing and only reads the saved runs; `-e` is off so one
       # missing output cannot end the tracing of the others.
       - name: Trace each rise function by function
         if: failure() && (steps.gate.outcome == 'failure' || steps.judge.outcome == 'failure')
@@ -571,10 +575,9 @@ jobs:
             echo "Merge base \`${MERGE_BASE:0:12}\` (Rust $BASE_TOOLCHAIN) against" \
               "\`${HEAD_SHA:0:12}\` (Rust $HEAD_TOOLCHAIN), measured in one job with" \
               "$(valgrind --version 2>/dev/null). The gate: no benchmark's instructions, estimated" \
-              "cycles or heap use may rise by more than $GATE_PERCENT%, nor any cache-miss count" \
-              "large enough to resolve $GATE_PERCENT% (20 or more at the merge base; smaller ones" \
-              "are listed and judged through estimated cycles), and every benchmark's inputs and" \
-              "results must match golden.txt."
+              "cycles or heap use may rise by more than $GATE_PERCENT% (every cache-miss count" \
+              "that changed is listed and judged through estimated cycles), and every benchmark's" \
+              "inputs and results must match golden.txt."
             echo
             case "$GATE_OUTCOME/$HAS_BASE" in
               success/true)
@@ -726,6 +729,10 @@ jobs:
           echo "COUNTS=$CARGO_TARGET_DIR/release/geom-bench-counts" >> "$GITHUB_ENV"
 
       - name: Build each tree's guest for wasm32-wasip1
+        env:
+          # One codegen unit per crate for both guests, as the instructions job's builds (chapter
+          # 23.13); on this step only, so the fuel host and the count checks keep Cargo's default.
+          CARGO_PROFILE_RELEASE_CODEGEN_UNITS: "1"
         run: |
           set -euo pipefail
           # Each tree's guest in a target directory of its own: in one shared directory cargo would
