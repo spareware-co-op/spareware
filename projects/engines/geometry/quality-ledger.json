@@ -6321,8 +6321,7 @@
       "occurrences": 1,
       "kind": "harmless",
       "reason": "The probe moves from b + (b - a) + 1 to b + (b - a), still past the end since b > a. A kind keeping the contract refuses every parameter outside its domain, so both probes see the same refusal; a kind that refuses some parameters past its end and not others may slip past either."
-    },
-    {}
+    }
   ],
   "coverage_off": [
     {
