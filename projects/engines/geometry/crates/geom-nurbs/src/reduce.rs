@@ -41,7 +41,7 @@
 //!   and basis maxima from a numerical search) and its weight range are replaced by the certified
 //!   bound above, so the square root of its odd-degree estimate is not needed; a new curve is
 //!   returned with its deviation instead of a flag.
-//! SPDX-License-Identifier: MPL-2.0 AND Apache-2.0
+//! SPDX-License-Identifier: Apache-2.0
 //!
 //! Cost: O(s·p²) operations for s spans to reduce, and an elevation and a refinement of the
 //! result in intervals to certify, O(s·p²) more; the candidate and the enclosures are allocated

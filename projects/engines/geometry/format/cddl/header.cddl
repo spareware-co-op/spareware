@@ -1,0 +1,10 @@
+; The header record's payload (tag 1, schema 1): format 1 (draft), SPEC.md section 6.
+header = [
+  format: [major: 1, minor: uint],
+  edition: uint,
+  name-scheme: uint,
+  ladder: { * uint => int },
+  unicode: [uint, uint, uint],
+  program: tstr,
+  extensions: { * uint => any },
+]

@@ -39,7 +39,7 @@
 //!   that its knots are finite, ordered, interior and leave every multiplicity at most p, which
 //!   `N_CrvRefine` does not; the zero test of `N_CrvRefine` compares the two knots instead of
 //!   their computed difference with zero.
-//! SPDX-License-Identifier: MPL-2.0 AND Apache-2.0
+//! SPDX-License-Identifier: Apache-2.0
 //!
 //! Cost: insertion takes O(n + r·p) operations and refinement O(n + (n + k)·p) for k new knots,
 //! each twice; each allocates the result's points and knots and its enclosure.

@@ -1137,7 +1137,7 @@ The licence, proof that it is built legally, privacy, fair moderation of shared 
 
 | ID | Part | Kind | Size | Depends on | Piece |
 | --- | --- | --- | --- | --- | --- |
-| CON-A24-F1-P1 | **Licence choice**. MPL-2.0 core with an Apache-2.0 SDK, or an alternative, decided by an owner. | legal | small |  | [A14](STATUS.md) |
+| CON-A24-F1-P1 | **Licence choice**. Apache-2.0 for everything, decided by an owner (2026-11-05). | legal | small |  | [A14](STATUS.md) |
 | CON-A24-F1-P2 | **Contribution sign-off**. Spare Construct follows the kit's contributor sign-off (KIT-A14-F16-P1). It adds only that kernel, file format and API changes need their code owners' review. | legal | small | CON-A24-F1-P1, KIT-A14-F16-P1 |  |
 | CON-A24-F1-P3 | **Dependency licence check**. Spare Construct's ground rule 3 as a rule in the kit's dependency checks (KIT-A22-F5-P2): no GPL or AGPL code in the kernel, file format or core crates. | service | small | KIT-A22-F5-P2 |  |
 | CON-A24-F1-P4 | **Provenance records**. Each Spare Construct method note records the open project studied, its licence, and whether code was reused or only the method, as for planegcs (LGPL, method only). | data | small |  |  |

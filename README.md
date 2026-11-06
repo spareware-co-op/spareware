@@ -156,8 +156,8 @@ Any major change, such as starting or dropping a program, changing an architectu
 
 ## Licence
 
-**Decided, and never to change.** Spareware's core is licensed under the [Mozilla Public License 2.0](LICENSE). The SDK, examples and plugin templates that people use to build add-ins are licensed under the [Apache License 2.0](LICENSE-APACHE), so add-ins can use any licence.
+**Decided (2026-11-05).** Everything in Spareware is licensed under the [Apache License 2.0](LICENSE): the core, the SDK, the examples and the plugin templates. Add-ins built on top can use any licence. The kernel's `NOTICE` file lists the outside code it ports, each file keeping its own licence.
 
-- **Never relicensed.** Spareware will never be moved to a closed, paid or subscription licence.
-- **You keep the copyright to your work.** There is no contributor licence agreement. Every commit is signed off with the [Developer Certificate of Origin](https://developercertificate.org/) (`git commit -s`), which says you have the right to contribute it under these licences. Because the copyright stays spread across everyone who contributes, nobody, including the project's owners, can relicense what the community builds.
-- **Improvements come back.** Under MPL-2.0, anyone who changes Spareware's own files and shares the result must share those changes openly. Products and add-ins built on top can use any licence.
+- **Never closed.** Spareware will never be moved to a closed, paid or subscription licence.
+- **You keep the copyright to your work.** There is no contributor licence agreement. Every commit is signed off with the [Developer Certificate of Origin](https://developercertificate.org/) (`git commit -s`), which says you have the right to contribute it under this licence. The copyright stays with everyone who contributes, so no one is given extra rights over your work.
+- **Open and permissive.** Anyone may use, change and share Spareware's code, in open or closed products, if they keep the licence text and `NOTICE` files and say what they changed. Apache-2.0 also grants a patent licence from each contributor for their own contribution.

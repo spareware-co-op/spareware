@@ -1,0 +1,17 @@
+; The names record's payload (tag 16, schema 1): format 1 (draft), SPEC.md section 10.
+; CDDL by RFC 8610. The first rule is the one a payload is validated against; the history record's
+; schema (history.cddl) uses this file's rules for paths, roles, piece keys and names.
+names = [* name-node]
+name-node = [id: name-id, name: topo-name]
+name-id = bstr .size 16
+topo-name = created / split / merged / bounded / weak
+created = [0, op: op-path, role: role, from: [* name-id]]
+split = [1, op: op-path, of: name-id, piece: piece-key]
+merged = [2, op: op-path, of: [* name-id]]
+bounded = [3, kind: 0 / 1, by: [* name-id], ends: [* name-id]]
+weak = [4, base: name-id, ord: [n: uint, of: uint]]
+op-path = [op-id: bstr .size 16, * label]
+label = tstr / bstr .size 16
+role = [name: tstr, * role-arg]
+role-arg = bstr .size 16 / uint
+piece-key = [0, tools: [* name-id], side: 0 / 1]
