@@ -452,7 +452,7 @@ impl<const L: usize> Chain<L> {
 
     /// A chain of no polynomials, for [`Chain::fill`] to set up where the chain will live: a chain
     /// is large, and building it in place saves the copies a return by value makes.
-    pub const EMPTY: Chain<L> = Chain {
+    pub(crate) const EMPTY: Chain<L> = Chain {
         polys: [Poly {
             terms: [Wide::<L>::ZERO; TERMS],
             degree: 0,
@@ -466,7 +466,7 @@ impl<const L: usize> Chain<L> {
     ///
     /// As [`Chain::of`].
     #[inline(never)]
-    pub fn fill(&mut self, coefficients: &[Wide<L>; TERMS]) -> Result<(), NumError> {
+    pub(crate) fn fill(&mut self, coefficients: &[Wide<L>; TERMS]) -> Result<(), NumError> {
         let degree = degree_of(coefficients).ok_or(NumError::Degenerate)?;
         if degree == 0 {
             return Err(NumError::Degenerate);
