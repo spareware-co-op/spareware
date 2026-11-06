@@ -86,8 +86,7 @@ fn wr_470_a_changed_byte_in_a_stored_body_is_refused_or_changes_nothing() {
                         // another body; reading it is not the reader's to refuse, but the
                         // checker the file's trust runs (24.4) must not pass what was read.
                         let report =
-                            check(&back, Exactness::Exact, Level::Full, &mut meter())
-                                .unwrap();
+                            check(&back, Exactness::Exact, Level::Full, &mut meter()).unwrap();
                         assert!(
                             !report.passed(),
                             "record {which}, byte {at}, xor {flip:#x}: another body passes the checker"

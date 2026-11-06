@@ -88,14 +88,8 @@ fn ub_166_knots_a_hair_from_the_start_knot_are_refused_or_evaluate_on_the_plane(
                 match point_at(&k, pu, pv) {
                     Ok(p) => {
                         assert!(p.iter().all(|x| x.is_finite()), "knots {v:?}: {p:?}");
-                        assert!(
-                            p[0] >= -1e-9 && p[0] <= u_hi + 1e-9,
-                            "knots {v:?}: x {p:?}"
-                        );
-                        assert!(
-                            p[1] >= -1e-9 && p[1] <= v_hi + 1e-9,
-                            "knots {v:?}: y {p:?}"
-                        );
+                        assert!(p[0] >= -1e-9 && p[0] <= u_hi + 1e-9, "knots {v:?}: x {p:?}");
+                        assert!(p[1] >= -1e-9 && p[1] <= v_hi + 1e-9, "knots {v:?}: y {p:?}");
                         assert!(
                             (p[2] - (p[0] + p[1])).abs() <= 1e-6 * (1.0 + p[2].abs()),
                             "knots {v:?}: off the plane {p:?}"
