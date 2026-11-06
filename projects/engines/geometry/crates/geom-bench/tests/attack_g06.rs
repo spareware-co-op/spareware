@@ -1322,6 +1322,24 @@ fn direct_digest(group: &str, name: &str, class: Class) -> Option<Digest> {
                 geom_intersect::curve::curves(a, b, &mut meter)
             }))
         }
+        ("intersect", "surface_plane") => {
+            fold(inputs::intersect::line_planes(class).iter().map(|(c, s)| {
+                let mut meter = geom_run::WorkMeter::new(geom_run::Budget::UNLIMITED);
+                geom_intersect::curve_surface::curve_surface(c, s, &mut meter)
+            }))
+        }
+        ("intersect", "surface_torus") => {
+            fold(inputs::intersect::line_tori(class).iter().map(|(c, s)| {
+                let mut meter = geom_run::WorkMeter::new(geom_run::Budget::UNLIMITED);
+                geom_intersect::curve_surface::curve_surface(c, s, &mut meter)
+            }))
+        }
+        ("intersect", "surface_patch") => fold(inputs::intersect::cubic_patches(class).iter().map(
+            |(c, s)| {
+                let mut meter = geom_run::WorkMeter::new(geom_run::Budget::UNLIMITED);
+                geom_intersect::curve_surface::curve_surface(c, s, &mut meter)
+            },
+        )),
         ("intersect", "curve_loop") => fold(inputs::intersect::loops(class).iter().map(|c| {
             let mut meter = geom_run::WorkMeter::new(geom_run::Budget::UNLIMITED);
             geom_intersect::curve::self_crossings(c, &mut meter)
