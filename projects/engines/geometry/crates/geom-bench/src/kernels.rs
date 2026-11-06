@@ -1773,11 +1773,23 @@ pub mod bvh {
 
 /// The triangulation's hot path (piece G153, decision 32.44).
 pub mod mesh {
+    use geom_mesh::exact::build::{Polygons, build};
+    use geom_mesh::exact::{ExactMesh, MeshError};
     use geom_mesh::{Cdt, CdtError, triangulate};
-    use geom_run::{Budget, WorkMeter};
+    use geom_run::{Budget, Exec, WorkMeter};
 
     use super::run;
     use crate::inputs::mesh::Terrain;
+
+    /// `geom_mesh::exact::build::build` on each set of polygons, serially, under an unlimited
+    /// budget.
+    #[inline(never)]
+    pub fn exact_build(batch: &[Polygons], out: &mut Vec<Result<ExactMesh, MeshError>>) {
+        run(batch, out, |polygons| {
+            let mut meter = WorkMeter::new(Budget::UNLIMITED);
+            build(polygons, &Exec::serial(), &mut meter)
+        });
+    }
 
     /// `geom_mesh::triangulate` on each terrain, under an unlimited budget.
     #[inline(never)]

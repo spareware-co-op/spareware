@@ -65,6 +65,8 @@ pub struct ExactMesh {
 
 **Raw meshes.** Imported soups that are open, non-manifold or self-intersecting are a separate type, `RawMesh`. Its vertices are grid points, because import always rounds into the frame first (19.7, step 1); only its topology is unchecked. It is the mesh counterpart of a Tolerant body: an import state that healing turns into an exact mesh. Only healing, reconstruction, display and clash accept a `RawMesh`, and clash reports surface contacts on it only (19.11), because inside and outside are undefined for an open surface.
 
+**As built (G146).** `geom-mesh::exact` holds the arrays above as `Parts`; `ExactMesh::new` is the only way to a mesh, and it runs the whole checker group. A face and an edge plane each hold a `Facing`, a row and whether it looks the other way, because a canonical plane has one sign. An edge plane faces into its face. Grid vertices sort before three-plane ones. On a shared development machine a million triangles with a million planes of their own build and check in about 1.9 s on 1 thread and 1.1 s on 8, and check alone in 0.25 s and 0.09 s; sorting the pool is the largest step. Chapter 30's 0.5 s is not reached.
+
 **What it never does.** No `f64` coordinates. No per-mesh epsilon: Manifold's is a relative precision times the largest coordinate of the bounding box, so the same shape is decided differently in a different place ([01](../../../kit/notes/G01-evidence/01-manifold-mesh-booleans.md), section 1). No global counters. No vertex welding inside an operation.
 
 ## 19.3 Watertight tessellation of B-reps
