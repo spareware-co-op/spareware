@@ -715,8 +715,8 @@ struct RunFin {
     rising: bool,
     held: usize,
     bound: Plane,
-    /// Whether the sheet's two fins here were kept apart because another sheet's edge lies along
-    /// them, not because a cut holds a seam.
+    /// Whether this is the rising fin of a sheet's two fins here that were kept apart because
+    /// another sheet's edge lies along them, not because a cut holds a seam.
     contact: bool,
 }
 
@@ -821,15 +821,12 @@ fn sweep(
             };
             match (net, up, down) {
                 (0, Some(a), Some(b)) if cut || meeting => {
-                    let contact = !cut;
+                    // Only the rising fin says a contact, not a cut, holds the pair apart.
                     fins.push(RunFin {
-                        contact,
+                        contact: !cut,
                         ..fin(a, true)
                     });
-                    fins.push(RunFin {
-                        contact,
-                        ..fin(b, false)
-                    });
+                    fins.push(fin(b, false));
                 }
                 (0, Some(a), Some(b)) => join(parents, a.held, b.held),
                 (1, Some(side), None) => fins.push(fin(side, true)),
@@ -1126,7 +1123,7 @@ fn without_slits(mut runs: Vec<Run>, parents: &[usize]) -> Result<Vec<Run>, Merg
                     && other.rising != fin.rising
                     && root(parents, other.held) == root(parents, fin.held)
             });
-            slit |= partner.is_some_and(|other| fin.contact && other.contact);
+            slit |= fin.contact && partner.is_some();
             partner.is_none()
         });
         if slit {
