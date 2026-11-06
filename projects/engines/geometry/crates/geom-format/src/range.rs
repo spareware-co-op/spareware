@@ -99,7 +99,7 @@ impl core::error::Error for RangeError {}
 /// How many bits the magnitude of `v` needs: 0 for 0.
 #[must_use]
 pub const fn bits(v: i128) -> u32 {
-    v.unsigned_abs().bit_width()
+    u128::BITS.saturating_sub(v.unsigned_abs().leading_zeros())
 }
 
 /// Whether `v` is a grid coordinate of the frame, `|v| ≤ 2^40 − 1`.

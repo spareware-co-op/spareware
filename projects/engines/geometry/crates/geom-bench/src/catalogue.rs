@@ -396,6 +396,8 @@ pub static OPS: &[Op] = &[
     // each built for a scene and queried.
     Op { group: "bvh", name: "tree_build_query", measures: "geom_bvh::BoxTree::build", classes: T, prepare: |c| bind(inputs::bvh::tree_build_query(c), kernels::bvh::tree_build_query) },
     Op { group: "bvh", name: "cells_within", measures: "geom_bvh::CellIndex::build", classes: T, prepare: |c| bind(inputs::bvh::cells_within(c), kernels::bvh::cells_within) },
+    // The attribute step's hot path (piece G90; decision 32.44).
+    Op { group: "attributes", name: "apply", measures: "geom_name::classes::apply", classes: T, prepare: |c| bind(inputs::attributes::apply(c), kernels::attributes::apply) },
     // geom-topo's hot paths (piece G80; decision 32.44): a column's copy on write, and publishing.
     Op { group: "topo", name: "column_edit", measures: "geom_topo::Column::set", classes: T, prepare: |c| bind(inputs::topo::column_edit(c), kernels::topo::column_edit) },
     Op { group: "topo", name: "publish", measures: "geom_topo::Builder::publish", classes: T, prepare: |c| bind(inputs::topo::publish(c), kernels::topo::publish) },
@@ -436,7 +438,7 @@ pub static OPS: &[Op] = &[
 ];
 
 /// The groups of [`OPS`], in order.
-pub const GROUPS: [&str; 33] = [
+pub const GROUPS: [&str; 34] = [
     "predicate",
     "sign",
     "wide",
@@ -461,6 +463,7 @@ pub const GROUPS: [&str; 33] = [
     "ball",
     "math_types",
     "bvh",
+    "attributes",
     "topo",
     "nurbs",
     "curve",

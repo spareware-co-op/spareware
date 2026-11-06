@@ -5417,6 +5417,22 @@
       "occurrences": 1,
       "kind": "equivalent",
       "reason": "Two records with equal keys, the same class and the same bound, are the same record here: every copy of a pattern takes its grid step from the input, or from the one ceiling the caller gave, so a and b differ in nothing either branch could return."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-format/src/kinds.rs",
+      "mutant": "replace < with <= in end",
+      "line_text": "if x.is_infinite() && (x < 0.0) == low {",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "The comparison is reached only when x is infinite, and for ±∞ x < 0 and x <= 0 agree."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-format/src/kinds.rs",
+      "mutant": "replace < with <= in read_round_tail",
+      "line_text": "Ok((read_frame(d, m)?, read_box(d, m)?, read_sign(d, m)? < 0.0))",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "read_sign returns only 1.0 or -1.0, never 0, so s < 0 and s <= 0 agree."
     }
   ],
   "coverage_off": [
