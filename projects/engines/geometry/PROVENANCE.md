@@ -9,7 +9,7 @@ This is the record of what the geometry kernel's code takes from outside sources
 | Class (29.1) | Sources | Files that take them |
 | --- | --- | --- |
 | PORT | 11 | 18 |
-| PORT METHOD | 38 | 35 |
+| PORT METHOD | 39 | 36 |
 | DEPEND | 5 | 4 |
 
 3 method note(s) under the method-only procedure (29.20, rule 6).
