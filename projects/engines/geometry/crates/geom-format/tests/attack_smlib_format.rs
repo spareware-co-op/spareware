@@ -21,9 +21,11 @@
 #[path = "../../geom-topo/tests/common/mod.rs"]
 mod topo;
 
+use geom_check::{Level, check};
 use geom_format::body::{read_body, write_body};
 use geom_format::cbor::Decoder;
 use geom_format::kinds::{DEPTH, read_curve, read_surface};
+use geom_num::Exactness;
 use topo::{many_faces, meter, wall};
 
 /// solidcore plan/upstream-issues/UB-3--polymorphic-curve-and-surface-readers-recurse-without-a.md
@@ -54,7 +56,8 @@ fn ub_3_a_file_of_200000_nested_offsets_is_refused_not_followed() {
 /// (b4de2149): single-byte overwrites of stored B-reps read back as successes with radial edge
 /// use lists its own validation then rejected. A stored body is bound to its bytes by content
 /// IDs, so ours owes the same: a changed byte in any record, the index or a chunk, is a refusal,
-/// or the body read back is the body stored. A different body is never an `Ok`.
+/// or the body read back is the body stored, or the checker refuses it: a different body that
+/// passes the checker is never an `Ok`.
 #[test]
 fn wr_470_a_changed_byte_in_a_stored_body_is_refused_or_changes_nothing() {
     for body in [wall(), many_faces(3)] {
@@ -76,10 +79,18 @@ fn wr_470_a_changed_byte_in_a_stored_body_is_refused_or_changes_nothing() {
                         &mut bad.chunks[which]
                     };
                     record.payload[at] ^= flip;
-                    if let Ok(back) = read_body(&bad, &mut meter()) {
-                        assert_eq!(
-                            back, body,
-                            "record {which}, byte {at}, xor {flip:#x} read back a different body"
+                    if let Ok(back) = read_body(&bad, &mut meter())
+                        && back != body
+                    {
+                        // The index is the root of the hash tree, so a changed index names
+                        // another body; reading it is not the reader's to refuse, but the
+                        // checker the file's trust runs (24.4) must not pass what was read.
+                        let report =
+                            check(&back, Exactness::Exact, Level::Full, &mut meter())
+                                .unwrap();
+                        assert!(
+                            !report.passed(),
+                            "record {which}, byte {at}, xor {flip:#x}: another body passes the checker"
                         );
                     }
                 }

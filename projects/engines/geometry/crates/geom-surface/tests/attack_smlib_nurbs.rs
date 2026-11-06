@@ -20,7 +20,7 @@
 
 use geom_nurbs::{Basis, Limit, Surface};
 use geom_run::{Budget, WorkMeter};
-use geom_surface::{SurfaceKind, partial_index};
+use geom_surface::{ParamSurface, SurfaceKind, partial_index};
 
 const SIDES: (Limit, Limit) = (Limit::FromRight, Limit::FromRight);
 
