@@ -30,7 +30,7 @@ name: Kernel gate
 #   no_std kernel crate with deny-no-std.toml, the vetted allow-list: only the published crates
 #   on it (libm today), each at its pinned version, ship in it. The gate's own rules run on each
 #   same graph: no crate outside the workspace skips the licence check as private, our own
-#   crates' licence fields hold 29.2's identifiers (and MPL-2.0 for the family), no crate comes
+#   crates' licence fields hold 29.2's identifiers (and Apache-2.0 for the family), no crate comes
 #   from a folder outside the workspace or takes a family crate's name, a no_std crate's
 #   published crates are the vetted ones at their versions from crates.io, and every licence
 #   choice is recorded. Then each rule fails on seeded graphs.
