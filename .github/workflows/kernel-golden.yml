@@ -131,6 +131,10 @@ jobs:
         with:
           toolchain: ${{ env.RUST_TOOLCHAIN }}
       - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
+        with:
+          # Only main saves the cache; a pull request restores main's (a pull request's own
+          # caches filled the repository's cache limit and evicted what main saved).
+          save-if: ${{ github.ref == 'refs/heads/main' }}
         if: github.event_name != 'pull_request_review' || steps.edits.outputs.store == 'edited'
       - name: The store against the repository
         if: github.event_name != 'pull_request_review'

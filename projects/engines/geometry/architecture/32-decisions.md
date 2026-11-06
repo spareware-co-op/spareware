@@ -798,8 +798,10 @@ Every merge gate and the violation seeded to make it fail. R: the real tool runs
 | Workflow | Job | Seeded violation |
 | --- | --- | --- |
 | `kernel.yml` | `test` | J: `geom-test/tests/attack_g19.rs::a_run_that_does_not_prove_its_goldens_is_refused`; R: the job `guard` |
+| `kernel.yml` | `suite` | The tests of `test`: every test of every kernel crate once per target and mode, in parts (`cargo nextest run --partition count:k/n`, doctests in part 1); a failing test fails its part (J: `geom-test/tests/attack_g19.rs::kernel_yml_runs_every_golden_in_every_native_build_mode`) |
 | `kernel.yml` | `guard` | R: the job itself (`libm`'s `sin` changed by one bit must fail a golden); J: `geom-test/tests/attack_g20.rs::a_trip_counts_only_for_the_right_reason` |
 | `kernel.yml` | `wasm` | R: each leg first runs `guard prove --golden-run --target wasm32-wasip1 --release`: `libm`'s `sin` changed by one bit must make the leg's own `golden run` fail, under wasmtime and under Node, with `geom-num/determinism`'s digest differing from the store's; J: `geom-test/tests/attack_g19.rs::a_run_that_does_not_prove_its_goldens_is_refused` |
+| `kernel.yml` | `wasm-suite` | The tests of `wasm`: geom-num's test vectors and the whole suite in release on wasm32, under wasmtime and under Node |
 | `kernel.yml` | `lint` | `trip fmt`; R: `engine-geometry/tests/scaffold/gate.rs::gate_clippy_fails_on_each_seeded_violation` |
 | `kernel-build.yml` | `list` | Not a gate: it lists the crates the other jobs build, and fails when it lists none |
 | `kernel-build.yml` | `build` | R: `engine-geometry/tests/scaffold/gate.rs::gate_build_fails_on_seeded_violations` |
@@ -818,10 +820,12 @@ Every merge gate and the violation seeded to make it fail. R: the real tool runs
 | `kernel-golden.yml` | `store` | J: `geom-test/tests/attack_g19.rs::seeded_violations_of_the_real_tree_are_found`; R: `geom-test/tests/attack_g19.rs::golden_diff_holds_a_change_to_the_owner_rule_end_to_end` |
 | `kernel-golden.yml` | `fixtures` | J: `geom-test/tests/fixture_tool.rs::a_tree_that_breaks_a_rule_fails_its_check`; R: `geom-test/tests/fixture_tool.rs::diff_holds_a_pull_request_to_the_rules` |
 | `kernel-bench.yml` | `scope` | Not a gate: it decides which count jobs run, from the same paths as the workflow's trigger |
+| `kernel-bench.yml` | `cheap` | Not a gate: it waits for the cheap checks (format and lints, clippy, scaffold, sign-off) of the pull request's head commit and fails if one failed, so the heavy jobs of this workflow start only when they passed |
 | `kernel-bench.yml` | `checks` | The tools of `kernel.yml`'s `lint`: `trip fmt`; R: `engine-geometry/tests/scaffold/gate.rs::gate_clippy_fails_on_each_seeded_violation` |
 | `kernel-bench.yml` | `instructions` | `trip gungraun`, on both legs; J: `geom-bench/tests/attack_g18a.rs::a_real_rise_in_estimated_cycles_fails`, `geom-bench/tests/attack_g18a.rs::the_command_line_passes_fails_and_refuses_as_the_rule_says` |
 | `kernel-bench.yml` | `fuel` | `trip fuel`; J: `geom-bench/src/counts.rs::growth_passes_the_stated_order_and_fails_the_next`, `geom-bench/src/counts.rs::compare_finds_rises_listings_removals_and_additions` |
 | `kernel-fuzz.yml` | `libfuzzer` | `trip libfuzzer` |
+| `kernel-fuzz.yml` | `cheap` | Not a gate: it waits for the cheap checks (format and lints, clippy, scaffold, sign-off) of the pull request's head commit and fails if one failed, so the heavy jobs of this workflow start only when they passed |
 | `kernel-fuzz.yml` | `kani` | `trip kani-fuzz` |
 | `kernel-fuzz.yml` | `kani-num` | `trip kani-num` |
 | `kernel-fuzz.yml` | `kani-format` | `trip kani-format` |
@@ -830,6 +834,7 @@ Every merge gate and the violation seeded to make it fail. R: the real tool runs
 | `kernel-fuzz.yml` | `clusterfuzzlite` | `trip clusterfuzzlite`, run by the job `clusterfuzzlite-seeded` through this job's actions' own images with this job's inputs: the actions build a fresh clone of the pull request, which a planted line never reaches |
 | `kernel-fuzz.yml` | `clusterfuzzlite-seeded` | `trip clusterfuzzlite`: the job is `clusterfuzzlite`'s seeded run, and fails if ClusterFuzzLite's build and fuzzing stop finding the planted crash |
 | `kernel-quality.yml` | `mutants-plan` | J: `geom-test/tests/quality_gates.rs::shard_plans_fit_the_budget_and_a_matrix` |
+| `kernel-quality.yml` | `cheap` | Not a gate: it waits for the cheap checks (format and lints, clippy, scaffold, sign-off) of the pull request's head commit and fails if one failed, so the heavy jobs of this workflow start only when they passed |
 | `kernel-quality.yml` | `mutants` | R: `geom-test/tests/seeded_gates.rs::a_seeded_survivor_fails_the_mutation_gate_until_a_test_catches_it`; J: `geom-test/tests/kernel_quality_workflow.rs::every_gate_is_judged_and_tool_failures_are_not_swallowed` |
 | `kernel-quality.yml` | `mutants-2` | The tests of `mutants`: shards 256 on, with its steps word for word (J: `geom-test/tests/kernel_quality_workflow.rs::every_shard_and_partition_runs_once`) |
 | `kernel-quality.yml` | `mutants-judge` | R: `geom-test/tests/seeded_gates.rs::a_pull_request_that_adds_a_survivor_fails_the_diff_gate`; J: `geom-test/tests/quality_gates.rs::stale_entries_fail` |
