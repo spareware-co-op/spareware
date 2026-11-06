@@ -29,8 +29,8 @@ static ALLOCATOR: Cap<System> = Cap::new(System, usize::MAX);
 fn a_refused_reservation_stops_the_check() {
     let body = cube().body(BodyKind::Solid);
     let faults = MAX_FAULTS * size_of::<Fault>();
-    // The cube's scratch: four words per vertex and one per edge, its largest need.
-    let scratch = (4 * 8 + 12) * size_of::<u32>();
+    // The cube's scratch: three words per vertex and one per edge, its largest need.
+    let scratch = (3 * 8 + 12) * size_of::<u32>();
     let mut outcomes = Vec::new();
     for room in [
         0,
