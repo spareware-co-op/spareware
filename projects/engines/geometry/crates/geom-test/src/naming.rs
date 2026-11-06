@@ -1431,10 +1431,7 @@ pub fn scenarios() -> Result<Vec<Fixture>, NamingError> {
                     }),
                     kept.clone(),
                 ),
-                (
-                    Edit::Regenerate(with_door(12, |d| d.x = 200)),
-                    kept.clone(),
-                ),
+                (Edit::Regenerate(with_door(12, |d| d.x = 200)), kept.clone()),
             ],
         ),
         fixture(
