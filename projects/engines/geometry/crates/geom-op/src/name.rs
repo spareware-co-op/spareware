@@ -582,7 +582,7 @@ fn one_more(n: usize) -> Result<u64, NameError> {
 }
 
 /// Writes an `OpPath` as [`OpPath::encode`] does.
-fn op_path(e: &mut Encoder, op: &OpPath) -> Result<(), NameError> {
+pub(crate) fn op_path(e: &mut Encoder, op: &OpPath) -> Result<(), NameError> {
     Ok(op.encode(e)?)
 }
 
