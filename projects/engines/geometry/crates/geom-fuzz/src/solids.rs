@@ -81,7 +81,11 @@ pub struct Case {
 )]
 pub fn decode(data: &[u8]) -> (Case, usize) {
     let mut src = ByteSource::new(data);
-    let scale = SCALES[usize::from(src.byte()) % SCALES.len()];
+    // The index is below the table's length, so the fallback is never taken.
+    let scale = SCALES
+        .get(usize::from(src.byte()) % SCALES.len())
+        .copied()
+        .unwrap_or(2);
     let count = 1 + src.byte() % MAX_BOXES;
     let mut boxes = Vec::with_capacity(usize::from(count));
     for _ in 0..count {
@@ -322,9 +326,18 @@ fn check_hull(case: &Case) -> Result<(), Finding> {
     let hull = Hull::of(&points, &mut meter())
         .map_err(|e| Finding::new("corners have a hull", || format!("{case:?}: {e:?}")))?;
     for ring in hull.faces() {
-        let corner = |k: usize| hull.points()[ring[k] as usize];
+        let corner = |k: usize| {
+            ring.get(k)
+                .and_then(|v| hull.points().get(*v as usize))
+                .copied()
+        };
+        let (Some(c0), Some(c1), Some(c2)) = (corner(0), corner(1), corner(2)) else {
+            return Err(Finding::new("a hull ring names points of the hull", || {
+                format!("{case:?}")
+            }));
+        };
         for q in &points {
-            let side = orient3d(corner(0), corner(1), corner(2), *q);
+            let side = orient3d(c0, c1, c2, *q);
             if side.is_err() || side == Ok(Sign::Positive) {
                 return Err(Finding::new(
                     "every point is on or under every face",
@@ -334,6 +347,14 @@ fn check_hull(case: &Case) -> Result<(), Finding> {
         }
     }
     Ok(())
+}
+
+/// The three corners of the triangle `c` among `vertices`, or none when it names one that is not
+/// there.
+fn corners_of(vertices: &[P3], c: [u32; 3]) -> Option<[P3; 3]> {
+    let [p, q, r] = c;
+    let at = |v: u32| vertices.get(usize::try_from(v).ok()?).copied();
+    Some([at(p)?, at(q)?, at(r)?])
 }
 
 /// A box's corner is inside its envelope; boxes a cell apart do not touch; text carries the union
@@ -361,8 +382,12 @@ fn check_rest(case: &Case, operands: &[ExactMesh], union: &ExactMesh) -> Result<
     };
     let pieces = split(first, &mut meter())
         .map_err(|e| Finding::new("a box splits", || format!("{case:?}: {e:?}")))?;
-    let triangle = |c: [u32; 3]| c.map(|v| pieces.vertices[v as usize]);
-    let list: Vec<[P3; 3]> = pieces.corners.iter().map(|c| triangle(*c)).collect();
+    let list: Vec<[P3; 3]> = pieces
+        .corners
+        .iter()
+        .map(|c| corners_of(&pieces.vertices, *c))
+        .collect::<Option<Vec<[P3; 3]>>>()
+        .ok_or_else(|| Finding::new("a split names its own vertices", || format!("{case:?}")))?;
     let envelope = Envelope::new(&list, 8, &Exec::serial(), &mut meter())
         .map_err(|e| Finding::new("a box has an envelope", || format!("{case:?}: {e:?}")))?;
     for p in &pieces.vertices {
@@ -381,7 +406,9 @@ fn check_rest(case: &Case, operands: &[ExactMesh], union: &ExactMesh) -> Result<
             .map_err(|e| Finding::new("a box splits", || format!("{case:?}: {e:?}")))?;
         for x in &list {
             for corner in &others.corners {
-                let y = corner.map(|v| others.vertices[v as usize]);
+                let y = corners_of(&others.vertices, *corner).ok_or_else(|| {
+                    Finding::new("a split names its own vertices", || format!("{case:?}"))
+                })?;
                 if apart && triangles(*x, y) != Ok(Contact::Apart) {
                     return Err(Finding::new("boxes a cell apart do not touch", || {
                         format!("{case:?}")
@@ -403,8 +430,12 @@ fn check_rest(case: &Case, operands: &[ExactMesh], union: &ExactMesh) -> Result<
                 &mut meter(),
             )
             .map_err(|e| Finding::new("two boxes sum", || format!("{case:?}: {e:?}")))?;
-            let side = |k: usize| (high_a[k] - low_a[k]) + (high_b[k] - low_b[k]);
-            let count = side(0) * side(1) * side(2);
+            let count: i64 = low_a
+                .iter()
+                .zip(&high_a)
+                .zip(low_b.iter().zip(&high_b))
+                .map(|((la, ha), (lb, hb))| (ha - la) + (hb - lb))
+                .product();
             holds_cells(
                 "a sum of boxes adds their sides",
                 &sum.mesh,
