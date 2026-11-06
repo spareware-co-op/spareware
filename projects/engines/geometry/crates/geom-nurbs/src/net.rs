@@ -29,7 +29,7 @@
 //!   Changed for Spare Kit: `NLib`'s surface insertion, refinement, Bezier extraction and elevation
 //!   are rebuilt on the ported curve kernels applied line by line, in place of its separate surface
 //!   loops, with the curve kernels' changes; every result carries its certified deviation.
-//! SPDX-License-Identifier: MPL-2.0 AND Apache-2.0
+//! SPDX-License-Identifier: Apache-2.0
 //!
 //! Cost: the curve operation's cost times the number of lines, each twice; the new net and its
 //! enclosure are allocated once, and each line's result once.

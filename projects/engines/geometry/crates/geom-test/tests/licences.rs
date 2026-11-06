@@ -6,7 +6,7 @@
 //! crate's own dev-dependencies, every path to every package) and takes the packages the crate
 //! brings in itself: every package in the tree outside the subtrees of our own path crates, whose
 //! headers record theirs. Each must have a permissive licence (`geom_test::licence`), our own crates
-//! must be MPL-2.0 (or MPL-2.0 AND permissive licences, for a crate that holds code ported under
+//! must be Apache-2.0 (or Apache-2.0 AND permissive licences, for a crate that holds code ported under
 //! them, as geom-num holds CORE-MATH's under MIT), and each must appear in a record of the crate's `Licences` section under an
 //! expression of the same meaning. A record naming a package the crate does not bring in fails too,
 //! so the records can neither fall behind nor run ahead of `Cargo.lock`.
@@ -131,28 +131,28 @@ fn brought_in(krate: &str) -> (BTreeMap<String, BTreeSet<String>>, BTreeMap<Stri
     (outside, ours)
 }
 
-/// Whether one of our crates' licence is MPL-2.0: alone, or with permissive licences beside it
-/// (`MPL-2.0 AND MIT`), for code ported into the crate under its own licence.
-fn ours_is_mpl(licence: &str) -> bool {
-    let mpl = |e: &Expr| matches!(e, Expr::Licence { id, exception: None } if id == "MPL-2.0");
+/// Whether one of our crates' licence is Apache-2.0: alone, or with permissive licences beside it
+/// (`Apache-2.0 AND MIT`), for code ported into the crate under its own licence.
+fn ours_is_apache(licence: &str) -> bool {
+    let ours = |e: &Expr| matches!(e, Expr::Licence { id, exception: None } if id == "Apache-2.0");
     match Expr::parse(licence) {
-        Ok(e) if mpl(&e) => true,
+        Ok(e) if ours(&e) => true,
         Ok(Expr::And(terms)) => {
-            terms.iter().any(mpl) && terms.iter().all(|t| mpl(t) || t.permissive())
+            terms.iter().any(ours) && terms.iter().all(|t| ours(t) || t.permissive())
         }
         _ => false,
     }
 }
 
 #[test]
-fn our_crates_are_mpl_with_only_permissive_licences_beside_it() {
-    assert!(ours_is_mpl("MPL-2.0"));
-    assert!(ours_is_mpl("MPL-2.0 AND MIT"));
-    assert!(ours_is_mpl("MIT AND MPL-2.0"));
-    assert!(!ours_is_mpl("MIT"));
-    assert!(!ours_is_mpl("MPL-2.0 OR MIT"));
-    assert!(!ours_is_mpl("MPL-2.0 AND GPL-3.0-only"));
-    assert!(!ours_is_mpl("MPL-2.0 WITH LLVM-exception"));
+fn our_crates_are_apache_with_only_permissive_licences_beside_it() {
+    assert!(ours_is_apache("Apache-2.0"));
+    assert!(ours_is_apache("Apache-2.0 AND MIT"));
+    assert!(ours_is_apache("MIT AND Apache-2.0"));
+    assert!(!ours_is_apache("MIT"));
+    assert!(!ours_is_apache("Apache-2.0 OR MIT"));
+    assert!(!ours_is_apache("Apache-2.0 AND GPL-3.0-only"));
+    assert!(!ours_is_apache("Apache-2.0 WITH LLVM-exception"));
 }
 
 #[cfg_attr(
@@ -165,9 +165,9 @@ fn every_outside_package_is_permissive_and_recorded() {
     for krate in CRATES {
         let (outside, ours) = brought_in(krate);
         for (name, licence) in &ours {
-            if !ours_is_mpl(licence) {
+            if !ours_is_apache(licence) {
                 problems.push(format!(
-                    "{krate}: our crate {name} is {licence}, not MPL-2.0 (with only permissive                      licences beside it)"
+                    "{krate}: our crate {name} is {licence}, not Apache-2.0 (with only permissive                      licences beside it)"
                 ));
             }
         }
@@ -230,15 +230,15 @@ fn tree_lines_are_read_as_cargo_writes_them() {
         (l.depth, l.name.as_str(), l.local),
         (2, "serde_derive", false)
     );
-    let l = parse_line("11geom-num v0.0.0 (C:\\x\\geom-num)|MPL-2.0");
+    let l = parse_line("11geom-num v0.0.0 (C:\\x\\geom-num)|Apache-2.0");
     assert_eq!((l.depth, l.name.as_str(), l.local), (11, "geom-num", true));
-    assert_eq!(l.licence, "MPL-2.0");
+    assert_eq!(l.licence, "Apache-2.0");
     let l = parse_line("0zmij v1.0.23|MIT");
     assert_eq!((l.depth, l.local, l.licence.as_str()), (0, false, "MIT"));
     let l = parse_line("3forked v0.1.0 (https://github.com/x/y#0123abcd)|MIT");
     assert!(!l.local);
     let l = parse_line("3other v0.1.0 (registry `mirror`)|MIT");
     assert!(!l.local);
-    let l = parse_line("3our-macro v0.0.0 (/home/x/our-macro) (proc-macro)|MPL-2.0");
+    let l = parse_line("3our-macro v0.0.0 (/home/x/our-macro) (proc-macro)|Apache-2.0");
     assert!(l.local);
 }

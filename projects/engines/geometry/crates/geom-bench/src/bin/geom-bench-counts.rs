@@ -10,8 +10,8 @@
 //!
 //! `callgrind` judges the instruction-and-cache gate's Callgrind counts from the `summary.json`
 //! files Gungraun saved under the folder (`geom_bench::callgrind`): instructions and estimated
-//! cycles at the gate's percentage, and each miss count at it where the merge base's count
-//! resolves it, from 20 up for 5%.
+//! cycles at the gate's percentage, with every miss count that changed listed and judged through
+//! estimated cycles.
 //!
 //! Each prints a Markdown report on standard output (`removed` prints one name per line) and exits
 //! with 0 when the check passes, 1 when it fails, 2 when an argument or file is wrong, so a

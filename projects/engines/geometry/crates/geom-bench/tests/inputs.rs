@@ -2289,6 +2289,15 @@ fn topo_typical_batches_all_succeed() {
     all_ok("publish", k::publish, &m::publish(Typical));
 }
 
+/// Every typical batch of `geom-run`'s helper benchmarks (decision 32.44) maps every list.
+#[test]
+fn helper_typical_batches_all_succeed() {
+    use geom_bench::inputs::helper as m;
+    use geom_bench::kernels::helper as k;
+    all_ok("lone_serial", k::lone_serial, &m::lone_serial(Typical));
+    all_ok("lone_pool", k::lone_pool, &m::lone_pool(Typical));
+}
+
 /// Every typical batch of `geom-nurbs`'s benchmarks (decision 32.44) evaluates, interpolates and
 /// bounds every input.
 #[test]
