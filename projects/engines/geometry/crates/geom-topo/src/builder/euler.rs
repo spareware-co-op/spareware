@@ -36,6 +36,16 @@
 //!   faces or a face's loops ([`Builder::publish_named`] rebuilds them from the owner links), only
 //!   each loop's and each edge's first fin.
 //!
+//! Bounded proofs, and what is only tested: Kani proves (piece G112, chapter 28.7), with its
+//! overflow, bounds and panic checks on, these sequences from a lone wire, every argument a
+//! constant: MEV then KEV, MEF then KEF, MEF from a fin to itself, KEMR then MEKR, MFKRH then KFMRH
+//! and a wire's removal each keep every rule above and Euler's formula, and three refusals change
+//! nothing.
+//! A symbolic fin took CBMC past 12 GB, so these are bounded in their arguments as well as their
+//! length; the geometry pools, which no operator reads, are stood in for. That the operators keep
+//! the rules on every body is Verus's proof on a model (`verus/euler.rs`, piece G111), and
+//! `tests/euler_model.rs`'s 100,000 random steps tie the model to this code.
+//!
 //! Method: Mäntylä and Sulonen's GWB operators on half-edges (MVFS, MEV, MEF, KEMR, KFMRH and their
 //! inverses; "GWB: a solid modeler with Euler operators", IEEE Computer Graphics and Applications
 //! 2(7), 17-31, 1982, <https://doi.org/10.1109/MCG.1982.1674396>), with fins as half-edges. A fin
@@ -60,8 +70,8 @@ use super::named::{Keep, Moves, to};
 use crate::arenas::Arenas;
 use crate::body::{Body, BodyKind};
 use crate::entity::{
-    Edge, EdgeIx, Face, FaceIx, Fin, FinIx, Loop, LoopIx, Region, RegionIx, RegionKind, Sense,
-    Shell, ShellIx, Vertex, VertexIx,
+    CurveIx, Edge, EdgeIx, Face, FaceIx, Fin, FinIx, Loop, LoopIx, Region, RegionIx, RegionKind,
+    Sense, Shell, ShellIx, SurfaceIx, Vertex, VertexIx,
 };
 use crate::error::{Refusal, TopoError};
 use crate::ix::{Arena, Ix, Kind};
@@ -360,6 +370,14 @@ impl Euler {
         Ok(ix)
     }
 
+    fn add_curve(&mut self, curve: CurveKind<3>) -> Result<CurveIx, TopoError> {
+        self.arenas.curves.push(curve)
+    }
+
+    fn add_surface(&mut self, surface: SurfaceKind) -> Result<SurfaceIx, TopoError> {
+        self.arenas.surfaces.push(surface)
+    }
+
     fn add_edge(
         &mut self,
         e: NewEdge,
@@ -367,7 +385,7 @@ impl Euler {
         end: VertexIx,
         first_fin: FinIx,
     ) -> Result<EdgeIx, TopoError> {
-        let curve = self.arenas.curves.push(e.curve)?;
+        let curve = self.add_curve(e.curve)?;
         let ix = self.arenas.edges.push(Edge {
             first_fin: Some(first_fin),
             start: Some(start),
@@ -394,7 +412,7 @@ impl Euler {
     }
 
     fn add_face(&mut self, f: NewFace, shell: ShellIx) -> Result<FaceIx, TopoError> {
-        let surface = self.arenas.surfaces.push(f.surface)?;
+        let surface = self.add_surface(f.surface)?;
         let ix = self.arenas.faces.push(Face {
             shell,
             next: None,
@@ -927,5 +945,302 @@ impl Euler {
         };
         let outside = to(&moves.regions, outside)?;
         Builder { arenas: kept }.publish_named(&names, kind, outside, meter)
+    }
+}
+
+/// Bounded proofs (chapter 28.7; piece G112), proven by `kernel-fuzz.yml`'s `kani-topo` job.
+#[cfg(kani)]
+// cargo-mutants reads this attribute from the source and skips the module (its harnesses are
+// proven by Kani, and no test build compiles them); no build evaluates it, since the module
+// exists only under Kani, where `test` is off.
+#[cfg_attr(test, mutants::skip)]
+mod proofs {
+    use geom_curve::Line;
+    use geom_surface::Plane;
+
+    use super::*;
+
+    /// The arguments every operator takes: one name per call, and shared geometry, which no
+    /// operator reads.
+    struct Stock {
+        names: u8,
+        curve: CurveKind<3>,
+        surface: SurfaceKind,
+        bound: Box3,
+        point: P3,
+    }
+
+    impl Stock {
+        fn new() -> Stock {
+            let point = P3::new(0, 0, 0).ok().unwrap();
+            Stock {
+                names: 0,
+                curve: CurveKind::Line(Line::new([0.0; 3], [1.0, 0.0, 0.0], (0.0, 1.0)).unwrap()),
+                surface: SurfaceKind::Plane(
+                    Plane::new(
+                        [0.0; 3],
+                        [1.0, 0.0, 0.0],
+                        [0.0, 1.0, 0.0],
+                        ((0.0, 1.0), (0.0, 1.0)),
+                    )
+                    .unwrap(),
+                ),
+                bound: Box3::new(point, point).ok().unwrap(),
+                point,
+            }
+        }
+
+        fn name(&mut self) -> NameKey {
+            self.names += 1;
+            NameKey([self.names; 16])
+        }
+
+        fn edge(&mut self) -> NewEdge {
+            NewEdge {
+                name: self.name(),
+                curve: self.curve.clone(),
+            }
+        }
+
+        fn face(&mut self) -> NewFace {
+            NewFace {
+                name: self.name(),
+                surface: self.surface.clone(),
+                sense: Sense::Forward,
+                bound: self.bound,
+            }
+        }
+
+        fn vertex(&mut self) -> NewVertex {
+            NewVertex {
+                name: self.name(),
+                point: self.point,
+            }
+        }
+    }
+
+    /// An editor holding one region and one wire.
+    fn wire(stock: &mut Stock) -> Euler {
+        let mut e = Euler::new();
+        let name = stock.name();
+        let region = e.make_region(RegionKind::Solid, name).unwrap();
+        let (face, edge) = (stock.face(), stock.edge());
+        let (start, end) = (stock.vertex(), stock.vertex());
+        e.make_wire(region, face, edge, start, end).unwrap();
+        e
+    }
+
+    /// The live rows of arena `arena`, of `rows` rows.
+    fn live_rows(e: &Euler, arena: Arena, rows: u32) -> i32 {
+        let mut count = 0;
+        for row in 0..rows {
+            if e.is_live(arena, row) {
+                count += 1;
+            }
+        }
+        count
+    }
+
+    /// Every combinatorial rule the operators promise: each live fin's links, partner and loop;
+    /// each live loop's ring holding all its fins; each live edge's first fin; Euler's formula.
+    fn assert_rules(e: &Euler, holes: i32, rows: u32) {
+        let a = &e.arenas;
+        assert!(a.fins.len() == rows);
+        for row in 0..rows {
+            if !e.is_live(Arena::Fin, row) {
+                continue;
+            }
+            let x: FinIx = Ix::new(row).unwrap();
+            let fin = e.fin(x).unwrap();
+            let next = e.fin(fin.next).unwrap();
+            let prev = e.fin(fin.prev).unwrap();
+            let partner = e.fin(fin.radial).unwrap();
+            assert!(next.prev == x && prev.next == x);
+            assert!(next.loop_ == fin.loop_);
+            assert!(fin.radial != x && partner.radial == x);
+            assert!(partner.edge == fin.edge && partner.sense != fin.sense);
+            assert!(e.start(&partner).unwrap() == e.start(&next).unwrap());
+            assert!(e.loop_(fin.loop_).is_ok());
+        }
+        for row in 0..a.loops.len() {
+            if !e.is_live(Arena::Loop, row) {
+                continue;
+            }
+            let l: LoopIx = Ix::new(row).unwrap();
+            let first = e.loop_(l).unwrap().first_fin.unwrap();
+            let ring = e.segment(first, first);
+            assert!(
+                ring.iter()
+                    .all(|&f| e.fin(f).is_ok_and(|fin| fin.loop_ == l))
+            );
+            let mut fins = 0;
+            for f in 0..rows {
+                let x: FinIx = Ix::new(f).unwrap();
+                if e.fin(x).is_ok_and(|fin| fin.loop_ == l) {
+                    fins += 1;
+                }
+            }
+            assert!(fins == ring.len());
+        }
+        for row in 0..a.edges.len() {
+            if !e.is_live(Arena::Edge, row) {
+                continue;
+            }
+            let x: EdgeIx = Ix::new(row).unwrap();
+            let first = e.edge(x).unwrap().first_fin.unwrap();
+            assert!(e.fin(first).is_ok_and(|fin| fin.edge == x));
+        }
+        let v = live_rows(e, Arena::Vertex, a.vertices.len());
+        let edges = live_rows(e, Arena::Edge, a.edges.len());
+        let f = live_rows(e, Arena::Face, a.faces.len());
+        let l = live_rows(e, Arena::Loop, a.loops.len());
+        let s = live_rows(e, Arena::Shell, a.shells.len());
+        assert!(v - edges + f - (l - f) == 2 * (s - holes));
+    }
+
+    /// Stands in for [`Euler::add_curve`]: no operator reads a curve.
+    fn no_curve(_: &mut Euler, _: CurveKind<3>) -> Result<CurveIx, TopoError> {
+        Ok(Ix::new(0).unwrap())
+    }
+
+    /// Stands in for [`Euler::add_surface`]: no operator reads a surface.
+    fn no_surface(_: &mut Euler, _: SurfaceKind) -> Result<SurfaceIx, TopoError> {
+        Ok(Ix::new(0).unwrap())
+    }
+
+    /// Stands in for `geom_curve::frame::not_parallel`, an exact sum whose loops CBMC cannot bound,
+    /// which the stock's one plane meets, on axes that are not parallel.
+    fn apart(_: [f64; 3], _: [f64; 3]) -> bool {
+        true
+    }
+
+    /// MEV at the wire's first fin, then KEV of the new edge: every rule after each.
+    #[kani::proof]
+    #[kani::unwind(14)]
+    #[kani::stub(geom_curve::frame::not_parallel, apart)]
+    #[kani::stub(Euler::add_curve, no_curve)]
+    #[kani::stub(Euler::add_surface, no_surface)]
+    fn mev_and_kev() {
+        let mut stock = Stock::new();
+        let mut e = wire(&mut stock);
+        let at: FinIx = Ix::new(0).unwrap();
+        let (edge, vertex) = (stock.edge(), stock.vertex());
+        let (new, _) = e.mev(at, edge, vertex).unwrap();
+        assert_rules(&e, 0, 4);
+        e.kev(new).unwrap();
+        assert_rules(&e, 0, 4);
+    }
+
+    /// Row `row` of the fins.
+    fn fin(row: u32) -> FinIx {
+        Ix::new(row).unwrap()
+    }
+
+    /// MEF across a wire's two fins, then KEF of the new face: every rule after each.
+    #[kani::proof]
+    #[kani::unwind(14)]
+    #[kani::stub(geom_curve::frame::not_parallel, apart)]
+    #[kani::stub(Euler::add_curve, no_curve)]
+    #[kani::stub(Euler::add_surface, no_surface)]
+    fn mef_and_kef() {
+        let mut stock = Stock::new();
+        let mut e = wire(&mut stock);
+        let (edge, face) = (stock.edge(), stock.face());
+        e.mef(fin(0), fin(1), edge, face).unwrap();
+        assert_rules(&e, 0, 4);
+        e.kef(fin(3)).unwrap();
+        assert_rules(&e, 0, 4);
+    }
+
+    /// MEF from a fin to itself, a closed edge whose forward fin is a loop of its own.
+    #[kani::proof]
+    #[kani::unwind(14)]
+    #[kani::stub(geom_curve::frame::not_parallel, apart)]
+    #[kani::stub(Euler::add_curve, no_curve)]
+    #[kani::stub(Euler::add_surface, no_surface)]
+    fn mef_closes_an_edge() {
+        let mut stock = Stock::new();
+        let mut e = wire(&mut stock);
+        let (edge, face) = (stock.edge(), stock.face());
+        e.mef(fin(0), fin(0), edge, face).unwrap();
+        assert_rules(&e, 0, 4);
+    }
+
+    /// A wire with a spur on each side, so its two fins are not next to each other: [`Euler::kemr`]
+    /// applies to it. Six fins.
+    fn spurred(stock: &mut Stock) -> Euler {
+        let mut e = wire(stock);
+        let (edge, vertex) = (stock.edge(), stock.vertex());
+        e.mev(fin(1), edge, vertex).unwrap();
+        let (edge, vertex) = (stock.edge(), stock.vertex());
+        e.mev(fin(0), edge, vertex).unwrap();
+        e
+    }
+
+    /// KEMR on a spurred wire, then MEKR joining the ring back: every rule after each.
+    #[kani::proof]
+    #[kani::unwind(14)]
+    #[kani::stub(geom_curve::frame::not_parallel, apart)]
+    #[kani::stub(Euler::add_curve, no_curve)]
+    #[kani::stub(Euler::add_surface, no_surface)]
+    fn kemr_and_mekr() {
+        let mut stock = Stock::new();
+        let mut e = spurred(&mut stock);
+        e.kemr(fin(0)).unwrap();
+        assert_rules(&e, 0, 6);
+        let edge = stock.edge();
+        e.mekr(fin(2), fin(4), edge).unwrap();
+        assert_rules(&e, 0, 8);
+    }
+
+    /// MFKRH makes a ring a face of its own, KFMRH makes it a ring again: every rule after each,
+    /// with one hole fewer between them.
+    #[kani::proof]
+    #[kani::unwind(14)]
+    #[kani::stub(geom_curve::frame::not_parallel, apart)]
+    #[kani::stub(Euler::add_curve, no_curve)]
+    #[kani::stub(Euler::add_surface, no_surface)]
+    fn mfkrh_and_kfmrh() {
+        let mut stock = Stock::new();
+        let mut e = spurred(&mut stock);
+        let ring = e.kemr(fin(0)).unwrap();
+        let face = stock.face();
+        e.mfkrh(ring, face).unwrap();
+        assert_rules(&e, -1, 6);
+        e.kfmrh(Ix::new(0).unwrap(), ring).unwrap();
+        assert_rules(&e, 0, 6);
+    }
+
+    /// A lone wire removed: nothing is left live.
+    #[kani::proof]
+    #[kani::unwind(14)]
+    #[kani::stub(geom_curve::frame::not_parallel, apart)]
+    #[kani::stub(Euler::add_curve, no_curve)]
+    #[kani::stub(Euler::add_surface, no_surface)]
+    fn kill_wire_leaves_nothing() {
+        let mut stock = Stock::new();
+        let mut e = wire(&mut stock);
+        e.kill_wire(Ix::new(0).unwrap()).unwrap();
+        assert_rules(&e, 0, 2);
+        assert!(live_rows(&e, Arena::Vertex, 2) == 0 && live_rows(&e, Arena::Fin, 2) == 0);
+    }
+
+    /// What a lone wire refuses changes nothing: KEV (its fins are the whole of their loop), KEF
+    /// (both fins are in one face) and KEMR (they are next to each other).
+    #[kani::proof]
+    #[kani::unwind(14)]
+    #[kani::stub(geom_curve::frame::not_parallel, apart)]
+    #[kani::stub(Euler::add_curve, no_curve)]
+    #[kani::stub(Euler::add_surface, no_surface)]
+    fn refusals_change_nothing() {
+        let mut stock = Stock::new();
+        let mut e = wire(&mut stock);
+        let rows = [e.fin(fin(0)).unwrap(), e.fin(fin(1)).unwrap()];
+        assert!(e.kev(Ix::new(0).unwrap()).is_err());
+        assert!(e.kef(fin(0)).is_err());
+        assert!(e.kemr(fin(0)).is_err());
+        assert!([e.fin(fin(0)).unwrap(), e.fin(fin(1)).unwrap()] == rows);
+        assert!(e.arenas.fins.len() == 2 && e.arenas.loops.len() == 1);
+        assert_rules(&e, 0, 2);
     }
 }
