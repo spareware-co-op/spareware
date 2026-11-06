@@ -18,7 +18,7 @@
 //!   series in the accurate path just below 1; the accurate path's tables trimmed to the entries
 //!   its index reaches; a written proof of the error bound. Every change is listed under "Changes
 //!   from the C source" below; none changes a correctly rounded result.
-//! SPDX-License-Identifier: MPL-2.0 AND MIT
+//! SPDX-License-Identifier: Apache-2.0 AND MIT
 //!
 //! The original notices of `log.c` and `dint.h`, reproduced as the MIT licence requires, each as
 //! published (`dint.h`'s reads `exp_dRESS` where `log.c`'s reads `EXPRESS`):

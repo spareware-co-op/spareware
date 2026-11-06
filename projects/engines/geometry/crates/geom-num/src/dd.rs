@@ -175,7 +175,7 @@
 //!   show unbounded for operands of opposite signs; its products fold the two cross terms into one
 //!   rounded sum and its root is Karp's step from `1/√x_h`, neither with a published bound; so
 //!   the algorithms here are JMP's and LLMPR's instead.
-//! - The double-double type piece G03 wrote for `geom-math` (Spare Kit, MPL-2.0), whose exact
+//! - The double-double type piece G03 wrote for `geom-math` (Spare Kit, Apache-2.0), whose exact
 //!   conversions ([`DD::from_i64`], [`DD::from_i128`], [`DD::round_shifted`]) are kept here with
 //!   their proofs re-checked, now without lossy casts; its operations are replaced by the
 //!   machine-checked algorithms above, and its scaling by the one in *Range*, which also covers
