@@ -1,0 +1,99 @@
+name: Cheap checks first
+
+# Called by the heavy kernel workflows (benchmarks, fuzzing and Kani, mutants, coverage and Miri) as
+# their first job, `cheap`; every heavy job of those workflows lists it under `needs`. On a pull
+# request it waits for the checks that finish in minutes (format, lints, the scaffold, the sign-off)
+# and fails if one of them failed, so a push that fails a cheap check never starts the hours of
+# work behind it. GitHub's `needs` reaches only a workflow's own jobs, and these checks run in other
+# workflows, so this job reads their results from the commit's check runs.
+#
+# It never holds a run up for ever and never invents a failure: a check that does not appear within
+# five minutes is taken as not running on this pull request (a path filter kept its workflow away);
+# a check that has not finished after 30 minutes is not waited for; a check that was cancelled or
+# skipped is not a failure. Only a check that finished as failed, timed out or needing action stops
+# the run. On any other event (a push to main, a schedule, a release tag) it passes at once.
+#
+# The workflow runs no repository code and needs no action: it reads check runs with the runner's
+# own gh. The repository is public, so the check runs of a commit are readable with the workflow's
+# default read-only token: no job here, or in its callers, asks for more than `contents: read`.
+
+on:
+  workflow_call:
+
+permissions:
+  contents: read
+
+jobs:
+  wait:
+    name: The cheap checks pass
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - name: Wait for the cheap checks of this commit
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          SHA: ${{ github.event.pull_request.head.sha }}
+          EVENT: ${{ github.event_name }}
+        run: |
+          if [ "$EVENT" != pull_request ]; then
+            echo "Not a pull request: nothing to wait for."
+            exit 0
+          fi
+          # The names of the jobs (check runs) that are cheap: kernel.yml's lint, kernel-gate.yml's
+          # clippy, kernel-build.yml's scaffold, dco.yml's sign-off.
+          names=(
+            "Format and lints"
+            "Clippy with the kernel's lint rules"
+            "Scaffold check"
+            "Every commit is signed off"
+          )
+          start=$(date +%s)
+          errors=0
+          while true; do
+            if ! runs=$(gh api "repos/$REPO/commits/$SHA/check-runs?per_page=100" --paginate \
+              --jq '.check_runs[] | [.id, .name, .status, (.conclusion // "")] | @tsv'); then
+              errors=$((errors + 1))
+              if [ "$errors" -ge 3 ]; then
+                echo "::warning::The check runs could not be read; the heavy jobs start without waiting."
+                exit 0
+              fi
+              sleep 20
+              continue
+            fi
+            elapsed=$(( $(date +%s) - start ))
+            waiting=()
+            for name in "${names[@]}"; do
+              # The newest run of that name (a re-run has a higher id).
+              row=$(printf '%s\n' "$runs" | awk -F'\t' -v n="$name" '$2 == n' | sort -n | tail -n 1)
+              if [ -z "$row" ]; then
+                if [ "$elapsed" -lt 300 ]; then waiting+=("$name"); fi
+                continue
+              fi
+              status=$(printf '%s' "$row" | cut -f3)
+              conclusion=$(printf '%s' "$row" | cut -f4)
+              if [ "$status" != completed ]; then
+                waiting+=("$name")
+                continue
+              fi
+              case "$conclusion" in
+                failure | timed_out | action_required | startup_failure)
+                  echo "::error::\"$name\" finished as $conclusion, so the heavy jobs of this workflow do not start."
+                  exit 1
+                  ;;
+              esac
+            done
+            if [ "${#waiting[@]}" -eq 0 ]; then
+              echo "Every cheap check that runs here has passed."
+              exit 0
+            fi
+            if [ "$elapsed" -ge 1800 ]; then
+              echo "::warning::Not waited for any longer: ${waiting[*]}"
+              exit 0
+            fi
+            echo "Waiting for: ${waiting[*]}"
+            sleep 20
+          done
