@@ -12,7 +12,8 @@
 //! operation at every width; and [`variants`] (G42), every variant of every generated exact path
 //! returns the exact value of its description, evaluated in big integers; [`cbor`] (G91),
 //! `geom-format`'s strict CBOR decoder and its text form never panic, refuse inside their input and
-//! convert both ways bit for bit. Gate 2 (32.44) adds
+//! convert both ways bit for bit; and [`arenas`] (G80), `geom-topo` publishes exactly the arenas
+//! its rules allow, and a body's versions never see each other's edits. Gate 2 (32.44) adds
 //! [`curves`], every curve kind keeps the kind contract on any bytes (G60 to G64, G67, G68), and
 //! [`surfaces`], every surface kind likewise (G60, G65 to G68), and [`nurbs`], NURBS curves keep
 //! their stated bounds against exact rational evaluation (G56, G58, G59), and [`transforms`], the
@@ -125,6 +126,8 @@
 //!   target reads the predicates with.
 //! - `geom-format` and `geom-run` (Apache-2.0, ours), the code under test of the [`cbor`] target and
 //!   the work meter it reads with.
+//! - `geom-topo`, `geom-curve`, `geom-surface` and `geom-math` (Apache-2.0, ours), the code under
+//!   test of the [`arenas`] target and the values that fill its arenas.
 //! - `dashu-ratio` 0.6.1 (MIT OR Apache-2.0), without its default features: the exact rationals
 //!   of the [`nurbs`] target's oracle, `geom-test`'s NURBS reference.
 //! - `num-bigint` 0.4.8 (MIT OR Apache-2.0), the oracle of the [`wide`] and [`variants`] targets:
@@ -171,6 +174,7 @@
 
 use core::fmt;
 
+pub mod arenas;
 pub mod boxtree;
 pub mod cbor;
 pub mod curves;

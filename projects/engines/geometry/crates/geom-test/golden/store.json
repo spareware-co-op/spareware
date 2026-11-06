@@ -236,9 +236,15 @@
               "kind": "corpus",
               "piece": "G148",
               "why": "2 new count benchmarks of geom-run's helper (decision 32.44): Exec::map of a list that fits one chunk, on the serial executor and on a pool, for the fix that runs a wave of one task on the calling thread (found in G148's timings); no existing digest moved"
+            },
+            {
+              "sha256": "57fb849de9d6eb8003fe3ff677db5373da1b40984777f2d573018b64e5601c1b",
+              "kind": "corpus",
+              "piece": "G80",
+              "why": "2 new count benchmarks on the topology's hot paths (decision 32.44): topo/column_edit and topo/publish; no existing digest moved"
             }
           ],
-          "sha256": "57fb849de9d6eb8003fe3ff677db5373da1b40984777f2d573018b64e5601c1b"
+          "sha256": "029ea44ae8ddb92d35bb461dca2a56b270e067d2a608dcc7e36413ba1036695f"
         },
         {
           "id": "geom-nurbs/operations",
@@ -510,6 +516,16 @@
             "function": "dense_golden_hash_is_the_same_on_every_target"
           },
           "sha256": "507472559492ae92313b7e32156a0f64df25fa341cd6eab56772404bcfd55a91"
+        },
+        {
+          "id": "geom-topo/arenas",
+          "what": "The arenas of geom-topo (piece G80): 48 bodies of random sizes (six past three chunks of faces and fins), every link random and in range, filled row by row or each arena at once, each published with every column in row order, its chunk count and the work publishing charged; an edit of random rows published beside the unchanged original; and each body refused once with a link pointed past its arena and once with a column one row longer, as tests/arena_determinism.rs records them.",
+          "check": {
+            "crate": "geom-topo",
+            "test": "arena_determinism",
+            "function": "arenas_golden_hash_is_the_same_on_every_target"
+          },
+          "sha256": "9df6dc9250d028d90f299d94442c212ac16472679a9d22d207c6d6e0a0a161dc"
         }
       ]
     }

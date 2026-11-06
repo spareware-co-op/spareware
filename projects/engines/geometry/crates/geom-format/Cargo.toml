@@ -32,6 +32,11 @@ geom-topo = { path = "../geom-topo" }
 crc = "3.4.0"
 
 [dev-dependencies]
+# The CDDL validator (RFC 8610) that checks every archived file against format/cddl/, tests only:
+# cddl-cat, MIT, pure Rust, with its ciborium feature for CBOR. Chosen over the `cddl` crate, which
+# brings about 87 crates and a separate wasm-bindgen interface; cddl-cat covers every CDDL feature
+# format 1's schemas use (it has no tags, `#6.n`, which body records' columns will need, G94).
+cddl-cat = { version = "=0.7.1", default-features = false, features = ["ciborium"] }
 # Property tests only, never linked into the kernel. MIT OR Apache-2.0. Without its default fork and
 # timeout features, so the tests also run on wasm32-wasip1.
 proptest = { version = "1.12.0", default-features = false, features = ["std", "bit-set"] }
@@ -39,6 +44,7 @@ proptest = { version = "1.12.0", default-features = false, features = ["std", "b
 geom-test = { path = "../geom-test" }
 # Reads the cbor2 cross-check vectors, tests/cbor2/vectors.jsonl (MIT OR Apache-2.0).
 serde_json = "1.0.154"
+
 
 [[bench]]
 name = "cbor"
