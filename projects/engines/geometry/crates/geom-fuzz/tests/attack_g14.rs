@@ -39,7 +39,8 @@ use std::path::{Path, PathBuf};
 
 use geom_fuzz::orient2d::{Case, PROOF_BOUND, ProofDraw, check, check_with, proof_case, reference};
 use geom_fuzz::{
-    Harness, arenas, boxtree, cbor, curves, linalg, maths, nurbs, orient2d, predicates, roots, surfaces, transforms, variants, wide,
+    Harness, arenas, boxtree, cbor, curves, linalg, maths, nurbs, orient2d, predicates, roots,
+    surfaces, transforms, variants, wide,
 };
 use geom_num::Sign;
 use geom_num::generated::orient2d::{filter, value};
@@ -51,7 +52,7 @@ use geom_test::{Seed, SplitMix64};
 
 /// Every target of the crate, by module name, with its harness. A target module that is not here,
 /// or a name here that is not a target module, fails `attack_every_target_is_listed_here`.
-const TARGETS: [(&str, Harness); 7] = [
+const TARGETS: [(&str, Harness); 14] = [
     ("arenas", arenas::harness),
     ("boxtree", boxtree::harness),
     ("cbor", cbor::harness),
