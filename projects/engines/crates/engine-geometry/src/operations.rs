@@ -367,6 +367,7 @@ const MAKE_BOX: OpSchema = OpSchema {
     classes: &[Class::Exact],
     charges: &[PER_ROW],
     batch: false,
+    name_free: false,
     example: "make.box { min: [0, 0, 0], size: [4000, 200, 2700] } gives a solid of 6 faces, 12 \
               edges and 8 vertices, Exact.",
 };
@@ -412,6 +413,7 @@ const MAKE_CONE: OpSchema = OpSchema {
     classes: &[Class::Certified],
     charges: &[PER_ROW],
     batch: false,
+    name_free: false,
     example: "make.cone { base: [0, 0, 0], radius: 6, height: 12, step: Q0 } gives a solid of 2 \
               faces and 1 edge, Certified within 1 step.",
 };
@@ -458,6 +460,7 @@ const MAKE_CYLINDER: OpSchema = OpSchema {
     classes: &[Class::Certified],
     charges: &[PER_ROW],
     batch: false,
+    name_free: false,
     example: "make.cylinder { base: [0, 0, 0], radius: 5, height: 10, step: Q0 } gives a solid of 3 \
               faces and 2 edges, Certified within 1 step.",
 };
@@ -533,6 +536,7 @@ const MAKE_PRISM: OpSchema = OpSchema {
     classes: &[Class::Exact],
     charges: &[PER_ROW],
     batch: false,
+    name_free: false,
     example: "make.prism { base: [[0, 0, 0], [10, 0, 0], [12, 7, 0], [3, 11, 0]], height: 9 } gives \
               a solid of 6 faces, Exact.",
 };
@@ -567,6 +571,7 @@ const MAKE_SPHERE: OpSchema = OpSchema {
     classes: &[Class::Certified],
     charges: &[PER_ROW],
     batch: false,
+    name_free: false,
     example: "make.sphere { center: [1, 2, 3], radius: 5, step: Q0 } gives a solid of 1 face, \
               Certified within 1 step.",
 };
@@ -637,6 +642,7 @@ const MAKE_TORUS: OpSchema = OpSchema {
     classes: &[Class::Certified],
     charges: &[PER_ROW],
     batch: false,
+    name_free: false,
     example: "make.torus { center: [0, 0, 0], major: 10, minor: 3, step: Q0 } gives a solid of 1 \
               face, 2 edges and 1 vertex, Certified within 1 step.",
 };
@@ -668,6 +674,7 @@ const TRANSFORM_MIRROR: OpSchema = OpSchema {
     classes: &[Class::Exact, Class::Certified, Class::Approximate],
     charges: &[PER_ROW],
     batch: false,
+    name_free: false,
     example: "transform.mirror { body, exactness: Exact, axis: x, at: [3, -2, 1] } gives the body \
               mirrored, Exact.",
 };
@@ -697,6 +704,7 @@ const TRANSFORM_MOVE: OpSchema = OpSchema {
     classes: &[Class::Exact, Class::Certified, Class::Approximate],
     charges: &[PER_ROW],
     batch: false,
+    name_free: false,
     example: "transform.move { body, exactness: Exact, offset: [1, 2, 3] } gives the body moved, \
               Exact.",
 };
@@ -774,6 +782,7 @@ const TRANSFORM_PATTERN: OpSchema = OpSchema {
     classes: &[Class::Exact, Class::Certified, Class::Approximate],
     charges: &[PER_ROW],
     batch: false,
+    name_free: false,
     example: "transform.pattern { body, exactness: Exact, instances: [{ key, move by 20 }, { key, \
               move by 40 }] } gives two copies, Exact.",
 };
@@ -806,6 +815,7 @@ const TRANSFORM_ROTATE: OpSchema = OpSchema {
     classes: &[Class::Exact, Class::Certified, Class::Approximate],
     charges: &[PER_ROW],
     batch: false,
+    name_free: false,
     example: "transform.rotate { body, exactness: Exact, axis: z, rotation: 1 quarter turn, center: \
               [1, 1, 0] } gives the body rotated, Exact.",
 };
@@ -838,6 +848,7 @@ const TRANSFORM_SCALE: OpSchema = OpSchema {
     classes: &[Class::Exact, Class::Certified, Class::Approximate],
     charges: &[PER_ROW],
     batch: false,
+    name_free: false,
     example: "transform.scale { body, exactness: Exact, factors: [3, 3, 3], center: [1, 1, 1] } \
               gives the body three times the size, Exact.",
 };
