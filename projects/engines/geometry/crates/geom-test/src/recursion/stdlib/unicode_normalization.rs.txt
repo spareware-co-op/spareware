@@ -1,0 +1,9 @@
+// The recursion check's model of the `unicode-normalization` crate (MIT OR Apache-2.0,
+// https://github.com/unicode-rs/unicode-normalization), read in place of its source
+// (src/recursion/stdlib.rs): the part geom-op's names call, written from its documentation
+// (https://docs.rs/unicode-normalization/0.1.26/unicode_normalization/). Nothing calls back into
+// kernel code, so every body is `loop {}`. Never compiled.
+
+pub fn is_nfc(s: &str) -> bool {
+    loop {}
+}

@@ -6,7 +6,10 @@
 //! point, for an enclosure; a box, for a bound), listed as [`crate::param::partial_index`] lists
 //! partials. Sums, products, quotients and square roots of jets are the jets of the sums,
 //! products, quotients and roots, by the two-variable recurrences of automatic differentiation;
-//! [`Jet::du`] and [`Jet::dv`] differentiate. So the jet of an offset surface's formula,
+//! [`Jet::du`] and [`Jet::dv`] differentiate. A quotient whose value is known from elsewhere (a
+//! rational patch's convex hull, a unit vector's [−1, 1]) starts from that value
+//! ([`Jet::div_valued`], piece G68), so its derivatives do not inherit the width of the value's
+//! quotient of boxes. So the jet of an offset surface's formula,
 //! S + d·(`S_u` × `S_v`)/|`S_u` × `S_v`|, gives all of its partials to order K from the base's partials
 //! to order K + 1: its higher derivatives come from the formula's exact rules (Leibniz's rule and
 //! the quotient and root recurrences), never from a finite difference.
@@ -258,6 +261,23 @@ impl Jet {
     ///
     /// [`CurveError::Unbounded`] if g's value may be zero.
     pub(crate) fn div(&self, g: &Jet) -> Result<Jet, CurveError> {
+        self.quotient(g, None)
+    }
+
+    /// f / g with the quotient's value known to lie in `value`, an enclosure from elsewhere (a
+    /// rational patch's convex hull, or [−1, 1] for a coordinate of a unit vector): as
+    /// [`Jet::div`], with q^(0, 0) cut to `value`. Every other coefficient takes q^(0, 0) through
+    /// the recurrence, so the cut narrows them all, and each still holds its exact value.
+    ///
+    /// # Errors
+    ///
+    /// As [`Jet::div`].
+    pub(crate) fn div_valued(&self, g: &Jet, value: Interval) -> Result<Jet, CurveError> {
+        self.quotient(g, Some(value))
+    }
+
+    /// f / g, q^(0, 0) cut to `value` if given ([`Jet::div`], [`Jet::div_valued`]).
+    fn quotient(&self, g: &Jet, value: Option<Interval>) -> Result<Jet, CurveError> {
         let order = self.same(g)?;
         let g0 = g.get(0, 0)?;
         if g0.lo() <= 0.0 && g0.hi() >= 0.0 {
@@ -270,7 +290,10 @@ impl Jet {
                 // q^(k, l) is not yet in q; the sum skips (0, 0), the only term that needs it.
                 q.push(point(0.0)?);
                 let s = Jet::convolve(g, &q, (k, l), |i, j| i == 0 && j == 0)?;
-                let x = tight::div(tight::sub(self.get(k, l)?, s)?, g0)?;
+                let mut x = tight::div(tight::sub(self.get(k, l)?, s)?, g0)?;
+                if let (0, 0, Some(v)) = (k, l, value) {
+                    x = tight::meet(x, v)?;
+                }
                 if let Some(slot) = q.last_mut() {
                     *slot = x;
                 }
