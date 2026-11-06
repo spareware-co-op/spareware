@@ -871,23 +871,29 @@ fn sheets_of<'p>(
     meter: &mut WorkMeter<'_>,
 ) -> Result<(Vec<Sheet>, Vec<Held<'p>>), MergeError> {
     let seams = merge == Merge::KeepSeams;
-    let made = exec.try_map(meter, SHEETS, PIECES, pieces, |_, piece, _| {
-        let face = canonical(&piece.piece.face)?;
-        let pairs = |w: &Winding| {
-            if seams {
-                w.pairs().to_vec()
-            } else {
-                Vec::new()
-            }
-        };
-        Ok::<SheetKey, MergeError>((
-            (face.plane.d(), face.plane.n()),
-            face.flipped,
-            if seams { piece.source } else { 0 },
-            pairs(&piece.front),
-            pairs(&piece.back),
-        ))
-    });
+    let made = exec.try_map(
+        meter,
+        SHEETS,
+        PIECES,
+        pieces,
+        |_, piece, _| -> Result<SheetKey, MergeError> {
+            let face = canonical(&piece.piece.face)?;
+            let pairs = |w: &Winding| {
+                if seams {
+                    w.pairs().to_vec()
+                } else {
+                    Vec::new()
+                }
+            };
+            Ok((
+                (face.plane.d(), face.plane.n()),
+                face.flipped,
+                if seams { piece.source } else { 0 },
+                pairs(&piece.front),
+                pairs(&piece.back),
+            ))
+        },
+    );
     let keys = made.map_err(|e| phase_error(e, meter))?;
     // Equal keys by the sheet's source faces as the result does where one can, the lowest first
     // (11.5); the stable sort keeps the input's order past that, as the serial sort did.
@@ -934,15 +940,21 @@ fn numbered(
     exec: &Exec<'_>,
     meter: &mut WorkMeter<'_>,
 ) -> Result<(Vec<usize>, Vec<Corner>), MergeError> {
-    let made = exec.try_map(meter, CORNERS, PIECES, held, |_, piece, m| {
-        let after = piece.piece.bounds.iter().cycle().skip(1);
-        let mut out = Vec::with_capacity(piece.piece.bounds.len());
-        for (bound, next) in piece.piece.bounds.iter().zip(after) {
-            m.charge(1)?;
-            out.push(corner(piece.piece.face, *bound, *next)?);
-        }
-        Ok::<_, MergeError>(out)
-    });
+    let made = exec.try_map(
+        meter,
+        CORNERS,
+        PIECES,
+        held,
+        |_, piece, m| -> Result<Vec<Corner>, MergeError> {
+            let after = piece.piece.bounds.iter().cycle().skip(1);
+            let mut out = Vec::with_capacity(piece.piece.bounds.len());
+            for (bound, next) in piece.piece.bounds.iter().zip(after) {
+                m.charge(1)?;
+                out.push(corner(piece.piece.face, *bound, *next)?);
+            }
+            Ok(out)
+        },
+    );
     let made = made.map_err(|e| phase_error(e, meter))?;
     let corners: Vec<Corner> = made.into_iter().flatten().collect();
     let keys: Option<Vec<&[Cell; 3]>> = corners.iter().map(|c| c.cells.as_ref()).collect();
@@ -1078,28 +1090,34 @@ fn sides_of(
         bases.push(base);
         base = base.saturating_add(entry.piece.bounds.len());
     }
-    let made = exec.try_map(meter, SIDES, PIECES, held, |at, entry, m| {
-        let k = entry.piece.bounds.len();
-        let base = bases.get(at).copied().ok_or(MergeError::Open)?;
-        let mut out = Vec::with_capacity(k);
-        for (i, bound) in entry.piece.bounds.iter().enumerate() {
-            m.charge(1)?;
-            // Bound i runs from corner i − 1 to corner i.
-            let before = base.saturating_add(i.checked_sub(1).unwrap_or(k.saturating_sub(1)));
-            let from = number.get(before).copied().unwrap_or(0);
-            let to = number.get(base.saturating_add(i)).copied().unwrap_or(0);
-            out.push(Side {
-                key: line_key(&entry.piece.face, bound)?,
-                low: from.min(to),
-                high: from.max(to),
-                rising: from < to,
-                sheet: entry.sheet,
-                held: at,
-                bound: *bound,
-            });
-        }
-        Ok::<_, MergeError>(out)
-    });
+    let made = exec.try_map(
+        meter,
+        SIDES,
+        PIECES,
+        held,
+        |at, entry, m| -> Result<Vec<Side>, MergeError> {
+            let k = entry.piece.bounds.len();
+            let base = bases.get(at).copied().ok_or(MergeError::Open)?;
+            let mut out = Vec::with_capacity(k);
+            for (i, bound) in entry.piece.bounds.iter().enumerate() {
+                m.charge(1)?;
+                // Bound i runs from corner i − 1 to corner i.
+                let before = base.saturating_add(i.checked_sub(1).unwrap_or(k.saturating_sub(1)));
+                let from = number.get(before).copied().unwrap_or(0);
+                let to = number.get(base.saturating_add(i)).copied().unwrap_or(0);
+                out.push(Side {
+                    key: line_key(&entry.piece.face, bound)?,
+                    low: from.min(to),
+                    high: from.max(to),
+                    rising: from < to,
+                    sheet: entry.sheet,
+                    held: at,
+                    bound: *bound,
+                });
+            }
+            Ok(out)
+        },
+    );
     let made = made.map_err(|e| phase_error(e, meter))?;
     let sides: Vec<Side> = made.into_iter().flatten().collect();
     let keys: Option<Vec<(usize, &[Cell; 6])>> = sides
@@ -1180,9 +1198,15 @@ fn cut_at_ends(
     ends.sort_unstable();
     ends.dedup();
     let cells: Vec<Option<[i128; 3]>> = places.iter().map(floors).collect();
-    let made = exec.try_map(meter, ENDS, RUNS, runs, |_, run, _| {
-        Ok::<_, MergeError>(cut_run(run, (&ends, &cells), places))
-    });
+    let made = exec.try_map(
+        meter,
+        ENDS,
+        RUNS,
+        runs,
+        |_, run, _| -> Result<Result<Vec<Run>, MergeError>, MergeError> {
+            Ok(cut_run(run, (&ends, &cells), places))
+        },
+    );
     let made = made.map_err(|e| phase_error(e, meter))?;
     // Each run's parts, in run order, and the first run's failure as a serial walk meets it.
     let mut edges: Vec<Run> = Vec::with_capacity(runs.len());
@@ -1701,9 +1725,15 @@ pub fn merge_on(
 
     // Radial order, which joins faces into shells, numbered by their lowest face.
     // Each edge's order on the pool; the joins, and the first failure, in edge order as before.
-    let orders = exec.try_map(meter, RADIAL, RUNS, &around_edge, |_, here, _| {
-        Ok::<_, MergeError>(radial(here, &fins, &planes))
-    });
+    let orders = exec.try_map(
+        meter,
+        RADIAL,
+        RUNS,
+        &around_edge,
+        |_, here, _| -> Result<Result<Vec<usize>, MergeError>, MergeError> {
+            Ok(radial(here, &fins, &planes))
+        },
+    );
     let orders = orders.map_err(|e| phase_error(e, meter))?;
     let mut same_shell: Vec<usize> = (0..face_list.len()).collect();
     let mut edges = Vec::with_capacity(runs.len());
@@ -1763,14 +1793,18 @@ pub fn merge_on(
         .collect();
     // Each face's rings on the pool, each read in face order below, so a failure is the one a
     // walk of the faces meets first.
-    let traced = exec.try_map(meter, RINGS, RUNS, &own_fins, |at, list, _| {
-        Ok::<_, MergeError>(
-            planes
+    let traced = exec.try_map(
+        meter,
+        RINGS,
+        RUNS,
+        &own_fins,
+        |at, list, _| -> Result<Result<Vec<Vec<usize>>, MergeError>, MergeError> {
+            Ok(planes
                 .get(at)
                 .ok_or(MergeError::Open)
-                .and_then(|plane| rings(&fins, list, plane)),
-        )
-    });
+                .and_then(|plane| rings(&fins, list, plane)))
+        },
+    );
     let traced = traced.map_err(|e| phase_error(e, meter))?;
     for (at, (((sheet, ..), _), ring)) in face_list.iter().zip(traced).enumerate() {
         let shell = shell_of(at)?;
