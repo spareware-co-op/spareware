@@ -317,7 +317,6 @@ pub(crate) fn settle(
 ) -> Result<OpOutput<Made>, OpError> {
     finish(
         ctx,
-        meter,
         copy.body,
         copy.records,
         copy.names,
