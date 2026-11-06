@@ -40,6 +40,7 @@ pub mod dd;
 pub mod eft;
 pub mod exact_sum;
 pub mod exactness;
+pub mod format;
 pub mod generated;
 pub mod grid;
 pub mod growth;
