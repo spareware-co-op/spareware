@@ -6,6 +6,9 @@
 //! cargo run -p geom-test --bin oracle -- check [--root <dir>] [--repository <oracle checkout>]
 //! cargo run -p geom-test --bin oracle -- jobs geomdl --seed <hex> --count <n>
 //! cargo run -p geom-test --bin oracle -- compare geomdl --jobs <file> --answers <file>
+//! cargo run -p geom-test --bin oracle -- triage geomdl --jobs <file> --id <n> --kind <kind>
+//!     --outcome <ours|theirs|within-bounds|undecided> --fixture <id> --why <words>
+//!     [--reference <words>] [--root <dir>]
 //! ```
 //!
 //! - `list` prints every oracle: id, how it runs, its state and its licence.
@@ -17,8 +20,11 @@
 //!   error, for the harness in the oracle repository.
 //! - `compare` judges each answer and prints the differences by signature. It fails only on a
 //!   signature the triage register does not hold: each is judged once (28.10).
+//! - `triage` records one signature's outcome in the register and writes its fixture from what the
+//!   kernel gives for that job today, so "ours" comes after its fix.
 //!
-//! Guarantees: nothing here runs an oracle or writes a file. Exit codes: 0 when everything checked
+//! Guarantees: nothing here runs an oracle, and only `triage` writes a file: the register and the
+//! one fixture. Exit codes: 0 when everything checked
 //! holds; 1 when a check fails or a new signature appears; 2 for a usage error, or a file or a line
 //! that cannot be read (a broken harness is never a pass).
 //!
@@ -34,10 +40,15 @@ use std::path::{Path, PathBuf};
 use std::process::ExitCode;
 
 use clap::{Args, Parser, Subcommand};
+use geom_test::fixture::kernel::Kernel;
+use geom_test::fixture::repo as fixture_repo;
+use geom_test::fixture::run::replay;
+use geom_test::fixture::{OpLog, Triage};
+use geom_test::golden::store::Store;
 use geom_test::map::repo::workspace_root;
 use geom_test::oracle::catalogue::{self, Catalogue, audit, linked};
 use geom_test::oracle::geomdl::{self, Answer, Compared, Job, judge};
-use geom_test::oracle::triage::{self, Register, group};
+use geom_test::oracle::triage::{self, Record, Register, Signature, fixture as fixture_of, group};
 use geom_test::seed::Seed;
 
 /// The outside oracles' tool.
@@ -89,6 +100,37 @@ enum Tool {
         #[arg(long)]
         answers: PathBuf,
     },
+    /// Record a signature's outcome and write its fixture.
+    Triage(Triaging),
+}
+
+#[derive(Args)]
+struct Triaging {
+    /// The oracle.
+    oracle: String,
+    /// The jobs, one JSON line each.
+    #[arg(long)]
+    jobs: PathBuf,
+    /// The job that shows it.
+    #[arg(long)]
+    id: u64,
+    /// The kind of difference.
+    #[arg(long)]
+    kind: String,
+    /// `ours`, `theirs`, `within-bounds` or `undecided`.
+    #[arg(long)]
+    outcome: String,
+    /// The fixture's id.
+    #[arg(long)]
+    fixture: String,
+    /// Why, in a sentence.
+    #[arg(long)]
+    why: String,
+    /// The upstream report, the fix, or what settles it.
+    #[arg(long)]
+    reference: Option<String>,
+    #[command(flatten)]
+    root: Root,
 }
 
 fn main() -> ExitCode {
@@ -230,6 +272,56 @@ fn compare(oracle: &str, jobs: &Path, answers: &Path) -> Result<ExitCode, String
     })
 }
 
+fn triage_command(t: &Triaging) -> Result<ExitCode, String> {
+    known(&t.oracle)?;
+    let root = match &t.root.root {
+        Some(r) => r.clone(),
+        None => workspace_root().map_err(|e| e.to_string())?,
+    };
+    let jobs: Vec<Job> = lines(&read(&t.jobs)?, "a job")?;
+    let job = jobs
+        .iter()
+        .find(|j| j.id == t.id)
+        .ok_or_else(|| format!("no job {}", t.id))?;
+    let outcome: Triage = serde_json::from_value(serde_json::Value::String(t.outcome.clone()))
+        .map_err(|e| format!("the outcome {:?}: {e}", t.outcome))?;
+    let record = Record {
+        signature: Signature {
+            operation: job.op.name().to_owned(),
+            oracle: t.oracle.clone(),
+            kind: t.kind.clone(),
+            family: job.family.clone(),
+        },
+        outcome,
+        fixture: t.fixture.clone(),
+        reference: t.reference.clone(),
+        why: t.why.clone(),
+    };
+    let register_path = joined(&root, &triage::REGISTER_PATH);
+    let mut register = Register::parse(&read(&register_path)?).map_err(|e| e.to_string())?;
+    if register.knows(&record.signature) {
+        eprintln!("oracle triage: {} is already triaged", record.signature);
+        return Ok(ExitCode::from(1));
+    }
+    let log = OpLog::new(Vec::new(), vec![geomdl::operation(job)?]);
+    let store = Store::embedded().map_err(|e| e.to_string())?;
+    let edition = store.current().map_err(|e| e.to_string())?.edition.clone();
+    let key = (edition, log.versions());
+    let replayed = replay(&mut Kernel::new(), &log);
+    let fixture = fixture_of(&record, log, key, &replayed)?;
+    let text = fixture.to_json().map_err(|e| e.to_string())?;
+    let path = joined(&root, &fixture_repo::DIR).join(format!("{}.json", fixture.id));
+    if let Some(folder) = path.parent() {
+        fs::create_dir_all(folder).map_err(|e| format!("{}: {e}", folder.display()))?;
+    }
+    fs::write(&path, text).map_err(|e| format!("{}: {e}", path.display()))?;
+    register.records.push(record);
+    let text = register.to_json().map_err(|e| e.to_string())?;
+    fs::write(&register_path, text).map_err(|e| format!("{}: {e}", register_path.display()))?;
+    println!("oracle triage: {}", fixture.id);
+    Ok(ExitCode::SUCCESS)
+}
+
 fn command(tool: Tool) -> Result<ExitCode, String> {
     match tool {
         Tool::List => list(),
@@ -244,5 +336,6 @@ fn command(tool: Tool) -> Result<ExitCode, String> {
             jobs,
             answers,
         } => compare(&oracle, &jobs, &answers),
+        Tool::Triage(triaging) => triage_command(&triaging),
     }
 }
