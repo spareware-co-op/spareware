@@ -52,7 +52,7 @@
 //!   `N_BezSrfCrossProduct` and `N_BezSrfDotProduct`, in interval arithmetic so every coefficient
 //!   is certified; the binomial ratios from Pascal's rule in intervals instead of `NLib`'s table of
 //!   18 rows; the normal patch of rational patches and the division of collapsed edges are ours.
-//! SPDX-License-Identifier: MPL-2.0 AND Apache-2.0
+//! SPDX-License-Identifier: Apache-2.0
 //!
 //! Cost: a product of degrees (p1, q1) and (p2, q2) takes O((p1 + 1)(p2 + 1)(q1 + 1)(q2 + 1)·D)
 //! interval operations; a rational normal patch three products of degree (3p − 1, 3q − 1); one

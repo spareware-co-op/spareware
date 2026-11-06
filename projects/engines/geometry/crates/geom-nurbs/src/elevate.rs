@@ -37,7 +37,7 @@
 //!   the same steps give the result and its interval enclosure; Pascal's triangle is computed
 //!   rather than read from `NLib`'s table of 18 rows; a new curve is returned instead of edited in
 //!   place; the degree limit is [`MAX_DEGREE`].
-//! SPDX-License-Identifier: MPL-2.0 AND Apache-2.0
+//! SPDX-License-Identifier: Apache-2.0
 //!
 //! Cost: O(s·(p + t)·p) operations for s spans, each twice, and O((p + t)·p) for the matrix; the
 //! result and its enclosure are allocated once.
@@ -72,7 +72,9 @@ impl<const D: usize> Curve<D> {
     ) -> Result<Changed<Curve<D>>, NurbsError> {
         let basis = self.basis();
         let p = basis.degree();
-        let q = add(p, t)?;
+        // p + t past the limit is a degree refusal, and so is a count that overflows the sum
+        // (it saturates, so the refusal names usize::MAX).
+        let q = p.saturating_add(t);
         if q > MAX_DEGREE {
             return Err(NurbsError::Degree { degree: q });
         }
