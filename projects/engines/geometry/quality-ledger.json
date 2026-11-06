@@ -5220,38 +5220,6 @@
     },
     {
       "file": "projects/engines/geometry/crates/geom-intersect/src/curve_surface.rs",
-      "mutant": "replace * with + in <impl Field<1> for Quartic>::reach",
-      "line_text": "Ok((t.hi() - t.lo()) * self.speed)",
-      "occurrences": 1,
-      "kind": "hangs",
-      "reason": "reach is how far a box of t can carry the line, its width times the line's speed. With + in place of the product it no longer shrinks with the box, so no box of a torus's quartic is ever small enough to settle and the engine splits each one down to its floor: attack_g164's lines through tori then run past cargo-mutants' timeout, which is how the tests catch it."
-    },
-    {
-      "file": "projects/engines/geometry/crates/geom-intersect/src/curve_surface.rs",
-      "mutant": "replace - with + in <impl Field<1> for Quartic>::reach",
-      "line_text": "Ok((t.hi() - t.lo()) * self.speed)",
-      "occurrences": 1,
-      "kind": "hangs",
-      "reason": "reach is how far a box of t can carry the line, its width times the line's speed. With the sum of t's ends in place of their difference it stays near twice the root's own t however small the box, so no box of a torus's quartic is ever small enough to settle and the engine splits each one down to its floor: attack_g164's lines through tori run past cargo-mutants' timeout."
-    },
-    {
-      "file": "projects/engines/geometry/crates/geom-intersect/src/curve_surface.rs",
-      "mutant": "replace - with / in <impl Field<1> for Quartic>::reach",
-      "line_text": "Ok((t.hi() - t.lo()) * self.speed)",
-      "occurrences": 1,
-      "kind": "hangs",
-      "reason": "reach is how far a box of t can carry the line, its width times the line's speed. With the ratio of t's ends in place of their difference it tends to one, not zero, as the box shrinks, so no box of a torus's quartic is ever small enough to settle and the engine splits each one down to its floor: attack_g164's lines through tori run past cargo-mutants' timeout."
-    },
-    {
-      "file": "projects/engines/geometry/crates/geom-intersect/src/curve_surface.rs",
-      "mutant": "replace closed_form -> Result<Option<Intersection>, IntersectError> with Ok(None)",
-      "line_text": "let seams = seams_of(surface);",
-      "occurrences": 1,
-      "kind": "hangs",
-      "reason": "With no closed form every line, circle and helix against a plane, sphere, cylinder, cone or torus goes to the subdivision engine instead of its exact or one-dimensional solve, and on attack_g164's long lines, wide surfaces and tangencies that engine splits boxes far past the budgeted meets' work: the tests run past cargo-mutants' timeout, which is how they catch it."
-    },
-    {
-      "file": "projects/engines/geometry/crates/geom-intersect/src/curve_surface.rs",
       "mutant": "replace > with >= in <impl Field<3> for Contact<'_>>::narrow",
       "line_text": "if lo > hi {",
       "occurrences": 1,

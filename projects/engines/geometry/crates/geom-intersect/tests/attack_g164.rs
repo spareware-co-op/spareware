@@ -865,6 +865,45 @@ fn a_tangent_band_on_a_torus_is_as_wide_as_its_run() {
 }
 
 #[test]
+fn a_near_tangent_secant_of_a_whole_torus_is_not_called_a_tangent() {
+    // On whole-number radii the exact count is known, but a tangent band is only settled into
+    // tangent points when the roots are exactly repeated and the run of bands and certified roots
+    // makes up that count. These lines run in the plane of the tube's top (z = 2) or its bottom
+    // across a ring of radius 10, nearly along it: two simple roots a few steps apart, which no
+    // box can split. Each stays a flagged band, and none is reported as a tangent contact.
+    let t = torus(10.0, 2.0);
+    let r = meet(&line([-50.0, -10.0, 2.0], [1000.0, 1.0, 0.0]), &t);
+    assert!(
+        matches!(
+            r.items(),
+            [Item::Flagged {
+                why: Unresolved::TangentBand { .. },
+                ..
+            }]
+        ),
+        "{:?}",
+        r.items()
+    );
+    let r = meet(&line([-50.0, 10.0, -2.0], [1000.0, 0.0, 1.0]), &t);
+    assert_eq!(contacts(&r), [PointContact::Crossing]);
+    assert_eq!(
+        r.items()
+            .iter()
+            .filter(|i| matches!(
+                i,
+                Item::Flagged {
+                    why: Unresolved::TangentBand { .. },
+                    ..
+                }
+            ))
+            .count(),
+        1,
+        "{:?}",
+        r.items()
+    );
+}
+
+#[test]
 fn a_bound_on_a_domain_end_is_past_it() {
     // Every enclosure is rounded outward, so one whose bound lands exactly on a domain's end holds
     // a value strictly past it. A segment stopping 9 doubles short of the plane, and lines 5 doubles
