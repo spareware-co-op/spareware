@@ -818,6 +818,7 @@ Every merge gate and the violation seeded to make it fail. R: the real tool runs
 | `kernel-dev.yml` | `wasm` | The tests of `native` on wasm32: a failing test fails it, and the checks they test are seeded under `native` |
 | `kernel-dev.yml` | `verus` | `trip verus` |
 | `kernel-golden.yml` | `store` | J: `geom-test/tests/attack_g19.rs::seeded_violations_of_the_real_tree_are_found`; R: `geom-test/tests/attack_g19.rs::golden_diff_holds_a_change_to_the_owner_rule_end_to_end` |
+| `kernel-golden.yml` | `fixtures` | J: `geom-test/tests/fixture_tool.rs::a_tree_that_breaks_a_rule_fails_its_check`; R: `geom-test/tests/fixture_tool.rs::diff_holds_a_pull_request_to_the_rules` |
 | `kernel-bench.yml` | `scope` | Not a gate: it decides which count jobs run, from the same paths as the workflow's trigger |
 | `kernel-bench.yml` | `cheap` | Not a gate: it waits for the cheap checks (format and lints, clippy, scaffold, sign-off) of the pull request's head commit and fails if one failed, so the heavy jobs of this workflow start only when they passed |
 | `kernel-bench.yml` | `checks` | The tools of `kernel.yml`'s `lint`: `trip fmt`; R: `engine-geometry/tests/scaffold/gate.rs::gate_clippy_fails_on_each_seeded_violation` |
