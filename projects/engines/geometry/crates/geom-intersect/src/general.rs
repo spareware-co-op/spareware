@@ -18,6 +18,13 @@
 //! - **Everything is accounted for.** A branch through a settled pair enters and leaves, so each
 //!   pair holds an even number of start points, or its count goes to [`Subdivided::flagged`].
 //! - **Nothing is decided below the floor.** A pair still undecided there is flagged, for 12.9.
+//! - **Coincidence is by data, and answered before any work.** Two surfaces with equal data, or two
+//!   patches of one plane, cylinder, sphere or torus (equal centre, frame and radii, exactly, so no
+//!   sampling is involved) are one carrier. [`subdivide`] spends nothing on them: it returns the
+//!   one pair of the parameters they share, flagged as coincident at a gap of exactly zero, for
+//!   G171's analysis to read as an overlap. It does so only where the shared parameters are one
+//!   region: when a patch wraps round onto itself so that two regions would share, or the patches
+//!   only touch, the pair goes the ordinary way.
 //!
 //! Method: Hohmeyer's subdivision (UCB/CSD-92-681, 1992,
 //! <https://www2.eecs.berkeley.edu/Pubs/TechRpts/1992/6140.html>) with Patrikalakis and Maekawa's
@@ -53,16 +60,18 @@
 use alloc::vec::Vec;
 
 use geom_curve::CurveError;
-use geom_curve::tight::larger;
+use geom_curve::tight::{larger, smaller};
 use geom_num::NumError;
+use geom_num::grid::Steps;
 use geom_num::interval::Interval;
+use geom_num::math;
 use geom_nurbs::{Bounds, Limit};
 use geom_run::WorkMeter;
 use geom_surface::{ParamBox as Region, ParamSurface, SurfaceKind};
 
 use crate::IntersectError;
 use crate::project::{boxed, dot, image, negative, positive};
-use crate::result::{Test, Unresolved};
+use crate::result::{StepsInterval, Test, Unresolved};
 use crate::solve::{Field, solve};
 
 /// What a pair of patches costs the meter, besides the kinds' own charges.
@@ -407,6 +416,92 @@ fn speeds(
     Ok([Interval::norm(su)?.hi(), Interval::norm(sv)?.hi()])
 }
 
+/// The two ranges' common part, if it has a width.
+fn common(a: (f64, f64), b: (f64, f64)) -> Option<(f64, f64)> {
+    let (lo, hi) = (larger(a.0, b.0), smaller(a.1, b.1));
+    (lo < hi).then_some((lo, hi))
+}
+
+/// How many of `b`'s copies, shifted by whole periods of 2 (a turn), share a width with `a`, and
+/// the common part of the unshifted one. `None` where the ranges are not finite and near.
+fn wraps(a: (f64, f64), b: (f64, f64)) -> Option<(usize, Option<(f64, f64)>)> {
+    let (lo, hi) = ((a.0 - b.1) / 2.0, (a.1 - b.0) / 2.0);
+    if !(lo.is_finite() && hi.is_finite() && lo.abs() < 1e9 && hi.abs() < 1e9) {
+        return None;
+    }
+    let mut count = 0_usize;
+    let mut here = None;
+    let mut k = math::ceil(lo).ok()?.get();
+    let last = math::floor(hi).ok()?.get();
+    while k <= last {
+        let shifted = (b.0 + 2.0 * k, b.1 + 2.0 * k);
+        if let Some(part) = common(a, shifted) {
+            count = count.saturating_add(1);
+            if k == 0.0 {
+                here = Some(part);
+            }
+        }
+        k += 1.0;
+    }
+    Some((count, here))
+}
+
+/// The parameters two patches of one carrier share, when they are one region and exactly that: the
+/// same plane, cylinder, sphere or torus (equal data, compared exactly), over domains whose common
+/// part has an area, and no other copy of a patch, one turn round, shares with the other. `None` for
+/// anything else, which the ordinary search then decides.
+#[allow(
+    clippy::float_cmp,
+    reason = "a carrier is the same only if its data are equal, exactly"
+)]
+pub(crate) fn shared_carrier(first: &SurfaceKind, second: &SurfaceKind) -> Option<Region> {
+    let (turns, same) = match (first, second) {
+        (SurfaceKind::Plane(a), SurfaceKind::Plane(b)) => {
+            ([false, false], a.vectors() == b.vectors())
+        }
+        (SurfaceKind::Cylinder(a), SurfaceKind::Cylinder(b)) => (
+            [true, false],
+            a.center() == b.center()
+                && a.frame() == b.frame()
+                && a.axial_sign() == b.axial_sign()
+                && a.radius() == b.radius(),
+        ),
+        (SurfaceKind::Sphere(a), SurfaceKind::Sphere(b)) => (
+            [true, false],
+            a.center() == b.center()
+                && a.frame() == b.frame()
+                && a.axial_sign() == b.axial_sign()
+                && a.radius() == b.radius(),
+        ),
+        (SurfaceKind::Torus(a), SurfaceKind::Torus(b)) => (
+            [true, true],
+            a.center() == b.center()
+                && a.frame() == b.frame()
+                && a.axial_sign() == b.axial_sign()
+                && a.radii() == b.radii(),
+        ),
+        _ => return None,
+    };
+    if !same {
+        return None;
+    }
+    let ((au, av), (bu, bv)) = (first.domain(), second.domain());
+    let axis = |a, b, turns| {
+        if turns {
+            wraps(a, b)
+        } else {
+            let part = common(a, b);
+            Some((usize::from(part.is_some()), part))
+        }
+    };
+    let ((cu, here_u), (cv, here_v)) = (axis(au, bu, turns[0])?, axis(av, bv, turns[1])?);
+    // One shared copy on each axis, and it is the unshifted one.
+    if cu != 1 || cv != 1 {
+        return None;
+    }
+    Some((here_u?, here_v?))
+}
+
 /// Subdivides the pair of `first` and `second` until each piece is apart, settled or flagged, to a
 /// floor of `floor` in space, and finds the settled pairs' start points.
 ///
@@ -423,6 +518,21 @@ pub fn subdivide(
 ) -> Result<Subdivided, IntersectError> {
     if floor.is_nan() || floor <= 0.0 {
         return Err(IntersectError::InvalidInput);
+    }
+    let shared = if first == second {
+        Some(first.domain())
+    } else {
+        shared_carrier(first, second)
+    };
+    if let (Some(region), Some(gap)) = (shared, StepsInterval::new(Steps::ZERO, Steps::ZERO)) {
+        return Ok(Subdivided {
+            settled: Vec::new(),
+            flagged: alloc::vec![FlaggedPair {
+                first: region,
+                second: region,
+                why: Unresolved::NearCoincident { gap },
+            }],
+        });
     }
     let mut out = Subdivided {
         settled: Vec::new(),
