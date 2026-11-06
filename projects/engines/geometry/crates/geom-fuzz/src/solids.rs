@@ -430,12 +430,12 @@ fn check_rest(case: &Case, operands: &[ExactMesh], union: &ExactMesh) -> Result<
                 &mut meter(),
             )
             .map_err(|e| Finding::new("two boxes sum", || format!("{case:?}: {e:?}")))?;
-            let count: i64 = low_a
-                .iter()
-                .zip(&high_a)
-                .zip(low_b.iter().zip(&high_b))
-                .map(|((la, ha), (lb, hb))| (ha - la) + (hb - lb))
-                .fold(1_i64, |all, side| all * side);
+            let [lax, lay, laz] = low_a;
+            let [hax, hay, haz] = high_a;
+            let [lbx, lby, lbz] = low_b;
+            let [hbx, hby, hbz] = high_b;
+            let count =
+                (hax - lax + (hbx - lbx)) * (hay - lay + (hby - lby)) * (haz - laz + (hbz - lbz));
             holds_cells(
                 "a sum of boxes adds their sides",
                 &sum.mesh,
