@@ -250,7 +250,7 @@
               "why": "4 new count benchmarks on geom-make's hot paths (decision 32.44): a box and a cylinder built, a box moved and quarter-turned; no existing digest moved"
             }
           ],
-          "sha256": "029ea44ae8ddb92d35bb461dca2a56b270e067d2a608dcc7e36413ba1036695f"
+          "sha256": "c14e6e5402898a7f98f4bc6daa4dd69af5d6c35ef2efc3cb558a43137deef490"
         },
         {
           "id": "geom-nurbs/operations",
