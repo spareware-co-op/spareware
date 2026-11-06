@@ -702,6 +702,10 @@ The questions the owner settles in section 32 are listed once, in the first tabl
 | --- | --- | --- |
 | Can geom-topo's arenas hold 2D arrangements efficiently, with fins as half-edges, or is a planar specialisation needed? | 14 | Piece "2D-09 Arrangement of lines, arcs and conics" |
 | Re-check 8.1's "the structure Parasolid documents publicly" against Siemens's own pages and cite Weiler, Mäntylä and Jackson, because the evidence read a third-party copy | 29 | Editorial fix to 8.1 |
+| Euler's formula for general, non-manifold bodies: the checker holds solids and sheets to it, shell by shell, and a general body only to the first stage of group 1; the non-manifold form (radial-edge counts) is to be chosen | G84 build | Kernel owners, with the first operation that makes a general body |
+| Where a body's exactness record lives: the checker takes it beside the body, from the operation's `OpOutput`; whether `Body` itself carries it, as the native format's body index stores it (24.2) | G84 build | Piece "Body records" |
+| The full checker in release test builds: `geom-check`'s `full` feature runs every group at `Level::of_build()`; which test builds turn it on, beside the shipped leg of the determinism matrix (28.4) | G84 build | Piece "Determinism matrix for operation logs" |
+| Regions when each face names one shell: a solid body's shells belong to its solid regions and the outside void has none, as G80's wall body is built, so a void cavity has no shell of its own; whether faces need a shell on each side, as Parasolid's do, for cellular models (rooms as regions, 8.1) | G84 build | Pieces "Builder, Euler operators and attributes" and "Cells, rooms and space boundaries" |
 
 ### Chapter 9: Representations and exactness
 

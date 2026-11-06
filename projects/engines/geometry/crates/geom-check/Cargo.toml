@@ -16,6 +16,21 @@ geom-num = { path = "../geom-num" }
 geom-op = { path = "../geom-op" }
 geom-topo = { path = "../geom-topo" }
 
+[features]
+# Every group of chapter 8.3 at `Level::of_build()` in a release build too: the switch a release test
+# build turns on, so it runs the full set as debug builds do (28.4); shipped builds leave it off and
+# run the cheap groups.
+full = []
+
+[dev-dependencies]
+# Bodies for the tests: their geometry kinds and face boxes.
+geom-curve = { path = "../geom-curve" }
+geom-math = { path = "../geom-math" }
+geom-surface = { path = "../geom-surface" }
+# An allocator that refuses allocations past a limit, so the tests reach every refused
+# reservation (23.10, never abort on memory). cap 0.1.2, MIT OR Apache-2.0.
+cap = "=0.1.2"
+
 [lints.rust]
 unsafe_code = "forbid"
 missing_docs = "warn"
