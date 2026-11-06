@@ -869,7 +869,7 @@ fn hull_of(open: &[([Interval; 2], f64)], side: Option<(usize, f64, bool)>) -> O
     let mut out: Option<ParamBox> = None;
     for (at, _) in open {
         if let Some((k, middle, high)) = side
-            && !at.get(k).is_some_and(|x| (x.lo() >= middle) == high)
+            && at.get(k).is_none_or(|x| (x.lo() >= middle) != high)
         {
             continue;
         }
