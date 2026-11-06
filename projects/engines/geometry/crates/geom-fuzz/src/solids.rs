@@ -435,7 +435,7 @@ fn check_rest(case: &Case, operands: &[ExactMesh], union: &ExactMesh) -> Result<
                 .zip(&high_a)
                 .zip(low_b.iter().zip(&high_b))
                 .map(|((la, ha), (lb, hb))| (ha - la) + (hb - lb))
-                .product();
+                .fold(1_i64, |all, side| all * side);
             holds_cells(
                 "a sum of boxes adds their sides",
                 &sum.mesh,

@@ -561,6 +561,7 @@ fn corner(bits: u32) -> [i64; 3] {
 #[allow(
     clippy::too_many_lines,
     clippy::cast_precision_loss,
+    clippy::many_single_char_names,
     reason = "one block per arena, as geom-topo's own meeting box; corners of ten steps are exact"
 )]
 fn mixed_box(extra: &[Plane]) -> Builder {
