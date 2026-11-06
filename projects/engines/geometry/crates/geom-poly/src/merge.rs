@@ -1121,13 +1121,13 @@ fn without_slits(mut runs: Vec<Run>, parents: &[usize]) -> Result<Vec<Run>, Merg
         let fins = run.fins.clone();
         let mut slit = false;
         run.fins.retain(|fin| {
-            let seam = fins.iter().any(|other| {
+            let partner = fins.iter().find(|other| {
                 other.sheet == fin.sheet
                     && other.rising != fin.rising
                     && root(parents, other.held) == root(parents, fin.held)
             });
-            slit |= seam && fin.contact;
-            !seam
+            slit |= partner.is_some_and(|other| fin.contact && other.contact);
+            partner.is_none()
         });
         if slit {
             return Err(MergeError::Slit);
