@@ -89,6 +89,7 @@ pub mod hash;
 pub mod history;
 pub mod id;
 pub mod kind;
+pub mod local;
 pub mod name;
 pub mod output;
 pub mod remedy;
