@@ -240,17 +240,34 @@ fn kernel_yml_runs_every_golden_in_every_native_build_mode() {
 ",
         "      - name: Every golden in debug
         if: ${{ !cancelled() && matrix.mode == 'debug' }}
-        run: cargo run --locked -p geom-test --bin golden -- run
+        # The runner calls `cargo test -p geom-test`, and cargo builds a package's binaries for its
+        # integration tests: in this same debug folder that can mean replacing the running golden
+        # binary, which Windows refuses (\"failed to remove file ... golden.exe: Access is denied\",
+        # so the goldens never ran). The release steps build their tests in another profile's
+        # folder. So the debug runner runs from a copy outside the build folder.
+        run: |
+          cargo build --locked -p geom-test --bin golden
+          exe=\"\"
+          if [ \"$RUNNER_OS\" = \"Windows\" ]; then exe=\".exe\"; fi
+          cp \"target/debug/golden$exe\" \"$RUNNER_TEMP/golden$exe\"
+          \"$RUNNER_TEMP/golden$exe\" run
 ",
-        "      - name: Test suite in release, with overflow checks on
-        if: ${{ !cancelled() && matrix.mode == 'release' }}
-        env:
+        // The whole suite, in parts that run side by side (the job `suite`): every part runs the
+        // tests of `--partition count:k/n`, and the doctests, which nextest does not run, run in
+        // part 1.
+        "        env:
           RUSTFLAGS: -C overflow-checks=on
-        run: cargo test $KERNEL_CRATES --release --locked --no-fail-fast
+        run: cargo nextest run $KERNEL_CRATES --release --locked --no-fail-fast --partition count:${{ matrix.part.k }}/${{ matrix.part.n }}
 ",
-        "      - name: Test suite in debug
-        if: ${{ !cancelled() && matrix.mode == 'debug' }}
-        run: cargo test $KERNEL_CRATES --locked --no-fail-fast
+        "        if: ${{ !cancelled() && matrix.part.mode == 'debug' }}
+        run: cargo nextest run $KERNEL_CRATES --locked --no-fail-fast --partition count:${{ matrix.part.k }}/${{ matrix.part.n }}
+",
+        "        env:
+          RUSTFLAGS: -C overflow-checks=on
+        run: cargo test $KERNEL_CRATES --doc --release --locked --no-fail-fast
+",
+        "        if: ${{ !cancelled() && matrix.part.mode == 'debug' && matrix.part.k == 1 }}
+        run: cargo test $KERNEL_CRATES --doc --locked --no-fail-fast
 ",
     ];
     for step in steps {
