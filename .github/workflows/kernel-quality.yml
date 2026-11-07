@@ -646,7 +646,10 @@ jobs:
       # Borrows' own aliasing rules.
       # geom-pool runs its tasks with rayon's `join` and not a scope: rayon-core 1.13.0's
       # `Scope::spawn` frees a scope under a finishing job's protected reference, which Tree Borrows
-      # rejects under some schedules (rayon-rs/rayon#1328, fixed by #1330, in no release yet).
+      # rejects under some schedules (rayon-rs/rayon#1328, fixed by #1330, in no release yet). The
+      # old scope code failed 4 of 16 Miri seeds (`-Zmiri-many-seeds=0..16`) on both e7dd9a41 and
+      # 96e349a7, so the earlier green runs were a lucky schedule, not a fix; the join code is clean
+      # on 32 seeds of the tests that nest and panic.
       - name: geom-pool's tests under Miri with Tree Borrows
         if: env.NEEDED == 'true' && matrix.partition == 1
         env:

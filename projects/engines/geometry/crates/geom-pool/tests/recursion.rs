@@ -17,7 +17,8 @@ use geom_run::Pool;
 /// run.
 #[test]
 fn halving_reaches_every_task_of_a_large_wave() {
-    const TASKS: usize = 1 << 16;
+    // Miri interprets a wave of 2^16 tasks in tens of gigabytes; 2^10 is 11 frames deep.
+    const TASKS: usize = if cfg!(miri) { 1 << 10 } else { 1 << 16 };
     for threads in [1, 2] {
         let pool = Rayon::new(NonZeroUsize::new(threads).unwrap()).unwrap();
         let runs: Vec<AtomicU8> = (0..TASKS).map(|_| AtomicU8::new(0)).collect();
