@@ -752,7 +752,13 @@ fn drivers() -> Vec<(&'static str, Driver)> {
 
 #[test]
 fn every_registered_operation_has_a_driver() {
-    let registered: BTreeSet<&str> = OPERATIONS.iter().map(|o| o.schema.name).collect();
+    // The queries (piece G102) are Preview and carry no driver yet: the map lists their contract
+    // evidence as missing. A piece that drives them removes the exemption here.
+    let registered: BTreeSet<&str> = OPERATIONS
+        .iter()
+        .map(|o| o.schema.name)
+        .filter(|name| !name.starts_with("query."))
+        .collect();
     let driven: BTreeSet<&str> = drivers().iter().map(|(name, _)| *name).collect();
     assert_eq!(registered, driven);
 }
