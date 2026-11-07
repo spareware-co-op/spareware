@@ -155,7 +155,12 @@ impl BodyVersion {
     ///
     /// As [`write_body`].
     pub fn next(&self, body: &Body, meter: &mut WorkMeter<'_>) -> Result<BodyVersion, BodyError> {
-        write(body, Some(self), meter)
+        let shared = if cfg!(feature = "reference") {
+            None
+        } else {
+            Some(self)
+        };
+        write(body, shared, meter)
     }
 
     /// The index record.
