@@ -29,7 +29,7 @@ use crate::predicates;
 use crate::quadrature;
 
 /// Every generator, in the order they run.
-pub const GENERATORS: [Generator; 55] = [
+pub const GENERATORS: [Generator; 67] = [
     Generator {
         name: grid_steps::NAME,
         output: grid_steps::OUTPUT,
@@ -83,6 +83,42 @@ pub const GENERATORS: [Generator; 55] = [
         output: "projects/engines/geometry/crates/geom-num/src/generated/tpi_side.rs",
         about: "a three-plane point against a plane: its f64 filter on rounded inputs, exact path and certificate",
         generate: Generate::Plain(predicates::generate_tpi_side),
+    },
+    Generator {
+        name: "predicate-line-sphere",
+        output: "projects/engines/geometry/crates/geom-num/src/generated/line_sphere.rs",
+        about: "line_sphere: its f64 filter, exact path and certificate",
+        generate: Generate::Plain(predicates::generate_line_sphere),
+    },
+    Generator {
+        name: "predicate-line-cylinder",
+        output: "projects/engines/geometry/crates/geom-num/src/generated/line_cylinder.rs",
+        about: "line_cylinder: its f64 filter, exact path and certificate",
+        generate: Generate::Plain(predicates::generate_line_cylinder),
+    },
+    Generator {
+        name: "predicate-line-cone",
+        output: "projects/engines/geometry/crates/geom-num/src/generated/line_cone.rs",
+        about: "line_cone: its f64 filter, exact path and certificate",
+        generate: Generate::Plain(predicates::generate_line_cone),
+    },
+    Generator {
+        name: "predicate-line-cone-lead",
+        output: "projects/engines/geometry/crates/geom-num/src/generated/line_cone_lead.rs",
+        about: "line_cone_lead: its f64 filter, exact path and certificate",
+        generate: Generate::Plain(predicates::generate_line_cone_lead),
+    },
+    Generator {
+        name: "predicate-cross-norm",
+        output: "projects/engines/geometry/crates/geom-num/src/generated/cross_norm.rs",
+        about: "cross_norm: its f64 filter, exact path and certificate",
+        generate: Generate::Plain(predicates::generate_cross_norm),
+    },
+    Generator {
+        name: "predicate-axis-gap",
+        output: "projects/engines/geometry/crates/geom-num/src/generated/axis_gap.rs",
+        about: "axis_gap: its f64 filter, exact path and certificate",
+        generate: Generate::Plain(predicates::generate_axis_gap),
     },
     Generator {
         name: "predicate-lpi-weight",
@@ -329,6 +365,42 @@ pub const GENERATORS: [Generator; 55] = [
         output: "projects/engines/geometry/crates/geom-gen/generated/fptaylor-tpi-side.fpt",
         about: "tpi_side's normalised f64 filter for FPTaylor, whose certificate HOL Light checks",
         generate: Generate::Plain(predicates::generate_fptaylor_tpi_side),
+    },
+    Generator {
+        name: "fptaylor-line-sphere",
+        output: "projects/engines/geometry/crates/geom-gen/generated/fptaylor-line-sphere.fpt",
+        about: "line_sphere's normalised f64 filter for FPTaylor, whose certificate HOL Light checks",
+        generate: Generate::Plain(predicates::generate_fptaylor_line_sphere),
+    },
+    Generator {
+        name: "fptaylor-line-cylinder",
+        output: "projects/engines/geometry/crates/geom-gen/generated/fptaylor-line-cylinder.fpt",
+        about: "line_cylinder's normalised f64 filter for FPTaylor, whose certificate HOL Light checks",
+        generate: Generate::Plain(predicates::generate_fptaylor_line_cylinder),
+    },
+    Generator {
+        name: "fptaylor-line-cone",
+        output: "projects/engines/geometry/crates/geom-gen/generated/fptaylor-line-cone.fpt",
+        about: "line_cone's normalised f64 filter for FPTaylor, whose certificate HOL Light checks",
+        generate: Generate::Plain(predicates::generate_fptaylor_line_cone),
+    },
+    Generator {
+        name: "fptaylor-line-cone-lead",
+        output: "projects/engines/geometry/crates/geom-gen/generated/fptaylor-line-cone-lead.fpt",
+        about: "line_cone_lead's normalised f64 filter for FPTaylor, whose certificate HOL Light checks",
+        generate: Generate::Plain(predicates::generate_fptaylor_line_cone_lead),
+    },
+    Generator {
+        name: "fptaylor-cross-norm",
+        output: "projects/engines/geometry/crates/geom-gen/generated/fptaylor-cross-norm.fpt",
+        about: "cross_norm's normalised f64 filter for FPTaylor, whose certificate HOL Light checks",
+        generate: Generate::Plain(predicates::generate_fptaylor_cross_norm),
+    },
+    Generator {
+        name: "fptaylor-axis-gap",
+        output: "projects/engines/geometry/crates/geom-gen/generated/fptaylor-axis-gap.fpt",
+        about: "axis_gap's normalised f64 filter for FPTaylor, whose certificate HOL Light checks",
+        generate: Generate::Plain(predicates::generate_fptaylor_axis_gap),
     },
     Generator {
         name: "fptaylor-lpi-weight",
