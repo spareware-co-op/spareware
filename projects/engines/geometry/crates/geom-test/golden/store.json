@@ -230,9 +230,15 @@
               "kind": "corpus",
               "piece": "G70",
               "why": "26 new count benchmarks on the hot paths of phase 2's code pieces (decision 32.44): geom-math 7, geom-curve 5, geom-surface 5, geom-nurbs 3, geom-linalg 2, geom-bvh 2, geom-num 2; no existing digest moved"
+            },
+            {
+              "sha256": "046f3d4883d4a30f17d9366db22efdf83ea063bd38f04694be237bebcad8b8f6",
+              "kind": "corpus",
+              "piece": "G220",
+              "why": "2 new count benchmarks on geom-sketch's spline rules (decision 32.44): the arc length of a cubic spline with its proven error bound, and the assembly of rational spline rules (a G2 join, a G3 end against a line, a pinned point and a stated length); no existing digest moved"
             }
           ],
-          "sha256": "046f3d4883d4a30f17d9366db22efdf83ea063bd38f04694be237bebcad8b8f6"
+          "sha256": "5cc1d806d062257487033472b01d965c1a8054b4910970424c83e22b56b26aab"
         },
         {
           "id": "geom-nurbs/operations",
@@ -512,6 +518,26 @@
               "why": "G217's assembly wrote a variable's partial derivative once per row, so where a variable appears twice in one row the second partial replaced the first instead of adding to it. The corpus has such rows: a point-line distance whose point is one of its own line's ends, where the true partials sum to exactly zero (the point stays on the line). G218 adds them. The sketch text, the residuals and every other entry are unchanged: 128 Jacobian entries moved (1,022 of the corpus's 212,671 bytes), each now exactly 0. The same new digest native on Linux and Windows."
             }
           ]
+        },
+        {
+          "id": "geom-sketch/splines",
+          "what": "Spline joins of geom-sketch (piece G220): 64 pairs of cubic splines with a join of every order or a spline end along a line, each through sketch v1 and back, then assembled and measured, every byte of the text, every residual and Jacobian entry's bits and the measured smoothness.",
+          "check": {
+            "crate": "geom-sketch",
+            "test": "spline_determinism",
+            "function": "spline_golden_hash_is_the_same_on_every_target"
+          },
+          "sha256": "d5829819091d2271145f5b094a3e80cb5119d327c9e6daf73b21f2661dcfcdb3"
+        },
+        {
+          "id": "geom-sketch/splines-more",
+          "what": "The rest of the spline rules of geom-sketch (piece G220): 48 drawings of two rational quadratic splines, a line and an arc with a join, a spline against a line or an arc, a length or a pinned point, each through sketch v1 and back, assembled and measured, every byte of the text, every residual and Jacobian entry's bits and both splines' arc length with its error bound; and 16 fit-point splines through seven points, with their control points, knots, parameters and certified error.",
+          "check": {
+            "crate": "geom-sketch",
+            "test": "spline_more_determinism",
+            "function": "spline_more_golden_hash_is_the_same_on_every_target"
+          },
+          "sha256": "2973f22a918646a7c3cae627a992a239db8656edf9be15b27e6023a0c65b82db"
         },
         {
           "id": "geom-linalg/dense",

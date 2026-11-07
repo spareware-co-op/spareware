@@ -47,7 +47,7 @@ use geom_num::{GridStep, P3};
 
 use crate::model::{
     Amount, Constraint, ConstraintKind, Entity, EntityKind, Extent, ItemId, Side, Sketch,
-    SketchError, Standing,
+    SketchError, Smoothness, SplineEnd, Standing,
 };
 use crate::plane::{Lattice, PlaneFrame, Rotated, SketchPlane};
 
@@ -93,6 +93,21 @@ const fn side_name(side: Side) -> &'static str {
     match side {
         Side::Left => "left",
         Side::Right => "right",
+    }
+}
+
+const fn end_name(end: SplineEnd) -> &'static str {
+    match end {
+        SplineEnd::Start => "start",
+        SplineEnd::Finish => "finish",
+    }
+}
+
+const fn order_name(order: Smoothness) -> &'static str {
+    match order {
+        Smoothness::Tangent => "g1",
+        Smoothness::Curvature => "g2",
+        Smoothness::CurvatureRate => "g3",
     }
 }
 
@@ -320,6 +335,45 @@ fn write_constraint(out: &mut String, constraint: &Constraint) -> Result<(), Ske
         ConstraintKind::ArcsTangentAtEnd { a, b, point } => {
             put_kind(out, "arcs-tangent-at-end", &[a, b, point])?;
         }
+        ConstraintKind::SplineJoin {
+            a,
+            a_end,
+            b,
+            b_end,
+            order,
+        } => {
+            put_kind(out, "spline-join", &[a])?;
+            put(out, end_name(a_end))?;
+            put_id(out, b)?;
+            put(out, end_name(b_end))?;
+            put(out, order_name(order))?;
+        }
+        ConstraintKind::SplineTangentLine { spline, end, line } => {
+            put_kind(out, "spline-tangent-line", &[spline])?;
+            put(out, end_name(end))?;
+            put_id(out, line)?;
+        }
+        ConstraintKind::SplineAgainst {
+            spline,
+            end,
+            other,
+            other_end,
+            order,
+        } => {
+            put_kind(out, "spline-against", &[spline])?;
+            put(out, end_name(end))?;
+            put_id(out, other)?;
+            put(out, end_name(other_end))?;
+            put(out, order_name(order))?;
+        }
+        ConstraintKind::SplineLength { spline, length } => {
+            put_kind(out, "spline-length", &[spline])?;
+            put_amount(out, length)?;
+        }
+        ConstraintKind::SplineThrough { spline, point, at } => {
+            put_kind(out, "spline-through", &[spline, point])?;
+            put(out, at)?;
+        }
         ConstraintKind::Symmetric { a, b, line } => put_kind(out, "symmetric", &[a, b, line])?,
         ConstraintKind::SymmetricAbout { point, a, b } => {
             put_kind(out, "symmetric-about", &[point, a, b])?;
@@ -459,6 +513,23 @@ impl<'t> Words<'t> {
         match self.word()? {
             "left" => Ok(Side::Left),
             "right" => Ok(Side::Right),
+            _ => Err(self.bad()),
+        }
+    }
+
+    fn spline_end(&mut self) -> Result<SplineEnd, SketchError> {
+        match self.word()? {
+            "start" => Ok(SplineEnd::Start),
+            "finish" => Ok(SplineEnd::Finish),
+            _ => Err(self.bad()),
+        }
+    }
+
+    fn order(&mut self) -> Result<Smoothness, SketchError> {
+        match self.word()? {
+            "g1" => Ok(Smoothness::Tangent),
+            "g2" => Ok(Smoothness::Curvature),
+            "g3" => Ok(Smoothness::CurvatureRate),
             _ => Err(self.bad()),
         }
     }
@@ -743,6 +814,34 @@ fn read_constraint(words: &mut Words<'_>) -> Result<Constraint, SketchError> {
             a: words.id()?,
             b: words.id()?,
             point: words.id()?,
+        },
+        "spline-join" => ConstraintKind::SplineJoin {
+            a: words.id()?,
+            a_end: words.spline_end()?,
+            b: words.id()?,
+            b_end: words.spline_end()?,
+            order: words.order()?,
+        },
+        "spline-tangent-line" => ConstraintKind::SplineTangentLine {
+            spline: words.id()?,
+            end: words.spline_end()?,
+            line: words.id()?,
+        },
+        "spline-against" => ConstraintKind::SplineAgainst {
+            spline: words.id()?,
+            end: words.spline_end()?,
+            other: words.id()?,
+            other_end: words.spline_end()?,
+            order: words.order()?,
+        },
+        "spline-length" => ConstraintKind::SplineLength {
+            spline: words.id()?,
+            length: words.amount()?,
+        },
+        "spline-through" => ConstraintKind::SplineThrough {
+            spline: words.id()?,
+            point: words.id()?,
+            at: words.real()?,
         },
         "symmetric" => ConstraintKind::Symmetric {
             a: words.id()?,
