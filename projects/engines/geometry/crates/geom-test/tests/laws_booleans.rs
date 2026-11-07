@@ -58,7 +58,7 @@ use geom_poly::merge::Merge;
 use geom_run::{Budget, Exec, WorkMeter};
 use geom_test::flat_reference::{Op, Solid, Where, boolean, int, point as qpoint};
 use geom_topo::query::{point as vertex_point, shell_volume, side_of_shell, volume, Side};
-use geom_topo::{Body, ShellIx, VertexIx};
+use geom_topo::{Body, BodyKind, ShellIx, VertexIx};
 
 const SERIAL: Exec<'static> = Exec::serial();
 
@@ -145,9 +145,11 @@ fn draw_cuboid(d: &mut Draw, near: Option<&Cuboid>) -> Cuboid {
     c
 }
 
-/// A solid of one box or two overlapping or separate boxes, with its body.
+/// A solid of one box or two overlapping or separate boxes, with its body and each box's own
+/// body, which carries the names a transform needs.
 struct Shape {
     parts: Vec<Cuboid>,
+    pieces: Vec<Body>,
     body: Body,
 }
 
@@ -173,15 +175,24 @@ fn draw_shape(d: &mut Draw, near: Option<&Shape>) -> Result<Shape, String> {
     if d.one_in(2) {
         parts.push(draw_cuboid(d, Some(&first)));
     }
-    let body = if let [a, b] = parts.as_slice() {
-        let (ba, bb) = (make(a)?, make(b)?);
-        unite(&ctx(), &SERIAL, &[solid(1, &ba), solid(2, &bb)])
+    let pieces = parts.iter().map(make).collect::<Result<Vec<Body>, String>>()?;
+    let body = joined(&pieces).map_err(|e| format!("building {parts:?}: {e}"))?;
+    Ok(Shape {
+        parts,
+        pieces,
+        body,
+    })
+}
+
+/// The union of one or two boxes' bodies.
+fn joined(pieces: &[Body]) -> Result<Body, String> {
+    match pieces {
+        [one] => Ok(one.clone()),
+        [a, b] => unite(&ctx(), &SERIAL, &[solid(1, a), solid(2, b)])
             .map(|out| out.result)
-            .map_err(|e| format!("building the union of {a:?} and {b:?}: {e:?}"))?
-    } else {
-        make(&first)?
-    };
-    Ok(Shape { parts, body })
+            .map_err(|e| format!("{e:?}")),
+        _ => Err(format!("{} pieces", pieces.len())),
+    }
 }
 
 fn draw_pair(d: &mut Draw) -> Result<(Shape, Shape), String> {
@@ -190,15 +201,32 @@ fn draw_pair(d: &mut Draw) -> Result<(Shape, Shape), String> {
     Ok((a, b))
 }
 
-/// Six times a body's volume, `0` for no body at all.
+/// Six times a body's volume, `0` for no body at all. A regularised boolean of solids bounds its
+/// material by closed shells even where it is not manifold (two boxes sharing only an edge make a
+/// general body, chapter 11.6), so a general body's volume is the sum of its shells', as a solid's
+/// is.
 fn six(body: &Body) -> Result<i128, String> {
     if body.arenas().edges.is_empty() {
         return Ok(0);
     }
-    volume(body, &mut meter())
-        .map_err(|e| format!("volume: {e:?}"))?
-        .to_i128()
-        .ok_or_else(|| "volume: out of i128".to_owned())
+    let total = if body.kind() == BodyKind::General {
+        let mut sum = 0_i128;
+        for row in 0..body.arenas().shells.len() {
+            let s = ShellIx::new(row).ok_or("shell index")?;
+            let v = shell_volume(body, s, &mut meter())
+                .map_err(|e| format!("shell_volume: {e:?}"))?
+                .to_i128()
+                .ok_or("shell volume: out of i128")?;
+            sum += v;
+        }
+        sum
+    } else {
+        volume(body, &mut meter())
+            .map_err(|e| format!("volume: {e:?}"))?
+            .to_i128()
+            .ok_or("volume: out of i128")?
+    };
+    Ok(total)
 }
 
 fn vertices(body: &Body) -> BTreeSet<[i64; 3]> {
@@ -309,16 +337,10 @@ fn a_solid_minus_itself_is_empty_and_united_with_itself_is_itself() {
     });
 }
 
-/// A second body of the same solid, built from the same boxes.
+/// A second body of the same solid, built again from the same boxes.
 fn rebuild(s: &Shape) -> Result<Body, String> {
-    if let [a, b] = s.parts.as_slice() {
-        let (ba, bb) = (make(a)?, make(b)?);
-        unite(&ctx(), &SERIAL, &[solid(1, &ba), solid(2, &bb)])
-            .map(|o| o.result)
-            .map_err(|e| format!("{e:?}"))
-    } else {
-        make(&s.parts[0])
-    }
+    let pieces = s.parts.iter().map(make).collect::<Result<Vec<Body>, String>>()?;
+    joined(&pieces)
 }
 
 #[test]
@@ -519,6 +541,16 @@ impl Move {
         }
     }
 
+    /// The shape moved: each of its boxes moved by the kernel's transform, and united again.
+    fn shape(self, s: &Shape) -> Result<Body, String> {
+        let moved = s
+            .pieces
+            .iter()
+            .map(|piece| self.body(piece))
+            .collect::<Result<Vec<Body>, String>>()?;
+        joined(&moved)
+    }
+
     fn body(self, b: &Body) -> Result<Body, String> {
         let moved = Moved {
             body: b,
@@ -562,8 +594,8 @@ fn grid_moves_commute_with_every_boolean() {
     run("booleans: grid moves", 0x6007, |f, d, a, b| {
         let m = Move::draw(d);
         let (Some(ma), Some(mb)) = (
-            took(f, "refused", "moving A", m.body(&a.body)),
-            took(f, "refused", "moving B", m.body(&b.body)),
+            took(f, "refused", "moving A", m.shape(a)),
+            took(f, "refused", "moving B", m.shape(b)),
         ) else {
             return;
         };

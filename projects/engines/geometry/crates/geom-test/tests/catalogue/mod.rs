@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 //! What the law catalogue's files for booleans, mass properties, names, formats and numbers share
-//! (chapter 28.3; piece G155): a seeded draw and a report of what a law found.
+//! (chapter 28.3; piece G155): a seeded draw, a report of what a law found, and flat solids drawn
+//! as the kernel's bodies and the flat reference's solids ([`flat`]).
 //!
 //! Every law prints `seed: <hex>` and replays with `SPAREKIT_SEED`; pull requests run the fixed
 //! default seed given to [`seed`], and the nightly workflow a fresh one (`kernel-nightly.yml`).
@@ -10,6 +11,8 @@
     clippy::unwrap_used,
     reason = "each law binary uses part of this module, and a failure stops the test"
 )]
+
+pub mod flat;
 
 use core::num::NonZeroU64;
 

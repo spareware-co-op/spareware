@@ -176,6 +176,15 @@ fn every_kind_reads_back_as_written_and_writes_the_same_bytes() {
     f.assert_none("formats: kinds", 100);
 }
 
+fn operand(n: u8, body: &Body) -> Operand<'_> {
+    Operand {
+        key: OperandKey([n; 16]),
+        body,
+        kind: OperandKind::Solid,
+        exactness: Exactness::Exact,
+    }
+}
+
 fn box_body(low: [i64; 3], size: [u64; 3]) -> Body {
     let input = BoxInput {
         min: P3::new(low[0], low[1], low[2]).unwrap(),
@@ -198,12 +207,6 @@ fn a_stored_body_reads_back_equal_and_writes_the_same_records() {
                 [0; 3].map(|_: i64| d.between(-5, 5)),
                 [0; 3].map(|_: u64| d.between(1, 6) as u64),
             );
-            let operand = |n: u8, body: &Body| Operand {
-                key: OperandKey([n; 16]),
-                body,
-                kind: OperandKind::Solid,
-                exactness: Exactness::Exact,
-            };
             match unite(&ctx(), &Exec::serial(), &[operand(1, &a), operand(2, &b)]) {
                 Ok(o) => o.result,
                 Err(e) => {
@@ -322,7 +325,7 @@ fn item(e: &mut Encoder, d: &mut Draw, depth: usize) {
     let leaf = depth == 0 || d.one_in(3);
     match if leaf { d.below(5) } else { 5 + d.below(2) } {
         0 => e.uint(d.0.next_u64() >> d.below(64)).unwrap(),
-        1 => e.int(-(i64::try_from(d.0.next_u64() >> 2).unwrap()) - 1).unwrap(),
+        1 => e.int(-i128::from(d.0.next_u64() >> 2) - 1).unwrap(),
         2 => {
             let n = d.pick(20);
             e.bytes(&d.bytes(n)).unwrap();

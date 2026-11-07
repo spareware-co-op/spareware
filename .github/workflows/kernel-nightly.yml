@@ -18,7 +18,9 @@ name: Kernel nightly
 # the kernel's certified enclosure, settling any difference by a fixed-point truth. Piece G69 adds
 # the law catalogue of 28.3 for the curve and surface kinds and NURBS (geom-test's tests/laws_nurbs.rs,
 # laws_curves.rs and laws_surfaces.rs), each law's dense refutation sampler drawing from the night's
-# seed. Piece G86 adds Python's cbor2, run the same way: geom-op's tests/cbor2_oracle.rs writes the
+# seed. Piece G155 adds the catalogue's rows for numbers and frames, booleans and cells, flat mass
+# properties, names and history, and formats (laws_numbers.rs, laws_booleans.rs, laws_mass.rs,
+# laws_names.rs and laws_formats.rs) to the same job. Piece G86 adds Python's cbor2, run the same way: geom-op's tests/cbor2_oracle.rs writes the
 # night's seeded values of SKG's subset with the kernel's canonical CBOR, cbor2 6.1.5 (pinned by hash)
 # encodes each value in its canonical mode in a container pinned by digest and reads the kernel's
 # bytes back, and the test fails on any byte that differs. Piece G97 adds the slow fixtures (28.16):
@@ -86,7 +88,7 @@ jobs:
           --test verification --test attack_g28 --test attack_g29 --test attack_g30
 
   laws:
-    name: Kind and NURBS laws with a fresh seed
+    name: The law catalogue with a fresh seed
     runs-on: ubuntu-latest
     timeout-minutes: 120
     steps:
@@ -106,6 +108,11 @@ jobs:
         run: >-
           cargo test --locked --release -p geom-test
           --test laws_nurbs --test laws_curves --test laws_surfaces
+      - name: The law catalogue for numbers, frames, booleans, cells, mass, names and formats (28.3)
+        run: >-
+          cargo test --locked --release -p geom-test
+          --test laws_numbers --test laws_booleans --test laws_mass --test laws_names
+          --test laws_formats
 
   maths:
     name: Proven maths against the oracle
