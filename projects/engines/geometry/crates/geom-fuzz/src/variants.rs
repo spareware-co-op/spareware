@@ -40,9 +40,7 @@ use geom_bench::avnaim;
 use geom_gen::predicate_lang::{Axis, Expr, InputKind, Op, parse};
 use geom_gen::predicates::PREDICATES;
 use geom_num::generated::{
-    axis_gap, carrier_order, carrier_side, cross_norm, incircle, insphere, limbs, line_cone,
-    line_cone_lead, line_cylinder, line_sphere, lpi_side, lpi_weight, orient2d, orient3d, plain,
-    plane_side, rational_cmp, rational_orient, ssi_side, ssi_weight, tpi_side, tpi_weight,
+    axis_gap, carrier_order, carrier_side, circle_gap, circle_line, circle_side, cross_norm, ellipse_line, ellipse_side, incircle, insphere, limbs, line_cone, line_cone_lead, line_cylinder, line_sphere, lpi_side, lpi_weight, orient2d, orient3d, plain, plane_side, rational_cmp, rational_orient, round_grid, round_line, round_rational, ssi_side, ssi_weight, tpi_side, tpi_weight,
 };
 use geom_num::grid::{P2, P3};
 use geom_num::wide::Wide;
@@ -275,6 +273,22 @@ fn call(name: &str, a: &Args) -> Result<[Option<BigInt>; 3], Finding> {
         ),
         "cross_norm" => three!(cross_norm, cross_norm_value; q(0)?, q(1)?, q(2)?, q(3)?),
         "axis_gap" => three!(axis_gap, axis_gap_value; q(0)?, q(1)?, q(2)?, r(3)?),
+        "round_grid" => three!(round_grid, round_grid_value; p(0)?, p(1)?, r(2)?, r(3)?, r(4)?),
+        "round_rational" => {
+            three!(round_rational, round_rational_value; r(0)?, r(1)?, r(2)?, p(3)?, r(4)?, r(5)?, r(6)?)
+        }
+        "round_line" => {
+            three!(round_line, round_line_value; r(0)?, r(1)?, r(2)?, p(3)?, r(4)?, r(5)?, r(6)?)
+        }
+        "circle_side" => three!(circle_side, circle_side_value; r(0)?, r(1)?, r(2)?, p(3)?, r(4)?),
+        "circle_line" => three!(circle_line, circle_line_value; r(0)?, r(1)?, r(2)?, p(3)?, r(4)?),
+        "circle_gap" => three!(circle_gap, circle_gap_value; p(0)?, p(1)?, r(2)?),
+        "ellipse_side" => {
+            three!(ellipse_side, ellipse_side_value; r(0)?, r(1)?, r(2)?, p(3)?, r(4)?, r(5)?, r(6)?, r(7)?)
+        }
+        "ellipse_line" => {
+            three!(ellipse_line, ellipse_line_value; r(0)?, r(1)?, r(2)?, p(3)?, r(4)?, r(5)?, r(6)?, r(7)?)
+        }
         other => {
             return Err(Finding {
                 law: "the harness calls every registered predicate".into(),
