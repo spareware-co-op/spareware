@@ -16,6 +16,8 @@ dashu-ratio = { version = "0.6.1", default-features = false, features = ["std"] 
 dashu-int = { version = "0.6.2", default-features = false, features = ["std"] }
 # The kinds and transforms the curves and surfaces targets hold to the kind contract (Gate 2, 32.44). Ours,
 # Apache-2.0.
+# The entity target (G194): geom-2d's entity model, under test (ours, Apache-2.0).
+geom-2d = { path = "../geom-2d" }
 geom-bvh = { path = "../geom-bvh" }
 geom-curve = { path = "../geom-curve" }
 geom-linalg = { path = "../geom-linalg" }

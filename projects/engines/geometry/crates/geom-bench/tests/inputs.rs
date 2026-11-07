@@ -2289,6 +2289,16 @@ fn topo_typical_batches_all_succeed() {
     all_ok("publish", k::publish, &m::publish(Typical));
 }
 
+/// Every typical batch of `geom-2d`'s entity benchmarks (decision 32.44) builds every polyline and
+/// puts every shape through its classification.
+#[test]
+fn entity_typical_batches_all_succeed() {
+    use geom_bench::inputs::entity as m;
+    use geom_bench::kernels::entity as k;
+    all_ok("polyline", k::polyline, &m::polyline(Typical));
+    all_ok("under", k::under, &m::under(Typical));
+}
+
 /// Every typical batch of `geom-run`'s helper benchmarks (decision 32.44) maps every list.
 #[test]
 fn helper_typical_batches_all_succeed() {

@@ -469,6 +469,10 @@ pub static OPS: &[Op] = &[
     // geom-topo's hot paths (piece G80; decision 32.44): a column's copy on write, and publishing.
     Op { group: "topo", name: "column_edit", measures: "geom_topo::Column::set", classes: T, prepare: |c| bind(inputs::topo::column_edit(c), kernels::topo::column_edit) },
     Op { group: "topo", name: "publish", measures: "geom_topo::Builder::publish", classes: T, prepare: |c| bind(inputs::topo::publish(c), kernels::topo::publish) },
+    // geom-2d's entity model (piece G194; decision 32.44): a polyline built and checked, and a
+    // shape's change under a transform's classification.
+    Op { group: "entity", name: "polyline", measures: "geom_2d::Polyline::new", classes: T, prepare: |c| bind(inputs::entity::polyline(c), kernels::entity::polyline) },
+    Op { group: "entity", name: "under", measures: "geom_2d::Shape::under", classes: T, prepare: |c| bind(inputs::entity::under(c), kernels::entity::under) },
     // geom-nurbs's hot paths (pieces G56, G58 and G59; decision 32.44): evaluation, interpolation
     // and the Bernstein bound.
     Op { group: "nurbs", name: "curve_point", measures: "geom_nurbs::Curve::point", classes: T, prepare: |c| bind(inputs::nurbs::curve_point(c), kernels::nurbs::curve_point) },
@@ -500,7 +504,7 @@ pub static OPS: &[Op] = &[
 ];
 
 /// The groups of [`OPS`], in order.
-pub const GROUPS: [&str; 32] = [
+pub const GROUPS: [&str; 33] = [
     "predicate",
     "sign",
     "wide",
@@ -526,6 +530,7 @@ pub const GROUPS: [&str; 32] = [
     "math_types",
     "bvh",
     "topo",
+    "entity",
     "nurbs",
     "curve",
     "surface",

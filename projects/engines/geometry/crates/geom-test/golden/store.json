@@ -234,29 +234,23 @@
             {
               "sha256": "046f3d4883d4a30f17d9366db22efdf83ea063bd38f04694be237bebcad8b8f6",
               "kind": "corpus",
-              "piece": "G187",
-              "why": "83 new benchmarks: integer carriers and rational points and their generated predicates; no existing digest moved"
+              "piece": "G148",
+              "why": "2 new count benchmarks of geom-run's helper (decision 32.44): Exec::map of a list that fits one chunk, on the serial executor and on a pool, for the fix that runs a wave of one task on the calling thread (found in G148's timings); no existing digest moved"
             },
             {
-              "sha256": "da4fdd58f92a598b3514947db88d705c715ac97910a493f0f37cf41d7c82cc79",
+              "sha256": "57fb849de9d6eb8003fe3ff677db5373da1b40984777f2d573018b64e5601c1b",
               "kind": "corpus",
-              "piece": "G188",
-              "why": "116 new benchmarks: rational-centre circles and arcs and their generated predicates; no existing digest moved"
+              "piece": "G194",
+              "why": "the benchmark groups of piece/G192's line and of G80 and G81 meet in one golden"
             },
             {
-              "sha256": "7b4093180097afa334400fcc6295c5e8e795ef51e2f6f9468b16dd78c21ec30a",
+              "sha256": "d447eb75906f05514da32055b78c30ab5a248d51385dd15b17e7f694c57e7307",
               "kind": "corpus",
-              "piece": "G189",
-              "why": "17 new benchmarks: one-root numbers, their crossings and comparisons; no existing digest moved"
-            },
-            {
-              "sha256": "a7a706906538d34a7684389ebfd4ab02cdbdeaedf6597054fbe7b3da4a595949",
-              "kind": "corpus",
-              "piece": "G190",
-              "why": "53 new benchmarks: ellipses, their generated predicates, their crossings and the roots of their quartics; no existing digest moved"
+              "piece": "G194",
+              "why": "two entity benchmarks added (entity/polyline, entity/under)"
             }
           ],
-          "sha256": "761e00e8fb8501231bdaf94d17ef5dc7818c56bc86be4beae74d14048964e5bd"
+          "sha256": "7208d271d98e833acd7a8ad9e5974395dd546d19ef3cfd6135d8df0e6c18bebf"
         },
         {
           "id": "geom-nurbs/operations",

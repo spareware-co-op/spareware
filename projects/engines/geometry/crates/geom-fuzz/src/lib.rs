@@ -18,6 +18,7 @@
 //! their stated bounds against exact rational evaluation (G56, G58, G59), and [`transforms`], the
 //! typed transforms move grid points as their definitions say and decimals round-trip (G45, G46,
 //! G48), and [`boxtree`], the box tree and cell index answer as brute force does (G54, G55), and
+//! [`entity`], `geom-2d`'s entity model keeps its fraction, tag, polyline and kind-change laws (G194), and
 //! [`linalg`], the dense decompositions are refused or finite and the spectral ones backward stable
 //! (G49, G50), and [`roots`], the root engine misses no root and proves none twice, Brent's
 //! zero brackets its sign change (G51, G52, G53), and [`maths`], the proven maths functions are
@@ -174,6 +175,7 @@ use core::fmt;
 pub mod arenas;
 pub mod boxtree;
 pub mod curves;
+pub mod entity;
 pub mod linalg;
 pub mod maths;
 pub mod nurbs;
