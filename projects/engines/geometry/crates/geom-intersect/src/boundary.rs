@@ -271,7 +271,7 @@ fn piece(
 
 /// A bound, in space, on how far the edge is from its chord over `a` to `b`: the piece's length
 /// times the width of the edge's velocity over it (the velocity's variation integrated). `None`
-/// where the surface cannot be bounded there.
+/// where the surface cannot be bounded there, or the edge may stand still.
 fn bowed(
     edge: &Edge<'_>,
     (a, b): (f64, f64),
@@ -285,6 +285,11 @@ fn bowed(
         return Err(IntersectError::Internal);
     };
     let velocity = if edge.fixed_u { dv } else { du };
+    // An edge that stands still, as one on a pole line does, is a point and no curve: it lies in
+    // whatever contains the point, and is no branch.
+    if !velocity.iter().any(|x| x.lo() > 0.0 || x.hi() < 0.0) {
+        return Ok(None);
+    }
     let wide = velocity
         .iter()
         .fold(0.0, |most, x| larger(most, x.hi() - x.lo()));
