@@ -173,6 +173,7 @@
 use core::fmt;
 
 pub mod arenas;
+pub mod arrange;
 pub mod boxtree;
 pub mod curves;
 pub mod entity;

@@ -19,7 +19,11 @@ each other's edits; and `entity` (`src/entity.rs`, G194), a drafting entity buil
 keeps its invariants (a bulge is a bounded reduced fraction, a polyline's counts agree) and changes
 kind under a transform's classification as the rules of 14.10 say. Its replay corpus, 18 seed files
 in `tests/__fuzz__/entity/corpus`, covers the three decode modes and six shape tags; `cargo test`
-replays them on every run.
+replays them on every run. And `arrange` (`src/arrange.rs`, G196a): the
+arrangement of segments built from any bytes has exactly the end points and proper crossings the
+cross-product formula gives as its vertices, satisfies Euler's formula, puts every half-edge on one
+cycle and every cycle on one face, and does not depend on the input order. Its replay corpus,
+18 seed files in `tests/__fuzz__/arrange/corpus`, covers every segment count from none to eight.
 
 ## One law, four engines
 
