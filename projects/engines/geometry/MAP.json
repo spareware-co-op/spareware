@@ -63,6 +63,35 @@
           "non_exhaustive": false
         },
         {
+          "doc": "Why an arrangement could not be stored as a body.",
+          "file": "projects/engines/geometry/crates/geom-2d/src/arrange.rs",
+          "kinds": [
+            {
+              "doc": "A vertex is not a grid point, and the body's points are: the first such vertex, by rank (the vertices are in lexicographic order), and where it is. The exact [`Arrangement`] still holds it.",
+              "name": "OffGrid",
+              "shape": "struct"
+            },
+            {
+              "doc": "More items than a 32-bit index names.",
+              "name": "TooMany",
+              "shape": "unit"
+            },
+            {
+              "doc": "The geometry of a plane or a line could not be made.",
+              "name": "Geometry",
+              "shape": "unit"
+            },
+            {
+              "doc": "The topology refused a row, or the meter stopped publishing.",
+              "name": "Topo",
+              "shape": "tuple"
+            }
+          ],
+          "module": "geom_2d::arrange",
+          "name": "BodyError",
+          "non_exhaustive": false
+        },
+        {
           "doc": "Why an entity could not be made or changed.",
           "file": "projects/engines/geometry/crates/geom-2d/src/entity.rs",
           "kinds": [
