@@ -355,10 +355,18 @@ pub fn check(inputs: &Inputs) -> Result<(), Finding> {
                 InputKind::Rounded { bits, .. } if bits == NORMAL_BITS => {
                     inputs.normals.get(normal).map(|&v| Arg::Rounded(v))
                 }
-                InputKind::Rounded { bits, .. } if bits == OFFSET_BITS => {
-                    inputs.offsets.get(offset).map(|&v| Arg::Rounded(v))
+                // Every other width takes an offset cut down to it: an extreme stays the extreme of
+                // the narrower width, and zero stays zero.
+                InputKind::Rounded { bits, .. } => {
+                    let shift = 1_i128
+                        .checked_shl(OFFSET_BITS.saturating_sub(bits))
+                        .unwrap_or(1);
+                    inputs
+                        .offsets
+                        .get(offset)
+                        .and_then(|v| v.checked_div(shift))
+                        .map(Arg::Rounded)
                 }
-                InputKind::Rounded { .. } => None,
             };
             match input.kind {
                 InputKind::Point { dim: 2 } => i2 = i2.saturating_add(1),
