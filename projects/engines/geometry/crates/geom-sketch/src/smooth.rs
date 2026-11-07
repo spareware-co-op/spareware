@@ -385,6 +385,15 @@ fn round_jets(sketch: &Sketch, other: ItemId, other_end: SplineEnd) -> Result<Je
     })
 }
 
+/// The jets of a line turned to leave the join against the spline's tangent `first` (a line has no
+/// direction of its own at the join; its sense is the other way from the spline's).
+fn line_against(mut line: Jets, first: [f64; 2]) -> Jets {
+    if line.first[0] * first[0] + line.first[1] * first[1] > 0.0 {
+        line.first = [-line.first[0], -line.first[1]];
+    }
+    line
+}
+
 /// Measures every spline join of `sketch` as it stands: each [`ConstraintKind::SplineJoin`], each
 /// [`ConstraintKind::SplineTangentLine`] (at G1) and each [`ConstraintKind::SplineAgainst`], in the
 /// constraints' order. On a solved sketch it is the continuity of the solved curves.
@@ -403,28 +412,25 @@ pub fn measure_joins(sketch: &Sketch) -> Result<Vec<Joined>, SketchError> {
                 b_end,
                 order,
             } => (order, continuity(sketch, (a, a_end), (b, b_end), order)?),
-            ConstraintKind::SplineTangentLine { spline, end, line } => (
-                Smoothness::Tangent,
-                continuity_of(
-                    end_jets(sketch, spline, end, 1)?,
-                    round_jets(sketch, line, SplineEnd::Start)?,
-                    1,
-                )?,
-            ),
+            ConstraintKind::SplineTangentLine { spline, end, line } => (Smoothness::Tangent, {
+                let ours = end_jets(sketch, spline, end, 1)?;
+                let theirs = line_against(round_jets(sketch, line, SplineEnd::Start)?, ours.first);
+                continuity_of(ours, theirs, 1)?
+            }),
             ConstraintKind::SplineAgainst {
                 spline,
                 end,
                 other,
                 other_end,
                 order,
-            } => (
-                order,
-                continuity_of(
-                    end_jets(sketch, spline, end, order.level())?,
-                    round_jets(sketch, other, other_end)?,
-                    order.level(),
-                )?,
-            ),
+            } => (order, {
+                let ours = end_jets(sketch, spline, end, order.level())?;
+                let mut theirs = round_jets(sketch, other, other_end)?;
+                if sketch.line(other).is_ok() {
+                    theirs = line_against(theirs, ours.first);
+                }
+                continuity_of(ours, theirs, order.level())?
+            }),
             _ => continue,
         };
         out.try_reserve(1).map_err(|_| SketchError::OutOfMemory)?;

@@ -510,3 +510,43 @@ fn the_plain_layout_rules_have_a_sense_too() {
     // The cubic leaves its finish towards its inner point, to the left and up: along the line.
     assert!(join_sense(&s, id(4, 2)).unwrap().is_some());
 }
+
+#[test]
+fn the_measure_reads_a_tangent_line_and_both_ends_of_an_arc() {
+    let scene = circle_scene();
+    let mut text = scene.clone();
+    // The first quarter leaves (5, 0) upward along the vertical line; its finish at (0, 5) runs
+    // into the arc's finish; the second quarter leaves that point anticlockwise from the arc's.
+    text.push_str("constraint 3.0 driving 0 spline-tangent-line 2.0 start 2.3\n");
+    text.push_str("constraint 3.1 driving 0 spline-against 2.0 finish 2.2 finish g3\n");
+    text.push_str("constraint 3.2 driving 0 spline-against 2.1 start 2.2 finish g3\n");
+    text.push_str("constraint 3.3 driving 0 spline-against 2.0 start 2.2 start g3\n");
+    let s = parse(&text).unwrap();
+    let joins = measure_joins(&s).unwrap();
+    assert_eq!(joins.len(), 4);
+    assert_eq!(joins[0].order, Smoothness::Tangent);
+    // The quarter circle and the arc are one circle: every gap is rounding, whichever way the pair
+    // runs, except where both leave the same way round (the curvatures then add).
+    assert!(joins[0].continuity.tangent.abs() < 1e-12, "{:?}", joins[0]);
+    assert!(
+        joins[2].continuity.curvature.unwrap().abs() < 1e-12,
+        "{:?}",
+        joins[2]
+    );
+    assert!(
+        joins[2].continuity.rate.unwrap().abs() < 1e-10,
+        "{:?}",
+        joins[2]
+    );
+    // The first quarter and the arc leave their finishes the same way: against.
+    assert!(
+        joins[1].continuity.curvature.unwrap().abs() > 0.1,
+        "{:?}",
+        joins[1]
+    );
+    assert!(
+        joins[3].continuity.curvature.unwrap().abs() > 0.1,
+        "{:?}",
+        joins[3]
+    );
+}
