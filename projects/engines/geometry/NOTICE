@@ -714,6 +714,13 @@ shuffling-allocator
     projects/engines/geometry/crates/geom-test/src/golden/perturb.rs
       for its size classes and shuffling layer and to judge whether it could be used; not taken, for the reasons above. No code copied.
 
+solidcore
+  Licence:      Apache-2.0
+  Link:         https://github.com/tangency-labs/solidcore/blob/b4de2149aadbd737268091c51d8390a7d3cdda70/docs/generic-blend.md
+  Consulted by:
+    projects/engines/geometry/crates/geom-blend/src/radius.rs
+      for its contract that a blend refusal returns the largest size that builds, with the cause that sets it (section 3.5). No code copied; the bounds here are re-derived as certified enclosures.
+
 SPDX License List 3.29.0
   Licence:      CC-BY-3.0
   Link:         https://github.com/spdx/license-list-data/blob/31ba1a50e5397e00a304dbadc76531740e89ee48/json/licenses.json

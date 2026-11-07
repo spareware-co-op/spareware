@@ -1502,6 +1502,49 @@
           "module": "geom_blend::convexity",
           "name": "ConvexityError",
           "non_exhaustive": false
+        },
+        {
+          "doc": "Why an overflow could not be resolved.",
+          "file": "projects/engines/geometry/crates/geom-blend/src/overflow.rs",
+          "kinds": [
+            {
+              "doc": "No allowed type works at this site; the boundary edge and the type that would are named.",
+              "name": "OverflowNotAllowed",
+              "shape": "struct"
+            },
+            {
+              "doc": "No type can work at all: nothing past the boundary can carry the blend.",
+              "name": "NoOverflowPossible",
+              "shape": "struct"
+            }
+          ],
+          "module": "geom_blend::overflow",
+          "name": "OverflowError",
+          "non_exhaustive": false
+        },
+        {
+          "doc": "Why a plan could not be made.",
+          "file": "projects/engines/geometry/crates/geom-blend/src/plan.rs",
+          "kinds": [
+            {
+              "doc": "An overflow has no allowed type.",
+              "name": "Overflow",
+              "shape": "tuple"
+            },
+            {
+              "doc": "The numbers layer refused.",
+              "name": "Num",
+              "shape": "tuple"
+            },
+            {
+              "doc": "A request, a cluster or a shared face names a chain that is not there.",
+              "name": "UnknownChain",
+              "shape": "tuple"
+            }
+          ],
+          "module": "geom_blend::plan",
+          "name": "PlanError",
+          "non_exhaustive": false
         }
       ],
       "family": [
@@ -1590,13 +1633,96 @@
           "provenance": [],
           "spdx": null,
           "target": "lib"
+        },
+        {
+          "cost": "linear in the sites and the policy. No recursion.",
+          "does": "a blend overflows when a contact curve would leave its support face. A [`Site`] is one place where a contact curve nears the edge of its face: the face, the edge that bounds it there, how far the face reaches (an enclosure), the half-angle tangent of the blend's edge, and what lies beyond. [`detect`] finds the sites where r · tan(φ / 2) passes the reach. [`resolve`] picks a type for each by the caller's ordered [`Policy`]: **smooth** (carry on across a smooth edge onto the next face), **cliff** (across a sharp edge, one side stays on the face and the other runs along the edge), **cliff-end** (where a cliff does not fit, the blend's end becomes a cliff along the edges it meets) and **notch** (keep the blend's surface and trim it by the faces it runs into). If no allowed type works the plan fails with [`OverflowError::OverflowNotAllowed`], naming the boundary edge and the type that would.",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-blend/src/overflow.rs",
+          "guarantees": [
+            "**Certain or possible, never missed.** A site overflows for certain when the needed reach is proven past the face's reach, and possibly when the enclosures overlap; both are reported, so no overflow is missed, and [`Found::certain`] says which.",
+            "**A type must be possible.** Smooth needs a smooth edge beyond, cliff a sharp edge and room for it, cliff-end a sharp edge and no room, notch any edge that is not smooth. A type the policy allows but the site cannot take is skipped, never forced.",
+            "**The default order is Parasolid's published one**, smooth then cliff then notch, with cliff-end tried where a cliff does not fit (pending owner check, rule 11).",
+            "**Every refusal names a way out.** [`OverflowError::OverflowNotAllowed`] carries the type that would work, so the caller can allow it."
+          ],
+          "job": "Overflow detection and the caller's policy (13.10, \"Overflows\", G262).",
+          "method": {
+            "links": [
+              "projects/engines/geometry/architecture/13-sweeps-blends-offsets.md",
+              "https://doi.org/10.1016/0010-4485(94"
+            ],
+            "text": "chapter 13.10 of the kernel architecture, \"Overflows\" (`projects/engines/geometry/architecture/13-sweeps-blends-offsets.md`), which takes the four overflow types of the survey of Vida, Martin and Varady, CAD 26(5), 1994 (<https://doi.org/10.1016/0010-4485(94)90023-X>), in its own words."
+          },
+          "path": "geom_blend::overflow",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
+          "cost": "linear in the chains, limits and sites. No recursion.",
+          "does": "[`plan`] takes the facts about each chain (its radius limits and the sites where its contact curves near a face's edge), the interaction clusters of the chains, the faces that chains share, a request radius for each chain and the caller's overflow policy, and returns a [`Plan`]: for each chain the largest feasible radius, the verdict on the request, and the overflows resolved; for each cluster whether it succeeds as one. A cluster fails if any of its chains does, or if the chains that share a narrow face ask for more of it than it has ([`SharedFace`]). The plan is also the blend preview: what fits, asked of the facts without building anything.",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-blend/src/plan.rs",
+          "guarantees": [
+            "**A cluster succeeds or fails as one.** [`ClusterPlan::feasible`] is true only when every chain in it is feasible with its overflows resolved and every shared face has room for all of them.",
+            "**The largest feasible radius is certified, per chain.** It is the lowest lower end among the chain's limits ([`crate::radius::largest`]), so a request at or below it passes that bound.",
+            "**A refusal names a size.** An infeasible chain carries [`crate::radius::Largest`]; a shared face that is too narrow carries the factor by which every radius asking for it must be scaled to fit.",
+            "**Nothing is built.** The plan reads facts and never calls a constructor, so it cannot leave a hole; an unresolved overflow is an error of the plan, not a trimmed result."
+          ],
+          "job": "The blend plan: feasibility first, and the preview query (13.10, G262).",
+          "method": {
+            "links": [
+              "projects/engines/geometry/architecture/13-sweeps-blends-offsets.md"
+            ],
+            "text": "chapter 13.10 of the kernel architecture, \"Feasibility first\" and \"Never a hole\" (`projects/engines/geometry/architecture/13-sweeps-blends-offsets.md`)."
+          },
+          "path": "geom_blend::plan",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
+          "cost": "constant per limit. No recursion.",
+          "does": "a rolling ball of radius r between two faces whose normals turn by an angle φ touches each face at a distance r · tan(φ / 2) from the edge. [`half_angle_tangent`] gives that tangent as an enclosure from two integer normals, with no angle taken. A chain's radius is bounded by [`Limit`]s, each an enclosure with the [`Cause`] that makes it, and [`reach_limit`] makes the limit that a face's width sets. [`largest`] reduces limits to the largest radius that certainly builds, with the cause and whether the bound is open, and [`judge`] answers a request: [`Verdict::Feasible`], or [`Verdict::RadiusTooLarge`] naming the radius that fits.",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-blend/src/radius.rs",
+          "guarantees": [
+            "**Every bound is an enclosure.** A limit holds the true largest radius its cause allows; [`largest`] takes the lowest of their lower ends, so a radius it reports builds as far as that cause goes, never past it.",
+            "**A refusal names the size that fits.** [`Verdict::RadiusTooLarge`] carries the largest feasible radius and the cause that sets it; the caller shows it and offers it, and never searches by retrying builds.",
+            "**An open bound is reported as open.** Where a radius at the bound would leave a face or an edge of no extent, [`Largest::open`] is set and the radius reported is the largest number below the bound, not a multiple of a tolerance.",
+            "**Undecided is not feasible.** A request whose radius is inside a limit's enclosure, neither below its lower end nor above its upper end, is [`Verdict::Undecided`], never accepted.",
+            "**No limit, no answer.** With no limit at all [`largest`] is `None`."
+          ],
+          "job": "Certified radius bounds and the largest feasible radius (13.10, \"Feasibility first\", steps 3 and 5, G262).",
+          "method": {
+            "links": [
+              "projects/engines/geometry/architecture/13-sweeps-blends-offsets.md",
+              "https://github.com/tangency-labs/solidcore/blob/b4de2149aadbd737268091c51d8390a7d3cdda70/docs/generic-blend.md"
+            ],
+            "text": "chapter 13.10 of the kernel architecture, \"Feasibility first\", steps 3 and 5, and \"A refusal names the size that fits\" (`projects/engines/geometry/architecture/13-sweeps-blends-offsets.md`), whose contract is solidcore's (<https://github.com/tangency-labs/solidcore/blob/b4de2149aadbd737268091c51d8390a7d3cdda70/docs/generic-blend.md>, section 3.5); the tangent of the half angle is tan(φ / 2) = |n₁ × n₂| / (n₁ · n₂ + |n₁||n₂|), a standard half-angle identity, with the norms by interval square roots."
+          },
+          "path": "geom_blend::radius",
+          "provenance": [
+            {
+              "licence": "Apache-2.0",
+              "link": "https://github.com/tangency-labs/solidcore/blob/b4de2149aadbd737268091c51d8390a7d3cdda70/docs/generic-blend.md",
+              "method_note": null,
+              "name": "solidcore",
+              "notice": [],
+              "pinned": true,
+              "purpose": "for its contract that a blend refusal returns the largest size that builds, with the cause that sets it (section 3.5). No code copied; the bounds here are re-derived as certified enclosures.",
+              "take": "port-method"
+            }
+          ],
+          "spdx": null,
+          "target": "lib"
         }
       ],
       "name": "geom-blend",
       "provenance": [],
       "sections": "13.10, 13.21 and 13.22; open question OQ-13.3, in the kernel architecture (`projects/engines/geometry/architecture/`).",
       "spdx": null,
-      "status": "the feasibility plan's first steps (G262) built; the rest of the plan by G262, and the blends by pieces G263, G264, G265, G266, G267, G268, G269.",
+      "status": "the feasibility plan (G262) built, on facts the caller reads from the body; the blends by pieces G263, G264, G265, G266, G267, G268, G269.",
       "summary": "Spare Kit geometry kernel: fillets, chamfers and blends."
     },
     {
@@ -18921,6 +19047,17 @@
       "take": "port-method",
       "used_by": [
         "projects/engines/geometry/crates/geom-test/src/map/classes.rs"
+      ]
+    },
+    {
+      "licence": "Apache-2.0",
+      "link": "https://github.com/tangency-labs/solidcore/blob/b4de2149aadbd737268091c51d8390a7d3cdda70/docs/generic-blend.md",
+      "method_note": null,
+      "name": "solidcore",
+      "pinned": true,
+      "take": "port-method",
+      "used_by": [
+        "projects/engines/geometry/crates/geom-blend/src/radius.rs"
       ]
     },
     {
