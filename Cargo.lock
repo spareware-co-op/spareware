@@ -822,6 +822,7 @@ name = "geom-bench"
 version = "0.0.0"
 dependencies = [
  "divan",
+ "geom-bool",
  "geom-bvh",
  "geom-curve",
  "geom-intersect",

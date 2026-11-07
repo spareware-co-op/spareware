@@ -396,6 +396,8 @@ pub static OPS: &[Op] = &[
     // each built for a scene and queried.
     Op { group: "bvh", name: "tree_build_query", measures: "geom_bvh::BoxTree::build", classes: T, prepare: |c| bind(inputs::bvh::tree_build_query(c), kernels::bvh::tree_build_query) },
     Op { group: "bvh", name: "cells_within", measures: "geom_bvh::CellIndex::build", classes: T, prepare: |c| bind(inputs::bvh::cells_within(c), kernels::bvh::cells_within) },
+    // The curved builder's broad phase (piece G242; decision 32.44): padded point boxes, the pairs that meet.
+    Op { group: "curved", name: "broad_pairs", measures: "geom_bool::broad::candidate_pairs", classes: T, prepare: |c| bind(inputs::curved::broad_scenes(c), kernels::curved::broad_pairs) },
     // geom-nurbs's hot paths (pieces G56, G58 and G59; decision 32.44): evaluation, interpolation
     // and the Bernstein bound.
     Op { group: "nurbs", name: "curve_point", measures: "geom_nurbs::Curve::point", classes: T, prepare: |c| bind(inputs::nurbs::curve_point(c), kernels::nurbs::curve_point) },
@@ -476,7 +478,7 @@ pub static OPS: &[Op] = &[
 ];
 
 /// The groups of [`OPS`], in order.
-pub const GROUPS: [&str; 34] = [
+pub const GROUPS: [&str; 35] = [
     "predicate",
     "sign",
     "wide",
@@ -511,6 +513,7 @@ pub const GROUPS: [&str; 34] = [
     "intersect",
     "quadric",
     "make",
+    "curved",
 ];
 
 /// The group of the growth checks.

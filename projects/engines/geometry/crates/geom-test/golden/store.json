@@ -314,9 +314,15 @@
               "kind": "corpus",
               "piece": "G101",
               "why": "4 new count benchmarks on geom-make's hot paths (decision 32.44): a box and a cylinder built, a box moved and quarter-turned; no existing digest moved"
+            },
+            {
+              "sha256": "db171f34bec8209a2b62f75dec9831323b70e029678ef5c19ee56868c2de43bb",
+              "kind": "corpus",
+              "piece": "G242",
+              "why": "1 new count benchmark of geom-bool's broad phase (decision 32.44): the pairs of 32 padded point boxes that meet. intersect/fit_curve/typical's inputs and results also changed: the crossings it fits are marched by geom-intersect, and the stack merged in (G173 and G173a, the boundary branch along a domain end) settles and traces a pair it left flagged; no other digest moved"
             }
           ],
-          "sha256": "db171f34bec8209a2b62f75dec9831323b70e029678ef5c19ee56868c2de43bb"
+          "sha256": "285f6484fd712429eb9547ea6718b3a2bb455ee143fe416b9a71e5bc689f3888"
         },
         {
           "id": "geom-nurbs/operations",

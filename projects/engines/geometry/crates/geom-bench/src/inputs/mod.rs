@@ -35,6 +35,7 @@ use crate::rng::{SplitMix64, seed_for};
 pub mod bvh;
 pub mod crossing;
 pub mod curve;
+pub mod curved;
 pub mod dd;
 pub mod eft;
 pub mod exact_sum;

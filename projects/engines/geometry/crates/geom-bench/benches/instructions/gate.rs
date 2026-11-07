@@ -2967,6 +2967,23 @@ pub mod quadric {
     );
 }
 
+/// geom-bool's broad phase (piece G242; decision 32.44).
+pub mod curved {
+    use super::*;
+
+    #[library_benchmark(teardown = verify)]
+    #[bench::typical(leak("curved/broad_pairs/typical"))]
+    fn broad_pairs(run: &'static mut Named) -> &'static mut Named {
+        run.bench.measure();
+        run
+    }
+
+    library_benchmark_group!(
+        name = curved;
+        benchmarks = broad_pairs
+    );
+}
+
 /// geom-make's hot paths (piece G101; decision 32.44).
 pub mod make {
     use super::*;
