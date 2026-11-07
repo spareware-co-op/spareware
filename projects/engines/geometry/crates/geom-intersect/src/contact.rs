@@ -968,7 +968,7 @@ pub fn analyse(
     meter: &mut WorkMeter<'_>,
 ) -> Result<Vec<Reading>, IntersectError> {
     let readings = read_pair(first, second, found, floor, ceiling, meter)?;
-    let Some(turned) = turned_seams(first, second, found, &readings) else {
+    let Some(turned) = turned_seams(first, second, found, &readings, meter)? else {
         return Ok(readings);
     };
     let again = read_pair(
@@ -1026,23 +1026,31 @@ fn read_pair(
 }
 
 /// The length of a closing parameter's domain: a whole turn, in half-turns.
-const TURN: f64 = 2.0;
+#[doc(hidden)]
+pub const TURN: f64 = 2.0;
 
 /// The parameters (u₁, v₁, u₂, v₂) that close, by a whole turn: a point of the domain's one end is
 /// the point of the other.
-fn closing(first: &SurfaceKind, second: &SurfaceKind) -> [bool; 4] {
+#[doc(hidden)]
+#[must_use]
+pub fn closing(first: &SurfaceKind, second: &SurfaceKind) -> [bool; 4] {
     let (a, b) = (charts(first).closes, charts(second).closes);
     [a[0], a[1], b[0], b[1]]
 }
 
-/// `x` moved by `by`, widened outward by one step of the grid of doubles for the rounding.
-fn moved(x: Interval, by: f64) -> Result<Interval, NumError> {
+/// `x` moved by `by`, widened outward by one step of the grid of doubles for the rounding. (This and
+/// the other items marked hidden are public only so that tests/seam_chart.rs can hold each to its
+/// arithmetic, since the mutation judge runs the tests folder and not a crate's own.)
+#[doc(hidden)]
+pub fn moved(x: Interval, by: f64) -> Result<Interval, NumError> {
     Interval::new((x.lo() + by).next_down(), (x.hi() + by).next_up())
 }
 
 /// The box of `b`, moved by whole turns of the closing parameters, that touches `a` in all four
 /// parameters; `None` if no such move exists or none is needed (then the clusters already met).
-fn wrapped(a: &[Interval; 4], b: &[Interval; 4], closes: [bool; 4]) -> Option<[Interval; 4]> {
+#[doc(hidden)]
+#[must_use]
+pub fn wrapped(a: &[Interval; 4], b: &[Interval; 4], closes: [bool; 4]) -> Option<[Interval; 4]> {
     let mut out = *b;
     let mut moves = 0_usize;
     for ((o, x), (y, close)) in out.iter_mut().zip(a).zip(b.iter().zip(closes)) {
@@ -1291,7 +1299,9 @@ fn ranges(reading: &Reading) -> [(f64, f64); 4] {
 }
 
 /// Where each closing parameter's domain starts and ends, and `None` for those that do not close.
-fn cuts_of(first: &SurfaceKind, second: &SurfaceKind) -> [Option<(f64, f64)>; 4] {
+#[doc(hidden)]
+#[must_use]
+pub fn cuts_of(first: &SurfaceKind, second: &SurfaceKind) -> [Option<(f64, f64)>; 4] {
     let closes = closing(first, second);
     let ((u0, u1), (v0, v1)) = first.domain();
     let ((s0, s1), (t0, t1)) = second.domain();
@@ -1306,10 +1316,24 @@ fn cuts_of(first: &SurfaceKind, second: &SurfaceKind) -> [Option<(f64, f64)>; 4]
 
 /// Whether a reading's boxes reach an end of a closing parameter's domain.
 fn on_a_cut(reading: &Reading, cuts: &[Option<(f64, f64)>; 4]) -> bool {
-    ranges(reading)
+    reach_a_cut(&ranges(reading), cuts)
+}
+
+/// Whether four ranges, one for each of u1, v1, u2, v2, reach an end of a closing parameter's
+/// domain.
+fn reach_a_cut(spans: &[(f64, f64); 4], cuts: &[Option<(f64, f64)>; 4]) -> bool {
+    spans
         .iter()
         .zip(cuts)
         .any(|((a, b), cut)| cut.is_some_and(|(lo, hi)| *a == lo || *b == hi))
+}
+
+/// The four ranges of a pair of patches.
+#[doc(hidden)]
+#[must_use]
+pub const fn spans_of(first: Region, second: Region) -> [(f64, f64); 4] {
+    let (((a, b), (c, d)), ((e, f), (g, h))) = (first, second);
+    [(a, b), (c, d), (e, f), (g, h)]
 }
 
 /// `surface` over its domain with each closing parameter's range moved half a turn on: the same
@@ -1369,7 +1393,8 @@ fn turned_seams(
     second: &SurfaceKind,
     found: &Subdivided,
     readings: &[Reading],
-) -> Option<Turned> {
+    meter: &mut WorkMeter<'_>,
+) -> Result<Option<Turned>, IntersectError> {
     // Only the closing parameters that a reading left undecided lies on a cut of are turned: the
     // others keep their cut, where no reading of this pair is.
     let mut cuts = cuts_of(first, second);
@@ -1391,20 +1416,45 @@ fn turned_seams(
         }
     }
     if cuts.iter().all(Option::is_none) {
-        return None;
+        return Ok(None);
     }
     let starts = cuts.map(|cut| cut.map(|(lo, _)| lo));
     let [first_u, first_v, second_u, second_v] = starts;
     let [c0, c1, c2, c3] = starts.map(|s| s.is_some());
-    let turned_first = turned_surface(first, [c0, c1])?;
-    let turned_second = turned_surface(second, [c2, c3])?;
+    let (Some(turned_first), Some(turned_second)) = (
+        turned_surface(first, [c0, c1]),
+        turned_surface(second, [c2, c3]),
+    ) else {
+        return Ok(None);
+    };
+    // The patches in the clusters that reach a cut are the ones the turned chart reads. A patch
+    // that reaches across the half-way line, where the turned chart cuts, cannot be moved: if it
+    // is in such a cluster the turned chart declines, and anywhere else it is left out, since a
+    // contact on that line is read in the first chart, where it is not cut.
+    let mut seam: Vec<FlaggedPair> = Vec::new();
+    for cluster in clusters(&found.flagged, meter)? {
+        if cluster
+            .iter()
+            .any(|p| reach_a_cut(&spans_of(p.first, p.second), &cuts))
+        {
+            seam.extend(cluster);
+        }
+    }
     let mut out = Subdivided {
         settled: Vec::new(),
         flagged: Vec::new(),
     };
     for pair in &found.flagged {
-        let m1 = moves(pair.first, [first_u, first_v])?;
-        let m2 = moves(pair.second, [second_u, second_v])?;
+        let moved_by = (
+            moves(pair.first, [first_u, first_v]),
+            moves(pair.second, [second_u, second_v]),
+        );
+        let (Some(m1), Some(m2)) = moved_by else {
+            if seam.contains(pair) {
+                return Ok(None);
+            }
+            continue;
+        };
         out.flagged.push(FlaggedPair {
             first: turn_region(pair.first, m1),
             second: turn_region(pair.second, m2),
@@ -1412,15 +1462,29 @@ fn turned_seams(
         });
     }
     for pair in &found.settled {
-        let m1 = moves(pair.first, [first_u, first_v])?;
-        let m2 = moves(pair.second, [second_u, second_v])?;
+        let moved_by = (
+            moves(pair.first, [first_u, first_v]),
+            moves(pair.second, [second_u, second_v]),
+        );
+        let (Some(m1), Some(m2)) = moved_by else {
+            if seam
+                .iter()
+                .any(|f| touch(f.first, pair.first) && touch(f.second, pair.second))
+            {
+                return Ok(None);
+            }
+            continue;
+        };
         let by = [m1[0], m1[1], m2[0], m2[1]];
         let mut starts_moved = Vec::new();
         for start in &pair.starts {
             let mut s = *start;
             for (x, up) in s.iter_mut().zip(by) {
                 if up {
-                    *x = moved(*x, TURN).ok()?;
+                    let Ok(y) = moved(*x, TURN) else {
+                        return Ok(None);
+                    };
+                    *x = y;
                 }
             }
             starts_moved.push(s);
@@ -1431,19 +1495,21 @@ fn turned_seams(
             starts: starts_moved,
         });
     }
-    Some(Turned {
+    Ok(Some(Turned {
         first: turned_first,
         second: turned_second,
         found: out,
         starts,
-    })
+    }))
 }
 
 /// A reading of the turned chart, put back in the first chart: a box wholly a turn past the first
 /// chart's start moves back by it. One that reaches across the first chart's cut is left as it is,
 /// past the domain's end by what it reaches; the part past the end is the same points as the
 /// domain's start (12.10).
-fn unturned(reading: Reading, starts: &[Option<f64>; 4]) -> Reading {
+#[doc(hidden)]
+#[must_use]
+pub fn unturned(reading: Reading, starts: &[Option<f64>; 4]) -> Reading {
     let spans = ranges(&reading);
     let past: [bool; 4] = core::array::from_fn(|k| {
         spans
@@ -1507,14 +1573,7 @@ fn at_the_cuts(readings: Vec<Reading>, again: Vec<Reading>, turned: &Turned) -> 
         .filter(|r| !on_a_cut(r, &old))
         .collect();
     for reading in again {
-        let spans = ranges(&reading);
-        let holds = spans
-            .iter()
-            .zip(&turned.starts)
-            .any(|((a, b), start)| start.is_some_and(|s| *a <= s + TURN && s + TURN <= *b));
-        let new_cut = spans.iter().zip(&turned.starts).any(|((a, b), start)| {
-            start.is_some_and(|s| *a == s + TURN / 2.0 || *b == s + TURN / 2.0 + TURN)
-        });
+        let (holds, new_cut) = cut_of(&ranges(&reading), &turned.starts);
         if holds && !new_cut {
             out.push(unturned(reading, &turned.starts));
         }
@@ -1522,88 +1581,23 @@ fn at_the_cuts(readings: Vec<Reading>, again: Vec<Reading>, turned: &Turned) -> 
     out
 }
 
+/// Whether four ranges of the turned chart hold the first chart's cut (a whole turn from the turned
+/// domain's start) and whether they touch the turned chart's own (its half-way line, and a turn
+/// past it).
+#[doc(hidden)]
+#[must_use]
+pub fn cut_of(spans: &[(f64, f64); 4], starts: &[Option<f64>; 4]) -> (bool, bool) {
+    let holds = spans
+        .iter()
+        .zip(starts)
+        .any(|((a, b), start)| start.is_some_and(|s| *a <= s + TURN && s + TURN <= *b));
+    let new_cut = spans.iter().zip(starts).any(|((a, b), start)| {
+        start.is_some_and(|s| *a == s + TURN / 2.0 || *b == s + TURN / 2.0 + TURN)
+    });
+    (holds, new_cut)
+}
+
 /// The first chart's domain ends, from where its closing parameters start: a turn long.
 fn turned_cuts(starts: &[Option<f64>; 4]) -> [Option<(f64, f64)>; 4] {
     starts.map(|start| start.map(|s| (s, s + TURN)))
-}
-
-#[cfg(test)]
-mod tests {
-    #![allow(
-        clippy::unwrap_used,
-        clippy::indexing_slicing,
-        reason = "test code: a failure should stop loudly"
-    )]
-
-    use super::*;
-    use geom_surface::{Cylinder, Plane};
-
-    fn span_of(lo: f64, hi: f64) -> Interval {
-        Interval::new(lo, hi).unwrap()
-    }
-
-    fn plane() -> SurfaceKind {
-        SurfaceKind::Plane(
-            Plane::new(
-                [0.0; 3],
-                [1.0, 0.0, 0.0],
-                [0.0, 1.0, 0.0],
-                ((0.0, 2.0), (0.0, 2.0)),
-            )
-            .unwrap(),
-        )
-    }
-
-    fn cylinder() -> SurfaceKind {
-        SurfaceKind::Cylinder(
-            Cylinder::new(
-                [0.0; 3],
-                1.0,
-                Frame::new([1.0, 0.0, 0.0], [0.0, 0.0, 1.0]).unwrap(),
-                ((0.0, 2.0), (0.0, 4.0)),
-            )
-            .unwrap(),
-        )
-    }
-
-    #[test]
-    fn only_a_whole_turn_closes() {
-        assert_eq!(closing(&plane(), &plane()), [false; 4]);
-        assert_eq!(closing(&cylinder(), &plane()), [true, false, false, false]);
-        assert_eq!(closing(&plane(), &cylinder()), [false, false, true, false]);
-    }
-
-    #[test]
-    fn a_box_moved_a_turn_is_moved_by_two_and_no_more() {
-        let moved_up = moved(span_of(0.0, 0.5), TURN).unwrap();
-        assert!(moved_up.lo() <= 2.0 && moved_up.lo() > 1.999);
-        assert!(moved_up.hi() >= 2.5 && moved_up.hi() < 2.501);
-        let moved_down = moved(span_of(2.0, 2.0), -TURN).unwrap();
-        assert!(moved_down.lo() <= 0.0 && moved_down.hi() >= 0.0);
-        assert!(moved_down.hi() < 0.001 && moved_down.lo() > -0.001);
-    }
-
-    #[test]
-    fn boxes_are_wrapped_only_when_a_closing_parameter_needs_it() {
-        let at = |u2: (f64, f64)| {
-            [
-                span_of(0.5, 0.5),
-                span_of(1.0, 1.0),
-                span_of(u2.0, u2.1),
-                span_of(1.0, 1.0),
-            ]
-        };
-        let closes = [false, false, true, false];
-        // Touching as they are: nothing to move, so no wrapped box (the clusters met already).
-        assert_eq!(wrapped(&at((0.0, 0.1)), &at((0.1, 0.2)), closes), None);
-        // One at each end of the closing parameter: moved a turn, they touch.
-        let there = wrapped(&at((0.0, 0.1)), &at((1.95, 2.0)), closes).unwrap();
-        assert!(there[2].hi() >= -0.05 && there[2].hi() < 0.001);
-        assert_eq!(there[0], span_of(0.5, 0.5));
-        // Apart along a parameter that does not close: never joined.
-        assert_eq!(wrapped(&at((0.0, 0.1)), &at((1.95, 2.0)), [false; 4]), None);
-        let mut off = at((1.95, 2.0));
-        off[1] = span_of(1.5, 1.5);
-        assert_eq!(wrapped(&at((0.0, 0.1)), &off, closes), None);
-    }
 }
