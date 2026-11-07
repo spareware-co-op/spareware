@@ -7,10 +7,11 @@
     clippy::arithmetic_side_effects,
     clippy::cast_possible_truncation,
     clippy::disallowed_methods,
+    clippy::disallowed_types,
     clippy::indexing_slicing,
     clippy::panic,
     clippy::unwrap_used,
-    reason = "tests: native arithmetic, and a failure stops the test"
+    reason = "tests: native arithmetic, a counter that never decides a result, and a failure stops the test"
 )]
 
 use geom_bool::batch::{BatchRule, Cut, cut};
@@ -25,7 +26,7 @@ use geom_topo::Body;
 #[cfg(not(target_family = "wasm"))]
 use std::sync::atomic::{AtomicUsize, Ordering};
 
-/// A pool that runs each task on its own thread and counts the parallel phases open at once.
+/// A pool that runs its tasks one after another and counts the parallel phases open at once.
 #[cfg(not(target_family = "wasm"))]
 struct Counting {
     open: AtomicUsize,
@@ -37,11 +38,9 @@ impl Pool for Counting {
     fn run_all(&self, tasks: &mut [&mut (dyn FnMut() + Send)]) {
         let now = self.open.fetch_add(1, Ordering::SeqCst) + 1;
         self.deepest.fetch_max(now, Ordering::SeqCst);
-        std::thread::scope(|scope| {
-            for task in tasks.iter_mut() {
-                scope.spawn(task);
-            }
-        });
+        for task in tasks.iter_mut() {
+            task();
+        }
         self.open.fetch_sub(1, Ordering::SeqCst);
     }
 }
