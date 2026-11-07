@@ -42,7 +42,7 @@ const ITERATIONS: usize = 2_000;
 const SEEDED_CASES: u32 = 4_000;
 
 /// The longest byte string the seeded leg draws. The harness reads at most
-/// [`MAX_INPUT_BYTES`] (620) bytes (derived in `geom_fuzz::variants`); the 80 more let some
+/// [`MAX_INPUT_BYTES`] (658) bytes (derived in `geom_fuzz::variants`); the 42 more let some
 /// strings carry bytes nobody reads, which must change nothing.
 const MAX_LEN: u16 = 700;
 

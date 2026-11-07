@@ -3,7 +3,8 @@
 //!
 //! What it does: [`decode`] turns a fuzzer's bytes into the inputs the predicates take: six 2D and
 //! five 3D grid points from `geom-test`'s [`GridSampler`], and twelve plane-normal coordinates of
-//! 83 bits and four plane offsets of 125 bits, each an extreme, zero, a small value or a value of a
+//! 83 bits and six offsets of 125 bits (plane offsets, and the carrier descriptions' narrower
+//! integers, cut down to their width), each an extreme, zero, a small value or a value of a
 //! random bit length. [`check`] evaluates each registered predicate's description (geom-gen's
 //! `PREDICATES`, read by its `predicate_lang::parse`) on those inputs in big integers, and compares
 //! the shipped `value`, the plain-`i128` variant (`geom_num::generated::plain`) and the width-aware
@@ -51,15 +52,16 @@ use num_bigint::BigInt;
 
 use crate::Finding;
 
-/// The most bytes [`decode`] reads from any input: 620, an upper bound.
+/// The most bytes [`decode`] reads from any input: 658, an upper bound.
 ///
 /// The points read what `geom_fuzz::predicates` derives for the sampler: at most 26 bytes for the
 /// first 2D point, 24 for the second and 23 for each later one, so (26 + 24 + 4 · 23) = 142 for
 /// six; and at most 37, 35 and 34 for the 3D points, so (37 + 35 + 3 · 34) = 174 for five. A
 /// rounded input reads a class byte, a sign byte, and for a random value a length byte and two
-/// eight-byte words: at most 19, and 16 · 19 = 304 for the sixteen. 142 + 174 + 304 = 620; a unit
+/// eight-byte words: at most 19, and 18 · 19 = 342 for the twelve normals and six offsets.
+/// 142 + 174 + 342 = 658; a unit
 /// test checks that no input reads more.
-pub const MAX_INPUT_BYTES: usize = 620;
+pub const MAX_INPUT_BYTES: usize = 658;
 
 /// The inputs one byte string decodes to.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -70,8 +72,9 @@ pub struct Inputs {
     pub p3: [P3; 5],
     /// Plane-normal coordinates, |v| ≤ 2^83 − 1.
     pub normals: [i128; 12],
-    /// Plane offsets, |v| ≤ 2^125 − 1.
-    pub offsets: [i128; 4],
+    /// Plane offsets and the carrier descriptions' narrower integers, |v| ≤ 2^125 − 1; a narrower input
+    /// takes one of these cut down to its width.
+    pub offsets: [i128; 6],
 }
 
 /// The bits of a plane normal's coordinate and of a plane offset, as the descriptions declare
