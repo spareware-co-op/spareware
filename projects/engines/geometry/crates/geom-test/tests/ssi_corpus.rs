@@ -420,8 +420,7 @@ fn pipeline(
         settled,
         flagged: Vec::new(),
     };
-    let traced =
-        march(a, b, &all, FLOOR, ceiling, &mut meter(work)).map_err(stage("march"))?;
+    let traced = march(a, b, &all, FLOOR, ceiling, &mut meter(work)).map_err(stage("march"))?;
     if std::env::var_os("SSI_CORPUS_DEBUG").is_some() {
         let mid = |v: &[geom_num::interval::Interval; 4]| v.map(|x| x.lo() / 2.0 + x.hi() / 2.0);
         for b in &traced.branches {
