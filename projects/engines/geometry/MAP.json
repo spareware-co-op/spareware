@@ -39,6 +39,55 @@
       "depends": [],
       "errors": [
         {
+          "doc": "Why a fit or a conversion was refused.",
+          "file": "projects/engines/geometry/crates/geom-2d/src/fit.rs",
+          "kinds": [
+            {
+              "doc": "Fewer fit points than the degree needs, or a degree the fitter does not take.",
+              "name": "Count",
+              "shape": "unit"
+            },
+            {
+              "doc": "Two neighbouring fit points coincide, or the rounded parameters do not increase.",
+              "name": "Coincident",
+              "shape": "unit"
+            },
+            {
+              "doc": "The solve failed or a number overflowed.",
+              "name": "Numeric",
+              "shape": "unit"
+            },
+            {
+              "doc": "The fit, with its rounding, is further from the points than the tolerance allows.",
+              "name": "Tolerance",
+              "shape": "struct"
+            },
+            {
+              "doc": "A control point or fraction does not fit the grid or the bounded fraction size.",
+              "name": "Range",
+              "shape": "unit"
+            },
+            {
+              "doc": "The meter stopped the work.",
+              "name": "Stopped",
+              "shape": "tuple"
+            },
+            {
+              "doc": "The three points are on one line or the tangents are parallel: no biarc, only a line or a curve of the other sign.",
+              "name": "NoBiarc",
+              "shape": "unit"
+            },
+            {
+              "doc": "An entity could not be built from the result.",
+              "name": "Entity",
+              "shape": "tuple"
+            }
+          ],
+          "module": "geom_2d::fit",
+          "name": "FitError",
+          "non_exhaustive": false
+        },
+        {
           "doc": "Why a point could not be read, or a result could not be given.",
           "file": "projects/engines/geometry/crates/geom-2d/src/point.rs",
           "kinds": [
@@ -160,6 +209,24 @@
           "target": "lib"
         },
         {
+          "cost": "a fit is `geom-nurbs`'s, O(n·p²); a biarc is constant; covering a spline is O(pieces · samples), each piece costing a fixed number of evaluations.",
+          "does": "[`fit_spline`] turns fit points on the grid into a [`Spline`] of chapter 14.1: the control points are grid points, the knots fractions of bounded size, and the creation intent (the fit points, the end tangents, the tolerance and [`FIT_VERSION`]) is kept with it, to be refitted only by a versioned algorithm. [`biarc`] joins two points with given tangent directions by two circular arcs that touch each end's tangent exactly, and [`spline_to_biarcs`] covers a spline with a chain of biarcs, subdividing until every sample lies within a tolerance.",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-2d/src/fit.rs",
+          "guarantees": [
+            "**Versioned.** The fit is version [`FIT_VERSION`] of `geom-nurbs`'s interpolation (its `V1`, piece G58), with chord-length parameters rounded to multiples of 2^-20 and averaged knots, so the same points give the same bytes on every target. A change of any rule is a new version, and an old [`Spline`] keeps the version that made it.",
+            "**Through the points, within a stated bound.** [`Fit::deviation`] bounds, in whole grid steps, how far the stored spline can lie from the exact interpolating curve: the certified error of the solve plus the move of rounding each control point to the grid, which moves the curve by at most the largest such move (the convex-hull property). A fit past the caller's tolerance is refused ([`FitError::Tolerance`]), never returned.",
+            "**Biarc arcs are exact.** Each arc's circle has a rational centre and passes through a grid point, and meets the tangent at its outer end exactly: the centre is the crossing of two lines with whole-number coefficients. The joint is a grid point, so the two arcs meet it exactly, but their tangents there differ by [`Biarc::gap`], which is measured in doubles from the exact centres and is zero only by luck.",
+            "**Bounded.** The subdivision uses a stack, not recursion, at most [`MAX_DEPTH`] deep, and charges the meter for each piece it makes."
+          ],
+          "job": "Spline fitting and biarcs: fit points to a stored spline, and a spline to circular arcs.",
+          "method": null,
+          "path": "geom_2d::fit",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
           "cost": "a few hundred double-double operations for lines, some thousands for ellipses.",
           "does": "a tangent circle's centre needs square roots that stay closed under nothing, so it is never stored. Chapter 14.3 keeps a rational centre near it instead, and this module says where near is. Every curve of [`crate::carrier::Curve2`] is a conic, so one solver serves them all: the foot of a point on a curve is where the normal through the point meets it, and the distance from a curve moves with the point by the unit normal at the foot, which is Newton's step for the centre.",
           "family": [],
@@ -235,7 +302,7 @@
       "provenance": [],
       "sections": "14 and 17.2; open questions OQ-12.1 and OQ-14.9, in the kernel architecture (`projects/engines/geometry/architecture/`).",
       "spdx": null,
-      "status": "carriers, points and commits (G192), tangent constructions (G193); built on by pieces G194, G195, G196, G197, G198, G199, G200, G201, G202, G203, G204, G205, G206, G207, G208, G209, G210, G211, G212, G213, G359, G360, G361.",
+      "status": "carriers, points and commits (G192), tangent constructions (G193), spline fitting and biarcs (G213); built on by pieces G194, G195, G196, G197, G198, G199, G200, G201, G202, G203, G204, G205, G206, G207, G208, G209, G210, G211, G212, G359, G360, G361.",
       "summary": "Spare Kit geometry kernel: 2D drafting."
     },
     {

@@ -38,8 +38,8 @@ use geom_2d::fit::{
     BiarcArc, FIT_VERSION, FitError, MAX_DEPTH, biarc, fit_spline, spline_to_biarcs,
 };
 use geom_math::F2;
-use geom_nurbs::{Basis, Curve, Limit};
 use geom_num::grid::{P2, Steps};
+use geom_nurbs::{Basis, Curve, Limit};
 use geom_run::{Budget, WorkMeter};
 
 fn p2(x: i64, y: i64) -> P2 {
@@ -56,7 +56,10 @@ fn quarter(r: i64, n: i64) -> Vec<P2> {
     (0..=n)
         .map(|k| {
             let a = std::f64::consts::FRAC_PI_2 * k as f64 / n as f64;
-            p2((r as f64 * a.cos()).round() as i64, (r as f64 * a.sin()).round() as i64)
+            p2(
+                (r as f64 * a.cos()).round() as i64,
+                (r as f64 * a.sin()).round() as i64,
+            )
         })
         .collect()
 }
@@ -85,7 +88,11 @@ fn the_knots_are_clamped_increasing_fractions() {
     let fit = fit_spline(&pts, None, None, 3, Steps(4), &mut meter()).unwrap();
     let k = fit.spline.knots();
     assert!(k[..4].iter().all(|f| f.is_zero()));
-    assert!(k[k.len() - 4..].iter().all(|f| f.numerator() == f.denominator()));
+    assert!(
+        k[k.len() - 4..]
+            .iter()
+            .all(|f| f.numerator() == f.denominator())
+    );
     assert!(k.windows(2).all(|w| w[0].at_most(w[1])));
     // Every knot is a multiple of 1 / (3 · 2^20).
     assert!(k.iter().all(|f| (3 << 20) % f.denominator() == 0));
@@ -127,8 +134,13 @@ fn the_curve_passes_every_fit_point_within_the_reported_bound() {
             }
             let u = (run / total * 1_048_576.0).round() / 1_048_576.0;
             let at = curve.point(u, Limit::FromRight).unwrap();
-            let miss = ((at[0] - q.x.get() as f64).powi(2) + (at[1] - q.y.get() as f64).powi(2)).sqrt();
-            assert!(miss <= fit.deviation.0 as f64 + 1e-6, "r {r} point {i}: {miss} > {:?}", fit.deviation);
+            let miss =
+                ((at[0] - q.x.get() as f64).powi(2) + (at[1] - q.y.get() as f64).powi(2)).sqrt();
+            assert!(
+                miss <= fit.deviation.0 as f64 + 1e-6,
+                "r {r} point {i}: {miss} > {:?}",
+                fit.deviation
+            );
         }
     }
 }
@@ -137,7 +149,10 @@ fn the_curve_passes_every_fit_point_within_the_reported_bound() {
 fn a_tolerance_below_the_bound_is_refused() {
     let pts = quarter(1000, 8);
     let ok = fit_spline(&pts, None, None, 3, Steps(8), &mut meter()).unwrap();
-    assert!(ok.deviation.0 >= 1, "rounding to the grid always costs something here");
+    assert!(
+        ok.deviation.0 >= 1,
+        "rounding to the grid always costs something here"
+    );
     let refused = fit_spline(&pts, None, None, 3, Steps(0), &mut meter()).unwrap_err();
     assert!(matches!(refused, FitError::Tolerance { deviation } if deviation == ok.deviation));
 }
@@ -211,7 +226,10 @@ fn a_biarc_is_exact_at_the_ends_and_small_at_the_joint() {
 #[test]
 fn a_biarc_turns_the_way_its_tangent_does() {
     let left = biarc(p2(0, 0), [1, 0], p2(10_000, 10_000), [0, 1]).unwrap();
-    assert!(left.first.forward, "heading east to a point to the north turns left");
+    assert!(
+        left.first.forward,
+        "heading east to a point to the north turns left"
+    );
     let right = biarc(p2(0, 0), [1, 0], p2(10_000, -10_000), [0, -1]).unwrap();
     assert!(!right.first.forward);
 }

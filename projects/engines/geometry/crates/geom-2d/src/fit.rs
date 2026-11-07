@@ -37,11 +37,11 @@
 use alloc::vec::Vec;
 
 use geom_math::F2;
-use geom_nurbs::{Basis, Curve, Limit, NurbsError};
 use geom_num::NumError;
 use geom_num::arc::Round;
 use geom_num::carrier::Rational2;
 use geom_num::grid::{P2, Steps};
+use geom_nurbs::{Basis, Curve, Limit, NurbsError};
 use geom_run::{Stop, WorkMeter};
 
 use crate::carrier::Circle2;
@@ -131,7 +131,11 @@ fn float_point(p: P2) -> Result<F2, FitError> {
 )]
 fn nearest(x: f64) -> Option<i64> {
     let r = geom_num::math::round_ties_even(x).ok()?.get();
-    if r.abs() < 1_099_511_627_776.0 { Some(r as i64) } else { None }
+    if r.abs() < 1_099_511_627_776.0 {
+        Some(r as i64)
+    } else {
+        None
+    }
 }
 
 /// The fraction nearest `x` among those over `denominator`.
@@ -167,8 +171,9 @@ pub fn fit_spline(
         .iter()
         .map(|q| float_point(*q))
         .collect::<Result<Vec<F2>, FitError>>()?;
-    let raw = geom_nurbs::fit::parameters(&data, geom_nurbs::fit::Parametrization::ChordLength, meter)
-        .map_err(nurbs)?;
+    let raw =
+        geom_nurbs::fit::parameters(&data, geom_nurbs::fit::Parametrization::ChordLength, meter)
+            .map_err(nurbs)?;
     // Parameters on a grid of 2^-20, so every later number is a short fraction.
     let mut u = Vec::with_capacity(raw.len());
     for x in &raw {
@@ -192,14 +197,9 @@ pub fn fit_spline(
         .map(|k| coordinate(k.numerator()) / coordinate(k.denominator()))
         .collect::<Vec<f64>>();
     let basis = Basis::new(p, exact_knots).map_err(nurbs)?;
-    let solved = Curve::<2>::interpolate_at(
-        &data,
-        &u,
-        basis,
-        geom_nurbs::fit::FitVersion::V1,
-        meter,
-    )
-    .map_err(nurbs)?;
+    let solved =
+        Curve::<2>::interpolate_at(&data, &u, basis, geom_nurbs::fit::FitVersion::V1, meter)
+            .map_err(nurbs)?;
     // Control points to the grid; the curve moves by at most the largest move.
     let mut control = Vec::with_capacity(data.len());
     let mut moved = 0.0_f64;
@@ -269,10 +269,17 @@ pub struct Biarc {
 fn centre(a: P2, t: [i64; 2], j: P2) -> Result<Option<Rational2>, FitError> {
     let (ax, ay) = (i128::from(a.x.get()), i128::from(a.y.get()));
     let d = [
-        i128::from(j.x.get()).checked_sub(ax).ok_or(FitError::Range)?,
-        i128::from(j.y.get()).checked_sub(ay).ok_or(FitError::Range)?,
+        i128::from(j.x.get())
+            .checked_sub(ax)
+            .ok_or(FitError::Range)?,
+        i128::from(j.y.get())
+            .checked_sub(ay)
+            .ok_or(FitError::Range)?,
     ];
-    let n = [i128::from(t[1]).checked_neg().ok_or(FitError::Range)?, i128::from(t[0])];
+    let n = [
+        i128::from(t[1]).checked_neg().ok_or(FitError::Range)?,
+        i128::from(t[0]),
+    ];
     let nd = n[0]
         .checked_mul(d[0])
         .and_then(|x| n[1].checked_mul(d[1]).and_then(|y| x.checked_add(y)))
@@ -300,7 +307,10 @@ fn centre(a: P2, t: [i64; 2], j: P2) -> Result<Option<Rational2>, FitError> {
 /// The centre as doubles.
 fn centre_f(c: &Rational2) -> [f64; 2] {
     let ([x, y], w) = c.coordinates();
-    #[allow(clippy::cast_precision_loss, reason = "a double estimate for the gap only")]
+    #[allow(
+        clippy::cast_precision_loss,
+        reason = "a double estimate for the gap only"
+    )]
     let (x, y, w) = (x as f64, y as f64, w as f64);
     [x / w, y / w]
 }
@@ -340,7 +350,10 @@ pub fn biarc(p0: P2, t0: [i64; 2], p1: P2, t1: [i64; 2]) -> Result<Biarc, FitErr
         let l = geom_num::math::sqrt(x * x + y * y).ok()?.get();
         (l > 0.0 && l.is_finite()).then(|| [x / l, y / l])
     };
-    let (u0, u1) = (unit(t0).ok_or(FitError::NoBiarc)?, unit(t1).ok_or(FitError::NoBiarc)?);
+    let (u0, u1) = (
+        unit(t0).ok_or(FitError::NoBiarc)?,
+        unit(t1).ok_or(FitError::NoBiarc)?,
+    );
     let v = [
         coordinate(p1.x.get()) - coordinate(p0.x.get()),
         coordinate(p1.y.get()) - coordinate(p0.y.get()),
@@ -357,8 +370,14 @@ pub fn biarc(p0: P2, t0: [i64; 2], p1: P2, t1: [i64; 2]) -> Result<Biarc, FitErr
     if !(d.is_finite() && d > 0.0) {
         return Err(FitError::NoBiarc);
     }
-    let a = [coordinate(p0.x.get()) + d * u0[0], coordinate(p0.y.get()) + d * u0[1]];
-    let b = [coordinate(p1.x.get()) - d * u1[0], coordinate(p1.y.get()) - d * u1[1]];
+    let a = [
+        coordinate(p0.x.get()) + d * u0[0],
+        coordinate(p0.y.get()) + d * u0[1],
+    ];
+    let b = [
+        coordinate(p1.x.get()) - d * u1[0],
+        coordinate(p1.y.get()) - d * u1[1],
+    ];
     let j = P2::new(
         nearest((a[0] + b[0]) / 2.0).ok_or(FitError::Range)?,
         nearest((a[1] + b[1]) / 2.0).ok_or(FitError::Range)?,
@@ -447,7 +466,11 @@ pub fn spline_to_biarcs(
                 FitError::NoBiarc
             } else {
                 FitError::Tolerance {
-                    deviation: Steps(nearest(off).and_then(|n| u64::try_from(n).ok()).unwrap_or(u64::MAX)),
+                    deviation: Steps(
+                        nearest(off)
+                            .and_then(|n| u64::try_from(n).ok())
+                            .unwrap_or(u64::MAX),
+                    ),
                 }
             });
         }
@@ -518,6 +541,7 @@ fn distance_to(arc: &BiarcArc, q: [f64; 2]) -> f64 {
     let on = round.on();
     let (rx, ry) = (coordinate(on.x.get()) - c[0], coordinate(on.y.get()) - c[1]);
     let (qx, qy) = (q[0] - c[0], q[1] - c[1]);
-    let norm = |x: f64, y: f64| geom_num::math::sqrt(x * x + y * y).map_or(f64::INFINITY, |r| r.get());
+    let norm =
+        |x: f64, y: f64| geom_num::math::sqrt(x * x + y * y).map_or(f64::INFINITY, |r| r.get());
     norm(qx, qy) - norm(rx, ry)
 }
