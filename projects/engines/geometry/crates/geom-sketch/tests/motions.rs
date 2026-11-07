@@ -110,23 +110,24 @@ fn one_entity_gets_only_its_own_motions() {
     let mine = finder.of_entity(id, &mut meter()).unwrap();
     assert_eq!(mine.len(), 1);
     assert!(all.contains(&mine[0]));
-    assert!(
+    assert_eq!(
         finder
             .of_entity(ItemId::new(9, 9), &mut meter())
             .unwrap()
-            .is_empty()
+            .len(),
+        0
     );
 }
 
 #[test]
 fn a_fully_constrained_sketch_has_no_motion() {
     let mut text = String::new();
-    for i in 0..5 {
+    for i in 0..5_u8 {
         writeln!(
             text,
             "entity 1.{i} point {} {}",
-            i as f64 * 100.0,
-            i as f64 * 50.0
+            f64::from(i) * 100.0,
+            f64::from(i) * 50.0
         )
         .unwrap();
     }
@@ -151,7 +152,7 @@ constraint 2.1 driving 0 fix 1.0 1 0
     }
     let finder = MotionFinder::new(&sketch(&text), &mut meter()).unwrap();
     assert_eq!(finder.dof(), 0);
-    assert!(finder.all(&mut meter()).unwrap().is_empty());
+    assert_eq!(finder.all(&mut meter()).unwrap().len(), 0);
 }
 
 #[test]
