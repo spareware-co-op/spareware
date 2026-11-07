@@ -112,7 +112,7 @@
 
 use std::collections::BTreeSet;
 
-use geom_num::wide::{I256, I320, I384, I512};
+use geom_num::wide::{I256, I320, I384, I512, I576, I768};
 
 use crate::bignum::{Nat, U_EXPONENT, UPoly};
 use crate::predicate_lang::{Axis, Description, InputKind, Op, Step, StepKind, parse};
@@ -132,17 +132,23 @@ pub enum Width {
     I384,
     /// `I512`, eight limbs.
     I512,
+    /// `I576`, nine limbs: skeleton event order only (decision 32.29).
+    I576,
+    /// `I768`, twelve limbs: mitre-offset event order only (decision 32.29).
+    I768,
 }
 
 impl Width {
     /// Every width, narrowest first.
-    pub const ALL: [Width; 6] = [
+    pub const ALL: [Width; 8] = [
         Width::I64,
         Width::I128,
         Width::I256,
         Width::I320,
         Width::I384,
         Width::I512,
+        Width::I576,
+        Width::I768,
     ];
 
     /// The type's name in Rust.
@@ -155,6 +161,8 @@ impl Width {
             Width::I320 => "I320",
             Width::I384 => "I384",
             Width::I512 => "I512",
+            Width::I576 => "I576",
+            Width::I768 => "I768",
         }
     }
 
@@ -169,6 +177,8 @@ impl Width {
             Width::I320 => I320::ZERO.to_le_limbs().len(),
             Width::I384 => I384::ZERO.to_le_limbs().len(),
             Width::I512 => I512::ZERO.to_le_limbs().len(),
+            Width::I576 => I576::ZERO.to_le_limbs().len(),
+            Width::I768 => I768::ZERO.to_le_limbs().len(),
         }
     }
 
@@ -847,7 +857,11 @@ mod tests {
         assert_eq!(width_for(256).unwrap(), Width::I320);
         assert_eq!(width_for(383).unwrap(), Width::I384);
         assert_eq!(width_for(511).unwrap(), Width::I512);
-        assert!(width_for(512).is_err());
+        assert_eq!(width_for(512).unwrap(), Width::I576);
+        assert_eq!(width_for(575).unwrap(), Width::I576);
+        assert_eq!(width_for(576).unwrap(), Width::I768);
+        assert_eq!(width_for(767).unwrap(), Width::I768);
+        assert!(width_for(768).is_err());
     }
 
     #[test]

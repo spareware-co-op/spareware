@@ -259,7 +259,7 @@ fn the_twin_is_current() {
 const MODEL: &str = include_str!("../../geom-num/verus/model.rs");
 
 /// Every predicate twin of the Verus crate (pieces G36 and G38) and the module it shadows.
-const PREDICATE_TWINS: [(&str, &str, &str); 11] = [
+const PREDICATE_TWINS: [(&str, &str, &str); 13] = [
     (
         "orient2d",
         include_str!("../../geom-num/verus/generated/orient2d.rs"),
@@ -315,6 +315,16 @@ const PREDICATE_TWINS: [(&str, &str, &str); 11] = [
         include_str!("../../geom-num/verus/generated/lpi_side.rs"),
         include_str!("../../geom-num/src/generated/lpi_side.rs"),
     ),
+    (
+        "tpi_height",
+        include_str!("../../geom-num/verus/generated/tpi_height.rs"),
+        include_str!("../../geom-num/src/generated/tpi_height.rs"),
+    ),
+    (
+        "mitre_time",
+        include_str!("../../geom-num/verus/generated/mitre_time.rs"),
+        include_str!("../../geom-num/src/generated/mitre_time.rs"),
+    ),
 ];
 
 /// The Verus crate's root, which must hold every predicate twin as a module.
@@ -334,6 +344,8 @@ fn every_predicate_twin_is_its_shipped_value_token_for_token() {
         geom_gen::predicates::generate_verus_tpi_side,
         geom_gen::predicates::generate_verus_lpi_weight,
         geom_gen::predicates::generate_verus_lpi_side,
+        geom_gen::predicates::generate_verus_tpi_height,
+        geom_gen::predicates::generate_verus_mitre_time,
     ];
     for ((name, twin, shipped), generate) in PREDICATE_TWINS.iter().zip(shipped_generators) {
         let t = find_fn(&tokens(twin), "value").unwrap_or_else(|| panic!("{name}: no value"));
@@ -370,6 +382,7 @@ sign b
     .unwrap();
     let e = verus_twin(&wide, "test", "shipped.rs").unwrap_err().0;
     assert!(e.contains("up to I384"), "{e}");
+    assert!(e.contains("not I512"), "{e}");
 }
 
 // ---------------------------------------------------------------------------------------------

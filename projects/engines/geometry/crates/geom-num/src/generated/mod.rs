@@ -85,6 +85,8 @@
 //! | [`lpi_side`] | 39 | `I256` | 2.5757174171303673e-14 · max{z·d1·n2, z·n1·d2, z^2·n1·n2, y·d1·n2, y·n1·d2, y·z·n1·n2, y^2·n1·n2, x·d1·n2, x·n1·d2, x·z·n1·n2, x·y·n1·n2, x^2·n1·n2} | — (not in predicates.c) | — (Geogram has no line-plane point) |
 //! | [`ssi_weight`] | 7 | `i128` | 4.440892098500629e-16 · x·y | — (not in predicates.c) | — (Geogram has no implicit crossing point) |
 //! | [`ssi_side`] | 27 | `I256` | 5.3290705182007585e-15 · x^2·y^2 | — (not in predicates.c) | — (Geogram has no implicit crossing point) |
+//! | [`tpi_height`] | 77 | `I576` | 1.385558334732199e-13 · max{d1·n2·n3·n4·n5·n6, n1·d2·n3·n4·n5·n6, n1·n2·d3·n4·n5·n6, n1·n2·n3·d4·n5·n6, n1·n2·n3·n4·d5·n6, n1·n2·n3·n4·n5·d6} | — (not in predicates.c) | — (Geogram has no three-plane point) |
+//! | [`mitre_time`] | 195 | `I768` | 3.3040237212844784e-12 · max{s1·n2·n3·n4·d5·n6·n7·n8, s1·n2·n3·n4·n5·d6·n7·n8, s1·n2·n3·n4·n5·n6·d7·n8, s1·n2·n3·n4·n5·n6·n7·d8, d1·n2·n3·n4·s5·n6·n7·n8, d1·n2·n3·n4·n5·s6·n7·n8, d1·n2·n3·n4·n5·n6·s7·n8, d1·n2·n3·n4·n5·n6·n7·s8, n1·s2·n3·n4·d5·n6·n7·n8, n1·s2·n3·n4·n5·d6·n7·n8, n1·s2·n3·n4·n5·n6·d7·n8, n1·s2·n3·n4·n5·n6·n7·d8, n1·d2·n3·n4·s5·n6·n7·n8, n1·d2·n3·n4·n5·s6·n7·n8, n1·d2·n3·n4·n5·n6·s7·n8, n1·d2·n3·n4·n5·n6·n7·s8, n1·n2·s3·n4·d5·n6·n7·n8, n1·n2·s3·n4·n5·d6·n7·n8, n1·n2·s3·n4·n5·n6·d7·n8, n1·n2·s3·n4·n5·n6·n7·d8, n1·n2·d3·n4·s5·n6·n7·n8, n1·n2·d3·n4·n5·s6·n7·n8, n1·n2·d3·n4·n5·n6·s7·n8, n1·n2·d3·n4·n5·n6·n7·s8, n1·n2·n3·s4·d5·n6·n7·n8, n1·n2·n3·s4·n5·d6·n7·n8, n1·n2·n3·s4·n5·n6·d7·n8, n1·n2·n3·s4·n5·n6·n7·d8, n1·n2·n3·d4·s5·n6·n7·n8, n1·n2·n3·d4·n5·s6·n7·n8, n1·n2·n3·d4·n5·n6·s7·n8, n1·n2·n3·d4·n5·n6·n7·s8} | — (not in predicates.c) | — (Geogram has no moving plane) |
 //!
 //! Method: Meyer and Pion's almost-static filters, which chapter 6.2 calls semi-static (*FPG: A
 //! code generator for fast and certified geometric predicates*, Real Numbers and Computers 2008,
@@ -119,12 +121,14 @@ pub mod insphere;
 pub mod limbs;
 pub mod lpi_side;
 pub mod lpi_weight;
+pub mod mitre_time;
 pub mod orient2d;
 pub mod orient3d;
 pub mod plain;
 pub mod plane_side;
 pub mod ssi_side;
 pub mod ssi_weight;
+pub mod tpi_height;
 pub mod tpi_side;
 pub mod tpi_weight;
 

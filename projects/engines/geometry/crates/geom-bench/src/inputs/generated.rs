@@ -397,3 +397,84 @@ pub fn orient2d_avnaim(class: Class) -> Vec<[P2; 3]> {
 pub fn orient3d_avnaim(class: Class) -> Vec<[P3; 4]> {
     predicate::orient3d_from("avnaim::orient3d", class)
 }
+
+/// The six planes' coefficients (the first meeting point's three, then the second's) of
+/// [`plane::cmp_height`]'s classes, drawn with the seed of `op` (piece G251).
+fn height_six(op: &str, class: Class) -> Vec<[Coefficients; 6]> {
+    plane::cmp_height_from(op, class)
+        .into_iter()
+        .map(|(a, b)| {
+            let [p, q, r] = a.planes().map(|p| (p.n(), p.d()));
+            let [s, t, u] = b.planes().map(|p| (p.n(), p.d()));
+            [p, q, r, s, t, u]
+        })
+        .collect()
+}
+
+/// A moving plane's coefficients and speed.
+type Moving = (Coefficients, i128);
+
+/// The eight moving planes (the first meeting's four, then the second's) of
+/// [`plane::cmp_meeting`]'s classes, drawn with the seed of `op` (piece G251).
+fn meeting_eight(op: &str, class: Class) -> Vec<[Moving; 8]> {
+    plane::cmp_meeting_from(op, class)
+        .into_iter()
+        .map(|(a, b)| {
+            let [p, q, r, s, t, u, v, w] = [a[0], a[1], a[2], a[3], b[0], b[1], b[2], b[3]]
+                .map(|m| ((m.plane().n(), m.plane().d()), m.speed()));
+            [p, q, r, s, t, u, v, w]
+        })
+        .collect()
+}
+
+/// Inputs for `generated::tpi_height::filter`.
+#[must_use]
+pub fn tpi_height_filter(class: Class) -> Vec<[Coefficients; 6]> {
+    height_six("generated::tpi_height::filter", class)
+}
+
+/// Inputs for `generated::tpi_height::value`.
+#[must_use]
+pub fn tpi_height_value(class: Class) -> Vec<[Coefficients; 6]> {
+    height_six("generated::tpi_height::value", class)
+}
+
+/// Inputs for `generated::plain::tpi_height_value`: the same class and generator as
+/// `generated::tpi_height::value`'s, drawn under the variant's own name.
+#[must_use]
+pub fn tpi_height_value_plain(class: Class) -> Vec<[Coefficients; 6]> {
+    height_six("generated::plain::tpi_height_value", class)
+}
+
+/// Inputs for `generated::limbs::tpi_height_value`: the same class and generator as
+/// `generated::tpi_height::value`'s, drawn under the variant's own name.
+#[must_use]
+pub fn tpi_height_value_limbs(class: Class) -> Vec<[Coefficients; 6]> {
+    height_six("generated::limbs::tpi_height_value", class)
+}
+
+/// Inputs for `generated::mitre_time::filter`.
+#[must_use]
+pub fn mitre_time_filter(class: Class) -> Vec<[Moving; 8]> {
+    meeting_eight("generated::mitre_time::filter", class)
+}
+
+/// Inputs for `generated::mitre_time::value`.
+#[must_use]
+pub fn mitre_time_value(class: Class) -> Vec<[Moving; 8]> {
+    meeting_eight("generated::mitre_time::value", class)
+}
+
+/// Inputs for `generated::plain::mitre_time_value`: the same class and generator as
+/// `generated::mitre_time::value`'s, drawn under the variant's own name.
+#[must_use]
+pub fn mitre_time_value_plain(class: Class) -> Vec<[Moving; 8]> {
+    meeting_eight("generated::plain::mitre_time_value", class)
+}
+
+/// Inputs for `generated::limbs::mitre_time_value`: the same class and generator as
+/// `generated::mitre_time::value`'s, drawn under the variant's own name.
+#[must_use]
+pub fn mitre_time_value_limbs(class: Class) -> Vec<[Moving; 8]> {
+    meeting_eight("generated::limbs::mitre_time_value", class)
+}

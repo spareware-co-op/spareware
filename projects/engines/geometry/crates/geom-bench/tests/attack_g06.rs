@@ -1021,6 +1021,12 @@ fn direct_digest(group: &str, name: &str, class: Class) -> Option<Digest> {
         ("plane", "side_of_tpi") => {
             fold(ip::side_of_tpi(class).iter().map(|(p, t)| p.side_of_tpi(t)))
         }
+        ("plane", "cmp_height") => fold(ip::cmp_height(class).iter().map(|(a, b)| a.cmp_height(b))),
+        ("plane", "cmp_meeting") => fold(
+            ip::cmp_meeting(class)
+                .iter()
+                .map(|(a, b)| geom_num::plane::Moving::cmp_meeting(a, b)),
+        ),
         ("plane", "to_grid") => fold(ip::to_grid(class).iter().map(Tpi::to_grid)),
         ("plane", "lpi_new") => fold(
             ip::lpi_new(class)
@@ -1862,6 +1868,138 @@ fn generated_digest(name: &str, class: Class) -> Option<Digest> {
                 .into_iter()
                 .map(|([a, b, c, d], p, q)| gp::ssi_side::value(a, b, c, d, p, q)),
         ),
+        "tpi_height_filter" => fold(i::tpi_height_filter(class).into_iter().map(
+            |[
+                ([n1x, n1y, n1z], d1),
+                ([n2x, n2y, n2z], d2),
+                ([n3x, n3y, n3z], d3),
+                ([n4x, n4y, n4z], d4),
+                ([n5x, n5y, n5z], d5),
+                ([n6x, n6y, n6z], d6),
+            ]| {
+                gp::tpi_height::filter(
+                    n1x, n1y, n1z, d1, n2x, n2y, n2z, d2, n3x, n3y, n3z, d3, n4x, n4y, n4z, d4,
+                    n5x, n5y, n5z, d5, n6x, n6y, n6z, d6,
+                )
+            },
+        )),
+        "tpi_height_value" => fold(i::tpi_height_value(class).into_iter().map(
+            |[
+                ([n1x, n1y, n1z], d1),
+                ([n2x, n2y, n2z], d2),
+                ([n3x, n3y, n3z], d3),
+                ([n4x, n4y, n4z], d4),
+                ([n5x, n5y, n5z], d5),
+                ([n6x, n6y, n6z], d6),
+            ]| {
+                gp::tpi_height::value(
+                    n1x, n1y, n1z, d1, n2x, n2y, n2z, d2, n3x, n3y, n3z, d3, n4x, n4y, n4z, d4,
+                    n5x, n5y, n5z, d5, n6x, n6y, n6z, d6,
+                )
+            },
+        )),
+        "tpi_height_value_plain" => fold(i::tpi_height_value_plain(class).into_iter().map(
+            |[
+                ([n1x, n1y, n1z], d1),
+                ([n2x, n2y, n2z], d2),
+                ([n3x, n3y, n3z], d3),
+                ([n4x, n4y, n4z], d4),
+                ([n5x, n5y, n5z], d5),
+                ([n6x, n6y, n6z], d6),
+            ]| {
+                gp::tpi_height::value(
+                    n1x, n1y, n1z, d1, n2x, n2y, n2z, d2, n3x, n3y, n3z, d3, n4x, n4y, n4z, d4,
+                    n5x, n5y, n5z, d5, n6x, n6y, n6z, d6,
+                )
+            },
+        )),
+        "tpi_height_value_limbs" => fold(i::tpi_height_value_limbs(class).into_iter().map(
+            |[
+                ([n1x, n1y, n1z], d1),
+                ([n2x, n2y, n2z], d2),
+                ([n3x, n3y, n3z], d3),
+                ([n4x, n4y, n4z], d4),
+                ([n5x, n5y, n5z], d5),
+                ([n6x, n6y, n6z], d6),
+            ]| {
+                gp::tpi_height::value(
+                    n1x, n1y, n1z, d1, n2x, n2y, n2z, d2, n3x, n3y, n3z, d3, n4x, n4y, n4z, d4,
+                    n5x, n5y, n5z, d5, n6x, n6y, n6z, d6,
+                )
+            },
+        )),
+        "mitre_time_filter" => fold(i::mitre_time_filter(class).into_iter().map(
+            |[
+                (([n1x, n1y, n1z], d1), s1),
+                (([n2x, n2y, n2z], d2), s2),
+                (([n3x, n3y, n3z], d3), s3),
+                (([n4x, n4y, n4z], d4), s4),
+                (([n5x, n5y, n5z], d5), s5),
+                (([n6x, n6y, n6z], d6), s6),
+                (([n7x, n7y, n7z], d7), s7),
+                (([n8x, n8y, n8z], d8), s8),
+            ]| {
+                gp::mitre_time::filter(
+                    n1x, n1y, n1z, d1, s1, n2x, n2y, n2z, d2, s2, n3x, n3y, n3z, d3, s3, n4x, n4y,
+                    n4z, d4, s4, n5x, n5y, n5z, d5, s5, n6x, n6y, n6z, d6, s6, n7x, n7y, n7z, d7,
+                    s7, n8x, n8y, n8z, d8, s8,
+                )
+            },
+        )),
+        "mitre_time_value" => fold(i::mitre_time_value(class).into_iter().map(
+            |[
+                (([n1x, n1y, n1z], d1), s1),
+                (([n2x, n2y, n2z], d2), s2),
+                (([n3x, n3y, n3z], d3), s3),
+                (([n4x, n4y, n4z], d4), s4),
+                (([n5x, n5y, n5z], d5), s5),
+                (([n6x, n6y, n6z], d6), s6),
+                (([n7x, n7y, n7z], d7), s7),
+                (([n8x, n8y, n8z], d8), s8),
+            ]| {
+                gp::mitre_time::value(
+                    n1x, n1y, n1z, d1, s1, n2x, n2y, n2z, d2, s2, n3x, n3y, n3z, d3, s3, n4x, n4y,
+                    n4z, d4, s4, n5x, n5y, n5z, d5, s5, n6x, n6y, n6z, d6, s6, n7x, n7y, n7z, d7,
+                    s7, n8x, n8y, n8z, d8, s8,
+                )
+            },
+        )),
+        "mitre_time_value_plain" => fold(i::mitre_time_value_plain(class).into_iter().map(
+            |[
+                (([n1x, n1y, n1z], d1), s1),
+                (([n2x, n2y, n2z], d2), s2),
+                (([n3x, n3y, n3z], d3), s3),
+                (([n4x, n4y, n4z], d4), s4),
+                (([n5x, n5y, n5z], d5), s5),
+                (([n6x, n6y, n6z], d6), s6),
+                (([n7x, n7y, n7z], d7), s7),
+                (([n8x, n8y, n8z], d8), s8),
+            ]| {
+                gp::mitre_time::value(
+                    n1x, n1y, n1z, d1, s1, n2x, n2y, n2z, d2, s2, n3x, n3y, n3z, d3, s3, n4x, n4y,
+                    n4z, d4, s4, n5x, n5y, n5z, d5, s5, n6x, n6y, n6z, d6, s6, n7x, n7y, n7z, d7,
+                    s7, n8x, n8y, n8z, d8, s8,
+                )
+            },
+        )),
+        "mitre_time_value_limbs" => fold(i::mitre_time_value_limbs(class).into_iter().map(
+            |[
+                (([n1x, n1y, n1z], d1), s1),
+                (([n2x, n2y, n2z], d2), s2),
+                (([n3x, n3y, n3z], d3), s3),
+                (([n4x, n4y, n4z], d4), s4),
+                (([n5x, n5y, n5z], d5), s5),
+                (([n6x, n6y, n6z], d6), s6),
+                (([n7x, n7y, n7z], d7), s7),
+                (([n8x, n8y, n8z], d8), s8),
+            ]| {
+                gp::mitre_time::value(
+                    n1x, n1y, n1z, d1, s1, n2x, n2y, n2z, d2, s2, n3x, n3y, n3z, d3, s3, n4x, n4y,
+                    n4z, d4, s4, n5x, n5y, n5z, d5, s5, n6x, n6y, n6z, d6, s6, n7x, n7y, n7z, d7,
+                    s7, n8x, n8y, n8z, d8, s8,
+                )
+            },
+        )),
         _ => return None,
     })
 }

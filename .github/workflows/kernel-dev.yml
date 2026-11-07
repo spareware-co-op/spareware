@@ -234,6 +234,11 @@ jobs:
       VERUS_ARCHIVE: "verus-0.2026.10.18.7d82994-x86-linux.zip"
       VERUS_SHA256: "e9af03732d4bdd32b93a8fcf471706739c24c1473fa5086618d96c47237845dd"
       VERUS_RUST: "1.99.1"
+      # A deep twin, such as mitre_time's (piece G251, some 250 steps in 12-limb integers),
+      # overflowed the verifier's default stack in CI. The overflow is the tool's, not the
+      # kernel's, so the verifier gets 1 GiB: rustc's compiler thread and every thread spawned
+      # without a size take RUST_MIN_STACK, and each step below lifts the shell's own limit.
+      RUST_MIN_STACK: "1073741824"
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -257,8 +262,10 @@ jobs:
         with:
           toolchain: ${{ env.RUST_TOOLCHAIN }}
       - name: Verus fails on a planted violation
-        run: >-
-          cargo run --locked -q -p geom-test --bin trip -- verus --
-          verus --crate-type=lib projects/engines/geometry/crates/geom-num/verus/lib.rs
+        run: |
+          ulimit -s unlimited
+          cargo run --locked -q -p geom-test --bin trip -- verus --             verus --crate-type=lib projects/engines/geometry/crates/geom-num/verus/lib.rs
       - name: Verus verifies geom-num's twins (the wide integers and the four explicit-point predicates)
-        run: verus --crate-type=lib projects/engines/geometry/crates/geom-num/verus/lib.rs
+        run: |
+          ulimit -s unlimited
+          verus --crate-type=lib projects/engines/geometry/crates/geom-num/verus/lib.rs
