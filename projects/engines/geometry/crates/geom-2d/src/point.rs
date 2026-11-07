@@ -160,6 +160,24 @@ fn crossing(a: &Curve2, b: &Curve2, root: Root) -> Result<Crossing2, PointError>
     };
     Ok(match (a, b) {
         (Curve2::Line(l), Curve2::Line(m)) => Crossing2::of_point(&l.meet(m)?)?,
+        (Curve2::Fine(l), Curve2::Fine(m)) => Crossing2::of_lines(l, m)?,
+        (Curve2::Fine(l), Curve2::Line(m)) | (Curve2::Line(m), Curve2::Fine(l)) => {
+            Crossing2::of_lines(l, &(*m).into())?
+        }
+        (Curve2::Line(l), Curve2::Circle(Circle2::Disc(c)))
+        | (Curve2::Circle(Circle2::Disc(c)), Curve2::Line(l)) => Crossing2::of_disc(l, c, root)?,
+        (Curve2::Fine(l), Curve2::Circle(c)) | (Curve2::Circle(c), Curve2::Fine(l)) => {
+            Crossing2::of_fine(l, &c.disc()?, root)?
+        }
+        (Curve2::Fine(l), Curve2::Ellipse(e)) | (Curve2::Ellipse(e), Curve2::Fine(l)) => {
+            Crossing2::of_fine_and_ellipse(l, e, root)?
+        }
+        (Curve2::Circle(Circle2::Disc(c)), Curve2::Circle(d)) => {
+            Crossing2::of_discs(c, &d.disc()?, root)?
+        }
+        (Curve2::Circle(c), Curve2::Circle(Circle2::Disc(d))) => {
+            Crossing2::of_discs(&c.disc()?, d, root)?
+        }
         (Curve2::Line(l), Curve2::Circle(Circle2::Grid(c)))
         | (Curve2::Circle(Circle2::Grid(c)), Curve2::Line(l)) => Crossing2::of_circle(l, c, root)?,
         (Curve2::Line(l), Curve2::Circle(Circle2::Round(c)))
@@ -232,8 +250,10 @@ impl Pt2 {
         Ok(match self.place(carriers)? {
             Place::OneRoot(z) => match target {
                 Curve2::Line(l) => z.side(l)? == Sign::Zero,
+                Curve2::Fine(l) => z.side_of_fine(l)? == Sign::Zero,
                 Curve2::Circle(Circle2::Grid(c)) => z.against_circle(c)? == Sign::Zero,
                 Curve2::Circle(Circle2::Round(c)) => z.against_round(c)? == Sign::Zero,
+                Curve2::Circle(Circle2::Disc(c)) => z.against_disc(c)? == Sign::Zero,
                 Curve2::Ellipse(e) => z.against_ellipse(e)? == Sign::Zero,
             },
             Place::Conic {

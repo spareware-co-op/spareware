@@ -17,6 +17,7 @@ geom-curve = { path = "../geom-curve" }
 geom-intersect = { path = "../geom-intersect" }
 geom-name = { path = "../geom-name" }
 geom-num = { path = "../geom-num" }
+geom-nurbs = { path = "../geom-nurbs" }
 geom-op = { path = "../geom-op" }
 geom-topo = { path = "../geom-topo" }
 
