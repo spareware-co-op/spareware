@@ -1625,7 +1625,7 @@ fn direct_digest(group: &str, name: &str, class: Class) -> Option<Digest> {
                 Ok(placed.vertices()[0].x.get().unsigned_abs() + placed.bulges().len() as u64)
             },
         )),
-        ("entity", "length") => fold(inputs::entity::polyline(class).into_iter().map(
+        ("entity", "length") => fold(inputs::entity::length(class).into_iter().map(
             |(vertices, bulges)| -> Result<u64, geom_num::NumError> {
                 let poly = geom_2d::entity::Polyline::new(vertices, bulges, None, false)
                     .map_err(|_| geom_num::NumError::Degenerate)?;

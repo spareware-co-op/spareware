@@ -95,6 +95,17 @@ pub fn under(class: Class) -> Vec<(Shape, Classification)> {
     })
 }
 
+/// Vertices and bulges for `polyline_length`: the polyline's own shape, drawn apart from
+/// [`polyline`]'s so that the two benchmarks have different inputs.
+#[must_use]
+pub fn length(class: Class) -> Vec<(Vec<P2>, Vec<Frac>)> {
+    if class != Class::Typical {
+        return Vec::new();
+    }
+    let mut g = rng("entity::length", class);
+    batch_of(|_| parts(&mut g))
+}
+
 /// A polyline and the number of one of eight placements (`Similarity`): four quarter turns, a
 /// mirror in a row, a mirror in a column, a whole scale of three and a shift.
 #[must_use]

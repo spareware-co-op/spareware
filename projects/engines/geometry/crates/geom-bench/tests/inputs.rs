@@ -2298,7 +2298,7 @@ fn entity_typical_batches_all_succeed() {
     all_ok("polyline", k::polyline, &m::polyline(Typical));
     all_ok("under", k::under, &m::under(Typical));
     all_ok("place", k::place, &m::place(Typical));
-    all_ok("length", k::length, &m::polyline(Typical));
+    all_ok("length", k::length, &m::length(Typical));
 }
 
 /// Every typical batch of `geom-run`'s helper benchmarks (decision 32.44) maps every list.
