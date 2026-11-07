@@ -39,6 +39,30 @@
       "depends": [],
       "errors": [
         {
+          "doc": "Why an arrangement was refused.",
+          "file": "projects/engines/geometry/crates/geom-2d/src/arrange.rs",
+          "kinds": [
+            {
+              "doc": "A step of the exact arithmetic did not fit its budget.",
+              "name": "Range",
+              "shape": "unit"
+            },
+            {
+              "doc": "More segments, vertices or edges than a 32-bit index names.",
+              "name": "TooMany",
+              "shape": "unit"
+            },
+            {
+              "doc": "The work meter stopped the sweep.",
+              "name": "Stopped",
+              "shape": "tuple"
+            }
+          ],
+          "module": "geom_2d::arrange",
+          "name": "ArrangeError",
+          "non_exhaustive": false
+        },
+        {
           "doc": "Why an entity could not be made or changed.",
           "file": "projects/engines/geometry/crates/geom-2d/src/entity.rs",
           "kinds": [
@@ -215,6 +239,30 @@
             "text": "chapter 14.3's acceptance (`projects/engines/geometry/architecture/14-2d-drafting.md`) and chapter 9's rule that an operation never lowers the class unasked (`projects/engines/geometry/architecture/09-representations.md`)."
           },
           "path": "geom_2d::accept",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
+          "cost": "O((n + k) log n) comparisons for the sweep, n segments and k crossings, plus the cost of moving the entries of the status list on insertion, which is linear in the segments the sweep line crosses at once; the faces are linear in the edges, and finding the face around each hole is linear in the edges for each hole.",
+          "does": "[`arrange`] takes segments between grid points and returns the [`Arrangement`] they divide the plane into: the vertices (every end point and every crossing, as exact rational points, in lexicographic order), the edges between consecutive vertices along each segment (two segments that share a stretch share its edges, and an edge names every segment that covers it), each vertex's edges in counter-clockwise order, and the faces: one unbounded face, and one bounded face for each outer boundary, with the boundaries of the components inside it as holes.",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-2d/src/arrange.rs",
+          "guarantees": [
+            "**Exact.** Every decision is a sign of one of `geom-num`'s exact predicates on carriers and rational points ([`Carrier::side`], [`Carrier::order`], [`Carrier::meet`], [`Rational2::cmp_x`]); no coordinate is ever rounded, and a crossing is the exact rational point where two carriers meet. A step past the exact budget is [`ArrangeError::Range`], never a wrong answer.",
+            "**Permutation-invariant.** Vertices are named by their rank in lexicographic order, edges by their end vertices, faces by the rank of their lowest-leftmost vertex; the only thing that depends on the input order is the label of each source, which is the segment's place in the input. Permuting the input gives the same arrangement with the labels permuted.",
+            "**Overlaps merge, touching splits.** A segment through another's end point is split there; two segments on one line share the edges of their common stretch.",
+            "**Cancellable.** The sweep charges its [`WorkMeter`] once for each event point."
+          ],
+          "job": "The arrangement of line segments (chapter 14.4): an exact plane sweep, overlap merging, the order of edges at each vertex, the faces and the unbounded face, and where each edge came from.",
+          "method": {
+            "links": [
+              "https://doi.org/10.1109/TC.1979.1675432",
+              "doi:10.1007/978-3-540-77974-2"
+            ],
+            "text": "Bentley and Ottmann's sweep ([DOI](https://doi.org/10.1109/TC.1979.1675432)) in the form of de Berg, Cheong, van Kreveld and Overmars, *Computational Geometry*, 3rd ed., Springer 2008, section 2.1 (doi:10.1007/978-3-540-77974-2), with the sweep line tilted so that a vertical segment is the steepest upward one, and with every comparison an exact sign; the doubly-connected edge list and the placing of holes by a leftward ray after the same book, section 2.2."
+          },
+          "path": "geom_2d::arrange",
           "provenance": [],
           "spdx": null,
           "target": "lib"

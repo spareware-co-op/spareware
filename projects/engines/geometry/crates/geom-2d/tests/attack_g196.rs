@@ -261,7 +261,11 @@ fn a_dangling_edge_inside_a_face_makes_no_face() {
     ]);
     assert_eq!(a.faces().len(), 2);
     let spike_cycle = a.cycles().iter().find(|c| c.len() == 6).unwrap();
-    assert_eq!(spike_cycle.len(), 6, "the inside walk goes down the spike and back");
+    assert_eq!(
+        spike_cycle.len(),
+        6,
+        "the inside walk goes down the spike and back"
+    );
 }
 
 #[test]
@@ -296,7 +300,11 @@ fn the_arrangement_does_not_depend_on_the_input_order() {
         assert_eq!(ea, eb, "round {round}");
         // The sources agree once the labels are mapped back.
         for (x, y) in a.edges().iter().zip(b.edges()) {
-            let mapped: BTreeSet<u32> = y.sources.iter().map(|&s| order[s as usize] as u32).collect();
+            let mapped: BTreeSet<u32> = y
+                .sources
+                .iter()
+                .map(|&s| order[s as usize] as u32)
+                .collect();
             let want: BTreeSet<u32> = x.sources.iter().copied().collect();
             assert_eq!(mapped, want, "round {round}");
         }
@@ -340,7 +348,11 @@ fn oracle_vertices(segs: &[(P2, P2)]) -> BTreeSet<Red> {
             let (qx, qy) = (cx - ax, cy - ay);
             let tn = qx * sy - qy * sx;
             let un = qx * ry - qy * rx;
-            let (tn, un, den) = if den < 0 { (-tn, -un, -den) } else { (tn, un, den) };
+            let (tn, un, den) = if den < 0 {
+                (-tn, -un, -den)
+            } else {
+                (tn, un, den)
+            };
             if tn < 0 || tn > den || un < 0 || un > den {
                 continue;
             }
@@ -365,7 +377,10 @@ fn components(a: &Arrangement) -> usize {
     let n = a.vertices().len();
     let mut parent: Vec<usize> = (0..n).collect();
     for e in a.edges() {
-        let (u, v) = (find(&mut parent, e.from as usize), find(&mut parent, e.to as usize));
+        let (u, v) = (
+            find(&mut parent, e.from as usize),
+            find(&mut parent, e.to as usize),
+        );
         parent[u] = v;
     }
     let mut roots = BTreeSet::new();
@@ -385,7 +400,11 @@ fn random_drawings_match_the_vertex_oracle_and_euler_s_formula() {
         let a = run(&segs);
         let got: BTreeSet<Red> = a.vertices().iter().map(reduced).collect();
         assert_eq!(got, oracle_vertices(&segs), "round {round}: {segs:?}");
-        assert_eq!(got.len(), a.vertices().len(), "round {round}: vertices are distinct");
+        assert_eq!(
+            got.len(),
+            a.vertices().len(),
+            "round {round}: vertices are distinct"
+        );
         // Vertices ascend lexicographically.
         let pts: Vec<(i128, i128)> = a
             .vertices()
@@ -422,6 +441,9 @@ fn random_drawings_match_the_vertex_oracle_and_euler_s_formula() {
                 count_of[*h as usize] += 1;
             }
         }
-        assert!(count_of.iter().all(|&n| n == 1), "round {round}: {count_of:?}");
+        assert!(
+            count_of.iter().all(|&n| n == 1),
+            "round {round}: {count_of:?}"
+        );
     }
 }

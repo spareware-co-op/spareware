@@ -325,7 +325,10 @@ pub fn arrange(
             at: lo,
             start: Some(id),
         })?;
-        heap.push(Event { at: hi, start: None })?;
+        heap.push(Event {
+            at: hi,
+            start: None,
+        })?;
     }
     // The status: the segments the sweep line crosses, lowest first.
     let mut status: Vec<u32> = Vec::new();
@@ -533,8 +536,12 @@ fn build(
     let origin = |h: u32| -> Result<usize, ArrangeError> {
         let e = usize::try_from(h / 2).map_err(|_| ArrangeError::TooMany)?;
         let edge = edges.get(e).ok_or(ArrangeError::TooMany)?;
-        usize::try_from(if h.is_multiple_of(2) { edge.from } else { edge.to })
-            .map_err(|_| ArrangeError::TooMany)
+        usize::try_from(if h.is_multiple_of(2) {
+            edge.from
+        } else {
+            edge.to
+        })
+        .map_err(|_| ArrangeError::TooMany)
     };
     let mut place_in: Vec<usize> = alloc::vec![0; edges.len().saturating_mul(2)];
     for list in &around {
@@ -553,7 +560,11 @@ fn build(
             .get(usize::try_from(twin).map_err(|_| ArrangeError::TooMany)?)
             .copied()
             .ok_or(ArrangeError::TooMany)?;
-        let k = if i == 0 { list.len().saturating_sub(1) } else { i.saturating_sub(1) };
+        let k = if i == 0 {
+            list.len().saturating_sub(1)
+        } else {
+            i.saturating_sub(1)
+        };
         list.get(k).copied().ok_or(ArrangeError::TooMany)
     };
     let total = edges.len().saturating_mul(2);
@@ -587,7 +598,10 @@ fn build(
     let mut cycle_of_half: Vec<usize> = alloc::vec![0; total];
     for (c, cycle) in cycles.iter().enumerate() {
         for &h in cycle {
-            if let Some(slot) = usize::try_from(h).ok().and_then(|k| cycle_of_half.get_mut(k)) {
+            if let Some(slot) = usize::try_from(h)
+                .ok()
+                .and_then(|k| cycle_of_half.get_mut(k))
+            {
                 *slot = c;
             }
         }
