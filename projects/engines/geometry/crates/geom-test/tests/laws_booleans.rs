@@ -527,7 +527,7 @@ impl Move {
         };
         match self {
             Move::Shift(by) => move_by(&ctx(), moved, by),
-            Move::Turn(axis, n) => rotate(&ctx(), moved, axis, Rotation::quarter_turns(n), p(0, 0, 0)),
+            Move::Turn(axis, n) => rotate(&ctx(), moved, axis, Rotation::quarter_turns(i32::try_from(n).unwrap()), p(0, 0, 0)),
             Move::Mirror(axis) => mirror(&ctx(), moved, axis, p(0, 0, 0)),
         }
         .map(|o| o.result.body)
