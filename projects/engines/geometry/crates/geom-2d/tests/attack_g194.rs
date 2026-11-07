@@ -1,4 +1,3 @@
-// SPDX-License-Identifier: Apache-2.0
 //! Attacks on piece G194: the drafting entity model (`geom_2d::entity`; chapter 14.1 and 14.10 of
 //! the kernel architecture). Every test tries to break a claim of the piece's done-when:
 //! every 14.1 entity as a closed enum with stable tags, attribute pass-through, regions as Sheet
@@ -54,6 +53,7 @@ fn frac(n: i64, d: i64) -> Frac {
 fn sheet() -> geom_topo::Body {
     let mut b = Builder::new();
     b.arenas.regions.kind.push(RegionKind::Void).unwrap();
+    b.arenas.regions.first_shell.push(None).unwrap();
     b.publish(
         BodyKind::Sheet,
         Ix::new(0).unwrap(),
@@ -65,6 +65,7 @@ fn sheet() -> geom_topo::Body {
 fn solid_outside_only() -> geom_topo::Body {
     let mut b = Builder::new();
     b.arenas.regions.kind.push(RegionKind::Void).unwrap();
+    b.arenas.regions.first_shell.push(None).unwrap();
     b.publish(
         BodyKind::Acorn,
         Ix::new(0).unwrap(),

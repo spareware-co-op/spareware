@@ -1,4 +1,3 @@
-// SPDX-License-Identifier: Apache-2.0
 //! The drafting entity model: every entity of chapter 14.1 as a closed enum with a stable tag.
 //!
 //! What it does: [`Shape`] is the closed list of what a drawing holds: points, lines, rays and
@@ -118,7 +117,7 @@ impl Frac {
         let n = i64::try_from(rn).map_err(|_| EntityError::Fraction)?;
         let d = i64::try_from(rd).map_err(|_| EntityError::Fraction)?;
         Ok(Frac {
-            n: if negative { -n } else { n },
+            n: if negative { n.saturating_neg() } else { n },
             d,
         })
     }
@@ -160,7 +159,7 @@ impl Frac {
     #[must_use]
     pub const fn negated(self) -> Frac {
         Frac {
-            n: -self.n,
+            n: self.n.saturating_neg(),
             d: self.d,
         }
     }
@@ -374,10 +373,11 @@ impl Spline {
         }) {
             return Err(EntityError::Spline);
         }
-        if let Some(w) = &weights {
-            if w.len() != control.len() || w.iter().any(|f| f.n <= 0) {
-                return Err(EntityError::Spline);
-            }
+        if weights
+            .as_ref()
+            .is_some_and(|w| w.len() != control.len() || w.iter().any(|f| f.n <= 0))
+        {
+            return Err(EntityError::Spline);
         }
         Ok(Spline {
             degree,
