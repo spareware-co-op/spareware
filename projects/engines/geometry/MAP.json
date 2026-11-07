@@ -13127,7 +13127,7 @@
             "**Within a tolerance, never bits** (15.16): the kernel's points and ezpz's agree within a grid step of the truth. fiksi stops once its residuals' sum of squares is below 1e-8 in a system divided by the root mean square of its coordinates and lengths (`solve/lm.rs`, `assemble/mod.rs` at the pinned commit), so its points are only as near as that: its answer agrees within [`FIKSI_SLACK`] times 1e-4 of the job's scale ([`near`]), still far inside the two units that separate a sketch's branches.",
             "**Deterministic.** A seed gives the same jobs on every target."
           ],
-          "job": "Sketch solvers as oracles: ezpz, fiksi, SolveSpace and planegcs, each out of process, against the block solver of `geom-sketch` (pieces G222's and G231's differential runs; chapters 15.16 and 28.10). SolveSpace (GPL-3.0) and planegcs (LGPL-2.1-or-later) are only ever run as separate programs from the oracle repository: nothing of either is linked, vendored or read here.",
+          "job": "Sketch solvers as oracles: ezpz, fiksi, `SolveSpace` and planegcs, each out of process, against the block solver of `geom-sketch` (pieces G222's and G231's differential runs; chapters 15.16 and 28.10). `SolveSpace` (GPL-3.0) and planegcs (LGPL-2.1-or-later) are only ever run as separate programs from the oracle repository: nothing of either is linked, vendored or read here.",
           "method": {
             "links": [
               "projects/engines/geometry/architecture/15-sketches.md",
