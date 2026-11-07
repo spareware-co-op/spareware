@@ -1490,13 +1490,21 @@ impl Assembly {
 
     /// Rule `rule`'s residuals and their derivatives over the box `held` (one interval per
     /// variable): the natural interval extension of the one text the kind is written in, on dual
-    /// intervals, so the derivatives are enclosures of the true ones over the whole box.
+    /// intervals, so the derivatives are enclosures of the true ones over the whole box. The
+    /// derivatives are with respect to the columns in `unknown` (increasing) alone: the dual numbers
+    /// are as wide as the rule has unknowns among its inputs, up to four, and a rule with more is as
+    /// wide as its inputs.
     ///
     /// # Errors
     ///
     /// [`SketchError::Internal`] for a rule it does not have or `held` of another length than the
     /// variables; [`SketchError::Numeric`] where the interval arithmetic refuses.
-    pub fn jet(&self, rule: usize, held: &[Interval]) -> Result<Jet, SketchError> {
+    pub fn jet(
+        &self,
+        rule: usize,
+        held: &[Interval],
+        unknown: &[usize],
+    ) -> Result<Jet, SketchError> {
         if held.len() != self.variables.len() {
             return Err(SketchError::Internal);
         }
@@ -1507,6 +1515,7 @@ impl Assembly {
             &mut Jetter {
                 assembly: self,
                 held,
+                unknown,
                 out: &mut out,
             },
         )?;
@@ -1659,29 +1668,45 @@ impl Visit for Enclose<'_> {
     }
 }
 
-/// Takes a rule's residuals and their derivatives over `held`.
+/// Takes a rule's residuals and their derivatives over `held`, with respect to the variables in
+/// `unknown` alone.
 struct Jetter<'a> {
     assembly: &'a Assembly,
     held: &'a [Interval],
+    /// The columns to differentiate by, in increasing order.
+    unknown: &'a [usize],
     out: &'a mut Option<Jet>,
 }
 
-impl Visit for Jetter<'_> {
-    fn go<R: Residual<N, E>, const N: usize, const E: usize>(
+impl Jetter<'_> {
+    /// The jet of one rule with `K` lanes, one for each of its inputs that is an unknown. The
+    /// other inputs are intervals with no derivative, so a rule of ten inputs and three unknowns
+    /// runs on dual numbers three wide.
+    fn lanes<R: Residual<N, E>, const N: usize, const E: usize, const K: usize>(
         &mut self,
         kind: &R,
         row: &Row,
+        list: &[Slot; N],
     ) -> Result<(), SketchError> {
-        let list: &[Slot; N] = self.assembly.list_of(row)?;
-        let (zero, one) = (Interval::point(0.0)?, Interval::point(1.0)?);
-        let mut seeds = [Dual::new(zero, [zero; N]); N];
-        for (j, (seed, slot)) in seeds.iter_mut().zip(list).enumerate() {
-            let mut partials = [zero; N];
+        let zero = Interval::point(0.0)?;
+        let one = Interval::point(1.0)?;
+        let mut seeds = [Dual::new(zero, [zero; K]); N];
+        // The variable each lane differentiates by.
+        let mut owner = [0_usize; K];
+        let mut lane = 0_usize;
+        for (seed, slot) in seeds.iter_mut().zip(list) {
+            let mut partials = [zero; K];
             let value = match *slot {
                 Slot::Constant(c) => Interval::point(c)?,
                 Slot::Variable(i) => {
-                    if let Some(unit) = partials.get_mut(j) {
-                        *unit = one;
+                    if self.unknown.binary_search(&i).is_ok() {
+                        if let Some(unit) = partials.get_mut(lane) {
+                            *unit = one;
+                        }
+                        if let Some(own) = owner.get_mut(lane) {
+                            *own = i;
+                        }
+                        lane = lane.saturating_add(1);
                     }
                     *self.held.get(i).ok_or(SketchError::Internal)?
                 }
@@ -1694,28 +1719,53 @@ impl Visit for Jetter<'_> {
             residuals: Vec::new(),
             partials: Vec::new(),
         };
+        jet.residuals
+            .try_reserve_exact(E)
+            .map_err(|_| SketchError::OutOfMemory)?;
         for (e, out) in result.iter().enumerate() {
-            jet.residuals
-                .try_reserve(1)
-                .map_err(|_| SketchError::OutOfMemory)?;
             jet.residuals.push(out.value());
-            for (partial, slot) in out.partials().iter().zip(list) {
-                if let Slot::Variable(v) = *slot {
-                    if let Some((_, _, sum)) =
-                        jet.partials.iter_mut().find(|(w, f, _)| *w == v && *f == e)
-                    {
-                        *sum = sum.add(*partial)?;
-                    } else {
-                        jet.partials
-                            .try_reserve(1)
-                            .map_err(|_| SketchError::OutOfMemory)?;
-                        jet.partials.push((v, e, *partial));
-                    }
+            for (partial, &v) in out.partials().iter().zip(&owner).take(lane) {
+                if let Some((_, _, sum)) =
+                    jet.partials.iter_mut().find(|(w, f, _)| *w == v && *f == e)
+                {
+                    *sum = sum.add(*partial)?;
+                } else {
+                    jet.partials
+                        .try_reserve(1)
+                        .map_err(|_| SketchError::OutOfMemory)?;
+                    jet.partials.push((v, e, *partial));
                 }
             }
         }
         *self.out = Some(jet);
         Ok(())
+    }
+}
+
+impl Visit for Jetter<'_> {
+    fn go<R: Residual<N, E>, const N: usize, const E: usize>(
+        &mut self,
+        kind: &R,
+        row: &Row,
+    ) -> Result<(), SketchError> {
+        let list: &[Slot; N] = self.assembly.list_of(row)?;
+        let mut count = 0_usize;
+        for slot in list {
+            if let Slot::Variable(i) = *slot
+                && self.unknown.binary_search(&i).is_ok()
+            {
+                count = count.saturating_add(1);
+            }
+        }
+        // Few lanes are the usual case; any more run as wide as the rule is.
+        match count {
+            0 => self.lanes::<R, N, E, 0>(kind, row, list),
+            1 => self.lanes::<R, N, E, 1>(kind, row, list),
+            2 => self.lanes::<R, N, E, 2>(kind, row, list),
+            3 => self.lanes::<R, N, E, 3>(kind, row, list),
+            4 => self.lanes::<R, N, E, 4>(kind, row, list),
+            _ => self.lanes::<R, N, E, N>(kind, row, list),
+        }
     }
 }
 

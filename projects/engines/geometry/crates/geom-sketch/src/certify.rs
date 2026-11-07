@@ -201,7 +201,7 @@ fn evaluate(
     f.resize(rows.len(), zero);
     let mut j = Dense::new(rows.len(), cols.len(), zero)?;
     for &rule in rules {
-        let jet = assembly.jet(rule, held)?;
+        let jet = assembly.jet(rule, held, cols)?;
         for (e, residual) in jet.residuals.iter().enumerate() {
             let row = jet.first.checked_add(e).ok_or(SketchError::Internal)?;
             if let Ok(i) = rows.binary_search(&row) {
