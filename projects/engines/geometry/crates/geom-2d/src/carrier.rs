@@ -160,6 +160,12 @@ impl Carriers {
         self.curves.len()
     }
 
+    /// Drops every carrier from place `len` on, so a point made for a moment (a snap candidate's
+    /// crossing) does not leave its carriers behind. Points made before `len` keep their places.
+    pub fn truncate(&mut self, len: usize) {
+        self.curves.truncate(len);
+    }
+
     /// Whether it holds none.
     #[must_use]
     pub const fn is_empty(&self) -> bool {
