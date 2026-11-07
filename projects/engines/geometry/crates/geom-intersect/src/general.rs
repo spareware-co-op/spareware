@@ -390,8 +390,31 @@ pub(crate) fn starts_of(
                     floor,
                 };
                 let length = if fixed_u { (c, d) } else { (a, b) };
-                let domain = [span(length)?, span(there.0)?, span(there.1)?];
-                let found = solve(&edge, domain, |_, _| Ok(true), meter)?;
+                let (wide, room) = match roomy(other, there) {
+                    Some((wide, room)) => (Some(wide), room),
+                    None => (None, there),
+                };
+                let (wide_own, own_room) = match roomy(own, here) {
+                    Some((wide, room)) => (Some(wide), room),
+                    None => (None, here),
+                };
+                let search = if fixed_u { own_room.1 } else { own_room.0 };
+                let edge = Edge {
+                    own: wide_own.as_ref().unwrap_or(own),
+                    other: wide.as_ref().unwrap_or(other),
+                    ..edge
+                };
+                let domain = [span(search)?, span(room.0)?, span(room.1)?];
+                let mut found = solve(&edge, domain, |_, _| Ok(true), meter)?;
+                // A zero is the patches' if its enclosure meets them both: it is cut to them, and
+                // one wholly in the room past an end is another patch's or none.
+                found
+                    .zeros
+                    .retain_mut(|z| meets_patch(&mut z.enclosure, length, there));
+                found.flagged.retain(|f| {
+                    let mut region = f.region;
+                    meets_patch(&mut region, length, there)
+                });
                 // An end of the edge on a pole line is the pole, which that line's own test
                 // answers for every pair at once: a root or a flag the engine leaves there is that
                 // point, within the floor, and is not this edge's.
@@ -426,6 +449,77 @@ pub(crate) fn starts_of(
         }
     }
     Ok(Starts::Found(out))
+}
+
+/// `surface` and `there`, a patch of it that an edge is searched against, both widened past each
+/// end that is an end of the surface's own domain, on the parameters along which the kind goes on
+/// past it: a plane's both, a cylinder's and a cone's axial one (their round one closes on itself
+/// instead). `None` when there is nothing to widen.
+///
+/// A zero of the edge's system on the end of the other surface's domain cannot be proven in a box
+/// that stops at the end: Krawczyk's image of the box leaves it on the outside. In a box that goes
+/// on past the end the same zero is inside, and is proven there (12.3). The kinds' formulas do not
+/// stop at the end, so the same surface over a wider domain (`with_domain`) is read there; a NURBS
+/// surface is not defined past its end, so it has no room. What lies past the end is cut off
+/// again by [`meets_patch`].
+fn roomy(surface: &SurfaceKind, there: Region) -> Option<(SurfaceKind, Region)> {
+    let (us, vs) = surface.domain();
+    let (free_u, free_v) = match surface {
+        SurfaceKind::Plane(_) => (true, true),
+        SurfaceKind::Cylinder(_) | SurfaceKind::Cone(_) => (false, true),
+        _ => (false, false),
+    };
+    // The patch and the domain, each widened by the same room at the ends they share.
+    let widen = |(a, b): (f64, f64), (lo, hi): (f64, f64), free: bool| {
+        let room = (b - a) / ROOM;
+        if !free || room.is_nan() || room <= 0.0 {
+            return ((a, b), (lo, hi));
+        }
+        let (down, up) = (a == lo, b == hi);
+        (
+            (
+                if down { a - room } else { a },
+                if up { b + room } else { b },
+            ),
+            (
+                if down { lo - room } else { lo },
+                if up { hi + room } else { hi },
+            ),
+        )
+    };
+    let (ru, du) = widen(there.0, us, free_u);
+    let (rv, dv) = widen(there.1, vs, free_v);
+    if (ru, rv) == there {
+        return None;
+    }
+    let domain = (du, dv);
+    let wide = match surface {
+        SurfaceKind::Plane(k) => SurfaceKind::Plane(k.with_domain(domain).ok()?),
+        SurfaceKind::Cylinder(k) => SurfaceKind::Cylinder(k.with_domain(domain).ok()?),
+        SurfaceKind::Cone(k) => SurfaceKind::Cone(k.with_domain(domain).ok()?),
+        _ => return None,
+    };
+    Some((wide, (ru, rv)))
+}
+
+/// How much of a patch's width the room past its end is: a sixteenth.
+const ROOM: f64 = 16.0;
+
+/// Whether the enclosure `[t, s, r]` of a zero of an edge system meets the edge (`length`) and the patch `there` of the
+/// other surface, and if so cut to it (a zero within the floor of the patch's end is the end's).
+fn meets_patch(zero: &mut [Interval; 3], length: (f64, f64), there: Region) -> bool {
+    let [t, s, r] = zero;
+    let (((a, b), (c, d)), cut) = (there, |x: &mut Interval, lo: f64, hi: f64| {
+        let (low, high) = (larger(x.lo(), lo), smaller(x.hi(), hi));
+        match Interval::new(low, high) {
+            Ok(met) => {
+                *x = met;
+                true
+            }
+            Err(_) => false,
+        }
+    });
+    cut(t, length.0, length.1) && cut(s, a, b) && cut(r, c, d)
 }
 
 /// The point `share` of the way across a span, if it has one strictly inside.
