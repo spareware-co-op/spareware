@@ -29,7 +29,7 @@ use geom_num::pencil::{
 };
 use geom_num::quadric::{self, Ring, Slope};
 use geom_num::sign::Sign;
-use geom_num::sturm::{gcd, square_root};
+use geom_num::sturm::{gcd, gcd_with_steps, square_root};
 use geom_num::wide::Wide;
 
 const NONE: Topology = Topology {
@@ -1090,6 +1090,62 @@ fn the_filter_gives_way_when_its_walk_cannot_part_the_roots() {
         b[k][k] = i(-x);
     }
     assert_eq!(filtered(&a, &b), None);
+}
+
+/// The binary gcd's steps are held by the bits of its inputs (the bound in `gcd_with_steps`'s
+/// documentation): the larger number's bit length falls at every step. Checked on the worst shapes
+/// (a run of ones against one, Fibonacci neighbours, powers of two) and a few hundred full-width
+/// pairs, and the answer is held to agree with `gcd`.
+#[test]
+fn the_binary_gcd_ends_within_the_bits_of_its_inputs() {
+    type W = Wide<4>;
+    let bits = |v: &W| -> usize {
+        let limbs = v.to_le_limbs();
+        limbs.iter().rposition(|l| *l != 0).map_or(0, |used| {
+            used * 64 + 64 - usize::try_from(limbs[used].leading_zeros()).unwrap()
+        })
+    };
+    let from = |limbs: [u64; 4]| W::from_le_limbs(limbs);
+    let mut pairs: Vec<(W, W)> = Vec::new();
+    // A run of ones against one, and against a smaller run.
+    for k in [1_usize, 7, 64, 65, 127, 128, 200, 254] {
+        let mut ones = [0_u64; 4];
+        for bit in 0..k {
+            ones[bit / 64] |= 1 << (bit % 64);
+        }
+        pairs.push((from(ones), W::from_i64(1)));
+        pairs.push((from(ones), W::from_i64(3)));
+        pairs.push((from(ones), from([u64::MAX, 0, 0, 0])));
+    }
+    // Fibonacci neighbours, the slowest case of Euclid's method.
+    let (mut p, mut q) = (W::from_i64(1), W::from_i64(1));
+    for _ in 0..340 {
+        let Some(next) = p.checked_add(&q) else { break };
+        pairs.push((p, q));
+        p = q;
+        q = next;
+    }
+    // Full-width pairs from a fixed generator.
+    let mut state = 0x9e37_79b9_7f4a_7c15_u64;
+    let mut next = || {
+        state = state
+            .wrapping_mul(6_364_136_223_846_793_005)
+            .wrapping_add(1_442_695_040_888_963_407);
+        state
+    };
+    for _ in 0..300 {
+        let mut a = [next(), next(), next(), next() >> 1];
+        let mut b = [next(), next(), next(), next() >> 1];
+        a[0] |= 1;
+        b[0] |= 1;
+        pairs.push((from(a), from(b)));
+    }
+    for (a, b) in pairs {
+        let (g, steps) = gcd_with_steps(&a, &b).expect("fits");
+        assert!(steps <= bits(&a) + bits(&b), "{steps} steps");
+        assert_eq!(gcd(&a, &b), Some(g));
+        assert!(!g.is_zero());
+    }
 }
 
 #[test]

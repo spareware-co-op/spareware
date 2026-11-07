@@ -1228,8 +1228,15 @@ fn apex_one_double(pencil: &Exact, terms: &[Big; TERMS]) -> Result<Topology, Num
             meets: 1,
             ..EMPTY
         },
-        // Beside the root the determinant, which is not zero, has a sign: the members there are of
-        // rank three, the base conics' full rank, and only their signs are left to read.
+        // Why the guard needs no test of the rank. `beside` reads each sum of principal minors
+        // just to one side of the root, from its first derivative there that is not zero. The
+        // last sum is the determinant, a polynomial that is not zero (the pencil has a last
+        // polynomial of degree one, so a determinant of degree at least one), and a polynomial
+        // that is not zero cannot vanish on both sides of a root of its own: its sign beside the
+        // root is certain and not zero. Descartes' count (`inertia_of`) of a form whose last sum
+        // is not zero counts the form's whole size as eigenvalues that are not zero, so the
+        // members beside the root are of the base conics' full rank, three, and only the signs
+        // are left to read. The rank is therefore three whenever this point is reached.
         _ if [left, right].iter().any(|i| i.one_sided()) => apex,
         _ => Topology {
             double_lines: 2,
