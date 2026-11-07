@@ -32,7 +32,7 @@
 //! Cost: O((n + k) log n) comparisons for the sweep, n segments and k crossings, plus the cost of
 //! moving the entries of the status list on insertion, which is linear in the segments the sweep
 //! line crosses at once; the faces are linear in the edges, and finding the face around each hole
-//! is linear in the edges for each hole.
+//! is a second sweep over the finished edges.
 
 #![allow(
     clippy::many_single_char_names,
@@ -689,72 +689,58 @@ fn faces_of(
             }
         }
     }
-    // The edges a downward ray from a vertex can meet: those that run across its x to the right
-    // end, as the later-starting test below needs.
+    // The parent cycle of each clockwise cycle: the cycle of the edge nearest below its lowest-
+    // leftmost vertex. A second sweep over the finished edges finds it: the vertices are in
+    // lexicographic order already, the status holds the edges the sweep line crosses, lowest first,
+    // and no two cross, so a vertex is placed among them by exact side tests. At a hole's vertex
+    // the edge just below it in the status is the edge below the hole; the face above that edge
+    // is on the left of its half-edge that runs rightwards.
     let seg_of_edge = |e: usize| -> Result<&Seg, ArrangeError> {
         let s = rep.get(e).copied().ok_or(ArrangeError::TooMany)?;
         seg_of(segs, s)
     };
-    let end_pts = |e: usize| -> Result<(&Rational2, &Rational2), ArrangeError> {
-        let edge = edges.get(e).ok_or(ArrangeError::TooMany)?;
-        let lo = vertices
-            .get(usize::try_from(edge.from).map_err(|_| ArrangeError::TooMany)?)
-            .ok_or(ArrangeError::TooMany)?;
-        let hi = vertices
-            .get(usize::try_from(edge.to).map_err(|_| ArrangeError::TooMany)?)
-            .ok_or(ArrangeError::TooMany)?;
-        Ok((lo, hi))
-    };
-    // The parent cycle of each clockwise cycle: the cycle of the edge nearest below its lowest-
-    // leftmost vertex, just left of it.
+    let mut hole_at: Vec<Option<usize>> = alloc::vec![None; vertices.len()];
+    for (c, m) in low.iter().enumerate() {
+        if !counter.get(c).copied().unwrap_or(true)
+            && let Some(slot) = hole_at.get_mut(*m)
+        {
+            *slot = Some(c);
+        }
+    }
     let mut parent: Vec<Option<u32>> = alloc::vec![None; cycles.len()];
-    for (c, cycle) in cycles.iter().enumerate() {
-        if counter.get(c).copied().unwrap_or(true) {
-            continue;
-        }
-        let m_id = low.get(c).copied().ok_or(ArrangeError::TooMany)?;
-        let m = vertices.get(m_id).ok_or(ArrangeError::TooMany)?;
-        let _ = cycle;
-        let mut best: Option<usize> = None;
-        for e in 0..edges.len() {
-            let (lo, hi) = end_pts(e)?;
-            let s = seg_of_edge(e)?;
-            if sign_order(lo.cmp_x(m)?) != Ordering::Less
-                || sign_order(hi.cmp_x(m)?) == Ordering::Less
-                || s.dir[0] == 0
-            {
-                continue;
+    let mut status: Vec<usize> = Vec::new();
+    let mut next_edge = 0_usize;
+    for (v, at) in vertices.iter().enumerate() {
+        // The edges that end here are those the vertex lies on.
+        let (mut a, mut b) = (0_usize, status.len());
+        while a < b {
+            let mid = a.saturating_add(b.saturating_sub(a) / 2);
+            let e = status.get(mid).copied().ok_or(ArrangeError::TooMany)?;
+            if seg_of_edge(e)?.line.side(at)? == Sign::Positive {
+                a = mid.saturating_add(1);
+            } else {
+                b = mid;
             }
-            // m strictly above the edge: on the left of the carrier running rightwards.
-            if s.line.side(m)? != Sign::Positive {
-                continue;
-            }
-            best = match best {
-                None => Some(e),
-                Some(b) => {
-                    let (blo, _) = end_pts(b)?;
-                    let sb = seg_of_edge(b)?;
-                    // Whichever starts later has its start within the other's span.
-                    let e_later = sign_order(lo.cmp_x(blo)?) == Ordering::Greater;
-                    let higher = if e_later {
-                        match s_side(sb, lo)? {
-                            Ordering::Greater => true,
-                            Ordering::Less => false,
-                            Ordering::Equal => cross_sign(sb.dir, s.dir)? == Ordering::Greater,
-                        }
-                    } else {
-                        match s_side(s, blo)? {
-                            Ordering::Greater => false,
-                            Ordering::Less => true,
-                            Ordering::Equal => cross_sign(sb.dir, s.dir)? == Ordering::Greater,
-                        }
-                    };
-                    if higher { Some(e) } else { Some(b) }
-                }
-            };
         }
-        if let Some(e) = best {
-            let h = index(e.checked_mul(2).ok_or(ArrangeError::TooMany)?)?;
+        let lo = a;
+        let (mut a, mut b) = (lo, status.len());
+        while a < b {
+            let mid = a.saturating_add(b.saturating_sub(a) / 2);
+            let e = status.get(mid).copied().ok_or(ArrangeError::TooMany)?;
+            if seg_of_edge(e)?.line.side(at)? == Sign::Zero {
+                a = mid.saturating_add(1);
+            } else {
+                b = mid;
+            }
+        }
+        let hi = a;
+        let tail = status.split_off(hi);
+        status.truncate(lo);
+        status.extend(tail);
+        if let Some(Some(c)) = hole_at.get(v).copied()
+            && let Some(below) = lo.checked_sub(1).and_then(|k| status.get(k)).copied()
+        {
+            let h = index(below.checked_mul(2).ok_or(ArrangeError::TooMany)?)?;
             let on_cycle = cycle_of
                 .get(usize::try_from(h).map_err(|_| ArrangeError::TooMany)?)
                 .copied()
@@ -763,6 +749,35 @@ fn faces_of(
                 *slot = Some(on_cycle);
             }
         }
+        // The edges that start here, in the order just after the vertex: by direction.
+        let mut starting: Vec<usize> = Vec::new();
+        while let Some(e) = edges.get(next_edge) {
+            if usize::try_from(e.from).ok() != Some(v) {
+                break;
+            }
+            starting.push(next_edge);
+            next_edge = next_edge.saturating_add(1);
+        }
+        let mut fail: Option<ArrangeError> = None;
+        starting.sort_by(|&x, &y| {
+            let (Ok(sx), Ok(sy)) = (seg_of_edge(x), seg_of_edge(y)) else {
+                fail = Some(ArrangeError::TooMany);
+                return Ordering::Equal;
+            };
+            match cross_sign(sy.dir, sx.dir) {
+                Ok(o) => o,
+                Err(e) => {
+                    fail = Some(e);
+                    Ordering::Equal
+                }
+            }
+        });
+        if let Some(e) = fail {
+            return Err(e);
+        }
+        let tail = status.split_off(lo);
+        status.extend(starting);
+        status.extend(tail);
     }
     // Resolve each cycle to a face: a counter-clockwise cycle is its own; a clockwise one is in the
     // face of its parent, or the unbounded face.
@@ -790,9 +805,4 @@ fn faces_of(
         }
     }
     Ok((faces, cycle_of))
-}
-
-/// Which side of segment `s`'s carrier the point `p` is on: greater when above.
-fn s_side(s: &Seg, p: &Rational2) -> Result<Ordering, ArrangeError> {
-    Ok(sign_order(s.line.side(p)?))
 }
