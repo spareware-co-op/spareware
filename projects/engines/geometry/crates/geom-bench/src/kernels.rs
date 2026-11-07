@@ -2351,6 +2351,7 @@ pub mod bvh {
 pub mod entity {
     use geom_2d::edit::{Similarity, place_polyline, polyline_length};
     use geom_2d::entity::{Becomes, Frac, Polyline, Shape};
+    use crate::inputs::entity::Placed;
     use geom_math::Classification;
     use geom_num::NumError;
     use geom_num::grid::P2;
@@ -2395,7 +2396,7 @@ pub mod entity {
 
     /// `place_polyline` on each input: the first vertex's x, as a bit pattern, plus the bulge count.
     #[inline(never)]
-    pub fn place(batch: &[((Vec<P2>, Vec<Frac>), i64)], out: &mut Vec<Result<u64, NumError>>) {
+    pub fn place(batch: &[Placed], out: &mut Vec<Result<u64, NumError>>) {
         run(batch, out, |((vertices, bulges), k)| {
             let poly = Polyline::new(vertices.clone(), bulges.clone(), None, false)
                 .map_err(|_| NumError::Degenerate)?;

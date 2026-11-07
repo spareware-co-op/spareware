@@ -33,6 +33,9 @@ fn point(g: &mut SplitMix64) -> Option<P2> {
     P2::new(g.range(-1000, 1000), g.range(-1000, 1000)).ok()
 }
 
+/// A polyline's vertices and bulges, and the number of the placement to put it through.
+pub type Placed = ((Vec<P2>, Vec<Frac>), i64);
+
 /// The vertices and bulges of one polyline: one bulge for each of the open polyline's segments.
 fn parts(g: &mut SplitMix64) -> Option<(Vec<P2>, Vec<Frac>)> {
     let vertices = (0..VERTICES)
@@ -95,7 +98,7 @@ pub fn under(class: Class) -> Vec<(Shape, Classification)> {
 /// A polyline and the number of one of eight placements (`Similarity`): four quarter turns, a
 /// mirror in a row, a mirror in a column, a whole scale of three and a shift.
 #[must_use]
-pub fn place(class: Class) -> Vec<((Vec<P2>, Vec<Frac>), i64)> {
+pub fn place(class: Class) -> Vec<Placed> {
     if class != Class::Typical {
         return Vec::new();
     }

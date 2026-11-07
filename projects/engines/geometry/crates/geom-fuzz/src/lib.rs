@@ -184,6 +184,7 @@ pub mod arenas;
 pub mod boxtree;
 pub mod crossings;
 pub mod curves;
+pub mod edit;
 pub mod entity;
 pub mod intersect;
 pub mod linalg;
