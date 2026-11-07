@@ -317,7 +317,7 @@ fn every_multiple_of_thirty_and_forty_five_degrees_holds_its_exact_value() {
         if k % 2 != 0 {
             let t = degrees.rem_euclid(360);
             let sin_sign = if t < 180 { 1 } else { -1 };
-            let cos_sign = if t < 90 || t > 270 { 1 } else { -1 };
+            let cos_sign = if (90..=270).contains(&t) { -1 } else { 1 };
             assert!(holds_root(s, sin_sign, &half), "{degrees}");
             assert!(holds_root(c, cos_sign, &half), "{degrees}");
         }
