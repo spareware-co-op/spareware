@@ -23,19 +23,20 @@ mod gate;
 
 #[cfg(target_os = "linux")]
 use gate::{
-    ball::ball, brent::brent, bvh::bvh, crossing::crossing, curve::curve, dd::dd, dual::dual,
-    eft::eft, exact_sum::exact_sum, exactness::exactness, generated::generated, grid::grid,
-    growth::growth, helper::helper, interval::interval, isolate::isolate, linalg::linalg,
-    math::math, math_types::math_types, newton::newton, nurbs::nurbs, perturb::perturb,
-    plane::plane, predicate::predicate, quadrature::quadrature, real::real, rng::rng, sign::sign,
-    surface::surface, topo::topo, unproven::unproven, wide::wide, wide32::wide32,
+    attributes::attributes, ball::ball, brent::brent, bvh::bvh, crossing::crossing, curve::curve,
+    dd::dd, dual::dual, eft::eft, exact_sum::exact_sum, exactness::exactness, generated::generated,
+    grid::grid, growth::growth, helper::helper, interval::interval, isolate::isolate,
+    linalg::linalg, math::math, math_types::math_types, newton::newton, nurbs::nurbs,
+    perturb::perturb, plane::plane, predicate::predicate, quadrature::quadrature, real::real,
+    rng::rng, sign::sign, surface::surface, topo::topo, unproven::unproven, wide::wide,
+    wide32::wide32,
 };
 
 #[cfg(target_os = "linux")]
 gungraun::main!(
     config = gate::config();
     library_benchmark_groups = predicate, sign, wide, wide32, plane, crossing, eft, interval, grid, real, exactness,
-        math, unproven, rng, dd, exact_sum, generated, perturb, newton, dual, isolate, ball, math_types, linalg, bvh, topo, nurbs, curve, surface, brent, quadrature, helper, growth
+        math, unproven, rng, dd, exact_sum, generated, perturb, newton, dual, isolate, ball, math_types, linalg, bvh, attributes, topo, nurbs, curve, surface, brent, quadrature, helper, growth
 );
 
 /// Off Linux: explain where the gate runs, and succeed.
