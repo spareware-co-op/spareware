@@ -38,6 +38,31 @@ fn tools() -> Value {
     read("projects/engines/crates/engine-geometry/generated/mcp-tools.json")
 }
 
+/// The make and transform operations of piece G101, by name.
+const BASE_OPERATIONS: [&str; 11] = [
+    "make.box",
+    "make.cone",
+    "make.cylinder",
+    "make.prism",
+    "make.sphere",
+    "make.torus",
+    "transform.mirror",
+    "transform.move",
+    "transform.pattern",
+    "transform.rotate",
+    "transform.scale",
+];
+
+/// The queries piece G102 registers, Preview since 2026-10-31, by name.
+const QUERY_OPERATIONS: [&str; 6] = [
+    "query.area",
+    "query.bounding_box",
+    "query.exactness",
+    "query.faces",
+    "query.validity",
+    "query.volume",
+];
+
 fn the_parts() -> Value {
     json!({
         "benchmark": ["b"], "contract": ["c"], "family_laws": ["l"],
@@ -66,11 +91,26 @@ fn one(tier: &str, evidence: Value, missing: Value) -> (Value, Value) {
 fn the_real_tree_passes_and_lists_everything() {
     let (map, tools) = (map(), tools());
     assert_eq!(problems(&map, &tools), Vec::<String>::new());
-    // Eleven make and transform operations (piece G101), and the six queries piece G102 adds, which
-    // are Preview and list the parts they lack: the count is the registry's own, so a seventeenth
-    // operation is a change to read here, not a surprise.
-    let count = map["operations"].as_array().unwrap().len();
-    assert!(count == 11 || count == 17, "{count} operations");
+    // The registry holds exactly the eleven make and transform operations of piece G101, and,
+    // when piece G102 is in the tree (it adds `geom-topo`'s `query_ops`), exactly the six Preview
+    // queries it registers besides: a list by name, so a registry that loses one, or gains one
+    // nobody named here, fails.
+    let mut expected: Vec<&str> = BASE_OPERATIONS.to_vec();
+    if root()
+        .join("projects/engines/geometry/crates/geom-topo/src/query_ops.rs")
+        .exists()
+    {
+        expected.extend(QUERY_OPERATIONS);
+    }
+    expected.sort_unstable();
+    let mut names: Vec<&str> = map["operations"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|o| o["name"].as_str().unwrap())
+        .collect();
+    names.sort_unstable();
+    assert_eq!(names, expected);
     // Fifteen curve kinds and eleven surface kinds (chapter 7).
     assert_eq!(map["kinds"].as_array().unwrap().len(), 26);
 }
