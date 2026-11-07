@@ -10403,6 +10403,41 @@
           "target": "lib"
         },
         {
+          "cost": "reading the file is one pass over 380 KB.",
+          "does": "[`cases`] reads `data/ssi-corpus.json`, one [`Case`] for each pair: its class, the two surfaces as the corpus gives them ([`Surface`]: plane, cylinder, cone, sphere, torus or NURBS, in the corpus' own units and in degrees), the coverage tolerance, the expected topology (branches with their kind and whether they close, isolated points, singular points, coincident regions) and whether `SMLib`'s `GlobalSurfaceIntersect` passes the case ([`Cpp`]). The file is the corpus slimmed: the densely sampled curves are cut to nine points a branch and a region keeps its point count (`data/slim-ssi-corpus.py` makes it from the corpus). Placing a case on the grid and running the kernel over it is the benchmark's work, in `tests/ssi_corpus.rs`; this module holds no kernel type.",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-test/src/ssi_corpus.rs",
+          "guarantees": [
+            "**Nothing is guessed.** Unknown fields are refused, and a case file that does not read is an error, never a shorter corpus.",
+            "**A benchmark, not a gate.** Nothing here decides whether a kernel passes; the corpus' pass count for `SMLib` (81 of 119) is held as data, in [`Case::cpp`].",
+            "**The count is the corpus'.** [`cases`] returns 119 cases, each id once."
+          ],
+          "job": "The surface-surface intersection corpus: 119 pairs of surfaces whose exact intersection is known, read as plain data for the benchmark of `geom-intersect` (chapter 12.17; piece S6).",
+          "method": {
+            "links": [
+              "https://doi.org/10.1145/3618349"
+            ],
+            "text": "jyviko's exact-ground-truth corpus, as chapter 12.17 names it, the cases' surfaces and topology taken as they are. Where `SMLib` passes each case comes from the text of solidcore issue #17 (the 38 cases it names as not passing), listed in `data/slim-ssi-corpus.py`. The Yang, Jia and Yan cases derive from a CC-BY 4.0 paper: F. Yang, Z. Jia and D.-M. Yan, \"Topology Guaranteed B-Spline Surface/Surface Intersection\", ACM Transactions on Graphics 42(6), Article 211, 2023, <https://doi.org/10.1145/3618349>; every such case has \"Y23\" in its class and `y23_` in its id."
+          },
+          "path": "geom_test::ssi_corpus",
+          "provenance": [
+            {
+              "licence": "MIT OR Apache-2.0",
+              "link": "https://github.com/jyviko/ssi-corpus/tree/b04c8a6093a8b3505d865d1dd874ec3879ccb1f9/cases/data",
+              "method_note": null,
+              "name": "ssi-corpus (the 119 cases of `cases/data`)",
+              "notice": [
+                "Copyright (c) 2026 `SolidCraft` contributors"
+              ],
+              "pinned": true,
+              "purpose": "slimmed to one file (every branch cut to at most nine points, each region to its point count, the truth functions left out), each case given `SMLib`'s result from solidcore issue #17, and read by this module in place of the corpus' Python scorer.",
+              "take": "port"
+            }
+          ],
+          "spdx": "MIT OR Apache-2.0",
+          "target": "lib"
+        },
+        {
           "cost": "linear in the file's length and the run's output.",
           "does": "gate 1 (chapter 30.3) asks that every merge gate fail on a seeded violation, the pattern of the kernel's merge gate (G12) and of the toolchain guard (G20, [`crate::guard`]). Most gates already meet it in their own tests (gate 1's record in chapter 32 lists each). The gates here are the ones whose verdict is an outside tool's: rustfmt, Verus, Kani, libFuzzer, `ClusterFuzzLite`, Gungraun's Callgrind comparison, Wasmtime's fuel, Gappa with Rocq, and HOL Light. [`VIOLATIONS`] holds one planted violation for each: a file of the kernel, one line in it found exactly once ([`Violation::anchor`]), the line it becomes, and the text the tool prints when it catches it. The binary `trip` writes the changed line into the working tree, runs the gate's own command, restores the file byte for byte, and asks [`verdict`] whether the run failed for that reason. Each workflow job runs it with its real check, so a job that could no longer fail (a tool that stopped checking, a command that checks nothing) fails instead. The two count gates run it last, comparing the planted run with the pull request's own run measured just before; the `ClusterFuzzLite` gate runs it in a job of its own, `clusterfuzzlite-seeded`, because its actions build a fresh clone of the pull request, which a planted line never reaches; and HOL Light's runs on orient2d's leg of its matrix alone.",
           "family": [],
@@ -10580,6 +10615,17 @@
       "take": "port",
       "used_by": [
         "projects/engines/geometry/crates/geom-nurbs/src/net.rs"
+      ]
+    },
+    {
+      "licence": "MIT OR Apache-2.0",
+      "link": "https://github.com/jyviko/ssi-corpus/tree/b04c8a6093a8b3505d865d1dd874ec3879ccb1f9/cases/data",
+      "method_note": null,
+      "name": "ssi-corpus (the 119 cases of `cases/data`)",
+      "pinned": true,
+      "take": "port",
+      "used_by": [
+        "projects/engines/geometry/crates/geom-test/src/ssi_corpus.rs"
       ]
     },
     {
