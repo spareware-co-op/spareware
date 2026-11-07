@@ -107,16 +107,26 @@ fn main() {
     );
     // The sparse form on a 10,000-unknown outline: 5,000 points held along x, every y free.
     let outline = chain(5000, false, false);
-    time("sparse factorisation of a 10,000-unknown outline", 3, || {
-        let mut meter = WorkMeter::new(Budget::UNLIMITED);
-        black_box(MotionFinder::new(black_box(&outline), &mut meter).unwrap());
-    });
+    time(
+        "sparse factorisation of a 10,000-unknown outline",
+        3,
+        || {
+            let mut meter = WorkMeter::new(Budget::UNLIMITED);
+            black_box(MotionFinder::new(black_box(&outline), &mut meter).unwrap());
+        },
+    );
     let mut meter = WorkMeter::new(Budget::UNLIMITED);
     let finder = MotionFinder::new(&outline, &mut meter).unwrap();
     assert_eq!(finder.dof(), 4999);
-    time("free motions of one entity, 10,000 unknowns (target < 5 ms)", 200, || {
-        let mut meter = WorkMeter::new(Budget::UNLIMITED);
-        let m = finder.of_entity(black_box(ItemId::new(1, 2500)), &mut meter).unwrap();
-        assert_eq!(m.len(), 1);
-    });
+    time(
+        "free motions of one entity, 10,000 unknowns (target < 5 ms)",
+        200,
+        || {
+            let mut meter = WorkMeter::new(Budget::UNLIMITED);
+            let m = finder
+                .of_entity(black_box(ItemId::new(1, 2500)), &mut meter)
+                .unwrap();
+            assert_eq!(m.len(), 1);
+        },
+    );
 }

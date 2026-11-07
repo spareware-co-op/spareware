@@ -35,7 +35,10 @@ fn same(a: &[Motion], b: &[Motion]) {
         assert_eq!(x.moves.len(), y.moves.len(), "{x:?} against {y:?}");
         for (p, q) in x.moves.iter().zip(&y.moves) {
             assert_eq!((p.0, p.1), (q.0, q.1));
-            assert!((p.2 - q.2).abs() <= 1e-6 * (1.0 + p.2.abs()), "{x:?} against {y:?}");
+            assert!(
+                (p.2 - q.2).abs() <= 1e-6 * (1.0 + p.2.abs()),
+                "{x:?} against {y:?}"
+            );
         }
     }
 }
@@ -44,12 +47,23 @@ fn same(a: &[Motion], b: &[Motion]) {
 fn chain(points: usize) -> Sketch {
     let mut text = String::new();
     for i in 0..points {
-        writeln!(text, "entity 1.{i} point {} {}", i as f64 * 100.0, i as f64 * 50.0).unwrap();
+        writeln!(
+            text,
+            "entity 1.{i} point {} {}",
+            i as f64 * 100.0,
+            i as f64 * 50.0
+        )
+        .unwrap();
     }
     writeln!(text, "constraint 2.0 driving 0 fix 1.0 0 0").unwrap();
     writeln!(text, "constraint 2.1 driving 0 fix 1.0 1 0").unwrap();
     for i in 1..points {
-        writeln!(text, "constraint 3.{i} driving 0 across 1.{} 1.{i} 100", i - 1).unwrap();
+        writeln!(
+            text,
+            "constraint 3.{i} driving 0 across 1.{} 1.{i} 100",
+            i - 1
+        )
+        .unwrap();
     }
     sketch(&text)
 }
@@ -59,7 +73,10 @@ fn it_equals_the_dense_form_with_no_constraints() {
     let s = sketch("entity 1.0 point 1 2\nentity 1.1 point 5 7\n");
     let finder = MotionFinder::new(&s, &mut meter()).unwrap();
     assert_eq!(finder.dof(), 4);
-    same(&finder.all(&mut meter()).unwrap(), &free_motions(&s, &mut meter()).unwrap());
+    same(
+        &finder.all(&mut meter()).unwrap(),
+        &free_motions(&s, &mut meter()).unwrap(),
+    );
 }
 
 #[test]
@@ -93,21 +110,44 @@ fn one_entity_gets_only_its_own_motions() {
     let mine = finder.of_entity(id, &mut meter()).unwrap();
     assert_eq!(mine.len(), 1);
     assert!(all.contains(&mine[0]));
-    assert!(finder.of_entity(ItemId::new(9, 9), &mut meter()).unwrap().is_empty());
+    assert!(
+        finder
+            .of_entity(ItemId::new(9, 9), &mut meter())
+            .unwrap()
+            .is_empty()
+    );
 }
 
 #[test]
 fn a_fully_constrained_sketch_has_no_motion() {
     let mut text = String::new();
     for i in 0..5 {
-        writeln!(text, "entity 1.{i} point {} {}", i as f64 * 100.0, i as f64 * 50.0).unwrap();
+        writeln!(
+            text,
+            "entity 1.{i} point {} {}",
+            i as f64 * 100.0,
+            i as f64 * 50.0
+        )
+        .unwrap();
     }
-    text.push_str("constraint 2.0 driving 0 fix 1.0 0 0
+    text.push_str(
+        "constraint 2.0 driving 0 fix 1.0 0 0
 constraint 2.1 driving 0 fix 1.0 1 0
-");
+",
+    );
     for i in 1..5 {
-        writeln!(text, "constraint 3.{i} driving 0 across 1.{} 1.{i} 100", i - 1).unwrap();
-        writeln!(text, "constraint 4.{i} driving 0 upward 1.{} 1.{i} 50", i - 1).unwrap();
+        writeln!(
+            text,
+            "constraint 3.{i} driving 0 across 1.{} 1.{i} 100",
+            i - 1
+        )
+        .unwrap();
+        writeln!(
+            text,
+            "constraint 4.{i} driving 0 upward 1.{} 1.{i} 50",
+            i - 1
+        )
+        .unwrap();
     }
     let finder = MotionFinder::new(&sketch(&text), &mut meter()).unwrap();
     assert_eq!(finder.dof(), 0);

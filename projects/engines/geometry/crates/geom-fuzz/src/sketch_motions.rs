@@ -46,7 +46,12 @@ fn text_of(data: &[u8]) -> String {
     let points = bytes.next().map_or(0, |b| usize::from(b) % MAX_POINTS) + 1;
     for p in 0..points {
         let (x, y) = (bytes.next().unwrap_or(0), bytes.next().unwrap_or(0));
-        let _ = writeln!(text, "entity 1.{p} point {} {}", u32::from(x) * 100, u32::from(y) * 100);
+        let _ = writeln!(
+            text,
+            "entity 1.{p} point {} {}",
+            u32::from(x) * 100,
+            u32::from(y) * 100
+        );
     }
     for c in 0..MAX_CONSTRAINTS {
         let Some(kind) = bytes.next() else { break };
@@ -54,7 +59,11 @@ fn text_of(data: &[u8]) -> String {
         let b = usize::from(bytes.next().unwrap_or(1)) % points;
         let d = 100 + u32::from(bytes.next().unwrap_or(0)) * 4;
         let _ = match kind % 4 {
-            0 => writeln!(text, "constraint 2.{c} driving 0 fix 1.{a} {} {d}", kind / 4 % 2),
+            0 => writeln!(
+                text,
+                "constraint 2.{c} driving 0 fix 1.{a} {} {d}",
+                kind / 4 % 2
+            ),
             1 if a != b => writeln!(text, "constraint 2.{c} driving 0 across 1.{a} 1.{b} {d}"),
             2 if a != b => writeln!(text, "constraint 2.{c} driving 0 upward 1.{a} 1.{b} {d}"),
             _ if a != b => writeln!(text, "constraint 2.{c} driving 0 distance 1.{a} 1.{b} {d}"),
@@ -88,7 +97,9 @@ pub fn check_sketch(sketch: &Sketch) -> Result<(), Finding> {
         return Err(law("the motions are the same every time"));
     }
     let mut assembly = Assembly::new(sketch).map_err(|_| law("an assembly is made"))?;
-    assembly.evaluate(sketch).map_err(|_| law("an assembly evaluates"))?;
+    assembly
+        .evaluate(sketch)
+        .map_err(|_| law("an assembly evaluates"))?;
     let variables = assembly.variables().to_vec();
     let jacobian = assembly.jacobian();
     let mut largest = 0.0_f64;
@@ -117,15 +128,18 @@ pub fn check_sketch(sketch: &Sketch) -> Result<(), Finding> {
         let Ok(product) = jacobian.multiply(&x) else {
             return Err(law("the Jacobian multiplies a motion"));
         };
-        let size = x.iter().fold(0.0_f64, |a, b| if b.abs() > a { b.abs() } else { a });
+        let size = x
+            .iter()
+            .fold(0.0_f64, |a, b| if b.abs() > a { b.abs() } else { a });
         let bound = 1.01 * INDEPENDENT * largest + 1e-9 * (1.0 + largest * size);
         let worst = product
             .iter()
             .fold(0.0_f64, |a, b| if b.abs() > a { b.abs() } else { a });
         if worst > bound {
-            return Err(Finding::new("a motion changes no equation past the rank tolerance", || {
-                format!("{worst} > {bound} on {sketch:?}")
-            }));
+            return Err(Finding::new(
+                "a motion changes no equation past the rank tolerance",
+                || format!("{worst} > {bound} on {sketch:?}"),
+            ));
         }
     }
     Ok(())

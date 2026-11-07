@@ -349,8 +349,7 @@ constraint 2.4 driving 0 distance 1.0 1.2 1000
 constraint 2.5 driving 0 distance 1.1 1.2 5000
 ",
     );
-    let Outcome::NotConverged { remedies, .. } =
-        solve_checked(&s, 10_000.0, &mut meter()).unwrap()
+    let Outcome::NotConverged { remedies, .. } = solve_checked(&s, 10_000.0, &mut meter()).unwrap()
     else {
         panic!("converged or conflicting");
     };
@@ -384,5 +383,8 @@ constraint 2.4 driving 1 distance 1.0 1.1 3100
     };
     let newer = remedies.iter().find(|r| r.constraint == id(2, 4)).unwrap();
     let range = newer.range.unwrap();
-    assert!(range.most.unwrap() - range.least.unwrap() < 0.5, "{newer:?}");
+    assert!(
+        range.most.unwrap() - range.least.unwrap() < 0.5,
+        "{newer:?}"
+    );
 }
