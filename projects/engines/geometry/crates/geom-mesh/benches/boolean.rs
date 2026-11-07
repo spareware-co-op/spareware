@@ -16,7 +16,7 @@
 //! untouched: two spheres, a sphere and a torus, two tori, and a cube against a rotated cube, each
 //! of about 1,000, 10,000 and 100,000 faces a side, made by a fixed generator (no random numbers).
 //! Thingi10K's own models cannot be read yet (the readers are not built), so this is the stand-in
-//! for EMBER's 1.6 ms; `shapes` takes the same filter text, such as `shapes sphere`, and `small` after it for radius 2^13 steps, where every plane's coefficients fit machine words (otherwise 2^24).
+//! for EMBER's 1.6 ms; `shapes` takes the same filter text, such as `shapes sphere`, and `small` and `one` (only the one-thread runs) after it, `small` for radius 2^13 steps, where every plane's coefficients fit machine words (otherwise 2^24).
 //!
 //! Arguments: a side (23, 71 or 224; all three by default), then text a run's line must hold to
 //! run, such as "in a strip, as solids, 1 thread". Each timed run is the call `timed`, so a
@@ -366,7 +366,7 @@ fn shape_pair(kind: &str, size: usize, small: bool) -> (Polygons, Polygons) {
 
 /// The `shapes` mode: each pair at each size, as built (the models are closed), on 1 and 8
 /// threads, with the soup alone and the whole boolean.
-fn shapes(rayon: &Rayon, step: &OpPath, only: &str, small: bool) {
+fn shapes(rayon: &Rayon, step: &OpPath, only: &str, (small, one_thread): (bool, bool)) {
     for kind in [
         "two spheres",
         "a sphere and a torus",
@@ -384,7 +384,10 @@ fn shapes(rayon: &Rayon, step: &OpPath, only: &str, small: bool) {
             for (name, exec) in [
                 ("1 thread", Exec::serial()),
                 ("8 threads", Exec::with_pool(rayon)),
-            ] {
+            ]
+            .into_iter()
+            .take(if one_thread { 1 } else { 2 })
+            {
                 let start = Instant::now();
                 let kept = soup_only(&a, &b, &exec);
                 let staged = start.elapsed();
@@ -406,7 +409,9 @@ fn main() {
     let step = OpPath::new(OpId::from_bytes([7; 16]));
     if std::env::args().nth(1).as_deref() == Some("shapes") {
         let filter = std::env::args().nth(2).unwrap_or_default();
-        shapes(&rayon, &step, &filter, std::env::args().nth(3).as_deref() == Some("small"));
+        let options = std::env::args().skip(3).collect::<Vec<_>>();
+        let has = |word: &str| options.iter().any(|o| o == word);
+        shapes(&rayon, &step, &filter, (has("small"), has("one")));
         return;
     }
     let sides: Vec<u32> = match std::env::args().nth(1).and_then(|a| a.parse().ok()) {
