@@ -570,10 +570,13 @@ fn attack_every_target_has_its_tests_and_is_in_both_ci_matrices() {
     );
 
     // Seeded violations: each must be reported.
-    let drop_fuzz = workflow.replace(
-        "[arenas_fuzz, attributes_fuzz, batch_fuzz, cache_fuzz, cbor_fuzz, cdt_fuzz, crossings_fuzz, exact_fuzz, general_fuzz, intersect_fuzz, level_fuzz, make_fuzz, orient2d_fuzz, piercing_fuzz, planes_fuzz, project_fuzz, quadric_fuzz, solids_fuzz, variants_fuzz, wide_fuzz]",
-        "[arenas_fuzz, attributes_fuzz, batch_fuzz, cache_fuzz, cbor_fuzz, cdt_fuzz, crossings_fuzz, exact_fuzz, general_fuzz, intersect_fuzz, level_fuzz, make_fuzz, piercing_fuzz, planes_fuzz, project_fuzz, quadric_fuzz, solids_fuzz, variants_fuzz, wide_fuzz]",
-    );
+    // orient2d_fuzz is cut from the libFuzzer matrix's own line, read from the workflow, so the
+    // edit still lands when another piece adds a target to that line.
+    let matrix = workflow
+        .lines()
+        .find(|l| l.trim_start().starts_with("target: ["))
+        .expect("kernel-fuzz.yml has a libFuzzer matrix line");
+    let drop_fuzz = workflow.replace(matrix, &matrix.replace(" orient2d_fuzz,", ""));
     assert_ne!(drop_fuzz, workflow);
     assert!(
         layout_violations(&targets, &tests, &drop_fuzz)
