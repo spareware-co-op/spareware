@@ -455,24 +455,21 @@ fn seeded_arcs_pass_through_their_points() {
     let rounds = if cfg!(debug_assertions) { 60 } else { 600 };
     let mut checked = 0;
     for round in 0..rounds {
-        let r = 2.0_f64.powf(12.0 + 22.0 * unit());
-        let cx = (unit() * 2.0 - 1.0) * 2.0_f64.powi(38);
-        let cy = (unit() * 2.0 - 1.0) * 2.0_f64.powi(38);
-        let start = unit() * 2.0 * core::f64::consts::PI;
+        // Exact powers of two and the kernel's sinpi and cospi, so a seed replays on every target.
+        let r = (1u64 << (12 + (unit() * 22.0) as u32)) as f64 * (1.0 + unit());
+        let cx = (unit() * 2.0 - 1.0) * (1u64 << 38) as f64;
+        let cy = (unit() * 2.0 - 1.0) * (1u64 << 38) as f64;
+        let start = unit() * 2.0;
         let spread = 0.05 + 1.85 * unit();
         let split = 0.1 + 0.8 * unit();
-        let angles = [
-            start,
-            start + spread * split * core::f64::consts::PI,
-            start + spread * core::f64::consts::PI,
-        ];
+        let angles = [start, start + spread * split, start + spread];
         let mut pts: Vec<P3> = angles
             .iter()
             .map(|t| {
-                let z = ((unit() * 2.0 - 1.0) * 2.0_f64.powi(30)).round() as i64;
+                let z = ((unit() * 2.0 - 1.0) * (1u64 << 30) as f64).round() as i64;
                 p(
-                    (cx + r * t.cos()).round() as i64,
-                    (cy + r * t.sin()).round() as i64,
+                    (cx + r * geom_num::math::cospi(*t).unwrap().get()).round() as i64,
+                    (cy + r * geom_num::math::sinpi(*t).unwrap().get()).round() as i64,
                     z,
                 )
             })
@@ -505,4 +502,16 @@ fn segments_say_how_many_points_they_use() {
         .uses(),
         7
     );
+}
+
+/// An arc so nearly straight that its circle's center is 2^77 steps away: no doubles hold it within
+/// `ε_fit` of its points, and the linework says so rather than return a curve that misses them.
+#[test]
+fn an_arc_the_doubles_cannot_hold_within_the_fit_bound_is_refused() {
+    let half = 1_i64 << 39;
+    let pts = [p(-half, 0, 0), p(0, 1, 0), p(half, 0, 0)];
+    match linework(&pts, &[Segment::Arc], &mut meter()) {
+        Err(LineworkError::OverFit { bound }) => assert!(bound.get() > 64.0, "{}", bound.get()),
+        other => panic!("{other:?}"),
+    }
 }
