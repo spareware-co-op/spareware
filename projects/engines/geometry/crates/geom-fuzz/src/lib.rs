@@ -204,6 +204,7 @@ pub mod robustness;
 pub mod roots;
 pub mod seeded;
 pub mod sequence;
+pub mod sketch_motions;
 pub mod sketch_text;
 pub mod surfaces;
 pub mod transforms;

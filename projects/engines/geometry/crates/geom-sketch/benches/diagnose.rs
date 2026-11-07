@@ -105,8 +105,7 @@ fn main() {
             black_box(free_motions(black_box(&under), &mut meter).unwrap());
         },
     );
-    // The sparse form on a 10,000-unknown outline: 5,000 points, y free (sparse motions), then a
-    // chain held only by x-distances plus a fixed y step on every other link (denser motions).
+    // The sparse form on a 10,000-unknown outline: 5,000 points held along x, every y free.
     let outline = chain(5000, false, false);
     time("sparse factorisation of a 10,000-unknown outline", 3, || {
         let mut meter = WorkMeter::new(Budget::UNLIMITED);
