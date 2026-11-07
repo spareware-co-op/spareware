@@ -36,6 +36,11 @@
 //!
 //! Cost: linear in the cases; a check is one parse, one diagnosis and one solve.
 
+#![allow(
+    clippy::arithmetic_side_effects,
+    reason = "the indices of a chain and a grid, bounded by the sizes this module draws: a dozen points, six rows and columns"
+)]
+
 use core::fmt::Write;
 
 use geom_run::{Budget, WorkMeter};
@@ -250,7 +255,7 @@ pub fn cases(seed: Seed, count: u64) -> Vec<Case> {
             consistent: true,
         };
         let (truth, mut rules) = match family {
-            Family::Chain => chain(&mut rng, points, &[]),
+            Family::Chain | Family::Redundant | Family::Conflicting => chain(&mut rng, points, &[]),
             Family::Loose => {
                 let mut loose = vec![false; points];
                 for slot in loose.iter_mut().skip(1) {
@@ -277,7 +282,6 @@ pub fn cases(seed: Seed, count: u64) -> Vec<Case> {
                     mirror: true,
                 },
             ),
-            Family::Redundant | Family::Conflicting => chain(&mut rng, points, &[]),
         };
         if matches!(family, Family::Redundant | Family::Conflicting) {
             let lengths: Vec<usize> = rules

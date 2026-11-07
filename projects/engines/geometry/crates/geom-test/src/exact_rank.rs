@@ -31,8 +31,11 @@
 //! Cost: Bareiss on an m by n matrix is O(m·n·rank) big-integer multiplications whose operands grow
 //! to about rank times the entries' bit length; the note has the measured table.
 
-use core::fmt::Write;
-use std::time::Instant;
+#![allow(
+    clippy::arithmetic_side_effects,
+    clippy::many_single_char_names,
+    reason = "exact big-integer and rational arithmetic cannot overflow or round, and the names are the geometry's: a and b a line's ends, u and v its directions, c the pivot column; this is a development spike"
+)]
 
 use dashu_int::IBig;
 use dashu_int::ops::BitTest;
@@ -76,14 +79,16 @@ impl Row {
     }
 
     fn add(&mut self, point: usize, axis: usize, value: &RBig) {
-        if let Some(slot) = self.0.get_mut(point * 2 + axis) {
+        let at = point.saturating_mul(2).saturating_add(axis);
+        if let Some(slot) = self.0.get_mut(at) {
             *slot += value;
         }
     }
 }
 
 fn sub(a: &[RBig; 2], b: &[RBig; 2]) -> [RBig; 2] {
-    [&a[0] - &b[0], &a[1] - &b[1]]
+    let ([ax, ay], [bx, by]) = (a, b);
+    [ax - bx, ay - by]
 }
 
 fn times(k: i32, x: &RBig) -> RBig {
@@ -92,11 +97,17 @@ fn times(k: i32, x: &RBig) -> RBig {
 
 /// Adds `by` times `grad` (a gradient on the two coordinates of a difference `to - from`) to a row.
 fn difference(row: &mut Row, from: usize, to: usize, grad: &[RBig; 2], by: i32) {
-    for axis in 0..2 {
-        let g = times(by, &grad[axis]);
+    for (axis, g) in grad.iter().enumerate() {
+        let g = times(by, g);
         row.add(to, axis, &g);
         row.add(from, axis, &-g);
     }
+}
+
+/// The four points of a pair of lines.
+fn four(l: &[usize; 4]) -> (usize, usize, usize, usize) {
+    let [a, b, c, d] = *l;
+    (a, b, c, d)
 }
 
 /// The Jacobian of `job`'s rules at its starting points, a row for each equation, scaled to whole
@@ -106,10 +117,13 @@ fn difference(row: &mut Row, from: usize, to: usize, grad: &[RBig; 2], by: i32) 
 ///
 /// A job with an angle rule, or one that names a point it does not have or holds a number that is
 /// not finite.
+#[allow(
+    clippy::too_many_lines,
+    reason = "one arm for each kind of rule, laid out as its gradient reads"
+)]
 pub fn jacobian(job: &Job) -> Result<Vec<Vec<IBig>>, String> {
     let p = coordinates(job)?;
-    let n = p.len();
-    let columns = n * 2;
+    let columns = p.len().saturating_mul(2);
     let at = |i: usize| p.get(i).ok_or_else(|| format!("no point {i}"));
     let mut rows: Vec<Row> = Vec::new();
     for rule in &job.rules {
@@ -137,25 +151,27 @@ pub fn jacobian(job: &Job) -> Result<Vec<Vec<IBig>>, String> {
                 r.add(*a, axis, &-RBig::ONE);
                 rows.push(r);
             }
-            Rule::Parallel { lines: l } | Rule::Perpendicular { lines: l } => {
-                let (u, v) = (sub(at(l[1])?, at(l[0])?), sub(at(l[3])?, at(l[2])?));
+            Rule::Parallel { lines } | Rule::Perpendicular { lines } => {
+                let (a, b, c, d) = four(lines);
+                let ([ux, uy], [vx, vy]) = (sub(at(b)?, at(a)?), sub(at(d)?, at(c)?));
                 // cross(u, v) has the gradient (vy, -vx) on u and (-uy, ux) on v; dot(u, v) has
                 // (vx, vy) on u and (ux, uy) on v.
                 let (gu, gv) = if matches!(rule, Rule::Parallel { .. }) {
-                    ([v[1].clone(), -&v[0]], [-&u[1], u[0].clone()])
+                    ([vy, -vx], [-uy, ux])
                 } else {
-                    ([v[0].clone(), v[1].clone()], [u[0].clone(), u[1].clone()])
+                    ([vx, vy], [ux, uy])
                 };
                 let mut r = Row::new(columns);
-                difference(&mut r, l[0], l[1], &gu, 1);
-                difference(&mut r, l[2], l[3], &gv, 1);
+                difference(&mut r, a, b, &gu, 1);
+                difference(&mut r, c, d, &gv, 1);
                 rows.push(r);
             }
-            Rule::EqualLength { lines: l } => {
-                let (u, v) = (sub(at(l[1])?, at(l[0])?), sub(at(l[3])?, at(l[2])?));
+            Rule::EqualLength { lines } => {
+                let (a, b, c, d) = four(lines);
+                let (u, v) = (sub(at(b)?, at(a)?), sub(at(d)?, at(c)?));
                 let mut r = Row::new(columns);
-                difference(&mut r, l[0], l[1], &u, 2);
-                difference(&mut r, l[2], l[3], &v, -2);
+                difference(&mut r, a, b, &u, 2);
+                difference(&mut r, c, d, &v, -2);
                 rows.push(r);
             }
             Rule::Midpoint { point, a, b } => {
@@ -169,26 +185,28 @@ pub fn jacobian(job: &Job) -> Result<Vec<Vec<IBig>>, String> {
             }
             Rule::Mirror { a, b, line } => {
                 let (pa, pb) = (at(*a)?, at(*b)?);
-                let (o, q) = (at(line[0])?, at(line[1])?);
+                let [l0, l1] = *line;
+                let (o, q) = (at(l0)?, at(l1)?);
                 let w = sub(q, o);
                 // dot(b - a, w) = 0
                 let ba = sub(pb, pa);
                 let mut first = Row::new(columns);
                 difference(&mut first, *a, *b, &w, 1);
-                difference(&mut first, line[0], line[1], &ba, 1);
+                difference(&mut first, l0, l1, &ba, 1);
                 rows.push(first);
                 // cross(w, a + b - 2 o) = 0, with s = a + b - 2 o
-                let s = [
-                    &pa[0] + &pb[0] - times(2, &o[0]),
-                    &pa[1] + &pb[1] - times(2, &o[1]),
-                ];
-                let (gw, gs) = ([s[1].clone(), -&s[0]], [-&w[1], w[0].clone()]);
+                let ([ox, oy], [pax, pay], [pbx, pby]) = (o, pa, pb);
+                let sx = pax + pbx - times(2, ox);
+                let sy = pay + pby - times(2, oy);
+                let [wx, wy] = w;
+                let gw = [sy, -sx];
+                let gs = [-wy, wx];
                 let mut second = Row::new(columns);
-                difference(&mut second, line[0], line[1], &gw, 1);
-                for axis in 0..2 {
-                    second.add(*a, axis, &gs[axis]);
-                    second.add(*b, axis, &gs[axis]);
-                    second.add(line[0], axis, &times(-2, &gs[axis]));
+                difference(&mut second, l0, l1, &gw, 1);
+                for (axis, g) in gs.iter().enumerate() {
+                    second.add(*a, axis, g);
+                    second.add(*b, axis, g);
+                    second.add(l0, axis, &times(-2, g));
                 }
                 rows.push(second);
             }
@@ -197,20 +215,21 @@ pub fn jacobian(job: &Job) -> Result<Vec<Vec<IBig>>, String> {
                 line,
                 signed,
             } => {
-                let (k, a, b) = (at(*point)?, at(line[0])?, at(line[1])?);
-                let (u, w) = (sub(b, a), sub(k, a));
-                let c = &u[0] * &w[1] - &u[1] * &w[0];
+                let [l0, l1] = *line;
+                let (k, a, b) = (at(*point)?, at(l0)?, at(l1)?);
+                let ([ux, uy], [wx, wy]) = (sub(b, a), sub(k, a));
+                let c = &ux * &wy - &uy * &wx;
                 let d = to_rational(signed)?;
                 let d2 = &d * &d;
                 // g = c^2 - d^2 |u|^2: 2c dc - d^2 d|u|^2, dc = (wy, -wx | -uy, ux), d|u|^2 = 2u.
                 let gu = [
-                    times(2, &(&c * &w[1])) - times(2, &(&d2 * &u[0])),
-                    -times(2, &(&c * &w[0])) - times(2, &(&d2 * &u[1])),
+                    times(2, &(&c * &wy)) - times(2, &(&d2 * &ux)),
+                    -times(2, &(&c * &wx)) - times(2, &(&d2 * &uy)),
                 ];
-                let gw = [-times(2, &(&c * &u[1])), times(2, &(&c * &u[0]))];
+                let gw = [-times(2, &(&c * &uy)), times(2, &(&c * &ux))];
                 let mut r = Row::new(columns);
-                difference(&mut r, line[0], line[1], &gu, 1);
-                difference(&mut r, line[0], *point, &gw, 1);
+                difference(&mut r, l0, l1, &gu, 1);
+                difference(&mut r, l0, *point, &gw, 1);
                 rows.push(r);
             }
             Rule::Angle { .. } => {
@@ -232,7 +251,7 @@ fn whole(row: &[RBig]) -> Vec<IBig> {
     row.iter()
         .map(|q| {
             let scaled = q * RBig::from(lcm.clone());
-            IBig::from(scaled.numerator().clone()) / IBig::from(scaled.denominator().clone())
+            scaled.numerator().clone() / IBig::from(scaled.denominator().clone())
         })
         .collect()
 }
@@ -251,6 +270,15 @@ fn bits(x: &IBig) -> u64 {
     u64::try_from(x.bit_len()).unwrap_or(u64::MAX)
 }
 
+/// The columns of `matrix`, if its rows are all of one length.
+fn width<T>(matrix: &[Vec<T>]) -> Result<usize, String> {
+    let columns = matrix.first().map_or(0, Vec::len);
+    if matrix.iter().any(|r| r.len() != columns) {
+        return Err("rows of unequal length".to_owned());
+    }
+    Ok(columns)
+}
+
 /// The rank of `matrix` by Bareiss' fraction-free elimination.
 ///
 /// # Errors
@@ -258,44 +286,46 @@ fn bits(x: &IBig) -> u64 {
 /// Rows of unequal length, or a division that leaves a remainder (which the method rules out: a
 /// defect, never a rounded answer).
 pub fn bareiss_rank(matrix: &[Vec<IBig>]) -> Result<Rank, String> {
-    let columns = matrix.first().map_or(0, Vec::len);
-    if matrix.iter().any(|r| r.len() != columns) {
-        return Err("rows of unequal length".to_owned());
-    }
+    let columns = width(matrix)?;
     let mut m: Vec<Vec<IBig>> = matrix.to_vec();
     let rows = m.len();
     let (mut r, mut previous) = (0_usize, IBig::ONE);
     let (mut longest, mut products) = (0_u64, 0_u64);
     let mut pivots = Vec::new();
     for c in 0..columns {
-        let Some(found) = (r..rows).find(|&i| m.get(i).is_some_and(|row| row[c] != IBig::ZERO))
-        else {
+        let Some(found) = (r..rows).find(|&i| {
+            m.get(i)
+                .and_then(|row| row.get(c))
+                .is_some_and(|x| *x != IBig::ZERO)
+        }) else {
             continue;
         };
         m.swap(r, found);
-        let pivot = m[r][c].clone();
-        for i in r + 1..rows {
-            let lead = m[i][c].clone();
-            for j in c + 1..columns {
-                let top = &pivot * &m[i][j] - &lead * &m[r][j];
-                products += 2;
+        let (head, tail) = m.split_at_mut(r.saturating_add(1));
+        let top_row = head.get(r).ok_or("no pivot row")?;
+        let pivot = top_row.get(c).ok_or("no pivot")?.clone();
+        for row in tail.iter_mut() {
+            let lead = row.get(c).ok_or("no lead")?.clone();
+            for (cell, above) in row.iter_mut().zip(top_row).skip(c.saturating_add(1)) {
+                let top = &pivot * &*cell - &lead * above;
+                products = products.saturating_add(2);
                 let (q, rem) = (&top / &previous, &top % &previous);
                 if rem != IBig::ZERO {
                     return Err("a Bareiss division left a remainder".to_owned());
                 }
                 longest = longest.max(bits(&q));
-                m[i][j] = q;
+                *cell = q;
             }
-            m[i][c] = IBig::ZERO;
+            if let Some(cell) = row.get_mut(c) {
+                *cell = IBig::ZERO;
+            }
         }
         previous = pivot;
         pivots.push(c);
-        r += 1;
+        r = r.saturating_add(1);
     }
-    for row in matrix {
-        for x in row {
-            longest = longest.max(bits(x));
-        }
+    for x in matrix.iter().flatten() {
+        longest = longest.max(bits(x));
     }
     Ok(Rank {
         rank: r,
@@ -311,10 +341,7 @@ pub fn bareiss_rank(matrix: &[Vec<IBig>]) -> Result<Rank, String> {
 ///
 /// Rows of unequal length.
 pub fn gauss_rank(matrix: &[Vec<IBig>]) -> Result<usize, String> {
-    let columns = matrix.first().map_or(0, Vec::len);
-    if matrix.iter().any(|r| r.len() != columns) {
-        return Err("rows of unequal length".to_owned());
-    }
+    let columns = width(matrix)?;
     let mut m: Vec<Vec<RBig>> = matrix
         .iter()
         .map(|r| r.iter().map(|x| RBig::from(x.clone())).collect())
@@ -322,27 +349,35 @@ pub fn gauss_rank(matrix: &[Vec<IBig>]) -> Result<usize, String> {
     let rows = m.len();
     let mut r = 0_usize;
     for c in 0..columns {
-        let Some(found) = (r..rows).find(|&i| m[i][c] != RBig::ZERO) else {
+        let Some(found) = (r..rows).find(|&i| {
+            m.get(i)
+                .and_then(|row| row.get(c))
+                .is_some_and(|x| *x != RBig::ZERO)
+        }) else {
             continue;
         };
         m.swap(r, found);
-        for i in r + 1..rows {
-            if m[i][c] == RBig::ZERO {
+        let (head, tail) = m.split_at_mut(r.saturating_add(1));
+        let top_row = head.get(r).ok_or("no pivot row")?;
+        let pivot = top_row.get(c).ok_or("no pivot")?.clone();
+        for row in tail.iter_mut() {
+            let lead = row.get(c).ok_or("no lead")?.clone();
+            if lead == RBig::ZERO {
                 continue;
             }
-            let factor = &m[i][c] / &m[r][c];
-            for j in c..columns {
-                let delta = &factor * &m[r][j];
-                m[i][j] -= delta;
+            let factor = &lead / &pivot;
+            for (cell, above) in row.iter_mut().zip(top_row).skip(c) {
+                let delta = &factor * above;
+                *cell -= delta;
             }
         }
-        r += 1;
+        r = r.saturating_add(1);
     }
     Ok(r)
 }
 
-/// A chain of `points` points with `rows` equations: the Jacobian of a long chain of lengths and
-/// plumb or level lines, for the cost table. Its entries are whole numbers of at most `bits` bits.
+/// A chain of `points` points: a fixed first point, then for each next a level line and a length
+/// with whole-number entries from a seeded sequence, for the cost table.
 ///
 /// # Errors
 ///
@@ -355,48 +390,43 @@ pub fn chain_matrix(points: usize, seed: u64) -> Result<Vec<Vec<IBig>>, String> 
             .wrapping_add(1_442_695_040_888_963_407);
         i64::try_from(state >> 40).unwrap_or(0) % 2001 - 1000
     };
-    let columns = points * 2;
-    let mut rows = vec![vec![IBig::ZERO; columns]; 2];
-    rows[0][0] = IBig::ONE;
-    rows[1][1] = IBig::ONE;
+    let columns = points.saturating_mul(2);
+    let mut rows = Vec::new();
+    for at in 0..2 {
+        let mut row = vec![IBig::ZERO; columns];
+        if let Some(slot) = row.get_mut(at) {
+            *slot = IBig::ONE;
+        }
+        rows.push(row);
+    }
     for k in 1..points {
         let (dx, dy) = (next(), next());
+        let (x, y) = (k.saturating_mul(2), k.saturating_mul(2).saturating_add(1));
         let mut level = vec![IBig::ZERO; columns];
-        level[2 * k + 1] = IBig::ONE;
-        level[2 * k - 1] = -IBig::ONE;
-        rows.push(level);
         let mut length = vec![IBig::ZERO; columns];
-        length[2 * k] = IBig::from(2 * dx + 2001);
-        length[2 * k - 2] = IBig::from(-2 * dx - 2001);
-        length[2 * k + 1] = IBig::from(2 * dy + 1);
-        length[2 * k - 1] = IBig::from(-2 * dy - 1);
+        let put = |row: &mut Vec<IBig>, at: usize, value: IBig| {
+            if let Some(slot) = row.get_mut(at) {
+                *slot = value;
+            }
+        };
+        put(&mut level, y, IBig::ONE);
+        put(&mut level, y.saturating_sub(2), -IBig::ONE);
+        put(&mut length, x, IBig::from(2 * dx + 2001));
+        put(&mut length, x.saturating_sub(2), IBig::from(-2 * dx - 2001));
+        put(&mut length, y, IBig::from(2 * dy + 1));
+        put(&mut length, y.saturating_sub(2), IBig::from(-2 * dy - 1));
+        rows.push(level);
         rows.push(length);
     }
     Ok(rows)
 }
 
-/// A table of what Bareiss costs on chains of the given sizes: points, unknowns, rank, longest entry
-/// in bits, multiplications, milliseconds.
+/// What Bareiss costs on the chain of `points` points (the cost table of the note times this, one
+/// size at a time: this crate's library code reads no clock).
 ///
 /// # Errors
 ///
 /// What [`bareiss_rank`] refuses.
-pub fn cost_table(sizes: &[usize]) -> Result<String, String> {
-    let mut out = String::from("points unknowns rank bits products milliseconds\n");
-    for &points in sizes {
-        let matrix = chain_matrix(points, 0x231)?;
-        let start = Instant::now();
-        let rank = bareiss_rank(&matrix)?;
-        let ms = start.elapsed().as_millis();
-        writeln!(
-            out,
-            "{points} {} {} {} {} {ms}",
-            points * 2,
-            rank.rank,
-            rank.bits,
-            rank.products
-        )
-        .map_err(|e| e.to_string())?;
-    }
-    Ok(out)
+pub fn chain_cost(points: usize) -> Result<Rank, String> {
+    bareiss_rank(&chain_matrix(points, 0x231)?)
 }

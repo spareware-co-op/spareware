@@ -1,6 +1,6 @@
-//! Sketch solvers as oracles: ezpz, fiksi, SolveSpace and planegcs, each out of process, against the
+//! Sketch solvers as oracles: ezpz, fiksi, `SolveSpace` and planegcs, each out of process, against the
 //! block solver of `geom-sketch` (pieces G222's and G231's differential runs; chapters 15.16 and
-//! 28.10). SolveSpace (GPL-3.0) and planegcs (LGPL-2.1-or-later) are only ever run as separate
+//! 28.10). `SolveSpace` (GPL-3.0) and planegcs (LGPL-2.1-or-later) are only ever run as separate
 //! programs from the oracle repository: nothing of either is linked, vendored or read here.
 //!
 //! What it does: [`jobs`] draws a night's sketches for one oracle from a true configuration: a fixed
@@ -72,10 +72,10 @@ pub const EZPZ: &str = "ezpz";
 /// fiksi, Linebender's sketch solver, in the catalogue.
 pub const FIKSI: &str = "fiksi";
 
-/// SolveSpace, in the catalogue (piece G231): GPL-3.0, run out of process; its source is not read.
+/// `SolveSpace`, in the catalogue (piece G231): GPL-3.0, run out of process; its source is not read.
 pub const SOLVESPACE: &str = "solvespace";
 
-/// FreeCAD's planegcs, in the catalogue (piece G231): LGPL-2.1-or-later, run out of process; its
+/// `FreeCAD`'s planegcs, in the catalogue (piece G231): LGPL-2.1-or-later, run out of process; its
 /// source is not read.
 pub const PLANEGCS: &str = "planegcs";
 
@@ -273,7 +273,7 @@ pub(super) struct Kinds {
     pub(super) mirror: bool,
 }
 
-/// The kinds `oracle` states, or `None` for a name that is no sketch solver: ezpz and SolveSpace have
+/// The kinds `oracle` states, or `None` for a name that is no sketch solver: ezpz and `SolveSpace` have
 /// every kind, planegcs has no midpoint rule (its midpoint constraint puts a line's middle on
 /// another line), and fiksi has neither.
 pub(super) fn kinds_of(oracle: &str) -> Option<Kinds> {

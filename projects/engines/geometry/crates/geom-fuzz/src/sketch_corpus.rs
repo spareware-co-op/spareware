@@ -100,7 +100,10 @@ pub fn harness(data: &[u8]) -> Result<(), Finding> {
     for (slot, byte) in seed.iter_mut().zip(data) {
         *slot = *byte;
     }
-    let count = 1 + u64::from(data.get(8).copied().unwrap_or(0)) % MOST;
+    let count = u64::from(data.get(8).copied().unwrap_or(0))
+        .checked_rem(MOST)
+        .unwrap_or(0)
+        .saturating_add(1);
     let night = cases(Seed(u64::from_le_bytes(seed)), count);
     for case in &night {
         check_case(case)?;
@@ -115,7 +118,7 @@ pub fn harness(data: &[u8]) -> Result<(), Finding> {
     }
     if let (Some(&pick), Some(&scale)) = (data.get(9), data.get(10)) {
         let by = 0.25 + f64::from(scale) / 64.0;
-        if let Some(case) = night.get(usize::from(pick) % night.len().max(1)) {
+        if let Some(case) = night.get(usize::from(pick).checked_rem(night.len()).unwrap_or(0)) {
             check_edited(case, usize::from(data.get(11).copied().unwrap_or(0)), by)?;
         }
     }
