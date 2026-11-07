@@ -263,6 +263,19 @@ fn sign(e: &mut Encoder, s: f64) -> Written {
     Ok(())
 }
 
+/// A round kind's axial factor: the integer 1 or −1 as built, any other finite nonzero value (a
+/// similarity multiplies a cylinder's or cone's by its scale) as a double.
+fn axial(e: &mut Encoder, s: f64) -> Written {
+    if s == 1.0 || s == -1.0 {
+        return sign(e, s);
+    }
+    if !s.is_finite() || s == 0.0 {
+        return Err(KindError::Shape("an axial factor that is zero or not finite"));
+    }
+    e.float(s)?;
+    Ok(())
+}
+
 /// A frame `[x, normal]`.
 fn frame<const D: usize>(e: &mut Encoder, f: &Frame<D>) -> Written {
     e.array(2)?;
@@ -609,7 +622,7 @@ fn placement(e: &mut Encoder, (c, l): ([f64; 3], [[f64; 3]; 3])) -> Written {
 fn round_tail(e: &mut Encoder, f: &Frame<3>, domain: ParamBox, s: f64) -> Written {
     frame(e, f)?;
     param_box(e, domain)?;
-    sign(e, s)
+    axial(e, s)
 }
 
 /// A term function's code: 0 for 1, 1 for t, 2 for cos πt, 3 for sin πt.
@@ -883,6 +896,16 @@ fn read_optional_column(
         0 => Ok(None),
         1 => Ok(Some(read_column(d, m)?)),
         _ => Err(KindError::Shape("an optional column of more than one item")),
+    }
+}
+
+/// A round kind's axial factor: 1, −1, or a finite nonzero double.
+fn read_axial(d: &mut Decoder<'_>, m: &mut WorkMeter<'_>) -> Result<f64, KindError> {
+    match next(d, m)? {
+        Item::Uint(1) => Ok(1.0),
+        Item::Nint(0) => Ok(-1.0),
+        Item::Float(x) if x.is_finite() && x != 0.0 && x != 1.0 && x != -1.0 => Ok(x),
+        _ => Err(KindError::Shape("an axial factor that is 1, -1 or another finite double")),
     }
 }
 
@@ -1265,8 +1288,8 @@ fn read_fun(d: &mut Decoder<'_>, m: &mut WorkMeter<'_>) -> Result<Fun, KindError
 fn read_round_tail(
     d: &mut Decoder<'_>,
     m: &mut WorkMeter<'_>,
-) -> Result<(Frame<3>, ParamBox, bool), KindError> {
-    Ok((read_frame(d, m)?, read_box(d, m)?, read_sign(d, m)? < 0.0))
+) -> Result<(Frame<3>, ParamBox, f64), KindError> {
+    Ok((read_frame(d, m)?, read_box(d, m)?, read_axial(d, m)?))
 }
 
 /// Reads a surface kind.
@@ -1353,30 +1376,30 @@ fn read_surface_leaf(
         surface::CYLINDER => {
             want(6)?;
             let (center, radius) = (vector(d, m)?, float(d, m)?);
-            let (f, domain, flipped) = read_round_tail(d, m)?;
+            let (f, domain, factor) = read_round_tail(d, m)?;
             let c = Cylinder::new(center, radius, f, domain)?;
-            SurfaceKind::Cylinder(if flipped { c.flipped_axially()? } else { c })
+            SurfaceKind::Cylinder(if factor == 1.0 { c } else { c.with_axial_sign(factor)? })
         }
         surface::CONE => {
             want(7)?;
             let (center, radius, slope) = (vector(d, m)?, float(d, m)?, float(d, m)?);
-            let (f, domain, flipped) = read_round_tail(d, m)?;
+            let (f, domain, factor) = read_round_tail(d, m)?;
             let c = Cone::new(center, radius, slope, f, domain)?;
-            SurfaceKind::Cone(if flipped { c.flipped_axially()? } else { c })
+            SurfaceKind::Cone(if factor == 1.0 { c } else { c.with_axial_sign(factor)? })
         }
         surface::SPHERE => {
             want(6)?;
             let (center, radius) = (vector(d, m)?, float(d, m)?);
-            let (f, domain, flipped) = read_round_tail(d, m)?;
+            let (f, domain, factor) = read_round_tail(d, m)?;
             let c = Sphere::new(center, radius, f, domain)?;
-            SurfaceKind::Sphere(if flipped { c.flipped_axially()? } else { c })
+            SurfaceKind::Sphere(if factor == 1.0 { c } else { c.with_axial_sign(factor)? })
         }
         surface::TORUS => {
             want(7)?;
             let (center, major, minor) = (vector(d, m)?, float(d, m)?, float(d, m)?);
-            let (f, domain, flipped) = read_round_tail(d, m)?;
+            let (f, domain, factor) = read_round_tail(d, m)?;
             let c = Torus::new(center, major, minor, f, domain)?;
-            SurfaceKind::Torus(if flipped { c.flipped_axially()? } else { c })
+            SurfaceKind::Torus(if factor == 1.0 { c } else { c.with_axial_sign(factor)? })
         }
         surface::AFFINE => {
             want(6)?;
