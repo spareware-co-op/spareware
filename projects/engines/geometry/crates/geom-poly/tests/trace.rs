@@ -224,6 +224,30 @@ fn one_block_is_inside_behind_and_outside_in_front() {
 }
 
 #[test]
+fn the_vector_at_a_point_counts_the_blocks_around_it() {
+    // winding_at walks from the box's corner to where three planes meet, counting what it
+    // crosses: inside both blocks, inside one or the other, and outside both.
+    let b = Block {
+        low: [2, 2, 2],
+        high: [6, 6, 6],
+    };
+    let polygons: Vec<Polygon> = [A, b]
+        .iter()
+        .enumerate()
+        .flat_map(|(i, block)| faces(block, Some(i as u32)))
+        .collect();
+    let cell = Cell {
+        low: [-100; 3],
+        high: [100; 3],
+    };
+    for at in [3, 1, 5, 8] {
+        let planes = [up(0, at), up(1, at), up(2, at)];
+        let found = winding_at(&cell, &Winding::new(), &polygons, planes, &mut meter()).unwrap();
+        assert_eq!(found, oracle(&[A, b], [at * 4; 3]), "at {at}");
+    }
+}
+
+#[test]
 fn two_overlapping_blocks_count_each_piece() {
     let blocks = [
         A,

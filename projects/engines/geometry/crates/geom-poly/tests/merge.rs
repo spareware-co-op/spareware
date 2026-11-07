@@ -12,7 +12,7 @@
     reason = "tests: native arithmetic and short names, and a failure stops the test"
 )]
 
-use geom_num::plane::{Plane, Tpi};
+use geom_num::plane::{Plane, Tpi, normals_sign};
 use geom_num::{NumError, P3, Sign};
 use geom_poly::convex::{Piece, convex_pieces};
 use geom_poly::merge::{
@@ -930,6 +930,100 @@ fn a_point_on_a_split_is_not_named_by_it() {
     }
 }
 
+/// `polygons` with every plane's coefficients multiplied by `k`: the same planes, written longer.
+fn scaled(polygons: &[Polygon], k: i128) -> Vec<Polygon> {
+    let times = |p: &Plane| Plane::new(p.n().map(|v| v * k), p.d() * k).unwrap();
+    polygons
+        .iter()
+        .map(|polygon| Polygon {
+            piece: Piece {
+                face: times(&polygon.piece.face),
+                bounds: polygon.piece.bounds.iter().map(times).collect(),
+            },
+            entry: polygon.entry,
+        })
+        .collect()
+}
+
+/// The name the merge gives the point `at` among `pieces`: a grid point's three axis planes; for a
+/// point off the grid, of the planes of every corner there (a piece's face and two bounds in turn),
+/// the first three in plane order that meet in one point.
+fn first_three(pieces: &[Outward], at: &Tpi) -> Tpi {
+    let near = at.to_grid().unwrap();
+    if near.is_exact() {
+        let p = near.value();
+        return Tpi::meeting(up(0, p.x.get()), up(1, p.y.get()), up(2, p.z.get())).unwrap();
+    }
+    let mut through = Vec::new();
+    for outward in pieces {
+        let Piece { face, bounds } = &outward.piece;
+        let after = bounds.iter().cycle().skip(1);
+        for (bound, next) in bounds.iter().zip(after) {
+            let corner = [*face, *bound, *next];
+            if corner
+                .iter()
+                .all(|plane| plane.side_of_tpi(at).unwrap() == Sign::Zero)
+            {
+                through.extend(corner);
+            }
+        }
+    }
+    // The scene keeps every split of the boxes, 2x = odd on one axis, away from these points.
+    let split = |p: &Plane| {
+        let n = p.n();
+        n.iter().filter(|v| **v != 0).count() == 1
+            && n.iter().any(|v| v.abs() == 2)
+            && p.d() % 2 != 0
+    };
+    assert!(!through.iter().any(split), "a split through {at:?}");
+    through.sort_unstable_by_key(|plane| (plane.n(), plane.d()));
+    through.dedup();
+    for (i, a) in through.iter().enumerate() {
+        for (j, b) in through.iter().enumerate().skip(i + 1) {
+            for c in through.iter().skip(j + 1) {
+                if normals_sign(a, b, c).unwrap() != Sign::Zero {
+                    return Tpi::meeting(*a, *b, *c).unwrap();
+                }
+            }
+        }
+    }
+    panic!("no three planes meet at {at:?}")
+}
+
+#[test]
+fn a_point_is_named_the_same_however_its_planes_are_written() {
+    // A block's faces on odd whole steps, written with normals one long, and the same faces written
+    // with normals two long and even offsets. Neither is a split of the boxes, 2x = odd, though the
+    // one shares its odd offset with them and the other its normal. A grid point is named by its
+    // axis planes. A spike's three edges up from (4, 4, 4) cross the block's top, z = 9, off the
+    // grid at thirds and seventeenths, never on a half step, so no split passes there, and the
+    // first three planes through each such point name it.
+    let mut polygons = scene(&[block([1, 1, 1], [9, 9, 9])]);
+    let spike = [[4, 4, 4], [6, 5, 19], [5, 7, 19], [3, 6, 21]];
+    tetrahedron(spike, 1, &mut polygons).unwrap();
+    for k in [1, 2] {
+        let polygons = scaled(&polygons, k);
+        for leaf in [1, 2, 4, 1000] {
+            let pieces = kept(&polygons, &WindingTest::unite(), leaf);
+            let m = merge(&pieces, Merge::RemoveRedundant, &mut meter()).unwrap();
+            closed(&m, &pieces);
+            let off = m
+                .vertices
+                .iter()
+                .filter(|v| !v.to_grid().unwrap().is_exact());
+            assert_eq!(
+                off.count(),
+                3,
+                "k {k}, leaf {leaf}: the spike's edges through the top"
+            );
+            for (at, point) in m.vertices.iter().enumerate() {
+                let name = first_three(&pieces, point);
+                assert_eq!(*point, name, "k {k}, leaf {leaf}, vertex {at}");
+            }
+        }
+    }
+}
+
 #[test]
 fn two_faces_that_meet_at_their_lowest_corner_keep_their_numbers() {
     let mut polygons = Vec::new();
@@ -1142,6 +1236,77 @@ fn an_edge_breaks_where_a_corner_rests_on_it() {
     let m = merge(&pieces, Merge::RemoveRedundant, &mut meter()).unwrap();
     closed(&m, &pieces);
     assert_eq!(counts(&m), [2, 10, 10, 19, 12]);
+}
+
+/// The name the merge gives a point off the grid: the first three planes through it, among the
+/// planes of the corners of `pieces` there, in plane order and leaving out the boxes' splits (one
+/// normal component of two and an odd offset: 2x = odd), that meet in one point.
+fn named_off_the_grid(pieces: &[Outward], at: &Tpi) -> Tpi {
+    let split = |p: &Plane| {
+        let n = p.n();
+        n.iter().filter(|v| **v != 0).count() == 1
+            && n.iter().any(|v| v.unsigned_abs() == 2)
+            && p.d() % 2 != 0
+    };
+    let mut through = Vec::new();
+    for outward in pieces {
+        let Piece { face, bounds } = &outward.piece;
+        let after = bounds.iter().cycle().skip(1);
+        for (bound, next) in bounds.iter().zip(after) {
+            let three = [*face, *bound, *next];
+            if three
+                .iter()
+                .all(|plane| plane.side_of_tpi(at).unwrap() == Sign::Zero)
+            {
+                through.extend(three);
+            }
+        }
+    }
+    through.retain(|plane| !split(plane));
+    through.sort_unstable_by_key(|plane| (plane.n(), plane.d()));
+    through.dedup();
+    for (i, a) in through.iter().enumerate() {
+        for (j, b) in through.iter().enumerate().skip(i + 1) {
+            for c in through.iter().skip(j + 1) {
+                if let Ok(point) = Tpi::new(*a, *b, *c) {
+                    return point;
+                }
+            }
+        }
+    }
+    panic!("no three planes meet there")
+}
+
+#[test]
+fn faces_that_look_like_splits_name_the_points_on_them() {
+    // A block whose faces lie on odd whole steps, its planes written with normals one long, then
+    // two long with even offsets, and a tilted solid whose edges cross those faces off the grid.
+    // The boxes split on half steps, 2x = odd; neither way of writing a face on x = 1 is one, so
+    // the face is among the planes a point on it may be named by.
+    let turned_out = |t: [[i64; 3]; 4]| {
+        let fits = tetrahedron(t, 0, &mut Vec::new()).is_some();
+        if fits { t } else { [t[1], t[0], t[2], t[3]] }
+    };
+    let wedge = turned_out([[-4, 3, 4], [14, 5, 6], [5, 15, 3], [4, 4, 15]]);
+    for k in [1, 2] {
+        let mut polygons = scaled(&scene(&[block([1, 1, 1], [9, 9, 9])]), k);
+        tetrahedron(wedge, 1, &mut polygons).unwrap();
+        for leaf in [1, 4, 1000] {
+            let pieces = kept(&polygons, &WindingTest::unite(), leaf);
+            let m = merge(&pieces, Merge::RemoveRedundant, &mut meter()).unwrap();
+            closed(&m, &pieces);
+            let mut off = 0;
+            for (at, point) in m.vertices.iter().enumerate() {
+                if point.to_grid().unwrap().is_exact() {
+                    continue;
+                }
+                off += 1;
+                let name = named_off_the_grid(&pieces, point);
+                assert_eq!(*point, name, "k {k}, leaf {leaf}, vertex {at}");
+            }
+            assert!(off > 0, "no point off the grid");
+        }
+    }
 }
 
 fn any_block() -> impl Strategy<Value = Block> {

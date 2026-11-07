@@ -670,11 +670,12 @@ fn classified(
     }
     let gathered = gather(operands, exec, meter)?;
     // A solid operand's leaves away from the others need no cuts and no tracing (11.3 step 4).
-    let solids: Vec<Entry> = (0..)
-        .zip(operands)
-        .filter(|(_, mesh)| mesh.is_solid())
-        .map(|(entry, _)| entry)
-        .collect();
+    let mut solids: Vec<Entry> = Vec::new();
+    for (entry, mesh) in (0..).zip(operands) {
+        if mesh.is_solid() {
+            solids.push(entry);
+        }
+    }
     let classified = arranged((&gathered, &solids), tests, exec, meter)?;
     Ok((gathered, classified))
 }

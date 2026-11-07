@@ -136,6 +136,24 @@ pub(crate) fn finite(v: f64) -> Result<f64, LinalgError> {
     }
 }
 
+/// Twice the unit roundoff, 2^−52: the relative size below which an off-diagonal entry of a
+/// tridiagonal or bidiagonal matrix is zero.
+const DEFLATION: f64 = f64::from_bits(0x3CB0_0000_0000_0000);
+
+/// Whether the off-diagonal entry `e` is negligible beside the diagonal entries `p` and `t` on
+/// either side of it: |e| ≤ 2^−52·(|p| + |t|), the deflation test of the symmetric QR algorithm
+/// and of the Golub–Kahan SVD (Golub and Van Loan, algorithms 8.3.3 and 8.6.2).
+///
+/// Each magnitude is scaled before the two are added. 2^−52·|x| is exact for |x| ≥ 2^−970, so
+/// where both magnitudes are at least that and their sum is a finite double, this threshold is
+/// 2^−52 times the rounded sum, bit for bit; below, the two forms can differ only in the last bit
+/// of a subnormal product. Adding first overflowed once |p| + |t| passed the largest double: the
+/// threshold became infinite and the entry beside them was taken for zero (issue #542). Scaled
+/// first, the threshold is at most 2^−51 times the largest double.
+pub(crate) fn negligible(e: f64, p: f64, t: f64) -> bool {
+    e.abs() <= DEFLATION * p.abs() + DEFLATION * t.abs()
+}
+
 /// A dense matrix of finite doubles, stored by rows.
 #[derive(Clone, Debug, PartialEq)]
 pub struct Matrix {

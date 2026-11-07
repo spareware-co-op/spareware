@@ -45,6 +45,10 @@ if [ ! -x "$STACK_HOME/bin/rustfs" ]; then
   chmod +x "$STACK_HOME/bin/rustfs"
 fi
 
-"$STACK_HOME/bin/tikv-server" --version | head -2
-"$STACK_HOME/bin/pd-server" --version | head -1
-"$STACK_HOME/bin/rustfs" --version | head -1
+# The versions are only printed, never checked: on ARM Linux one of these exits with an error
+# ("description() is deprecated; use Display") after printing its version, and under `bash -e`
+# with pipefail that stopped the job before the checklist ran. The checklist itself shows
+# whether each server works.
+{ "$STACK_HOME/bin/tikv-server" --version 2>&1 | head -2; } || true
+{ "$STACK_HOME/bin/pd-server" --version 2>&1 | head -1; } || true
+{ "$STACK_HOME/bin/rustfs" --version 2>&1 | head -1; } || true

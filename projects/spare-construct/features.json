@@ -8728,7 +8728,7 @@
       {
        "id": "CON-A24-F1-P1",
        "name": "Licence choice",
-       "what": "MPL-2.0 core with an Apache-2.0 SDK, or an alternative, decided by an owner.",
+       "what": "Apache-2.0 for everything, decided by an owner (2026-11-05).",
        "kind": "legal",
        "size": "small",
        "depends_on": [],

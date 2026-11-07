@@ -220,7 +220,19 @@ impl Live {
             match timeout(Duration::from_secs(40), self.socket.next()).await {
                 Ok(Some(Ok(Message::Text(text)))) => return serde_json::from_str(&text).ok(),
                 Ok(Some(Ok(_))) => {}
-                _ => return None,
+                // Say why no reply came, so a failure tells a hang from a dropped connection.
+                Ok(Some(Err(e))) => {
+                    println!("      the socket failed: {e}");
+                    return None;
+                }
+                Ok(None) => {
+                    println!("      the server closed the socket");
+                    return None;
+                }
+                Err(_) => {
+                    println!("      no message in 40 s");
+                    return None;
+                }
             }
         }
     }

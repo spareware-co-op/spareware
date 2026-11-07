@@ -38,7 +38,7 @@ From the kernel's map (G01):
 | | A. bevy_ecs on its own | B. Our own chunked column store | C. Flecs through Rust bindings |
 | --- | --- | --- | --- |
 | What it is | Bevy's ECS crate without the engine: one `World`, archetype tables, queries | Columns per element shape, inside each chunk; handles mapped to permanent IDs | A C ECS with first-class relationships and inheritance |
-| Licence | MIT or Apache-2.0 | Ours (MPL-2.0) | MIT |
+| Licence | MIT or Apache-2.0 | Ours (Apache-2.0) | MIT |
 | Language | Rust | Rust | C, with third-party Rust bindings |
 | Storage unit | One table per archetype for the whole world | One table per element shape per chunk | One table per archetype for the whole world |
 | Change tracking | Two ticks per component per entity, always on | Per chunk, table and column, plus the exact change list from each transaction | One counter per table column |
