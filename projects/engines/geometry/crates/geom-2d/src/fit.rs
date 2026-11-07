@@ -26,13 +26,18 @@
 //! - **Bounded.** The subdivision uses a stack, not recursion, at most [`MAX_DEPTH`] deep, and
 //!   charges the meter for each piece it makes.
 //!
-//! Method: Piegl and Tiller's global interpolation (The NURBS Book, 2nd ed., sections 9.2.1 and
-//! 9.2.2) as `geom-nurbs` has it; the equal-arm biarc of Bolton, "Biarc curves", Computer-Aided
+//! Method: Piegl and Tiller's global interpolation (The NURBS Book, 2nd ed., Springer (1997),
+//! sections 9.2.1 and 9.2.2, <https://doi.org/10.1007/978-3-642-59223-2>) as `geom-nurbs` has it; the equal-arm biarc of Bolton, "Biarc curves", Computer-Aided
 //! Design 7 (1975): the arm length is the root of a quadratic, found with `geom-num`'s square root,
 //! and the joint is rounded to the grid before any exact step.
 //!
 //! Cost: a fit is `geom-nurbs`'s, O(n·p²); a biarc is constant; covering a spline is O(pieces ·
 //! samples), each piece costing a fixed number of evaluations.
+
+#![allow(
+    clippy::many_single_char_names,
+    reason = "p, t, d, u and the like are the book's and the formula's"
+)]
 
 use alloc::vec::Vec;
 
@@ -97,7 +102,7 @@ fn nurbs(e: NurbsError) -> FitError {
     match e {
         NurbsError::Stopped(s) => FitError::Stopped(s),
         NurbsError::DataCount { .. } | NurbsError::Degree { .. } => FitError::Count,
-        NurbsError::CoincidentData | NurbsError::ParameterOrder => FitError::Coincident,
+        NurbsError::CoincidentData { .. } | NurbsError::ParameterOrder { .. } => FitError::Coincident,
         _ => FitError::Numeric,
     }
 }
