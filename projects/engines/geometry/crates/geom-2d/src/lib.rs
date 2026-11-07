@@ -38,3 +38,4 @@ pub mod carrier;
 pub mod commit;
 pub mod entity;
 pub mod point;
+pub mod snap;
