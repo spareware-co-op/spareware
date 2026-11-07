@@ -26,6 +26,10 @@
 //! - **Told where to keep a seam.** [`merge_with`] takes pieces it does not keep, whose sides hold a
 //!   seam open where they lie along a face: an imprint's outline, and the walls of a split. A cut
 //!   that ends inside a face leaves it whole, with no slit.
+//! - **A contact edge splits the face it lies in.** Where a face runs on through a stretch of a
+//!   line and another sheet's fin lies along it, the face keeps a fin on each side, so the edge has
+//!   all its faces (the radial order of 11.3). A contact that ends inside the face leaves a slit
+//!   of no area, which the caller refuses.
 //! - **No recursion.** Disjoint sets and rings are walked in loops (principle 13).
 //!
 //! Method: chapter 11.3's rebuild (`projects/engines/geometry/architecture/11-booleans.md`), which
@@ -144,6 +148,9 @@ pub enum MergeError {
     Open,
     /// A shell faces inward with no shell around it.
     Inside,
+    /// An edge of one sheet lies in a face of another and ends inside it: the face would need a
+    /// slit with no area.
+    Slit,
     /// The parallel helper broke one of its own rules: a defect, reported instead of a wrong
     /// merge.
     Defect,
@@ -159,6 +166,7 @@ impl fmt::Display for MergeError {
             MergeError::Overlap => f.write_str("two pieces of one face overlap"),
             MergeError::Open => f.write_str("kept pieces do not close"),
             MergeError::Inside => f.write_str("a shell faces inward with no shell around it"),
+            MergeError::Slit => f.write_str("an edge ends inside a face, which it would slit"),
         }
     }
 }
@@ -712,6 +720,9 @@ struct RunFin {
     rising: bool,
     held: usize,
     bound: Plane,
+    /// Whether this is the rising fin of a sheet's two fins here that were kept apart because
+    /// another sheet's edge lies along them, not because a cut holds a seam.
+    contact: bool,
 }
 
 /// A stretch of one line with the same fins all along.
@@ -801,6 +812,9 @@ fn sweep(
                 *slot = (slot.0.saturating_sub(1), slot.1, Some(*side));
             }
         }
+        // A sheet that runs on through the stretch while another sheet ends on it holds a seam
+        // open: the other's edge lies in its face, and the edge belongs to both.
+        let meeting = held.values().any(|(net, ..)| *net != 0);
         let mut fins = Vec::new();
         for (sheet, (net, up, down)) in held {
             let fin = |side: &Side, rising: bool| RunFin {
@@ -808,10 +822,15 @@ fn sweep(
                 rising,
                 held: side.held,
                 bound: side.bound,
+                contact: false,
             };
             match (net, up, down) {
-                (0, Some(a), Some(b)) if cut => {
-                    fins.push(fin(a, true));
+                (0, Some(a), Some(b)) if cut || meeting => {
+                    // Only the rising fin says a contact, not a cut, holds the pair apart.
+                    fins.push(RunFin {
+                        contact: !cut,
+                        ..fin(a, true)
+                    });
                     fins.push(fin(b, false));
                 }
                 (0, Some(a), Some(b)) => join(parents, a.held, b.held),
@@ -1094,20 +1113,30 @@ fn in_order<'s>(sides: &'s [Side], order: &[usize]) -> Result<Vec<&'s Side>, Mer
 }
 
 /// `runs` without seams that have one face on both sides: a cut that ends inside a face leaves it
-/// whole. Only a seam can hold two fins of one sheet, so those two are the seam.
-fn without_slits(mut runs: Vec<Run>, parents: &[usize]) -> Vec<Run> {
+/// whole. Only a seam can hold two fins of one sheet, so those two are the seam. Two fins kept
+/// apart for another sheet's edge along them, which are still one face's, mean that edge ends
+/// inside the face (an edge across the whole face keeps its two pieces apart, so it has no such
+/// pair): the face would need a slit with no area, and the merge refuses with
+/// [`MergeError::Slit`].
+fn without_slits(mut runs: Vec<Run>, parents: &[usize]) -> Result<Vec<Run>, MergeError> {
     for run in &mut runs {
         let fins = run.fins.clone();
+        let mut slit = false;
         run.fins.retain(|fin| {
-            !fins.iter().any(|other| {
+            let partner = fins.iter().find(|other| {
                 other.sheet == fin.sheet
                     && other.rising != fin.rising
                     && root(parents, other.held) == root(parents, fin.held)
-            })
+            });
+            slit |= fin.contact && partner.is_some();
+            partner.is_none()
         });
+        if slit {
+            return Err(MergeError::Slit);
+        }
     }
     runs.retain(|run| !run.fins.is_empty());
-    runs
+    Ok(runs)
 }
 
 /// The whole parts of a corner's coordinates, where it has [`Cell`]s: it lies in the unit cell from
@@ -1453,6 +1482,7 @@ fn meetings(
             rising: side.rising,
             held: side.held,
             bound: side.bound,
+            contact: false,
         });
         match runs.get_mut(opening..).and_then(<[Run]>::last_mut) {
             Some(run) if run.high == low => {
@@ -1594,7 +1624,7 @@ pub fn merge_on(
             start = end;
         }
     }
-    let runs = without_slits(runs, &same_piece);
+    let runs = without_slits(runs, &same_piece)?;
     let runs = cut_at_ends(&whole_runs(runs, &same_piece), &points, exec, meter)?;
 
     // Faces: the connected pieces of a sheet, numbered by the sheet and their lowest fin, which
