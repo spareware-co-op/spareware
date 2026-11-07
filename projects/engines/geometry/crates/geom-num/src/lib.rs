@@ -94,8 +94,10 @@
 // vector, reserved fallibly and charged to the caller's logical-memory budget (chapter 23.10).
 extern crate alloc;
 
+pub mod arc;
 pub mod ball;
 pub mod brent;
+pub mod carrier;
 pub mod crossing;
 pub mod dd;
 pub mod dual;

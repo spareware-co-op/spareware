@@ -64,6 +64,7 @@ use geom_bench::inputs::{self, BATCH, Class};
 use geom_bench::kernels;
 use geom_bench::rng::{SplitMix64, fnv1a, seed_for};
 use geom_bench::sha256::{Digest, Sha256};
+use geom_num::carrier::Rational2;
 use geom_num::crossing::Ssi;
 use geom_num::dd::{self as dd, DD};
 use geom_num::exact_sum::ExactSum;
@@ -1068,6 +1069,52 @@ fn direct_digest(group: &str, name: &str, class: Class) -> Option<Digest> {
                 .into_iter()
                 .map(|(s, p, q)| s.orient2d(p, q)),
         ),
+        ("crossing", "carrier_side") => {
+            fold(inputs::carrier::side(class).iter().map(|(l, p)| l.side(p)))
+        }
+        ("crossing", "carrier_order") => fold(
+            inputs::carrier::order(class)
+                .iter()
+                .map(|(l, p, q)| l.order(p, q)),
+        ),
+        ("crossing", "carrier_meet") => {
+            fold(inputs::carrier::meet(class).iter().map(|(l, m)| l.meet(m)))
+        }
+        ("crossing", "rational_cmp_x") => fold(
+            inputs::carrier::cmp_x(class)
+                .iter()
+                .map(|(p, q)| p.cmp_x(q)),
+        ),
+        ("crossing", "rational_orient") => fold(
+            inputs::carrier::orient(class)
+                .iter()
+                .map(|[p, q, r]| Rational2::orient(p, q, r)),
+        ),
+        ("crossing", "round_side_of_grid") => fold(
+            inputs::arc::round_grid(class)
+                .iter()
+                .map(|(r, z)| r.side_of_grid(*z)),
+        ),
+        ("crossing", "round_side") => fold(
+            inputs::arc::round_side(class)
+                .iter()
+                .map(|(r, z)| r.side(z)),
+        ),
+        ("crossing", "round_meets") => fold(
+            inputs::arc::round_meets(class)
+                .iter()
+                .map(|(r, l)| r.meets(l)),
+        ),
+        ("crossing", "circle_side") => fold(
+            inputs::arc::circle_side(class)
+                .iter()
+                .map(|(c, z)| c.side(z)),
+        ),
+        ("crossing", "circle_meets") => fold(
+            inputs::arc::circle_meets(class)
+                .iter()
+                .map(|(c, l)| c.meets(l)),
+        ),
         ("crossing", "ssi_to_grid") => fold(
             inputs::crossing::ssi_to_grid(class)
                 .iter()
@@ -1827,6 +1874,110 @@ fn generated_digest(name: &str, class: Class) -> Option<Digest> {
                 .into_iter()
                 .map(|[a, b, c, d]| gp::ssi_weight::filter(a, b, c, d)),
         ),
+        "carrier_side_filter" => fold(
+            i::carrier_side_filter(class)
+                .into_iter()
+                .map(|([a, b, c], [x, y, w])| gp::carrier_side::filter(a, b, c, x, y, w)),
+        ),
+        "carrier_side_value" => fold(
+            i::carrier_side_value(class)
+                .into_iter()
+                .map(|([a, b, c], [x, y, w])| gp::carrier_side::value(a, b, c, x, y, w)),
+        ),
+        "carrier_order_filter" => fold(i::carrier_order_filter(class).into_iter().map(
+            |([a, b], [xp, yp, wp], [xq, yq, wq])| {
+                gp::carrier_order::filter(a, b, xp, yp, xq, yq, wp, wq)
+            },
+        )),
+        "carrier_order_value" => fold(i::carrier_order_value(class).into_iter().map(
+            |([a, b], [xp, yp, wp], [xq, yq, wq])| {
+                gp::carrier_order::value(a, b, xp, yp, xq, yq, wp, wq)
+            },
+        )),
+        "rational_cmp_filter" => fold(
+            i::rational_cmp_filter(class)
+                .into_iter()
+                .map(|[p, q, wp, wq]| gp::rational_cmp::filter(p, q, wp, wq)),
+        ),
+        "rational_cmp_value" => fold(
+            i::rational_cmp_value(class)
+                .into_iter()
+                .map(|[p, q, wp, wq]| gp::rational_cmp::value(p, q, wp, wq)),
+        ),
+        "rational_orient_filter" => fold(i::rational_orient_filter(class).into_iter().map(
+            |[[xa, ya, wa], [xb, yb, wb], [xc, yc, wc]]| {
+                gp::rational_orient::filter(xa, ya, xb, yb, xc, yc, wa, wb, wc)
+            },
+        )),
+        "rational_orient_value" => fold(i::rational_orient_value(class).into_iter().map(
+            |[[xa, ya, wa], [xb, yb, wb], [xc, yc, wc]]| {
+                gp::rational_orient::value(xa, ya, xb, yb, xc, yc, wa, wb, wc)
+            },
+        )),
+        "round_grid_filter" => fold(
+            i::round_grid_filter(class)
+                .into_iter()
+                .map(|(z, p, [cx, cy, w])| gp::round_grid::filter(z, p, cx, cy, w)),
+        ),
+        "round_grid_value" => fold(
+            i::round_grid_value(class)
+                .into_iter()
+                .map(|(z, p, [cx, cy, w])| gp::round_grid::value(z, p, cx, cy, w)),
+        ),
+        "round_rational_filter" => fold(
+            i::round_rational_filter(class)
+                .into_iter()
+                .map(|([x, y, v], q, [cx, cy, w])| {
+                    gp::round_rational::filter(x, y, v, q, cx, cy, w)
+                }),
+        ),
+        "round_rational_value" => fold(
+            i::round_rational_value(class)
+                .into_iter()
+                .map(|([x, y, v], q, [cx, cy, w])| {
+                    gp::round_rational::value(x, y, v, q, cx, cy, w)
+                }),
+        ),
+        "round_line_filter" => fold(
+            i::round_line_filter(class)
+                .into_iter()
+                .map(|([a, b, d], p, [cx, cy, w])| gp::round_line::filter(a, b, d, p, cx, cy, w)),
+        ),
+        "round_line_value" => fold(
+            i::round_line_value(class)
+                .into_iter()
+                .map(|([a, b, d], p, [cx, cy, w])| gp::round_line::value(a, b, d, p, cx, cy, w)),
+        ),
+        "circle_side_filter" => fold(
+            i::circle_side_filter(class)
+                .into_iter()
+                .map(|([x, y, v], k, r)| gp::circle_side::filter(x, y, v, k, r)),
+        ),
+        "circle_side_value" => fold(
+            i::circle_side_value(class)
+                .into_iter()
+                .map(|([x, y, v], k, r)| gp::circle_side::value(x, y, v, k, r)),
+        ),
+        "circle_line_filter" => fold(
+            i::circle_line_filter(class)
+                .into_iter()
+                .map(|([a, b, d], k, r)| gp::circle_line::filter(a, b, d, k, r)),
+        ),
+        "circle_line_value" => fold(
+            i::circle_line_value(class)
+                .into_iter()
+                .map(|([a, b, d], k, r)| gp::circle_line::value(a, b, d, k, r)),
+        ),
+        "circle_gap_filter" => fold(
+            i::circle_gap_filter(class)
+                .into_iter()
+                .map(|(a, b, t)| gp::circle_gap::filter(a, b, t)),
+        ),
+        "circle_gap_value" => fold(
+            i::circle_gap_value(class)
+                .into_iter()
+                .map(|(a, b, t)| gp::circle_gap::value(a, b, t)),
+        ),
         "ssi_side_filter" => fold(
             i::ssi_side_filter(class)
                 .into_iter()
@@ -1928,6 +2079,58 @@ fn generated_digest(name: &str, class: Class) -> Option<Digest> {
                 .into_iter()
                 .map(|[a, b, c, d]| gp::ssi_weight::value(a, b, c, d)),
         ),
+        "carrier_side_value_plain" => fold(
+            i::carrier_side_value_plain(class)
+                .into_iter()
+                .map(|([a, b, c], [x, y, w])| gp::carrier_side::value(a, b, c, x, y, w)),
+        ),
+        "carrier_order_value_plain" => fold(i::carrier_order_value_plain(class).into_iter().map(
+            |([a, b], [xp, yp, wp], [xq, yq, wq])| {
+                gp::carrier_order::value(a, b, xp, yp, xq, yq, wp, wq)
+            },
+        )),
+        "rational_cmp_value_plain" => fold(
+            i::rational_cmp_value_plain(class)
+                .into_iter()
+                .map(|[p, q, wp, wq]| gp::rational_cmp::value(p, q, wp, wq)),
+        ),
+        "rational_orient_value_plain" => {
+            fold(i::rational_orient_value_plain(class).into_iter().map(
+                |[[xa, ya, wa], [xb, yb, wb], [xc, yc, wc]]| {
+                    gp::rational_orient::value(xa, ya, xb, yb, xc, yc, wa, wb, wc)
+                },
+            ))
+        }
+        "round_grid_value_plain" => fold(
+            i::round_grid_value_plain(class)
+                .into_iter()
+                .map(|(z, p, [cx, cy, w])| gp::round_grid::value(z, p, cx, cy, w)),
+        ),
+        "round_rational_value_plain" => {
+            fold(i::round_rational_value_plain(class).into_iter().map(
+                |([x, y, v], q, [cx, cy, w])| gp::round_rational::value(x, y, v, q, cx, cy, w),
+            ))
+        }
+        "round_line_value_plain" => fold(
+            i::round_line_value_plain(class)
+                .into_iter()
+                .map(|([a, b, d], p, [cx, cy, w])| gp::round_line::value(a, b, d, p, cx, cy, w)),
+        ),
+        "circle_side_value_plain" => fold(
+            i::circle_side_value_plain(class)
+                .into_iter()
+                .map(|([x, y, v], k, r)| gp::circle_side::value(x, y, v, k, r)),
+        ),
+        "circle_line_value_plain" => fold(
+            i::circle_line_value_plain(class)
+                .into_iter()
+                .map(|([a, b, d], k, r)| gp::circle_line::value(a, b, d, k, r)),
+        ),
+        "circle_gap_value_plain" => fold(
+            i::circle_gap_value_plain(class)
+                .into_iter()
+                .map(|(a, b, t)| gp::circle_gap::value(a, b, t)),
+        ),
         "ssi_side_value_plain" => fold(
             i::ssi_side_value_plain(class)
                 .into_iter()
@@ -2002,6 +2205,58 @@ fn generated_digest(name: &str, class: Class) -> Option<Digest> {
             i::ssi_weight_value_limbs(class)
                 .into_iter()
                 .map(|[a, b, c, d]| gp::ssi_weight::value(a, b, c, d)),
+        ),
+        "carrier_side_value_limbs" => fold(
+            i::carrier_side_value_limbs(class)
+                .into_iter()
+                .map(|([a, b, c], [x, y, w])| gp::carrier_side::value(a, b, c, x, y, w)),
+        ),
+        "carrier_order_value_limbs" => fold(i::carrier_order_value_limbs(class).into_iter().map(
+            |([a, b], [xp, yp, wp], [xq, yq, wq])| {
+                gp::carrier_order::value(a, b, xp, yp, xq, yq, wp, wq)
+            },
+        )),
+        "rational_cmp_value_limbs" => fold(
+            i::rational_cmp_value_limbs(class)
+                .into_iter()
+                .map(|[p, q, wp, wq]| gp::rational_cmp::value(p, q, wp, wq)),
+        ),
+        "rational_orient_value_limbs" => {
+            fold(i::rational_orient_value_limbs(class).into_iter().map(
+                |[[xa, ya, wa], [xb, yb, wb], [xc, yc, wc]]| {
+                    gp::rational_orient::value(xa, ya, xb, yb, xc, yc, wa, wb, wc)
+                },
+            ))
+        }
+        "round_grid_value_limbs" => fold(
+            i::round_grid_value_limbs(class)
+                .into_iter()
+                .map(|(z, p, [cx, cy, w])| gp::round_grid::value(z, p, cx, cy, w)),
+        ),
+        "round_rational_value_limbs" => {
+            fold(i::round_rational_value_limbs(class).into_iter().map(
+                |([x, y, v], q, [cx, cy, w])| gp::round_rational::value(x, y, v, q, cx, cy, w),
+            ))
+        }
+        "round_line_value_limbs" => fold(
+            i::round_line_value_limbs(class)
+                .into_iter()
+                .map(|([a, b, d], p, [cx, cy, w])| gp::round_line::value(a, b, d, p, cx, cy, w)),
+        ),
+        "circle_side_value_limbs" => fold(
+            i::circle_side_value_limbs(class)
+                .into_iter()
+                .map(|([x, y, v], k, r)| gp::circle_side::value(x, y, v, k, r)),
+        ),
+        "circle_line_value_limbs" => fold(
+            i::circle_line_value_limbs(class)
+                .into_iter()
+                .map(|([a, b, d], k, r)| gp::circle_line::value(a, b, d, k, r)),
+        ),
+        "circle_gap_value_limbs" => fold(
+            i::circle_gap_value_limbs(class)
+                .into_iter()
+                .map(|(a, b, t)| gp::circle_gap::value(a, b, t)),
         ),
         "ssi_side_value_limbs" => fold(
             i::ssi_side_value_limbs(class)
