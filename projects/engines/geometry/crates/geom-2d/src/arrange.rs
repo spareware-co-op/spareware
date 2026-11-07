@@ -45,8 +45,15 @@ use alloc::vec::Vec;
 use core::cmp::Ordering;
 use core::fmt;
 
+use geom_curve::{CurveKind, Line};
+use geom_math::bbox::Box3;
 use geom_num::carrier::{Carrier, Rational2};
-use geom_num::grid::P2;
+use geom_num::grid::{P2, P3};
+use geom_surface::{Plane, SurfaceKind};
+use geom_topo::{
+    Body, BodyKind, Builder, Edge, Face, Fin, Ix, Loop, Region, RegionKind, Sense, Shell,
+    TopoError, Vertex,
+};
 use geom_num::{NumError, Sign};
 use geom_run::{Stopped, WorkMeter};
 
@@ -805,4 +812,142 @@ fn faces_of(
         }
     }
     Ok((faces, cycle_of))
+}
+
+/// Why an arrangement could not be stored as a body.
+#[derive(Clone, Debug, PartialEq)]
+pub enum BodyError {
+    /// A vertex is not a grid point, and the body's points are: the first such vertex, by rank
+    /// (the vertices are in lexicographic order), and where it is. The exact [`Arrangement`] still
+    /// holds it.
+    OffGrid {
+        /// The vertex's rank.
+        vertex: u32,
+        /// Where it is.
+        at: Rational2,
+    },
+    /// More items than a 32-bit index names.
+    TooMany,
+    /// The geometry of a plane or a line could not be made.
+    Geometry,
+    /// The topology refused a row, or the meter stopped publishing.
+    Topo(TopoError),
+}
+
+impl From<TopoError> for BodyError {
+    fn from(e: TopoError) -> Self {
+        BodyError::Topo(e)
+    }
+}
+
+/// The index of row `n`.
+fn row<K: geom_topo::Kind>(n: usize) -> Result<Ix<K>, BodyError> {
+    Ix::new(u32::try_from(n).map_err(|_| BodyError::TooMany)?).ok_or(BodyError::TooMany)
+}
+
+impl Arrangement {
+    /// The arrangement as a `General` body, in the plane z = 0: a vertex for each vertex, an edge on
+    /// a line segment for each edge, one face on the plane for each bounded face, its outer loop
+    /// first and the loops of the components inside it after, one fin for each side of an edge that
+    /// a bounded face lies on (the unbounded face has none), and one shell in the outside region.
+    ///
+    /// The body's points are grid points, so the arrangement must have no crossing off the grid
+    /// (the options for storing exact points are in the pull request that added this); the first
+    /// that is off the grid is the error.
+    ///
+    /// # Errors
+    ///
+    /// [`BodyError::OffGrid`], [`BodyError::TooMany`], [`BodyError::Geometry`] and
+    /// [`BodyError::Topo`].
+    pub fn to_body(&self, meter: &mut WorkMeter<'_>) -> Result<Body, BodyError> {
+        // The vertices' points.
+        let mut points: Vec<P3> = Vec::with_capacity(self.vertices.len());
+        for (rank, v) in self.vertices.iter().enumerate() {
+            let ([x, y], w) = v.coordinates();
+            let grid = x
+                .checked_rem(w)
+                .zip(y.checked_rem(w))
+                .is_some_and(|(a, b)| a == 0 && b == 0);
+            let at = x.checked_div(w).zip(y.checked_div(w));
+            let point = at
+                .filter(|_| grid)
+                .and_then(|(gx, gy)| P3::new(i64::try_from(gx).ok()?, i64::try_from(gy).ok()?, 0).ok());
+            match point {
+                Some(p) => points.push(p),
+                None => {
+                    return Err(BodyError::OffGrid {
+                        vertex: index(rank).map_err(|_| BodyError::TooMany)?,
+                        at: *v,
+                    });
+                }
+            }
+        }
+        let mut b = Builder::new();
+        let a = &mut b.arenas;
+        // The outside region, and the one shell.
+        a.regions.push(Region {
+            kind: RegionKind::Void,
+            first_shell: Some(row(0)?),
+        })?;
+        // The plane z = 0.
+        let plane = Plane::new(
+            [0.0, 0.0, 0.0],
+            [1.0, 0.0, 0.0],
+            [0.0, 1.0, 0.0],
+            (
+                (f64::NEG_INFINITY, f64::INFINITY),
+                (f64::NEG_INFINITY, f64::INFINITY),
+            ),
+        )
+        .map_err(|_| BodyError::Geometry)?;
+        let surface = a.surfaces.push(SurfaceKind::Plane(plane))?;
+        // Vertices.
+        for p in &points {
+            let at = a.points.push(*p)?;
+            a.vertices.push(Vertex { point: at })?;
+        }
+        // Which bounded face each cycle lies in (the unbounded face has no fins).
+        let mut face_of_cycle: Vec<Option<usize>> = alloc::vec![None; self.cycles.len()];
+        for (fi, face) in self.faces.iter().enumerate().skip(1) {
+            for c in face.outer.iter().chain(face.holes.iter()) {
+                if let Some(slot) = usize::try_from(*c)
+                    .ok()
+                    .and_then(|k| face_of_cycle.get_mut(k))
+                {
+                    *slot = Some(fi.saturating_sub(1));
+                }
+            }
+        }
+        // Loops: for each bounded face, its outer cycle then its holes.
+        let mut loop_of_cycle: Vec<Option<usize>> = alloc::vec![None; self.cycles.len()];
+        let mut loops_in_order: Vec<(usize, usize)> = Vec::new();
+        for (fi, face) in self.faces.iter().enumerate().skip(1) {
+            for c in face.outer.iter().chain(face.holes.iter()) {
+                let k = usize::try_from(*c).map_err(|_| BodyError::TooMany)?;
+                if let Some(slot) = loop_of_cycle.get_mut(k) {
+                    *slot = Some(loops_in_order.len());
+                }
+                loops_in_order.push((fi.saturating_sub(1), k));
+            }
+        }
+        // Fins: one for each half-edge on a stored cycle, numbered in half-edge order.
+        let total = self.edges.len().saturating_mul(2);
+        let mut fin_of_half: Vec<Option<usize>> = alloc::vec![None; total];
+        let mut fins_in_order: Vec<usize> = Vec::new();
+        for h in 0..total {
+            let cycle = self
+                .cycles
+                .iter()
+                .position(|c| c.contains(&index(h).unwrap_or(u32::MAX)));
+            if let Some(c) = cycle
+                && face_of_cycle.get(c).copied().flatten().is_some()
+                && let Some(slot) = fin_of_half.get_mut(h)
+            {
+                *slot = Some(fins_in_order.len());
+                fins_in_order.push(h);
+            }
+        }
+        Self::rows(self, a, &points, surface.get(), &face_of_cycle, &loop_of_cycle, &loops_in_order, &fin_of_half, &fins_in_order)?;
+        Ok(b.publish(BodyKind::General, row(0)?, meter)?)
+    }
 }

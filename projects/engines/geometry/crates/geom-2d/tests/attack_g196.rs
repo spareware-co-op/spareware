@@ -447,3 +447,92 @@ fn random_drawings_match_the_vertex_oracle_and_euler_s_formula() {
         );
     }
 }
+
+/// The rows of each arena of a body, in the order region, shell, face, loop, fin, edge, vertex.
+fn rows(body: &geom_topo::Body) -> [usize; 7] {
+    use geom_topo::Arena;
+    let a = body.arenas();
+    [
+        Arena::Region,
+        Arena::Shell,
+        Arena::Face,
+        Arena::Loop,
+        Arena::Fin,
+        Arena::Edge,
+        Arena::Vertex,
+    ]
+    .map(|k| usize::try_from(a.rows(k)).unwrap())
+}
+
+fn meter() -> WorkMeter<'static> {
+    WorkMeter::new(Budget::UNLIMITED)
+}
+
+#[test]
+fn a_square_is_a_general_body_with_one_face_and_one_loop() {
+    let a = run(&[
+        seg((0, 0), (10, 0)),
+        seg((10, 0), (10, 10)),
+        seg((10, 10), (0, 10)),
+        seg((0, 10), (0, 0)),
+    ]);
+    let body = a.to_body(&mut meter()).unwrap();
+    assert_eq!(body.kind(), geom_topo::BodyKind::General);
+    // 1 outside region, 1 shell, 1 face, 1 loop, 4 fins (the outside has none), 4 edges, 4 vertices.
+    assert_eq!(rows(&body), [1, 1, 1, 1, 4, 4, 4]);
+}
+
+#[test]
+fn a_square_with_diagonals_has_four_faces_and_a_fin_for_each_side_with_a_face() {
+    let a = run(&[
+        seg((0, 0), (10, 0)),
+        seg((10, 0), (10, 10)),
+        seg((10, 10), (0, 10)),
+        seg((0, 10), (0, 0)),
+        seg((0, 0), (10, 10)),
+        seg((0, 10), (10, 0)),
+    ]);
+    // The diagonals cross at (5, 5), a grid point.
+    let body = a.to_body(&mut meter()).unwrap();
+    // 4 triangles of 3 fins each; 8 edges; 5 vertices.
+    assert_eq!(rows(&body), [1, 1, 4, 4, 12, 8, 5]);
+}
+
+#[test]
+fn nested_squares_give_the_ring_a_second_loop() {
+    let square = |lo: i64, hi: i64| {
+        vec![
+            seg((lo, lo), (hi, lo)),
+            seg((hi, lo), (hi, hi)),
+            seg((hi, hi), (lo, hi)),
+            seg((lo, hi), (lo, lo)),
+        ]
+    };
+    let mut segs = square(0, 20);
+    segs.extend(square(5, 15));
+    let body = run(&segs).to_body(&mut meter()).unwrap();
+    // Two faces; the ring has its outer loop and the hole (3 loops), 4 fins on each of the three
+    // cycles; 8 edges; 8 vertices.
+    assert_eq!(rows(&body), [1, 1, 2, 3, 12, 8, 8]);
+}
+
+#[test]
+fn a_crossing_off_the_grid_is_refused_naming_the_first_such_vertex() {
+    let a = run(&[seg((0, 0), (3, 1)), seg((0, 1), (3, 0))]);
+    let err = a.to_body(&mut meter()).unwrap_err();
+    // The vertices ascend: (0,0), (0,1), (3/2,1/2), ...: the crossing is the third.
+    match err {
+        geom_2d::arrange::BodyError::OffGrid { vertex, at } => {
+            assert_eq!(vertex, 2);
+            assert_eq!(reduced(&at), (3, 2, 1, 2));
+        }
+        other => panic!("{other:?}"),
+    }
+}
+
+#[test]
+fn drawings_without_faces_are_bodies_without_fins() {
+    let a = run(&[seg((0, 0), (5, 0)), seg((5, 0), (5, 5))]);
+    let body = a.to_body(&mut meter()).unwrap();
+    assert_eq!(rows(&body), [1, 1, 0, 0, 0, 2, 3]);
+}
