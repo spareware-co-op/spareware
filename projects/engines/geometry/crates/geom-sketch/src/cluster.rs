@@ -1,4 +1,3 @@
-// SPDX-License-Identifier: Apache-2.0
 //! Rigid clusters: the Hoffmann–Lomonosov–Sitharam decomposition of a constraint graph, for any
 //! number of rigid motions D.
 //!
@@ -42,10 +41,11 @@
 //! doi:10.1287/mnsc.22.11.1268, and the flow of `flow`), the construction the authors use; a dense
 //! set is reduced to a minimal one by removing a node and searching what is left, O(n^2 (m + n))
 //! in all. The search grows from each constraint outwards, a ring of neighbours at a time, so the
-//! small clusters of an interactive sketch cost little. Consulted: fiksi, Apache-2.0 OR MIT,
-//! <https://github.com/endoli/fiksi/blob/ff4850546738fb82e95ff27c4db63e924d938473/fiksi/src/analyze/graph/recursive_assembly.rs>,
-//! for what the decomposition must return and where its exhaustive search for a minimum subgraph
-//! is slow; no code copied, and its randomly seeded hash sets are not used here.
+//! small clusters of an interactive sketch cost little.
+//! Consulted: fiksi, Apache-2.0 OR MIT,
+//!   <https://github.com/endoli/fiksi/blob/ff4850546738fb82e95ff27c4db63e924d938473/fiksi/src/analyze/graph/recursive_assembly.rs>,
+//!   for what the decomposition must return and where its exhaustive search for a minimum subgraph
+//!   is slow. No code copied, and its randomly seeded hash sets are not used here.
 //!
 //! Cost: one cluster costs a few maximum flows on the neighbourhood it grows through; a family of
 //! small rigid bodies costs time linear in its size; the worst case is the authors' O(n^2 (m + n)).
@@ -236,7 +236,9 @@ impl Work {
         for l in self.links_inside(set, meter)? {
             equations = add(equations, get(&self.link_weight, l)?)?;
         }
-        Ok(i128::from(nodes) - i128::from(equations))
+        i128::from(nodes)
+            .checked_sub(i128::from(equations))
+            .ok_or(SketchError::Internal)
     }
 
     /// A dense set of the nodes `set` that holds the link `seed`, if one exists: the heaviest
@@ -263,7 +265,11 @@ impl Work {
             net.add_arc(0, at, profit)?;
             for &v in self.members.get(l).ok_or(SketchError::Internal)? {
                 let p = set.binary_search(&v).map_err(|_| SketchError::Internal)?;
-                net.add_arc(at, base.checked_add(p).ok_or(SketchError::Internal)?, INFINITE)?;
+                net.add_arc(
+                    at,
+                    base.checked_add(p).ok_or(SketchError::Internal)?,
+                    INFINITE,
+                )?;
             }
         }
         for (p, &v) in set.iter().enumerate() {
@@ -465,7 +471,10 @@ impl Work {
         let redundant = if any_ground && grounded {
             0
         } else {
-            u64::try_from(i128::from(self.motions) - free).unwrap_or(0)
+            i128::from(self.motions)
+                .checked_sub(free)
+                .and_then(|r| u64::try_from(r).ok())
+                .unwrap_or(0)
         };
         push(
             clusters,
@@ -523,18 +532,8 @@ fn components(
     Ok((root_of, size))
 }
 
-/// Decomposes `problem` into rigid clusters.
-///
-/// # Errors
-///
-/// [`SketchError::Internal`] for a member past the last node, a link with no member, two nodes or
-/// two links with one key, or a weight sum that overflows; [`SketchError::OutOfMemory`];
-/// [`SketchError::Stopped`] when the meter stops it.
-pub fn plan(
-    problem: &Problem,
-    limit: usize,
-    meter: &mut WorkMeter<'_>,
-) -> Result<Plan, SketchError> {
+/// The working graph of `problem` in canonical order, and the positions of its fixed nodes.
+fn build(problem: &Problem) -> Result<(Work, Vec<usize>), SketchError> {
     // Canonical order: nodes and links by key.
     let mut order: Vec<usize> = (0..problem.nodes.len()).collect();
     order.sort_unstable_by_key(|&i| problem.nodes.get(i).map(|n| n.key));
@@ -563,10 +562,10 @@ pub fn plan(
     let mut fixed = Vec::new();
     for (new, &old) in order.iter().enumerate() {
         let n = problem.nodes.get(old).ok_or(SketchError::Internal)?;
-        if let Some(before) = new.checked_sub(1) {
-            if get(&w.key, before)? == n.key {
-                return Err(SketchError::Internal);
-            }
+        if let Some(before) = new.checked_sub(1)
+            && get(&w.key, before)? == n.key
+        {
+            return Err(SketchError::Internal);
         }
         push(&mut w.weight, u64::from(n.weight))?;
         push(&mut w.key, n.key)?;
@@ -591,10 +590,10 @@ pub fn plan(
         if m.is_empty() {
             return Err(SketchError::Internal);
         }
-        if let Some(before) = at.checked_sub(1) {
-            if get(&w.link_key, before)? == l.key {
-                return Err(SketchError::Internal);
-            }
+        if let Some(before) = at.checked_sub(1)
+            && get(&w.link_key, before)? == l.key
+        {
+            return Err(SketchError::Internal);
         }
         for &v in &m {
             push(slot(&mut w.incident, v)?, at)?;
@@ -604,6 +603,22 @@ pub fn plan(
         push(&mut w.link_key, l.key)?;
         push(&mut w.link_alive, true)?;
     }
+    Ok((w, fixed))
+}
+
+/// Decomposes `problem` into rigid clusters.
+///
+/// # Errors
+///
+/// [`SketchError::Internal`] for a member past the last node, a link with no member, two nodes or
+/// two links with one key, or a weight sum that overflows; [`SketchError::OutOfMemory`];
+/// [`SketchError::Stopped`] when the meter stops it.
+pub fn plan(
+    problem: &Problem,
+    limit: usize,
+    meter: &mut WorkMeter<'_>,
+) -> Result<Plan, SketchError> {
+    let (mut w, fixed) = build(problem)?;
     let (root_of, size) = components(problem.nodes.len(), &w.members, meter)?;
     let mut too_large = Vec::new();
     for v in 0..problem.nodes.len() {

@@ -1,4 +1,3 @@
-// SPDX-License-Identifier: Apache-2.0
 //! Placing a rigid cluster: the rigid motion that best carries its solved shape onto where it was
 //! drawn, in any dimension.
 //!
@@ -164,7 +163,11 @@ pub fn kabsch<const N: usize>(
             for j in 0..N {
                 let mut sum = 0.0;
                 for k in 0..N {
-                    let scale = if k.checked_add(1) == Some(N) { flip } else { 1.0 };
+                    let scale = if k.checked_add(1) == Some(N) {
+                        flip
+                    } else {
+                        1.0
+                    };
                     sum += v.get(i, k)? * scale * u.get(j, k)?;
                 }
                 let at = i.checked_mul(N).and_then(|row| row.checked_add(j));

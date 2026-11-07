@@ -488,6 +488,13 @@ ezpz (Zoo)
     projects/engines/geometry/crates/geom-sketch/src/equation.rs
       for which kinds a sketch solver needs; its residuals are hand-differentiated and none is taken.
 
+fiksi
+  Licence:      Apache-2.0 OR MIT
+  Link:         https://github.com/endoli/fiksi/blob/ff4850546738fb82e95ff27c4db63e924d938473/fiksi/src/analyze/graph/recursive_assembly.rs
+  Consulted by:
+    projects/engines/geometry/crates/geom-sketch/src/cluster.rs
+      for what the decomposition must return and where its exhaustive search for a minimum subgraph is slow. No code copied, and its randomly seeded hash sets are not used here.
+
 fiksi (Endoli)
   Licence:      MIT
   Link:         https://github.com/endoli/fiksi/blob/ff4850546738fb82e95ff27c4db63e924d938473/fiksi/src/solve/lm.rs

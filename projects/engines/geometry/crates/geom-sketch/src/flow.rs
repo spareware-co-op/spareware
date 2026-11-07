@@ -1,4 +1,3 @@
-// SPDX-License-Identifier: Apache-2.0
 //! Maximum flow and the cheapest cut, for the rigid-cluster search.
 //!
 //! What it does: [`Network`] is a directed graph with whole-number capacities. [`Network::max_flow`]
@@ -190,7 +189,10 @@ impl Network {
             while arc != NONE {
                 let v = get(&self.to, arc)?;
                 if get(&self.left, arc)? > 0
-                    && get(level, v)? == get(level, at)?.checked_add(1).ok_or(SketchError::Internal)?
+                    && get(level, v)?
+                        == get(level, at)?
+                            .checked_add(1)
+                            .ok_or(SketchError::Internal)?
                 {
                     found = arc;
                     break;
@@ -300,7 +302,7 @@ mod tests {
     use super::{INFINITE, Network};
 
     fn meter() -> WorkMeter<'static> {
-        WorkMeter::new(Budget::unlimited())
+        WorkMeter::new(Budget::UNLIMITED)
     }
 
     #[test]
