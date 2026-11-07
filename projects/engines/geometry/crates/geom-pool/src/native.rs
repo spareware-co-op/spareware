@@ -109,10 +109,6 @@ impl Pool for Rayon {
 ///
 /// The first call comes from any thread and `ThreadPool::join` moves it onto a worker; a later
 /// call is already on one, where `join` runs in place and the second half is open to thieves.
-#[allow(
-    clippy::disallowed_methods,
-    reason = "clippy.toml bans `ThreadPool::join` for every kernel crate; this is the one adapter               that may call it, and the only place that does"
-)]
 fn run_halves(pool: &rayon::ThreadPool, tasks: &mut [&mut (dyn FnMut() + Send)]) {
     match tasks {
         [] => {}
