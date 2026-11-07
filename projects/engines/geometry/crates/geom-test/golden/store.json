@@ -302,9 +302,15 @@
               "kind": "corpus",
               "piece": "G175",
               "why": "1 new count benchmark on geom-intersect's intersection curve (decision 32.44): marched crossings fitted, every span certified; no existing digest moved"
+            },
+            {
+              "sha256": "4f00e11786f21e0dcddb4d2384ff3375e67bf4066d661a50865ba355fa991da8",
+              "kind": "corpus",
+              "piece": "G173a",
+              "why": "intersect/fit_curve/typical's inputs and results changed (no other digest moved): the crossings it fits are marched by geom-intersect, and the boundary branch of G173a (a branch along a domain end is proven to lie in the other surface and traced once) settles and traces a pair that was flagged before"
             }
           ],
-          "sha256": "4f00e11786f21e0dcddb4d2384ff3375e67bf4066d661a50865ba355fa991da8"
+          "sha256": "b13164cf704d66bf6e8571e28c87152ae8eb20fd7743a65e17231fe3184f1a8e"
         },
         {
           "id": "geom-nurbs/operations",
