@@ -673,6 +673,7 @@ pub static UNMEASURED: &[(&str, &str)] = &[
     ("pencil::cylinder_form", "a call of `pencil::revolution`"),
     ("pencil::cone_form", "a call of `pencil::revolution`"),
     ("sturm::gcd", "measured through `pencil::classify`, which reduces each repeated root by it"),
+    ("sturm::gcd_with_steps", "measured as `sturm::gcd`, which is a call of it"),
     ("sturm::sign_beside", "measured through `pencil::classify`, on a double root"),
     ("sturm::square_root", "measured through `pencil::classify`, on two double roots"),
     ("Chain::last", "hands back the chain's last element; the chain is measured"),
