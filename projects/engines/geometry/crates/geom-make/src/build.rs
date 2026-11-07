@@ -76,6 +76,11 @@ pub struct Made {
     pub body: Body,
     /// Where each region, face, edge and vertex of the body came from (20.3).
     pub history: History,
+    /// The names this operation made, in the order it made them, each after those it refers to:
+    /// a primitive's every name and a pattern copy's, none for a transform, which keeps its
+    /// input's. With the names its inputs brought, they are what a name graph (`geom_name`) needs
+    /// to resolve a reference to the body (20.4) and what a names record stores (24.4).
+    pub names: Vec<TopoName>,
     /// Which transform it went through: `None` for a primitive and for a pattern's copy, whose
     /// role `copy` is its attribute event (8.4).
     pub motion: Option<Motion>,
@@ -124,15 +129,18 @@ pub(crate) fn unbuilt(ctx: &OpContext<'_>, meter: &mut WorkMeter<'_>, e: TopoErr
     }
 }
 
-/// The name of what operation `op` creates by `role`, from nothing.
-pub(crate) fn created(op: &OpPath, role: &Role) -> Option<NameId> {
+/// What operation `op` creates by `role`, from nothing: the name itself.
+pub(crate) fn created_name(op: &OpPath, role: &Role) -> TopoName {
     TopoName::Created {
         op: op.clone(),
         role: role.clone(),
         from: NameList::new([]),
     }
-    .id()
-    .ok()
+}
+
+/// The name of what operation `op` creates by `role`, from nothing.
+pub(crate) fn created(op: &OpPath, role: &Role) -> Option<NameId> {
+    created_name(op, role).id().ok()
 }
 
 /// The role `name` with the names in `args` as its arguments, sorted so the role does not depend
@@ -214,8 +222,11 @@ fn built(
         vertices: Vec::new(),
     };
     let mut records = Vec::new();
+    let mut made = Vec::new();
     for (role, kind) in roles {
-        let name = created(op, role).ok_or_else(defect)?;
+        let node = created_name(op, role);
+        let name = node.id().map_err(|_| defect())?;
+        made.push(node);
         let key = NameKey(name.to_bytes());
         match kind {
             Kind::Region => names.regions.push(key),
@@ -236,7 +247,7 @@ fn built(
     let body = filled(&rows, part)
         .and_then(|b| b.publish_named(&names, BodyKind::Solid, outside_row, meter))
         .map_err(|e| unbuilt(ctx, meter, e))?;
-    finish(ctx, meter, body, records, None, exactness)
+    finish(ctx, meter, body, records, made, None, exactness)
 }
 
 /// A solid's topology, as rows.
@@ -260,7 +271,7 @@ enum Kind {
 }
 
 /// Checks `body` as the postcondition, and returns it with the history of `records` (no input is
-/// deleted: a Make operation has none, and a transform keeps every entity).
+/// deleted: a Make operation has none, and a transform keeps every entity) and the names it made.
 ///
 /// # Errors
 ///
@@ -271,6 +282,7 @@ pub(crate) fn finish(
     meter: &mut WorkMeter<'_>,
     body: Body,
     records: Vec<Record>,
+    names: Vec<TopoName>,
     motion: Option<Motion>,
     exactness: Exactness,
 ) -> Result<OpOutput<Made>, OpError> {
@@ -289,6 +301,7 @@ pub(crate) fn finish(
     let made = Made {
         body,
         history,
+        names,
         motion,
     };
     Ok(OpOutput::new(made, exactness))

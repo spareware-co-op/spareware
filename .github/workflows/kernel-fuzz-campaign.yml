@@ -85,6 +85,10 @@ jobs:
       - name: Install the pinned nightly compiler
         run: rustup toolchain install "$FUZZ_NIGHTLY" --profile minimal
       - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
+        with:
+          # Only main saves the cache; a pull request restores main's (a pull request's own
+          # caches filled the repository's cache limit and evicted what main saved).
+          save-if: ${{ github.ref == 'refs/heads/main' }}
       - name: Install cargo-bolero ${{ env.CARGO_BOLERO_VERSION }}
         run: >-
           cargo install cargo-bolero --version "$CARGO_BOLERO_VERSION" --locked

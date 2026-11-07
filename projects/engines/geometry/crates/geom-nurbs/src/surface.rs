@@ -55,7 +55,7 @@
 //!   book's A4.4 on the stored homogeneous points, where `NLib` forms rational basis derivatives
 //!   against points divided by their weights; parameters outside the domains and orders above
 //!   the maximum are typed errors; each overflow is checked.
-//! SPDX-License-Identifier: MPL-2.0 AND Apache-2.0
+//! SPDX-License-Identifier: Apache-2.0
 //!
 //! Cost: construction is linear in the control points and makes one allocation (two if rational).
 //! [`Surface::point`] takes O(p² + q² + p·q·D) operations; [`Surface::derivs`]
