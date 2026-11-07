@@ -45,7 +45,16 @@
 //!   <https://github.com/endoli/fiksi/blob/ff4850546738fb82e95ff27c4db63e924d938473/solvi/src/decomposition/sparse/qr.rs>,
 //!   for its left-looking structure and the handing of rows up the tree.
 //!
-//! Cost: as charged; O(|R| + |V| + m + n) memory. No recursion.
+//! Cost: as charged; O(|R| + |V| + m + n) memory. No recursion in the factoring or the solves.
+//!
+//! Recursion:
+//!
+//! - Types: `SparseQr`.
+//!   Bound: 2.
+//!   Why: a `SparseQr` holds a second one only when a column is dead, and `SparseQr::factor`
+//!   makes that second from the plain factors of Rᵀ, which it never gives a second of its own, so a
+//!   value is at most itself and one more; its drop glue and derived implementations go no deeper.
+//!   Test: `a_staircase_clones_compares_and_prints_at_its_bound`.
 
 #![allow(
     clippy::many_single_char_names,
