@@ -75,6 +75,7 @@ use geom_run::WorkMeter;
 use geom_surface::{ParamBox as Region, ParamSurface, SurfaceKind};
 
 use crate::IntersectError;
+use crate::boundary::{Lying, lies_in};
 use crate::project::{boxed, dot, image, negative, positive};
 use crate::result::{Degeneracy, StepsInterval, Test, Unresolved};
 use crate::seam::{Charts, PoleStarts, Poles, cells, charts};
@@ -244,21 +245,22 @@ pub(crate) fn point(x: f64) -> Result<Interval, NumError> {
 
 /// One edge of a patch against the other patch: `S₁(t) − S₂(s, r)`, three equations in three
 /// unknowns, for 12.8's step 5.
-struct Edge<'a> {
+pub(crate) struct Edge<'a> {
     /// The surface whose edge it is.
-    own: &'a SurfaceKind,
+    pub(crate) own: &'a SurfaceKind,
     /// The surface it meets.
-    other: &'a SurfaceKind,
+    pub(crate) other: &'a SurfaceKind,
     /// The fixed parameter's value.
-    at: f64,
+    pub(crate) at: f64,
     /// Whether u is the one that is fixed.
-    fixed_u: bool,
-    floor: f64,
+    pub(crate) fixed_u: bool,
+    /// The resolution floor, in steps.
+    pub(crate) floor: f64,
 }
 
 impl Edge<'_> {
     /// The region of `t` along the edge.
-    fn along(&self, t: Interval) -> Region {
+    pub(crate) fn along(&self, t: Interval) -> Region {
         if self.fixed_u {
             ((self.at, self.at), ends(t))
         } else {
@@ -354,6 +356,27 @@ pub(crate) enum Starts {
     Lone,
 }
 
+/// Whether a flagged box of `edge`'s system is the edge's own: the edge is on an end of its
+/// surface's domain, lies in the other surface for all of `length`, and the box, less than a floor
+/// across, meets the run that proves it. `ends` are the ends of the own surface's parameter that is
+/// held. The run is proven once, into `lies`.
+fn runs_along(
+    edge: &Edge<'_>,
+    (length, ends): ((f64, f64), (f64, f64)),
+    lies: &mut Lying,
+    region: &[Interval; 3],
+    meter: &mut WorkMeter<'_>,
+) -> Result<bool, IntersectError> {
+    if !(edge.at == ends.0 || edge.at == ends.1) || edge.reach(region, meter)? > 1.0 {
+        return Ok(false);
+    }
+    if !lies.tried {
+        lies.tried = true;
+        lies.run = lies_in(edge, length, f64::MAX, meter)?;
+    }
+    Ok(lies.run.as_ref().is_some_and(|run| run.holds(region)))
+}
+
 /// The start points of one pair, or why there are none to take. An edge on a pole line of its
 /// surface ([`crate::seam`]) is one point, tested as a point.
 pub(crate) fn starts_of(
@@ -426,9 +449,20 @@ pub(crate) fn starts_of(
                         .iter()
                         .any(|&end| across.contains(&end) && t.contains(end))
                 };
+                // An edge on an end of its own surface's domain may lie in the other surface: the
+                // branch runs along it and the march traces it (`crate::boundary`). Its flagged
+                // boxes, each less than a floor across, are then that run's, not a doubt.
+                let held = if fixed_u {
+                    own.domain().0
+                } else {
+                    own.domain().1
+                };
+                let mut lies = Lying::default();
                 for flagged in &found.flagged {
                     let [t, ..] = flagged.region;
-                    if !(at_pole(t) && edge.reach(&flagged.region, meter)? <= 1.0) {
+                    let explained = (at_pole(t) && edge.reach(&flagged.region, meter)? <= 1.0)
+                        || runs_along(&edge, (length, held), &mut lies, &flagged.region, meter)?;
+                    if !explained {
                         return Ok(Starts::Undecided);
                     }
                 }
@@ -464,7 +498,7 @@ pub(crate) fn starts_of(
 /// stop at the end, so the same surface over a wider domain (`with_domain`) is read there; a NURBS
 /// surface is not defined past its end, so it has no room. What lies past the end is cut off
 /// again by [`meets_patch`].
-fn roomy(surface: &SurfaceKind, there: Region) -> Option<(SurfaceKind, Region)> {
+pub(crate) fn roomy(surface: &SurfaceKind, there: Region) -> Option<(SurfaceKind, Region)> {
     let (us, vs) = surface.domain();
     let (free_u, free_v) = match surface {
         SurfaceKind::Plane(_) => (true, true),

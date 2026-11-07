@@ -57,8 +57,10 @@ use geom_run::WorkMeter;
 use geom_surface::{ParamBox as Region, ParamSurface, SurfaceKind};
 
 use crate::IntersectError;
+use crate::boundary::{four, lies_in};
 use crate::general::{
-    Settled, Subdivided, cross, ends, may_be_parallel, normals, partials, point, speeds,
+    Edge, Settled, Subdivided, cross, ends, may_be_parallel, normals, partials, point, roomy,
+    speeds,
 };
 use crate::project::{negative, positive};
 use crate::result::CurveEnd;
@@ -551,6 +553,105 @@ fn walk(
     }
 }
 
+/// The start a piece along an edge reaches, its vertices, and its deviation.
+type Along = (usize, Vec<[Interval; 4]>, f64);
+
+/// A piece of a branch that runs along an edge of its own surface's domain: from start `from` to
+/// the nearest other start on that edge, where the edge lies in the other surface between them
+/// ([`crate::boundary`]). The first surface's edge is taken before the second's, so a border both
+/// patches share is traced once. `None` where no edge joins `from` to a start.
+fn along_an_edge(
+    (first, second): (&SurfaceKind, &SurfaceKind),
+    pair: &Settled,
+    (from, done): (usize, &[bool]),
+    (floor, ceiling): (f64, f64),
+    meter: &mut WorkMeter<'_>,
+) -> Result<Option<Along>, IntersectError> {
+    let a = pair.starts.get(from).ok_or(IntersectError::Internal)?;
+    for own_first in [true, false] {
+        let (own, other, there) = if own_first {
+            (first, second, pair.second)
+        } else {
+            (second, first, pair.first)
+        };
+        let (us, vs) = own.domain();
+        for fixed_u in [true, false] {
+            let (fixed, free) = match (own_first, fixed_u) {
+                (true, true) => (0, 1),
+                (true, false) => (1, 0),
+                (false, true) => (2, 3),
+                (false, false) => (3, 2),
+            };
+            let (lo, hi) = if fixed_u { us } else { vs };
+            for end in [lo, hi] {
+                let on = |s: &[Interval; 4]| {
+                    s.get(fixed).is_some_and(|x| x.lo() <= end && end <= x.hi())
+                };
+                if !on(a) {
+                    continue;
+                }
+                let along = |s: &[Interval; 4]| s.get(free).copied().map(mid);
+                let Some(ta) = along(a) else { continue };
+                let (run_lo, run_hi) = if fixed_u { vs } else { us };
+                // The nearest start on the same edge: a branch along it passes no other.
+                let mut best: Option<(usize, f64, f64)> = None;
+                for (k, s) in pair.starts.iter().enumerate() {
+                    let tb = along(s);
+                    if let (false, true, Some(tb)) =
+                        (k == from || done.get(k).copied().unwrap_or(true), on(s), tb)
+                    {
+                        let gap = (tb - ta).abs();
+                        if gap > 0.0 && best.is_none_or(|(_, g, _)| gap < g) {
+                            best = Some((k, gap, tb));
+                        }
+                    }
+                }
+                let Some((to, _, tb)) = best else { continue };
+                let wide = roomy(other, there).map(|(wide, _)| wide);
+                let edge = Edge {
+                    own,
+                    other: wide.as_ref().unwrap_or(other),
+                    at: end,
+                    fixed_u,
+                    floor,
+                };
+                let Some(run) = lies_in(
+                    &edge,
+                    (
+                        larger(smaller(ta, tb), run_lo),
+                        smaller(larger(ta, tb), run_hi),
+                    ),
+                    ceiling,
+                    meter,
+                )?
+                else {
+                    continue;
+                };
+                let end_point = pair
+                    .starts
+                    .get(to)
+                    .copied()
+                    .ok_or(IntersectError::Internal)?;
+                let mut inner = Vec::new();
+                for (cut, x) in run.cuts.iter().zip(&run.at).skip(1) {
+                    if *cut >= larger(ta, tb) {
+                        break;
+                    }
+                    inner.push(four((own_first, fixed_u), end, *cut, *x)?);
+                }
+                if ta > tb {
+                    inner.reverse();
+                }
+                let mut vertices = alloc::vec![*a];
+                vertices.extend(inner);
+                vertices.push(end_point);
+                return Ok(Some((to, vertices, run.deviation)));
+            }
+        }
+    }
+    Ok(None)
+}
+
 /// `x` moved along `rates` for a step of `h`.
 fn signed_to(x: &[f64; 4], rates: &[f64; 4], h: f64) -> [f64; 4] {
     let mut out = *x;
@@ -786,7 +887,24 @@ pub fn march(
                 continue;
             }
             let mut piece = None;
+            if let Some((to, vertices, deviation)) = along_an_edge(
+                (first, second),
+                pair,
+                (from, &done),
+                (floor, ceiling),
+                meter,
+            )? {
+                piece = Some(Piece {
+                    from: (index, from),
+                    to,
+                    vertices,
+                    deviation,
+                });
+            }
             for way in [1.0, -1.0] {
+                if piece.is_some() {
+                    break;
+                }
                 match walk(&system, pair, from, way, (floor, ceiling), meter) {
                     Ok(Walk::Reached(to, vertices, deviation))
                         if !done.get(to).copied().unwrap_or(true) =>
