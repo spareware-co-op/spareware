@@ -29,9 +29,9 @@ name: Kernel fuzzing and proofs
 #
 # Path filters: the workflow runs when the code a target fuzzes or proves changes: geom-fuzz and
 # every crate of the workspace it depends on (geom-bench, geom-bvh, geom-check, geom-curve,
-# geom-format, geom-gen, geom-intersect, geom-linalg, geom-make, geom-math, geom-num, geom-nurbs,
-# geom-op, geom-pool, geom-run, geom-surface, geom-test and geom-topo today, with engine-geometry
-# and kit-core through geom-gen's facade generators;
+# geom-format, geom-gen, geom-intersect, geom-linalg, geom-make, geom-math, geom-name, geom-num,
+# geom-nurbs, geom-op, geom-pool, geom-run, geom-surface, geom-test and geom-topo today, with
+# engine-geometry and kit-core through geom-gen's facade generators;
 # geom-fuzz's tests/attack_g14.rs fails until a new target's crates are listed here), geom-op for
 # its job kani-op, geom-format for kani-format, the workspace
 # files that change any build (Cargo.toml, Cargo.lock, .cargo/, the toolchain file), the
@@ -56,24 +56,17 @@ on:
       - "projects/engines/geometry/crates/geom-2d/**"
       - "projects/engines/geometry/crates/geom-bench/**"
       - "projects/engines/geometry/crates/geom-bvh/**"
+      - "projects/engines/geometry/crates/geom-check/**"
       - "projects/engines/geometry/crates/geom-cloud/**"
       - "projects/engines/geometry/crates/geom-curve/**"
       - "projects/engines/geometry/crates/geom-draw/**"
       - "projects/engines/geometry/crates/geom-field/**"
       - "projects/engines/geometry/crates/geom-format/**"
-      - "projects/kit/crates/kit-core/**"
       - "projects/engines/geometry/crates/geom-fuzz/**"
-      - "projects/engines/geometry/crates/geom-check/**"
-      - "projects/engines/geometry/crates/geom-curve/**"
-      - "projects/engines/geometry/crates/geom-linalg/**"
-      - "projects/engines/geometry/crates/geom-make/**"
-      - "projects/engines/geometry/crates/geom-math/**"
-      - "projects/engines/geometry/crates/geom-nurbs/**"
-      - "projects/engines/geometry/crates/geom-surface/**"
-      - "projects/engines/geometry/crates/geom-topo/**"
       - "projects/engines/geometry/crates/geom-gen/**"
       - "projects/engines/geometry/crates/geom-intersect/**"
       - "projects/engines/geometry/crates/geom-linalg/**"
+      - "projects/engines/geometry/crates/geom-make/**"
       - "projects/engines/geometry/crates/geom-math/**"
       - "projects/engines/geometry/crates/geom-mesh/**"
       - "projects/engines/geometry/crates/geom-name/**"
@@ -88,6 +81,8 @@ on:
       - "projects/engines/geometry/crates/geom-subd/**"
       - "projects/engines/geometry/crates/geom-surface/**"
       - "projects/engines/geometry/crates/geom-test/**"
+      - "projects/engines/geometry/crates/geom-topo/**"
+      - "projects/kit/crates/kit-core/**"
       - "Cargo.toml"
       - "Cargo.lock"
       - ".cargo/**"
@@ -102,24 +97,17 @@ on:
       - "projects/engines/geometry/crates/geom-2d/**"
       - "projects/engines/geometry/crates/geom-bench/**"
       - "projects/engines/geometry/crates/geom-bvh/**"
+      - "projects/engines/geometry/crates/geom-check/**"
       - "projects/engines/geometry/crates/geom-cloud/**"
       - "projects/engines/geometry/crates/geom-curve/**"
       - "projects/engines/geometry/crates/geom-draw/**"
       - "projects/engines/geometry/crates/geom-field/**"
       - "projects/engines/geometry/crates/geom-format/**"
-      - "projects/kit/crates/kit-core/**"
       - "projects/engines/geometry/crates/geom-fuzz/**"
-      - "projects/engines/geometry/crates/geom-check/**"
-      - "projects/engines/geometry/crates/geom-curve/**"
-      - "projects/engines/geometry/crates/geom-linalg/**"
-      - "projects/engines/geometry/crates/geom-make/**"
-      - "projects/engines/geometry/crates/geom-math/**"
-      - "projects/engines/geometry/crates/geom-nurbs/**"
-      - "projects/engines/geometry/crates/geom-surface/**"
-      - "projects/engines/geometry/crates/geom-topo/**"
       - "projects/engines/geometry/crates/geom-gen/**"
       - "projects/engines/geometry/crates/geom-intersect/**"
       - "projects/engines/geometry/crates/geom-linalg/**"
+      - "projects/engines/geometry/crates/geom-make/**"
       - "projects/engines/geometry/crates/geom-math/**"
       - "projects/engines/geometry/crates/geom-mesh/**"
       - "projects/engines/geometry/crates/geom-name/**"
@@ -134,6 +122,8 @@ on:
       - "projects/engines/geometry/crates/geom-subd/**"
       - "projects/engines/geometry/crates/geom-surface/**"
       - "projects/engines/geometry/crates/geom-test/**"
+      - "projects/engines/geometry/crates/geom-topo/**"
+      - "projects/kit/crates/kit-core/**"
       - "Cargo.toml"
       - "Cargo.lock"
       - ".cargo/**"
@@ -161,14 +151,21 @@ env:
   KANI_VERSION: 0.68.0
 
 jobs:
+  cheap:
+    name: Cheap checks first
+    # Waits for format, lints, the scaffold and the sign-off (cheap-checks.yml), so a push that
+    # fails one of them stops here; every heavy job below lists this job under `needs`.
+    uses: ./.github/workflows/cheap-checks.yml
+
   libfuzzer:
     name: libFuzzer under cargo-bolero (${{ matrix.target }})
+    needs: cheap
     runs-on: ubuntu-latest
     timeout-minutes: 45
     strategy:
       fail-fast: false
       matrix:
-        target: [arenas_fuzz, cache_fuzz, cbor_fuzz, make_fuzz, orient2d_fuzz, predicates_fuzz, sequence_fuzz, variants_fuzz, wide_fuzz]
+        target: [arenas_fuzz, attributes_fuzz, boxtree_fuzz, cache_fuzz, cbor_fuzz, curves_fuzz, linalg_fuzz, make_fuzz, maths_fuzz, nurbs_fuzz, orient2d_fuzz, predicates_fuzz, roots_fuzz, sequence_fuzz, surfaces_fuzz, transforms_fuzz, variants_fuzz, wide_fuzz]
     defaults:
       run:
         shell: bash
@@ -182,6 +179,10 @@ jobs:
       - name: Install the pinned nightly compiler
         run: rustup toolchain install "$FUZZ_NIGHTLY" --profile minimal
       - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
+        with:
+          # Only main saves the cache; a pull request restores main's (a pull request's own
+          # caches filled the repository's cache limit and evicted what main saved).
+          save-if: ${{ github.ref == 'refs/heads/main' }}
       - name: Install cargo-bolero ${{ env.CARGO_BOLERO_VERSION }}
         run: >-
           cargo install cargo-bolero --version "$CARGO_BOLERO_VERSION" --locked
@@ -211,6 +212,7 @@ jobs:
 
   kani:
     name: Kani (${{ matrix.harness }})
+    needs: cheap
     runs-on: ubuntu-latest
     # orient2d_proof is the slowest harness: on G37's rewritten wide integers, which its total
     # path reaches, kissat proved it in 47 minutes (run 40291338626) and then in 75 (run
@@ -264,6 +266,7 @@ jobs:
   # splitter 54 and dd's from_i128 46; 120 minutes is the margin orient2d_proof's job above keeps.
   kani-num:
     name: Kani, geom-num (${{ matrix.proof }})
+    needs: cheap
     runs-on: ubuntu-latest
     timeout-minutes: 120
     strategy:
@@ -321,15 +324,20 @@ jobs:
           - math::atan2::proofs::add_of_like_signs_is_within_two_ulps
           - math::atan2::proofs::add_of_unlike_signs_at_equal_exponents_is_within_two_ulps
           - math::atan2::proofs::add_of_unlike_signs_one_apart_is_within_two_ulps
+          - math::atan2::proofs::agreed_answers_exactly_when_both_ends_round_alike
           - math::atan2::proofs::is_zero_holds_exactly_for_zero
           - math::atan2::proofs::mul_keeps_every_carry
           - math::atan2::proofs::shl_moves_every_bit_up
           - math::atan2::proofs::to_f64_rounds_to_nearest
           - math::log::proofs::is_zero_reads_both_words
+          - math::hexf::proofs::step_never_returns_none
+          - math::hexf::proofs::step_u128_never_returns_none
           - math::proofs::abs_is_exact
           - math::proofs::ceil_is_exact
           - math::proofs::floor_is_exact
           - math::proofs::round_ties_even_is_exact
+          - math::sincospi::proofs::cospi_hard_case_answers_exactly_the_listed_pairs
+          - math::sincospi::proofs::sinpi_hard_case_answers_exactly_the_listed_pairs
           - perturb::proofs::bit_of_covers_exactly_a_mask_of_32
           - perturb::proofs::distinct_refuses_exactly_repeated_keys
           - perturb::proofs::the_lift_of_every_frame_point_fits
@@ -379,6 +387,7 @@ jobs:
 
   kani-limbs:
     name: Kani, geom-num limb steps
+    needs: cheap
     runs-on: ubuntu-latest
     # Piece G42: one bounded proof for every kind of step the generated limb variant performs
     # (chapter 23.3), all in one run so they share one build; the generator writes them beside the
@@ -500,7 +509,7 @@ jobs:
         if: strategy.job-index == 0
         run: >-
           cargo run --locked -q -p geom-test --bin trip -- kani-format --
-          cargo kani -p geom-format --harness range::proofs::bits_is_the_magnitude_width --exact
+          cargo kani -p geom-format --harness range::proofs::real_accepts_exactly_the_finite_frame --exact
       - name: Prove ${{ matrix.proof }}
         run: |
           start=$(date +%s)
@@ -511,6 +520,7 @@ jobs:
 
   clusterfuzzlite:
     name: ClusterFuzzLite (address sanitizer)
+    needs: cheap
     if: github.event_name == 'pull_request'
     runs-on: ubuntu-latest
     timeout-minutes: 60
@@ -545,6 +555,7 @@ jobs:
   # (.clusterfuzzlite/seeded.sh says what differs and why). run_fuzzers must report the crash.
   clusterfuzzlite-seeded:
     name: ClusterFuzzLite finds a planted violation
+    needs: cheap
     if: github.event_name == 'pull_request'
     runs-on: ubuntu-latest
     timeout-minutes: 60

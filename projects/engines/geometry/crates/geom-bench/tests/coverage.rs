@@ -531,6 +531,17 @@ const OTHER_CRATES: &[(&str, &[(&str, &str)])] = &[
         ],
     ),
     (
+        "geom_topo",
+        &[
+            ("column", include_str!("../../geom-topo/src/column.rs")),
+            ("builder", include_str!("../../geom-topo/src/builder.rs")),
+        ],
+    ),
+    (
+        "geom_name",
+        &[("classes", include_str!("../../geom-name/src/classes.rs"))],
+    ),
+    (
         "geom_nurbs",
         &[
             ("curve", include_str!("../../geom-nurbs/src/curve.rs")),
@@ -554,6 +565,10 @@ const OTHER_CRATES: &[(&str, &[(&str, &str)])] = &[
     (
         "geom_surface",
         &[("param", include_str!("../../geom-surface/src/param.rs"))],
+    ),
+    (
+        "geom_run",
+        &[("exec", include_str!("../../geom-run/src/exec.rs"))],
     ),
 ];
 
@@ -771,7 +786,7 @@ fn the_gate_is_five_percent_on_every_measure() {
     );
     // A bare local run gates every measure at a plain 5%. The workflow's limits replace these and
     // gate instructions and estimated cycles; the miss counts are judged from Gungraun's summaries
-    // (geom_bench::callgrind, G18a), which gate only those that can resolve 5%.
+    // (geom_bench::callgrind), which lists them and judges them through estimated cycles.
     for metric in GATED_METRICS {
         assert!(
             GATE.contains(&format!("(EventKind::{metric}, GATE_PERCENT)")),
@@ -785,7 +800,6 @@ fn the_gate_is_five_percent_on_every_measure() {
             .map(|&(_, name)| name)
             .collect();
         assert_eq!(judged, GATED_METRICS);
-        assert_eq!(geom_bench::callgrind::floor(5), Some(20));
     }
     for metric in GATED_HEAP_METRICS {
         assert!(
@@ -986,7 +1000,9 @@ fn every_action_is_pinned_to_the_commit_kernel_yml_runs() {
     let uses = |text: &'static str| -> Vec<&'static str> {
         text.lines()
             .map(|line| line.trim().trim_start_matches("- "))
-            .filter(|line| line.starts_with("uses: "))
+            // A workflow of this repository at the same commit (`uses: ./.github/workflows/...`,
+            // the job `cheap`) is no action to pin.
+            .filter(|line| line.starts_with("uses: ") && !line.starts_with("uses: ./"))
             .collect()
     };
     let kernel = uses(KERNEL_WORKFLOW);

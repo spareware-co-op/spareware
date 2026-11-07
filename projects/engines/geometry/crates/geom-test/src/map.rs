@@ -909,7 +909,7 @@ fn depend_values(
         .collect()
 }
 
-/// The crate's `license` field names every ported file's licence beside MPL-2.0 (29.20, rule 4).
+/// The crate's `license` field names every ported file's licence beside Apache-2.0 (29.20, rule 4).
 fn check_crate_licence(
     krate: &CrateInput,
     manifest: &Manifest,
@@ -930,7 +930,7 @@ fn check_crate_licence(
         }
         _ => Vec::new(),
     };
-    let mut wanted: Vec<String> = vec!["MPL-2.0".to_owned()];
+    let mut wanted: Vec<String> = vec!["Apache-2.0".to_owned()];
     wanted.extend(
         ports
             .iter()
@@ -945,7 +945,7 @@ fn check_crate_licence(
             Rule::Spdx,
             format!(
                 "the crate ports files under {}, so its own `license` field names each beside \
-                 MPL-2.0 (29.20, rule 4): license = \"{}\"",
+                 Apache-2.0 (29.20, rule 4): license = \"{}\"",
                 ports.join(", "),
                 wanted.join(" AND ")
             ),
@@ -1382,7 +1382,7 @@ mod tests {
             name: "geom-x".into(),
             folder: format!("{CRATES_DIR}/geom-x"),
             manifest: Some(
-                "[package]\nname = \"geom-x\"\nlicense = \"MPL-2.0 AND BSD-3-Clause\"\n\n\
+                "[package]\nname = \"geom-x\"\nlicense = \"Apache-2.0 AND BSD-3-Clause\"\n\n\
                  [dependencies]\n# A comment = no\ngeom-num = { path = \"../geom-num\" }\n\
                  libm = \"0.2.16\"\nfoo = { version = \"1.2.3\", default-features = false }\n\
                  bar.workspace = true\n\n[dev-dependencies]\nproptest = \"1\"\n\n\
@@ -1396,7 +1396,7 @@ mod tests {
         assert_eq!(problems, []);
         assert_eq!(
             manifest.licence.as_deref(),
-            Some("MPL-2.0 AND BSD-3-Clause")
+            Some("Apache-2.0 AND BSD-3-Clause")
         );
         let names: Vec<(&str, Option<&str>)> = manifest
             .dependencies
@@ -1430,12 +1430,12 @@ mod tests {
         // Single quotes, an inline table across lines, a renamed package and a comment holding
         // `=` are TOML, read as cargo reads them.
         let (manifest, problems) = read(
-            "[package]\nname = 'geom-x' # the folder's name\nlicense = 'MPL-2.0'\n\
+            "[package]\nname = 'geom-x' # the folder's name\nlicense = 'Apache-2.0'\n\
              [dependencies]\nm = { package = \"libm\", version = \"0.2.16\" }\n\
              # x = \"1\"\n[lib]\ndoctest = false\n",
         );
         assert_eq!(problems, []);
-        assert_eq!(manifest.licence.as_deref(), Some("MPL-2.0"));
+        assert_eq!(manifest.licence.as_deref(), Some("Apache-2.0"));
         assert_eq!(
             manifest.dependencies,
             [Dependency {

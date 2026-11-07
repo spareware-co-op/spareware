@@ -187,7 +187,7 @@ struct FieldBody {
 
 **Tape pruning.** A tape is the straight-line list of operations the interpreter runs. Over a box where intervals show that one operand of a min or max always wins, the other branch is dropped, giving a shorter tape for that box and everything inside it ([Keeter 2020](https://doi.org/10.1145/3386569.3392429)). This is what makes a lattice of millions of struts cheap: a small box sees only a few. Spare Kit prunes only when the two intervals are strictly separated. Because every interval contains the point evaluator's result, the pruned tape then returns bit-identical values.
 
-Fidget and libfive's library are MPL-2.0, Spare Kit's own licence, so their methods and, where useful, their code are ported with their notices kept. Fidget's intervals are single precision and not rounded outward ([interval.rs L5-L9](https://github.com/mkeeter/fidget/blob/17853f767b05a5b70bb835a63238ca3174f1204f/fidget-core/src/types/interval.rs#L5-L9)), so its arithmetic is replaced. libfive Studio and its Guile bindings are GPL and are not read.
+Fidget and libfive's library are MPL-2.0, which 29.2 allows, so their methods and, where useful, their code are ported with their notices kept and the ported files staying MPL-2.0. Fidget's intervals are single precision and not rounded outward ([interval.rs L5-L9](https://github.com/mkeeter/fidget/blob/17853f767b05a5b70bb835a63238ca3174f1204f/fidget-core/src/types/interval.rs#L5-L9)), so its arithmetic is replaced. libfive Studio and its Guile bindings are GPL and are not read.
 
 **Meshing with a certificate.**
 

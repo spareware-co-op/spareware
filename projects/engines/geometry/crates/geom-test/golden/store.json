@@ -234,17 +234,35 @@
             {
               "sha256": "046f3d4883d4a30f17d9366db22efdf83ea063bd38f04694be237bebcad8b8f6",
               "kind": "corpus",
-              "piece": "G105",
-              "why": "3 new benchmarks in a new group: format (a cache key, a memo store's lookup and a body's next version); no existing digest moved"
+              "piece": "G148",
+              "why": "2 new count benchmarks of geom-run's helper (decision 32.44): Exec::map of a list that fits one chunk, on the serial executor and on a pool, for the fix that runs a wave of one task on the calling thread (found in G148's timings); no existing digest moved"
             },
             {
-              "sha256": "5775a677d1dc165be37085b18d3bfd09e1c02a95a0b9661fc1305914ea731812",
+              "sha256": "57fb849de9d6eb8003fe3ff677db5373da1b40984777f2d573018b64e5601c1b",
+              "kind": "corpus",
+              "piece": "G80",
+              "why": "2 new count benchmarks on the topology's hot paths (decision 32.44): topo/column_edit and topo/publish; no existing digest moved"
+            },
+            {
+              "sha256": "029ea44ae8ddb92d35bb461dca2a56b270e067d2a608dcc7e36413ba1036695f",
+              "kind": "corpus",
+              "piece": "G90",
+              "why": "1 new count benchmark on the attribute step (decision 32.44): attributes/apply; no existing digest moved"
+            },
+            {
+              "sha256": "9b4a5e0d5c0d13da0c6a564870d80a2dcc01cc20f84f7b571ac404a676fce526",
               "kind": "corpus",
               "piece": "G101",
               "why": "4 new count benchmarks on geom-make's hot paths (decision 32.44): a box and a cylinder built, a box moved and quarter-turned; no existing digest moved"
+            },
+            {
+              "sha256": "b085ebd6770937b858e6ae815f4e62125013af8c97d1bcf07a54eebeede27cbc",
+              "kind": "corpus",
+              "piece": "G105",
+              "why": "3 new benchmarks in a new group: format (a cache key, a memo store's lookup and a body's next version); no existing digest moved"
             }
           ],
-          "sha256": "e3b3c4d5640e0732ef67a71703c45293c184e22eebb19b36220a29626d63c0cc"
+          "sha256": "6dbe60fe9d44dce2a6f5d834008db333c7c2073e5ed89f9d02db9d315ebd0ca8"
         },
         {
           "id": "geom-nurbs/operations",
@@ -284,13 +302,19 @@
             "test": "analytic_determinism",
             "function": "analytic_golden_hash_is_the_same_on_every_target"
           },
-          "sha256": "0c25c27e3c8c9f679924d6644ccd47a55eeb0929eee4271c638c9bce12627fe9",
+          "sha256": "b9e16212d966052945e4131e1705a3bc9a5e5c01df31a5ccd1a16216bc459dfb",
           "history": [
             {
               "sha256": "e30b4c2d63bb616f99ed5093cf9116cf50ba6a6382a34ff74890e62272069342",
               "kind": "improvement",
               "piece": "G67",
               "why": "The analytic kinds' bounds and derivative bounds are their closed-form extents now (piece G67): each coordinate's range over the span from its values at the span's ends and at its critical points in closed form, where G61 took the interval extension over eighths of a turn. So the bound records of the line, circle, ellipse, hyperbola, parabola, helix and involute moved inward, and so did the deviations of the helix's and involute's NURBS forms, whose Taylor remainders rest on derivative bounds. The change is in the bound route alone (form.rs's bound and derivative_bound); the result count (30606) and the refusals (6) are unchanged."
+            },
+            {
+              "sha256": "0c25c27e3c8c9f679924d6644ccd47a55eeb0929eee4271c638c9bce12627fe9",
+              "kind": "improvement",
+              "piece": "G69",
+              "why": "A grid transform that moves a circle's centre exactly now states deviation 0 (chapter 7: grid transforms stay exact; piece G69's law catalogue found circles on frames with irrational unit vectors stating about 1e-14, from comparing interval enclosures that are never points). The corpus's quarter turns of circles moved; the kinds, their data and every other record are unchanged, and so are the result count (30606) and the refusals (6)."
             }
           ]
         },
@@ -302,13 +326,19 @@
             "test": "compound_determinism",
             "function": "compound_golden_hash_is_the_same_on_every_target"
           },
-          "sha256": "3f8ae9216582bafeecce26ad7b619ffa4208ab095251518127420cd24c400760",
+          "sha256": "da8e6e689c1157e9a9b81f1164620b70ddffb9be97fae2746e19fea2b2b49338",
           "history": [
             {
               "sha256": "3aadba80ffd582ba2a5f6ab55a12a59c7306e6eaa7dc2a884a5ecc6089d804b2",
               "kind": "improvement",
               "piece": "G67",
               "why": "The analytic kinds' bounds and derivative bounds are their closed-form extents now (piece G67). The bulge, trimmed, composite and offset kinds bound their analytic leaves through them, a composite's enclosures over a parameter interval use them, and the offsets' NURBS caches take their Taylor remainders from them, so those records moved. No compound kind's own code changed; the result count (10506) and the refusals (6) are unchanged."
+            },
+            {
+              "sha256": "3f8ae9216582bafeecce26ad7b619ffa4208ab095251518127420cd24c400760",
+              "kind": "improvement",
+              "piece": "G69",
+              "why": "A grid transform that moves a bulge polyline's vertices, or a circle's centre, exactly now states deviation 0 (chapter 7; piece G69's law catalogue), and so do the trimmed and composite curves built on them. The corpus's quarter turns of those curves moved; the result count (10506) and the refusals (6) are unchanged."
             }
           ]
         },
@@ -348,13 +378,19 @@
             "test": "surface_determinism",
             "function": "surface_golden_hash_is_the_same_on_every_target"
           },
-          "sha256": "0681542ec51a8126cdc8ae8543832539c2cdbdd0af20fa6b6992534d590b4bf1",
+          "sha256": "b649188c5a496949dbfdc81714544cc36aeee9c50bb90cd6402ec5a8117cbf94",
           "history": [
             {
               "sha256": "2bd33237d0660e08df18570457cf4fd866770a5f14153d34e65e2a0e2864c0bd",
               "kind": "improvement",
               "piece": "G67",
-              "why": "The analytic surface kinds' bounds, derivative bounds and partials over a box are their closed-form extents now (piece G67): a plane's, cylinder's and cone's (and their affine images') by separating the parameters, a sphere's by its factored form, a torus's by c + (R + r·cos πv)·G(u) + Q(v), where G65 took the interval extension over eighths of a turn. The change is in that route alone (a region of one point keeps the terms' own enclosure, and normal bounds are unchanged); the result count (2693) and the refusals (5) are unchanged."
+              "why": "The analytic surface kinds' bounds, derivative bounds and partials over a box are their closed-form extents now (piece G67): a plane's, cylinder's and cone's (and their affine images') by separating the parameters, a sphere's by its factored form, a torus's by c + (R + rÂ·cos Ï€v)Â·G(u) + Q(v), where G65 took the interval extension over eighths of a turn. The change is in that route alone (a region of one point keeps the terms' own enclosure, and normal bounds are unchanged); the result count (2693) and the refusals (5) are unchanged."
+            },
+            {
+              "sha256": "0681542ec51a8126cdc8ae8543832539c2cdbdd0af20fa6b6992534d590b4bf1",
+              "kind": "improvement",
+              "piece": "G69",
+              "why": "A grid transform that moves a cylinder's, cone's, sphere's or torus's centre exactly now states deviation 0 (chapter 7; piece G69's law catalogue found about 1e-15 stated, from comparing interval enclosures of irrational unit vectors). The corpus's quarter turns of those kinds moved; its revolutions turn about the origin, so piece G69's fix of a revolution's placement moved none of them; the result count (2693) and the refusals (5) are unchanged."
             }
           ]
         },
@@ -366,7 +402,7 @@
             "test": "offset_determinism",
             "function": "offset_golden_hash_is_the_same_on_every_target"
           },
-          "sha256": "0a84316b9ba89bd537d18c1c017a9acf8680cbaec57ec8612342702abad14906",
+          "sha256": "400046692e8651b4708068b01fa6e4b86efc7af0632345e1ae6705813e16afde",
           "history": [
             {
               "sha256": "63b11a13ca70c0fef43c5e6e03a53dca5e7f7cc8b7792900f1853aabeaa71a00",
@@ -379,8 +415,25 @@
               "kind": "improvement",
               "piece": "G68",
               "why": "A rational NURBS patch's partials over a box now start from the hull of its Euclidean control points (chapter 19.3's interval quotient rule, piece G68) rather than from the quotient of the boxes of its numerator and weight. The second round's offset is of a rational patch, and an offset bounds itself and builds its certified cache from its base's partials over boxes, so the records that rest on them moved. The offset kind's own code did not change; the result count (314) and the refusals (4) are unchanged."
+            },
+            {
+              "sha256": "0a84316b9ba89bd537d18c1c017a9acf8680cbaec57ec8612342702abad14906",
+              "kind": "improvement",
+              "piece": "G69",
+              "why": "A grid mirror of an analytic base now states deviation 0 (piece G69), so a grid mirror of an offset of such a base is an offset again, its distance negated, by the offset kind's own rule (an exact move of the base keeps the kind), where before the base's stated rounding sent it to its moved NURBS cache. The result count (314) and the refusals (4) are unchanged."
             }
           ]
+        },
+        {
+          "id": "geom-surface/derivative-bounds",
+          "what": "Every surface kind's second-derivative and normal-derivative bounds (piece G68): 6 rounds of a rational bicubic NURBS patch with an interior knot each way and weights from 2^-10 to 2^10 (with 1e-3 and 1e3 among them) and a nonrational biquadratic one, each over its whole domain, a quarter of it, a box of a hundredth of each side and a box across its interior knots; and a plane, a cylinder, a cone (at its apex and away from it), a sphere (at its pole and away from it), a torus and an affine image of a torus on random frames, over one box each. For every box the partials to order 2, the second-derivative bound with its chord constant M, and the normal-derivative bound; and 2 refusals: 386 results in the canonical encoding of tests/derivative_determinism.rs.",
+          "check": {
+            "crate": "geom-surface",
+            "test": "derivative_determinism",
+            "function": "derivative_bounds_golden_hash_is_the_same_on_every_target"
+          },
+          "sha256": "176e68088063809cacb3d0b44b818f69a2e9048584738a2b7fd54c536abecf9d",
+          "history": []
         },
         {
           "id": "geom-bvh/tree",
@@ -463,37 +516,6 @@
           "sha256": "9d3844529ba8b080138c3667380a91a2a7b2695dfd7b6a4f7651334d46b58d29"
         },
         {
-          "id": "geom-topo/arenas",
-          "what": "The arenas of geom-topo (piece G80): 48 bodies of random sizes (six past three chunks of faces and fins), every link random and in range, filled row by row or each arena at once, each published with every column in row order, its chunk count and the work publishing charged; an edit of random rows published beside the unchanged original; and each body refused once with a link pointed past its arena and once with a column one row longer, as tests/arena_determinism.rs records them.",
-          "check": {
-            "crate": "geom-topo",
-            "test": "arena_determinism",
-            "function": "arenas_golden_hash_is_the_same_on_every_target"
-          },
-          "sha256": "9df6dc9250d028d90f299d94442c212ac16472679a9d22d207c6d6e0a0a161dc"
-        },
-        {
-          "id": "geom-surface/derivative-bounds",
-          "what": "Every surface kind's second-derivative and normal-derivative bounds (piece G68): 6 rounds of a rational bicubic NURBS patch with an interior knot each way and weights from 2^-10 to 2^10 (with 1e-3 and 1e3 among them) and a nonrational biquadratic one, each over its whole domain, a quarter of it, a box of a hundredth of each side and a box across its interior knots; and a plane, a cylinder, a cone (at its apex and away from it), a sphere (at its pole and away from it), a torus and an affine image of a torus on random frames, over one box each. For every box the partials to order 2, the second-derivative bound with its chord constant M, and the normal-derivative bound; and 2 refusals: 386 results in the canonical encoding of tests/derivative_determinism.rs.",
-          "check": {
-            "crate": "geom-surface",
-            "test": "derivative_determinism",
-            "function": "derivative_bounds_golden_hash_is_the_same_on_every_target"
-          },
-          "sha256": "176e68088063809cacb3d0b44b818f69a2e9048584738a2b7fd54c536abecf9d",
-          "history": []
-        },
-        {
-          "id": "geom-linalg/dense",
-          "what": "The dense decompositions and solves of geom-linalg (piece G49): 256 matrices of every shape from 1 x 1 to 8 x 8 (random, integer, graded to 2^-600 and exactly rank-deficient), each through the pivoted QR, the complete orthogonal decomposition (rank, least squares, null space) and the canonical null space, each square one also through LU (and a solve), both triangular solves, Cholesky of A^T A + I (and a solve) and of A itself, and the tridiagonal solve, and four refusals for want of work: 1568 results in the canonical encoding of tests/dense_determinism.rs.",
-          "check": {
-            "crate": "geom-linalg",
-            "test": "dense_determinism",
-            "function": "dense_golden_hash_is_the_same_on_every_target"
-          },
-          "sha256": "507472559492ae92313b7e32156a0f64df25fa341cd6eab56772404bcfd55a91"
-        },
-        {
           "id": "geom-format/record-layer",
           "what": "geom-format's record-layer corpus (piece G92): 40 files of random records written whole, each salvaged with one bit flipped (intact offsets and damaged spans), the CRC-32C of seeded messages of every length to 300 bytes, and the grid, real and plane range checks at the frame's edge, in the encoding of tests/record_determinism.rs.",
           "check": {
@@ -502,16 +524,6 @@
             "function": "golden_hash_is_the_same_on_every_target"
           },
           "sha256": "601faa6494c0ad3f9b1d7dd7b8a1e78724066b90ac4a998057959dae37206886"
-        },
-        {
-          "id": "geom-name/attributes",
-          "what": "The shared attribute step of geom-name (piece G90): 200 operations, each a history of up to 24 outputs (unchanged, changed, split, merged, modified from several, generated in a copy role or another, from nothing) with deleted inputs, three attributes with random behaviours (one of an unknown owner, one a point a transform moves in a third of them) holding values on up to 32 names; every output value and note of the step, as tests/attributes_determinism.rs records them.",
-          "check": {
-            "crate": "geom-name",
-            "test": "attributes_determinism",
-            "function": "attributes_golden_hash_is_the_same_on_every_target"
-          },
-          "sha256": "47b93b32a27411ae3fe176d5fc19248cf2be0d553d1bcdc8aab1b62f9ad8357b"
         },
         {
           "id": "geom-format/cache-keys",
@@ -542,6 +554,36 @@
             "function": "replay_corpus_golden"
           },
           "sha256": "742f10a75747ba3c3181572802a374545b6b27194162608d37bd8c5ccf240d30"
+        },
+        {
+          "id": "geom-linalg/dense",
+          "what": "The dense decompositions and solves of geom-linalg (piece G49): 256 matrices of every shape from 1 x 1 to 8 x 8 (random, integer, graded to 2^-600 and exactly rank-deficient), each through the pivoted QR, the complete orthogonal decomposition (rank, least squares, null space) and the canonical null space, each square one also through LU (and a solve), both triangular solves, Cholesky of A^T A + I (and a solve) and of A itself, and the tridiagonal solve, and four refusals for want of work: 1568 results in the canonical encoding of tests/dense_determinism.rs.",
+          "check": {
+            "crate": "geom-linalg",
+            "test": "dense_determinism",
+            "function": "dense_golden_hash_is_the_same_on_every_target"
+          },
+          "sha256": "507472559492ae92313b7e32156a0f64df25fa341cd6eab56772404bcfd55a91"
+        },
+        {
+          "id": "geom-topo/arenas",
+          "what": "The arenas of geom-topo (piece G80): 48 bodies of random sizes (six past three chunks of faces and fins), every link random and in range, filled row by row or each arena at once, each published with every column in row order, its chunk count and the work publishing charged; an edit of random rows published beside the unchanged original; and each body refused once with a link pointed past its arena and once with a column one row longer, as tests/arena_determinism.rs records them.",
+          "check": {
+            "crate": "geom-topo",
+            "test": "arena_determinism",
+            "function": "arenas_golden_hash_is_the_same_on_every_target"
+          },
+          "sha256": "9df6dc9250d028d90f299d94442c212ac16472679a9d22d207c6d6e0a0a161dc"
+        },
+        {
+          "id": "geom-name/attributes",
+          "what": "The shared attribute step of geom-name (piece G90): 200 operations, each a history of up to 24 outputs (unchanged, changed, split, merged, modified from several, generated in a copy role or another, from nothing) with deleted inputs, three attributes with random behaviours (one of an unknown owner, one a point a transform moves in a third of them) holding values on up to 32 names; every output value and note of the step, as tests/attributes_determinism.rs records them.",
+          "check": {
+            "crate": "geom-name",
+            "test": "attributes_determinism",
+            "function": "attributes_golden_hash_is_the_same_on_every_target"
+          },
+          "sha256": "47b93b32a27411ae3fe176d5fc19248cf2be0d553d1bcdc8aab1b62f9ad8357b"
         }
       ]
     }

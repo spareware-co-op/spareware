@@ -262,6 +262,7 @@ Tag 18, schema 1, required. Its payload (CDDL `recipe` in [cddl/recipe.cddl](cdd
 
 How a shape was made, in one envelope every reader knows (architecture 24.4), whoever owns it. The format never decodes the payload; its owner does (the facade from operation schemas, `geom-ifc`, a plugin). A reader without the owner still opens the bodies the recipe produced, by their content IDs, keeps the recipe byte for byte, and refuses only what would re-run it, with `RecipeOwnerMissing`, naming the owner and its schema. A reader refuses an owner that is empty or not printable ASCII, and any payload that is not the recipe's canonical encoding.
 
+
 ## 15. The attributes record
 
 Tag 19, schema 1, required. Its payload (CDDL `attributes` in [cddl/attributes.cddl](cddl/attributes.cddl), with names.cddl's rules):

@@ -42,6 +42,8 @@
 //!   The binary `golden` lists the
 //!   store, checks it against the repository (`-- check`), runs every golden in one CI leg's
 //!   configuration (`-- run`) and holds a pull request's edits to the approval rule (`-- diff`).
+//! - [`faults`]: checker fault injection (chapter 28.4; G110): valid bodies broken one fault at a
+//!   time, each caught with the right kind, and every valid body passed.
 //! - [`history`]: chapter 20.3's history laws as a kit every operation's tests run (G88):
 //!   one history and a chain checked through `geom-op`'s checker, composition from both ends, and
 //!   proptest generators of valid histories and chains.
@@ -53,13 +55,13 @@
 //!   operation log in the native format; the runner's Pass, Fail and Improved; the operation-log
 //!   minimiser; what a pull request may do to a stored fixture; the fails-on-base list. The binary
 //!   `fixture` lists, checks and runs them.
+//! - [`corpus`]: the corpus register of 28.12 (G114): every outside corpus with its source, version,
+//!   SHA-256, licence and whether we may store it, the licence rules of 29.15 and 32.11, and the
+//!   hash-checked fetcher. The binary `corpus` lists, checks and fetches.
 //! - [`oracle`]: differential testing against outside oracles (28.10; G113): the catalogue, the
 //!   exact-input writer, exact and bounded comparisons, signatures and the four-outcome triage, and
 //!   the first oracle, geomdl, on NURBS. The binary `oracle` writes the jobs and judges the answers;
 //!   every harness lives in the oracle repository.
-//! - [`corpus`]: the corpus register of 28.12 (G114): every outside corpus with its source, version,
-//!   SHA-256, licence and whether we may store it, the licence rules of 29.15 and 32.11, and the
-//!   hash-checked fetcher. The binary `corpus` lists, checks and fetches.
 //! - [`guard`]: the proof that the toolchain and dependency guard of 28.13 trips: `libm`'s `sin`
 //!   changed by one bit must fail the golden `geom-num/determinism`. The binary `guard` patches
 //!   that change in and runs the golden (`-- prove`); `kernel.yml` runs it.
@@ -114,6 +116,16 @@
 //!   with it on every pull request: knot vectors exactly, points and changed curves within the
 //!   bounds `geom-nurbs` states.
 //!
+//! Piece G69 adds the law catalogue of section 28.3 for NURBS and the curve and surface kinds:
+//!
+//! - [`fixed`]: fixed-point numbers of 400 fractional bits with π, cos, sin, exp and square roots,
+//!   the higher precision of the catalogue's dense refutation sampler.
+//! - [`nurbs_reference::Patch`]: NURBS surfaces in exact rationals, the tensor product of two bases.
+//! - `tests/laws_nurbs.rs`, `tests/laws_curves.rs` and `tests/laws_surfaces.rs`: each law of 28.3's
+//!   NURBS and kinds rows as a seeded property test, every stated bound refuted, if it is wrong, by
+//!   a dense sample of exact or 400-bit values (`tests/truth`, each kind's definition written from
+//!   its documentation); fixed seeds on pull requests, fresh ones nightly (`kernel-nightly.yml`).
+//!
 //! Fixtures, the other reference implementations, oracle clients and the other CI tools arrive
 //! with the pieces that need them. The sister development crates are `geom-fuzz` (fuzz harnesses),
 //! `geom-gen` (every generator whose output is committed) and `geom-bench` (benchmarks). `geom-bench` is built by
@@ -150,7 +162,7 @@
 //!
 //! Dependencies, every one permissive (29.1):
 //!
-//! - `geom-num` (MPL-2.0, ours), the numbers layer under test.
+//! - `geom-num` (Apache-2.0, ours), the numbers layer under test.
 //! - `proptest` 1.12, without its default `fork` and `timeout` features, as in `geom-num`. [`prop`]
 //!   always runs it from a fixed seed, so its operating-system random path is never taken.
 //! - `serde_json` 1.0, to read the golden store, cargo-mutants' output and the quality ledger, and
@@ -168,7 +180,7 @@
 //!   recursion check's token printing.
 //! - `petgraph` 0.8, without default features: the recursion check's strongly connected
 //!   components (Tarjan's algorithm).
-//! - `pulldown-cmark` 0.13.5, a development dependency without its default features (the HTML
+//! - `pulldown-cmark` 0.13.6, a development dependency without its default features (the HTML
 //!   writer and the command line), so `tests/attack_g17.rs` reads the kernel's README.md,
 //!   AGENTS.md and GLOSSARY.md as Markdown.
 //! - `unicode-normalization` 0.1.26, a development dependency, so the same test sorts the
@@ -184,11 +196,13 @@
 //! - `yaml-rust2` 0.13, a development dependency (G21), which reads
 //!   `.github/workflows/kernel-quality.yml` as YAML.
 //! - `dashu-int` 0.6 and `dashu-ratio` 0.6 (G57), without their default features: the exact
-//!   rationals of [`nurbs_reference`].
-//! - `geom-nurbs` (MPL-2.0, ours): the curves `tests/nurbs_reference.rs` (G57) compares with the
+//!   rationals of [`nurbs_reference`] and the fixed point of [`fixed`] (G69).
+//! - `geom-nurbs` (Apache-2.0, ours): the curves `tests/nurbs_reference.rs` (G57) compares with the
 //!   reference, and `oracle::geomdl` (G113) with the first outside oracle.
-//! - `geom-format` and `geom-run` (MPL-2.0, ours), dependencies (G97): a fixture's operation log is
+//! - `geom-format` and `geom-run` (Apache-2.0, ours), dependencies (G97): a fixture's operation log is
 //!   a standalone native file, and the meter its readers take.
+//! - `geom-curve`, `geom-surface` and `geom-math` (Apache-2.0, ours), development dependencies (G69):
+//!   the kinds and transforms the law catalogue checks.
 //!
 //! Licences of every outside package this crate brings into a build, its own and its dependencies'
 //! on every target (`cargo tree --target all`), each record checked by `tests/licences.rs`. Where a
@@ -219,6 +233,8 @@ pub mod canonical;
 pub mod corpus;
 pub mod coverage;
 pub mod deps;
+pub mod faults;
+pub mod fixed;
 pub mod fixture;
 pub mod foundation;
 pub mod golden;

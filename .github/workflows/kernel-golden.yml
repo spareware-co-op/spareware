@@ -131,6 +131,10 @@ jobs:
         with:
           toolchain: ${{ env.RUST_TOOLCHAIN }}
       - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
+        with:
+          # Only main saves the cache; a pull request restores main's (a pull request's own
+          # caches filled the repository's cache limit and evicted what main saved).
+          save-if: ${{ github.ref == 'refs/heads/main' }}
         if: github.event_name != 'pull_request_review' || steps.edits.outputs.store == 'edited'
       - name: The store against the repository
         if: github.event_name != 'pull_request_review'
@@ -213,21 +217,16 @@ jobs:
       - name: Every fixture holds its rules
         if: github.event_name != 'pull_request_review'
         run: cargo run --locked -p geom-test --bin fixture -- check
+      # The corpus register (28.12; piece G114): no unlicensed or non-commercial file is vendored,
+      # no credit is missing, and every stored corpus is byte for byte what the register pins.
+      - name: Every corpus holds its rules, and every vendored file its register entry
+        if: github.event_name != 'pull_request_review'
+        run: cargo run --locked -p geom-test --bin corpus -- check
       # The oracle catalogue and the triage register (28.10; piece G113): each holds its rules, and
       # Cargo.lock holds no package an out-of-process oracle would bring in.
       - name: No oracle is linked
         if: github.event_name != 'pull_request_review'
         run: cargo run --locked -p geom-test --bin oracle -- check
-      # The corpus register (28.12; piece G114): no unlicensed or non-commercial file is vendored,
-      # no credit is missing, and every stored corpus is byte for byte what the register pins.
-      - name: Every corpus holds its rules, and every vendored file its register entry
-        if: github.event_name != 'pull_request_review'
-        run: cargo run --locked -p geom-test --bin corpus -- check
-      # The corpus register (28.12; piece G114): no unlicensed or non-commercial file is vendored,
-      # no credit is missing, and every stored corpus is byte for byte what the register pins.
-      - name: Every corpus holds its rules, and every vendored file its register entry
-        if: github.event_name != 'pull_request_review'
-        run: cargo run --locked -p geom-test --bin corpus -- check
       - name: The fast fixtures pass
         if: github.event_name != 'pull_request_review'
         run: cargo run --locked -p geom-test --bin fixture -- run --tier fast

@@ -1,5 +1,5 @@
-//! The reference implementation of NURBS curves (chapter 28.9): evaluation, knot insertion,
-//! refinement and degree elevation in exact rationals, to check `geom-nurbs` against.
+//! The reference implementation of NURBS curves and surfaces (chapter 28.9): evaluation, knot
+//! insertion, refinement and degree elevation in exact rationals, to check `geom-nurbs` against.
 //!
 //! What it does: a [`Spline`] holds a degree, a knot vector and control points as exact rationals,
 //! in homogeneous form for a rational curve (w·P and then w), converted exactly from the doubles a
@@ -9,7 +9,9 @@
 //! it, taking its r-th argument at its r-th level. [`Spline::homogeneous_point`] is the blossom at
 //! (u, …, u); [`Spline::point`] divides by the weight. [`Spline::homogeneous_derivative`] is the
 //! blossom with k of its arguments the unit direction (u + 1) − u, times p!/(p − k)!: the k-th
-//! derivative of the homogeneous curve (piece G68). A new knot vector over the same domain, finer
+//! derivative of the homogeneous curve (piece G68). A [`Patch`] is the tensor product of two bases,
+//! each a spline whose control points are the unit vectors, so its point lists the basis values;
+//! the law catalogue checks surfaces against it (piece G69). A new knot vector over the same domain, finer
 //! or of higher degree, gets its control points from the dual functional property: control point i
 //! of a spline of degree q is the blossom of any of its pieces in that point's support, at the q
 //! knots that follow knot i. [`Spline::insert`] and [`Spline::refine`] read the original pieces'
@@ -555,6 +557,170 @@ impl Spline {
             }
         }
         self.respan(self.degree.saturating_add(t), knots)
+    }
+}
+
+/// A NURBS surface with exact rational knots and net (piece G69): the tensor product of two bases.
+#[derive(Clone, Debug, PartialEq)]
+pub struct Patch {
+    /// The u basis: a spline whose control point i is the unit vector eᵢ, so that its point at u is
+    /// the list of the basis values at u.
+    u: Spline,
+    /// The v basis, likewise.
+    v: Spline,
+    /// The net, row by row: point (i, j) at i·(m + 1) + j, with m + 1 the v basis's count; (w·P, w)
+    /// for a rational patch, P otherwise.
+    net: Vec<Vec<RBig>>,
+    rational: bool,
+}
+
+/// The spline of degree `degree` on `knots` whose control points are the unit vectors, one per
+/// basis function.
+fn unit_basis(degree: usize, knots: &[f64]) -> Result<Spline, ReferenceError> {
+    let n = knots
+        .len()
+        .checked_sub(degree.saturating_add(1))
+        .filter(|&n| n > 0)
+        .ok_or(ReferenceError::KnotCount)?;
+    let rows: Vec<Vec<f64>> = (0..n)
+        .map(|i| (0..n).map(|j| if i == j { 1.0 } else { 0.0 }).collect())
+        .collect();
+    let refs: Vec<&[f64]> = rows.iter().map(Vec::as_slice).collect();
+    Spline::new(degree, knots, &refs)
+}
+
+impl Patch {
+    /// The nonrational patch of degrees `degrees` on `knots` (u's, then v's) with the net `net`,
+    /// row by row as a kernel surface stores it: point (i, j) at i·(m + 1) + j.
+    ///
+    /// # Errors
+    ///
+    /// As [`Spline::new`] for each basis, and [`ReferenceError::Points`] unless the net has one
+    /// point of one dimension per pair of basis functions.
+    pub fn new(
+        degrees: (usize, usize),
+        knots: (&[f64], &[f64]),
+        net: &[&[f64]],
+    ) -> Result<Patch, ReferenceError> {
+        let net = net
+            .iter()
+            .map(|p| p.iter().map(|&x| exact(x)).collect::<Result<Vec<_>, _>>())
+            .collect::<Result<Vec<_>, _>>()?;
+        Patch::build(degrees, knots, net, false)
+    }
+
+    /// The rational patch with homogeneous net `weighted` (w·P, as a kernel surface stores it) and
+    /// weights `weights`, both row by row.
+    ///
+    /// # Errors
+    ///
+    /// As [`Patch::new`], and [`ReferenceError::Weight`] unless there is one positive weight per
+    /// point.
+    pub fn new_rational(
+        degrees: (usize, usize),
+        knots: (&[f64], &[f64]),
+        weighted: &[&[f64]],
+        weights: &[f64],
+    ) -> Result<Patch, ReferenceError> {
+        if weights.len() != weighted.len() {
+            return Err(ReferenceError::Weight);
+        }
+        let mut net = Vec::new();
+        for (p, &w) in weighted.iter().zip(weights) {
+            let w = exact(w)?;
+            if w <= RBig::ZERO {
+                return Err(ReferenceError::Weight);
+            }
+            let mut h = p.iter().map(|&x| exact(x)).collect::<Result<Vec<_>, _>>()?;
+            h.push(w);
+            net.push(h);
+        }
+        Patch::build(degrees, knots, net, true)
+    }
+
+    fn build(
+        degrees: (usize, usize),
+        knots: (&[f64], &[f64]),
+        net: Vec<Vec<RBig>>,
+        rational: bool,
+    ) -> Result<Patch, ReferenceError> {
+        let (u, v) = (
+            unit_basis(degrees.0, knots.0)?,
+            unit_basis(degrees.1, knots.1)?,
+        );
+        let dim = net.first().map(Vec::len).ok_or(ReferenceError::Points)?;
+        if dim == 0
+            || net.iter().any(|p| p.len() != dim)
+            || net.len() != u.points.len().saturating_mul(v.points.len())
+        {
+            return Err(ReferenceError::Points);
+        }
+        Ok(Patch {
+            u,
+            v,
+            net,
+            rational,
+        })
+    }
+
+    /// The domains in u and in v.
+    ///
+    /// # Errors
+    ///
+    /// None for a patch this module built.
+    pub fn domain(&self) -> Result<[(RBig, RBig); 2], ReferenceError> {
+        Ok([self.u.domain()?, self.v.domain()?])
+    }
+
+    /// Whether the patch is rational.
+    #[must_use]
+    pub fn is_rational(&self) -> bool {
+        self.rational
+    }
+
+    /// The homogeneous point at (u, v): Σᵢ Σⱼ Nᵢ(u)·Mⱼ(v)·Hᵢⱼ, each basis value taken from the side
+    /// [`Spline::homogeneous_point`] takes.
+    ///
+    /// # Errors
+    ///
+    /// [`ReferenceError::Outside`] if u or v is outside its domain.
+    pub fn homogeneous_point(&self, u: &RBig, v: &RBig) -> Result<Vec<RBig>, ReferenceError> {
+        let (nu, nv) = (self.u.homogeneous_point(u)?, self.v.homogeneous_point(v)?);
+        let dim = self
+            .net
+            .first()
+            .map(Vec::len)
+            .ok_or(ReferenceError::Points)?;
+        let mut out = vec![RBig::ZERO; dim];
+        for (i, a) in nu.iter().enumerate() {
+            for (j, b) in nv.iter().enumerate() {
+                if *a == RBig::ZERO || *b == RBig::ZERO {
+                    continue;
+                }
+                let ab = a * b;
+                for (o, x) in out.iter_mut().zip(at(&self.net, i * nv.len() + j)?) {
+                    *o += &ab * x;
+                }
+            }
+        }
+        Ok(out)
+    }
+
+    /// The point at (u, v): the homogeneous point divided by its weight for a rational patch.
+    ///
+    /// # Errors
+    ///
+    /// As [`Patch::homogeneous_point`].
+    pub fn point(&self, u: &RBig, v: &RBig) -> Result<Vec<RBig>, ReferenceError> {
+        let mut h = self.homogeneous_point(u, v)?;
+        if !self.rational {
+            return Ok(h);
+        }
+        let w = h.pop().ok_or(ReferenceError::Points)?;
+        if w <= RBig::ZERO {
+            return Err(ReferenceError::Undetermined);
+        }
+        Ok(h.into_iter().map(|x| x / &w).collect())
     }
 }
 

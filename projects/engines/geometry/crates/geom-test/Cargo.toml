@@ -20,7 +20,12 @@ geom-run = { path = "../geom-run" }
 geom-op = { path = "../geom-op" }
 # What the fixture runner replays (pieces G97, G101): the operations, and the types of their inputs.
 geom-make = { path = "../geom-make" }
+# The fault-injection catalogue (piece G110): the checker it attacks, with every group on in every
+# build (chapter 28.4), and the kernel crates whose rows and values it breaks.
+geom-check = { path = "../geom-check", features = ["full"] }
+geom-curve = { path = "../geom-curve" }
 geom-math = { path = "../geom-math" }
+geom-surface = { path = "../geom-surface" }
 geom-topo = { path = "../geom-topo" }
 proptest = { version = "1.12.0", default-features = false, features = ["std", "bit-set"] }
 serde_json = "1.0.149"
@@ -93,7 +98,7 @@ wait-timeout = "=0.2.1"
 # GLOSSARY.md (their links, headings and code spans) as Markdown rather than by a home-made parser.
 # MIT (pulldown-cmark's manifest); without its default features, the HTML writer and the command
 # line, which the test does not use.
-pulldown-cmark = { version = "0.13.5", default-features = false }
+pulldown-cmark = { version = "0.13.6", default-features = false }
 # Unicode's canonical decomposition, so tests/attack_g17.rs sorts the glossary's headwords with
 # their accents set aside ("Bézier" as "Bezier"), as GLOSSARY.md states its order.
 # (MIT OR Apache-2.0) AND Unicode-3.0 (unicode-normalization's manifest), taken as MIT AND
@@ -105,6 +110,17 @@ unicode-normalization = "0.1.26"
 num-rational = "0.4.2"
 # The workflow test reads `.github/workflows/kernel-quality.yml` as YAML (G21). MIT OR Apache-2.0.
 yaml-rust2 = { version = "0.13.0", default-features = false }
+# The kernel crates the NURBS reference is compared with on every pull request (G57,
+# tests/nurbs_reference.rs): geom-nurbs's curves and the work meter its operations take. Ours,
+# Apache-2.0; development dependencies, so no kernel crate comes to depend on this one.
+geom-nurbs = { path = "../geom-nurbs" }
+# The closed-form bodies attack_g110 breaks (piece G110) use geom-make, a regular dependency above.
+# The kinds and transforms the law catalogue checks on every pull request and nightly (G69,
+# tests/laws_curves.rs and tests/laws_surfaces.rs). Ours, Apache-2.0; development dependencies, as
+# above.
+geom-curve = { path = "../geom-curve" }
+geom-surface = { path = "../geom-surface" }
+geom-math = { path = "../geom-math" }
 
 [lints.rust]
 unsafe_code = "forbid"

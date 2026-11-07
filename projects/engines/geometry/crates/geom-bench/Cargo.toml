@@ -47,6 +47,9 @@ geom-curve = { path = "../geom-curve" }
 geom-surface = { path = "../geom-surface" }
 # The dense linear algebra of phase 2 (pieces G49 and G50), for the same count benchmarks.
 geom-linalg = { path = "../geom-linalg" }
+# The arenas (piece G80) and the attribute step (piece G90) of phase 3 and the types they take, for the same
+# count benchmarks.
+geom-name = { path = "../geom-name" }
 # The primitives and transforms of phase 3 (piece G101), and the context and output they take and
 # give, for the same count benchmarks.
 geom-make = { path = "../geom-make" }

@@ -1,0 +1,5 @@
+# The kit's services with heavy dependencies, in a workspace of their own: their dependency trees
+# stay out of the root lock, and out of the crates a browser builds. Note K08 says why.
+[workspace]
+resolver = "3"
+members = ["accounts", "store"]

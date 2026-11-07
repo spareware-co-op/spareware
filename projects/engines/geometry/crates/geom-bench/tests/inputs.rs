@@ -2320,6 +2320,41 @@ fn bvh_typical_batches_all_succeed() {
     all_ok("cells_within", k::cells_within, &m::cells_within(Typical));
 }
 
+/// Every typical batch of `geom-topo`'s benchmarks (decision 32.44) edits every column and
+/// publishes every builder, and a column's write lands in its rows.
+#[test]
+fn topo_typical_batches_all_succeed() {
+    use geom_bench::inputs::topo as m;
+    use geom_bench::kernels::topo as k;
+    let columns = m::column_edit(Typical);
+    assert!(columns.iter().all(|(_, row, _)| (*row as usize) < m::ROWS));
+    assert!(columns.iter().all(|(values, _, _)| values.len() == m::ROWS));
+    all_ok("column_edit", k::column_edit, &columns);
+    all_ok("publish", k::publish, &m::publish(Typical));
+}
+
+/// Every typical batch of `geom-run`'s helper benchmarks (decision 32.44) maps every list.
+#[test]
+fn helper_typical_batches_all_succeed() {
+    use geom_bench::inputs::helper as m;
+    use geom_bench::kernels::helper as k;
+    all_ok("lone_serial", k::lone_serial, &m::lone_serial(Typical));
+    all_ok("lone_pool", k::lone_pool, &m::lone_pool(Typical));
+}
+
+/// Every typical batch of the attribute step's benchmark (decision 32.44) carries every value it
+/// should: two of every three entities live on.
+#[test]
+fn attributes_typical_batches_all_succeed() {
+    use geom_bench::inputs::attributes as m;
+    use geom_bench::kernels::attributes as k;
+    let batch = m::apply(Typical);
+    all_ok("apply", k::apply, &batch);
+    let mut out = Vec::new();
+    k::apply(&batch, &mut out);
+    assert!(out.iter().all(|r| *r == Ok(16)));
+}
+
 /// Every typical batch of `geom-nurbs`'s benchmarks (decision 32.44) evaluates, interpolates and
 /// bounds every input.
 #[test]

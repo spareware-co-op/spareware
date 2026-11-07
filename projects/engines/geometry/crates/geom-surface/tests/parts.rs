@@ -98,7 +98,9 @@ fn a_swept_surface_gives_back_its_shape_and_placement() {
         [0.0; 3],
         [[1.0, 0.0, 0.0], [0.0, 1.0, 0.0], [0.0, 0.0, 1.0]],
     );
-    assert_eq!(r.placement(), identity);
+    // A revolution is placed at its axis point, about which its shape turns; the others at the
+    // origin.
+    assert_eq!(r.placement(), ([0.0, 0.0, 1.0], identity.1));
     let x = Extrusion::new(profile.clone(), [0.0, 0.5, 2.0], (0.0, 2.0)).unwrap();
     assert_eq!(x.shape().unwrap(), (&profile, [0.0, 0.5, 2.0]));
     let second = segment([0.0, 2.0, 0.0], [0.0, 3.0, 2.0]);
