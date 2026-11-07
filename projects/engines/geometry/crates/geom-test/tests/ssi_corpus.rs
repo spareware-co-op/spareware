@@ -49,6 +49,7 @@
 use std::collections::BTreeMap;
 use std::fmt::Write as _;
 use std::panic::{AssertUnwindSafe, catch_unwind};
+#[cfg(not(target_family = "wasm"))]
 use std::sync::mpsc;
 use std::time::{Duration, Instant};
 
@@ -493,7 +494,16 @@ fn run_case(case: &Case, work: u64) -> Ours {
     }
 }
 
+/// One case run where there are no threads (WebAssembly): in place, with no time limit, since only
+/// the work each stage may spend bounds it.
+#[cfg(target_family = "wasm")]
+fn run_timed(case: &Case, work: u64, _seconds: u64) -> (Ours, Duration) {
+    let start = Instant::now();
+    (run_case(case, work), start.elapsed())
+}
+
 /// One case run on a thread of its own, given up on after `seconds`.
+#[cfg(not(target_family = "wasm"))]
 fn run_timed(case: &Case, work: u64, seconds: u64) -> (Ours, Duration) {
     let (tx, rx) = mpsc::channel();
     let owned = case.clone();
