@@ -554,6 +554,34 @@ fn offset_surfaces_read_back_cached_split_and_nested() {
     }
 }
 
+/// A similarity multiplies a cylinder's and a cone's axial factor by its scale (geom-surface), so
+/// a factor of 3, or of -3 after a mirror, is a surface the kernel makes and the format keeps.
+#[test]
+fn a_scaled_cylinder_and_cone_read_back_with_their_factor() {
+    let scale = TypedTransform::from(Transform::scale(3.0, 3.0, 3.0).unwrap());
+    let mirror = TypedTransform::Exact(GridTransform::mirror(Axis::Z));
+    let mut seen = 0;
+    for (what, s) in surfaces() {
+        if !matches!(s, SurfaceKind::Cylinder(_) | SurfaceKind::Cone(_)) {
+            continue;
+        }
+        let scaled = s.transformed(&scale, &mut meter()).unwrap().value;
+        let moved = match &scaled {
+            SurfaceKind::Cylinder(c) => c.axial_sign(),
+            SurfaceKind::Cone(c) => c.axial_sign(),
+            other => panic!("{what}: {other:?}"),
+        };
+        assert_eq!(moved, 3.0, "{what}");
+        surface_trip(what, &scaled);
+        let mut d = Decoder::new(&surface_bytes(&scaled), DEPTH);
+        assert_eq!(read_surface(&mut d, &mut meter()).unwrap(), scaled, "{what}");
+        let back = scaled.transformed(&mirror, &mut meter()).unwrap().value;
+        surface_trip(what, &back);
+        seen += 1;
+    }
+    assert!(seen >= 2, "{seen}");
+}
+
 #[test]
 fn a_kind_from_another_form_is_refused() {
     let line = CurveKind::Line(Line::new([1.0, 2.0, 3.0], [0.5, -0.25, 1.0], (-1.5, 2.0)).unwrap());
