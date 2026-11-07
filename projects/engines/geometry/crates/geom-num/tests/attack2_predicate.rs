@@ -471,7 +471,7 @@ mod copy {
 
         #[inline]
         pub(crate) fn filtered<T>(filter: impl FnOnce() -> Option<T>) -> Option<T> {
-            if FILTERS { filter() } else { None }
+            FILTERS.then(filter).flatten()
         }
 
         #[inline(never)]
