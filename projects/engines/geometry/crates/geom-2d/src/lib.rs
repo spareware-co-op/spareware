@@ -25,9 +25,9 @@
 //! Its direct dependencies are its row of chapter 27's crate table, checked by the
 //! scaffold test in `engine-geometry` (`tests/scaffold`).
 //!
-//! Status: carriers, points and commits (G192), tangent constructions (G193), spline fitting and biarcs (G213); built on by
-//! pieces G194, G195, G196, G197, G198, G199, G200, G201, G202, G203, G204, G205, G206, G207, G208, G209,
-//! G210, G211, G212, G359, G360, G361.
+//! Status: carriers, points and commits (G192), tangent constructions (G193), the entity model
+//! (G194), spline fitting and biarcs (G213); built on by pieces G195, G196, G197, G198, G199,
+//! G200, G201, G202, G203, G204, G205, G206, G207, G208, G209, G210, G211, G212, G359, G360, G361.
 #![cfg_attr(not(test), no_std)]
 #![forbid(unsafe_code)]
 
@@ -36,6 +36,7 @@ extern crate alloc;
 pub mod accept;
 pub mod carrier;
 pub mod commit;
+pub mod entity;
 pub mod fit;
 mod ideal;
 pub mod point;
