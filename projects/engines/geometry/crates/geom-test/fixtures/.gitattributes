@@ -1,0 +1,5 @@
+# Stored fixtures are parsed and compared byte for byte with their canonical rendering, so git must
+# never convert their line ends (a Windows checkout would otherwise turn \n into \r\n and fail
+# every test that reads them).
+* -text
+.gitattributes text eol=lf
