@@ -63,6 +63,12 @@ harness = false
 name = "repair"
 harness = false
 
+# Reconstruction by winding number's timing (piece G299): a gridded shell with a hole, and a pile
+# of overlapping boxes.
+[[bench]]
+name = "reconstruct"
+harness = false
+
 [lints.rust]
 unsafe_code = "forbid"
 missing_docs = "warn"

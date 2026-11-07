@@ -77,10 +77,12 @@ pub mod holes;
 mod loops;
 pub mod orient;
 pub mod quantise;
+pub mod reconstruct;
 pub mod weld;
 
 pub use heal::{Heal, HealLog, Healed, heal};
 pub use quantise::{Quantised, quantise};
+pub use reconstruct::{Reconstruct, ReconstructError, Reconstructed, reconstruct};
 pub use weld::{Welded, weld};
 
 /// An open boundary: a loop of edges that only one face, or an odd number of faces, uses.
