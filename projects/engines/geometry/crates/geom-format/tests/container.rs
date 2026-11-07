@@ -382,6 +382,23 @@ impl RangeSource for Broken {
     }
 }
 
+/// The cap is inclusive: a blob of exactly `RECORD_CAP` bytes is read (here it fails on its first
+/// read, so it got past the size check), and one byte more is refused before anything is read.
+#[test]
+#[cfg_attr(miri, ignore = "allocates 65 MiB")]
+#[cfg_attr(target_family = "wasm", ignore = "allocates 65 MiB")]
+fn a_blob_of_exactly_the_record_cap_is_read_and_one_byte_more_is_not() {
+    let key = ContentId::of_payload(b"cap");
+    assert_eq!(
+        read_record(&One(Broken(RECORD_CAP)), &key, &mut meter()),
+        Err(BlobError::Source(SourceError::Failed(7)))
+    );
+    assert_eq!(
+        read_record(&One(Broken(RECORD_CAP + 1)), &key, &mut meter()),
+        Err(BlobError::TooLarge(RECORD_CAP + 1))
+    );
+}
+
 /// A store that fails.
 struct Down;
 
