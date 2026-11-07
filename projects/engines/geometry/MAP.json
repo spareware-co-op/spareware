@@ -244,7 +244,7 @@
           "target": "lib"
         },
         {
-          "cost": "O((n + k) log n) comparisons for the sweep, n segments and k crossings, plus the cost of moving the entries of the status list on insertion, which is linear in the segments the sweep line crosses at once; the faces are linear in the edges, and finding the face around each hole is linear in the edges for each hole.",
+          "cost": "O((n + k) log n) comparisons for the sweep, n segments and k crossings, plus the cost of moving the entries of the status list on insertion, which is linear in the segments the sweep line crosses at once; the faces are linear in the edges, and finding the face around each hole is a second sweep over the finished edges.",
           "does": "[`arrange`] takes segments between grid points and returns the [`Arrangement`] they divide the plane into: the vertices (every end point and every crossing, as exact rational points, in lexicographic order), the edges between consecutive vertices along each segment (two segments that share a stretch share its edges, and an edge names every segment that covers it), each vertex's edges in counter-clockwise order, and the faces: one unbounded face, and one bounded face for each outer boundary, with the boundaries of the components inside it as holes.",
           "family": [],
           "file": "projects/engines/geometry/crates/geom-2d/src/arrange.rs",
@@ -2996,6 +2996,28 @@
             "text": "differential testing against an independent reading of chapter 8.2's rules as `geom-topo`'s `builder` module states them (`projects/engines/geometry/architecture/08-topology.md`), written here from the rules, not from the code: lengths per arena from region to edge, then the links in their published order, rows ascending, then the outside region."
           },
           "path": "geom_fuzz::arenas",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
+          "cost": "constant per case, at most [`MAX_SEGMENTS`] segments; at most [`MAX_INPUT_BYTES`] bytes read.",
+          "does": "[`decode`] turns a fuzzer's bytes into a [`Case`]: a count of segments and, for each, four signed bytes, the grid coordinates of its two ends. [`check`] arranges them and tests each rule against an independent reading of it: the vertices are exactly the end points and the proper crossings that the cross-product formula gives, as reduced fractions, each once and in lexicographic order; Euler's formula holds, V − E + F = 1 + C for C connected components; every half-edge lies on exactly one cycle; every cycle is the outer boundary of one face or a hole of exactly one; and arranging the segments in the opposite order gives the same vertices and edges. [`harness`] is `decode` then `check`.",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-fuzz/src/arrange.rs",
+          "guarantees": [
+            "**Any bytes are a case.** Every byte string, the empty one included, decodes to a case.",
+            "**A bounded input.** [`decode`] reads at most [`MAX_INPUT_BYTES`] bytes, derived below; a unit test builds the input that reaches it.",
+            "**A panic is a failure; a disagreement is a [`Finding`]** naming the law and the case."
+          ],
+          "job": "Fuzz target: `geom-2d`'s arrangement of line segments keeps its stated laws on any input.",
+          "method": {
+            "links": [
+              "https://doi.org/10.1017/CBO9780511804120"
+            ],
+            "text": "differential testing against the cross-product formula for the meeting of two segments in whole numbers (O'Rourke, *Computational Geometry in C*, 2nd ed., Cambridge 1998, section 7.1, <https://doi.org/10.1017/CBO9780511804120>) and Euler's formula for planar graphs, written here from the rules and not from the code."
+          },
+          "path": "geom_fuzz::arrange",
           "provenance": [],
           "spdx": null,
           "target": "lib"
