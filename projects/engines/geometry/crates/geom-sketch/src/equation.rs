@@ -423,10 +423,17 @@ impl Residual<3, 1> for Product {
 fn halves<S: Scalar, const N: usize, const H: usize>(
     x: &[S; N],
 ) -> Result<([S; H], [S; H], S), NumError> {
-    let (a, rest) = x.split_first_chunk::<H>().ok_or(NumError::Degenerate)?;
-    let (b, rest) = rest.split_first_chunk::<H>().ok_or(NumError::Degenerate)?;
-    let length = *rest.first().ok_or(NumError::Degenerate)?;
-    Ok((*a, *b, length))
+    let length = *x.get(H.saturating_mul(2)).ok_or(NumError::Degenerate)?;
+    Ok((run_at(x, 0)?, run_at(x, H)?, length))
+}
+
+/// The `H` numbers of `x` from `at`, as an array.
+fn run_at<S: Scalar, const H: usize>(x: &[S], at: usize) -> Result<[S; H], NumError> {
+    let mut out = [*x.get(at).ok_or(NumError::Degenerate)?; H];
+    for (i, slot) in out.iter_mut().enumerate() {
+        *slot = *x.get(at.saturating_add(i)).ok_or(NumError::Degenerate)?;
+    }
+    Ok(out)
 }
 
 /// (b − a) times `f`.
