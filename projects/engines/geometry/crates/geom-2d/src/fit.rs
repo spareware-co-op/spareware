@@ -408,9 +408,9 @@ pub fn biarc(p0: P2, t0: [i64; 2], p1: P2, t1: [i64; 2]) -> Result<Biarc, FitErr
     let c0 = centre(p0, t0, j)?.ok_or(FitError::NoBiarc)?;
     let c1 = centre(p1, t1, j)?.ok_or(FitError::NoBiarc)?;
     let left0 = turns_left(p0, t0, j);
-    // Arriving at p1 along t1 from j: the second arc turns left if p1 is to the left of the line
-    // from j along the tangent it has at j, which is the side p1 is on seen from p1 backwards.
-    let left1 = !turns_left(p1, t1, j);
+    // Walked backwards from p1 along -t1 the arc turns left exactly when j is right of t1, and a
+    // reversed walk turns the other way, so forwards it turns left when j is left of t1.
+    let left1 = turns_left(p1, t1, j);
     let first = arc(p0, c0, p0, j, left0);
     let second = arc(p1, c1, j, p1, left1);
     // The tangents at j, from the centres.

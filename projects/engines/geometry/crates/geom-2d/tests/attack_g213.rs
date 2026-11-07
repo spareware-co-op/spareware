@@ -130,8 +130,8 @@ fn the_curve_passes_every_fit_point_within_the_reported_bound() {
             }
             let u = (run / total * 1_048_576.0).round() / 1_048_576.0;
             let at = curve.point(u, Limit::FromRight).unwrap();
-            let miss =
-                ((at[0] - q.x.get() as f64).powi(2) + (at[1] - q.y.get() as f64).powi(2)).sqrt();
+            let (ex, ey) = (at[0] - q.x.get() as f64, at[1] - q.y.get() as f64);
+            let miss = (ex * ex + ey * ey).sqrt();
             assert!(
                 miss <= fit.deviation.0 as f64 + 1e-6,
                 "r {r} point {i}: {miss} > {:?}",
