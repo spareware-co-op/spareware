@@ -29,7 +29,7 @@ use gate::{
     linalg::linalg, make::make, math::math, math_types::math_types, newton::newton, nurbs::nurbs,
     perturb::perturb, plane::plane, predicate::predicate, quadrature::quadrature, real::real,
     rng::rng, scenario::scenario, sign::sign, surface::surface, topo::topo, unproven::unproven,
-    wide32::wide32, wide::wide,
+    wide::wide, wide32::wide32,
 };
 
 #[cfg(target_os = "linux")]

@@ -59,8 +59,8 @@ use geom_num::{Exactness, GridStep, P3, Steps};
 use geom_op::history::{History, Relations};
 use geom_op::{NameId, NameSet, OpContext, OpError, OpId, OpOutput, OpPath};
 use geom_run::Budget;
-use geom_test::golden::{self, hex, sha256};
 use geom_test::flat_reference::Op;
+use geom_test::golden::{self, hex, sha256};
 use geom_test::history::{chain, check_chain};
 use geom_test::prop;
 use geom_test::{Seed, SplitMix64};
@@ -88,7 +88,10 @@ fn names(body: &Body) -> Vec<NameId> {
 }
 
 /// A primitive of a drawn kind and size, made by the operation at `c`, and whether it is flat.
-fn draw_primitive(d: &mut Draw, c: &OpContext<'_>) -> (String, bool, Result<OpOutput<Made>, OpError>) {
+fn draw_primitive(
+    d: &mut Draw,
+    c: &OpContext<'_>,
+) -> (String, bool, Result<OpOutput<Made>, OpError>) {
     let at = p(d.between(-20, 20), d.between(-20, 20), d.between(-20, 20));
     let size = |d: &mut Draw| Steps(d.between(2, 12) as u64);
     match d.below(6) {
@@ -203,9 +206,11 @@ impl Step {
                     });
             }
             Step::Bool(op, low, size) => {
-                // The tool is made by an operation of its own, so its names are its own.
+                // The tool is made by an operation of its own, under this step's, so its names are
+                // its own and no other step's tool shares them.
+                let tool_op = OpContext::new(c.path().item([0xb0; 16]), Budget::UNLIMITED);
                 let tool = make_box(
-                    &ctx_at(200),
+                    &tool_op,
                     &BoxInput {
                         min: p(low[0], low[1], low[2]),
                         size: size.map(Steps),
@@ -267,9 +272,11 @@ fn rules(f: &mut Findings, what: &str, history: &History, inputs: &[NameId], out
         "every output entity has its history",
         || what.to_owned(),
     );
-    f.check(first_duplicate(outputs).is_none(), "no two entities share a name", || {
-        what.to_owned()
-    });
+    f.check(
+        first_duplicate(outputs).is_none(),
+        "no two entities share a name",
+        || what.to_owned(),
+    );
     f.check(
         modified.iter().all(|(i, _)| !deleted.contains(i)),
         "a deleted input has no modified outputs",
@@ -281,9 +288,8 @@ fn rules(f: &mut Findings, what: &str, history: &History, inputs: &[NameId], out
         || what.to_owned(),
     );
     f.check(
-        outs.iter().all(|o| {
-            nothing.contains(o) || modified.iter().chain(&generated).any(|(_, x)| x == o)
-        }),
+        outs.iter()
+            .all(|o| nothing.contains(o) || modified.iter().chain(&generated).any(|(_, x)| x == o)),
         "every output traces to an input or is generated",
         || what.to_owned(),
     );
@@ -367,7 +373,12 @@ impl Composed {
         let kept: BTreeSet<NameId> = modified.iter().map(|&(i, _)| i).collect();
         let deleted = first
             .deleted()
-            .chain(first.modified().map(|(i, _)| i).filter(|i| !kept.contains(i)))
+            .chain(
+                first
+                    .modified()
+                    .map(|(i, _)| i)
+                    .filter(|i| !kept.contains(i)),
+            )
             .collect();
         Composed {
             modified,
@@ -426,7 +437,13 @@ fn every_operation_keeps_the_rules_of_20_3_and_its_chain_composes() {
                 }
             };
             done = format!("{done} then {step:?}");
-            rules(&mut f, &done, &made.result.history, &inputs, &names(&made.result.body));
+            rules(
+                &mut f,
+                &done,
+                &made.result.history,
+                &inputs,
+                &names(&made.result.body),
+            );
             steps.push((made.result.history, NameSet::new(inputs).unwrap()));
             body = made.result.body;
             exactness = made.exactness;
@@ -434,15 +451,19 @@ fn every_operation_keeps_the_rules_of_20_3_and_its_chain_composes() {
         if steps.is_empty() {
             continue;
         }
-        f.check(check_chain(&steps).is_ok(), "the kit's chain check passes", || {
-            format!("{done}: {:?}", check_chain(&steps))
-        });
+        f.check(
+            check_chain(&steps).is_ok(),
+            "the kit's chain check passes",
+            || format!("{done}: {:?}", check_chain(&steps)),
+        );
         let relations: Vec<Relations> = steps.iter().map(|(h, _)| h.relations()).collect();
         let by_definition = Composed::of(&relations);
         let by_fold = folded(&relations).map(|r| Composed::read(&r));
-        f.check(by_fold.as_ref() == Some(&by_definition), "a chain composes as its definition says", || {
-            format!("{done}: {by_fold:?} against {by_definition:?}")
-        });
+        f.check(
+            by_fold.as_ref() == Some(&by_definition),
+            "a chain composes as its definition says",
+            || format!("{done}: {by_fold:?} against {by_definition:?}"),
+        );
         f.check(
             by_definition.outputs == names(&body).into_iter().collect(),
             "a chain's outputs are its last body's names",
@@ -486,9 +507,11 @@ fn no_two_entities_share_a_name() {
         };
         f.ran();
         let source = names(&out.result.body);
-        f.check(first_duplicate(&source).is_none(), "a primitive names each entity once", || {
-            what.clone()
-        });
+        f.check(
+            first_duplicate(&source).is_none(),
+            "a primitive names each entity once",
+            || what.clone(),
+        );
         let moved = Moved {
             body: &out.result.body,
             exactness: out.exactness,
@@ -541,7 +564,9 @@ fn untouched_entities_keep_their_names() {
                 "a transform keeps every name",
                 || format!("{what} then {step:?}"),
             ),
-            Err(why) => f.add("a transform the kernel refused", || format!("{what}: {why}")),
+            Err(why) => f.add("a transform the kernel refused", || {
+                format!("{what}: {why}")
+            }),
         }
         // Adding a copy to a pattern renames no other copy.
         let moved = Moved {
@@ -569,7 +594,9 @@ fn untouched_entities_keep_their_names() {
                     || what.clone(),
                 );
             }
-            (a, b) => f.add("a pattern the kernel refused", || format!("{what}: {:?} {:?}", a.err(), b.err())),
+            (a, b) => f.add("a pattern the kernel refused", || {
+                format!("{what}: {:?} {:?}", a.err(), b.err())
+            }),
         }
     }
     f.assert_none("names: untouched entities", 30);
@@ -594,9 +621,11 @@ fn a_primitives_names_do_not_depend_on_its_place_or_size() {
             .map(|o| names(&o.result.body))
         });
         let [a, b] = boxes;
-        f.check(a.is_ok() && a == b, "two boxes of one operation have the same names", || {
-            format!("{a:?} {b:?}")
-        });
+        f.check(
+            a.is_ok() && a == b,
+            "two boxes of one operation have the same names",
+            || format!("{a:?} {b:?}"),
+        );
         let radius = |d: &mut Draw| Steps(d.between(2, 12) as u64);
         let round = |d: &mut Draw| RoundInput {
             base: p(d.between(-30, 30), d.between(-30, 30), d.between(-30, 30)),
@@ -610,9 +639,11 @@ fn a_primitives_names_do_not_depend_on_its_place_or_size() {
             c1.map(|o| names(&o.result.body)),
             c2.map(|o| names(&o.result.body)),
         );
-        f.check(n1.is_ok() && n1 == n2, "two cylinders of one operation have the same names", || {
-            format!("{r1:?} {r2:?}")
-        });
+        f.check(
+            n1.is_ok() && n1 == n2,
+            "two cylinders of one operation have the same names",
+            || format!("{r1:?} {r2:?}"),
+        );
     }
     f.assert_none("names: roles, not places", 40);
 }

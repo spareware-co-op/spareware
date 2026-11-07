@@ -193,9 +193,7 @@ pub fn big<const L: usize>(w: Wide<L>) -> IBig {
 
 /// The exact place of a vertex the kernel stores.
 pub fn exact(corner: &Corner) -> Result<Point, String> {
-    let ratio = |x: IBig, w: &IBig| -> RBig {
-        RBig::from_parts_signed(x, w.clone())
-    };
+    let ratio = |x: IBig, w: &IBig| -> RBig { RBig::from_parts_signed(x, w.clone()) };
     match corner {
         Corner::Grid(q) => Ok([q.x.get(), q.y.get(), q.z.get()].map(int)),
         Corner::Tpi(t) => {

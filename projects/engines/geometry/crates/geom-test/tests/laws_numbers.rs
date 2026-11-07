@@ -74,7 +74,11 @@ fn qf(v: f64) -> Q {
 }
 
 fn magnitude(v: &IBig) -> IBig {
-    if *v < IBig::ZERO { -v.clone() } else { v.clone() }
+    if *v < IBig::ZERO {
+        -v.clone()
+    } else {
+        v.clone()
+    }
 }
 
 fn qabs(v: &Q) -> Q {
@@ -117,7 +121,8 @@ fn committing_a_point_never_flips_a_decided_predicate() {
                 Plane::through(at(d), at(d), at(d)).ok()
             }
         };
-        let (Some(a), Some(b), Some(c)) = (through(&mut d), through(&mut d), through(&mut d)) else {
+        let (Some(a), Some(b), Some(c)) = (through(&mut d), through(&mut d), through(&mut d))
+        else {
             continue;
         };
         let Ok(t) = Tpi::new(a, b, c) else {
@@ -143,20 +148,25 @@ fn committing_a_point_never_flips_a_decided_predicate() {
                 format!("{t:?} commits to {g:?}")
             });
             if twice == width {
-                f.check(&at_grid[i] % IBig::from(2) == IBig::ZERO, "a tie commits to even", || {
-                    format!("{t:?} commits to {g:?}")
-                });
+                f.check(
+                    &at_grid[i] % IBig::from(2) == IBig::ZERO,
+                    "a tie commits to even",
+                    || format!("{t:?} commits to {g:?}"),
+                );
             }
         }
         let integral = (0..3).all(|i| x[i] == &at_grid[i] * &w);
-        f.check(commit.is_exact() == integral, "a commit says whether it rounded", || {
-            format!("{t:?} commits to {g:?}, exact {}", commit.is_exact())
-        });
+        f.check(
+            commit.is_exact() == integral,
+            "a commit says whether it rounded",
+            || format!("{t:?} commits to {g:?}, exact {}", commit.is_exact()),
+        );
         // Other decided predicates: planes through the committed point, and planes anywhere near.
         let mut others: Vec<Plane> = (0..4)
             .filter_map(|_| Plane::through(g, at(&mut d), at(&mut d)).ok())
             .collect();
-        others.extend((0..4).filter_map(|_| Plane::through(at(&mut d), at(&mut d), at(&mut d)).ok()));
+        others
+            .extend((0..4).filter_map(|_| Plane::through(at(&mut d), at(&mut d), at(&mut d)).ok()));
         if commit.is_exact() {
             exact_commits += 1;
             for plane in [a, b, c].iter().chain(&others) {
@@ -169,15 +179,19 @@ fn committing_a_point_never_flips_a_decided_predicate() {
         } else {
             rounded_commits += 1;
             f.check(
-                [a, b, c].iter().any(|plane| plane.side(g) != Ok(Sign::Zero)),
+                [a, b, c]
+                    .iter()
+                    .any(|plane| plane.side(g) != Ok(Sign::Zero)),
                 "a rounded commit leaves one of its own planes",
                 || format!("{t:?} at {g:?}"),
             );
         }
     }
-    f.check(exact_commits > 50 && rounded_commits > 50, "both kinds of commit were drawn", || {
-        format!("{exact_commits} exact and {rounded_commits} rounded")
-    });
+    f.check(
+        exact_commits > 50 && rounded_commits > 50,
+        "both kinds of commit were drawn",
+        || format!("{exact_commits} exact and {rounded_commits} rounded"),
+    );
     f.assert_none("numbers: commits", 400);
 }
 
@@ -190,7 +204,9 @@ fn a_boolean_keeps_each_vertex_on_the_grid_exactly_or_where_its_planes_meet() {
         let pa = draw_prism(&mut d, None);
         let pb = draw_prism(&mut d, Some(&pa));
         let (Ok(a), Ok(b)) = (pa.body(), pb.body()) else {
-            f.add("a prism the kernel would not build", || format!("{pa:?} {pb:?}"));
+            f.add("a prism the kernel would not build", || {
+                format!("{pa:?} {pb:?}")
+            });
             continue;
         };
         f.ran();
@@ -234,7 +250,9 @@ fn a_boolean_keeps_each_vertex_on_the_grid_exactly_or_where_its_planes_meet() {
             }
         }
     }
-    f.check(implicit > 0, "some vertex was kept implicit", || "none".to_owned());
+    f.check(implicit > 0, "some vertex was kept implicit", || {
+        "none".to_owned()
+    });
     f.assert_none("numbers: vertices of booleans", 16);
 }
 
@@ -257,22 +275,28 @@ fn coarse_to_fine_is_exact_and_fine_to_coarse_is_marked_rounded() {
         let up = i128::from(v) * k;
         match refine(c, coarse, fine) {
             Ok(r) => {
-                f.check(i128::from(r.get()) == up, "coarse to fine multiplies by 25 a rung", || {
-                    format!("{v} from {coarse:?} to {fine:?} gives {}", r.get())
-                });
+                f.check(
+                    i128::from(r.get()) == up,
+                    "coarse to fine multiplies by 25 a rung",
+                    || format!("{v} from {coarse:?} to {fine:?} gives {}", r.get()),
+                );
                 match coarsen(r, fine, coarse) {
                     Ok(back) => f.check(
                         back.value() == c && back.is_exact(),
                         "fine to coarse undoes coarse to fine, exactly",
                         || format!("{v} through {fine:?}"),
                     ),
-                    Err(e) => f.add("coarsening a refined coordinate refused", || format!("{e:?}")),
+                    Err(e) => f.add("coarsening a refined coordinate refused", || {
+                        format!("{e:?}")
+                    }),
                 }
             }
             Err(NumError::OutOfRange { .. }) => {
-                f.check(up.abs() > i128::from(COORD_MAX), "a refinement is refused only past the frame", || {
-                    format!("{v} from {coarse:?} to {fine:?}")
-                });
+                f.check(
+                    up.abs() > i128::from(COORD_MAX),
+                    "a refinement is refused only past the frame",
+                    || format!("{v} from {coarse:?} to {fine:?}"),
+                );
             }
             Err(e) => f.add("a refinement refused", || format!("{v}: {e:?}")),
         }
@@ -280,9 +304,11 @@ fn coarse_to_fine_is_exact_and_fine_to_coarse_is_marked_rounded() {
             Ok(r) => {
                 let near = i128::from(r.value().get());
                 let off = i128::from(v) - near * k;
-                f.check(2 * off.abs() < k || k == 1, "fine to coarse goes to the nearest step", || {
-                    format!("{v} from {fine:?} to {coarse:?} gives {near}")
-                });
+                f.check(
+                    2 * off.abs() < k || k == 1,
+                    "fine to coarse goes to the nearest step",
+                    || format!("{v} from {fine:?} to {coarse:?} gives {near}"),
+                );
                 f.check(
                     r.is_exact() == (off == 0),
                     "fine to coarse is marked rounded exactly when it rounds",
@@ -339,7 +365,10 @@ fn draw_scale(d: &mut Draw) -> Scale {
 fn on_lattice(rotation: Rotation, scale: Scale, m: [i64; 2]) -> Option<([i64; 2], [i64; 2])> {
     let r = i64::from(rotation.exact_norm()?);
     let (c, s) = (i64::from(rotation.cos()), i64::from(rotation.sin()));
-    let (kn, kd) = (i64::try_from(scale.num()).ok()?, i64::try_from(scale.den()).ok()?);
+    let (kn, kd) = (
+        i64::try_from(scale.num()).ok()?,
+        i64::try_from(scale.den()).ok()?,
+    );
     let v = [kd * r * m[0], kd * r * m[1]];
     let image = [kn * (c * m[0] - s * m[1]), kn * (s * m[0] + c * m[1])];
     Some((v, image))
@@ -411,7 +440,8 @@ fn neighbouring_frames_shift_exactly() {
         let expected: Option<[i128; 3]> = match rotation.exact_norm() {
             Some(r) => {
                 let whole = |a: i128| -> Option<i128> {
-                    let v = Q::from_parts_signed(IBig::from(kd * a), IBig::from(kn * i128::from(r)));
+                    let v =
+                        Q::from_parts_signed(IBig::from(kd * a), IBig::from(kn * i128::from(r)));
                     if *v.denominator() == UBig::ONE {
                         i128::try_from(v.numerator().clone()).ok()
                     } else {
@@ -427,8 +457,7 @@ fn neighbouring_frames_shift_exactly() {
         match (source.shift_to(&target), expected) {
             (Ok(shift), Some(want)) => {
                 f.check(
-                    shift.refine() as i128 == k
-                        && shift.offset().map(i128::from) == want,
+                    shift.refine() as i128 == k && shift.offset().map(i128::from) == want,
                     "a shift is the offset the frame formula gives",
                     || format!("{source:?} to {target:?}: {shift:?}, want {want:?}"),
                 );
@@ -466,9 +495,10 @@ fn neighbouring_frames_shift_exactly() {
                 }
             }
             (Err(MathError::FrameMismatch(FrameMismatch::NotOnLattice)), None) => {}
-            (got, want) => f.add("a shift is given exactly when the frames share a lattice", || {
-                format!("{source:?} to {target:?}: {got:?}, want {want:?}")
-            }),
+            (got, want) => f.add(
+                "a shift is given exactly when the frames share a lattice",
+                || format!("{source:?} to {target:?}: {got:?}, want {want:?}"),
+            ),
         }
     }
     f.check(moved > 400, "points were moved", || format!("{moved}"));
@@ -575,7 +605,10 @@ impl Formula {
         let (above, below) = (against(&up), against(&down));
         let inside = above != Ordering::Less && below != Ordering::Greater;
         let tie = above == Ordering::Equal || below == Ordering::Equal;
-        (inside && (!tie || value.to_bits() % 2 == 0), against(&v) == Ordering::Equal)
+        (
+            inside && (!tie || value.to_bits() % 2 == 0),
+            against(&v) == Ordering::Equal,
+        )
     }
 }
 
@@ -594,7 +627,11 @@ fn draw_frame(d: &mut Draw) -> FrameRecord {
     } else {
         [0; 3].map(|_: i64| d.between(-(1 << 20), 1 << 20))
     };
-    let rotation = if d.one_in(2) { Rotation::IDENTITY } else { draw_rotation(d) };
+    let rotation = if d.one_in(2) {
+        Rotation::IDENTITY
+    } else {
+        draw_rotation(d)
+    };
     let frame = FrameRecord::new(CrsId::Epsg(2193), step, origin, rotation, draw_scale(d)).unwrap();
     if d.one_in(4) {
         frame.with_linear_unit(LinearUnit::INTERNATIONAL_FOOT)
@@ -627,18 +664,30 @@ fn map_round_trips_stay_within_commit_rounding() {
         let [te, tn] = form.map_numerators(x[0], x[1]);
         let (ne, ee) = form.nearest_double(m.easting, &form.origin[0], &te);
         let (nn, en) = form.nearest_double(m.northing, &form.origin[1], &tn);
-        let (nh, eh) = form.nearest_double(m.height, &(&form.origin[2] + q(i128::from(x[2]))), &Q::ZERO);
-        f.check(ne && nn && nh, "frame to map gives the nearest doubles", || {
-            format!("{grid:?} in {frame:?} gives {m:?}")
-        });
-        f.check(map.is_exact() == (ee && en && eh), "frame to map says whether it rounded", || {
-            format!("{grid:?} in {frame:?} gives {m:?}, exact {}", map.is_exact())
-        });
+        let (nh, eh) =
+            form.nearest_double(m.height, &(&form.origin[2] + q(i128::from(x[2]))), &Q::ZERO);
+        f.check(
+            ne && nn && nh,
+            "frame to map gives the nearest doubles",
+            || format!("{grid:?} in {frame:?} gives {m:?}"),
+        );
+        f.check(
+            map.is_exact() == (ee && en && eh),
+            "frame to map says whether it rounded",
+            || {
+                format!(
+                    "{grid:?} in {frame:?} gives {m:?}, exact {}",
+                    map.is_exact()
+                )
+            },
+        );
         // Map to frame: the nearest step, ties to even.
         let back = match frame.to_frame(m) {
             Ok(b) => b,
             Err(e) => {
-                f.add("a map value of the frame has no grid point", || format!("{e:?}"));
+                f.add("a map value of the frame has no grid point", || {
+                    format!("{e:?}")
+                });
                 continue;
             }
         };
@@ -647,7 +696,10 @@ fn map_round_trips_stay_within_commit_rounding() {
         let az = qf(m.height) * &form.per_unit - &form.origin[2];
         let height = |z: i64| {
             let off = qabs(&(&az - q(i128::from(z))));
-            (off < half() || (off == half() && z % 2 == 0), off == Q::ZERO)
+            (
+                off < half() || (off == half() && z % 2 == 0),
+                off == Q::ZERO,
+            )
         };
         let (hz, hz_exact) = height(g.z.get());
         f.check(
@@ -657,7 +709,9 @@ fn map_round_trips_stay_within_commit_rounding() {
         );
         f.check(
             back.is_exact()
-                == (form.equals_step(&ax, g.x.get()) && form.equals_step(&ay, g.y.get()) && hz_exact),
+                == (form.equals_step(&ax, g.x.get())
+                    && form.equals_step(&ay, g.y.get())
+                    && hz_exact),
             "map to frame says whether it rounded",
             || format!("{m:?} in {frame:?} gives {g:?}, exact {}", back.is_exact()),
         );
@@ -674,17 +728,18 @@ fn map_round_trips_stay_within_commit_rounding() {
         let fine_height = &form.per_unit * ulp(m.height.abs()) * &one_half < one_half;
         if fine_horizontal && fine_height {
             identities += 1;
-            f.check(g == grid, "frame to map to frame is the identity where the doubles are fine", || {
-                format!("{grid:?} in {frame:?} comes back as {g:?}")
-            });
+            f.check(
+                g == grid,
+                "frame to map to frame is the identity where the doubles are fine",
+                || format!("{grid:?} in {frame:?} comes back as {g:?}"),
+            );
         }
         // Map to frame to map moves a map value by at most a commit: half a step on each frame
         // axis, carried to the map by the scale and rotation, and the doubles' own rounding.
         let jitter = |d: &mut Draw, v: f64, unit_steps: f64| {
             v + (d.between(-1000, 1000) as f64 / 1000.0) * 3.0 / unit_steps
         };
-        let unit_steps = steps_per_metre(frame.step()) as f64
-            * frame.linear_unit().num() as f64
+        let unit_steps = steps_per_metre(frame.step()) as f64 * frame.linear_unit().num() as f64
             / frame.linear_unit().den() as f64;
         let start = MapPoint {
             easting: jitter(&mut d, m.easting, unit_steps),
@@ -692,19 +747,21 @@ fn map_round_trips_stay_within_commit_rounding() {
             height: jitter(&mut d, m.height, unit_steps),
         };
         let Ok(there) = frame.to_frame(start) else {
-            f.add("a jittered map value has no grid point", || format!("{start:?}"));
+            f.add("a jittered map value has no grid point", || {
+                format!("{start:?}")
+            });
             continue;
         };
         // r rounded down, so the bound below is never too tight for an irrational length.
         let r_low = form.n.isqrt();
         let Ok(again) = frame.to_map(there.value()) else {
-            f.add("a committed grid point has no map value", || format!("{there:?}"));
+            f.add("a committed grid point has no map value", || {
+                format!("{there:?}")
+            });
             continue;
         };
         let end = again.value();
-        let spread = (&form.kn / &form.kd)
-            * (qabs(&form.c) + qabs(&form.s))
-            / q(i128::from(r_low))
+        let spread = (&form.kn / &form.kd) * (qabs(&form.c) + qabs(&form.s)) / q(i128::from(r_low))
             * &one_half;
         let within = |a: f64, b: f64, carried: &Q| {
             let gap = (qf(a) - qf(b)) * &form.per_unit;
@@ -719,8 +776,10 @@ fn map_round_trips_stay_within_commit_rounding() {
             || format!("{start:?} in {frame:?} comes back as {end:?}"),
         );
     }
-    f.check(identities > 100, "round trips where the doubles are fine were drawn", || {
-        format!("{identities}")
-    });
+    f.check(
+        identities > 100,
+        "round trips where the doubles are fine were drawn",
+        || format!("{identities}"),
+    );
     f.assert_none("frames: map round trips", 500);
 }

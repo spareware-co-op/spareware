@@ -64,7 +64,7 @@ use geom_op::{OpContext, OpError, OpId, OpOutput, OpPath};
 use geom_poly::merge::Merge;
 use geom_run::{Budget, Exec, WorkMeter};
 use geom_test::flat_reference::{Op, Solid, Where, boolean, int, point as qpoint};
-use geom_topo::query::{point as vertex_point, shell_volume, side_of_shell, volume, Side};
+use geom_topo::query::{Side, point as vertex_point, shell_volume, side_of_shell, volume};
 use geom_topo::{Body, BodyKind, ShellIx, VertexIx};
 
 const SERIAL: Exec<'static> = Exec::serial();
@@ -182,7 +182,10 @@ fn draw_shape(d: &mut Draw, near: Option<&Shape>) -> Result<Shape, String> {
     if d.one_in(2) {
         parts.push(draw_cuboid(d, Some(&first)));
     }
-    let pieces = parts.iter().map(make).collect::<Result<Vec<Body>, String>>()?;
+    let pieces = parts
+        .iter()
+        .map(make)
+        .collect::<Result<Vec<Body>, String>>()?;
     let body = joined(&pieces).map_err(|e| format!("building {parts:?}: {e}"))?;
     Ok(Shape {
         parts,
@@ -290,8 +293,18 @@ fn volumes_add_up_exactly() {
         let both = [solid(1, &a.body), solid(2, &b.body)];
         let (Some(u), Some(i), Some(s)) = (
             took(f, "refused", "union", unite(&ctx(), &SERIAL, &both)),
-            took(f, "refused", "intersection", intersect(&ctx(), &SERIAL, &both)),
-            took(f, "refused", "difference", subtract(&ctx(), &SERIAL, key(1), &both)),
+            took(
+                f,
+                "refused",
+                "intersection",
+                intersect(&ctx(), &SERIAL, &both),
+            ),
+            took(
+                f,
+                "refused",
+                "difference",
+                subtract(&ctx(), &SERIAL, key(1), &both),
+            ),
         ) else {
             return;
         };
@@ -305,16 +318,24 @@ fn volumes_add_up_exactly() {
             f.add("volume", || describe(a, b));
             return;
         };
-        f.check(vu + vi == va + vb, "vol(A u B) + vol(A n B) = vol A + vol B", || {
-            format!("{} gives {vu} + {vi} against {va} + {vb}", describe(a, b))
-        });
+        f.check(
+            vu + vi == va + vb,
+            "vol(A u B) + vol(A n B) = vol A + vol B",
+            || format!("{} gives {vu} + {vi} against {va} + {vb}", describe(a, b)),
+        );
         f.check(vs == va - vi, "vol(A - B) = vol A - vol(A n B)", || {
             format!("{} gives {vs} against {va} - {vi}", describe(a, b))
         });
-        for (name, body) in [("union", &u.result.body), ("intersection", &i.result.body), ("difference", &s.result.body)] {
-            f.check(body.arenas().edges.is_empty() || checked(body), "full checker", || {
-                format!("{name} of {}", describe(a, b))
-            });
+        for (name, body) in [
+            ("union", &u.result.body),
+            ("intersection", &i.result.body),
+            ("difference", &s.result.body),
+        ] {
+            f.check(
+                body.arenas().edges.is_empty() || checked(body),
+                "full checker",
+                || format!("{name} of {}", describe(a, b)),
+            );
         }
     });
 }
@@ -326,15 +347,30 @@ fn a_solid_minus_itself_is_empty_and_united_with_itself_is_itself() {
             return;
         };
         let twin = [solid(1, &a.body), solid(2, &copy)];
-        if let Some(none) = took(f, "refused", "A - A", subtract(&ctx(), &SERIAL, key(1), &twin)) {
-            f.check(none.result.body.arenas().edges.is_empty(), "A - A is empty", || {
-                format!("{:?} leaves {} edges", a.parts, none.result.body.arenas().edges.len())
-            });
+        if let Some(none) = took(
+            f,
+            "refused",
+            "A - A",
+            subtract(&ctx(), &SERIAL, key(1), &twin),
+        ) {
+            f.check(
+                none.result.body.arenas().edges.is_empty(),
+                "A - A is empty",
+                || {
+                    format!(
+                        "{:?} leaves {} edges",
+                        a.parts,
+                        none.result.body.arenas().edges.len()
+                    )
+                },
+            );
         }
         if let Some(same) = took(f, "refused", "A u A", unite(&ctx(), &SERIAL, &twin)) {
-            f.check(six(&same.result.body) == six(&a.body), "A u A has A's volume", || {
-                format!("{:?}", a.parts)
-            });
+            f.check(
+                six(&same.result.body) == six(&a.body),
+                "A u A has A's volume",
+                || format!("{:?}", a.parts),
+            );
             f.check(
                 vertices(&same.result.body) == vertices(&a.body),
                 "A u A has A's vertices",
@@ -346,7 +382,11 @@ fn a_solid_minus_itself_is_empty_and_united_with_itself_is_itself() {
 
 /// A second body of the same solid, built again from the same boxes.
 fn rebuild(s: &Shape) -> Result<Body, String> {
-    let pieces = s.parts.iter().map(make).collect::<Result<Vec<Body>, String>>()?;
+    let pieces = s
+        .parts
+        .iter()
+        .map(make)
+        .collect::<Result<Vec<Body>, String>>()?;
     joined(&pieces)
 }
 
@@ -357,15 +397,30 @@ fn imprint_keeps_the_volume_and_the_cells_partition_the_union() {
             operands: vec![solid(1, &a.body), solid(2, &b.body)],
             select: vec![
                 Selection::Imprint { target: key(1) },
-                Selection::Where(vec![Term::Inside(key(1)), Term::Inside(key(2)), Term::Not, Term::And]),
-                Selection::Where(vec![Term::Inside(key(2)), Term::Inside(key(1)), Term::Not, Term::And]),
+                Selection::Where(vec![
+                    Term::Inside(key(1)),
+                    Term::Inside(key(2)),
+                    Term::Not,
+                    Term::And,
+                ]),
+                Selection::Where(vec![
+                    Term::Inside(key(2)),
+                    Term::Inside(key(1)),
+                    Term::Not,
+                    Term::And,
+                ]),
                 Selection::Where(vec![Term::Inside(key(1)), Term::Inside(key(2)), Term::And]),
                 Selection::Unite,
             ],
             merge: Merge::RemoveRedundant,
             accept: None,
         };
-        let Some(out) = took(f, "refused", "one arrangement", combine(&ctx(), &SERIAL, &input)) else {
+        let Some(out) = took(
+            f,
+            "refused",
+            "one arrangement",
+            combine(&ctx(), &SERIAL, &input),
+        ) else {
             return;
         };
         let volumes: Vec<Result<i128, String>> = out
@@ -381,12 +436,27 @@ fn imprint_keeps_the_volume_and_the_cells_partition_the_union() {
             f.add("volume", || format!("{volumes:?} for {}", describe(a, b)));
             return;
         };
-        f.check(Ok(*imprint) == six(&a.body), "imprint leaves volume unchanged", || {
-            format!("{imprint} against {:?} for {}", six(&a.body), describe(a, b))
-        });
-        f.check(only_a + only_b + both == *union, "the cells sum to the union", || {
-            format!("{only_a} + {only_b} + {both} against {union} for {}", describe(a, b))
-        });
+        f.check(
+            Ok(*imprint) == six(&a.body),
+            "imprint leaves volume unchanged",
+            || {
+                format!(
+                    "{imprint} against {:?} for {}",
+                    six(&a.body),
+                    describe(a, b)
+                )
+            },
+        );
+        f.check(
+            only_a + only_b + both == *union,
+            "the cells sum to the union",
+            || {
+                format!(
+                    "{only_a} + {only_b} + {both} against {union} for {}",
+                    describe(a, b)
+                )
+            },
+        );
         f.check(
             Ok(only_a + both) == six(&a.body) && Ok(only_b + both) == six(&b.body),
             "the cells of an operand sum to the operand",
@@ -424,8 +494,18 @@ fn a_point_is_in_the_result_when_the_operation_says_so_of_its_classes() {
         let both = [solid(1, &a.body), solid(2, &b.body)];
         let (Some(u), Some(i), Some(s)) = (
             took(f, "refused", "union", unite(&ctx(), &SERIAL, &both)),
-            took(f, "refused", "intersection", intersect(&ctx(), &SERIAL, &both)),
-            took(f, "refused", "difference", subtract(&ctx(), &SERIAL, key(1), &both)),
+            took(
+                f,
+                "refused",
+                "intersection",
+                intersect(&ctx(), &SERIAL, &both),
+            ),
+            took(
+                f,
+                "refused",
+                "difference",
+                subtract(&ctx(), &SERIAL, key(1), &both),
+            ),
         ) else {
             return;
         };
@@ -439,7 +519,10 @@ fn a_point_is_in_the_result_when_the_operation_says_so_of_its_classes() {
             ] {
                 match kernel_inside(body, x) {
                     Ok(got) => f.check(got == expect, name, || {
-                        format!("point {x:?} is {got} in the result, {ia} in A and {ib} in B: {}", describe(a, b))
+                        format!(
+                            "point {x:?} is {got} in the result, {ia} in A and {ib} in B: {}",
+                            describe(a, b)
+                        )
                     }),
                     Err(why) => f.add(name, || format!("{why} at {x:?}")),
                 }
@@ -456,15 +539,27 @@ fn the_kernels_volumes_are_the_references() {
         let ca = draw_cuboid(&mut d, None);
         let cb = draw_cuboid(&mut d, Some(&ca));
         let (Ok(ba), Ok(bb)) = (make(&ca), make(&cb)) else {
-            f.add("a box the kernel would not build", || format!("{ca:?} {cb:?}"));
+            f.add("a box the kernel would not build", || {
+                format!("{ca:?} {cb:?}")
+            });
             continue;
         };
         f.ran();
         let both = [solid(1, &ba), solid(2, &bb)];
         let (Some(u), Some(i), Some(s)) = (
             took(&mut f, "refused", "union", unite(&ctx(), &SERIAL, &both)),
-            took(&mut f, "refused", "intersection", intersect(&ctx(), &SERIAL, &both)),
-            took(&mut f, "refused", "difference", subtract(&ctx(), &SERIAL, key(1), &both)),
+            took(
+                &mut f,
+                "refused",
+                "intersection",
+                intersect(&ctx(), &SERIAL, &both),
+            ),
+            took(
+                &mut f,
+                "refused",
+                "difference",
+                subtract(&ctx(), &SERIAL, key(1), &both),
+            ),
         ) else {
             continue;
         };
@@ -512,12 +607,16 @@ fn union_and_intersection_commute() {
             ) else {
                 continue;
             };
-            f.check(six(&ab) == six(&ba), &format!("{op} commutes in volume"), || {
-                format!("{} gives {:?} and {:?}", describe(a, b), six(&ab), six(&ba))
-            });
-            f.check(vertices(&ab) == vertices(&ba), &format!("{op} commutes in vertices"), || {
-                format!("{}", describe(a, b))
-            });
+            f.check(
+                six(&ab) == six(&ba),
+                &format!("{op} commutes in volume"),
+                || format!("{} gives {:?} and {:?}", describe(a, b), six(&ab), six(&ba)),
+            );
+            f.check(
+                vertices(&ab) == vertices(&ba),
+                &format!("{op} commutes in vertices"),
+                || format!("{}", describe(a, b)),
+            );
         }
     });
 }
@@ -566,7 +665,13 @@ impl Move {
         };
         match self {
             Move::Shift(by) => move_by(&ctx(), moved, by),
-            Move::Turn(axis, n) => rotate(&ctx(), moved, axis, Rotation::quarter_turns(i32::try_from(n).unwrap()), p(0, 0, 0)),
+            Move::Turn(axis, n) => rotate(
+                &ctx(),
+                moved,
+                axis,
+                Rotation::quarter_turns(i32::try_from(n).unwrap()),
+                p(0, 0, 0),
+            ),
             Move::Mirror(axis) => mirror(&ctx(), moved, axis, p(0, 0, 0)),
         }
         .map(|o| o.result.body)
@@ -613,14 +718,26 @@ fn grid_moves_commute_with_every_boolean() {
             ) else {
                 continue;
             };
-            let expected: BTreeSet<[i64; 3]> = vertices(&first).into_iter().map(|q| m.point(q)).collect();
+            let expected: BTreeSet<[i64; 3]> =
+                vertices(&first).into_iter().map(|q| m.point(q)).collect();
             let name = format!("{op} commutes with {m:?}");
-            f.check(six(&first) == six(&moved_first), &format!("{name} (volume)"), || {
-                format!("{} gives {:?} and {:?}", describe(a, b), six(&first), six(&moved_first))
-            });
-            f.check(vertices(&moved_first) == expected, &format!("{name} (vertices)"), || {
-                format!("{}", describe(a, b))
-            });
+            f.check(
+                six(&first) == six(&moved_first),
+                &format!("{name} (volume)"),
+                || {
+                    format!(
+                        "{} gives {:?} and {:?}",
+                        describe(a, b),
+                        six(&first),
+                        six(&moved_first)
+                    )
+                },
+            );
+            f.check(
+                vertices(&moved_first) == expected,
+                &format!("{name} (vertices)"),
+                || format!("{}", describe(a, b)),
+            );
         }
     });
 }
@@ -637,21 +754,34 @@ fn a_batch_cut_equals_the_cuts_one_at_a_time_in_any_order() {
             Ok((a, t1, t2))
         })();
         let Ok((a, t1, t2)) = drawn else {
-            f.add("a shape the kernel would not build", || "a batch".to_owned());
+            f.add("a shape the kernel would not build", || {
+                "a batch".to_owned()
+            });
             continue;
         };
         f.ran();
         let all = [solid(1, &a.body), solid(2, &t1.body), solid(3, &t2.body)];
-        let Some(batch) = took(&mut f, "refused", "batch", subtract(&ctx(), &SERIAL, key(1), &all)) else {
+        let Some(batch) = took(
+            &mut f,
+            "refused",
+            "batch",
+            subtract(&ctx(), &SERIAL, key(1), &all),
+        ) else {
             continue;
         };
         let tools = [t1.body.clone(), t2.body.clone()];
-        let Some(by_cut) = took(&mut f, "refused", "batch::cut", cut_once(cut_of(&a.body, &tools, None))) else {
+        let Some(by_cut) = took(
+            &mut f,
+            "refused",
+            "batch::cut",
+            cut_once(cut_of(&a.body, &tools, None)),
+        ) else {
             continue;
         };
         let cut_body = &by_cut.result[0].result.body;
         f.check(
-            six(cut_body) == six(&batch.result.body) && vertices(cut_body) == vertices(&batch.result.body),
+            six(cut_body) == six(&batch.result.body)
+                && vertices(cut_body) == vertices(&batch.result.body),
             "batch::cut is the n-ary subtraction",
             || format!("A {:?}, tools {:?} and {:?}", a.parts, t1.parts, t2.parts),
         );
@@ -661,9 +791,11 @@ fn a_batch_cut_equals_the_cuts_one_at_a_time_in_any_order() {
             let Some(one_by_one) = took(&mut f, "refused", name, step2) else {
                 continue;
             };
-            f.check(six(&batch.result.body) == six(&one_by_one), &format!("batch = one at a time, {name} (volume)"), || {
-                format!("A {:?}, tools {:?} and {:?}", a.parts, t1.parts, t2.parts)
-            });
+            f.check(
+                six(&batch.result.body) == six(&one_by_one),
+                &format!("batch = one at a time, {name} (volume)"),
+                || format!("A {:?}, tools {:?} and {:?}", a.parts, t1.parts, t2.parts),
+            );
             f.check(
                 vertices(&batch.result.body) == vertices(&one_by_one),
                 &format!("batch = one at a time, {name} (vertices)"),
@@ -733,7 +865,12 @@ fn the_cells_partition_the_union() {
                 f.check(
                     elements.contains(&key(1)) == ia && elements.contains(&key(2)) == ib,
                     "a cell knows which solids it lies inside",
-                    || format!("{x:?}: {elements:?}, {ia} in A, {ib} in B: {}", describe(a, b)),
+                    || {
+                        format!(
+                            "{x:?}: {elements:?}, {ia} in A, {ib} in B: {}",
+                            describe(a, b)
+                        )
+                    },
                 );
             }
         }
@@ -762,7 +899,14 @@ fn work(one: &Cut<'_>) -> u64 {
             OpPath::new(OpId::from_bytes([7; 16])),
             Budget::new(middle, u64::MAX),
         );
-        if cut(&small, &SERIAL, core::slice::from_ref(one), BatchRule::Atomic).is_ok() {
+        if cut(
+            &small,
+            &SERIAL,
+            core::slice::from_ref(one),
+            BatchRule::Atomic,
+        )
+        .is_ok()
+        {
             high = middle;
         } else {
             low = middle;
@@ -789,8 +933,12 @@ fn a_cut_again_from_any_cache_is_a_fresh_cut() {
         let mut tools: Vec<Cuboid> = (0..d.between(1, 3))
             .map(|_| draw_cuboid(&mut d, near.as_ref()))
             .collect();
-        let bodies =
-            |tools: &[Cuboid]| tools.iter().map(make).collect::<Result<Vec<Body>, String>>();
+        let bodies = |tools: &[Cuboid]| {
+            tools
+                .iter()
+                .map(make)
+                .collect::<Result<Vec<Body>, String>>()
+        };
         let (Ok(before), Ok(others)) = (bodies(&tools), bodies(&tools)) else {
             f.add("a tool the kernel would not build", || format!("{tools:?}"));
             continue;
@@ -845,7 +993,12 @@ fn a_cut_again_from_any_cache_is_a_fresh_cut() {
                 f.check(
                     fresh_work == again_work,
                     "a cut again takes a fresh cut's work",
-                    || format!("{fresh_work} against {again_work}: host {:?}, tools {tools:?}", host.parts),
+                    || {
+                        format!(
+                            "{fresh_work} against {again_work}: host {:?}, tools {tools:?}",
+                            host.parts
+                        )
+                    },
                 );
             }
             match fresh {

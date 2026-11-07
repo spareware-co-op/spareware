@@ -104,7 +104,8 @@ fn areas(body: &Body) -> Result<(BTreeMap<RefPlane, Q>, Vec<[i128; 3]>), String>
     let mut shells = vec![[0_i128; 3]; usize::try_from(a.shells.len()).unwrap()];
     for row in 0..a.faces.len() {
         let face = FaceIx::new(row).ok_or("face index")?;
-        let vector = face_area(body, face, &mut meter()).map_err(|e| format!("face_area: {e:?}"))?;
+        let vector =
+            face_area(body, face, &mut meter()).map_err(|e| format!("face_area: {e:?}"))?;
         let shell = a.faces.get(face).ok_or("face row")?.shell;
         let total = &mut shells[shell.to_usize()];
         for i in 0..3 {
@@ -161,18 +162,22 @@ fn flat_volumes_are_exact_rationals_and_certified_where_a_vertex_is_implicit() {
         if on_grid(&body) {
             exact += 1;
             let got = six(&body).map(|v| Q::from(IBig::from(v)));
-            f.check(got.as_ref() == Ok(&want), "six times the volume is exact", || {
-                format!("{what}: {got:?} against {want}")
-            });
+            f.check(
+                got.as_ref() == Ok(&want),
+                "six times the volume is exact",
+                || format!("{what}: {got:?} against {want}"),
+            );
         }
         match certified_six(&body) {
             Ok((lo, hi)) => {
                 if !on_grid(&body) {
                     certified += 1;
                 }
-                f.check(lo <= want && want <= hi, "the certified volume holds the exact one", || {
-                    format!("{what}: [{lo}, {hi}] against {want}")
-                });
+                f.check(
+                    lo <= want && want <= hi,
+                    "the certified volume holds the exact one",
+                    || format!("{what}: [{lo}, {hi}] against {want}"),
+                );
                 f.check(
                     &hi - &lo <= (&want + int(1)) * Q::from_parts(IBig::ONE, (1_u64 << 30).into()),
                     "the certified volume is tight",
@@ -182,9 +187,11 @@ fn flat_volumes_are_exact_rationals_and_certified_where_a_vertex_is_implicit() {
             Err(why) => f.add("a certified volume refused", || format!("{what}: {why}")),
         }
     }
-    f.check(exact > 5 && certified > 3, "both kinds of body were drawn", || {
-        format!("{exact} on the grid, {certified} with implicit vertices")
-    });
+    f.check(
+        exact > 5 && certified > 3,
+        "both kinds of body were drawn",
+        || format!("{exact} on the grid, {certified} with implicit vertices"),
+    );
     f.assert_none("mass: volumes", 20);
 }
 
@@ -207,9 +214,11 @@ fn flat_areas_are_exact_plane_by_plane_and_close_up() {
         match areas(&body) {
             Ok((by_plane, shells)) => {
                 let want = truth.areas();
-                f.check(by_plane == want, "every plane's area is the reference's", || {
-                    format!("{what}: {by_plane:?} against {want:?}")
-                });
+                f.check(
+                    by_plane == want,
+                    "every plane's area is the reference's",
+                    || format!("{what}: {by_plane:?} against {want:?}"),
+                );
                 f.check(
                     shells.iter().all(|s| *s == [0; 3]),
                     "a closed shell's area vectors sum to zero",
@@ -239,7 +248,9 @@ fn grid_moves_keep_volume_and_area() {
     for _ in 0..60 {
         let prism = draw_prism(&mut d, None);
         let Ok(body) = prism.body() else {
-            f.add("a prism the kernel would not build", || format!("{prism:?}"));
+            f.add("a prism the kernel would not build", || {
+                format!("{prism:?}")
+            });
             continue;
         };
         f.ran();
@@ -262,7 +273,10 @@ fn grid_moves_keep_volume_and_area() {
                     rotate(&ctx(), moved, axis, Rotation::quarter_turns(turns), centre),
                 )
             }
-            _ => (format!("mirrored in {axis:?}"), mirror(&ctx(), moved, axis, centre)),
+            _ => (
+                format!("mirrored in {axis:?}"),
+                mirror(&ctx(), moved, axis, centre),
+            ),
         };
         let out = match out {
             Ok(o) => o.result.body,
@@ -272,9 +286,11 @@ fn grid_moves_keep_volume_and_area() {
             }
         };
         let (before, after) = (measure(&body), measure(&out));
-        f.check(before.is_ok() && before == after, "a grid move keeps volume and area", || {
-            format!("{prism:?} {how}: {before:?} then {after:?}")
-        });
+        f.check(
+            before.is_ok() && before == after,
+            "a grid move keeps volume and area",
+            || format!("{prism:?} {how}: {before:?} then {after:?}"),
+        );
     }
     f.assert_none("mass: grid moves", 50);
 }

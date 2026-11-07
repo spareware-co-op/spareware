@@ -39,6 +39,8 @@
 )]
 
 // The kinds and their truth, which the shared catalogue draws on (piece G69).
+#[path = "catalogue/mod.rs"]
+mod catalogue;
 #[allow(
     dead_code,
     unreachable_pub,
@@ -53,8 +55,6 @@ mod laws;
 )]
 #[path = "../../geom-curve/tests/series/mod.rs"]
 mod series;
-#[path = "catalogue/mod.rs"]
-mod catalogue;
 mod truth;
 
 use std::panic::{AssertUnwindSafe, catch_unwind};
@@ -121,17 +121,21 @@ fn kinds_trip<const D: usize>(f: &mut Findings, rng: &mut Rng, grid: bool) {
         let mut d = Decoder::new(&bytes, DEPTH);
         match read_curve::<D>(&mut d, &mut meter()) {
             Ok(back) => {
-                f.check(back == kind, &format!("{name} reads back as written"), || {
-                    format!("{kind:?}")
-                });
+                f.check(
+                    back == kind,
+                    &format!("{name} reads back as written"),
+                    || format!("{kind:?}"),
+                );
                 f.check(
                     curve_bytes(&back).as_deref() == Ok(bytes.as_slice()),
                     &format!("{name}: write, read, write"),
                     || hex(&bytes),
                 );
-                f.check(d.end() == Ok(bytes.len()), &format!("{name} is read to its end"), || {
-                    hex(&bytes)
-                });
+                f.check(
+                    d.end() == Ok(bytes.len()),
+                    &format!("{name} is read to its end"),
+                    || hex(&bytes),
+                );
             }
             Err(why) => f.add(&format!("{name} cannot be read back"), || format!("{why}")),
         }
@@ -160,9 +164,11 @@ fn every_kind_reads_back_as_written_and_writes_the_same_bytes() {
             };
             match read_surface(&mut Decoder::new(&bytes, DEPTH), &mut meter()) {
                 Ok(back) => {
-                    f.check(back == kind, &format!("{name} reads back as written"), || {
-                        format!("{kind:?}")
-                    });
+                    f.check(
+                        back == kind,
+                        &format!("{name} reads back as written"),
+                        || format!("{kind:?}"),
+                    );
                     f.check(
                         surface_bytes(&back).as_deref() == Ok(bytes.as_slice()),
                         &format!("{name}: write, read, write"),
@@ -227,12 +233,16 @@ fn a_stored_body_reads_back_equal_and_writes_the_same_records() {
         };
         match read_body(&stored, &mut meter()) {
             Ok(back) => {
-                f.check(back == body, "a body reads back equal", || "a box body".to_owned());
+                f.check(back == body, "a body reads back equal", || {
+                    "a box body".to_owned()
+                });
                 match write_body(&back, &mut meter()) {
                     Ok(again) => {
-                        f.check(again == stored, "write, read, write: the same records", || {
-                            "a box body".to_owned()
-                        });
+                        f.check(
+                            again == stored,
+                            "write, read, write: the same records",
+                            || "a box body".to_owned(),
+                        );
                         f.check(
                             again.content_id() == stored.content_id(),
                             "the content ID is a function of the body",
@@ -272,9 +282,11 @@ fn records_and_files_read_back_equal_and_write_the_same_bytes() {
         match record.encode(&mut meter()) {
             Ok(bytes) => match Record::decode(&bytes, &mut meter()) {
                 Ok((back, used)) => {
-                    f.check(back == record && used == bytes.len(), "a record reads back equal", || {
-                        format!("{record:?}")
-                    });
+                    f.check(
+                        back == record && used == bytes.len(),
+                        "a record reads back equal",
+                        || format!("{record:?}"),
+                    );
                     f.check(
                         back.encode(&mut meter()).as_ref() == Ok(&bytes),
                         "a record: write, read, write",
@@ -292,30 +304,40 @@ fn records_and_files_read_back_equal_and_write_the_same_bytes() {
             .map(|_| random_record(&mut d, &[10, 11, 12]))
             .collect();
         let Ok(bytes) = file::write(&header, &records, &mut meter()) else {
-            f.add("a file cannot be written", || format!("{} records", records.len()));
+            f.add("a file cannot be written", || {
+                format!("{} records", records.len())
+            });
             continue;
         };
         let known = |tag: u64, _: u64| tag == 10 || tag == 11 || tag == 12;
         match file::read(&mut SliceSource::new(&bytes), known, &mut meter()) {
             Ok(read) => {
-                f.check(read.header == header, "a file's header reads back equal", || {
-                    hex(&bytes)
-                });
-                f.check(read.records == records, "a file's records read back equal", || {
-                    hex(&bytes)
-                });
+                f.check(
+                    read.header == header,
+                    "a file's header reads back equal",
+                    || hex(&bytes),
+                );
+                f.check(
+                    read.records == records,
+                    "a file's records read back equal",
+                    || hex(&bytes),
+                );
                 f.check(
                     file::write(&read.header, &read.records, &mut meter()).as_ref() == Ok(&bytes),
                     "a file: write, read, write",
                     || hex(&bytes),
                 );
-                f.check(Header::read(&read.header.payload, &mut meter()).is_ok(), "the header record parses", || {
-                    hex(&bytes)
-                });
+                f.check(
+                    Header::read(&read.header.payload, &mut meter()).is_ok(),
+                    "the header record parses",
+                    || hex(&bytes),
+                );
             }
             Err(e) => f.add("a file cannot be read back", || format!("{e:?}")),
         }
-        f.check(HEADER_TAG == header.tag, "the header record's tag", || String::new());
+        f.check(HEADER_TAG == header.tag, "the header record's tag", || {
+            String::new()
+        });
     }
     f.assert_none("formats: records and files", 70);
 }
@@ -332,10 +354,14 @@ fn item(e: &mut Encoder, d: &mut Draw, depth: usize) {
         }
         3 => {
             let n = d.pick(12);
-            let s: String = (0..n).map(|_| char::from(b'a' + u8::try_from(d.below(26)).unwrap())).collect();
+            let s: String = (0..n)
+                .map(|_| char::from(b'a' + u8::try_from(d.below(26)).unwrap()))
+                .collect();
             e.text(&s).unwrap();
         }
-        4 => e.float([0.5, -2.0, 1.0e10, 3.141592653589793, 1.0 / 3.0][d.pick(5)]).unwrap(),
+        4 => e
+            .float([0.5, -2.0, 1.0e10, 3.141592653589793, 1.0 / 3.0][d.pick(5)])
+            .unwrap(),
         5 => {
             let n = d.pick(4);
             e.array(n as u64).unwrap();
@@ -362,13 +388,17 @@ fn a_cbor_item_checks_and_goes_through_its_text_and_back_to_the_same_bytes() {
         let mut e = Encoder::new();
         item(&mut e, &mut d, 3);
         let bytes = e.finish().unwrap().into_bytes();
-        f.check(cbor::check(&bytes, DEPTH, &mut meter()).is_ok(), "the encoder's bytes pass the strict decoder", || {
-            hex(&bytes)
-        });
+        f.check(
+            cbor::check(&bytes, DEPTH, &mut meter()).is_ok(),
+            "the encoder's bytes pass the strict decoder",
+            || hex(&bytes),
+        );
         match cbor::to_text(&bytes, DEPTH, &mut meter()) {
             Ok(text) => match cbor::from_text(&text, DEPTH, &mut meter()) {
                 Ok(again) => f.check(again == bytes, "bytes, text, bytes", || format!("{text}")),
-                Err(e) => f.add("the text of an item cannot be read", || format!("{text}: {e:?}")),
+                Err(e) => f.add("the text of an item cannot be read", || {
+                    format!("{text}: {e:?}")
+                }),
             },
             Err(e) => f.add("an item has no text", || format!("{e:?}: {}", hex(&bytes))),
         }
@@ -491,7 +521,8 @@ fn readers_never_panic_on_any_bytes() {
                 let mut b = d.bytes(n);
                 // Lean on CBOR's own first bytes so the readers get past the first check.
                 if let Some(first) = b.first_mut() {
-                    *first = [0x80, 0x81, 0x82, 0x83, 0x84, 0x85, 0xa1, 0x58, 0x40, 0x1b][d.pick(10)];
+                    *first =
+                        [0x80, 0x81, 0x82, 0x83, 0x84, 0x85, 0xa1, 0x58, 0x40, 0x1b][d.pick(10)];
                 }
                 b
             }
