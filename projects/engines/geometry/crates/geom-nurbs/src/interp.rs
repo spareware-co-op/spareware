@@ -39,7 +39,7 @@
 //!   `N_FitCrvDerivs` estimates them from a cubic through four points; the end-derivative
 //!   factors use the knots at both ends, where `NLib` assumes a domain of [0, 1]; every fit
 //!   returns its certified error.
-//! SPDX-License-Identifier: MPL-2.0 AND Apache-2.0
+//! SPDX-License-Identifier: Apache-2.0
 //!
 //! Cost: O(n·p²·D) to solve a curve and O(n·p²) to certify it; a surface of r × s points costs
 //! O(r·s·(p² + q²)·D); charged to the meter first.

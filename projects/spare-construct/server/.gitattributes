@@ -1,0 +1,2 @@
+# Shell scripts run on Linux from a Windows checkout too, so never CRLF.
+* text eol=lf
