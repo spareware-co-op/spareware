@@ -566,6 +566,16 @@
           "sha256": "507472559492ae92313b7e32156a0f64df25fa341cd6eab56772404bcfd55a91"
         },
         {
+          "id": "geom-test/museum",
+          "what": "The format museum (piece G99): every exhibit of geom-test/museum held to its record on this target, each file read whole and written back byte for byte and each log replayed to its hash, the digest of every exhibit's id, bytes and hash.",
+          "check": {
+            "crate": "geom-test",
+            "test": "museum",
+            "function": "every_exhibit_opens_and_replays_on_this_target"
+          },
+          "sha256": "327cc8119248efc09f90bab421c65b0125f0c897b1abcd3ed6f69a05ac3777cd"
+        },
+        {
           "id": "geom-topo/arenas",
           "what": "The arenas of geom-topo (piece G80): 48 bodies of random sizes (six past three chunks of faces and fins), every link random and in range, filled row by row or each arena at once, each published with every column in row order, its chunk count and the work publishing charged; an edit of random rows published beside the unchanged original; and each body refused once with a link pointed past its arena and once with a column one row longer, as tests/arena_determinism.rs records them.",
           "check": {
