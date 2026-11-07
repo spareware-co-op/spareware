@@ -73,7 +73,11 @@ fn chain(rng: &mut Lcg, points: usize) -> String {
         // The chain runs 100 right and 20 up per link: the straight distance is its own, or not.
         let n = (points - 1) as f64;
         let own = (n * n * 100.0 * 100.0 + n * n * 20.0 * 20.0).sqrt();
-        let asked = if rng.next() % 2 == 0 { own } else { own + 50.0 };
+        let asked = if rng.next().is_multiple_of(2) {
+            own
+        } else {
+            own + 50.0
+        };
         writeln!(
             text,
             "constraint 5.0 driving 2 distance 1.0 1.{} {asked}",

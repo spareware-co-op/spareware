@@ -4446,7 +4446,7 @@
           "file": "projects/engines/geometry/crates/geom-fuzz/src/sketch_motions.rs",
           "guarantees": [
             "**Never a panic.** A finder is made or refused with a typed error on every sketch.",
-            "**A motion is a motion.** Each motion moves the Jacobian's equations by no more than the rank tolerance lets through: `|J·x|` is at most σ_ind times the largest column, with the leading variable at 1, plus rounding (15.8).",
+            "**A motion is a motion.** Each motion moves the Jacobian's equations by no more than the rank tolerance lets through: `|J·x|` is at most `σ_ind` times the largest column, with the leading variable at 1, plus rounding (15.8).",
             "**One motion for each degree of freedom,** in leading-variable order, and a motion of one entity is one of the motions of all.",
             "**Deterministic.** A second finder gives equal motions."
           ],

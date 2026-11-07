@@ -248,9 +248,15 @@
               "kind": "corpus",
               "piece": "G101",
               "why": "4 new count benchmarks on geom-make's hot paths (decision 32.44): a box and a cylinder built, a box moved and quarter-turned; no existing digest moved"
+            },
+            {
+              "sha256": "cce98ea6ef149cfc6f915d2d4604fd511f459776f1b057a79fd2307846da82c1",
+              "kind": "corpus",
+              "piece": "G224",
+              "why": "2 new count benchmarks on geom-sketch's hot paths (decision 32.44): a chain diagnosed and the free motions of a chain by the sparse form; no existing digest moved"
             }
           ],
-          "sha256": "cce98ea6ef149cfc6f915d2d4604fd511f459776f1b057a79fd2307846da82c1"
+          "sha256": "ff57bf8f55d864e010b2cf05b41eb4177589ec871e987ac4e411e836d277e084"
         },
         {
           "id": "geom-nurbs/operations",
