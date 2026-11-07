@@ -43,6 +43,9 @@
 
 pub mod author;
 pub mod equation;
+pub mod fit;
+pub mod length;
+mod linear;
 pub mod model;
 pub mod plane;
 pub mod smooth;

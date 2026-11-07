@@ -478,8 +478,9 @@ fn only_a_spline_a_constraint_can_read_is_accepted() {
     let rule = "constraint 3.0 driving 0 spline-tangent-line 2.0 start 2.1\n";
     // The good one.
     assert!(parse(&base(rule, &BEZIER, "1 1 1 1")).is_ok());
-    // Rational, not clamped, a wrong knot count, and a line where a spline goes.
-    assert!(parse(&base(rule, &BEZIER, "1 2 1 1")).is_err());
+    // Rational is read now (piece G220); not clamped, a wrong knot count, and a line where a
+    // spline goes are not.
+    assert!(parse(&base(rule, &BEZIER, "1 2 1 1")).is_ok());
     assert!(
         parse(&base(
             rule,

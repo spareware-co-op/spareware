@@ -599,6 +599,42 @@ pub enum ConstraintKind {
         /// The line.
         line: ItemId,
     },
+    /// A spline end is smooth with a line or an arc, as far as `order` says (section 15.3): G1 is
+    /// the tangent, G2 adds the curvature the other curve has there (zero for a line, one over the
+    /// radius for an arc, on the side the arc bends to) and G3 its rate of change (zero for both).
+    /// The shared point is a coincidence of the spline's end control point and the other curve's
+    /// end, stated apart.
+    SplineAgainst {
+        /// The spline.
+        spline: ItemId,
+        /// Its end at the join.
+        end: SplineEnd,
+        /// The line or the arc.
+        other: ItemId,
+        /// Which end of an arc the join is at ([`SplineEnd::Start`] is the arc's start point);
+        /// a line is the same at both ends, and this is not read.
+        other_end: SplineEnd,
+        /// How smooth.
+        order: Smoothness,
+    },
+    /// A spline has this arc length, by fixed-node Gauss–Legendre quadrature (section 15.3).
+    SplineLength {
+        /// The spline.
+        spline: ItemId,
+        /// The length, above zero.
+        length: Amount,
+    },
+    /// A point is on a spline at the stated parameter of it: the pinned curve point is a fixed
+    /// linear function of the control points. A fit-point spline is a spline with one of these for
+    /// each of its fit points (section 15.2, [`crate::fit`]).
+    SplineThrough {
+        /// The spline.
+        spline: ItemId,
+        /// The point.
+        point: ItemId,
+        /// The parameter, inside the spline's domain.
+        at: f64,
+    },
     /// Two points are mirror images in a line.
     Symmetric {
         /// The first.
@@ -698,6 +734,7 @@ impl ConstraintKind {
                 | ConstraintKind::Heading { .. }
                 | ConstraintKind::Sweep { .. }
                 | ConstraintKind::ArcLength { .. }
+                | ConstraintKind::SplineLength { .. }
         )
     }
 
@@ -838,6 +875,19 @@ fn push<T>(list: &mut Vec<T>, value: T) -> Result<(), SketchError> {
     list.try_reserve(1).map_err(|_| SketchError::OutOfMemory)?;
     list.push(value);
     Ok(())
+}
+
+/// What a spline's constraints read of it: see [`Sketch::spline_parts`].
+#[derive(Clone, Copy, Debug)]
+pub(crate) struct SplineParts<'a> {
+    /// The degree.
+    pub degree: usize,
+    /// The control points.
+    pub points: &'a [ItemId],
+    /// The knots.
+    pub knots: &'a [f64],
+    /// The weights, or none for all ones.
+    pub weights: &'a [f64],
 }
 
 /// A sketch: a plane and its items, older first.
@@ -1058,19 +1108,20 @@ impl Sketch {
         Ok([centre, start, end])
     }
 
-    /// The spline `id`'s degree, control points and knots, when it is one whose ends have `level`
-    /// derivatives the constraints can read: not rational, clamped at both ends (the first and last
-    /// `degree` + 1 knots equal), of degree at least `level`, with more than `degree` control points
-    /// and the knot count a spline of that degree and size has.
+    /// The spline `id`'s degree, control points, knots and weights, when it is one whose ends have
+    /// `level` derivatives the constraints can read: clamped at both ends (the first and last
+    /// `degree` + 1 knots equal), of degree at least `level`, with more than `degree` control
+    /// points and the knot count a spline of that degree and size has. Weights may be any positive
+    /// numbers; none stored means all ones.
     ///
     /// # Errors
     ///
     /// [`SketchError::Unknown`]; [`SketchError::WrongKind`] if it is not such a spline.
-    pub fn spline_jets(
+    pub(crate) fn spline_parts(
         &self,
         id: ItemId,
         level: usize,
-    ) -> Result<(usize, &[ItemId], &[f64]), SketchError> {
+    ) -> Result<SplineParts<'_>, SketchError> {
         let EntityKind::Spline {
             degree,
             points,
@@ -1090,12 +1141,86 @@ impl Sketch {
             .and_then(|from| knots.get(from..))
             .is_some_and(clamped);
         let counted = n.checked_add(p).and_then(|k| k.checked_add(1)) == Some(knots.len());
-        let plain = weights.iter().all(|w| *w == 1.0);
-        let enough = p >= level && n > p;
-        if at_start && at_end && counted && plain && enough {
-            Ok((p, points, knots))
+        let weighed = weights.is_empty() || weights.len() == n;
+        // A rational curve has derivatives of every order; a polynomial one has none above its
+        // degree, which the constraints do not read.
+        let rational = weights.iter().any(|w| *w != 1.0);
+        let enough = (p >= level || rational) && n > p;
+        if at_start && at_end && counted && weighed && enough {
+            Ok(SplineParts {
+                degree: p,
+                points,
+                knots,
+                weights,
+            })
         } else {
             Err(SketchError::WrongKind(id))
+        }
+    }
+
+    /// The spline `id`'s degree, control points and knots, when it is one whose ends have `level`
+    /// derivatives the constraints can read and it is not rational (every weight one): see
+    /// [`Sketch::spline_parts`].
+    ///
+    /// # Errors
+    ///
+    /// [`SketchError::Unknown`]; [`SketchError::WrongKind`] if it is not such a spline.
+    pub fn spline_jets(
+        &self,
+        id: ItemId,
+        level: usize,
+    ) -> Result<(usize, &[ItemId], &[f64]), SketchError> {
+        let parts = self.spline_parts(id, level)?;
+        if parts.weights.iter().all(|w| *w == 1.0) {
+            Ok((parts.degree, parts.points, parts.knots))
+        } else {
+            Err(SketchError::WrongKind(id))
+        }
+    }
+
+    /// Whether the spline `id` has a weight other than one.
+    ///
+    /// # Errors
+    ///
+    /// [`SketchError::Unknown`]; [`SketchError::WrongKind`] if it is not a spline.
+    pub fn spline_is_rational(&self, id: ItemId) -> Result<bool, SketchError> {
+        match &self.entity(id)?.kind {
+            EntityKind::Spline { weights, .. } => Ok(weights.iter().any(|w| *w != 1.0)),
+            _ => Err(SketchError::WrongKind(id)),
+        }
+    }
+
+    /// The spline `id` as a `geom-nurbs` curve at the sketch's values: its basis, its control
+    /// points as they stand and its weights.
+    ///
+    /// # Errors
+    ///
+    /// [`SketchError::Unknown`]; [`SketchError::WrongKind`] if it is not a spline or its degree,
+    /// knots or weights are refused by `geom-nurbs`.
+    pub fn spline_curve(&self, id: ItemId) -> Result<geom_nurbs::Curve<2>, SketchError> {
+        let EntityKind::Spline {
+            degree,
+            points,
+            knots,
+            weights,
+        } = &self.entity(id)?.kind
+        else {
+            return Err(SketchError::WrongKind(id));
+        };
+        let wrong = |_| SketchError::WrongKind(id);
+        let p = usize::try_from(*degree).map_err(|_| SketchError::WrongKind(id))?;
+        let basis = geom_nurbs::Basis::new(p, knots.clone()).map_err(wrong)?;
+        let mut coords: Vec<[f64; 2]> = Vec::new();
+        coords
+            .try_reserve_exact(points.len())
+            .map_err(|_| SketchError::OutOfMemory)?;
+        for point in points {
+            coords.push(self.point(*point)?);
+        }
+        if weights.iter().all(|w| *w == 1.0) {
+            geom_nurbs::Curve::new(basis, &coords).map_err(wrong)
+        } else {
+            geom_nurbs::Curve::new_rational(basis, &coords, weights).map_err(wrong)
         }
     }
 
@@ -1292,14 +1417,45 @@ impl Sketch {
                 point(p)
             }
             ConstraintKind::SplineJoin { a, b, order, .. } => {
-                self.spline_jets(a, order.level())?;
-                self.spline_jets(b, order.level()).map(|_| ())
+                self.spline_parts(a, order.level())?;
+                self.spline_parts(b, order.level()).map(|_| ())
             }
             ConstraintKind::SplineTangentLine {
                 spline, line: l, ..
             } => {
-                self.spline_jets(spline, 1)?;
+                self.spline_parts(spline, 1)?;
                 line(l)
+            }
+            ConstraintKind::SplineAgainst {
+                spline,
+                other,
+                order,
+                ..
+            } => {
+                self.spline_parts(spline, order.level())?;
+                if self.line(other).is_ok() {
+                    Ok(())
+                } else {
+                    arc(other)
+                }
+            }
+            ConstraintKind::SplineLength { spline, length } => {
+                self.check_amount(length, true)?;
+                self.spline_curve(spline).map(|_| ())
+            }
+            ConstraintKind::SplineThrough {
+                spline,
+                point: p,
+                at,
+            } => {
+                finite(at)?;
+                point(p)?;
+                let (lo, hi) = self.spline_curve(spline)?.basis().domain();
+                if lo <= at && at <= hi {
+                    Ok(())
+                } else {
+                    Err(SketchError::WrongKind(spline))
+                }
             }
             ConstraintKind::Symmetric { a, b, line: l } => {
                 point(a)?;

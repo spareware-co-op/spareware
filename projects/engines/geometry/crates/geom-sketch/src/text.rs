@@ -353,6 +353,27 @@ fn write_constraint(out: &mut String, constraint: &Constraint) -> Result<(), Ske
             put(out, end_name(end))?;
             put_id(out, line)?;
         }
+        ConstraintKind::SplineAgainst {
+            spline,
+            end,
+            other,
+            other_end,
+            order,
+        } => {
+            put_kind(out, "spline-against", &[spline])?;
+            put(out, end_name(end))?;
+            put_id(out, other)?;
+            put(out, end_name(other_end))?;
+            put(out, order_name(order))?;
+        }
+        ConstraintKind::SplineLength { spline, length } => {
+            put_kind(out, "spline-length", &[spline])?;
+            put_amount(out, length)?;
+        }
+        ConstraintKind::SplineThrough { spline, point, at } => {
+            put_kind(out, "spline-through", &[spline, point])?;
+            put(out, at)?;
+        }
         ConstraintKind::Symmetric { a, b, line } => put_kind(out, "symmetric", &[a, b, line])?,
         ConstraintKind::SymmetricAbout { point, a, b } => {
             put_kind(out, "symmetric-about", &[point, a, b])?;
@@ -805,6 +826,22 @@ fn read_constraint(words: &mut Words<'_>) -> Result<Constraint, SketchError> {
             spline: words.id()?,
             end: words.spline_end()?,
             line: words.id()?,
+        },
+        "spline-against" => ConstraintKind::SplineAgainst {
+            spline: words.id()?,
+            end: words.spline_end()?,
+            other: words.id()?,
+            other_end: words.spline_end()?,
+            order: words.order()?,
+        },
+        "spline-length" => ConstraintKind::SplineLength {
+            spline: words.id()?,
+            length: words.amount()?,
+        },
+        "spline-through" => ConstraintKind::SplineThrough {
+            spline: words.id()?,
+            point: words.id()?,
+            at: words.real()?,
         },
         "symmetric" => ConstraintKind::Symmetric {
             a: words.id()?,

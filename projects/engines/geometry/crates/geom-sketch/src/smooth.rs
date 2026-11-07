@@ -139,6 +139,9 @@ pub fn end_jets(
     end: SplineEnd,
     level: usize,
 ) -> Result<Jets, SketchError> {
+    if sketch.spline_is_rational(spline)? {
+        return rational_jets(sketch, spline, end, level);
+    }
     let (ids, factors) = end_layout(sketch, spline, end, level)?;
     let mut values: Vec<f64> = Vec::new();
     for id in &ids {
@@ -172,6 +175,42 @@ pub fn end_jets(
             }
         }
         _ => return Err(SketchError::WrongKind(spline)),
+    })
+}
+
+/// The derivatives of a rational spline's end: sums of its first control points times the
+/// coefficients of [`crate::linear::end_coefficients`], each term and sum on [`Real`].
+fn rational_jets(
+    sketch: &Sketch,
+    spline: ItemId,
+    end: SplineEnd,
+    level: usize,
+) -> Result<Jets, SketchError> {
+    if !(1..=3).contains(&level) {
+        return Err(SketchError::WrongKind(spline));
+    }
+    let (ids, coefficients) = crate::linear::end_coefficients(sketch, spline, end, level)?;
+    let columns = ids.len();
+    let mut out = [[0.0_f64; 2]; 3];
+    for (k, jet) in out.iter_mut().enumerate().take(level) {
+        let (mut x, mut y) = (Real::ZERO, Real::ZERO);
+        for (i, id) in ids.iter().enumerate() {
+            let at = k
+                .checked_mul(columns)
+                .and_then(|r| r.checked_add(i))
+                .ok_or(SketchError::Internal)?;
+            let c = Real::new(*coefficients.get(at).ok_or(SketchError::Internal)?)?;
+            let [px, py] = sketch.point(*id)?;
+            x = x.add(c.mul(Real::new(px)?)?)?;
+            y = y.add(c.mul(Real::new(py)?)?)?;
+        }
+        *jet = [x.get(), y.get()];
+    }
+    let [first, second, third] = out;
+    Ok(Jets {
+        first,
+        second,
+        third,
     })
 }
 

@@ -14,6 +14,8 @@ geom-run = { path = "../geom-run", default-features = false }
 
 geom-curve = { path = "../geom-curve" }
 geom-linalg = { path = "../geom-linalg" }
+# Spline fitting and the basis a spline end is read from (piece G220); layer 2, below this crate.
+geom-nurbs = { path = "../geom-nurbs" }
 geom-num = { path = "../geom-num" }
 geom-op = { path = "../geom-op" }
 

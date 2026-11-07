@@ -1303,6 +1303,7 @@ dependencies = [
  "geom-linalg",
  "geom-math",
  "geom-num",
+ "geom-nurbs",
  "geom-op",
  "geom-run",
  "geom-test",

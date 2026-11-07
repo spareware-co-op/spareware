@@ -302,7 +302,7 @@ const ROWS: &[Row<'static>] = &[
     // 10. Operations.
     kernel("geom-blend",    10, Accepted,   Here, "base bool intersect surface topo check"),
     kernel("geom-offset",   10, Accepted,   Here, "base bool intersect surface skeleton topo"),
-    kernel("geom-sketch",   10, Accepted,   Elsewhere("G216"), "base math curve linalg"),
+    kernel("geom-sketch",   10, Accepted,   Elsewhere("G216"), "base math curve nurbs linalg"),
     kernel("geom-profile",  10, Amended27, Here, "base sketch 2d topo name check intersect"),
     kernel("geom-terrain",  10, Accepted,   Here,
         "base math 2d mesh topo poly bool skeleton curve surface name bvh"),
