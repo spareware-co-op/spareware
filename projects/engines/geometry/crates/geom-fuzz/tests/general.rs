@@ -85,6 +85,13 @@ fn a_crossing_of_a_planes_equation_past_the_patch_is_not_a_crossing() {
     holds(harness(&[0x4a, 0x03, 0xfd, 0x0b]));
 }
 
+/// The same law broken by `0a 33 23 32` on the line that came from the fuzzer's CI: a crossing at
+/// (0.427, 3.167) of a plane patch's equation, again past the patch, and again not a crossing.
+#[test]
+fn a_second_crossing_past_a_plane_patch_is_not_a_crossing() {
+    holds(harness(&[0x0a, 0x33, 0x23, 0x32]));
+}
+
 #[test]
 fn general_seeded() -> Result<(), seeded::Failure> {
     seeded::run(
