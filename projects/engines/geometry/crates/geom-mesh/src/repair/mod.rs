@@ -79,6 +79,7 @@ pub mod orient;
 pub mod quantise;
 pub mod reconstruct;
 pub mod weld;
+mod winding;
 
 pub use heal::{Heal, HealLog, Healed, heal};
 pub use quantise::{Quantised, quantise};

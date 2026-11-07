@@ -3,7 +3,9 @@ name = "geom-mesh"
 version = "0.0.0"
 edition.workspace = true
 publish.workspace = true
-license.workspace = true
+# Apache-2.0 for Spare Kit's code, and MPL-2.0 for the winding numbers converted from libigl into
+# src/repair/winding.rs (rule 29.20(4); the notice is in projects/engines/geometry/NOTICE).
+license = "Apache-2.0 AND MPL-2.0"
 description = "Spare Kit geometry kernel: exact meshes and watertight tessellation."
 
 [dependencies]
