@@ -32,7 +32,7 @@ affordable, and where an exact rank belongs.
   with dead columns, Bareiss and plain elimination give one rank, and it is never above the rank the
   matrix was built with.
 - On the generated families (`geom_test::oracle::families`), for every case whose rules are
-  polynomial (about nine in ten; the growth family's angle rules are the rest) the exact rank is
+  polynomial (every family but the growth family, whose angle rules are refused) the exact rank is
   exactly what the family is built to have, and it is the kernel's diagnosis: the unknowns less the
   rank are the degrees of freedom, and the equations less the rank are the redundant and conflicting
   groups. No disagreement in 400 cases at the seed in `tests/exact_rank.rs`, and the same night is a
@@ -40,35 +40,44 @@ affordable, and where an exact rank belongs.
 - Cost on a chain of lengths and level or plumb lines (`print_the_cost_table`, release build on one
   core):
 
-COST_TABLE
+```text
+points unknowns rank bits products milliseconds
+10 20 20 97 4940 0
+20 40 40 204 41080 2
+40 80 80 401 334960 16
+80 160 160 820 2705120 132
+160 320 320 1670 21743040 1416
+250 500 500 2595 83083500 4763
+330 660 660 3434 191228620 11250
+500 1000 1000 5202 665667000 44731
+```
+
+"bits" is the widest number met; "products" counts big-integer multiplications. Time grows with the
+cube of the size (160 to 500 points is 3.1 times the unknowns and 32 times the time).
 
 ## What it shows
 
 1. **Correctness is not in doubt.** The elimination is exact, and agrees with the pivoted QR on every
    family. The pivoted QR's tolerance (2^-12 of the largest column) never had to decide a case the
    exact rank decided otherwise.
-2. **Cost is polynomial but steep.** Bareiss on a dense matrix with n unknowns makes about n^3/3
-   products of numbers that grow to about n times the entries' length. A sketch Jacobian is sparse
-   and block-structured, and the table above is for the sparsest case, a chain, whose cost grows more
-   slowly than the dense bound but still faster than the number of unknowns. The dense bound for one
-   block of 1,000 unknowns is a few hundred million products of numbers of tens of thousands of
-   bits: hours, not milliseconds.
-3. **Real sketches do not have 1,000-unknown blocks.** After the structure analysis of 15.5 a
-   typical block is a few unknowns and the largest in a worked example a few dozen; the table's
-   sizes cover those in milliseconds.
+2. **Cost is polynomial and affordable in a test.** A chain is the sparsest case, and a block of 1,000
+   unknowns costs 45 seconds in a release build on one core, 5 seconds at 500 unknowns, 130
+   milliseconds at 160. A dense block would cost more, so the figure is a floor for a banded one.
+3. **Too slow to run on every solve.** The pivoted QR does the same block in milliseconds, so an exact
+   rank belongs where a test can pay seconds, not in the solver's path.
 
 ## Recommendation
 
 - **Use the exact rank in tests, not in the solver.** G232's law ("freedoms, redundancy and conflicts
   against the exact-rank Jacobian in rationals at seeded points") is affordable as stated: its sketches
-  are the families' sizes, each a few milliseconds. Use `exact_rank::jacobian` and `bareiss_rank` as
+  are the families' sizes (a dozen points), each well under a millisecond. Use `exact_rank::jacobian` and `bareiss_rank` as
   they are, extended with the rule forms G232 adds.
 - **Do not put Bareiss in a kernel crate for the solver's verdicts.** The pivoted QR with the SVD
   confirmation is already right on every case, is orders of magnitude cheaper, and its tolerance is
   stated and reported. An exact answer would add cost and a second place for a verdict to come from.
 - **If an exact verdict is ever wanted for a large block, do it per block and modularly.** Run the
   elimination on each Dulmage-Mendelsohn block (15.5), where sizes are small, and for a block over
-  about 150 unknowns take the rank modulo a few random primes: the rank over Q is at least the rank
+  about 500 unknowns take the rank modulo a few random primes: the rank over Q is at least the rank
   modulo any prime that does not divide the right minors, so the largest rank found is a certified
   lower bound and equals the rank with overwhelming probability. That is a separate piece if wanted;
   nothing in G220a to G232 needs it.
