@@ -18,7 +18,7 @@
 //!
 //! Method: differential testing against the cross-product formula for the meeting of two segments
 //! in whole numbers (O'Rourke, *Computational Geometry in C*, 2nd ed., Cambridge 1998, section
-//! 7.1, doi:10.1017/CBO9780511804120) and Euler's formula for planar graphs, written here from the
+//! 7.1, <https://doi.org/10.1017/CBO9780511804120>) and Euler's formula for planar graphs, written here from the
 //! rules and not from the code.
 //!
 //! Cost: constant per case, at most [`MAX_SEGMENTS`] segments; at most [`MAX_INPUT_BYTES`] bytes
@@ -113,19 +113,19 @@ fn of_rational(r: &Rational2) -> Option<Red> {
 /// The vertices the cross-product formula gives: every end point and every proper crossing.
 fn oracle(segs: &[[i128; 4]]) -> Option<BTreeSet<Red>> {
     let mut out = BTreeSet::new();
-    for s in segs {
-        out.insert((s[0], 1, s[1], 1));
-        out.insert((s[2], 1, s[3], 1));
+    for &[x0, y0, x1, y1] in segs {
+        out.insert((x0, 1, y0, 1));
+        out.insert((x1, 1, y1, 1));
     }
-    for (i, a) in segs.iter().enumerate() {
-        for b in segs.get(i.checked_add(1)?..)? {
-            let (rx, ry) = (a[2].checked_sub(a[0])?, a[3].checked_sub(a[1])?);
-            let (sx, sy) = (b[2].checked_sub(b[0])?, b[3].checked_sub(b[1])?);
+    for (i, &[ax, ay, bx, by]) in segs.iter().enumerate() {
+        for &[cx, cy, dx, dy] in segs.get(i.checked_add(1)?..)? {
+            let (rx, ry) = (bx.checked_sub(ax)?, by.checked_sub(ay)?);
+            let (sx, sy) = (dx.checked_sub(cx)?, dy.checked_sub(cy)?);
             let den = rx.checked_mul(sy)?.checked_sub(ry.checked_mul(sx)?)?;
             if den == 0 {
                 continue;
             }
-            let (qx, qy) = (b[0].checked_sub(a[0])?, b[1].checked_sub(a[1])?);
+            let (qx, qy) = (cx.checked_sub(ax)?, cy.checked_sub(ay)?);
             let tn = qx.checked_mul(sy)?.checked_sub(qy.checked_mul(sx)?)?;
             let un = qx.checked_mul(ry)?.checked_sub(qy.checked_mul(rx)?)?;
             let (tn, un, den) = if den < 0 {
@@ -136,8 +136,8 @@ fn oracle(segs: &[[i128; 4]]) -> Option<BTreeSet<Red>> {
             if tn < 0 || tn > den || un < 0 || un > den {
                 continue;
             }
-            let x = a[0].checked_mul(den)?.checked_add(tn.checked_mul(rx)?)?;
-            let y = a[1].checked_mul(den)?.checked_add(tn.checked_mul(ry)?)?;
+            let x = ax.checked_mul(den)?.checked_add(tn.checked_mul(rx)?)?;
+            let y = ay.checked_mul(den)?.checked_add(tn.checked_mul(ry)?)?;
             out.insert(reduced(x, y, den)?);
         }
     }
