@@ -14098,6 +14098,96 @@
       "version": 1
     },
     {
+      "evidence": {},
+      "family": "Query",
+      "missing": [
+        "benchmark",
+        "contract",
+        "family_laws",
+        "fuzz",
+        "property",
+        "unit"
+      ],
+      "name": "query.area",
+      "tier": "Preview since 2026-10-31",
+      "version": 1
+    },
+    {
+      "evidence": {},
+      "family": "Query",
+      "missing": [
+        "benchmark",
+        "contract",
+        "family_laws",
+        "fuzz",
+        "property",
+        "unit"
+      ],
+      "name": "query.bounding_box",
+      "tier": "Preview since 2026-10-31",
+      "version": 1
+    },
+    {
+      "evidence": {},
+      "family": "Query",
+      "missing": [
+        "benchmark",
+        "contract",
+        "family_laws",
+        "fuzz",
+        "property",
+        "unit"
+      ],
+      "name": "query.exactness",
+      "tier": "Preview since 2026-10-31",
+      "version": 1
+    },
+    {
+      "evidence": {},
+      "family": "Query",
+      "missing": [
+        "benchmark",
+        "contract",
+        "family_laws",
+        "fuzz",
+        "property",
+        "unit"
+      ],
+      "name": "query.faces",
+      "tier": "Preview since 2026-10-31",
+      "version": 1
+    },
+    {
+      "evidence": {},
+      "family": "Query",
+      "missing": [
+        "benchmark",
+        "contract",
+        "family_laws",
+        "fuzz",
+        "property",
+        "unit"
+      ],
+      "name": "query.validity",
+      "tier": "Preview since 2026-10-31",
+      "version": 1
+    },
+    {
+      "evidence": {},
+      "family": "Query",
+      "missing": [
+        "benchmark",
+        "contract",
+        "family_laws",
+        "fuzz",
+        "property",
+        "unit"
+      ],
+      "name": "query.volume",
+      "tier": "Preview since 2026-10-31",
+      "version": 1
+    },
+    {
       "evidence": {
         "contract": [
           "projects/engines/crates/engine-geometry/tests/contract_laws.rs"
