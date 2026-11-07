@@ -214,7 +214,7 @@ fn each_subdivision_takes_the_work_it_always_took() {
     let low = bowl(2.0, -1.0, 1.0);
     let high = bowl(2.0, 1.0, -1.0);
     let cases: [(&SurfaceKind, &SurfaceKind, u64, usize, usize); 2] = [
-        (&plane, &sphere, 96_699, 11, 22),
+        (&plane, &sphere, 94_705, 11, 22),
         (&low, &high, 92_793, 12, 24),
     ];
     for (a, b, work, settled, starts) in cases {

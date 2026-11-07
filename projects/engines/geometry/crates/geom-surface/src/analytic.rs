@@ -580,6 +580,18 @@ macro_rules! round_kind {
                 self.round.sign
             }
 
+            /// The same surface over `domain`: its data are kept, so the points that both
+            /// domains hold are the same points.
+            ///
+            /// # Errors
+            ///
+            /// As the kind's `new`, for the domain.
+            pub fn with_domain(&self, domain: ParamBox) -> Result<$kind, CurveError> {
+                let mut round = self.round.clone();
+                round.domain = domain;
+                $kind::build(round)
+            }
+
             fn build(round: Round) -> Result<$kind, CurveError> {
                 round.check($which)?;
                 let terms = round_terms($which, &round)?;
@@ -936,6 +948,15 @@ round_surface!(Sphere, Which::Sphere, Sphere);
 round_surface!(Torus, Which::Torus, Torus);
 
 impl Plane {
+    /// The same plane over `domain`.
+    ///
+    /// # Errors
+    ///
+    /// [`CurveError::SpanOutside`] for a side that is not ordered or is NaN.
+    pub fn with_domain(&self, domain: ParamBox) -> Result<Plane, CurveError> {
+        Plane::new(self.origin, self.a, self.b, domain)
+    }
+
     /// The plane c + u·a + v·b over `domain`, whose ends may be infinite.
     ///
     /// # Errors
