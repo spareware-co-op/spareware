@@ -31,8 +31,7 @@
 
 use std::collections::BTreeSet;
 
-use geom_2d::arrange::{Arrangement, arrange};
-use geom_num::carrier::Rational2;
+use geom_2d::arrange::{Arrangement, At, arrange};
 use geom_num::grid::P2;
 use geom_run::{Budget, WorkMeter};
 use geom_test::{ByteSource, Entropy};
@@ -105,8 +104,8 @@ fn reduced(x: i128, y: i128, w: i128) -> Option<Red> {
     ))
 }
 
-fn of_rational(r: &Rational2) -> Option<Red> {
-    let ([x, y], w) = r.coordinates();
+fn of_rational(v: &At) -> Option<Red> {
+    let ([x, y], w) = v.rational()?.coordinates();
     reduced(x, y, w)
 }
 
@@ -222,7 +221,11 @@ pub fn check(case: &Case) -> Result<(), Finding> {
     if v.checked_add(f) != e.checked_add(c).and_then(|n| n.checked_add(1)) {
         return Err(fail(case, "Euler's formula: V - E + F = 1 + C"));
     }
-    let half_edges: usize = a.cycles().iter().map(Vec::len).fold(0, usize::saturating_add);
+    let half_edges: usize = a
+        .cycles()
+        .iter()
+        .map(Vec::len)
+        .fold(0, usize::saturating_add);
     if Some(half_edges) != e.checked_mul(2) {
         return Err(fail(case, "every half-edge is on one cycle"));
     }
