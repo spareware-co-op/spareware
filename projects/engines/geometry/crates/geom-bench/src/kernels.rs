@@ -2349,9 +2349,9 @@ pub mod bvh {
 /// `geom-2d`'s entity model (piece G194, decision 32.44): a polyline built and checked, and a
 /// shape's change under a transform's classification.
 pub mod entity {
+    use crate::inputs::entity::Placed;
     use geom_2d::edit::{Similarity, place_polyline, polyline_length};
     use geom_2d::entity::{Becomes, Frac, Polyline, Shape};
-    use crate::inputs::entity::Placed;
     use geom_math::Classification;
     use geom_num::NumError;
     use geom_num::grid::P2;
@@ -2400,8 +2400,12 @@ pub mod entity {
         run(batch, out, |((vertices, bulges), k)| {
             let poly = Polyline::new(vertices.clone(), bulges.clone(), None, false)
                 .map_err(|_| NumError::Degenerate)?;
-            let placed = place_polyline(&poly, &placement(*k)?).map_err(|_| NumError::Degenerate)?;
-            let first = placed.vertices().first().map_or(0, |p| p.x.get().unsigned_abs());
+            let placed =
+                place_polyline(&poly, &placement(*k)?).map_err(|_| NumError::Degenerate)?;
+            let first = placed
+                .vertices()
+                .first()
+                .map_or(0, |p| p.x.get().unsigned_abs());
             Ok(first.wrapping_add(u64::try_from(placed.bulges().len()).unwrap_or(0)))
         });
     }

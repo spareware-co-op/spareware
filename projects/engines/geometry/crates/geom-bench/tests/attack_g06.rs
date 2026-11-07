@@ -1620,8 +1620,8 @@ fn direct_digest(group: &str, name: &str, class: Class) -> Option<Digest> {
                 .map_err(|_| geom_num::NumError::Degenerate)?;
                 let poly = geom_2d::entity::Polyline::new(vertices, bulges, None, false)
                     .map_err(|_| geom_num::NumError::Degenerate)?;
-                let placed = place_polyline(&poly, &map)
-                    .map_err(|_| geom_num::NumError::Degenerate)?;
+                let placed =
+                    place_polyline(&poly, &map).map_err(|_| geom_num::NumError::Degenerate)?;
                 Ok(placed.vertices()[0].x.get().unsigned_abs() + placed.bulges().len() as u64)
             },
         )),

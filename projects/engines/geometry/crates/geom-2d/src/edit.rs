@@ -50,7 +50,7 @@ use geom_num::interval::Interval;
 use geom_num::{NumError, carrier::Rational2};
 
 use crate::carrier::Line2;
-use crate::entity::{Bulge, EntityError, Ends, Frac, Polyline, Shape};
+use crate::entity::{Bulge, Ends, EntityError, Frac, Polyline, Shape};
 use crate::point::Pt2;
 
 /// The vector from `a` to `b`. A difference of two 63-bit coordinates fits 128 bits, so the
@@ -327,10 +327,7 @@ impl Similarity {
                     };
                     if back.linear(image) == Some(probe) {
                         let moved = back
-                            .linear([
-                                i128::from(self.shift[0]),
-                                i128::from(self.shift[1]),
-                            ])
+                            .linear([i128::from(self.shift[0]), i128::from(self.shift[1])])
                             .ok_or(EditError::Range)?;
                         let sx = i64::try_from(moved[0].checked_neg().ok_or(EditError::Range)?)
                             .map_err(|_| EditError::Range)?;
@@ -513,7 +510,13 @@ pub fn stretch(poly: &Polyline, window: &Window, dx: i64, dy: i64) -> Result<Pol
     let vertices = poly
         .vertices()
         .iter()
-        .map(|p| if window.holds(*p) { shift.point(*p) } else { Ok(*p) })
+        .map(|p| {
+            if window.holds(*p) {
+                shift.point(*p)
+            } else {
+                Ok(*p)
+            }
+        })
         .collect::<Result<Vec<P2>, EditError>>()?;
     Ok(Polyline::new(
         vertices,
@@ -544,11 +547,19 @@ pub fn array_rectangular(
         for c in 0..columns {
             let dx = i64::from(c)
                 .checked_mul(step[0])
-                .and_then(|a| i64::from(r).checked_mul(row_step[0]).and_then(|b| a.checked_add(b)))
+                .and_then(|a| {
+                    i64::from(r)
+                        .checked_mul(row_step[0])
+                        .and_then(|b| a.checked_add(b))
+                })
                 .ok_or(EditError::Range)?;
             let dy = i64::from(c)
                 .checked_mul(step[1])
-                .and_then(|a| i64::from(r).checked_mul(row_step[1]).and_then(|b| a.checked_add(b)))
+                .and_then(|a| {
+                    i64::from(r)
+                        .checked_mul(row_step[1])
+                        .and_then(|b| a.checked_add(b))
+                })
                 .ok_or(EditError::Range)?;
             out.push(place(shape, &Similarity::translation(dx, dy))?);
         }
@@ -607,7 +618,8 @@ fn gcd(a: u128, b: u128) -> u128 {
 /// [`EditError::Range`] past the coordinate range.
 pub fn lengthen(a: P2, b: P2, end: End, change: i64) -> Result<(P2, P2), EditError> {
     let [dx, dy] = diff(a, b);
-    let g = i128::try_from(gcd(dx.unsigned_abs(), dy.unsigned_abs())).map_err(|_| EditError::Range)?;
+    let g =
+        i128::try_from(gcd(dx.unsigned_abs(), dy.unsigned_abs())).map_err(|_| EditError::Range)?;
     let (Some(ux), Some(uy)) = (dx.checked_div(g), dy.checked_div(g)) else {
         return Err(EditError::Degenerate);
     };
@@ -674,7 +686,8 @@ pub fn divide(a: P2, b: P2, parts: u32) -> Result<Vec<Rational2>, EditError> {
 /// [`EditError::Degenerate`] for equal ends or `every` of zero.
 pub fn measure(a: P2, b: P2, every: u32) -> Result<Vec<P2>, EditError> {
     let [dx, dy] = diff(a, b);
-    let g = i128::try_from(gcd(dx.unsigned_abs(), dy.unsigned_abs())).map_err(|_| EditError::Range)?;
+    let g =
+        i128::try_from(gcd(dx.unsigned_abs(), dy.unsigned_abs())).map_err(|_| EditError::Range)?;
     let (Some(ux), Some(uy)) = (dx.checked_div(g), dy.checked_div(g)) else {
         return Err(EditError::Degenerate);
     };
@@ -735,7 +748,10 @@ pub fn polyline_length(poly: &Polyline) -> Result<Interval, EditError> {
     let v = poly.vertices();
     let mut total = Interval::point(0.0)?;
     for (i, bulge) in poly.bulges().iter().enumerate() {
-        let next = i.checked_add(1).and_then(|n| n.checked_rem(v.len())).ok_or(EditError::Range)?;
+        let next = i
+            .checked_add(1)
+            .and_then(|n| n.checked_rem(v.len()))
+            .ok_or(EditError::Range)?;
         let (Some(a), Some(b)) = (v.get(i), v.get(next)) else {
             return Err(EditError::Range);
         };

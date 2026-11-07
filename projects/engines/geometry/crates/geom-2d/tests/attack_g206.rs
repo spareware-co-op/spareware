@@ -117,7 +117,10 @@ fn a_unit_map_is_undone_by_its_inverse_and_a_scale_is_not() {
         }
     }
     assert_eq!(
-        Similarity::scaling(2, p(0, 0)).unwrap().inverse().unwrap_err(),
+        Similarity::scaling(2, p(0, 0))
+            .unwrap()
+            .inverse()
+            .unwrap_err(),
         EditError::NotExact
     );
 }
@@ -125,7 +128,10 @@ fn a_unit_map_is_undone_by_its_inverse_and_a_scale_is_not() {
 #[test]
 fn a_result_past_the_range_is_refused_not_wrapped() {
     let big = Similarity::scaling(4, p(0, 0)).unwrap();
-    assert_eq!(big.point(p(COORD_MAX / 2, 0)).unwrap_err(), EditError::Range);
+    assert_eq!(
+        big.point(p(COORD_MAX / 2, 0)).unwrap_err(),
+        EditError::Range
+    );
     let shift = Similarity::translation(COORD_MAX, 0);
     assert_eq!(shift.point(p(1, 0)).unwrap_err(), EditError::Range);
 }
@@ -187,10 +193,7 @@ fn a_segment_is_placed_with_its_carrier() {
     // Both ends are on the carrier a x + b y = c.
     let ([ca, cb], cc) = carrier.coefficients();
     for q in [a, b] {
-        assert_eq!(
-            ca * i128::from(q.x.get()) + cb * i128::from(q.y.get()),
-            cc
-        );
+        assert_eq!(ca * i128::from(q.x.get()) + cb * i128::from(q.y.get()), cc);
     }
 }
 
@@ -325,8 +328,14 @@ fn dividing_gives_exact_equal_parts() {
         assert_eq!(x * 4, 10 * k * w);
         assert_eq!(y * 4, 4 * k * w);
     }
-    assert_eq!(divide(p(0, 0), p(1, 1), 1).unwrap_err(), EditError::Degenerate);
-    assert_eq!(divide(p(2, 2), p(2, 2), 3).unwrap_err(), EditError::Degenerate);
+    assert_eq!(
+        divide(p(0, 0), p(1, 1), 1).unwrap_err(),
+        EditError::Degenerate
+    );
+    assert_eq!(
+        divide(p(2, 2), p(2, 2), 3).unwrap_err(),
+        EditError::Degenerate
+    );
 }
 
 #[test]
@@ -338,8 +347,14 @@ fn measuring_steps_off_primitive_lengths_not_past_the_end() {
     let by3 = measure(p(0, 0), p(12, 8), 3).unwrap();
     assert_eq!(by3.len(), 1);
     assert_eq!(xy(by3[0]), (9, 6));
-    assert_eq!(measure(p(0, 0), p(0, 0), 1).unwrap_err(), EditError::Degenerate);
-    assert_eq!(measure(p(0, 0), p(3, 4), 0).unwrap_err(), EditError::Degenerate);
+    assert_eq!(
+        measure(p(0, 0), p(0, 0), 1).unwrap_err(),
+        EditError::Degenerate
+    );
+    assert_eq!(
+        measure(p(0, 0), p(3, 4), 0).unwrap_err(),
+        EditError::Degenerate
+    );
 }
 
 #[test]
@@ -397,10 +412,9 @@ fn a_placed_polyline_has_a_length_that_meets_the_original() {
         );
     }
     // A whole scale multiplies the length by its factor.
-    let tripled = polyline_length(
-        &place_polyline(&poly, &Similarity::scaling(3, p(0, 0)).unwrap()).unwrap(),
-    )
-    .unwrap();
+    let tripled =
+        polyline_length(&place_polyline(&poly, &Similarity::scaling(3, p(0, 0)).unwrap()).unwrap())
+            .unwrap();
     assert!(tripled.lo() <= before.hi() * 3.0 && before.lo() * 3.0 <= tripled.hi());
 }
 
