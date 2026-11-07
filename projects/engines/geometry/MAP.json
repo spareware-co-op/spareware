@@ -11277,7 +11277,7 @@
         },
         {
           "cost": "one match per operation, plus the operation, plus one write of each result to hash it.",
-          "does": "[`Kernel`] finds an operation by its name and version ([`Call::read`]), takes the bodies it names from the results so far, runs it, and keeps each result under its content ID, so a later operation of the log can name it. Each piece that adds an operation adds its row to [`Call`].",
+          "does": "[`Kernel`] finds an operation by its name and version ([`Call::read`]), takes the bodies it names from the results so far, runs it, and keeps each result under its content ID, so a later operation of the log can name it. Each piece that adds an operation adds its row to [`Call`]. A case an oracle raised on a function no operation holds yet replays through `oracle::geomdl`.",
           "family": [],
           "file": "projects/engines/geometry/crates/geom-test/src/fixture/kernel.rs",
           "guarantees": [
