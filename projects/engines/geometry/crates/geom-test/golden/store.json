@@ -272,9 +272,15 @@
               "kind": "corpus",
               "piece": "G148",
               "why": "Count benchmarks of the stack joined: geom-make's four (G101), geom-num's fourteen new functions (G138) and mesh/boolean (G148); no existing digest moved"
+            },
+            {
+              "sha256": "fb85bdc3a9a3ac6755daa281d6c4c3a845bb8e7e93aa329334de45a77352d090",
+              "kind": "corpus",
+              "piece": "G149",
+              "why": "2 new count benchmarks on exact hulls and plane slices (decision 32.44): mesh/hull and mesh/slice; no existing digest moved"
             }
           ],
-          "sha256": "fb85bdc3a9a3ac6755daa281d6c4c3a845bb8e7e93aa329334de45a77352d090"
+          "sha256": "baac643f845957f016cf37e67d51f531c9d9b5bc745ceed3e4bd0edf35fbd99f"
         },
         {
           "id": "geom-nurbs/operations",
