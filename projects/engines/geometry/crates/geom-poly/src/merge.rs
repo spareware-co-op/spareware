@@ -1023,11 +1023,14 @@ fn numbered(
         let wide: Option<Vec<WideCorner>> = wide.into_iter().collect();
         let pooled = match wide {
             Some(wide) => {
+                // The items are references, as the cell sort's are, so that a key can borrow
+                // from the coordinates and not from the closure's argument.
+                let held: Vec<&WideCorner> = wide.iter().collect();
                 let sorted = exec.sort_stable::<_, _, MergeError, _>(
                     meter,
                     SORT_CORNERS,
                     SORT_PLAN,
-                    &wide,
+                    &held,
                     |w| WideKey(w),
                 );
                 let sorted = sorted.map_err(|e| phase_error(e, meter))?;
