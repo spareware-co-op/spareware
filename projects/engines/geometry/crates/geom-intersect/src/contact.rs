@@ -1032,6 +1032,7 @@ pub const TURN: f64 = 2.0;
 /// The parameters (u₁, v₁, u₂, v₂) that close, by a whole turn: a point of the domain's one end is
 /// the point of the other.
 #[doc(hidden)]
+#[must_use]
 pub fn closing(first: &SurfaceKind, second: &SurfaceKind) -> [bool; 4] {
     let (a, b) = (charts(first).closes, charts(second).closes);
     [a[0], a[1], b[0], b[1]]
@@ -1048,6 +1049,7 @@ pub fn moved(x: Interval, by: f64) -> Result<Interval, NumError> {
 /// The box of `b`, moved by whole turns of the closing parameters, that touches `a` in all four
 /// parameters; `None` if no such move exists or none is needed (then the clusters already met).
 #[doc(hidden)]
+#[must_use]
 pub fn wrapped(a: &[Interval; 4], b: &[Interval; 4], closes: [bool; 4]) -> Option<[Interval; 4]> {
     let mut out = *b;
     let mut moves = 0_usize;
@@ -1298,6 +1300,7 @@ fn ranges(reading: &Reading) -> [(f64, f64); 4] {
 
 /// Where each closing parameter's domain starts and ends, and `None` for those that do not close.
 #[doc(hidden)]
+#[must_use]
 pub fn cuts_of(first: &SurfaceKind, second: &SurfaceKind) -> [Option<(f64, f64)>; 4] {
     let closes = closing(first, second);
     let ((u0, u1), (v0, v1)) = first.domain();
@@ -1326,7 +1329,9 @@ fn reach_a_cut(spans: &[(f64, f64); 4], cuts: &[Option<(f64, f64)>; 4]) -> bool 
 }
 
 /// The four ranges of a pair of patches.
-const fn spans_of(first: Region, second: Region) -> [(f64, f64); 4] {
+#[doc(hidden)]
+#[must_use]
+pub const fn spans_of(first: Region, second: Region) -> [(f64, f64); 4] {
     let (((a, b), (c, d)), ((e, f), (g, h))) = (first, second);
     [(a, b), (c, d), (e, f), (g, h)]
 }
@@ -1503,6 +1508,7 @@ fn turned_seams(
 /// past the domain's end by what it reaches; the part past the end is the same points as the
 /// domain's start (12.10).
 #[doc(hidden)]
+#[must_use]
 pub fn unturned(reading: Reading, starts: &[Option<f64>; 4]) -> Reading {
     let spans = ranges(&reading);
     let past: [bool; 4] = core::array::from_fn(|k| {
@@ -1567,19 +1573,28 @@ fn at_the_cuts(readings: Vec<Reading>, again: Vec<Reading>, turned: &Turned) -> 
         .filter(|r| !on_a_cut(r, &old))
         .collect();
     for reading in again {
-        let spans = ranges(&reading);
-        let holds = spans
-            .iter()
-            .zip(&turned.starts)
-            .any(|((a, b), start)| start.is_some_and(|s| *a <= s + TURN && s + TURN <= *b));
-        let new_cut = spans.iter().zip(&turned.starts).any(|((a, b), start)| {
-            start.is_some_and(|s| *a == s + TURN / 2.0 || *b == s + TURN / 2.0 + TURN)
-        });
+        let (holds, new_cut) = cut_of(&ranges(&reading), &turned.starts);
         if holds && !new_cut {
             out.push(unturned(reading, &turned.starts));
         }
     }
     out
+}
+
+/// Whether four ranges of the turned chart hold the first chart's cut (a whole turn from the turned
+/// domain's start) and whether they touch the turned chart's own (its half-way line, and a turn
+/// past it).
+#[doc(hidden)]
+#[must_use]
+pub fn cut_of(spans: &[(f64, f64); 4], starts: &[Option<f64>; 4]) -> (bool, bool) {
+    let holds = spans
+        .iter()
+        .zip(starts)
+        .any(|((a, b), start)| start.is_some_and(|s| *a <= s + TURN && s + TURN <= *b));
+    let new_cut = spans.iter().zip(starts).any(|((a, b), start)| {
+        start.is_some_and(|s| *a == s + TURN / 2.0 || *b == s + TURN / 2.0 + TURN)
+    });
+    (holds, new_cut)
 }
 
 /// The first chart's domain ends, from where its closing parameters start: a turn long.

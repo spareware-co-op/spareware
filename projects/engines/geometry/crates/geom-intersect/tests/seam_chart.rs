@@ -10,7 +10,9 @@
 )]
 
 use geom_curve::Frame;
-use geom_intersect::contact::{Reading, TURN, closing, cuts_of, moved, unturned, wrapped};
+use geom_intersect::contact::{
+    Reading, TURN, closing, cut_of, cuts_of, moved, spans_of, unturned, wrapped,
+};
 use geom_intersect::result::{CurveContact, PointContact, Unresolved};
 use geom_num::interval::Interval;
 use geom_surface::{Cylinder, Plane, SurfaceKind};
@@ -65,7 +67,7 @@ fn a_cut_is_the_domain_of_a_closing_parameter_and_nothing_else() {
 
 #[test]
 fn a_box_moved_a_turn_is_moved_by_two_and_no_more() {
-    assert!((TURN - 2.0).abs() == 0.0);
+    assert_eq!(TURN.to_bits(), 2.0_f64.to_bits());
     let up = moved(span(0.0, 0.5), TURN).unwrap();
     assert!(up.lo() <= 2.0 && up.lo() > 1.999);
     assert!(up.hi() >= 2.5 && up.hi() < 2.501);
@@ -185,4 +187,38 @@ fn a_patch_wholly_a_turn_past_the_start_moves_back_in_each_kind_of_reading() {
         panic!("undecided stays undecided");
     };
     assert_eq!(s, ((2.0, 2.9), (0.0, 1.0)));
+}
+
+#[test]
+fn the_ranges_of_a_pair_are_its_four_parameters_in_order() {
+    assert_eq!(
+        spans_of(((1.0, 2.0), (3.0, 4.0)), ((5.0, 6.0), (7.0, 8.0))),
+        [(1.0, 2.0), (3.0, 4.0), (5.0, 6.0), (7.0, 8.0)]
+    );
+}
+
+/// The turned chart of `STARTS` has the first chart's cut at 2.5 and its own at 1.5 and 3.5.
+fn u2(a: f64, b: f64) -> [(f64, f64); 4] {
+    [(1.5, 1.5), (0.0, 1.0), (a, b), (3.5, 3.5)]
+}
+
+#[test]
+fn a_range_holds_the_first_cut_when_it_spans_a_turn_past_the_start() {
+    assert_eq!(cut_of(&u2(2.4, 2.6), &STARTS), (true, false));
+    assert_eq!(cut_of(&u2(2.5, 2.7), &STARTS), (true, false));
+    assert_eq!(cut_of(&u2(2.3, 2.5), &STARTS), (true, false));
+    assert_eq!(cut_of(&u2(2.6, 2.9), &STARTS), (false, false));
+    assert_eq!(cut_of(&u2(2.0, 2.4), &STARTS), (false, false));
+}
+
+#[test]
+fn a_range_touching_the_turned_charts_own_cut_is_marked() {
+    // Its start (the half-way line, a turn from the first chart's start plus a half) ...
+    assert_eq!(cut_of(&u2(1.5, 2.6), &STARTS), (true, true));
+    // ... and its end, a turn on.
+    assert_eq!(cut_of(&u2(2.4, 3.5), &STARTS), (true, true));
+    // Near them is not on them; a parameter that does not close has no cut.
+    assert_eq!(cut_of(&u2(1.6, 2.6), &STARTS), (true, false));
+    assert_eq!(cut_of(&u2(2.4, 3.4), &STARTS), (true, false));
+    assert_eq!(cut_of(&u2(2.4, 2.6), &[None; 4]), (false, false));
 }
