@@ -32,7 +32,10 @@ use geom_num::grid::{COORD_MAX, Coord, P2, P3};
 
 use crate::rng::{SplitMix64, seed_for};
 
+pub mod arc;
 pub mod bvh;
+pub mod carrier;
+pub mod conic;
 pub mod crossing;
 pub mod curve;
 pub mod dd;
@@ -50,6 +53,7 @@ pub mod math;
 pub mod math_types;
 pub mod newton;
 pub mod nurbs;
+pub mod one_root;
 pub mod perturb;
 pub mod plane;
 pub mod predicate;

@@ -42,8 +42,9 @@
 )]
 
 use geom_num::generated::{
-    incircle, insphere, limbs, lpi_side, lpi_weight, orient2d, orient3d, plain, plane_side,
-    ssi_side, ssi_weight, tpi_side, tpi_weight,
+    carrier_order, carrier_side, incircle, insphere, limbs, lpi_side, lpi_weight, orient2d,
+    orient3d, plain, plane_side, rational_cmp, rational_orient, ssi_side, ssi_weight, tpi_side,
+    tpi_weight,
 };
 use geom_num::grid::{COORD_MAX, P2, P3};
 use geom_num::{I512, Sign, Wide, Wide32};
@@ -163,6 +164,21 @@ fn explicit_point_predicates_agree_on_random_inputs() {
         let (a, b, c, d, e) = (g.p3(), g.p3(), g.p3(), g.p3(), g.p3());
         agree!(orient3d, orient3d_value; a, b, c, d);
         agree!(insphere, insphere_value; a, b, c, d, e);
+    }
+}
+
+#[test]
+fn carrier_predicates_agree_on_random_inputs() {
+    let mut g = Draw::new("attack_g42::carrier_predicates_agree_on_random_inputs");
+    for _ in 0..CASES {
+        let [a, b] = [g.value(41), g.value(41)];
+        let c = g.value(82);
+        let [xp, yp, xq, yq, xr, yr] = [(); 6].map(|()| g.value(124));
+        let [wp, wq, wr] = [(); 3].map(|()| g.value(83));
+        agree!(carrier_side, carrier_side_value; a, b, c, xp, yp, wp);
+        agree!(carrier_order, carrier_order_value; a, b, xp, yp, xq, yq, wp, wq);
+        agree!(rational_cmp, rational_cmp_value; xp, xq, wp, wq);
+        agree!(rational_orient, rational_orient_value; xp, yp, xq, yq, xr, yr, wp, wq, wr);
     }
 }
 
