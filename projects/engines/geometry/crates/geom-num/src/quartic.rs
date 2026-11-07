@@ -724,7 +724,10 @@ impl Roots {
     pub fn narrowed(&self, quartic: &Quartic, depth: u32) -> Result<Roots, NumError> {
         let simple = square_free(&primitive(&widened(&quartic.c)?)?)?;
         let mut out = *self;
-        for root in out.list.iter_mut().flatten() {
+        for slot in &mut out.list {
+            let Some(root) = slot.as_mut() else {
+                continue;
+            };
             let c = root.piece.open_on_unit(&simple)?;
             let mut at = Stretch::of(root)?;
             while !at.point && at.s < depth {
