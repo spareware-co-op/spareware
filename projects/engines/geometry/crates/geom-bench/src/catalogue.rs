@@ -432,6 +432,10 @@ pub static OPS: &[Op] = &[
     Op { group: "make", name: "cylinder", measures: "geom_make::primitive::cylinder", classes: T, prepare: |c| bind(inputs::make::cylinders(c), kernels::make::cylinders) },
     Op { group: "make", name: "move_box", measures: "geom_make::transform::move_by", classes: T, prepare: |c| bind(inputs::make::moved_boxes(c), kernels::make::moved_boxes) },
     Op { group: "make", name: "turn_box", measures: "geom_make::transform::rotate", classes: T, prepare: |c| bind(inputs::make::turned_boxes(c), kernels::make::turned_boxes) },
+    // geom-sketch's hot paths (piece G224; decision 32.44): a sketch diagnosed and its free motions
+    // found by the sparse form.
+    Op { group: "sketch", name: "diagnose_chain", measures: "geom_sketch::diagnose::diagnose", classes: T, prepare: |c| bind(inputs::sketch::determined_chains(c), kernels::sketch::diagnosed) },
+    Op { group: "sketch", name: "free_motions_chain", measures: "geom_sketch::motions::MotionFinder::new", classes: T, prepare: |c| bind(inputs::sketch::free_chains(c), kernels::sketch::motions) },
     // Root finding and quadrature (piece G51; decision 32.44).
     Op { group: "brent", name: "zero", measures: "brent::zero", classes: T, prepare: |c| bind(inputs::roots::zero(c), kernels::roots::zero) },
     Op { group: "quadrature", name: "gauss_legendre", measures: "quadrature::gauss_legendre", classes: T, prepare: |c| bind(inputs::roots::gauss_legendre(c), kernels::roots::gauss_legendre) },
@@ -439,7 +443,7 @@ pub static OPS: &[Op] = &[
 ];
 
 /// The groups of [`OPS`], in order.
-pub const GROUPS: [&str; 33] = [
+pub const GROUPS: [&str; 34] = [
     "predicate",
     "sign",
     "wide",
@@ -473,6 +477,7 @@ pub const GROUPS: [&str; 33] = [
     "linalg",
     "intersect",
     "make",
+    "sketch",
 ];
 
 /// The group of the growth checks.

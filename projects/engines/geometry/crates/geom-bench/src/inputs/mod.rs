@@ -59,6 +59,7 @@ pub mod real;
 pub mod rng;
 pub mod roots;
 pub mod sign;
+pub mod sketch;
 pub mod surface;
 pub mod wide;
 pub mod wide32;

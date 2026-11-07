@@ -874,6 +874,7 @@ dependencies = [
  "geom-nurbs",
  "geom-op",
  "geom-run",
+ "geom-sketch",
  "geom-surface",
  "geom-test",
  "geom-topo",
