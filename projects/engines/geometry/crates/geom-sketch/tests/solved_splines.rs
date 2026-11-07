@@ -622,3 +622,116 @@ fn a_settled_sketch_reads_back_whatever_its_ids() {
     let back = parse(&geom_sketch::text::write(&settled.solved.sketch).unwrap()).unwrap();
     assert_eq!(back, settled.solved.sketch);
 }
+
+#[test]
+fn a_line_at_the_other_end_and_any_slope_is_taken_against_the_spline() {
+    // The cut cubic's left half arrives at (16, 13.5) from the left; the finish leaves it back along
+    // (-6, -0.5). Lines with a slope that tells a dot product from a sum or a quotient of terms.
+    for (a, b) in [
+        ("16 13.5", "20 12.5"),
+        ("20 12.5", "16 13.5"),
+        ("16 13.5", "12 14.5"),
+        ("12 14.5", "16 13.5"),
+    ] {
+        let mut text = pulled(0.0, "g1");
+        writeln!(
+            text,
+            "entity 1.20 point {a}\nentity 1.21 point {b}\nentity 2.5 line 1.20 1.21 segment\nconstraint 4.2 driving 0 spline-tangent-line 2.0 finish 2.5"
+        )
+        .unwrap();
+        let joins = measure_joins(&parse(&text).unwrap()).unwrap();
+        let last = joins.last().unwrap();
+        // The line is not along the spline, so the angle is not zero, but it is the small one (well
+        // under a quarter turn) whichever way the line runs.
+        assert!(last.continuity.tangent.abs() < 0.25, "{a} to {b}: {last:?}");
+    }
+}
+
+#[test]
+fn entities_written_after_the_ones_they_name_whatever_their_ids() {
+    use geom_sketch::model::{Constraint, ConstraintKind, Entity, EntityKind, Extent, Standing};
+    let mut sketch = parse(HEAD).unwrap();
+    let add = |s: &mut geom_sketch::model::Sketch, id: ItemId, kind: EntityKind| {
+        s.add_entity(Entity {
+            id,
+            kind,
+            construction: false,
+        })
+        .unwrap();
+    };
+    // Points with the highest ids, and everything that names them below.
+    for k in 0..3 {
+        add(
+            &mut sketch,
+            id(9, k),
+            EntityKind::Point {
+                x: f64::from(k as u32),
+                y: 1.0,
+            },
+        );
+    }
+    add(
+        &mut sketch,
+        id(1, 0),
+        EntityKind::Line {
+            start: id(9, 0),
+            end: id(9, 1),
+            extent: Extent::Segment,
+        },
+    );
+    add(
+        &mut sketch,
+        id(1, 1),
+        EntityKind::Circle {
+            centre: id(9, 2),
+            radius: 2.0,
+        },
+    );
+    add(
+        &mut sketch,
+        id(1, 2),
+        EntityKind::Ellipse {
+            centre: id(9, 2),
+            axis: [3.0, 0.0],
+            minor: 1.0,
+        },
+    );
+    add(
+        &mut sketch,
+        id(1, 3),
+        EntityKind::Arc {
+            centre: id(9, 2),
+            radius: 2.0,
+            start: id(9, 0),
+            end: id(9, 1),
+        },
+    );
+    add(
+        &mut sketch,
+        id(1, 4),
+        EntityKind::Parameter {
+            curve: id(1, 3),
+            t: 0.5,
+            speed: 1.0,
+        },
+    );
+    sketch
+        .add_constraint(Constraint {
+            id: id(3, 0),
+            kind: ConstraintKind::Coincident {
+                a: id(9, 0),
+                b: id(9, 1),
+            },
+            standing: Standing::Driving,
+            priority: 0,
+        })
+        .unwrap();
+    let written = geom_sketch::text::write(&sketch).unwrap();
+    assert_eq!(parse(&written).unwrap(), sketch);
+    // The parameter came after the arc it names, the arc after the points.
+    let at = |needle: &str| written.find(needle).unwrap();
+    assert!(at("entity 9.2 point") < at("entity 1.0 line"));
+    assert!(at("entity 9.2 point") < at("entity 1.1 circle"));
+    assert!(at("entity 9.2 point") < at("entity 1.2 ellipse"));
+    assert!(at("entity 1.3 arc") < at("entity 1.4 parameter"));
+}
