@@ -571,6 +571,30 @@
       "reason": "The mutant compares each half with the kind from the other side of t. Only points (order 0) are compared, and a kind is a continuous curve, the same point from either side, so for every kind keeping the contract both compare the same points; a half that misses the kind is caught either way."
     },
     {
+      "file": "projects/engines/geometry/crates/geom-curve/src/contract.rs",
+      "mutant": "replace + with * in check",
+      "line_text": "past_end + 1.0",
+      "occurrences": 1,
+      "kind": "harmless",
+      "reason": "The probe moves by one unit, still past the end: the domain's stand-in length is positive, so the point lies outside the domain either way. A kind keeping the contract refuses every parameter outside its domain, so both probes see the same refusal; a kind refusing some parameters past its end and not others may slip past either."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-curve/src/contract.rs",
+      "mutant": "replace - with + in check",
+      "line_text": "before_start - 1.0",
+      "occurrences": 1,
+      "kind": "harmless",
+      "reason": "The probe moves by one unit, still past the end: the domain's stand-in length is positive, so the point lies outside the domain either way. A kind keeping the contract refuses every parameter outside its domain, so both probes see the same refusal; a kind refusing some parameters past its end and not others may slip past either."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-curve/src/contract.rs",
+      "mutant": "replace - with / in check",
+      "line_text": "before_start - 1.0",
+      "occurrences": 1,
+      "kind": "harmless",
+      "reason": "The probe moves by one unit, still past the end: the domain's stand-in length is positive, so the point lies outside the domain either way. A kind keeping the contract refuses every parameter outside its domain, so both probes see the same refusal; a kind refusing some parameters past its end and not others may slip past either."
+    },
+    {
       "file": "projects/engines/geometry/crates/geom-curve/src/nurbs.rs",
       "mutant": "replace < with <= in piece_at",
       "line_text": "Limit::FromLeft => (a < t || i == 0) && t <= b,",
@@ -5163,6 +5187,22 @@
       "reason": "sign is zero or the narrow format's sign bit alone (bit 15 of a binary16, bit 31 of a binary32), and magnitude is a narrow exponent field of at most 30 (binary16) or 254 (binary32) above an M-bit fraction, so it is below 0x7c00 or 0x7f800000 and never has the sign bit. The two never share a bit, so | and ^ give the same bits."
     },
     {
+      "file": "projects/engines/geometry/crates/geom-topo/src/column.rs",
+      "mutant": "replace > with >= in Column<K, V>::filled",
+      "line_text": "if full > 0 {",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "full is a u32, so full >= 0 always holds. When the column needs no full chunk (fewer than CHUNK_ROWS rows), the mutant builds one full chunk anyway and then places it zero times: column.chunks.resize(0, chunk) leaves the list empty with the capacity reserved before, and the chunk is dropped. The column's rows, chunks, values and Memory report are the same as the original's for every rows and value. Only a temporary allocation of one chunk differs, which a machine out of memory could refuse (OutOfMemory, never stored or replayed, 23.10) where the original needs none."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-surface/src/contract.rs",
+      "mutant": "replace + with * in check",
+      "line_text": "let outside = beyond + 1.0;",
+      "occurrences": 1,
+      "kind": "harmless",
+      "reason": "The probe moves from b + (b - a) + 1 to b + (b - a), still past the end since b > a. A kind keeping the contract refuses every parameter outside its domain, so both probes see the same refusal; a kind that refuses some parameters past its end and not others may slip past either."
+    },
+    {
       "file": "projects/engines/geometry/crates/geom-num/src/carrier.rs",
       "mutant": "replace below -> i128 with 0",
       "line_text": "(1_i128 << bits).saturating_sub(1)",
@@ -5345,14 +5385,6 @@
       "occurrences": 1,
       "kind": "hangs",
       "reason": "The bisection ends when low meets high, at the grid point whose half-past is at or above the coordinate. With <= the loop runs once more there: middle is low, its half-past is not below the coordinate, so high = middle again and nothing changes, for ever. The run's timeout catches it."
-    },
-    {
-      "file": "projects/engines/geometry/crates/geom-topo/src/column.rs",
-      "mutant": "replace > with >= in Column<K, V>::filled",
-      "line_text": "if full > 0 {",
-      "occurrences": 1,
-      "kind": "equivalent",
-      "reason": "full is a u32, so full >= 0 always holds. When the column needs no full chunk (fewer than CHUNK_ROWS rows), the mutant builds one full chunk anyway and then places it zero times: column.chunks.resize(0, chunk) leaves the list empty with the capacity reserved before, and the chunk is dropped. The column's rows, chunks, values and Memory report are the same as the original's for every rows and value. Only a temporary allocation of one chunk differs, which a machine out of memory could refuse (OutOfMemory, never stored or replayed, 23.10) where the original needs none."
     }
   ],
   "coverage_off": [
