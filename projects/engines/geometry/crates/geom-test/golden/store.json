@@ -514,6 +514,16 @@
           ]
         },
         {
+          "id": "geom-sketch/splines",
+          "what": "Spline joins of geom-sketch (piece G220): 64 pairs of cubic splines with a join of every order or a spline end along a line, each through sketch v1 and back, then assembled and measured, every byte of the text, every residual and Jacobian entry's bits and the measured smoothness.",
+          "check": {
+            "crate": "geom-sketch",
+            "test": "spline_determinism",
+            "function": "spline_golden_hash_is_the_same_on_every_target"
+          },
+          "sha256": "d5829819091d2271145f5b094a3e80cb5119d327c9e6daf73b21f2661dcfcdb3"
+        },
+        {
           "id": "geom-linalg/dense",
           "what": "The dense decompositions and solves of geom-linalg (piece G49): 256 matrices of every shape from 1 x 1 to 8 x 8 (random, integer, graded to 2^-600 and exactly rank-deficient), each through the pivoted QR, the complete orthogonal decomposition (rank, least squares, null space) and the canonical null space, each square one also through LU (and a solve), both triangular solves, Cholesky of A^T A + I (and a solve) and of A itself, and the tridiagonal solve, and four refusals for want of work: 1568 results in the canonical encoding of tests/dense_determinism.rs.",
           "check": {

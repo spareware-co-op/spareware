@@ -73,3 +73,8 @@ cast_sign_loss = "deny"
 # and certified bounds (principles 1 and 2), so clippy's advice to compare within an epsilon does
 # not apply.
 float_cmp = "allow"
+
+# The spline rules' residual and Jacobian (piece G220), the same way.
+[[bench]]
+name = "spline"
+harness = false

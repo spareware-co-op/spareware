@@ -7795,6 +7795,29 @@
           "target": "lib"
         },
         {
+          "cost": "O(degree) to read an end and a few dozen arithmetic operations to take its derivatives.",
+          "does": "[`end_layout`] reads a spline end the way the constraints do: the first control points counted from the end, and the factors that turn their differences into the end's derivatives. [`end_jets`] gives those derivatives, outward from the end, and [`continuity`] measures how smooth the join of two spline ends is, on a sketch as it stands: how far the tangents are from one line (G1), how far the curvatures are from agreeing (G2) and how far the rates of change of curvature are (G3). The constraints of `equation` ([`crate::model::ConstraintKind::SplineJoin`]) write the same residuals over the same layout, so a join the solver meets measures as smooth here.",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-sketch/src/smooth.rs",
+          "guarantees": [
+            "**Not rational, clamped.** Only splines with unit weights and clamped ends are read ([`Sketch::spline_jets`]); anything else is [`SketchError::WrongKind`], never a wrong number.",
+            "**Deterministic.** The derivatives are the residuals' own functions on [`Real`].",
+            "**No panics, no recursion, no unsafe code.**"
+          ],
+          "job": "Spline ends: their derivatives, and the smoothness of a join measured (piece G220; chapter 15.3, \"Smoothness\").",
+          "method": {
+            "links": [
+              "projects/engines/geometry/architecture/15-sketches.md",
+              "https://doi.org/10.1007/978-3-642-59223-2"
+            ],
+            "text": "section 15.3 (`projects/engines/geometry/architecture/15-sketches.md`), with L. Piegl and W. Tiller, *The NURBS Book*, 2nd ed., Springer (1997), <https://doi.org/10.1007/978-3-642-59223-2>, section 3.3, for the derivative control points."
+          },
+          "path": "geom_sketch::smooth",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
           "cost": "O(z√n) for the matching and O(z + n log n) for the rest, z the graph's edges and n its nodes; O(z + n) memory. No recursion.",
           "does": "[`Graph`] is the bipartite graph of equations and variables. [`substitute`] builds it from a sketch, merging the two variables of every equality between single variables, such as coincident points or a horizontal line. [`analyse`] splits the graph into connected [`Component`]s, finds a largest matching of equations to variables by Hopcroft and Karp's method, and from it the Dulmage–Mendelsohn decomposition of each component: an over-determined part, an under-determined part, and square [`Part`]s in the order to solve them.",
           "family": [],

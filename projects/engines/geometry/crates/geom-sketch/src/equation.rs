@@ -59,8 +59,8 @@ use geom_num::real::Real;
 use geom_num::scalar::Scalar;
 
 use crate::model::{
-    Amount, Constraint, ConstraintKind, Entity, EntityKind, ItemId, Sketch, SketchError, Standing,
-    Variable, power_of_two,
+    Amount, Constraint, ConstraintKind, Entity, EntityKind, ItemId, Sketch, SketchError,
+    Smoothness, SplineEnd, Standing, Variable, power_of_two,
 };
 
 /// What a residual cannot be differentiated at.
@@ -411,6 +411,175 @@ impl Residual<3, 1> for Product {
     }
 }
 
+/// An end's inputs split off a join's: the two ends of `H` numbers each and the length that scales
+/// the residual.
+fn halves<S: Scalar, const N: usize, const H: usize>(
+    x: &[S; N],
+) -> Result<([S; H], [S; H], S), NumError> {
+    let (a, rest) = x.split_first_chunk::<H>().ok_or(NumError::Degenerate)?;
+    let (b, rest) = rest.split_first_chunk::<H>().ok_or(NumError::Degenerate)?;
+    let length = *rest.first().ok_or(NumError::Degenerate)?;
+    Ok((*a, *b, length))
+}
+
+/// (b − a) times `f`.
+fn leg<S: Scalar>(a: [S; 2], b: [S; 2], f: S) -> Result<[S; 2], NumError> {
+    let d = minus(b, a)?;
+    Ok([d[0].mul(f)?, d[1].mul(f)?])
+}
+
+/// The first derivative leaving a spline's end, outward, from its two control points and the factor
+/// `degree / (knot span)` of the derivative's control point (de Boor's derivative of a B-spline;
+/// Piegl and Tiller, *The NURBS Book*, 2nd ed., eq. 3.8): `x` is P0, P1, f.
+pub(crate) fn jet1<S: Scalar>(x: [S; 5]) -> Result<[S; 2], NumError> {
+    let [p0x, p0y, p1x, p1y, f] = x;
+    leg([p0x, p0y], [p1x, p1y], f)
+}
+
+/// The first two derivatives: P0, P1, P2, then the factors of the first derivative's control points
+/// (two) and of the second's (one).
+pub(crate) fn jet2<S: Scalar>(x: [S; 9]) -> Result<([S; 2], [S; 2]), NumError> {
+    let [p0x, p0y, p1x, p1y, p2x, p2y, f10, f11, f20] = x;
+    let q0 = leg([p0x, p0y], [p1x, p1y], f10)?;
+    let q1 = leg([p1x, p1y], [p2x, p2y], f11)?;
+    Ok((q0, leg(q0, q1, f20)?))
+}
+
+/// The first three derivatives: P0 to P3, then the factors of the first derivative's control points
+/// (three), the second's (two) and the third's (one).
+pub(crate) fn jet3<S: Scalar>(x: [S; 14]) -> Result<[[S; 2]; 3], NumError> {
+    let [
+        p0x,
+        p0y,
+        p1x,
+        p1y,
+        p2x,
+        p2y,
+        p3x,
+        p3y,
+        f10,
+        f11,
+        f12,
+        f20,
+        f21,
+        f30,
+    ] = x;
+    let q0 = leg([p0x, p0y], [p1x, p1y], f10)?;
+    let q1 = leg([p1x, p1y], [p2x, p2y], f11)?;
+    let q2 = leg([p2x, p2y], [p3x, p3y], f12)?;
+    let r0 = leg(q0, q1, f20)?;
+    let r1 = leg(q1, q2, f21)?;
+    Ok([q0, r0, leg(r0, r1, f30)?])
+}
+
+/// The sine of the angle from `u` to `v`: their cross product over their lengths.
+fn sine<S: Scalar>(u: [S; 2], v: [S; 2]) -> Result<S, NumError> {
+    cross(u, v)?.div(dot(u, u)?.mul(dot(v, v)?)?.sqrt()?)
+}
+
+/// The signed curvature of a curve with first and second derivatives `d1` and `d2`: their cross
+/// product over the cube of the speed.
+pub(crate) fn curvature<S: Scalar>(d1: [S; 2], d2: [S; 2]) -> Result<S, NumError> {
+    let n = dot(d1, d1)?;
+    cross(d1, d2)?.div(n.mul(n.sqrt()?)?)
+}
+
+/// The rate of change of curvature along the curve, from the first three derivatives:
+/// (d1 × d3 · |d1|² − 3 (d1 × d2)(d1 · d2)) / |d1|⁶.
+pub(crate) fn curvature_rate<S: Scalar>(d1: [S; 2], d2: [S; 2], d3: [S; 2]) -> Result<S, NumError> {
+    let n = dot(d1, d1)?;
+    let three = S::constant(Real::new(3.0)?);
+    let top = cross(d1, d3)?
+        .mul(n)?
+        .sub(three.mul(cross(d1, d2)?)?.mul(dot(d1, d2)?)?)?;
+    top.div(n.square()?.mul(n)?)
+}
+
+/// Whether either end's first two control points are one.
+fn flat_end(x: &[f64]) -> bool {
+    matches!(x, [a, b, c, d, ..] if a == c && b == d)
+}
+
+/// Two splines join at G1: the tangent lines at their ends are one line, scaled by a length.
+pub struct JoinTangent;
+
+impl Residual<11, 1> for JoinTangent {
+    fn residuals<S: Scalar>(&self, x: [S; 11]) -> Result<[S; 1], NumError> {
+        let (a, b, l) = halves::<S, 11, 5>(&x)?;
+        Ok([sine(jet1(a)?, jet1(b)?)?.mul(l)?])
+    }
+
+    fn singular(&self, x: &[f64; 11]) -> Option<Singular> {
+        let (a, b) = x.split_at(5);
+        (flat_end(a) || flat_end(b)).then_some(Singular::ZeroLengthLine)
+    }
+}
+
+/// G2: G1, and the signed curvatures, each along its own outward direction, cancel: the curves
+/// bend to one side by one amount. Curvature is in units of one over a length, so it is scaled by
+/// the square of the length.
+pub struct JoinCurvature;
+
+impl Residual<19, 2> for JoinCurvature {
+    fn residuals<S: Scalar>(&self, x: [S; 19]) -> Result<[S; 2], NumError> {
+        let (a, b, l) = halves::<S, 19, 9>(&x)?;
+        let ((a1, a2), (b1, b2)) = (jet2(a)?, jet2(b)?);
+        Ok([
+            sine(a1, b1)?.mul(l)?,
+            curvature(a1, a2)?
+                .add(curvature(b1, b2)?)?
+                .mul(l.square()?)?,
+        ])
+    }
+
+    fn singular(&self, x: &[f64; 19]) -> Option<Singular> {
+        let (a, b) = x.split_at(9);
+        (flat_end(a) || flat_end(b)).then_some(Singular::ZeroLengthLine)
+    }
+}
+
+/// G3: G2, and the rates of change of curvature along the curve agree, scaled by the cube of the
+/// length.
+pub struct JoinCurvatureRate;
+
+impl Residual<29, 3> for JoinCurvatureRate {
+    fn residuals<S: Scalar>(&self, x: [S; 29]) -> Result<[S; 3], NumError> {
+        let (a, b, l) = halves::<S, 29, 14>(&x)?;
+        let ([a1, a2, a3], [b1, b2, b3]) = (jet3(a)?, jet3(b)?);
+        Ok([
+            sine(a1, b1)?.mul(l)?,
+            curvature(a1, a2)?
+                .add(curvature(b1, b2)?)?
+                .mul(l.square()?)?,
+            curvature_rate(a1, a2, a3)?
+                .sub(curvature_rate(b1, b2, b3)?)?
+                .mul(l.square()?.mul(l)?)?,
+        ])
+    }
+
+    fn singular(&self, x: &[f64; 29]) -> Option<Singular> {
+        let (a, b) = x.split_at(14);
+        (flat_end(a) || flat_end(b)).then_some(Singular::ZeroLengthLine)
+    }
+}
+
+/// A spline leaves its end along a line: the sine of the angle between its tangent and the line,
+/// scaled by a length.
+pub struct SplineAlong;
+
+impl Residual<10, 1> for SplineAlong {
+    fn residuals<S: Scalar>(&self, x: [S; 10]) -> Result<[S; 1], NumError> {
+        let [p0x, p0y, p1x, p1y, f, ax, ay, bx, by, l] = x;
+        let d = jet1([p0x, p0y, p1x, p1y, f])?;
+        Ok([sine(d, minus([bx, by], [ax, ay])?)?.mul(l)?])
+    }
+
+    fn singular(&self, x: &[f64; 10]) -> Option<Singular> {
+        let flat_line = x[5] == x[7] && x[6] == x[8];
+        (flat_end(x) || flat_line).then_some(Singular::ZeroLengthLine)
+    }
+}
+
 fn zeros(n: usize) -> Result<Vec<f64>, SketchError> {
     let mut v = Vec::new();
     v.try_reserve_exact(n)
@@ -497,6 +666,24 @@ impl Inputs<'_> {
         self.point(centre)?;
         self.variable(id, 0)
     }
+}
+
+/// A spline end's inputs, outward: the first `level` + 1 control points counted from the end, then the
+/// factors of the derivative control points ([`crate::smooth::end_layout`]).
+fn push_end(
+    i: &mut Inputs<'_>,
+    spline: ItemId,
+    end: SplineEnd,
+    level: usize,
+) -> Result<(), SketchError> {
+    let (ids, factors) = crate::smooth::end_layout(i.sketch, spline, end, level)?;
+    for id in &ids {
+        i.point(*id)?;
+    }
+    for f in factors {
+        i.constant(f)?;
+    }
+    Ok(())
 }
 
 /// `kind`'s inputs, in the order its residual reads them, and how many equations it has.
@@ -727,6 +914,25 @@ pub(crate) fn inputs_of(
             i.point(point)?;
             i.point(sketch.centre(a)?)?;
             i.point(sketch.centre(b)?)?;
+            i.constant(unit)?;
+            1
+        }
+        ConstraintKind::SplineJoin {
+            a,
+            a_end,
+            b,
+            b_end,
+            order,
+        } => {
+            let level = order.level();
+            push_end(&mut i, a, a_end, level)?;
+            push_end(&mut i, b, b_end, level)?;
+            i.constant(unit)?;
+            level
+        }
+        ConstraintKind::SplineTangentLine { spline, end, line } => {
+            push_end(&mut i, spline, end, 1)?;
+            i.line(line)?;
             i.constant(unit)?;
             1
         }
@@ -983,6 +1189,20 @@ impl Assembly {
                     let far = span(px, py, value(s, 4)?, value(s, 5)?);
                     (6, characteristic(line(s, 0)?, far))
                 }
+                ConstraintKind::SplineJoin { order, .. } => {
+                    let block: usize = match order {
+                        Smoothness::Tangent => 5,
+                        Smoothness::Curvature => 9,
+                        Smoothness::CurvatureRate => 14,
+                    };
+                    (
+                        block.checked_mul(2).ok_or(SketchError::Internal)?,
+                        characteristic(line(s, 0)?, line(s, block)?),
+                    )
+                }
+                ConstraintKind::SplineTangentLine { .. } => {
+                    (9, characteristic(line(s, 0)?, line(s, 5)?))
+                }
                 ConstraintKind::Symmetric { .. } => (8, characteristic(line(s, 4)?, 0.0)),
                 ConstraintKind::ArcLength { .. } => {
                     let (cx, cy) = (value(s, 0)?, value(s, 1)?);
@@ -1122,6 +1342,12 @@ impl Assembly {
             ConstraintKind::EqualLength { .. } => self.run(&SameLength, row, x),
             ConstraintKind::TangentAtEnd { .. } => self.run(&AcrossRadius, row, x),
             ConstraintKind::ArcsTangentAtEnd { .. } => self.run(&InLine, row, x),
+            ConstraintKind::SplineJoin { order, .. } => match order {
+                Smoothness::Tangent => self.run(&JoinTangent, row, x),
+                Smoothness::Curvature => self.run(&JoinCurvature, row, x),
+                Smoothness::CurvatureRate => self.run(&JoinCurvatureRate, row, x),
+            },
+            ConstraintKind::SplineTangentLine { .. } => self.run(&SplineAlong, row, x),
             ConstraintKind::Symmetric { .. } => self.run(&Mirror, row, x),
             ConstraintKind::LinearPattern { .. } => self.run(&SameStep, row, x),
             ConstraintKind::CircularPattern { .. } => self.run(&TurnedAbout, row, x),

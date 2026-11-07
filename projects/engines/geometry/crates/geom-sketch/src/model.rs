@@ -281,6 +281,38 @@ impl Side {
     }
 }
 
+/// Which end of a spline.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum SplineEnd {
+    /// Its first control point.
+    Start,
+    /// Its last control point.
+    Finish,
+}
+
+/// How smooth a join of two splines is (section 15.3): each order holds the ones before it.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Smoothness {
+    /// G1: the tangent lines are one line, the curves leaving the join in opposite directions.
+    Tangent,
+    /// G2: and the curvature agrees, on the side the curves bend to.
+    Curvature,
+    /// G3: and the rate of change of curvature along the curve agrees.
+    CurvatureRate,
+}
+
+impl Smoothness {
+    /// The derivative the order reaches: 1, 2 or 3.
+    #[must_use]
+    pub const fn level(self) -> usize {
+        match self {
+            Smoothness::Tangent => 1,
+            Smoothness::Curvature => 2,
+            Smoothness::CurvatureRate => 3,
+        }
+    }
+}
+
 /// A value a dimension takes: a number, or a named scalar several constraints share.
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub enum Amount {
@@ -542,6 +574,30 @@ pub enum ConstraintKind {
         b: ItemId,
         /// The shared point.
         point: ItemId,
+    },
+    /// Two splines that share an end point join with the stated smoothness there (section 15.3):
+    /// tangent (G1), equal curvature (G2) or equal rate of change of curvature (G3). The shared
+    /// point is a coincidence of the two end control points, stated apart.
+    SplineJoin {
+        /// The first spline.
+        a: ItemId,
+        /// Its end at the join.
+        a_end: SplineEnd,
+        /// The second spline.
+        b: ItemId,
+        /// Its end at the join.
+        b_end: SplineEnd,
+        /// How smooth.
+        order: Smoothness,
+    },
+    /// A spline leaves its end along a line (G1 with the line).
+    SplineTangentLine {
+        /// The spline.
+        spline: ItemId,
+        /// Its end at the line.
+        end: SplineEnd,
+        /// The line.
+        line: ItemId,
     },
     /// Two points are mirror images in a line.
     Symmetric {
@@ -1002,6 +1058,47 @@ impl Sketch {
         Ok([centre, start, end])
     }
 
+    /// The spline `id`'s degree, control points and knots, when it is one whose ends have `level`
+    /// derivatives the constraints can read: not rational, clamped at both ends (the first and last
+    /// `degree` + 1 knots equal), of degree at least `level`, with more than `level` control points
+    /// and the knot count a spline of that degree and size has.
+    ///
+    /// # Errors
+    ///
+    /// [`SketchError::Unknown`]; [`SketchError::WrongKind`] if it is not such a spline.
+    pub fn spline_jets(
+        &self,
+        id: ItemId,
+        level: usize,
+    ) -> Result<(usize, &[ItemId], &[f64]), SketchError> {
+        let EntityKind::Spline {
+            degree,
+            points,
+            knots,
+            weights,
+        } = &self.entity(id)?.kind
+        else {
+            return Err(SketchError::WrongKind(id));
+        };
+        let p = usize::try_from(*degree).map_err(|_| SketchError::WrongKind(id))?;
+        let n = points.len();
+        let clamped = |ks: &[f64]| ks.windows(2).all(|w| w.first() == w.get(1));
+        let at_start = knots.get(..=p).is_some_and(clamped);
+        let at_end = knots
+            .len()
+            .checked_sub(p.saturating_add(1))
+            .and_then(|from| knots.get(from..))
+            .is_some_and(clamped);
+        let counted = n.checked_add(p).and_then(|k| k.checked_add(1)) == Some(knots.len());
+        let plain = weights.iter().all(|w| *w == 1.0);
+        let enough = p >= level && n > level;
+        if at_start && at_end && counted && plain && enough {
+            Ok((p, points, knots))
+        } else {
+            Err(SketchError::WrongKind(id))
+        }
+    }
+
     /// Adds `entity`, which may name only entities already here.
     ///
     /// # Errors
@@ -1193,6 +1290,16 @@ impl Sketch {
                 arc(a)?;
                 arc(b)?;
                 point(p)
+            }
+            ConstraintKind::SplineJoin { a, b, order, .. } => {
+                self.spline_jets(a, order.level())?;
+                self.spline_jets(b, order.level()).map(|_| ())
+            }
+            ConstraintKind::SplineTangentLine {
+                spline, line: l, ..
+            } => {
+                self.spline_jets(spline, 1)?;
+                line(l)
             }
             ConstraintKind::Symmetric { a, b, line: l } => {
                 point(a)?;

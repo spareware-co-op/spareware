@@ -31,6 +31,7 @@
 //!   G217 and G218).
 //! - [`author`]: the plain constraints a macro writes, for fixing an entity and for offset chains
 //!   (piece G218).
+//! - [`smooth`]: spline ends' derivatives and the smoothness of a join, measured (piece G220).
 //! - [`structure`]: substitution, components, matching and the Dulmage–Mendelsohn decomposition
 //!   (piece G221).
 //! - [`text`]: the `sketch v1` text form (piece G217).
@@ -44,5 +45,6 @@ pub mod author;
 pub mod equation;
 pub mod model;
 pub mod plane;
+pub mod smooth;
 pub mod structure;
 pub mod text;
