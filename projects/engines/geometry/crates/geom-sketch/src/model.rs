@@ -686,6 +686,32 @@ impl ConstraintKind {
         }
     }
 
+    /// This dimension stated with the number `value` in place of its amount, whatever it was; `None`
+    /// for a constraint that is not a dimension.
+    #[must_use]
+    pub fn with_stated(&self, value: f64) -> Option<ConstraintKind> {
+        let mut kind = self.clone();
+        let amount = match &mut kind {
+            ConstraintKind::Turned { angle, .. }
+            | ConstraintKind::Heading { angle, .. }
+            | ConstraintKind::Sweep { angle, .. } => angle,
+            ConstraintKind::Distance { distance, .. }
+            | ConstraintKind::FromLine { distance, .. }
+            | ConstraintKind::FromCircle { distance, .. }
+            | ConstraintKind::LinesApart { distance, .. }
+            | ConstraintKind::Across { distance, .. }
+            | ConstraintKind::Upward { distance, .. } => distance,
+            ConstraintKind::Length { length, .. } | ConstraintKind::ArcLength { length, .. } => {
+                length
+            }
+            ConstraintKind::Radius { radius, .. } => radius,
+            ConstraintKind::Diameter { diameter, .. } => diameter,
+            _ => return None,
+        };
+        *amount = Amount::Value(value);
+        Some(kind)
+    }
+
     /// What it becomes at commit, by section 15.10's table. An angle counts as exact when it is a
     /// number and a multiple of a quarter turn. Symmetry about a line is exact only about a
     /// horizontal or vertical one, a radius only on a full circle, and a point on a circle only if

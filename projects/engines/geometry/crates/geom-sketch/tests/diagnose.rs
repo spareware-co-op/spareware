@@ -323,4 +323,66 @@ fn a_solved_sketch_comes_back_with_its_report() {
     };
     assert_eq!(report.dof_least, 0);
     assert!(solved.report.largest <= 0.02);
+    // The solver's own report carries the diagnosis too.
+    assert_eq!(solved.report.diagnosis.as_deref(), Some(&report));
+}
+
+#[test]
+fn a_plain_solve_does_not_diagnose() {
+    let done = geom_sketch::solve::solve(&sketch(TRIANGLE), &mut meter()).unwrap();
+    assert!(done.report.diagnosis.is_none());
+}
+
+#[test]
+fn a_remedy_gives_the_range_of_values_that_fit_by_continuation() {
+    // C is 1000 from A and the distance to B is asked to be 5000; B is 1000 from A. C can be
+    // anywhere from B itself to 2000 away, and not nearer than 0 nor farther than 2000.
+    let s = sketch(
+        "entity 1.0 point 0 0
+entity 1.1 point 1000 0
+entity 1.2 point 500 800
+constraint 2.0 driving 0 fix 1.0 0 0
+constraint 2.1 driving 0 fix 1.0 1 0
+constraint 2.2 driving 0 fix 1.1 0 1000
+constraint 2.3 driving 0 fix 1.1 1 0
+constraint 2.4 driving 0 distance 1.0 1.2 1000
+constraint 2.5 driving 0 distance 1.1 1.2 5000
+",
+    );
+    let Outcome::NotConverged { remedies, .. } =
+        solve_checked(&s, 10_000.0, &mut meter()).unwrap()
+    else {
+        panic!("converged or conflicting");
+    };
+    let third = remedies.iter().find(|r| r.constraint == id(2, 5)).unwrap();
+    let range = third.range.unwrap();
+    let most = range.most.unwrap();
+    assert!(most >= third.measures && most <= 2000.5, "{third:?}");
+    let least = range.least.unwrap();
+    assert!(least <= third.measures && least >= -0.5, "{third:?}");
+    // Five thousand is outside the range: the words say so by giving the range.
+    assert!(most < third.asked);
+    assert!(third.text().contains("any value from"), "{}", third.text());
+}
+
+#[test]
+fn two_dimensions_that_pin_one_value_have_a_range_of_that_value_alone() {
+    let s = sketch(
+        "entity 1.0 point 0 0
+entity 1.1 point 3000 0
+entity 1.5 line 1.0 1.1 segment
+constraint 2.0 driving 0 fix 1.0 0 0
+constraint 2.1 driving 0 fix 1.0 1 0
+constraint 2.2 driving 0 horizontal 1.5
+constraint 2.3 driving 0 distance 1.0 1.1 3000
+constraint 2.4 driving 1 distance 1.0 1.1 3100
+",
+    );
+    let Outcome::Conflict { remedies, .. } = solve_checked(&s, 10_000.0, &mut meter()).unwrap()
+    else {
+        panic!("not a conflict");
+    };
+    let newer = remedies.iter().find(|r| r.constraint == id(2, 4)).unwrap();
+    let range = newer.range.unwrap();
+    assert!(range.most.unwrap() - range.least.unwrap() < 0.5, "{newer:?}");
 }

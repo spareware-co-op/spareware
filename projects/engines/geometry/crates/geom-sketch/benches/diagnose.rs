@@ -5,8 +5,9 @@
 //! (wall-clock time on this machine; the reference machine and instruction counts are geom-bench's,
 //! piece G18). Section 15.7's targets are under 20 ms for the groups of a conflict among up to 256
 //! unknowns, and under 5 ms for the free motions of one entity in a 10,000-unknown outline. The
-//! second is measured here at 1,000 unknowns, as this piece's null space is dense (the sparse,
-//! per-entity form is not built yet), so its number is a floor to be read with that in mind.
+//! second is measured with the sparse per-entity form (`geom_sketch::motions`): the one-time
+//! factorisation of the 10,000-unknown outline is timed apart from the query for one entity, which is
+//! what the target bounds. The dense form is timed at 200 unknowns for comparison.
 
 #![allow(
     clippy::arithmetic_side_effects,
@@ -24,7 +25,8 @@ use std::time::Instant;
 
 use geom_run::{Budget, WorkMeter};
 use geom_sketch::diagnose::{diagnose, free_motions};
-use geom_sketch::model::Sketch;
+use geom_sketch::model::{ItemId, Sketch};
+use geom_sketch::motions::MotionFinder;
 use geom_sketch::text::parse;
 
 const HEAD: &str = "sketch v1\nplane lattice 0 0 0 1 0 0 0 1 0 q0\n";
@@ -103,4 +105,19 @@ fn main() {
             black_box(free_motions(black_box(&under), &mut meter).unwrap());
         },
     );
+    // The sparse form on a 10,000-unknown outline: 5,000 points, y free (sparse motions), then a
+    // chain held only by x-distances plus a fixed y step on every other link (denser motions).
+    let outline = chain(5000, false, false);
+    time("sparse factorisation of a 10,000-unknown outline", 3, || {
+        let mut meter = WorkMeter::new(Budget::UNLIMITED);
+        black_box(MotionFinder::new(black_box(&outline), &mut meter).unwrap());
+    });
+    let mut meter = WorkMeter::new(Budget::UNLIMITED);
+    let finder = MotionFinder::new(&outline, &mut meter).unwrap();
+    assert_eq!(finder.dof(), 4999);
+    time("free motions of one entity, 10,000 unknowns (target < 5 ms)", 200, || {
+        let mut meter = WorkMeter::new(Budget::UNLIMITED);
+        let m = finder.of_entity(black_box(ItemId::new(1, 2500)), &mut meter).unwrap();
+        assert_eq!(m.len(), 1);
+    });
 }

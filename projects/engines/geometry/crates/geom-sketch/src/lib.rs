@@ -29,6 +29,7 @@
 //! - [`model`]: entities, variables and constraints, in authoring order (piece G217).
 //! - [`diagnose`]: degrees of freedom, free motions, redundant and conflicting groups and the report
 //!   text (piece G224).
+//! - [`motions`]: free motions, sparse and per entity (piece G224).
 //! - [`equation`]: each constraint's residual and singular set, and the Jacobian's assembly (pieces
 //!   G217 and G218).
 //! - [`author`]: the plain constraints a macro writes, for fixing an entity and for offset chains
@@ -47,6 +48,7 @@ pub mod author;
 pub mod diagnose;
 pub mod equation;
 pub mod model;
+pub mod motions;
 pub mod plane;
 pub mod solve;
 pub mod structure;

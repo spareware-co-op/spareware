@@ -65,7 +65,7 @@ use geom_run::WorkMeter;
 
 use crate::equation::{Assembly, measure, rules_of};
 use crate::model::{Constraint, ItemId, Sketch, SketchError, Standing, Variable};
-use crate::solve::{INDEPENDENT, Solved, TOLERANCE, solve};
+use crate::solve::{INDEPENDENT, Solved, TOLERANCE, continue_to, solve};
 
 /// How near a threshold a pivot must be, by this factor either way, to be confirmed by a singular
 /// value decomposition (section 15.8).
@@ -944,8 +944,161 @@ pub struct Remedy {
     /// The value it was stated with (its measure now, for one that names another item).
     pub asked: f64,
     /// What it measures at the least-change solution of the sketch without it. Never offered as
-    /// the only value that works; a range is given only when it is cheap to bound.
+    /// the only value that works.
     pub measures: f64,
+    /// The values the dimension can take, found by continuation from `measures`; `None` when the
+    /// sketch with the dimension driving at `measures` could not be solved to start from.
+    pub range: Option<ValueRange>,
+}
+
+/// The values a dimension can take with the rest of the sketch held (section 15.8). Each end is
+/// where continuation along the one value could go no further, to [`RANGE_RESOLUTION`] of the last
+/// step; `None` is an end not found within [`RANGE_STEPS`] steps, so the dimension is not bounded
+/// on that side as far as the search could see.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct ValueRange {
+    /// The least value that fits.
+    pub least: Option<f64>,
+    /// The most value that fits.
+    pub most: Option<f64>,
+}
+
+/// The first step of the range search, as a share of the value's size (or of 1 for a value near 0).
+const RANGE_FIRST: f64 = 0.125;
+
+/// Steps of the search outward from the measured value; each success doubles the next step, so the
+/// search reaches 2^24 times the first step before it gives up on an end.
+pub const RANGE_STEPS: u32 = 24;
+
+/// How finely an end is found: the failing step is halved this many times.
+pub const RANGE_HALVINGS: u32 = 12;
+
+/// The share of the failing step left when an end is reported: 2^-[`RANGE_HALVINGS`].
+pub const RANGE_RESOLUTION: f64 = 1.0 / 4096.0;
+
+impl Remedy {
+    /// The remedy in words, in the manner of section 15.8: what the dimension measures without the
+    /// constraints it conflicts with, and the values that fit, never one value as the only answer.
+    #[must_use]
+    pub fn text(&self) -> String {
+        let mut out = String::new();
+        let _ = write!(
+            out,
+            "{} ({}) without its conflicts measures {}",
+            name(self.constraint),
+            self.asked,
+            self.measures
+        );
+        if let Some(range) = self.range {
+            match (range.least, range.most) {
+                (Some(a), Some(b)) => {
+                    let _ = write!(out, ", and any value from {a:.1} to {b:.1} fits");
+                }
+                (None, Some(b)) => {
+                    let _ = write!(out, ", and any value up to {b:.1} fits");
+                }
+                (Some(a), None) => {
+                    let _ = write!(out, ", and any value from {a:.1} up fits");
+                }
+                (None, None) => {}
+            }
+        }
+        out
+    }
+}
+
+/// `sketch` with dimension `id` driving, stated as `value`.
+fn stated_as(sketch: &Sketch, id: ItemId, value: f64) -> Result<Sketch, SketchError> {
+    let mut out = Sketch::new(*sketch.plane());
+    for e in sketch.entities() {
+        out.add_entity(e.clone())?;
+    }
+    for c in sketch.constraints() {
+        let mut c = *c;
+        if c.id == id {
+            c.kind = c
+                .kind
+                .with_stated(value)
+                .ok_or(SketchError::NotADimension(id))?;
+            c.standing = Standing::Driving;
+        }
+        out.add_constraint(c)?;
+    }
+    Ok(out)
+}
+
+/// One continuation of `held` to dimension `id` stated as `to`: the solution, or `None` when the
+/// value is refused or cannot be followed to.
+fn follow(
+    held: &Sketch,
+    id: ItemId,
+    to: f64,
+    meter: &mut WorkMeter<'_>,
+) -> Result<Option<Solved>, SketchError> {
+    let Ok(target) = stated_as(held, id, to) else {
+        return Ok(None);
+    };
+    match continue_to(held, &target, meter) {
+        Ok(done) => Ok(Some(done)),
+        Err(SketchError::Stopped) => Err(SketchError::Stopped),
+        Err(_) => Ok(None),
+    }
+}
+
+/// Walks dimension `id` away from `start` (a solution with it driving at `at`) in direction `sign`
+/// by continuation: steps that double after a success, then the failing step halved. The end is
+/// the last value continuation could follow, or `None` after [`RANGE_STEPS`] steps.
+fn walk(
+    start: &Solved,
+    id: ItemId,
+    at: f64,
+    sign: f64,
+    meter: &mut WorkMeter<'_>,
+) -> Result<Option<f64>, SketchError> {
+    let mut held = start.sketch.clone();
+    let mut here = at;
+    let mut step = RANGE_FIRST * if at.abs() > 1.0 { at.abs() } else { 1.0 };
+    for _ in 0..RANGE_STEPS {
+        if let Some(done) = follow(&held, id, here + sign * step, meter)? {
+            held = done.sketch;
+            here += sign * step;
+            step *= 2.0;
+            continue;
+        }
+        // The end lies within `step` of `here`: halve the bracket, moving `here` on each success.
+        let mut bad = step;
+        for _ in 0..RANGE_HALVINGS {
+            let mid = bad / 2.0;
+            if let Some(done) = follow(&held, id, here + sign * mid, meter)? {
+                held = done.sketch;
+                here += sign * mid;
+            }
+            bad = mid;
+        }
+        return Ok(Some(here));
+    }
+    Ok(None)
+}
+
+/// The values dimension `id` can take, from the sketch solved without it (`relaxed`) where it
+/// measures `measures`.
+fn range_of(
+    relaxed: &Solved,
+    id: ItemId,
+    measures: f64,
+    meter: &mut WorkMeter<'_>,
+) -> Result<Option<ValueRange>, SketchError> {
+    let Ok(driven) = stated_as(&relaxed.sketch, id, measures) else {
+        return Ok(None);
+    };
+    let start = match solve(&driven, meter) {
+        Ok(s) => s,
+        Err(SketchError::Stopped) => return Err(SketchError::Stopped),
+        Err(_) => return Ok(None),
+    };
+    let most = walk(&start, id, measures, 1.0, meter)?;
+    let least = walk(&start, id, measures, -1.0, meter)?;
+    Ok(Some(ValueRange { least, most }))
 }
 
 /// The sketch with dimension `id` made a reference dimension (measured, not solved).
@@ -997,10 +1150,13 @@ pub fn remedies(
                     .iter()
                     .find(|k| k.id == id)
                     .ok_or(SketchError::Internal)?;
+                let measures = measure(&done.sketch, reference)?;
+                let range = range_of(&done, id, measures, meter)?;
                 out.push(Remedy {
                     constraint: id,
                     asked,
-                    measures: measure(&done.sketch, reference)?,
+                    measures,
+                    range,
                 });
             }
             Err(SketchError::Stopped) => return Err(SketchError::Stopped),
@@ -1054,13 +1210,14 @@ pub fn solve_checked(
     meter: &mut WorkMeter<'_>,
 ) -> Result<Outcome, SketchError> {
     match solve(sketch, meter) {
-        Ok(solved) => {
+        Ok(mut solved) => {
             let report = diagnose(&solved.sketch, size, meter)?;
             if report.has_conflict() {
                 let ids = conflicting_ids(&report);
                 let remedies = remedies(sketch, &ids, meter)?;
                 return Ok(Outcome::Conflict { report, remedies });
             }
+            solved.report.diagnosis = Some(Box::new(report.clone()));
             Ok(Outcome::Solved {
                 solved: Box::new(solved),
                 report,

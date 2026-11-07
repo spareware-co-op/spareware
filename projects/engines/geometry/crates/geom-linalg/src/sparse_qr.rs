@@ -504,6 +504,22 @@ impl SparseQr {
         &self.order
     }
 
+    /// The dead columns of A, as column numbers of A in increasing order: those with nothing left,
+    /// to the rank tolerance, once the columns before them in Π's order are taken out. With Π the
+    /// natural order these are exactly the columns that are combinations of earlier ones.
+    #[must_use]
+    pub fn dead_columns(&self) -> Vec<usize> {
+        let mut out: Vec<usize> = self
+            .order
+            .iter()
+            .zip(&self.pivot)
+            .filter(|&(_, &p)| p == NONE)
+            .map(|(&column, _)| column)
+            .collect();
+        out.sort_unstable();
+        out
+    }
+
     /// The smallest pivot: the least |R[k, k]|, and 0 if a column is dead.
     #[must_use]
     pub fn smallest_pivot(&self) -> f64 {
