@@ -369,12 +369,9 @@ fn every_predicate_twin_is_its_shipped_value_token_for_token() {
 const I512_EXCEPTIONS: [(&str, &str); 2] = [
     (
         "mitre_at",
-        "piece G273: Verus's wide twin has no eight-limb support yet, and G251's mitre_time twin          overflowed Verus's stack; an owner decision (decision note in the pull request)",
+        "piece G273: no eight-limb Verus twin yet (an owner decision, see the pull request)",
     ),
-    (
-        "mitre_side",
-        "piece G273: the same reason as mitre_at",
-    ),
+    ("mitre_side", "piece G273: the same reason as mitre_at"),
 ];
 
 #[test]
