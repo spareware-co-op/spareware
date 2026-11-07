@@ -26,8 +26,9 @@
 //! scaffold test in `engine-geometry` (`tests/scaffold`).
 //!
 //! Status: carriers, points and commits (G192), tangent constructions (G193), the entity model
-//! (G194), spline fitting and biarcs (G213); built on by pieces G195, G196, G197, G198, G199,
-//! G200, G201, G202, G203, G204, G205, G206, G207, G208, G209, G210, G211, G212, G359, G360, G361.
+//! (G194), contacts read from the certified curve-curve intersection (G195), spline fitting and
+//! biarcs (G213); built on by pieces G196, G197, G198, G199, G200, G201, G202, G203, G204, G205,
+//! G206, G207, G208, G209, G210, G211, G212, G359, G360, G361.
 #![cfg_attr(not(test), no_std)]
 #![forbid(unsafe_code)]
 
@@ -39,5 +40,6 @@ pub mod commit;
 pub mod entity;
 pub mod fit;
 mod ideal;
+pub mod contact;
 pub mod point;
 pub mod tangent;
