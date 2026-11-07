@@ -1,4 +1,3 @@
-// SPDX-License-Identifier: Apache-2.0
 //! Free motions, sparse and per entity (piece G224; chapter 15.8, "free motions").
 //!
 //! What it does: [`MotionFinder`] factors a sketch's Jacobian once, sparsely, and then gives the
@@ -13,8 +12,8 @@
 //!   sparse QR of J with its columns taken from the last variable to the first marks a column dead
 //!   exactly when it is a combination of the columns after it; the dead columns lead.
 //! - **One vector.** For leading variable f, the other leading variables are held at 0 and the rest
-//!   solve J_P·x = -J_f, with P the live columns: one least-squares solve against the sparse QR
-//!   of J_P, charged by the factors' size, not by the number of variables.
+//!   solve `J_P·x = -J_f`, with P the live columns: one least-squares solve against the sparse QR
+//!   of `J_P`, charged by the factors' size, not by the number of variables.
 //!
 //! Guarantees:
 //!
@@ -28,7 +27,7 @@
 //! Method: section 15.8 (`projects/engines/geometry/architecture/15-sketches.md`), with
 //! `geom-linalg`'s sparse QR for the factors (piece G215).
 //!
-//! Cost: one sparse QR of J to find the leading variables and one of J_P, once; then 2·(|V| + |R|)
+//! Cost: one sparse QR of J to find the leading variables and one of `J_P`, once; then 2·(|V| + |R|)
 //! multiply-adds and an O(n) vector for each motion. No recursion.
 
 extern crate alloc;
@@ -63,7 +62,7 @@ pub struct MotionFinder {
 }
 
 /// Charges the meter what `work` has used of `start`.
-fn settle(meter: &mut WorkMeter<'_>, start: u64, work: &Work) -> Result<(), SketchError> {
+fn settle(meter: &mut WorkMeter<'_>, start: u64, work: Work) -> Result<(), SketchError> {
     meter.charge(start.saturating_sub(work.left()))?;
     Ok(())
 }
@@ -124,9 +123,12 @@ impl MotionFinder {
             }
             let live = Sparse::from_triplets(rows, others.len(), &kept)?;
             let symbolic = SymbolicQr::new(&live, &mut work)?;
-            Some(SparseQr::factor(&symbolic, &live, tol, &mut work)?)
+            // The columns are independent (the scan found them so, up to the rank tolerance), and
+            // taken in COLAMD's order they must not be dropped again at that tolerance: a column
+            // dropped here would make the solve least-norm instead of least-squares.
+            Some(SparseQr::factor(&symbolic, &live, Real::ZERO, &mut work)?)
         };
-        settle(meter, start, &work)?;
+        settle(meter, start, work)?;
         Ok(MotionFinder {
             variables,
             jacobian,
@@ -157,7 +159,7 @@ impl MotionFinder {
             let start = u64::MAX;
             let mut work = Work::new(start);
             let x = qr.least_squares(&rhs, &mut work)?;
-            settle(meter, start, &work)?;
+            settle(meter, start, work)?;
             for (&j, &value) in self.others.iter().zip(&x) {
                 if value.abs() > NEGLIGIBLE {
                     solved.push((j, value));

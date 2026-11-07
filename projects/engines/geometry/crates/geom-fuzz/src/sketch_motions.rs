@@ -1,4 +1,3 @@
-// SPDX-License-Identifier: Apache-2.0
 //! The fuzz target of a sketch's free motions (piece G224): any bytes are read as a small sketch,
 //! and the motions the sparse form finds must be motions.
 //!

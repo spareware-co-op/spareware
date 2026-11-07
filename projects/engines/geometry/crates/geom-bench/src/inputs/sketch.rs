@@ -1,4 +1,3 @@
-// SPDX-License-Identifier: Apache-2.0
 //! Inputs for `geom-sketch`'s diagnosis and free motions (piece G224, decision 32.44): small sketches
 //! in the `sketch v1` text form, each held at its start by a fixed first point and dimensioned along
 //! a chain.
