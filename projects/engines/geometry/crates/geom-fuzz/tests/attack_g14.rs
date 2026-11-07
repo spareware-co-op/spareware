@@ -57,6 +57,7 @@ const TARGETS: [(&str, Harness); 19] = [
     ("boxtree", boxtree::harness),
     ("crossings", crossings::harness),
     ("curves", curves::harness),
+    ("edit", edit::harness),
     ("entity", entity::harness),
     ("intersect", intersect::harness),
     ("linalg", linalg::harness),
