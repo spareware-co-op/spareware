@@ -8,7 +8,7 @@
 //!
 //! - **Never a panic.** A finder is made or refused with a typed error on every sketch.
 //! - **A motion is a motion.** Each motion moves the Jacobian's equations by no more than the rank
-//!   tolerance lets through: `|J·x|` is at most σ_ind times the largest column, with the leading
+//!   tolerance lets through: `|J·x|` is at most `σ_ind` times the largest column, with the leading
 //!   variable at 1, plus rounding (15.8).
 //! - **One motion for each degree of freedom,** in leading-variable order, and a motion of one
 //!   entity is one of the motions of all.
@@ -42,7 +42,10 @@ const MAX_CONSTRAINTS: usize = 10;
 fn text_of(data: &[u8]) -> String {
     let mut bytes = data.iter().copied();
     let mut text = String::from("sketch v1\nplane lattice 0 0 0 1 0 0 0 1 0 q0\n");
-    let points = bytes.next().map_or(0, |b| usize::from(b) % MAX_POINTS) + 1;
+    let points = usize::from(bytes.next().unwrap_or(0))
+        .checked_rem(MAX_POINTS)
+        .unwrap_or(0)
+        .saturating_add(1);
     for p in 0..points {
         let (x, y) = (bytes.next().unwrap_or(0), bytes.next().unwrap_or(0));
         let _ = writeln!(
@@ -54,9 +57,13 @@ fn text_of(data: &[u8]) -> String {
     }
     for c in 0..MAX_CONSTRAINTS {
         let Some(kind) = bytes.next() else { break };
-        let a = usize::from(bytes.next().unwrap_or(0)) % points;
-        let b = usize::from(bytes.next().unwrap_or(1)) % points;
-        let d = 100 + u32::from(bytes.next().unwrap_or(0)) * 4;
+        let a = usize::from(bytes.next().unwrap_or(0))
+            .checked_rem(points)
+            .unwrap_or(0);
+        let b = usize::from(bytes.next().unwrap_or(1))
+            .checked_rem(points)
+            .unwrap_or(0);
+        let d = 100_u32.saturating_add(u32::from(bytes.next().unwrap_or(0)).saturating_mul(4));
         let _ = match kind % 4 {
             0 => writeln!(
                 text,

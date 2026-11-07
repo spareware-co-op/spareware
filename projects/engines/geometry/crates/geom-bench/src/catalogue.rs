@@ -435,7 +435,7 @@ pub static OPS: &[Op] = &[
     // geom-sketch's hot paths (piece G224; decision 32.44): a sketch diagnosed and its free motions
     // found by the sparse form.
     Op { group: "sketch", name: "diagnose_chain", measures: "geom_sketch::diagnose::diagnose", classes: T, prepare: |c| bind(inputs::sketch::determined_chains(c), kernels::sketch::diagnosed) },
-    Op { group: "sketch", name: "free_motions_chain", measures: "geom_sketch::motions::MotionFinder::new", classes: T, prepare: |c| bind(inputs::sketch::free_chains(c), kernels::sketch::motions) },
+    Op { group: "sketch", name: "free_motions_chain", measures: "geom_sketch::MotionFinder::new", classes: T, prepare: |c| bind(inputs::sketch::free_chains(c), kernels::sketch::motions) },
     // Root finding and quadrature (piece G51; decision 32.44).
     Op { group: "brent", name: "zero", measures: "brent::zero", classes: T, prepare: |c| bind(inputs::roots::zero(c), kernels::roots::zero) },
     Op { group: "quadrature", name: "gauss_legendre", measures: "quadrature::gauss_legendre", classes: T, prepare: |c| bind(inputs::roots::gauss_legendre(c), kernels::roots::gauss_legendre) },
