@@ -34,8 +34,8 @@ use geom_num::real::Real;
 use geom_num::scalar::Scalar;
 
 use super::{
-    Assembly, Residual, Row, Singular, SketchError, Slot, curvature, curvature_rate, dot, minus,
-    sine,
+    Assembly, Residual, Row, Singular, SketchError, Slot, cross, curvature, curvature_rate, dot,
+    minus, sine,
 };
 
 /// The numbers of one spline end in the linear layout: its first `level` + 1 control points
@@ -189,6 +189,44 @@ fn round_rows<S: Scalar, const L: usize>(x: &[S]) -> Result<[S; L], NumError> {
     )
 }
 
+/// The branch quantity of a join of two outward ends: minus the dot product of their tangents.
+/// Above zero the curves leave the join in opposite directions, a smooth continuation; below zero
+/// they leave the same way, a cusp. The G1 row is zero for both, so a path keeps the sign.
+fn join_branch<S: Scalar, const L: usize>(x: &[S]) -> Result<S, NumError> {
+    let h = block(L);
+    let (a, rest) = x.split_at_checked(h).ok_or(NumError::Degenerate)?;
+    let (b, _) = rest.split_at_checked(h).ok_or(NumError::Degenerate)?;
+    let (ja, jb) = (lin_jets::<S, L>(a)?, lin_jets::<S, L>(b)?);
+    let a1 = *ja.first().ok_or(NumError::Degenerate)?;
+    let b1 = *jb.first().ok_or(NumError::Degenerate)?;
+    S::constant(Real::ZERO).sub(dot(a1, b1)?)
+}
+
+/// The branch quantity of a spline end against a line: the dot product of its tangent and the
+/// line's direction. The G1 row is zero whichever way the spline leaves along the line.
+fn along_branch<S: Scalar, const L: usize>(x: &[S]) -> Result<S, NumError> {
+    let (end, rest) = x.split_at_checked(block(L)).ok_or(NumError::Degenerate)?;
+    let [ax, ay, bx, by, _] = five(rest)?;
+    let jets = lin_jets::<S, L>(end)?;
+    let d1 = *jets.first().ok_or(NumError::Degenerate)?;
+    dot(d1, minus([bx, by], [ax, ay])?)
+}
+
+/// The branch quantity of a spline end against an arc: the cross product of the radius from the
+/// centre and the tangent, positive when the spline leaves anticlockwise about the centre. The G1
+/// row is zero for both ways round.
+fn round_branch<S: Scalar, const L: usize>(x: &[S]) -> Result<S, NumError> {
+    let (end, rest) = x.split_at_checked(block(L)).ok_or(NumError::Degenerate)?;
+    let [cx, cy, _, _, _] = five(rest)?;
+    let p = [
+        *end.first().ok_or(NumError::Degenerate)?,
+        *end.get(1).ok_or(NumError::Degenerate)?,
+    ];
+    let jets = lin_jets::<S, L>(end)?;
+    let d1 = *jets.first().ok_or(NumError::Degenerate)?;
+    cross(minus(p, [cx, cy])?, d1)
+}
+
 /// Whether either end of a join in the linear layout has no tangent.
 fn flat_join(x: &[f64], level: usize) -> bool {
     let h = block(level);
@@ -213,6 +251,10 @@ impl Residual<13, 1> for LinJoin1 {
     fn singular(&self, x: &[f64; 13]) -> Option<Singular> {
         flat_join(x, 1).then_some(Singular::ZeroLengthLine)
     }
+
+    fn branch<S: Scalar>(&self, x: [S; 13]) -> Result<Option<S>, NumError> {
+        Ok(Some(join_branch::<S, 1>(&x)?))
+    }
 }
 
 #[doc = "G2 join of two spline ends in the linear layout."]
@@ -225,6 +267,10 @@ impl Residual<25, 2> for LinJoin2 {
 
     fn singular(&self, x: &[f64; 25]) -> Option<Singular> {
         flat_join(x, 2).then_some(Singular::ZeroLengthLine)
+    }
+
+    fn branch<S: Scalar>(&self, x: [S; 25]) -> Result<Option<S>, NumError> {
+        Ok(Some(join_branch::<S, 2>(&x)?))
     }
 }
 
@@ -239,6 +285,10 @@ impl Residual<41, 3> for LinJoin3 {
     fn singular(&self, x: &[f64; 41]) -> Option<Singular> {
         flat_join(x, 3).then_some(Singular::ZeroLengthLine)
     }
+
+    fn branch<S: Scalar>(&self, x: [S; 41]) -> Result<Option<S>, NumError> {
+        Ok(Some(join_branch::<S, 3>(&x)?))
+    }
 }
 
 #[doc = "A spline end tangent to a line."]
@@ -251,6 +301,10 @@ impl Residual<11, 1> for LinAlong1 {
 
     fn singular(&self, x: &[f64; 11]) -> Option<Singular> {
         flat_one(x, 1).then_some(Singular::ZeroLengthLine)
+    }
+
+    fn branch<S: Scalar>(&self, x: [S; 11]) -> Result<Option<S>, NumError> {
+        Ok(Some(along_branch::<S, 1>(&x)?))
     }
 }
 
@@ -265,6 +319,10 @@ impl Residual<17, 2> for LinAlong2 {
     fn singular(&self, x: &[f64; 17]) -> Option<Singular> {
         flat_one(x, 2).then_some(Singular::ZeroLengthLine)
     }
+
+    fn branch<S: Scalar>(&self, x: [S; 17]) -> Result<Option<S>, NumError> {
+        Ok(Some(along_branch::<S, 2>(&x)?))
+    }
 }
 
 #[doc = "A spline end G3 with a line."]
@@ -277,6 +335,10 @@ impl Residual<25, 3> for LinAlong3 {
 
     fn singular(&self, x: &[f64; 25]) -> Option<Singular> {
         flat_one(x, 3).then_some(Singular::ZeroLengthLine)
+    }
+
+    fn branch<S: Scalar>(&self, x: [S; 25]) -> Result<Option<S>, NumError> {
+        Ok(Some(along_branch::<S, 3>(&x)?))
     }
 }
 
@@ -291,6 +353,10 @@ impl Residual<11, 1> for LinRound1 {
     fn singular(&self, x: &[f64; 11]) -> Option<Singular> {
         flat_one(x, 1).then_some(Singular::ZeroLengthLine)
     }
+
+    fn branch<S: Scalar>(&self, x: [S; 11]) -> Result<Option<S>, NumError> {
+        Ok(Some(round_branch::<S, 1>(&x)?))
+    }
 }
 
 #[doc = "A spline end G2 with an arc."]
@@ -304,6 +370,10 @@ impl Residual<17, 2> for LinRound2 {
     fn singular(&self, x: &[f64; 17]) -> Option<Singular> {
         flat_one(x, 2).then_some(Singular::ZeroLengthLine)
     }
+
+    fn branch<S: Scalar>(&self, x: [S; 17]) -> Result<Option<S>, NumError> {
+        Ok(Some(round_branch::<S, 2>(&x)?))
+    }
 }
 
 #[doc = "A spline end G3 with an arc."]
@@ -316,6 +386,10 @@ impl Residual<25, 3> for LinRound3 {
 
     fn singular(&self, x: &[f64; 25]) -> Option<Singular> {
         flat_one(x, 3).then_some(Singular::ZeroLengthLine)
+    }
+
+    fn branch<S: Scalar>(&self, x: [S; 25]) -> Result<Option<S>, NumError> {
+        Ok(Some(round_branch::<S, 3>(&x)?))
     }
 }
 

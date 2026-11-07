@@ -6,7 +6,11 @@
 //! derivatives. [`end_jets`] gives those derivatives, outward from the end, and [`continuity`]
 //! measures how smooth the join of two spline ends is, on a sketch as it stands: how far the
 //! tangents are from one line (G1), how far the curvatures are from agreeing (G2) and how far the
-//! rates of change of curvature are (G3). The constraints of `equation` ([`crate::model::ConstraintKind::SplineJoin`])
+//! rates of change of curvature are (G3).
+//! [`measure_joins`] measures every spline join of a sketch, against lines and arcs too, and
+//! [`solve_and_measure`] does it at the solution of the solver, so the continuity is that of the solved
+//! curves. [`join_sense`] says which way round a join's tangent root is (a continuation or a cusp),
+//! the quantity a path of the solver holds (piece G220a). The constraints of `equation` ([`crate::model::ConstraintKind::SplineJoin`])
 //! write the same residuals over the same layout, so a join the solver meets measures as smooth
 //! here.
 //!
@@ -41,8 +45,11 @@ use alloc::vec::Vec;
 use geom_num::real::Real;
 use geom_num::scalar::Scalar;
 
-use crate::equation::{curvature, curvature_rate, jet1, jet2, jet3};
-use crate::model::{ItemId, Sketch, SketchError, Smoothness, SplineEnd};
+use crate::equation::{Assembly, Sense, curvature, curvature_rate, jet1, jet2, jet3};
+use geom_run::WorkMeter;
+
+use crate::model::{ConstraintKind, ItemId, Sketch, SketchError, Smoothness, SplineEnd};
+use crate::solve::{Solved, solve};
 
 /// A spline end's first control points and derivative factors, outward from the end.
 ///
@@ -246,6 +253,11 @@ pub fn continuity(
         end_jets(sketch, a, a_end, level)?,
         end_jets(sketch, b, b_end, level)?,
     );
+    continuity_of(ja, jb, level)
+}
+
+/// The continuity of two outward ends from their jets, up to `level`.
+fn continuity_of(ja: Jets, jb: Jets, level: usize) -> Result<Continuity, SketchError> {
     let back = Real::new(-1.0)?;
     let (a1, b1) = (
         [Real::new(ja.first[0])?, Real::new(ja.first[1])?],
@@ -306,4 +318,164 @@ pub fn curvature_rate_of(
         Ok([Real::new(v[0])?, Real::new(v[1])?])
     };
     Ok(curvature_rate(pair(first)?, pair(second)?, pair(third)?)?.get())
+}
+
+/// One join of a sketch and how smooth it is as the sketch stands.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct Joined {
+    /// The constraint that states the join.
+    pub constraint: ItemId,
+    /// The order it states.
+    pub order: Smoothness,
+    /// What the three gaps are, up to that order.
+    pub continuity: Continuity,
+}
+
+/// The outward jets of the line or arc `other` at `other_end`, as a curve of unit speed: the
+/// tangent, the curvature times the left normal, and the derivative of that along the curve. A line
+/// has no curvature; an arc runs anticlockwise from its start, so its outward direction is
+/// anticlockwise at its start and clockwise at its end, and its curvature is plus or minus one over
+/// its radius.
+fn round_jets(sketch: &Sketch, other: ItemId, other_end: SplineEnd) -> Result<Jets, SketchError> {
+    let pair = |v: [f64; 2]| -> Result<[Real; 2], SketchError> {
+        Ok([Real::new(v[0])?, Real::new(v[1])?])
+    };
+    let zero = [0.0, 0.0];
+    if let Ok([a, b]) = sketch.line(other) {
+        let (p, q) = (pair(sketch.point(a)?)?, pair(sketch.point(b)?)?);
+        let d = [q[0].sub(p[0])?, q[1].sub(p[1])?];
+        let speed = d[0].mul(d[0])?.add(d[1].mul(d[1])?)?.sqrt()?;
+        let first = [d[0].div(speed)?.get(), d[1].div(speed)?.get()];
+        return Ok(Jets {
+            first,
+            second: zero,
+            third: zero,
+        });
+    }
+    let [centre, start, finish] = sketch.arc(other)?;
+    let radius = Real::new(sketch.radius(other)?)?;
+    let at = if other_end == SplineEnd::Start {
+        start
+    } else {
+        finish
+    };
+    let (c, p) = (pair(sketch.point(centre)?)?, pair(sketch.point(at)?)?);
+    let r = [p[0].sub(c[0])?, p[1].sub(c[1])?];
+    let length = r[0].mul(r[0])?.add(r[1].mul(r[1])?)?.sqrt()?;
+    // The anticlockwise tangent is the radius turned a quarter; the clockwise one is its reverse.
+    let sign = Real::new(if other_end == SplineEnd::Start {
+        1.0
+    } else {
+        -1.0
+    })?;
+    let t = [
+        sign.mul(Real::new(0.0)?.sub(r[1])?)?.div(length)?,
+        sign.mul(r[0])?.div(length)?,
+    ];
+    let kappa = sign.div(radius)?;
+    let normal = [Real::new(0.0)?.sub(t[1])?, t[0]];
+    let square = kappa.mul(kappa)?;
+    Ok(Jets {
+        first: [t[0].get(), t[1].get()],
+        second: [kappa.mul(normal[0])?.get(), kappa.mul(normal[1])?.get()],
+        third: [
+            Real::new(0.0)?.sub(square.mul(t[0])?)?.get(),
+            Real::new(0.0)?.sub(square.mul(t[1])?)?.get(),
+        ],
+    })
+}
+
+/// The jets of a line turned to leave the join against the spline's tangent `first` (a line has no
+/// direction of its own at the join; its sense is the other way from the spline's).
+fn line_against(mut line: Jets, first: [f64; 2]) -> Jets {
+    if line.first[0] * first[0] + line.first[1] * first[1] > 0.0 {
+        line.first = [-line.first[0], -line.first[1]];
+    }
+    line
+}
+
+/// Measures every spline join of `sketch` as it stands: each [`ConstraintKind::SplineJoin`], each
+/// [`ConstraintKind::SplineTangentLine`] (at G1) and each [`ConstraintKind::SplineAgainst`], in the
+/// constraints' order. On a solved sketch it is the continuity of the solved curves.
+///
+/// # Errors
+///
+/// As [`end_jets`]; [`SketchError::OutOfMemory`].
+pub fn measure_joins(sketch: &Sketch) -> Result<Vec<Joined>, SketchError> {
+    let mut out = Vec::new();
+    for c in sketch.constraints() {
+        let (order, continuity) = match c.kind {
+            ConstraintKind::SplineJoin {
+                a,
+                a_end,
+                b,
+                b_end,
+                order,
+            } => (order, continuity(sketch, (a, a_end), (b, b_end), order)?),
+            ConstraintKind::SplineTangentLine { spline, end, line } => (Smoothness::Tangent, {
+                let ours = end_jets(sketch, spline, end, 1)?;
+                let theirs = line_against(round_jets(sketch, line, SplineEnd::Start)?, ours.first);
+                continuity_of(ours, theirs, 1)?
+            }),
+            ConstraintKind::SplineAgainst {
+                spline,
+                end,
+                other,
+                other_end,
+                order,
+            } => (order, {
+                let ours = end_jets(sketch, spline, end, order.level())?;
+                let mut theirs = round_jets(sketch, other, other_end)?;
+                if sketch.line(other).is_ok() {
+                    theirs = line_against(theirs, ours.first);
+                }
+                continuity_of(ours, theirs, order.level())?
+            }),
+            _ => continue,
+        };
+        out.try_reserve(1).map_err(|_| SketchError::OutOfMemory)?;
+        out.push(Joined {
+            constraint: c.id,
+            order,
+            continuity,
+        });
+    }
+    Ok(out)
+}
+
+/// Solves `sketch` and measures its spline joins at the solution: the continuity of the solved
+/// curves (chapter 15.3, "Smoothness").
+///
+/// # Errors
+///
+/// What [`crate::solve::solve`] and [`measure_joins`] refuse.
+pub fn solve_and_measure(
+    sketch: &Sketch,
+    meter: &mut WorkMeter<'_>,
+) -> Result<(Solved, Vec<Joined>), SketchError> {
+    let solved = solve(sketch, meter)?;
+    let joins = measure_joins(&solved.sketch)?;
+    Ok((solved, joins))
+}
+
+/// Which way round the join `join` is, as the sketch stands: the sense of its tangent root, or
+/// `None` where interval arithmetic cannot certify one (the tangents are at a right angle, say).
+///
+/// - [`ConstraintKind::SplineJoin`]: [`Sense::Positive`] when the two curves leave the join in
+///   opposite directions, a continuation, and [`Sense::Negative`] when they leave the same way, a
+///   cusp. The G1 row is zero in both, so only this tells them apart.
+/// - [`ConstraintKind::SplineTangentLine`] and [`ConstraintKind::SplineAgainst`] against a line:
+///   [`Sense::Positive`] when the spline leaves along the line's direction.
+/// - [`ConstraintKind::SplineAgainst`] against an arc: [`Sense::Positive`] when the spline leaves
+///   anticlockwise about the arc's centre.
+///
+/// A path (`crate::solve::continue_to`) holds the sense it starts with.
+///
+/// # Errors
+///
+/// [`SketchError::Unknown`] if no constraint has that id; what the assembly refuses.
+pub fn join_sense(sketch: &Sketch, join: ItemId) -> Result<Option<Sense>, SketchError> {
+    let assembly = Assembly::new(sketch)?;
+    let x = assembly.start()?;
+    assembly.sense_of_id(join, &x)
 }
