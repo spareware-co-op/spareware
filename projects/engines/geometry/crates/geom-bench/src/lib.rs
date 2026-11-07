@@ -27,7 +27,8 @@
 //! `geom-nurbs`'s evaluation, interpolation and Bernstein bound, and the curve and surface kinds'
 //! evaluation, certified enclosures and conversion to NURBS in `geom-curve` and `geom-surface`,
 //! each named in the catalogue with its crate's path and checked to be a public function there;
-//! and, from phase 3, `geom-topo`'s columns and publishing.
+//! and, from phase 3, `geom-topo`'s columns and publishing; and, from phase 10, chapter 17.2's
+//! survey linework (`geom-curve`) and survey import (`geom-2d`).
 //!
 //! Map: chapter 23.13 (benchmarks and regression gates) and 28.14 (benchmarks in the test suite)
 //! of the kernel architecture, `projects/engines/geometry/architecture/`; board entry G18, which

@@ -532,6 +532,7 @@ const OTHER_CRATES: &[(&str, &[(&str, &str)])] = &[
         "geom_curve",
         &[
             ("param", include_str!("../../geom-curve/src/param.rs")),
+            ("linework", include_str!("../../geom-curve/src/linework.rs")),
             (
                 "transition",
                 include_str!("../../geom-curve/src/transition.rs"),
@@ -545,6 +546,10 @@ const OTHER_CRATES: &[(&str, &[(&str, &str)])] = &[
     (
         "geom_run",
         &[("exec", include_str!("../../geom-run/src/exec.rs"))],
+    ),
+    (
+        "geom_2d",
+        &[("survey", include_str!("../../geom-2d/src/survey.rs"))],
     ),
 ];
 

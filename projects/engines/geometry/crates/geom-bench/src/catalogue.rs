@@ -427,10 +427,16 @@ pub static OPS: &[Op] = &[
     // pool, so its lone wave is counted both ways (decision 32.44).
     Op { group: "helper", name: "lone_serial", measures: "geom_run::Exec::map", classes: T, prepare: |c| bind(inputs::helper::lone_serial(c), kernels::helper::lone_serial) },
     Op { group: "helper", name: "lone_pool", measures: "geom_run::Exec::map", classes: T, prepare: |c| bind(inputs::helper::lone_pool(c), kernels::helper::lone_pool) },
+    // Chapter 17.2's survey points and linework (piece G361; decision 32.44): a figure of a line,
+    // an arc and a smooth figure joined into one curve, a dataset imported as a named Acorn body,
+    // and a first import's key.
+    Op { group: "survey", name: "linework", measures: "geom_curve::linework::linework", classes: T, prepare: |c| bind(inputs::survey::linework(c), kernels::survey::linework) },
+    Op { group: "survey", name: "import", measures: "geom_2d::survey::import", classes: T, prepare: |c| bind(inputs::survey::import(c), kernels::survey::import) },
+    Op { group: "survey", name: "first_import", measures: "geom_2d::PointKey::first_import", classes: T, prepare: |c| bind(inputs::survey::first_import(c), kernels::survey::first_import) },
 ];
 
 /// The groups of [`OPS`], in order.
-pub const GROUPS: [&str; 32] = [
+pub const GROUPS: [&str; 33] = [
     "predicate",
     "sign",
     "wide",
@@ -463,6 +469,7 @@ pub const GROUPS: [&str; 32] = [
     "quadrature",
     "linalg",
     "helper",
+    "survey",
 ];
 
 /// The group of the growth checks.

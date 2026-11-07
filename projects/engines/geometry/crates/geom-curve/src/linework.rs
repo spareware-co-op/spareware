@@ -34,15 +34,29 @@
 //!   fewer than three points, and segments that do not use exactly the points given are typed
 //!   errors that name the point or segment; nothing is moved to make a figure fit.
 //!
-//! Method: chapter 17.2's linework (`projects/engines/geometry/architecture/17-survey-terrain-civil.md`): the
-//! arc's center is the circumcenter of its plan points, from the determinant formula in
-//! double-double arithmetic; each piece starts at its first point, with its frame's reference
-//! vector toward it and its normal up for an arc turning left (down for one turning right), so the
-//! parameter runs from 0 over the piece's turn in half-turns, from the kernel's `atan2`; its pitch
-//! is twice its rise over that turn. Smooth figures follow The NURBS Book's global interpolation
-//! (L. Piegl and W. Tiller, 2nd ed., algorithm A9.1, <https://doi.org/10.1007/978-3-642-59223-2>)
-//! as `geom-nurbs` ports it. Pieces join as chapter 14's composite curves, each joint keeping its
-//! certified gap (`crate::composite`).
+//! Method: chapter 17.2's linework
+//! (`projects/engines/geometry/architecture/17-survey-terrain-civil.md`), with the arc through
+//! three points as `SMLib` makes it: the center where the perpendicular bisectors of the chords
+//! meet, by Cramer's rule, the reference axis toward the start point, and the turn from it to the
+//! end. Here each piece's frame has its reference vector toward the piece's first point and its
+//! normal up for an arc turning left (down for one turning right), so the parameter runs from 0
+//! over the piece's turn in half-turns, from the kernel's `atan2`; its pitch is twice its rise over
+//! that turn. Smooth figures follow The NURBS Book's global interpolation (L. Piegl and W. Tiller,
+//! 2nd ed., algorithm A9.1, <https://doi.org/10.1007/978-3-642-59223-2>) as `geom-nurbs` ports it.
+//! Pieces join as chapter 14's composite curves, each joint keeping its certified gap
+//! (`crate::composite`).
+//!
+//! Source: PORT from NVIDIA USD `BRep` `SMLib`, Apache-2.0,
+//!   <https://github.com/NVIDIA-Omniverse/usd-brep/blob/c9c5979f04cea8c38213004d4f04df0dcfb40d05/source/SMLib/src/SmGeomUtility.cpp>
+//!   SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+//!   Changed for Spare Kit: translated to safe `no_std` Rust from `smgu_CircleCenterFrom3Points`
+//!   and `smgu_CircleFrom3Points`; collinear points decided exactly on the grid integers, where
+//!   `SMLib` compares a distance with `SM_EFF_ZERO`; the bisectors' equations written relative to
+//!   the first point and solved in double-double arithmetic, where `SMLib` squares absolute
+//!   coordinates in doubles and loses their low bits far from the origin; the turn in half-turns
+//!   by the kernel's `atan2`, clockwise as well as anticlockwise; and every point checked by
+//!   certified enclosures, where `SMLib` asserts its circle in debug builds only.
+//! SPDX-License-Identifier: Apache-2.0
 //!
 //! Cost: linear in the points: an arc is a few dozen double-double operations and two `atan2`s; a
 //! figure of n points is `geom-nurbs`'s O(n) banded solve and certification; every point is checked

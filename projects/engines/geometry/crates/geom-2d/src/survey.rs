@@ -254,12 +254,16 @@ fn text(id: &str) -> Result<Vec<u8>, geom_op::cbor::EncodeError> {
     Ok(e.finish()?.into_bytes())
 }
 
-/// The first pair of records, in the order of `key`'s bytes and then by record, that share a key.
-fn repeated<K: Ord + Clone>(keys: &[K]) -> Option<(K, usize, usize)> {
-    let mut order: Vec<(K, usize)> = keys.iter().cloned().zip(0..).collect();
-    order.sort();
+/// The first pair of records, in the order of their keys and then by record, that share a key.
+fn repeated<K: Ord + Copy>(keys: &[K]) -> Option<(K, usize, usize)> {
+    let mut order: Vec<(K, usize)> = Vec::with_capacity(keys.len());
+    for (i, &k) in keys.iter().enumerate() {
+        order.push((k, i));
+    }
+    // Every pair is distinct (its record is), so an unstable sort orders them one way only.
+    order.sort_unstable();
     order.windows(2).find_map(|w| match w {
-        [(a, i), (b, j)] if a == b => Some((a.clone(), *i, *j)),
+        [(a, i), (b, j)] if a == b => Some((*a, *i, *j)),
         _ => None,
     })
 }
@@ -305,10 +309,11 @@ pub fn import(
     {
         return Err(SurveyError::Id { index, reason });
     }
-    let ids: Vec<&[u8]> = records.iter().map(|r| r.id.as_bytes()).collect();
+    // A `str` orders by its bytes.
+    let ids: Vec<&str> = records.iter().map(|r| r.id).collect();
     if let Some((id, first, second)) = repeated(&ids) {
         return Err(SurveyError::DuplicateId {
-            id: String::from_utf8_lossy(id).into_owned(),
+            id: String::from(id),
             first,
             second,
         });
