@@ -25,7 +25,8 @@
 //! `cargo test -p geom-test --release --test ssi_corpus -- --ignored --nocapture report`. Setting
 //! `SSI_CORPUS_REPORT` to a path writes the same report there; `SSI_CORPUS_WORK` sets the work
 //! each stage may spend (default 2^24) and `SSI_CORPUS_SECONDS` how long a case may take (default
-//! 120).
+//! 120). `SSI_CORPUS_JOBS` runs that many cases at once (default 1); the report is in the corpus'
+//! order either way, and `SSI_CORPUS_ONLY` keeps the cases whose id contains its text.
 
 #![allow(
     clippy::unwrap_used,
@@ -372,11 +373,26 @@ fn pipeline(
     ceiling: f64,
     work: u64,
 ) -> Result<Found, IntersectError> {
-    let found = subdivide(a, b, FLOOR, &mut meter(work))?;
+    let stage = |name: &'static str| {
+        move |e: IntersectError| {
+            if std::env::var_os("SSI_CORPUS_DEBUG").is_some() {
+                eprintln!("stage {name} refused: {e}");
+            }
+            e
+        }
+    };
+    let found = subdivide(a, b, FLOOR, &mut meter(work)).map_err(stage("subdivide"))?;
+    if std::env::var_os("SSI_CORPUS_DEBUG").is_some() {
+        eprintln!(
+            "subdivided: {} settled, {} flagged",
+            found.settled.len(),
+            found.flagged.len()
+        );
+    }
     let readings = if found.flagged.is_empty() {
         Vec::new()
     } else {
-        analyse(a, b, &found, FLOOR, ceiling, &mut meter(work))?
+        analyse(a, b, &found, FLOOR, ceiling, &mut meter(work)).map_err(stage("analyse"))?
     };
     let mut out = Found::default();
     let mut settled = found.settled.clone();
@@ -404,7 +420,8 @@ fn pipeline(
         settled,
         flagged: Vec::new(),
     };
-    let traced = march(a, b, &all, FLOOR, ceiling, &mut meter(work))?;
+    let traced =
+        march(a, b, &all, FLOOR, ceiling, &mut meter(work)).map_err(stage("march"))?;
     if std::env::var_os("SSI_CORPUS_DEBUG").is_some() {
         let mid = |v: &[geom_num::interval::Interval; 4]| v.map(|x| x.lo() / 2.0 + x.hi() / 2.0);
         for b in &traced.branches {
@@ -609,8 +626,32 @@ fn run_corpus(work: u64, seconds: u64) -> (String, Vec<(String, Verdict)>) {
     let mut classes: BTreeMap<String, [usize; 3]> = BTreeMap::new();
     let mut total = Duration::ZERO;
     let only = std::env::var("SSI_CORPUS_ONLY").unwrap_or_default();
-    for case in cases.iter().filter(|c| c.id.contains(&only)) {
-        let (ours, took) = run_timed(case, work, seconds);
+    let chosen: Vec<&Case> = cases.iter().filter(|c| c.id.contains(&only)).collect();
+    // The cases are independent, so `SSI_CORPUS_JOBS` of them run at once (default one, which keeps
+    // each case's time as it is alone); the report is in the corpus' order whatever order they end.
+    let jobs: usize = std::env::var("SSI_CORPUS_JOBS")
+        .ok()
+        .and_then(|v| v.parse().ok())
+        .unwrap_or(1)
+        .max(1);
+    let next = std::sync::atomic::AtomicUsize::new(0);
+    let finished: std::sync::Mutex<Vec<Option<(Ours, Duration)>>> =
+        std::sync::Mutex::new(vec![None; chosen.len()]);
+    std::thread::scope(|scope| {
+        for _ in 0..jobs {
+            scope.spawn(|| {
+                loop {
+                    let k = next.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+                    let Some(case) = chosen.get(k) else { break };
+                    let result = run_timed(case, work, seconds);
+                    finished.lock().unwrap()[k] = Some(result);
+                }
+            });
+        }
+    });
+    let results = finished.into_inner().unwrap();
+    for (case, result) in chosen.iter().zip(results) {
+        let (ours, took) = result.unwrap();
         total += took;
         let verdict = judge(case, &ours);
         let label = against(case.cpp, &verdict);
