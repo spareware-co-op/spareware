@@ -6401,6 +6401,8 @@
       "occurrences": 1,
       "kind": "hangs",
       "reason": "The edge's own end counts as inside it, so each round of stitching puts it into the edge again, and the rounds never run out: the tests stop it by their timeout. It hangs; it never returns a wrong mesh."
+    },
+    {
       "file": "projects/engines/geometry/crates/geom-bool/src/batch.rs",
       "mutant": "replace != with == in entered",
       "line_text": "tools.retain(|tool| tool.key != key);",
