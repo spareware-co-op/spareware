@@ -2350,7 +2350,6 @@ pub mod bvh {
 /// shape's change under a transform's classification.
 pub mod entity {
     use geom_2d::edit::{Similarity, place_polyline, polyline_length};
-    use geom_2d::edit::{Similarity, place_polyline, polyline_length};
     use geom_2d::entity::{Becomes, Frac, Polyline, Shape};
     use geom_math::Classification;
     use geom_num::NumError;
