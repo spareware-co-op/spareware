@@ -457,7 +457,7 @@ fn neighbouring_frames_shift_exactly() {
         match (source.shift_to(&target), expected) {
             (Ok(shift), Some(want)) => {
                 f.check(
-                    shift.refine() as i128 == k && shift.offset().map(i128::from) == want,
+                    i128::from(shift.refine()) == k && shift.offset().map(i128::from) == want,
                     "a shift is the offset the frame formula gives",
                     || format!("{source:?} to {target:?}: {shift:?}, want {want:?}"),
                 );
