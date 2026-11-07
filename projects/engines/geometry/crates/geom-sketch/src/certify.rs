@@ -53,7 +53,7 @@ use crate::check::held_of;
 use crate::commit::Committed;
 use crate::equation::Assembly;
 use crate::model::{ItemId, Sketch, SketchError};
-use crate::structure::{Part, analyse, substitute_read};
+use crate::structure::{Analysis, Part, analyse, substitute_read};
 
 /// The most unknowns in a block that is certified: its dense inverse costs the cube. It is the same
 /// size as the largest pivoted block a solve takes whole in practice and is a bound to measure, not
@@ -68,7 +68,7 @@ const INDEPENDENT: f64 = 1.0 / 4096.0;
 const INFLATIONS: usize = 20;
 
 /// How many times a proven box is narrowed by applying the operator to it again.
-const REFINEMENTS: usize = 6;
+const REFINEMENTS: usize = 4;
 
 /// A box this far from the committed point is no proof of anything near it: give up.
 const HUGE: f64 = 1.0e12;
@@ -218,19 +218,63 @@ fn evaluate(
     Ok((f, j))
 }
 
-/// The inverse of the square matrix whose entries are the midpoints of `j`, row by row, or `None`
-/// if it is singular.
-fn inverse(j: &Dense, n: usize, work: &mut Work) -> Result<Option<Vec<f64>>, SketchError> {
-    let mut entries = Vec::new();
-    entries
-        .try_reserve_exact(n.saturating_mul(n))
+/// The residuals of `rows` over `held` without derivatives, and their derivatives with respect to
+/// `cols` in doubles at the midpoint of `held`: what the preconditioner and the centre's residual
+/// need, at a fraction of the cost of an interval Jacobian.
+fn at_centre(
+    assembly: &Assembly,
+    rules: &[usize],
+    held: &[Interval],
+    rows: &[usize],
+    cols: &[usize],
+    with_values: bool,
+) -> Result<(Vec<Interval>, Vec<f64>), SketchError> {
+    let zero = Interval::point(0.0)?;
+    let mut f = Vec::new();
+    f.try_reserve_exact(rows.len())
         .map_err(|_| SketchError::OutOfMemory)?;
-    for i in 0..n {
-        for k in 0..n {
-            entries.push(mid(j.at(i, k)?));
+    f.resize(rows.len(), zero);
+    let mut x = Vec::new();
+    x.try_reserve_exact(held.len())
+        .map_err(|_| SketchError::OutOfMemory)?;
+    x.extend(held.iter().map(|h| mid(*h)));
+    let mut j = Vec::new();
+    j.try_reserve_exact(rows.len().saturating_mul(cols.len()))
+        .map_err(|_| SketchError::OutOfMemory)?;
+    j.resize(rows.len().saturating_mul(cols.len()), 0.0);
+    let mut point = Vec::new();
+    if with_values {
+        for &v in &x {
+            push(&mut point, Interval::point(v)?)?;
         }
     }
-    let lu = match Lu::factor(&Matrix::from_rows(n, n, &entries)?, work) {
+    for &rule in rules {
+        let first = assembly.first_row(rule)?;
+        if with_values {
+            for (e, residual) in assembly.rule_values(rule, &point)?.iter().enumerate() {
+                let row = first.checked_add(e).ok_or(SketchError::Internal)?;
+                if let Ok(i) = rows.binary_search(&row) {
+                    *f.get_mut(i).ok_or(SketchError::Internal)? = *residual;
+                }
+            }
+        }
+        for (variable, e, slope) in assembly.slopes(rule, &x)? {
+            let row = first.checked_add(e).ok_or(SketchError::Internal)?;
+            if let (Ok(i), Ok(k)) = (rows.binary_search(&row), cols.binary_search(&variable)) {
+                let at = i
+                    .checked_mul(cols.len())
+                    .and_then(|q| q.checked_add(k))
+                    .ok_or(SketchError::Internal)?;
+                *j.get_mut(at).ok_or(SketchError::Internal)? = slope;
+            }
+        }
+    }
+    Ok((f, j))
+}
+
+/// The inverse of the square matrix `entries` (row by row), or `None` if it is singular.
+fn inverse(entries: &[f64], n: usize, work: &mut Work) -> Result<Option<Vec<f64>>, SketchError> {
+    let lu = match Lu::factor(&Matrix::from_rows(n, n, entries)?, work) {
         Ok(lu) => lu,
         Err(geom_linalg::LinalgError::Singular) => return Ok(None),
         Err(e) => return Err(e.into()),
@@ -259,7 +303,7 @@ fn inverse(j: &Dense, n: usize, work: &mut Work) -> Result<Option<Vec<f64>>, Ske
 /// The independent equations and unknowns of a part, by pivoted QR of its midpoint Jacobian: the
 /// rows to keep, the columns to solve for. Others are set aside and held.
 fn select(
-    j: &Dense,
+    j: &[f64],
     rows: usize,
     cols: usize,
     work: &mut Work,
@@ -271,7 +315,10 @@ fn select(
         .map_err(|_| SketchError::OutOfMemory)?;
     for c in 0..cols {
         for r in 0..rows {
-            transposed.push(mid(j.at(r, c)?));
+            transposed.push(
+                *j.get(r.saturating_mul(cols).saturating_add(c))
+                    .ok_or(SketchError::Internal)?,
+            );
         }
     }
     let by_equation = PivotedQr::factor(&Matrix::from_rows(cols, rows, &transposed)?, work)?;
@@ -280,7 +327,7 @@ fn select(
         .r_diagonal(rank)
         .is_some_and(|d| d.abs() > INDEPENDENT)
     {
-        rank += 1;
+        rank = rank.saturating_add(1);
     }
     let chosen_rows: Vec<usize> = by_equation
         .permutation()
@@ -295,7 +342,10 @@ fn select(
         .map_err(|_| SketchError::OutOfMemory)?;
     for &r in &chosen_rows {
         for c in 0..cols {
-            picked.push(mid(j.at(r, c)?));
+            picked.push(
+                *j.get(r.saturating_mul(cols).saturating_add(c))
+                    .ok_or(SketchError::Internal)?,
+            );
         }
     }
     let by_unknown = PivotedQr::factor(&Matrix::from_rows(rank, cols, &picked)?, work)?;
@@ -333,7 +383,7 @@ fn krawczyk(
     for (&c, &x) in cols.iter().zip(&centre) {
         *local.get_mut(c).ok_or(SketchError::Internal)? = Interval::point(x)?;
     }
-    let (f0, j0) = evaluate(assembly, rules, &local, rows, cols)?;
+    let (f0, j0) = at_centre(assembly, rules, &local, rows, cols, true)?;
     let Some(c_inv) = inverse(&j0, n, work)? else {
         return Ok(Err(Reason::Singular));
     };
@@ -362,7 +412,15 @@ fn krawczyk(
     }
     // Rump's epsilon-inflation: start twice the Newton step wide; each time the operator's image does
     // not lie inside, take the image widened a tenth and a hair as the next box.
-    let radius = spread * 2.0 + 1.0e-12;
+    // The floor follows the size of the coordinates: a double near 4e4 is 7e-12 apart from the next,
+    // and a box narrower than the rounding of the residual proves nothing.
+    let mut largest = 1.0_f64;
+    for &x in &centre {
+        if x.abs() > largest {
+            largest = x.abs();
+        }
+    }
+    let radius = spread * 2.0 + 1.0e-12 * largest;
     let mut boxes = Vec::new();
     for &x in &centre {
         push(&mut boxes, Interval::new(x - radius, x + radius)?)?;
@@ -377,7 +435,8 @@ fn krawczyk(
         b: &b,
     };
     for _ in 0..INFLATIONS {
-        let image = step.image(&mut local, &boxes)?;
+        let m = step.contraction(&mut local, &boxes)?;
+        let image = step.apply(&m, &boxes)?;
         let mut inside = true;
         let mut reach = 0.0_f64;
         for ((k, x_box), x) in image.iter().zip(&boxes).zip(&centre) {
@@ -390,11 +449,12 @@ fn krawczyk(
             }
         }
         if inside {
-            // The image holds the unique zero. Applying the operator to it again narrows it: each
-            // image is inside the box before, so every one still holds the zero.
+            // The image holds the unique zero. Applying the operator to it again narrows it, with the
+            // same contraction matrix (the Jacobian over the larger box encloses it over the
+            // smaller): each image is inside the box before, so every one still holds the zero.
             let mut tight = image;
             for _ in 0..REFINEMENTS {
-                let again = step.image(&mut local, &tight)?;
+                let again = step.apply(&m, &tight)?;
                 let mut narrowed = Vec::new();
                 for (a, t) in again.iter().zip(&tight) {
                     let lo = if a.lo() > t.lo() { a.lo() } else { t.lo() };
@@ -440,26 +500,23 @@ struct Step<'a> {
 }
 
 impl Step<'_> {
-    /// K(X) = centre - b + (I - C J(X)) (X - centre) for the box `boxes`, with every other variable
-    /// as it is in `local`.
-    fn image(
+    /// M = I - C J(X), the contraction matrix of the box `boxes`, with every other variable as it is
+    /// in `local`. J is enclosed over the box and the centre together: the mean value theorem takes
+    /// the Jacobian at points on the segment from the centre to each point of the box.
+    fn contraction(
         &self,
         local: &mut [Interval],
         boxes: &[Interval],
-    ) -> Result<Vec<Interval>, SketchError> {
+    ) -> Result<Dense, SketchError> {
         let n = self.cols.len();
-        // The mean value theorem takes the Jacobian at points on the segment from the centre to each
-        // point of the box, so J is enclosed over the box and the centre together (they differ once
-        // the box has been narrowed away from the committed point).
         for ((&c, x_box), x) in self.cols.iter().zip(boxes).zip(self.centre) {
             let lo = if *x < x_box.lo() { *x } else { x_box.lo() };
             let hi = if *x > x_box.hi() { *x } else { x_box.hi() };
             *local.get_mut(c).ok_or(SketchError::Internal)? = Interval::new(lo, hi)?;
         }
         let (_, jx) = evaluate(self.assembly, self.rules, local, self.rows, self.cols)?;
-        let mut image = Vec::new();
+        let mut m = Dense::new(n, n, Interval::point(0.0)?)?;
         for i in 0..n {
-            let mut acc = Interval::point(get(self.centre, i)?)?.sub(get(self.b, i)?)?;
             for j in 0..n {
                 let mut a = Interval::point(0.0)?;
                 for k in 0..n {
@@ -471,8 +528,21 @@ impl Step<'_> {
                     a = a.add(Interval::point(cik)?.mul(jx.at(k, j)?)?)?;
                 }
                 let identity = Interval::point(if i == j { 1.0 } else { 0.0 })?;
+                m.put(i, j, identity.sub(a)?)?;
+            }
+        }
+        Ok(m)
+    }
+
+    /// K(X) = centre - b + M (X - centre) for the box `boxes`.
+    fn apply(&self, m: &Dense, boxes: &[Interval]) -> Result<Vec<Interval>, SketchError> {
+        let n = self.cols.len();
+        let mut image = Vec::new();
+        for i in 0..n {
+            let mut acc = Interval::point(get(self.centre, i)?)?.sub(get(self.b, i)?)?;
+            for j in 0..n {
                 let offset = get(boxes, j)?.sub(Interval::point(get(self.centre, j)?)?)?;
-                acc = acc.add(identity.sub(a)?.mul(offset)?)?;
+                acc = acc.add(m.at(i, j)?.mul(offset)?)?;
             }
             push(&mut image, acc)?;
         }
@@ -502,6 +572,9 @@ fn rules_of_rows(assembly: &Assembly, rows: &[usize]) -> Result<Vec<usize>, Sket
     Ok(rules)
 }
 
+/// A block, the box it proved if any, and the unknowns it solved for.
+type Attempt = (Block, Option<Vec<Interval>>, Vec<usize>);
+
 /// Certifies one part of a component.
 fn certify_part(
     assembly: &Assembly,
@@ -519,12 +592,12 @@ fn certify_part(
     let (rows_all, cols_all) = (&part.equations, &part.variables);
     meter.charge(cost(rows_all.len()).saturating_add(cost(cols_all.len())))?;
     let rules = rules_of_rows(assembly, rows_all)?;
-    let attempt = (|| -> Result<(Block, Option<Vec<Interval>>, Vec<usize>), SketchError> {
+    let attempt = (|| -> Result<Attempt, SketchError> {
         // The square, independent subsystem.
         let (rows, cols) = if rows_all.len() == cols_all.len() {
             (rows_all.clone(), cols_all.clone())
         } else {
-            let (_, j) = evaluate(assembly, &rules, held, rows_all, cols_all)?;
+            let (_, j) = at_centre(assembly, &rules, held, rows_all, cols_all, false)?;
             let (rows_at, cols_at) = select(&j, rows_all.len(), cols_all.len(), work)?;
             let mut rows: Vec<usize> = rows_at
                 .iter()
@@ -588,50 +661,85 @@ fn certify_part(
     }
 }
 
-/// Certifies a sketch's committed geometry, block by block in the plan's order.
+/// A sketch's plan and equations, built once, to certify commits of it against.
+pub struct Certifier {
+    analysis: Analysis,
+    assembly: Assembly,
+}
+
+impl Certifier {
+    /// The structural plan and the equations of `sketch`, with each row's lengths fixed at its solved
+    /// values.
+    ///
+    /// # Errors
+    ///
+    /// What assembling the equations and analysing the structure refuse; [`SketchError::Stopped`]
+    /// when the meter stops it.
+    pub fn new(sketch: &Sketch, meter: &mut WorkMeter<'_>) -> Result<Certifier, SketchError> {
+        let (substituted, read) = substitute_read(sketch)?;
+        let analysis = analyse(&substituted.graph, meter)?;
+        let mut assembly = Assembly::merged_read(sketch, &substituted, &read)?;
+        let start = assembly.start()?;
+        assembly.rescale(&start)?;
+        Ok(Certifier { analysis, assembly })
+    }
+
+    /// Certifies a sketch's committed geometry, block by block in the plan's order.
+    ///
+    /// # Errors
+    ///
+    /// What reading the committed values refuses; [`SketchError::OutOfMemory`];
+    /// [`SketchError::Stopped`] when the meter stops it.
+    pub fn certify(
+        &self,
+        sketch: &Sketch,
+        committed: &Committed,
+        meter: &mut WorkMeter<'_>,
+    ) -> Result<Certified, SketchError> {
+        let assembly = &self.assembly;
+        let mut held = held_of(sketch, committed, assembly.variables())?;
+        let mut done = alloc::vec![false; held.len()];
+        let mut work = Work::new(u64::MAX);
+        let mut out = Certified::default();
+        for component in &self.analysis.components {
+            let parts = core::iter::once(&component.over)
+                .chain(component.blocks.iter())
+                .chain(core::iter::once(&component.under));
+            for part in parts {
+                if part.equations.is_empty() {
+                    continue;
+                }
+                let block = certify_part(assembly, &mut held, part, &mut work, meter)?;
+                if matches!(block.certificate, Certificate::Proven { .. }) {
+                    for &c in &part.variables {
+                        if let Some(flag) = done.get_mut(c) {
+                            *flag = true;
+                        }
+                    }
+                }
+                push(&mut out.blocks, block)?;
+            }
+        }
+        meter.charge(u64::MAX.saturating_sub(work.left()))?;
+        for (i, v) in assembly.variables().iter().enumerate() {
+            if get(&done, i)? {
+                push(&mut out.boxes, (v.owner, v.slot, get(&held, i)?))?;
+            }
+        }
+        Ok(out)
+    }
+}
+
+/// Certifies a sketch's committed geometry, block by block in the plan's order: [`Certifier::new`]
+/// and [`Certifier::certify`] in one call.
 ///
 /// # Errors
 ///
-/// What assembling the equations and analysing the structure refuse; [`SketchError::OutOfMemory`];
-/// [`SketchError::Stopped`] when the meter stops it.
+/// As for those two.
 pub fn certify(
     sketch: &Sketch,
     committed: &Committed,
     meter: &mut WorkMeter<'_>,
 ) -> Result<Certified, SketchError> {
-    let (substituted, read) = substitute_read(sketch)?;
-    let analysis = analyse(&substituted.graph, meter)?;
-    let mut assembly = Assembly::merged_read(sketch, &substituted, &read)?;
-    let start = assembly.start()?;
-    assembly.rescale(&start)?;
-    let mut held = held_of(sketch, committed, assembly.variables())?;
-    let mut done = alloc::vec![false; held.len()];
-    let mut work = Work::new(u64::MAX);
-    let mut out = Certified::default();
-    for component in &analysis.components {
-        let parts = core::iter::once(&component.over)
-            .chain(component.blocks.iter())
-            .chain(core::iter::once(&component.under));
-        for part in parts {
-            if part.equations.is_empty() {
-                continue;
-            }
-            let block = certify_part(&assembly, &mut held, part, &mut work, meter)?;
-            if matches!(block.certificate, Certificate::Proven { .. }) {
-                for &c in &part.variables {
-                    if let Some(flag) = done.get_mut(c) {
-                        *flag = true;
-                    }
-                }
-            }
-            push(&mut out.blocks, block)?;
-        }
-    }
-    meter.charge(u64::MAX.saturating_sub(work.left()))?;
-    for (i, v) in assembly.variables().iter().enumerate() {
-        if get(&done, i)? {
-            push(&mut out.boxes, (v.owner, v.slot, get(&held, i)?))?;
-        }
-    }
-    Ok(out)
+    Certifier::new(sketch, meter)?.certify(sketch, committed, meter)
 }

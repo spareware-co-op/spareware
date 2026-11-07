@@ -100,7 +100,7 @@ fn certified(s: &Sketch) -> Certified {
 fn proven(b: &Block) -> f64 {
     match b.certificate {
         Certificate::Proven { radius } => radius,
-        other => panic!("not proven: {other:?}"),
+        other @ Certificate::Unproven(_) => panic!("not proven: {other:?}"),
     }
 }
 
@@ -108,8 +108,10 @@ fn box_of(c: &Certified, owner: ItemId, slot: u8) -> Interval {
     c.boxes
         .iter()
         .find(|(o, s, _)| *o == owner && *s == slot)
-        .map(|(_, _, b)| *b)
-        .unwrap_or_else(|| panic!("no proven box for {owner:?} slot {slot}"))
+        .map_or_else(
+            || panic!("no proven box for {owner:?} slot {slot}"),
+            |(_, _, b)| *b,
+        )
 }
 
 /// Whether the interval holds the rational `[lo, hi]`.
@@ -158,7 +160,7 @@ fn a_point_at_two_distances_is_certified_and_its_box_holds_the_exact_solution() 
     let radius = proven(&got.blocks[0]);
     assert!(radius > 0.0 && radius < 2.0, "{radius}");
     assert_eq!(got.blocks[0].unknowns, 2);
-    assert!(got.blocks[0].set_aside.is_empty());
+    assert_eq!(got.blocks[0].set_aside, Vec::new());
     let x = RBig::from_parts(7_i32.into(), UBig::from(2_u32));
     assert!(holds(box_of(&got, pid(3), 0), &x, &x));
     let (lo, hi) = root_of_12_75();
@@ -288,7 +290,7 @@ fn a_family_of_rectangles_is_certified_in_every_block_and_the_certificate_repeat
     let s = family();
     assert_eq!(s.constraints().len(), 200);
     let first = certified(&s);
-    assert!(!first.blocks.is_empty());
+    assert_ne!(first.blocks.len(), 0);
     for block in &first.blocks {
         assert!(
             matches!(block.certificate, Certificate::Proven { .. }),

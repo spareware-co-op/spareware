@@ -22,7 +22,7 @@ use std::hint::black_box;
 use std::time::Instant;
 
 use geom_run::{Budget, WorkMeter};
-use geom_sketch::certify::{Certificate, certify};
+use geom_sketch::certify::{Certificate, Certifier, certify};
 use geom_sketch::commit::commit;
 use geom_sketch::model::Sketch;
 use geom_sketch::solve::solve;
@@ -91,4 +91,20 @@ fn main() {
             .unwrap(),
         );
     });
+    let certifier = Certifier::new(&solved, &mut WorkMeter::new(Budget::UNLIMITED)).unwrap();
+    time(
+        "certificates, the plan and equations built once",
+        20,
+        || {
+            black_box(
+                certifier
+                    .certify(
+                        black_box(&solved),
+                        black_box(&committed),
+                        &mut WorkMeter::new(Budget::UNLIMITED),
+                    )
+                    .unwrap(),
+            );
+        },
+    );
 }
