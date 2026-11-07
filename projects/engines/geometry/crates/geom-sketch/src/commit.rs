@@ -133,20 +133,28 @@ impl Committed {
     /// The stored point of `id`.
     #[must_use]
     pub fn point(&self, id: ItemId) -> Option<&Stored> {
-        self.points.iter().find(|(i, _)| *i == id).map(|(_, s)| s)
+        find(&self.points, id)
     }
 
     /// The carrier of the line `id`.
     #[must_use]
     pub fn line(&self, id: ItemId) -> Option<&Carrier> {
-        self.lines.iter().find(|(i, _)| *i == id).map(|(_, c)| c)
+        find(&self.lines, id)
     }
 
     /// The mark of the constraint `id`.
     #[must_use]
     pub fn mark(&self, id: ItemId) -> Option<Mark> {
-        self.marks.iter().find(|(i, _)| *i == id).map(|(_, m)| *m)
+        find(&self.marks, id).copied()
     }
+}
+
+/// The value of `id` in a list kept in id order, which every list of [`Committed`] is.
+pub(crate) fn find<T>(list: &[(ItemId, T)], id: ItemId) -> Option<&T> {
+    list.binary_search_by_key(&id, |&(k, _)| k)
+        .ok()
+        .and_then(|at| list.get(at))
+        .map(|(_, v)| v)
 }
 
 fn get<T: Copy>(list: &[T], i: usize) -> Result<T, SketchError> {

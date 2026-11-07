@@ -91,6 +91,18 @@ pub enum SketchError {
         /// How far along, from 0 to 1.
         along: f64,
     },
+    /// Committing moved geometry across this constraint's stored root choice (a side, an outside, a
+    /// tangency), or onto its boundary where the choice cannot be told: rounding within a few grid
+    /// steps of a degenerate configuration (chapter 15.10, the first check).
+    CommitFlip(ItemId),
+    /// A constraint is held only to this bound, in grid steps, which is past the fit ceiling
+    /// (chapter 15.10, the second check; section 22's `Bound`).
+    ExactnessNotAccepted {
+        /// The constraint.
+        constraint: ItemId,
+        /// Its residual's bound, in grid steps.
+        bound: f64,
+    },
     /// A path's two ends are not one sketch with new values.
     NotTheSameSketch,
     /// Text that is not `sketch v1`, at this line, from 1.
@@ -149,6 +161,10 @@ impl core::fmt::Display for SketchError {
             SketchError::Degenerate(_) => "the start is on a singular set",
             SketchError::Unsolved(_) => "a block would not converge",
             SketchError::BranchLost { .. } => "the path could not be followed",
+            SketchError::CommitFlip(_) => "committing moved geometry across a stored root choice",
+            SketchError::ExactnessNotAccepted { .. } => {
+                "a constraint holds only past the fit ceiling"
+            }
             SketchError::NotTheSameSketch => "a path's two ends are not one sketch",
             SketchError::Text { .. } => "text that is not sketch v1",
             SketchError::Plane(_) => "the plane's frame is refused",
