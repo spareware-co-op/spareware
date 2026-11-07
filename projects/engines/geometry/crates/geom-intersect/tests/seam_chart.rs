@@ -11,8 +11,10 @@
 
 use geom_curve::Frame;
 use geom_intersect::contact::{
-    Reading, TURN, closing, cut_of, cuts_of, moved, spans_of, unturned, wrapped,
+    Reading, TURN, closing, cut_of, cuts_of, cuts_with_readings, in_a_seam, moved, spans_of,
+    unturned, wrapped,
 };
+use geom_intersect::general::{FlaggedPair, Settled};
 use geom_intersect::result::{CurveContact, PointContact, Unresolved};
 use geom_num::interval::Interval;
 use geom_surface::{Cylinder, Plane, SurfaceKind};
@@ -221,4 +223,72 @@ fn a_range_touching_the_turned_charts_own_cut_is_marked() {
     assert_eq!(cut_of(&u2(1.6, 2.6), &STARTS), (true, false));
     assert_eq!(cut_of(&u2(2.4, 3.4), &STARTS), (true, false));
     assert_eq!(cut_of(&u2(2.4, 2.6), &[None; 4]), (false, false));
+}
+
+#[test]
+fn only_the_cuts_a_reading_left_undecided_lies_on_are_kept() {
+    let both = [Some((0.0, 2.0)), Some((0.0, 2.0)), None, None];
+    let undecided = |first: ((f64, f64), (f64, f64))| Reading::Undecided {
+        first,
+        second: ((0.0, 1.0), (0.0, 1.0)),
+        why: Unresolved::HigherOrderContact,
+    };
+    // On the end of u only.
+    let at_u = [undecided(((1.5, 2.0), (0.3, 0.4)))];
+    assert_eq!(
+        cuts_with_readings(both, &at_u),
+        [Some((0.0, 2.0)), None, None, None]
+    );
+    // On the start of v only.
+    let at_v = [undecided(((0.3, 0.4), (0.0, 0.5)))];
+    assert_eq!(
+        cuts_with_readings(both, &at_v),
+        [None, Some((0.0, 2.0)), None, None]
+    );
+    // On neither: no cut is turned.
+    let inside = [undecided(((0.3, 0.4), (0.3, 0.4)))];
+    assert_eq!(cuts_with_readings(both, &inside), [None; 4]);
+    // A tangent curve counts, a decided point does not.
+    let curve = [Reading::Curve {
+        first: ((1.5, 2.0), (0.3, 0.4)),
+        second: ((0.0, 1.0), (0.0, 1.0)),
+        contact: CurveContact::Crossing,
+    }];
+    assert_eq!(
+        cuts_with_readings(both, &curve),
+        [Some((0.0, 2.0)), None, None, None]
+    );
+    let point = [Reading::Point {
+        at: [
+            span(2.0, 2.0),
+            span(0.5, 0.5),
+            span(0.5, 0.5),
+            span(0.5, 0.5),
+        ],
+        gap: span(0.0, 0.0),
+        contact: PointContact::IsolatedTangent,
+    }];
+    assert_eq!(cuts_with_readings(both, &point), [None; 4]);
+}
+
+#[test]
+fn a_settled_pair_is_in_a_seam_when_it_touches_a_flagged_pair_in_both_patches() {
+    let near = ((0.0, 1.0), (0.0, 1.0));
+    let touching = ((0.5, 2.0), (0.5, 2.0));
+    let apart = ((5.0, 6.0), (5.0, 6.0));
+    let seam = [FlaggedPair {
+        first: near,
+        second: near,
+        why: Unresolved::HigherOrderContact,
+    }];
+    let pair = |first, second| Settled {
+        first,
+        second,
+        starts: Vec::new(),
+    };
+    assert!(in_a_seam(&seam, &pair(touching, touching)));
+    assert!(!in_a_seam(&seam, &pair(touching, apart)));
+    assert!(!in_a_seam(&seam, &pair(apart, touching)));
+    assert!(!in_a_seam(&seam, &pair(apart, apart)));
+    assert!(!in_a_seam(&[], &pair(touching, touching)));
 }
