@@ -363,17 +363,34 @@ fn every_predicate_twin_is_its_shipped_value_token_for_token() {
     }
 }
 
+/// The only predicates allowed to compute in `I512`, the total path's width, without a Verus twin,
+/// each with the reason. Any other predicate must have a twin, so this list cannot grow without a
+/// reviewer seeing it.
+const I512_EXCEPTIONS: [(&str, &str); 2] = [
+    (
+        "mitre_at",
+        "piece G273: Verus's wide twin has no eight-limb support yet, and G251's mitre_time twin          overflowed Verus's stack; an owner decision (decision note in the pull request)",
+    ),
+    (
+        "mitre_side",
+        "piece G273: the same reason as mitre_at",
+    ),
+];
+
 #[test]
 fn every_predicate_has_a_twin_and_the_rest_is_refused() {
     for p in &PREDICATES {
         let d = derivation(p).unwrap();
         let twin = verus_twin(&d, "test", "shipped.rs");
-        if d.certs.iter().any(|c| c.width == Width::I512) {
-            // The total path's width has no twin yet: `mitre_at` and `mitre_side` (piece G273)
-            // compute in it, and are refused with the reason until the wide twin states the
-            // half base of eight limbs.
-            let e = twin.expect_err(p.comparison.name).0;
-            assert!(e.contains("not I512"), "{}: {e}", p.comparison.name);
+        let exception = I512_EXCEPTIONS
+            .iter()
+            .find(|(name, _)| *name == p.comparison.name);
+        if let Some((name, _reason)) = exception {
+            // A named exception is refused with the reason, and the list stays honest: a
+            // predicate that no longer computes in I512 must leave it.
+            assert!(d.certs.iter().any(|c| c.width == Width::I512), "{name}");
+            let e = twin.expect_err(name).0;
+            assert!(e.contains("not I512"), "{name}: {e}");
         } else {
             assert!(twin.is_ok(), "{}: {twin:?}", p.comparison.name);
         }
