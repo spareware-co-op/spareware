@@ -85,6 +85,12 @@ pub struct Case {
     pub spare: [i8; 8],
 }
 
+/// The lowest byte of a word.
+fn low_byte(word: u64) -> u8 {
+    let [low, ..] = word.to_le_bytes();
+    low
+}
+
 /// A byte as a signed number.
 fn signed(b: u8) -> i8 {
     i8::from_le_bytes([b])
@@ -107,8 +113,8 @@ pub fn decode(data: &[u8]) -> (Case, usize) {
             i64::from_le_bytes(b.to_le_bytes()),
         ),
         1 => (
-            i64::from(signed(a.to_le_bytes()[0])),
-            i64::from(signed(b.to_le_bytes()[0])),
+            i64::from(signed(low_byte(a))),
+            i64::from(signed(low_byte(b))),
         ),
         _ => (near_bound(a), near_bound(b)),
     };
