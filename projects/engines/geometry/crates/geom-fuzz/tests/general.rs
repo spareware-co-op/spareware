@@ -78,6 +78,16 @@ fn general_fuzz() {
         .for_each(|data: &[u8]| holds(harness(data)));
 }
 
+/// libFuzzer's find on the pull request of the SSI corpus (`4a 03 fd 0b`): a cone with its apex on
+/// its domain's edge against a plane patch. The cone and the plane's equation cross at (u, v) =
+/// (0.427, 3.667), which stands at 10.7 on the plane patch's second direction, past the patch's 9,
+/// so subdivision rightly leaves nothing for it. The law said every crossing of the equation lay in
+/// a settled or flagged pair, counting a plane patch's whole plane; it now counts only the patch.
+#[test]
+fn a_crossing_of_a_planes_equation_past_the_patch_is_not_a_crossing() {
+    holds(harness(&[0x4a, 0x03, 0xfd, 0x0b]));
+}
+
 #[test]
 fn general_seeded() -> Result<(), seeded::Failure> {
     seeded::run(

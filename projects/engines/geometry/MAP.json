@@ -3594,6 +3594,29 @@
           "target": "lib"
         },
         {
+          "cost": "a piece takes a handful of reads of both surfaces; a straight edge takes one piece. All of it is charged to the meter. Recursion: none.",
+          "does": "[`lies_in`] takes an edge of one surface, the curve `S₁(t)` with one parameter held at an end of its domain, and the other surface it may lie in, and proves it so over a stretch of `t`, piece by piece. Where it does, the edge is the branch: its system against the other surface has a zero for every `t`, so the interior engine of [`crate::solve`] can never prove one and flags boxes the whole length of it, and the march ([`crate::march`]) walks the edge itself, since a box around a point of it cannot stand in the domain.",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-intersect/src/boundary.rs",
+          "guarantees": [
+            "**A piece is proven for every `t` in it.** Two of the edge system's three equations are solved in the other surface's `(s, r)` with `t` an interval: Krawczyk's operator (chapter 12.3) with the parameter in the residual, so one box holds exactly one solution for each `t` of the piece. The pair of equations is the one whose partials determine `(s, r)` best.",
+            "**The third equation holds to within the floor.** Its residual over the proven box is enclosed, and must lie within an eighth of the floor of zero: the edge lies in the other surface to within the resolution floor, the standard every contact is held to (12.9).",
+            "**A piece stays within the ceiling.** The edge's chord over a piece leaves the edge by at most the piece's length times the width of the edge's velocity over it, which a piece is halved to keep under the ceiling.",
+            "**Nothing is guessed.** A piece that cannot be proven is halved, down to a 4096th of the stretch, and then the whole stretch is not proven: the pair stays flagged or unproven."
+          ],
+          "job": "An edge of a patch that lies in the other surface: a branch that runs along a domain's end (G173a, chapter 12.8 step 5).",
+          "method": {
+            "links": [
+              "https://doi.org/10.1137/0731048"
+            ],
+            "text": "the parametric Krawczyk test is Kearfott and Xing's (<https://doi.org/10.1137/0731048>), the one [`crate::march`] steps with; the least-squares start for the middle of a piece is Gauss-Newton on the three residuals."
+          },
+          "path": "geom_intersect::boundary",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
           "cost": "a few predicates per call, each one filter and at most one exact path. [`line_torus`] and [`between`] add at most one Sturm chain. [`collapsed`] is linear. No allocation. Recursion: none.",
           "does": "on the exact data of 12.7, [`line_sphere`], [`line_cylinder`] and [`line_cone`] say how a line meets a quadric as a [`Meeting`], with no square root anywhere, and [`line_torus`] counts its real points on a torus. [`between`] counts them on a stretch of the line. [`position`] decides which of Goldman and Miller's special positions two natural quadrics stand in. [`collapsed`] decides whether the control points along a patch's edge are one point.",
           "family": [],
