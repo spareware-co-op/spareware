@@ -11057,6 +11057,30 @@
           "target": "lib"
         },
         {
+          "cost": "O((n + m) alpha(n)) for n entities and m constraints, plus one exact predicate per exact relation; O(n + m) memory. No recursion. A 1,000-entity commit takes about 2 ms (`benches/commit.rs`).",
+          "does": "[`commit`] turns the solver's floating-point positions into grid values and integer forms (chapter 15.10). Points the sketch pins become grid points, each master rounded **once**, in the sketch's own integer space; straight lines become integer carriers; a point that two carriers must share, or that must lie on one, becomes their meeting, a depth-one point; an arc's centre becomes a rational point on its chord's bisector; a circle keeps a grid centre and a whole radius. Then every constraint the section 15.10 table calls exact is checked **exactly** against what was stored, and marked [`Mark::Exact`], or [`Mark::Bounded`] and listed in [`Committed::broken`] with the reason when the stored geometry cannot hold it.",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-sketch/src/commit.rs",
+          "guarantees": [
+            "**Rounded once.** A master (a coordinate group's value, a line's direction, a carrier's offset, a circle's radius) is rounded from the solved value exactly once, with ties to even; every other stored quantity is computed from masters in integers. Nothing is rounded twice.",
+            "**Exact incidences.** A relation marked `Exact` was verified with `geom-num`'s exact predicates (`Carrier::side`, `Carrier::parallel`, `Carrier::same`, `Rational2::same`, `Arc2::new`) on the stored values, not assumed from how they were made. A T-junction, a corner of lines that cannot both pass through a rounded point, and a point sliding on a sloping line are depth-one points on their carriers, so a wall meeting a sloping wall leaves no gap and no sliver.",
+            "**Cycles give way in a fixed order.** A relation whose quantities were all placed by others is only checked. If it fails it is `Bounded`, reported in [`Committed::broken`] with the reason, and it is always the later constraint in authoring order that gives way, so the same relation gives way on every machine.",
+            "**Deterministic and total.** Integers except the rounding of a solved value; ties to even; every walk is in authoring order; every list is iterated in index order; every step is checked and charged to the meter; no recursion."
+          ],
+          "job": "The commit plan: from a solved sketch to stored geometry, with every declared incidence exact.",
+          "method": {
+            "links": [
+              "projects/engines/geometry/architecture/15-sketches.md",
+              "doi:10.1145/321879.321884"
+            ],
+            "text": "chapter 15.10 of the kernel architecture (`projects/engines/geometry/architecture/15-sketches.md`, \"Exact forms\" and \"The commit plan\"): carriers, depth-one points and rational-centre arcs from `geom_num::carrier` and `geom_num::arc` (owner action G186, decision 32.26), masters rounded once as Shewchuk's and Hoffmann's \"rounded once\" rule requires; the dependency order is a union-find over the exact relations (R. E. Tarjan, \"Efficiency of a good but not linear set union algorithm\", J. ACM 22(2), 1975, doi:10.1145/321879.321884), with offsets between members as in a weighted union-find."
+          },
+          "path": "geom_sketch::commit",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
           "cost": "O(m·n·min(m, n)) multiply-adds for m equations and n variables, charged to the meter before the work, then the same for the confirming decompositions of small groups.",
           "does": "[`diagnose`] reads a sketch's Jacobian at its values and says how many ways the sketch can still move, which equations repeat others, and which of those repeats conflict. [`analyse_columns`] is the same on bare data, so the numerics are tested without a sketch. [`free_motions`] gives the directions the sketch can still move in, in the canonical echelon form, and [`SketchReport::text`] prints a report in words.",
           "family": [],

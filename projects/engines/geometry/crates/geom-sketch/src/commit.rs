@@ -381,6 +381,8 @@ struct Plan<'a> {
     ents: &'a [Entity],
     cons: &'a [Constraint],
     index: BTreeMap<ItemId, usize>,
+    /// The endpoints of each line, as entity indices, found once.
+    line_ends: Vec<Option<[usize; 2]>>,
 }
 
 impl Plan<'_> {
@@ -402,10 +404,7 @@ impl Plan<'_> {
 
     /// The endpoints of the line at `i`, as entity indices.
     fn ends(&self, i: usize) -> Result<Option<[usize; 2]>, SketchError> {
-        match &self.entity(i)?.kind {
-            EntityKind::Line { start, end, .. } => Ok(Some([self.at(*start)?, self.at(*end)?])),
-            _ => Ok(None),
-        }
+        get(&self.line_ends, i)
     }
 
     /// The solved position of the point at `i`, in steps.
@@ -492,7 +491,26 @@ pub fn commit(sketch: &Sketch, meter: &mut WorkMeter<'_>) -> Result<Committed, S
     for (i, e) in ents.iter().enumerate() {
         index.insert(e.id, i);
     }
-    let plan = Plan { ents, cons, index };
+    let mut line_ends = Vec::new();
+    for e in ents {
+        let both = match &e.kind {
+            EntityKind::Line { start, end, .. } => Some([
+                index
+                    .get(start)
+                    .copied()
+                    .ok_or(SketchError::Unknown(*start))?,
+                index.get(end).copied().ok_or(SketchError::Unknown(*end))?,
+            ]),
+            _ => None,
+        };
+        push(&mut line_ends, both)?;
+    }
+    let plan = Plan {
+        ents,
+        cons,
+        index,
+        line_ends,
+    };
     let n = ents.len();
 
     // Pass 1: the exact relations between coordinates, as a weighted union-find over slots, and
@@ -674,6 +692,43 @@ pub fn commit(sketch: &Sketch, meter: &mut WorkMeter<'_>) -> Result<Committed, S
         *count = count.checked_add(1).ok_or(SketchError::Internal)?;
     }
     // Incidence of lines on point classes: a point class is a coincidence class.
+    // Per point class: how many line ends are in it. Per direction class: its first line and its
+    // normal if an axis fixes one. One pass each, so no line scans the others.
+    let mut end_count = alloc::vec![0_usize; n];
+    for l in 0..n {
+        if let Some([p, q]) = plan.ends(l)? {
+            for e in [p, q] {
+                let r = same_point.find(e)?.0;
+                let count = slot(&mut end_count, r)?;
+                *count = count.checked_add(1).ok_or(SketchError::Internal)?;
+            }
+        }
+    }
+    let mut class_first: Vec<Option<usize>> = alloc::vec![None; n];
+    let mut class_axis: Vec<Option<(i128, i128)>> = alloc::vec![None; n];
+    for m in 0..n {
+        if plan.ends(m)?.is_none() {
+            continue;
+        }
+        let (r, turned) = direction.find(m)?;
+        if get(&class_first, r)?.is_none() {
+            *slot(&mut class_first, r)? = Some(m);
+        }
+        if get(&class_axis, r)?.is_none() {
+            let own = match get(&axis, m)?.kind {
+                1 => Some((0_i128, 1_i128)),
+                2 => Some((1, 0)),
+                _ => None,
+            };
+            if let Some((a, b)) = own {
+                *slot(&mut class_axis, r)? = Some(if turned == 0 {
+                    (a, b)
+                } else {
+                    unquarter(a, b)?
+                });
+            }
+        }
+    }
     let mut carriers: Vec<Option<Carrier>> = alloc::vec![None; n];
     let mut class_normal: Vec<Option<(i128, i128)>> = alloc::vec![None; n];
     for l in 0..n {
@@ -690,19 +745,7 @@ pub fn commit(sketch: &Sketch, meter: &mut WorkMeter<'_>) -> Result<Committed, S
         // Where the carrier must pass: a pinned end first, else a shared end, else the first end.
         let shared = |e: usize, same_point: &mut Classes| -> Result<bool, SketchError> {
             let r = same_point.find(e)?.0;
-            let mut seen = 0_usize;
-            for (j, k) in plan.ents.iter().enumerate() {
-                if let EntityKind::Line { start, end, .. } = &k.kind
-                    && j != l
-                {
-                    for t in [start, end] {
-                        if same_point.find(plan.at(*t)?)?.0 == r {
-                            seen = seen.checked_add(1).ok_or(SketchError::Internal)?;
-                        }
-                    }
-                }
-            }
-            Ok(seen > 0)
+            Ok(get(&end_count, r)? > 1)
         };
         let anchor_end = if get(&pinned, p)? {
             0
@@ -742,34 +785,10 @@ pub fn commit(sketch: &Sketch, meter: &mut WorkMeter<'_>) -> Result<Committed, S
         } else {
             // The class's normal, in its root's frame: an axis fixes it; else the root's own line.
             if get(&class_normal, root)?.is_none() {
-                let mut found: Option<(i128, i128)> = None;
-                for m in 0..n {
-                    if plan.ends(m)?.is_none() || direction.find(m)?.0 != root {
-                        continue;
-                    }
-                    let turned = direction.find(m)?.1;
-                    if let Some((a, b)) = match get(&axis, m)?.kind {
-                        1 => Some((0_i128, 1_i128)),
-                        2 => Some((1, 0)),
-                        _ => None,
-                    } {
-                        // The member's normal is the root's turned `turned` times.
-                        found = Some(if turned == 0 {
-                            (a, b)
-                        } else {
-                            unquarter(a, b)?
-                        });
-                        break;
-                    }
-                }
+                let mut found: Option<(i128, i128)> = get(&class_axis, root)?;
                 if found.is_none() {
                     // The first line of the class, in authoring order.
-                    let first = (0..n)
-                        .find(|&m| {
-                            matches!(plan.ends(m), Ok(Some(_)))
-                                && direction.find(m).map(|r| r.0) == Ok(root)
-                        })
-                        .ok_or(SketchError::Internal)?;
+                    let first = get(&class_first, root)?.ok_or(SketchError::Internal)?;
                     let [fp, fq] = plan.ends(first)?.ok_or(SketchError::Internal)?;
                     let (gfp, gfq) = (
                         get(&grid, fp)?.ok_or(SketchError::Internal)?,

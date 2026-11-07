@@ -129,7 +129,7 @@ fn a_rectangle_commits_to_grid_points_and_axis_carriers() {
     for k in 1..=4 {
         assert_eq!(c.mark(cid(k)), Some(Mark::Exact), "rule {k}");
     }
-    assert!(c.broken.is_empty());
+    assert_eq!(c.broken, []);
     // A level side is the carrier y = row; a plumb one, x = column.
     let ([a, b], _) = c.line(lid(1)).unwrap().coefficients();
     assert_eq!(a, 0);
@@ -472,7 +472,7 @@ fn a_dimension_that_is_not_exact_is_bounded_without_being_broken() {
     );
     let c = commit(&s, &mut meter()).unwrap();
     assert_eq!(c.mark(cid(1)), Some(Mark::Bounded));
-    assert!(c.broken.is_empty());
+    assert_eq!(c.broken, []);
 }
 
 #[test]

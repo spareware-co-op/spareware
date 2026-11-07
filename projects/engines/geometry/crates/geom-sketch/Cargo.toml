@@ -83,3 +83,8 @@ float_cmp = "allow"
 [[bench]]
 name = "diagnose"
 harness = false
+
+# The commit of a 1,000-entity sketch (piece G225), the same way.
+[[bench]]
+name = "commit"
+harness = false
