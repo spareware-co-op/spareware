@@ -36,7 +36,7 @@ use geom_op::{
 };
 use geom_poly::convex::Piece;
 use geom_poly::merge::{
-    Memo, Merge, MergeError, Merged, Outward, Rules, as_kept, both_ways, merge_with,
+    Curves, Memo, Merge, MergeError, Merged, Outward, Rules, as_kept, both_ways, merge_with,
     merge_with_reusing, section, select,
 };
 use geom_poly::subdivide::{LEAF_POLYGONS, Solved, around, arrange_reusing};
@@ -52,6 +52,7 @@ use crate::operand::{
 };
 use crate::passage::{Passage, narrowest};
 use crate::rebuild::{Carrier, RebuildError, publish, wire};
+use crate::wires::{self, Run, WireError};
 
 /// The arrangement's phase.
 const ARRANGEMENT: Phase = Phase::new("arrangement");
@@ -128,6 +129,10 @@ pub const COMBINE: OpSchema = OpSchema {
             code: "bool.empty_result",
             doc: "A selection keeps nothing.",
         },
+        DiagnosticSpec {
+            code: "bool.touching_only",
+            doc: "An intersection keeps nothing, and two of its operands touch at a face.",
+        },
     ],
     classes: &[Class::Exact, Class::Certified],
     charges: &[Charge::new(ARRANGEMENT, "polygon a split clips", 1)],
@@ -135,7 +140,8 @@ pub const COMBINE: OpSchema = OpSchema {
     example: "a 4 m cube less a 2 m cube at its corner: a cube with a corner notch",
 };
 
-/// A result: its body and, when every operand had names to start from, its history.
+/// A result: its body and, when every operand had names to start from, its history; a wire
+/// target's pieces under Keep or Trim have none yet.
 #[derive(Clone, Debug, PartialEq)]
 pub struct Combined {
     /// The body.
@@ -173,6 +179,9 @@ pub struct CellReport {
     /// Each face, by its row before naming, with what lies beyond it.
     pub boundaries: Vec<(usize, Beyond)>,
 }
+
+/// A wire target's pieces, and the other operands' polygons that cut it.
+type WireRuns<'a> = (Vec<Run>, Vec<&'a Polygon>);
 
 /// One arrangement, for the selections to read.
 struct Scene<'a> {
@@ -294,6 +303,16 @@ impl From<NumError> for Refused {
     }
 }
 
+impl From<WireError> for Refused {
+    fn from(e: WireError) -> Self {
+        match e {
+            WireError::Num(e) => e.into(),
+            WireError::Trace(e) => MergeError::Trace(e).into(),
+            WireError::Detail(detail) => Refused::Detail(detail),
+        }
+    }
+}
+
 /// The operation's error for a failure of the numbers layer.
 fn numbers(ctx: &OpContext<'_>, e: NumError) -> OpError {
     OpError::new(ctx.path().clone(), e)
@@ -393,6 +412,20 @@ impl<'a> Scene<'a> {
     /// Whether `polygon` belongs to the operand at `owner`.
     fn owned(&self, polygon: usize, owner: Option<usize>) -> bool {
         self.ready.owners.get(polygon).copied() == owner
+    }
+
+    /// Whether two operands touch at a face: a piece with one's material in front and another's
+    /// behind, each on its side alone (11.5). Contact along an edge or at a corner alone has no
+    /// such piece, and is not found here.
+    fn touching(&self) -> bool {
+        let alone = |here: &Winding, there: &Winding| {
+            here.pairs()
+                .iter()
+                .any(|(entry, count)| *count > 0 && there.count(*entry) <= 0)
+        };
+        self.classified
+            .iter()
+            .any(|c| alone(&c.front, &c.back) && alone(&c.back, &c.front))
     }
 
     /// Every piece of the operands other than the one at `target`.
@@ -793,13 +826,48 @@ impl<'a> Scene<'a> {
         Ok((pieces, merged))
     }
 
-    /// The pieces of the sheet at `target`, either side of each passing `test`.
+    /// The pieces of the wire at `target`, cut by the other operands' polygons, each with its
+    /// vector, and those polygons; `None` for a target that is not a wire.
+    fn wire_runs(
+        &self,
+        target: Option<usize>,
+        meter: &mut WorkMeter<'_>,
+    ) -> Result<Option<WireRuns<'_>>, Refused> {
+        let ours = |owner: &usize| Some(*owner) == target;
+        let segments: Vec<[P3; 2]> = self
+            .ready
+            .segments
+            .iter()
+            .filter(|(owner, _)| ours(owner))
+            .map(|(_, ends)| *ends)
+            .collect();
+        if segments.is_empty() {
+            return Ok(None);
+        }
+        let others: Vec<&Polygon> = self
+            .ready
+            .polygons
+            .iter()
+            .zip(&self.ready.owners)
+            .filter(|(_, owner)| !ours(owner))
+            .map(|(polygon, _)| polygon)
+            .collect();
+        let cell = around(&self.ready.polygons)?;
+        let runs = wires::runs(&segments, &others, &self.ready.polygons, cell, meter)?;
+        Ok(Some((runs, others)))
+    }
+
+    /// The pieces of the sheet or wire at `target`, a sheet's either side of each passing `test`,
+    /// a wire's along it.
     fn keep(
         &self,
         test: &WindingTest,
         target: Option<usize>,
         meter: &mut WorkMeter<'_>,
     ) -> Result<Picked, Refused> {
+        if let Some((runs, _)) = self.wire_runs(target, meter)? {
+            return wired(&wires::kept(test, &runs), meter);
+        }
         let pieces: Vec<Outward> = self
             .classified
             .iter()
@@ -838,13 +906,17 @@ impl<'a> Scene<'a> {
         })
     }
 
-    /// The pieces of the sheet at `target`, cut by the others, that hold `seeds`.
+    /// The pieces of the sheet or wire at `target`, cut by the others, that hold `seeds`.
     fn trim(
         &self,
         target: Option<usize>,
         seeds: &[P3],
         meter: &mut WorkMeter<'_>,
     ) -> Result<Picked, Refused> {
+        if let Some((runs, others)) = self.wire_runs(target, meter)? {
+            let curves = wires::trimmed(&runs, &others, seeds)?;
+            return wired(&curves, meter);
+        }
         let of_target = self
             .classified
             .iter()
@@ -923,6 +995,23 @@ impl<'a> Scene<'a> {
             memo: None,
         })
     }
+}
+
+/// A wire target's kept or trimmed `curves` as its one result: a wire body, with no names yet
+/// (11.9 names faces, cells and sections; a wire target's pieces wait for rules of their own).
+fn wired(curves: &Curves, meter: &mut WorkMeter<'_>) -> Result<Picked, Refused> {
+    Ok(Picked {
+        results: alloc::vec![Combined {
+            body: wire(curves, None, meter)?,
+            history: None,
+            names: Vec::new(),
+            cell: None,
+        }],
+        separated: true,
+        qualified: false,
+        leaks: Vec::new(),
+        memo: None,
+    })
 }
 
 /// The grid points nearest `merged`'s corners.
@@ -1110,6 +1199,12 @@ pub(crate) fn selected(
                 "bool.empty_result",
                 "the selection keeps nothing",
             ));
+            if matches!(selection, Selection::Intersect) && scene.touching() {
+                notes.extend(Diagnostic::new(
+                    "bool.touching_only",
+                    "the operands touch at a face and share no volume",
+                ));
+            }
         }
         lists.push(results);
     }

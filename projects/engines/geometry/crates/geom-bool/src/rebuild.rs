@@ -15,6 +15,8 @@
 //!   so the body stores them once.
 //! - **Refused, never guessed.** What [`merge`] refuses and what the arenas refuse are a
 //!   [`RebuildError`].
+//! - **Nothing is a valid body.** Pieces that make no face give a general body with no faces,
+//!   which the checker passes: a solid body must hold a solid region (8.3; tested).
 //! - **Non-manifold is general (11.6).** A body is a solid only if every edge has two fins and
 //!   every vertex's fins in each shell go round it in one fan. An edge of four fins, or a shell
 //!   that pinches at a vertex, as three boxes do whose empty space around a corner is two opposite

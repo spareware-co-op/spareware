@@ -27,12 +27,20 @@
       "reason": "The numbers layer refuses nothing a plane within budget can reach (6.2), so no test can make this arm run. Without it the error would come out as ResultInvalid instead of the numbers layer's own: still an error, never a body."
     },
     {
+      "file": "projects/engines/geometry/crates/geom-bool/src/combine.rs",
+      "mutant": "replace > with >= in Scene<'a>::touching",
+      "line_text": ".any(|(entry, count)| *count > 0 && there.count(*entry) <= 0)",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "A winding vector's pairs hold no zero count, so on each of them a count above 0 and a count of 0 or more are one test."
+    },
+    {
       "file": "projects/engines/geometry/crates/geom-bool/src/half_space.rs",
       "mutant": "replace > with >= in cap",
       "line_text": "if largest(k) > largest(axis) {",
       "occurrences": 1,
       "kind": "equivalent",
-      "reason": "On a tie the mutant takes the later of two axes with equal largest components. Either way the axis has a non-zero component, so the four sides around it bound the plane and the other two clip it to the same polygon of the range box."
+      "reason": "cap bounds the plane by the range box around the axis of the normal's largest component; where two components tie, the mutant takes the later axis. Either way the cap is the plane within the range box, the same points, and the merge names every corner by its planes sorted, so the body is the same: checked by building half-spaces whose normals tie on two axes and on all three, bit for bit the same bodies under both."
     },
     {
       "file": "projects/engines/geometry/crates/geom-bool/src/half_space.rs",
@@ -40,7 +48,7 @@
       "line_text": "if n.get(axis).is_some_and(|v| *v < 0) {",
       "occurrences": 1,
       "kind": "equivalent",
-      "reason": "axis holds the normal's largest component, and a plane's normal is not zero, so the component is never 0."
+      "reason": "axis is the normal's largest component in magnitude, and a plane's normal is never zero (Plane::new refuses one), so that component is never 0 and < 0 and <= 0 agree."
     },
     {
       "file": "projects/engines/geometry/crates/geom-bool/src/names.rs",
@@ -5620,6 +5628,38 @@
       "occurrences": 1,
       "kind": "equivalent",
       "reason": "Two records with equal keys, the same class and the same bound, are the same record here: every copy of a pattern takes its grid step from the input, or from the one ceiling the caller gave, so a and b differ in nothing either branch could return."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-bool/src/wires.rs",
+      "mutant": "replace > with >= in line",
+      "line_text": "if change.saturating_abs() > most {",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "On a tie the edge takes the later of two axes it changes along equally. The axis only chooses the plane across the edge at each end: any plane square to an axis the edge changes along crosses it there, and moved towards the edge's end it slides the point along the edge alone, so the stops, their order and every vector are the same; the planes through the edge do not depend on it."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-bool/src/wires.rs",
+      "mutant": "replace > with >= in line",
+      "line_text": "let toward = if along.is_some_and(|(u, v)| v > u) {",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "Along the axis the edge changes most its ends differ, as an edge of no length is refused just before, so v > u and v >= u are one test."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-bool/src/wires.rs",
+      "mutant": "replace != with == in root",
+      "line_text": "while let Some(up) = parents.get(at).copied().filter(|up| *up != at) {",
+      "occurrences": 1,
+      "kind": "hangs",
+      "reason": "At a root, whose parent is itself, the filter then passes and the walk steps to the same place forever."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-poly/src/subdivide.rs",
+      "mutant": "replace < with == in splits",
+      "line_text": "(low < odd && odd < high).then_some(odd)",
+      "occurrences": 1,
+      "kind": "hangs",
+      "reason": "The tests stop it by their timeout: the mutant offers a split only where the odd half step is the cell's own low face, so every polygon lies on one side, the child cell is the cell itself with every polygon, and the walk splits it there again for ever. It is a hang the tests catch; kept so that the judge counts it as one."
     },
     {
       "file": "projects/engines/geometry/crates/geom-check/src/planar.rs",

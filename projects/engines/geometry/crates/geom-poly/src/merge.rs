@@ -964,11 +964,24 @@ fn splits_boxes(plane: &Plane) -> bool {
         && plane.d() & 1 != 0
 }
 
-/// `corner`'s point under a name the boxes cannot change: the first three planes through it, in
-/// plane order and leaving out the boxes' own, that meet in one point. Which corners a point has
-/// depends on how the boxes fell, but which faces pass through it does not. A point with no such
-/// three, which only a seam has, keeps its corner's.
+/// `corner`'s point under a name the boxes cannot change. A grid point is named by its three axis
+/// planes: which corners it has, and so which planes reach it, depends on how far each box's
+/// cuts run (a face that only touches a corner of another solid is cut there in one box and not
+/// in a smaller one). A point off the grid takes the first three planes through it, in plane
+/// order and leaving out the boxes' own, that meet in one point; one with no such three, which
+/// only a seam has, keeps its corner's.
 fn named(corner: &Corner, meter: &mut WorkMeter<'_>) -> Result<Tpi, MergeError> {
+    let near = corner.point.to_grid()?;
+    if near.is_exact() {
+        let at = near.value();
+        // A grid point's coordinates are within 2^40, so negating one cannot saturate.
+        let axis = |n: [i128; 3], v: i64| Plane::new(n, i128::from(v).saturating_neg());
+        return Ok(Tpi::meeting(
+            axis([1, 0, 0], at.x.get())?,
+            axis([0, 1, 0], at.y.get())?,
+            axis([0, 0, 1], at.z.get())?,
+        )?);
+    }
     let mut list: Vec<Plane> = corner
         .through
         .iter()

@@ -45,7 +45,9 @@ use geom_poly::subdivide::around;
 use geom_poly::trace::{Cell, Polygon};
 use geom_poly::winding::{Entry, Term as Inner, WindingError, WindingTest};
 use geom_run::{Stopped, Usage, WorkMeter};
-use geom_topo::{Arenas, Body, Face, Fin, Ix, PointKind, Sense, SurfaceKind, Vertex};
+use geom_topo::{
+    Arenas, Body, BodyKind, CurveKind, Edge, Face, Fin, Ix, PointKind, Sense, SurfaceKind, Vertex,
+};
 
 use crate::rebuild::Carrier;
 
@@ -123,16 +125,16 @@ pub enum Selection {
         /// The target.
         target: OperandKey,
     },
-    /// The pieces of a sheet target that pass a test on the solids.
+    /// The pieces of a sheet or wire target that pass a test on the solids.
     Keep {
-        /// The sheet.
+        /// The sheet or wire.
         target: OperandKey,
         /// The test.
         test: Vec<Term>,
     },
-    /// A sheet target cut by the others, keeping the pieces that hold the seeds.
+    /// A sheet or wire target cut by the others, keeping the pieces that hold the seeds.
     Trim {
-        /// The sheet.
+        /// The sheet or wire.
         target: OperandKey,
         /// Points on the pieces to keep.
         seeds: Vec<P3>,
@@ -237,6 +239,9 @@ pub struct Prepared {
     /// Each operand's box, in `keys` order, as [`around`] gives it for its polygons alone: none for
     /// an operand with no polygons. The least and greatest of these are [`around`] of them all.
     pub cells: Vec<Result<Option<Cell>, NumError>>,
+    /// Each straight edge of a wire operand, with that operand's place in `keys`, between grid
+    /// points: what Keep and Trim cut of a wire target.
+    pub segments: Vec<(usize, [P3; 2])>,
 }
 
 /// What preparing one operand gave, kept for a later call that brings the same body (G139).
@@ -278,7 +283,7 @@ impl Operands {
 }
 
 /// `plane`, facing the other way.
-fn turned(plane: &Plane) -> Result<Plane, NumError> {
+pub(crate) fn turned(plane: &Plane) -> Result<Plane, NumError> {
     let [x, y, z] = plane.n();
     let negate = |v: i128| v.checked_neg().ok_or(NumError::BudgetExceeded);
     Plane::new([negate(x)?, negate(y)?, negate(z)?], negate(plane.d())?)
@@ -485,6 +490,45 @@ fn joined(face: &Plane, sides: Vec<Side>) -> Result<Vec<Side>, NumError> {
     Ok(ring)
 }
 
+/// The straight edges of `operand` if it is a wire, between grid points, into `ready`.
+///
+/// # Errors
+///
+/// [`PrepareError::NotPlaneBased`] for an edge that is not straight or ends at a meeting point,
+/// which later pieces take; [`PrepareError::Broken`] for an edge with no ends or no length.
+fn segments_of(
+    operand: &Operand<'_>,
+    owner: usize,
+    ready: &mut Prepared,
+) -> Result<(), PrepareError> {
+    if operand.body.kind() != BodyKind::Wire {
+        return Ok(());
+    }
+    let a = operand.body.arenas();
+    let not_flat = PrepareError::NotPlaneBased(operand.key);
+    let broken = PrepareError::Broken(operand.key);
+    for row in 0..a.edges.len() {
+        let edge = a
+            .edges
+            .get(Ix::<Edge>::new(row).ok_or(broken)?)
+            .ok_or(broken)?;
+        if !matches!(a.curves.get(edge.curve), Some(CurveKind::Line(_))) {
+            return Err(not_flat);
+        }
+        let end = |v: Option<Ix<Vertex>>| match v.and_then(|v| point_of(a, v)) {
+            Some(PointKind::Grid(p)) => Ok(p),
+            Some(PointKind::Meet(_)) => Err(not_flat),
+            None => Err(broken),
+        };
+        let (start, finish) = (end(edge.start)?, end(edge.end)?);
+        if start == finish {
+            return Err(broken);
+        }
+        ready.segments.push((owner, [start, finish]));
+    }
+    Ok(())
+}
+
 /// `operand`'s polygons added to `ready`, with their carriers, its owner and its faces.
 fn polygons_of(
     operand: &Operand<'_>,
@@ -687,6 +731,7 @@ pub(crate) fn prepare_reusing(
         tests,
         targets,
         cells: Vec::with_capacity(order.len()),
+        segments: Vec::new(),
     };
     let mut kept = Operands::default();
     for (owner, (operand, entry)) in order.iter().zip(entries).enumerate() {
@@ -720,6 +765,7 @@ pub(crate) fn prepare_reusing(
             .extend(held.faces.iter().map(|face| base.saturating_add(*face)));
         ready.cells.push(held.cell);
         kept.held.insert((operand.key, entry), held);
+        segments_of(operand, owner, &mut ready)?;
     }
     Ok((ready, kept))
 }
@@ -746,6 +792,7 @@ fn prepared_one(
         tests: Vec::new(),
         targets: Vec::new(),
         cells: Vec::new(),
+        segments: Vec::new(),
     };
     polygons_of(operand, entry, 0, &mut one, meter)?;
     let after = meter.used();

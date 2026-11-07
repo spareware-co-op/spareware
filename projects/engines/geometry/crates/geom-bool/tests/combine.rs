@@ -18,16 +18,16 @@ use geom_bool::half_space::half_space;
 use geom_bool::operand::{
     BooleanInput, Operand, OperandKey, OperandKind, PrepareError, Selection, Term,
 };
-use geom_bool::rebuild::{Carrier, RebuildError, rebuild_with};
+use geom_bool::rebuild::{Carrier, RebuildError, rebuild_with, wire};
 use geom_check::{Level, check};
 use geom_make::{BoxInput, Made, cylinder, make_box, prism};
-use geom_num::plane::Plane;
+use geom_num::plane::{Plane, Tpi};
 use geom_num::{Exactness, NumError, P3, Steps};
-use geom_op::{CombineDetail, ErrorKind, OpContext, OpErrorDetail, OpId, OpPath};
+use geom_op::{CombineDetail, ErrorKind, OpContext, OpErrorDetail, OpId, OpPath, RunDetail};
 use geom_poly::convex::Piece;
-use geom_poly::merge::{Merge, Outward, Rules};
+use geom_poly::merge::{Curves, Merge, Outward, Rules};
 use geom_poly::winding::Winding;
-use geom_run::{Budget, Exec, WorkMeter};
+use geom_run::{Budget, Exec, Phase, WorkMeter};
 use geom_topo::query::volume;
 use geom_topo::{Body, BodyKind, Builder, FlatSurface, Sense, SurfaceKind};
 use proptest::prelude::*;
@@ -595,6 +595,303 @@ fn trim_keeps_the_pieces_that_hold_the_seeds() {
     );
 }
 
+/// A wire through grid points, an edge from each to the next.
+fn polyline(points: &[[i64; 3]]) -> Body {
+    let at =
+        |q: [i64; 3]| Tpi::new(square(0, 1, q[0]), square(1, 1, q[1]), square(2, 1, q[2])).unwrap();
+    let curves = Curves {
+        vertices: points.iter().map(|q| at(*q)).collect(),
+        edges: (1..points.len()).map(|k| (k - 1, k)).collect(),
+        meets: vec![Vec::new(); points.len().saturating_sub(1)],
+    };
+    wire(&curves, None, &mut meter()).unwrap()
+}
+
+/// A wire's vertices as grid points, sorted, and how many edges it has.
+fn wire_shape(body: &Body) -> (Vec<[i64; 3]>, u32) {
+    let a = body.arenas();
+    let mut points = Vec::new();
+    for row in 0..a.points.len() {
+        match a.points.get(geom_topo::Ix::new(row).unwrap()) {
+            Some(geom_topo::PointKind::Grid(g)) => points.push([g.x.get(), g.y.get(), g.z.get()]),
+            other => panic!("not on the grid: {other:?}"),
+        }
+    }
+    points.sort_unstable();
+    (points, a.edges.len())
+}
+
+#[test]
+fn keep_clips_a_wire_to_a_solid() {
+    // A rebar's centreline into a block, along it and out through its side: the pieces inside are
+    // kept, one edge each, joined where the centreline turns; with Not, the pieces outside.
+    let block = cuboid([0, 0, 0], [20, 20, 20]);
+    let bar = polyline(&[[-10, 5, 5], [10, 5, 5], [10, 30, 5]]);
+    let keep = |test| Selection::Keep {
+        target: key(2),
+        test,
+    };
+    let inside = picked(
+        vec![solid(1, &block), cutter(2, &bar)],
+        keep(vec![Term::Inside(key(1))]),
+    );
+    let kept = &inside.result[0][0].body;
+    assert_eq!(kept.kind(), BodyKind::Wire);
+    assert_eq!(
+        wire_shape(kept),
+        (vec![[0, 5, 5], [10, 5, 5], [10, 20, 5]], 2)
+    );
+    checked(kept);
+    let outside = picked(
+        vec![solid(1, &block), cutter(2, &bar)],
+        keep(vec![Term::Inside(key(1)), Term::Not]),
+    );
+    assert_eq!(
+        wire_shape(&outside.result[0][0].body),
+        (vec![[-10, 5, 5], [0, 5, 5], [10, 20, 5], [10, 30, 5]], 2)
+    );
+    // A tilted face splits an edge off the grid; nothing is kept twice.
+    let roof = half_space(
+        ctx().path(),
+        [p(0, 0, 8), p(40, 0, 8), p(0, 40, 12)],
+        &mut meter(),
+    )
+    .unwrap();
+    let rod = polyline(&[[5, 5, 0], [5, 5, 30]]);
+    let under = picked(
+        vec![solid(1, &roof), cutter(2, &rod)],
+        keep(vec![Term::Inside(key(1))]),
+    );
+    let kept = &under.result[0][0].body;
+    assert_eq!(kept.arenas().edges.len(), 1);
+    checked(kept);
+}
+
+#[test]
+fn trim_keeps_the_runs_of_a_wire_that_hold_the_seeds() {
+    // A line through a block is cut where it enters and leaves; a seed chooses its piece, and a
+    // seed where it is cut, or off the line, is refused.
+    let block = cuboid([0, 0, 0], [20, 20, 20]);
+    let line = polyline(&[[-10, 5, 5], [10, 5, 5], [30, 5, 5]]);
+    let operands = || vec![solid(1, &block), cutter(2, &line)];
+    let trim = |seed: P3| Selection::Trim {
+        target: key(2),
+        seeds: vec![seed],
+    };
+    let out = picked(operands(), trim(p(25, 5, 5)));
+    assert_eq!(
+        wire_shape(&out.result[0][0].body),
+        (vec![[20, 5, 5], [30, 5, 5]], 1)
+    );
+    checked(&out.result[0][0].body);
+    // The middle run crosses the wire vertex at x 10, which lies on no face.
+    let out = picked(operands(), trim(p(10, 5, 5)));
+    assert_eq!(
+        wire_shape(&out.result[0][0].body),
+        (vec![[0, 5, 5], [10, 5, 5], [20, 5, 5]], 2)
+    );
+    let input = |selection| BooleanInput {
+        operands: operands(),
+        select: vec![selection],
+        merge: Merge::RemoveRedundant,
+        accept: None,
+    };
+    let refused = |seed| {
+        *combine(&ctx(), &SERIAL, &input(trim(seed)))
+            .unwrap_err()
+            .detail()
+    };
+    assert_eq!(
+        refused(p(5, 6, 5)),
+        OpErrorDetail::Combine(CombineDetail::SeedOutside)
+    );
+    assert_eq!(
+        refused(p(0, 5, 5)),
+        OpErrorDetail::Combine(CombineDetail::SeedOnBoundary)
+    );
+}
+
+#[test]
+fn a_wire_edge_is_split_in_order_once_at_each_crossing_and_not_beside_a_face() {
+    // One straight edge through two blocks that share a face: it is split where it enters, where
+    // the blocks meet (both their faces there, one split) and where it leaves, in that order.
+    let near = cuboid([0, 0, 0], [20, 20, 20]);
+    let far = cuboid([20, 0, 0], [20, 20, 20]);
+    let line = polyline(&[[-10, 5, 5], [50, 5, 5]]);
+    let operands = || vec![solid(1, &near), solid(2, &far), cutter(3, &line)];
+    let keep = |test| Selection::Keep {
+        target: key(3),
+        test,
+    };
+    let either = picked(
+        operands(),
+        keep(vec![Term::Inside(key(1)), Term::Inside(key(2)), Term::Or]),
+    );
+    assert_eq!(
+        wire_shape(&either.result[0][0].body),
+        (vec![[0, 5, 5], [40, 5, 5]], 1)
+    );
+    let second = picked(operands(), keep(vec![Term::Inside(key(2))]));
+    assert_eq!(
+        wire_shape(&second.result[0][0].body),
+        (vec![[20, 5, 5], [40, 5, 5]], 1)
+    );
+    let trim = |seed| Selection::Trim {
+        target: key(3),
+        seeds: vec![seed],
+    };
+    let middle = picked(operands(), trim(p(30, 5, 5)));
+    assert_eq!(
+        wire_shape(&middle.result[0][0].body),
+        (vec![[20, 5, 5], [40, 5, 5]], 1)
+    );
+    // Beside a block, the edge crosses the planes of two of its faces, outside them: no split, and
+    // a seed keeps the whole edge.
+    let beside = polyline(&[[-10, 30, 5], [50, 30, 5]]);
+    let whole = picked(
+        vec![solid(1, &near), cutter(3, &beside)],
+        trim(p(10, 30, 5)),
+    );
+    assert_eq!(
+        wire_shape(&whole.result[0][0].body),
+        (vec![[-10, 30, 5], [50, 30, 5]], 1)
+    );
+}
+
+/// How many edges of `wire` Keep keeps inside `solid`, and how many with Not.
+fn kept_in(solid_body: &Body, wire: &Body) -> [u32; 2] {
+    [
+        vec![Term::Inside(key(1))],
+        vec![Term::Inside(key(1)), Term::Not],
+    ]
+    .map(|test| {
+        let selection = Selection::Keep {
+            target: key(2),
+            test,
+        };
+        let out = picked(vec![solid(1, solid_body), cutter(2, wire)], selection);
+        out.result[0][0].body.arenas().edges.len()
+    })
+}
+
+#[test]
+fn a_wire_lying_in_a_face_falls_the_same_side_whichever_way_it_runs() {
+    // Moved off the face a step towards +x, then +y, then +z: inside the block on its three low
+    // faces and outside on its three high ones, along either axis of the face or across it, drawn
+    // either way.
+    let block = cuboid([0, 0, 0], [20, 20, 20]);
+    for axis in 0..3 {
+        let (u, v) = ((axis + 1) % 3, (axis + 2) % 3);
+        for (at, want) in [(0, [1, 0]), (20, [0, 1])] {
+            let point = |(s, t): (i64, i64)| {
+                let mut q = [0; 3];
+                q[axis] = at;
+                q[u] = s;
+                q[v] = t;
+                q
+            };
+            for [from, to] in [
+                [(5, 5), (15, 5)],
+                [(5, 5), (5, 15)],
+                [(5, 5), (15, 15)],
+                [(5, 15), (15, 5)],
+            ] {
+                for ends in [[from, to], [to, from]] {
+                    let bar = polyline(&ends.map(point));
+                    assert_eq!(
+                        kept_in(&block, &bar),
+                        want,
+                        "{ends:?} at {at} on axis {axis}"
+                    );
+                }
+            }
+        }
+    }
+    // In a tilted face the step towards +x decides first: a wire in the plane x = y falls as one a
+    // step towards +x does, upright or across, though the material lies towards +y.
+    let wedge = half_space(
+        ctx().path(),
+        [p(0, 0, 0), p(10, 10, 0), p(0, 0, 10)],
+        &mut meter(),
+    )
+    .unwrap();
+    for (ends, beside) in [
+        ([[5, 5, 2], [5, 5, 8]], [[6, 5, 2], [6, 5, 8]]),
+        ([[5, 5, 8], [5, 5, 2]], [[6, 5, 2], [6, 5, 8]]),
+        ([[2, 2, 5], [8, 8, 5]], [[3, 2, 5], [9, 8, 5]]),
+    ] {
+        let lying = kept_in(&wedge, &polyline(&ends));
+        assert_eq!(lying, kept_in(&wedge, &polyline(&beside)), "{ends:?}");
+        assert_eq!(lying, [0, 1], "{ends:?}");
+    }
+}
+
+#[test]
+fn a_wire_runs_back_along_an_axis_and_to_the_edge_of_the_range() {
+    // Edges drawn towards −x are cut and chosen as those drawn towards +x.
+    let block = cuboid([-20, 0, 0], [10, 10, 10]);
+    let bar = polyline(&[[15, 5, 5], [5, 5, 5], [-15, 5, 5]]);
+    let inside = picked(
+        vec![solid(1, &block), cutter(2, &bar)],
+        Selection::Keep {
+            target: key(2),
+            test: vec![Term::Inside(key(1))],
+        },
+    );
+    assert_eq!(
+        wire_shape(&inside.result[0][0].body),
+        (vec![[-15, 5, 5], [-10, 5, 5]], 1)
+    );
+    // A wire on the last grid plane, where no point lies a step further.
+    let far = geom_num::grid::COORD_MAX;
+    let edge = polyline(&[[far, 0, 0], [far, 10, 0], [far - 10, 10, 10]]);
+    assert_eq!(kept_in(&block, &edge), [0, 2]);
+}
+
+#[test]
+fn a_wire_vertex_on_a_face_ends_a_run_and_its_free_ends_hold_seeds() {
+    // The line turns at nothing, but its middle vertex lies on the block's face: neither edge is
+    // split there, Keep keeps the edge inside whole, a seed on either side or on that side's free
+    // end keeps that side's edge alone, and a seed on the vertex is refused.
+    let block = cuboid([0, 0, 0], [20, 20, 20]);
+    let line = polyline(&[[-10, 5, 5], [0, 5, 5], [10, 5, 5]]);
+    let operands = || vec![solid(1, &block), cutter(2, &line)];
+    let inside = Selection::Keep {
+        target: key(2),
+        test: vec![Term::Inside(key(1))],
+    };
+    let kept = &picked(operands(), inside).result[0][0].body;
+    assert_eq!(wire_shape(kept), (vec![[0, 5, 5], [10, 5, 5]], 1));
+    checked(kept);
+    let trim = |seed| Selection::Trim {
+        target: key(2),
+        seeds: vec![seed],
+    };
+    for (seed, shape) in [
+        (p(5, 5, 5), [[0, 5, 5], [10, 5, 5]]),
+        (p(10, 5, 5), [[0, 5, 5], [10, 5, 5]]),
+        (p(-5, 5, 5), [[-10, 5, 5], [0, 5, 5]]),
+        (p(-10, 5, 5), [[-10, 5, 5], [0, 5, 5]]),
+    ] {
+        let out = picked(operands(), trim(seed));
+        assert_eq!(
+            wire_shape(&out.result[0][0].body),
+            (shape.to_vec(), 1),
+            "{seed:?}"
+        );
+    }
+    let input = BooleanInput {
+        operands: operands(),
+        select: vec![trim(p(0, 5, 5))],
+        merge: Merge::RemoveRedundant,
+        accept: None,
+    };
+    assert_eq!(
+        *combine(&ctx(), &SERIAL, &input).unwrap_err().detail(),
+        OpErrorDetail::Combine(CombineDetail::SeedOnBoundary)
+    );
+}
+
 #[test]
 fn a_section_is_the_curve_where_operands_meet() {
     let a = cuboid([0, 0, 0], [40, 40, 40]);
@@ -617,6 +914,162 @@ fn a_section_is_the_curve_where_operands_meet() {
         out.diagnostics
             .iter()
             .any(|d| d.code == "bool.empty_result")
+    );
+}
+
+/// Faces, edges, vertices and shells.
+fn counted(body: &Body) -> [u32; 4] {
+    let a = body.arenas();
+    [
+        a.faces.len(),
+        a.edges.len(),
+        a.vertices.len(),
+        a.shells.len(),
+    ]
+}
+
+fn noted(out: &geom_op::OpOutput<Combined>, code: &str) -> bool {
+    out.diagnostics.iter().any(|d| d.code == code)
+}
+
+#[test]
+fn a_box_less_itself_or_a_box_around_it_is_nothing_and_goes_back_in() {
+    // A less A is empty (11.17), and so is a box less one around it: a valid general body with no
+    // faces, which says so and goes straight back in.
+    let a = cuboid([0, 0, 0], [10, 10, 10]);
+    let around = cuboid([-5, -5, -5], [20, 20, 20]);
+    for tool in [&a, &around] {
+        let out = subtract(&ctx(), &SERIAL, key(1), &[solid(1, &a), solid(2, tool)]).unwrap();
+        assert!(noted(&out, "bool.empty_result") && !noted(&out, "bool.touching_only"));
+        let nothing = out.result.body;
+        assert_eq!(counted(&nothing), [0, 0, 0, 0]);
+        assert_eq!(nothing.kind(), BodyKind::General);
+        checked(&nothing);
+        let back = unite(&ctx(), &SERIAL, &[solid(1, &nothing), solid(2, &a)]).unwrap();
+        assert_eq!(
+            (counted(&back.result.body), sixfold(&back.result.body)),
+            (counted(&a), sixfold(&a))
+        );
+        let less = subtract(&ctx(), &SERIAL, key(1), &[solid(1, &nothing), solid(2, &a)]);
+        assert_eq!(counted(&less.unwrap().result.body), [0, 0, 0, 0]);
+    }
+}
+
+#[test]
+fn a_walls_end_on_anothers_side_follows_the_shared_face_table() {
+    // Wall A's end face lies on wall B's side face, facing the other way (11.5's table).
+    let a = cuboid([0, 0, 0], [100, 10, 30]);
+    let b = cuboid([100, -20, 0], [10, 50, 30]);
+    let both = [solid(1, &a), solid(2, &b)];
+    // Unite: inside on both sides, the face goes, and one solid stands.
+    let one = unite(&ctx(), &SERIAL, &both).unwrap().result.body;
+    assert_eq!(one.arenas().shells.len(), 1);
+    assert_eq!(sixfold(&one), sixfold(&a) + sixfold(&b));
+    checked(&one);
+    // Subtract A less B: A is unchanged there.
+    let cut = subtract(&ctx(), &SERIAL, key(1), &both)
+        .unwrap()
+        .result
+        .body;
+    assert_eq!((counted(&cut), sixfold(&cut)), (counted(&a), sixfold(&a)));
+    // Intersect: an empty body, which says the walls only touch.
+    let met = intersect(&ctx(), &SERIAL, &both).unwrap();
+    assert!(noted(&met, "bool.empty_result") && noted(&met, "bool.touching_only"));
+    assert_eq!(counted(&met.result.body), [0, 0, 0, 0]);
+    checked(&met.result.body);
+    // Apart, or touching along an edge alone, they share no face: nothing is said of touching.
+    for low in [[200, 0, 0], [100, 10, 0]] {
+        let c = cuboid(low, [10, 10, 30]);
+        let out = intersect(&ctx(), &SERIAL, &[solid(1, &a), solid(2, &c)]).unwrap();
+        assert!(noted(&out, "bool.empty_result") && !noted(&out, "bool.touching_only"));
+        checked(&out.result.body);
+    }
+    // Two that overlap and a third apart keep nothing: the two share volume, not just a face, and
+    // a face of one inside the other has one's material on both sides.
+    let over = cuboid([50, 0, 0], [100, 10, 30]);
+    let far = cuboid([500, 0, 0], [10, 10, 10]);
+    let three = [solid(1, &a), solid(2, &over), solid(3, &far)];
+    let out = intersect(&ctx(), &SERIAL, &three).unwrap();
+    assert!(noted(&out, "bool.empty_result") && !noted(&out, "bool.touching_only"));
+}
+
+#[test]
+fn boxes_that_share_only_an_edge_or_a_corner_are_not_nudged_apart() {
+    // 11.5: boxes touching at an edge unite into a shape non-manifold there, a general body, with
+    // the edge shared by four fins; nothing is nudged apart. At a corner every edge still has two
+    // fins, so the union is a solid of two shells sharing that vertex, which the checker passes.
+    // Either way the difference leaves the first box whole, and the intersection is empty.
+    let a = cuboid([0, 0, 0], [10, 10, 10]);
+    for (low, kind, edges, vertices) in [
+        ([10, 10, 0], BodyKind::General, 23, 14),
+        ([10, 10, 10], BodyKind::Solid, 24, 15),
+    ] {
+        let b = cuboid(low, [10, 10, 10]);
+        let both = [solid(1, &a), solid(2, &b)];
+        let one = unite(&ctx(), &SERIAL, &both).unwrap().result.body;
+        let arenas = one.arenas();
+        assert_eq!(
+            (
+                one.kind(),
+                arenas.shells.len(),
+                arenas.edges.len(),
+                arenas.vertices.len()
+            ),
+            (kind, 2, edges, vertices),
+            "{low:?}"
+        );
+        checked(&one);
+        let cut = subtract(&ctx(), &SERIAL, key(1), &both)
+            .unwrap()
+            .result
+            .body;
+        assert_eq!((counted(&cut), sixfold(&cut)), (counted(&a), sixfold(&a)));
+        let met = intersect(&ctx(), &SERIAL, &both).unwrap();
+        assert!(noted(&met, "bool.empty_result"));
+        assert_eq!(counted(&met.result.body), [0, 0, 0, 0]);
+    }
+}
+
+#[test]
+fn a_box_inside_another_unites_cuts_and_meets() {
+    let outer = cuboid([0, 0, 0], [40, 40, 40]);
+    let inner = cuboid([10, 10, 10], [10, 10, 10]);
+    let both = [solid(1, &outer), solid(2, &inner)];
+    let whole = unite(&ctx(), &SERIAL, &both).unwrap().result.body;
+    assert_eq!(
+        (counted(&whole), sixfold(&whole)),
+        (counted(&outer), sixfold(&outer))
+    );
+    // Clear of every face, the inner box leaves a cavity: a second shell.
+    let hollow = subtract(&ctx(), &SERIAL, key(1), &both)
+        .unwrap()
+        .result
+        .body;
+    assert_eq!(counted(&hollow), [12, 24, 16, 2]);
+    assert_eq!(sixfold(&hollow), sixfold(&outer) - sixfold(&inner));
+    checked(&hollow);
+    let none = subtract(&ctx(), &SERIAL, key(2), &both).unwrap();
+    assert!(noted(&none, "bool.empty_result"));
+    checked(&none.result.body);
+    let met = intersect(&ctx(), &SERIAL, &both).unwrap().result.body;
+    assert_eq!(
+        (counted(&met), sixfold(&met)),
+        (counted(&inner), sixfold(&inner))
+    );
+    // On one of the outer box's faces, it leaves a pocket in one shell.
+    let flush = cuboid([0, 10, 10], [10, 10, 10]);
+    let both = [solid(1, &outer), solid(2, &flush)];
+    let pocket = subtract(&ctx(), &SERIAL, key(1), &both)
+        .unwrap()
+        .result
+        .body;
+    assert_eq!(pocket.arenas().shells.len(), 1);
+    assert_eq!(sixfold(&pocket), sixfold(&outer) - sixfold(&flush));
+    checked(&pocket);
+    let met = intersect(&ctx(), &SERIAL, &both).unwrap().result.body;
+    assert_eq!(
+        (counted(&met), sixfold(&met)),
+        (counted(&flush), sixfold(&flush))
     );
 }
 
@@ -787,6 +1240,53 @@ fn a_subtraction_that_leaves_nothing_is_an_empty_body() {
                 .iter()
                 .any(|d| d.code == "bool.empty_result")
         );
+    }
+}
+
+#[test]
+fn a_budget_that_runs_out_in_the_rebuild_stops_cleanly() {
+    // The rebuild's publication charges a few units between the merge and the checker, which the
+    // stepped sweep above steps over and the tail sweep never reaches. It charges once at least
+    // for each of a body's 22 link columns, so a stride of 11 from the arrangement's end to the
+    // answer lands in it, and each budget tried must be a budget stop.
+    let a = cuboid([0, 0, 0], [40, 40, 40]);
+    let b = cuboid([20, 20, 20], [40, 40, 40]);
+    let run = |budget: u64| {
+        let small = OpContext::new(
+            OpPath::new(OpId::from_bytes([7; 16])),
+            Budget::new(budget, u64::MAX),
+        );
+        unite(&small, &SERIAL, &[solid(1, &a), solid(2, &b)])
+    };
+    let arranging = |budget: u64| {
+        run(budget).is_err_and(|e| {
+            matches!(
+                e.detail(),
+                OpErrorDetail::Run(RunDetail::BudgetExceeded(x))
+                    if x.phase == Phase::new("arrangement")
+            )
+        })
+    };
+    // The first budget past `pass`: `pass(low)` holds and `pass(high)` does not.
+    let first = |pass: &dyn Fn(u64) -> bool| {
+        let (mut low, mut high) = (0u64, 1 << 24);
+        assert!(pass(low) && !pass(high));
+        while high - low > 1 {
+            let middle = low + (high - low) / 2;
+            if pass(middle) {
+                low = middle;
+            } else {
+                high = middle;
+            }
+        }
+        high
+    };
+    let rebuilding = first(&arranging);
+    let answered = first(&|budget| run(budget).is_err());
+    assert!(rebuilding < answered);
+    for budget in (rebuilding..answered).step_by(11) {
+        let e = run(budget).unwrap_err();
+        assert_eq!(e.kind(), ErrorKind::BudgetExceeded, "{budget}: {e:?}");
     }
 }
 
