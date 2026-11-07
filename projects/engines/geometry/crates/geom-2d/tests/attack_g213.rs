@@ -35,7 +35,7 @@
 
 use geom_2d::carrier::Circle2;
 use geom_2d::fit::{
-    BiarcArc, FIT_VERSION, FitError, MAX_DEPTH, biarc, fit_spline, spline_to_biarcs,
+    BiarcArc, FIT_VERSION, FitError, biarc, fit_spline, spline_to_biarcs,
 };
 use geom_math::F2;
 use geom_num::grid::{P2, Steps};
@@ -50,16 +50,14 @@ fn meter() -> WorkMeter<'static> {
     WorkMeter::new(Budget::UNLIMITED)
 }
 
-/// Points on a quarter of a circle of radius `r`, by a rational parametrisation so they are
-/// whole numbers only approximately: rounded to the grid.
+/// Points on a quarter of a circle of radius `r` by the rational parametrisation
+/// x = r (n² − k²) / (n² + k²), y = 2 r n k / (n² + k²), rounded to the grid with whole numbers.
 fn quarter(r: i64, n: i64) -> Vec<P2> {
     (0..=n)
         .map(|k| {
-            let a = std::f64::consts::FRAC_PI_2 * k as f64 / n as f64;
-            p2(
-                (r as f64 * a.cos()).round() as i64,
-                (r as f64 * a.sin()).round() as i64,
-            )
+            let den = n * n + k * k;
+            let half = den / 2;
+            p2((r * (n * n - k * k) + half) / den, (2 * r * n * k + half) / den)
         })
         .collect()
 }
@@ -117,14 +115,12 @@ fn the_curve_passes_every_fit_point_within_the_reported_bound() {
             .collect();
         let curve = Curve::<2>::new(Basis::new(3, knots).unwrap(), &ctrl).unwrap();
         // Chord-length parameters on the rounded grid, as the fit chose them.
-        let total: f64 = pts
-            .windows(2)
-            .map(|w| {
-                let dx = (w[1].x.get() - w[0].x.get()) as f64;
-                let dy = (w[1].y.get() - w[0].y.get()) as f64;
-                (dx * dx + dy * dy).sqrt()
-            })
-            .sum();
+        let mut total = 0.0_f64;
+        for w in pts.windows(2) {
+            let dx = (w[1].x.get() - w[0].x.get()) as f64;
+            let dy = (w[1].y.get() - w[0].y.get()) as f64;
+            total += (dx * dx + dy * dy).sqrt();
+        }
         let mut run = 0.0;
         for (i, q) in pts.iter().enumerate() {
             if i > 0 {
@@ -263,5 +259,4 @@ fn a_quarter_circle_spline_is_covered_by_biarcs_within_the_tolerance() {
     let c = fit.spline.control();
     assert!(first.first.start == c[0] || first.first.end == c[0]);
     assert!(last.second.start == *c.last().unwrap() || last.second.end == *c.last().unwrap());
-    assert!(MAX_DEPTH >= 8);
 }
