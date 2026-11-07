@@ -807,6 +807,7 @@ name = "geom-bench"
 version = "0.0.0"
 dependencies = [
  "divan",
+ "geom-2d",
  "geom-bvh",
  "geom-curve",
  "geom-linalg",
@@ -1038,6 +1039,7 @@ dependencies = [
  "bolero",
  "dashu-int",
  "dashu-ratio",
+ "geom-2d",
  "geom-bench",
  "geom-bvh",
  "geom-curve",

@@ -928,6 +928,26 @@
           "target": "lib"
         },
         {
+          "cost": "a few dozen draws of [`SplitMix64`](crate::rng::SplitMix64) per input, once per batch, outside every measured run.",
+          "does": null,
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-bench/src/inputs/entity.rs",
+          "guarantees": [
+            "every batch is full and the same on every target, and every result of a typical batch is `Ok` (`tests/inputs.rs`); every result is the operation's own, run directly (`tests/attack_g06.rs`)."
+          ],
+          "job": "Inputs for `geom-2d`'s entity model (piece G194, decision 32.44): a polyline built and checked, and a shape put through a transform's classification.",
+          "method": {
+            "links": [
+              "projects/engines/geometry/architecture/28-testing.md"
+            ],
+            "text": "the entity table of chapter 14.1 and the transform rules of 14.10, measured as chapter 28.14 sets benchmarks out, `projects/engines/geometry/architecture/28-testing.md`."
+          },
+          "path": "geom_bench::inputs::entity",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
           "cost": "a few draws of [`SplitMix64`] per term, once per batch, outside every measured run.",
           "does": null,
           "family": [],
@@ -2974,6 +2994,28 @@
             "text": "the kind contract of chapter 7 as `geom_curve::contract` states it, driven by coverage-guided fuzzing (chapter 28.5), with inputs aimed at the hard cases 28.5 lists (`projects/engines/geometry/architecture/28-testing.md`)."
           },
           "path": "geom_fuzz::curves",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
+          "cost": "constant per case, at most [`MAX_VERTICES`] vertices; at most [`MAX_INPUT_BYTES`] bytes read.",
+          "does": "[`decode`] turns a fuzzer's bytes into a [`Case`]: a fraction's numerator and denominator, a byte that may name a tag, a polyline's vertices, bulge count, closing flag and width flag, a shape to build, an attribute key and a transform's classification. [`check`] tests each of the model's rules against an independent reading of it: a fraction is refused exactly when its denominator is zero or its reduced size is past the bound, and is otherwise the same number, reduced, with a positive denominator; a number names a tag exactly when it is one of the eighteen and the tag gives the number back; a polyline is made exactly when its counts are right; and a shape put under a classification becomes what chapter 14.10 says (a circle an ellipse under a non-uniform transform, a polyline with a bulge a run, nothing else changes kind, a degenerate transform is refused), with its attribute key untouched. [`harness`] is `decode` then `check`.",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-fuzz/src/entity.rs",
+          "guarantees": [
+            "**Any bytes are a case.** Every byte string, the empty one included, decodes to a case.",
+            "**A bounded input.** [`decode`] reads at most [`MAX_INPUT_BYTES`] bytes, derived below; a unit test builds the input that reaches it.",
+            "**A panic is a failure; a disagreement is a [`Finding`]** naming the law and the case."
+          ],
+          "job": "Fuzz target: `geom-2d`'s entity model keeps its stated laws on any input.",
+          "method": {
+            "links": [
+              "projects/engines/geometry/architecture/14-2d-drafting.md"
+            ],
+            "text": "differential testing against the rules of chapters 14.1 and 14.10 (`projects/engines/geometry/architecture/14-2d-drafting.md`), written here from the rules and not from the code: Euclid's algorithm on 128-bit numbers for the fractions, and a table of the kind changes."
+          },
+          "path": "geom_fuzz::entity",
           "provenance": [],
           "spdx": null,
           "target": "lib"

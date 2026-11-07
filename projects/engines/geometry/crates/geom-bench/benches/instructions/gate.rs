@@ -3291,6 +3291,30 @@ pub mod topo {
     );
 }
 
+/// geom-2d's entity model (piece G194; decision 32.44).
+pub mod entity {
+    use super::*;
+
+    #[library_benchmark(teardown = verify)]
+    #[bench::typical(leak("entity/polyline/typical"))]
+    fn polyline(run: &'static mut Named) -> &'static mut Named {
+        run.bench.measure();
+        run
+    }
+
+    #[library_benchmark(teardown = verify)]
+    #[bench::typical(leak("entity/under/typical"))]
+    fn under(run: &'static mut Named) -> &'static mut Named {
+        run.bench.measure();
+        run
+    }
+
+    library_benchmark_group!(
+        name = entity;
+        benchmarks = polyline, under
+    );
+}
+
 /// geom-nurbs's hot paths (pieces G56, G58 and G59; decision 32.44).
 pub mod nurbs {
     use super::*;

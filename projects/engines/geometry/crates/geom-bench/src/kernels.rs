@@ -2346,6 +2346,40 @@ pub mod bvh {
     }
 }
 
+/// `geom-2d`'s entity model (piece G194, decision 32.44): a polyline built and checked, and a
+/// shape's change under a transform's classification.
+pub mod entity {
+    use geom_2d::entity::{Becomes, Frac, Polyline, Shape};
+    use geom_math::Classification;
+    use geom_num::NumError;
+    use geom_num::grid::P2;
+
+    use super::run;
+
+    /// `Polyline::new` on each input: the number of vertices it holds.
+    #[inline(never)]
+    pub fn polyline(batch: &[(Vec<P2>, Vec<Frac>)], out: &mut Vec<Result<u64, NumError>>) {
+        run(batch, out, |(vertices, bulges)| {
+            Polyline::new(vertices.clone(), bulges.clone(), None, false)
+                .map(|p| u64::try_from(p.vertices().len()).unwrap_or(0))
+                .map_err(|_| NumError::Degenerate)
+        });
+    }
+
+    /// `Shape::under` on each input: the tag it becomes, doubled, plus one if it mirrors.
+    #[inline(never)]
+    pub fn under(batch: &[(Shape, Classification)], out: &mut Vec<Result<u64, NumError>>) {
+        run(batch, out, |(shape, class)| {
+            let change = shape.under(*class).map_err(|_| NumError::Degenerate)?;
+            let tag = match change.becomes {
+                Becomes::One(tag) => u64::from(tag.as_u8()),
+                Becomes::Run => 0,
+            };
+            Ok(tag.wrapping_mul(2).wrapping_add(u64::from(change.mirror)))
+        });
+    }
+}
+
 /// `geom-topo`'s hot paths (piece G80, decision 32.44): a column filled, copied and written, and
 /// a builder's arenas published.
 pub mod topo {
