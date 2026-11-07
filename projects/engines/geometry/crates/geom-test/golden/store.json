@@ -248,9 +248,15 @@
               "kind": "corpus",
               "piece": "G194",
               "why": "two entity benchmarks added (entity/polyline, entity/under)"
+            },
+            {
+              "sha256": "7208d271d98e833acd7a8ad9e5974395dd546d19ef3cfd6135d8df0e6c18bebf",
+              "kind": "corpus",
+              "piece": "G206",
+              "why": "two edit benchmarks added (entity/place, entity/length)"
             }
           ],
-          "sha256": "7208d271d98e833acd7a8ad9e5974395dd546d19ef3cfd6135d8df0e6c18bebf"
+          "sha256": "339d477ae6dc87891308f6a0279b2b58ac00ae65ec5f206177ac660cd09a1806"
         },
         {
           "id": "geom-nurbs/operations",
