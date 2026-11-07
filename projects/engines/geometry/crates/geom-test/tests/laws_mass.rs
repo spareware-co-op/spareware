@@ -94,11 +94,15 @@ fn a_vertex_of(body: &Body, face: FaceIx) -> Option<VertexIx> {
     edge.start
 }
 
+/// Twice the area on each plane, by the reference's canonical plane, and each shell's sum of twice
+/// its faces' area vectors.
+type Areas = (BTreeMap<RefPlane, Q>, Vec<[i128; 3]>);
+
 /// Twice the area on each plane of a body whose vertices are grid points, keyed by the reference's
 /// canonical plane: for a face's twice-area vector A, the plane through its vertex with normal A,
 /// and A's first nonzero component taken positive (the reference's measure along a normal whose
 /// first nonzero component is one). Also each shell's sum of area vectors.
-fn areas(body: &Body) -> Result<(BTreeMap<RefPlane, Q>, Vec<[i128; 3]>), String> {
+fn areas(body: &Body) -> Result<Areas, String> {
     let a = body.arenas();
     let mut by_plane: BTreeMap<RefPlane, Q> = BTreeMap::new();
     let mut shells = vec![[0_i128; 3]; usize::try_from(a.shells.len()).unwrap()];
