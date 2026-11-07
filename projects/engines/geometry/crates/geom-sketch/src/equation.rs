@@ -1156,6 +1156,39 @@ pub(crate) fn inputs_of(
     })
 }
 
+/// A row of a spline rule: its places, how many control points its spline has, and how it reads its
+/// ends (piece G220).
+fn spline_row(
+    sketch: &Sketch,
+    id: ItemId,
+    kind: ConstraintKind,
+    (first, at, from): (usize, usize, usize),
+    len: usize,
+) -> Result<Row, SketchError> {
+    let n = match kind {
+        ConstraintKind::SplineLength { spline, .. }
+        | ConstraintKind::SplineThrough { spline, .. } => {
+            sketch.spline_parts(spline, 0)?.points.len()
+        }
+        _ => 0,
+    };
+    let round = match kind {
+        ConstraintKind::SplineAgainst { other, .. } => sketch.line(other).is_err(),
+        _ => false,
+    };
+    Ok(Row {
+        id,
+        kind,
+        first,
+        at,
+        from,
+        len,
+        n,
+        lin: linear_layout(sketch, &kind)?,
+        round,
+    })
+}
+
 /// A sketch's residuals and Jacobian.
 #[derive(Clone, Debug, PartialEq)]
 pub struct Assembly {
@@ -1368,28 +1401,13 @@ impl Assembly {
                 }
             }
             rows.try_reserve(1).map_err(|_| SketchError::OutOfMemory)?;
-            let n = match kind {
-                ConstraintKind::SplineLength { spline, .. }
-                | ConstraintKind::SplineThrough { spline, .. } => {
-                    sketch.spline_parts(spline, 0)?.points.len()
-                }
-                _ => 0,
-            };
-            let round = match kind {
-                ConstraintKind::SplineAgainst { other, .. } => sketch.line(other).is_err(),
-                _ => false,
-            };
-            rows.push(Row {
+            rows.push(spline_row(
+                sketch,
                 id,
                 kind,
-                first: equations,
-                at,
-                from,
-                len: list.len(),
-                n,
-                lin: linear_layout(sketch, &kind)?,
-                round,
-            });
+                (equations, at, from),
+                list.len(),
+            )?);
             equations = equations.checked_add(here).ok_or(SketchError::Internal)?;
         }
         let jacobian = Sparse::from_triplets(equations, variables.len(), &triplets)?;

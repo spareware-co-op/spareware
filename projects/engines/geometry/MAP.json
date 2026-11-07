@@ -4440,6 +4440,30 @@
           "target": "lib"
         },
         {
+          "cost": "a few small solves and one measure per input.",
+          "does": "[`harness`] reads the fuzzer's bytes as the control points of two cubics, a line, an arc, and up to six rules (joins, a spline end against the line or the arc, a stated length, a pinned point), writes the `sketch v1` text, and runs the sketch through the assembly, the arc length, the senses of the joins, the solver, the measure of the solved joins and the fit-point settling.",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-fuzz/src/sketch_splines.rs",
+          "guarantees": [
+            "**Never a panic.** Every step returns a typed error on a sketch it cannot read.",
+            "**The length is a bound.** A spline's length is at least the distance between its ends, less the error bound the measure states, and the bound is not negative.",
+            "**A solve is solved.** When the solver answers, its largest residual is within the tolerance, and answering twice gives equal sketches.",
+            "**The same answer twice.** The assembly, the senses and the length are equal on a second run."
+          ],
+          "job": "The fuzz target of the spline rules (piece G220a): any bytes are read as two cubic splines and a few rules on them, and everything the crate does with splines must hold its laws.",
+          "method": {
+            "links": [
+              "projects/engines/geometry/architecture/28-testing.md",
+              "projects/engines/geometry/architecture/15-sketches.md"
+            ],
+            "text": "the property-based fuzzing of 28.5 (`projects/engines/geometry/architecture/28-testing.md`), on sections 15.2 and 15.3 (`projects/engines/geometry/architecture/15-sketches.md`)."
+          },
+          "path": "geom_fuzz::sketch_splines",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
           "cost": "linear in the input, three parses and two writes at most.",
           "does": "[`harness`] reads the fuzzer's bytes as text and hands them to `geom_sketch::text::parse`. A text it accepts must write, read back equal, and write the same text again.",
           "family": [],
@@ -10920,7 +10944,7 @@
         },
         {
           "cost": "O(degree) to read an end and a few dozen arithmetic operations to take its derivatives.",
-          "does": "[`end_layout`] reads a spline end the way the constraints do: the first control points counted from the end, and the factors that turn their differences into the end's derivatives. [`end_jets`] gives those derivatives, outward from the end, and [`continuity`] measures how smooth the join of two spline ends is, on a sketch as it stands: how far the tangents are from one line (G1), how far the curvatures are from agreeing (G2) and how far the rates of change of curvature are (G3). The constraints of `equation` ([`crate::model::ConstraintKind::SplineJoin`]) write the same residuals over the same layout, so a join the solver meets measures as smooth here.",
+          "does": "[`end_layout`] reads a spline end the way the constraints do: the first control points counted from the end, and the factors that turn their differences into the end's derivatives. [`end_jets`] gives those derivatives, outward from the end, and [`continuity`] measures how smooth the join of two spline ends is, on a sketch as it stands: how far the tangents are from one line (G1), how far the curvatures are from agreeing (G2) and how far the rates of change of curvature are (G3). [`measure_joins`] measures every spline join of a sketch, against lines and arcs too, and [`solve_and_measure`] does it at the solution of the solver, so the continuity is that of the solved curves. [`join_sense`] says which way round a join's tangent root is (a continuation or a cusp), the quantity a path of the solver holds (piece G220a). The constraints of `equation` ([`crate::model::ConstraintKind::SplineJoin`]) write the same residuals over the same layout, so a join the solver meets measures as smooth here.",
           "family": [],
           "file": "projects/engines/geometry/crates/geom-sketch/src/smooth.rs",
           "guarantees": [

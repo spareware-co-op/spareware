@@ -6,7 +6,11 @@
 //! derivatives. [`end_jets`] gives those derivatives, outward from the end, and [`continuity`]
 //! measures how smooth the join of two spline ends is, on a sketch as it stands: how far the
 //! tangents are from one line (G1), how far the curvatures are from agreeing (G2) and how far the
-//! rates of change of curvature are (G3). The constraints of `equation` ([`crate::model::ConstraintKind::SplineJoin`])
+//! rates of change of curvature are (G3).
+//! [`measure_joins`] measures every spline join of a sketch, against lines and arcs too, and
+//! [`solve_and_measure`] does it at the solution of the solver, so the continuity is that of the solved
+//! curves. [`join_sense`] says which way round a join's tangent root is (a continuation or a cusp),
+//! the quantity a path of the solver holds (piece G220a). The constraints of `equation` ([`crate::model::ConstraintKind::SplineJoin`])
 //! write the same residuals over the same layout, so a join the solver meets measures as smooth
 //! here.
 //!
