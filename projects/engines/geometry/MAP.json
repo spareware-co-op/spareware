@@ -3515,6 +3515,28 @@
           "target": "lib"
         },
         {
+          "cost": "at most [`MAX_FACES`] triangles and two reconstructions.",
+          "does": "[`decode`] turns a fuzzer's bytes into a [`Case`]: up to [`MAX_FACES`] triangles between the corners of a small lattice, so that repeats, flat faces, open edges, shared planes and edges of many faces are all common. [`check`] reconstructs them under a work budget. What it returns must be a closed solid mesh whose class is Approximate, whose undecided cells match its log, and which is the same when the faces come in the other order and each starts from another corner; what it refuses must be one of its named refusals.",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-fuzz/src/reconstruct.rs",
+          "guarantees": [
+            "**Any bytes are a case.** Every byte string, the empty one included, decodes to a case.",
+            "**A bounded input and a bounded run.** [`decode`] reads at most [`MAX_INPUT_BYTES`] bytes, and the run is held to [`WORK`] units of the meter, so a hang is a refusal, not a stall.",
+            "**A panic is a failure; a broken law is a [`Finding`]** naming the law and the case."
+          ],
+          "job": "Fuzz target: `geom-mesh`'s reconstruction by winding number never panics or hangs, refuses what has no inside, and gives one answer whatever order its faces come in.",
+          "method": {
+            "links": [
+              "projects/engines/geometry/architecture/19-meshes-spatial-clash.md"
+            ],
+            "text": "the laws of chapter 19.7's reconstruction, `projects/engines/geometry/architecture/19-meshes-spatial-clash.md`: the result is a closed solid, its class says it is Approximate, the cells it left out are counted once, and nothing in it depends on the order the faces came in."
+          },
+          "path": "geom_fuzz::reconstruct",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
           "cost": "one isolation, one Brent search and one quadrature of a polynomial of degree at most [`MAX_ROOTS`], each bounded; at most [`MAX_INPUT_BYTES`] bytes read.",
           "does": "[`decode`] turns a fuzzer's bytes into a [`Case`]: a polynomial in one unknown, the product of x − rᵢ for up to [`MAX_ROOTS`] roots on a grid of quarters (repeated roots included), a domain, the Newton operator to use, and a bracket's half-width. [`check`] holds three laws, decided exactly from the roots (the sign of the polynomial at a double is the product of the signs of x − rᵢ, each an exact comparison):",
           "family": [],
@@ -5447,6 +5469,35 @@
           "module": "geom_mesh::repair",
           "name": "HealError",
           "non_exhaustive": false
+        },
+        {
+          "doc": "Why reconstruction failed.",
+          "file": "projects/engines/geometry/crates/geom-mesh/src/repair/reconstruct.rs",
+          "kinds": [
+            {
+              "doc": "The faces' first steps (welding to the keys, orienting) failed.",
+              "name": "Heal",
+              "shape": "tuple"
+            },
+            {
+              "doc": "No face has any area.",
+              "name": "NoSurface",
+              "shape": "unit"
+            },
+            {
+              "doc": "No cell is kept: the faces enclose nothing, or every enclosed cell is undecided.",
+              "name": "NothingKept",
+              "shape": "struct"
+            },
+            {
+              "doc": "A failure of the mesh, its numbers or its budget.",
+              "name": "Mesh",
+              "shape": "tuple"
+            }
+          ],
+          "module": "geom_mesh::repair::reconstruct",
+          "name": "ReconstructError",
+          "non_exhaustive": false
         }
       ],
       "family": [
@@ -5887,6 +5938,33 @@
           "target": "lib"
         },
         {
+          "cost": "for n triangles and c cells, O(c · n) interval solid angles, and the partition's clips: for a cell holding m fragments, up to 4 m clips to choose a plane and m to cut by it. The two deviations are O(v · t) exact point-triangle distances for v vertices and t triangles. Charges the meter one unit per clip, per solid angle and per distance.",
+          "does": "[`reconstruct()`] takes the faces of a [`RawMesh`] as they are, cuts the space round them into convex cells by the planes of their triangles, finds each cell's generalised winding number at a point inside it, keeps the cells whose number is above one half, and returns the boundary between the cells kept and the cells not kept as an [`ExactMesh`] whose faces lie on the planes the cells were cut by. Where the input bounds the result, its faces survive exactly; where a hole is closed, the new faces lie on a plane the input already had.",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-mesh/src/repair/reconstruct.rs",
+          "guarantees": [
+            "**Exact cells.** Every cell, portal and kept piece is exact: planes of the input's triangles and of the box, and exact predicates on them. No cell is guessed.",
+            "**Proven numbers, said.** A cell is kept only if the whole interval of its winding number is above ½. The interval encloses the number at every point within half a step of the centroid (the centroid of the cell's corners rounded to the grid), so it is outward-rounded.",
+            "**Approximate, measured both ways.** The result's class is [`Exactness::Approximate`] with the larger of two deviations ([`Deviation`]): the farthest a corner of the result is from the input, and the farthest a vertex of the input is from the result, each measured to whole steps by the exact point-triangle distance of 19.10 on the rounded corners, plus one step for the rounding. It is a measurement at corners, not a proven Hausdorff bound.",
+            "**Deterministic.** Cells are cut in an order that depends on the faces and their numbers alone, every decision is an exact predicate, and the numbers come out the same on any pool.",
+            "**No recursion.** The partition, its portals and their pushing are explicit stacks.",
+            "**Refused, never guessed.** A mesh with no face, or whose every cell is dropped or undecided, is an error that lists the undecided cells."
+          ],
+          "job": "Reconstruction by winding number (19.7): a closed mesh from a soup that healing cannot close.",
+          "method": {
+            "links": [
+              "https://doi.org/10.1145/2461912.2461916",
+              "https://doi.org/10.1145/800250.807481",
+              "https://doi.org/10.1145/37402.37430"
+            ],
+            "text": "Jacobson, Kavan and Sorkine-Hornung, \"Robust inside-outside segmentation using generalized winding numbers\", ACM Trans. Graph. 32(4), 2013, <https://doi.org/10.1145/2461912.2461916>, with its cells found exactly instead of by a graph cut; the partition is Fuchs, Kedem and Naylor 1980, <https://doi.org/10.1145/800250.807481>, its portals as in Thibault and Naylor 1987, <https://doi.org/10.1145/37402.37430>."
+          },
+          "path": "geom_mesh::repair::reconstruct",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
           "cost": "O(n log n) for n vertices, one cell search each; per face, linear in its corners for the cleaning and flatness and quadratic for the crossing test of a face of more than three corners.",
           "does": "[`weld()`] keys each distinct grid point by its Morton code and visits them in key order. Each joins the lowest-keyed representative within ε, found among the candidates the cell index gives and decided by exact squared distance; a point with none becomes a representative. Then every face is rewritten onto the representatives and cleaned: a corner repeating the one before it goes, a loop that passes a vertex twice is cut there into simple loops, and a loop with no area is removed. A loop off one plane, or one that crosses itself, is split into a fan from its lowest-keyed corner. A face repeated the same way round is kept once.",
           "family": [],
@@ -5908,6 +5986,44 @@
           "path": "geom_mesh::repair::weld",
           "provenance": [],
           "spdx": null,
+          "target": "lib"
+        },
+        {
+          "cost": "about 60 interval operations a triangle, so O(n) for n triangles. Charges the meter one unit per triangle.",
+          "does": "[`winding_number`] sums, over every triangle, the solid angle the triangle makes at a box, over 4π, in outward-rounded interval arithmetic. [`solid_angle`] is one triangle's term, `atan2(det, den)`, the form of libigl's `solid_angle` (which divides it by 2π at once). A box that holds a point of a triangle has no angle to take; that is `None`, never a guess.",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-mesh/src/repair/winding.rs",
+          "guarantees": [
+            "**An enclosure.** The interval holds the winding number at every point of the box, because every operation rounds outward and `atan2` is the proven one of `geom-num`.",
+            "**The sign of the side.** A triangle counts positive from behind (inside, for a mesh that faces outward) and negative from in front, so a closed outward mesh gives 1 inside, 0 outside.",
+            "**Refused, never guessed.** The origin of `atan2` (the box holds a point of the triangle) is `None`; any other refusal of the arithmetic is an error.",
+            "**No recursion, no unsafe code.**"
+          ],
+          "job": "Generalised winding numbers of a triangle soup, in intervals: libigl's `solid_angle` and `winding_number`, converted (19.7, reconstruction by winding number).",
+          "method": {
+            "links": [
+              "https://doi.org/10.1145/2461912.2461916",
+              "https://doi.org/10.1109/TBME.1983.325207"
+            ],
+            "text": "Jacobson, Kavan and Sorkine-Hornung, \"Robust inside-outside segmentation using generalized winding numbers\", ACM Trans. Graph. 32(4), 2013, <https://doi.org/10.1145/2461912.2461916>; the solid angle of a triangle at a point is Van Oosterom and Strackee's, IEEE Trans. Biomed. Eng. 30(2), 1983, <https://doi.org/10.1109/TBME.1983.325207>."
+          },
+          "path": "geom_mesh::repair::winding",
+          "provenance": [
+            {
+              "licence": "MPL-2.0",
+              "link": "https://github.com/libigl/libigl/blob/b41f1944a703653ae0da81e6588650ba14c270ea/include/igl/solid_angle.cpp",
+              "method_note": null,
+              "name": "libigl `include/igl/solid_angle.cpp` and `include/igl/winding_number.cpp` at commit `b41f1944a703653ae0da81e6588650ba14c270ea`, by Alec Jacobson and libigl's authors",
+              "notice": [
+                "<https://github.com/libigl/libigl/blob/b41f1944a703653ae0da81e6588650ba14c270ea/include/igl/winding_number.cpp>",
+                "Copyright (C) 2015 Alec Jacobson <alecjacobson@gmail.com>"
+              ],
+              "pinned": true,
+              "purpose": "translated to safe `no_std` Rust over `geom-num` intervals instead of `Eigen` doubles; the grid triangle's corners and the box are exact or enclosed, so every sum and product rounds outward; the sum over triangles is a plain loop in the order given, charged to the work meter, without the bounding-volume hierarchy (`WindingNumberAABB`) and its parallel loop; `atan2` is the proven interval one; a box on a triangle is `None` where the C++ gives whatever `atan2(0, 0)` gives; the 2D (`signed_angle`) case is left out.",
+              "take": "port"
+            }
+          ],
+          "spdx": "MPL-2.0",
           "target": "lib"
         }
       ],
@@ -13479,6 +13595,17 @@
       "take": "port",
       "used_by": [
         "projects/engines/geometry/crates/geom-nurbs/src/net.rs"
+      ]
+    },
+    {
+      "licence": "MPL-2.0",
+      "link": "https://github.com/libigl/libigl/blob/b41f1944a703653ae0da81e6588650ba14c270ea/include/igl/solid_angle.cpp",
+      "method_note": null,
+      "name": "libigl `include/igl/solid_angle.cpp` and `include/igl/winding_number.cpp` at commit `b41f1944a703653ae0da81e6588650ba14c270ea`, by Alec Jacobson and libigl's authors",
+      "pinned": true,
+      "take": "port",
+      "used_by": [
+        "projects/engines/geometry/crates/geom-mesh/src/repair/winding.rs"
       ]
     },
     {

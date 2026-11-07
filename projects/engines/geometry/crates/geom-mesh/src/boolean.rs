@@ -513,7 +513,7 @@ fn corners_of(
 
 /// `merged` as polygons of the runs given. Vertices are in lexicographic order, so the ring with a
 /// face's lowest vertex is its outer ring, and it comes first.
-fn polygons_of(
+pub(crate) fn polygons_of(
     merged: &Merged,
     (face_run, runs, class): (Vec<u32>, Vec<Source>, Exactness),
     exec: &Exec<'_>,
