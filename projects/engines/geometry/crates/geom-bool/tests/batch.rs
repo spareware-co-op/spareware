@@ -303,6 +303,7 @@ fn the_work_grows_in_step_with_the_openings() {
 }
 
 /// The 300-opening wall of G138, timed by hand; G140's gate counts its instructions.
+#[cfg(not(target_family = "wasm"))]
 #[test]
 #[ignore = "a timing to read, not a check"]
 #[allow(clippy::print_stdout, reason = "the timing is the output")]
