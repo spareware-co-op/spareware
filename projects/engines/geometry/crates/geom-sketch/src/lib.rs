@@ -27,6 +27,8 @@
 //!
 //! - [`plane`]: sketch planes, their maps into 3D and the Gram metric (piece G216).
 //! - [`model`]: entities, variables and constraints, in authoring order (piece G217).
+//! - [`check`]: the checks after a commit: root choices decided again and every bounded constraint
+//!   held to an interval bound under the fit ceiling (piece G226).
 //! - [`commit`]: the commit plan, from a solved sketch to stored geometry with every declared
 //!   incidence exact (piece G225).
 //! - [`diagnose`]: degrees of freedom, free motions, redundant and conflicting groups and the report
@@ -47,6 +49,7 @@
 #![forbid(unsafe_code)]
 
 pub mod author;
+pub mod check;
 pub mod commit;
 pub mod diagnose;
 pub mod equation;
