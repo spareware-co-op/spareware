@@ -161,3 +161,17 @@ fn a_budget_too_small_stops_it() {
     let mut small = WorkMeter::new(Budget::of_work(1));
     assert!(MotionFinder::new(&s, &mut small).is_err());
 }
+
+#[test]
+fn a_motion_is_in_model_units_not_the_solvers() {
+    // A scalar of size 1/8 has the scale 8: a unit of its solver variable is eight model units.
+    let s = sketch(
+        "entity 1.0 scalar 5 0.125
+entity 1.1 point 1 2
+",
+    );
+    let finder = MotionFinder::new(&s, &mut meter()).unwrap();
+    let all = finder.all(&mut meter()).unwrap();
+    same(&all, &free_motions(&s, &mut meter()).unwrap());
+    assert_eq!(all[0].moves, vec![(ItemId::new(1, 0), 0, 8.0)]);
+}

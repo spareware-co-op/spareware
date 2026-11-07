@@ -5123,6 +5123,38 @@
       "reason": "The two differ only when a column's norm equals the largest so far, and then both keep the same value."
     },
     {
+      "file": "projects/engines/geometry/crates/geom-sketch/src/diagnose.rs",
+      "mutant": "replace > with >= in walk",
+      "line_text": "let mut step = RANGE_FIRST * if at.abs() > 1.0 { at.abs() } else { 1.0 };",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "The forms differ only when the value is exactly 1 or -1, and then both branches give the same size: |at| and 1.0 are the same number."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-sketch/src/motions.rs",
+      "mutant": "replace > with >= in MotionFinder::motion",
+      "line_text": "if value.abs() > NEGLIGIBLE {",
+      "occurrences": 1,
+      "kind": "harmless",
+      "reason": "The forms differ only for an entry of exactly 1e-12 in size. That cut-off is a convenience that keeps rounding dust out of a motion, and the crate promises nothing about an entry at the cut-off itself: the dense form it is held to uses the same cut, and entries are either dust far below it or amounts of a step."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-sketch/src/motions.rs",
+      "mutant": "replace < with == in MotionFinder::motion",
+      "line_text": "let place = solved.partition_point(|&(j, _)| j < index);",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "Every other entry of a motion lies after its leading variable (a leading column is dead because it is a combination of the live columns after it, and the least-squares solve is unique), so the predicate is false for all of them and the insertion point is 0 for <, <= and ==."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-sketch/src/motions.rs",
+      "mutant": "replace < with <= in MotionFinder::motion",
+      "line_text": "let place = solved.partition_point(|&(j, _)| j < index);",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "Every other entry of a motion lies after its leading variable, and none is the leading variable itself, so < and <= are the same predicate on every entry: the insertion point is 0 for both."
+    },
+    {
       "file": "projects/engines/geometry/crates/geom-sketch/src/plane.rs",
       "mutant": "replace sum -> Result<i128, PlaneError> with Ok(-1)",
       "line_text": "a.checked_add(b).ok_or(PlaneError::OutOfRange)",
