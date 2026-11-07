@@ -573,8 +573,13 @@ fn a_scaled_cylinder_and_cone_read_back_with_their_factor() {
         };
         assert_eq!(moved, 3.0, "{what}");
         surface_trip(what, &scaled);
-        let mut d = Decoder::new(&surface_bytes(&scaled), DEPTH);
-        assert_eq!(read_surface(&mut d, &mut meter()).unwrap(), scaled, "{what}");
+        let bytes = surface_bytes(&scaled);
+        let mut d = Decoder::new(&bytes, DEPTH);
+        assert_eq!(
+            read_surface(&mut d, &mut meter()).unwrap(),
+            scaled,
+            "{what}"
+        );
         let back = scaled.transformed(&mirror, &mut meter()).unwrap().value;
         surface_trip(what, &back);
         seen += 1;

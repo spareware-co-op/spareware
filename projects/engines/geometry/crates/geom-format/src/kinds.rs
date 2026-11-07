@@ -270,7 +270,9 @@ fn axial(e: &mut Encoder, s: f64) -> Written {
         return sign(e, s);
     }
     if !s.is_finite() || s == 0.0 {
-        return Err(KindError::Shape("an axial factor that is zero or not finite"));
+        return Err(KindError::Shape(
+            "an axial factor that is zero or not finite",
+        ));
     }
     e.float(s)?;
     Ok(())
@@ -905,7 +907,9 @@ fn read_axial(d: &mut Decoder<'_>, m: &mut WorkMeter<'_>) -> Result<f64, KindErr
         Item::Uint(1) => Ok(1.0),
         Item::Nint(0) => Ok(-1.0),
         Item::Float(x) if x.is_finite() && x != 0.0 && x != 1.0 && x != -1.0 => Ok(x),
-        _ => Err(KindError::Shape("an axial factor that is 1, -1 or another finite double")),
+        _ => Err(KindError::Shape(
+            "an axial factor that is 1, -1 or another finite double",
+        )),
     }
 }
 
