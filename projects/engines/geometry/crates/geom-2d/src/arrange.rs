@@ -51,8 +51,8 @@ use geom_num::carrier::{Carrier, Rational2};
 use geom_num::grid::{P2, P3};
 use geom_surface::{Plane, SurfaceKind};
 use geom_topo::{
-    Body, BodyKind, Builder, Edge, Face, Fin, Ix, Loop, Region, RegionKind, Sense, Shell,
-    TopoError, Vertex,
+    Body, BodyKind, Builder, Edge as TopoEdge, Face as TopoFace, Fin, Ix, Loop, Region, RegionKind,
+    Sense, Shell, TopoError, Vertex,
 };
 use geom_num::{NumError, Sign};
 use geom_run::{Stopped, WorkMeter};
@@ -869,9 +869,9 @@ impl Arrangement {
                 .zip(y.checked_rem(w))
                 .is_some_and(|(a, b)| a == 0 && b == 0);
             let at = x.checked_div(w).zip(y.checked_div(w));
-            let point = at
-                .filter(|_| grid)
-                .and_then(|(gx, gy)| P3::new(i64::try_from(gx).ok()?, i64::try_from(gy).ok()?, 0).ok());
+            let point = at.filter(|_| grid).and_then(|(gx, gy)| {
+                P3::new(i64::try_from(gx).ok()?, i64::try_from(gy).ok()?, 0).ok()
+            });
             match point {
                 Some(p) => points.push(p),
                 None => {
@@ -882,9 +882,49 @@ impl Arrangement {
                 }
             }
         }
+        // The cycle each half-edge is on.
+        let total = self.edges.len().saturating_mul(2);
+        let mut cycle_of_half: Vec<usize> = alloc::vec![usize::MAX; total];
+        for (c, cycle) in self.cycles.iter().enumerate() {
+            for &h in cycle {
+                if let Some(slot) = usize::try_from(h)
+                    .ok()
+                    .and_then(|k| cycle_of_half.get_mut(k))
+                {
+                    *slot = c;
+                }
+            }
+        }
+        // Which bounded face (numbered from 0, the unbounded face left out) each cycle lies in, and
+        // the order of the loops: for each bounded face its outer cycle, then its holes.
+        let mut face_of_cycle: Vec<Option<usize>> = alloc::vec![None; self.cycles.len()];
+        let mut loop_of_cycle: Vec<Option<usize>> = alloc::vec![None; self.cycles.len()];
+        let mut loops: Vec<(usize, usize)> = Vec::new();
+        for (fi, face) in self.faces.iter().enumerate().skip(1) {
+            for c in face.outer.iter().chain(face.holes.iter()) {
+                let k = usize::try_from(*c).map_err(|_| BodyError::TooMany)?;
+                if let Some(slot) = face_of_cycle.get_mut(k) {
+                    *slot = Some(fi.saturating_sub(1));
+                }
+                if let Some(slot) = loop_of_cycle.get_mut(k) {
+                    *slot = Some(loops.len());
+                }
+                loops.push((fi.saturating_sub(1), k));
+            }
+        }
+        // One fin for each half-edge on a cycle of a bounded face, in half-edge order.
+        let mut fin_of_half: Vec<Option<usize>> = alloc::vec![None; total];
+        let mut fins: Vec<usize> = Vec::new();
+        for (h, slot) in fin_of_half.iter_mut().enumerate() {
+            let c = cycle_of_half.get(h).copied().unwrap_or(usize::MAX);
+            if face_of_cycle.get(c).copied().flatten().is_some() {
+                *slot = Some(fins.len());
+                fins.push(h);
+            }
+        }
         let mut b = Builder::new();
         let a = &mut b.arenas;
-        // The outside region, and the one shell.
+        // The outside region, holding the one shell.
         a.regions.push(Region {
             kind: RegionKind::Void,
             first_shell: Some(row(0)?),
@@ -906,48 +946,134 @@ impl Arrangement {
             let at = a.points.push(*p)?;
             a.vertices.push(Vertex { point: at })?;
         }
-        // Which bounded face each cycle lies in (the unbounded face has no fins).
-        let mut face_of_cycle: Vec<Option<usize>> = alloc::vec![None; self.cycles.len()];
-        for (fi, face) in self.faces.iter().enumerate().skip(1) {
-            for c in face.outer.iter().chain(face.holes.iter()) {
-                if let Some(slot) = usize::try_from(*c)
-                    .ok()
-                    .and_then(|k| face_of_cycle.get_mut(k))
-                {
-                    *slot = Some(fi.saturating_sub(1));
-                }
-            }
-        }
-        // Loops: for each bounded face, its outer cycle then its holes.
-        let mut loop_of_cycle: Vec<Option<usize>> = alloc::vec![None; self.cycles.len()];
-        let mut loops_in_order: Vec<(usize, usize)> = Vec::new();
-        for (fi, face) in self.faces.iter().enumerate().skip(1) {
-            for c in face.outer.iter().chain(face.holes.iter()) {
-                let k = usize::try_from(*c).map_err(|_| BodyError::TooMany)?;
-                if let Some(slot) = loop_of_cycle.get_mut(k) {
-                    *slot = Some(loops_in_order.len());
-                }
-                loops_in_order.push((fi.saturating_sub(1), k));
-            }
-        }
-        // Fins: one for each half-edge on a stored cycle, numbered in half-edge order.
-        let total = self.edges.len().saturating_mul(2);
-        let mut fin_of_half: Vec<Option<usize>> = alloc::vec![None; total];
-        let mut fins_in_order: Vec<usize> = Vec::new();
-        for h in 0..total {
-            let cycle = self
-                .cycles
+        // Edges, each on the segment between its end points.
+        let flat = |v: u32| -> Result<[f64; 3], BodyError> {
+            let p = usize::try_from(v)
+                .ok()
+                .and_then(|k| points.get(k))
+                .ok_or(BodyError::TooMany)?;
+            #[allow(
+                clippy::cast_precision_loss,
+                reason = "grid coordinates are below 2^40"
+            )]
+            Ok([p.x.get() as f64, p.y.get() as f64, 0.0])
+        };
+        for (e, edge) in self.edges.iter().enumerate() {
+            let line = Line::<3>::segment(flat(edge.from)?, flat(edge.to)?)
+                .map_err(|_| BodyError::Geometry)?
+                .value;
+            let curve = a.curves.push(CurveKind::Line(line))?;
+            let own = e.checked_mul(2).ok_or(BodyError::TooMany)?;
+            let first_fin = [own, own.saturating_add(1)]
                 .iter()
-                .position(|c| c.contains(&index(h).unwrap_or(u32::MAX)));
-            if let Some(c) = cycle
-                && face_of_cycle.get(c).copied().flatten().is_some()
-                && let Some(slot) = fin_of_half.get_mut(h)
-            {
-                *slot = Some(fins_in_order.len());
-                fins_in_order.push(h);
-            }
+                .find_map(|h| fin_of_half.get(*h).copied().flatten());
+            a.edges.push(TopoEdge {
+                first_fin: first_fin.map(row).transpose()?,
+                start: Some(row(
+                    usize::try_from(edge.from).map_err(|_| BodyError::TooMany)?,
+                )?),
+                end: Some(row(
+                    usize::try_from(edge.to).map_err(|_| BodyError::TooMany)?,
+                )?),
+                curve,
+            })?;
         }
-        Self::rows(self, a, &points, surface.get(), &face_of_cycle, &loop_of_cycle, &loops_in_order, &fin_of_half, &fins_in_order)?;
+        // Fins, each linked to the next and previous of its cycle and to the other side.
+        for &h in &fins {
+            let c = cycle_of_half.get(h).copied().unwrap_or(usize::MAX);
+            let cycle = self.cycles.get(c).ok_or(BodyError::TooMany)?;
+            let at = cycle
+                .iter()
+                .position(|x| usize::try_from(*x).ok() == Some(h))
+                .ok_or(BodyError::TooMany)?;
+            let n = cycle.len();
+            let neighbour = |k: usize| -> Result<Ix<geom_topo::Fin>, BodyError> {
+                let half = cycle
+                    .get(k)
+                    .and_then(|x| usize::try_from(*x).ok())
+                    .ok_or(BodyError::TooMany)?;
+                let fin = fin_of_half
+                    .get(half)
+                    .copied()
+                    .flatten()
+                    .ok_or(BodyError::TooMany)?;
+                row(fin)
+            };
+            let next = neighbour(at.saturating_add(1).checked_rem(n).unwrap_or(0))?;
+            let prev = neighbour(at.checked_sub(1).unwrap_or(n.saturating_sub(1)))?;
+            let own = row(fin_of_half
+                .get(h)
+                .copied()
+                .flatten()
+                .ok_or(BodyError::TooMany)?)?;
+            let twin = fin_of_half.get(h ^ 1).copied().flatten();
+            a.fins.push(Fin {
+                loop_: row(loop_of_cycle
+                    .get(c)
+                    .copied()
+                    .flatten()
+                    .ok_or(BodyError::TooMany)?)?,
+                next,
+                prev,
+                edge: row(h / 2)?,
+                sense: if h % 2 == 0 {
+                    Sense::Forward
+                } else {
+                    Sense::Reversed
+                },
+                radial: twin.map(row).transpose()?.unwrap_or(own),
+                pcurve: None,
+            })?;
+        }
+        // Loops, in the order of their faces.
+        for (k, &(face, c)) in loops.iter().enumerate() {
+            let cycle = self.cycles.get(c).ok_or(BodyError::TooMany)?;
+            let first = cycle
+                .first()
+                .and_then(|x| usize::try_from(*x).ok())
+                .and_then(|h| fin_of_half.get(h).copied().flatten())
+                .ok_or(BodyError::TooMany)?;
+            let following = k.saturating_add(1);
+            let next = loops
+                .get(following)
+                .filter(|(f, _)| *f == face)
+                .map(|_| row(following))
+                .transpose()?;
+            a.loops.push(Loop {
+                face: row(face)?,
+                next,
+                first_fin: Some(row(first)?),
+            })?;
+        }
+        // Faces: on the plane, bounded by the box of their outer cycle's vertices.
+        let bounded = self.faces.len().saturating_sub(1);
+        for (fi, face) in self.faces.iter().enumerate().skip(1) {
+            let outer = face
+                .outer
+                .and_then(|c| usize::try_from(c).ok())
+                .ok_or(BodyError::TooMany)?;
+            let cycle = self.cycles.get(outer).ok_or(BodyError::TooMany)?;
+            let corners = cycle.iter().filter_map(|&h| {
+                let e = self.edges.get(usize::try_from(h / 2).ok()?)?;
+                let v = if h % 2 == 0 { e.from } else { e.to };
+                points.get(usize::try_from(v).ok()?).copied()
+            });
+            let bound = Box3::from_points(corners).ok_or(BodyError::TooMany)?;
+            let first_loop = loop_of_cycle.get(outer).copied().flatten();
+            a.faces.push(TopoFace {
+                shell: row(0)?,
+                next: if fi < bounded { Some(row(fi)?) } else { None },
+                surface,
+                sense: Sense::Forward,
+                first_loop: first_loop.map(row).transpose()?,
+                bound,
+            })?;
+        }
+        a.shells.push(Shell {
+            region: row(0)?,
+            next: None,
+            first_face: if bounded > 0 { Some(row(0)?) } else { None },
+        })?;
         Ok(b.publish(BodyKind::General, row(0)?, meter)?)
     }
 }
