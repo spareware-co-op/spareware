@@ -683,6 +683,36 @@ impl Plane {
             _ => Err(NumError::BudgetExceeded),
         }
     }
+
+    /// The plane n · p + d = 0 from its coefficients, as a stored or reduced plane gives them.
+    ///
+    /// # Errors
+    ///
+    /// [`NumError::Degenerate`] for a zero normal, and [`NumError::BudgetExceeded`] for a
+    /// coefficient over its budget (|`n_i`| ≥ 2^83 or |d| ≥ 2^125): chapter 6.2 has the type refuse
+    /// it here, so no plane over budget reaches an exact computation.
+    pub const fn new(n: [i128; 3], d: i128) -> (r: Result<Plane, NumError>)
+        ensures
+            match r {
+                Ok(pl) => pl.wf() && pl.normal() == (n@[0] as int, n@[1] as int, n@[2] as int)
+                    && pl.offset() == d as int && !(n@[0] == 0 && n@[1] == 0 && n@[2] == 0),
+                Err(e) => (e == NumError::Degenerate && n@[0] == 0 && n@[1] == 0 && n@[2] == 0)
+                    || (e == NumError::BudgetExceeded && !(n@[0] == 0 && n@[1] == 0 && n@[2] == 0)
+                        && !(-0x800000000000000000000 < n@[0] < 0x800000000000000000000
+                            && -0x800000000000000000000 < n@[1] < 0x800000000000000000000
+                            && -0x800000000000000000000 < n@[2] < 0x800000000000000000000
+                            && -0x20000000000000000000000000000000 < d
+                                < 0x20000000000000000000000000000000)),
+            },
+    {
+        if n[0] == 0 && n[1] == 0 && n[2] == 0 {
+            Err(NumError::Degenerate)
+        } else if within_budget(&n, d) {
+            Ok(Plane { n, d })
+        } else {
+            Err(NumError::BudgetExceeded)
+        }
+    }
 }
 
 impl Tpi {

@@ -4,7 +4,7 @@
 //! section 28.5): every operation, every reader and the operation-sequence generator get a fuzz
 //! target here. Fuzzing feeds a program huge numbers of machine-made inputs, steered towards code
 //! not yet reached, and watches for anything wrong: a panic, a broken law, an invalid result, a
-//! changed input. It has nineteen targets so far: [`predicates`] (G11), `geom-num`'s exact
+//! changed input. It has twenty-two targets so far: [`predicates`] (G11), `geom-num`'s exact
 //! predicates never panic and swapping two points flips their sign, on arbitrary grid points;
 //! [`orient2d`] (G14), orient2d, its exact path and its `f64` filter agree with the exact
 //! determinant of orient2d's definition, computed from scratch, which is also proven by Kani on a
@@ -28,7 +28,12 @@
 //! [`linalg`], the dense decompositions are refused or finite and the spectral ones backward stable
 //! (G49, G50), and [`roots`], the root engine misses no root and proves none twice, Brent's
 //! zero brackets its sign change (G51, G52, G53), and [`maths`], the proven maths functions are
-//! correctly rounded (G47). The layout every target follows, and how each engine runs it locally and in CI,
+//! correctly rounded //! (G47). Phase 3 and 4 add [`arenas`] (G80), `geom-topo` publishes exactly the arenas its
+//! rules allow, and a body's versions never see each other's edits; [`make`] (G101), the
+//! primitives and transforms return only what the full checker passes, keep their laws, and refuse
+//! with a typed error; and [`planes`] (G123), `geom-poly`'s canonical planes and arrangement
+//! predicates give one entry to one plane and one order to any points or rays. The layout every
+//! target follows, and how each engine runs it locally and in CI,
 //! is in this crate's `README.md`.
 //!
 //! Layer: Development, in chapter 27's crate table: a development crate, outside the
@@ -134,6 +139,10 @@
 //!   of the [`nurbs`] target's oracle, `geom-test`'s NURBS reference.
 //! - `geom-intersect` (MPL-2.0, ours), the code the [`intersect`] target tests, and `geom-curve`,
 //!   `geom-math`, `geom-run` and `geom-surface` (MPL-2.0, ours), what its cases are made of.
+//! - `geom-topo`, `geom-curve`, `geom-surface`, `geom-math` and `geom-run` (MPL-2.0, ours), the code
+//!   under test of the [`arenas`] target and the values that fill its arenas.
+//! - `geom-make`, `geom-check` and `geom-op` (MPL-2.0, ours), with the crates above, the code under
+//!   test of the [`make`] target and the checker it judges them by.
 //! - `num-bigint` 0.4.8 (MIT OR Apache-2.0), the oracle of the [`wide`] and [`variants`] targets:
 //!   exact arbitrary-precision integers, the big-integer oracle chapter 29.3 names, sharing no
 //!   code with `geom-num`.
@@ -178,6 +187,7 @@
 
 use core::fmt;
 
+pub mod arenas;
 pub mod boxtree;
 pub mod crossings;
 pub mod curves;
@@ -185,10 +195,12 @@ pub mod general;
 pub mod intersect;
 pub mod level;
 pub mod linalg;
+pub mod make;
 pub mod maths;
 pub mod nurbs;
 pub mod orient2d;
 pub mod piercing;
+pub mod planes;
 pub mod predicates;
 pub mod project;
 pub mod quadric;

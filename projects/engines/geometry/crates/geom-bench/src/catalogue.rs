@@ -459,6 +459,12 @@ pub static OPS: &[Op] = &[
     // Contact analysis (piece G171; decision 32.44): a sphere resting on a plane patch.
     Op { group: "intersect", name: "analyse_rest", measures: "geom_intersect::contact::analyse", classes: T, prepare: |c| bind(inputs::intersect::rests(c), kernels::intersect::touched) },
     Op { group: "intersect", name: "trace_silhouette", measures: "geom_intersect::level::trace", classes: T, prepare: |c| bind(inputs::intersect::tori(c), kernels::intersect::silhouettes) },
+    // geom-make's hot paths (piece G101; decision 32.44): a primitive built and a body moved, named,
+    // published and checked.
+    Op { group: "make", name: "build_box", measures: "geom_make::primitive::make_box", classes: T, prepare: |c| bind(inputs::make::boxes(c), kernels::make::boxes) },
+    Op { group: "make", name: "cylinder", measures: "geom_make::primitive::cylinder", classes: T, prepare: |c| bind(inputs::make::cylinders(c), kernels::make::cylinders) },
+    Op { group: "make", name: "move_box", measures: "geom_make::transform::move_by", classes: T, prepare: |c| bind(inputs::make::moved_boxes(c), kernels::make::moved_boxes) },
+    Op { group: "make", name: "turn_box", measures: "geom_make::transform::rotate", classes: T, prepare: |c| bind(inputs::make::turned_boxes(c), kernels::make::turned_boxes) },
     // Root finding and quadrature (piece G51; decision 32.44).
     Op { group: "brent", name: "zero", measures: "brent::zero", classes: T, prepare: |c| bind(inputs::roots::zero(c), kernels::roots::zero) },
     Op { group: "quadrature", name: "gauss_legendre", measures: "quadrature::gauss_legendre", classes: T, prepare: |c| bind(inputs::roots::gauss_legendre(c), kernels::roots::gauss_legendre) },
@@ -470,7 +476,7 @@ pub static OPS: &[Op] = &[
 ];
 
 /// The groups of [`OPS`], in order.
-pub const GROUPS: [&str; 33] = [
+pub const GROUPS: [&str; 34] = [
     "predicate",
     "sign",
     "wide",
@@ -504,6 +510,7 @@ pub const GROUPS: [&str; 33] = [
     "helper",
     "intersect",
     "quadric",
+    "make",
 ];
 
 /// The group of the growth checks.
@@ -705,7 +712,9 @@ pub static UNMEASURED: &[(&str, &str)] = &[
     ("Interval::hi", "field accessor"),
     ("Plane::n", "field accessor"),
     ("Plane::d", "field accessor"),
+    ("Plane::new", "two comparisons of the coefficients with their budgets"),
     ("Tpi::planes", "field accessor"),
+    ("Tpi::weight", "field accessor"),
     ("Lpi::points", "field accessor"),
     ("Lpi::plane", "field accessor"),
     ("Ssi::points", "field accessor"),

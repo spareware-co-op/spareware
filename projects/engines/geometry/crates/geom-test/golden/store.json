@@ -308,9 +308,15 @@
               "kind": "corpus",
               "piece": "G148",
               "why": "2 new count benchmarks of geom-run's helper (decision 32.44): Exec::map of a list that fits one chunk, on the serial executor and on a pool, for the fix that runs a wave of one task on the calling thread (found in G148's timings); no existing digest moved"
+            },
+            {
+              "sha256": "292cf999c77239f23e60422ffa5d811d52e023014db02b6f50e16d0140a33b1e",
+              "kind": "corpus",
+              "piece": "G101",
+              "why": "4 new count benchmarks on geom-make's hot paths (decision 32.44): a box and a cylinder built, a box moved and quarter-turned; no existing digest moved"
             }
           ],
-          "sha256": "292cf999c77239f23e60422ffa5d811d52e023014db02b6f50e16d0140a33b1e"
+          "sha256": "db171f34bec8209a2b62f75dec9831323b70e029678ef5c19ee56868c2de43bb"
         },
         {
           "id": "geom-nurbs/operations",
@@ -562,6 +568,36 @@
             "function": "dense_golden_hash_is_the_same_on_every_target"
           },
           "sha256": "507472559492ae92313b7e32156a0f64df25fa341cd6eab56772404bcfd55a91"
+        },
+        {
+          "id": "geom-op/determinism",
+          "what": "geom-op's canonical CBOR and SHA-256 corpus (piece G86): every power of two and the edges of each float width and integer head, 3,000 nested values of SKG's subset drawn from a fixed SplitMix64 stream, and the SHA-256 and 128-bit cut of each encoding and of seeded messages of every length to 300 bytes: 22,369 records in the encoding of tests/determinism.rs.",
+          "check": {
+            "crate": "geom-op",
+            "test": "determinism",
+            "function": "golden_hash_is_the_same_on_every_target"
+          },
+          "sha256": "9d3844529ba8b080138c3667380a91a2a7b2695dfd7b6a4f7651334d46b58d29"
+        },
+        {
+          "id": "geom-topo/arenas",
+          "what": "The arenas of geom-topo (piece G80): 48 bodies of random sizes (six past three chunks of faces and fins), every link random and in range, filled row by row or each arena at once, each published with every column in row order, its chunk count and the work publishing charged; an edit of random rows published beside the unchanged original; and each body refused once with a link pointed past its arena and once with a column one row longer, as tests/arena_determinism.rs records them.",
+          "check": {
+            "crate": "geom-topo",
+            "test": "arena_determinism",
+            "function": "arenas_golden_hash_is_the_same_on_every_target"
+          },
+          "sha256": "9df6dc9250d028d90f299d94442c212ac16472679a9d22d207c6d6e0a0a161dc"
+        },
+        {
+          "id": "geom-make/queries",
+          "what": "The core queries (piece G102) over 32 boxes, each also moved, 32 prisms and 8 cylinders from a fixed stream: every face's row, name and roles, twice-area vectors, the bounding box, six times the volume, the exactness report's counts and the validity report's deferred count, as tests/query_determinism.rs records them.",
+          "check": {
+            "crate": "geom-make",
+            "test": "query_determinism",
+            "function": "queries_golden_hash_is_the_same_on_every_target"
+          },
+          "sha256": "b8f2e38d41f1e8a7dacd616b124f55c6b7b46cc691203456872debd94e8f9c4f"
         }
       ]
     }

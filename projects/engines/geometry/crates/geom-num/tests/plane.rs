@@ -1065,3 +1065,35 @@ fn extreme_tpis() {
         "{max:?}"
     );
 }
+
+#[test]
+fn a_plane_from_coefficients_is_checked_as_a_plane_through_points_is() {
+    assert_eq!(Plane::new([0, 0, 0], 1), Err(NumError::Degenerate));
+    for n in [[1, 0, 0], [0, 1, 0], [0, 0, 1], [-1, 0, 0]] {
+        let plane = Plane::new(n, 5).unwrap();
+        assert_eq!((plane.n(), plane.d()), (n, 5));
+    }
+    let top_n = (1i128 << 83) - 1;
+    let top_d = (1i128 << 125) - 1;
+    assert!(Plane::new([top_n, -top_n, top_n], top_d).is_ok());
+    assert!(Plane::new([-top_n, top_n, -top_n], -top_d).is_ok());
+    for n in [[top_n + 1, 0, 0], [0, -top_n - 1, 0], [0, 0, top_n + 1]] {
+        assert_eq!(Plane::new(n, 0), Err(NumError::BudgetExceeded));
+    }
+    assert_eq!(
+        Plane::new([1, 0, 0], top_d + 1),
+        Err(NumError::BudgetExceeded)
+    );
+    assert_eq!(
+        Plane::new([1, 0, 0], -top_d - 1),
+        Err(NumError::BudgetExceeded)
+    );
+}
+
+#[test]
+fn a_point_says_the_sign_of_its_weight() {
+    let at = |n: [i128; 3]| Plane::new(n, 0).unwrap();
+    let (x, y, z) = (at([1, 0, 0]), at([0, 1, 0]), at([0, 0, 1]));
+    assert_eq!(Tpi::new(x, y, z).unwrap().weight(), Sign::Positive);
+    assert_eq!(Tpi::new(y, x, z).unwrap().weight(), Sign::Negative);
+}

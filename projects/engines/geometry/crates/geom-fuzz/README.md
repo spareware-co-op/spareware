@@ -23,7 +23,11 @@ on both, and two cubic graphs that change sides have an item between them; `pier
 and marching stays on both surfaces; and,
 for Gate 2 (decision 32.44: a target per phase-2 code piece), `curves` (`src/curves.rs`) and
 `surfaces` (`src/surfaces.rs`), every curve and surface kind built from any bytes keeps the kind
-contract kit (`geom_curve::contract`, `geom_surface::contract`) under any typed transform.
+contract kit (`geom_curve::contract`, `geom_surface::contract`) under any typed transform. Phase 3 adds `arenas` (`src/arenas.rs`, G80), `geom-topo` publishes exactly the arenas its rules
+allow, and a body's versions never see each other's edits; `make` (`src/make.rs`, G101), the
+primitives and transforms return only what the full checker passes, keep their laws, and refuse with
+a typed error; and `planes` (`src/planes.rs`, G123), `geom-poly`'s canonical planes and arrangement
+predicates give one entry to one plane and one order to any points or rays.
 
 ## One law, four engines
 
