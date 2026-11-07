@@ -615,7 +615,7 @@ fn union_and_intersection_commute() {
             f.check(
                 vertices(&ab) == vertices(&ba),
                 &format!("{op} commutes in vertices"),
-                || format!("{}", describe(a, b)),
+                || describe(a, b),
             );
         }
     });
@@ -736,7 +736,7 @@ fn grid_moves_commute_with_every_boolean() {
             f.check(
                 vertices(&moved_first) == expected,
                 &format!("{name} (vertices)"),
-                || format!("{}", describe(a, b)),
+                || describe(a, b),
             );
         }
     });

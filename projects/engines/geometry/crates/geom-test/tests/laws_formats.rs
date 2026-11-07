@@ -86,8 +86,9 @@ fn ctx() -> OpContext<'static> {
     OpContext::new(OpPath::new(OpId::from_bytes([9; 16])), Budget::UNLIMITED)
 }
 
+/// The first 48 bytes of `bytes` in hexadecimal, for a finding's report.
 fn hex(bytes: &[u8]) -> String {
-    bytes.iter().take(48).map(|b| format!("{b:02x}")).collect()
+    hex::encode(bytes.get(..48).unwrap_or(bytes))
 }
 
 fn curve_bytes<const D: usize>(c: &CurveKind<D>) -> Result<Vec<u8>, String> {
@@ -360,7 +361,7 @@ fn item(e: &mut Encoder, d: &mut Draw, depth: usize) {
             e.text(&s).unwrap();
         }
         4 => e
-            .float([0.5, -2.0, 1.0e10, 3.141592653589793, 1.0 / 3.0][d.pick(5)])
+            .float([0.5, -2.0, 1.0e10, core::f64::consts::PI, 1.0 / 3.0][d.pick(5)])
             .unwrap(),
         5 => {
             let n = d.pick(4);
@@ -395,7 +396,7 @@ fn a_cbor_item_checks_and_goes_through_its_text_and_back_to_the_same_bytes() {
         );
         match cbor::to_text(&bytes, DEPTH, &mut meter()) {
             Ok(text) => match cbor::from_text(&text, DEPTH, &mut meter()) {
-                Ok(again) => f.check(again == bytes, "bytes, text, bytes", || format!("{text}")),
+                Ok(again) => f.check(again == bytes, "bytes, text, bytes", || text.clone()),
                 Err(e) => f.add("the text of an item cannot be read", || {
                     format!("{text}: {e:?}")
                 }),
@@ -515,21 +516,17 @@ fn readers_never_panic_on_any_bytes() {
     valid.extend(file::write(&header, &records, &mut meter()));
     f.ran();
     for round in 0..600 {
-        let bytes = match round % 3 {
-            0 => {
-                let n = d.pick(48);
-                let mut b = d.bytes(n);
-                // Lean on CBOR's own first bytes so the readers get past the first check.
-                if let Some(first) = b.first_mut() {
-                    *first =
-                        [0x80, 0x81, 0x82, 0x83, 0x84, 0x85, 0xa1, 0x58, 0x40, 0x1b][d.pick(10)];
-                }
-                b
+        let bytes = if round % 3 == 0 {
+            let n = d.pick(48);
+            let mut b = d.bytes(n);
+            // Lean on CBOR's own first bytes so the readers get past the first check.
+            if let Some(first) = b.first_mut() {
+                *first = [0x80, 0x81, 0x82, 0x83, 0x84, 0x85, 0xa1, 0x58, 0x40, 0x1b][d.pick(10)];
             }
-            _ => {
-                let base = &valid[d.pick(valid.len())];
-                damaged(&mut d, base)
-            }
+            b
+        } else {
+            let base = &valid[d.pick(valid.len())];
+            damaged(&mut d, base)
         };
         f.ran();
         for name in read_everything(&bytes) {
