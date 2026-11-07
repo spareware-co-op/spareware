@@ -1385,19 +1385,15 @@ fn turn_region(region: Region, moved: [bool; 2]) -> Region {
     (up((a, b), moved[0]), up((c, d), moved[1]))
 }
 
-/// The surfaces and the patches of `found` in the chart cut half a turn on along every closing
-/// parameter, if some reading in `readings` is left undecided or a tangent curve at a cut of the
-/// first chart.
-fn turned_seams(
-    first: &SurfaceKind,
-    second: &SurfaceKind,
-    found: &Subdivided,
+/// `cuts` with those left out that no reading left undecided, or a tangent curve, lies on: only the
+/// closing parameters that such a reading lies on a cut of are turned, and the others keep their
+/// cut, where no reading of this pair is.
+#[doc(hidden)]
+#[must_use]
+pub fn cuts_with_readings(
+    mut cuts: [Option<(f64, f64)>; 4],
     readings: &[Reading],
-    meter: &mut WorkMeter<'_>,
-) -> Result<Option<Turned>, IntersectError> {
-    // Only the closing parameters that a reading left undecided lies on a cut of are turned: the
-    // others keep their cut, where no reading of this pair is.
-    let mut cuts = cuts_of(first, second);
+) -> [Option<(f64, f64)>; 4] {
     let undecided: Vec<&Reading> = readings
         .iter()
         .filter(|r| matches!(r, Reading::Undecided { .. } | Reading::Curve { .. }))
@@ -1415,6 +1411,29 @@ fn turned_seams(
             *cut = None;
         }
     }
+    cuts
+}
+
+/// Whether a settled pair touches a flagged pair of `seam` in both its patches: it is next to a
+/// contact on a cut, and cannot be left out of the turned chart.
+#[doc(hidden)]
+#[must_use]
+pub fn in_a_seam(seam: &[FlaggedPair], pair: &Settled) -> bool {
+    seam.iter()
+        .any(|f| touch(f.first, pair.first) && touch(f.second, pair.second))
+}
+
+/// The surfaces and the patches of `found` in the chart cut half a turn on along every closing
+/// parameter, if some reading in `readings` is left undecided or a tangent curve at a cut of the
+/// first chart.
+fn turned_seams(
+    first: &SurfaceKind,
+    second: &SurfaceKind,
+    found: &Subdivided,
+    readings: &[Reading],
+    meter: &mut WorkMeter<'_>,
+) -> Result<Option<Turned>, IntersectError> {
+    let cuts = cuts_with_readings(cuts_of(first, second), readings);
     if cuts.iter().all(Option::is_none) {
         return Ok(None);
     }
@@ -1467,10 +1486,7 @@ fn turned_seams(
             moves(pair.second, [second_u, second_v]),
         );
         let (Some(m1), Some(m2)) = moved_by else {
-            if seam
-                .iter()
-                .any(|f| touch(f.first, pair.first) && touch(f.second, pair.second))
-            {
+            if in_a_seam(&seam, pair) {
                 return Ok(None);
             }
             continue;
