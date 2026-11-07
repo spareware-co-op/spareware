@@ -294,9 +294,9 @@ fn whole(
     ring: &[Side],
     meter: &mut WorkMeter<'_>,
 ) -> Result<Option<Piece>, ConvexError> {
-    if !(3..=4).contains(&ring.len()) {
+    let ([a, b, c] | [a, b, c, _]) = ring else {
         return Ok(None);
-    }
+    };
     let after = ring.iter().cycle().skip(1);
     for (a, b) in ring.iter().zip(after) {
         meter.charge(1)?;
@@ -304,9 +304,6 @@ fn whole(
             return Ok(None);
         }
     }
-    let (Some(a), Some(b), Some(c)) = (ring.first(), ring.get(1), ring.get(2)) else {
-        return Ok(None);
-    };
     if side_of(c, face, a, b)? != Sign::Positive {
         return Ok(None);
     }

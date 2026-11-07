@@ -395,7 +395,7 @@ Worse than waiting would be using something before it clears and having to remov
 - hypermesh relicensed under a notice for someone not among its contributors;
 - AI-written code reproducing known tables (29).
 
-If such code entered Spare Kit, it would have to be torn out and rewritten clean, possibly after files depend on its behaviour. Spareware is never relicensed, so there is no other way out.
+If such code entered Spare Kit, it would have to be torn out and rewritten clean, possibly after files depend on its behaviour. Spareware will never move to a closed licence, so there is no other way out.
 
 **Likelihood:** High that tainted sources are met, because several already have been. Medium that tainted code gets into Spare Kit, given the checks below. **Impact:** High.
 
@@ -430,7 +430,7 @@ If such code entered Spare Kit, it would have to be torn out and rewritten clean
 
 ### R20. Copyright in AI-written code is uncertain
 
-**What could go wrong.** Chapter 29 notes that copyright in largely AI-generated code is legally uncertain, for solidcore, CADCraft and csgrs. The same question applies to Spare Kit, which agents largely write. Spareware relies on copyright staying spread across its contributors, so that nobody can relicense it. If contributions carry thin copyright, that protection, and MPL-2.0's force against closed forks, weaken. This is our reading of 29's open question applied to ourselves. It is unverified and is for counsel.
+**What could go wrong.** Chapter 29 notes that copyright in largely AI-generated code is legally uncertain, for solidcore, CADCraft and csgrs. The same question applies to Spare Kit, which agents largely write. Spareware relies on copyright staying with its contributors, who each sign off their work under the project's licence, Apache-2.0 (32.45). If contributions carry thin copyright, what that licence rests on weakens. This is our reading of 29's open question applied to ourselves. It is unverified and is for counsel.
 
 **Likelihood:** Medium that the question stays open. **Impact:** Medium. The code still works and stays open; protection weakens.
 
@@ -766,6 +766,7 @@ The questions the owner settles in section 32 are listed once, in the first tabl
 | Interval certification of Lifted Surfacing output, for general swept volumes | 13, 16 | Piece "Swept volumes: general route" |
 | G2 n-sided corners for more corner classes | 13 | Piece "Vertex blends and the corner matrix" |
 | A proven bound for rotation-minimising frames (Wang et al., with interval derivatives) | 13 | A new research piece in section 30 |
+| A proven bound on stored rotation-minimising frames for paths of exact lines and arcs only (OQ-13.8, 13.23), and the cell-and-Taylor bound as the template for a Sweep face's cache | 13 | Owner answer, then piece G254 and piece G256 |
 
 ### Chapter 14: 2D drafting
 

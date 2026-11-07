@@ -465,6 +465,23 @@ fn parents_are_every_name_a_name_refers_to_in_encoding_order() {
 }
 
 #[test]
+fn an_operands_key_in_a_keyed_role_is_not_a_parent() {
+    // tool(key), operand(key) and seed(key) carry an element's ID or an OpPath (11.9), not a name.
+    for role in geom_op::KEYED_ROLES {
+        assert_eq!(
+            parents(&created(role, vec![RoleArg::Name(id(9))], &[id(2)])),
+            vec![id(2)],
+            "{role}"
+        );
+    }
+    // Every other role's names are, a near spelling included.
+    assert_eq!(
+        parents(&created("tools", vec![RoleArg::Name(id(9))], &[id(2)])),
+        vec![id(9), id(2)]
+    );
+}
+
+#[test]
 fn the_duplicate_detector_finds_exactly_the_repeated_names() {
     assert_eq!(first_duplicate(&[]), None);
     assert_eq!(first_duplicate(&[id(1), id(2), id(3)]), None);

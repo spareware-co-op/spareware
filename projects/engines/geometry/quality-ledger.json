@@ -3,6 +3,54 @@
   "about": "The geometry kernel's quality ledger (kernel architecture 28.8). survivors: every mutant cargo-mutants makes that the kernel's tests do not catch and the kernel keeps, keyed by file, cargo-mutants' description and the trimmed text of the mutated line, with why; in the foundation set only equivalent mutants (no input through the crate's public interface can tell them from the original) may be kept. coverage_off: every coverage(off) mark in a kernel crate, with the Kani or Verus proof that the code it hides cannot run. awaiting_proof: every foundation line the tests do not run yet, by its file, its trimmed text and how many missed lines have it, with the piece that proves it unreachable or tests it (the coverage gate landed before those proofs: owner decision of 2026-10-27); the list can only shrink. geom-test's kernel-quality binary checks both in .github/workflows/kernel-quality.yml; geom_test::quality_ledger documents the format.",
   "survivors": [
     {
+      "file": "projects/engines/geometry/crates/geom-bool/src/certificate.rs",
+      "mutant": "replace == with != in pairs_up",
+      "line_text": "if at == first {",
+      "occurrences": 1,
+      "kind": "hangs",
+      "reason": "The radial walk stops when it comes back to the edge's first fin. The mutant stops at the second fin and otherwise walks the ring for ever, on any edge with more than two fins, so the tests stop it by their timeout. It hangs; it never passes a body."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-bool/src/combine.rs",
+      "mutant": "delete match arm RebuildError::Merge(MergeError::Num(e)) | RebuildError::Num(e) in rebuilt",
+      "line_text": "RebuildError::Merge(MergeError::Num(e)) | RebuildError::Num(e) => numbers(ctx, e),",
+      "occurrences": 1,
+      "kind": "harmless",
+      "reason": "The numbers layer refuses nothing a plane within budget can reach (6.2), so no test can make this arm run. Without it the error would come out as ResultInvalid instead of the numbers layer's own: still an error, never a body."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-bool/src/names.rs",
+      "mutant": "replace == with != in told_apart",
+      "line_text": "if rows.len() == out.len() {",
+      "occurrences": 1,
+      "kind": "hangs",
+      "reason": "The loop ends when no two rows share a name. The mutant goes on while they all differ, and there is then nothing to change, so it never ends and the tests stop it by their timeout. It hangs; it never returns a repeated name."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-bool/src/names.rs",
+      "mutant": "replace > with == in told_apart",
+      "line_text": "for (name, list) in rows.iter().filter(|(_, list)| list.len() > 1) {",
+      "occurrences": 1,
+      "kind": "hangs",
+      "reason": "The pass renames only rows that hold a name alone, so names that repeat stay repeated and the loop never ends, and the tests stop it by their timeout. It hangs; it never returns a repeated name."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-bool/src/names.rs",
+      "mutant": "replace > with < in told_apart",
+      "line_text": "for (name, list) in rows.iter().filter(|(_, list)| list.len() > 1) {",
+      "occurrences": 1,
+      "kind": "hangs",
+      "reason": "A list of rows holds at least one, so the pass renames nothing, names that repeat stay repeated and the loop never ends, and the tests stop it by their timeout. It hangs; it never returns a repeated name."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-bool/src/operand.rs",
+      "mutant": "replace != with == in side_of_fin",
+      "line_text": "while at != own {",
+      "occurrences": 1,
+      "kind": "hangs",
+      "reason": "The radial walk stops when it comes back to the fin it started from. The mutant skips the walk at once for that fin and for every other one walks past it for ever, or until the same fin comes round, so the tests stop it by their timeout. It hangs; it never returns a wrong side."
+    },
+    {
       "file": "projects/engines/geometry/crates/geom-linalg/src/matrix.rs",
       "mutant": "replace || with && in Matrix::row_pair",
       "line_text": "if i == j || i >= self.rows || j >= self.rows {",
@@ -4675,6 +4723,14 @@
       "reason": "The two differ only when the panels' remainder bounds sum to exactly L·2⁻⁵⁶, the tolerance: > keeps that panel count, >= doubles it. Both counts are certified, every enclosure carries its remainders either way, and the choice is the same on every target, so a tie changes how many panels a transition gets, never whether its results hold."
     },
     {
+      "file": "projects/engines/geometry/crates/geom-curve/src/offset.rs",
+      "mutant": "replace > with >= in Offset<D>::refined",
+      "line_text": "Ok(r) if r.is_some_and(|r| r.hi() > target) => Verdict::Finer,",
+      "occurrences": 1,
+      "kind": "harmless",
+      "reason": "The two differ only when a piece's Taylor remainder bound is exactly the cache's aim, 10⁻¹⁰ times the offset's size: > keeps that piece, >= halves it once more. Either way taylor::from_cuts then states the deviation of every piece it makes, from that piece's own certified remainder, and the choice is the same on every target, so a tie changes how many pieces the offset's NURBS cache has, never whether its stated deviation holds."
+    },
+    {
       "file": "projects/engines/geometry/crates/geom-curve/src/transition.rs",
       "mutant": "replace < with <= in <impl ParamCurve<D> for Transition<D>>::to_nurbs",
       "line_text": "return Ok(if n.deviation < b.deviation { n } else { b });",
@@ -6305,6 +6361,934 @@
       "occurrences": 1,
       "kind": "equivalent",
       "reason": "Two + on this line share the key. The first, h * (l + ERR), makes right = h·(l + ERR), below 2^-17.9·|h| in magnitude (in log_fast |l| < 2^-18: the polynomial's -z^2/2 with |z| <= 0.00213, e·LOG2_L below 2^-33.9, l2 and a rounding; and ERR = 2^-68.2), while left = h + (l - ERR) is at least |h|·(1 - 2^-7.5): |l| is at most 2^-7.6·|h| (where e = 0 and the table's inverse is 1, so l1 = 0, h = z exactly and l is the polynomial's -z^2/2 + ..., at most 0.0011·|z|; elsewhere |h| >= 0.0029 - 0.00213 > 2^-10.4, because e·LOG2_H + l1 is 0 or at least 0.0029 in magnitude, proof F1), and ERR is below 2^-15·|h| (|h| >= 2^-53; h = 0 only for x = 1, which returns earlier). So the two differ, the fast path never returns and log_accurate gives the same correctly rounded value. Only the time changes. The second, l * ERR, is caught by gate1_libm.rs's LN_CANCELLATION."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-poly/src/subdivide.rs",
+      "mutant": "replace splits -> [(usize, Option<i64>); 3] with [(0, Some(1)); 3]",
+      "line_text": "let at = |axis: usize| {",
+      "occurrences": 1,
+      "kind": "hangs",
+      "reason": "A box split at the same plane every time, or outside itself, has a child equal to itself, so the level-by-level subdivision never runs out of boxes over SUBTREE_POLYGONS and the tests stop it by their timeout. It hangs; it never returns a wrong arrangement."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-poly/src/subdivide.rs",
+      "mutant": "replace splits -> [(usize, Option<i64>); 3] with [(1, Some(1)); 3]",
+      "line_text": "let at = |axis: usize| {",
+      "occurrences": 1,
+      "kind": "hangs",
+      "reason": "A box split at the same plane every time, or outside itself, has a child equal to itself, so the level-by-level subdivision never runs out of boxes over SUBTREE_POLYGONS and the tests stop it by their timeout. It hangs; it never returns a wrong arrangement."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-poly/src/subdivide.rs",
+      "mutant": "replace && with || in splits",
+      "line_text": "(low < odd && odd < high).then_some(odd)",
+      "occurrences": 1,
+      "kind": "hangs",
+      "reason": "A box split at the same plane every time, or outside itself, has a child equal to itself, so the level-by-level subdivision never runs out of boxes over SUBTREE_POLYGONS and the tests stop it by their timeout. It hangs; it never returns a wrong arrangement."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-poly/src/subdivide.rs",
+      "mutant": "replace < with == in splits",
+      "line_text": "(low < odd && odd < high).then_some(odd)",
+      "occurrences": 2,
+      "kind": "hangs",
+      "reason": "A box split at the same plane every time, or outside itself, has a child equal to itself, so the level-by-level subdivision never runs out of boxes over SUBTREE_POLYGONS and the tests stop it by their timeout. It hangs; it never returns a wrong arrangement."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-poly/src/subdivide.rs",
+      "mutant": "replace < with <= in splits",
+      "line_text": "(low < odd && odd < high).then_some(odd)",
+      "occurrences": 2,
+      "kind": "hangs",
+      "reason": "A box split at the same plane every time, or outside itself, has a child equal to itself, so the level-by-level subdivision never runs out of boxes over SUBTREE_POLYGONS and the tests stop it by their timeout. It hangs; it never returns a wrong arrangement."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-poly/src/subdivide.rs",
+      "mutant": "delete ! in arrange_with",
+      "line_text": "while !level.is_empty() {",
+      "occurrences": 1,
+      "kind": "hangs",
+      "reason": "Without the not, the loop runs only while the level is empty: an input small enough to be one unit leaves it empty, and an empty level stays empty, so the loop spins and the tests stop it by their timeout. It hangs; it never returns a wrong arrangement."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-poly/src/merge.rs",
+      "mutant": "delete ! in rings",
+      "line_text": ".filter(|o| !used.contains_key(o))",
+      "occurrences": 1,
+      "kind": "hangs",
+      "reason": "Without the not, a ring's walk is offered only fins it has used, so it never runs out of a way on and the tests stop it by their timeout. It hangs; it never returns a wrong ring."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-poly/src/convex.rs",
+      "mutant": "replace != with == in whole",
+      "line_text": "if side_of(c, face, a, b)? != Sign::Positive {",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "whole is a shortcut for a convex triangle or quadrilateral, which partition turns into the same piece: when the mutant gives None, or sends a ring the turn checks found convex on to partition, the piece is the same."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-poly/src/convex.rs",
+      "mutant": "replace whole -> Result<Option<Piece>, ConvexError> with Ok(None)",
+      "line_text": "let ([a, b, c] | [a, b, c, _]) = ring else {",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "whole is a shortcut for a convex triangle or quadrilateral, which partition turns into the same piece: when the mutant gives None, or sends a ring the turn checks found convex on to partition, the piece is the same."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-poly/src/cut.rs",
+      "mutant": "replace || with && in can_cut",
+      "line_text": "if !positive || !negative {",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "can_cut only filters pairs before split, which cuts a piece only where it straddles the other's plane; letting more pairs through changes no piece."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-poly/src/merge.rs",
+      "mutant": "replace || with && in Cell::order",
+      "line_text": "if self.rest == 0 || other.rest == 0 {",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "With && the shortcut runs only when both rests are zero; when one is, the general comparison that follows orders 0 / over against r / o the same way."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-poly/src/merge.rs",
+      "mutant": "replace narrow_order -> Option<Ordering> with None",
+      "line_text": "let wide = I256::from_i128;",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "Without cells the merge compares the point or line in wide integers, the same order exactly (far_tilted_solids_merge_in_wide_integers and two_tilted_solids_moved_to_the_frame_s_far_corner reach that path); only the work changes."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-poly/src/merge.rs",
+      "mutant": "replace cells_of -> Option<[Cell; 3]> with None",
+      "line_text": "let turn = |v: i128| {",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "Without cells the merge compares the point or line in wide integers, the same order exactly (far_tilted_solids_merge_in_wide_integers and two_tilted_solids_moved_to_the_frame_s_far_corner reach that path); only the work changes."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-poly/src/merge.rs",
+      "mutant": "delete ! in wide_of",
+      "line_text": "if !weight.is_negative() {",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "Without the not, every w is turned negative instead of positive: each X / w keeps its value, and a / b against c / d with b and d both negative has b * d positive, so every comparison is the same."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-poly/src/merge.rs",
+      "mutant": "replace <impl PartialEq for CellKey<'_, N>>::eq -> bool with true",
+      "line_text": "self.cmp(other) == Ordering::Equal",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "The sorts order CellKeys by Ord::cmp alone; PartialEq and PartialOrd exist for Ord's bounds and nothing in the crate calls them."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-poly/src/merge.rs",
+      "mutant": "replace <impl PartialEq for CellKey<'_, N>>::eq -> bool with false",
+      "line_text": "self.cmp(other) == Ordering::Equal",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "The sorts order CellKeys by Ord::cmp alone; PartialEq and PartialOrd exist for Ord's bounds and nothing in the crate calls them."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-poly/src/merge.rs",
+      "mutant": "replace == with != in <impl PartialEq for CellKey<'_, N>>::eq",
+      "line_text": "self.cmp(other) == Ordering::Equal",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "The sorts order CellKeys by Ord::cmp alone; PartialEq and PartialOrd exist for Ord's bounds and nothing in the crate calls them."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-poly/src/merge.rs",
+      "mutant": "replace <impl PartialOrd for CellKey<'_, N>>::partial_cmp -> Option<Ordering> with None",
+      "line_text": "Some(self.cmp(other))",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "The sorts order CellKeys by Ord::cmp alone; PartialEq and PartialOrd exist for Ord's bounds and nothing in the crate calls them."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-poly/src/merge.rs",
+      "mutant": "replace line_in_words -> Option<([i128; 6], usize)> with None",
+      "line_text": "let (([px, py, pz], pd), ([qx, qy, qz], qd)) = (plane_words(p)?, plane_words(q)?);",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "Without its words the line's key is made in I256 by wide_line_key, the same key, whose cells, where they fit, are the same; only the work changes."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-poly/src/merge.rs",
+      "mutant": "replace line_cells -> Option<[Cell; 6]> with None",
+      "line_text": "let mut words = [0i128; 6];",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "Without its words the line's key is made in I256 by wide_line_key, the same key, whose cells, where they fit, are the same; only the work changes."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-poly/src/merge.rs",
+      "mutant": "replace line_cells_of -> Option<[Cell; 6]> with None",
+      "line_text": "let over = *coordinates.get(first)?;",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "Without cells the merge compares the point or line in wide integers, the same order exactly (far_tilted_solids_merge_in_wide_integers and two_tilted_solids_moved_to_the_frame_s_far_corner reach that path); only the work changes."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-poly/src/merge.rs",
+      "mutant": "replace & with | in splits_boxes",
+      "line_text": "&& plane.d() & 1 != 0",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "plane.d() | 1 is never 0, so the test becomes 'one non-zero normal component of size 2'. A canonical plane with such a normal has an odd offset (Plane::new divides out the common factor), so the same planes are found: the boxes' own sides."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-poly/src/merge.rs",
+      "mutant": "replace floors -> Option<[i128; 3]> with None",
+      "line_text": "corner.cells.map(|[x, y, z]| [x.floor, y.floor, z.floor])",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "cut_run's floors only let it skip a place outside the run's cells. None, or one value for every place, makes no place lie beyond, so none is skipped and each run is cut at the same places."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-poly/src/merge.rs",
+      "mutant": "replace floors -> Option<[i128; 3]> with Some([1; 3])",
+      "line_text": "corner.cells.map(|[x, y, z]| [x.floor, y.floor, z.floor])",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "cut_run's floors only let it skip a place outside the run's cells. None, or one value for every place, makes no place lie beyond, so none is skipped and each run is cut at the same places."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-poly/src/merge.rs",
+      "mutant": "replace floors -> Option<[i128; 3]> with Some([0; 3])",
+      "line_text": "corner.cells.map(|[x, y, z]| [x.floor, y.floor, z.floor])",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "cut_run's floors only let it skip a place outside the run's cells. None, or one value for every place, makes no place lie beyond, so none is skipped and each run is cut at the same places."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-poly/src/merge.rs",
+      "mutant": "replace floors -> Option<[i128; 3]> with Some([-1; 3])",
+      "line_text": "corner.cells.map(|[x, y, z]| [x.floor, y.floor, z.floor])",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "cut_run's floors only let it skip a place outside the run's cells. None, or one value for every place, makes no place lie beyond, so none is skipped and each run is cut at the same places."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-poly/src/merge.rs",
+      "mutant": "replace || with && in beyond",
+      "line_text": ".any(|(v, (p, q))| v < &(*p).min(*q) || v > &(*p).max(*q))",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "beyond only lets cut_run skip a place outside a run's cells: never skipping, or skipping fewer, cuts each run at the same places."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-poly/src/merge.rs",
+      "mutant": "replace beyond -> bool with false",
+      "line_text": "at.iter()",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "beyond only lets cut_run skip a place outside a run's cells: never skipping, or skipping fewer, cuts each run at the same places."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-poly/src/merge.rs",
+      "mutant": "replace < with <= in radial",
+      "line_text": "let rising = |fin: &Fin| fin.from < fin.to;",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "A fin runs between two different vertices, so from < to and from <= to agree; and from > to turns rising round for every fin at once, which leaves whether two fins rise alike, all that is read, as it was."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-poly/src/merge.rs",
+      "mutant": "replace < with > in radial",
+      "line_text": "let rising = |fin: &Fin| fin.from < fin.to;",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "A fin runs between two different vertices, so from < to and from <= to agree; and from > to turns rising round for every fin at once, which leaves whether two fins rise alike, all that is read, as it was."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-poly/src/merge.rs",
+      "mutant": "replace == with != in radial",
+      "line_text": "reversed: rising(&fin) == rising(&start),",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "With != every fin's sense against the start is turned over at once, the start's included, which moves each by half a circle about the edge and leaves their order round it, and so the pairs, as they were."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-poly/src/merge.rs",
+      "mutant": "replace < with > in join_around",
+      "line_text": "let rising = |fin: &Fin| fin.from < fin.to;",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "A fin runs between two different vertices, so from < to and from <= to agree; and from > to turns rising round for every fin at once, which leaves whether two fins rise alike, all that is read, as it was."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-poly/src/merge.rs",
+      "mutant": "replace < with <= in join_around",
+      "line_text": "let rising = |fin: &Fin| fin.from < fin.to;",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "A fin runs between two different vertices, so from < to and from <= to agree; and from > to turns rising round for every fin at once, which leaves whether two fins rise alike, all that is read, as it was."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-poly/src/merge.rs",
+      "mutant": "replace == with != in turned",
+      "line_text": "first == Sign::Negative",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "With != every line is turned so that its direction's first non-zero component is negative instead of positive, by the one rule keys in machine words and in I256 share. Keys are compared only as coordinates over that component: line_order's ratios, and the cells, which are then not made (Cell::new refuses a denominator not above 0), so the wide comparison runs. a / b against c / d with b and d both negative has b * d positive, so every order is the same; only the work changes."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-poly/src/order.rs",
+      "mutant": "replace plane_words -> Option<([i64; 3], i64)> with None",
+      "line_text": "let [x, y, z] = p.n();",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "A quick path in machine words: its None sends the caller on to the next path, i128 and then the exact predicate or the wide integers, which give the same answer, so only the work changes."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-poly/src/order.rs",
+      "mutant": "replace cross_in_words -> Option<[i128; 3]> with None",
+      "line_text": "let ([ax, ay, az], [bx, by, bz]) = (a, b);",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "A quick path in machine words: its None sends the caller on to the next path, i128 and then the exact predicate or the wide integers, which give the same answer, so only the work changes."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-poly/src/order.rs",
+      "mutant": "replace cross_of_words -> Option<[i64; 3]> with None",
+      "line_text": "let ([ax, ay, az], [bx, by, bz]) = (a, b);",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "A quick path in machine words: its None sends the caller on to the next path, i128 and then the exact predicate or the wide integers, which give the same answer, so only the work changes."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-poly/src/order.rs",
+      "mutant": "replace point_words -> Option<([i64; 3], i64)> with None",
+      "line_text": "let [first, second, third] = x;",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "A quick path in machine words: its None sends the caller on to the next path, i128 and then the exact predicate or the wide integers, which give the same answer, so only the work changes."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-poly/src/order.rs",
+      "mutant": "replace dot_of_words -> Option<i128> with None",
+      "line_text": "let ([ax, ay, az], [bx, by, bz]) = (a, b);",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "A quick path in machine words: its None sends the caller on to the next path, i128 and then the exact predicate or the wide integers, which give the same answer, so only the work changes."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-poly/src/order.rs",
+      "mutant": "replace dot_in_words -> Option<i128> with None",
+      "line_text": "let ([ax, ay, az], [bx, by, bz]) = (a, b);",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "A quick path in machine words: its None sends the caller on to the next path, i128 and then the exact predicate or the wide integers, which give the same answer, so only the work changes."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-poly/src/order.rs",
+      "mutant": "replace Meeting::reading -> Option<Sign> with None",
+      "line_text": "if let (Some((x, w)), Some((n, d))) = (self.words, plane_words(s)) {",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "A quick path in machine words: its None sends the caller on to the next path, i128 and then the exact predicate or the wide integers, which give the same answer, so only the work changes."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-poly/src/order.rs",
+      "mutant": "replace Meeting::from_words -> Option<Self> with None",
+      "line_text": "let ((n_p, d_p), (n_q, d_q), (n_r, d_r)) =",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "A quick path in machine words: its None sends the caller on to the next path, i128 and then the exact predicate or the wide integers, which give the same answer, so only the work changes."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-poly/src/order.rs",
+      "mutant": "replace Meeting::from_wide -> Option<Self> with None",
+      "line_text": "let (n_p, n_q, n_r) = (p.n(), q.n(), r.n());",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "A quick path in machine words: its None sends the caller on to the next path, i128 and then the exact predicate or the wide integers, which give the same answer, so only the work changes."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-poly/src/order.rs",
+      "mutant": "replace Meeting::coordinates -> ([i128; 3], i128) with ([0; 3], 0)",
+      "line_text": "(self.x, self.w)",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "With w 0 the corner gets no cells (Cell::new refuses a denominator not above 0), so the merge compares it in wide integers, the same order; only the work changes."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-poly/src/order.rs",
+      "mutant": "replace Meeting::coordinates -> ([i128; 3], i128) with ([-1; 3], 0)",
+      "line_text": "(self.x, self.w)",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "With w 0 the corner gets no cells (Cell::new refuses a denominator not above 0), so the merge compares it in wide integers, the same order; only the work changes."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-poly/src/order.rs",
+      "mutant": "replace Meeting::coordinates -> ([i128; 3], i128) with ([1; 3], 0)",
+      "line_text": "(self.x, self.w)",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "With w 0 the corner gets no cells (Cell::new refuses a denominator not above 0), so the merge compares it in wide integers, the same order; only the work changes."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-poly/src/order.rs",
+      "mutant": "replace Meeting::rounded -> Option<[i128; 3]> with None",
+      "line_text": "let turn = self.w.is_negative();",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "rounded only places the root box (subdivide's nearest, through range_of and cell_around), whose sides lie a step and a half past the rounded corners. None and every one of these roundings put a corner within one step of the true point, or hand it to the exact Tpi::to_grid, so every polygon stays inside the box; the arrangement does not depend on where the box falls (a_small_leaf_gives_the_vectors_a_large_one_does)."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-poly/src/order.rs",
+      "mutant": "replace == with != in Meeting::rounded",
+      "line_text": "if w == 0 {",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "rounded only places the root box (subdivide's nearest, through range_of and cell_around), whose sides lie a step and a half past the rounded corners. None and every one of these roundings put a corner within one step of the true point, or hand it to the exact Tpi::to_grid, so every polygon stays inside the box; the arrangement does not depend on where the box falls (a_small_leaf_gives_the_vectors_a_large_one_does)."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-poly/src/order.rs",
+      "mutant": "replace || with && in Meeting::rounded",
+      "line_text": "let up = twice > w || (twice == w && floor.checked_rem_euclid(2)? == 1);",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "rounded only places the root box (subdivide's nearest, through range_of and cell_around), whose sides lie a step and a half past the rounded corners. None and every one of these roundings put a corner within one step of the true point, or hand it to the exact Tpi::to_grid, so every polygon stays inside the box; the arrangement does not depend on where the box falls (a_small_leaf_gives_the_vectors_a_large_one_does)."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-poly/src/order.rs",
+      "mutant": "replace > with == in Meeting::rounded",
+      "line_text": "let up = twice > w || (twice == w && floor.checked_rem_euclid(2)? == 1);",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "rounded only places the root box (subdivide's nearest, through range_of and cell_around), whose sides lie a step and a half past the rounded corners. None and every one of these roundings put a corner within one step of the true point, or hand it to the exact Tpi::to_grid, so every polygon stays inside the box; the arrangement does not depend on where the box falls (a_small_leaf_gives_the_vectors_a_large_one_does)."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-poly/src/order.rs",
+      "mutant": "replace > with >= in Meeting::rounded",
+      "line_text": "let up = twice > w || (twice == w && floor.checked_rem_euclid(2)? == 1);",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "rounded only places the root box (subdivide's nearest, through range_of and cell_around), whose sides lie a step and a half past the rounded corners. None and every one of these roundings put a corner within one step of the true point, or hand it to the exact Tpi::to_grid, so every polygon stays inside the box; the arrangement does not depend on where the box falls (a_small_leaf_gives_the_vectors_a_large_one_does)."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-poly/src/order.rs",
+      "mutant": "replace && with || in Meeting::rounded",
+      "line_text": "let up = twice > w || (twice == w && floor.checked_rem_euclid(2)? == 1);",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "rounded only places the root box (subdivide's nearest, through range_of and cell_around), whose sides lie a step and a half past the rounded corners. None and every one of these roundings put a corner within one step of the true point, or hand it to the exact Tpi::to_grid, so every polygon stays inside the box; the arrangement does not depend on where the box falls (a_small_leaf_gives_the_vectors_a_large_one_does)."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-poly/src/order.rs",
+      "mutant": "replace == with != in Meeting::rounded",
+      "line_text": "let up = twice > w || (twice == w && floor.checked_rem_euclid(2)? == 1);",
+      "occurrences": 2,
+      "kind": "equivalent",
+      "reason": "rounded only places the root box (subdivide's nearest, through range_of and cell_around), whose sides lie a step and a half past the rounded corners. None and every one of these roundings put a corner within one step of the true point, or hand it to the exact Tpi::to_grid, so every polygon stays inside the box; the arrangement does not depend on where the box falls (a_small_leaf_gives_the_vectors_a_large_one_does)."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-poly/src/order.rs",
+      "mutant": "replace Meeting::floors -> Option<[i64; 3]> with None",
+      "line_text": "if let Some((x, w)) = self.words",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "Floors only build spans, which let a pair of polygons whose spans miss skip the cut. None, or one value for every point, makes no spans miss, so nothing is skipped and the result is the same. The other path's division by a negative w gives the true floor or one more, and a span runs a step below its lowest floor and two above its highest, so it still holds every point with its moves: a skipped pair is still apart."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-poly/src/order.rs",
+      "mutant": "replace Meeting::floors -> Option<[i64; 3]> with Some([0; 3])",
+      "line_text": "if let Some((x, w)) = self.words",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "Floors only build spans, which let a pair of polygons whose spans miss skip the cut. None, or one value for every point, makes no spans miss, so nothing is skipped and the result is the same. The other path's division by a negative w gives the true floor or one more, and a span runs a step below its lowest floor and two above its highest, so it still holds every point with its moves: a skipped pair is still apart."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-poly/src/order.rs",
+      "mutant": "replace Meeting::floors -> Option<[i64; 3]> with Some([1; 3])",
+      "line_text": "if let Some((x, w)) = self.words",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "Floors only build spans, which let a pair of polygons whose spans miss skip the cut. None, or one value for every point, makes no spans miss, so nothing is skipped and the result is the same. The other path's division by a negative w gives the true floor or one more, and a span runs a step below its lowest floor and two above its highest, so it still holds every point with its moves: a skipped pair is still apart."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-poly/src/order.rs",
+      "mutant": "replace Meeting::floors -> Option<[i64; 3]> with Some([-1; 3])",
+      "line_text": "if let Some((x, w)) = self.words",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "Floors only build spans, which let a pair of polygons whose spans miss skip the cut. None, or one value for every point, makes no spans miss, so nothing is skipped and the result is the same. The other path's division by a negative w gives the true floor or one more, and a span runs a step below its lowest floor and two above its highest, so it still holds every point with its moves: a skipped pair is still apart."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-poly/src/order.rs",
+      "mutant": "replace > with < in Meeting::floors",
+      "line_text": "&& w > 0",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "Floors only build spans, which let a pair of polygons whose spans miss skip the cut. None, or one value for every point, makes no spans miss, so nothing is skipped and the result is the same. The other path's division by a negative w gives the true floor or one more, and a span runs a step below its lowest floor and two above its highest, so it still holds every point with its moves: a skipped pair is still apart."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-poly/src/order.rs",
+      "mutant": "replace > with == in Meeting::floors",
+      "line_text": "&& w > 0",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "Floors only build spans, which let a pair of polygons whose spans miss skip the cut. None, or one value for every point, makes no spans miss, so nothing is skipped and the result is the same. The other path's division by a negative w gives the true floor or one more, and a span runs a step below its lowest floor and two above its highest, so it still holds every point with its moves: a skipped pair is still apart."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-poly/src/order.rs",
+      "mutant": "replace == with != in Meeting::floors",
+      "line_text": "if w == 0 {",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "Floors only build spans, which let a pair of polygons whose spans miss skip the cut. None, or one value for every point, makes no spans miss, so nothing is skipped and the result is the same. The other path's division by a negative w gives the true floor or one more, and a span runs a step below its lowest floor and two above its highest, so it still holds every point with its moves: a skipped pair is still apart."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-poly/src/order.rs",
+      "mutant": "replace > with >= in Meeting::floors",
+      "line_text": "&& w > 0",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "Floors only build spans, which let a pair of polygons whose spans miss skip the cut. None, or one value for every point, makes no spans miss, so nothing is skipped and the result is the same. The other path's division by a negative w gives the true floor or one more, and a span runs a step below its lowest floor and two above its highest, so it still holds every point with its moves: a skipped pair is still apart."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-poly/src/order.rs",
+      "mutant": "replace Span::of -> Option<Self> with None",
+      "line_text": "let mut low = [i64::MAX; 3];",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "Floors only build spans, which let a pair of polygons whose spans miss skip the cut. None, or one value for every point, makes no spans miss, so nothing is skipped and the result is the same. The other path's division by a negative w gives the true floor or one more, and a span runs a step below its lowest floor and two above its highest, so it still holds every point with its moves: a skipped pair is still apart."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-poly/src/order.rs",
+      "mutant": "replace Span::misses -> bool with false",
+      "line_text": "let apart = |(a, b): (&Span, &Span)| a.high.iter().zip(&b.low).any(|(h, l)| h < l);",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "Spans only let a pair whose spans miss skip the cut; a span runs a step below and two above its points' floors, so two polygons that share a point overlap by three cells. Reporting fewer misses skips less, and calling high equal to low a miss can only happen for polygons that share no point; either way no piece changes."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-poly/src/order.rs",
+      "mutant": "replace < with == in Span::misses",
+      "line_text": "let apart = |(a, b): (&Span, &Span)| a.high.iter().zip(&b.low).any(|(h, l)| h < l);",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "Spans only let a pair whose spans miss skip the cut; a span runs a step below and two above its points' floors, so two polygons that share a point overlap by three cells. Reporting fewer misses skips less, and calling high equal to low a miss can only happen for polygons that share no point; either way no piece changes."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-poly/src/order.rs",
+      "mutant": "replace < with <= in Span::misses",
+      "line_text": "let apart = |(a, b): (&Span, &Span)| a.high.iter().zip(&b.low).any(|(h, l)| h < l);",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "Spans only let a pair whose spans miss skip the cut; a span runs a step below and two above its points' floors, so two polygons that share a point overlap by three cells. Reporting fewer misses skips less, and calling high equal to low a miss can only happen for polygons that share no point; either way no piece changes."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-poly/src/order.rs",
+      "mutant": "replace || with && in Span::misses",
+      "line_text": "apart((self, other)) || apart((other, self))",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "Spans only let a pair whose spans miss skip the cut; a span runs a step below and two above its points' floors, so two polygons that share a point overlap by three cells. Reporting fewer misses skips less, and calling high equal to low a miss can only happen for polygons that share no point; either way no piece changes."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-poly/src/subdivide.rs",
+      "mutant": "replace != with == in nearest",
+      "line_text": ".filter(|point| point.weight() != Sign::Zero)",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "With == every point with a weight is sent to the exact Tpi::to_grid instead, which rounds it the same; a point with none fails there as before."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-poly/src/subdivide.rs",
+      "mutant": "replace <= with > in arrange_with",
+      "line_text": "let small = |node: &Node| node.polygons.len() <= SUBTREE_POLYGONS;",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "small only decides whether a box is split level by level or solved as one task, its whole subtree; the leaves and their pieces are the same either way (a_box_over_the_subtree_size_splits_level_by_level)."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-poly/src/trace.rs",
+      "mutant": "replace piece_span -> Option<Span> with None",
+      "line_text": "let after = piece.bounds.iter().cycle().skip(1);",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "A span only lets a segment skip a polygon it cannot reach; without one the polygon is read and the count is the same."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-poly/src/trace.rs",
+      "mutant": "replace > with == in classify",
+      "line_text": "let span = (paths > 1).then(|| piece_span(&polygon.piece)).flatten();",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "paths > 1 only decides whether spans are made for skipping; with or without them the counts are the same."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-poly/src/trace.rs",
+      "mutant": "replace > with >= in classify",
+      "line_text": "let span = (paths > 1).then(|| piece_span(&polygon.piece)).flatten();",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "paths > 1 only decides whether spans are made for skipping; with or without them the counts are the same."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-poly/src/trace.rs",
+      "mutant": "replace > with < in classify",
+      "line_text": "let span = (paths > 1).then(|| piece_span(&polygon.piece)).flatten();",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "paths > 1 only decides whether spans are made for skipping; with or without them the counts are the same."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-poly/src/subdivide.rs",
+      "mutant": "replace || with && in divide",
+      "line_text": "if in_plane || below.0.len().saturating_add(above.0.len()) >= enough {",
+      "occurrences": 1,
+      "kind": "hangs",
+      "reason": "With && a split that separates too few polygons is taken anyway: the polygons that span it go to both halves, so each child holds about as many as the box and is split again, down to boxes a step wide, and the work grows until the tests stop it by their timeout. It hangs; it never returns a wrong arrangement."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-poly/src/subdivide.rs",
+      "mutant": "replace | with ^ in divide",
+      "line_text": "key: node.key | bit,",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "bit is the bit of this node's depth, and a node's key has only the bits of the depths above it, so the bit is clear and | and ^ give one value."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-bool/src/batch.rs",
+      "mutant": "replace != with == in entered",
+      "line_text": "tools.retain(|tool| tool.key != key);",
+      "occurrences": 1,
+      "kind": "hangs",
+      "reason": "Under SkipFailedTools a tool that cannot enter is set aside and the rest are prepared again. The mutant keeps only the tool that failed, which fails again the same way, so the loop never ends (skipped grows by one each time round) and the tests stop it by their timeout. It hangs; it never returns a cut."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-bool/src/passage.rs",
+      "mutant": "replace > with < in narrowest",
+      "line_text": "if best.get(&block).is_some_and(|held| *held > reach) {",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "A block's best is never below the reach it was queued with, so the mutant never skips: it walks stale entries too. A stale entry comes off the queue after the block's best one (widest first), whose portals already gave every neighbour a way at least as wide, so the stale one changes no best and no pinch; and its neighbours' traces are held, so it charges the meter nothing more."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-bool/src/passage.rs",
+      "mutant": "replace < with == in narrowest",
+      "line_text": "if best.get(&next).is_none_or(|held| *held < wide) {",
+      "occurrences": 1,
+      "kind": "hangs",
+      "reason": "The tests stop it by their timeout: the mutant queues a block again whenever a way as wide as its best reaches it, so two open blocks side by side queue each other again for ever, and nothing in the walk charges the meter once their traces are held. It is a hang the tests catch; kept so that the judge counts it as one."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-bool/src/passage.rs",
+      "mutant": "replace < with <= in narrowest",
+      "line_text": "if best.get(&next).is_none_or(|held| *held < wide) {",
+      "occurrences": 1,
+      "kind": "hangs",
+      "reason": "The tests stop it by their timeout: the mutant queues a block again whenever a way at least as wide as its best reaches it, so two open blocks side by side queue each other again for ever, and nothing in the walk charges the meter once their traces are held. It is a hang the tests catch; kept so that the judge counts it as one."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-check/src/self_intersection.rs",
+      "mutant": "replace == with != in runs",
+      "line_text": "out.push((fin.edge.row(), fin.sense == Sense::Forward));",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "runs is read only by back_to_back, which compares f's sorted runs with g's turned over: they are equal exactly where, edge by edge, g's fins all run one way and f's as many run the other. The mutant turns every way over in both lists, and that holds of the turned lists exactly when it holds of the first."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-num/src/plane.rs",
+      "mutant": "replace words -> Option<[i64; 4]> with None",
+      "line_text": "let [x, y, z] = p.n;",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "words is read only by the machine-word rung: determinant_in_words, which is then None, so determinant_routed asks the generated tpi_side predicate, filter and then exact path, for the same 4 x 4 determinant; and normals_sign, which then computes the same 3 x 3 determinant with cross and dot. Both roads are exact, so every sign is the same; only the time taken changes. The generated tpi_side predicate's exact path takes every plane (its inputs are certified to 83 bits for a normal and 125 for an offset, the widths Plane::new holds every plane to), and normals_sign's cross and dot in I256 hold any normals below 2^83, so neither fails where the words would have answered."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-num/src/plane.rs",
+      "mutant": "replace det_in_words -> Option<i64> with None",
+      "line_text": "let ([ax, ay, az, _], [bx, by, bz, _], [cx, cy, cz, _]) = (*a, *b, *c);",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "det_in_words is read only by the machine-word rung: on None, determinant_in_words is None and determinant_routed asks the generated tpi_side predicate, filter and then exact path, for the same 4 x 4 determinant, and normals_sign computes the same 3 x 3 determinant with cross and dot. Both roads are exact, so every sign is the same; only the time taken changes. The generated tpi_side predicate's exact path takes every plane (its inputs are certified to 83 bits for a normal and 125 for an offset, the widths Plane::new holds every plane to), and normals_sign's cross and dot in I256 hold any normals below 2^83, so neither fails where the words would have answered."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-num/src/plane.rs",
+      "mutant": "replace determinant_in_words -> Option<Sign> with None",
+      "line_text": "let (a, b, c, e) = (words(p)?, words(q)?, words(r)?, words(s)?);",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "determinant_in_words is the first rung of determinant_routed: on None it asks the generated tpi_side predicate, filter and then exact path, for the same 4 x 4 determinant of the four planes' coefficients. Both roads are exact, so every sign is the same; only the time taken changes. The generated tpi_side predicate's exact path takes every plane (its inputs are certified to 83 bits for a normal and 125 for an offset, the widths Plane::new holds every plane to), and normals_sign's cross and dot in I256 hold any normals below 2^83, so neither fails where the words would have answered."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-bool/src/combine.rs",
+      "mutant": "replace > with >= in Scene<'a>::touching",
+      "line_text": ".any(|(entry, count)| *count > 0 && there.count(*entry) <= 0)",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "A winding vector's pairs hold no zero count, so on each of them a count above 0 and a count of 0 or more are one test."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-bool/src/wires.rs",
+      "mutant": "replace > with >= in line",
+      "line_text": "if change.saturating_abs() > most {",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "On a tie the edge takes the later of two axes it changes along equally. The axis only chooses the plane across the edge at each end: any plane square to an axis the edge changes along crosses it there, and moved towards the edge's end it slides the point along the edge alone, so the stops, their order and every vector are the same; the planes through the edge do not depend on it."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-bool/src/wires.rs",
+      "mutant": "replace > with >= in line",
+      "line_text": "let toward = if along.is_some_and(|(u, v)| v > u) {",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "Along the axis the edge changes most its ends differ, as an edge of no length is refused just before, so v > u and v >= u are one test."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-bool/src/wires.rs",
+      "mutant": "replace != with == in root",
+      "line_text": "while let Some(up) = parents.get(at).copied().filter(|up| *up != at) {",
+      "occurrences": 1,
+      "kind": "hangs",
+      "reason": "At a root, whose parent is itself, the filter then passes and the walk steps to the same place forever."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-bool/src/half_space.rs",
+      "mutant": "replace > with >= in cap",
+      "line_text": "if largest(k) > largest(axis) {",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "cap bounds the plane by the range box around the axis of the normal's largest component; where two components tie, the mutant takes the later axis. Either way the cap is the plane within the range box, the same points, and the merge names every corner by its planes sorted, so the body is the same: checked by building half-spaces whose normals tie on two axes and on all three, bit for bit the same bodies under both."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-bool/src/half_space.rs",
+      "mutant": "replace < with <= in cap",
+      "line_text": "if n.get(axis).is_some_and(|v| *v < 0) {",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "axis is the normal's largest component in magnitude, and a plane's normal is never zero (Plane::new refuses one), so that component is never 0 and < 0 and <= 0 agree."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-bool/src/names.rs",
+      "mutant": "replace grid_key -> (i64, i64, i64) with (0, 1, 0)",
+      "line_text": "(g.x.get(), g.y.get(), g.z.get())",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "grid_key only sorts an operand's vertices into buckets by grid point, so that found_vertex looks at a few. found_vertex takes a vertex only when same_point puts it exactly at the point: a grid vertex equal to the point's grid value, which must be exact, or a meeting whose three planes all pass through it. A vertex exactly at the point rounds to the point's own key, so with every vertex in one bucket, walked in the same row order, found_vertex returns the same first vertex, and so the same names. Each extra vertex it now reads, input() has read without error (at_vertex, to_grid), and side_of_tpi cannot fail for planes within budget, so no error is added either. Only the time taken changes: a walk of every vertex instead of a lookup."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-bool/src/names.rs",
+      "mutant": "replace grid_key -> (i64, i64, i64) with (0, 1, 1)",
+      "line_text": "(g.x.get(), g.y.get(), g.z.get())",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "grid_key only sorts an operand's vertices into buckets by grid point, so that found_vertex looks at a few. found_vertex takes a vertex only when same_point puts it exactly at the point: a grid vertex equal to the point's grid value, which must be exact, or a meeting whose three planes all pass through it. A vertex exactly at the point rounds to the point's own key, so with every vertex in one bucket, walked in the same row order, found_vertex returns the same first vertex, and so the same names. Each extra vertex it now reads, input() has read without error (at_vertex, to_grid), and side_of_tpi cannot fail for planes within budget, so no error is added either. Only the time taken changes: a walk of every vertex instead of a lookup."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-bool/src/names.rs",
+      "mutant": "replace grid_key -> (i64, i64, i64) with (0, 1, -1)",
+      "line_text": "(g.x.get(), g.y.get(), g.z.get())",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "grid_key only sorts an operand's vertices into buckets by grid point, so that found_vertex looks at a few. found_vertex takes a vertex only when same_point puts it exactly at the point: a grid vertex equal to the point's grid value, which must be exact, or a meeting whose three planes all pass through it. A vertex exactly at the point rounds to the point's own key, so with every vertex in one bucket, walked in the same row order, found_vertex returns the same first vertex, and so the same names. Each extra vertex it now reads, input() has read without error (at_vertex, to_grid), and side_of_tpi cannot fail for planes within budget, so no error is added either. Only the time taken changes: a walk of every vertex instead of a lookup."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-bool/src/names.rs",
+      "mutant": "replace grid_key -> (i64, i64, i64) with (0, -1, 0)",
+      "line_text": "(g.x.get(), g.y.get(), g.z.get())",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "grid_key only sorts an operand's vertices into buckets by grid point, so that found_vertex looks at a few. found_vertex takes a vertex only when same_point puts it exactly at the point: a grid vertex equal to the point's grid value, which must be exact, or a meeting whose three planes all pass through it. A vertex exactly at the point rounds to the point's own key, so with every vertex in one bucket, walked in the same row order, found_vertex returns the same first vertex, and so the same names. Each extra vertex it now reads, input() has read without error (at_vertex, to_grid), and side_of_tpi cannot fail for planes within budget, so no error is added either. Only the time taken changes: a walk of every vertex instead of a lookup."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-bool/src/names.rs",
+      "mutant": "replace grid_key -> (i64, i64, i64) with (0, -1, 1)",
+      "line_text": "(g.x.get(), g.y.get(), g.z.get())",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "grid_key only sorts an operand's vertices into buckets by grid point, so that found_vertex looks at a few. found_vertex takes a vertex only when same_point puts it exactly at the point: a grid vertex equal to the point's grid value, which must be exact, or a meeting whose three planes all pass through it. A vertex exactly at the point rounds to the point's own key, so with every vertex in one bucket, walked in the same row order, found_vertex returns the same first vertex, and so the same names. Each extra vertex it now reads, input() has read without error (at_vertex, to_grid), and side_of_tpi cannot fail for planes within budget, so no error is added either. Only the time taken changes: a walk of every vertex instead of a lookup."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-bool/src/names.rs",
+      "mutant": "replace grid_key -> (i64, i64, i64) with (0, -1, -1)",
+      "line_text": "(g.x.get(), g.y.get(), g.z.get())",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "grid_key only sorts an operand's vertices into buckets by grid point, so that found_vertex looks at a few. found_vertex takes a vertex only when same_point puts it exactly at the point: a grid vertex equal to the point's grid value, which must be exact, or a meeting whose three planes all pass through it. A vertex exactly at the point rounds to the point's own key, so with every vertex in one bucket, walked in the same row order, found_vertex returns the same first vertex, and so the same names. Each extra vertex it now reads, input() has read without error (at_vertex, to_grid), and side_of_tpi cannot fail for planes within budget, so no error is added either. Only the time taken changes: a walk of every vertex instead of a lookup."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-bool/src/names.rs",
+      "mutant": "replace grid_key -> (i64, i64, i64) with (1, 0, 0)",
+      "line_text": "(g.x.get(), g.y.get(), g.z.get())",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "grid_key only sorts an operand's vertices into buckets by grid point, so that found_vertex looks at a few. found_vertex takes a vertex only when same_point puts it exactly at the point: a grid vertex equal to the point's grid value, which must be exact, or a meeting whose three planes all pass through it. A vertex exactly at the point rounds to the point's own key, so with every vertex in one bucket, walked in the same row order, found_vertex returns the same first vertex, and so the same names. Each extra vertex it now reads, input() has read without error (at_vertex, to_grid), and side_of_tpi cannot fail for planes within budget, so no error is added either. Only the time taken changes: a walk of every vertex instead of a lookup."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-bool/src/names.rs",
+      "mutant": "replace grid_key -> (i64, i64, i64) with (1, 0, 1)",
+      "line_text": "(g.x.get(), g.y.get(), g.z.get())",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "grid_key only sorts an operand's vertices into buckets by grid point, so that found_vertex looks at a few. found_vertex takes a vertex only when same_point puts it exactly at the point: a grid vertex equal to the point's grid value, which must be exact, or a meeting whose three planes all pass through it. A vertex exactly at the point rounds to the point's own key, so with every vertex in one bucket, walked in the same row order, found_vertex returns the same first vertex, and so the same names. Each extra vertex it now reads, input() has read without error (at_vertex, to_grid), and side_of_tpi cannot fail for planes within budget, so no error is added either. Only the time taken changes: a walk of every vertex instead of a lookup."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-bool/src/names.rs",
+      "mutant": "replace grid_key -> (i64, i64, i64) with (1, 0, -1)",
+      "line_text": "(g.x.get(), g.y.get(), g.z.get())",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "grid_key only sorts an operand's vertices into buckets by grid point, so that found_vertex looks at a few. found_vertex takes a vertex only when same_point puts it exactly at the point: a grid vertex equal to the point's grid value, which must be exact, or a meeting whose three planes all pass through it. A vertex exactly at the point rounds to the point's own key, so with every vertex in one bucket, walked in the same row order, found_vertex returns the same first vertex, and so the same names. Each extra vertex it now reads, input() has read without error (at_vertex, to_grid), and side_of_tpi cannot fail for planes within budget, so no error is added either. Only the time taken changes: a walk of every vertex instead of a lookup."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-bool/src/names.rs",
+      "mutant": "replace grid_key -> (i64, i64, i64) with (1, 1, 0)",
+      "line_text": "(g.x.get(), g.y.get(), g.z.get())",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "grid_key only sorts an operand's vertices into buckets by grid point, so that found_vertex looks at a few. found_vertex takes a vertex only when same_point puts it exactly at the point: a grid vertex equal to the point's grid value, which must be exact, or a meeting whose three planes all pass through it. A vertex exactly at the point rounds to the point's own key, so with every vertex in one bucket, walked in the same row order, found_vertex returns the same first vertex, and so the same names. Each extra vertex it now reads, input() has read without error (at_vertex, to_grid), and side_of_tpi cannot fail for planes within budget, so no error is added either. Only the time taken changes: a walk of every vertex instead of a lookup."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-bool/src/names.rs",
+      "mutant": "replace grid_key -> (i64, i64, i64) with (1, 1, 1)",
+      "line_text": "(g.x.get(), g.y.get(), g.z.get())",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "grid_key only sorts an operand's vertices into buckets by grid point, so that found_vertex looks at a few. found_vertex takes a vertex only when same_point puts it exactly at the point: a grid vertex equal to the point's grid value, which must be exact, or a meeting whose three planes all pass through it. A vertex exactly at the point rounds to the point's own key, so with every vertex in one bucket, walked in the same row order, found_vertex returns the same first vertex, and so the same names. Each extra vertex it now reads, input() has read without error (at_vertex, to_grid), and side_of_tpi cannot fail for planes within budget, so no error is added either. Only the time taken changes: a walk of every vertex instead of a lookup."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-bool/src/names.rs",
+      "mutant": "replace grid_key -> (i64, i64, i64) with (1, 1, -1)",
+      "line_text": "(g.x.get(), g.y.get(), g.z.get())",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "grid_key only sorts an operand's vertices into buckets by grid point, so that found_vertex looks at a few. found_vertex takes a vertex only when same_point puts it exactly at the point: a grid vertex equal to the point's grid value, which must be exact, or a meeting whose three planes all pass through it. A vertex exactly at the point rounds to the point's own key, so with every vertex in one bucket, walked in the same row order, found_vertex returns the same first vertex, and so the same names. Each extra vertex it now reads, input() has read without error (at_vertex, to_grid), and side_of_tpi cannot fail for planes within budget, so no error is added either. Only the time taken changes: a walk of every vertex instead of a lookup."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-bool/src/names.rs",
+      "mutant": "replace grid_key -> (i64, i64, i64) with (1, -1, 0)",
+      "line_text": "(g.x.get(), g.y.get(), g.z.get())",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "grid_key only sorts an operand's vertices into buckets by grid point, so that found_vertex looks at a few. found_vertex takes a vertex only when same_point puts it exactly at the point: a grid vertex equal to the point's grid value, which must be exact, or a meeting whose three planes all pass through it. A vertex exactly at the point rounds to the point's own key, so with every vertex in one bucket, walked in the same row order, found_vertex returns the same first vertex, and so the same names. Each extra vertex it now reads, input() has read without error (at_vertex, to_grid), and side_of_tpi cannot fail for planes within budget, so no error is added either. Only the time taken changes: a walk of every vertex instead of a lookup."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-bool/src/names.rs",
+      "mutant": "replace grid_key -> (i64, i64, i64) with (1, -1, 1)",
+      "line_text": "(g.x.get(), g.y.get(), g.z.get())",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "grid_key only sorts an operand's vertices into buckets by grid point, so that found_vertex looks at a few. found_vertex takes a vertex only when same_point puts it exactly at the point: a grid vertex equal to the point's grid value, which must be exact, or a meeting whose three planes all pass through it. A vertex exactly at the point rounds to the point's own key, so with every vertex in one bucket, walked in the same row order, found_vertex returns the same first vertex, and so the same names. Each extra vertex it now reads, input() has read without error (at_vertex, to_grid), and side_of_tpi cannot fail for planes within budget, so no error is added either. Only the time taken changes: a walk of every vertex instead of a lookup."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-bool/src/names.rs",
+      "mutant": "replace grid_key -> (i64, i64, i64) with (1, -1, -1)",
+      "line_text": "(g.x.get(), g.y.get(), g.z.get())",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "grid_key only sorts an operand's vertices into buckets by grid point, so that found_vertex looks at a few. found_vertex takes a vertex only when same_point puts it exactly at the point: a grid vertex equal to the point's grid value, which must be exact, or a meeting whose three planes all pass through it. A vertex exactly at the point rounds to the point's own key, so with every vertex in one bucket, walked in the same row order, found_vertex returns the same first vertex, and so the same names. Each extra vertex it now reads, input() has read without error (at_vertex, to_grid), and side_of_tpi cannot fail for planes within budget, so no error is added either. Only the time taken changes: a walk of every vertex instead of a lookup."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-bool/src/names.rs",
+      "mutant": "replace grid_key -> (i64, i64, i64) with (-1, 0, 0)",
+      "line_text": "(g.x.get(), g.y.get(), g.z.get())",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "grid_key only sorts an operand's vertices into buckets by grid point, so that found_vertex looks at a few. found_vertex takes a vertex only when same_point puts it exactly at the point: a grid vertex equal to the point's grid value, which must be exact, or a meeting whose three planes all pass through it. A vertex exactly at the point rounds to the point's own key, so with every vertex in one bucket, walked in the same row order, found_vertex returns the same first vertex, and so the same names. Each extra vertex it now reads, input() has read without error (at_vertex, to_grid), and side_of_tpi cannot fail for planes within budget, so no error is added either. Only the time taken changes: a walk of every vertex instead of a lookup."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-bool/src/names.rs",
+      "mutant": "replace grid_key -> (i64, i64, i64) with (-1, 0, 1)",
+      "line_text": "(g.x.get(), g.y.get(), g.z.get())",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "grid_key only sorts an operand's vertices into buckets by grid point, so that found_vertex looks at a few. found_vertex takes a vertex only when same_point puts it exactly at the point: a grid vertex equal to the point's grid value, which must be exact, or a meeting whose three planes all pass through it. A vertex exactly at the point rounds to the point's own key, so with every vertex in one bucket, walked in the same row order, found_vertex returns the same first vertex, and so the same names. Each extra vertex it now reads, input() has read without error (at_vertex, to_grid), and side_of_tpi cannot fail for planes within budget, so no error is added either. Only the time taken changes: a walk of every vertex instead of a lookup."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-bool/src/names.rs",
+      "mutant": "replace grid_key -> (i64, i64, i64) with (-1, 0, -1)",
+      "line_text": "(g.x.get(), g.y.get(), g.z.get())",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "grid_key only sorts an operand's vertices into buckets by grid point, so that found_vertex looks at a few. found_vertex takes a vertex only when same_point puts it exactly at the point: a grid vertex equal to the point's grid value, which must be exact, or a meeting whose three planes all pass through it. A vertex exactly at the point rounds to the point's own key, so with every vertex in one bucket, walked in the same row order, found_vertex returns the same first vertex, and so the same names. Each extra vertex it now reads, input() has read without error (at_vertex, to_grid), and side_of_tpi cannot fail for planes within budget, so no error is added either. Only the time taken changes: a walk of every vertex instead of a lookup."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-bool/src/names.rs",
+      "mutant": "replace grid_key -> (i64, i64, i64) with (-1, 1, 0)",
+      "line_text": "(g.x.get(), g.y.get(), g.z.get())",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "grid_key only sorts an operand's vertices into buckets by grid point, so that found_vertex looks at a few. found_vertex takes a vertex only when same_point puts it exactly at the point: a grid vertex equal to the point's grid value, which must be exact, or a meeting whose three planes all pass through it. A vertex exactly at the point rounds to the point's own key, so with every vertex in one bucket, walked in the same row order, found_vertex returns the same first vertex, and so the same names. Each extra vertex it now reads, input() has read without error (at_vertex, to_grid), and side_of_tpi cannot fail for planes within budget, so no error is added either. Only the time taken changes: a walk of every vertex instead of a lookup."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-bool/src/names.rs",
+      "mutant": "replace grid_key -> (i64, i64, i64) with (-1, 1, 1)",
+      "line_text": "(g.x.get(), g.y.get(), g.z.get())",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "grid_key only sorts an operand's vertices into buckets by grid point, so that found_vertex looks at a few. found_vertex takes a vertex only when same_point puts it exactly at the point: a grid vertex equal to the point's grid value, which must be exact, or a meeting whose three planes all pass through it. A vertex exactly at the point rounds to the point's own key, so with every vertex in one bucket, walked in the same row order, found_vertex returns the same first vertex, and so the same names. Each extra vertex it now reads, input() has read without error (at_vertex, to_grid), and side_of_tpi cannot fail for planes within budget, so no error is added either. Only the time taken changes: a walk of every vertex instead of a lookup."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-bool/src/names.rs",
+      "mutant": "replace grid_key -> (i64, i64, i64) with (-1, 1, -1)",
+      "line_text": "(g.x.get(), g.y.get(), g.z.get())",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "grid_key only sorts an operand's vertices into buckets by grid point, so that found_vertex looks at a few. found_vertex takes a vertex only when same_point puts it exactly at the point: a grid vertex equal to the point's grid value, which must be exact, or a meeting whose three planes all pass through it. A vertex exactly at the point rounds to the point's own key, so with every vertex in one bucket, walked in the same row order, found_vertex returns the same first vertex, and so the same names. Each extra vertex it now reads, input() has read without error (at_vertex, to_grid), and side_of_tpi cannot fail for planes within budget, so no error is added either. Only the time taken changes: a walk of every vertex instead of a lookup."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-bool/src/names.rs",
+      "mutant": "replace grid_key -> (i64, i64, i64) with (-1, -1, 0)",
+      "line_text": "(g.x.get(), g.y.get(), g.z.get())",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "grid_key only sorts an operand's vertices into buckets by grid point, so that found_vertex looks at a few. found_vertex takes a vertex only when same_point puts it exactly at the point: a grid vertex equal to the point's grid value, which must be exact, or a meeting whose three planes all pass through it. A vertex exactly at the point rounds to the point's own key, so with every vertex in one bucket, walked in the same row order, found_vertex returns the same first vertex, and so the same names. Each extra vertex it now reads, input() has read without error (at_vertex, to_grid), and side_of_tpi cannot fail for planes within budget, so no error is added either. Only the time taken changes: a walk of every vertex instead of a lookup."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-bool/src/names.rs",
+      "mutant": "replace grid_key -> (i64, i64, i64) with (-1, -1, 1)",
+      "line_text": "(g.x.get(), g.y.get(), g.z.get())",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "grid_key only sorts an operand's vertices into buckets by grid point, so that found_vertex looks at a few. found_vertex takes a vertex only when same_point puts it exactly at the point: a grid vertex equal to the point's grid value, which must be exact, or a meeting whose three planes all pass through it. A vertex exactly at the point rounds to the point's own key, so with every vertex in one bucket, walked in the same row order, found_vertex returns the same first vertex, and so the same names. Each extra vertex it now reads, input() has read without error (at_vertex, to_grid), and side_of_tpi cannot fail for planes within budget, so no error is added either. Only the time taken changes: a walk of every vertex instead of a lookup."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-bool/src/names.rs",
+      "mutant": "replace grid_key -> (i64, i64, i64) with (-1, -1, -1)",
+      "line_text": "(g.x.get(), g.y.get(), g.z.get())",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "grid_key only sorts an operand's vertices into buckets by grid point, so that found_vertex looks at a few. found_vertex takes a vertex only when same_point puts it exactly at the point: a grid vertex equal to the point's grid value, which must be exact, or a meeting whose three planes all pass through it. A vertex exactly at the point rounds to the point's own key, so with every vertex in one bucket, walked in the same row order, found_vertex returns the same first vertex, and so the same names. Each extra vertex it now reads, input() has read without error (at_vertex, to_grid), and side_of_tpi cannot fail for planes within budget, so no error is added either. Only the time taken changes: a walk of every vertex instead of a lookup."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-bool/src/names.rs",
+      "mutant": "replace match guard corners.contains(&row) with true in untouched",
+      "line_text": "Some(row) if corners.contains(&row) => {}",
+      "occurrences": 1,
+      "kind": "harmless",
+      "reason": "A face piece lies on the input face it came from, so each of its corners lies on that face or its boundary. In a valid operand the only vertices there are the face's own corners: the checker's group 3 has faces meet only along shared edges and edges only at shared vertices, so no vertex lies inside a face or an edge it does not end, and no two share a point. found_vertex returns the operand's vertex exactly at a point, so it returns one of those corners and the guard holds. The mutant differs only for an operand that is not a valid body, with two vertices at one point, and there it calls a face Unchanged where the guard calls it Modified: the face keeps its name either way, and an invalid operand's history is nothing the boolean promises."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-bool/src/names.rs",
+      "mutant": "replace grid_key -> (i64, i64, i64) with (0, 0, 0)",
+      "line_text": "(g.x.get(), g.y.get(), g.z.get())",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "grid_key only sorts an operand's vertices into buckets by grid point, so that found_vertex looks at a few. found_vertex takes a vertex only when same_point puts it exactly at the point: a grid vertex equal to the point's grid value, which must be exact, or a meeting whose three planes all pass through it. A vertex exactly at the point rounds to the point's own key, so with every vertex in one bucket, walked in the same row order, found_vertex returns the same first vertex, and so the same names. Each extra vertex it now reads, input() has read without error (at_vertex, to_grid), and side_of_tpi cannot fail for planes within budget, so no error is added either. Only the time taken changes: a walk of every vertex instead of a lookup."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-bool/src/names.rs",
+      "mutant": "replace grid_key -> (i64, i64, i64) with (0, 0, 1)",
+      "line_text": "(g.x.get(), g.y.get(), g.z.get())",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "grid_key only sorts an operand's vertices into buckets by grid point, so that found_vertex looks at a few. found_vertex takes a vertex only when same_point puts it exactly at the point: a grid vertex equal to the point's grid value, which must be exact, or a meeting whose three planes all pass through it. A vertex exactly at the point rounds to the point's own key, so with every vertex in one bucket, walked in the same row order, found_vertex returns the same first vertex, and so the same names. Each extra vertex it now reads, input() has read without error (at_vertex, to_grid), and side_of_tpi cannot fail for planes within budget, so no error is added either. Only the time taken changes: a walk of every vertex instead of a lookup."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-bool/src/names.rs",
+      "mutant": "replace grid_key -> (i64, i64, i64) with (0, 0, -1)",
+      "line_text": "(g.x.get(), g.y.get(), g.z.get())",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "grid_key only sorts an operand's vertices into buckets by grid point, so that found_vertex looks at a few. found_vertex takes a vertex only when same_point puts it exactly at the point: a grid vertex equal to the point's grid value, which must be exact, or a meeting whose three planes all pass through it. A vertex exactly at the point rounds to the point's own key, so with every vertex in one bucket, walked in the same row order, found_vertex returns the same first vertex, and so the same names. Each extra vertex it now reads, input() has read without error (at_vertex, to_grid), and side_of_tpi cannot fail for planes within budget, so no error is added either. Only the time taken changes: a walk of every vertex instead of a lookup."
     }
   ],
   "coverage_off": [
@@ -7213,6 +8197,5 @@
       "piece": "G41",
       "reason": "Wide32's extremes set their top limb through last_mut, which always finds one: L >= 2 is checked when the width is used (AT_LEAST_TWO_LIMBS), so the None arm and the end of the if let never run. As for Wide's same lines, G41's bounded proof of no panic in geom-num removes them."
     }
-
   ]
 }

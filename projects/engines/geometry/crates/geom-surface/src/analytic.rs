@@ -1,8 +1,8 @@
 //! The analytic surface kinds: plane, cylinder, cone, sphere and torus, each stored as itself.
 //!
 //! What it does: each kind writes its surface in the shared form c + Σ f(u)·g(v)·W (`crate::terms`),
-//! with angles in half-turns on an exact [`Frame`] (x̂, ŷ, n̂), and a sign s = ±1 on its axial term
-//! so that reversing either parameter is exact:
+//! with angles in half-turns on an exact [`Frame`] (x̂, ŷ, n̂), and a factor s on its axial term,
+//! ±1 as built, so that reversing either parameter is exact:
 //!
 //! | Kind | S(u, v) | Normal direction (a positive multiple of `S_u` × `S_v`) |
 //! | --- | --- | --- |
@@ -26,8 +26,9 @@
 //!   angular direction, a line in each linear one) with a parameter map per direction, its
 //!   deviation 0 where the doubles hold it exactly (a whole cylinder on an axis-aligned frame).
 //! - **Transforms change kinds explicitly.** A similarity keeps the kind (lengths times its scale,
-//!   the frame carried, a mirror flipping the axial sign); any other transform gives the moved
-//!   NURBS form. A plane takes every affine map. A grid transform that moves the centre exactly
+//!   a cylinder's and a cone's axial factor too, the frame carried, a mirror flipping the axial
+//!   factor's sign), so its image at each (u, v) is the moved point there: a uniform whole-number
+//!   scale is exact, deviation 0. Any other transform gives the moved NURBS form. A plane takes every affine map. A grid transform that moves the centre exactly
 //!   is exact: deviation 0 (chapter 7; piece G69).
 //! - **Exact split and reversal.**
 //!
@@ -445,12 +446,18 @@ impl Round {
     }
 
     /// This round's data under a similarity: centre and frame carried, lengths scaled, the axial
-    /// sign flipped by a mirror.
-    fn moved(&self, m: &Motion) -> Result<Round, CurveError> {
+    /// factor flipped by a mirror. A cylinder's and a cone's axial term s·v·n̂ is a length too, so
+    /// its factor takes the scale with the radius and a cone's slope k, and the image of each (u, v)
+    /// is the moved kind's point there: c + (r₀ + k·v)·e(u) + s·v·n̂ times m is
+    /// m·c + (m·r₀ + m·k·v)·e(u) + m·s·v·n̂. A sphere's and a torus's axial term is r·sin πv, which
+    /// the scaled radius carries, so theirs stays ±1.
+    fn moved(&self, which: Which, m: &Motion) -> Result<Round, CurveError> {
+        let flipped = if m.mirror() { -self.sign } else { self.sign };
+        let linear = matches!(which, Which::Cylinder | Which::Cone);
         Ok(Round {
             center: m.point(self.center)?,
             frame: Frame::new(m.vector(self.frame.x())?, m.normal(self.frame.normal())?)?,
-            sign: if m.mirror() { -self.sign } else { self.sign },
+            sign: if linear { m.scale * flipped } else { flipped },
             lengths: self.lengths.map(|x| m.scale * x),
             domain: self.domain,
         })
@@ -551,7 +558,9 @@ macro_rules! round_kind {
                 self.round.frame
             }
 
-            /// The axial sign s: +1 or −1.
+            /// The axial factor s: +1 or −1 as built, its sign flipped by a reversal in v or a
+            /// mirror. A similarity multiplies a cylinder's and a cone's by its scale, so that v
+            /// stays the moved image's parameter: such a kind runs |s| along n̂ per unit of v.
             #[must_use]
             pub fn axial_sign(&self) -> f64 {
                 self.round.sign
@@ -900,7 +909,7 @@ macro_rules! round_surface {
                 if !m.similar() {
                     return affine_image(&self.terms, self.round.domain, angular($which), &m);
                 }
-                let k = $kind::build(self.round.moved(&m)?)?;
+                let k = $kind::build(self.round.moved($which, &m)?)?;
                 if m.exact_for(&[self.round.center])? {
                     // A grid transform moving the centre exactly carries the frame, and its unit
                     // vectors, exactly too (piece G69).

@@ -17,8 +17,8 @@
 //!   `MIT OR Apache-2.0 OR LGPL-2.1-or-later` is permissive, taken under MIT or Apache-2.0, and
 //!   `MIT AND GPL-3.0-only` is not. The permissive licences are exactly [`PERMISSIVE`]: the list the
 //!   development crates may take (MIT, Apache-2.0, BSD, ISC, Zlib, Unicode). The Unlicense is not on
-//!   it (chapter 32.6 takes it only beside another licence), nor is MPL-2.0, which is ours and is
-//!   checked separately.
+//!   it (chapter 32.6 takes it only beside another licence), nor is MPL-2.0, which is copyleft per
+//!   file and so not permissive, though 29.2 allows it.
 //! - **One form per meaning.** [`Expr::canonical`] flattens nested `OR`s and `AND`s and sorts and
 //!   deduplicates their operands, so `MIT OR Apache-2.0`, `Apache-2.0 OR MIT` and Cargo's legacy
 //!   `MIT/Apache-2.0` compare equal.
