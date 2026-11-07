@@ -10964,7 +10964,7 @@
           "family": [],
           "file": "projects/engines/geometry/crates/geom-test/src/bin/oracle.rs",
           "guarantees": [
-            "nothing here runs an oracle or writes a file. Exit codes: 0 when everything checked holds; 1 when a check fails or a new signature appears; 2 for a usage error, or a file or a line that cannot be read (a broken harness is never a pass)."
+            "nothing here runs an oracle, and only `triage` writes a file: the register and the one fixture. Exit codes: 0 when everything checked holds; 1 when a check fails or a new signature appears; 2 for a usage error, or a file or a line that cannot be read (a broken harness is never a pass)."
           ],
           "job": "`oracle`: the outside oracles' tool: list the catalogue, check it, write a night's jobs, compare the answers, and record a triage.",
           "method": {
