@@ -207,8 +207,8 @@ fn wrapped(
         let (north, south) = (points.len() as u32, points.len() as u32 + 1);
         points.extend(pole);
         for c in 0..around {
-            tris.push([north, index(0, c + 1), index(0, c)]);
-            tris.push([south, index(rows - 1, c), index(rows - 1, c + 1)]);
+            tris.push([north, index(0, c), index(0, c + 1)]);
+            tris.push([south, index(rows - 1, c + 1), index(rows - 1, c)]);
         }
     }
     for r in 0..bands {
@@ -322,8 +322,14 @@ fn cube(k: u32, half: i64, center: [i64; 3], turned: bool, name: u8) -> Polygons
                         point(corner(i + 1, j + 1)),
                         point(corner(i, j + 1)),
                     );
-                    tris.push([a, b, c]);
-                    tris.push([a, c, d]);
+                    // Facing out: along the axis at its far end, against it at its near end.
+                    if end == k {
+                        tris.push([a, b, c]);
+                        tris.push([a, c, d]);
+                    } else {
+                        tris.push([a, c, b]);
+                        tris.push([a, d, c]);
+                    }
                 }
             }
         }
