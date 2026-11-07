@@ -5297,6 +5297,22 @@
       "occurrences": 1,
       "kind": "equivalent",
       "reason": "full is a u32, so full >= 0 always holds. When the column needs no full chunk (fewer than CHUNK_ROWS rows), the mutant builds one full chunk anyway and then places it zero times: column.chunks.resize(0, chunk) leaves the list empty with the capacity reserved before, and the chunk is dropped. The column's rows, chunks, values and Memory report are the same as the original's for every rows and value. Only a temporary allocation of one chunk differs, which a machine out of memory could refuse (OutOfMemory, never stored or replayed, 23.10) where the original needs none."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-format/src/kinds.rs",
+      "mutant": "replace < with <= in end",
+      "line_text": "if x.is_infinite() && (x < 0.0) == low {",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "The comparison is reached only when x is infinite, and for ±∞ x < 0 and x <= 0 agree."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-format/src/kinds.rs",
+      "mutant": "replace || with && in axial",
+      "line_text": "if !s.is_finite() || s == 0.0 {",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "axial writes the factor of a built cylinder or cone, and with_axial_sign (geom-surface) refuses a factor that is zero or not finite, as do the constructors that set it to 1 or -1, so no surface reaches this test with either: the branch is unreachable through the public interface, and the mutant only changes when it fires. read_axial refuses the same values on the way back in, which tests/kinds.rs a_round_kinds_axial_factor_refuses_every_other_double holds."
     }
   ],
   "coverage_off": [
