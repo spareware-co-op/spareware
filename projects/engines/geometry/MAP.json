@@ -1459,7 +1459,51 @@
         13
       ],
       "depends": [],
-      "errors": [],
+      "errors": [
+        {
+          "doc": "Why edges could not be chained.",
+          "file": "projects/engines/geometry/crates/geom-blend/src/chain.rs",
+          "kinds": [
+            {
+              "doc": "Two edges meet inside the band where tangency cannot be decided: neither certified smooth nor certified sharp. Heal the edge to tangent, leave it out, or use a radius that clears the band.",
+              "name": "IllConditioned",
+              "shape": "struct"
+            },
+            {
+              "doc": "A join names an edge that was not given, or a vertex that neither of its edges has.",
+              "name": "UnknownJoin",
+              "shape": "struct"
+            },
+            {
+              "doc": "An edge is given twice.",
+              "name": "DuplicateEdge",
+              "shape": "tuple"
+            }
+          ],
+          "module": "geom_blend::chain",
+          "name": "ChainError",
+          "non_exhaustive": false
+        },
+        {
+          "doc": "Why an edge could not be classified.",
+          "file": "projects/engines/geometry/crates/geom-blend/src/convexity.rs",
+          "kinds": [
+            {
+              "doc": "The faces are tangent along a stretch of the edge, not at a point.",
+              "name": "MixedConvexity",
+              "shape": "tuple"
+            },
+            {
+              "doc": "The edge has no convex or concave section to blend.",
+              "name": "NothingToBlend",
+              "shape": "tuple"
+            }
+          ],
+          "module": "geom_blend::convexity",
+          "name": "ConvexityError",
+          "non_exhaustive": false
+        }
+      ],
       "family": [
         "Blend"
       ],
@@ -1475,12 +1519,84 @@
       "job": "Fillets, chamfers, vertex blends.",
       "kind": "kernel",
       "layer": "10",
-      "modules": [],
+      "modules": [
+        {
+          "cost": "linear in the number of edges and joins, sorted once. No recursion.",
+          "does": "the edges a caller wants blended are given as [`EdgeRow`]s, each with the two vertices it joins, and the caller says, at each vertex where two of them meet, how they continue each other ([`Join`]): [`Tangency::Tangent`] when the tangents are certified equal (exact for analytic pairs), [`Tangency::Sharp`] when they are certified apart, and [`Tangency::Undecided`] when the angle between them is inside the band where the ball's path is ill-conditioned. [`chains`] links edges across their tangent joins into [`Chain`]s, each an ordered run of edges with the way each is walked, open or closed. A vertex where more than two of the edges meet, or where the join is sharp, ends the chains that reach it: it is a corner.",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-blend/src/chain.rs",
+          "guarantees": [
+            "**Certified or refused.** An edge continues another only across a [`Tangency::Tangent`] join. An undecided join is [`ChainError::IllConditioned`] with the vertex and the band, never treated as smooth; the remedies it offers are to heal the edge to tangent, to leave it out, or to use a radius that clears the band.",
+            "**Every edge in exactly one chain.** The chains partition the given edges, whatever order they were given in.",
+            "**Deterministic.** Chains start from the lowest edge id that is not yet in one, run on from its start vertex end first, and are returned in the order of their first edges; a closed chain starts at its lowest edge id and walks that edge forward.",
+            "**No guesses at a corner.** Three or more of the edges at a vertex, or a vertex with a sharp join, end the chains there; a join named for a vertex or an edge that is not given is [`ChainError::UnknownJoin`]."
+          ],
+          "job": "Chaining the edges of a blend into tangent-continuous chains (13.10, \"Feasibility first\", step 1, G262).",
+          "method": {
+            "links": [
+              "projects/engines/geometry/architecture/13-sweeps-blends-offsets.md",
+              "https://doi.org/10.1016/0010-4485(94"
+            ],
+            "text": "chapter 13.10 of the kernel architecture, \"Feasibility first\", step 1 (`projects/engines/geometry/architecture/13-sweeps-blends-offsets.md`), which takes the near-tangent treatment of the survey of Vida, Martin and Varady, CAD 26(5), 1994 (<https://doi.org/10.1016/0010-4485(94)90023-X>), and proves tangency instead of assuming it."
+          },
+          "path": "geom_blend::chain",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
+          "cost": "quadratic in the patches of one face at worst, and linear elsewhere. No recursion.",
+          "does": "each chain's **footprint** is the band between its contact curves, extended by its setbacks, written as the [`Patch`]es of faces it covers and the vertices it touches ([`Footprint`]). [`clusters`] joins the chains whose footprints overlap, or that share a vertex, into [`Cluster`]s, even when they share no vertex: two fillets eating one narrow face, or the opposite edges of a thin rib. A cluster succeeds or fails as one.",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-blend/src/cluster.rs",
+          "guarantees": [
+            "**Overlap is closed.** Two patches of one face overlap when their regions share a point, touching included, since a blend that only touches another's band still meets it at a setback. A patch of another face never overlaps.",
+            "**Transitive.** Chains joined through a third are one cluster: the clusters are the connected parts of the overlap relation.",
+            "**A partition, in a fixed order.** Every chain is in exactly one cluster; the chains of a cluster are in input order and the clusters are in the order of their first chains.",
+            "**No false separation.** A region is an enclosure of the band, so a pair that could overlap is joined: separation is only declared where the enclosures are proven apart."
+          ],
+          "job": "Interaction clusters: chains that must be blended together (13.10, \"Feasibility first\", step 4, G262).",
+          "method": {
+            "links": [
+              "projects/engines/geometry/architecture/13-sweeps-blends-offsets.md",
+              "https://doi.org/10.1145/62.2160"
+            ],
+            "text": "chapter 13.10 of the kernel architecture, \"Feasibility first\", step 4 (`projects/engines/geometry/architecture/13-sweeps-blends-offsets.md`), with the connected parts of the relation found by the disjoint-set structure of Tarjan and van Leeuwen (<https://doi.org/10.1145/62.2160>)."
+          },
+          "path": "geom_blend::cluster",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
+          "cost": "linear in the number of sections. The exact test is a few wide multiplications. No recursion.",
+          "does": "[`classify`] reads an edge's [`Section`]s along its length (each convex, concave or tangent, with certified enclosures of where it starts and ends) and cuts the edge into [`Run`]s of one convexity, with a [`Pinch`] at each place the faces become tangent at a point and the convexity flips: the two parts blend on opposite sides and the ball touches both faces at that one point. Where the faces are tangent along a stretch with a proven extent the edge cannot be blended as one: [`ConvexityError::MixedConvexity`]. [`plane_convexity`] decides the convexity of an edge between two planar faces exactly, from integer normals and the edge's direction, and [`corner_class`] counts the convex and concave edges that meet at a vertex.",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-blend/src/convexity.rs",
+          "guarantees": [
+            "**Exact for planes.** [`plane_convexity`] is the sign of (n₁ × n₂) · d on integers, in wide arithmetic with every step checked: convex when it is positive, concave when negative, [`PlaneEdge::Tangent`] when the normals are parallel and agree, [`PlaneEdge::Opposed`] when they are parallel and opposite (a knife edge, no ball fits).",
+            "**A flip is a point, or it is refused.** A tangent section whose two ends are not proven apart is a pinch at the hull of its ends; one whose ends are proven apart by their enclosures is a stretch, and the edge is [`ConvexityError::MixedConvexity`] with the edge named. A tangent section between runs of the same convexity is no pinch: the edge stays one run.",
+            "**Runs tile the edge.** The runs follow the sections in order, each starting where the one before ends, and together cover every convex or concave section; none overlaps another.",
+            "**Counts are exact.** [`corner_class`] reports how many edges meet at a vertex and how many of them are convex and concave."
+          ],
+          "job": "Convexity along a chain, and where it flips (13.10, \"Feasibility first\", step 2, G262).",
+          "method": {
+            "links": [
+              "projects/engines/geometry/architecture/13-sweeps-blends-offsets.md"
+            ],
+            "text": "chapter 13.10 of the kernel architecture, \"Feasibility first\", step 2 (`projects/engines/geometry/architecture/13-sweeps-blends-offsets.md`), which rejects, as `OpenCascade`'s offset does, an edge partly sharp and partly tangent along a stretch; the sign of (n₁ × n₂) · d is the standard test of a dihedral edge's convexity, here on integers."
+          },
+          "path": "geom_blend::convexity",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        }
+      ],
       "name": "geom-blend",
       "provenance": [],
       "sections": "13.10, 13.21 and 13.22; open question OQ-13.3, in the kernel architecture (`projects/engines/geometry/architecture/`).",
       "spdx": null,
-      "status": "scaffold only; built by pieces G262, G263, G264, G265, G266, G267, G268, G269.",
+      "status": "the feasibility plan's first steps (G262) built; the rest of the plan by G262, and the blends by pieces G263, G264, G265, G266, G267, G268, G269.",
       "summary": "Spare Kit geometry kernel: fillets, chamfers and blends."
     },
     {

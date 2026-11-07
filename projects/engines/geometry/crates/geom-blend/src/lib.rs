@@ -24,6 +24,19 @@
 //! Its direct dependencies are its row of chapter 27's crate table, checked by the
 //! scaffold test in `engine-geometry` (`tests/scaffold`).
 //!
-//! Status: scaffold only; built by pieces G262, G263, G264, G265, G266, G267, G268, G269.
+//! Modules:
+//!
+//! - [`chain`]: edges chained into tangent-continuous chains, tangency certified (G262).
+//! - [`cluster`]: chains joined into interaction clusters (G262).
+//! - [`convexity`]: convexity along an edge, the flips and the corners (G262).
+//!
+//! Status: the feasibility plan's first steps (G262) built; the rest of the plan by G262, and the
+//! blends by pieces G263, G264, G265, G266, G267, G268, G269.
 #![cfg_attr(not(test), no_std)]
 #![forbid(unsafe_code)]
+
+extern crate alloc;
+
+pub mod chain;
+pub mod cluster;
+pub mod convexity;
