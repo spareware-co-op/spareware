@@ -45,8 +45,16 @@ fn text_of(data: &[u8]) -> String {
     let mut text = String::from("sketch v1\nplane lattice 0 0 0 1 0 0 0 1 0 q0\n");
     for p in 0..12_u32 {
         let (x, y) = (bytes.next().unwrap_or(0), bytes.next().unwrap_or(0));
-        let (x, y) = (i32::from(x) - 128, i32::from(y) - 128);
-        let _ = writeln!(text, "entity 1.{p} point {} {}", x * 100, y * 100);
+        let (x, y) = (
+            i32::from(x).saturating_sub(128),
+            i32::from(y).saturating_sub(128),
+        );
+        let _ = writeln!(
+            text,
+            "entity 1.{p} point {} {}",
+            x.saturating_mul(100),
+            y.saturating_mul(100)
+        );
     }
     let _ = writeln!(
         text,
@@ -60,9 +68,13 @@ fn text_of(data: &[u8]) -> String {
     let _ = writeln!(text, "entity 2.3 arc 1.8 700 1.10 1.11");
     for c in 0..MAX_RULES {
         let Some(kind) = bytes.next() else { break };
-        let order = ["g1", "g2", "g3"][usize::from(kind / 8 % 3)];
+        let order = ["g1", "g2", "g3"]
+            .get(usize::from(kind / 8 % 3))
+            .copied()
+            .unwrap_or("g1");
         let end = |bit: u8| if kind & bit == 0 { "start" } else { "finish" };
-        let amount = 100 + u32::from(bytes.next().unwrap_or(0)) * 50;
+        let amount =
+            100_u32.saturating_add(u32::from(bytes.next().unwrap_or(0)).saturating_mul(50));
         let at = f64::from(bytes.next().unwrap_or(0)) / 255.0;
         let _ = match kind % 6 {
             0 => writeln!(
@@ -109,7 +121,7 @@ pub fn check_sketch(sketch: &Sketch) -> Result<(), Finding> {
     let law = |what: &str| Finding::new(what, || format!("{sketch:?}"));
     for spline in [ItemId::new(2, 0), ItemId::new(2, 1)] {
         if let Ok(length) = spline_length(sketch, spline) {
-            if !(length.error >= 0.0) || !length.value.is_finite() {
+            if length.error.is_nan() || length.error < 0.0 || !length.value.is_finite() {
                 return Err(law("a length states a bound that is not negative"));
             }
             let (Ok(first), Ok(last)) = (
@@ -144,7 +156,7 @@ pub fn check_sketch(sketch: &Sketch) -> Result<(), Finding> {
     let Ok(solved) = solve(sketch, &mut meter) else {
         return Ok(());
     };
-    if !(solved.report.largest <= TOLERANCE) {
+    if solved.report.largest.is_nan() || solved.report.largest > TOLERANCE {
         return Err(law(
             "a solved sketch has its residuals within the tolerance",
         ));

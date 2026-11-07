@@ -19,6 +19,13 @@
     clippy::unwrap_used,
     clippy::panic,
     clippy::disallowed_methods,
+    clippy::manual_midpoint,
+    clippy::needless_range_loop,
+    clippy::type_complexity,
+    clippy::expect_used,
+    clippy::too_many_lines,
+    clippy::float_arithmetic,
+    clippy::float_cmp,
     reason = "the corpus generator; the rules are for kernel code"
 )]
 
@@ -168,7 +175,7 @@ fn bits(bytes: &mut Vec<u8>, value: f64) {
 
 fn corpus() -> Vec<u8> {
     let mut bytes = Vec::new();
-    let mut rng = Lcg(0x0220_a);
+    let mut rng = Lcg(8714);
     for round in 0..48 {
         let order = ["g1", "g2", "g3"][round % 3];
         let text = write(&parse(&pulled(0.5 + 1.5 * rng.unit().abs(), order)).unwrap()).unwrap();

@@ -20,6 +20,10 @@
     clippy::cast_precision_loss,
     clippy::many_single_char_names,
     clippy::disallowed_methods,
+    clippy::manual_midpoint,
+    clippy::cast_possible_truncation,
+    clippy::needless_range_loop,
+    clippy::type_complexity,
     reason = "tests, written as the definitions read"
 )]
 
@@ -492,13 +496,15 @@ fn the_plain_layout_rules_have_a_sense_too() {
         );
     }
     let mut text = pulled(0.0, "g1");
-    text.push_str(&format!(
+    writeln!(
+        text,
         "entity 1.20 point {} {}\nentity 1.21 point {} {}\nentity 2.5 line 1.20 1.21 segment\n",
         l[3][0],
         l[3][1],
         l[3][0] - 3.0,
         l[3][1] + 1.0
-    ));
+    )
+    .unwrap();
     text.push_str("constraint 4.2 driving 0 spline-tangent-line 2.0 finish 2.5\n");
     let s = parse(&text).unwrap();
     // The cubic leaves its finish towards its inner point, to the left and up: along the line.

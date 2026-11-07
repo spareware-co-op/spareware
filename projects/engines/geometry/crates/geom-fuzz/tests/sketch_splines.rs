@@ -69,8 +69,12 @@ fn chosen_sketches_keep_every_law() {
     for data in [
         vec![],
         vec![128; 40],
-        (0..64).map(|i| (i * 7 + 90) as u8).collect::<Vec<u8>>(),
-        (0..64).map(|i| (255 - i * 3) as u8).collect::<Vec<u8>>(),
+        (0..64_u8)
+            .map(|i| i.wrapping_mul(7).wrapping_add(90))
+            .collect::<Vec<u8>>(),
+        (0..64_u8)
+            .map(|i| 255_u8.wrapping_sub(i.wrapping_mul(3)))
+            .collect::<Vec<u8>>(),
     ] {
         holds(harness(&data));
     }

@@ -209,7 +209,7 @@ pub fn pulled_joins(class: Class) -> Vec<String> {
     }
     let mut g = rng("spline::pulled_joins", class);
     batch_of(|i| {
-        let order = ["g1", "g2", "g3"][i % 3];
+        let order = ["g1", "g2", "g3"].get(i % 3).copied().unwrap_or("g1");
         Some(pulled(&mut g, order))
     })
 }
