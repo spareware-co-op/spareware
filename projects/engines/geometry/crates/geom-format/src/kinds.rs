@@ -1382,28 +1382,44 @@ fn read_surface_leaf(
             let (center, radius) = (vector(d, m)?, float(d, m)?);
             let (f, domain, factor) = read_round_tail(d, m)?;
             let c = Cylinder::new(center, radius, f, domain)?;
-            SurfaceKind::Cylinder(if factor == 1.0 { c } else { c.with_axial_sign(factor)? })
+            SurfaceKind::Cylinder(if factor == 1.0 {
+                c
+            } else {
+                c.with_axial_sign(factor)?
+            })
         }
         surface::CONE => {
             want(7)?;
             let (center, radius, slope) = (vector(d, m)?, float(d, m)?, float(d, m)?);
             let (f, domain, factor) = read_round_tail(d, m)?;
             let c = Cone::new(center, radius, slope, f, domain)?;
-            SurfaceKind::Cone(if factor == 1.0 { c } else { c.with_axial_sign(factor)? })
+            SurfaceKind::Cone(if factor == 1.0 {
+                c
+            } else {
+                c.with_axial_sign(factor)?
+            })
         }
         surface::SPHERE => {
             want(6)?;
             let (center, radius) = (vector(d, m)?, float(d, m)?);
             let (f, domain, factor) = read_round_tail(d, m)?;
             let c = Sphere::new(center, radius, f, domain)?;
-            SurfaceKind::Sphere(if factor == 1.0 { c } else { c.with_axial_sign(factor)? })
+            SurfaceKind::Sphere(if factor == 1.0 {
+                c
+            } else {
+                c.with_axial_sign(factor)?
+            })
         }
         surface::TORUS => {
             want(7)?;
             let (center, major, minor) = (vector(d, m)?, float(d, m)?, float(d, m)?);
             let (f, domain, factor) = read_round_tail(d, m)?;
             let c = Torus::new(center, major, minor, f, domain)?;
-            SurfaceKind::Torus(if factor == 1.0 { c } else { c.with_axial_sign(factor)? })
+            SurfaceKind::Torus(if factor == 1.0 {
+                c
+            } else {
+                c.with_axial_sign(factor)?
+            })
         }
         surface::AFFINE => {
             want(6)?;
