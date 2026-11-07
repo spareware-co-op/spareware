@@ -568,6 +568,16 @@
           "sha256": "2973f22a918646a7c3cae627a992a239db8656edf9be15b27e6023a0c65b82db"
         },
         {
+          "id": "geom-sketch/solved-splines",
+          "what": "Spline joins of geom-sketch with the solver (piece G220a): 48 cut cubics pulled off their join by an amount from a fixed sequence, with a join of each order, each through sketch v1 and back, solved and measured (every solved value, the report's counts, the measured gaps and the join's sense); and 8 fit-point splines through six points with the middle one dragged, settled (rounds, whether they settled, every solved value).",
+          "check": {
+            "crate": "geom-sketch",
+            "test": "solved_splines_determinism",
+            "function": "solved_splines_golden_hash_is_the_same_on_every_target"
+          },
+          "sha256": "0000000000000000000000000000000000000000000000000000000000000000"
+        },
+        {
           "id": "geom-linalg/dense",
           "what": "The dense decompositions and solves of geom-linalg (piece G49): 256 matrices of every shape from 1 x 1 to 8 x 8 (random, integer, graded to 2^-600 and exactly rank-deficient), each through the pivoted QR, the complete orthogonal decomposition (rank, least squares, null space) and the canonical null space, each square one also through LU (and a solve), both triangular solves, Cholesky of A^T A + I (and a solve) and of A itself, and the tridiagonal solve, and four refusals for want of work: 1568 results in the canonical encoding of tests/dense_determinism.rs.",
           "check": {

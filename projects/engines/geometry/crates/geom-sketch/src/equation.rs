@@ -561,6 +561,11 @@ impl Residual<11, 1> for JoinTangent {
         let (a, b) = x.split_at(5);
         (flat_end(a) || flat_end(b)).then_some(Singular::ZeroLengthLine)
     }
+
+    fn branch<S: Scalar>(&self, x: [S; 11]) -> Result<Option<S>, NumError> {
+        let (a, b, _) = halves::<S, 11, 5>(&x)?;
+        Ok(Some(S::constant(Real::ZERO).sub(dot(jet1(a)?, jet1(b)?)?)?))
+    }
 }
 
 /// G2: G1, and the signed curvatures, each along its own outward direction, cancel: the curves
@@ -583,6 +588,12 @@ impl Residual<19, 2> for JoinCurvature {
     fn singular(&self, x: &[f64; 19]) -> Option<Singular> {
         let (a, b) = x.split_at(9);
         (flat_end(a) || flat_end(b)).then_some(Singular::ZeroLengthLine)
+    }
+
+    fn branch<S: Scalar>(&self, x: [S; 19]) -> Result<Option<S>, NumError> {
+        let (a, b, _) = halves::<S, 19, 9>(&x)?;
+        let ((a1, _), (b1, _)) = (jet2(a)?, jet2(b)?);
+        Ok(Some(S::constant(Real::ZERO).sub(dot(a1, b1)?)?))
     }
 }
 
@@ -609,6 +620,12 @@ impl Residual<29, 3> for JoinCurvatureRate {
         let (a, b) = x.split_at(14);
         (flat_end(a) || flat_end(b)).then_some(Singular::ZeroLengthLine)
     }
+
+    fn branch<S: Scalar>(&self, x: [S; 29]) -> Result<Option<S>, NumError> {
+        let (a, b, _) = halves::<S, 29, 14>(&x)?;
+        let ([a1, _, _], [b1, _, _]) = (jet3(a)?, jet3(b)?);
+        Ok(Some(S::constant(Real::ZERO).sub(dot(a1, b1)?)?))
+    }
 }
 
 /// A spline leaves its end along a line: the sine of the angle between its tangent and the line,
@@ -625,6 +642,12 @@ impl Residual<10, 1> for SplineAlong {
     fn singular(&self, x: &[f64; 10]) -> Option<Singular> {
         let flat_line = x[5] == x[7] && x[6] == x[8];
         (flat_end(x) || flat_line).then_some(Singular::ZeroLengthLine)
+    }
+
+    fn branch<S: Scalar>(&self, x: [S; 10]) -> Result<Option<S>, NumError> {
+        let [p0x, p0y, p1x, p1y, f, ax, ay, bx, by, _] = x;
+        let d = jet1([p0x, p0y, p1x, p1y, f])?;
+        Ok(Some(dot(d, minus([bx, by], [ax, ay])?)?))
     }
 }
 
@@ -1554,8 +1577,40 @@ impl Assembly {
             | ConstraintKind::Perpendicular { .. }
             | ConstraintKind::Sweep { .. } => self.sense(&Turned, row, x),
             ConstraintKind::Heading { .. } => self.sense(&Heading, row, x),
+            ConstraintKind::SplineJoin { order, .. } => match (row.lin, order) {
+                (false, Smoothness::Tangent) => self.sense(&JoinTangent, row, x),
+                (false, Smoothness::Curvature) => self.sense(&JoinCurvature, row, x),
+                (false, Smoothness::CurvatureRate) => self.sense(&JoinCurvatureRate, row, x),
+                (true, Smoothness::Tangent) => self.sense(&LinJoin1, row, x),
+                (true, Smoothness::Curvature) => self.sense(&LinJoin2, row, x),
+                (true, Smoothness::CurvatureRate) => self.sense(&LinJoin3, row, x),
+            },
+            ConstraintKind::SplineTangentLine { .. } if row.lin => self.sense(&LinAlong1, row, x),
+            ConstraintKind::SplineTangentLine { .. } => self.sense(&SplineAlong, row, x),
+            ConstraintKind::SplineAgainst { order, .. } => match (row.round, order) {
+                (false, Smoothness::Tangent) => self.sense(&LinAlong1, row, x),
+                (false, Smoothness::Curvature) => self.sense(&LinAlong2, row, x),
+                (false, Smoothness::CurvatureRate) => self.sense(&LinAlong3, row, x),
+                (true, Smoothness::Tangent) => self.sense(&LinRound1, row, x),
+                (true, Smoothness::Curvature) => self.sense(&LinRound2, row, x),
+                (true, Smoothness::CurvatureRate) => self.sense(&LinRound3, row, x),
+            },
             _ => Ok(None),
         }
+    }
+
+    /// The sense of the constraint `id`, if it has a rule with two branches and interval arithmetic
+    /// can certify one, at the values `x`.
+    ///
+    /// # Errors
+    ///
+    /// [`SketchError::Unknown`] if no rule has that id; as [`Assembly::sense_of`].
+    pub(crate) fn sense_of_id(&self, id: ItemId, x: &[f64]) -> Result<Option<Sense>, SketchError> {
+        let first = self.rows.partition_point(|row| row.id < id);
+        if self.rows.get(first).is_none_or(|row| row.id != id) {
+            return Err(SketchError::Unknown(id));
+        }
+        self.sense_of(first, x)
     }
 
     fn sense<R: Residual<N, E>, const N: usize, const E: usize>(

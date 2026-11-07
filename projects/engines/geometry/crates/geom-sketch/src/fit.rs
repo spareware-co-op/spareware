@@ -35,6 +35,8 @@ use alloc::vec::Vec;
 use geom_nurbs::{Curve, FitVersion, Parametrization};
 use geom_run::{Budget, WorkMeter};
 
+use crate::solve::{Solved, TOLERANCE, solve};
+
 use crate::length::larger;
 use crate::model::{
     Constraint, ConstraintKind, Entity, EntityKind, ItemId, Sketch, SketchError, Standing,
@@ -244,4 +246,109 @@ pub fn reinterpolate(sketch: &Sketch, spline: ItemId) -> Result<Refit, SketchErr
         control_moved,
         parameter_moved,
     })
+}
+
+/// The most re-interpolations [`settle`] makes: a fixed number of rounds, as section 15.2 asks.
+pub const MOST_ROUNDS: u32 = 16;
+
+/// A fit-point spline solved, and whether its parametrisation settled.
+#[derive(Clone, Debug, PartialEq)]
+pub struct Settled {
+    /// The sketch at the last solve. Its through-constraints hold the parameters and its spline
+    /// the knots that solve used: the last parametrisation, stored with the spline.
+    pub solved: Solved,
+    /// How many solves were made, from 1.
+    pub rounds: u32,
+    /// Whether the last re-interpolation moved every control point by less than [`TOLERANCE`], a
+    /// 64th of a grid step (section 15.6): the report's answer to "did it settle".
+    pub settled: bool,
+    /// How far the last re-interpolation would have moved a control point.
+    pub moved: f64,
+}
+
+/// `sketch` with `refit` laid in: the control points where it puts them, the spline on its new
+/// knots, and each fit point's through-constraint at its new parameter.
+fn lay_in(sketch: &Sketch, spline: ItemId, refit: &Refit) -> Result<Sketch, SketchError> {
+    let EntityKind::Spline { degree, points, .. } = &sketch.entity(spline)?.kind else {
+        return Err(SketchError::WrongKind(spline));
+    };
+    let mut values: Vec<f64> = Vec::new();
+    values
+        .try_reserve_exact(sketch.variables()?.len())
+        .map_err(|_| SketchError::OutOfMemory)?;
+    for variable in sketch.variables()? {
+        let mut value = variable.value;
+        if let Some(i) = points.iter().position(|p| *p == variable.owner)
+            && let Some(point) = refit.fit.points.get(i)
+        {
+            value = point
+                .get(usize::from(variable.slot))
+                .copied()
+                .unwrap_or(value);
+        }
+        values.push(value);
+    }
+    let mut next = sketch.with_values(&values)?;
+    next = next.with_entity(Entity {
+        id: spline,
+        kind: EntityKind::Spline {
+            degree: *degree,
+            points: points.clone(),
+            knots: refit.fit.knots.clone(),
+            weights: Vec::new(),
+        },
+        construction: sketch.entity(spline)?.construction,
+    })?;
+    for constraint in sketch.constraints() {
+        if let ConstraintKind::SplineThrough {
+            spline: s, point, ..
+        } = constraint.kind
+            && s == spline
+            && let Some(i) = refit.fit_points.iter().position(|p| *p == point)
+            && let Some(at) = refit.fit.parameters.get(i)
+        {
+            next = next.with_constraint(Constraint {
+                kind: ConstraintKind::SplineThrough {
+                    spline,
+                    point,
+                    at: *at,
+                },
+                ..*constraint
+            })?;
+        }
+    }
+    Ok(next)
+}
+
+/// Solves `sketch` with the fit-point spline `spline` in it, and re-interpolates the spline through
+/// its fit points as the solve left them, solving again, until the control points move by less than
+/// [`TOLERANCE`] or [`MOST_ROUNDS`] rounds are used (section 15.2). Within each solve the
+/// parametrisation and knots are frozen, so the control points are a fixed linear function of the
+/// fit points and the Jacobian is exact.
+///
+/// # Errors
+///
+/// What [`solve`] and [`reinterpolate`] refuse.
+pub fn settle(
+    sketch: &Sketch,
+    spline: ItemId,
+    meter: &mut WorkMeter<'_>,
+) -> Result<Settled, SketchError> {
+    let mut current = sketch.clone();
+    let mut round = 0_u32;
+    loop {
+        round = round.checked_add(1).ok_or(SketchError::Internal)?;
+        let solved = solve(&current, meter)?;
+        let refit = reinterpolate(&solved.sketch, spline)?;
+        let done = refit.control_moved < TOLERANCE;
+        if done || round >= MOST_ROUNDS {
+            return Ok(Settled {
+                moved: refit.control_moved,
+                solved,
+                rounds: round,
+                settled: done,
+            });
+        }
+        current = lay_in(&solved.sketch, spline, &refit)?;
+    }
 }

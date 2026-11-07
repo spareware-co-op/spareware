@@ -1602,6 +1602,53 @@ impl Sketch {
         }
     }
 
+    /// This sketch with the entity that has `entity`'s id replaced by `entity`, which must be the same
+    /// kind of thing and name only entities already here (a re-interpolated spline's new knots, say).
+    ///
+    /// # Errors
+    ///
+    /// [`SketchError::Unknown`] if nothing has that id; [`SketchError::WrongKind`] for another kind;
+    /// what [`Sketch::add_entity`] refuses.
+    pub fn with_entity(&self, entity: Entity) -> Result<Sketch, SketchError> {
+        let mut sketch = self.clone();
+        let place = sketch
+            .entities
+            .binary_search_by_key(&entity.id, |e| e.id)
+            .map_err(|_| SketchError::Unknown(entity.id))?;
+        let held = sketch
+            .entities
+            .get_mut(place)
+            .ok_or(SketchError::Internal)?;
+        if core::mem::discriminant(&held.kind) != core::mem::discriminant(&entity.kind) {
+            return Err(SketchError::WrongKind(entity.id));
+        }
+        entity.kind.check(self)?;
+        *held = entity;
+        for e in &sketch.entities {
+            e.kind.check(&sketch)?;
+        }
+        Ok(sketch)
+    }
+
+    /// This sketch with the constraint that has `constraint`'s id replaced by `constraint`.
+    ///
+    /// # Errors
+    ///
+    /// [`SketchError::Unknown`] if nothing has that id; what [`Sketch::add_constraint`] refuses.
+    pub fn with_constraint(&self, constraint: Constraint) -> Result<Sketch, SketchError> {
+        let mut sketch = self.clone();
+        let place = sketch
+            .constraints
+            .binary_search_by_key(&constraint.id, |c| c.id)
+            .map_err(|_| SketchError::Unknown(constraint.id))?;
+        sketch.check_constraint(&constraint)?;
+        *sketch
+            .constraints
+            .get_mut(place)
+            .ok_or(SketchError::Internal)? = constraint;
+        Ok(sketch)
+    }
+
     /// This sketch with `values`, one for each of [`Sketch::variables`], in that order.
     ///
     /// # Errors

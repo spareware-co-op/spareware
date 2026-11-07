@@ -2589,9 +2589,23 @@ pub mod spline {
         run
     }
 
+    #[library_benchmark(teardown = verify)]
+    #[bench::typical(leak("spline/solve_join/typical"))]
+    fn solve_join(run: &'static mut Named) -> &'static mut Named {
+        run.bench.measure();
+        run
+    }
+
+    #[library_benchmark(teardown = verify)]
+    #[bench::typical(leak("spline/settle_fit/typical"))]
+    fn settle_fit(run: &'static mut Named) -> &'static mut Named {
+        run.bench.measure();
+        run
+    }
+
     library_benchmark_group!(
         name = spline;
-        benchmarks = length, rational_rules
+        benchmarks = length, solve_join, settle_fit, rational_rules
     );
 }
 

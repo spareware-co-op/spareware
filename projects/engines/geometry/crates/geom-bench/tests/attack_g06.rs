@@ -1446,6 +1446,28 @@ fn direct_digest(group: &str, name: &str, class: Class) -> Option<Digest> {
                 geom_sketch::length::spline_length(&sketch, geom_sketch::model::ItemId::new(2, 0))?;
             Ok::<_, geom_sketch::model::SketchError>([l.value, l.error])
         })),
+        ("spline", "solve_join") => fold(inputs::spline::pulled_joins(class).iter().map(|text| {
+            let sketch = geom_sketch::text::parse(text)?;
+            let mut meter = geom_run::WorkMeter::new(geom_run::Budget::UNLIMITED);
+            let (solved, joins) = geom_sketch::smooth::solve_and_measure(&sketch, &mut meter)?;
+            let gap = joins.first().map_or(0.0, |j| j.continuity.tangent);
+            let iterations = u32::try_from(solved.report.iterations).map_or(f64::MAX, f64::from);
+            Ok::<_, geom_sketch::model::SketchError>([solved.report.largest, iterations, gap])
+        })),
+        ("spline", "settle_fit") => fold(inputs::spline::dragged_fits(class).iter().map(|text| {
+            let sketch = geom_sketch::text::parse(text)?;
+            let mut meter = geom_run::WorkMeter::new(geom_run::Budget::UNLIMITED);
+            let s = geom_sketch::fit::settle(
+                &sketch,
+                geom_sketch::model::ItemId::new(2, 0),
+                &mut meter,
+            )?;
+            Ok::<_, geom_sketch::model::SketchError>([
+                f64::from(s.rounds),
+                f64::from(u8::from(s.settled)),
+                s.moved,
+            ])
+        })),
         ("spline", "rational_rules") => {
             fold(inputs::spline::rational_rules(class).iter().map(|text| {
                 let sketch = geom_sketch::text::parse(text)?;

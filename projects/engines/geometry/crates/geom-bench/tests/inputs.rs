@@ -2313,6 +2313,8 @@ fn spline_typical_batches_all_succeed() {
     use geom_bench::inputs::spline as m;
     use geom_bench::kernels::spline as k;
     all_ok("length", k::lengths, &m::lengths(Typical));
+    all_ok("solve_join", k::solved_joins, &m::pulled_joins(Typical));
+    all_ok("settle_fit", k::settled_fits, &m::dragged_fits(Typical));
     all_ok(
         "rational_rules",
         k::rational_rules,
