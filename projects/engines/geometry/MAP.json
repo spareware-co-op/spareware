@@ -10964,7 +10964,7 @@
           "family": [],
           "file": "projects/engines/geometry/crates/geom-test/src/bin/oracle.rs",
           "guarantees": [
-            "nothing here runs an oracle, and only `triage` writes a file: the register and the one fixture. Exit codes: 0 when everything checked holds; 1 when a check fails or a new signature appears; 2 for a usage error, or a file or a line that cannot be read (a broken harness is never a pass)."
+            "nothing here runs an oracle, and only `triage` and `compare --report` write a file: the register and the one fixture, and the report. Exit codes: 0 when everything checked holds; 1 when a check fails, a new signature appears or a record cannot cover a job; 2 for a usage error, or a file or a line that cannot be read (a broken harness is never a pass)."
           ],
           "job": "`oracle`: the outside oracles' tool: list the catalogue, check it, write a night's jobs, compare the answers, and record a triage.",
           "method": {
@@ -11277,7 +11277,7 @@
         },
         {
           "cost": "one match per operation, plus the operation, plus one write of each result to hash it.",
-          "does": "[`Kernel`] finds an operation by its name and version ([`Call::read`]), takes the bodies it names from the results so far, runs it, and keeps each result under its content ID, so a later operation of the log can name it. Each piece that adds an operation adds its row to [`Call`].",
+          "does": "[`Kernel`] finds an operation by its name and version ([`Call::read`]), takes the bodies it names from the results so far, runs it, and keeps each result under its content ID, so a later operation of the log can name it. Each piece that adds an operation adds its row to [`Call`]. A case an oracle raised on a function no operation holds yet replays through `oracle::geomdl`.",
           "family": [],
           "file": "projects/engines/geometry/crates/geom-test/src/fixture/kernel.rs",
           "guarantees": [
@@ -12306,7 +12306,9 @@
             "**Never trusted as truth, never linked, never shipped** (28.10): an oracle only ever raises a difference, ground truth settles it, and [`catalogue::linked`] fails a build that links one.",
             "**The oracle sees what the kernel saw**: [`exact`] writes each input so it reads back to the same bits.",
             "**The allowance never grows with the oracle's tolerance**: it is capped at our bound plus the fit bound ([`compare::Allowance::total`]).",
-            "**Each signature is judged once**: a nightly run fails only on a new one."
+            "**Each signature is judged once**: a nightly run fails only on a new one, or on a job its record cannot cover.",
+            "**Nothing hides a wrong answer of ours**: a register entry rests on what the exact reference found, a \"theirs\" carries a reproducing input and the pinned oracle it was reproduced on, a job found ours fails the night under any record, and the only waiver is for lost coverage ([`triage`], [`waiver`]).",
+            "**The comparison is shown to see**: `compare --perturb` moves each agreeing answer and fails unless every one is caught ([`compare::perturbed`])."
           ],
           "job": "Differential testing against outside oracles (chapter 28.10; piece G113): the same job through another system, and an investigation of every difference.",
           "method": {
@@ -12317,7 +12319,18 @@
             "text": "chapter 28.10 and decision 32.6 (`projects/engines/geometry/architecture/28-testing.md`, `projects/engines/geometry/architecture/32-decisions.md`)."
           },
           "path": "geom_test::oracle",
-          "provenance": [],
+          "provenance": [
+            {
+              "licence": "Apache-2.0",
+              "link": "https://github.com/tangency-labs/solidcore/blob/b4de2149aadbd737268091c51d8390a7d3cdda70/crates/difftest/README.md",
+              "method_note": null,
+              "name": "solidcore",
+              "notice": [],
+              "pinned": true,
+              "purpose": "for the whole of the above. No code copied.",
+              "take": "port-method"
+            }
+          ],
           "spdx": null,
           "target": "lib"
         },
@@ -12350,17 +12363,29 @@
           "guarantees": [
             "**The cap holds.** [`Allowance::total`] never exceeds our bound plus the fit bound, whatever the oracle states: anything beyond is settled by recomputing the case in high precision, never accepted because the oracle's own tolerance grew.",
             "**A pass is never lost to rounding, and a difference never hidden by it**: the allowance is rounded up and the gap rounded down, so [`within`] says \"differs\" only when the two doubles are truly further apart than the allowance's real value.",
-            "**Not finite is a difference.**"
+            "**Not finite is a difference.**",
+            "**The comparison can be shown to see a difference**: [`perturbed`] moves one value by far more than any allowance a job states, and the night's `--perturb` run fails unless every moved answer is caught, so a comparison that has gone blind fails loudly instead of passing everything."
           ],
           "job": "Comparing a kernel result with an oracle's (chapter 28.10; piece G113).",
           "method": {
             "links": [
               "projects/engines/geometry/architecture/28-testing.md"
             ],
-            "text": "chapter 28.10's comparisons (`projects/engines/geometry/architecture/28-testing.md`), with directed rounding by one unit in the last place on each sum."
+            "text": "chapter 28.10's comparisons (`projects/engines/geometry/architecture/28-testing.md`), with directed rounding by one unit in the last place on each sum. The sensitivity check follows solidcore's difftest `--perturb` (change one item of each case's output; pass only if every changed case is caught), with its step in relative terms, 1e-6 of the value or of one, far above any bound a job here states."
           },
           "path": "geom_test::oracle::compare",
-          "provenance": [],
+          "provenance": [
+            {
+              "licence": "Apache-2.0",
+              "link": "https://github.com/tangency-labs/solidcore/blob/b4de2149aadbd737268091c51d8390a7d3cdda70/crates/difftest/README.md",
+              "method_note": null,
+              "name": "solidcore",
+              "notice": [],
+              "pinned": true,
+              "purpose": "for the perturbation check of the comparator itself (the README's \"Perturbation\" section). No code copied.",
+              "take": "port-method"
+            }
+          ],
           "spdx": null,
           "target": "lib"
         },
@@ -12415,18 +12440,63 @@
           "file": "projects/engines/geometry/crates/geom-test/src/oracle/triage.rs",
           "guarantees": [
             "**One record per signature**, and every record names its fixture.",
-            "**\"Theirs\" names its report**, and \"ours\" its fix: neither can be recorded empty.",
-            "**The nightly run fails only on a new signature**, so a known difference never hides a new one and is never argued twice."
+            "**\"Theirs\" carries its evidence, \"ours\" names its fix, \"undecided\" the question**: none can be recorded empty.",
+            "**A register entry never clears a wrong answer of ours**: [`Register::contradicts`].",
+            "**The nightly run fails only on a new signature or a contradiction**, so a known difference never hides a new one and is never argued twice."
           ],
           "job": "Triage: every difference ends in one of four outcomes, each a fixture, and each signature is recorded once (chapter 28.10; piece G113).",
           "method": {
             "links": [
               "projects/engines/geometry/architecture/28-testing.md"
             ],
-            "text": "chapter 28.10's triage (`projects/engines/geometry/architecture/28-testing.md`)."
+            "text": "chapter 28.10's triage (`projects/engines/geometry/architecture/28-testing.md`). That a difference blamed on the outside tool needs a confirmed upstream report and a reproducing input, and that listing a case never makes it pass, follows solidcore's difftest (its `known.rs` and the regression gate in its `baseline.rs`), re-derived against exact truth: its `cpp_defect` stands on the C++ being \"verified wrong\", ours on the exact reference settling it."
           },
           "path": "geom_test::oracle::triage",
-          "provenance": [],
+          "provenance": [
+            {
+              "licence": "Apache-2.0",
+              "link": "https://github.com/tangency-labs/solidcore/blob/b4de2149aadbd737268091c51d8390a7d3cdda70/crates/difftest/src/known.rs",
+              "method_note": null,
+              "name": "solidcore",
+              "notice": [],
+              "pinned": true,
+              "purpose": "for the evidence a defect blamed on the reference must carry (a confirmed upstream record and a record that names the case) and for never letting a listed case count as a pass. No code copied.",
+              "take": "port-method"
+            }
+          ],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
+          "cost": "linear in the jobs for a report, in the cells for a ratchet and in the waivers times the violations for [`apply`].",
+          "does": "[`Report::from_night`] folds a night's judged jobs into one [`Report`], a cell for each operation and input family with its jobs, its agreements and what the differences were, settled or not ([`Settled`]). [`ratchet`] holds a night's report to the earlier one: a cell the earlier night covered must still be covered, so a generator that quietly stops drawing a family cannot make a night greener. A [`Violation`] is waived only by an entry of `oracles/waivers.toml` ([`WAIVERS_PATH`], [`Waivers`]), and [`apply`] says what was waived, what was not, and which waivers no longer cover anything.",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-test/src/oracle/waiver.rs",
+          "guarantees": [
+            "**A waiver can never hide a wrong answer of ours.** The only check there is to waive is [`Check::Coverage`], a cell that went missing. A difference has no waiver: it is a signature in the triage register, held to what the exact reference found ([`super::triage::Register::contradicts`]), and no field of a waiver names a signature, a kind or a job.",
+            "**Nothing a typing mistake widens.** An unknown field, a blank operation or family, a missing or blank reason, an unknown check, a format that is not 1 and a waiver given twice are each an error: a misspelt `family` would otherwise read as absent, which covers every family.",
+            "**A waiver is a reviewed exception, not a standing one.** [`apply`] lists a waiver that covers no violation as unused, so one left behind after its cause is gone is seen."
+          ],
+          "job": "The night's report, the ratchet against the last one, and the waivers a reviewer can read (chapter 28.10; piece G113).",
+          "method": {
+            "links": [
+              "projects/engines/geometry/architecture/"
+            ],
+            "text": "chapter 28.10's nightly run and decision 32.6 (`projects/engines/geometry/architecture/`). The report-to-report ratchet and the waiver file follow solidcore's difftest: its regression gate compares a run with the earlier run's reports and waives a violation only by an entry that names the unit, the check and optionally the case, with a reason (`baseline.rs`, `Waivers`; README, \"Regression gate\"). Here the cell stands where its unit and case stood, and the pass/fail ratchet it also holds is carried by the triage register instead."
+          },
+          "path": "geom_test::oracle::waiver",
+          "provenance": [
+            {
+              "licence": "Apache-2.0",
+              "link": "https://github.com/tangency-labs/solidcore/blob/b4de2149aadbd737268091c51d8390a7d3cdda70/crates/difftest/src/baseline.rs",
+              "method_note": null,
+              "name": "solidcore",
+              "notice": [],
+              "pinned": true,
+              "purpose": "for the ratchet against the earlier report, the waiver's fields and its strict reading, and the rule that a waiver is removed once it covers nothing. No code copied.",
+              "take": "port-method"
+            }
+          ],
           "spdx": null,
           "target": "lib"
         },
@@ -14069,6 +14139,40 @@
       "take": "port-method",
       "used_by": [
         "projects/engines/geometry/crates/geom-test/src/map/classes.rs"
+      ]
+    },
+    {
+      "licence": "Apache-2.0",
+      "link": "https://github.com/tangency-labs/solidcore/blob/b4de2149aadbd737268091c51d8390a7d3cdda70/crates/difftest/README.md",
+      "method_note": null,
+      "name": "solidcore",
+      "pinned": true,
+      "take": "port-method",
+      "used_by": [
+        "projects/engines/geometry/crates/geom-test/src/oracle.rs",
+        "projects/engines/geometry/crates/geom-test/src/oracle/compare.rs"
+      ]
+    },
+    {
+      "licence": "Apache-2.0",
+      "link": "https://github.com/tangency-labs/solidcore/blob/b4de2149aadbd737268091c51d8390a7d3cdda70/crates/difftest/src/baseline.rs",
+      "method_note": null,
+      "name": "solidcore",
+      "pinned": true,
+      "take": "port-method",
+      "used_by": [
+        "projects/engines/geometry/crates/geom-test/src/oracle/waiver.rs"
+      ]
+    },
+    {
+      "licence": "Apache-2.0",
+      "link": "https://github.com/tangency-labs/solidcore/blob/b4de2149aadbd737268091c51d8390a7d3cdda70/crates/difftest/src/known.rs",
+      "method_note": null,
+      "name": "solidcore",
+      "pinned": true,
+      "take": "port-method",
+      "used_by": [
+        "projects/engines/geometry/crates/geom-test/src/oracle/triage.rs"
       ]
     },
     {

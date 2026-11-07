@@ -37,9 +37,9 @@ use geom_op::{Exactness, NameSet, OpId, OpPath};
 use geom_run::{Budget, WorkMeter};
 use serde::{Deserialize, Serialize};
 
-use super::compare::{Allowance, within};
+use super::compare::{Allowance, perturbed, within};
 use super::exact::{float, read_float};
-use super::triage::Signature;
+use super::triage::{Settled, Signature};
 use crate::fixture::Spend;
 use crate::fixture::run::{Ran, Step};
 use crate::golden::Sha256;
@@ -372,13 +372,16 @@ pub enum Compared {
     Differ {
         /// Its signature.
         signature: Signature,
-        /// What the exact reference found: whether the kernel is within its bound of the truth.
+        /// What the exact reference found, in words.
         settled: String,
+        /// What it found, for the register's rules: [`Settled::Unsettled`] where the reference was
+        /// not run.
+        verdict: Settled,
     },
 }
 
-/// The difference `job` raised, of `kind`, with `settled`.
-fn difference(job: &Job, kind: &str, settled: String) -> Compared {
+/// The difference `job` raised, of `kind`, with `settled` in words and as a `verdict`.
+fn difference(job: &Job, kind: &str, settled: String, verdict: Settled) -> Compared {
     Compared::Differ {
         signature: Signature {
             operation: job.op.name().to_owned(),
@@ -387,6 +390,7 @@ fn difference(job: &Job, kind: &str, settled: String) -> Compared {
             family: job.family.clone(),
         },
         settled,
+        verdict,
     }
 }
 
@@ -420,12 +424,13 @@ fn reference(job: &Job, input: &Parsed) -> Result<Spline, String> {
     clippy::arithmetic_side_effects,
     reason = "exact rationals, which cannot overflow"
 )]
-/// Settles a point difference against the exact curve: which side is within `limit` of the truth.
+/// Settles a point difference against the exact curve: whether the kernel's values, and whether the
+/// oracle's, lie farther than `limit` from the truth, in that order.
 ///
 /// # Errors
 ///
 /// A job the exact reference cannot read.
-pub fn settle(job: &Job, ours: &[f64], theirs: &[f64], limit: f64) -> Result<String, String> {
+pub fn sides(job: &Job, ours: &[f64], theirs: &[f64], limit: f64) -> Result<(bool, bool), String> {
     let input = parse(job)?;
     let spline = reference(job, &input)?;
     let truth = spline
@@ -442,13 +447,95 @@ pub fn settle(job: &Job, ours: &[f64], theirs: &[f64], limit: f64) -> Result<Str
         }
         Ok(false)
     };
-    Ok(match (far(ours)?, far(theirs)?) {
+    Ok((far(ours)?, far(theirs)?))
+}
+
+/// What [`sides`] found, in words.
+#[must_use]
+pub const fn words(kernel_far: bool, oracle_far: bool) -> &'static str {
+    match (kernel_far, oracle_far) {
         (false, true) => "theirs: the kernel is within its bound of the truth, and geomdl is not",
         (true, false) => "ours: geomdl is within the bound of the truth, and the kernel is not",
         (true, true) => "ours: neither is within the bound of the truth",
         (false, false) => "both within the bound of the truth",
     }
-    .to_owned())
+}
+
+/// What [`sides`] found, as the register's rules read it.
+#[must_use]
+pub const fn verdict(kernel_far: bool, oracle_far: bool) -> Settled {
+    match (kernel_far, oracle_far) {
+        (false, true) => Settled::Theirs,
+        (false, false) => Settled::Both,
+        (true, _) => Settled::Ours,
+    }
+}
+
+/// Settles a point difference against the exact curve, in words: which side is within `limit` of
+/// the truth.
+///
+/// # Errors
+///
+/// A job the exact reference cannot read.
+pub fn settle(job: &Job, ours: &[f64], theirs: &[f64], limit: f64) -> Result<String, String> {
+    let (kernel_far, oracle_far) = sides(job, ours, theirs, limit)?;
+    Ok(words(kernel_far, oracle_far).to_owned())
+}
+
+/// What [`sensitivity`] found.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct Sensitivity {
+    /// The agreeing answers that had a value to move, each moved once.
+    pub moved: usize,
+    /// How many of those the comparison told from the original.
+    pub caught: usize,
+    /// The agreeing answers with nothing to move.
+    pub unmoved: usize,
+    /// The jobs whose moved answer still agreed: a comparison that cannot see them has gone blind.
+    pub missed: Vec<u64>,
+}
+
+/// Moves one value of every answer `judge` agrees with and asks `judge` again: it must tell each
+/// moved answer from the original (solidcore's `--perturb`).
+///
+/// # Errors
+///
+/// What `judge` says of a job or answer it cannot read.
+pub fn sensitivity<F>(jobs: &[Job], answers: &[Answer], mut judge: F) -> Result<Sensitivity, String>
+where
+    F: FnMut(&Job, &Answer) -> Result<Compared, String>,
+{
+    let mut found = Sensitivity::default();
+    for (job, answer) in jobs.iter().zip(answers) {
+        if judge(job, answer)? != Compared::Agree {
+            continue;
+        }
+        let Some(other) = perturb(answer) else {
+            found.unmoved = found.unmoved.saturating_add(1);
+            continue;
+        };
+        found.moved = found.moved.saturating_add(1);
+        if matches!(judge(job, &other)?, Compared::Differ { .. }) {
+            found.caught = found.caught.saturating_add(1);
+        } else {
+            found.missed.push(job.id);
+        }
+    }
+    Ok(found)
+}
+
+/// `answer` with its first value moved by [`perturbed`], for the sensitivity check: a comparison
+/// that agrees with it has gone blind. `None` for a refusal, an empty answer or a value that cannot
+/// be read, which have nothing to move.
+#[must_use]
+pub fn perturb(answer: &Answer) -> Option<Answer> {
+    let mut values = answer.values.clone()?;
+    let first = values.first_mut()?;
+    *first = float(perturbed(read_float(first)?))?;
+    Some(Answer {
+        id: answer.id,
+        values: Some(values),
+    })
 }
 
 /// Judges one answer.
@@ -483,6 +570,7 @@ pub fn judge(job: &Job, answer: &Answer) -> Result<Compared, String> {
                 job,
                 "refused",
                 "one side refused the job".to_owned(),
+                Settled::Unsettled,
             ));
         }
         (Some((ours, size)), Some(theirs)) => (ours, size, theirs),
@@ -492,6 +580,7 @@ pub fn judge(job: &Job, answer: &Answer) -> Result<Compared, String> {
             job,
             "shape",
             format!("{} values and {}", ours.len(), theirs.len()),
+            Settled::Unsettled,
         ));
     }
     let stated = bound(job, size);
@@ -508,10 +597,17 @@ pub fn judge(job: &Job, answer: &Answer) -> Result<Compared, String> {
     {
         return Ok(Compared::Agree);
     }
-    let settled = if job.op == Op::Point {
-        settle(job, &ours, &theirs, stated)?
+    let (settled, verdict) = if job.op == Op::Point {
+        let (kernel_far, oracle_far) = sides(job, &ours, &theirs, stated)?;
+        (
+            words(kernel_far, oracle_far).to_owned(),
+            verdict(kernel_far, oracle_far),
+        )
     } else {
-        "beyond the allowance; the exact reference settles a point only".to_owned()
+        (
+            "beyond the allowance; the exact reference settles a point only".to_owned(),
+            Settled::Unsettled,
+        )
     };
-    Ok(difference(job, "value", settled))
+    Ok(difference(job, "value", settled, verdict))
 }
