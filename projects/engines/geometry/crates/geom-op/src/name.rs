@@ -199,11 +199,13 @@ impl Role {
     }
 }
 
-/// The roles a boolean qualifies names by an operand's key (chapter 11.9): `operand(key)`,
-/// `seed(key)` and `tool(key)`. A key is an element's permanent ID or an `OpPath` (11.1), written
-/// in a [`RoleArg::Name`] slot under `NameScheme v1` but not a name: no name graph holds it, so a
-/// walk over a name's parents skips it.
-pub const KEYED_ROLES: [&str; 3] = ["operand", "seed", "tool"];
+/// The roles whose argument is a key rather than a name: those a boolean qualifies names by an
+/// operand's key (chapter 11.9), `operand(key)`, `seed(key)` and `tool(key)`, a key there being an
+/// element's permanent ID or an `OpPath` (11.1); and `survey.point(key)`, a survey point's stable
+/// record key (chapter 17.2, piece G361). A key is written in a [`RoleArg::Name`] slot under
+/// `NameScheme v1` but is not a name: no name graph holds it, so a walk over a name's parents
+/// skips it.
+pub const KEYED_ROLES: [&str; 4] = ["operand", "seed", "survey.point", "tool"];
 
 /// Which side of the cutting faces a split piece lies on.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]

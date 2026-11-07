@@ -158,7 +158,7 @@ impl NameGraph {
 #[must_use]
 pub fn parents(name: &TopoName) -> Vec<NameId> {
     match name {
-        // A keyed role's argument is an operand's key, not a name (`geom_op::KEYED_ROLES`).
+        // A keyed role's argument is a key, not a name (`geom_op::KEYED_ROLES`).
         TopoName::Created { role, from, .. } => role
             .args()
             .iter()

@@ -106,6 +106,18 @@ impl<const D: usize> Composite<D> {
     ///
     /// As [`Composite::new`]; [`CurveError::NotFinite`] for a start that is not finite.
     pub fn starting_at(segments: Vec<Trimmed<D>>, start: f64) -> Result<Composite<D>, CurveError> {
+        Composite::starting_within(segments, start, 0.0)
+    }
+
+    /// The composite of `segments`, starting at parameter `start`, whose joints may be apart by at
+    /// most `allow` beyond overlapping: for surveyed linework (`crate::linework`), whose pieces
+    /// meet at a surveyed point only within their certified bounds of it. Each joint's gap is
+    /// recorded as for any composite.
+    pub(crate) fn starting_within(
+        segments: Vec<Trimmed<D>>,
+        start: f64,
+        allow: f64,
+    ) -> Result<Composite<D>, CurveError> {
         if !start.is_finite() {
             return Err(CurveError::NotFinite);
         }
@@ -117,7 +129,7 @@ impl<const D: usize> Composite<D> {
             s += b - a;
             starts.push(s);
         }
-        Composite::assemble(segments, starts, 0.0)
+        Composite::assemble(segments, starts, allow)
     }
 
     /// The composite of `segments` over `starts` (increasing and finite, or

@@ -47,6 +47,10 @@
 //! positions by certified Gauss–Legendre quadrature, a part of its parent run either way, with a
 //! certified NURBS form and typed transforms.
 //!
+//! Surveyed 3D linework (piece G361): [`linework()`] in [`linework`](mod@linework), a figure's
+//! points joined by lines, arcs in plan on a steady grade (helices and level arcs) and smooth
+//! NURBS figures into one [`Composite`] that passes within `ε_fit` of every point, certified.
+//!
 //! Enclosures (piece G67): the closed-form extents in one parameter ([`extent`]), from which every
 //! analytic kind's bound and derivative bounds come (through `form`); a transition's bound and
 //! derivative bounds over a span on pieces of a sixteenth of a half-turn of heading; the Fresnel
@@ -58,7 +62,8 @@
 //! the bulge, trimmed, composite, offset and curve-on-surface kinds (G62), the transition kind,
 //! its evaluation (G63) and its conversion, split, reversal and transforms (G64), the analytic
 //! and transcendental enclosures (G67), and rational curves' higher derivative bounds started from
-//! their control points (G68) built; the other kinds to come in G175, G361 and G371.
+//! their control points (G68) built, and surveyed linework (G361); the other kinds to come in G175
+//! and G371.
 #![cfg_attr(not(test), no_std)]
 #![forbid(unsafe_code)]
 
@@ -79,6 +84,7 @@ pub mod helix;
 pub mod involute;
 mod jet;
 pub mod line;
+pub mod linework;
 pub mod map;
 pub mod moved;
 mod nurbs;
@@ -102,6 +108,7 @@ pub use frame::Frame;
 pub use helix::Helix;
 pub use involute::Involute;
 pub use line::{Extent, Line};
+pub use linework::{Linework, LineworkError, Segment, linework};
 pub use map::{LocalMap, MapPiece, NurbsForm, ParamMap};
 pub use offset::{Offset, OffsetLaw, Station};
 pub use on_surface::{OnSurface, SurfaceRef};
