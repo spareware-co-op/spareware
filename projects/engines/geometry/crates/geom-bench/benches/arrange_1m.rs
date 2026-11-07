@@ -128,8 +128,21 @@ fn geom_2d_exact_arrangement(bencher: Bencher) {
         });
 }
 
+/// The most segments the iOverlay row runs on unless `ARRANGE_IOVERLAY_ALL` is set: on this layout
+/// (short segments spread over a large square) iOverlay 9.1.0 asks for 20 GB at once from about
+/// 200,000 segments and aborts on a machine with less, so the row is skipped past 100,000 to keep
+/// a default run from taking the machine down. The measured rows are in the pull request.
+const IOVERLAY_SAFE: usize = 100_000;
+
 #[divan::bench(sample_count = 3, sample_size = 1)]
 fn i_overlay_edge_overlay(bencher: Bencher) {
+    if count() > IOVERLAY_SAFE && std::env::var_os("ARRANGE_IOVERLAY_ALL").is_none() {
+        eprintln!(
+            "i_overlay row skipped above {IOVERLAY_SAFE} segments (set ARRANGE_IOVERLAY_ALL to run it)"
+        );
+        bencher.bench_local(|| 0_usize);
+        return;
+    }
     let segs = drawing();
     bencher
         .counter(ItemsCount::new(segs.len()))
