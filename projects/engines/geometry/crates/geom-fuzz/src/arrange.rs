@@ -24,6 +24,11 @@
 //! Cost: constant per case, at most [`MAX_SEGMENTS`] segments; at most [`MAX_INPUT_BYTES`] bytes
 //! read.
 
+#![allow(
+    clippy::many_single_char_names,
+    reason = "a, b, e, f, c, v, x, y and w are the formulas' own letters"
+)]
+
 use std::collections::BTreeSet;
 
 use geom_2d::arrange::{Arrangement, arrange};
