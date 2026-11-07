@@ -644,6 +644,9 @@ jobs:
       # -Zmiri-ignore-leaks` (rayon-rs/rayon, .github/workflows/ci.yaml). Every other check of
       # Miri stays on: data races, use-after-free, uninitialised and out-of-bounds reads, and Tree
       # Borrows' own aliasing rules.
+      # geom-pool runs its tasks with rayon's `join` and not a scope: rayon-core 1.13.0's
+      # `Scope::spawn` frees a scope under a finishing job's protected reference, which Tree Borrows
+      # rejects under some schedules (rayon-rs/rayon#1328, fixed by #1330, in no release yet).
       - name: geom-pool's tests under Miri with Tree Borrows
         if: env.NEEDED == 'true' && matrix.partition == 1
         env:
