@@ -481,3 +481,57 @@ fn fit_data_the_interpolation_refuses_is_refused() {
     assert!(fit::author(&s, &[id(1, 0), id(1, 1)], 3, id(2, 0), 4, 0).is_err());
     assert!(fit::author(&s, &[id(1, 0), id(1, 9)], 1, id(2, 0), 4, 0).is_err());
 }
+
+#[test]
+fn the_new_rules_and_helpers_refuse_what_is_not_a_spline_or_not_a_curve() {
+    let base = quarters();
+    let s = parse(&base).unwrap();
+    // A point is no spline.
+    let point = id(1, 0);
+    assert!(matches!(
+        s.spline_is_rational(point),
+        Err(SketchError::WrongKind(_))
+    ));
+    assert!(matches!(
+        s.spline_curve(point),
+        Err(SketchError::WrongKind(_))
+    ));
+    assert!(matches!(
+        spline_length(&s, point),
+        Err(SketchError::WrongKind(_))
+    ));
+    assert!(matches!(
+        end_jets(&s, point, SplineEnd::Start, 1),
+        Err(SketchError::WrongKind(_))
+    ));
+    // Orders the jets do not give.
+    for level in [0, 4] {
+        assert!(matches!(
+            end_jets(&s, id(2, 0), SplineEnd::Start, level),
+            Err(SketchError::WrongKind(_))
+        ));
+    }
+    // Rules whose names are the wrong kind of thing.
+    for rule in [
+        "spline-against 2.0 start 1.0 start g1",
+        "spline-against 1.0 start 2.2 start g1",
+        "spline-length 1.0 5",
+        "spline-length 2.0 0",
+        "spline-length 2.0 -3",
+        "spline-through 1.0 1.0 0.5",
+        "spline-through 2.0 2.0 0.5",
+        "spline-through 2.0 1.0 -0.5",
+    ] {
+        let text = format!("{base}constraint 3.0 driving 0 {rule}\n");
+        assert!(parse(&text).is_err(), "{rule}");
+    }
+    // A fit-point spline's helpers refuse what is not one.
+    assert!(matches!(
+        fit::reinterpolate(&s, point),
+        Err(SketchError::WrongKind(_))
+    ));
+    assert!(matches!(
+        fit::reinterpolate(&s, id(2, 0)),
+        Err(SketchError::WrongKind(_))
+    ));
+}
