@@ -47,7 +47,7 @@ use geom_num::arc::Round;
 use geom_num::carrier::Rational2;
 use geom_num::grid::{P2, Steps};
 use geom_nurbs::{Basis, Curve, Limit, NurbsError};
-use geom_run::{Stop, WorkMeter};
+use geom_run::{Stopped, WorkMeter};
 
 use crate::carrier::Circle2;
 use crate::entity::{EntityError, FitIntent, Frac, Spline};
@@ -78,7 +78,7 @@ pub enum FitError {
     /// A control point or fraction does not fit the grid or the bounded fraction size.
     Range,
     /// The meter stopped the work.
-    Stopped(Stop),
+    Stopped(Stopped),
     /// The three points are on one line or the tangents are parallel: no biarc, only a line or a
     /// curve of the other sign.
     NoBiarc,
