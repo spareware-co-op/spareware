@@ -1,0 +1,15 @@
+# The oracle runner's waivers (chapter 28.10; piece G113, src/oracle/waiver.rs).
+#
+# A waiver excuses one thing: a cell (an operation on an input family) the earlier night's report
+# covered and this night's does not. It cannot excuse a difference, a signature or a job: those are
+# the triage register's, held to what the exact reference found. Every waiver carries a reason a
+# reviewer can check, and is removed once it covers nothing (the runner says when).
+#
+# [[waiver]]
+# oracle = "geomdl"
+# check = "coverage"
+# operation = "nurbs.insert"    # optional; leave it out to cover every operation
+# family = "degree-3-2d"        # optional; leave it out to cover every family
+# reason = "why the cell is no longer drawn, and when it returns"
+
+format = 1

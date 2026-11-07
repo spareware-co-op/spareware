@@ -33,9 +33,8 @@ use std::path::PathBuf;
 use dashu_int::{IBig, UBig};
 use dashu_ratio::RBig;
 use geom_num::GridStep;
-use geom_nurbs::{Basis, Curve, Limit};
 use geom_op::ErrorKind;
-use geom_run::{Budget, WorkMeter};
+use geom_run::Budget;
 use geom_test::fixture::run::Replayed;
 use geom_test::fixture::{
     Class, Counts, Expect, Hash, Measures, OpLog, Source, Spend, Status, Triage,
@@ -44,8 +43,13 @@ use geom_test::oracle::catalogue::{Catalogue, CatalogueError, Oracle, Run, State
 use geom_test::oracle::compare::{Allowance, exact, within};
 use geom_test::oracle::exact::{float, read_float, steps, to_millimetres};
 use geom_test::oracle::geomdl::{Answer, Compared, ID, Job, Op, bound, gamma, jobs, judge, settle};
-use geom_test::oracle::triage::{Record, Register, Signature, TriageError, fixture, group};
+use geom_test::oracle::triage::{
+    Evidence, Record, Register, Settled, Signature, TriageError, fixture, group,
+};
 use geom_test::seed::Seed;
+
+mod common;
+use common::honest;
 
 fn oracle(id: &str, licence: &str, run: Run) -> Oracle {
     Oracle {
@@ -318,12 +322,29 @@ fn signature(family: &str) -> Signature {
     }
 }
 
+/// The evidence a "theirs" carries: the catalogue's own pin for geomdl.
+fn evidence() -> Evidence {
+    Evidence {
+        issue: "https://github.com/orbingol/NURBS-Python/issues/1".to_owned(),
+        reproduced_on: "5.4.0".to_owned(),
+        reproducer: r#"{"id":1}"#.to_owned(),
+    }
+}
+
+/// A record whose verdict and evidence are the ones its outcome stands on.
 fn record(family: &str, outcome: Triage, reference: Option<&str>) -> Record {
     Record {
         signature: signature(family),
         outcome,
+        settled: match outcome {
+            Triage::Ours => Settled::Ours,
+            Triage::Theirs => Settled::Theirs,
+            Triage::WithinBounds => Settled::Both,
+            Triage::Undecided => Settled::Unsettled,
+        },
         fixture: "oracle/0001-a".to_owned(),
         reference: reference.map(str::to_owned),
+        evidence: (outcome == Triage::Theirs).then(evidence),
         why: "w".to_owned(),
     }
 }
@@ -354,13 +375,20 @@ fn each_signature_is_judged_once() {
 #[test]
 fn the_register_keeps_its_rules() {
     assert!(register(vec![record("a", Triage::WithinBounds, None)]).is_ok());
-    for outcome in [Triage::Ours, Triage::Theirs, Triage::Undecided] {
+    for outcome in [Triage::Ours, Triage::Undecided] {
         assert!(matches!(
             register(vec![record("a", outcome, None)]),
             Err(TriageError::Rule(why)) if why.contains("names its")
         ));
         assert!(register(vec![record("a", outcome, Some("x"))]).is_ok());
     }
+    // "Theirs" needs its evidence, not a reference.
+    assert!(register(vec![record("a", Triage::Theirs, None)]).is_ok());
+    let mut bare = record("a", Triage::Theirs, Some("x"));
+    bare.evidence = None;
+    assert!(
+        matches!(register(vec![bare]), Err(TriageError::Rule(why)) if why.contains("evidence"))
+    );
     let mut bad = record("a", Triage::WithinBounds, None);
     bad.fixture = "nope".to_owned();
     assert!(matches!(register(vec![bad]), Err(TriageError::Rule(w)) if w.contains("fixture")));
@@ -452,66 +480,6 @@ fn every_outcome_ends_as_its_fixture() {
     assert!(fixture(&r, log(), wrong, &done()).is_err());
 }
 
-/// The kernel's own answer to a job, the way a correct oracle would give it.
-fn honest(job: &Job) -> Answer {
-    let read = |t: &String| t.parse::<f64>().unwrap();
-    let knots: Vec<f64> = job.knots.iter().map(read).collect();
-    let basis = Basis::new(job.degree, knots).unwrap();
-    let values: Vec<f64> = match job.op {
-        Op::Basis => {
-            let mut out = vec![0.0; job.degree + 1];
-            basis
-                .eval(read(&job.at), Limit::FromRight, &mut out)
-                .unwrap();
-            out
-        }
-        _ => curve_values(job, basis),
-    };
-    Answer {
-        id: job.id,
-        values: Some(values.iter().map(|x| float(*x).unwrap()).collect()),
-    }
-}
-
-fn curve_values(job: &Job, basis: Basis) -> Vec<f64> {
-    let read = |t: &String| t.parse::<f64>().unwrap();
-    let weights: Option<Vec<f64>> = job.weights.as_ref().map(|w| w.iter().map(read).collect());
-    if job.points[0].len() == 2 {
-        values::<2>(job, basis, weights)
-    } else {
-        values::<3>(job, basis, weights)
-    }
-}
-
-fn values<const D: usize>(job: &Job, basis: Basis, weights: Option<Vec<f64>>) -> Vec<f64> {
-    let read = |t: &String| t.parse::<f64>().unwrap();
-    let homogeneous: Vec<[f64; D]> = job
-        .points
-        .iter()
-        .enumerate()
-        .map(|(i, p)| {
-            let w = weights.as_ref().map_or(1.0, |w| w[i]);
-            let mut h = [0.0; D];
-            for (slot, x) in h.iter_mut().zip(p) {
-                *slot = read(x) * w;
-            }
-            h
-        })
-        .collect();
-    let curve = Curve::from_homogeneous(basis, homogeneous, weights).unwrap();
-    let at = read(&job.at);
-    if job.op == Op::Point {
-        return curve.point(at, Limit::FromRight).unwrap().to_vec();
-    }
-    let changed = curve
-        .insert_knot(at, 1, &mut WorkMeter::new(Budget::UNLIMITED))
-        .unwrap();
-    let new = changed.value;
-    let mut out = new.basis().knots().to_vec();
-    out.extend(new.homogeneous().iter().flatten());
-    out
-}
-
 #[test]
 fn geomdl_jobs_are_drawn_from_their_seed() {
     let a = jobs(Seed(1), 200);
@@ -545,9 +513,15 @@ fn a_wrong_answer_is_a_difference_and_truth_settles_it() {
     let values = wrong.values.as_mut().unwrap();
     let moved = values[0].parse::<f64>().unwrap() + 1.0;
     values[0] = float(moved).unwrap();
-    let Compared::Differ { signature, settled } = judge(job, &wrong).unwrap() else {
+    let Compared::Differ {
+        signature,
+        settled,
+        verdict,
+    } = judge(job, &wrong).unwrap()
+    else {
         panic!()
     };
+    assert_eq!(verdict, Settled::Theirs);
     assert_eq!(signature.operation, "nurbs.point");
     assert_eq!(signature.oracle, ID);
     assert_eq!(signature.kind, "value");
