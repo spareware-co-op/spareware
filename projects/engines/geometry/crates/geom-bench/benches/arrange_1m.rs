@@ -1,4 +1,4 @@
-//! The arrangement of one million segments, timed beside iOverlay's split-and-graph build of the
+//! The arrangement of one million segments (or `ARRANGE_SEGMENTS` of them), timed beside iOverlay's split-and-graph build of the
 //! same segments (piece G196a; decision 32.44), for people.
 //!
 //! The drawing is [`SEGMENTS`] short segments between grid points in a square of side
@@ -40,8 +40,16 @@ use i_overlay::core::overlay_rule::OverlayRule;
 use i_overlay::i_float::int::point::IntPoint;
 use i_overlay::segm::boolean::ShapeCountBoolean;
 
-/// How many segments.
+/// How many segments by default; the environment variable `ARRANGE_SEGMENTS` sets another count,
+/// for a smaller run or a machine with less memory.
 const SEGMENTS: usize = 1_000_000;
+
+fn count() -> usize {
+    std::env::var("ARRANGE_SEGMENTS")
+        .ok()
+        .and_then(|v| v.parse().ok())
+        .unwrap_or(SEGMENTS)
+}
 
 /// The side of the square, in grid steps.
 const SIDE: i64 = 1_000_000;
@@ -73,7 +81,7 @@ impl SplitMix64 {
 /// The segments, as pairs of coordinates.
 fn drawing() -> Vec<[i32; 4]> {
     let mut g = SplitMix64(0x1A3E_0001);
-    (0..SEGMENTS)
+    (0..count())
         .map(|_| {
             let x = REACH + g.below(SIDE - 2 * REACH);
             let y = REACH + g.below(SIDE - 2 * REACH);
