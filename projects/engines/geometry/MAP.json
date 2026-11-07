@@ -1370,6 +1370,35 @@
           "module": "geom_bool::rebuild",
           "name": "RebuildError",
           "non_exhaustive": false
+        },
+        {
+          "doc": "Why a curved decision or merge could not be taken.",
+          "file": "projects/engines/geometry/crates/geom-bool/src/rule.rs",
+          "kinds": [
+            {
+              "doc": "A decision stayed undecided and wider than the contact radius.",
+              "name": "NearContact",
+              "shape": "tuple"
+            },
+            {
+              "doc": "A merge's representative is not within the remaining bound of all its carriers.",
+              "name": "CoincidenceChain",
+              "shape": "tuple"
+            },
+            {
+              "doc": "A certified intersection or projection stopped.",
+              "name": "Intersect",
+              "shape": "tuple"
+            },
+            {
+              "doc": "The numbers layer refused.",
+              "name": "Num",
+              "shape": "tuple"
+            }
+          ],
+          "module": "geom_bool::rule",
+          "name": "ContactError",
+          "non_exhaustive": false
         }
       ],
       "family": [
@@ -1388,6 +1417,28 @@
       "kind": "kernel",
       "layer": "6",
       "modules": [
+        {
+          "cost": "constant per entity; a carrier set costs its length. No recursion.",
+          "does": "[`PointGeom`] and [`CurveGeom`] hold exact and certified geometry side by side, and every entity says which it is. A point is a committed grid point (exact), the meeting of three planes of the plane table (exact, implicit), or a grid point proven within a bound of the carriers it lies on (certified). A curve is the meeting of two planes (exact), a curve kind stored as itself, or a procedural meeting of two surfaces with an optional cached fit. A **carrier** ([`CarrierIx`]) is the surface a face lies on or the curve an edge lies on, named by its index into the builder's pools; a boolean never moves one. [`SortedVec`] keeps a certified point's carriers in one order, and [`Bound`] is a distance in whole grid steps.",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-bool/src/carrier.rs",
+          "guarantees": [
+            "**Every entity says which kind it is.** [`PointGeom::is_exact`] is true for a grid point and a plane meeting only; a certified point carries the carriers it was proven against and the bound it was proven within.",
+            "**A set of carriers has one order.** [`SortedVec`] holds its items sorted and without repeats, whatever order they were given in, so two entities with the same carriers compare equal and a decision never depends on the order carriers were found.",
+            "**A bound is a whole number of steps, rounded up.** [`Bound::of`] never rounds a distance down, and refuses a negative or infinite one."
+          ],
+          "job": "What the curved builder stores: where a point or a curve is, and which carriers say so (11.4, G242).",
+          "method": {
+            "links": [
+              "projects/engines/geometry/architecture/11-booleans.md"
+            ],
+            "text": "the data model of chapter 11.4 (`projects/engines/geometry/architecture/11-booleans.md`), whose `PointGeom` and `CurveGeom` these are, with the carriers' indices those of the plane table of `geom_poly::plane` and the surface and curve pools of `geom_topo`."
+          },
+          "path": "geom_bool::carrier",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
         {
           "cost": "what [`prepare`], [`arrange`] and [`rebuild`] cost, and the checker per result.",
           "does": "[`combine`] prepares its operands, arranges their polygons, and for each selection rebuilds what it keeps and holds the body to the checker. [`unite`], [`subtract`] and [`intersect`] are its three commonest calls. [`COMBINE`] is its schema.",
@@ -1437,6 +1488,29 @@
           "target": "lib"
         },
         {
+          "cost": "a plane, a few interval operations; any other carrier, one projection search at the floor asked, charged to the meter. No recursion.",
+          "does": "[`Carriers`] holds the builder's carriers: a table of planes and pools of surfaces and curves, named by [`CarrierIx`]. [`Carriers::distance`] encloses how far a grid point lies from one, computed from the carrier's own definition: a plane's from its integer coefficients in one exact step, every other kind's by `geom_intersect::project`, the certified nearest-point search of chapter 12.4. [`separation`] encloses how far apart two points are, each point's own bound added: a certified point may lie anywhere within its bound of where its carriers meet.",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-bool/src/distance.rs",
+          "guarantees": [
+            "**An enclosure, never a number.** Each distance holds the true distance. A refinement only narrows it: the floor of the search at refinement k is [`FIRST_FLOOR`] over 2^k steps.",
+            "**From the definition.** A distance is measured from the carrier's definition, never from an earlier representative or a cached fit, so repeated operations cannot walk a point away from its carriers.",
+            "**A plane's distance is exact up to one rounding.** n · p + d is computed in `i128`, checked, and enclosed by the nearest doubles around it; |n| by an interval square root.",
+            "**Undecided is wide.** A search that reaches its floor with nearest points that cannot be told apart (`NonIsolated`) gives the widest enclosure, so the contact rule reads it as near."
+          ],
+          "job": "Certified distances of a grid point from a carrier, and between points that carry a bound (11.4, G242).",
+          "method": {
+            "links": [
+              "https://doi.org/10.1016/S0167-8396(03"
+            ],
+            "text": "the point-to-surface projection of Ma and Hewitt, certified, in `geom_intersect::project` (<https://doi.org/10.1016/S0167-8396(03)00021-9>), and the plane's signed distance n · p + d over |n| (`geom_num::plane`)."
+          },
+          "path": "geom_bool::distance",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
           "cost": "constant, and what [`rebuild`] costs on seven pieces.",
           "does": "[`half_space`] builds the solid bounded by a plane and the frame's range box, with corners at ±(2^40 − 1) steps. It is a body like any other, so it enters a boolean as a solid and stays exact: IFC's half-space that clips a wall under a roof is one of these, and its boxed half-space is the same one, since the box there is only a search aid.",
           "family": [],
@@ -1454,6 +1528,30 @@
             "text": "chapter 11.1 (`projects/engines/geometry/architecture/11-booleans.md`), which cites the IFC half-space entities."
           },
           "path": "geom_bool::half_space",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
+          "cost": "one decision per pair, one projection per member and carrier. All of it is charged to the meter. No recursion.",
+          "does": "[`merge_stage`] takes the points of an arrangement and the pairs a broad phase says may touch, takes the contact rule's decision on each pair ([`crate::rule::decide`]), joins the pairs that touch into clusters, and gives each cluster one representative. Every point comes out as the representative of its cluster, so a later decision uses the merged entity and never one of its members: merges are decided before any later predicate uses them. The representative is the lowest exact grid point of the cluster if it has one, otherwise the member's committed grid point that is proven nearest all the carriers of the cluster, ties to the lowest point. It is accepted only if it is proven within the remaining bound of every carrier of every member, measured from the carriers' definitions ([`Carriers::distance`]); otherwise the merge fails with [`CoincidenceChain`].",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-bool/src/merge.rs",
+          "guarantees": [
+            "**Measured against carriers, never against an earlier representative.** The proof of a representative uses the carriers of all members, which never move, so repeated merges cannot walk a vertex away: its bound is the worst distance from a carrier, not a sum of steps.",
+            "**Transitive coincidence is checked.** A chain of touches a ~ b ~ c in which a and c are not within the bound of each other's carriers fails with `CoincidenceChain`; it is never merged on the strength of its links alone.",
+            "**Entities proven apart stay apart.** A pair whose distance enclosure excludes zero at any refinement is never merged, however close.",
+            "**Deterministic.** Pairs are taken in the order given, clusters are joined by the lowest member, and representatives are chosen by distance and then by point order, never by hash order or memory address."
+          ],
+          "job": "The merge stage: touching entities become one, checked against their carriers (11.4, G242).",
+          "method": {
+            "links": [
+              "projects/engines/geometry/architecture/11-booleans.md",
+              "https://github.com/NVIDIA-Omniverse/usd-brep"
+            ],
+            "text": "the merge rule of chapter 11.4 (`projects/engines/geometry/architecture/11-booleans.md`), \"Merges are checked against carriers\". The idea that coincidence is held as explicit relations between entities, and merged in one stage, is that of `SMLib`'s `SmMerge` mates (<https://github.com/NVIDIA-Omniverse/usd-brep>); its tolerance growth on relating is not taken."
+          },
+          "path": "geom_bool::merge",
           "provenance": [],
           "spdx": null,
           "target": "lib"
@@ -1502,6 +1600,29 @@
             "text": "chapter 11.3's rebuild (`projects/engines/geometry/architecture/11-booleans.md`), into the Parasolid model structure of chapter 8.1, after EMBER (Trettner, Nehring-Wirxel and Kobbelt 2022, <https://doi.org/10.1145/3528223.3530181>)."
           },
           "path": "geom_bool::rebuild",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
+          "cost": "constant outside the measure. No allocation. Recursion: none.",
+          "does": "a certified decision computes an **enclosure**, an interval proven to hold the true value, and [`judge`] reads it. It excludes zero: the question is decided, with the sign. It holds zero and its largest magnitude is strictly below `ε_fit` ([`EPS_FIT`]): the entities **touch** and become one. Otherwise the decision is **near** and the operation fails. [`decide`] refines an enclosure up to a fixed limit ([`REFINEMENTS`]) before it reads the last: an entity that can be proven apart stays apart, however close. [`NearContact`] carries the enclosure as evidence and [`CoincidenceChain`] the width a merge needed, each with its remedies ([`Remedy`]).",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-bool/src/rule.rs",
+          "guarantees": [
+            "**Touch only when proven close and not proven apart.** [`Verdict::Touch`] needs an enclosure that holds zero at the finest refinement and whose largest magnitude is strictly below `ε_fit`; at exactly `ε_fit` it is [`Verdict::Near`].",
+            "**Apart wins whenever it can be proven.** [`decide`] always runs every refinement until one excludes zero, so no touch is declared that a finer enclosure would have refuted.",
+            "**A fixed amount of work.** [`decide`] calls its measure at most [`REFINEMENTS`] plus one times, whatever the numbers, so a budget runs out at the same stage on every machine.",
+            "**Never a guess.** A decision neither decided nor touching is an error with evidence, not a rounded answer; `ε_fit` is the ladder's fixed value, never stored per entity and never grown."
+          ],
+          "job": "The contact rule at `ε_fit`, and the two errors that stand for a decision it cannot take (11.4, 11.11, G242).",
+          "method": {
+            "links": [
+              "projects/engines/geometry/architecture/11-booleans.md"
+            ],
+            "text": "chapter 11.4 of the kernel architecture (`projects/engines/geometry/architecture/11-booleans.md`), \"Certified decisions and the one contact radius\", and 11.11 for the errors and their remedies. The contact radius is `geom_num::ladder::FIT`."
+          },
+          "path": "geom_bool::rule",
           "provenance": [],
           "spdx": null,
           "target": "lib"

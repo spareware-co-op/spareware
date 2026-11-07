@@ -28,9 +28,13 @@
 //! Modules:
 //!
 //! - [`operand`]: operands and selections, and an operand's faces as convex polygons (G130).
+//! - [`carrier`]: what the curved builder stores: points, curves and their carriers (G242).
 //! - [`combine`]: the boolean's entry and its schema (G131).
 //! - [`decide`]: the exact analytic decision table of the certified curved path (G242).
+//! - [`distance`]: certified distances of points from carriers, and between points (G242).
+//! - [`merge`]: touching entities become one, checked against their carriers (G242).
 //! - [`half_space`]: everything on one side of a plane, as a solid operand (G130).
+//! - [`rule`]: the contact rule at `ε_fit`, `NearContact` and `CoincidenceChain` (G242).
 //! - [`rebuild`]: merged pieces published as a body by canonical rules (G129).
 //!
 //! Status: the rebuild (G129), operands and selections (G130) and the entry (G131) built; the rest
@@ -41,9 +45,13 @@
 
 extern crate alloc;
 
+pub mod carrier;
 pub mod combine;
 pub mod decide;
+pub mod distance;
 pub mod half_space;
+pub mod merge;
 pub mod operand;
 pub mod rebuild;
+pub mod rule;
 mod wires;
