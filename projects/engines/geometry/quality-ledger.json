@@ -5179,6 +5179,30 @@
       "reason": "The two branches differ only at magnitude = f64::MIN_POSITIVE = 2^-1022. Scaled by 2^64 it reads with exponent field 65 and offset 1087, unscaled with field 1 and offset 1023: the same exponent -1022 and the same empty fraction, so the same text."
     },
     {
+      "file": "projects/engines/geometry/crates/geom-name/src/graph.rs",
+      "mutant": "replace match guard node.bytes == bytes with true in NameGraph::insert",
+      "line_text": "Some(node) if node.bytes == bytes => Ok(id),",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "The guard decides only when the graph already holds the NameId being interned. Through the public interface that NameId is the 128-bit cut of SHA-256 over the prefix and the name's canonical bytes, so a node held under it with different bytes needs two encodings whose truncated hashes agree: no such pair is known, and finding one costs about 2^64 hashes (32.19). So no input through the public interface tells the mutant from the original; the unit test graph::tests::a_second_encoding_under_a_held_name_id_is_refused forges the collision directly."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-name/src/ordinal.rs",
+      "mutant": "replace < with <= in sorted",
+      "line_text": "while width < from.len() {",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "With <=, the loop makes one more pass when width equals the number of entities. That pass has one chunk, split at its full length, so the right run is empty and the merge copies the left run unchanged. The order, and every comparison's outcome, is the same."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-name/src/ordinal.rs",
+      "mutant": "replace < with > in sorted",
+      "line_text": "while width < from.len() {",
+      "occurrences": 1,
+      "kind": "hangs",
+      "reason": "With >, for no entity or one the condition 1 > 0 or 1 > 1 holds and stays true as width doubles and saturates at usize::MAX, so the loop never ends and the tests stop it by their timeout. For two or more entities the loop does not run and the unsorted order fails the tests. It hangs or is caught; it never returns a wrong order unnoticed."
+    },
+    {
       "file": "projects/engines/geometry/crates/geom-num/src/ball.rs",
       "mutant": "replace > with >= in <impl Scalar for Ball>::sqrt",
       "line_text": "let spread = if root_floor > 0.0 {",
@@ -5265,6 +5289,14 @@
       "occurrences": 1,
       "kind": "equivalent",
       "reason": "REQUIRED is 1 and COPY_ALWAYS is 2, one bit each and not the same bit, so REQUIRED | COPY_ALWAYS and REQUIRED ^ COPY_ALWAYS are both 3."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-topo/src/column.rs",
+      "mutant": "replace > with >= in Column<K, V>::filled",
+      "line_text": "if full > 0 {",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "full is a u32, so full >= 0 always holds. When the column needs no full chunk (fewer than CHUNK_ROWS rows), the mutant builds one full chunk anyway and then places it zero times: column.chunks.resize(0, chunk) leaves the list empty with the capacity reserved before, and the chunk is dropped. The column's rows, chunks, values and Memory report are the same as the original's for every rows and value. Only a temporary allocation of one chunk differs, which a machine out of memory could refuse (OutOfMemory, never stored or replayed, 23.10) where the original needs none."
     }
   ],
   "coverage_off": [
