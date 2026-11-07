@@ -394,7 +394,8 @@ fn the_new_rules_round_trip_in_text() {
         "spline-length 2.0 7.5",
         "spline-through 2.0 1.6 0.25",
     ] {
-        text.push_str(&format!("constraint 3.{} driving 0 {rule}\n", text.len()));
+        let key = text.len();
+        writeln!(text, "constraint 3.{key} driving 0 {rule}").unwrap();
     }
     let s = parse(&text).unwrap();
     assert_eq!(parse(&write(&s).unwrap()).unwrap(), s);

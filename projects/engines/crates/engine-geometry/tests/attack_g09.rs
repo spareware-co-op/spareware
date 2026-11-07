@@ -690,7 +690,7 @@ mod repository {
             10,
             "base bool intersect surface skeleton topo",
         ),
-        ("geom-sketch", 10, "base math curve linalg"),
+        ("geom-sketch", 10, "base math curve nurbs linalg"),
         (
             "geom-profile",
             10,
