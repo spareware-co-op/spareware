@@ -32,6 +32,11 @@ geom-test = { path = "../geom-test" }
 name = "snap"
 harness = false
 
+# One edit on a drawing of a million edges (piece G199), with the standard library's clock only.
+[[bench]]
+name = "zone"
+harness = false
+
 [lints.rust]
 unsafe_code = "forbid"
 missing_docs = "warn"
