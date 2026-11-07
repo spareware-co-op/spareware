@@ -17,7 +17,9 @@
 #![allow(clippy::unwrap_used, clippy::indexing_slicing, clippy::panic)]
 
 use geom_run::{Budget, WorkMeter};
-use geom_sketch::diagnose::{Class, Equation, Verdict, analyse_columns, diagnose, free_motions};
+use geom_sketch::diagnose::{
+    Class, Equation, Outcome, Verdict, analyse_columns, diagnose, free_motions, solve_checked,
+};
 use geom_sketch::model::{ItemId, Sketch, SketchError};
 use geom_sketch::text::parse;
 
@@ -226,4 +228,99 @@ fn inconsistent_inputs_are_refused() {
     let columns = vec![vec![1.0, 0.0]];
     let r = analyse_columns(&columns, &[], &[0.0], 2, 1.0, &mut meter());
     assert_eq!(r, Err(SketchError::Internal));
+}
+
+#[test]
+fn a_conflict_comes_with_what_each_dimension_would_measure_without_the_other() {
+    let s = sketch(
+        "entity 1.0 point 0 0
+entity 1.1 point 3000 0
+entity 1.5 line 1.0 1.1 segment
+constraint 2.0 driving 0 fix 1.0 0 0
+constraint 2.1 driving 0 fix 1.0 1 0
+constraint 2.2 driving 0 horizontal 1.5
+constraint 2.3 driving 0 distance 1.0 1.1 3000
+constraint 2.4 driving 1 distance 1.0 1.1 3100
+",
+    );
+    let Outcome::Conflict { report, remedies } = solve_checked(&s, 10_000.0, &mut meter()).unwrap()
+    else {
+        panic!("not a conflict");
+    };
+    assert_eq!(report.conflicting.len(), 1);
+    // Without the newer 3100, the sketch settles at the older 3000; without the older, at 3100.
+    let by = |c: ItemId| {
+        remedies
+            .iter()
+            .find(|r| r.constraint == c)
+            .copied()
+            .unwrap()
+    };
+    let newer = by(id(2, 4));
+    assert!((newer.asked - 3100.0).abs() < 1e-6);
+    assert!((newer.measures - 3000.0).abs() < 0.1, "{newer:?}");
+    let older = by(id(2, 3));
+    assert!((older.measures - 3100.0).abs() < 0.1, "{older:?}");
+}
+
+#[test]
+fn lengths_that_cannot_close_a_triangle_are_not_converged_and_the_remedy_search_finds_values() {
+    // A and B are held 1000 apart; C is asked to be 1000 from A and 5000 from B. The equations are
+    // independent, so there is no rank problem, only no solution from this start.
+    let s = sketch(
+        "entity 1.0 point 0 0
+entity 1.1 point 1000 0
+entity 1.2 point 500 800
+constraint 2.0 driving 0 fix 1.0 0 0
+constraint 2.1 driving 0 fix 1.0 1 0
+constraint 2.2 driving 0 fix 1.1 0 1000
+constraint 2.3 driving 0 fix 1.1 1 0
+constraint 2.4 driving 0 distance 1.0 1.2 1000
+constraint 2.5 driving 0 distance 1.1 1.2 5000
+",
+    );
+    let Outcome::NotConverged {
+        report, remedies, ..
+    } = solve_checked(&s, 10_000.0, &mut meter()).unwrap()
+    else {
+        panic!("converged or conflicting");
+    };
+    assert_eq!(report.conflicting.len(), 0);
+    let third = remedies.iter().find(|r| r.constraint == id(2, 5)).unwrap();
+    assert!((third.asked - 5000.0).abs() < 1e-6);
+    // Held to the first side, C is at most 2000 from B.
+    assert!(third.measures <= 2000.0 + 0.1, "{third:?}");
+}
+
+#[test]
+fn a_dependence_that_only_this_configuration_has_is_special_not_redundant() {
+    // Three points on one line under three distances: the lengths AB, BC and AC are dependent
+    // here because AC = AB + BC, and independent as soon as the points leave the line.
+    let s = sketch(
+        "entity 1.0 point 0 0
+entity 1.1 point 3000 0
+entity 1.2 point 6000 0
+constraint 2.0 driving 0 fix 1.0 0 0
+constraint 2.1 driving 0 fix 1.0 1 0
+constraint 2.2 driving 0 fix 1.1 1 0
+constraint 2.3 driving 0 distance 1.0 1.1 3000
+constraint 2.4 driving 0 distance 1.1 1.2 3000
+constraint 2.5 driving 0 distance 1.0 1.2 6000
+",
+    );
+    let r = diagnose(&s, 10_000.0, &mut meter()).unwrap();
+    assert_eq!(r.redundant.len(), 0, "{}", r.text());
+    assert_eq!(r.special.len(), 1, "{}", r.text());
+    assert!(r.text().contains("special configuration"));
+}
+
+#[test]
+fn a_solved_sketch_comes_back_with_its_report() {
+    let s = sketch(TRIANGLE);
+    let Outcome::Solved { solved, report } = solve_checked(&s, 10_000.0, &mut meter()).unwrap()
+    else {
+        panic!("not solved");
+    };
+    assert_eq!(report.dof_least, 0);
+    assert!(solved.report.largest <= 0.02);
 }

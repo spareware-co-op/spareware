@@ -52,6 +52,7 @@
 
 extern crate alloc;
 
+use alloc::boxed::Box;
 use alloc::string::String;
 use alloc::vec::Vec;
 use core::fmt::Write as _;
@@ -62,9 +63,9 @@ use geom_num::real::Real;
 use geom_num::scalar::Scalar;
 use geom_run::WorkMeter;
 
-use crate::equation::{Assembly, rules_of};
-use crate::model::{ItemId, Sketch, SketchError, Variable};
-use crate::solve::{INDEPENDENT, TOLERANCE};
+use crate::equation::{Assembly, measure, rules_of};
+use crate::model::{Constraint, ItemId, Sketch, SketchError, Standing, Variable};
+use crate::solve::{INDEPENDENT, Solved, TOLERANCE, solve};
 
 /// How near a threshold a pivot must be, by this factor either way, to be confirmed by a singular
 /// value decomposition (section 15.8).
@@ -72,6 +73,10 @@ pub const CONFIRM_WITHIN: f64 = 16.0;
 
 /// A pivot within this factor of the largest column's may be passed over for a lower priority number.
 const PREFERRED_WITHIN: f64 = 2.0;
+
+/// The downdated norm of a column is recomputed when its share of the norm it was computed from falls
+/// below this: the square root of the unit roundoff.
+const RECOMPUTE: f64 = 1.490_116_119_384_765_6e-8;
 
 /// The unit roundoff of binary64.
 const UNIT_ROUNDOFF: f64 = 1.110_223_024_625_156_5e-16;
@@ -272,19 +277,27 @@ fn root(x: f64) -> Result<f64, SketchError> {
     Ok(Real::new(x)?.sqrt()?.get())
 }
 
-/// The norm of column `j` from row `from` down.
+/// The norm of column `j` from row `from` down. A plain sum of squares when it neither overflows
+/// nor loses its low end (the common case, and the fast one); otherwise scaled by the largest entry.
 fn tail_norm(columns: &[Vec<f64>], j: usize, from: usize) -> Result<f64, SketchError> {
     let column = columns.get(j).ok_or(SketchError::Internal)?;
-    // Scale by the largest entry so the squares neither overflow nor vanish.
+    let tail = column.get(from..).ok_or(SketchError::Internal)?;
+    let mut plain = 0.0f64;
+    for &x in tail {
+        plain += x * x;
+    }
+    if plain > 1e-250 && plain < 1e250 {
+        return root(plain);
+    }
     let mut big = 0.0f64;
-    for &x in column.get(from..).ok_or(SketchError::Internal)? {
+    for &x in tail {
         big = larger(big, x.abs());
     }
     if big == 0.0 {
         return Ok(0.0);
     }
     let mut sum = 0.0f64;
-    for &x in column.get(from..).ok_or(SketchError::Internal)? {
+    for &x in tail {
         let s = x / big;
         sum += s * s;
     }
@@ -306,16 +319,21 @@ fn factor(
     let mut sizes = Vec::new();
     let mut maxima = Vec::new();
     let steps = rows.min(m);
+    // The trailing norms of the columns, downdated after each reflection and recomputed when the
+    // downdate would lose too much (Businger and Golub's method, as LAPACK's xGEQP3 keeps it);
+    // `fresh` holds the norm each was last computed from.
+    let mut norms: Vec<f64> = Vec::new();
+    norms
+        .try_reserve_exact(m)
+        .map_err(|_| SketchError::OutOfMemory)?;
+    for j in 0..m {
+        norms.push(tail_norm(&a, j, 0)?);
+    }
+    let mut fresh = norms.clone();
     for k in 0..steps {
-        let mut norms = Vec::new();
-        norms
-            .try_reserve_exact(m.saturating_sub(k))
-            .map_err(|_| SketchError::OutOfMemory)?;
         let mut largest = 0.0f64;
-        for j in k..m {
-            let n = tail_norm(&a, j, k)?;
+        for &n in norms.iter().skip(k) {
             largest = larger(largest, n);
-            norms.push(n);
         }
         if largest == 0.0 {
             // Everything left is zero: each remaining column is dependent with pivot 0.
@@ -328,7 +346,7 @@ fn factor(
         // The preferred column: within a factor of 2 of the largest, the lowest priority number,
         // then the oldest.
         let mut best: Option<usize> = None;
-        for (offset, &n) in norms.iter().enumerate() {
+        for (offset, &n) in norms.iter().skip(k).enumerate() {
             if n * PREFERRED_WITHIN < largest {
                 continue;
             }
@@ -348,27 +366,51 @@ fn factor(
         let p = best.ok_or(SketchError::Internal)?;
         a.swap(k, p);
         order.swap(k, p);
+        norms.swap(k, p);
+        fresh.swap(k, p);
         sizes.push(tail_norm(&a, k, k)?);
         maxima.push(largest);
         // The reflector for column k from row k, applied to the columns after it.
         let alpha = entry(&a, k, k)?;
         let norm = tail_norm(&a, k, k)?;
         let beta = if alpha >= 0.0 { -norm } else { norm };
-        let mut v: Vec<f64> = a.get(k).ok_or(SketchError::Internal)?.clone();
-        for x in v.iter_mut().take(k) {
-            *x = 0.0;
-        }
-        *v.get_mut(k).ok_or(SketchError::Internal)? = alpha - beta;
+        // The reflector's vector from row k down: column k there, with alpha - beta on top.
+        let mut v: Vec<f64> = a
+            .get(k)
+            .and_then(|c| c.get(k..))
+            .ok_or(SketchError::Internal)?
+            .to_vec();
+        *v.first_mut().ok_or(SketchError::Internal)? = alpha - beta;
         let vv = dot(&v, &v);
         if vv > 0.0 {
             for j in k..m {
-                let dot = dot(&v, a.get(j).ok_or(SketchError::Internal)?);
-                let scale = 2.0 * dot / vv;
-                let column = a.get_mut(j).ok_or(SketchError::Internal)?;
+                let column = a
+                    .get_mut(j)
+                    .and_then(|c| c.get_mut(k..))
+                    .ok_or(SketchError::Internal)?;
+                let scale = 2.0 * dot(&v, column) / vv;
                 for (c, x) in column.iter_mut().zip(&v) {
                     *c -= scale * x;
                 }
             }
+        }
+        // Downdate the norms of the columns after k; recompute any the downdate would spoil.
+        for j in k.saturating_add(1)..m {
+            let old = get(&norms, j)?;
+            if old == 0.0 {
+                continue;
+            }
+            let ratio = entry(&a, j, k)?.abs() / old;
+            let kept = larger(1.0 - ratio * ratio, 0.0);
+            let drift = kept * (old / get(&fresh, j)?) * (old / get(&fresh, j)?);
+            let value = if drift <= RECOMPUTE {
+                let exact = tail_norm(&a, j, k.saturating_add(1))?;
+                *fresh.get_mut(j).ok_or(SketchError::Internal)? = exact;
+                exact
+            } else {
+                old * root(kept)?
+            };
+            *norms.get_mut(j).ok_or(SketchError::Internal)? = value;
         }
         // Zero below the diagonal of column k exactly; the reflector put beta on it.
         let column = a.get_mut(k).ok_or(SketchError::Internal)?;
@@ -662,6 +704,17 @@ pub struct SketchReport {
     pub conflicting: Vec<DependencyGroup>,
     /// Pivots too close to call.
     pub near_singular: Vec<NearSingularGroup>,
+    /// Dependence that comes from this configuration only: it appears at the point but not at the
+    /// witness (the point moved by small amounts derived from the variables' keys).
+    pub special: Vec<SpecialConfiguration>,
+}
+
+/// A dependence that holds only at the configuration diagnosed (section 15.8), such as three
+/// points on one line under a triangle's distances.
+#[derive(Clone, Debug, PartialEq)]
+pub struct SpecialConfiguration {
+    /// The constraints involved, in authoring order.
+    pub constraints: Vec<ItemId>,
 }
 
 impl SketchReport {
@@ -706,6 +759,13 @@ impl SketchReport {
                 let _ = write!(out, "; suggest removing {}", name(id));
             }
             let _ = writeln!(out);
+        }
+        for sp in &self.special {
+            let _ = writeln!(
+                out,
+                "special configuration: {} depend on each other here only",
+                names(&sp.constraints)
+            );
         }
         for n in &self.near_singular {
             let _ = writeln!(out, "near-singular: {}", names(&n.constraints));
@@ -802,14 +862,249 @@ pub fn diagnose(
         .cloned()
         .partition(|g| g.class == Class::Conflicting);
     let near_singular = analysis.near.clone();
-    Ok(SketchReport {
+    let mut report = SketchReport {
         analysis,
         dof_least,
         dof_most,
         redundant,
         conflicting,
         near_singular,
-    })
+        special: Vec::new(),
+    };
+    witness(sketch, &mut assembly, &equations, size, meter, &mut report)?;
+    Ok(report)
+}
+
+/// The start moved by small amounts derived from each variable's owner, slot and key: a different
+/// point for each sketch, the same for the same sketch on every target.
+fn witness_point(assembly: &Assembly) -> Result<Vec<f64>, SketchError> {
+    let mut x = assembly.start()?;
+    for (v, var) in assembly.variables().iter().enumerate() {
+        let h = var
+            .owner
+            .sequence
+            .wrapping_mul(31)
+            .wrapping_add(var.owner.key.wrapping_mul(17))
+            .wrapping_add(u64::from(var.slot).wrapping_mul(7));
+        // 1 to 61 of 2^-7 of a step.
+        let amount = f64::from(u32::try_from(h % 61).unwrap_or(0).saturating_add(1)) / 128.0;
+        let c = x.get_mut(v).ok_or(SketchError::Internal)?;
+        *c += amount;
+    }
+    Ok(x)
+}
+
+/// Judges the rank again at the witness. A dependent group at the point that is not dependent at
+/// the witness comes from this configuration only: it moves from the redundant groups to the
+/// special ones.
+fn witness(
+    sketch: &Sketch,
+    assembly: &mut Assembly,
+    equations: &[Equation],
+    size: f64,
+    meter: &mut WorkMeter<'_>,
+    report: &mut SketchReport,
+) -> Result<(), SketchError> {
+    if report.redundant.is_empty() {
+        return Ok(());
+    }
+    let x = witness_point(assembly)?;
+    // A witness on a singular set is no witness: leave the report as it is.
+    if assembly.evaluate_at(&x).is_err() {
+        assembly.evaluate(sketch)?;
+        return Ok(());
+    }
+    let (columns, residuals, variables) = gradients(assembly)?;
+    let at_witness = analyse_columns(&columns, equations, &residuals, variables, size, meter)?;
+    let still: Vec<Vec<ItemId>> = at_witness
+        .groups
+        .iter()
+        .map(|g| g.constraints.clone())
+        .collect();
+    let (kept, special): (Vec<_>, Vec<_>) = report
+        .redundant
+        .iter()
+        .cloned()
+        .partition(|g| still.contains(&g.constraints));
+    report.redundant = kept;
+    report.special = special
+        .into_iter()
+        .map(|g| SpecialConfiguration {
+            constraints: g.constraints,
+        })
+        .collect();
+    Ok(())
+}
+
+/// What a driving dimension takes when the sketch is solved without it.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct Remedy {
+    /// The dimension.
+    pub constraint: ItemId,
+    /// The value it was stated with (its measure now, for one that names another item).
+    pub asked: f64,
+    /// What it measures at the least-change solution of the sketch without it. Never offered as
+    /// the only value that works; a range is given only when it is cheap to bound.
+    pub measures: f64,
+}
+
+/// The sketch with dimension `id` made a reference dimension (measured, not solved).
+fn without(sketch: &Sketch, id: ItemId) -> Result<Sketch, SketchError> {
+    let mut out = Sketch::new(*sketch.plane());
+    for e in sketch.entities() {
+        out.add_entity(e.clone())?;
+    }
+    for c in sketch.constraints() {
+        let mut c = *c;
+        if c.id == id {
+            c.standing = Standing::Reference;
+        }
+        out.add_constraint(c)?;
+    }
+    Ok(out)
+}
+
+/// For each of `candidates` that is a driving dimension, solves the sketch without it and measures
+/// the value it then takes (section 15.8, "remedies with numbers"). A candidate whose sketch still
+/// does not solve is skipped: removing that one dimension is no remedy.
+///
+/// # Errors
+///
+/// [`SketchError::Stopped`] when the budget runs out; what building the sketches refuses.
+pub fn remedies(
+    sketch: &Sketch,
+    candidates: &[ItemId],
+    meter: &mut WorkMeter<'_>,
+) -> Result<Vec<Remedy>, SketchError> {
+    let mut out = Vec::new();
+    for &id in candidates {
+        let Some(c) = sketch.constraints().iter().find(|c| c.id == id) else {
+            continue;
+        };
+        if c.standing != Standing::Driving || !c.kind.is_dimension() {
+            continue;
+        }
+        let asked = match c.kind.stated() {
+            Some(x) => x,
+            None => measure(sketch, c)?,
+        };
+        let relaxed = without(sketch, id)?;
+        match solve(&relaxed, meter) {
+            Ok(done) => {
+                let reference: &Constraint = done
+                    .sketch
+                    .constraints()
+                    .iter()
+                    .find(|k| k.id == id)
+                    .ok_or(SketchError::Internal)?;
+                out.push(Remedy {
+                    constraint: id,
+                    asked,
+                    measures: measure(&done.sketch, reference)?,
+                });
+            }
+            Err(SketchError::Stopped) => return Err(SketchError::Stopped),
+            Err(_) => {}
+        }
+    }
+    Ok(out)
+}
+
+/// What a checked solve found.
+#[derive(Clone, Debug, PartialEq)]
+pub enum Outcome {
+    /// Converged. Redundant groups, special configurations and near-singular groups are warnings
+    /// in the report.
+    Solved {
+        /// The solved sketch.
+        solved: Box<Solved>,
+        /// Its diagnosis, at the solution.
+        report: SketchReport,
+    },
+    /// The equations conflict: nothing changes.
+    Conflict {
+        /// The diagnosis, at the sketch's own values.
+        report: SketchReport,
+        /// Each conflicting dimension solved without.
+        remedies: Vec<Remedy>,
+    },
+    /// No solution was found from this start (never "none exists"). Nothing changes.
+    NotConverged {
+        /// The rule the solver could not satisfy.
+        worst: ItemId,
+        /// The diagnosis, at the sketch's own values.
+        report: SketchReport,
+        /// Every driving dimension solved without.
+        remedies: Vec<Remedy>,
+    },
+}
+
+/// Solves `sketch` and diagnoses it: a solved sketch comes back with its report, a conflict with the
+/// groups, the suggested removal and the dimensions' remedies, and a solve that stops above
+/// tolerance as `NotConverged` with the remedy search over every driving dimension. A sketch of
+/// S grid steps across is judged with `size` = S.
+///
+/// # Errors
+///
+/// [`SketchError::Stopped`] and what the solve and the diagnosis refuse other than a block that will
+/// not converge, which is an [`Outcome`].
+pub fn solve_checked(
+    sketch: &Sketch,
+    size: f64,
+    meter: &mut WorkMeter<'_>,
+) -> Result<Outcome, SketchError> {
+    match solve(sketch, meter) {
+        Ok(solved) => {
+            let report = diagnose(&solved.sketch, size, meter)?;
+            if report.has_conflict() {
+                let ids = conflicting_ids(&report);
+                let remedies = remedies(sketch, &ids, meter)?;
+                return Ok(Outcome::Conflict { report, remedies });
+            }
+            Ok(Outcome::Solved {
+                solved: Box::new(solved),
+                report,
+            })
+        }
+        Err(SketchError::Unsolved(worst)) => {
+            let report = diagnose(sketch, size, meter)?;
+            let mut ids: Vec<ItemId> = if report.has_conflict() {
+                conflicting_ids(&report)
+            } else {
+                sketch
+                    .constraints()
+                    .iter()
+                    .filter(|c| c.kind.is_dimension())
+                    .map(|c| c.id)
+                    .collect()
+            };
+            ids.sort_unstable();
+            ids.dedup();
+            let remedies = remedies(sketch, &ids, meter)?;
+            if report.has_conflict() {
+                Ok(Outcome::Conflict { report, remedies })
+            } else {
+                Ok(Outcome::NotConverged {
+                    worst,
+                    report,
+                    remedies,
+                })
+            }
+        }
+        Err(e) => Err(e),
+    }
+}
+
+/// The constraints of the conflicting groups, each once, in id order.
+fn conflicting_ids(report: &SketchReport) -> Vec<ItemId> {
+    let mut ids: Vec<ItemId> = report
+        .conflicting
+        .iter()
+        .flat_map(|g| g.constraints.iter().copied())
+        .collect();
+    ids.sort_unstable();
+    ids.dedup();
+    ids
 }
 
 /// One direction in which the sketch can still move.
