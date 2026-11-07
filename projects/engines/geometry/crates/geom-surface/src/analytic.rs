@@ -579,6 +579,27 @@ macro_rules! round_kind {
                 })
             }
 
+            /// The same surface with its axial factor set to `s`, as a similarity leaves a
+            /// cylinder or cone (the scale times the old factor): what a stored surface whose
+            /// factor is neither +1 nor −1 is rebuilt from.
+            ///
+            /// # Errors
+            ///
+            /// [`CurveError::NotFinite`] unless `s` is finite; [`CurveError::Degenerate`] for
+            /// zero; those of building the surface's terms.
+            pub fn with_axial_sign(&self, s: f64) -> Result<$kind, CurveError> {
+                if !s.is_finite() {
+                    return Err(CurveError::NotFinite);
+                }
+                if s == 0.0 {
+                    return Err(CurveError::Degenerate);
+                }
+                $kind::build(Round {
+                    sign: s,
+                    ..self.round
+                })
+            }
+
             fn build(round: Round) -> Result<$kind, CurveError> {
                 round.check($which)?;
                 let terms = round_terms($which, &round)?;
