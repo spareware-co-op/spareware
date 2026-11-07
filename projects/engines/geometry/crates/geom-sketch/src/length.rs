@@ -24,6 +24,11 @@
 //!   relative error is below 2⁻⁵¹ and a node is within 2⁻⁴⁸·max(1, |a|, |b|) of the exact one, and
 //!   the speed moves by at most max |C″| per unit of parameter.
 //!
+//! The bound is proved, and loose where the turn is tight: the derivative enclosures of the series
+//! are boxes, so their dependency swells with the order, and a curve that turns sharply inside a
+//! span can keep a bound near a thousandth of its length at 32 panels a span, while the value is
+//! far closer (`tests/spline_more.rs`, a loop of a cubic).
+//!
 //! Guarantees:
 //!
 //! - **A proof, not an estimate.** The returned error is a bound: the length of the spline the

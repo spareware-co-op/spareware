@@ -536,3 +536,58 @@ fn the_new_rules_and_helpers_refuse_what_is_not_a_spline_or_not_a_curve() {
         Err(SketchError::WrongKind(_))
     ));
 }
+
+#[test]
+fn a_rational_spline_leaves_along_the_line_it_is_tangent_to() {
+    // The first quarter circle leaves (5, 0) straight up: along the vertical line x = 5, across the
+    // horizontal one.
+    let mut text = quarters();
+    text.push_str("entity 1.7 point 5 -3\nentity 1.8 point 5 9\nentity 1.9 point -4 0\n");
+    text.push_str("entity 2.3 line 1.7 1.8 segment\nentity 2.4 line 1.9 1.8 segment\n");
+    let along = tail(&with_rule(&text, "spline-tangent-line 2.0 start 2.3"), 1);
+    assert!(along[0].abs() < 1e-9, "{along:?}");
+    let across = tail(&with_rule(&text, "spline-tangent-line 2.0 start 2.4"), 1);
+    assert!(across[0].abs() > 0.1, "{across:?}");
+}
+
+/// The length of a cubic Bézier by summing 200,000 chords: below the true length by less than
+/// 1e-7 here, from the curve's own formula and nothing of the crate under test.
+fn chord_length(p: [[f64; 2]; 4]) -> f64 {
+    let at = |t: f64| -> [f64; 2] {
+        let u = 1.0 - t;
+        let w = [u * u * u, 3.0 * u * u * t, 3.0 * u * t * t, t * t * t];
+        [
+            w[0] * p[0][0] + w[1] * p[1][0] + w[2] * p[2][0] + w[3] * p[3][0],
+            w[0] * p[0][1] + w[1] * p[1][1] + w[2] * p[2][1] + w[3] * p[3][1],
+        ]
+    };
+    let n = 200_000;
+    let mut last = at(0.0);
+    let mut total = 0.0;
+    for i in 1..=n {
+        let here = at(f64::from(i) / f64::from(n));
+        total += (here[0] - last[0]).hypot(here[1] - last[1]);
+        last = here;
+    }
+    total
+}
+
+#[test]
+fn a_loop_needs_more_panels_and_still_has_its_length_within_the_bound() {
+    let p = [[0.0, 0.0], [300.0, 10.0], [-300.0, 60.0], [0.0, 70.0]];
+    let mut text = HEAD.to_owned();
+    for (k, c) in p.iter().enumerate() {
+        point(&mut text, k as u64, c[0], c[1]);
+    }
+    spline(&mut text, 0, 3, 0, &[1.0; 4], "0 0 0 0 1 1 1 1");
+    let l = spline_length(&parse(&text).unwrap(), id(2, 0)).unwrap();
+    let exact = chord_length(p);
+    assert!(
+        (l.value - exact).abs() <= l.error + 1e-6,
+        "{l:?} against {exact}"
+    );
+    // The bound is honest, not tight, for a curve this tight in its turn: it shrinks with the panels
+    // and is still below a thousandth here, while the value is within 1e-6 of the chords.
+    assert!((l.value - exact).abs() < 1e-6, "{l:?} against {exact}");
+    assert!(l.error < 1e-3 * l.value, "{l:?}");
+}
