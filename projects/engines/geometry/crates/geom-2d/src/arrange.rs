@@ -815,7 +815,7 @@ fn faces_of(
 }
 
 /// Why an arrangement could not be stored as a body.
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug)]
 pub enum BodyError {
     /// A vertex is not a grid point, and the body's points are: the first such vertex, by rank
     /// (the vertices are in lexicographic order), and where it is. The exact [`Arrangement`] still
