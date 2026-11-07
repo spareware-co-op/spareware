@@ -5560,7 +5560,7 @@
           "target": "lib"
         },
         {
-          "cost": "as charged; O(|R| + |V| + m + n) memory. No recursion.",
+          "cost": "as charged; O(|R| + |V| + m + n) memory. No recursion in the factoring or the solves.",
           "does": "[`SymbolicQr`] reads a pattern: the column order, the elimination tree of Aᵀ·A and the pattern of R. It is computed once for every matrix of that pattern (chapter 15.7). [`SparseQr::factor`] then factors one matrix, column by column from the left: each column takes the reflections of the earlier columns R says reach it, and makes its own on the rows it holds. A row enters at the first column it touches, and each column hands the rows it did not use as its pivot to its parent in the tree. A column with nothing left, to the rank tolerance, is dead: it makes no reflection and uses no pivot, and its rows go on up, so A·Π = Q·R with R a staircase. [`SparseQr::least_squares`] solves A·x = b in the least-squares sense with the least norm. On a staircase, and on any under-determined system, it factors Rᵀ too and solves through that. Where solvi fixes its rows in its symbolic step and fails on a rank-deficient matrix, a dead column here hands its rows on and the solve stays least-norm.",
           "family": [],
           "file": "projects/engines/geometry/crates/geom-linalg/src/sparse_qr.rs",
