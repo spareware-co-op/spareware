@@ -102,7 +102,9 @@ fn nurbs(e: NurbsError) -> FitError {
     match e {
         NurbsError::Stopped(s) => FitError::Stopped(s),
         NurbsError::DataCount { .. } | NurbsError::Degree { .. } => FitError::Count,
-        NurbsError::CoincidentData { .. } | NurbsError::ParameterOrder { .. } => FitError::Coincident,
+        NurbsError::CoincidentData { .. } | NurbsError::ParameterOrder { .. } => {
+            FitError::Coincident
+        }
         _ => FitError::Numeric,
     }
 }
