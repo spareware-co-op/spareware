@@ -55,6 +55,11 @@
 //! Cost: constant for every kind but Centroid, which is linear in the loop; at most one crossing is
 //! made, and at most two carriers pushed.
 
+#![allow(
+    clippy::many_single_char_names,
+    reason = "a, b and c are points and lines, d a direction, n and t numerators and parameters, and x, y and w the coordinates of a point, as in the formulas"
+)]
+
 use alloc::vec::Vec;
 
 pub use geom_name::resolve::Reference;
@@ -318,8 +323,12 @@ impl Drawing {
         mut carriers: Vec<(geom_name::resolve::CarrierIx, Curve2)>,
     ) -> Result<Drawing, SnapError> {
         items.sort_by_key(|(name, _)| *name);
-        if let Some(pair) = items.windows(2).find(|w| w[0].0 == w[1].0) {
-            return Err(SnapError::NoEntity(pair[0].0));
+        let repeated = items.windows(2).find_map(|w| match w {
+            [a, b] if a.0 == b.0 => Some(a.0),
+            _ => None,
+        });
+        if let Some(name) = repeated {
+            return Err(SnapError::NoEntity(name));
         }
         carriers.sort_by_key(|(ix, _)| *ix);
         Ok(Drawing { items, carriers })
@@ -457,8 +466,9 @@ fn point_of(r: Rational2) -> Pt2 {
     Pt2::Rational(r)
 }
 
-/// The line through the rational point `a` in the direction `d`: a = −d_y w, b = d_x w and
-/// c = −d_y X + d_x Y, so that it runs along (b, −a) = (d_x w, d_y w).
+/// The line through the rational point `a` in the direction `d`: with the point as (`X`, `Y`) / `w`,
+/// the coefficients are `-d.y * w`, `d.x * w` and `-d.y * X + d.x * Y`, so that it runs along
+/// (`b`, `-a`) = (`d.x * w`, `d.y * w`).
 fn line_through(a: &Rational2, d: [i128; 2]) -> Result<Carrier, SnapError> {
     if d == [0, 0] {
         return Err(SnapError::NoDirection);
@@ -623,7 +633,6 @@ fn within(z: &Pt2, e: &Entity, carriers: &Carriers) -> Result<bool, SnapError> {
             }
         },
         Shape::Arc { circle, start, end } => arc_holds(&zc, circle, start, end),
-        Shape::Circle(_) | Shape::Ellipse(_) => Ok(true),
         _ => Ok(true),
     }
 }
@@ -646,8 +655,8 @@ fn arc_holds(z: &Crossing2, circle: &Circle2, start: &Pt2, end: &Pt2) -> Result<
     // Left of c to s is the counter-clockwise side of s: the normal (-dy, dx) points there.
     let left_of_start = normal_line(&c, [neg(ds[1])?, ds[0]])?;
     let left_of_end = normal_line(&c, [neg(de[1])?, de[0]])?;
-    let ls = z.side(&shift_through(&left_of_start, &c)?)?;
-    let le = z.side(&shift_through(&left_of_end, &c)?)?;
+    let ls = z.side(&left_of_start)?;
+    let le = z.side(&left_of_end)?;
     Ok(if turn == 0 && dot > 0 {
         // The ends are one: the whole circle.
         true
@@ -661,11 +670,6 @@ fn arc_holds(z: &Crossing2, circle: &Circle2, start: &Pt2, end: &Pt2) -> Result<
         // Over a half turn: not in the short way round from the end to the start.
         !(le == Sign::Positive && ls == Sign::Negative)
     })
-}
-
-/// `line` as it is (it already passes through `centre`).
-fn shift_through(line: &Carrier, _centre: &Rational2) -> Result<Carrier, SnapError> {
-    Ok(*line)
 }
 
 impl SnapRef {
@@ -698,7 +702,7 @@ impl SnapRef {
         }
         let on = self.on.as_ref().ok_or(SnapError::Missing("an entity"))?;
         let subject = subject(on, drawing, lookup)?;
-        self.on_subject(subject, carriers)
+        self.on_subject(&subject, carriers)
     }
 
     /// The point of a snap on a single subject, whichever way the subject was found: the part of
@@ -714,11 +718,11 @@ impl SnapRef {
     )]
     pub(crate) fn on_subject(
         &self,
-        subject: Subject<'_>,
+        subject: &Subject<'_>,
         carriers: &mut Carriers,
     ) -> Result<Pt2, SnapError> {
         let kind = self.kind;
-        let entity = match &subject {
+        let entity = match subject {
             Subject::Entity(e) => Some(*e),
             Subject::Carrier(_) => None,
         };
@@ -735,13 +739,13 @@ impl SnapRef {
                     Ok(Pt2::Grid(e.centre()))
                 }
                 _ => match subject {
-                    Subject::Carrier(Curve2::Circle(c)) => Ok(point_of(centre_of(&c))),
+                    Subject::Carrier(Curve2::Circle(c)) => Ok(point_of(centre_of(c))),
                     Subject::Carrier(Curve2::Ellipse(e)) => Ok(Pt2::Grid(e.centre())),
                     _ => Err(unsupported(kind, entity)),
                 },
             },
             SnapKind::Quadrant => {
-                let curve = curve_of_subject(&subject, kind)?;
+                let curve = curve_of_subject(subject, kind)?;
                 self.quadrant(&curve, carriers)
             }
             SnapKind::Insertion => match entity.map(Entity::shape) {
@@ -759,17 +763,17 @@ impl SnapRef {
                 _ => Err(unsupported(kind, entity)),
             },
             SnapKind::Perpendicular => {
-                let curve = curve_of_subject(&subject, kind)?;
+                let curve = curve_of_subject(subject, kind)?;
                 let from = rat(self.from.as_ref().ok_or(SnapError::Missing("a point"))?)?;
                 self.foot(&curve, &from, carriers)
             }
             SnapKind::Tangent => {
-                let curve = curve_of_subject(&subject, kind)?;
+                let curve = curve_of_subject(subject, kind)?;
                 let from = rat(self.from.as_ref().ok_or(SnapError::Missing("a point"))?)?;
                 self.tangent(&curve, &from, carriers)
             }
-            SnapKind::Nearest => self.nearest(&subject, carriers),
-            SnapKind::Extension => self.extension(&subject),
+            SnapKind::Nearest => self.nearest(subject, carriers),
+            SnapKind::Extension => self.extension(subject),
             SnapKind::Centroid => match entity.map(Entity::shape) {
                 Some(Shape::Polyline(p)) => centroid(p),
                 _ => Err(unsupported(kind, entity)),
@@ -871,22 +875,18 @@ impl SnapRef {
                 ];
                 let turn = sub(mul(ds[0], de[1])?, mul(ds[1], de[0])?)?;
                 let dot = add(mul(ds[0], de[0])?, mul(ds[1], de[1])?)?;
-                let direction = if turn == 0 {
-                    if dot > 0 {
+                let direction = match turn.cmp(&0) {
+                    core::cmp::Ordering::Equal if dot > 0 => {
                         // A whole circle: the point opposite the start.
                         [neg(ds[0])?, neg(ds[1])?]
-                    } else {
-                        // A half turn: at right angles to the chord, on its counter-clockwise side.
-                        [neg(ds[1])?, ds[0]]
                     }
-                } else if turn > 0 {
-                    d
-                } else {
-                    [neg(d[0])?, neg(d[1])?]
+                    // A half turn: at right angles to the chord, on its counter-clockwise side.
+                    core::cmp::Ordering::Equal => [neg(ds[1])?, ds[0]],
+                    core::cmp::Ordering::Greater => d,
+                    core::cmp::Ordering::Less => [neg(d[0])?, neg(d[1])?],
                 };
                 along_ray(carriers, &Curve2::Circle(*circle), &c, direction)
             }
-            Some(Shape::EllipticArc { .. }) => Err(unsupported(kind, entity)),
             _ => Err(unsupported(kind, entity)),
         }
     }
@@ -1013,12 +1013,16 @@ impl SnapRef {
                 let ey = sub(mul(py, cw)?, mul(cy, pw)?)?;
                 let scale = mul(pw, cw)?;
                 // ex/scale · X + ey/scale · Y = rho + (ex cx + ey cy) / (scale cw)
-                let rhs_num = add(
+                let right_top = add(
                     mul(rho_num, mul(scale, cw)?)?,
                     mul(rho_den, add(mul(ex, cx)?, mul(ey, cy)?)?)?,
                 );
-                let rhs_den = mul(rho_den, mul(scale, cw)?)?;
-                let (a, b, c0) = (mul(ex, rhs_den)?, mul(ey, rhs_den)?, mul(rhs_num?, scale)?);
+                let right_bottom = mul(rho_den, mul(scale, cw)?)?;
+                let (a, b, c0) = (
+                    mul(ex, right_bottom)?,
+                    mul(ey, right_bottom)?,
+                    mul(right_top?, scale)?,
+                );
                 let g = gcd(gcd(a, b), c0).max(1);
                 Carrier::new(
                     a.checked_div(g).unwrap_or(a),

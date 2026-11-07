@@ -6,7 +6,7 @@
 //! the square of that aperture, makes the snaps of the kinds asked for on each (an entity's own
 //! points, and the crossings of the entities near the cursor in pairs), and returns the closest
 //! that is within the aperture. A tie goes to the lower name. There is no scan of the drawing and no
-//! cap on candidates (14.8; CADCraft tests at most 200).
+//! cap on candidates (14.8; `CADCraft` tests at most 200).
 //!
 //! Guarantees:
 //!
@@ -31,6 +31,11 @@
 //!
 //! Cost: building is O(n log n) for n entities, a box for each; a query is the tree's walk over the
 //! aperture's square plus the snaps of the entities in it, none for those outside.
+
+#![allow(
+    clippy::many_single_char_names,
+    reason = "a, b and c are points and lines, d a direction, n and t numerators and parameters, and x, y and w the coordinates of a point, as in the formulas"
+)]
 
 use alloc::vec::Vec;
 
@@ -117,7 +122,8 @@ pub struct SnapIndex<'d> {
 /// The floor of a double, as an `i64` clamped to the frame.
 #[allow(
     clippy::cast_possible_truncation,
-    reason = "the value is clamped to the frame, which an i64 holds, before it is cast"
+    clippy::cast_precision_loss,
+    reason = "the value is clamped to the frame, below 2^40, which an i64 and a double hold exactly, before it is cast"
 )]
 fn floor(v: f64) -> i64 {
     let c = if v < -(FRAME as f64) {
@@ -189,15 +195,19 @@ fn root_up(n: u128) -> i64 {
     i64::try_from(lo).unwrap_or(FRAME).min(FRAME)
 }
 
+/// A box as its low and high corners, in whole steps.
+pub type Corners = ([i64; 2], [i64; 2]);
+
 /// The box of everything a snap of `entity` can be, or `None` if it has none.
 ///
 /// # Errors
 ///
 /// As for reading a point.
-pub fn bounds(
-    entity: &Entity,
-    carriers: &Carriers,
-) -> Result<Option<([i64; 2], [i64; 2])>, IndexError> {
+#[allow(
+    clippy::too_many_lines,
+    reason = "one match on the shape: each arm is the box of that entity's snaps"
+)]
+pub fn bounds(entity: &Entity, carriers: &Carriers) -> Result<Option<Corners>, IndexError> {
     let whole = ([-FRAME, -FRAME], [FRAME, FRAME]);
     let around = |cx: i64, cy: i64, r: i64| {
         (
@@ -302,7 +312,11 @@ pub fn bounds(
                         .abs()
                         .saturating_mul(i128::from(chord));
                     let bottom = i128::from(b.denominator()).saturating_mul(2).max(1);
-                    let sag = top.saturating_add(bottom).saturating_sub(1) / bottom;
+                    let sag = top
+                        .saturating_add(bottom)
+                        .saturating_sub(1)
+                        .checked_div(bottom)
+                        .unwrap_or(0);
                     grow = grow.max(i64::try_from(sag).unwrap_or(FRAME).saturating_add(1));
                 }
             }
@@ -458,7 +472,7 @@ impl<'d> SnapIndex<'d> {
                     snap.sub = sub;
                     snap.pick = pick;
                     let mark = carriers.len();
-                    if let Ok(point) = snap.on_subject(Subject::Entity(entity), carriers)
+                    if let Ok(point) = snap.on_subject(&Subject::Entity(entity), carriers)
                         && let Some(found) = consider(
                             Found {
                                 kind,
@@ -474,7 +488,7 @@ impl<'d> SnapIndex<'d> {
                             carriers,
                         )?
                     {
-                        best = better(best, found);
+                        best = Some(better(best, found));
                     }
                     carriers.truncate(mark);
                 }
@@ -512,7 +526,7 @@ impl<'d> SnapIndex<'d> {
                             &limit,
                             carriers,
                         )? {
-                            best = better(best, found);
+                            best = Some(better(best, found));
                         }
                         carriers.truncate(mark);
                     }
@@ -535,7 +549,7 @@ impl SnapIndex<'_> {
         snap.sub = found.sub;
         snap.pick = found.pick;
         match found.with {
-            None => snap.on_subject(Subject::Entity(entity), carriers).ok(),
+            None => snap.on_subject(&Subject::Entity(entity), carriers).ok(),
             Some(other) => {
                 let second = self.drawing.entity(other)?;
                 snap.cross_subjects(&Subject::Entity(entity), &Subject::Entity(second), carriers)
@@ -556,16 +570,27 @@ fn rounded(n: u64) -> f64 {
 
 /// The (part, pick) pairs of an entity's own snaps of `kind`.
 fn picks(kind: SnapKind, entity: &Entity) -> Vec<(Option<u32>, u8)> {
+    let mut out = Vec::new();
     match (kind, entity.shape()) {
-        (SnapKind::Quadrant, _) => (0..4).map(|k| (None, k)).collect(),
-        (SnapKind::End | SnapKind::Start, Shape::Polyline(p)) => (0..p.vertices().len())
-            .filter_map(|i| u32::try_from(i).ok())
-            .map(|i| (Some(i), 0))
-            .collect(),
-        (SnapKind::Mid, Shape::Polyline(p)) => (0..p.bulges().len())
-            .filter_map(|i| u32::try_from(i).ok())
-            .map(|i| (Some(i), 0))
-            .collect(),
+        (SnapKind::Quadrant, _) => {
+            for k in 0..4_u8 {
+                out.push((None, k));
+            }
+        }
+        (SnapKind::End | SnapKind::Start, Shape::Polyline(p)) => {
+            for i in 0..p.vertices().len() {
+                if let Ok(i) = u32::try_from(i) {
+                    out.push((Some(i), 0));
+                }
+            }
+        }
+        (SnapKind::Mid, Shape::Polyline(p)) => {
+            for i in 0..p.bulges().len() {
+                if let Ok(i) = u32::try_from(i) {
+                    out.push((Some(i), 0));
+                }
+            }
+        }
         (
             SnapKind::Node
             | SnapKind::End
@@ -575,9 +600,10 @@ fn picks(kind: SnapKind, entity: &Entity) -> Vec<(Option<u32>, u8)> {
             | SnapKind::Insertion
             | SnapKind::Centroid,
             _,
-        ) => alloc::vec![(None, 0)],
-        _ => Vec::new(),
+        ) => out.push((None, 0)),
+        _ => {}
     }
+    out
 }
 
 /// The candidate with its distance enclosed, or `None` if it is certainly outside the aperture.
@@ -608,17 +634,17 @@ fn consider(
 
 /// The better of the best so far and `found`: closer if its whole interval is below, and otherwise
 /// the lower name.
-fn better(best: Option<Found>, found: Found) -> Option<Found> {
+fn better(best: Option<Found>, found: Found) -> Found {
     match best {
-        None => Some(found),
+        None => found,
         Some(held) => {
             let closer = found.distance_squared[1] < held.distance_squared[0];
             let farther = held.distance_squared[1] < found.distance_squared[0];
             let tied = !closer && !farther;
             if closer || (tied && found.name < held.name) {
-                Some(found)
+                found
             } else {
-                Some(held)
+                held
             }
         }
     }

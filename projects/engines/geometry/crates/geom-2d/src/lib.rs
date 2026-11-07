@@ -25,8 +25,8 @@
 //! Its direct dependencies are its row of chapter 27's crate table, checked by the
 //! scaffold test in `engine-geometry` (`tests/scaffold`).
 //!
-//! Status: carriers, points and commits (G192); the entity model (G194); built on by pieces G193, G195, G196, G197,
-//! G198, G199, G200, G201, G202, G203, G204, G205, G206, G207, G208, G209, G210, G211, G212, G213,
+//! Status: carriers, points and commits (G192); the entity model (G194); snaps, tracking and the 2D
+//! index (G198); built on by pieces G193, G195, G196, G197, G199, G200, G201, G202, G203, G204, G205, G206, G207, G208, G209, G210, G211, G212, G213,
 //! G359, G360, G361.
 #![cfg_attr(not(test), no_std)]
 #![forbid(unsafe_code)]

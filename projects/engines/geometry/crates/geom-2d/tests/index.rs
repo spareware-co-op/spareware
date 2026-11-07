@@ -61,7 +61,7 @@ fn drawing(shapes: Vec<Shape>) -> Drawing {
     Drawing::new(items, Vec::new()).unwrap()
 }
 
-fn build<'d>(d: &'d Drawing) -> SnapIndex<'d> {
+fn build(d: &Drawing) -> SnapIndex<'_> {
     SnapIndex::build(d, &Exec::serial(), &mut meter()).unwrap()
 }
 
