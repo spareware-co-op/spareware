@@ -26,6 +26,7 @@
 //! reader, `geom-linalg`'s pivoted QR and SVD, `geom-bvh`'s box tree and cell index,
 //! `geom-nurbs`'s evaluation, interpolation and Bernstein bound, and the curve and surface kinds'
 //! evaluation, certified enclosures and conversion to NURBS in `geom-curve` and `geom-surface`,
+//! with, from phase 3, `geom-make`'s primitives and transforms,
 //! each named in the catalogue with its crate's path and checked to be a public function there;
 //! and, from phase 3, `geom-mesh`'s triangulation.
 //!

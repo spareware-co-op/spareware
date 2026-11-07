@@ -45,8 +45,11 @@ use core::fmt;
 use geom_num::NumError;
 use geom_run::{Exceeded, Interrupted, ItemError, RunError};
 
+use geom_num::Exactness;
+
+use crate::evidence::Value;
 use crate::kind::ErrorKind;
-use crate::remedy::Remedy;
+use crate::remedy::{Bound, Remedy};
 
 /// The operation's own typed failure (chapter 22): one variant per family of details, each holding
 /// that family's enum. Grows with the kernel; generic code reads an error's
@@ -58,6 +61,13 @@ pub enum OpErrorDetail {
     Run(RunDetail),
     /// A failure of the numbers layer, wrapped by meaning.
     Num(NumDetail),
+    /// A failure of the Make and Transform families: primitives, transforms and patterns
+    /// (`geom-make`, piece G101).
+    Make(MakeDetail),
+    /// A failure of a query (chapter 22; piece G102).
+    Query(QueryDetail),
+    /// A failure of the Combine family (`geom-bool`, chapter 11.11).
+    Combine(CombineDetail),
 }
 
 impl OpErrorDetail {
@@ -67,6 +77,9 @@ impl OpErrorDetail {
         match self {
             OpErrorDetail::Run(detail) => detail.kind(),
             OpErrorDetail::Num(detail) => detail.kind(),
+            OpErrorDetail::Make(detail) => detail.kind(),
+            OpErrorDetail::Query(detail) => detail.kind(),
+            OpErrorDetail::Combine(detail) => detail.kind(),
         }
     }
 
@@ -76,6 +89,9 @@ impl OpErrorDetail {
         match self {
             OpErrorDetail::Run(detail) => detail.remedies(),
             OpErrorDetail::Num(detail) => detail.remedies(),
+            OpErrorDetail::Make(detail) => detail.remedies(),
+            OpErrorDetail::Query(detail) => detail.remedies(),
+            OpErrorDetail::Combine(detail) => detail.remedies(),
         }
     }
 }
@@ -85,6 +101,9 @@ impl fmt::Display for OpErrorDetail {
         match self {
             OpErrorDetail::Run(detail) => fmt::Display::fmt(detail, f),
             OpErrorDetail::Num(detail) => fmt::Display::fmt(detail, f),
+            OpErrorDetail::Make(detail) => fmt::Display::fmt(detail, f),
+            OpErrorDetail::Query(detail) => fmt::Display::fmt(detail, f),
+            OpErrorDetail::Combine(detail) => fmt::Display::fmt(detail, f),
         }
     }
 }
@@ -324,6 +343,353 @@ impl From<NumError> for NumDetail {
             NumError::ToleranceExceeded => NumDetail::BoundOverCeiling,
             NumError::UnprovenMaths => NumDetail::UnprovenMaths,
         }
+    }
+}
+
+/// A failure of the Make and Transform families (`geom-make`, piece G101): an input the shape
+/// cannot be made from, a transform the result could not keep exact or certified, or a defect
+/// found before anything was returned.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub enum MakeDetail {
+    /// A length the shape needs to be positive is zero: an extent, a radius or a height, the input
+    /// `input` names.
+    ZeroLength {
+        /// The input, by its name in the operation's schema.
+        input: &'static str,
+    },
+    /// A prism's base has fewer than three corners.
+    TooFewCorners {
+        /// How many it has.
+        corners: u64,
+    },
+    /// A prism's base corners do not all lie in one plane perpendicular to the z axis.
+    BaseNotLevel,
+    /// A prism's base is not a strictly convex polygon running counter-clockwise seen from above:
+    /// three corners in a row on one line, a turn the other way, or corners repeated.
+    BaseNotConvex,
+    /// A torus's minor radius is not below its major radius: it would be a horn or spindle torus,
+    /// not a primitive (chapter 10.2).
+    MinorNotBelowMajor {
+        /// The major radius, in grid steps; the minor radius must be below it.
+        major: u64,
+    },
+    /// A transform would leave the body less exact than the class the caller accepted.
+    NotAccepted {
+        /// The class and bound the result would have.
+        would: Exactness,
+    },
+    /// A transform would turn a curved face or edge into a kind the checker cannot certify yet:
+    /// a scale that is not uniform makes cylinders, cones, spheres and tori affine surfaces and
+    /// circles ellipses.
+    KindNotCertified,
+    /// A transform that rounds corners or moves curved geometry by a certified deviation gave a
+    /// body the checker cannot certify yet: rounded corners leave their faces' planes, and a tilted
+    /// curved face meets its caps where only exact data is followed today.
+    NotCertifiedYet {
+        /// The piece that widens what the checker certifies, by its board number.
+        piece: &'static str,
+    },
+    /// The body given carries no names: it was not published in name order, so its entities
+    /// cannot keep their names through the transform.
+    BodyNotNamed,
+    /// A pattern has no instance.
+    EmptyPattern,
+    /// Two instances of a pattern have one key.
+    RepeatedKey,
+    /// A pattern's transform has no inverse: it would collapse the body onto a plane, a line or a
+    /// point.
+    SingularTransform,
+    /// The result did not pass the checker. A defect: nothing was returned.
+    ResultInvalid,
+    /// The body could not be assembled from its rows. A defect.
+    BuildFailed,
+}
+
+impl MakeDetail {
+    /// The base kind.
+    #[must_use]
+    pub const fn kind(&self) -> ErrorKind {
+        match self {
+            MakeDetail::ZeroLength { .. } => ErrorKind::Degenerate,
+            MakeDetail::TooFewCorners { .. }
+            | MakeDetail::BaseNotLevel
+            | MakeDetail::BaseNotConvex
+            | MakeDetail::MinorNotBelowMajor { .. }
+            | MakeDetail::BodyNotNamed
+            | MakeDetail::EmptyPattern
+            | MakeDetail::RepeatedKey
+            | MakeDetail::SingularTransform => ErrorKind::InvalidInput,
+            MakeDetail::NotAccepted { .. } => ErrorKind::ExactnessNotAccepted,
+            MakeDetail::KindNotCertified | MakeDetail::NotCertifiedYet { .. } => {
+                ErrorKind::Unsupported
+            }
+            MakeDetail::ResultInvalid | MakeDetail::BuildFailed => ErrorKind::Internal,
+        }
+    }
+
+    /// The remedies this detail knows: the input to change and, where it is known, the nearest
+    /// value that works; the class to accept; the piece that adds a route; or a report.
+    #[must_use]
+    pub fn remedies(&self) -> Vec<Remedy> {
+        let change =
+            |input: &'static str, to: Option<(Bound, Value)>| Remedy::ChangeInput { input, to };
+        match self {
+            MakeDetail::ZeroLength { input } => {
+                vec![change(input, Some((Bound::AtLeast, Value::Count(1))))]
+            }
+            MakeDetail::TooFewCorners { .. } => {
+                vec![change("base", Some((Bound::AtLeast, Value::Count(3))))]
+            }
+            MakeDetail::BaseNotLevel | MakeDetail::BaseNotConvex => vec![change("base", None)],
+            MakeDetail::MinorNotBelowMajor { major } => vec![change(
+                "minor",
+                Some((
+                    Bound::AtMost,
+                    Value::Count(u128::from(major.saturating_sub(1))),
+                )),
+            )],
+            MakeDetail::NotAccepted { would } => vec![Remedy::Accept { class: *would }],
+            MakeDetail::KindNotCertified => vec![Remedy::AwaitPiece { piece: "G177" }],
+            MakeDetail::NotCertifiedYet { piece } => vec![Remedy::AwaitPiece { piece }],
+            MakeDetail::BodyNotNamed => vec![change("body", None)],
+            MakeDetail::EmptyPattern | MakeDetail::RepeatedKey | MakeDetail::SingularTransform => {
+                vec![change("instances", None)]
+            }
+            MakeDetail::ResultInvalid | MakeDetail::BuildFailed => vec![Remedy::Report],
+        }
+    }
+}
+
+impl fmt::Display for MakeDetail {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            MakeDetail::ZeroLength { input } => write!(f, "the length {input} is zero"),
+            MakeDetail::TooFewCorners { corners } => {
+                write!(f, "the base has {corners} corners, fewer than three")
+            }
+            MakeDetail::BaseNotLevel => f.write_str("the base corners are not at one height"),
+            MakeDetail::BaseNotConvex => f.write_str(
+                "the base is not a strictly convex polygon running counter-clockwise from above",
+            ),
+            MakeDetail::MinorNotBelowMajor { major } => {
+                write!(f, "the minor radius is not below the major radius, {major}")
+            }
+            MakeDetail::NotAccepted { would } => {
+                write!(f, "the result would be {would:?}, which was not accepted")
+            }
+            MakeDetail::KindNotCertified => f.write_str(
+                "the transform would make curved geometry of a kind the checker cannot certify yet",
+            ),
+            MakeDetail::NotCertifiedYet { piece } => write!(
+                f,
+                "the checker cannot certify the transformed body yet; piece {piece} widens it"
+            ),
+            MakeDetail::BodyNotNamed => f.write_str("the body carries no names"),
+            MakeDetail::EmptyPattern => f.write_str("the pattern has no instance"),
+            MakeDetail::RepeatedKey => f.write_str("two instances of the pattern have one key"),
+            MakeDetail::SingularTransform => {
+                f.write_str("a transform of the pattern has no inverse")
+            }
+            MakeDetail::ResultInvalid => f.write_str("the result did not pass the checker"),
+            MakeDetail::BuildFailed => f.write_str("the body could not be assembled"),
+        }
+    }
+}
+
+impl core::error::Error for MakeDetail {}
+
+/// Why a query could not answer (chapter 22).
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub enum QueryDetail {
+    /// A link into a row its arena does not have, or a list that does not end: never in a body
+    /// published by the builder and passed by the checker.
+    Malformed,
+    /// An edge is not a straight line between two vertices, and the query needs polygons.
+    CurvedEdge {
+        /// The edge's row.
+        edge: u32,
+    },
+    /// A vertex is where three planes meet, and the query's exact sums need a grid point.
+    ImplicitVertex {
+        /// The vertex's row.
+        vertex: u32,
+    },
+    /// A face is not on a plane, and the query needs polygons.
+    CurvedFace {
+        /// The face's row.
+        face: u32,
+    },
+    /// A face has no loop, and the query needs polygons.
+    NoLoops {
+        /// The face's row.
+        face: u32,
+    },
+    /// A volume asked of a body that is not a solid.
+    NotSolid,
+    /// A sum past its integer's width: never for a body within its arenas' limits.
+    Overflow,
+}
+
+impl QueryDetail {
+    /// The base kind.
+    #[must_use]
+    pub const fn kind(&self) -> ErrorKind {
+        match self {
+            QueryDetail::Malformed | QueryDetail::NotSolid => ErrorKind::InvalidInput,
+            QueryDetail::CurvedEdge { .. }
+            | QueryDetail::ImplicitVertex { .. }
+            | QueryDetail::CurvedFace { .. }
+            | QueryDetail::NoLoops { .. } => ErrorKind::Unsupported,
+            QueryDetail::Overflow => ErrorKind::Internal,
+        }
+    }
+
+    /// The remedies this detail knows: the input to change, the piece that adds a route, or a
+    /// report.
+    #[must_use]
+    pub fn remedies(&self) -> Vec<Remedy> {
+        let change = |input: &'static str| Remedy::ChangeInput { input, to: None };
+        match self {
+            QueryDetail::Malformed | QueryDetail::NotSolid => vec![change("body")],
+            QueryDetail::CurvedEdge { .. }
+            | QueryDetail::CurvedFace { .. }
+            | QueryDetail::NoLoops { .. } => vec![Remedy::AwaitPiece { piece: "G177" }],
+            QueryDetail::ImplicitVertex { .. } => vec![Remedy::AwaitPiece { piece: "G129" }],
+            QueryDetail::Overflow => vec![Remedy::Report],
+        }
+    }
+}
+
+impl fmt::Display for QueryDetail {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            QueryDetail::Malformed => f.write_str("the body's links do not make a body"),
+            QueryDetail::CurvedEdge { edge } => {
+                write!(f, "edge {edge} is not a straight line between two vertices")
+            }
+            QueryDetail::ImplicitVertex { vertex } => {
+                write!(f, "vertex {vertex} has no grid point")
+            }
+            QueryDetail::CurvedFace { face } => write!(f, "face {face} is not on a plane"),
+            QueryDetail::NoLoops { face } => write!(f, "face {face} has no loop"),
+            QueryDetail::NotSolid => f.write_str("the body is not a solid"),
+            QueryDetail::Overflow => f.write_str("a sum went past its integer's width"),
+        }
+    }
+}
+
+impl core::error::Error for QueryDetail {}
+
+/// A failure of the Combine family (chapter 11.11).
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub enum CombineDetail {
+    /// Two operands share a key.
+    DuplicateOperand,
+    /// A selection names a key that no solid operand has.
+    UnknownOperand,
+    /// A test on winding numbers does not leave one answer.
+    BadSelection,
+    /// An operand cannot enter the arrangement.
+    InvalidOperand,
+    /// An operand has a face the flat path cannot take.
+    NotPlaneBased,
+    /// The selection would include the outside.
+    UnboundedResult,
+    /// A seed lies on the boundary between two pieces.
+    SeedOnBoundary,
+    /// A seed lies on no piece.
+    SeedOutside,
+    /// The result would be less exact than the caller accepts.
+    NotAccepted {
+        /// The class and bound it would have.
+        would: Exactness,
+    },
+    /// A rebuilt body failed the checker: a defect, reported instead of a wrong body.
+    ResultInvalid,
+}
+
+impl CombineDetail {
+    /// The base kind.
+    #[must_use]
+    pub const fn kind(&self) -> ErrorKind {
+        match self {
+            CombineDetail::DuplicateOperand
+            | CombineDetail::UnknownOperand
+            | CombineDetail::BadSelection
+            | CombineDetail::InvalidOperand
+            | CombineDetail::SeedOnBoundary
+            | CombineDetail::SeedOutside
+            | CombineDetail::UnboundedResult => ErrorKind::InvalidInput,
+            CombineDetail::NotPlaneBased => ErrorKind::Unsupported,
+            CombineDetail::NotAccepted { .. } => ErrorKind::ExactnessNotAccepted,
+            CombineDetail::ResultInvalid => ErrorKind::Internal,
+        }
+    }
+
+    /// The remedies this detail knows: the input to change, or the piece that adds a route.
+    #[must_use]
+    pub fn remedies(&self) -> Vec<Remedy> {
+        let change = |input: &'static str| Remedy::ChangeInput { input, to: None };
+        match self {
+            CombineDetail::DuplicateOperand
+            | CombineDetail::UnknownOperand
+            | CombineDetail::InvalidOperand => vec![change("operands")],
+            CombineDetail::BadSelection
+            | CombineDetail::UnboundedResult
+            | CombineDetail::SeedOnBoundary
+            | CombineDetail::SeedOutside => {
+                vec![change("select")]
+            }
+            CombineDetail::NotPlaneBased => vec![Remedy::AwaitPiece { piece: "G242" }],
+            CombineDetail::NotAccepted { would } => vec![Remedy::Accept { class: *would }],
+            CombineDetail::ResultInvalid => Vec::new(),
+        }
+    }
+}
+
+impl fmt::Display for CombineDetail {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            CombineDetail::DuplicateOperand => f.write_str("two operands share a key"),
+            CombineDetail::UnknownOperand => f.write_str("a selection names no solid operand"),
+            CombineDetail::BadSelection => {
+                f.write_str("a test on winding numbers leaves no answer")
+            }
+            CombineDetail::InvalidOperand => f.write_str("an operand cannot enter the arrangement"),
+            CombineDetail::NotPlaneBased => {
+                f.write_str("an operand has a face the flat path cannot take")
+            }
+            CombineDetail::UnboundedResult => {
+                f.write_str("the selection would include the outside")
+            }
+            CombineDetail::SeedOnBoundary => f.write_str("a seed lies between two pieces"),
+            CombineDetail::SeedOutside => f.write_str("a seed lies on no piece"),
+            CombineDetail::NotAccepted { would } => {
+                write!(
+                    f,
+                    "the result would be {would:?}, which the caller does not accept"
+                )
+            }
+            CombineDetail::ResultInvalid => f.write_str("a rebuilt body failed the checker"),
+        }
+    }
+}
+
+impl From<CombineDetail> for OpErrorDetail {
+    fn from(detail: CombineDetail) -> Self {
+        OpErrorDetail::Combine(detail)
+    }
+}
+
+impl From<QueryDetail> for OpErrorDetail {
+    fn from(detail: QueryDetail) -> Self {
+        OpErrorDetail::Query(detail)
+    }
+}
+
+impl From<MakeDetail> for OpErrorDetail {
+    fn from(detail: MakeDetail) -> Self {
+        OpErrorDetail::Make(detail)
     }
 }
 
