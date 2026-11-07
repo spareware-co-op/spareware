@@ -234,11 +234,59 @@
             {
               "sha256": "046f3d4883d4a30f17d9366db22efdf83ea063bd38f04694be237bebcad8b8f6",
               "kind": "corpus",
+              "piece": "G158",
+              "why": "3 new count benchmarks on geom-intersect's canonical order (decision 32.44): a list of items sorted and proven disjoint, a circle's key, a pair of lines put in order; no existing digest moved"
+            },
+            {
+              "sha256": "ac8f48e34a9a84aa562f2d851ab2eb7891c2c8e984ff9c46241e92bef029ae63",
+              "kind": "corpus",
+              "piece": "G159",
+              "why": "7 new count benchmarks on the exact decisions on lines and quadrics (decision 32.44): a line with a sphere, cylinder, cone and torus, parallel directions, an axis's gap and a tangent sphere; no existing digest moved"
+            },
+            {
+              "sha256": "d0f5a6b3d51104d1b56c8c8bb6801b4e0b66025a74a9d0670020e1ddc53d2ff4",
+              "kind": "corpus",
+              "piece": "G163",
+              "why": "5 new count benchmarks on where curves meet (decision 32.44): two segments, two circles, a line with a circle, two cubics and a loop; merged with G159's quadric and G162's projection lines; no existing digest moved"
+            },
+            {
+              "sha256": "ad9c15a7d6201c5b6d42ec0316a502e33dbd22a68046da6b5b30336df585d071",
+              "kind": "corpus",
+              "piece": "G164",
+              "why": "3 new count benchmarks on where curves meet surfaces (decision 32.44): a line through a plane, a line along a torus's equator and a cubic through a graph; no existing digest moved"
+            },
+            {
+              "sha256": "0addf11ef9e85ac52b1858fff68014e4dbe595ceb2a811ae5ef5823f7fef51b9",
+              "kind": "corpus",
+              "piece": "G168",
+              "why": "2 new count benchmarks on geom-intersect's tracer (decision 32.44): a sphere through a plane patch and a torus's silhouette; no existing digest moved"
+            },
+            {
+              "sha256": "04d28353bb06b8f4ac478afc9379ac8904b01735a08a01b4770f1214c4f798db",
+              "kind": "corpus",
+              "piece": "G169",
+              "why": "1 new count benchmark on geom-intersect's subdivision (decision 32.44): a sphere through a plane patch; no existing digest moved"
+            },
+            {
+              "sha256": "9fa3a5cb5a890b07c73fb90432b035c17901a9dc19d0318a45830de510df1a3b",
+              "kind": "corpus",
+              "piece": "G170",
+              "why": "1 new count benchmark on geom-intersect's marching (decision 32.44): the branches of a sphere through a plane patch; no existing digest moved"
+            },
+            {
+              "sha256": "9c0f3d471e31b39dc2a038e37205a513ea11aa4fc0d57eecd0a05282ca194d9e",
+              "kind": "corpus",
+              "piece": "G171",
+              "why": "1 new count benchmark on geom-intersect's contact analysis (decision 32.44): a sphere resting on a plane patch. march_plate's digest moves with it: the march now pads each parameter's box at that parameter's speed, without which it could not walk a NURBS surface against a plane at grid scale."
+            },
+            {
+              "sha256": "b59060fccfa0cc11a8c2e21c0ef9e3a30750f66e442147425073903464bf184b",
+              "kind": "corpus",
               "piece": "G148",
               "why": "2 new count benchmarks of geom-run's helper (decision 32.44): Exec::map of a list that fits one chunk, on the serial executor and on a pool, for the fix that runs a wave of one task on the calling thread (found in G148's timings); no existing digest moved"
             }
           ],
-          "sha256": "57fb849de9d6eb8003fe3ff677db5373da1b40984777f2d573018b64e5601c1b"
+          "sha256": "b2d943fd45427166ef2d5f13e548cb1aa026fd018b11d7a784306ef1169b3b38"
         },
         {
           "id": "geom-nurbs/operations",
