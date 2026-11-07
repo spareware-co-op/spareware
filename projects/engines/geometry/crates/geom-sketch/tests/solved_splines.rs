@@ -576,3 +576,49 @@ fn a_line_at_any_slope_is_taken_against_the_spline_whichever_way_it_runs() {
         }
     }
 }
+
+#[test]
+fn a_settled_sketch_reads_back_whatever_its_ids() {
+    // Control points authored in a sequence above the spline's: the text writes them first.
+    let data = [
+        [0.0, 0.0],
+        [10.0, 6.0],
+        [22.0, 9.0],
+        [31.0, 7.0],
+        [40.0, 1.0],
+        [52.0, -3.0],
+    ];
+    let mut text = HEAD.to_owned();
+    for (k, p) in data.iter().enumerate() {
+        point(&mut text, k as u64, p[0], p[1]);
+    }
+    let mut sketch = parse(&text).unwrap();
+    let fit_points: Vec<ItemId> = (0..6).map(|k| id(1, k)).collect();
+    let made = geom_sketch::fit::author(&sketch, &fit_points, 3, id(2, 0), 4, 0).unwrap();
+    for e in made.entities {
+        sketch.add_entity(e).unwrap();
+    }
+    for c in made.constraints {
+        sketch.add_constraint(c).unwrap();
+    }
+    let written = geom_sketch::text::write(&sketch).unwrap();
+    assert_eq!(parse(&written).unwrap(), sketch);
+    let spline_at = written.find("entity 2.0 spline").unwrap();
+    let last_point = written.find("entity 4.5 construction point").unwrap();
+    assert!(
+        last_point < spline_at,
+        "the points are written before the spline"
+    );
+    let mut held = String::new();
+    for (key, (k, x, y)) in [(0, 0.0, 0.0), (2, 26.0, 16.0), (5, 52.0, -3.0)]
+        .into_iter()
+        .enumerate()
+    {
+        fix(&mut held, 2 * key as u64, k, x, y);
+    }
+    let both = parse(&format!("{written}{held}")).unwrap();
+    let settled = settle(&both, id(2, 0), &mut meter()).unwrap();
+    assert!(settled.settled);
+    let back = parse(&geom_sketch::text::write(&settled.solved.sketch).unwrap()).unwrap();
+    assert_eq!(back, settled.solved.sketch);
+}
