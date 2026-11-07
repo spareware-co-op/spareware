@@ -664,14 +664,19 @@ fn line_order(a: &LineKey, b: &LineKey) -> Option<Ordering> {
     if order != Ordering::Equal {
         return Some(order);
     }
+    if let (Some(p), Some(q)) = (&a.cells, &b.cells) {
+        for (x, y) in p.iter().zip(q.iter()) {
+            let order = x.order(y)?;
+            if order != Ordering::Equal {
+                return Some(order);
+            }
+        }
+        return Some(Ordering::Equal);
+    }
     let over = a.first;
+    let (p, q) = (&a.coordinates, &b.coordinates);
     for i in 0..6 {
-        let order = if let (Some(p), Some(q)) = (&a.cells, &b.cells) {
-            p.get(i)?.order(q.get(i)?)?
-        } else {
-            let (p, q) = (&a.coordinates, &b.coordinates);
-            ratio_order::<4, 4, 8>(p.get(i)?, p.get(over)?, q.get(i)?, q.get(over)?)?
-        };
+        let order = ratio_order::<4, 4, 8>(p.get(i)?, p.get(over)?, q.get(i)?, q.get(over)?)?;
         if order != Ordering::Equal {
             return Some(order);
         }

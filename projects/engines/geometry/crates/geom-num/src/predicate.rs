@@ -884,7 +884,7 @@ pub fn orient2d(a: P2, b: P2, c: P2) -> Result<Sign, NumError> {
 /// As [`orient2d`].
 pub fn orient2d_step(a: P2, b: P2, c: P2) -> Result<(Sign, Step), NumError> {
     let sign = orient2d(a, b, c)?;
-    let filtered = generated::orient2d::filter(a, b, c).is_some();
+    let filtered = filtered(|| generated::orient2d::filter(a, b, c)).is_some();
     let narrowed = orient2d_narrow(a, b, c).is_some();
     Ok((sign, Step::route(ORIENT2D_FILTER_FIRST, filtered, narrowed)))
 }
@@ -961,7 +961,7 @@ pub fn orient3d(a: P3, b: P3, c: P3, d: P3) -> Result<Sign, NumError> {
 ///
 /// As [`orient3d`].
 pub fn orient3d_step(a: P3, b: P3, c: P3, d: P3) -> Result<(Sign, Step), NumError> {
-    let filtered = generated::orient3d::filter(a, b, c, d).is_some();
+    let filtered = filtered(|| generated::orient3d::filter(a, b, c, d)).is_some();
     Ok((orient3d(a, b, c, d)?, Step::route(true, filtered, false)))
 }
 
@@ -1023,7 +1023,7 @@ pub fn incircle(a: P2, b: P2, c: P2, d: P2) -> Result<Sign, NumError> {
 ///
 /// As [`incircle`].
 pub fn incircle_step(a: P2, b: P2, c: P2, d: P2) -> Result<(Sign, Step), NumError> {
-    let filtered = generated::incircle::filter(a, b, c, d).is_some();
+    let filtered = filtered(|| generated::incircle::filter(a, b, c, d)).is_some();
     Ok((incircle(a, b, c, d)?, Step::route(true, filtered, false)))
 }
 

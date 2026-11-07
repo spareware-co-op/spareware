@@ -5,7 +5,7 @@
 //! between curves of different degrees and knots converts on one knot vector; a placed surface's
 //! derivatives do not move with its translation; and the accessors answer with what was given.
 //!
-//! Covers: SurfaceKind::Affine.
+//! Covers: `SurfaceKind::Affine`.
 
 #![allow(
     clippy::float_cmp,
