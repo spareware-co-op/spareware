@@ -58,6 +58,11 @@ harness = false
 name = "exact"
 harness = false
 
+# Healing's timing (piece G298), the weld and the whole heal, at 1 and 8 threads.
+[[bench]]
+name = "repair"
+harness = false
+
 [lints.rust]
 unsafe_code = "forbid"
 missing_docs = "warn"

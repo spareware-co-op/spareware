@@ -599,6 +599,13 @@ Manifold
     projects/engines/geometry/crates/geom-mesh/src/exact/mod.rs
       for half-edges as parallel arrays, and <https://github.com/elalish/manifold/blob/d056b8fb70de8c8e6d6bee2e639b71c20aa08d01/include/manifold/mesh.h>, for property vertices and runs; its data model, not its code.
 
+Manifold
+  Licence:      Apache-2.0
+  Link:         https://github.com/elalish/manifold/blob/d056b8fb70de8c8e6d6bee2e639b71c20aa08d01/src/sort.cpp
+  Consulted by:
+    projects/engines/geometry/crates/geom-mesh/src/repair/mod.rs
+      for `MergeMeshGLP`: open edges as directed uses that do not cancel, and welding only within a tolerance; its method, not its code.
+
 npm `hosted-git-info` 10.1.1
   Licence:      ISC
   Link:         https://github.com/npm/hosted-git-info/blob/8c3bebb5e42142b7bce06b085b4c1bd1adba7371/lib/hosts.js

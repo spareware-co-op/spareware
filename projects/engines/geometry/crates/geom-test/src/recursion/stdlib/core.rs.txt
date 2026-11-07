@@ -2198,6 +2198,12 @@ pub mod slice {
         pub fn chunks(&self, chunk_size: usize) -> Chunks<T> {
             loop {}
         }
+        pub fn chunk_by<F: FnMut(&T, &T) -> bool>(&self, pred: F) -> ChunkBy<T> {
+            let mut pred = pred;
+            let a: &T = crate::any();
+            pred(a, a);
+            loop {}
+        }
         pub fn chunks_mut(&mut self, chunk_size: usize) -> ChunksMut<T> {
             loop {}
         }
@@ -2521,6 +2527,25 @@ pub mod slice {
     }
     impl<T> ExactSizeIterator for Windows<T> {}
     #[derive(Debug)]
+    pub struct ChunkBy<T> {
+        p: PhantomData<T>,
+    }
+    impl<T> Clone for ChunkBy<T> {
+        fn clone(&self) -> Self {
+            loop {}
+        }
+    }
+    impl<T> Iterator for ChunkBy<T> {
+        type Item = &[T];
+        fn next(&mut self) -> Option<&[T]> {
+            loop {}
+        }
+    }
+    impl<T> DoubleEndedIterator for ChunkBy<T> {
+        fn next_back(&mut self) -> Option<&[T]> {
+            loop {}
+        }
+    }
     pub struct Chunks<T> {
         p: PhantomData<T>,
     }
@@ -3836,6 +3861,59 @@ pub mod collections {
     impl crate::error::Error for TryReserveError {}
     pub use btree_map::BTreeMap;
     pub use btree_set::BTreeSet;
+    pub use vec_deque::VecDeque;
+    // `VecDeque` as its documented signatures give it: a queue of values, none of its methods
+    // calls a trait method of the values.
+    pub mod vec_deque {
+        use crate::marker::PhantomData;
+        pub struct VecDeque<T> {
+            p: PhantomData<T>,
+        }
+        impl<T> VecDeque<T> {
+            pub const fn new() -> VecDeque<T> {
+                loop {}
+            }
+            pub fn with_capacity(capacity: usize) -> VecDeque<T> {
+                loop {}
+            }
+            pub fn len(&self) -> usize {
+                loop {}
+            }
+            pub fn is_empty(&self) -> bool {
+                loop {}
+            }
+            pub fn clear(&mut self) {}
+            pub fn push_back(&mut self, value: T) {}
+            pub fn push_front(&mut self, value: T) {}
+            pub fn pop_back(&mut self) -> Option<T> {
+                loop {}
+            }
+            pub fn pop_front(&mut self) -> Option<T> {
+                loop {}
+            }
+            pub fn front(&self) -> Option<&T> {
+                loop {}
+            }
+            pub fn back(&self) -> Option<&T> {
+                loop {}
+            }
+            pub fn get(&self, index: usize) -> Option<&T> {
+                loop {}
+            }
+            pub fn iter(&self) -> Iter<T> {
+                loop {}
+            }
+        }
+        pub struct Iter<T> {
+            p: PhantomData<T>,
+        }
+        impl<T> Iterator for Iter<T> {
+            type Item = &T;
+            fn next(&mut self) -> Option<&T> {
+                loop {}
+            }
+        }
+    }
     // `BTreeMap` and `BTreeSet` as their documented signatures give them: every method that orders
     // keys calls `Ord::cmp` on them; `Clone`, `Debug`, `PartialEq` and `Hash` call the keys' and
     // values' own; the closures they are handed are called.
