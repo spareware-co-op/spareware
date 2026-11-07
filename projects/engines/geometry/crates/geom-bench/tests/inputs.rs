@@ -2406,6 +2406,9 @@ fn intersect_typical_batches_all_succeed() {
     all_ok("natural_tee", k::closed_forms, &m::tees(Typical));
     all_ok("natural_apex", k::closed_forms, &m::apexes(Typical));
     all_ok("quartic_walk", k::walked, &m::walks(Typical));
+    all_ok("reduced_torus", k::closed_forms, &m::torus_cuts(Typical));
+    all_ok("reduced_tube", k::closed_forms, &m::torus_tubes(Typical));
+    all_ok("reduced_wall", k::closed_forms, &m::wall_cuts(Typical));
     all_ok("project_arc", k::on_arcs, &m::arcs(Typical));
     all_ok("project_sphere", k::on_spheres, &m::spheres(Typical));
 }

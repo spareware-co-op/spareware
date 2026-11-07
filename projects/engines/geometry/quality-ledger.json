@@ -5956,6 +5956,110 @@
       "reason": "Both coordinates of the solve the same: every pair in space projects onto one line, so no box ever proves a zero or its absence and the solver halves each to its floor, past the run's timeout (300 s on the full run of curve.rs)."
     },
     {
+      "file": "projects/engines/geometry/crates/geom-intersect/src/reduced.rs",
+      "mutant": "replace && with || in line_and_circle",
+      "line_text": "let touching = disc.lo() == 0.0 && disc.hi() == 0.0;",
+      "occurrences": 1,
+      "kind": "harmless",
+      "reason": "The two differ only for an enclosure with exactly one end at zero. A point enclosure, the only kind tight arithmetic leaves unwidened, has equal ends; geom-num widens every other bound outward by one step and stores a zero bound as +0, so an end is exactly zero only where its rounded value was ±2^-1074, which b² − a·e reaches only with both terms in the lowest binade, from data below 2^-510 steps, far under the finest grid step Q2 (1/625 of Q0): nothing the kernel promises."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-intersect/src/reduced.rs",
+      "mutant": "replace || with && in line_and_circle",
+      "line_text": "if t.hi() < span.0 || t.lo() > span.1 {",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "Skipping a crossing off the line's span is an early drop: a ring there lies off that surface's domain, and natural's trimming keeps a piece only on both domains, so the ring is dropped later instead. It cannot hide another crossing first: a line meridian is a plane's, a cylinder's (one line) or a cone's, whose lines start at the axis and meet only there, so no other meridian of the surface crosses at that place, and a crossing behind the axis is dropped by its radius before it is seen."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-intersect/src/reduced.rs",
+      "mutant": "replace match guard square_to(p, e) with true in meridians",
+      "line_text": "SurfaceKind::Plane(p) if square_to(p, e) => {",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "A plane reaches meridians only through plane_torus and plane_revolution, each of which calls about_one_axis with the plane only after square_to(a, e) held for the same axis: the order of pieces() sends every other pair with a plane to them, and about_torus and about_revolution never take a plane. The guard is true wherever it is read."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-intersect/src/reduced.rs",
+      "mutant": "replace > with >= in meridians",
+      "line_text": "let (lo, hi) = if sense > 0.0 { (v0, v1) } else { (-v1, -v0) };",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "sense is the stored frame normal, a non-zero vector, dotted with the unit axis it lies along (the arm runs only for a cylinder about that axis, by same_line's exact parallel test), so it is ±|n|, never zero: > 0 and >= 0 decide alike."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-intersect/src/reduced.rs",
+      "mutant": "replace && with || in plane_across",
+      "line_text": "if t > lo && t < hi {",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "curve_surface's crossings lie in the profile's domain [lo, hi], so the mutant adds only cuts at lo or hi themselves. A cut at lo makes the first stretch run from lo to lo and one at hi the last from hi to hi, and the loop keeps a stretch only if end > start, so both are dropped and the pieces are the same."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-intersect/src/reduced.rs",
+      "mutant": "replace > with >= in plane_across",
+      "line_text": "if t > lo && t < hi {",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "The mutant adds a cut at t = lo only. The stretch it opens runs from lo to lo, which the loop's end > start drops, and the next starts at lo as before: the pieces are the same."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-intersect/src/reduced.rs",
+      "mutant": "replace < with <= in plane_across",
+      "line_text": "if t > lo && t < hi {",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "The mutant adds a cut at t = hi only, after which hi is pushed again: the stretch from hi to hi is dropped by the loop's end > start, and the one before it ends at hi as before."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-intersect/src/reduced.rs",
+      "mutant": "replace > with >= in plane_across",
+      "line_text": "if end > start && v.hi() >= span.0 && v.lo() <= span.1 {",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "No stretch starts where it ends: cuts lie strictly inside (lo, hi) by the test before, the last end is hi, and the cuts come from the two end planes, distinct and parallel, which cannot share a point of the profile, so no two cuts and no cut and hi coincide. end == start never occurs, and > and >= decide alike."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-intersect/src/reduced.rs",
+      "mutant": "replace Sweep::whole -> Result<(f64, f64), IntersectError> with Ok((0.0, 1.0))",
+      "line_text": "let span = match &self.profile {",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "whole serves only sweeps' early exit. Both sweeps then reach (0, 1), which overlap, so the exit is never taken and every crossing is judged by its own reach; where the true reaches do not overlap, no crossing's reach (each within its sweep's whole) overlaps either, and the answer is empty as the exit makes it."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-intersect/src/reduced.rs",
+      "mutant": "replace Sweep::whole -> Result<(f64, f64), IntersectError> with Ok((-1.0, 0.0))",
+      "line_text": "let span = match &self.profile {",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "whole serves only sweeps' early exit. Both sweeps then reach (−1, 0), which overlap, so the exit is never taken and every crossing is judged by its own reach; where the true reaches do not overlap, no crossing's reach (each within its sweep's whole) overlaps either, and the answer is empty as the exit makes it."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-intersect/src/reduced.rs",
+      "mutant": "replace Sweep::whole -> Result<(f64, f64), IntersectError> with Ok((-1.0, 1.0))",
+      "line_text": "let span = match &self.profile {",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "whole serves only sweeps' early exit. Both sweeps then reach (−1, 1), which overlap, so the exit is never taken and every crossing is judged by its own reach; where the true reaches do not overlap, no crossing's reach (each within its sweep's whole) overlaps either, and the answer is empty as the exit makes it."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-intersect/src/reduced.rs",
+      "mutant": "replace += with -= in turned",
+      "line_text": "uv += a * b;",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "The mutant sums −(u·v) instead of u·v, and uv is read only by close(uv, 0.0), which takes its absolute value against the same bound: the axes count as square in exactly the same cases."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-intersect/src/reduced.rs",
+      "mutant": "replace wide_of -> f64 with 1.0",
+      "line_text": "let mut out = 0.0_f64;",
+      "occurrences": 1,
+      "kind": "harmless",
+      "reason": "A reach is read only by class_of, which counts whole steps: ceil(reach) + 1. geom-num widens every map's bounds outward, so each width wide_of takes is positive, and for data inside the frame's ±2^40 steps it is a few steps of 2^-12 at most, so ceil gives 1, as for 1.0: the class is Steps(2) either way. Only data past the frame's range could tell them apart, a bound the kernel does not promise there (attack_g167 pins a line image there refused FrameRange)."
+    },
+    {
       "file": "projects/engines/geometry/crates/geom-intersect/src/quadrics.rs",
       "mutant": "delete - in funnel",
       "line_text": "let v = tight::div(tight::point(-r0)?, tight::point(k)?)?;",
@@ -6045,27 +6149,11 @@
     },
     {
       "file": "projects/engines/geometry/crates/geom-intersect/src/quadrics.rs",
-      "mutant": "replace - with + in cut_at",
-      "line_text": "let period = hi - lo;",
-      "occurrences": 1,
-      "kind": "equivalent",
-      "reason": "Every loop G165's closed forms make turns from 0, by Circle::full or an ellipse on (0, 2), so hi + lo = hi − lo = 2. (G167, whose profiles can turn from elsewhere, tests it.)"
-    },
-    {
-      "file": "projects/engines/geometry/crates/geom-intersect/src/quadrics.rs",
       "mutant": "replace - with + in trimmed",
       "line_text": "if *t > last + room && *t < stop - room {",
       "occurrences": 1,
       "kind": "harmless",
       "reason": "The mutant also keeps cuts within room before the stop (and none past it, cuts lying in the domain): the last stretch, from such a cut to the stop, a billionth of the parameter, is no wider than two steps on any curve the grid holds and is dropped as no stretch: the piece before ends room short of the stop at most."
-    },
-    {
-      "file": "projects/engines/geometry/crates/geom-intersect/src/quadrics.rs",
-      "mutant": "replace - with + in trimmed",
-      "line_text": "let period = hi - lo;",
-      "occurrences": 1,
-      "kind": "equivalent",
-      "reason": "Every loop G165's closed forms make turns from 0, by Circle::full or an ellipse on (0, 2), so hi + lo = hi − lo = 2. (G167, whose profiles can turn from elsewhere, tests it.)"
     },
     {
       "file": "projects/engines/geometry/crates/geom-intersect/src/quadrics.rs",
@@ -6080,16 +6168,8 @@
       "mutant": "replace -= with += in cut_at",
       "line_text": "t -= period;",
       "occurrences": 1,
-      "kind": "equivalent",
-      "reason": "The loop never runs for G165's loops: turn_of reads a turn in [−½, 3/2], and every loop G165 makes turns from 0 to 2, so t < hi from the start. (G167's profiles can turn from −1, where it runs.)"
-    },
-    {
-      "file": "projects/engines/geometry/crates/geom-intersect/src/quadrics.rs",
-      "mutant": "replace -= with /= in cut_at",
-      "line_text": "t -= period;",
-      "occurrences": 1,
-      "kind": "equivalent",
-      "reason": "The loop never runs for G165's loops: turn_of reads a turn in [−½, 3/2], and every loop G165 makes turns from 0 to 2, so t < hi from the start. (G167's profiles can turn from −1, where it runs.)"
+      "kind": "hangs",
+      "reason": "while t >= hi { t += period } never ends once a cut's turn reads past the loop's end: turn_of reads up to 3/2, and a loop turning from −1, as a whole circle profile on (−1, 1) pushed and cut across makes (attack_g167), ends at 1."
     },
     {
       "file": "projects/engines/geometry/crates/geom-intersect/src/quadrics.rs",
@@ -6282,14 +6362,6 @@
       "occurrences": 1,
       "kind": "equivalent",
       "reason": "The test never holds. On a loop the wraps just before put t in [lo, hi). On an open piece t is the parameter of a point of an edge: on the curve it lies inside the piece's span (a line runs over all of the grid, a conic past the cone's largest radius), and off it the gap test after refuses it, the curve's points past its span standing past that radius, farther than a step from any edge point."
-    },
-    {
-      "file": "projects/engines/geometry/crates/geom-intersect/src/quadrics.rs",
-      "mutant": "replace - with + in kept",
-      "line_text": "let period = hi - lo;",
-      "occurrences": 1,
-      "kind": "equivalent",
-      "reason": "Every loop G165's closed forms make turns from 0, by Circle::full or an ellipse on (0, 2), so hi + lo = hi − lo = 2. (G167, whose profiles can turn from elsewhere, tests it.)"
     },
     {
       "file": "projects/engines/geometry/crates/geom-intersect/src/quadrics.rs",

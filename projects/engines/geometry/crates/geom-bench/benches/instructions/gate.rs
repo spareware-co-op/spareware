@@ -2843,6 +2843,27 @@ pub mod intersect {
     }
 
     #[library_benchmark(teardown = verify)]
+    #[bench::typical(leak("intersect/reduced_torus/typical"))]
+    fn reduced_torus(run: &'static mut Named) -> &'static mut Named {
+        run.bench.measure();
+        run
+    }
+
+    #[library_benchmark(teardown = verify)]
+    #[bench::typical(leak("intersect/reduced_tube/typical"))]
+    fn reduced_tube(run: &'static mut Named) -> &'static mut Named {
+        run.bench.measure();
+        run
+    }
+
+    #[library_benchmark(teardown = verify)]
+    #[bench::typical(leak("intersect/reduced_wall/typical"))]
+    fn reduced_wall(run: &'static mut Named) -> &'static mut Named {
+        run.bench.measure();
+        run
+    }
+
+    #[library_benchmark(teardown = verify)]
     #[bench::typical(leak("intersect/quartic_walk/typical"))]
     fn quartic_walk(run: &'static mut Named) -> &'static mut Named {
         run.bench.measure();
@@ -2858,7 +2879,7 @@ pub mod intersect {
 
     library_benchmark_group!(
         name = intersect;
-        benchmarks = sort_items, key_circle, pair_lines, project_arc, project_sphere, curve_segments, curve_circles, curve_line_circle, curve_cubics, curve_loop, surface_plane, surface_torus, surface_patch, natural_plane, natural_spheres, natural_tee, natural_apex, quartic_walk
+        benchmarks = sort_items, key_circle, pair_lines, project_arc, project_sphere, curve_segments, curve_circles, curve_line_circle, curve_cubics, curve_loop, surface_plane, surface_torus, surface_patch, natural_plane, natural_spheres, natural_tee, natural_apex, quartic_walk, reduced_torus, reduced_tube, reduced_wall
     );
 }
 

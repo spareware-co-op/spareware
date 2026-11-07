@@ -1388,6 +1388,27 @@ fn direct_digest(group: &str, name: &str, class: Class) -> Option<Digest> {
                     .map(|found| found.topology)
             }))
         }
+        ("intersect", "reduced_torus") => {
+            fold(inputs::intersect::torus_cuts(class).iter().map(|(a, b)| {
+                let mut meter = geom_run::WorkMeter::new(geom_run::Budget::UNLIMITED);
+                geom_intersect::quadrics::natural(a, b, &mut meter)
+                    .and_then(|found| found.ok_or(geom_intersect::IntersectError::Internal))
+            }))
+        }
+        ("intersect", "reduced_tube") => {
+            fold(inputs::intersect::torus_tubes(class).iter().map(|(a, b)| {
+                let mut meter = geom_run::WorkMeter::new(geom_run::Budget::UNLIMITED);
+                geom_intersect::quadrics::natural(a, b, &mut meter)
+                    .and_then(|found| found.ok_or(geom_intersect::IntersectError::Internal))
+            }))
+        }
+        ("intersect", "reduced_wall") => {
+            fold(inputs::intersect::wall_cuts(class).iter().map(|(a, b)| {
+                let mut meter = geom_run::WorkMeter::new(geom_run::Budget::UNLIMITED);
+                geom_intersect::quadrics::natural(a, b, &mut meter)
+                    .and_then(|found| found.ok_or(geom_intersect::IntersectError::Internal))
+            }))
+        }
         ("intersect", "curve_loop") => fold(inputs::intersect::loops(class).iter().map(|c| {
             let mut meter = geom_run::WorkMeter::new(geom_run::Budget::UNLIMITED);
             geom_intersect::curve::self_crossings(c, &mut meter)
