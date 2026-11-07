@@ -17,13 +17,13 @@ allow-indexing-slicing-in-tests = true
 # its global pool or schedule it themselves (join, scope, spawn, broadcast, the parallel iterators,
 # and the same on a ThreadPool); and the six atomic integer types a counter would use. geom-pool,
 # the one std crate that adapts rayon to the Pool trait, is built with this same file, so what it
-# needs stays allowed: ThreadPoolBuilder, ThreadPool::in_place_scope, Scope::spawn and
+# needs stays allowed: ThreadPoolBuilder, ThreadPool::join and
 # ThreadPool::current_num_threads. AtomicBool, a flag and not a counter (geom-run's CancelToken),
 # stays allowed. Tests may start threads (a test pool does), so a test file that does allows
 # clippy::disallowed_methods. The std and core paths carry no allow-invalid; the rayon paths do,
 # since no kernel crate but geom-pool depends on rayon (deny-ships.toml). Checked: under clippy
 # 0.1.99, in a scratch crate outside the repository, every entry was shown to resolve and fire on a
-# call or a use, against rayon 1.12.0 and std, on x86_64-pc-windows-gnu, and the four calls
+# call or a use, against rayon 1.12.0 and std, on x86_64-pc-windows-gnu, and the three calls
 # geom-pool needs were shown not to fire.
 #
 # Chapter 21's determinism hazards, enforced by clippy as chapter 21's "Enforced by" column and
@@ -204,7 +204,6 @@ disallowed-methods = [
     { path = "rayon::iter::IntoParallelRefIterator::par_iter", reason = "rayon's parallel iterators reduce in an unstated order; use geom-run's helper (chapter 23.4)", allow-invalid = true },
     { path = "rayon::iter::IntoParallelRefMutIterator::par_iter_mut", reason = "rayon's parallel iterators reduce in an unstated order; use geom-run's helper (chapter 23.4)", allow-invalid = true },
     { path = "rayon::ThreadPool::install", reason = "rayon only through geom-pool's Pool, under geom-run's helper (chapter 23.4; 29.4)", allow-invalid = true },
-    { path = "rayon::ThreadPool::join", reason = "rayon only through geom-pool's Pool, under geom-run's helper (chapter 23.4; 29.4)", allow-invalid = true },
     { path = "rayon::ThreadPool::scope", reason = "rayon only through geom-pool's Pool, under geom-run's helper (chapter 23.4; 29.4)", allow-invalid = true },
     { path = "rayon::ThreadPool::spawn", reason = "rayon only through geom-pool's Pool, under geom-run's helper (chapter 23.4; 29.4)", allow-invalid = true },
     { path = "rayon::ThreadPool::broadcast", reason = "rayon only through geom-pool's Pool, under geom-run's helper (chapter 23.4; 29.4)", allow-invalid = true },

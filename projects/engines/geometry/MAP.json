@@ -6928,24 +6928,46 @@
       "layer": "13",
       "modules": [
         {
-          "cost": "one scope and one spawned job per task, each a small heap allocation inside rayon, and the pool's threads, started once when it is built and stopped when it is dropped.",
-          "does": "[`Rayon`] owns a `rayon::ThreadPool` of a fixed number of threads and implements [`Pool`]: [`Pool::run_all`] spawns every task into one scope of that pool and returns when all of them have finished. The helper (`geom_run::Exec::with_pool`) decides everything else: the fixed chunks, the order results are read in, the lowest-numbered failure, so every answer is the serial executor's, bit for bit, whatever the pool does (23.4).",
+          "cost": "`n - 1` calls of `Join::join` for `n` tasks, no allocation, and `ceil(log2 n) + 1` frames of stack at the deepest.",
+          "does": "[`run_halves`] runs every task of a slice by splitting the slice in two and handing the two halves to a [`Join`], which runs both and returns when both are done; each half is split again until one task is left. [`native::Rayon`](crate::native::Rayon) gives it rayon's `join` on a pool. [`Inline`] runs the two halves one after the other on the calling thread, so the same halving runs with no threads, on WebAssembly too, and its depth is tested there.",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-pool/src/halves.rs",
+          "guarantees": [
+            "**Every task runs exactly once**: a slice of no tasks does nothing, a slice of one runs it, and any other slice is split into two non-empty halves that between them hold every task.",
+            "**The caller's `Join` decides where tasks run and in what order**; this code only decides the split, which depends on the number of tasks and on nothing else.",
+            "**No panic of its own.** A task's panic passes through [`Join::join`], whose contract it is to finish both halves before passing it on."
+          ],
+          "job": "Running a wave of tasks by halving it, over any fork-join, for every target.",
+          "method": {
+            "links": [
+              "doi:10.1145/324133.324234"
+            ],
+            "text": "divide and conquer over a fork-join (Blumofe and Leiserson, \"Scheduling Multithreaded Computations by Work Stealing\", Journal of the ACM 46(5), 1999, `doi:10.1145/324133.324234`), the shape of rayon's own `join`-based parallel iterators, with the halves cut at the midpoint so that the depth is the logarithm of the number of tasks."
+          },
+          "path": "geom_pool::halves",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
+          "cost": "`n - 1` calls of `join` for `n` tasks, each pushing one job on the worker's own deque without a heap allocation, and the pool's threads, started once when it is built and stopped when it is dropped.",
+          "does": "[`Rayon`] owns a `rayon::ThreadPool` of a fixed number of threads and implements [`Pool`]: [`Pool::run_all`] splits the tasks in halves and runs the halves with rayon's `join`, on that pool, and returns when all of them have finished. The helper (`geom_run::Exec::with_pool`) decides everything else: the fixed chunks, the order results are read in, the lowest-numbered failure, so every answer is the serial executor's, bit for bit, whatever the pool does (23.4).",
           "family": [],
           "file": "projects/engines/geometry/crates/geom-pool/src/native.rs",
           "guarantees": [
-            "**Every task runs exactly once**, on some thread of the pool, in any order: each is spawned once into the scope, and the scope returns only after every spawned job has finished.",
-            "**Re-entrant.** A task may call the helper again with the same pool. The nested scope runs on the worker thread that opened it, and while it waits that thread runs other jobs of the pool, rayon's work stealing, instead of blocking; so a nested call makes progress on any number of threads, one included.",
-            "**No panic of its own.** `run_all` panics only to pass on a task's panic, after every task has finished: rayon's scope catches a job's panic and resumes it when the scope ends. Building a pool reports a failure to start its threads as [`PoolError`], never a panic.",
+            "**Every task runs exactly once**, on some thread of the pool, in any order: the slice is split in two until one task is left, and `join` returns only after both of its halves have run. (A lone task, which the helper never hands over, runs on the calling thread.)",
+            "**Re-entrant.** A task may call the helper again with the same pool. The nested call runs on the worker thread that made it, and while it waits for a half that another thread took, that thread runs other jobs of the pool, rayon's work stealing, instead of blocking; so a nested call makes progress on any number of threads, one included.",
+            "**No panic of its own.** `run_all` panics only to pass on a task's panic, after every task has finished: `join` waits for its other half when one panics and then resumes the panic. Building a pool reports a failure to start its threads as [`PoolError`], never a panic.",
             "**The thread count is the caller's.** It is fixed when the pool is built and never read by the helper, whose chunks do not depend on it (23.4); rayon's own environment variable (`RAYON_NUM_THREADS`) is not consulted, because the count is set explicitly."
           ],
           "job": "rayon's work-stealing pool behind `geom-run`'s `Pool` trait, for native targets.",
           "method": {
             "links": [
-              "https://docs.rs/rayon/1.12.0/rayon/struct.ThreadPool.html#method.in_place_scope",
+              "https://docs.rs/rayon/1.12.0/rayon/struct.ThreadPool.html#method.join",
               "doi:10.1145/324133.324234",
               "projects/kit/notes/G33-rayon-audit.md"
             ],
-            "text": "rayon's scoped spawning, `ThreadPool::in_place_scope` and `Scope::spawn`, whose documented contract is that the scope returns when every job spawned into it, and every job those spawned, has completed, and that a panic in a job is propagated when the scope ends (<https://docs.rs/rayon/1.12.0/rayon/struct.ThreadPool.html#method.in_place_scope>), over its work-stealing scheduler, after Blumofe and Leiserson, \"Scheduling Multithreaded Computations by Work Stealing\", Journal of the ACM 46(5), 1999 (`doi:10.1145/324133.324234`). rayon's audit is `projects/kit/notes/G33-rayon-audit.md`."
+            "text": "rayon's fork-join, `ThreadPool::join`, whose documented contract is that both closures have run when it returns, that it runs them on the pool (on a worker already, it runs in place), and that a panic in either is propagated after the other has finished (<https://docs.rs/rayon/1.12.0/rayon/struct.ThreadPool.html#method.join>), over its work-stealing scheduler, after Blumofe and Leiserson, \"Scheduling Multithreaded Computations by Work Stealing\", Journal of the ACM 46(5), 1999 (`doi:10.1145/324133.324234`). rayon's audit is `projects/kit/notes/G33-rayon-audit.md`."
           },
           "path": "geom_pool::native",
           "provenance": [],
@@ -9376,7 +9398,7 @@
         },
         {
           "cost": "three more crates for the loader to parse, about 5 000 lines; their instances are checked only when kernel code calls them.",
-          "does": "the kernel's crates call `core`, `alloc` (and `std` in tests) and `libm` constantly, and the standard library calls kernel code back through what it is handed: closures (`Option::map`, `Iterator::fold`, `sort_by`) and trait implementations of kernel types (`sort` runs `Ord::cmp`, `Vec::clone` runs `Clone::clone`, formatting runs `Display::fmt`). Their real source is not read; instead [`CORE`], [`LIBM`] and [`RAYON`] are Rust written from their documented signatures, which [`sources`] gives the loader as crates of role [`Role::Model`]: `core` (also answering to `alloc` and `std`, [`crate::recursion::resolve::MODEL_ALIASES`]), `libm`, `rayon` (`geom-pool`, the one kernel crate that depends on it, runs its tasks on a rayon pool: `in_place_scope` runs its closure and `Scope::spawn` its body), and the parts of `sha2` (`geom-op`'s hash), `unicode-normalization` (`geom-op`'s names) and `crc` (`geom-format`'s checksum) the kernel calls. A function of the model that calls back has a body that makes exactly those calls (`Option::map` calls `f`; `Map`'s `next` calls its closure; `[T]::sort` calls `T::cmp`); one that calls nothing back has the body `loop {}`. The type checker reads the model's bodies as it reads the kernel's, instance by instance, so a callback reaches exactly the closure or implementation the call was handed.",
+          "does": "the kernel's crates call `core`, `alloc` (and `std` in tests) and `libm` constantly, and the standard library calls kernel code back through what it is handed: closures (`Option::map`, `Iterator::fold`, `sort_by`) and trait implementations of kernel types (`sort` runs `Ord::cmp`, `Vec::clone` runs `Clone::clone`, formatting runs `Display::fmt`). Their real source is not read; instead [`CORE`], [`LIBM`] and [`RAYON`] are Rust written from their documented signatures, which [`sources`] gives the loader as crates of role [`Role::Model`]: `core` (also answering to `alloc` and `std`, [`crate::recursion::resolve::MODEL_ALIASES`]), `libm`, `rayon` (`geom-pool`, the one kernel crate that depends on it, runs its tasks on a rayon pool: `ThreadPool::join` runs both its closures), and the parts of `sha2` (`geom-op`'s hash), `unicode-normalization` (`geom-op`'s names) and `crc` (`geom-format`'s checksum) the kernel calls. A function of the model that calls back has a body that makes exactly those calls (`Option::map` calls `f`; `Map`'s `next` calls its closure; `[T]::sort` calls `T::cmp`); one that calls nothing back has the body `loop {}`. The type checker reads the model's bodies as it reads the kernel's, instance by instance, so a callback reaches exactly the closure or implementation the call was handed.",
           "family": [],
           "file": "projects/engines/geometry/crates/geom-test/src/recursion/stdlib.rs",
           "guarantees": [

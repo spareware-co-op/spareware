@@ -10,8 +10,8 @@
 //! their documented signatures, which [`sources`] gives the loader as crates of role
 //! [`Role::Model`]: `core` (also answering to `alloc` and `std`,
 //! [`crate::recursion::resolve::MODEL_ALIASES`]), `libm`, `rayon` (`geom-pool`, the one
-//! kernel crate that depends on it, runs its tasks on a rayon pool: `in_place_scope` runs its
-//! closure and `Scope::spawn` its body), and the parts of `sha2` (`geom-op`'s hash),
+//! kernel crate that depends on it, runs its tasks on a rayon pool: `ThreadPool::join` runs
+//! both its closures), and the parts of `sha2` (`geom-op`'s hash),
 //! `unicode-normalization` (`geom-op`'s names) and `crc` (`geom-format`'s checksum) the kernel
 //! calls. A function of the model that calls
 //! back has a body that makes exactly those calls (`Option::map` calls `f`; `Map`'s `next` calls
