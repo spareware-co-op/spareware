@@ -28,7 +28,7 @@
 //! Cost: the predicate module's `value`, with each product at the width of its result.
 
 use crate::grid::{P2, P3};
-use crate::wide::{I256, I320, I384};
+use crate::wide::{I256, I320, I384, I512, I576, I768};
 
 use super::within;
 
@@ -557,4 +557,729 @@ pub fn ssi_side_value(a: P2, b: P2, c: P2, d: P2, p: P2, q: P2) -> Option<I256> 
     let s_2 = I256::from_i128(ob).checked_mul(&I256::from_i128(oa2))?;
     let s = s_1.checked_sub(&s_2)?;
     Some(s)
+}
+
+/// `tpi_height`'s exact value in plain `i128` (chapter 23.3): each step in `i128`, or in its
+/// certificate's wide type with both operands widened to it, with checked arithmetic; `None` only
+/// if a step overflowed, which the certificate rules out; `None` also for a rounded input outside
+/// its declared range.
+#[inline]
+#[must_use]
+#[allow(
+    clippy::similar_names,
+    clippy::too_many_arguments,
+    reason = "names, parameters and lines follow the description: one per input and step"
+)]
+pub fn tpi_height_value(
+    n1x: i128,
+    n1y: i128,
+    n1z: i128,
+    d1: i128,
+    n2x: i128,
+    n2y: i128,
+    n2z: i128,
+    d2: i128,
+    n3x: i128,
+    n3y: i128,
+    n3z: i128,
+    d3: i128,
+    n4x: i128,
+    n4y: i128,
+    n4z: i128,
+    d4: i128,
+    n5x: i128,
+    n5y: i128,
+    n5z: i128,
+    d5: i128,
+    n6x: i128,
+    n6y: i128,
+    n6z: i128,
+    d6: i128,
+) -> Option<I576> {
+    let n2y = within(n2y, 83)?;
+    let n3z = within(n3z, 83)?;
+    let a23_x_1 = I256::from_i128(n2y).checked_mul(&I256::from_i128(n3z))?;
+    let n2z = within(n2z, 83)?;
+    let n3y = within(n3y, 83)?;
+    let a23_x_2 = I256::from_i128(n2z).checked_mul(&I256::from_i128(n3y))?;
+    let a23_x = a23_x_1.checked_sub(&a23_x_2)?;
+    let n3x = within(n3x, 83)?;
+    let a23_y_1 = I256::from_i128(n2z).checked_mul(&I256::from_i128(n3x))?;
+    let n2x = within(n2x, 83)?;
+    let a23_y_2 = I256::from_i128(n2x).checked_mul(&I256::from_i128(n3z))?;
+    let a23_y = a23_y_1.checked_sub(&a23_y_2)?;
+    let a23_z_1 = I256::from_i128(n2x).checked_mul(&I256::from_i128(n3y))?;
+    let a23_z_2 = I256::from_i128(n2y).checked_mul(&I256::from_i128(n3x))?;
+    let a23_z = a23_z_1.checked_sub(&a23_z_2)?;
+    let n1y = within(n1y, 83)?;
+    let a31_z_1 = I256::from_i128(n3x).checked_mul(&I256::from_i128(n1y))?;
+    let n1x = within(n1x, 83)?;
+    let a31_z_2 = I256::from_i128(n3y).checked_mul(&I256::from_i128(n1x))?;
+    let a31_z = a31_z_1.checked_sub(&a31_z_2)?;
+    let a12_z_1 = I256::from_i128(n1x).checked_mul(&I256::from_i128(n2y))?;
+    let a12_z_2 = I256::from_i128(n1y).checked_mul(&I256::from_i128(n2x))?;
+    let a12_z = a12_z_1.checked_sub(&a12_z_2)?;
+    let wa_1 = I256::from_i128(n1x).checked_mul(&a23_x)?;
+    let wa_2 = I256::from_i128(n1y).checked_mul(&a23_y)?;
+    let wa_3 = wa_1.checked_add(&wa_2)?;
+    let n1z = within(n1z, 83)?;
+    let wa_4 = I256::from_i128(n1z).checked_mul(&a23_z)?;
+    let wa = wa_3.checked_add(&wa_4)?;
+    let d1 = within(d1, 125)?;
+    let mza_1 = I320::from_i128(d1).checked_mul(&a23_z.resize::<5>()?)?;
+    let d2 = within(d2, 125)?;
+    let mza_2 = I320::from_i128(d2).checked_mul(&a31_z.resize::<5>()?)?;
+    let mza_3 = mza_1.checked_add(&mza_2)?;
+    let d3 = within(d3, 125)?;
+    let mza_4 = I320::from_i128(d3).checked_mul(&a12_z.resize::<5>()?)?;
+    let mza = mza_3.checked_add(&mza_4)?;
+    let n5y = within(n5y, 83)?;
+    let n6z = within(n6z, 83)?;
+    let b56_x_1 = I256::from_i128(n5y).checked_mul(&I256::from_i128(n6z))?;
+    let n5z = within(n5z, 83)?;
+    let n6y = within(n6y, 83)?;
+    let b56_x_2 = I256::from_i128(n5z).checked_mul(&I256::from_i128(n6y))?;
+    let b56_x = b56_x_1.checked_sub(&b56_x_2)?;
+    let n6x = within(n6x, 83)?;
+    let b56_y_1 = I256::from_i128(n5z).checked_mul(&I256::from_i128(n6x))?;
+    let n5x = within(n5x, 83)?;
+    let b56_y_2 = I256::from_i128(n5x).checked_mul(&I256::from_i128(n6z))?;
+    let b56_y = b56_y_1.checked_sub(&b56_y_2)?;
+    let b56_z_1 = I256::from_i128(n5x).checked_mul(&I256::from_i128(n6y))?;
+    let b56_z_2 = I256::from_i128(n5y).checked_mul(&I256::from_i128(n6x))?;
+    let b56_z = b56_z_1.checked_sub(&b56_z_2)?;
+    let n4y = within(n4y, 83)?;
+    let b64_z_1 = I256::from_i128(n6x).checked_mul(&I256::from_i128(n4y))?;
+    let n4x = within(n4x, 83)?;
+    let b64_z_2 = I256::from_i128(n6y).checked_mul(&I256::from_i128(n4x))?;
+    let b64_z = b64_z_1.checked_sub(&b64_z_2)?;
+    let b45_z_1 = I256::from_i128(n4x).checked_mul(&I256::from_i128(n5y))?;
+    let b45_z_2 = I256::from_i128(n4y).checked_mul(&I256::from_i128(n5x))?;
+    let b45_z = b45_z_1.checked_sub(&b45_z_2)?;
+    let wb_1 = I256::from_i128(n4x).checked_mul(&b56_x)?;
+    let wb_2 = I256::from_i128(n4y).checked_mul(&b56_y)?;
+    let wb_3 = wb_1.checked_add(&wb_2)?;
+    let n4z = within(n4z, 83)?;
+    let wb_4 = I256::from_i128(n4z).checked_mul(&b56_z)?;
+    let wb = wb_3.checked_add(&wb_4)?;
+    let d4 = within(d4, 125)?;
+    let mzb_1 = I320::from_i128(d4).checked_mul(&b56_z.resize::<5>()?)?;
+    let d5 = within(d5, 125)?;
+    let mzb_2 = I320::from_i128(d5).checked_mul(&b64_z.resize::<5>()?)?;
+    let mzb_3 = mzb_1.checked_add(&mzb_2)?;
+    let d6 = within(d6, 125)?;
+    let mzb_4 = I320::from_i128(d6).checked_mul(&b45_z.resize::<5>()?)?;
+    let mzb = mzb_3.checked_add(&mzb_4)?;
+    let h_1 = mzb.resize::<9>()?.checked_mul(&wa.resize::<9>()?)?;
+    let h_2 = mza.resize::<9>()?.checked_mul(&wb.resize::<9>()?)?;
+    let h = h_1.checked_sub(&h_2)?;
+    Some(h)
+}
+
+/// `mitre_time`'s exact value in plain `i128` (chapter 23.3): each step in `i128`, or in its
+/// certificate's wide type with both operands widened to it, with checked arithmetic; `None` only
+/// if a step overflowed, which the certificate rules out; `None` also for a rounded input outside
+/// its declared range.
+#[inline]
+#[must_use]
+#[allow(
+    clippy::similar_names,
+    clippy::too_many_arguments,
+    clippy::too_many_lines,
+    reason = "names, parameters and lines follow the description: one per input and step"
+)]
+pub fn mitre_time_value(
+    n1x: i128,
+    n1y: i128,
+    n1z: i128,
+    d1: i128,
+    s1: i128,
+    n2x: i128,
+    n2y: i128,
+    n2z: i128,
+    d2: i128,
+    s2: i128,
+    n3x: i128,
+    n3y: i128,
+    n3z: i128,
+    d3: i128,
+    s3: i128,
+    n4x: i128,
+    n4y: i128,
+    n4z: i128,
+    d4: i128,
+    s4: i128,
+    n5x: i128,
+    n5y: i128,
+    n5z: i128,
+    d5: i128,
+    s5: i128,
+    n6x: i128,
+    n6y: i128,
+    n6z: i128,
+    d6: i128,
+    s6: i128,
+    n7x: i128,
+    n7y: i128,
+    n7z: i128,
+    d7: i128,
+    s7: i128,
+    n8x: i128,
+    n8y: i128,
+    n8z: i128,
+    d8: i128,
+    s8: i128,
+) -> Option<I768> {
+    let n2y = within(n2y, 83)?;
+    let n3z = within(n3z, 83)?;
+    let a_bc_x_1 = I256::from_i128(n2y).checked_mul(&I256::from_i128(n3z))?;
+    let n2z = within(n2z, 83)?;
+    let n3y = within(n3y, 83)?;
+    let a_bc_x_2 = I256::from_i128(n2z).checked_mul(&I256::from_i128(n3y))?;
+    let a_bc_x = a_bc_x_1.checked_sub(&a_bc_x_2)?;
+    let n3x = within(n3x, 83)?;
+    let a_bc_y_1 = I256::from_i128(n2z).checked_mul(&I256::from_i128(n3x))?;
+    let n2x = within(n2x, 83)?;
+    let a_bc_y_2 = I256::from_i128(n2x).checked_mul(&I256::from_i128(n3z))?;
+    let a_bc_y = a_bc_y_1.checked_sub(&a_bc_y_2)?;
+    let a_bc_z_1 = I256::from_i128(n2x).checked_mul(&I256::from_i128(n3y))?;
+    let a_bc_z_2 = I256::from_i128(n2y).checked_mul(&I256::from_i128(n3x))?;
+    let a_bc_z = a_bc_z_1.checked_sub(&a_bc_z_2)?;
+    let n1z = within(n1z, 83)?;
+    let a_ca_x_1 = I256::from_i128(n3y).checked_mul(&I256::from_i128(n1z))?;
+    let n1y = within(n1y, 83)?;
+    let a_ca_x_2 = I256::from_i128(n3z).checked_mul(&I256::from_i128(n1y))?;
+    let a_ca_x = a_ca_x_1.checked_sub(&a_ca_x_2)?;
+    let n1x = within(n1x, 83)?;
+    let a_ca_y_1 = I256::from_i128(n3z).checked_mul(&I256::from_i128(n1x))?;
+    let a_ca_y_2 = I256::from_i128(n3x).checked_mul(&I256::from_i128(n1z))?;
+    let a_ca_y = a_ca_y_1.checked_sub(&a_ca_y_2)?;
+    let a_ca_z_1 = I256::from_i128(n3x).checked_mul(&I256::from_i128(n1y))?;
+    let a_ca_z_2 = I256::from_i128(n3y).checked_mul(&I256::from_i128(n1x))?;
+    let a_ca_z = a_ca_z_1.checked_sub(&a_ca_z_2)?;
+    let a_ab_x_1 = I256::from_i128(n1y).checked_mul(&I256::from_i128(n2z))?;
+    let a_ab_x_2 = I256::from_i128(n1z).checked_mul(&I256::from_i128(n2y))?;
+    let a_ab_x = a_ab_x_1.checked_sub(&a_ab_x_2)?;
+    let a_ab_y_1 = I256::from_i128(n1z).checked_mul(&I256::from_i128(n2x))?;
+    let a_ab_y_2 = I256::from_i128(n1x).checked_mul(&I256::from_i128(n2z))?;
+    let a_ab_y = a_ab_y_1.checked_sub(&a_ab_y_2)?;
+    let a_ab_z_1 = I256::from_i128(n1x).checked_mul(&I256::from_i128(n2y))?;
+    let a_ab_z_2 = I256::from_i128(n1y).checked_mul(&I256::from_i128(n2x))?;
+    let a_ab_z = a_ab_z_1.checked_sub(&a_ab_z_2)?;
+    let a_w_1 = I256::from_i128(n1x).checked_mul(&a_bc_x)?;
+    let a_w_2 = I256::from_i128(n1y).checked_mul(&a_bc_y)?;
+    let a_w_3 = a_w_1.checked_add(&a_w_2)?;
+    let a_w_4 = I256::from_i128(n1z).checked_mul(&a_bc_z)?;
+    let a_w = a_w_3.checked_add(&a_w_4)?;
+    let d1 = within(d1, 125)?;
+    let a_mx_x_1 = I320::from_i128(d1).checked_mul(&a_bc_x.resize::<5>()?)?;
+    let d2 = within(d2, 125)?;
+    let a_mx_x_2 = I320::from_i128(d2).checked_mul(&a_ca_x.resize::<5>()?)?;
+    let a_mx_x_3 = a_mx_x_1.checked_add(&a_mx_x_2)?;
+    let d3 = within(d3, 125)?;
+    let a_mx_x_4 = I320::from_i128(d3).checked_mul(&a_ab_x.resize::<5>()?)?;
+    let a_mx_x = a_mx_x_3.checked_add(&a_mx_x_4)?;
+    let a_mx_y_1 = I320::from_i128(d1).checked_mul(&a_bc_y.resize::<5>()?)?;
+    let a_mx_y_2 = I320::from_i128(d2).checked_mul(&a_ca_y.resize::<5>()?)?;
+    let a_mx_y_3 = a_mx_y_1.checked_add(&a_mx_y_2)?;
+    let a_mx_y_4 = I320::from_i128(d3).checked_mul(&a_ab_y.resize::<5>()?)?;
+    let a_mx_y = a_mx_y_3.checked_add(&a_mx_y_4)?;
+    let a_mx_z_1 = I320::from_i128(d1).checked_mul(&a_bc_z.resize::<5>()?)?;
+    let a_mx_z_2 = I320::from_i128(d2).checked_mul(&a_ca_z.resize::<5>()?)?;
+    let a_mx_z_3 = a_mx_z_1.checked_add(&a_mx_z_2)?;
+    let a_mx_z_4 = I320::from_i128(d3).checked_mul(&a_ab_z.resize::<5>()?)?;
+    let a_mx_z = a_mx_z_3.checked_add(&a_mx_z_4)?;
+    let s1 = within(s1, 125)?;
+    let a_ms_x_1 = I320::from_i128(s1).checked_mul(&a_bc_x.resize::<5>()?)?;
+    let s2 = within(s2, 125)?;
+    let a_ms_x_2 = I320::from_i128(s2).checked_mul(&a_ca_x.resize::<5>()?)?;
+    let a_ms_x_3 = a_ms_x_1.checked_add(&a_ms_x_2)?;
+    let s3 = within(s3, 125)?;
+    let a_ms_x_4 = I320::from_i128(s3).checked_mul(&a_ab_x.resize::<5>()?)?;
+    let a_ms_x = a_ms_x_3.checked_add(&a_ms_x_4)?;
+    let a_ms_y_1 = I320::from_i128(s1).checked_mul(&a_bc_y.resize::<5>()?)?;
+    let a_ms_y_2 = I320::from_i128(s2).checked_mul(&a_ca_y.resize::<5>()?)?;
+    let a_ms_y_3 = a_ms_y_1.checked_add(&a_ms_y_2)?;
+    let a_ms_y_4 = I320::from_i128(s3).checked_mul(&a_ab_y.resize::<5>()?)?;
+    let a_ms_y = a_ms_y_3.checked_add(&a_ms_y_4)?;
+    let a_ms_z_1 = I320::from_i128(s1).checked_mul(&a_bc_z.resize::<5>()?)?;
+    let a_ms_z_2 = I320::from_i128(s2).checked_mul(&a_ca_z.resize::<5>()?)?;
+    let a_ms_z_3 = a_ms_z_1.checked_add(&a_ms_z_2)?;
+    let a_ms_z_4 = I320::from_i128(s3).checked_mul(&a_ab_z.resize::<5>()?)?;
+    let a_ms_z = a_ms_z_3.checked_add(&a_ms_z_4)?;
+    let d4 = within(d4, 125)?;
+    let a_nd_1 = I384::from_i128(d4).checked_mul(&a_w.resize::<6>()?)?;
+    let n4x = within(n4x, 83)?;
+    let a_nd_2 = I384::from_i128(n4x).checked_mul(&a_mx_x.resize::<6>()?)?;
+    let a_nd_3 = a_nd_1.checked_sub(&a_nd_2)?;
+    let n4y = within(n4y, 83)?;
+    let a_nd_4 = I384::from_i128(n4y).checked_mul(&a_mx_y.resize::<6>()?)?;
+    let a_nd_5 = a_nd_3.checked_sub(&a_nd_4)?;
+    let n4z = within(n4z, 83)?;
+    let a_nd_6 = I384::from_i128(n4z).checked_mul(&a_mx_z.resize::<6>()?)?;
+    let a_nd = a_nd_5.checked_sub(&a_nd_6)?;
+    let s4 = within(s4, 125)?;
+    let a_ns_1 = I384::from_i128(s4).checked_mul(&a_w.resize::<6>()?)?;
+    let a_ns_2 = I384::from_i128(n4x).checked_mul(&a_ms_x.resize::<6>()?)?;
+    let a_ns_3 = a_ns_1.checked_sub(&a_ns_2)?;
+    let a_ns_4 = I384::from_i128(n4y).checked_mul(&a_ms_y.resize::<6>()?)?;
+    let a_ns_5 = a_ns_3.checked_sub(&a_ns_4)?;
+    let a_ns_6 = I384::from_i128(n4z).checked_mul(&a_ms_z.resize::<6>()?)?;
+    let a_ns = a_ns_5.checked_sub(&a_ns_6)?;
+    let n6y = within(n6y, 83)?;
+    let n7z = within(n7z, 83)?;
+    let b_bc_x_1 = I256::from_i128(n6y).checked_mul(&I256::from_i128(n7z))?;
+    let n6z = within(n6z, 83)?;
+    let n7y = within(n7y, 83)?;
+    let b_bc_x_2 = I256::from_i128(n6z).checked_mul(&I256::from_i128(n7y))?;
+    let b_bc_x = b_bc_x_1.checked_sub(&b_bc_x_2)?;
+    let n7x = within(n7x, 83)?;
+    let b_bc_y_1 = I256::from_i128(n6z).checked_mul(&I256::from_i128(n7x))?;
+    let n6x = within(n6x, 83)?;
+    let b_bc_y_2 = I256::from_i128(n6x).checked_mul(&I256::from_i128(n7z))?;
+    let b_bc_y = b_bc_y_1.checked_sub(&b_bc_y_2)?;
+    let b_bc_z_1 = I256::from_i128(n6x).checked_mul(&I256::from_i128(n7y))?;
+    let b_bc_z_2 = I256::from_i128(n6y).checked_mul(&I256::from_i128(n7x))?;
+    let b_bc_z = b_bc_z_1.checked_sub(&b_bc_z_2)?;
+    let n5z = within(n5z, 83)?;
+    let b_ca_x_1 = I256::from_i128(n7y).checked_mul(&I256::from_i128(n5z))?;
+    let n5y = within(n5y, 83)?;
+    let b_ca_x_2 = I256::from_i128(n7z).checked_mul(&I256::from_i128(n5y))?;
+    let b_ca_x = b_ca_x_1.checked_sub(&b_ca_x_2)?;
+    let n5x = within(n5x, 83)?;
+    let b_ca_y_1 = I256::from_i128(n7z).checked_mul(&I256::from_i128(n5x))?;
+    let b_ca_y_2 = I256::from_i128(n7x).checked_mul(&I256::from_i128(n5z))?;
+    let b_ca_y = b_ca_y_1.checked_sub(&b_ca_y_2)?;
+    let b_ca_z_1 = I256::from_i128(n7x).checked_mul(&I256::from_i128(n5y))?;
+    let b_ca_z_2 = I256::from_i128(n7y).checked_mul(&I256::from_i128(n5x))?;
+    let b_ca_z = b_ca_z_1.checked_sub(&b_ca_z_2)?;
+    let b_ab_x_1 = I256::from_i128(n5y).checked_mul(&I256::from_i128(n6z))?;
+    let b_ab_x_2 = I256::from_i128(n5z).checked_mul(&I256::from_i128(n6y))?;
+    let b_ab_x = b_ab_x_1.checked_sub(&b_ab_x_2)?;
+    let b_ab_y_1 = I256::from_i128(n5z).checked_mul(&I256::from_i128(n6x))?;
+    let b_ab_y_2 = I256::from_i128(n5x).checked_mul(&I256::from_i128(n6z))?;
+    let b_ab_y = b_ab_y_1.checked_sub(&b_ab_y_2)?;
+    let b_ab_z_1 = I256::from_i128(n5x).checked_mul(&I256::from_i128(n6y))?;
+    let b_ab_z_2 = I256::from_i128(n5y).checked_mul(&I256::from_i128(n6x))?;
+    let b_ab_z = b_ab_z_1.checked_sub(&b_ab_z_2)?;
+    let b_w_1 = I256::from_i128(n5x).checked_mul(&b_bc_x)?;
+    let b_w_2 = I256::from_i128(n5y).checked_mul(&b_bc_y)?;
+    let b_w_3 = b_w_1.checked_add(&b_w_2)?;
+    let b_w_4 = I256::from_i128(n5z).checked_mul(&b_bc_z)?;
+    let b_w = b_w_3.checked_add(&b_w_4)?;
+    let d5 = within(d5, 125)?;
+    let b_mx_x_1 = I320::from_i128(d5).checked_mul(&b_bc_x.resize::<5>()?)?;
+    let d6 = within(d6, 125)?;
+    let b_mx_x_2 = I320::from_i128(d6).checked_mul(&b_ca_x.resize::<5>()?)?;
+    let b_mx_x_3 = b_mx_x_1.checked_add(&b_mx_x_2)?;
+    let d7 = within(d7, 125)?;
+    let b_mx_x_4 = I320::from_i128(d7).checked_mul(&b_ab_x.resize::<5>()?)?;
+    let b_mx_x = b_mx_x_3.checked_add(&b_mx_x_4)?;
+    let b_mx_y_1 = I320::from_i128(d5).checked_mul(&b_bc_y.resize::<5>()?)?;
+    let b_mx_y_2 = I320::from_i128(d6).checked_mul(&b_ca_y.resize::<5>()?)?;
+    let b_mx_y_3 = b_mx_y_1.checked_add(&b_mx_y_2)?;
+    let b_mx_y_4 = I320::from_i128(d7).checked_mul(&b_ab_y.resize::<5>()?)?;
+    let b_mx_y = b_mx_y_3.checked_add(&b_mx_y_4)?;
+    let b_mx_z_1 = I320::from_i128(d5).checked_mul(&b_bc_z.resize::<5>()?)?;
+    let b_mx_z_2 = I320::from_i128(d6).checked_mul(&b_ca_z.resize::<5>()?)?;
+    let b_mx_z_3 = b_mx_z_1.checked_add(&b_mx_z_2)?;
+    let b_mx_z_4 = I320::from_i128(d7).checked_mul(&b_ab_z.resize::<5>()?)?;
+    let b_mx_z = b_mx_z_3.checked_add(&b_mx_z_4)?;
+    let s5 = within(s5, 125)?;
+    let b_ms_x_1 = I320::from_i128(s5).checked_mul(&b_bc_x.resize::<5>()?)?;
+    let s6 = within(s6, 125)?;
+    let b_ms_x_2 = I320::from_i128(s6).checked_mul(&b_ca_x.resize::<5>()?)?;
+    let b_ms_x_3 = b_ms_x_1.checked_add(&b_ms_x_2)?;
+    let s7 = within(s7, 125)?;
+    let b_ms_x_4 = I320::from_i128(s7).checked_mul(&b_ab_x.resize::<5>()?)?;
+    let b_ms_x = b_ms_x_3.checked_add(&b_ms_x_4)?;
+    let b_ms_y_1 = I320::from_i128(s5).checked_mul(&b_bc_y.resize::<5>()?)?;
+    let b_ms_y_2 = I320::from_i128(s6).checked_mul(&b_ca_y.resize::<5>()?)?;
+    let b_ms_y_3 = b_ms_y_1.checked_add(&b_ms_y_2)?;
+    let b_ms_y_4 = I320::from_i128(s7).checked_mul(&b_ab_y.resize::<5>()?)?;
+    let b_ms_y = b_ms_y_3.checked_add(&b_ms_y_4)?;
+    let b_ms_z_1 = I320::from_i128(s5).checked_mul(&b_bc_z.resize::<5>()?)?;
+    let b_ms_z_2 = I320::from_i128(s6).checked_mul(&b_ca_z.resize::<5>()?)?;
+    let b_ms_z_3 = b_ms_z_1.checked_add(&b_ms_z_2)?;
+    let b_ms_z_4 = I320::from_i128(s7).checked_mul(&b_ab_z.resize::<5>()?)?;
+    let b_ms_z = b_ms_z_3.checked_add(&b_ms_z_4)?;
+    let d8 = within(d8, 125)?;
+    let b_nd_1 = I384::from_i128(d8).checked_mul(&b_w.resize::<6>()?)?;
+    let n8x = within(n8x, 83)?;
+    let b_nd_2 = I384::from_i128(n8x).checked_mul(&b_mx_x.resize::<6>()?)?;
+    let b_nd_3 = b_nd_1.checked_sub(&b_nd_2)?;
+    let n8y = within(n8y, 83)?;
+    let b_nd_4 = I384::from_i128(n8y).checked_mul(&b_mx_y.resize::<6>()?)?;
+    let b_nd_5 = b_nd_3.checked_sub(&b_nd_4)?;
+    let n8z = within(n8z, 83)?;
+    let b_nd_6 = I384::from_i128(n8z).checked_mul(&b_mx_z.resize::<6>()?)?;
+    let b_nd = b_nd_5.checked_sub(&b_nd_6)?;
+    let s8 = within(s8, 125)?;
+    let b_ns_1 = I384::from_i128(s8).checked_mul(&b_w.resize::<6>()?)?;
+    let b_ns_2 = I384::from_i128(n8x).checked_mul(&b_ms_x.resize::<6>()?)?;
+    let b_ns_3 = b_ns_1.checked_sub(&b_ns_2)?;
+    let b_ns_4 = I384::from_i128(n8y).checked_mul(&b_ms_y.resize::<6>()?)?;
+    let b_ns_5 = b_ns_3.checked_sub(&b_ns_4)?;
+    let b_ns_6 = I384::from_i128(n8z).checked_mul(&b_ms_z.resize::<6>()?)?;
+    let b_ns = b_ns_5.checked_sub(&b_ns_6)?;
+    let t_1 = b_nd.resize::<12>()?.checked_mul(&a_ns.resize::<12>()?)?;
+    let t_2 = a_nd.resize::<12>()?.checked_mul(&b_ns.resize::<12>()?)?;
+    let t = t_1.checked_sub(&t_2)?;
+    Some(t)
+}
+
+/// `mitre_side`'s exact value in plain `i128` (chapter 23.3): each step in `i128`, or in its
+/// certificate's wide type with both operands widened to it, with checked arithmetic; `None` only
+/// if a step overflowed, which the certificate rules out; `None` also for a rounded input outside
+/// its declared range.
+#[inline]
+#[must_use]
+#[allow(
+    clippy::similar_names,
+    clippy::too_many_arguments,
+    clippy::too_many_lines,
+    reason = "names, parameters and lines follow the description: one per input and step"
+)]
+pub fn mitre_side_value(
+    n1x: i128,
+    n1y: i128,
+    n1z: i128,
+    d1: i128,
+    s1: i128,
+    n2x: i128,
+    n2y: i128,
+    n2z: i128,
+    d2: i128,
+    s2: i128,
+    n3x: i128,
+    n3y: i128,
+    n3z: i128,
+    d3: i128,
+    s3: i128,
+    n4x: i128,
+    n4y: i128,
+    n4z: i128,
+    d4: i128,
+    s4: i128,
+    n5x: i128,
+    n5y: i128,
+    n5z: i128,
+    d5: i128,
+    s5: i128,
+) -> Option<I512> {
+    let n2y = within(n2y, 83)?;
+    let n3z = within(n3z, 83)?;
+    let c23_x_1 = I256::from_i128(n2y).checked_mul(&I256::from_i128(n3z))?;
+    let n2z = within(n2z, 83)?;
+    let n3y = within(n3y, 83)?;
+    let c23_x_2 = I256::from_i128(n2z).checked_mul(&I256::from_i128(n3y))?;
+    let c23_x = c23_x_1.checked_sub(&c23_x_2)?;
+    let n3x = within(n3x, 83)?;
+    let c23_y_1 = I256::from_i128(n2z).checked_mul(&I256::from_i128(n3x))?;
+    let n2x = within(n2x, 83)?;
+    let c23_y_2 = I256::from_i128(n2x).checked_mul(&I256::from_i128(n3z))?;
+    let c23_y = c23_y_1.checked_sub(&c23_y_2)?;
+    let c23_z_1 = I256::from_i128(n2x).checked_mul(&I256::from_i128(n3y))?;
+    let c23_z_2 = I256::from_i128(n2y).checked_mul(&I256::from_i128(n3x))?;
+    let c23_z = c23_z_1.checked_sub(&c23_z_2)?;
+    let n4z = within(n4z, 83)?;
+    let c24_x_1 = I256::from_i128(n2y).checked_mul(&I256::from_i128(n4z))?;
+    let n4y = within(n4y, 83)?;
+    let c24_x_2 = I256::from_i128(n2z).checked_mul(&I256::from_i128(n4y))?;
+    let c24_x = c24_x_1.checked_sub(&c24_x_2)?;
+    let n4x = within(n4x, 83)?;
+    let c24_y_1 = I256::from_i128(n2z).checked_mul(&I256::from_i128(n4x))?;
+    let c24_y_2 = I256::from_i128(n2x).checked_mul(&I256::from_i128(n4z))?;
+    let c24_y = c24_y_1.checked_sub(&c24_y_2)?;
+    let c24_z_1 = I256::from_i128(n2x).checked_mul(&I256::from_i128(n4y))?;
+    let c24_z_2 = I256::from_i128(n2y).checked_mul(&I256::from_i128(n4x))?;
+    let c24_z = c24_z_1.checked_sub(&c24_z_2)?;
+    let n5z = within(n5z, 83)?;
+    let c25_x_1 = I256::from_i128(n2y).checked_mul(&I256::from_i128(n5z))?;
+    let n5y = within(n5y, 83)?;
+    let c25_x_2 = I256::from_i128(n2z).checked_mul(&I256::from_i128(n5y))?;
+    let c25_x = c25_x_1.checked_sub(&c25_x_2)?;
+    let n5x = within(n5x, 83)?;
+    let c25_y_1 = I256::from_i128(n2z).checked_mul(&I256::from_i128(n5x))?;
+    let c25_y_2 = I256::from_i128(n2x).checked_mul(&I256::from_i128(n5z))?;
+    let c25_y = c25_y_1.checked_sub(&c25_y_2)?;
+    let c25_z_1 = I256::from_i128(n2x).checked_mul(&I256::from_i128(n5y))?;
+    let c25_z_2 = I256::from_i128(n2y).checked_mul(&I256::from_i128(n5x))?;
+    let c25_z = c25_z_1.checked_sub(&c25_z_2)?;
+    let c34_x_1 = I256::from_i128(n3y).checked_mul(&I256::from_i128(n4z))?;
+    let c34_x_2 = I256::from_i128(n3z).checked_mul(&I256::from_i128(n4y))?;
+    let c34_x = c34_x_1.checked_sub(&c34_x_2)?;
+    let c34_y_1 = I256::from_i128(n3z).checked_mul(&I256::from_i128(n4x))?;
+    let c34_y_2 = I256::from_i128(n3x).checked_mul(&I256::from_i128(n4z))?;
+    let c34_y = c34_y_1.checked_sub(&c34_y_2)?;
+    let c34_z_1 = I256::from_i128(n3x).checked_mul(&I256::from_i128(n4y))?;
+    let c34_z_2 = I256::from_i128(n3y).checked_mul(&I256::from_i128(n4x))?;
+    let c34_z = c34_z_1.checked_sub(&c34_z_2)?;
+    let c35_x_1 = I256::from_i128(n3y).checked_mul(&I256::from_i128(n5z))?;
+    let c35_x_2 = I256::from_i128(n3z).checked_mul(&I256::from_i128(n5y))?;
+    let c35_x = c35_x_1.checked_sub(&c35_x_2)?;
+    let c35_y_1 = I256::from_i128(n3z).checked_mul(&I256::from_i128(n5x))?;
+    let c35_y_2 = I256::from_i128(n3x).checked_mul(&I256::from_i128(n5z))?;
+    let c35_y = c35_y_1.checked_sub(&c35_y_2)?;
+    let c35_z_1 = I256::from_i128(n3x).checked_mul(&I256::from_i128(n5y))?;
+    let c35_z_2 = I256::from_i128(n3y).checked_mul(&I256::from_i128(n5x))?;
+    let c35_z = c35_z_1.checked_sub(&c35_z_2)?;
+    let c45_x_1 = I256::from_i128(n4y).checked_mul(&I256::from_i128(n5z))?;
+    let c45_x_2 = I256::from_i128(n4z).checked_mul(&I256::from_i128(n5y))?;
+    let c45_x = c45_x_1.checked_sub(&c45_x_2)?;
+    let c45_y_1 = I256::from_i128(n4z).checked_mul(&I256::from_i128(n5x))?;
+    let c45_y_2 = I256::from_i128(n4x).checked_mul(&I256::from_i128(n5z))?;
+    let c45_y = c45_y_1.checked_sub(&c45_y_2)?;
+    let c45_z_1 = I256::from_i128(n4x).checked_mul(&I256::from_i128(n5y))?;
+    let c45_z_2 = I256::from_i128(n4y).checked_mul(&I256::from_i128(n5x))?;
+    let c45_z = c45_z_1.checked_sub(&c45_z_2)?;
+    let s1 = within(s1, 125)?;
+    let d2 = within(d2, 125)?;
+    let q12_1 = I256::from_i128(s1).checked_mul(&I256::from_i128(d2))?;
+    let s2 = within(s2, 125)?;
+    let d1 = within(d1, 125)?;
+    let q12_2 = I256::from_i128(s2).checked_mul(&I256::from_i128(d1))?;
+    let q12 = q12_1.checked_sub(&q12_2)?;
+    let d3 = within(d3, 125)?;
+    let q13_1 = I256::from_i128(s1).checked_mul(&I256::from_i128(d3))?;
+    let s3 = within(s3, 125)?;
+    let q13_2 = I256::from_i128(s3).checked_mul(&I256::from_i128(d1))?;
+    let q13 = q13_1.checked_sub(&q13_2)?;
+    let d4 = within(d4, 125)?;
+    let q14_1 = I256::from_i128(s1).checked_mul(&I256::from_i128(d4))?;
+    let s4 = within(s4, 125)?;
+    let q14_2 = I256::from_i128(s4).checked_mul(&I256::from_i128(d1))?;
+    let q14 = q14_1.checked_sub(&q14_2)?;
+    let d5 = within(d5, 125)?;
+    let q15_1 = I256::from_i128(s1).checked_mul(&I256::from_i128(d5))?;
+    let s5 = within(s5, 125)?;
+    let q15_2 = I256::from_i128(s5).checked_mul(&I256::from_i128(d1))?;
+    let q15 = q15_1.checked_sub(&q15_2)?;
+    let q23_1 = I256::from_i128(s2).checked_mul(&I256::from_i128(d3))?;
+    let q23_2 = I256::from_i128(s3).checked_mul(&I256::from_i128(d2))?;
+    let q23 = q23_1.checked_sub(&q23_2)?;
+    let q24_1 = I256::from_i128(s2).checked_mul(&I256::from_i128(d4))?;
+    let q24_2 = I256::from_i128(s4).checked_mul(&I256::from_i128(d2))?;
+    let q24 = q24_1.checked_sub(&q24_2)?;
+    let q25_1 = I256::from_i128(s2).checked_mul(&I256::from_i128(d5))?;
+    let q25_2 = I256::from_i128(s5).checked_mul(&I256::from_i128(d2))?;
+    let q25 = q25_1.checked_sub(&q25_2)?;
+    let q34_1 = I256::from_i128(s3).checked_mul(&I256::from_i128(d4))?;
+    let q34_2 = I256::from_i128(s4).checked_mul(&I256::from_i128(d3))?;
+    let q34 = q34_1.checked_sub(&q34_2)?;
+    let q35_1 = I256::from_i128(s3).checked_mul(&I256::from_i128(d5))?;
+    let q35_2 = I256::from_i128(s5).checked_mul(&I256::from_i128(d3))?;
+    let q35 = q35_1.checked_sub(&q35_2)?;
+    let q45_1 = I256::from_i128(s4).checked_mul(&I256::from_i128(d5))?;
+    let q45_2 = I256::from_i128(s5).checked_mul(&I256::from_i128(d4))?;
+    let q45 = q45_1.checked_sub(&q45_2)?;
+    let n1x = within(n1x, 83)?;
+    let m123_1 = I256::from_i128(n1x).checked_mul(&c23_x)?;
+    let n1y = within(n1y, 83)?;
+    let m123_2 = I256::from_i128(n1y).checked_mul(&c23_y)?;
+    let m123_3 = m123_1.checked_add(&m123_2)?;
+    let n1z = within(n1z, 83)?;
+    let m123_4 = I256::from_i128(n1z).checked_mul(&c23_z)?;
+    let m123 = m123_3.checked_add(&m123_4)?;
+    let p123 = m123.resize::<8>()?.checked_mul(&q45.resize::<8>()?)?;
+    let m124_1 = I256::from_i128(n1x).checked_mul(&c24_x)?;
+    let m124_2 = I256::from_i128(n1y).checked_mul(&c24_y)?;
+    let m124_3 = m124_1.checked_add(&m124_2)?;
+    let m124_4 = I256::from_i128(n1z).checked_mul(&c24_z)?;
+    let m124 = m124_3.checked_add(&m124_4)?;
+    let p124 = m124.resize::<8>()?.checked_mul(&q35.resize::<8>()?)?;
+    let m125_1 = I256::from_i128(n1x).checked_mul(&c25_x)?;
+    let m125_2 = I256::from_i128(n1y).checked_mul(&c25_y)?;
+    let m125_3 = m125_1.checked_add(&m125_2)?;
+    let m125_4 = I256::from_i128(n1z).checked_mul(&c25_z)?;
+    let m125 = m125_3.checked_add(&m125_4)?;
+    let p125 = m125.resize::<8>()?.checked_mul(&q34.resize::<8>()?)?;
+    let m134_1 = I256::from_i128(n1x).checked_mul(&c34_x)?;
+    let m134_2 = I256::from_i128(n1y).checked_mul(&c34_y)?;
+    let m134_3 = m134_1.checked_add(&m134_2)?;
+    let m134_4 = I256::from_i128(n1z).checked_mul(&c34_z)?;
+    let m134 = m134_3.checked_add(&m134_4)?;
+    let p134 = m134.resize::<8>()?.checked_mul(&q25.resize::<8>()?)?;
+    let m135_1 = I256::from_i128(n1x).checked_mul(&c35_x)?;
+    let m135_2 = I256::from_i128(n1y).checked_mul(&c35_y)?;
+    let m135_3 = m135_1.checked_add(&m135_2)?;
+    let m135_4 = I256::from_i128(n1z).checked_mul(&c35_z)?;
+    let m135 = m135_3.checked_add(&m135_4)?;
+    let p135 = m135.resize::<8>()?.checked_mul(&q24.resize::<8>()?)?;
+    let m145_1 = I256::from_i128(n1x).checked_mul(&c45_x)?;
+    let m145_2 = I256::from_i128(n1y).checked_mul(&c45_y)?;
+    let m145_3 = m145_1.checked_add(&m145_2)?;
+    let m145_4 = I256::from_i128(n1z).checked_mul(&c45_z)?;
+    let m145 = m145_3.checked_add(&m145_4)?;
+    let p145 = m145.resize::<8>()?.checked_mul(&q23.resize::<8>()?)?;
+    let m234_1 = I256::from_i128(n2x).checked_mul(&c34_x)?;
+    let m234_2 = I256::from_i128(n2y).checked_mul(&c34_y)?;
+    let m234_3 = m234_1.checked_add(&m234_2)?;
+    let m234_4 = I256::from_i128(n2z).checked_mul(&c34_z)?;
+    let m234 = m234_3.checked_add(&m234_4)?;
+    let p234 = m234.resize::<8>()?.checked_mul(&q15.resize::<8>()?)?;
+    let m235_1 = I256::from_i128(n2x).checked_mul(&c35_x)?;
+    let m235_2 = I256::from_i128(n2y).checked_mul(&c35_y)?;
+    let m235_3 = m235_1.checked_add(&m235_2)?;
+    let m235_4 = I256::from_i128(n2z).checked_mul(&c35_z)?;
+    let m235 = m235_3.checked_add(&m235_4)?;
+    let p235 = m235.resize::<8>()?.checked_mul(&q14.resize::<8>()?)?;
+    let m245_1 = I256::from_i128(n2x).checked_mul(&c45_x)?;
+    let m245_2 = I256::from_i128(n2y).checked_mul(&c45_y)?;
+    let m245_3 = m245_1.checked_add(&m245_2)?;
+    let m245_4 = I256::from_i128(n2z).checked_mul(&c45_z)?;
+    let m245 = m245_3.checked_add(&m245_4)?;
+    let p245 = m245.resize::<8>()?.checked_mul(&q13.resize::<8>()?)?;
+    let m345_1 = I256::from_i128(n3x).checked_mul(&c45_x)?;
+    let m345_2 = I256::from_i128(n3y).checked_mul(&c45_y)?;
+    let m345_3 = m345_1.checked_add(&m345_2)?;
+    let m345_4 = I256::from_i128(n3z).checked_mul(&c45_z)?;
+    let m345 = m345_3.checked_add(&m345_4)?;
+    let p345 = m345.resize::<8>()?.checked_mul(&q12.resize::<8>()?)?;
+    let v_1 = p123.checked_sub(&p124)?;
+    let v_2 = v_1.checked_add(&p125)?;
+    let v_3 = v_2.checked_add(&p134)?;
+    let v_4 = v_3.checked_sub(&p135)?;
+    let v_5 = v_4.checked_add(&p145)?;
+    let v_6 = v_5.checked_sub(&p234)?;
+    let v_7 = v_6.checked_add(&p235)?;
+    let v_8 = v_7.checked_sub(&p245)?;
+    let v = v_8.checked_add(&p345)?;
+    Some(v)
+}
+
+/// `mitre_at`'s exact value in plain `i128` (chapter 23.3): each step in `i128`, or in its
+/// certificate's wide type with both operands widened to it, with checked arithmetic; `None` only
+/// if a step overflowed, which the certificate rules out; `None` also for a rounded input outside
+/// its declared range.
+#[inline]
+#[must_use]
+#[allow(
+    clippy::similar_names,
+    clippy::too_many_arguments,
+    reason = "names, parameters and lines follow the description: one per input and step"
+)]
+pub fn mitre_at_value(
+    n1x: i128,
+    n1y: i128,
+    n1z: i128,
+    d1: i128,
+    s1: i128,
+    n2x: i128,
+    n2y: i128,
+    n2z: i128,
+    d2: i128,
+    s2: i128,
+    n3x: i128,
+    n3y: i128,
+    n3z: i128,
+    d3: i128,
+    s3: i128,
+    n4x: i128,
+    n4y: i128,
+    n4z: i128,
+    d4: i128,
+    s4: i128,
+    t: i128,
+) -> Option<I512> {
+    let n2y = within(n2y, 83)?;
+    let n3z = within(n3z, 83)?;
+    let bc_x_1 = I256::from_i128(n2y).checked_mul(&I256::from_i128(n3z))?;
+    let n2z = within(n2z, 83)?;
+    let n3y = within(n3y, 83)?;
+    let bc_x_2 = I256::from_i128(n2z).checked_mul(&I256::from_i128(n3y))?;
+    let bc_x = bc_x_1.checked_sub(&bc_x_2)?;
+    let n3x = within(n3x, 83)?;
+    let bc_y_1 = I256::from_i128(n2z).checked_mul(&I256::from_i128(n3x))?;
+    let n2x = within(n2x, 83)?;
+    let bc_y_2 = I256::from_i128(n2x).checked_mul(&I256::from_i128(n3z))?;
+    let bc_y = bc_y_1.checked_sub(&bc_y_2)?;
+    let bc_z_1 = I256::from_i128(n2x).checked_mul(&I256::from_i128(n3y))?;
+    let bc_z_2 = I256::from_i128(n2y).checked_mul(&I256::from_i128(n3x))?;
+    let bc_z = bc_z_1.checked_sub(&bc_z_2)?;
+    let n1z = within(n1z, 83)?;
+    let ca_x_1 = I256::from_i128(n3y).checked_mul(&I256::from_i128(n1z))?;
+    let n1y = within(n1y, 83)?;
+    let ca_x_2 = I256::from_i128(n3z).checked_mul(&I256::from_i128(n1y))?;
+    let ca_x = ca_x_1.checked_sub(&ca_x_2)?;
+    let n1x = within(n1x, 83)?;
+    let ca_y_1 = I256::from_i128(n3z).checked_mul(&I256::from_i128(n1x))?;
+    let ca_y_2 = I256::from_i128(n3x).checked_mul(&I256::from_i128(n1z))?;
+    let ca_y = ca_y_1.checked_sub(&ca_y_2)?;
+    let ca_z_1 = I256::from_i128(n3x).checked_mul(&I256::from_i128(n1y))?;
+    let ca_z_2 = I256::from_i128(n3y).checked_mul(&I256::from_i128(n1x))?;
+    let ca_z = ca_z_1.checked_sub(&ca_z_2)?;
+    let ab_x_1 = I256::from_i128(n1y).checked_mul(&I256::from_i128(n2z))?;
+    let ab_x_2 = I256::from_i128(n1z).checked_mul(&I256::from_i128(n2y))?;
+    let ab_x = ab_x_1.checked_sub(&ab_x_2)?;
+    let ab_y_1 = I256::from_i128(n1z).checked_mul(&I256::from_i128(n2x))?;
+    let ab_y_2 = I256::from_i128(n1x).checked_mul(&I256::from_i128(n2z))?;
+    let ab_y = ab_y_1.checked_sub(&ab_y_2)?;
+    let ab_z_1 = I256::from_i128(n1x).checked_mul(&I256::from_i128(n2y))?;
+    let ab_z_2 = I256::from_i128(n1y).checked_mul(&I256::from_i128(n2x))?;
+    let ab_z = ab_z_1.checked_sub(&ab_z_2)?;
+    let w_1 = I256::from_i128(n1x).checked_mul(&bc_x)?;
+    let w_2 = I256::from_i128(n1y).checked_mul(&bc_y)?;
+    let w_3 = w_1.checked_add(&w_2)?;
+    let w_4 = I256::from_i128(n1z).checked_mul(&bc_z)?;
+    let w = w_3.checked_add(&w_4)?;
+    let d1 = within(d1, 125)?;
+    let mx_x_1 = I320::from_i128(d1).checked_mul(&bc_x.resize::<5>()?)?;
+    let d2 = within(d2, 125)?;
+    let mx_x_2 = I320::from_i128(d2).checked_mul(&ca_x.resize::<5>()?)?;
+    let mx_x_3 = mx_x_1.checked_add(&mx_x_2)?;
+    let d3 = within(d3, 125)?;
+    let mx_x_4 = I320::from_i128(d3).checked_mul(&ab_x.resize::<5>()?)?;
+    let mx_x = mx_x_3.checked_add(&mx_x_4)?;
+    let mx_y_1 = I320::from_i128(d1).checked_mul(&bc_y.resize::<5>()?)?;
+    let mx_y_2 = I320::from_i128(d2).checked_mul(&ca_y.resize::<5>()?)?;
+    let mx_y_3 = mx_y_1.checked_add(&mx_y_2)?;
+    let mx_y_4 = I320::from_i128(d3).checked_mul(&ab_y.resize::<5>()?)?;
+    let mx_y = mx_y_3.checked_add(&mx_y_4)?;
+    let mx_z_1 = I320::from_i128(d1).checked_mul(&bc_z.resize::<5>()?)?;
+    let mx_z_2 = I320::from_i128(d2).checked_mul(&ca_z.resize::<5>()?)?;
+    let mx_z_3 = mx_z_1.checked_add(&mx_z_2)?;
+    let mx_z_4 = I320::from_i128(d3).checked_mul(&ab_z.resize::<5>()?)?;
+    let mx_z = mx_z_3.checked_add(&mx_z_4)?;
+    let s1 = within(s1, 125)?;
+    let ms_x_1 = I320::from_i128(s1).checked_mul(&bc_x.resize::<5>()?)?;
+    let s2 = within(s2, 125)?;
+    let ms_x_2 = I320::from_i128(s2).checked_mul(&ca_x.resize::<5>()?)?;
+    let ms_x_3 = ms_x_1.checked_add(&ms_x_2)?;
+    let s3 = within(s3, 125)?;
+    let ms_x_4 = I320::from_i128(s3).checked_mul(&ab_x.resize::<5>()?)?;
+    let ms_x = ms_x_3.checked_add(&ms_x_4)?;
+    let ms_y_1 = I320::from_i128(s1).checked_mul(&bc_y.resize::<5>()?)?;
+    let ms_y_2 = I320::from_i128(s2).checked_mul(&ca_y.resize::<5>()?)?;
+    let ms_y_3 = ms_y_1.checked_add(&ms_y_2)?;
+    let ms_y_4 = I320::from_i128(s3).checked_mul(&ab_y.resize::<5>()?)?;
+    let ms_y = ms_y_3.checked_add(&ms_y_4)?;
+    let ms_z_1 = I320::from_i128(s1).checked_mul(&bc_z.resize::<5>()?)?;
+    let ms_z_2 = I320::from_i128(s2).checked_mul(&ca_z.resize::<5>()?)?;
+    let ms_z_3 = ms_z_1.checked_add(&ms_z_2)?;
+    let ms_z_4 = I320::from_i128(s3).checked_mul(&ab_z.resize::<5>()?)?;
+    let ms_z = ms_z_3.checked_add(&ms_z_4)?;
+    let d4 = within(d4, 125)?;
+    let nd_1 = I384::from_i128(d4).checked_mul(&w.resize::<6>()?)?;
+    let n4x = within(n4x, 83)?;
+    let nd_2 = I384::from_i128(n4x).checked_mul(&mx_x.resize::<6>()?)?;
+    let nd_3 = nd_1.checked_sub(&nd_2)?;
+    let n4y = within(n4y, 83)?;
+    let nd_4 = I384::from_i128(n4y).checked_mul(&mx_y.resize::<6>()?)?;
+    let nd_5 = nd_3.checked_sub(&nd_4)?;
+    let n4z = within(n4z, 83)?;
+    let nd_6 = I384::from_i128(n4z).checked_mul(&mx_z.resize::<6>()?)?;
+    let nd = nd_5.checked_sub(&nd_6)?;
+    let s4 = within(s4, 125)?;
+    let ns_1 = I384::from_i128(s4).checked_mul(&w.resize::<6>()?)?;
+    let ns_2 = I384::from_i128(n4x).checked_mul(&ms_x.resize::<6>()?)?;
+    let ns_3 = ns_1.checked_sub(&ns_2)?;
+    let ns_4 = I384::from_i128(n4y).checked_mul(&ms_y.resize::<6>()?)?;
+    let ns_5 = ns_3.checked_sub(&ns_4)?;
+    let ns_6 = I384::from_i128(n4z).checked_mul(&ms_z.resize::<6>()?)?;
+    let ns = ns_5.checked_sub(&ns_6)?;
+    let t = within(t, 40)?;
+    let f_1 = I512::from_i128(t).checked_mul(&ns.resize::<8>()?)?;
+    let f = nd.resize::<8>()?.checked_add(&f_1)?;
+    Some(f)
 }

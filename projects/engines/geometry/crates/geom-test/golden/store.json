@@ -236,9 +236,21 @@
               "kind": "corpus",
               "piece": "G148",
               "why": "2 new count benchmarks of geom-run's helper (decision 32.44): Exec::map of a list that fits one chunk, on the serial executor and on a pool, for the fix that runs a wave of one task on the calling thread (found in G148's timings); no existing digest moved"
+            },
+            {
+              "sha256": "57fb849de9d6eb8003fe3ff677db5373da1b40984777f2d573018b64e5601c1b",
+              "kind": "corpus",
+              "piece": "G251",
+              "why": "40 new benchmarks: tpi_height and mitre_time (filter, value and the plain and limb variants) and Tpi::cmp_height and Moving::cmp_meeting, each on four classes; no existing digest moved"
+            },
+            {
+              "sha256": "3b736909d9afafe4d0e5554f2f5cb3edb004521eaa8e1d40c4988a3bd44fd10f",
+              "kind": "corpus",
+              "piece": "G273",
+              "why": "6 new benchmarks: Moving::cmp_meeting_time and Moving::side_at_meeting, each on three classes; no existing digest moved"
             }
           ],
-          "sha256": "57fb849de9d6eb8003fe3ff677db5373da1b40984777f2d573018b64e5601c1b"
+          "sha256": "41eee2dfb2e099151b34e9fb4b01169398d1517883b0a8910db6ca75d8bcd777"
         },
         {
           "id": "geom-nurbs/operations",

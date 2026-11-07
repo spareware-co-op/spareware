@@ -49,3 +49,7 @@ pub mod tpi_side;
 pub mod lpi_weight;
 #[path = "generated/lpi_side.rs"]
 pub mod lpi_side;
+#[path = "generated/tpi_height.rs"]
+pub mod tpi_height;
+#[path = "generated/mitre_time.rs"]
+pub mod mitre_time;

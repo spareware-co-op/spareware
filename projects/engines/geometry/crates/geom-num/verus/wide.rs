@@ -947,6 +947,10 @@ pub type I256 = Wide<4>;
 pub type I320 = Wide<5>;
 /// 384-bit signed integer: classifying a three-plane point against a plane.
 pub type I384 = Wide<6>;
+/// 576-bit signed integer: skeleton event order (`tpi_height`, decision 32.29).
+pub type I576 = Wide<9>;
+/// 768-bit signed integer: mitre-offset event order (`mitre_time`, decision 32.29).
+pub type I768 = Wide<12>;
 
 /// Half the base of four limbs: 2^255, the bound an `I256` value must stay below.
 pub proof fn lemma_half_base_4()
@@ -1000,6 +1004,43 @@ pub proof fn lemma_half_base_6()
     lemma_base_step(3);
     lemma_base_step(4);
     lemma_base_step(5);
+    lemma2_to64();
+}
+
+/// Half the base of nine limbs: 2^575, the bound an `I576` value must stay below.
+pub proof fn lemma_half_base_9()
+    ensures
+        base(9) / 2 == 123665200736552267030251260509823595017565674550605919957031528046448612553265933585158200530621522494798835713008069669675682517153375604983773077550946583958303386074349568,
+{
+    lemma_base_step(0);
+    lemma_base_step(1);
+    lemma_base_step(2);
+    lemma_base_step(3);
+    lemma_base_step(4);
+    lemma_base_step(5);
+    lemma_base_step(6);
+    lemma_base_step(7);
+    lemma_base_step(8);
+    lemma2_to64();
+}
+
+/// Half the base of twelve limbs: 2^767, the bound an `I768` value must stay below.
+pub proof fn lemma_half_base_12()
+    ensures
+        base(12) / 2 == 776259046150354467574489744231251277628443008558348305569526019013025476343188443165439204414323238975243865348565536603085790022057407195722143637520590569602227488010424952775132642815799222412631499596858234375446423426908028928,
+{
+    lemma_base_step(0);
+    lemma_base_step(1);
+    lemma_base_step(2);
+    lemma_base_step(3);
+    lemma_base_step(4);
+    lemma_base_step(5);
+    lemma_base_step(6);
+    lemma_base_step(7);
+    lemma_base_step(8);
+    lemma_base_step(9);
+    lemma_base_step(10);
+    lemma_base_step(11);
     lemma2_to64();
 }
 

@@ -300,41 +300,61 @@ fn signature(out: &mut String, name: &str, parameters: &[String], ret: &str) {
     line(out, &format!(") -> {ret} {{"));
 }
 
+/// A call's arguments, all names, laid out as rustfmt lays out short arguments that do not fit
+/// one line: indented eight spaces, separated by `, `, as many to a line as fit [`WIDTH`] columns
+/// with the comma that ends each line (its mixed layout of short items).
+fn filled(arguments: &str) -> Vec<String> {
+    let mut lines = Vec::new();
+    let mut current = String::new();
+    for a in arguments.split(", ") {
+        let next = if current.is_empty() {
+            format!("        {a},")
+        } else {
+            format!("{current} {a},")
+        };
+        if next.chars().count() > WIDTH && !current.is_empty() {
+            lines.push(core::mem::take(&mut current));
+            current = format!("        {a},");
+        } else {
+            current = next;
+        }
+    }
+    if !current.is_empty() {
+        lines.push(current);
+    }
+    lines
+}
+
 /// The widest argument list rustfmt keeps on one line in a call: its default `fn_call_width`, 60%
 /// of [`WIDTH`].
 const CALL_ARGS_WIDTH: usize = 60;
 
 /// `exact`'s body, `value(<arguments>).map(<sign>)`, as rustfmt lays it out: on one line when the
 /// line fits [`WIDTH`] columns and the arguments [`CALL_ARGS_WIDTH`]; otherwise the call's
-/// arguments on one line of their own, indented eight spaces and followed by a comma, and the
-/// `.map` on the line after the closing parenthesis, as rustfmt breaks a chain whose arguments are
-/// all names. A list of arguments too long for that one line is refused.
-fn value_call(out: &mut String, arguments: &str, sign: &str) -> Result<(), EmitError> {
+/// arguments on lines of their own, indented eight spaces, as many to a line as fit [`WIDTH`]
+/// columns with the line's comma ([`filled`]), and the `.map` on the line after the closing
+/// parenthesis, as rustfmt breaks a chain whose arguments are all names.
+fn value_call(out: &mut String, arguments: &str, sign: &str) {
     let one = format!("    value({arguments}).map({sign})");
     if one.chars().count() <= WIDTH && arguments.chars().count() <= CALL_ARGS_WIDTH {
         line(out, &one);
-        return Ok(());
-    }
-    let inner = format!("        {arguments},");
-    if inner.chars().count() > WIDTH {
-        return fail(format!(
-            "`exact`'s arguments would pass {WIDTH} columns on a line of their own, which rustfmt \
-             lays out over several lines: {arguments}"
-        ));
+        return;
     }
     line(out, "    value(");
-    line(out, &inner);
+    for l in filled(arguments) {
+        line(out, &l);
+    }
     line(out, "    )");
     line(out, &format!("    .map({sign})"));
-    Ok(())
 }
 
 /// The lines of the filter that compute its scale. On one line, `let scale = <expression>;`, when
 /// that fits [`WIDTH`] columns and the expression is not a `larger` whose arguments pass
 /// [`CALL_ARGS_WIDTH`]. Otherwise the scale is the largest of several terms, times their common
 /// factor if they have one ([`crate::predicate_derive`]'s scale expression), and it is computed one
-/// term per line: the larger of the first two terms, then the larger of the scale so far and each
-/// further term, then the common factor times the scale. Those are the operations the one-line
+/// term per line: the larger of the first two terms (or, where those two do not fit one call, the
+/// first term and then the larger of it and the second), then the larger of the scale so far and
+/// each further term, then the common factor times the scale. Those are the operations the one-line
 /// expression performs, on the same values, so they give the same `f64` and the same roundings;
 /// the header shows the one-line expression they compute. A scale of another form, or a line that
 /// would still be too long, is refused.
@@ -373,16 +393,18 @@ fn scale_lines(e: &ScaleExpr, groups: &[String]) -> Result<Vec<String>, EmitErro
     let mut lines = Vec::new();
     let mut previous: Option<String> = None;
     for term in terms {
-        lines.push(match previous {
-            None => {
-                previous = Some(term);
-                continue;
-            }
-            Some(p) => {
-                previous = Some("scale".to_owned());
-                format!("    let scale = larger({p}, {term});")
-            }
-        });
+        let Some(p) = previous.replace("scale".to_owned()) else {
+            previous = Some(term);
+            continue;
+        };
+        // Two terms too long for one call start from the first alone: the same larger of the
+        // same values, so the same f64.
+        if p != "scale" && format!("{p}, {term}").chars().count() > CALL_ARGS_WIDTH {
+            lines.push(format!("    let scale = {p};"));
+            lines.push(format!("    let scale = larger(scale, {term});"));
+        } else {
+            lines.push(format!("    let scale = larger({p}, {term});"));
+        }
     }
     if let Some(c) = common {
         lines.push(format!(
@@ -714,7 +736,10 @@ fn para(out: &mut String, lead: &str, first: &str, rest: &str, text: &str) {
             .count()
             .saturating_add(usize::from(!empty))
             .saturating_add(word.chars().count());
-        if !empty && needed > WIDTH {
+        // A line must not start with a lone `+`, `-` or `*`: markdown reads it as a list item,
+        // and clippy's `doc_lazy_continuation` refuses the line. Such a word stays on its line.
+        let marker = matches!(word, "+" | "-" | "*");
+        if !empty && needed > WIDTH && !marker {
             line(out, &current);
             current = format!("{lead} {rest}");
             empty = true;
@@ -1141,7 +1166,7 @@ pub fn predicate_module_serving(
         Width::I128 => "Sign::of_i128",
         _ => "|v| v.signum()",
     };
-    value_call(&mut out, &args(d), sign)?;
+    value_call(&mut out, &args(d), sign);
     line(&mut out, "}");
     // rustfmt would rewrap a longer line of code, and the committed file would then fail
     // `cargo fmt --check`: refuse it here, naming the line.
@@ -1516,19 +1541,21 @@ fn spec_expression(step: &Step, d: &Derivation) -> Result<String, EmitError> {
 ///
 /// # Errors
 ///
-/// An [`EmitError`] for a description the twin does not cover: a step wider than `I384` (the
-/// widest budgeted width), a wide step made from an `i64` operand (`from_i64` has no proof yet),
-/// or no inputs.
+/// An [`EmitError`] for a description the twin does not cover: a step in a width that is not
+/// budgeted (`I512`, the total paths' fallback, chapter 6.2; the budgeted widths are `I256`,
+/// `I320`, `I384`, and `I576` and `I768` for skeleton and mitre-offset events, decision 32.29), a
+/// wide step made from an `i64` operand (`from_i64` has no proof yet), or no inputs.
 #[allow(
     clippy::too_many_lines,
     reason = "one straight sequence of the twin's refusals, header and items, in the order they are written"
 )]
 pub fn verus_twin(d: &Derivation, generator: &str, shipped: &str) -> Result<String, EmitError> {
     let name = &d.description.name;
-    if d.certs.iter().any(|c| c.width > Width::I384) {
+    if d.certs.iter().any(|c| c.width == Width::I512) {
         return fail(format!(
-            "`{name}`: the twin covers exact paths up to I384, the widest budgeted width (chapter \
-             6.2); the wide twin states the half base of 4, 5 and 6 limbs only"
+            "`{name}`: the twin covers exact paths in the budgeted widths, up to I384 and I576 \
+             and I768 (chapter 6.2, decision 32.29), not I512; the wide twin states the half base \
+             of 4, 5, 6, 9 and 12 limbs"
         ));
     }
     for (step, cert) in d.steps.iter().zip(&d.certs) {
