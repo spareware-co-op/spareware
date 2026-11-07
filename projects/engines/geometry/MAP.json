@@ -1641,6 +1641,29 @@
           "provenance": [],
           "spdx": null,
           "target": "lib"
+        },
+        {
+          "cost": "O(e · p) plane tests for the e edges of the target and the p polygons of the others, and a trace over every polygon for each piece. Charges the meter what the traces charge.",
+          "does": "each straight edge of the target runs between grid points, on the line two planes through its ends meet in. A polygon of another operand whose plane has the edge's ends strictly on either side, and holds the meeting point within its bounds, splits the edge there: a point where three planes meet. The splits are put in order along the edge by the sign each split's plane takes at the others. Each piece between stops takes the vector just past its start, traced from the corner of a box around every polygon and the wire, with the plane it starts on facing along the edge and moved towards its end, as a piece of face takes the vector in front of it (11.2); a piece lying in another operand's face is then moved off it a step towards +x, then +y, then +z, by the two planes through the edge. [`kept`] keeps the pieces whose vector passes the test, a run of kept pieces along one edge as one; [`trimmed`] keeps the runs of pieces, unbroken by a split or by a wire vertex on another operand's face, that hold a seed. Both give the [`Curves`] the wire rebuild takes, their vertices in the order the wire meets them.",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-bool/src/wires.rs",
+          "guarantees": [
+            "**Exact.** Every stop is the meeting of three planes and every comparison a sign; nothing rounds but the published edges' shadows (8.3).",
+            "**Chosen by the others alone.** A wire has no inside and adds nothing to any vector, so a piece is never classified by its own wire (11.1).",
+            "**Drawn either way, chosen the same.** A piece lying in a face falls on the side a step towards +x, then +y, then +z, gives (a simulation of simplicity), whichever way its edge runs and whatever its direction in the face: a wire along a block's face is inside it on the three low faces and outside on the three high ones.",
+            "**Refused, never guessed.** A seed on no piece is [`CombineDetail::SeedOutside`], and one on a split, on a wire vertex on another operand's face, or between pieces of two runs, is [`CombineDetail::SeedOnBoundary`]."
+          ],
+          "job": "Wire targets of Keep and Trim: a wire's edges cut where the other operands' faces cross them, each piece chosen by the others' winding numbers or by seeds (11.1).",
+          "method": {
+            "links": [
+              "projects/engines/geometry/architecture/11-booleans.md"
+            ],
+            "text": "chapter 11.1's sheet and wire targets and 11.2's winding vectors (`projects/engines/geometry/architecture/11-booleans.md`)."
+          },
+          "path": "geom_bool::wires",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
         }
       ],
       "name": "geom-bool",
@@ -2351,7 +2374,7 @@
               "shape": "unit"
             },
             {
-              "doc": "The data or a transform collapses the kind: parallel vectors where independent ones are needed, a zero length or direction, or a singular transform.",
+              "doc": "The data or a transform collapses the kind: parallel vectors where independent ones are needed, a zero length or direction, or a singular transform; or an offset whose normal vanishes somewhere on its domain (its basis's tangent zero there, or parallel to its reference direction), where the offset is not defined.",
               "name": "Degenerate",
               "shape": "unit"
             },
@@ -2795,12 +2818,13 @@
           "target": "lib"
         },
         {
-          "cost": "an evaluation of order k is the basis's of order k + 1 plus O(k²) interval operations; the cache is the Taylor conversion of `crate::taylor`, eight to 128 pieces per smooth interval of the basis, narrower pieces tried where wider ones cannot bound the offset's derivatives.",
+          "cost": "an evaluation of order k is the basis's of order k + 1 plus O(k²) interval operations; the cache is the Taylor conversion of `crate::taylor`, eight to 128 pieces per smooth interval of the basis, narrower pieces tried where wider ones cannot bound the offset's derivatives; where even 128 cannot, only the pieces that need it are halved, each at most about 52 times (to 2^−52 of the domain, or to neighbouring doubles), depth first on an explicit stack of at most one piece per halving, every piece examined charged to the meter.",
           "does": "[`Offset`] stores a trimmed basis curve C and an [`OffsetLaw`]:",
           "family": [],
           "file": "projects/engines/geometry/crates/geom-curve/src/offset.rs",
           "guarantees": [
             "**Certified, or refused.** Where the normal may vanish (a cusp of the basis, or a span too wide to separate it from zero) a derivative bound is `Unbounded` and an enclosure is refused, never guessed; a bound on the points still holds there, from the basis's bound widened by the offset's largest size.",
+            "**Converted wherever it is defined.** Where the normal vanishes, or cannot be told from zero even over the narrowest piece the conversion cuts (the domain's width times 2^−52, or two neighbouring doubles where those are farther apart), the offset is undefined (a cusp of the basis, or a tangent parallel to the reference direction), and the NURBS form is refused as `Degenerate`, never as `Unbounded`, which names an infinite domain. A normal that only comes near zero, as on a nearly flat helix offset along its axis, is cut finer there until its pieces are bounded (issue #526); only a remainder that overflows the doubles even on the narrowest pieces is refused, as `NotFinite`.",
             "**Exact split and reversal.** A split trims the basis; a reversal reverses the basis and negates the distances (the left normal of the reversed curve is the right normal).",
             "**Transforms keep the kind only when exact.** A grid transform of an offset whose basis moves exactly gives an offset (a mirror negating the side); any other transform gives the moved NURBS cache, with both deviations."
           ],
@@ -4346,6 +4370,7 @@
             "**Symmetric or refused.** A matrix that is not square is [`LinalgError::Shape`]; one whose entries are not exactly symmetric, `a_ij` ≠ `a_ji` for some pair, is [`LinalgError::NotSymmetric`]. Only the lower triangle is read after that check.",
             "**Deterministic.** Fixed order of reflections, rotations and deflation tests; the shift from the trailing 2 × 2 block, computed on the block scaled to magnitude 1; IEEE 754 operations in the order written and the correctly rounded square root; a stable sort of the eigenvalues with ties broken by position.",
             "**Accuracy, checked against exact rationals.** The method is backward stable: Q·Λ·Qᵀ is a symmetric matrix within a small multiple of u·‖A‖ of A, so each eigenvalue is within that of an exact one (Golub and Van Loan, section 8.3.6). The tests check the residual and Q's orthogonality exactly and bracket each eigenvalue by exact inertia counts of A − x·I.",
+            "**Refused beyond the doubles.** A matrix with an eigenvalue beyond the largest double (which needs an entry above the largest double over n, as |λ| ≤ n·max|`a_ij`|) has no factorisation within the bound above in finite doubles: it is [`LinalgError::NotFinite`], as is any whose reduction or QR step overflows. The deflation test scales each diagonal magnitude before adding the two (`crate::matrix`'s `negligible`), so it cannot overflow and take an entry beside them for zero (issue #542).",
             "**Bounded.** At most 30·n QR steps, then [`LinalgError::NoConvergence`]; each step charges its work before it runs, the reduction its own first."
           ],
           "job": "The symmetric eigenproblem: A = Q·Λ·Qᵀ for a symmetric matrix, by Householder tridiagonalisation and the implicit symmetric QR algorithm with Wilkinson's shift.",
@@ -4459,7 +4484,7 @@
             "**Deterministic.** Fixed sweep order (pairs (p, q), p < q, row by row), fixed deflation and shift rules, IEEE 754 operations in the order written, the correctly rounded square root of `geom_num::math`, no fused multiply-add, and a stable sort with ties broken by column index. The same input gives the same bits on every target.",
             "**Accuracy, checked against exact rationals.** Both are backward stable: the computed factors are those of a matrix A + E with ‖E‖ a small multiple of u·‖A‖ (Golub and Van Loan, 8.6.3), so each singular value is within that of the exact one. Jacobi does better on graded matrices A = B·D with B well conditioned: each singular value to a small multiple of u·κ(B) in relative terms, however small (Demmel and Veselić, theorem 4.4). The tests check both claims with exact rational arithmetic: the residual and the orthogonality of U and V, and each singular value bracketed by exact inertia counts of Aᵀ·A.",
             "**Bounded.** Jacobi stops after [`MAX_SWEEPS`] sweeps and Golub–Kahan after 6·k² QR steps with [`LinalgError::NoConvergence`]; neither has ever needed it in the tests. Each sweep or step charges its work before it runs; the reductions charge theirs first.",
-            "**Typed failures.** Columns whose norms differ by more than the doubles can hold (a rotation angle that is not finite) are [`LinalgError::NotFinite`], never a silently wrong factor."
+            "**Typed failures.** Columns whose norms differ by more than the doubles can hold (a rotation angle that is not finite) are [`LinalgError::NotFinite`], never a silently wrong factor. So is a matrix with a singular value beyond the largest double (as when a row or column's norm passes it), which has no factorisation within the bound above in finite doubles, and any whose reduction or QR step overflows. Golub–Kahan's deflation test scales each diagonal magnitude before adding the two (`crate::matrix`'s `negligible`), so it cannot overflow and take an entry beside them for zero (issue #542)."
           ],
           "job": "The singular value decomposition, two ways: one-sided Jacobi, accurate to the last bits of tiny singular values of graded matrices, and Golub–Kahan, the fast general method.",
           "method": {
@@ -5494,6 +5519,7 @@
           "guarantees": [
             "**Closed inputs only.** The arrangement needs a whole winding number everywhere, so an open mesh is [`MeshError::NotClosed`], whose remedy is healing. Self-intersections are fine.",
             "**A result is a solid** ([`ExactMesh::is_solid`]): its winding is its test's, 0 or 1, and no two of its faces cross. A solid operand's boxes away from the others are solved without cuts or tracing (11.3 step 4): fewer pieces, the same vectors, the same mesh.",
+            "**As exact as its least exact operand.** A result's class is its operands' combined: the least exact class, the bounds added (9, 19.13), and every face carries that bound.",
             "**Bounded results only.** A test the outside passes, such as \"not A\", has no finite boundary: [`MeshError::UnboundedResult`] names which test, and the remedy is to intersect it with a box.",
             "**Conforming and exact.** The merge gives maximal faces and edges that end where other edges do, so no T-junction is left. Nothing is rounded, however often a mesh is cut: a corner off the grid stays three planes. Each result passes the mesh checker on the way out.",
             "**The same mesh however it was reached.** The boxes, the threads and the order of the faces do not show. A corner off the grid takes the lowest three planes around it, not the three that happened to cut a piece.",
@@ -7073,7 +7099,7 @@
               "take": "port"
             }
           ],
-          "spdx": "MPL-2.0 AND MIT",
+          "spdx": "Apache-2.0 AND MIT",
           "target": "lib"
         },
         {
@@ -7132,7 +7158,7 @@
               "take": "port"
             }
           ],
-          "spdx": "MPL-2.0 AND MIT",
+          "spdx": "Apache-2.0 AND MIT",
           "target": "lib"
         },
         {
@@ -7193,7 +7219,7 @@
               "take": "port"
             }
           ],
-          "spdx": "MPL-2.0 AND MIT",
+          "spdx": "Apache-2.0 AND MIT",
           "target": "lib"
         },
         {
@@ -7227,7 +7253,7 @@
               "take": "port"
             }
           ],
-          "spdx": "MPL-2.0 AND MIT",
+          "spdx": "Apache-2.0 AND MIT",
           "target": "lib"
         },
         {
@@ -7848,7 +7874,7 @@
               "take": "port"
             }
           ],
-          "spdx": "MPL-2.0 AND Apache-2.0",
+          "spdx": "Apache-2.0",
           "target": "lib"
         },
         {
@@ -7933,7 +7959,7 @@
               "take": "port"
             }
           ],
-          "spdx": "MPL-2.0 AND Apache-2.0",
+          "spdx": "Apache-2.0",
           "target": "lib"
         },
         {
@@ -7994,7 +8020,7 @@
               "take": "port"
             }
           ],
-          "spdx": "MPL-2.0 AND Apache-2.0",
+          "spdx": "Apache-2.0",
           "target": "lib"
         },
         {
@@ -8057,7 +8083,7 @@
               "take": "port"
             }
           ],
-          "spdx": "MPL-2.0 AND Apache-2.0",
+          "spdx": "Apache-2.0",
           "target": "lib"
         },
         {
@@ -8080,7 +8106,7 @@
           },
           "path": "geom_nurbs::deboor",
           "provenance": [],
-          "spdx": "MPL-2.0",
+          "spdx": "Apache-2.0",
           "target": "lib"
         },
         {
@@ -8118,7 +8144,7 @@
               "take": "port"
             }
           ],
-          "spdx": "MPL-2.0 AND Apache-2.0",
+          "spdx": "Apache-2.0",
           "target": "lib"
         },
         {
@@ -8229,7 +8255,7 @@
               "take": "port-method"
             }
           ],
-          "spdx": "MPL-2.0 AND Apache-2.0",
+          "spdx": "Apache-2.0",
           "target": "lib"
         },
         {
@@ -8286,7 +8312,7 @@
               "take": "port"
             }
           ],
-          "spdx": "MPL-2.0 AND Apache-2.0",
+          "spdx": "Apache-2.0",
           "target": "lib"
         },
         {
@@ -8322,7 +8348,7 @@
               "take": "port"
             }
           ],
-          "spdx": "MPL-2.0 AND Apache-2.0",
+          "spdx": "Apache-2.0",
           "target": "lib"
         },
         {
@@ -8358,7 +8384,7 @@
               "take": "port"
             }
           ],
-          "spdx": "MPL-2.0 AND Apache-2.0",
+          "spdx": "Apache-2.0",
           "target": "lib"
         },
         {
@@ -8393,7 +8419,7 @@
               "take": "port"
             }
           ],
-          "spdx": "MPL-2.0 AND Apache-2.0",
+          "spdx": "Apache-2.0",
           "target": "lib"
         },
         {
@@ -8470,7 +8496,7 @@
               "take": "port"
             }
           ],
-          "spdx": "MPL-2.0 AND Apache-2.0",
+          "spdx": "Apache-2.0",
           "target": "lib"
         },
         {
@@ -8507,7 +8533,7 @@
               "take": "port"
             }
           ],
-          "spdx": "MPL-2.0 AND Apache-2.0",
+          "spdx": "Apache-2.0",
           "target": "lib"
         },
         {
@@ -8544,7 +8570,7 @@
               "take": "port"
             }
           ],
-          "spdx": "MPL-2.0 AND Apache-2.0",
+          "spdx": "Apache-2.0",
           "target": "lib"
         },
         {
@@ -8605,7 +8631,7 @@
               "take": "port"
             }
           ],
-          "spdx": "MPL-2.0 AND Apache-2.0",
+          "spdx": "Apache-2.0",
           "target": "lib"
         }
       ],
@@ -10782,14 +10808,14 @@
       "modules": [
         {
           "cost": "constant per evaluation; a bound O(1) per piece (at most 64 pieces); a conversion O(m·n) for its control net.",
-          "does": "each kind writes its surface in the shared form c + Σ f(u)·g(v)·W (`crate::terms`), with angles in half-turns on an exact [`Frame`] (x̂, ŷ, n̂), and a sign s = ±1 on its axial term so that reversing either parameter is exact:",
+          "does": "each kind writes its surface in the shared form c + Σ f(u)·g(v)·W (`crate::terms`), with angles in half-turns on an exact [`Frame`] (x̂, ŷ, n̂), and a factor s on its axial term, ±1 as built, so that reversing either parameter is exact:",
           "family": [],
           "file": "projects/engines/geometry/crates/geom-surface/src/analytic.rs",
           "guarantees": [
             "**Stored as themselves.** Centres, radii, slopes and frames are the stored doubles, exactly.",
             "**Certified, or refused.** Enclosures and bounds are the terms' closed forms in interval arithmetic; the normal bound is the closed-form direction, which survives the poles of a sphere and the apex of a cone (where its sign may be either: then both).",
             "**Exact NURBS forms.** Each converts to a tensor-product rational surface (a circle in each angular direction, a line in each linear one) with a parameter map per direction, its deviation 0 where the doubles hold it exactly (a whole cylinder on an axis-aligned frame).",
-            "**Transforms change kinds explicitly.** A similarity keeps the kind (lengths times its scale, the frame carried, a mirror flipping the axial sign); any other transform gives the moved NURBS form. A plane takes every affine map. A grid transform that moves the centre exactly is exact: deviation 0 (chapter 7; piece G69).",
+            "**Transforms change kinds explicitly.** A similarity keeps the kind (lengths times its scale, a cylinder's and a cone's axial factor too, the frame carried, a mirror flipping the axial factor's sign), so its image at each (u, v) is the moved point there: a uniform whole-number scale is exact, deviation 0. Any other transform gives the moved NURBS form. A plane takes every affine map. A grid transform that moves the centre exactly is exact: deviation 0 (chapter 7; piece G69).",
             "**Exact split and reversal.**"
           ],
           "job": "The analytic surface kinds: plane, cylinder, cone, sphere and torus, each stored as itself.",
@@ -11862,7 +11888,7 @@
           "file": "projects/engines/geometry/crates/geom-test/src/licence.rs",
           "guarantees": [
             "**Exact grammar, or an error.** An expression with an unknown character, an unbalanced parenthesis, a missing operand or a stray operator is an [`ExprError`], never a pass.",
-            "**Permissive means every licence of one way to comply is permissive.** An `OR` needs one permissive branch, an `AND` needs both, and `WITH` may add only an exception in [`EXCEPTIONS`], which grant permissions and take none away. So `MIT OR Apache-2.0 OR LGPL-2.1-or-later` is permissive, taken under MIT or Apache-2.0, and `MIT AND GPL-3.0-only` is not. The permissive licences are exactly [`PERMISSIVE`]: the list the development crates may take (MIT, Apache-2.0, BSD, ISC, Zlib, Unicode). The Unlicense is not on it (chapter 32.6 takes it only beside another licence), nor is MPL-2.0, which is ours and is checked separately.",
+            "**Permissive means every licence of one way to comply is permissive.** An `OR` needs one permissive branch, an `AND` needs both, and `WITH` may add only an exception in [`EXCEPTIONS`], which grant permissions and take none away. So `MIT OR Apache-2.0 OR LGPL-2.1-or-later` is permissive, taken under MIT or Apache-2.0, and `MIT AND GPL-3.0-only` is not. The permissive licences are exactly [`PERMISSIVE`]: the list the development crates may take (MIT, Apache-2.0, BSD, ISC, Zlib, Unicode). The Unlicense is not on it (chapter 32.6 takes it only beside another licence), nor is MPL-2.0, which is copyleft per file and so not permissive, though 29.2 allows it.",
             "**One form per meaning.** [`Expr::canonical`] flattens nested `OR`s and `AND`s and sorts and deduplicates their operands, so `MIT OR Apache-2.0`, `Apache-2.0 OR MIT` and Cargo's legacy `MIT/Apache-2.0` compare equal."
           ],
           "job": "Licences: whether a package's licence expression is permissive, and the licence records every development crate keeps in its header.",
@@ -12121,7 +12147,7 @@
           "guarantees": [
             "**A `Source:` record is the whole notice, of code 29.2 lets us port.** It reads `Source: PORT from <name>, <licence>,` with a licence met by 29.2's allow-list ([`classes::Class::Allowed`]), a link pinned to a full commit, at least one copyright line (a line before `Changed for Spare Kit:` that opens with `Copyright`, `©`, `(c)` or `SPDX-FileCopyrightText:`, as the REUSE specification writes copyright notices), and a `Changed for Spare Kit: ` line that says what changed; the header carries an `SPDX-License-Identifier:` line met by the allow-list whose expression is that licence or has it as an `AND` operand. Anything else is a [`Rule::Source`] or [`Rule::Spdx`] problem.",
             "**A `Consulted:` record names a real licence and a read 29.2 allows.** It reads `Consulted: <name>, <licence>, <link>, <what for>`, the link a web address or a DOI; the licence is classified by [`classes`] (an identifier 29.2 does not classify is a problem); a link on a code-hosting site is pinned to a full commit; and code under a licence 29.2 never lets us read (AGPL, non-commercial or custom terms) is a problem, while LGPL code, and GPL code an owner allowed, carry a `Method note:` line naming the method-only procedure's note under `projects/engines/geometry/methods/` (rule 6). Anything else is a [`Rule::Consulted`] problem.",
-            "**A module that ports nothing is ours.** Without a `Source:` record, an `SPDX-License-Identifier:` line, if any, is `MPL-2.0` (29.20, rule 4: \"A PORT METHOD module is MPL-2.0 and ours\").",
+            "**A module that ports nothing is ours.** Without a `Source:` record, an `SPDX-License-Identifier:` line, if any, is `Apache-2.0` (29.20, rule 4: \"A PORT METHOD module is Apache-2.0 and ours\").",
             "**Every link to outside code is credited.** A link to source code ([`links::is_code`]) anywhere else in the header or in the file's doc comments needs a `Source:` or `Consulted:` record in the same header for the same repository (on a code-hosting site) or the same file (elsewhere), and a commit named by an abbreviated name (the word \"commit\" and its first seven to 39 hexadecimal digits) is a source read but not credited with a pinned link; either is a [`Rule::Uncredited`] problem."
           ],
           "job": "The provenance lines of a header: `Source:` for a ported file, `Consulted:` for a source a module consulted, `SPDX-License-Identifier:`, and the rule that every link to outside code is credited.",

@@ -146,8 +146,15 @@ env:
   KANI_VERSION: 0.68.0
 
 jobs:
+  cheap:
+    name: Cheap checks first
+    # Waits for format, lints, the scaffold and the sign-off (cheap-checks.yml), so a push that
+    # fails one of them stops here; every heavy job below lists this job under `needs`.
+    uses: ./.github/workflows/cheap-checks.yml
+
   libfuzzer:
     name: libFuzzer under cargo-bolero (${{ matrix.target }})
+    needs: cheap
     runs-on: ubuntu-latest
     timeout-minutes: 45
     strategy:
@@ -167,6 +174,10 @@ jobs:
       - name: Install the pinned nightly compiler
         run: rustup toolchain install "$FUZZ_NIGHTLY" --profile minimal
       - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
+        with:
+          # Only main saves the cache; a pull request restores main's (a pull request's own
+          # caches filled the repository's cache limit and evicted what main saved).
+          save-if: ${{ github.ref == 'refs/heads/main' }}
       - name: Install cargo-bolero ${{ env.CARGO_BOLERO_VERSION }}
         run: >-
           cargo install cargo-bolero --version "$CARGO_BOLERO_VERSION" --locked
@@ -196,6 +207,7 @@ jobs:
 
   kani:
     name: Kani (${{ matrix.harness }})
+    needs: cheap
     runs-on: ubuntu-latest
     # orient2d_proof is the slowest harness: on G37's rewritten wide integers, which its total
     # path reaches, kissat proved it in 47 minutes (run 40291338626) and then in 75 (run
@@ -249,6 +261,7 @@ jobs:
   # splitter 54 and dd's from_i128 46; 120 minutes is the margin orient2d_proof's job above keeps.
   kani-num:
     name: Kani, geom-num (${{ matrix.proof }})
+    needs: cheap
     runs-on: ubuntu-latest
     timeout-minutes: 120
     strategy:
@@ -373,6 +386,7 @@ jobs:
 
   kani-limbs:
     name: Kani, geom-num limb steps
+    needs: cheap
     runs-on: ubuntu-latest
     # Piece G42: one bounded proof for every kind of step the generated limb variant performs
     # (chapter 23.3), all in one run so they share one build; the generator writes them beside the
@@ -446,6 +460,7 @@ jobs:
 
   clusterfuzzlite:
     name: ClusterFuzzLite (address sanitizer)
+    needs: cheap
     if: github.event_name == 'pull_request'
     runs-on: ubuntu-latest
     timeout-minutes: 60
@@ -480,6 +495,7 @@ jobs:
   # (.clusterfuzzlite/seeded.sh says what differs and why). run_fuzzers must report the crash.
   clusterfuzzlite-seeded:
     name: ClusterFuzzLite finds a planted violation
+    needs: cheap
     if: github.event_name == 'pull_request'
     runs-on: ubuntu-latest
     timeout-minutes: 60

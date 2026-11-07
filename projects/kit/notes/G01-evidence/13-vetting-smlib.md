@@ -4,6 +4,14 @@
 
 NVIDIA published SMLib, a NURBS B-rep solid modelling kernel, as USD BRep under Apache-2.0 on 2026-10-08; tangency-labs began a Rust port, solidcore, on 2026-10-12. Each subsystem was evaluated against its actual source, then challenged by an independent skeptic. Read for G01 on 2026-10-21.
 
+**Addendum, 2026-11-03.** The owner decided that none of the licensing points in this report are a concern (32.44): the Numerical Recipes and fixture exclusions below are lifted, and solidcore may be ported like SMLib. Where this report says "do not take" or "exclude" for those reasons, read it as lifted. A recheck the same day found:
+- solidcore has 99.3% of in-scope upstream lines ported, 281 of 282 units green against the C++ within 1e-9 (one blocked), up from about a third on 2026-10-21. It has new crates for surface/surface intersection, STEP import and export, and grid meshing (github.com/tangency-labs/solidcore at 189cbb21; tangency-labs.github.io/solidcore).
+- Its goals now match ours: no `unsafe`, no panics on bad input, deterministic results, no global state, wasm32, exact or certified geometry.
+- On the 119-case surface/surface corpus (jyviko/ssi-corpus, as in 12.17) the Rust passes 78 (21 incomplete, 10 wrong topology, 1 error, 9 deferred); the C++ passes 81 (25 incomplete, 11 wrong topology, 2 error).
+- Its upstream defect log has 987 SMLib defects (264 undefined behaviour, 51 hangs, 11 nondeterminism, 387 wrong results, 5 docs), 336 confirmed by a C++ run: failure cases for our attack tests.
+- `docs/generic-blend.md` designs one rolling-ball construction (spine, two rails, a section) for rounds, curvature-continuous rounds and chamfers between faces of any kind, replacing SMLib's fillet code: the nearest prior art for chapter 13's blends.
+
+
 ## overview-legal
 
 **Commit sha:** c9c5979f04cea8c38213004d4f04df0dcfb40d05
@@ -160,7 +168,7 @@ RISKS AN OWNER MUST CHECK BEFORE PORTING ANY CODE. NVIDIA's Apache grant is only
 
 Re-implement all of these from public-domain or primary sources: EISPACK tred2/tql2, Golub–Van Loan, Brent 1973, LAPACK (BSD).
 
-The Rust port tangency-labs/solidcore already ports EigenSystemJacobiSolver (crates/solidcore/src/geom/matrix.rs at 0a676a0) while its NOTICE says no further third-party notices apply. So it inherits this risk, and SpareKit must not take that file from solidcore either.
+The Rust port tangency-labs/solidcore already ports EigenSystemJacobiSolver (crates/solidcore/src/geom/matrix.rs at 0a676a0) while its NOTICE says no further third-party notices apply. So it inherits this risk, and SpareKit must not take that file from solidcore either. (Lifted 2026-11-03, 32.44.)
 
 (2) IntegrityWare co-authorship 1998–2004. IntegrityWare's own history says the 1998 agreement gave the three firms marketing and sale rights. It says nothing about copyright assignment. IntegrityWare authored fillet, shell/offset, polygon, ray-firing, primitives and HLR, and Iw* names survive in the code. Whether SMS/NVIDIA hold copyright, or merely the right to sublicense those parts under Apache, is unverified.
 
@@ -300,7 +308,7 @@ So the architectural rejection holds, and so do the bans on PORT_CODE and PARTNE
 An out-of-process oracle can stay an optional secondary tool. It is safe only for the evaluation layers and not for the RNG-based point-cloud fitting.
 
 **Legal corrections for the review's 'what to take' list.**
-- Add SmIntegrator to the NR exclusions, and do not take solidcore's matrix.rs, mass/integrator.rs or local_solve1d.rs.
+- Add SmIntegrator to the NR exclusions, and do not take solidcore's matrix.rs, mass/integrator.rs or local_solve1d.rs. (Lifted 2026-11-03, 32.44.)
 - Treat omniSolid/schema.usda as AOUSD-terms material.
 - Treat the OCCT parsers as LGPL method study only.
 - Carry the THIRD_PARTY_NOTICES header with anything ported.
