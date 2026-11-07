@@ -36,8 +36,8 @@
 //! - [`solve`]: Gauss–Newton steps with Moré's damping on each block, and continuation (piece G222).
 //! - [`text`]: the `sketch v1` text form (piece G217).
 //!
-//! Status: scaffold only; built by pieces G216, G217, G218, G219, G220, G221, G222, G223, G224,
-//! G225, G226, G227, G228, G230, G477, G478; G216, G217, G218, G221 and G222 are done.
+//! Status: built by pieces G216, G217, G218, G219, G220, G221, G222, G223, G224, G225, G226, G227,
+//! G228, G230, G477, G478; G216, G217, G218, G221 and G222 are done.
 #![cfg_attr(not(test), no_std)]
 #![forbid(unsafe_code)]
 
