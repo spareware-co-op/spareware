@@ -34,6 +34,7 @@
 extern crate alloc;
 
 pub mod accept;
+pub mod arrange;
 pub mod carrier;
 pub mod commit;
 pub mod entity;
