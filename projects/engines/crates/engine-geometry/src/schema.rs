@@ -23,6 +23,7 @@
 pub use geom_op::{
     Charge, Class, DiagnosticSpec, ErrorSpec, Family, Field, OpSchema, RoleSpec, Unit,
 };
+pub use geom_run::Phase;
 
 /// A stability tier of chapter 25, for one operation.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]

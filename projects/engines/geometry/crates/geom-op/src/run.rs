@@ -39,11 +39,13 @@
 
 use alloc::vec::Vec;
 
-use geom_run::{LogicalSize, Phase, Stop, Stopped, WorkMeter};
+use geom_run::{LogicalSize, Stop, Stopped, WorkMeter};
 
 use crate::context::OpContext;
 use crate::detail::{OpErrorDetail, RunDetail};
 use crate::error::OpError;
+
+pub use geom_run::Phase;
 
 /// The phase a stop that the body did not report is charged to, in [`OpContext::run`].
 pub const RUN: Phase = Phase::new("operation");

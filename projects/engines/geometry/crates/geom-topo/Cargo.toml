@@ -18,6 +18,11 @@ geom-op = { path = "../geom-op" }
 geom-surface = { path = "../geom-surface" }
 
 [dev-dependencies]
+# Exact rationals, the oracle for the certified mass properties of implicit corners (piece G102).
+# MIT OR Apache-2.0.
+num-bigint = "0.4"
+num-rational = "0.4.2"
+num-traits = "0.2"
 # Without its default fork and timeout features, which pull in code that has no WebAssembly
 # (WASI) build, so the tests also run on wasm32-wasip1. MIT OR Apache-2.0.
 proptest = { version = "1.12.0", default-features = false, features = ["std", "bit-set"] }

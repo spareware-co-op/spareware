@@ -135,7 +135,12 @@ fn made(name: &str, out: &OpOutput<Made>) {
 
 #[test]
 fn the_list_holds_every_make_and_transform_operation() {
-    let names: Vec<&str> = OPERATIONS.iter().map(|op| op.schema.name).collect();
+    let ours = || {
+        OPERATIONS
+            .iter()
+            .filter(|op| !op.schema.name.starts_with("query."))
+    };
+    let names: Vec<&str> = ours().map(|op| op.schema.name).collect();
     assert_eq!(
         names,
         [
@@ -152,7 +157,7 @@ fn the_list_holds_every_make_and_transform_operation() {
             "transform.scale",
         ]
     );
-    for op in OPERATIONS {
+    for op in ours() {
         let s = op.schema;
         let family = if s.name.starts_with("make.") {
             Family::Make
