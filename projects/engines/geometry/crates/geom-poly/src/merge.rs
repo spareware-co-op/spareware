@@ -1028,7 +1028,7 @@ fn numbered(
                     SORT_CORNERS,
                     SORT_PLAN,
                     &wide,
-                    WideKey,
+                    |w| WideKey(w),
                 );
                 let sorted = sorted.map_err(|e| phase_error(e, meter))?;
                 let in_order = sorted.iter().zip(sorted.iter().skip(1)).all(|(a, b)| {
