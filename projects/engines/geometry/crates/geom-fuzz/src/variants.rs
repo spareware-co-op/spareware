@@ -3,7 +3,8 @@
 //!
 //! What it does: [`decode`] turns a fuzzer's bytes into the inputs the predicates take: six 2D and
 //! five 3D grid points from `geom-test`'s [`GridSampler`], and twelve plane-normal coordinates of
-//! 83 bits and four plane offsets of 125 bits, each an extreme, zero, a small value or a value of a
+//! 83 bits and eight offsets of 125 bits (plane offsets, and the carrier descriptions' narrower
+//! integers, cut down to their width), each an extreme, zero, a small value or a value of a
 //! random bit length. [`check`] evaluates each registered predicate's description (geom-gen's
 //! `PREDICATES`, read by its `predicate_lang::parse`) on those inputs in big integers, and compares
 //! the shipped `value`, the plain-`i128` variant (`geom_num::generated::plain`) and the width-aware
@@ -39,9 +40,11 @@ use geom_bench::avnaim;
 use geom_gen::predicate_lang::{Axis, Expr, InputKind, Op, parse};
 use geom_gen::predicates::PREDICATES;
 use geom_num::generated::{
-    axis_gap, carrier_order, carrier_side, cross_norm, incircle, insphere, limbs, line_cone,
-    line_cone_lead, line_cylinder, line_sphere, lpi_side, lpi_weight, orient2d, orient3d, plain,
-    plane_side, rational_cmp, rational_orient, ssi_side, ssi_weight, tpi_side, tpi_weight,
+    axis_gap, carrier_order, carrier_side, circle_gap, circle_line, circle_side, cross_norm,
+    ellipse_line, ellipse_side, incircle, insphere, limbs, line_cone, line_cone_lead,
+    line_cylinder, line_sphere, lpi_side, lpi_weight, orient2d, orient3d, plain, plane_side,
+    rational_cmp, rational_orient, round_grid, round_line, round_rational, ssi_side, ssi_weight,
+    tpi_side, tpi_weight,
 };
 use geom_num::grid::{P2, P3};
 use geom_num::wide::Wide;
@@ -51,15 +54,16 @@ use num_bigint::BigInt;
 
 use crate::Finding;
 
-/// The most bytes [`decode`] reads from any input: 620, an upper bound.
+/// The most bytes [`decode`] reads from any input: 696, an upper bound.
 ///
 /// The points read what `geom_fuzz::predicates` derives for the sampler: at most 26 bytes for the
 /// first 2D point, 24 for the second and 23 for each later one, so (26 + 24 + 4 · 23) = 142 for
 /// six; and at most 37, 35 and 34 for the 3D points, so (37 + 35 + 3 · 34) = 174 for five. A
 /// rounded input reads a class byte, a sign byte, and for a random value a length byte and two
-/// eight-byte words: at most 19, and 16 · 19 = 304 for the sixteen. 142 + 174 + 304 = 620; a unit
+/// eight-byte words: at most 19, and 20 · 19 = 380 for the twelve normals and eight offsets.
+/// 142 + 174 + 380 = 696; a unit
 /// test checks that no input reads more.
-pub const MAX_INPUT_BYTES: usize = 620;
+pub const MAX_INPUT_BYTES: usize = 696;
 
 /// The inputs one byte string decodes to.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -70,8 +74,9 @@ pub struct Inputs {
     pub p3: [P3; 5],
     /// Plane-normal coordinates, |v| ≤ 2^83 − 1.
     pub normals: [i128; 12],
-    /// Plane offsets, |v| ≤ 2^125 − 1.
-    pub offsets: [i128; 4],
+    /// Plane offsets and the carrier descriptions' narrower integers, |v| ≤ 2^125 − 1; a narrower input
+    /// takes one of these cut down to its width.
+    pub offsets: [i128; 8],
 }
 
 /// The bits of a plane normal's coordinate and of a plane offset, as the descriptions declare
@@ -272,6 +277,22 @@ fn call(name: &str, a: &Args) -> Result<[Option<BigInt>; 3], Finding> {
         ),
         "cross_norm" => three!(cross_norm, cross_norm_value; q(0)?, q(1)?, q(2)?, q(3)?),
         "axis_gap" => three!(axis_gap, axis_gap_value; q(0)?, q(1)?, q(2)?, r(3)?),
+        "round_grid" => three!(round_grid, round_grid_value; p(0)?, p(1)?, r(2)?, r(3)?, r(4)?),
+        "round_rational" => {
+            three!(round_rational, round_rational_value; r(0)?, r(1)?, r(2)?, p(3)?, r(4)?, r(5)?, r(6)?)
+        }
+        "round_line" => {
+            three!(round_line, round_line_value; r(0)?, r(1)?, r(2)?, p(3)?, r(4)?, r(5)?, r(6)?)
+        }
+        "circle_side" => three!(circle_side, circle_side_value; r(0)?, r(1)?, r(2)?, p(3)?, r(4)?),
+        "circle_line" => three!(circle_line, circle_line_value; r(0)?, r(1)?, r(2)?, p(3)?, r(4)?),
+        "circle_gap" => three!(circle_gap, circle_gap_value; p(0)?, p(1)?, r(2)?),
+        "ellipse_side" => {
+            three!(ellipse_side, ellipse_side_value; r(0)?, r(1)?, r(2)?, p(3)?, r(4)?, r(5)?, r(6)?, r(7)?)
+        }
+        "ellipse_line" => {
+            three!(ellipse_line, ellipse_line_value; r(0)?, r(1)?, r(2)?, p(3)?, r(4)?, r(5)?, r(6)?, r(7)?)
+        }
         other => {
             return Err(Finding {
                 law: "the harness calls every registered predicate".into(),
@@ -363,9 +384,12 @@ pub fn check(inputs: &Inputs) -> Result<(), Finding> {
                 InputKind::Rounded { bits, .. } if bits == NORMAL_BITS => {
                     inputs.normals.get(normal).map(|&v| Arg::Rounded(v))
                 }
-                // Every other width takes an offset cut down to it.
+                // Every other width takes an offset cut down to it: an extreme stays the extreme of
+                // the narrower width, and zero stays zero.
                 InputKind::Rounded { bits, .. } => {
-                    let shift = 1_i128 << OFFSET_BITS.saturating_sub(bits);
+                    let shift = 1_i128
+                        .checked_shl(OFFSET_BITS.saturating_sub(bits))
+                        .unwrap_or(1);
                     inputs
                         .offsets
                         .get(offset)
