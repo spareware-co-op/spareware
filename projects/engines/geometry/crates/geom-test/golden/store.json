@@ -242,9 +242,15 @@
               "kind": "corpus",
               "piece": "G194",
               "why": "the benchmark groups of piece/G192's line and of G80 and G81 meet in one golden"
+            },
+            {
+              "sha256": "d447eb75906f05514da32055b78c30ab5a248d51385dd15b17e7f694c57e7307",
+              "kind": "corpus",
+              "piece": "G194",
+              "why": "two entity benchmarks added (entity/polyline, entity/under)"
             }
           ],
-          "sha256": "d447eb75906f05514da32055b78c30ab5a248d51385dd15b17e7f694c57e7307"
+          "sha256": "7208d271d98e833acd7a8ad9e5974395dd546d19ef3cfd6135d8df0e6c18bebf"
         },
         {
           "id": "geom-nurbs/operations",
