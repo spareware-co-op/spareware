@@ -736,7 +736,10 @@ fn para(out: &mut String, lead: &str, first: &str, rest: &str, text: &str) {
             .count()
             .saturating_add(usize::from(!empty))
             .saturating_add(word.chars().count());
-        if !empty && needed > WIDTH {
+        // A line must not start with a lone `+`, `-` or `*`: markdown reads it as a list item,
+        // and clippy's `doc_lazy_continuation` refuses the line. Such a word stays on its line.
+        let marker = matches!(word, "+" | "-" | "*");
+        if !empty && needed > WIDTH && !marker {
             line(out, &current);
             current = format!("{lead} {rest}");
             empty = true;

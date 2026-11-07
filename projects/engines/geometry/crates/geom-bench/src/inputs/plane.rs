@@ -594,7 +594,7 @@ pub fn cmp_meeting_time(class: Class) -> Vec<([Moving; 4], Coord)> {
         }),
         Class::Extreme => batch_of(|_| {
             let four = extreme_meeting(&mut g)?;
-            let time = Coord::new(i64::from(g.sign()) * M).ok()?;
+            let time = Coord::new(g.sign() * M).ok()?;
             Moving::cmp_meeting_time(&four, time)
                 .is_ok()
                 .then_some((four, time))
@@ -625,7 +625,7 @@ pub fn side_at_meeting(class: Class) -> Vec<([Moving; 4], Moving)> {
         Class::Degenerate => batch_of(|k| {
             let at = typical3(&mut g);
             let four = meeting_at(&mut g, at, 0)?;
-            let other = four[k % 4];
+            let other = *four.get(k % 4)?;
             (Moving::side_at_meeting(&four, &other) == Ok(Sign::Zero)).then_some((four, other))
         }),
         Class::Extreme => batch_of(|_| {

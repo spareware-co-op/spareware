@@ -36,7 +36,7 @@
     clippy::indexing_slicing
 )]
 
-use geom_gen::predicate_derive::derive;
+use geom_gen::predicate_derive::{Width, derive};
 use geom_gen::predicate_emit::verus_twin;
 use geom_gen::predicates::{PREDICATES, derivation, generate_verus_orient2d};
 use proc_macro2::{Group, TokenStream, TokenTree};
@@ -368,7 +368,15 @@ fn every_predicate_has_a_twin_and_the_rest_is_refused() {
     for p in &PREDICATES {
         let d = derivation(p).unwrap();
         let twin = verus_twin(&d, "test", "shipped.rs");
-        assert!(twin.is_ok(), "{}: {twin:?}", p.comparison.name);
+        if d.certs.iter().any(|c| c.width == Width::I512) {
+            // The total path's width has no twin yet: `mitre_at` and `mitre_side` (piece G273)
+            // compute in it, and are refused with the reason until the wide twin states the
+            // half base of eight limbs.
+            let e = twin.expect_err(p.comparison.name).0;
+            assert!(e.contains("not I512"), "{}: {e}", p.comparison.name);
+        } else {
+            assert!(twin.is_ok(), "{}: {twin:?}", p.comparison.name);
+        }
     }
     // A step wider than I384, the widest budgeted width: refused with the reason.
     let wide = derive(

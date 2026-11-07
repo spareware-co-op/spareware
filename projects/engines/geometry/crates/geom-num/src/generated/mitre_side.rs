@@ -508,8 +508,8 @@ use crate::wide::{I256, I512};
 use super::{decide, larger, largest_magnitude, rounded_f64, within};
 
 /// The filter's error constant: E · (1 + 2u)^5 with E = 2168u + 17520u^2 + 57432u^3 + 134904u^4 +
-/// 272648u^5 + 465504u^6 + 648892u^7 + 732152u^8 + 668096u^9 + 491712u^10 + 289744u^11 + 134848u^12
-/// + 48480u^13 + 12992u^14 + 2444u^15 + 288u^16 + 16u^17, the result's unit error (header), rounded
+/// 272648u^5 + 465504u^6 + 648892u^7 + 732152u^8 + 668096u^9 + 491712u^10 + 289744u^11 + 134848u^12 +
+/// 48480u^13 + 12992u^14 + 2444u^15 + 288u^16 + 16u^17, the result's unit error (header), rounded
 /// up to an `f64`: 4767482418036746 · 2^-94.
 const ERROR: f64 = f64::from_bits(0x3d50_f000_0000_000a);
 

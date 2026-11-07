@@ -409,3 +409,184 @@ fn sides_are_the_exact_signs() {
         }
     }
 }
+
+/// The twenty-five numbers `generated::mitre_side` takes for four planes and a fifth: each plane's
+/// normal, offset and speed.
+fn side_args(four: &[Moving; 4], other: &Moving) -> [i128; 25] {
+    let mut out = [0; 25];
+    for (k, m) in four.iter().chain([other]).enumerate() {
+        let [x, y, z] = m.plane().n();
+        for (slot, v) in out
+            .iter_mut()
+            .skip(5 * k)
+            .zip([x, y, z, m.plane().d(), m.speed()])
+        {
+            *slot = v;
+        }
+    }
+    out
+}
+
+/// What the generated filter says about the sign of the 5 x 5 determinant: `None` when it cannot
+/// tell.
+fn side_filter(four: &[Moving; 4], other: &Moving) -> Option<Sign> {
+    let [
+        n1x,
+        n1y,
+        n1z,
+        d1,
+        s1,
+        n2x,
+        n2y,
+        n2z,
+        d2,
+        s2,
+        n3x,
+        n3y,
+        n3z,
+        d3,
+        s3,
+        n4x,
+        n4y,
+        n4z,
+        d4,
+        s4,
+        n5x,
+        n5y,
+        n5z,
+        d5,
+        s5,
+    ] = side_args(four, other);
+    geom_num::generated::mitre_side::filter(
+        n1x, n1y, n1z, d1, s1, n2x, n2y, n2z, d2, s2, n3x, n3y, n3z, d3, s3, n4x, n4y, n4z, d4, s4,
+        n5x, n5y, n5z, d5, s5,
+    )
+}
+
+#[test]
+fn one_step_from_degenerate_is_decided_exactly() {
+    // The fifth plane is one of the four with its speed one step off: at their meeting it is
+    // t steps away, the smallest distance the data can give.
+    let mut rng = Rng::for_test("one_step_from_degenerate_is_decided_exactly");
+    let mut checked = 0;
+    while checked < 500 {
+        let planes: [Option<Plane>; 4] = core::array::from_fn(|_| rng.plane());
+        let Some(planes) = planes.into_iter().collect::<Option<Vec<Plane>>>() else {
+            continue;
+        };
+        let four: [Moving; 4] =
+            core::array::from_fn(|k| Moving::at_speed(planes[k], rng.speed()).unwrap());
+        if meeting(&four).is_none() {
+            continue;
+        }
+        for k in 0..4 {
+            for step in [-1, 1] {
+                let speed = four[k].speed() + step;
+                let Ok(other) = Moving::at_speed(four[k].plane(), speed) else {
+                    continue;
+                };
+                let want = sign_of(&distance_at(&four, &other).unwrap());
+                assert_ne!(want, Sign::Zero, "one step moves the plane off the meeting");
+                assert_eq!(Moving::side_at_meeting(&four, &other), Ok(want));
+            }
+        }
+        checked += 1;
+    }
+}
+
+#[test]
+fn the_filter_boundary_is_crossed_both_ways() {
+    // The fifth plane is the fourth with its speed moved by 2^k, so the determinant is nd · 2^k
+    // and grows from tiny to huge as k does. The filter must decline the small ones, decide the
+    // large ones, and `side_at_meeting` must match the oracle on both.
+    let (four, _) = extreme_planes();
+    let (mut declined, mut decided) = (0, 0);
+    for k in 0..=123 {
+        for sign in [-1_i128, 1] {
+            let speed = four[3].speed() + sign * (1_i128 << k);
+            let Ok(other) = Moving::at_speed(four[3].plane(), speed) else {
+                continue;
+            };
+            let want = sign_of(&distance_at(&four, &other).unwrap());
+            assert_eq!(Moving::side_at_meeting(&four, &other), Ok(want), "k = {k}");
+            match side_filter(&four, &other) {
+                None => declined += 1,
+                Some(filtered) => {
+                    decided += 1;
+                    // The filter's sign is the determinant's, which is `want` times ns's sign.
+                    let ns = sign_of(&determinant_ns(&four));
+                    assert_eq!(filtered.mul(ns), want, "k = {k}");
+                }
+            }
+        }
+    }
+    assert!(
+        declined > 0 && decided > 0,
+        "declined {declined}, decided {decided}"
+    );
+}
+
+/// The determinant of the rows (n, s) of the four planes, by Gaussian elimination in rationals.
+fn determinant_ns(four: &[Moving; 4]) -> BigRational {
+    let mut m: Vec<Vec<BigRational>> = four
+        .iter()
+        .map(|q| {
+            let n = q.plane().n();
+            vec![rat(n[0]), rat(n[1]), rat(n[2]), rat(q.speed())]
+        })
+        .collect();
+    let mut det = rat(1);
+    for col in 0..4 {
+        let pivot = (col..4).find(|&r| m[r][col] != rat(0)).unwrap();
+        if pivot != col {
+            m.swap(col, pivot);
+            det = -det;
+        }
+        det *= m[col][col].clone();
+        for r in col + 1..4 {
+            let f = &m[r][col] / &m[col][col];
+            let source = m[col].clone();
+            for (k, cell) in m[r].iter_mut().enumerate() {
+                *cell = &*cell - &f * &source[k];
+            }
+        }
+    }
+    det
+}
+
+#[test]
+fn the_side_obeys_its_laws() {
+    // Reordering the four planes keeps the answer; reversing the fifth plane (its points the other
+    // way round, its speed negated) flips it.
+    let mut rng = Rng::for_test("the_side_obeys_its_laws");
+    let mut checked = 0;
+    while checked < 300 {
+        let pts: [P3; 3] = core::array::from_fn(|_| p(rng.coord(), rng.coord(), rng.coord()));
+        let planes: [Option<Plane>; 4] = core::array::from_fn(|_| rng.plane());
+        let Some(planes) = planes.into_iter().collect::<Option<Vec<Plane>>>() else {
+            continue;
+        };
+        let (Ok(forward), Ok(backward)) = (
+            Plane::through(pts[0], pts[1], pts[2]),
+            Plane::through(pts[0], pts[2], pts[1]),
+        ) else {
+            continue;
+        };
+        let four: [Moving; 4] =
+            core::array::from_fn(|k| Moving::at_speed(planes[k], rng.speed()).unwrap());
+        let speed = rng.speed();
+        let (a, b) = (
+            Moving::at_speed(forward, speed).unwrap(),
+            Moving::at_speed(backward, -speed).unwrap(),
+        );
+        let Ok(side) = Moving::side_at_meeting(&four, &a) else {
+            continue;
+        };
+        assert_eq!(Moving::side_at_meeting(&four, &b), Ok(side.negate()));
+        for order in [[1, 0, 2, 3], [3, 2, 1, 0], [2, 3, 0, 1], [0, 2, 1, 3]] {
+            let permuted = order.map(|k| four[k]);
+            assert_eq!(Moving::side_at_meeting(&permuted, &a), Ok(side));
+        }
+        checked += 1;
+    }
+}

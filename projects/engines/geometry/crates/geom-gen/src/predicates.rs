@@ -1563,7 +1563,7 @@ mod tests {
     type Generate = fn() -> Result<Vec<u8>, GenError>;
 
     /// Each generator with its committed output, built into the test.
-    const COMMITTED: [(&str, Generate, &[u8]); 14] = [
+    const COMMITTED: [(&str, Generate, &[u8]); 16] = [
         (
             "mod.rs",
             generate_module,
@@ -1633,6 +1633,16 @@ mod tests {
             "mitre_time.rs",
             generate_mitre_time,
             include_bytes!("../../geom-num/src/generated/mitre_time.rs"),
+        ),
+        (
+            "mitre_side.rs",
+            generate_mitre_side,
+            include_bytes!("../../geom-num/src/generated/mitre_side.rs"),
+        ),
+        (
+            "mitre_at.rs",
+            generate_mitre_at,
+            include_bytes!("../../geom-num/src/generated/mitre_at.rs"),
         ),
     ];
 
