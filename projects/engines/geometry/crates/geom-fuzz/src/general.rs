@@ -449,7 +449,7 @@ fn exact_ceiling() -> u64 {
 }
 
 /// Whether a point near the second surface's equation stands over its trimmed patch: a sphere
-/// band's latitude, or a plane patch's whole reach.
+/// band's latitude, or a plane patch's parallelogram.
 fn reaches(second: &SurfaceKind, p: [f64; 3]) -> bool {
     if let SurfaceKind::Sphere(sphere) = second {
         let [cx, cy, cz] = sphere.center();
@@ -459,7 +459,37 @@ fn reaches(second: &SurfaceKind, p: [f64; 3]) -> bool {
         // A margin inside the band: its edge's own crossings are the first surface's business.
         return dz.abs() < 0.9 * length * 0.98;
     }
+    if let SurfaceKind::Plane(_) = second {
+        return over_patch(second, p);
+    }
     true
+}
+
+/// Whether `p`, which stands near a plane patch's plane, stands over the patch: its coordinates on
+/// the plane's two directions, inside the patch's domain with a margin, since the edge's own
+/// crossings are the first surface's business. A plane is linear in its parameters, so its origin
+/// and directions are three of its points.
+fn over_patch(plane: &SurfaceKind, p: [f64; 3]) -> bool {
+    let at = |u: f64, v: f64| plane.point(u, v, (Limit::FromRight, Limit::FromRight));
+    let (Ok(o), Ok(pa), Ok(pb)) = (at(0.0, 0.0), at(1.0, 0.0), at(0.0, 1.0)) else {
+        return true;
+    };
+    let sub = |x: [f64; 3], y: [f64; 3]| [x[0] - y[0], x[1] - y[1], x[2] - y[2]];
+    let dot = |x: [f64; 3], y: [f64; 3]| x[0] * y[0] + x[1] * y[1] + x[2] * y[2];
+    let (a, b, d) = (sub(pa, o), sub(pb, o), sub(p, o));
+    let (aa, bb, ab) = (dot(a, a), dot(b, b), dot(a, b));
+    let (da, db) = (dot(d, a), dot(d, b));
+    let det = aa * bb - ab * ab;
+    if det == 0.0 {
+        return true;
+    }
+    let (s, r) = ((da * bb - db * ab) / det, (db * aa - da * ab) / det);
+    let ((s0, s1), (r0, r1)) = plane.domain();
+    let inside = |x: f64, lo: f64, hi: f64| {
+        let (middle, half) = (lo / 2.0 + hi / 2.0, (hi - lo) / 2.0);
+        (x - middle).abs() < 0.98 * half
+    };
+    inside(s, s0, s1) && inside(r, r0, r1)
 }
 
 /// Holds one case to the laws, and says what its answer was.
