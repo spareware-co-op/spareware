@@ -829,27 +829,31 @@ fn closes(surface: &SurfaceKind) -> [bool; 2] {
     }
 }
 
+/// The hull of `boxes` as one parameter box, `None` for none. A slice, not a trait object: the
+/// recursion check cannot follow a call through `dyn Iterator`.
+fn span(boxes: &[&[Interval; 2]]) -> Option<ParamBox> {
+    let mut out: Option<ParamBox> = None;
+    for at in boxes {
+        let [u, v] = at;
+        out = Some(match out {
+            None => ((u.lo(), u.hi()), (v.lo(), v.hi())),
+            Some(((p, q), (r, s))) => (
+                (smaller(p, u.lo()), larger(q, u.hi())),
+                (smaller(r, v.lo()), larger(s, v.hi())),
+            ),
+        });
+    }
+    out
+}
+
 /// The undecided boxes' hull, as one or two parameter boxes: two when the boxes reach both ends
 /// of a closed direction, the boxes nearer each end hulled on their own side of the seam, since
 /// the seam's two ends are one curve.
 fn hulls(surface: &SurfaceKind, open: &[([Interval; 2], f64)]) -> Option<Vec<ParamBox>> {
     let ((a, b), (c, d)) = surface.domain();
     let ends = [(a, b), (c, d)];
-    let span = |boxes: &mut dyn Iterator<Item = &[Interval; 2]>| -> Option<ParamBox> {
-        let mut out: Option<ParamBox> = None;
-        for at in boxes {
-            let [u, v] = at;
-            out = Some(match out {
-                None => ((u.lo(), u.hi()), (v.lo(), v.hi())),
-                Some(((p, q), (r, s))) => (
-                    (smaller(p, u.lo()), larger(q, u.hi())),
-                    (smaller(r, v.lo()), larger(s, v.hi())),
-                ),
-            });
-        }
-        out
-    };
-    let whole = span(&mut open.iter().map(|(at, _)| at))?;
+    let all: Vec<&[Interval; 2]> = open.iter().map(|(at, _)| at).collect();
+    let whole = span(&all)?;
     for (k, closed) in closes(surface).into_iter().enumerate() {
         let (lo, hi) = ends.get(k).copied()?;
         let side = |at: &[Interval; 2]| at.get(k).copied();
@@ -866,8 +870,8 @@ fn hulls(surface: &SurfaceKind, open: &[([Interval; 2], f64)]) -> Option<Vec<Par
         let near = |high: bool| {
             move |at: &&[Interval; 2]| side(at).is_some_and(|x| (x.lo() >= middle) == high)
         };
-        let low = span(&mut open.iter().map(|(at, _)| at).filter(near(false)))?;
-        let high = span(&mut open.iter().map(|(at, _)| at).filter(near(true)))?;
+        let low = span(&all.iter().copied().filter(near(false)).collect::<Vec<_>>())?;
+        let high = span(&all.iter().copied().filter(near(true)).collect::<Vec<_>>())?;
         return Some(alloc::vec![low, high]);
     }
     Some(alloc::vec![whole])
