@@ -3311,7 +3311,7 @@ pub mod entity {
 
     library_benchmark_group!(
         name = entity;
-        benchmarks = polyline, under
+        benchmarks = polyline, place, length, under
     );
 }
 

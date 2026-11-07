@@ -91,3 +91,14 @@ pub fn under(class: Class) -> Vec<(Shape, Classification)> {
         ))
     })
 }
+
+/// A polyline and the number of one of eight placements (`Similarity`): four quarter turns, a
+/// mirror in a row, a mirror in a column, a whole scale of three and a shift.
+#[must_use]
+pub fn place(class: Class) -> Vec<((Vec<P2>, Vec<Frac>), i64)> {
+    if class != Class::Typical {
+        return Vec::new();
+    }
+    let mut g = rng("entity::place", class);
+    batch_of(|_| Some((parts(&mut g)?, g.range(0, 7))))
+}

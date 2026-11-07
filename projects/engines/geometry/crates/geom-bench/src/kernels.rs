@@ -2349,6 +2349,7 @@ pub mod bvh {
 /// `geom-2d`'s entity model (piece G194, decision 32.44): a polyline built and checked, and a
 /// shape's change under a transform's classification.
 pub mod entity {
+    use geom_2d::edit::{Similarity, place_polyline, polyline_length};
     use geom_2d::entity::{Becomes, Frac, Polyline, Shape};
     use geom_math::Classification;
     use geom_num::NumError;

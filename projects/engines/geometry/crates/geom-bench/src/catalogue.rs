@@ -472,6 +472,8 @@ pub static OPS: &[Op] = &[
     // geom-2d's entity model (piece G194; decision 32.44): a polyline built and checked, and a
     // shape's change under a transform's classification.
     Op { group: "entity", name: "polyline", measures: "geom_2d::Polyline::new", classes: T, prepare: |c| bind(inputs::entity::polyline(c), kernels::entity::polyline) },
+    Op { group: "entity", name: "place", measures: "geom_2d::edit::place_polyline", classes: T, prepare: |c| bind(inputs::entity::place(c), kernels::entity::place) },
+    Op { group: "entity", name: "length", measures: "geom_2d::edit::polyline_length", classes: T, prepare: |c| bind(inputs::entity::polyline(c), kernels::entity::length) },
     Op { group: "entity", name: "under", measures: "geom_2d::Shape::under", classes: T, prepare: |c| bind(inputs::entity::under(c), kernels::entity::under) },
     // geom-nurbs's hot paths (pieces G56, G58 and G59; decision 32.44): evaluation, interpolation
     // and the Bernstein bound.

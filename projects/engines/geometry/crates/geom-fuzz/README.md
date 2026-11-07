@@ -25,7 +25,12 @@ versions never see each other's edits; and `entity` (`src/entity.rs`, G194), a d
 from any bytes keeps its invariants (a bulge is a bounded reduced fraction, a polyline's counts
 agree) and changes kind under a transform's classification as the rules of 14.10 say. Its replay
 corpus, 18 seed files in `tests/__fuzz__/entity/corpus`, covers the three decode modes and six
-shape tags; `cargo test` replays them on every run.
+shape tags; `cargo test` replays them on every run. And `edit` (`src/edit.rs`, G206):
+a polyline placed by a quarter turn, a mirror, a whole scale and a shift is the image the
+definition gives in 128-bit numbers (or refused exactly when an image leaves the grid), a bulge is
+kept or negated by a mirror, a unit map is undone by its inverse, and a certified length interval
+meets that of a length-keeping image. Its replay corpus, 24 seed files in
+`tests/__fuzz__/edit/corpus`, covers every quarter turn, both mirror senses and three scales.
 
 ## One law, four engines
 
