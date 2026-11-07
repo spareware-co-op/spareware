@@ -92,6 +92,10 @@ fn signed(b: u8) -> i8 {
 
 /// Decodes `data` into a case, and returns it with the number of bytes read.
 #[must_use]
+#[allow(
+    clippy::many_single_char_names,
+    reason = "a, b, n, d, x are the case's own letters: two words, a fraction and a vertex"
+)]
 pub fn decode(data: &[u8]) -> (Case, usize) {
     let mut src = ByteSource::new(data);
     let mode = src.byte() % 3;
