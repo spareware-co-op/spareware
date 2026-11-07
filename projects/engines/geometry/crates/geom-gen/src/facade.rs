@@ -6,7 +6,8 @@
 //! `engine_geometry::operations::OPERATIONS`: its name, version, family and tier, what it does,
 //! its inputs and outputs (each with its type, unit and whether it may be left out), the roles it
 //! names, the errors it can return (each detail with its base kind and its data), the warnings it
-//! can give, the exactness classes it can return, whether it has a batch entry, and its example.
+//! can give, the exactness classes it can return, its charge schedule, whether it has a batch
+//! entry, and its example.
 //! [`mcp`] writes JSON: the MCP protocol version the descriptions follow ([`MCP_VERSION`]) and one
 //! `Tool` per operation, as MCP's `tools/list` describes a tool: its `name`, `title` and
 //! `description`, an `inputSchema` and an `outputSchema` in JSON Schema 2020-12 (MCP's default
@@ -14,13 +15,14 @@
 //! nothing outside its inputs and changes nothing, so it is read-only, idempotent and closed-world
 //! to the program that calls it), and the kernel's own data under `_meta`
 //! (`org.spareware/kernel`: version, family, tier, exactness classes, errors with base kinds,
-//! warnings, batch entry, roles). The command layer that serves the tools adds the program's side
+//! warnings, charges, batch entry, roles). The command layer that serves the tools adds the program's side
 //! (sign-in scopes, the program's units), as EXTENDING.md, section 2.2, sets out.
 //!
 //! Each field's JSON Schema comes from its type and unit ([`field_schema`]): booleans, whole
 //! numbers (unsigned ones at least 0), real numbers, text, grid points as arrays of whole grid
-//! steps, lists of any of these, and the facade's value types (bodies, curves, surfaces, names)
-//! as objects named by their type, whose form the command layer gives. A type with no rule here
+//! steps, axes by name, lists of any of these, of any length (`[T]`) or of one (`[T; N]`), and the
+//! facade's value types (bodies, curves, surfaces, names, transforms) as objects named by their
+//! type, whose form the command layer gives. A type with no rule here
 //! is an error naming it, so an operation cannot reach the interfaces with a field they cannot
 //! describe.
 //!
@@ -253,6 +255,16 @@ pub fn api(ops: &[Operation]) -> Result<Vec<u8>, GenError> {
             }
             out.push('\n');
         }
+        out.push_str("**Charges**");
+        if s.charges.is_empty() {
+            out.push_str(": none.\n\n");
+        } else {
+            out.push_str("\n\n");
+            for c in s.charges {
+                let _ = writeln!(out, "- `{}`: {} per {}", c.phase.name(), c.units, c.per);
+            }
+            out.push('\n');
+        }
         let classes: Vec<&str> = s.classes.iter().map(|c| class(*c)).collect();
         let _ = write!(
             out,
@@ -274,6 +286,18 @@ fn type_schema(ty: &str) -> Result<Value, GenError> {
         .and_then(|t| t.strip_suffix(']'))
         .or_else(|| ty.strip_prefix("Vec<").and_then(|t| t.strip_suffix('>')))
     {
+        if let Some((item, count)) = inner.rsplit_once(';') {
+            let count: u64 = count
+                .trim()
+                .parse()
+                .map_err(|_| fail(format!("`{ty}` has no whole length")))?;
+            return Ok(json!({
+                "type": "array",
+                "items": type_schema(item)?,
+                "minItems": count,
+                "maxItems": count
+            }));
+        }
         return Ok(json!({ "type": "array", "items": type_schema(inner)? }));
     }
     let schema = match ty {
@@ -298,8 +322,10 @@ fn type_schema(ty: &str) -> Result<Value, GenError> {
             "maxItems": 3,
             "description": "a grid point, x, y and z in whole grid steps"
         }),
+        "Axis" => json!({ "type": "string", "enum": ["x", "y", "z"] }),
         "Body" | "CurveKind" | "SurfaceKind" | "NameId" | "TopoName" | "Role" | "PieceKey"
-        | "Exactness" | "GridStep" => json!({
+        | "Exactness" | "GridStep" | "History" | "Motion" | "Copies" | "Instance" | "Rotation"
+        | "Scale" => json!({
             "type": "object",
             "title": ty,
             "description": format!(
@@ -374,6 +400,11 @@ fn tool(op: &Operation) -> Result<Value, GenError> {
         .iter()
         .map(|r| json!({ "name": r.name, "doc": r.doc }))
         .collect();
+    let charges: Vec<Value> = s
+        .charges
+        .iter()
+        .map(|c| json!({ "phase": c.phase.name(), "per": c.per, "units": c.units }))
+        .collect();
     let classes: Vec<&str> = s.classes.iter().map(|c| class(*c)).collect();
     Ok(json!({
         "name": s.name,
@@ -401,6 +432,7 @@ fn tool(op: &Operation) -> Result<Value, GenError> {
                 "exactness": classes,
                 "errors": errors,
                 "warnings": warnings,
+                "charges": charges,
                 "roles": roles,
                 "batch": s.batch,
                 "example": s.example

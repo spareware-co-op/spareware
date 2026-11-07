@@ -4,7 +4,8 @@
 //! What it does: an [`OpSchema`] is chapter 22's description of one operation: its name, version
 //! and family; its inputs and outputs, each with a type and a unit; the roles it names; the errors
 //! it can return, each detail with its base kind and its data; the warnings it can give; the
-//! exactness classes it can return; whether it has a batch entry; and an example. The types here
+//! exactness classes it can return; its charge schedule; whether it has a batch entry; and an
+//! example. The types here
 //! are the vocabulary; the facade, `engine-geometry`, holds every operation's schema as data and
 //! generates from them (piece G100).
 //!
@@ -28,6 +29,7 @@
 use geom_num::Exactness;
 
 use crate::kind::ErrorKind;
+use crate::run::Charge;
 
 /// The families of chapter 10.2's catalogue.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord)]
@@ -178,6 +180,8 @@ pub struct OpSchema {
     pub diagnostics: &'static [DiagnosticSpec],
     /// The exactness classes it can return.
     pub classes: &'static [Class],
+    /// Its charge schedule: what each phase charges, fixed by its version (chapter 23.10).
+    pub charges: &'static [Charge],
     /// Whether it has a batch entry with one result per item (chapter 10.1).
     pub batch: bool,
     /// An example call and its result, in plain words and values.

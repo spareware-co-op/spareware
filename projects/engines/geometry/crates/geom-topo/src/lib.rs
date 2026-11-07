@@ -74,4 +74,9 @@ pub use entity::{
     SurfaceIx, Vertex, VertexIx, Vertices,
 };
 pub use error::{Refusal, TopoError};
+// The geometry kinds a body's pools hold, for the crates above this one that read them (such as
+// geom-check's exactness record) without a direct dependency on geom-curve and geom-surface,
+// which chapter 27's crate table does not give them.
+pub use geom_curve::CurveKind;
+pub use geom_surface::SurfaceKind;
 pub use ix::{Arena, Ix, Kind};
