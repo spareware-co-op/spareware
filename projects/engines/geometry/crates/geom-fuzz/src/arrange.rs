@@ -222,7 +222,11 @@ pub fn check(case: &Case) -> Result<(), Finding> {
     if v.checked_add(f) != e.checked_add(c).and_then(|n| n.checked_add(1)) {
         return Err(fail(case, "Euler's formula: V - E + F = 1 + C"));
     }
-    let half_edges: usize = a.cycles().iter().map(Vec::len).fold(0, usize::saturating_add);
+    let half_edges: usize = a
+        .cycles()
+        .iter()
+        .map(Vec::len)
+        .fold(0, usize::saturating_add);
     if Some(half_edges) != e.checked_mul(2) {
         return Err(fail(case, "every half-edge is on one cycle"));
     }

@@ -74,7 +74,9 @@ fn arrange_seeded() -> Result<(), seeded::Failure> {
 #[test]
 fn the_input_bound_is_reached_and_never_passed() {
     let mut data = vec![MAX_SEGMENTS];
-    data.extend_from_slice(&[8, 0, 120, 100, 0, 96, 100, 8, 40, 0, 40, 100, 100, 0, 100, 100]);
+    data.extend_from_slice(&[
+        8, 0, 120, 100, 0, 96, 100, 8, 40, 0, 40, 100, 100, 0, 100, 100,
+    ]);
     data.extend_from_slice(&[0; 16]);
     assert_eq!(data.len(), MAX_INPUT_BYTES);
     let (case, read) = decode(&data);
