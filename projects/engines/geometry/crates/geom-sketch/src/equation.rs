@@ -726,15 +726,14 @@ fn push_lin_end(
     Ok(())
 }
 
-/// Whether a spline rule reads its ends in the linear layout: a rational spline, or a rule against
-/// a line or an arc.
+/// Whether a join or a tangent line reads its ends in the linear layout: a rational spline in it.
+/// (A rule against a line or an arc always does, and says so in `Row::round`.)
 pub(crate) fn linear_layout(sketch: &Sketch, kind: &ConstraintKind) -> Result<bool, SketchError> {
     Ok(match *kind {
         ConstraintKind::SplineJoin { a, b, .. } => {
             sketch.spline_is_rational(a)? || sketch.spline_is_rational(b)?
         }
         ConstraintKind::SplineTangentLine { spline, .. } => sketch.spline_is_rational(spline)?,
-        ConstraintKind::SplineAgainst { .. } => true,
         _ => false,
     })
 }

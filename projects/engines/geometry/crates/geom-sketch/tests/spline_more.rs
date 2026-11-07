@@ -591,3 +591,132 @@ fn a_loop_needs_more_panels_and_still_has_its_length_within_the_bound() {
     assert!((l.value - exact).abs() < 1e-6, "{l:?} against {exact}");
     assert!(l.error < 1e-3 * l.value, "{l:?}");
 }
+
+/// `quarters()` with the first spline's end tangent flat: its first two control points are one.
+fn flat_first_spline(text: &str) -> String {
+    text.replacen("entity 1.1 point 5 5", "entity 1.1 point 5 0", 1)
+}
+
+#[test]
+fn a_spline_end_with_no_tangent_is_degenerate_in_every_new_rule() {
+    let mut base = quarters();
+    base.push_str("entity 1.7 point 0 0\nentity 1.8 point 6 1\nentity 2.3 line 1.7 1.8 segment\n");
+    for rule in [
+        "spline-join 2.0 start 2.1 start g1",
+        "spline-join 2.0 start 2.1 start g2",
+        "spline-join 2.0 start 2.1 start g3",
+        "spline-join 2.1 start 2.0 start g1",
+        "spline-join 2.1 start 2.0 start g2",
+        "spline-join 2.1 start 2.0 start g3",
+        "spline-tangent-line 2.0 start 2.3",
+        "spline-against 2.0 start 2.3 start g1",
+        "spline-against 2.0 start 2.3 start g2",
+        "spline-against 2.0 start 2.3 start g3",
+        "spline-against 2.0 start 2.2 start g1",
+        "spline-against 2.0 start 2.2 start g2",
+        "spline-against 2.0 start 2.2 start g3",
+    ] {
+        // Flat at the first spline only, then (for the joins) at the second only.
+        let flat = with_rule(&flat_first_spline(&base), rule);
+        let mut a = Assembly::new(&flat).unwrap();
+        assert!(
+            matches!(a.evaluate(&flat), Err(SketchError::Degenerate(_))),
+            "{rule}"
+        );
+        // The same rule on the unflattened sketch is fine.
+        let ok = with_rule(&base, rule);
+        let mut a = Assembly::new(&ok).unwrap();
+        a.evaluate(&ok).unwrap();
+    }
+    // Flat at the second spline's start only.
+    let flat_second = base.replacen("entity 1.4 point -5 5", "entity 1.4 point 0 5", 1);
+    for rule in [
+        "spline-join 2.0 finish 2.1 start g1",
+        "spline-join 2.0 finish 2.1 start g2",
+        "spline-join 2.0 finish 2.1 start g3",
+    ] {
+        let s = with_rule(&flat_second, rule);
+        let mut a = Assembly::new(&s).unwrap();
+        assert!(
+            matches!(a.evaluate(&s), Err(SketchError::Degenerate(_))),
+            "{rule}"
+        );
+    }
+}
+
+#[test]
+fn a_rational_spline_joins_a_plain_one() {
+    // The rational quarter circle ends at (0, 5) heading left; a plain quadratic leaves it left.
+    let mut text = HEAD.to_owned();
+    for (k, (x, y)) in [
+        (5.0, 0.0),
+        (5.0, 5.0),
+        (0.0, 5.0),
+        (0.0, 5.0),
+        (-5.0, 5.0),
+        (-5.0, 0.0),
+    ]
+    .into_iter()
+    .enumerate()
+    {
+        point(&mut text, k as u64, x, y);
+    }
+    spline(&mut text, 0, 2, 0, &[1.0, FRAC_1_SQRT_2, 1.0], QUADRATIC);
+    spline(&mut text, 1, 2, 3, &[1.0; 3], QUADRATIC);
+    for (order, rows) in [("g1", 1)] {
+        let s = with_rule(&text, &format!("spline-join 2.0 finish 2.1 start {order}"));
+        for x in tail(&s, rows) {
+            assert!(x.abs() < 1e-9, "{order}: {x}");
+        }
+        let s = with_rule(&text, &format!("spline-join 2.1 start 2.0 finish {order}"));
+        for x in tail(&s, rows) {
+            assert!(x.abs() < 1e-9, "{order} reversed: {x}");
+        }
+    }
+    // The quarter circle bends by 1/5 and this quadratic does not, so G2 does not hold.
+    let s = with_rule(&text, "spline-join 2.0 finish 2.1 start g2");
+    assert!(tail(&s, 2)[1].abs() > 1e-4);
+}
+
+#[test]
+fn a_rational_spline_whose_weights_are_all_not_one_is_still_its_curve() {
+    // Twice the weights of a quarter circle are the same circle: its length is still 5 pi / 2.
+    let mut text = quarters();
+    text = text.replacen(
+        "entity 2.0 spline 2 3 1.0 1.1 1.2 6 0 0 0 1 1 1 3 1 0.7071067811865476 1",
+        "entity 2.0 spline 2 3 1.0 1.1 1.2 6 0 0 0 1 1 1 3 2 1.4142135623730951 2",
+        1,
+    );
+    assert!(text.contains("1.4142135623730951"));
+    let l = spline_length(&parse(&text).unwrap(), id(2, 0)).unwrap();
+    assert!((l.value - 5.0 * PI / 2.0).abs() <= l.error, "{l:?}");
+    assert!(l.error < 1e-9, "{l:?}");
+}
+
+#[test]
+fn a_named_length_is_solved_for_as_well_as_driven() {
+    // The stated length is a scalar variable of its own scale: its partial is minus one, scaled.
+    let mut text = quarters();
+    text.push_str("entity 1.20 scalar 7.5 8\n");
+    let s = with_rule(&text, "spline-length 2.1 @1.20");
+    let mut a = Assembly::new(&s).unwrap();
+    let mut x = a.start().unwrap();
+    a.rescale(&x).unwrap();
+    a.evaluate_at(&x).unwrap();
+    let jacobian = a.jacobian().to_dense().unwrap();
+    let scalar = a
+        .variables()
+        .iter()
+        .position(|v| v.owner == id(1, 20))
+        .unwrap();
+    let scale = a.variables()[scalar].scale;
+    assert!(scale != 1.0, "{scale}");
+    let rows = a.residuals().len();
+    let exact = jacobian.get(rows - 1, scalar).unwrap();
+    assert!((exact + scale).abs() < 1e-12, "{exact} against {scale}");
+    // And a step in it moves the residual by the length it states.
+    let before = a.residuals()[rows - 1];
+    x[scalar] += 1.0;
+    a.evaluate_at(&x).unwrap();
+    assert!((a.residuals()[rows - 1] - before + 1.0).abs() < 1e-12);
+}
