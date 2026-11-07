@@ -18,6 +18,8 @@ dashu-int = { version = "0.6.2", default-features = false, features = ["std"] }
 # Apache-2.0.
 # The entity target (G194): geom-2d's entity model, under test (ours, Apache-2.0).
 geom-2d = { path = "../geom-2d" }
+# The snap target (G198) names its entities by `NameId` (ours, Apache-2.0).
+geom-op = { path = "../geom-op" }
 geom-bvh = { path = "../geom-bvh" }
 geom-curve = { path = "../geom-curve" }
 geom-linalg = { path = "../geom-linalg" }

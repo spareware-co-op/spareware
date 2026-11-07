@@ -184,6 +184,7 @@ pub mod orient2d;
 pub mod predicates;
 pub mod roots;
 pub mod seeded;
+pub mod snap;
 pub mod surfaces;
 pub mod transforms;
 pub mod variants;

@@ -171,6 +171,30 @@
           "non_exhaustive": false
         },
         {
+          "doc": "Why the index could not be built or asked.",
+          "file": "projects/engines/geometry/crates/geom-2d/src/index.rs",
+          "kinds": [
+            {
+              "doc": "The box tree refused.",
+              "name": "Tree",
+              "shape": "tuple"
+            },
+            {
+              "doc": "A point could not be read.",
+              "name": "Point",
+              "shape": "tuple"
+            },
+            {
+              "doc": "A step of the arithmetic failed.",
+              "name": "Num",
+              "shape": "tuple"
+            }
+          ],
+          "module": "geom_2d::index",
+          "name": "IndexError",
+          "non_exhaustive": false
+        },
+        {
           "doc": "Why a point could not be read, or a result could not be given.",
           "file": "projects/engines/geometry/crates/geom-2d/src/point.rs",
           "kinds": [
@@ -202,6 +226,70 @@
           ],
           "module": "geom_2d::point",
           "name": "PointError",
+          "non_exhaustive": false
+        },
+        {
+          "doc": "Why a snap could not be made into a point.",
+          "file": "projects/engines/geometry/crates/geom-2d/src/snap.rs",
+          "kinds": [
+            {
+              "doc": "A reference did not resolve to one entity or carrier: why, as section 20.4 says.",
+              "name": "Unresolved",
+              "shape": "tuple"
+            },
+            {
+              "doc": "The name resolved, but the drawing holds no entity of it.",
+              "name": "NoEntity",
+              "shape": "tuple"
+            },
+            {
+              "doc": "The snap needs a reference, a point, a direction or a parameter that it was not given.",
+              "name": "Missing",
+              "shape": "tuple"
+            },
+            {
+              "doc": "The snap's kind does not cover this kind of entity.",
+              "name": "Unsupported",
+              "shape": "tuple"
+            },
+            {
+              "doc": "An end that this snap needs as a rational point is itself implicit (a crossing).",
+              "name": "ImplicitEnd",
+              "shape": "unit"
+            },
+            {
+              "doc": "The part, the pick or the parameter is out of range.",
+              "name": "Param",
+              "shape": "unit"
+            },
+            {
+              "doc": "The crossing is not within the extent of one of the entities.",
+              "name": "OffExtent",
+              "shape": "unit"
+            },
+            {
+              "doc": "The entity's transform would round the point.",
+              "name": "Rounded",
+              "shape": "unit"
+            },
+            {
+              "doc": "A direction of zero length, or a tracking line with none.",
+              "name": "NoDirection",
+              "shape": "unit"
+            },
+            {
+              "doc": "A step of the numbers layer failed.",
+              "name": "Num",
+              "shape": "tuple"
+            },
+            {
+              "doc": "A point could not be read or made.",
+              "name": "Point",
+              "shape": "tuple"
+            }
+          ],
+          "module": "geom_2d::snap",
+          "name": "SnapError",
           "non_exhaustive": false
         }
       ],
@@ -386,6 +474,29 @@
           "target": "lib"
         },
         {
+          "cost": "building is O(n log n) for n entities, a box for each; a query is the tree's walk over the aperture's square plus the snaps of the entities in it, none for those outside.",
+          "does": "[`SnapIndex::build`] puts a box round each snappable entity of a [`Drawing`] into `geom-bvh`'s box tree, keyed by the entity's place in name order. [`SnapIndex::snap`] takes a cursor as a grid point and an aperture in steps, asks the tree for the entities whose boxes meet the square of that aperture, makes the snaps of the kinds asked for on each (an entity's own points, and the crossings of the entities near the cursor in pairs), and returns the closest that is within the aperture. A tie goes to the lower name. There is no scan of the drawing and no cap on candidates (14.8; `CADCraft` tests at most 200).",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-2d/src/index.rs",
+          "guarantees": [
+            "**Never a miss.** An entity's box holds everything a snap of it can be: the box is rounded outward to whole steps from the exact ends, centre and radius, so an entity with a snap point in the aperture has a box that meets the aperture's square. An unbounded line gets the whole frame; an arc, the box of its circle; an ellipse, the square of its major axis; a polyline, its vertices grown by each bulge's sagitta; a spline, its control points (the convex hull property); a text or insert, its anchor, the only snap it has.",
+            "**One answer, whatever the tree.** The candidates come back sorted by key, which is name order, so the result does not depend on the tree's shape or the threads that built it (`geom-bvh`'s guarantee).",
+            "**Closest wins; ties go to the lower name.** Distances are enclosed in intervals from the exact points; a candidate wins only if its whole interval is below the best's, and otherwise ties, so two equal distances (a symmetric pair of quadrants) are ordered by name, and two that differ by less than the width of the enclosure (a few units in the last place) are too.",
+            "**No recursion** (the tree's walk is `geom-bvh`'s explicit stack) and **no unsafe code**."
+          ],
+          "job": "The 2D index: one tree of integer boxes over a drawing, and the snap query on it (chapter 14.8).",
+          "method": {
+            "links": [
+              "projects/engines/geometry/architecture/14-2d-drafting.md"
+            ],
+            "text": "chapter 14.8 and 19.9 of the kernel architecture (`projects/engines/geometry/architecture/14-2d-drafting.md`); the box tree is `geom-bvh`'s (piece G54)."
+          },
+          "path": "geom_2d::index",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
           "cost": "reading a one-root point is one `Crossing2` construction, a few dozen products; reading a conic root is a quartic and its roots, as [`geom_num::quartic`] says. No allocation.",
           "does": "a [`Pt2`] is one of chapter 14.2's four classes. A grid point is whole steps and a rational point homogeneous integers. The other two are implicit: where two carriers cross, stored as the carriers and which crossing, or where an ellipse meets another conic, stored as the two and which root. [`Pt2::place`] reads a point's definition into exact numbers each time it is asked, and every question is asked of those: a rounded copy is never kept, so nothing decided here can differ from what the definition says (chapter 6.3).",
           "family": [],
@@ -404,6 +515,32 @@
             "text": "the point classes and implicit points of chapter 14.2 (`projects/engines/geometry/architecture/14-2d-drafting.md`) and 6.3 (`projects/engines/geometry/architecture/06-numbers.md`)."
           },
           "path": "geom_2d::point",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
+          "cost": "constant for every kind but Centroid, which is linear in the loop; at most one crossing is made, and at most two carriers pushed.",
+          "does": "a [`SnapRef`] is a [`SnapKind`] on one or two entities, named by section 20.4's [`Reference`]s, with whatever else the kind needs: a part of an entity, a dyadic parameter, a chosen point, a rational direction, and which of several answers. [`SnapRef::resolve`] reads the entities from a [`Drawing`] and gives a [`Pt2`] in one of 14.2's four classes, never a rounded copy. The kinds are the thirteen of DXF's `DIMASSOC` (end point, midpoint, centre, node, quadrant, intersection, insertion, perpendicular, tangent, nearest, apparent intersection, parallel and start) and the tracking kinds of 14.8: a point beyond a line's end, on a line through a chosen point in a chosen rational direction, where two such lines cross, and the centroid of a closed loop.",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-2d/src/snap.rs",
+          "guarantees": [
+            "**Every snap resolves to an exact point, or is refused with a reason.** [`SnapError`] names the reason: a reference that did not resolve (with its [`Resolution`]), an end that is itself implicit where a rational one is needed, a crossing off an entity's extent, a transform that would round, or an entity kind the snap does not cover. Nothing is guessed or approximated.",
+            "**Extents are exact.** Whether a crossing lies within a segment, a ray or an arc is decided by exact signs on the one-root number and the stored ends.",
+            "**A reference that moved is followed by history, not geometry.** [`SnapRef::resolve`] resolves each [`Reference`] with section 20.4's [`resolve`], so a split or merge is followed, a deleted entity is [`SnapError::Unresolved`], and the cached point is for display only: it is never read.",
+            "**Deterministic and allocation-light.** Every choice depends on the stored data alone; the only allocations are the carriers a crossing needs, pushed to the [`Carriers`] table given.",
+            "**No recursion, no unsafe code.**"
+          ],
+          "job": "Snaps and tracking (chapter 14.8): a typed reference that resolves to an exact point.",
+          "method": {
+            "links": [
+              "projects/engines/geometry/architecture/14-2d-drafting.md",
+              "https://help.autodesk.com/cloudhelp/2018/ENU/AutoCAD-DXF/files/GUID-C0B96256-A911-4B4D-85E6-EB4AF2C91E27.htm",
+              "projects/kit/notes/G01-evidence/06-2d-drafting.md"
+            ],
+            "text": "chapter 14.8 of the kernel architecture (`projects/engines/geometry/architecture/14-2d-drafting.md`) and 14.2's implicit points; the list of kinds and their codes is the public `DIMASSOC` reference (<https://help.autodesk.com/cloudhelp/2018/ENU/AutoCAD-DXF/files/GUID-C0B96256-A911-4B4D-85E6-EB4AF2C91E27.htm>), as stored in `projects/kit/notes/G01-evidence/06-2d-drafting.md`; the tangent point on the polar line is the classical pole-and-polar construction, and a circle's perpendicular foot and nearest point lie on the line through its centre."
+          },
+          "path": "geom_2d::snap",
           "provenance": [],
           "spdx": null,
           "target": "lib"
@@ -440,7 +577,7 @@
       "provenance": [],
       "sections": "14 and 17.2; open questions OQ-12.1 and OQ-14.9, in the kernel architecture (`projects/engines/geometry/architecture/`).",
       "spdx": null,
-      "status": "carriers, points and commits (G192), tangent constructions (G193), the entity model (G194), spline fitting and biarcs (G213); built on by pieces G195, G196, G197, G198, G199, G200, G201, G202, G203, G204, G205, G206, G207, G208, G209, G210, G211, G212, G359, G360, G361.",
+      "status": "carriers, points and commits (G192), tangent constructions (G193), the entity model (G194), snaps, tracking and the 2D index (G198), spline fitting and biarcs (G213); built on by pieces G195, G196, G197, G199, G200, G201, G202, G203, G204, G205, G206, G207, G208, G209, G210, G211, G212, G359, G360, G361.",
       "summary": "Spare Kit geometry kernel: 2D drafting."
     },
     {
@@ -3280,6 +3417,28 @@
           "target": "lib"
         },
         {
+          "cost": "at most [`MAX_ENTITIES`] entities, two queries and a scan.",
+          "does": "[`decode`] turns a fuzzer's bytes into a [`Case`]: up to [`MAX_ENTITIES`] points, segments and circles on a small lattice, so that shared ends, shared lines and tangent circles are all common, a cursor, an aperture and the kinds to ask for. [`check`] builds the drawing and its index and asks the snap query. What it answers must be what a scan of every entity answers (so the tree misses nothing), the same when asked twice, a point that can be read, and within the aperture.",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-fuzz/src/snap.rs",
+          "guarantees": [
+            "**Any bytes are a case.** Every byte string, the empty one included, decodes to a case.",
+            "**A bounded input.** [`decode`] reads at most [`MAX_INPUT_BYTES`] bytes.",
+            "**A panic is a failure; a broken law is a [`Finding`]** naming the law and the case."
+          ],
+          "job": "Fuzz target: `geom-2d`'s snap index never misses, never panics and answers the same twice.",
+          "method": {
+            "links": [
+              "projects/engines/geometry/architecture/14-2d-drafting.md"
+            ],
+            "text": "differential testing of the tree against a scan, the laws of chapter 14.8 (`projects/engines/geometry/architecture/14-2d-drafting.md`): the closest wins, a tie goes to the lower name, and nothing outside the aperture is returned."
+          },
+          "path": "geom_fuzz::snap",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
           "cost": "one kind built and one contract check per input, each bounded by [`WORK`] work units; at most [`MAX_INPUT_BYTES`] bytes read.",
           "does": "[`decode`] turns a fuzzer's bytes into a [`Case`]: a surface kind (one of the 11 of `geom_surface::SurfaceKind`), the doubles it is built from, up to four parameter pairs in its domain and a typed transform. [`check`] builds the kind and runs `geom_surface::contract::check` on it, the kind contract kit every surface kind is held to (piece G60, with G68's derivative laws), under a bounded work meter. [`harness`] is `decode` then `check`, the function every fuzzing engine drives (the crate README sets out the layout). It reaches pieces G60 and G65 to G68 (Gate 2, 32.44).",
           "family": [],
@@ -4868,6 +5027,31 @@
           "target": "lib"
         },
         {
+          "cost": "for s recorded steps, r records per step and m names in the walk's vector, O(s · r log(r m)), searched by bisection, never with hashed sets; the weak checks visit the name graph's reachable nodes once per name asked about, and the base candidates scan the body's names once. Recursion: none.",
+          "does": "a [`Reference`] holds the document it points into ([`DocRef`], or none for the reference's own document), the element, the entity's [`NameId`], its [`EntityKind`], what it wants ([`Want`]: one entity, every piece, or the carrier), and the stored [`Signature`]. [`resolve`] answers it from a [`Lookup`]: the element's [`Body`] as the program has it (its current names, the carrier of each face and edge that has one, the history recorded since the reference was made, oldest first, and the name graph), or why the element cannot be read. It takes 20.4's steps in order:",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-name/src/resolve.rs",
+          "guarantees": [
+            "**No geometric guessing (20.4 step 5).** [`resolve`] reads a reference's document, name and want, and never its signature, kind or element: the signature only suggests a repair in the interface, and an accepted repair is a new operation in the log. `tests/attack_g89.rs` changes each of them and finds every result unchanged, and checks that this module's code never reads the signature.",
+            "**Model state, the same on every machine.** Every outcome is computed from names and recorded history alone, every set of names is in name order, and nothing depends on an address, a hash map's order or the machine.",
+            "**Pruned is never Deleted.** A walk that reaches a pruned step while it still has names to follow answers `HistoryPruned`, whatever the later steps hold (24.4).",
+            "**Generated is not followed.** Only modified images are descendants: an entity generated from the referenced one is a new entity, not the referenced one in a new form.",
+            "**Unknown is never guessed.** A name the graph cannot classify, or that no recorded step and not the body holds, is `Unresolved` with `NameUnknown`.",
+            "**No recursion.** The walk is one loop over the steps, holding a sorted vector of names."
+          ],
+          "job": "References and how they resolve (chapter 20.4): a reference names an entity of an element, and resolving it against the element's current body and the history recorded since gives one value of the closed [`Resolution`] type.",
+          "method": {
+            "links": [
+              "projects/engines/geometry/architecture/20-naming-history.md"
+            ],
+            "text": "chapter 20.4's resolution, with the history contract of 20.3 as `geom_op::history` carries it (piece G88; `OpenCascade`'s `BRepTools_History` contract, adopted as a tested invariant), all in `projects/engines/geometry/architecture/20-naming-history.md`."
+          },
+          "path": "geom_name::resolve",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
           "cost": "O(n log n) time and one copy of the list. Recursion: none.",
           "does": "[`first_duplicate`] finds the lowest name that appears more than once in a list. [`expect_unique`] is what an operation calls on the names it made before publishing them: in a build with debug assertions, every test build, it refuses a list with a duplicate; in a release build it checks nothing, because there a collision still becomes a `Weak` name, never a random suffix (20.2), and the operation's own naming has already done that.",
           "family": [],
@@ -4893,7 +5077,7 @@
       "provenance": [],
       "sections": "8.4, 17.12, 20 and 24.4, in the kernel architecture (`projects/engines/geometry/architecture/`).",
       "spdx": null,
-      "status": "the hash-consed name graph ([`graph`]), the ordinal order of `Weak` names ([`ordinal`]) and the duplicate-name detector ([`unique`]) built (G87); references and their resolution in G89, attribute classes in G90, `PruneHistory` in G109 and placement references in G374.",
+      "status": "the hash-consed name graph ([`graph`]), the ordinal order of `Weak` names ([`ordinal`]) and the duplicate-name detector ([`unique`]) built (G87); references and their resolution ([`resolve`]) built (G89); attribute classes in G90, `PruneHistory` in G109 and placement references in G374.",
       "summary": "Spare Kit geometry kernel: persistent names and references."
     },
     {
@@ -8019,6 +8203,54 @@
           "non_exhaustive": false
         },
         {
+          "doc": "Why records cannot make a history.",
+          "file": "projects/engines/geometry/crates/geom-op/src/history.rs",
+          "kinds": [
+            {
+              "doc": "Two records for one output.",
+              "name": "RepeatedOutput",
+              "shape": "struct"
+            },
+            {
+              "doc": "A `Modified` record from no input: an output made from nothing is `Generated`.",
+              "name": "ModifiedFromNothing",
+              "shape": "struct"
+            },
+            {
+              "doc": "A `Merged` record of fewer than two inputs: one input changed is `Modified`.",
+              "name": "MergeOfOne",
+              "shape": "struct"
+            }
+          ],
+          "module": "geom_op::history",
+          "name": "HistoryError",
+          "non_exhaustive": false
+        },
+        {
+          "doc": "Which law of chapter 20.3 (or 13.14's recording rule) a history breaks, and where.",
+          "file": "projects/engines/geometry/crates/geom-op/src/history.rs",
+          "kinds": [
+            {
+              "doc": "Law 1: a deleted input has a modified output (or passed through unchanged).",
+              "name": "DeletedButModified",
+              "shape": "struct"
+            },
+            {
+              "doc": "Law 3: a record or the deleted set names something that is not an input.",
+              "name": "NotAnInput",
+              "shape": "struct"
+            },
+            {
+              "doc": "13.14: a topology change the records and the deleted set do not show.",
+              "name": "ChangeNotRecorded",
+              "shape": "struct"
+            }
+          ],
+          "module": "geom_op::history",
+          "name": "LawBreak",
+          "non_exhaustive": false
+        },
+        {
           "doc": "The shared base of every error (chapter 22): one of a closed set, each kind defined once.",
           "file": "projects/engines/geometry/crates/geom-op/src/kind.rs",
           "kinds": [
@@ -8295,6 +8527,32 @@
           "target": "lib"
         },
         {
+          "cost": "making a history sorts its records and changes, `O(n log n)` in their number; a check and a composition are `O(m log m)` in the number of relation pairs, on sorted vectors searched by bisection, never hashed sets. Recursion: none.",
+          "does": "a [`History`] holds one [`Record`] per output entity, sorted by name, saying whether the output passed through unchanged, was modified from inputs, generated from inputs (or from nothing) in a role, split from one input by cutting faces, or merged from several (chapter 20.3); the set of inputs it deleted; and the [`TopologyChange`]s of chapter 13.14 it made. [`History::check`] tests the laws every operation's history keeps. [`Relations`] is the same history as three relations between inputs and outputs (modified, generated, deleted), the form in which histories compose ([`Relations::then`]) across a chain of operations.",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-op/src/history.rs",
+          "guarantees": [
+            "**Sorted by name, never by report order.** Records are in output-name order, each output once; changes and every set in them are in name order (20.2). Two operations that report the same history in different orders hold equal histories.",
+            "**The four laws hold** for every history and composition. Law 1 (a deleted input has no modified output) and law 3 (every output traces to an input or is generated, and every input a record names is an input of the operation) are checked ([`History::check`], [`Relations::check`]). Law 2 (an input's generated and modified outputs do not overlap) holds by construction: a history gives each output one origin, and composition takes the modified pairs out of the generated ones. Law 4 (histories compose, keeping the others) is [`Relations::then`]; `geom-test`'s history kit checks laws 2 and 4 on generated chains.",
+            "**Every topology change is recorded in the history** (13.14): a vanished face or an overshoot removed is deleted, faces merged are one `Merged` output of exactly those faces, and a face added is generated in the role the change gives.",
+            "**Composition is associative and keeps the laws.** Composing follows the method note's three rules, with one more where a part reaches an input by both relations through a chain: there it is modified, not generated, because it carries on a part of that input (the \"two paths\" case, decided here and written into 20.3). Grouping a chain either way gives the same relations."
+          ],
+          "job": "History: how every output of an operation relates to its inputs, which inputs it removed and what topology changes it made; the four laws of chapter 20.3; and how histories compose.",
+          "method": {
+            "links": [
+              "projects/engines/geometry/architecture/20-naming-history.md",
+              "projects/engines/geometry/architecture/13-sweeps-blends-offsets.md",
+              "projects/engines/geometry/methods/occt-history-contract.md",
+              "doi:10.1016/S0010-4485(96"
+            ],
+            "text": "chapter 20.3's history contract and 13.14's topology-change records (`projects/engines/geometry/architecture/20-naming-history.md`, `projects/engines/geometry/architecture/13-sweeps-blends-offsets.md`), after OCCT's history contract as the method note records it, its composition rules derived there (`projects/engines/geometry/methods/occt-history-contract.md`), and Kripac's face history graph (doi:10.1016/S0010-4485(96)00040-1)."
+          },
+          "path": "geom_op::history",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
           "cost": "IDs and names are sixteen bytes, copied by value. A path holds its labels in one vector; a child path copies its parent's labels once and adds one, so it allocates once.",
           "does": "an [`OpId`] is the permanent 128-bit ID of one operation, set when the operation is authored and kept in the operation log forever (architecture chapter 20.1). An [`OpPath`] adds sub-step labels to it: a [`Label::Step`] named by the operation, or a [`Label::Key`], the stable key the caller gives a batch item (chapter 10.1), so an item's path is the batch's path plus that key and never its position. A [`NameId`] is the 128-bit value of a persistent name (chapter 20.1), held here as its sixteen bytes so that errors and diagnostics can name the entities they concern; computing one from a `TopoName` under `NameScheme v1` is piece G87's.",
           "family": [],
@@ -8438,7 +8696,7 @@
       "provenance": [],
       "sections": "10.1, 13.2, 13.14, 20, 22, 23.10 and 24.3; chapter 27 (\"Who owns what\"), in the kernel architecture (`projects/engines/geometry/architecture/`).",
       "spdx": null,
-      "status": "the context, the error base and its details for the parallel helper and the numbers layer, the exactness class and warnings of an output, operation identity and the schema types built (G82); the canonical CBOR encoder ([`cbor`]) and SHA-256 ([`hash`]) built (G86); persistent names and their `NameId`s under `NameScheme v1` ([`name`]) built (G87); budgets in the contract to come in G83, history in G88, the batch runner in G104, per-entity bounds in G143, the local-operation driver in G144 and preview precision in G459.",
+      "status": "the context, the error base and its details for the parallel helper and the numbers layer, the exactness class and warnings of an output, operation identity and the schema types built (G82); the canonical CBOR encoder ([`cbor`]) and SHA-256 ([`hash`]) built (G86); persistent names and their `NameId`s under `NameScheme v1` ([`name`]) built (G87); history records, their laws and their composition ([`history`]) built (G88); budgets in the contract to come in G83, the batch runner in G104, per-entity bounds in G143, the local-operation driver in G144 and preview precision in G459.",
       "summary": "Spare Kit geometry kernel: the operation contract."
     },
     {
@@ -10148,6 +10406,30 @@
             "text": "Cargo's documented `[patch]` table for overriding a dependency with a local copy (<https://doc.rust-lang.org/cargo/reference/overriding-dependencies.html>), set from the command line (<https://doc.rust-lang.org/cargo/reference/config.html#command-line-overrides>), and the seeded-violation pattern of the kernel's merge gate (G12): each gate is shown to fail on a violation planted on purpose."
           },
           "path": "geom_test::guard",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
+          "cost": "linear in a history's records, times the composition's ordered-set operations; a chain of `k` steps composes twice, `O(k)` compositions.",
+          "does": "[`check_laws`] checks one operation's history against laws 1 to 3 and 13.14's recording rule. [`check_chain`] checks every step of a chain, composes it, checks the composition against the chain's first inputs (law 4: histories compose and keep laws 1 to 3), and checks that composing left to right and right to left give the same relations; it says which step or which part failed ([`ChainBreak`]). [`step`] and [`chain`] are proptest strategies of valid histories: every input unchanged, modified, split, merged with others, deleted, or deleted while generating, plus outputs generated from nothing, each output under a fresh name.",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-test/src/history.rs",
+          "guarantees": [
+            "**Every law is checked through `geom-op`'s own checker**, so the kit and the contract cannot disagree; the kit adds the chain's composition and its associativity.",
+            "**The generators only make histories the laws allow**, so a law break the kit reports on them is a defect of `geom-op`'s checker or composition; its tests seed one break of each law to show the checker finds it.",
+            "**Seeded and repeatable**: names are made from the step and position, never drawn at random beyond proptest's own seeded runner."
+          ],
+          "job": "The history laws as a kit every operation's tests run: chapter 20.3's four laws checked on one history and on a chain, and seeded generators of valid histories and chains.",
+          "method": {
+            "links": [
+              "projects/engines/geometry/architecture/20-naming-history.md",
+              "projects/engines/geometry/methods/occt-history-contract.md",
+              "https://proptest-rs.github.io/proptest/proptest/tutorial/strategy-basics.html"
+            ],
+            "text": "chapter 20.3's laws and the method note's composition rules (`projects/engines/geometry/architecture/20-naming-history.md`, `projects/engines/geometry/methods/occt-history-contract.md`), as property-based tests in proptest's strategies (<https://proptest-rs.github.io/proptest/proptest/tutorial/strategy-basics.html>)."
+          },
+          "path": "geom_test::history",
           "provenance": [],
           "spdx": null,
           "target": "lib"
