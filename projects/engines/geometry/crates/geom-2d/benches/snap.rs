@@ -33,8 +33,8 @@ use geom_op::NameId;
 use geom_run::{Budget, Exec, WorkMeter};
 use geom_test::{Seed, SplitMix64};
 
-/// The side of the square the entities lie in, in steps.
-const SIDE: u64 = 4_000_000;
+/// The side of the square the entities lie in, in steps: about ten candidates in an aperture.
+const SIDE: u64 = 100_000;
 
 fn p(x: i64, y: i64) -> P2 {
     P2::new(x, y).unwrap()
@@ -106,6 +106,7 @@ fn main() {
     let queries = 20_000_u32;
     let mut carriers = Carriers::new();
     let mut found = 0_u32;
+    let mut near = 0_usize;
     let mut worst = 0.0_f64;
     let start = Instant::now();
     for _ in 0..queries {
@@ -125,9 +126,17 @@ fn main() {
         carriers.truncate(0);
     }
     let mean = start.elapsed().as_secs_f64() * 1e6 / f64::from(queries);
+    for _ in 0..2_000 {
+        let cursor = p(below(SIDE), below(SIDE));
+        near += index
+            .candidates(cursor, Steps(64), &mut WorkMeter::new(Budget::UNLIMITED))
+            .unwrap()
+            .len();
+    }
     println!(
-        "a snap of {} kinds, aperture 64 steps: mean {mean:.1} us, worst {:.1} us, {found} of {queries} found",
+        "a snap of {} kinds, aperture 64 steps: mean {mean:.1} us, worst {:.1} us, {found} of {queries} found, {:.1} candidates on average",
         kinds.len(),
-        worst * 1e6
+        worst * 1e6,
+        near as f64 / 2_000.0
     );
 }
