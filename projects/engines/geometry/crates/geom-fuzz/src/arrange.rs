@@ -184,10 +184,10 @@ pub fn check(case: &Case) -> Result<(), Finding> {
     let grid: Option<Vec<(P2, P2)>> = case
         .segments
         .iter()
-        .map(|s| {
+        .map(|&[x0, y0, x1, y1]| {
             Some((
-                P2::new(i64::from(s[0]), i64::from(s[1])).ok()?,
-                P2::new(i64::from(s[2]), i64::from(s[3])).ok()?,
+                P2::new(i64::from(x0), i64::from(y0)).ok()?,
+                P2::new(i64::from(x1), i64::from(y1)).ok()?,
             ))
         })
         .collect();
@@ -200,7 +200,7 @@ pub fn check(case: &Case) -> Result<(), Finding> {
     let wide: Vec<[i128; 4]> = case
         .segments
         .iter()
-        .filter(|s| s[0] != s[2] || s[1] != s[3])
+        .filter(|&&[x0, y0, x1, y1]| x0 != x1 || y0 != y1)
         .map(|s| s.map(i128::from))
         .collect();
     let want = oracle(&wide).ok_or_else(|| fail(case, "the oracle fits"))?;
