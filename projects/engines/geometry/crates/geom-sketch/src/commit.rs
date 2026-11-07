@@ -45,10 +45,9 @@
 
 extern crate alloc;
 
-use alloc::collections::BTreeMap;
 use alloc::vec::Vec;
 
-use geom_num::arc::{Arc2, Circle2};
+use geom_num::arc::{Arc2, Circle2, Round};
 use geom_num::carrier::{Carrier, Rational2};
 use geom_num::grid::{COORD_MAX, P2};
 use geom_num::math::round_ties_even;
@@ -119,6 +118,9 @@ pub struct Committed {
     pub lines: Vec<(ItemId, Carrier)>,
     /// Every full circle: a grid centre and a whole radius.
     pub circles: Vec<(ItemId, Circle2)>,
+    /// Every full circle with a defining point and no whole radius to state: a grid centre and the
+    /// grid point it passes through, so its radius is exact without being a whole number of steps.
+    pub rounds: Vec<(ItemId, Round)>,
     /// Every arc: grid endpoints and a rational centre on their bisector.
     pub arcs: Vec<(ItemId, Arc2)>,
     /// Every constraint, in authoring order, with what the commit made of it.
@@ -159,6 +161,16 @@ fn push<T>(list: &mut Vec<T>, value: T) -> Result<(), SketchError> {
     list.try_reserve(1).map_err(|_| SketchError::OutOfMemory)?;
     list.push(value);
     Ok(())
+}
+
+/// The position of the entity `id` in a list sorted by id.
+fn lookup(index: &[(ItemId, usize)], id: ItemId) -> Result<usize, SketchError> {
+    index
+        .binary_search_by_key(&id, |&(k, _)| k)
+        .ok()
+        .and_then(|at| index.get(at))
+        .map(|&(_, i)| i)
+        .ok_or(SketchError::Unknown(id))
 }
 
 fn cost(n: usize) -> u64 {
@@ -221,6 +233,13 @@ impl Offsets {
 
     /// The root of `s` and `value(s) - value(root)`; compresses the path.
     fn find(&mut self, s: usize) -> Result<(usize, i64), SketchError> {
+        let up = get(&self.parent, s)?;
+        if up == s {
+            return Ok((s, 0));
+        }
+        if get(&self.parent, up)? == up {
+            return Ok((up, get(&self.offset, s)?));
+        }
         let mut path = Vec::new();
         let mut at = s;
         let mut total = 0_i64;
@@ -295,6 +314,13 @@ impl Classes {
     }
 
     fn find(&mut self, s: usize) -> Result<(usize, u8), SketchError> {
+        let up = get(&self.parent, s)?;
+        if up == s {
+            return Ok((s, 0));
+        }
+        if get(&self.parent, up)? == up {
+            return Ok((up, get(&self.parity, s)?));
+        }
         let mut path = Vec::new();
         let mut at = s;
         let mut total = 0_u8;
@@ -380,14 +406,14 @@ struct Axis {
 struct Plan<'a> {
     ents: &'a [Entity],
     cons: &'a [Constraint],
-    index: BTreeMap<ItemId, usize>,
+    index: Vec<(ItemId, usize)>,
     /// The endpoints of each line, as entity indices, found once.
     line_ends: Vec<Option<[usize; 2]>>,
 }
 
 impl Plan<'_> {
     fn at(&self, id: ItemId) -> Result<usize, SketchError> {
-        self.index.get(&id).copied().ok_or(SketchError::Unknown(id))
+        lookup(&self.index, id)
     }
 
     fn entity(&self, i: usize) -> Result<&Entity, SketchError> {
@@ -487,20 +513,27 @@ pub fn commit(sketch: &Sketch, meter: &mut WorkMeter<'_>) -> Result<Committed, S
     let ents = sketch.entities();
     let cons = sketch.constraints();
     meter.charge(cost(ents.len()).saturating_add(cost(cons.len()).saturating_mul(4)))?;
-    let mut index = BTreeMap::new();
+    let mut index: Vec<(ItemId, usize)> = Vec::new();
+    index
+        .try_reserve_exact(ents.len())
+        .map_err(|_| SketchError::OutOfMemory)?;
     for (i, e) in ents.iter().enumerate() {
-        index.insert(e.id, i);
+        index.push((e.id, i));
+    }
+    index.sort_unstable();
+    let mut previous: Option<ItemId> = None;
+    for &(id, _) in &index {
+        if previous == Some(id) {
+            return Err(SketchError::Internal);
+        }
+        previous = Some(id);
     }
     let mut line_ends = Vec::new();
     for e in ents {
         let both = match &e.kind {
-            EntityKind::Line { start, end, .. } => Some([
-                index
-                    .get(start)
-                    .copied()
-                    .ok_or(SketchError::Unknown(*start))?,
-                index.get(end).copied().ok_or(SketchError::Unknown(*end))?,
-            ]),
+            EntityKind::Line { start, end, .. } => {
+                Some([lookup(&index, *start)?, lookup(&index, *end)?])
+            }
             _ => None,
         };
         push(&mut line_ends, both)?;
@@ -614,6 +647,23 @@ pub fn commit(sketch: &Sketch, meter: &mut WorkMeter<'_>) -> Result<Committed, S
             _ => {}
         }
     }
+    // Symmetry about a level or plumb line: the coordinate along the line is shared, and the other
+    // is mirrored exactly (computed from masters in pass 2).
+    let mut mirrors: Vec<(usize, usize, usize, u8)> = Vec::new();
+    for c in plan.cons {
+        if let ConstraintKind::Symmetric { a, b, line } = c.kind {
+            let (a, b, l) = (plan.at(a)?, plan.at(b)?, plan.at(line)?);
+            let kind = get(&axis, l)?.kind;
+            if plan.is_point(a) && plan.is_point(b) && kind != 0 && plan.ends(l)?.is_some() {
+                if kind == 1 {
+                    co.union(xs(a)?, xs(b)?, 0)?;
+                } else {
+                    co.union(ys(a)?, ys(b)?, 0)?;
+                }
+                push(&mut mirrors, (a, b, l, kind))?;
+            }
+        }
+    }
     // Reference points are fixed where they stand.
     for (i, e) in ents.iter().enumerate() {
         if let EntityKind::Reference { x, y } = e.kind {
@@ -660,6 +710,43 @@ pub fn commit(sketch: &Sketch, meter: &mut WorkMeter<'_>) -> Result<Committed, S
                 };
                 *slot(&mut master, r)? = Some(m);
             }
+        }
+    }
+    // A mirrored coordinate that nothing else pins is computed from its partner's and the axis's:
+    // y_b = 2 y_axis - y_a (or x), exactly, not rounded again.
+    let mut size = alloc::vec![0_usize; n.saturating_mul(2)];
+    if !mirrors.is_empty() {
+        for i in 0..n {
+            if plan.is_point(i) {
+                for s in [xs(i)?, ys(i)?] {
+                    let r = co.find(s)?.0;
+                    let count = slot(&mut size, r)?;
+                    *count = count.checked_add(1).ok_or(SketchError::Internal)?;
+                }
+            }
+        }
+    }
+    for &(a, b, l, kind) in &mirrors {
+        let Some([lp, _]) = plan.ends(l)? else {
+            continue;
+        };
+        let across = |i: usize| if kind == 1 { ys(i) } else { xs(i) };
+        let mut value = |s: usize| -> Result<i64, SketchError> {
+            let (r, o) = co.find(s)?;
+            get(&master, r)?
+                .and_then(|m| m.checked_add(o))
+                .ok_or(SketchError::Internal)
+        };
+        let (va, vl) = (value(across(a)?)?, value(across(lp)?)?);
+        let (rb, ob) = co.find(across(b)?)?;
+        if get(&size, rb)? == 1 && get(&co.fixed, rb)?.is_none() {
+            let want = vl
+                .checked_mul(2)
+                .and_then(|t| t.checked_sub(va))
+                .and_then(|t| t.checked_sub(ob))
+                .ok_or(SketchError::Internal)?;
+            *slot(&mut master, rb)? = Some(want);
+            *slot(&mut size, rb)? = 2;
         }
     }
     let mut grid: Vec<Option<P2>> = alloc::vec![None; n];
@@ -915,14 +1002,44 @@ pub fn commit(sketch: &Sketch, meter: &mut WorkMeter<'_>) -> Result<Committed, S
 
     // Pass 5: circles and arcs.
     let mut circles = Vec::new();
+    let mut rounds = Vec::new();
     let mut arcs = Vec::new();
     for (i, e) in ents.iter().enumerate() {
         match &e.kind {
             EntityKind::Circle { centre, radius } => {
                 let c = plan.at(*centre)?;
                 let g = get(&grid, c)?.ok_or(SketchError::Internal)?;
-                let r = nearest(*radius)?;
-                push(&mut circles, (e.id, Circle2::new(g, i128::from(r))?))?;
+                // A circle with no whole radius stated, through a grid point it is declared to
+                // pass through, is stored by that defining point: its radius is exact.
+                let whole_radius = plan.cons.iter().any(|k| match k.kind {
+                    ConstraintKind::Radius { circle, radius } => {
+                        circle == e.id && whole(radius).is_some()
+                    }
+                    ConstraintKind::Diameter { circle, diameter } => {
+                        circle == e.id && whole(diameter).is_some()
+                    }
+                    _ => false,
+                });
+                let defining = plan.cons.iter().find_map(|k| match k.kind {
+                    ConstraintKind::OnCircle { point, circle } if circle == e.id => Some(point),
+                    _ => None,
+                });
+                let defining = match defining {
+                    Some(pt) => match get(&stored, plan.at(pt)?)? {
+                        Some(Stored::Grid(p)) => Some(p),
+                        _ => None,
+                    },
+                    None => None,
+                };
+                if !whole_radius
+                    && let Some(p) = defining
+                    && p != g
+                {
+                    push(&mut rounds, (e.id, Round::new(p, Rational2::from(g))))?;
+                } else {
+                    let r = nearest(*radius)?;
+                    push(&mut circles, (e.id, Circle2::new(g, i128::from(r))?))?;
+                }
             }
             EntityKind::Arc {
                 centre, start, end, ..
@@ -986,6 +1103,7 @@ pub fn commit(sketch: &Sketch, meter: &mut WorkMeter<'_>) -> Result<Committed, S
         }
     }
     out.circles = circles;
+    out.rounds = rounds;
     out.arcs = arcs;
     for c in plan.cons {
         meter.charge(1)?;
@@ -1013,6 +1131,19 @@ pub fn commit(sketch: &Sketch, meter: &mut WorkMeter<'_>) -> Result<Committed, S
                     Mark::Bounded
                 }
             }
+        } else if let Some(verdict) = extra_holds(&plan, &out, &stored, &carriers, c)? {
+            if verdict {
+                Mark::Exact
+            } else {
+                push(
+                    &mut out.broken,
+                    Broken {
+                        constraint: c.id,
+                        why: Why::Disagrees,
+                    },
+                )?;
+                Mark::Bounded
+            }
         } else if radius_holds(&out, c) == Some(true) {
             Mark::Exact
         } else {
@@ -1021,6 +1152,67 @@ pub fn commit(sketch: &Sketch, meter: &mut WorkMeter<'_>) -> Result<Committed, S
         push(&mut out.marks, (c.id, mark))?;
     }
     Ok(out)
+}
+
+/// The rows of 15.10's table that the constraint's own class cannot decide because they need the
+/// sketch: symmetry about a level or plumb line is exact when the mirrored points are grid points
+/// and the line is level or plumb (`Some(false)` if the stored points are not mirrored), and a point
+/// on a circle is exact when the circle's form passes through it (a defining point, or a whole radius
+/// the point meets); a point that misses stays bounded, as the table says of any other point.
+fn extra_holds(
+    plan: &Plan<'_>,
+    out: &Committed,
+    stored: &[Option<Stored>],
+    carriers: &[Option<Carrier>],
+    c: &Constraint,
+) -> Result<Option<bool>, SketchError> {
+    let grid_of = |i: usize| -> Result<Option<P2>, SketchError> {
+        Ok(match get(stored, i)? {
+            Some(Stored::Grid(p)) => Some(p),
+            _ => None,
+        })
+    };
+    Ok(match c.kind {
+        ConstraintKind::Symmetric { a, b, line } => {
+            let l = plan.at(line)?;
+            let (Some(k), Some([lp, _])) = (get(carriers, l)?, plan.ends(l)?) else {
+                return Ok(None);
+            };
+            let ([ca, cb], _) = k.coefficients();
+            if ca != 0 && cb != 0 {
+                return Ok(None);
+            }
+            let (Some(pa), Some(pb), Some(pl)) =
+                (grid_of(plan.at(a)?)?, grid_of(plan.at(b)?)?, grid_of(lp)?)
+            else {
+                return Ok(Some(false));
+            };
+            let mirrored =
+                |from: i64, to: i64, axis: i64| from.checked_add(to) == axis.checked_mul(2);
+            Some(if ca == 0 {
+                pa.x == pb.x && mirrored(pa.y.get(), pb.y.get(), pl.y.get())
+            } else {
+                pa.y == pb.y && mirrored(pa.x.get(), pb.x.get(), pl.x.get())
+            })
+        }
+        ConstraintKind::OnCircle { point, circle } => {
+            let Some(at) = get(stored, plan.at(point)?)?.map(|s| s.rational()) else {
+                return Ok(None);
+            };
+            let on = if let Some((_, r)) = out.rounds.iter().find(|(i, _)| *i == circle) {
+                r.side(&at)? == Sign::Zero
+            } else if let Some((_, k)) = out.circles.iter().find(|(i, _)| *i == circle) {
+                k.side(&at)? == Sign::Zero
+            } else if let Some((_, a)) = out.arcs.iter().find(|(i, _)| *i == circle) {
+                a.round().side(&at)? == Sign::Zero
+            } else {
+                return Ok(None);
+            };
+            // A miss is only bounded: such a point is not a defining point.
+            on.then_some(true)
+        }
+        _ => None,
+    })
 }
 
 /// The centre point of a circle or arc entity, as an entity index.

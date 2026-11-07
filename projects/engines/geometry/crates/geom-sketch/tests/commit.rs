@@ -540,3 +540,112 @@ fn a_carrier_through_two_stored_points_is_the_line_between_them() {
     let want = Carrier::new(-4, 3, 0).unwrap();
     assert!(c.line(lid(1)).unwrap().same(&want).unwrap());
 }
+
+#[test]
+fn points_mirrored_about_a_level_or_plumb_line_are_mirrored_exactly() {
+    // A level line at row 100 and two points that must be mirrors about it; and a plumb one at
+    // column 300 with two more. The partner's mirrored coordinate is computed, not rounded again.
+    let s = build(
+        vec![
+            point(1, 0.0, 100.3),
+            point(2, 500.0, 100.4),
+            point(3, 100.2, 40.4),
+            point(4, 100.1, 159.7),
+            line(1, 1, 2),
+            point(5, 300.2, 0.0),
+            point(6, 299.8, 500.0),
+            point(7, 220.4, 80.0),
+            point(8, 379.7, 80.2),
+            line(2, 5, 6),
+        ],
+        vec![
+            rule(1, ConstraintKind::Horizontal { line: lid(1) }),
+            rule(2, ConstraintKind::Vertical { line: lid(2) }),
+            rule(
+                3,
+                ConstraintKind::Symmetric {
+                    a: pid(3),
+                    b: pid(4),
+                    line: lid(1),
+                },
+            ),
+            rule(
+                4,
+                ConstraintKind::Symmetric {
+                    a: pid(7),
+                    b: pid(8),
+                    line: lid(2),
+                },
+            ),
+        ],
+    );
+    let c = commit(&s, &mut meter()).unwrap();
+    assert_eq!(c.mark(cid(3)), Some(Mark::Exact), "{:?}", c.broken);
+    assert_eq!(c.mark(cid(4)), Some(Mark::Exact), "{:?}", c.broken);
+    let (a, b) = (
+        grid(c.point(pid(3)).unwrap()),
+        grid(c.point(pid(4)).unwrap()),
+    );
+    assert_eq!((a.0, a.1), (100, 40));
+    assert_eq!((b.0, b.1), (100, 160));
+    let (a, b) = (
+        grid(c.point(pid(7)).unwrap()),
+        grid(c.point(pid(8)).unwrap()),
+    );
+    assert_eq!((a.0, a.1), (220, 80));
+    assert_eq!((b.0, b.1), (380, 80));
+    assert_eq!(c.broken, []);
+}
+
+#[test]
+fn a_point_on_a_circle_is_exact_at_its_defining_point_and_bounded_elsewhere() {
+    let circle = Entity {
+        id: ItemId::new(4, 1),
+        kind: EntityKind::Circle {
+            centre: pid(1),
+            radius: 50.4,
+        },
+        construction: false,
+    };
+    let s = build(
+        vec![
+            point(1, 200.0, 200.0),
+            point(2, 230.2, 240.1),
+            point(3, 250.1, 200.2),
+            point(4, 240.0, 210.0),
+            circle,
+        ],
+        vec![
+            rule(
+                1,
+                ConstraintKind::OnCircle {
+                    point: pid(2),
+                    circle: ItemId::new(4, 1),
+                },
+            ),
+            rule(
+                2,
+                ConstraintKind::OnCircle {
+                    point: pid(3),
+                    circle: ItemId::new(4, 1),
+                },
+            ),
+            rule(
+                3,
+                ConstraintKind::OnCircle {
+                    point: pid(4),
+                    circle: ItemId::new(4, 1),
+                },
+            ),
+        ],
+    );
+    let c = commit(&s, &mut meter()).unwrap();
+    // The circle is stored by its defining point (230, 240): radius squared 30^2 + 40^2.
+    assert_eq!(c.circles.len(), 0);
+    assert_eq!(c.rounds.len(), 1);
+    assert_eq!(c.mark(cid(1)), Some(Mark::Exact));
+    // (250, 200) is 50 away, exactly on it by luck; (240, 210) is not, and is bounded, not broken.
+    assert_eq!(c.mark(cid(2)), Some(Mark::Exact));
+    assert_eq!(c.mark(cid(3)), Some(Mark::Bounded));
+    assert_eq!(c.broken, []);
+}
