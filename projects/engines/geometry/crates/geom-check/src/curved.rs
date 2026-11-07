@@ -661,4 +661,3 @@ mod tests {
         assert!(matches!(pair(&floor, &vague), Pair::Unknown));
     }
 }
-
