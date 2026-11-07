@@ -11006,7 +11006,7 @@
       "provenance": [],
       "sections": "15, and 22 for its errors, in the kernel architecture (`projects/engines/geometry/architecture/`).",
       "spdx": null,
-      "status": "built by pieces G216, G217, G218, G219, G220, G221, G222, G223, G224, G225, G226, G227, G228, G230, G477, G478; G216, G217, G218, G221 and G222 are done.",
+      "status": "scaffold only; built by pieces G216, G217, G218, G219, G220, G221, G222, G223, G224, G225, G226, G227, G228, G230, G477, G478; G216, G217, G218, G221 and G222 are done.",
       "summary": "Spare Kit geometry kernel: the constraint solver."
     },
     {
