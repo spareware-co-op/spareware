@@ -13,7 +13,13 @@ flips its sign; `wide` (`src/wide.rs`, G26), the wide integers agree with `num-b
 every operation at every width, `I128` to the reserved 768 bits; and, for Gate 2 (decision 32.44:
 a target per phase-2 code piece), `curves` (`src/curves.rs`) and `surfaces` (`src/surfaces.rs`),
 every curve and surface kind built from any bytes keeps the kind contract kit
-(`geom_curve::contract`, `geom_surface::contract`) under any typed transform.
+(`geom_curve::contract`, `geom_surface::contract`) under any typed transform; and `arenas` (`src/arenas.rs`,
+G80), `geom-topo` publishes exactly the arenas its rules allow, and a body's versions never see
+each other's edits; and `entity` (`src/entity.rs`, G194), a drafting entity built from any bytes
+keeps its invariants (a bulge is a bounded reduced fraction, a polyline's counts agree) and changes
+kind under a transform's classification as the rules of 14.10 say. Its replay corpus, 18 seed files
+in `tests/__fuzz__/entity/corpus`, covers the three decode modes and six shape tags; `cargo test`
+replays them on every run.
 
 ## One law, four engines
 

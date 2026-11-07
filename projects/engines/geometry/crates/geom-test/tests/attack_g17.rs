@@ -510,7 +510,7 @@ fn is_workflow(name: &str) -> bool {
 }
 
 /// English number words, for the counts the files write out.
-fn number_word(n: usize) -> &'static str {
+fn number_word(n: usize) -> String {
     const WORDS: [&str; 21] = [
         "zero",
         "one",
@@ -534,7 +534,16 @@ fn number_word(n: usize) -> &'static str {
         "nineteen",
         "twenty",
     ];
-    WORDS.get(n).copied().unwrap_or("many")
+    // Past twenty, a ten's word and a unit's, joined by a hyphen, as the headers write them.
+    const TENS: [&str; 10] = [
+        "", "", "twenty", "thirty", "forty", "fifty", "sixty", "seventy", "eighty", "ninety",
+    ];
+    match (WORDS.get(n), TENS.get(n / 10)) {
+        (Some(word), _) => (*word).to_owned(),
+        (None, Some(tens)) if n % 10 == 0 => (*tens).to_owned(),
+        (None, Some(tens)) => format!("{tens}-{}", WORDS[n % 10]),
+        (None, None) => "many".to_owned(),
+    }
 }
 
 #[test]
@@ -797,7 +806,7 @@ fn the_workflows_are_all_named_and_counted() {
             .collect();
         assert_eq!(named, workflows, "{doc} names these workflows");
     }
-    let mut count = number_word(workflows.len()).to_owned();
+    let mut count = number_word(workflows.len());
     count[..1].make_ascii_uppercase();
     assert!(
         kernel_file("README.md").contains(&format!("{count} workflows in `.github/workflows/`")),
