@@ -550,3 +550,29 @@ fn the_measure_reads_a_tangent_line_and_both_ends_of_an_arc() {
         joins[3]
     );
 }
+
+#[test]
+fn a_line_at_any_slope_is_taken_against_the_spline_whichever_way_it_runs() {
+    // The cut cubic's left half leaves (0, 0) towards (8, 16), the direction (1, 2).
+    for (a, b) in [
+        ("0 0", "3 6"),
+        ("3 6", "0 0"),
+        ("-1 -2", "5 10"),
+        ("5 10", "-1 -2"),
+    ] {
+        let mut text = pulled(0.0, "g1");
+        let (a, b) = (a.to_owned(), b.to_owned());
+        writeln!(
+            text,
+            "entity 1.20 point {a}\nentity 1.21 point {b}\nentity 2.5 line 1.20 1.21 segment\nconstraint 4.2 driving 0 spline-tangent-line 2.0 start 2.5\nconstraint 4.3 driving 0 spline-against 2.0 start 2.5 start g2"
+        )
+        .unwrap();
+        let joins = measure_joins(&parse(&text).unwrap()).unwrap();
+        for j in joins
+            .iter()
+            .filter(|j| j.constraint.sequence == 4 && j.constraint.key >= 2)
+        {
+            assert!(j.continuity.tangent.abs() < 1e-12, "{a} to {b}: {j:?}");
+        }
+    }
+}
