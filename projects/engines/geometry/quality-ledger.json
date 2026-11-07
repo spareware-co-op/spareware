@@ -5268,22 +5268,6 @@
     },
     {
       "file": "projects/engines/geometry/crates/geom-sketch/src/structure.rs",
-      "mutant": "replace greedy -> Result<(), SketchError> with Ok(())",
-      "line_text": "for e in 0..graph.equations() {",
-      "occurrences": 1,
-      "kind": "equivalent",
-      "reason": "greedy only seeds the matching. Hopcroft and Karp's phases find a largest matching from an empty one too, and nothing the analysis returns depends on which largest matching it found: the Dulmage-Mendelsohn parts and the square blocks are fixed by the graph alone, their members are listed ascending, and the solve order is chosen by each block's lowest equation."
-    },
-    {
-      "file": "projects/engines/geometry/crates/geom-sketch/src/structure.rs",
-      "mutant": "replace == with != in greedy",
-      "line_text": "if get(&matching.of_variable, v)? == NONE {",
-      "occurrences": 1,
-      "kind": "equivalent",
-      "reason": "Every variable starts unmatched and greedy is the first to match any, so `!= NONE` never holds and greedy matches nothing: the same as greedy doing nothing, whose entry says why the result is unchanged."
-    },
-    {
-      "file": "projects/engines/geometry/crates/geom-sketch/src/structure.rs",
       "mutant": "replace layers -> Result<bool, SketchError> with Ok(true)",
       "line_text": "queue.clear();",
       "occurrences": 1,
@@ -5345,6 +5329,630 @@
       "occurrences": 1,
       "kind": "equivalent",
       "reason": "The two differ only when the values are equal, and then both keep the same low link."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-sketch/src/structure.rs",
+      "mutant": "replace == with != in blocks_of",
+      "line_text": "if place == 0 {",
+      "occurrences": 1,
+      "kind": "hangs",
+      "reason": "The tests stop it by their timeout: every equation of the square part reads the variable it determines, so the walk meets its own equation as a next one; the mutant numbers an equation only after its first visit, so there it is still unnumbered and is walked into again, for ever. It is a hang the tests catch; kept so that the judge counts it as one."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-sketch/src/structure.rs",
+      "mutant": "replace == with != in blocks_of",
+      "line_text": "if get(&order, w)? == NONE {",
+      "occurrences": 1,
+      "kind": "hangs",
+      "reason": "The tests stop it by their timeout: every equation of the square part reads the variable it determines, so the walk meets its own equation as a next one; the mutant walks only into equations already numbered, so it walks into that one again, renumbering it each time, for ever. It is a hang the tests catch; kept so that the judge counts it as one."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-name/src/graph.rs",
+      "mutant": "replace match guard node.bytes == bytes with true in NameGraph::insert",
+      "line_text": "Some(node) if node.bytes == bytes => Ok(id),",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "The guard decides only when the graph already holds the NameId being interned. Through the public interface that NameId is the 128-bit cut of SHA-256 over the prefix and the name's canonical bytes, so a node held under it with different bytes needs two encodings whose truncated hashes agree: no such pair is known, and finding one costs about 2^64 hashes (32.19). So no input through the public interface tells the mutant from the original; the unit test graph::tests::a_second_encoding_under_a_held_name_id_is_refused forges the collision directly."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-name/src/ordinal.rs",
+      "mutant": "replace < with <= in sorted",
+      "line_text": "while width < from.len() {",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "With <=, the loop makes one more pass when width equals the number of entities. That pass has one chunk, split at its full length, so the right run is empty and the merge copies the left run unchanged. The order, and every comparison's outcome, is the same."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-name/src/ordinal.rs",
+      "mutant": "replace < with > in sorted",
+      "line_text": "while width < from.len() {",
+      "occurrences": 1,
+      "kind": "hangs",
+      "reason": "With >, for no entity or one the condition 1 > 0 or 1 > 1 holds and stays true as width doubles and saturates at usize::MAX, so the loop never ends and the tests stop it by their timeout. For two or more entities the loop does not run and the unsorted order fails the tests. It hangs or is caught; it never returns a wrong order unnoticed."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-op/src/cbor.rs",
+      "mutant": "replace | with ^ in head",
+      "line_text": "out.push(major | b7);",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "head writes the first byte of a head as the major type, one of 0x00, 0x20, ... 0xe0, so only its top three bits can be set, joined with the additional information, which is below 24 or one of 0x18 to 0x1b, so only its low five bits can be set. The two never share a bit, so | and ^ give the same byte for every argument of every head. Here the argument is below 24, so b7 is the whole argument."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-op/src/cbor.rs",
+      "mutant": "replace | with ^ in head",
+      "line_text": "out.extend_from_slice(&[major | 0x18, b7]);",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "head writes the first byte of a head as the major type, one of 0x00, 0x20, ... 0xe0, so only its top three bits can be set, joined with the additional information, which is below 24 or one of 0x18 to 0x1b, so only its low five bits can be set. The two never share a bit, so | and ^ give the same byte for every argument of every head."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-op/src/cbor.rs",
+      "mutant": "replace | with ^ in head",
+      "line_text": "out.extend_from_slice(&[major | 0x19, b6, b7]);",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "head writes the first byte of a head as the major type, one of 0x00, 0x20, ... 0xe0, so only its top three bits can be set, joined with the additional information, which is below 24 or one of 0x18 to 0x1b, so only its low five bits can be set. The two never share a bit, so | and ^ give the same byte for every argument of every head."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-op/src/cbor.rs",
+      "mutant": "replace | with ^ in head",
+      "line_text": "out.extend_from_slice(&[major | 0x1a, b4, b5, b6, b7]);",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "head writes the first byte of a head as the major type, one of 0x00, 0x20, ... 0xe0, so only its top three bits can be set, joined with the additional information, which is below 24 or one of 0x18 to 0x1b, so only its low five bits can be set. The two never share a bit, so | and ^ give the same byte for every argument of every head."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-op/src/cbor.rs",
+      "mutant": "replace | with ^ in head",
+      "line_text": "out.extend_from_slice(&[major | 0x1b, b0, b1, b2, b3, b4, b5, b6, b7]);",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "head writes the first byte of a head as the major type, one of 0x00, 0x20, ... 0xe0, so only its top three bits can be set, joined with the additional information, which is below 24 or one of 0x18 to 0x1b, so only its low five bits can be set. The two never share a bit, so | and ^ give the same byte for every argument of every head."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-op/src/cbor.rs",
+      "mutant": "replace | with ^ in narrow",
+      "line_text": "(exponent.checked_sub(format.rebias)? << format.fraction) | (fraction >> format.dropped)",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "The narrow exponent field is shifted left by the narrow format's fraction width M, so its low M bits are zero, and the narrow fraction is the binary64 fraction shifted right by 52 - M, so it is below 2^M. The two never share a bit, so | and ^ give the same bits for every double."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-op/src/cbor.rs",
+      "mutant": "replace | with ^ in narrow",
+      "line_text": "let q = (1 << 52) | fraction;",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "fraction is the binary64's low 52 bits (bits & (2^52 - 1)), so it is below 2^52 and never has bit 52, the implicit leading bit set here; | and ^ give the same q for every double."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-op/src/cbor.rs",
+      "mutant": "replace | with ^ in narrow",
+      "line_text": "Some(sign | magnitude)",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "sign is zero or the narrow format's sign bit alone (bit 15 of a binary16, bit 31 of a binary32), and magnitude is a narrow exponent field of at most 30 (binary16) or 254 (binary32) above an M-bit fraction, so it is below 0x7c00 or 0x7f800000 and never has the sign bit. The two never share a bit, so | and ^ give the same bits."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-topo/src/column.rs",
+      "mutant": "replace > with >= in Column<K, V>::filled",
+      "line_text": "if full > 0 {",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "full is a u32, so full >= 0 always holds. When the column needs no full chunk (fewer than CHUNK_ROWS rows), the mutant builds one full chunk anyway and then places it zero times: column.chunks.resize(0, chunk) leaves the list empty with the capacity reserved before, and the chunk is dropped. The column's rows, chunks, values and Memory report are the same as the original's for every rows and value. Only a temporary allocation of one chunk differs, which a machine out of memory could refuse (OutOfMemory, never stored or replayed, 23.10) where the original needs none."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-check/src/curved.rs",
+      "mutant": "replace * with / in same_side",
+      "line_text": "[a.lo() * a.hi(), b.lo() * b.hi(), a.lo() * b.lo()]",
+      "occurrences": 3,
+      "kind": "equivalent",
+      "reason": "same_side answers whether the smallest of the three numbers is above 0. Interval bounds are finite and a zero bound is +0, so x / y has the sign of x * y whenever y is not zero, and the answer can differ only where a divisor is 0. Then: in a.lo() / a.hi() and b.lo() / b.hi(), hi = 0 means lo <= 0, giving -inf or NaN where the product gave 0; in a.lo() / b.lo(), b.lo() = 0 makes b.lo() * b.hi() = 0 in the same list. In each case another number of the list, or the replaced one, is at most 0 (a NaN is the largest in tight::smaller's total order, so it never becomes the smallest), and the answer stays false."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-check/src/report.rs",
+      "mutant": "replace Group::built -> bool with true",
+      "line_text": "matches!(",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "Since G85 every group of 8.3 is built: the matches! lists all four Group variants, so built returns true for each, as the mutant does. It stays a function so that a group added later, or a level that drops one, can say it is not built."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-check/src/combinatorial.rs",
+      "mutant": "replace != with == in check",
+      "line_text": "if sink.found() != before {",
+      "occurrences": 1,
+      "kind": "hangs",
+      "reason": "Group 1's first stage is what proves every list and ring finite before anything walks them again (combinatorial.rs header, 23.11). The mutant lets a broken body through to the second stage (it runs exactly when the first stage found faults) through, or never ends a walk, so a test body with a broken ring (faults.rs, and the gating tests in attack_g85.rs, the first test binary cargo-mutants runs) walks it forever: the run times out rather than failing an assertion. Caught as a hang."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-check/src/combinatorial.rs",
+      "mutant": "replace != with == in ring",
+      "line_text": "(n != first).then_some(n)",
+      "occurrences": 1,
+      "kind": "hangs",
+      "reason": "Group 1's first stage is what proves every list and ring finite before anything walks them again (combinatorial.rs header, 23.11). The mutant lets a broken ring walk: a ring of one fin (each edge of a sheet) yields its fin forever through, or never ends a walk, so a test body with a broken ring (faults.rs, and the gating tests in attack_g85.rs, the first test binary cargo-mutants runs) walks it forever: the run times out rather than failing an assertion. Caught as a hang."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-check/src/combinatorial.rs",
+      "mutant": "replace fin_rings -> Result<(), Stopped> with Ok(())",
+      "line_text": "let (owner, _) = take(scratch, a.rows(Arena::Fin));",
+      "occurrences": 1,
+      "kind": "hangs",
+      "reason": "Group 1's first stage is what proves every list and ring finite before anything walks them again (combinatorial.rs header, 23.11). The mutant lets a broken loop ring (its check is skipped) through, or never ends a walk, so a test body with a broken ring (faults.rs, and the gating tests in attack_g85.rs, the first test binary cargo-mutants runs) walks it forever: the run times out rather than failing an assertion. Caught as a hang."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-check/src/combinatorial.rs",
+      "mutant": "replace radial_rings -> Result<(), Stopped> with Ok(())",
+      "line_text": "let (on, _) = take(scratch, a.rows(Arena::Fin));",
+      "occurrences": 1,
+      "kind": "hangs",
+      "reason": "Group 1's first stage is what proves every list and ring finite before anything walks them again (combinatorial.rs header, 23.11). The mutant lets a broken radial ring (its check is skipped) through, or never ends a walk, so a test body with a broken ring (faults.rs, and the gating tests in attack_g85.rs, the first test binary cargo-mutants runs) walks it forever: the run times out rather than failing an assertion. Caught as a hang."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-check/src/combinatorial.rs",
+      "mutant": "replace == with != in Sets<'s>::find",
+      "line_text": "if up == row {",
+      "occurrences": 1,
+      "kind": "hangs",
+      "reason": "The mutant's find returns only from a row that is not a root and loops at a root, where up == row makes grand = row forever. shells() calls find on every valid body (attack_g85.rs's first test builds cubes), so the first test binary never ends: caught as a hang."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-check/src/combinatorial.rs",
+      "mutant": "replace Sets<'s>::size -> u32 with 0",
+      "line_text": "self.size.get(at(root)).copied().unwrap_or(1)",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "Sets joins by size only to keep its trees shallow. Which root goes under which never changes the partition: join links two different roots, so no cycle forms whatever the order, find follows parents to the same root, and shells() reads only whether every face of a shell has one root. Nothing is charged to the meter inside Sets, so the reports and the meter's usage are the same for every body; only the depth of the trees, and the time, differ."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-check/src/combinatorial.rs",
+      "mutant": "replace Sets<'s>::size -> u32 with 1",
+      "line_text": "self.size.get(at(root)).copied().unwrap_or(1)",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "Sets joins by size only to keep its trees shallow. Which root goes under which never changes the partition: join links two different roots, so no cycle forms whatever the order, find follows parents to the same root, and shells() reads only whether every face of a shell has one root. Nothing is charged to the meter inside Sets, so the reports and the meter's usage are the same for every body; only the depth of the trees, and the time, differ."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-check/src/combinatorial.rs",
+      "mutant": "replace < with == in Sets<'s>::join",
+      "line_text": "let (big, small) = if self.size(x) < self.size(y) {",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "Sets joins by size only to keep its trees shallow. Which root goes under which never changes the partition: join links two different roots, so no cycle forms whatever the order, find follows parents to the same root, and shells() reads only whether every face of a shell has one root. Nothing is charged to the meter inside Sets, so the reports and the meter's usage are the same for every body; only the depth of the trees, and the time, differ."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-check/src/combinatorial.rs",
+      "mutant": "replace < with > in Sets<'s>::join",
+      "line_text": "let (big, small) = if self.size(x) < self.size(y) {",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "Sets joins by size only to keep its trees shallow. Which root goes under which never changes the partition: join links two different roots, so no cycle forms whatever the order, find follows parents to the same root, and shells() reads only whether every face of a shell has one root. Nothing is charged to the meter inside Sets, so the reports and the meter's usage are the same for every body; only the depth of the trees, and the time, differ."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-check/src/combinatorial.rs",
+      "mutant": "replace < with <= in Sets<'s>::join",
+      "line_text": "let (big, small) = if self.size(x) < self.size(y) {",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "Sets joins by size only to keep its trees shallow. Which root goes under which never changes the partition: join links two different roots, so no cycle forms whatever the order, find follows parents to the same root, and shells() reads only whether every face of a shell has one root. Nothing is charged to the meter inside Sets, so the reports and the meter's usage are the same for every body; only the depth of the trees, and the time, differ."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-check/src/curved.rs",
+      "mutant": "replace * with / in carrier",
+      "line_text": "slope: slope * s.axial_sign(),",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "A surface's axial sign is exactly +1 or -1 (geom_surface::analytic, Cone::axial_sign), and for s = +1 or -1, slope / s and slope * s are the same double: both are slope or -slope exactly."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-check/src/curved.rs",
+      "mutant": "replace * with / in away",
+      "line_text": "a.lo() * a.hi() > 0.0",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "Interval bounds are finite with lo <= hi and a zero bound stored as +0. Where hi is not zero, lo / hi has the sign of lo * hi; where hi is zero, lo <= 0, so lo / hi is -inf or NaN and lo * hi is 0, and none of them is above 0. So the comparison with 0 is the same for every interval."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-format/src/cbor/decode.rs",
+      "mutant": "replace | with ^ in Decoder<'a>::head",
+      "line_text": ".fold(0_u64, |value, &byte| (value << 8) | u64::from(byte));",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "value << 8 has its low eight bits clear and u64::from(byte) sets only those eight. Two words with no set bit in common give the same word under OR and XOR, so the result is the same for every input."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-format/src/cbor/decode.rs",
+      "mutant": "replace Decoder<'a>::open -> Result<(), CborError> with Ok(())",
+      "line_text": "let (start, end) = head;",
+      "occurrences": 1,
+      "kind": "hangs",
+      "reason": "Without pushing the frame or moving past the container's head, the next call of next reads the same head again, for ever under the tests' unlimited meter (a metered read stops at its budget). It hangs; it never accepts bytes the original refuses."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-format/src/cbor/decode.rs",
+      "mutant": "replace Decoder<'a>::complete -> Result<(), CborError> with Ok(())",
+      "line_text": "self.at = end;",
+      "occurrences": 1,
+      "kind": "hangs",
+      "reason": "Without moving past the item it just read, the next call of next reads the same head again, for ever under the tests' unlimited meter. It hangs; it never accepts bytes the original refuses."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-format/src/cbor/float.rs",
+      "mutant": "replace | with ^ in half",
+      "line_text": "u16::try_from(magnitude >> 13).ok().map(|m| m | sign)",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "m is at most 0x7bff (larger magnitudes are refused just above), so its bit 15 is clear, and sign is 0 or 0x8000. Two words with no set bit in common give the same word under OR and XOR, so the result is the same for every input."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-format/src/cbor/parse.rs",
+      "mutant": "replace Cursor<'_>::bump -> Option<char> with Some(Default::default())",
+      "line_text": "let c = self.peek()?;",
+      "occurrences": 1,
+      "kind": "hangs",
+      "reason": "The cursor never advances, so the first loop that reads past a character (whitespace, a digit, a string) reads the same character for ever. It hangs; it never returns bytes."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-format/src/cbor/parse.rs",
+      "mutant": "replace Cursor<'_>::bump -> Option<char> with None",
+      "line_text": "let c = self.peek()?;",
+      "occurrences": 1,
+      "kind": "hangs",
+      "reason": "The cursor never advances, so the first loop that reads past a character (whitespace, a digit, a string) reads the same character for ever. It hangs; it never returns bytes."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-format/src/cbor/parse.rs",
+      "mutant": "replace Parser<'_>::item -> Result<bool, TextError> with Ok(false)",
+      "line_text": "let (line, column) = (self.cursor.line, self.cursor.column);",
+      "occurrences": 1,
+      "kind": "hangs",
+      "reason": "No item ever completes and nothing is consumed, so the parse loop calls item for ever under the tests' unlimited meter. It hangs; it never returns bytes."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-format/src/cbor/parse.rs",
+      "mutant": "replace | with ^ in hex_float",
+      "line_text": "significand = (significand << 4) | u128::from(d);",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "significand << 4 has its low four bits clear and d is a hexadecimal digit, below 16. Two words with no set bit in common give the same word under OR and XOR, so the result is the same for every input."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-format/src/cbor/parse.rs",
+      "mutant": "replace | with ^ in escape",
+      "line_text": "let code = (((unit & 0x3ff) << 10) | (low & 0x3ff))",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "(unit & 0x3ff) << 10 sets only bits 10 to 19 and low & 0x3ff only bits 0 to 9. Two words with no set bit in common give the same word under OR and XOR, so the result is the same for every input."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-format/src/cbor/parse.rs",
+      "mutant": "replace | with ^ in hex4",
+      "line_text": "unit = (unit << 4) | d;",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "unit << 4 has its low four bits clear and d is a hexadecimal digit, below 16. Two words with no set bit in common give the same word under OR and XOR, so the result is the same for every input."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-format/src/cbor/parse.rs",
+      "mutant": "replace | with ^ in hex_bytes",
+      "line_text": "Some(h) => out.push(u8::try_from((h << 4) | d).map_err(|_| here)?),",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "h << 4 has its low four bits clear and d is a hexadecimal digit, below 16. Two words with no set bit in common give the same word under OR and XOR, so the result is the same for every input."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-format/src/cbor/parse.rs",
+      "mutant": "replace | with ^ in head",
+      "line_text": "out.push(initial | small);",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "initial is the major type shifted up five places, so its low five bits are clear, and small is below 24. Two words with no set bit in common give the same word under OR and XOR, so the result is the same for every input."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-format/src/cbor/parse.rs",
+      "mutant": "replace | with ^ in head",
+      "line_text": "out.push(initial | info);",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "initial is the major type shifted up five places, so its low five bits are clear, and info is 24, 25, 26 or 27. Two words with no set bit in common give the same word under OR and XOR, so the result is the same for every input."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-format/src/cbor/text.rs",
+      "mutant": "replace < with <= in hex_float",
+      "line_text": "let (normal, offset) = if magnitude < f64::MIN_POSITIVE {",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "The two branches differ only at magnitude = f64::MIN_POSITIVE = 2^-1022. Scaled by 2^64 it reads with exponent field 65 and offset 1087, unscaled with field 1 and offset 1023: the same exponent -1022 and the same empty fraction, so the same text."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-format/src/file.rs",
+      "mutant": "replace | with ^ in pull_record",
+      "line_text": "bytes.iter().fold(0_u64, |a, &b| (a << 8) | u64::from(b))",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "The value so far is shifted left by 8, so its low byte is zero, and u64::from(b) is a single byte, below 256. The two never share a bit, so | and ^ give the same argument for every head."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-format/src/record.rs",
+      "mutant": "replace | with ^",
+      "line_text": "const FLAGS: u64 = REQUIRED | COPY_ALWAYS;",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "REQUIRED is 1 and COPY_ALWAYS is 2, one bit each and not the same bit, so REQUIRED | COPY_ALWAYS and REQUIRED ^ COPY_ALWAYS are both 3."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-format/src/kinds.rs",
+      "mutant": "replace < with <= in end",
+      "line_text": "if x.is_infinite() && (x < 0.0) == low {",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "The comparison is reached only when x is infinite, and for ±∞ x < 0 and x <= 0 agree."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-format/src/kinds.rs",
+      "mutant": "replace < with <= in read_round_tail",
+      "line_text": "Ok((read_frame(d, m)?, read_box(d, m)?, read_sign(d, m)? < 0.0))",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "read_sign returns only 1.0 or -1.0, never 0, so s < 0 and s <= 0 agree."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-make/src/pattern.rs",
+      "mutant": "replace > with >= in less_exact",
+      "line_text": "if key(b) > key(a) { b } else { a }",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "Two records with equal keys, the same class and the same bound, are the same record here: every copy of a pattern takes its grid step from the input, or from the one ceiling the caller gave, so a and b differ in nothing either branch could return."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-linalg/src/sparse_qr.rs",
+      "mutant": "delete ! in odd",
+      "line_text": "if !first {",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "odd is private and called only by determinant_sign, on Π and on P, both permutations of the same n. The mutant counts one swap per cycle, c in all, where the definition counts n − c; both parities move by n mod 2 together, so odd(Π) != odd(P), all the sign reads, is unchanged."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-linalg/src/sparse_qr.rs",
+      "mutant": "replace < with > in SparseQr::smallest_pivot",
+      "line_text": "if self.rank < self.diagonal.len() {",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "The rank is never above the columns, so the mutant always takes the loop. With every column live that is the original; with a dead column, whose diagonal is stored as 0 (the field's rule), the least |R[k, k]| the loop finds is 0, the value the guard returns."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-linalg/src/sparse_qr.rs",
+      "mutant": "replace < with <= in SparseQr::smallest_pivot",
+      "line_text": "if pivot.abs() < least {",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "The two differ only when a pivot ties the least so far, and then both keep the same value."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-linalg/src/sparse_qr.rs",
+      "mutant": "replace < with <= in SparseQr::determinant_sign",
+      "line_text": "if *beta < 0.0 {",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "The sign is given only at full rank, when every diagonal is a live pivot. A column is dead when what is left of it is at most tol times the largest, and tol is never negative, so a column with nothing left is dead: a live pivot is never 0, and < and <= agree on it."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-sketch/src/equation.rs",
+      "mutant": "replace == with != in choice",
+      "line_text": "| ConstraintKind::TangentLine { side, .. } => Some(side == Side::Left),",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "choice is read only by same_structure, which compares two rules' choices for equality. Negating side == Left on both sides is a bijection of the same bool, so every comparison is unchanged."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-sketch/src/equation.rs",
+      "mutant": "replace > with >= in Assembly::sense",
+      "line_text": "if quantity.lo() > 0.0 {",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "They differ only when the enclosure of the branch quantity starts at exactly 0. Senses are read only at solved points (continue_to and at_risk, after a block has converged), where a heading's quantity is ±|ab| and a turn's ±|u||v|: 0 only for a line of no length, which is singular and refused before any sense is read. A point enclosure of a value that far from 0 never touches it."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-sketch/src/equation.rs",
+      "mutant": "replace < with <= in Assembly::sense",
+      "line_text": "} else if quantity.hi() < 0.0 {",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "They differ only when the enclosure of the branch quantity ends at exactly 0. Senses are read only at solved points (continue_to and at_risk, after a block has converged), where a heading's quantity is ±|ab| and a turn's ±|u||v|: 0 only for a line of no length, which is singular and refused before any sense is read. A point enclosure of a value that far from 0 never touches it."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-sketch/src/solve.rs",
+      "mutant": "replace > with >= in Stage::iterate",
+      "line_text": "if lambda > MOST_DAMPING {",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "They differ only at λ = 10^12 exactly, which the damping λ is 0 or 10^-6·4^k, since it starts at 0, is set to 10^-6 and only ever multiplied or divided by 4, each exact in binary: 10^-6·4^k = 10^12 would need 4^k = 10^18 = 2^18·5^18, which no power of 4 is."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-sketch/src/solve.rs",
+      "mutant": "replace < with <= in Stage::solve",
+      "line_text": "Ok((pivot, _)) => pivot < INDEPENDENT,",
+      "occurrences": 1,
+      "kind": "harmless",
+      "reason": "They differ only when the smallest pivot is exactly 2^-12. The threshold (chapter 15.7) bounds where a block is read as singular, not which side an exact tie takes: either way the block is restarted from a nudge or reported unsolved, both answers the method allows there."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-sketch/src/solve.rs",
+      "mutant": "replace < with <= in Plan::at_risk",
+      "line_text": "if pivot < INDEPENDENT || sign != *watch {",
+      "occurrences": 1,
+      "kind": "harmless",
+      "reason": "They differ only when a watched block's smallest pivot is exactly 2^-12. The threshold (chapter 15.7) bounds where a step is read as near a singular place, not which side an exact tie takes: either way the step is halved or kept, and a halved step only walks the same path more finely."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-sketch/src/solve.rs",
+      "mutant": "replace > with >= in Stage::iterate",
+      "line_text": "if ratio > 0.75 {",
+      "occurrences": 1,
+      "kind": "harmless",
+      "reason": "They differ only when a step's ratio of actual to predicted reduction is exactly 0.75: Moré's update (1978) leaves the edges of its bands open, and either reading only changes how fast the damping falls, not whether the block converges or where."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-sketch/src/solve.rs",
+      "mutant": "replace < with <= in Stage::iterate",
+      "line_text": "} else if ratio < 0.25 {",
+      "occurrences": 1,
+      "kind": "harmless",
+      "reason": "They differ only when a step's ratio of actual to predicted reduction is exactly 0.25: Moré's update (1978) leaves the edges of its bands open, and either reading only changes how fast the damping rises, not whether the block converges or where."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-sketch/src/solve.rs",
+      "mutant": "replace > with >= in Stage::iterate",
+      "line_text": "if ratio > ACCEPTED {",
+      "occurrences": 1,
+      "kind": "harmless",
+      "reason": "They differ only when a step's ratio is exactly 10^-4: a step that reduces the residual by that share of its prediction is kept by one and retried damped by the other, both of which converge."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-sketch/src/solve.rs",
+      "mutant": "replace Stage::step -> Result<Option<Vec<f64>>, SketchError> with Ok(None)",
+      "line_text": "if lambda == 0.0 {",
+      "occurrences": 1,
+      "kind": "hangs",
+      "reason": "The tests stop it by their timeout: every step is None, so iterate sets λ to 10^-6 and asks again, for ever: λ never passes MOST_DAMPING. It is a hang the tests catch; kept so that the judge counts it as one."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-sketch/src/solve.rs",
+      "mutant": "replace < with == in Stage::iterate",
+      "line_text": "lambda = if lambda < LEAST_DAMPING {",
+      "occurrences": 1,
+      "kind": "hangs",
+      "reason": "The tests stop it by their timeout: a rejected step at λ = 0 sets λ to 0·4 = 0 again, so the same step is rejected for ever. It is a hang the tests catch; kept so that the judge counts it as one."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-sketch/src/solve.rs",
+      "mutant": "replace < with > in Stage::iterate",
+      "line_text": "lambda = if lambda < LEAST_DAMPING {",
+      "occurrences": 1,
+      "kind": "hangs",
+      "reason": "The tests stop it by their timeout: a rejected step at λ = 0 sets λ to 0·4 = 0 again, and one above 10^-6 drops back to 10^-6, so λ never passes MOST_DAMPING and a rejected step is retried for ever. It is a hang the tests catch; kept so that the judge counts it as one."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-sketch/src/solve.rs",
+      "mutant": "replace < with <= in Stage::iterate",
+      "line_text": "lambda = if lambda < LEAST_DAMPING {",
+      "occurrences": 1,
+      "kind": "hangs",
+      "reason": "The tests stop it by their timeout: every rejected step leaves λ at 10^-6, so it never passes MOST_DAMPING and a step rejected there is retried for ever. It is a hang the tests catch; kept so that the judge counts it as one."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-sketch/src/solve.rs",
+      "mutant": "replace * with / in Stage::iterate",
+      "line_text": "lambda * 4.0",
+      "occurrences": 1,
+      "kind": "hangs",
+      "reason": "The tests stop it by their timeout: a rejected step divides λ by 4 instead of raising it, so λ never passes MOST_DAMPING and the inner loop retries for ever. It is a hang the tests catch; kept so that the judge counts it as one."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-sketch/src/solve.rs",
+      "mutant": "replace > with < in Stage::iterate",
+      "line_text": "if ratio > 0.75 {",
+      "occurrences": 1,
+      "kind": "hangs",
+      "reason": "The tests stop it by their timeout: a rejected step (ratio below 10^-4) now lowers λ, so damping never rises past MOST_DAMPING and the same rejected step comes back for ever. It is a hang the tests catch; kept so that the judge counts it as one."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-sketch/src/solve.rs",
+      "mutant": "replace < with == in Stage::iterate",
+      "line_text": "} else if ratio < 0.25 {",
+      "occurrences": 1,
+      "kind": "hangs",
+      "reason": "The tests stop it by their timeout: a rejected step leaves λ where it was unless its ratio is exactly 0.25, so the same step is computed and rejected for ever. It is a hang the tests catch; kept so that the judge counts it as one."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-sketch/src/solve.rs",
+      "mutant": "replace < with > in Stage::iterate",
+      "line_text": "} else if ratio < 0.25 {",
+      "occurrences": 1,
+      "kind": "hangs",
+      "reason": "The tests stop it by their timeout: a rejected step, whose ratio is below 10^-4, no longer raises λ, so the same step is computed and rejected for ever. It is a hang the tests catch; kept so that the judge counts it as one."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-sketch/src/solve.rs",
+      "mutant": "replace > with == in Stage::iterate",
+      "line_text": "if ratio > ACCEPTED {",
+      "occurrences": 1,
+      "kind": "hangs",
+      "reason": "The tests stop it by their timeout: a step is kept only at a ratio of exactly 10^-4, so good steps are undone and, with λ falling on each, retried for ever. It is a hang the tests catch; kept so that the judge counts it as one."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-sketch/src/solve.rs",
+      "mutant": "replace > with < in Stage::iterate",
+      "line_text": "if ratio > ACCEPTED {",
+      "occurrences": 1,
+      "kind": "hangs",
+      "reason": "The tests stop it by their timeout: only steps that fail are kept and good ones undone, so the residual never falls below the tolerance and the good step is retried with ever less damping. It is a hang the tests catch; kept so that the judge counts it as one."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-sketch/src/solve.rs",
+      "mutant": "replace < with <= in continue_to",
+      "line_text": "while done < 1.0 {",
+      "occurrences": 1,
+      "kind": "hangs",
+      "reason": "The tests stop it by their timeout: at the end of the path done is exactly 1, so the loop steps to 1 again and again for ever. It is a hang the tests catch; kept so that the judge counts it as one."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-sketch/src/solve.rs",
+      "mutant": "replace + with - in continue_to",
+      "line_text": "let ahead = done + size;",
+      "occurrences": 1,
+      "kind": "hangs",
+      "reason": "The tests stop it by their timeout: short of the end each step goes back by its size instead of on, so done never reaches 1. It is a hang the tests catch; kept so that the judge counts it as one."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-sketch/src/solve.rs",
+      "mutant": "replace + with * in continue_to",
+      "line_text": "let ahead = done + size;",
+      "occurrences": 1,
+      "kind": "hangs",
+      "reason": "The tests stop it by their timeout: short of the end the next place is done·size, at most done, so a path that has to halve never moves on from where it is. It is a hang the tests catch; kept so that the judge counts it as one."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-sketch/src/solve.rs",
+      "mutant": "replace *= with /= in continue_to",
+      "line_text": "size *= 2.0;",
+      "occurrences": 1,
+      "kind": "hangs",
+      "reason": "The tests stop it by their timeout: each success after a halving halves the step again, so the steps shrink geometrically and their sum stops short of the end of the path. It is a hang the tests catch; kept so that the judge counts it as one."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-sketch/src/solve.rs",
+      "mutant": "replace square -> Result<f64, SketchError> with Ok(-1.0)",
+      "line_text": "let mut sum = Real::ZERO;",
+      "occurrences": 1,
+      "kind": "hangs",
+      "reason": "The tests stop it by their timeout: with every |v|² read as −1, every predicted reduction is 0 and every ratio 0/0, a NaN that passes none of the damping's tests, so λ never moves and the same step is tried and refused for ever (the tests' meters have no budget). It is a hang the tests catch; kept so that the judge counts it as one."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-sketch/src/solve.rs",
+      "mutant": "replace <= with > in Stage::iterate",
+      "line_text": "if predicted <= FLAT * square(&r)? {",
+      "occurrences": 1,
+      "kind": "hangs",
+      "reason": "The tests stop it by their timeout: the mutant refuses every step that predicts a reduction and takes only one that predicts none: at a block whose step is zero the trial is the point itself, the ratio 0/0 is a NaN that passes none of the damping's tests, and the same step is tried and refused for ever. It is a hang the tests catch; kept so that the judge counts it as one."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-sketch/src/solve.rs",
+      "mutant": "replace > with >= in continue_to",
+      "line_text": "if depth > 0 {",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "depth is unsigned, so the mutant also doubles the step after a success at depth 0. At depth 0 the step is the whole path, so that success reaches 1 and the loop ends: the doubled step is never used."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-sketch/src/solve.rs",
+      "mutant": "replace > with == in Stage::iterate",
+      "line_text": "if lambda > MOST_DAMPING {",
+      "occurrences": 1,
+      "kind": "harmless",
+      "reason": "The damping runs out only if every damped step up to 10^12 is refused. Every residual is a length with a gradient near one (equation.rs), so once λ passes the Jacobian's scale the step shrinks as 1/λ and the linear model predicts it ever better: no test, and no sketch tried, runs out (replacing the return with another error fails no test). Were one to, the mutant would keep raising λ, and end at the flat-step test with the same Unsolved, at λ's overflow with Numeric, or with a step taken whose result finish still holds to the tolerance: an error or a checked answer, never a wrong one."
     },
     {
       "file": "projects/engines/geometry/crates/geom-sketch/src/fit.rs",

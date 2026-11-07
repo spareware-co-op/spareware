@@ -4,22 +4,33 @@
 //! section 28.5): every operation, every reader and the operation-sequence generator get a fuzz
 //! target here. Fuzzing feeds a program huge numbers of machine-made inputs, steered towards code
 //! not yet reached, and watches for anything wrong: a panic, a broken law, an invalid result, a
-//! changed input. It has four targets so far: [`predicates`] (G11), `geom-num`'s exact
+//! changed input. It has nineteen targets so far: [`predicates`] (G11), `geom-num`'s exact
 //! predicates never panic and swapping two points flips their sign, on arbitrary grid points;
 //! [`orient2d`] (G14), orient2d, its exact path and its `f64` filter agree with the exact
 //! determinant of orient2d's definition, computed from scratch, which is also proven by Kani on a
 //! bounded domain; [`wide`] (G26), the wide integers agree with `num-bigint` on every
-//! operation at every width; and [`variants`] (G42), every variant of every generated exact path
-//! returns the exact value of its description, evaluated in big integers. Gate 2 (32.44) adds
-//! [`curves`], every curve kind keeps the kind contract on any bytes (G60 to G64, G67, G68), and
-//! [`surfaces`], every surface kind likewise (G60, G65 to G68), and [`nurbs`], NURBS curves keep
-//! their stated bounds against exact rational evaluation (G56, G58, G59), and [`transforms`], the
-//! typed transforms move grid points as their definitions say and decimals round-trip (G45, G46,
-//! G48), and [`boxtree`], the box tree and cell index answer as brute force does (G54, G55), and
-//! [`linalg`], the dense decompositions are refused or finite and the spectral ones backward stable
-//! (G49, G50), and [`roots`], the root engine misses no root and proves none twice, Brent's
-//! zero brackets its sign change (G51, G52, G53), and [`maths`], the proven maths functions are
-//! correctly rounded (G47). The layout every target follows, and how each engine runs it locally and in CI,
+//! operation at every width; [`variants`] (G42), every variant of every generated exact path
+//! returns the exact value of its description, evaluated in big integers; [`cbor`] (G91),
+//! `geom-format`'s strict CBOR decoder and its text form never panic, refuse inside their input
+//! and convert both ways bit for bit; [`cache`] (G105), `geom-format`'s memo store keeps to its
+//! bound, forgets the entry used longest ago first and answers only where the caller's budget
+//! covers the stored run; [`arenas`] (G80), `geom-topo` publishes exactly the arenas its rules
+//! allow, and a body's versions never see each other's edits; [`make`] (G101), the primitives
+//! and transforms return only what the full checker passes, keep their laws, and refuse with a
+//! typed error; [`sequence`] (G116), whole operation logs replay to the same hash and keep
+//! every law at every step; and [`intersect`] (G158), an intersection's items keep their
+//! invariants against an all-pairs oracle and a pair asked either way round makes one call.
+//! Gate 2 (32.44) adds [`curves`], every curve kind keeps the kind contract on any bytes (G60 to
+//! G64, G67, G68), and [`surfaces`], every surface kind likewise (G60, G65 to G68), and [`nurbs`],
+//! NURBS curves keep their stated bounds against exact rational evaluation (G56, G58, G59), and
+//! [`transforms`], the typed transforms move grid points as their definitions say and decimals
+//! round-trip (G45, G46, G48), and [`boxtree`], the box tree and cell index answer as brute force
+//! does (G54, G55), and [`linalg`], the dense decompositions are refused or finite and the spectral
+//! ones backward stable (G49, G50), and [`roots`], the root engine misses no root and proves none
+//! twice, Brent's zero brackets its sign change (G51, G52, G53), and [`maths`], the proven maths
+//! functions are correctly rounded (G47). [`adversarial`] holds the generators aimed at chapter
+//! 28.5's hard cases, and [`robustness`] counts how many plain designs succeed. The layout every
+//! target follows, and how each engine runs it locally and in CI,
 //! is in this crate's `README.md`.
 //!
 //! Layer: Development, in chapter 27's crate table: a development crate, outside the
@@ -124,6 +135,14 @@
 //! - `dashu-ratio` 0.6.1 (MIT OR Apache-2.0), without its default features: the exact rationals
 //!   of the [`nurbs`] target's oracle, `geom-test`'s NURBS reference.
 //! - `geom-sketch` (MPL-2.0, ours), the code the [`sketch_text`] target tests.
+//! - `geom-format` and `geom-run` (MPL-2.0, ours), the code under test of the [`cbor`] target and
+//!   the work meter it reads with, and of the [`cache`] target with `geom-op`.
+//! - `geom-topo`, `geom-curve`, `geom-surface`, `geom-math` and `geom-run` (MPL-2.0, ours), the code
+//!   under test of the [`arenas`] target and the values that fill its arenas.
+//! - `geom-make`, `geom-check`, `geom-math`, `geom-op`, `geom-run` and `geom-topo` (MPL-2.0, ours),
+//!   the code under test of the [`make`] target and the checker and values it judges them by.
+//! - `geom-intersect` (MPL-2.0, ours), the code the [`intersect`] target tests, and `geom-curve`,
+//!   `geom-math`, `geom-run` and `geom-surface` (MPL-2.0, ours), what its cases are made of.
 //! - `num-bigint` 0.4.8 (MIT OR Apache-2.0), the oracle of the [`wide`] and [`variants`] targets:
 //!   exact arbitrary-precision integers, the big-integer oracle chapter 29.3 names, sharing no
 //!   code with `geom-num`.
@@ -168,15 +187,23 @@
 
 use core::fmt;
 
+pub mod adversarial;
+pub mod arenas;
 pub mod boxtree;
+pub mod cache;
+pub mod cbor;
 pub mod curves;
+pub mod intersect;
 pub mod linalg;
+pub mod make;
 pub mod maths;
 pub mod nurbs;
 pub mod orient2d;
 pub mod predicates;
+pub mod robustness;
 pub mod roots;
 pub mod seeded;
+pub mod sequence;
 pub mod sketch_text;
 pub mod surfaces;
 pub mod transforms;
