@@ -1566,7 +1566,8 @@ impl Sketch {
                     take(y)?;
                 }
                 EntityKind::Circle { radius, .. } | EntityKind::Arc { radius, .. } => take(radius)?,
-                EntityKind::Ellipse { axis, minor, .. } => {
+                EntityKind::Ellipse { axis, minor, .. }
+                | EntityKind::EllipticalArc { axis, minor, .. } => {
                     let [first, second] = axis;
                     take(first)?;
                     take(second)?;
