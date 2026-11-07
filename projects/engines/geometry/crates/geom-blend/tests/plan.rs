@@ -19,7 +19,8 @@ use geom_blend::overflow::{
 };
 use geom_blend::plan::{ChainFacts, PlanError, SharedFace, plan};
 use geom_blend::radius::{
-    Cause, Limit, Verdict, chain_limits, half_angle_tangent, judge, largest, reach_limit,
+    Cause, Limit, Verdict, chain_limits, collapse_limit, fold_limit, half_angle_tangent, judge,
+    largest, reach_limit, room_limit,
 };
 use geom_num::NumError;
 use geom_num::interval::Interval;
@@ -307,4 +308,28 @@ fn an_overflow_with_no_allowed_type_is_a_plan_error_and_unknown_chains_are_refus
         plan(&[facts(1.0)], &[], &[], &[], &Policy::default()),
         Err(PlanError::UnknownChain(0))
     );
+}
+
+#[test]
+fn curvature_room_and_collapse_set_their_own_limits() {
+    // A concave fillet cannot be larger than the supports' smallest radius of curvature, and a
+    // radius at it folds the face: open.
+    let fold = fold_limit(iv(5.0, 5.0));
+    assert_eq!(fold.cause, Cause::Fold);
+    assert!(fold.open);
+    // A slot 9 wide takes a ball up to 4.5.
+    let room = room_limit(iv(9.0, 9.0)).unwrap();
+    assert_eq!(room.cause, Cause::NoRoom);
+    assert!(room.radius.lo() <= 4.5 && room.radius.hi() >= 4.5);
+    assert_eq!(room_limit(iv(0.0, 1.0)), Err(NumError::Degenerate));
+    // A cylinder of 7 collapses a ball of 7 rolling inside it.
+    let collapse = collapse_limit(iv(7.0, 7.0));
+    assert!(collapse.open);
+    // Together: the lowest wins, and the open ones report the number below their bound.
+    let limits = [fold, room, collapse];
+    let fit = largest(&limits).unwrap();
+    assert_eq!(fit.cause, Cause::NoRoom);
+    assert!(fit.radius <= 4.5 && !fit.open);
+    assert_eq!(judge(&limits, 4.0), Verdict::Feasible);
+    assert!(matches!(judge(&limits, 6.0), Verdict::RadiusTooLarge(_)));
 }

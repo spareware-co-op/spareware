@@ -168,6 +168,47 @@ pub fn reach_limit(width: Interval, tan_half: Interval, open: bool) -> Result<Li
     })
 }
 
+/// The limit a principal radius of curvature sets on the concave side: the ball cannot be larger
+/// than the smallest radius of curvature of a support across the edge, and a radius at that bound
+/// folds the face, so the bound is open.
+#[must_use]
+pub const fn fold_limit(principal_radius: Interval) -> Limit {
+    Limit {
+        cause: Cause::Fold,
+        radius: principal_radius,
+        open: true,
+    }
+}
+
+/// The limit a slot sets: a ball fits between two faces up to half the width between them.
+///
+/// # Errors
+///
+/// [`NumError::Degenerate`] for a width that is not positive.
+pub fn room_limit(width: Interval) -> Result<Limit, NumError> {
+    if width.lo() <= 0.0 {
+        return Err(NumError::Degenerate);
+    }
+    let half = Interval::point(0.5)?.mul(width)?;
+    Ok(Limit {
+        cause: Cause::NoRoom,
+        radius: half,
+        open: false,
+    })
+}
+
+/// The limit a collapsing offset sets: a ball as wide as the cylinder or sphere it rolls on, with
+/// the ball inside, collapses that face's offset onto its axis or centre, so the support's radius is
+/// an open bound.
+#[must_use]
+pub const fn collapse_limit(support_radius: Interval) -> Limit {
+    Limit {
+        cause: Cause::CollapsedOffset,
+        radius: support_radius,
+        open: true,
+    }
+}
+
 /// The largest radius that certainly builds, from the lowest lower end among the limits; `None`
 /// with no limits.
 #[must_use]
