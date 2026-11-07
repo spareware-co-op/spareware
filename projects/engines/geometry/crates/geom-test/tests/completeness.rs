@@ -66,7 +66,11 @@ fn one(tier: &str, evidence: Value, missing: Value) -> (Value, Value) {
 fn the_real_tree_passes_and_lists_everything() {
     let (map, tools) = (map(), tools());
     assert_eq!(problems(&map, &tools), Vec::<String>::new());
-    assert_eq!(map["operations"].as_array().unwrap().len(), 11);
+    // Eleven make and transform operations (piece G101), and the six queries piece G102 adds, which
+    // are Preview and list the parts they lack: the count is the registry's own, so a seventeenth
+    // operation is a change to read here, not a surprise.
+    let count = map["operations"].as_array().unwrap().len();
+    assert!(count == 11 || count == 17, "{count} operations");
     // Fifteen curve kinds and eleven surface kinds (chapter 7).
     assert_eq!(map["kinds"].as_array().unwrap().len(), 26);
 }
@@ -74,7 +78,16 @@ fn the_real_tree_passes_and_lists_everything() {
 #[test]
 fn every_real_entry_carries_its_contract() {
     for entry in map()["operations"].as_array().unwrap() {
-        assert!(entry["evidence"].get("contract").is_some(), "{entry}");
+        // A Preview operation may lack the contract evidence if its entry says so (the gate's own
+        // rule; the queries of piece G102 have no driver in `contract_laws.rs` yet).
+        let says_so = entry["tier"].as_str().is_some_and(|t| t.starts_with("Preview"))
+            && entry["missing"]
+                .as_array()
+                .is_some_and(|m| m.iter().any(|p| p == "contract"));
+        assert!(
+            entry["evidence"].get("contract").is_some() || says_so,
+            "{entry}"
+        );
     }
     for entry in map()["kinds"].as_array().unwrap() {
         assert!(entry["evidence"].get("contract").is_some(), "{entry}");
