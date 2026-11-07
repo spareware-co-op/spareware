@@ -37,6 +37,11 @@
 //! Cost: linear in the vertices and copies; one interval arc tangent and one square root per
 //! segment of a length.
 
+#![allow(
+    clippy::many_single_char_names,
+    reason = "a, b, p, q, v, w, k and g are the geometry's own letters"
+)]
+
 use alloc::vec::Vec;
 use core::fmt;
 
@@ -47,6 +52,24 @@ use geom_num::{NumError, carrier::Rational2};
 use crate::carrier::Line2;
 use crate::entity::{Bulge, EntityError, Ends, Frac, Polyline, Shape};
 use crate::point::Pt2;
+
+/// The vector from `a` to `b`. A difference of two 63-bit coordinates fits 128 bits, so the
+/// saturation never acts.
+fn diff(a: P2, b: P2) -> [i128; 2] {
+    [
+        i128::from(b.x.get()).saturating_sub(i128::from(a.x.get())),
+        i128::from(b.y.get()).saturating_sub(i128::from(a.y.get())),
+    ]
+}
+
+/// The grid point (`x`, `y`), if it fits the range.
+fn grid(x: i128, y: i128) -> Result<P2, EditError> {
+    P2::new(
+        i64::try_from(x).map_err(|_| EditError::Range)?,
+        i64::try_from(y).map_err(|_| EditError::Range)?,
+    )
+    .map_err(|_| EditError::Range)
+}
 
 /// Why an edit was refused.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -228,9 +251,9 @@ impl Similarity {
     pub fn after(&self, first: &Similarity) -> Result<Similarity, EditError> {
         // The linear parts compose: a mirror in `first` reverses the turns of `self`.
         let turns = if first.mirror {
-            (first.turns.wrapping_add(4).wrapping_sub(self.turns % 4)) % 4
+            first.turns.wrapping_add(4).wrapping_sub(self.turns % 4) % 4
         } else {
-            (first.turns + self.turns) % 4
+            first.turns.wrapping_add(self.turns) % 4
         };
         let k = first
             .scale
@@ -415,53 +438,44 @@ pub fn place(shape: &Shape, map: &Similarity) -> Result<Shape, EditError> {
 /// [`EditError::Degenerate`] if `p0` = `p1` or `q0` = `q1`; [`EditError::NotExact`] if no quarter
 /// turn and whole scale takes the vector `p0 p1` to `q0 q1`.
 pub fn align(p0: P2, p1: P2, q0: P2, q1: P2) -> Result<Similarity, EditError> {
-    let diff = |a: P2, b: P2| {
-        [
-            i128::from(b.x.get()) - i128::from(a.x.get()),
-            i128::from(b.y.get()) - i128::from(a.y.get()),
-        ]
-    };
     let (v, w) = (diff(p0, p1), diff(q0, q1));
     if v == [0, 0] || w == [0, 0] {
         return Err(EditError::Degenerate);
     }
     for turns in 0..4_u8 {
-        for scale in [1_i64, -1] {
-            let probe = Similarity {
-                turns,
-                mirror: false,
-                scale: 1,
-                shift: [0, 0],
-            };
-            let Some(r) = probe.linear(v) else {
-                continue;
-            };
-            // w must be a whole multiple of r: w = k r.
-            let k = if r[0] != 0 {
-                w[0].checked_div(r[0])
-            } else {
-                w[1].checked_div(r[1])
-            };
-            let Some(k) = k.filter(|k| *k >= 1) else {
-                continue;
-            };
-            if r[0].checked_mul(k) != Some(w[0]) || r[1].checked_mul(k) != Some(w[1]) {
-                continue;
-            }
-            let _ = scale;
-            let linear = Similarity {
-                scale: i64::try_from(k).map_err(|_| EditError::Range)?,
-                ..probe
-            };
-            let image = linear
-                .linear([i128::from(p0.x.get()), i128::from(p0.y.get())])
-                .ok_or(EditError::Range)?;
-            let shift = [
-                i64::try_from(i128::from(q0.x.get()) - image[0]).map_err(|_| EditError::Range)?,
-                i64::try_from(i128::from(q0.y.get()) - image[1]).map_err(|_| EditError::Range)?,
-            ];
-            return Ok(Similarity { shift, ..linear });
+        let probe = Similarity {
+            turns,
+            ..Similarity::IDENTITY
+        };
+        let Some(r) = probe.linear(v) else {
+            continue;
+        };
+        // w must be a whole positive multiple of r: w = k r.
+        let k = if r[0] == 0 {
+            w[1].checked_div(r[1])
+        } else {
+            w[0].checked_div(r[0])
+        };
+        let Some(k) = k.filter(|k| *k >= 1) else {
+            continue;
+        };
+        if r[0].checked_mul(k) != Some(w[0]) || r[1].checked_mul(k) != Some(w[1]) {
+            continue;
         }
+        let linear = Similarity {
+            scale: i64::try_from(k).map_err(|_| EditError::Range)?,
+            ..probe
+        };
+        let image = linear
+            .linear([i128::from(p0.x.get()), i128::from(p0.y.get())])
+            .ok_or(EditError::Range)?;
+        let shift = |q: i64, im: i128| {
+            i64::try_from(i128::from(q).saturating_sub(im)).map_err(|_| EditError::Range)
+        };
+        return Ok(Similarity {
+            shift: [shift(q0.x.get(), image[0])?, shift(q0.y.get(), image[1])?],
+            ..linear
+        });
     }
     Err(EditError::NotExact)
 }
@@ -556,7 +570,7 @@ pub fn array_polar(shape: &Shape, centre: P2, copies: u32) -> Result<Vec<Shape>,
         _ => return Err(EditError::NotExact),
     };
     (0..copies)
-        .map(|i| {
+        .map(|i| -> Result<Shape, EditError> {
             let turns = u8::try_from(i.checked_mul(step).ok_or(EditError::Range)? % 4)
                 .map_err(|_| EditError::Range)?;
             place(shape, &Similarity::quarter_turns(turns, centre)?)
@@ -592,13 +606,11 @@ fn gcd(a: u128, b: u128) -> u128 {
 /// [`EditError::Degenerate`] for equal ends, or a change that carries an end through the other;
 /// [`EditError::Range`] past the coordinate range.
 pub fn lengthen(a: P2, b: P2, end: End, change: i64) -> Result<(P2, P2), EditError> {
-    let dx = i128::from(b.x.get()) - i128::from(a.x.get());
-    let dy = i128::from(b.y.get()) - i128::from(a.y.get());
+    let [dx, dy] = diff(a, b);
     let g = i128::try_from(gcd(dx.unsigned_abs(), dy.unsigned_abs())).map_err(|_| EditError::Range)?;
-    if g == 0 {
+    let (Some(ux), Some(uy)) = (dx.checked_div(g), dy.checked_div(g)) else {
         return Err(EditError::Degenerate);
-    }
-    let (ux, uy) = (dx / g, dy / g);
+    };
     // The segment holds g primitive steps; the change may not use them all.
     let (sign, moved) = match end {
         End::Start => (-1_i128, a),
@@ -608,17 +620,15 @@ pub fn lengthen(a: P2, b: P2, end: End, change: i64) -> Result<(P2, P2), EditErr
     if c.checked_neg().is_some_and(|n| n >= g) {
         return Err(EditError::Degenerate);
     }
-    let nx = i128::from(moved.x.get())
-        .checked_add(sign.checked_mul(c).and_then(|s| s.checked_mul(ux)).ok_or(EditError::Range)?)
-        .ok_or(EditError::Range)?;
-    let ny = i128::from(moved.y.get())
-        .checked_add(sign.checked_mul(c).and_then(|s| s.checked_mul(uy)).ok_or(EditError::Range)?)
-        .ok_or(EditError::Range)?;
-    let new = P2::new(
-        i64::try_from(nx).map_err(|_| EditError::Range)?,
-        i64::try_from(ny).map_err(|_| EditError::Range)?,
-    )
-    .map_err(|_| EditError::Range)?;
+    let along = sign.checked_mul(c).ok_or(EditError::Range)?;
+    let new = grid(
+        i128::from(moved.x.get())
+            .checked_add(along.checked_mul(ux).ok_or(EditError::Range)?)
+            .ok_or(EditError::Range)?,
+        i128::from(moved.y.get())
+            .checked_add(along.checked_mul(uy).ok_or(EditError::Range)?)
+            .ok_or(EditError::Range)?,
+    )?;
     Ok(match end {
         End::Start => (new, b),
         End::Finish => (a, new),
@@ -633,22 +643,25 @@ pub fn lengthen(a: P2, b: P2, end: End, change: i64) -> Result<(P2, P2), EditErr
 /// [`EditError::Degenerate`] for fewer than two parts or equal ends; [`EditError::Range`] if the
 /// rational points leave the exact budget.
 pub fn divide(a: P2, b: P2, parts: u32) -> Result<Vec<Rational2>, EditError> {
-    if parts < 2 || (a.x.get() == b.x.get() && a.y.get() == b.y.get()) {
+    if parts < 2 || diff(a, b) == [0, 0] {
         return Err(EditError::Degenerate);
     }
     let n = i128::from(parts);
     (1..parts)
-        .map(|i| {
+        .map(|i| -> Result<Rational2, EditError> {
             let i = i128::from(i);
-            let x = i128::from(a.x.get())
-                .checked_mul(n - i)
-                .and_then(|l| i128::from(b.x.get()).checked_mul(i).and_then(|r| l.checked_add(r)))
-                .ok_or(EditError::Range)?;
-            let y = i128::from(a.y.get())
-                .checked_mul(n - i)
-                .and_then(|l| i128::from(b.y.get()).checked_mul(i).and_then(|r| l.checked_add(r)))
-                .ok_or(EditError::Range)?;
-            Ok(Rational2::new(x, y, n)?)
+            let rest = n.saturating_sub(i);
+            let mix = |from: i64, to: i64| {
+                i128::from(from)
+                    .checked_mul(rest)
+                    .and_then(|l| i128::from(to).checked_mul(i).and_then(|r| l.checked_add(r)))
+                    .ok_or(EditError::Range)
+            };
+            Ok(Rational2::new(
+                mix(a.x.get(), b.x.get())?,
+                mix(a.y.get(), b.y.get())?,
+                n,
+            )?)
         })
         .collect()
 }
@@ -660,26 +673,26 @@ pub fn divide(a: P2, b: P2, parts: u32) -> Result<Vec<Rational2>, EditError> {
 ///
 /// [`EditError::Degenerate`] for equal ends or `every` of zero.
 pub fn measure(a: P2, b: P2, every: u32) -> Result<Vec<P2>, EditError> {
-    let dx = i128::from(b.x.get()) - i128::from(a.x.get());
-    let dy = i128::from(b.y.get()) - i128::from(a.y.get());
+    let [dx, dy] = diff(a, b);
     let g = i128::try_from(gcd(dx.unsigned_abs(), dy.unsigned_abs())).map_err(|_| EditError::Range)?;
-    if g == 0 || every == 0 {
+    let (Some(ux), Some(uy)) = (dx.checked_div(g), dy.checked_div(g)) else {
+        return Err(EditError::Degenerate);
+    };
+    if every == 0 {
         return Err(EditError::Degenerate);
     }
-    let (ux, uy) = (dx / g, dy / g);
     let mut out = Vec::new();
     let mut at = i128::from(every);
     while at <= g {
-        let x = i128::from(a.x.get()) + ux * at;
-        let y = i128::from(a.y.get()) + uy * at;
-        out.push(
-            P2::new(
-                i64::try_from(x).map_err(|_| EditError::Range)?,
-                i64::try_from(y).map_err(|_| EditError::Range)?,
-            )
-            .map_err(|_| EditError::Range)?,
-        );
-        at += i128::from(every);
+        out.push(grid(
+            i128::from(a.x.get())
+                .checked_add(ux.checked_mul(at).ok_or(EditError::Range)?)
+                .ok_or(EditError::Range)?,
+            i128::from(a.y.get())
+                .checked_add(uy.checked_mul(at).ok_or(EditError::Range)?)
+                .ok_or(EditError::Range)?,
+        )?);
+        at = at.saturating_add(i128::from(every));
     }
     Ok(out)
 }
@@ -726,8 +739,7 @@ pub fn polyline_length(poly: &Polyline) -> Result<Interval, EditError> {
         let (Some(a), Some(b)) = (v.get(i), v.get(next)) else {
             return Err(EditError::Range);
         };
-        let dx = i128::from(b.x.get()) - i128::from(a.x.get());
-        let dy = i128::from(b.y.get()) - i128::from(a.y.get());
+        let [dx, dy] = diff(*a, *b);
         total = total.add(segment_length(dx, dy, bulge)?)?;
     }
     Ok(total)
