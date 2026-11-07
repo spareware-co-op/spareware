@@ -1736,6 +1736,57 @@ pub mod linalg {
     }
 }
 
+/// `geom-sketch`'s hot paths (piece G224, decision 32.44): the diagnosis of a sketch and its free
+/// motions by the sparse form, each under an unlimited budget, from the sketch's text.
+pub mod sketch {
+    use geom_run::{Budget, WorkMeter};
+    use geom_sketch::diagnose::diagnose;
+    use geom_sketch::model::SketchError;
+    use geom_sketch::motions::MotionFinder;
+    use geom_sketch::text::parse;
+
+    use super::run;
+
+    /// The size, in grid steps, a diagnosed chain is judged at.
+    const SIZE: f64 = 10_000.0;
+
+    /// `diagnose` on each sketch: the degrees of freedom, least and most, and the redundant and
+    /// conflicting groups found.
+    #[inline(never)]
+    pub fn diagnosed(batch: &[String], out: &mut Vec<Result<[u32; 4], SketchError>>) {
+        run(batch, out, |text| {
+            let sketch = parse(text)?;
+            let mut meter = WorkMeter::new(Budget::UNLIMITED);
+            let r = diagnose(&sketch, SIZE, &mut meter)?;
+            Ok([
+                u32::try_from(r.dof_least).unwrap_or(u32::MAX),
+                u32::try_from(r.dof_most).unwrap_or(u32::MAX),
+                u32::try_from(r.redundant.len()).unwrap_or(u32::MAX),
+                u32::try_from(r.conflicting.len()).unwrap_or(u32::MAX),
+            ])
+        });
+    }
+
+    /// `MotionFinder::new` and every motion on each sketch: the degrees of freedom, the motions and
+    /// the variables they move.
+    #[inline(never)]
+    pub fn motions(batch: &[String], out: &mut Vec<Result<[u32; 4], SketchError>>) {
+        run(batch, out, |text| {
+            let sketch = parse(text)?;
+            let mut meter = WorkMeter::new(Budget::UNLIMITED);
+            let finder = MotionFinder::new(&sketch, &mut meter)?;
+            let all = finder.all(&mut meter)?;
+            let moved: usize = all.iter().map(|m| m.moves.len()).sum();
+            Ok([
+                u32::try_from(finder.dof()).unwrap_or(u32::MAX),
+                u32::try_from(all.len()).unwrap_or(u32::MAX),
+                u32::try_from(moved).unwrap_or(u32::MAX),
+                0,
+            ])
+        });
+    }
+}
+
 /// `geom-bvh`'s hot paths (pieces G54 and G55, decision 32.44): building the box tree and the
 /// cell index of a scene and querying it, on the serial executor under an unlimited budget.
 pub mod bvh {

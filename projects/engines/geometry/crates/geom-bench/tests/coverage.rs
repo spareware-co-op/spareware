@@ -531,6 +531,16 @@ const OTHER_CRATES: &[(&str, &[(&str, &str)])] = &[
         ],
     ),
     (
+        "geom_sketch",
+        &[
+            (
+                "diagnose",
+                include_str!("../../geom-sketch/src/diagnose.rs"),
+            ),
+            ("motions", include_str!("../../geom-sketch/src/motions.rs")),
+        ],
+    ),
+    (
         "geom_bvh",
         &[
             ("tree", include_str!("../../geom-bvh/src/tree.rs")),
