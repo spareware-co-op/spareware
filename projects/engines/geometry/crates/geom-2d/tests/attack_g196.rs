@@ -36,7 +36,7 @@ use geom_num::carrier::Rational2;
 use geom_num::grid::P2;
 use geom_run::{Budget, WorkMeter};
 
-/// A small deterministic generator (SplitMix64, Steele, Lea and Flood 2014), for the drawings.
+/// A small deterministic generator (`SplitMix64`, Steele, Lea and Flood 2014), for the drawings.
 struct SplitMix64(u64);
 
 impl SplitMix64 {
@@ -242,8 +242,12 @@ fn nested_squares_place_the_inner_component_as_a_hole() {
     // The ring face (the outer square's inside) holds the inner square as a hole.
     let ring = &a.faces()[1];
     assert_eq!(ring.holes.len(), 1);
-    assert!(a.faces()[0].holes.len() == 1, "the outer square is a hole of the unbounded face");
-    assert!(a.faces()[2].holes.is_empty());
+    assert_eq!(
+        a.faces()[0].holes.len(),
+        1,
+        "the outer square is a hole of the unbounded face"
+    );
+    assert_eq!(a.faces()[2].holes.len(), 0);
 }
 
 #[test]
@@ -351,8 +355,6 @@ fn oracle_vertices(segs: &[(P2, P2)]) -> BTreeSet<Red> {
 
 /// The connected components of the edge graph, by union-find over vertices that have an edge.
 fn components(a: &Arrangement) -> usize {
-    let n = a.vertices().len();
-    let mut parent: Vec<usize> = (0..n).collect();
     fn find(parent: &mut [usize], mut x: usize) -> usize {
         while parent[x] != x {
             parent[x] = parent[parent[x]];
@@ -360,6 +362,8 @@ fn components(a: &Arrangement) -> usize {
         }
         x
     }
+    let n = a.vertices().len();
+    let mut parent: Vec<usize> = (0..n).collect();
     for e in a.edges() {
         let (u, v) = (find(&mut parent, e.from as usize), find(&mut parent, e.to as usize));
         parent[u] = v;
@@ -400,7 +404,7 @@ fn random_drawings_match_the_vertex_oracle_and_euler_s_formula() {
         let c = components(&a) as i64;
         assert_eq!(v - e + f, 1 + c, "round {round}: {segs:?}");
         // Every half-edge is on exactly one cycle.
-        let total: usize = a.cycles().iter().map(Vec::len).sum();
+        let total: usize = a.cycles().iter().fold(0, |n, c| n + c.len());
         assert_eq!(total, 2 * a.edges().len(), "round {round}");
         let mut seen = BTreeSet::new();
         for cy in a.cycles() {

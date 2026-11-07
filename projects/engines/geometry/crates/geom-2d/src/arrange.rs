@@ -578,23 +578,49 @@ fn build(
         }
         cycles.push(cycle);
     }
-    // Orientation: at the cycle's lowest-leftmost vertex, a left turn is counter-clockwise.
-    let mut counter: Vec<bool> = Vec::new();
-    let mut low: Vec<usize> = Vec::new();
-    for cycle in &cycles {
-        let mut best: Option<(usize, usize)> = None;
-        for (i, &h) in cycle.iter().enumerate() {
-            let o = origin(h)?;
-            if best.is_none_or(|(_, bo)| o < bo) {
-                best = Some((i, o));
+    // Orientation. A component's outside boundary is the cycle that has the wedge toward the
+    // negative x direction at the component's lowest-leftmost vertex; with the sweep line tilted,
+    // that direction lies just after an edge that runs exactly west. Every other cycle of the
+    // component bounds a face from inside. At a cycle's own lowest-leftmost vertex, the cycle is the
+    // outside kind exactly when it holds the half-edge that leaves that vertex just before the
+    // wedge, going counter-clockwise.
+    let mut cycle_of_half: Vec<usize> = alloc::vec![0; total];
+    for (c, cycle) in cycles.iter().enumerate() {
+        for &h in cycle {
+            if let Some(slot) = usize::try_from(h).ok().and_then(|k| cycle_of_half.get_mut(k)) {
+                *slot = c;
             }
         }
-        let (i, o) = best.ok_or(ArrangeError::TooMany)?;
-        let out = cycle.get(i).copied().ok_or(ArrangeError::TooMany)?;
-        let prev_i = if i == 0 { cycle.len().saturating_sub(1) } else { i.saturating_sub(1) };
-        let inc = cycle.get(prev_i).copied().ok_or(ArrangeError::TooMany)?;
-        counter.push(cross_sign(dir_of(inc)?, dir_of(out)?)? == Ordering::Greater);
-        low.push(o);
+    }
+    let mut counter: Vec<bool> = Vec::new();
+    let mut low: Vec<usize> = Vec::new();
+    for (c, cycle) in cycles.iter().enumerate() {
+        let mut best: Option<usize> = None;
+        for &h in cycle {
+            let o = origin(h)?;
+            if best.is_none_or(|b| o < b) {
+                best = Some(o);
+            }
+        }
+        let m = best.ok_or(ArrangeError::TooMany)?;
+        let list = around.get(m).ok_or(ArrangeError::TooMany)?;
+        let first = list.first().copied().ok_or(ArrangeError::TooMany)?;
+        let [fx, fy] = dir_of(first)?;
+        let skip = usize::from(fy == 0 && fx < 0);
+        let n = list.len();
+        let before = skip
+            .checked_add(n)
+            .and_then(|v| v.checked_sub(1))
+            .and_then(|v| v.checked_rem(n))
+            .ok_or(ArrangeError::TooMany)?;
+        let out = list.get(before).copied().ok_or(ArrangeError::TooMany)?;
+        let outside = usize::try_from(out)
+            .ok()
+            .and_then(|k| cycle_of_half.get(k))
+            .copied()
+            == Some(c);
+        counter.push(!outside);
+        low.push(m);
     }
     let (faces, _) = faces_of(&edges, &vertices, segs, &rep, &cycles, &counter, &low)?;
     Ok(Arrangement {
