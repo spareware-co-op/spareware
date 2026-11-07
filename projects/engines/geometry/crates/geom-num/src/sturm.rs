@@ -267,6 +267,24 @@ pub fn sign_beside<const L: usize>(
 /// step did not fit.
 #[must_use]
 pub fn gcd<const L: usize>(a: &Wide<L>, b: &Wide<L>) -> Option<Wide<L>> {
+    gcd_with_steps(a, b).map(|(out, _)| out)
+}
+
+/// [`gcd`], and how many reduction steps it took (zero when one of them is zero).
+///
+/// The steps are bounded by the numbers' bits, so by 2·64·L: both numbers are odd when the loop
+/// starts, so their difference is even and the odd part that replaces the larger is at most half
+/// of it, which is less than half of the larger; the larger's bit length therefore falls by at
+/// least one at every step, while neither number can fall below 1, and the loop ends in fewer
+/// than the two numbers' bits together. The loop counts that bound down and gives up with `None`
+/// when it is spent, which no input reaches (the unit test in `tests/attack_g166.rs` holds the
+/// count to the bits of the inputs, worst cases included).
+///
+/// # Errors
+///
+/// `None` if a step did not fit.
+#[must_use]
+pub fn gcd_with_steps<const L: usize>(a: &Wide<L>, b: &Wide<L>) -> Option<(Wide<L>, usize)> {
     let zeros = |v: &[u64; L]| -> Option<usize> {
         let whole = v.iter().take_while(|l| **l == 0).count();
         let part = v.get(whole).map_or(0, |l| l.trailing_zeros());
@@ -274,18 +292,18 @@ pub fn gcd<const L: usize>(a: &Wide<L>, b: &Wide<L>) -> Option<Wide<L>> {
     };
     let (mut x, mut y) = (magnitude(a)?.to_le_limbs(), magnitude(b)?.to_le_limbs());
     if x.iter().all(|l| *l == 0) {
-        return Some(Wide::<L>::from_le_limbs(y));
+        return Some((Wide::<L>::from_le_limbs(y), 0));
     }
     if y.iter().all(|l| *l == 0) {
-        return Some(Wide::<L>::from_le_limbs(x));
+        return Some((Wide::<L>::from_le_limbs(x), 0));
     }
     let (from_x, from_y) = (zeros(&x)?, zeros(&y)?);
     let common = from_x.min(from_y);
     x = shifted(&x, from_x);
     y = shifted(&y, from_y);
-    // Both odd now. Each step replaces the larger by the odd part of the difference, which is
-    // smaller than it, so x + y falls at every step and the loop ends, at the latest when x = y,
-    // after fewer than 2·64·L steps: there is no way out of it but the return.
+    // Both odd now: the bound in the function's documentation, counted down.
+    let allowed = L.checked_mul(128)?;
+    let mut left = allowed;
     loop {
         let (wide_x, wide_y) = (Wide::<L>::from_le_limbs(x), Wide::<L>::from_le_limbs(y));
         let difference = wide_x.checked_sub(&wide_y)?;
@@ -295,8 +313,9 @@ pub fn gcd<const L: usize>(a: &Wide<L>, b: &Wide<L>) -> Option<Wide<L>> {
             for _ in 0..common {
                 out = out.checked_mul(&two)?;
             }
-            return Some(out);
+            return Some((out, allowed.checked_sub(left)?));
         }
+        left = left.checked_sub(1)?;
         let (rest, keep_y) = if difference.is_negative() {
             (difference.checked_neg()?, true)
         } else {
