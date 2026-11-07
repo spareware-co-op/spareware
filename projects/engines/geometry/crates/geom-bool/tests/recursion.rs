@@ -85,6 +85,7 @@ fn deepest_with(hosts: i64) -> usize {
         .map(|(i, (wall, door))| Cut {
             host: solid(2 * i as u16, wall),
             tools: vec![solid(2 * i as u16 + 1, door)],
+            reuse: None,
         })
         .collect();
     let pool = Counting {
@@ -112,6 +113,7 @@ fn parallel_phases_nest_at_most_twice() {
     let cuts = [Cut {
         host: solid(0, &wall),
         tools: vec![solid(1, &door)],
+        reuse: None,
     }];
     assert!(cut(&ctx(), &Exec::serial(), &cuts, BatchRule::Atomic).is_ok());
 }
