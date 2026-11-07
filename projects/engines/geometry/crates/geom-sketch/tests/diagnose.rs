@@ -355,13 +355,24 @@ constraint 2.5 driving 0 distance 1.1 1.2 5000
     };
     let third = remedies.iter().find(|r| r.constraint == id(2, 5)).unwrap();
     let range = third.range.unwrap();
-    let most = range.most.unwrap();
-    assert!(most >= third.measures && most <= 2000.5, "{third:?}");
-    let least = range.least.unwrap();
-    assert!(least <= third.measures && least >= -0.5, "{third:?}");
-    // Five thousand is outside the range: the words say so by giving the range.
-    assert!(most < third.asked);
-    assert!(third.text().contains("any value from"), "{}", third.text());
+    // C is 1000 from A and the distance from B runs from nothing to 2000.
+    assert!(
+        range.least.unwrap() >= 0.0 && range.least.unwrap() < 0.5,
+        "{third:?}"
+    );
+    assert!((range.most.unwrap() - 2000.0).abs() < 0.3, "{third:?}");
+    // And the distance from A runs from 4000 to 6000 with B 5000 away and A 1000 from B.
+    let second = remedies.iter().find(|r| r.constraint == id(2, 4)).unwrap();
+    let range = second.range.unwrap();
+    assert!((range.least.unwrap() - 4000.0).abs() < 0.5, "{second:?}");
+    assert!((range.most.unwrap() - 6000.0).abs() < 0.5, "{second:?}");
+    // Five thousand is outside the first range: the words say so by giving the range.
+    assert!(range.most.unwrap() < 6000.5 && third.asked > 2000.0);
+    assert!(
+        third.text().contains("any value from 0.2 to 1999.9"),
+        "{}",
+        third.text()
+    );
 }
 
 #[test]
@@ -387,4 +398,86 @@ constraint 2.4 driving 1 distance 1.0 1.1 3100
         range.most.unwrap() - range.least.unwrap() < 0.5,
         "{newer:?}"
     );
+}
+
+#[test]
+fn a_remedy_in_words_names_the_ends_it_has() {
+    use geom_sketch::diagnose::{Remedy, ValueRange};
+    let said = |least, most| {
+        Remedy {
+            constraint: id(2, 7),
+            asked: 4200.0,
+            measures: 4150.0,
+            range: Some(ValueRange { least, most }),
+        }
+        .text()
+    };
+    assert_eq!(
+        said(Some(3900.0), Some(4180.0)),
+        "2.7 (4200) without its conflicts measures 4150, and any value from 3900.0 to 4180.0 fits"
+    );
+    assert!(said(None, Some(4180.0)).ends_with(", and any value up to 4180.0 fits"));
+    assert!(said(Some(3900.0), None).ends_with(", and any value from 3900.0 up fits"));
+    assert!(said(None, None).ends_with("measures 4150"));
+    let bare = Remedy {
+        constraint: id(2, 7),
+        asked: 4200.0,
+        measures: 4150.0,
+        range: None,
+    };
+    assert!(bare.text().ends_with("measures 4150"));
+}
+
+#[test]
+fn a_dimension_restates_its_value_and_nothing_else_does() {
+    use geom_sketch::model::{Amount, ConstraintKind as K, Side};
+    let (a, b, c) = (id(1, 0), id(1, 1), id(1, 2));
+    let v = Amount::Value(1.0);
+    let dimensions = [
+        K::Turned { a, b, angle: v },
+        K::Heading { line: a, angle: v },
+        K::Sweep { arc: a, angle: v },
+        K::Distance { a, b, distance: v },
+        K::FromLine {
+            point: a,
+            line: b,
+            distance: v,
+            side: Side::Left,
+        },
+        K::FromCircle {
+            point: a,
+            circle: b,
+            distance: v,
+            outside: true,
+        },
+        K::LinesApart {
+            a,
+            b,
+            distance: v,
+            side: Side::Left,
+        },
+        K::Across { a, b, distance: v },
+        K::Upward { a, b, distance: v },
+        K::Length { line: a, length: v },
+        K::ArcLength { arc: a, length: v },
+        K::Radius {
+            circle: a,
+            radius: v,
+        },
+        K::Diameter {
+            circle: a,
+            diameter: v,
+        },
+        K::Distance {
+            a,
+            b,
+            distance: Amount::Named(c),
+        },
+    ];
+    for kind in dimensions {
+        let again = kind.with_stated(7.5).unwrap();
+        assert_eq!(again.stated(), Some(7.5), "{kind:?}");
+        assert_eq!(again.with_stated(1.0).unwrap().stated(), Some(1.0));
+    }
+    assert!(K::Coincident { a, b }.with_stated(7.5).is_none());
 }
