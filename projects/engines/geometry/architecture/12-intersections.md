@@ -279,6 +279,31 @@ Type decisions come from exact signs on whole-number data: `plane_ball`, `plane_
 
 Each curve is cut where the edges of either surface meet the other, by `curve_surface`, and a stretch is kept if its middle lies on both, so the answer is trimmed to both domains. Cuts that bunch around one point stand a little apart, and what lies between them is no stretch. The curves of one pair may share a box and may cross, so 12.2's rule that enclosures stand apart holds for points, overlaps and flagged regions.
 
+**As built (G166).** `geom_num::pencil` reads what two quadrics share from the pencil tA + B of their matrices, with no curve computed. The determinant's roots and multiplicities, by a Sturm chain, and the rank of the member at each repeated root name the Segre symbol, and the signature of the members around them say which real form it is. The rows below are each derived from Uhlig's canonical pairs, and tested on every sign of each pair under whole-number changes of coordinates and of the pencil's basis. Finsler's theorem decides empty: two real quadrics share no real point exactly when some member is definite.
+
+| Symbol | Real form | Shared, in real projective space |
+| --- | --- | --- |
+| [1111] | four real roots, a definite member; otherwise four, two or no real roots | nothing; two, one or two ovals of a smooth quartic |
+| [211] | member at the root (3, 0); else members beside it lean; else they do not | one isolated point; one loop and an isolated node; a loop crossing itself |
+| [31] | any | one loop with a cusp |
+| [22] | real, conjugate roots | a twisted cubic and a chord through two real points, or through none |
+| [4] | any | a twisted cubic and a tangent line |
+| [(11)11] | the two planes of the root real or conjugate, and whether the signature changes across it | two conics crossing twice, two apart, one (conjugate simple roots), two isolated points, or nothing |
+| [(11)2] | the signature across the root of rank two, and the other root's member | a conic and two lines in a triangle; a conic and an isolated point; an isolated point |
+| [(11)(11)] | members at real roots mixed or definite; conjugate roots | four lines of a skew quadrilateral, two isolated points, nothing; two skew lines |
+| [(21)1] | the root's planes real or conjugate | two conics touching at a point; an isolated point |
+| [(31)] | members beside the root lean or not | a conic; a conic and two lines through a point of it |
+| [(22)] | the root's planes real or conjugate | a double line and two lines across it; the double line |
+| [(111)1] | a definite member or not | nothing; a double conic |
+| [(211)] | members beside the root lean or not | an isolated point; two double lines through a point |
+| [(1111)] | definite or not | nothing; the quadric itself |
+| determinant zero, one apex | the pencil of base conics | four, three or two lines through the apex, double where base points repeat, or the apex alone |
+| determinant zero, no apex | | two cones touching along a line, and a conic |
+
+The budget is B = 876 bits for a determinant's coefficients at 40-bit coordinates, 13B + 50 = 11,438 bits for a Sturm chain and 11,427 for a sign read at a sample, so `Wide<184>`, 11,776 bits, holds every value, against 6.2's rough "several thousand". A filter in intervals answers first where four simple roots are certain, so the wide path runs near a repeated root and off a grid never.
+
+`geom_intersect::quartic::meet` gives that answer for a sphere, cylinder or cone with another, and where it is a quartic or a cubic writes the curve by the method of part I: a member of inertia (2, 2) is ruled, a point of it is (u : v) and (s : t), and the other quadric is a quadratic in s/t over (u : v) whose discriminant, a quartic form, bounds the branches. That is the parameterisation 12.12 calls the definition, and piece G175's intersection curve holds it; until then conics and lines go through `quadrics::natural` and the quartic waits there. Each point is an enclosure of a point exactly on both surfaces. The papers' care over how many radicals are needed does not arise, since every value here is an enclosure.
+
 ## 12.8 Surface with surface: general pairs
 
 **When one surface is implicit** (a plane, quadric, torus or field, with an equation F(x) = 0), the parametric surface is substituted into it. The intersection is the plane curve g(u, v) = F(S(u, v)) = 0 in the parametric surface's parameter plane. For NURBS against planes, quadrics and tori, g multiplied through by the positive weights is a Bernstein polynomial. It is traced with the certificates of interval methods for implicit curves ([Snyder 1992](https://doi.org/10.1145/142920.134024); [Plantinga and Vegter 2004](https://doi.org/10.1145/1057432.1057465)):

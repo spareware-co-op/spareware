@@ -559,7 +559,7 @@ impl Ring for Interval {
 }
 
 /// `p − q`. Each difference is below 2^41 in size, so it fits an `i64` and [`Ring::of`].
-fn minus<R: Ring>(p: P3, q: P3) -> Option<[R; 3]> {
+pub(crate) fn minus<R: Ring>(p: P3, q: P3) -> Option<[R; 3]> {
     let one = |x: i64, y: i64| R::of(x.checked_sub(y)?);
     Some([
         one(p.x.get(), q.x.get())?,
@@ -573,7 +573,7 @@ fn minus<R: Ring>(p: P3, q: P3) -> Option<[R; 3]> {
     clippy::many_single_char_names,
     reason = "the names of the descriptions and of the module header's formulas"
 )]
-fn inner<R: Ring>(u: [R; 3], v: [R; 3]) -> Option<R> {
+pub(crate) fn inner<R: Ring>(u: [R; 3], v: [R; 3]) -> Option<R> {
     let [a, b, c] = u;
     let [x, y, z] = v;
     a.times(x)?.plus(b.times(y)?)?.plus(c.times(z)?)
@@ -600,7 +600,7 @@ fn twice<R: Ring>(v: R) -> Option<R> {
 }
 
 /// The size `s` as a number of `R`, or `None` above 2^53.
-fn size<R: Ring>(s: u64) -> Option<R> {
+pub(crate) fn size<R: Ring>(s: u64) -> Option<R> {
     R::of(i64::try_from(s).ok()?)
 }
 

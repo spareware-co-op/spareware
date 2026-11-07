@@ -206,6 +206,10 @@ jobs:
           echo "${WASMTIME_SHA256}  $name.tar.xz" | sha256sum --check --strict
           tar -xJf "$name.tar.xz"
           echo "$RUNNER_TEMP/$name" >> "$GITHUB_PATH"
+      # WebAssembly's shadow stack is 1 MiB by default and has no guard page. The pencil and
+      # Sturm chain code sets its integers up in place, in small steps, so even an unoptimised
+      # build needs well under that (measured natively: 640 KiB), and the tests run on the
+      # default stack with no linker flag.
       - name: geom-test, geom-fuzz (the seeded leg) and geom-gen on a 32-bit target
         run: cargo test --locked -p geom-test -p geom-fuzz -p geom-gen --target wasm32-wasip1
 

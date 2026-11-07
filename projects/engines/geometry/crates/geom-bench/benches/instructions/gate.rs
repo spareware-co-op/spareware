@@ -2843,6 +2843,13 @@ pub mod intersect {
     }
 
     #[library_benchmark(teardown = verify)]
+    #[bench::typical(leak("intersect/quartic_walk/typical"))]
+    fn quartic_walk(run: &'static mut Named) -> &'static mut Named {
+        run.bench.measure();
+        run
+    }
+
+    #[library_benchmark(teardown = verify)]
     #[bench::typical(leak("intersect/surface_patch/typical"))]
     fn surface_patch(run: &'static mut Named) -> &'static mut Named {
         run.bench.measure();
@@ -2851,13 +2858,27 @@ pub mod intersect {
 
     library_benchmark_group!(
         name = intersect;
-        benchmarks = sort_items, key_circle, pair_lines, project_arc, project_sphere, curve_segments, curve_circles, curve_line_circle, curve_cubics, curve_loop, surface_plane, surface_torus, surface_patch, natural_plane, natural_spheres, natural_tee, natural_apex
+        benchmarks = sort_items, key_circle, pair_lines, project_arc, project_sphere, curve_segments, curve_circles, curve_line_circle, curve_cubics, curve_loop, surface_plane, surface_torus, surface_patch, natural_plane, natural_spheres, natural_tee, natural_apex, quartic_walk
     );
 }
 
 /// The exact decisions on lines and quadrics (piece G159; decision 32.44).
 pub mod quadric {
     use super::*;
+
+    #[library_benchmark(teardown = verify)]
+    #[bench::typical(leak("quadric/pencil_simple/typical"))]
+    fn pencil_simple(run: &'static mut Named) -> &'static mut Named {
+        run.bench.measure();
+        run
+    }
+
+    #[library_benchmark(teardown = verify)]
+    #[bench::typical(leak("quadric/pencil_node/typical"))]
+    fn pencil_node(run: &'static mut Named) -> &'static mut Named {
+        run.bench.measure();
+        run
+    }
 
     #[library_benchmark(teardown = verify)]
     #[bench::typical(leak("quadric/line_sphere/typical"))]
@@ -2910,6 +2931,6 @@ pub mod quadric {
 
     library_benchmark_group!(
         name = quadric;
-        benchmarks = line_sphere, line_cylinder, line_cone, line_torus, parallel, axis_gap, tangent
+        benchmarks = line_sphere, line_cylinder, line_cone, line_torus, parallel, axis_gap, tangent, pencil_simple, pencil_node
     );
 }

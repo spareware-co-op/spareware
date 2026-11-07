@@ -1,5 +1,6 @@
-//! Inputs for the exact decisions on lines and quadrics (piece G159, decision 32.44): lines against
-//! a sphere, a cylinder, a cone and a torus, parallel axes, and pairs whose axes meet.
+//! Inputs for the exact decisions on lines and quadrics (pieces G159 and G166, decision 32.44): lines
+//! against a sphere, a cylinder, a cone and a torus, parallel axes, pairs whose axes meet, and the
+//! pencils of a sphere and a cylinder, in general position and touching inside.
 //!
 //! Class `typical` only: each input lies within ±2^20 grid steps of the origin, radii and slopes
 //! from 1 to 2^16, so every call succeeds. Refusals and the budgets' extremes are tested in
@@ -15,6 +16,7 @@
 //! Cost: a few draws of [`SplitMix64`] per input, outside every measured run.
 
 use geom_num::grid::{P3, Steps};
+use geom_num::pencil::{Entry, Form, cylinder_form, sphere_form};
 use geom_num::quadric::{Cone, Cylinder, Line, Slope, Sphere, Torus};
 
 use super::{Class, batch_of, p3, rng, within};
@@ -130,4 +132,50 @@ pub fn gaps(class: Class) -> Vec<(Line, Line)> {
 #[must_use]
 pub fn tangents(class: Class) -> Vec<(Cylinder, Cone)> {
     typical(class, "quadric::tangents", |g| (cylinder(g), cone(g)))
+}
+
+/// A sphere and a cylinder through it, about the sphere's centre: four simple roots or two.
+#[must_use]
+pub fn simple_pencils(class: Class) -> Vec<(Form<Entry>, Form<Entry>)> {
+    typical(class, "quadric::simple_pencils", |g| {
+        let radius = size(g).0 + (1 << 16);
+        let centre = point(g);
+        let sphere = Sphere {
+            centre,
+            radius: Steps(radius),
+        };
+        let cylinder = Cylinder {
+            base: point(g),
+            along: point(g),
+            radius: size(g),
+        };
+        (
+            sphere_form(&sphere, centre).unwrap_or([[Entry::ZERO; 4]; 4]),
+            cylinder_form(&cylinder, centre).unwrap_or([[Entry::ZERO; 4]; 4]),
+        )
+    })
+}
+
+/// Viviani's window: a sphere of radius 2r and a cylinder of radius r through its centre, touching
+/// inside, a double root of rank three.
+#[must_use]
+pub fn nodal_pencils(class: Class) -> Vec<(Form<Entry>, Form<Entry>)> {
+    typical(class, "quadric::nodal_pencils", |g| {
+        let r = g.range(1, 1 << 16);
+        let [x, y, z] = [within(g, REACH), within(g, REACH), within(g, REACH)];
+        let centre = p3(x, y, z);
+        let sphere = Sphere {
+            centre,
+            radius: Steps(r.unsigned_abs().saturating_mul(2)),
+        };
+        let cylinder = Cylinder {
+            base: p3(x + r, y, z),
+            along: p3(x + r, y, z + 1),
+            radius: Steps(r.unsigned_abs()),
+        };
+        (
+            sphere_form(&sphere, centre).unwrap_or([[Entry::ZERO; 4]; 4]),
+            cylinder_form(&cylinder, centre).unwrap_or([[Entry::ZERO; 4]; 4]),
+        )
+    })
 }
