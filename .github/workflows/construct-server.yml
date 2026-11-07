@@ -1,0 +1,178 @@
+name: Construct server
+
+# Spare Construct's cloud server on real TiKV, on fresh ARM Ubuntu machines like the free server it
+# is meant for: the store's promises, the load test, the acceptance checklist on one node and on
+# three, real browsers, and the install script as deploy.sh runs it on a server. Construct's crates
+# and the kit's services are tested here too. The kit's own crates, which need no database, are
+# tested in kit.yml.
+
+on:
+  pull_request:
+    paths:
+      - "projects/spare-construct/server/**"
+      - "projects/spare-construct/app/**"
+      - "projects/spare-construct/crates/**"
+      - "projects/spare-construct/demo/index.html"
+      - "projects/kit/crates/kit-core/**"
+      - "projects/kit/crates/kit-ops/**"
+      - "projects/kit/crates/kit-store/**"
+      - "projects/kit/crates/kit-sync/**"
+      - "projects/kit/services/**"
+      - "Cargo.lock"
+      - "design/ribbon/**"
+      - ".github/workflows/construct-server.yml"
+
+permissions:
+  contents: read
+
+env:
+  # The workspace's pinned compiler (rust-toolchain.toml).
+  RUST_TOOLCHAIN: "1.99.0"
+
+jobs:
+  crates:
+    name: Construct's crates, native and for the browser
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8 # master, 2026-10-16
+        with:
+          toolchain: ${{ env.RUST_TOOLCHAIN }}
+          targets: wasm32-unknown-unknown
+          components: clippy
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
+      - name: Clippy
+        run: >-
+          cargo clippy --locked --no-deps -p construct-model -p construct-regen -p construct-shapes
+          -p construct-api --all-features --all-targets -- -D warnings
+      - name: Tests, with the shapes run on two generators
+        run: >-
+          cargo test --locked -p construct-model -p construct-regen -p construct-shapes
+          -p construct-api --all-features
+      - name: The browser's builds stay free of the store
+        run: >-
+          cargo check --locked --target wasm32-unknown-unknown -p construct-shapes -p construct-wasm
+
+  checklist:
+    name: The checklist on ARM Linux
+    runs-on: ubuntu-24.04-arm
+    timeout-minutes: 120
+    defaults:
+      run:
+        working-directory: projects/spare-construct/server
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8 # master, 2026-10-16
+        with:
+          toolchain: ${{ env.RUST_TOOLCHAIN }}
+          components: clippy, rustfmt
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
+        with:
+          workspaces: |
+            projects/spare-construct/server
+            projects/kit/services
+      - name: Clippy
+        run: |
+          cargo clippy --locked --all-targets -- -D warnings
+          cargo clippy --locked --manifest-path ../../kit/services/Cargo.toml --workspace --all-targets -- -D warnings
+      - name: Tests that need no database
+        run: |
+          cargo test --locked
+          cargo test --locked --manifest-path ../../kit/services/Cargo.toml --workspace
+      - name: Install TiKV, PD and RustFS
+        run: bash scripts/install-binaries.sh
+      # TiKV refuses to start below 123,880 open files, and a runner allows 65,536.
+      - name: On one node
+        run: |
+          sudo prlimit --pid $$ --nofile=1000000:1000000
+          bash scripts/run-checklist.sh
+      - name: On three nodes, by settings alone, with one killed mid-edit
+        env:
+          STACK_NODES: "3"
+          STACK_PD: 127.0.0.1:2379,127.0.0.1:2389,127.0.0.1:2399
+        run: |
+          sudo prlimit --pid $$ --nofile=1000000:1000000
+          bash scripts/run-checklist.sh
+      - name: In real browsers
+        run: |
+          sudo prlimit --pid $$ --nofile=1000000:1000000
+          bash scripts/run-browser-test.sh
+          cd tests/browser
+          npm ci
+          npx playwright-core install --with-deps chromium
+          BROWSER=bundled STACK_KILL='pkill -9 -x spare-server' \
+            STACK_START='bash ../../scripts/start-server.sh' node two_browsers.mjs
+
+  licences:
+    name: Every dependency's licence
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8 # master, 2026-10-16
+        with:
+          toolchain: ${{ env.RUST_TOOLCHAIN }}
+      - name: Install cargo-deny
+        run: cargo install cargo-deny --version 0.20.2 --locked
+      - name: Check the server's licences
+        working-directory: projects/spare-construct/server
+        run: cargo deny --locked check licenses
+      - name: Check the kit services' licences
+        working-directory: projects/kit/services
+        run: cargo deny --locked check licenses
+
+  install:
+    name: The install script on a fresh ARM server
+    runs-on: ubuntu-24.04-arm
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Lay out the server as deploy.sh does
+        run: |
+          sudo mkdir -p /opt/spare-stack/src /etc/spare-stack
+          git archive HEAD Cargo.toml rust-toolchain.toml projects/spare-construct/server \
+            projects/spare-construct/app projects/spare-construct/crates \
+            projects/spare-construct/demo/index.html projects/kit/crates projects/kit/services \
+            projects/engines/crates design/ribbon \
+            | sudo tar -x -C /opt/spare-stack/src
+          sudo tee /etc/spare-stack/owner.env <<'EOF'
+          STACK_PUBLIC_URL=http://localhost:8088
+          OIDC_CLIENT_ID=not-set-in-this-test
+          OIDC_CLIENT_SECRET=not-set-in-this-test
+          STACK_PEOPLE=anna=someone@example.test
+          EOF
+          sudo sed -i 's/^ *//' /etc/spare-stack/owner.env
+      - name: Install
+        run: sudo bash /opt/spare-stack/src/projects/spare-construct/server/deploy/install-on-server.sh
+      - name: Install again, as an update does
+        run: sudo bash /opt/spare-stack/src/projects/spare-construct/server/deploy/install-on-server.sh
+      - name: The web proxy reaches the server
+        run: curl -fsS http://localhost:8088/health
+      - name: The seeded logs and shapes check out
+        run: |
+          sudo systemd-run --wait --pipe --uid=spare \
+            --property=EnvironmentFile=/etc/spare-stack/stack.env \
+            /opt/spare-stack/bin/spare-server verify
+      - name: The daily backup runs
+        run: |
+          sudo systemctl start spare-backup.service
+          sudo systemctl is-enabled spare-backup.timer
+          sudo ls /opt/spare-stack/backups/
+      - name: Everything comes back after a restart of every service
+        run: |
+          sudo systemctl restart spare-pd spare-tikv spare-rustfs spare-server
+          for _ in $(seq 1 60); do curl -fs http://localhost:8088/health && break; sleep 2; done
+          curl -fsS http://localhost:8088/health
+      - name: Show the logs on failure
+        if: failure()
+        run: |
+          sudo journalctl -n 80 --no-pager -u spare-pd -u spare-tikv -u spare-rustfs -u spare-server -u caddy

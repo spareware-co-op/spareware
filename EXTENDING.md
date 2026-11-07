@@ -184,7 +184,7 @@ Every extension point has the same four answers: who can add one, where it lives
 
 | Program or area | Format | Status |
 | --- | --- | --- |
-| Spare Construct | A SQLite container with a published, versioned schema; IFC 4.3 and 2x3 for exchange | Lean, open decision |
+| Spare Construct | Rows and file storage with a published, versioned format, and one file built on export; IFC 4.3 and 2x3 for exchange | Decided (note K08) |
 | Spare Office | OpenDocument (ISO/IEC 26300); reads and writes Word, Excel and PowerPoint files | Lean |
 | Mail and calendar | IMAP, SMTP, JMAP, CalDAV, CardDAV | Planned |
 | Chat | Matrix | Research first (piece OF05) |
@@ -252,7 +252,7 @@ Every extension point has the same four answers: who can add one, where it lives
 - A self-host package (container images, guides, upgrade paths) lets a member group run its own servers (KIT-A22-F7-P1).
 - Member servers join, share and stay trusted through a method still being researched (KIT-A22-F7-P2).
 - An account and its history can move between the co-op's servers and a member's server, either way (KIT-A22-F7-P3).
-- Shared project spaces between firms let each firm's own server join directly, so firms can host anywhere (Spare Construct map).
+- Shared project spaces between firms sit in one co-op cloud: each firm's hub links to the project, and bridges cross between hubs only if both permit (Spare Construct note K08).
 - Social and chat use open protocols. Spare Social is weighing ActivityPub and the AT Protocol (piece M01). Spare Office weighs Matrix for chat (piece OF05).
 - The legal duties of a group that self-hosts (tax, anti-money-laundering, privacy, safety) are set out in an agreement each group signs (KIT-A22-F7-P4).
 - Domains, signing keys and developer accounts are held under two-person control, so no one person can lose or take them (KIT-A14-F18-P2, KIT-A22-F2-P3).
@@ -274,16 +274,16 @@ Every extension point has the same four answers: who can add one, where it lives
 
 **The promise.** Plainly:
 
-- The code licence will never be changed to a closed or subscription licence.
+- The code licence (Apache-2.0) will never be changed to a closed or subscription licence.
 - Contributors keep the copyright to their own work.
 - Contributors sign off with the [Developer Certificate of Origin](https://developercertificate.org/) only. There is no contributor licence agreement.
-- Because no one is given extra rights over other people's work, no one can relicense what the community builds. Not the steward, not an owner, not a company that later buys or hosts the project.
+- Because no one is given extra rights over other people's work, the project never moves to a closed, paid or subscription licence. Not the steward, not an owner, not a company that later buys or hosts the project.
 
-**The licence is decided (2026-10-19).** MPL-2.0 for the core ([LICENSE](LICENSE)) and Apache-2.0 for the SDK, examples and plugin templates ([LICENSE-APACHE](LICENSE-APACHE)). See the [README](README.md#licence) and the [K07 note](projects/kit/notes/K07-licence.md).
+**The licence is decided (2026-11-05).** Apache-2.0 for everything: the core, the SDK, examples and plugin templates ([LICENSE](LICENSE)). It replaced MPL-2.0 for the core so that code can move both ways between Spareware and the Apache-2.0 projects it ports from (32.45). See the [README](README.md#licence) and the [K07 note](projects/kit/notes/K07-licence.md).
 
 **What the DCO does.** A sign-off on each commit says the author wrote it, or has the right to pass it on, under the licence named in the file. It does not hand over copyright and does not give the project any licence beyond the open one. The [Linux kernel asks for the same sign-off](https://docs.kernel.org/process/submitting-patches.html), and its submission guide does not mention a copyright assignment. A contributor agreement usually adds extra rights for the project. That is exactly what we are choosing not to have.
 
-**What MPL-2.0 allows, so nobody is surprised.** It is copyleft per file. Changes to a covered file must be shared back. New files that hold none of our code can be kept closed, so a program may be built on top of an MPL library as part of a larger closed product ([MPL 2.0 FAQ](https://www.mozilla.org/en-US/MPL/2.0/FAQ/)). That is why the plugin API and SDK lean towards Apache-2.0, so anyone can build on them, free or paid. The promise is about Spareware's own code. Our code stays open. What others build on top is theirs.
+**What Apache-2.0 allows, so nobody is surprised.** It is permissive. Anyone may use, change and share the code, in open or closed products, as long as they keep the licence text and the NOTICE file and say what they changed. It also grants a patent licence from each contributor for their own contribution ([Apache License 2.0](https://www.apache.org/licenses/LICENSE-2.0)). So anyone can build on Spareware, free or paid. What others build on top is theirs.
 
 **Rules.**
 
@@ -374,5 +374,5 @@ Fetched or searched on 2026-10-19. Pages that were long were read in part, and a
 | Data and formats | [OpenStreetMap elements](https://wiki.openstreetmap.org/wiki/Elements), [API v0.6](https://wiki.openstreetmap.org/wiki/API_v0.6), [OpenDocument](https://en.wikipedia.org/wiki/OpenDocument), [SQLite long-term support](https://www.sqlite.org/lts.html), [file over app](https://stephango.com/file-over-app) |
 | Locale and language | [Unicode CLDR](https://cldr.unicode.org/), [Fluent](https://projectfluent.org/) |
 | Federation | [Matrix proposals](http://spec.matrix.org/proposals/), [Matrix room versions](https://spec.matrix.org/latest/rooms/), [ActivityPub](https://www.w3.org/TR/activitypub/) |
-| Licence and sign-off | [Developer Certificate of Origin](https://developercertificate.org/), [kernel submitting patches](https://docs.kernel.org/process/submitting-patches.html), [MPL 2.0 FAQ](https://www.mozilla.org/en-US/MPL/2.0/FAQ/) |
+| Licence and sign-off | [Developer Certificate of Origin](https://developercertificate.org/), [kernel submitting patches](https://docs.kernel.org/process/submitting-patches.html), [Apache License 2.0](https://www.apache.org/licenses/LICENSE-2.0) |
 | Review and repo | [GitHub CODEOWNERS](https://docs.github.com/en/repositories/managing-your-repositorys-settings-and-features/customizing-your-repository/about-code-owners), [Rust RFCs](https://github.com/rust-lang/rfcs/blob/master/README.md), [Linux MAINTAINERS](https://docs.kernel.org/process/maintainers.html), [OSM proposals](https://wiki.openstreetmap.org/wiki/Proposal_process), [git sparse-checkout](https://git-scm.com/docs/git-sparse-checkout), [Cargo dependencies](https://doc.rust-lang.org/cargo/reference/specifying-dependencies.html) |

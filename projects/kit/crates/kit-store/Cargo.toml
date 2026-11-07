@@ -3,6 +3,23 @@ name = "kit-store"
 version = "0.0.0"
 edition.workspace = true
 publish.workspace = true
+license.workspace = true
+
+[features]
+# An in-process store with injected faults, for tests. Nothing that ships turns this on.
+memory = []
 
 [dependencies]
 kit-core = { path = "../kit-core" }
+# serde and serde_json write the store's rows. MIT OR Apache-2.0.
+serde = { version = "1.0.229", features = ["derive"] }
+serde_json = "1.0.154"
+# The store's errors. MIT OR Apache-2.0.
+thiserror = "2.0.21"
+
+[dev-dependencies]
+# Fuzz harnesses, as the geometry kernel writes them: each runs as a property test here and under
+# libFuzzer with cargo-bolero. MIT.
+bolero = "0.13.7"
+kit-store = { path = ".", features = ["memory"] }
+tokio = { version = "1.54.1", features = ["macros", "rt"] }
