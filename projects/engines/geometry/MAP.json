@@ -1508,6 +1508,30 @@
           "target": "lib"
         },
         {
+          "cost": "a few dozen interval operations per check; no loop. Recursion: none.",
+          "does": "[`carrier`] turns a face's surface into its closed form ([`Carrier`]), and each check bounds a distance from above and compares it with the body's bound b. With w = p − c, h = w · n̂ (height along the axis) and ρ = |w × n̂| (distance from it), the distance of a point from each kind is:",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-check/src/curved.rs",
+          "guarantees": [
+            "**Upper bounds, certified.** Every distance is bounded from above in interval arithmetic that stays exact where the doubles are (`geom_curve::tight`), on the exact unit vectors' enclosures (`geom_curve::Frame::unit_vectors`) and certified sines and cosines of half-turns (`geom_num::Interval::{sinpi, cospi}`).",
+            "**Exact on exact data.** A grid point on a plane given by doubles, a cylinder, a sphere or a torus whose data are small integers on an axis-aligned frame is measured exactly, so a vertex exactly at the bound passes and one a step beyond fails. A circle's points come from `sinpi` and `cospi`, which widen by a step even where exact: its checks hold to that step.",
+            "**Fails closed.** A value that cannot be enclosed, a cone point whose radius may be negative, a torus that is not a ring, a surface kind without a closed form here: not certified, never passed.",
+            "**Nothing allocates; nothing is sampled.**"
+          ],
+          "job": "Certified bounds for group 2 on every carrier it measures against: how far a grid point, a line segment or a circle can lie from a plane, cylinder, cone, sphere or ring torus, and how far a grid point lies from a circle's end. Never sampled.",
+          "method": {
+            "links": [
+              "https://doi.org/10.1137/1.9780898717716",
+              "projects/engines/geometry/architecture/08-topology.md"
+            ],
+            "text": "the closed forms of the elementary surfaces of ISO 10303-42 as `geom_surface::analytic` parametrises them, the Lipschitz bound of the distance function, and interval arithmetic (R. E. Moore, R. B. Kearfott and M. J. Cloud, *Introduction to Interval Analysis*, SIAM 2009, <https://doi.org/10.1137/1.9780898717716>), for chapter 8.3's group 2 (`projects/engines/geometry/architecture/08-topology.md`)."
+          },
+          "path": "geom_check::curved",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
           "cost": "linear in the body's faces, edges and fins; no allocation.",
           "does": "a body recorded [`Exactness::Exact`] must be one its geometry can make exact. Chapter 9 makes a B-rep exact for flat faces and certified for curved ones, so every face of an exact body lies on a plane, every edge on a line, and every pcurve it holds is a line; any other kind of carrier is a fault at the entity that uses it. A body recorded [`Exactness::Certified`] or [`Exactness::Approximate`] may use any carrier: its stated bound is judged against the geometry by group 2, which certifies every vertex and edge against its carriers at that bound (11.12), and the record's own arithmetic, the least exact class of the inputs with their bounds added, is `geom_num::Exactness`'s, proven there.",
           "family": [],
@@ -1526,6 +1550,31 @@
             "text": "chapter 9's exactness classes and the kinds that keep a B-rep exact (`projects/engines/geometry/architecture/09-representations.md`), checked as chapter 8.3's fourth group (`projects/engines/geometry/architecture/08-topology.md`)."
           },
           "path": "geom_check::exactness",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
+          "cost": "linear in faces, fins and edges, one meter unit each; constant work per row; nothing allocated. Recursion: none.",
+          "does": "[`check`] walks the faces, fins and edges in row order. A face's surface is a plane, cylinder, cone, sphere or ring torus (`crate::curved::Carrier`); any other kind is reported as [`FaultKind::Unchecked`], never passed (8.3: \"certified with bounds, not sampled\"). For each fin, the vertex it starts at must lie on its face's surface, and its edge's line or circle on that surface; for each edge, its vertices must lie at its line's or circle's ends. An edge on another kind of curve, and a fin's pcurve, are reported unchecked.",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-check/src/geometric.rs",
+          "guarantees": [
+            "**Exact on flat faces.** A plane given by integer-valued doubles (its origin and two spanning vectors within ±(2^40 − 1)) becomes the integer plane through three grid points, and a vertex passes exactly when (n · p + d)^2 ≤ b^2 · |n|^2, compared in 320-bit integers; for b = 0 that is the orient test, n · p + d = 0. A plane not given by integers is unchecked in a body recorded Exact, and measured in certified intervals otherwise.",
+            "**Certified on lines and curved carriers.** Every other distance is a certified upper bound (`crate::curved`, and a line's end points enclosed with `geom_curve::tight`, exact where the doubles are), so a vertex exactly on the bound passes where the data are exact and one a step beyond fails.",
+            "**Fails closed.** Every comparison whose operands cannot be formed (a value out of its range, an overflow, a cone past its apex) is a fault, never a pass.",
+            "**No sampling, nothing allocated.** Each check is an exact predicate or one interval evaluation of a closed form."
+          ],
+          "job": "Group 2 of chapter 8.3, geometric consistency: every vertex lies on its faces' surfaces and at its edges' curve ends, and every edge on its faces, within the bound the body is recorded with.",
+          "method": {
+            "links": [
+              "projects/engines/geometry/architecture/08-topology.md",
+              "https://doi.org/10.1111/j.1467-8659.2009.01609.x",
+              "https://doi.org/10.1137/1.9780898717716"
+            ],
+            "text": "chapter 8.3's group 2 and its certified-bounds rule (`projects/engines/geometry/architecture/08-topology.md`), on the exact integer plane of 6.3 (`geom_num::plane`, after Campen and Kobbelt 2010, <https://doi.org/10.1111/j.1467-8659.2009.01609.x>) and interval enclosures that stay exact where the doubles are (R. E. Moore, R. B. Kearfott and M. J. Cloud, *Introduction to Interval Analysis*, SIAM 2009, <https://doi.org/10.1137/1.9780898717716>)."
+          },
+          "path": "geom_check::geometric",
           "provenance": [],
           "spdx": null,
           "target": "lib"
@@ -1578,6 +1627,31 @@
           "target": "lib"
         },
         {
+          "cost": "one meter unit per face, per pair of a face's edges, per pair of faces and per edge tested against a face; quadratic in a face's edges and in the faces, as primitives have few. Nothing allocated. Recursion: none.",
+          "does": "[`check`] runs on a body groups 1 and 2 passed, so every face lies on a plane, cylinder, cone, sphere or ring torus and every edge is a line or a circle on its faces.",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-check/src/self_intersection.rs",
+          "guarantees": [
+            "**Exact on segments and polygons.** Their tests are integer predicates on the grid vertices (`geom_num::predicate::orient3d`, and 2D orientations in `i128`, checked).",
+            "**Certified elsewhere, and fails closed.** A pair no exact or certified test separates is a [`FaultKind::PairUnchecked`] fault, never a pass (8.3: \"certified with bounds, not sampled\").",
+            "**A segment is its vertices.** A line edge is tested as the segment between its vertices, which group 2 has certified within the body's bound of the line's ends.",
+            "**Nothing allocated.** Every list is walked again where it is needed."
+          ],
+          "job": "Group 3 of chapter 8.3, self-intersection, for primitive bodies: no face crosses itself, and no two faces cross except along shared edges.",
+          "method": {
+            "links": [
+              "projects/engines/geometry/architecture/08-topology.md",
+              "https://doi.org/10.1007/PL00009321",
+              "https://doi.org/10.1017/CBO9780511804120"
+            ],
+            "text": "chapter 8.3's group 3 (`projects/engines/geometry/architecture/08-topology.md`), on J. R. Shewchuk's exact orientation predicates (\"Adaptive precision floating-point arithmetic and fast robust geometric predicates\", Discrete & Computational Geometry 18 (1997), <https://doi.org/10.1007/PL00009321>) and the segment and convex-polygon tests built on them (J. O'Rourke, *Computational Geometry in C*, 2nd ed., Cambridge University Press 1998, <https://doi.org/10.1017/CBO9780511804120>)."
+          },
+          "path": "geom_check::self_intersection",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
           "cost": "constant time per charge and per fault; [`Sink::new`] reserves [`MAX_FAULTS`] faults.",
           "does": "[`Sink`] holds the faults of one check and the caller's [`WorkMeter`]. It reserves room for [`MAX_FAULTS`] faults before the check starts, as Parasolid's body check takes a largest number of faults to return, so recording a fault never allocates; a fault past the cap is counted, not kept. Each check charges one work unit per row it visits ([`Sink::charge`]), so a check of a huge body can be stopped by the caller's budget or cancellation like any operation (23.10). The checks' scratch space is reserved once, by [`crate::check`], so a refused allocation stops the check through the meter instead of aborting ([`Sink::out_of_memory`]).",
           "family": [],
@@ -1604,7 +1678,7 @@
       "provenance": [],
       "sections": "8.3, 10.2, 16.1, 18.10, 19.2, 22, 24.7 and 28.4, in the kernel architecture (`projects/engines/geometry/architecture/`).",
       "spdx": null,
-      "status": "the framework and groups 1 and 4 (G84) built; geometric consistency and self-intersection to come in G85, G102, G134, G177 and G322.",
+      "status": "the framework and groups 1 and 4 (G84) and groups 2 and 3 for primitive bodies (G85) built. Group 3 tests primitives with its own exact predicates and closed forms, as `geom-intersect` is not built yet; plane-based bodies, pcurves and general surfaces come in G102, G134, G177 and G322.",
       "summary": "Spare Kit geometry kernel: the validity checker."
     },
     {

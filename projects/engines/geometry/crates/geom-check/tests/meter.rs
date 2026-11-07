@@ -68,6 +68,12 @@ fn a_cheap_check_costs_no_more_than_a_full_one() {
     check(&body, Exactness::Exact, Level::Full, &mut full).unwrap();
     let mut cheap = meter();
     check(&body, Exactness::Exact, Level::Cheap, &mut cheap).unwrap();
-    // Groups 2 and 3 are not built, so the two levels do the same work today.
-    assert_eq!(cheap.used(), full.used());
+    // The full level adds group 2's rows to the cheap groups' (group 3 is not built yet).
+    let work = |m: &geom_run::WorkMeter<'_>| m.used().get(geom_run::BudgetKind::Work);
+    assert!(
+        work(&cheap) < work(&full),
+        "{:?} {:?}",
+        cheap.used(),
+        full.used()
+    );
 }

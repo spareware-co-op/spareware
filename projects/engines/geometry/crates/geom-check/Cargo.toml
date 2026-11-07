@@ -11,6 +11,8 @@ geom-run = { path = "../geom-run", default-features = false }
 # Exactly this crate's row of chapter 27's crate table, checked by the scaffold test
 # in engine-geometry (tests/scaffold).
 
+# Certified enclosures (`tight`) and curve domains for group 2 (G85; chapter 27's row, amended).
+geom-curve = { path = "../geom-curve" }
 geom-intersect = { path = "../geom-intersect" }
 geom-num = { path = "../geom-num" }
 geom-op = { path = "../geom-op" }
@@ -24,7 +26,6 @@ full = []
 
 [dev-dependencies]
 # Bodies for the tests: their geometry kinds and face boxes.
-geom-curve = { path = "../geom-curve" }
 geom-math = { path = "../geom-math" }
 geom-surface = { path = "../geom-surface" }
 # An allocator that refuses allocations past a limit, so the tests reach every refused
