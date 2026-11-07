@@ -62,7 +62,7 @@ impl ItemId {
 }
 
 /// Why a sketch or one of its items could not be made.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq)]
 pub enum SketchError {
     /// Two items have this id.
     Duplicate(ItemId),
@@ -82,6 +82,17 @@ pub enum SketchError {
     RootChoiceUndetermined(ItemId),
     /// The start is on this constraint's singular set.
     Degenerate(ItemId),
+    /// A block would not converge: this is its worst rule.
+    Unsolved(ItemId),
+    /// A path could not be followed past this rule, this share of the way along it.
+    BranchLost {
+        /// The rule.
+        constraint: ItemId,
+        /// How far along, from 0 to 1.
+        along: f64,
+    },
+    /// A path's two ends are not one sketch with new values.
+    NotTheSameSketch,
     /// Text that is not `sketch v1`, at this line, from 1.
     Text {
         /// The line.
@@ -136,6 +147,9 @@ impl core::fmt::Display for SketchError {
             SketchError::NotADimension(_) => "only a dimension can be a reference",
             SketchError::RootChoiceUndetermined(_) => "the drawing does not decide the root",
             SketchError::Degenerate(_) => "the start is on a singular set",
+            SketchError::Unsolved(_) => "a block would not converge",
+            SketchError::BranchLost { .. } => "the path could not be followed",
+            SketchError::NotTheSameSketch => "a path's two ends are not one sketch",
             SketchError::Text { .. } => "text that is not sketch v1",
             SketchError::Plane(_) => "the plane's frame is refused",
             SketchError::Numeric(_) => "the arithmetic refused",
@@ -203,6 +217,24 @@ pub enum EntityKind {
         axis: [f64; 2],
         /// The minor radius.
         minor: f64,
+    },
+    /// An elliptical arc: an ellipse's variables, and its two ends, each a point and a parameter on
+    /// the arc, which the arc keeps together (piece G219; chapter 15.2).
+    EllipticalArc {
+        /// Its centre, a point.
+        centre: ItemId,
+        /// The major-axis vector.
+        axis: [f64; 2],
+        /// The minor radius.
+        minor: f64,
+        /// Its start, a point.
+        start: ItemId,
+        /// Its end, a point.
+        end: ItemId,
+        /// The parameter of its start, on the arc; it may come after the arc.
+        from: ItemId,
+        /// The parameter of its end, on the arc; it may come after the arc.
+        to: ItemId,
     },
     /// A spline: its control points are points; degree, knots and weights stay fixed in a solve.
     Spline {
@@ -543,6 +575,73 @@ pub enum ConstraintKind {
         /// The shared point.
         point: ItemId,
     },
+    /// A point is on an ellipse (piece G219).
+    OnEllipse {
+        /// The point.
+        point: ItemId,
+        /// The ellipse.
+        ellipse: ItemId,
+    },
+    /// A point is where a parameter on an ellipse puts it: c + cos πt · a + sin πt · (b / |a|) · a⊥,
+    /// for the ellipse's centre c, major-axis vector a and minor radius b (piece G219).
+    AtParameter {
+        /// The point.
+        point: ItemId,
+        /// The parameter, on an ellipse.
+        parameter: ItemId,
+    },
+    /// A point is `distance` from an ellipse, along the ellipse's normal at a parameter, its foot
+    /// (piece G219). Which foot, of an ellipse's up to four, is the parameter's start: the stored root
+    /// choice of section 15.3.
+    FromEllipse {
+        /// The point.
+        point: ItemId,
+        /// The foot, a parameter on the ellipse.
+        parameter: ItemId,
+        /// The distance, above zero.
+        distance: Amount,
+    },
+    /// An elliptical arc's length, from its start's parameter to its end's (piece G219).
+    EllipticalArcLength {
+        /// The elliptical arc.
+        arc: ItemId,
+        /// The length, above zero.
+        length: Amount,
+    },
+    /// An ellipse's major radius, the length of its major-axis vector (piece G219).
+    MajorRadius {
+        /// The ellipse.
+        ellipse: ItemId,
+        /// The radius, above zero.
+        radius: Amount,
+    },
+    /// An ellipse's minor radius (piece G219).
+    MinorRadius {
+        /// The ellipse.
+        ellipse: ItemId,
+        /// The radius, above zero.
+        radius: Amount,
+    },
+    /// A line touches an ellipse, on a stored side of the line (piece G219).
+    TangentEllipse {
+        /// The line.
+        line: ItemId,
+        /// The ellipse.
+        ellipse: ItemId,
+        /// The side of the line the ellipse's centre is on.
+        side: Side,
+    },
+    /// Two curves (each a line, a circle or arc, or an ellipse or elliptical arc) are tangent at a
+    /// point on both, which other rules put there (piece G219). Tangency anywhere is this at a
+    /// construction point.
+    TangentAtPoint {
+        /// The first curve.
+        a: ItemId,
+        /// The second curve.
+        b: ItemId,
+        /// The point they touch at.
+        point: ItemId,
+    },
     /// Two points are mirror images in a line.
     Symmetric {
         /// The first.
@@ -642,6 +741,10 @@ impl ConstraintKind {
                 | ConstraintKind::Heading { .. }
                 | ConstraintKind::Sweep { .. }
                 | ConstraintKind::ArcLength { .. }
+                | ConstraintKind::MajorRadius { .. }
+                | ConstraintKind::MinorRadius { .. }
+                | ConstraintKind::FromEllipse { .. }
+                | ConstraintKind::EllipticalArcLength { .. }
         )
     }
 
@@ -803,7 +906,8 @@ impl EntityKind {
             EntityKind::Circle { radius, .. } | EntityKind::Arc { radius, .. } => {
                 push(out, (*radius, 1.0))
             }
-            EntityKind::Ellipse { axis, minor, .. } => {
+            EntityKind::Ellipse { axis, minor, .. }
+            | EntityKind::EllipticalArc { axis, minor, .. } => {
                 push(out, (axis[0], 1.0))?;
                 push(out, (axis[1], 1.0))?;
                 push(out, (*minor, 1.0))
@@ -858,6 +962,23 @@ impl EntityKind {
                 finite(axis[1])?;
                 positive(*minor)?;
                 point(*centre)
+            }
+            // Its parameters name it as their curve, so they come after it: the assembly reads them
+            // when it lays out the rules of its ends.
+            EntityKind::EllipticalArc {
+                centre,
+                axis,
+                minor,
+                start,
+                end,
+                ..
+            } => {
+                finite(axis[0])?;
+                finite(axis[1])?;
+                positive(*minor)?;
+                point(*centre)?;
+                point(*start)?;
+                point(*end)
             }
             EntityKind::Spline {
                 points,
@@ -983,6 +1104,57 @@ impl Sketch {
     pub fn radius(&self, id: ItemId) -> Result<f64, SketchError> {
         match self.entity(id)?.kind {
             EntityKind::Circle { radius, .. } | EntityKind::Arc { radius, .. } => Ok(radius),
+            _ => Err(SketchError::WrongKind(id)),
+        }
+    }
+
+    /// The ellipse or elliptical arc `id`'s centre, major-axis vector and minor radius.
+    ///
+    /// # Errors
+    ///
+    /// [`SketchError::Unknown`]; [`SketchError::WrongKind`] if it is neither.
+    pub fn ellipse(&self, id: ItemId) -> Result<(ItemId, [f64; 2], f64), SketchError> {
+        match self.entity(id)?.kind {
+            EntityKind::Ellipse {
+                centre,
+                axis,
+                minor,
+            }
+            | EntityKind::EllipticalArc {
+                centre,
+                axis,
+                minor,
+                ..
+            } => Ok((centre, axis, minor)),
+            _ => Err(SketchError::WrongKind(id)),
+        }
+    }
+
+    /// The elliptical arc `id`'s parameters, of its start and of its end.
+    ///
+    /// # Errors
+    ///
+    /// [`SketchError::Unknown`]; [`SketchError::WrongKind`] if it is not an elliptical arc.
+    pub fn elliptical_arc(&self, id: ItemId) -> Result<[ItemId; 2], SketchError> {
+        match self.entity(id)?.kind {
+            EntityKind::EllipticalArc { from, to, .. } => Ok([from, to]),
+            _ => Err(SketchError::WrongKind(id)),
+        }
+    }
+
+    /// The ellipse the parameter `id` is on.
+    ///
+    /// # Errors
+    ///
+    /// [`SketchError::Unknown`]; [`SketchError::WrongKind`] if it is not a parameter, or its curve
+    /// is not an ellipse.
+    pub fn parameter_ellipse(&self, id: ItemId) -> Result<ItemId, SketchError> {
+        match self.entity(id)?.kind {
+            EntityKind::Parameter { curve, .. } => {
+                self.ellipse(curve)
+                    .map_err(|_| SketchError::WrongKind(id))?;
+                Ok(curve)
+            }
             _ => Err(SketchError::WrongKind(id)),
         }
     }
@@ -1180,6 +1352,55 @@ impl Sketch {
                 line(l)?;
                 round(circle)
             }
+            ConstraintKind::OnEllipse { point: p, ellipse } => {
+                point(p)?;
+                self.ellipse(ellipse).map(|_| ())
+            }
+            ConstraintKind::AtParameter {
+                point: p,
+                parameter,
+            } => {
+                point(p)?;
+                self.parameter_ellipse(parameter).map(|_| ())
+            }
+            ConstraintKind::FromEllipse {
+                point: p,
+                parameter,
+                distance,
+            } => {
+                self.check_amount(distance, true)?;
+                point(p)?;
+                self.parameter_ellipse(parameter).map(|_| ())
+            }
+            ConstraintKind::EllipticalArcLength { arc, length } => {
+                self.check_amount(length, true)?;
+                self.elliptical_arc(arc).map(|_| ())
+            }
+            ConstraintKind::MajorRadius { ellipse, radius }
+            | ConstraintKind::MinorRadius { ellipse, radius } => {
+                self.check_amount(radius, true)?;
+                self.ellipse(ellipse).map(|_| ())
+            }
+            ConstraintKind::TangentEllipse {
+                line: l, ellipse, ..
+            } => {
+                line(l)?;
+                self.ellipse(ellipse).map(|_| ())
+            }
+            ConstraintKind::TangentAtPoint { a, b, point: p } => {
+                point(p)?;
+                for curve in [a, b] {
+                    match self.entity(curve)?.kind {
+                        EntityKind::Line { .. }
+                        | EntityKind::Circle { .. }
+                        | EntityKind::Arc { .. }
+                        | EntityKind::Ellipse { .. }
+                        | EntityKind::EllipticalArc { .. } => {}
+                        _ => return Err(SketchError::WrongKind(curve)),
+                    }
+                }
+                Ok(())
+            }
             ConstraintKind::TangentAtEnd {
                 line: l,
                 arc: a,
@@ -1323,6 +1544,52 @@ impl Sketch {
             Ordering::Less => Ok(false),
             Ordering::Equal => Err(undecided),
         }
+    }
+
+    /// This sketch with `values`, one for each of [`Sketch::variables`], in that order.
+    ///
+    /// # Errors
+    ///
+    /// [`SketchError::Internal`] for too few; what [`Sketch::add_entity`] refuses of a value, such as
+    /// a radius that is no longer positive.
+    pub fn with_values(&self, values: &[f64]) -> Result<Sketch, SketchError> {
+        let mut sketch = self.clone();
+        let mut next = values.iter().copied();
+        let mut take = |held: &mut f64| -> Result<(), SketchError> {
+            *held = next.next().ok_or(SketchError::Internal)?;
+            Ok(())
+        };
+        for entity in &mut sketch.entities {
+            match &mut entity.kind {
+                EntityKind::Point { x, y } => {
+                    take(x)?;
+                    take(y)?;
+                }
+                EntityKind::Circle { radius, .. } | EntityKind::Arc { radius, .. } => take(radius)?,
+                EntityKind::Ellipse { axis, minor, .. }
+                | EntityKind::EllipticalArc { axis, minor, .. } => {
+                    let [first, second] = axis;
+                    take(first)?;
+                    take(second)?;
+                    take(minor)?;
+                }
+                EntityKind::Parameter { t, .. } => take(t)?,
+                EntityKind::Scalar { value, .. } => take(value)?,
+                EntityKind::Placement { offset, turn, .. } => {
+                    let [first, second] = offset;
+                    take(first)?;
+                    take(second)?;
+                    take(turn)?;
+                }
+                EntityKind::Line { .. }
+                | EntityKind::Spline { .. }
+                | EntityKind::Reference { .. } => {}
+            }
+        }
+        for entity in &sketch.entities {
+            entity.kind.check(&sketch)?;
+        }
+        Ok(sketch)
     }
 
     /// Every variable, in authoring order of its entity and slot order within it.

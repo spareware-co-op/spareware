@@ -109,6 +109,32 @@ fn put_kind(out: &mut String, tag: &str, ids: &[ItemId]) -> Result<(), SketchErr
     Ok(())
 }
 
+/// An elliptical arc's words: its tag, centre, axis and minor radius, then its start, end and their
+/// parameters; nothing for any other kind.
+fn write_elliptical_arc(out: &mut String, kind: &EntityKind) -> Result<(), SketchError> {
+    let EntityKind::EllipticalArc {
+        centre,
+        axis,
+        minor,
+        start,
+        end,
+        from,
+        to,
+    } = kind
+    else {
+        return Ok(());
+    };
+    out.push_str(" elliptical-arc");
+    put_id(out, *centre)?;
+    put(out, axis[0])?;
+    put(out, axis[1])?;
+    put(out, minor)?;
+    for id in [start, end, from, to] {
+        put_id(out, *id)?;
+    }
+    Ok(())
+}
+
 fn write_entity(out: &mut String, entity: &Entity) -> Result<(), SketchError> {
     out.push_str("entity");
     put_id(out, entity.id)?;
@@ -155,6 +181,7 @@ fn write_entity(out: &mut String, entity: &Entity) -> Result<(), SketchError> {
             put(out, axis[1])?;
             put(out, minor)?;
         }
+        arc @ EntityKind::EllipticalArc { .. } => write_elliptical_arc(out, arc)?,
         EntityKind::Spline {
             degree,
             points,
@@ -308,6 +335,43 @@ fn write_constraint(out: &mut String, constraint: &Constraint) -> Result<(), Ske
         }
         ConstraintKind::TangentLine { line, circle, side } => {
             put_kind(out, "tangent-line", &[line, circle])?;
+            put(out, side_name(side))?;
+        }
+        ConstraintKind::OnEllipse { point, ellipse } => {
+            put_kind(out, "on-ellipse", &[point, ellipse])?;
+        }
+        ConstraintKind::TangentAtPoint { a, b, point } => {
+            put_kind(out, "tangent-at-point", &[a, b, point])?;
+        }
+        ConstraintKind::AtParameter { point, parameter } => {
+            put_kind(out, "at-parameter", &[point, parameter])?;
+        }
+        ConstraintKind::FromEllipse {
+            point,
+            parameter,
+            distance,
+        } => {
+            put_kind(out, "point-ellipse", &[point, parameter])?;
+            put_amount(out, distance)?;
+        }
+        ConstraintKind::EllipticalArcLength { arc, length } => {
+            put_kind(out, "elliptical-arc-length", &[arc])?;
+            put_amount(out, length)?;
+        }
+        ConstraintKind::MajorRadius { ellipse, radius } => {
+            put_kind(out, "major-radius", &[ellipse])?;
+            put_amount(out, radius)?;
+        }
+        ConstraintKind::MinorRadius { ellipse, radius } => {
+            put_kind(out, "minor-radius", &[ellipse])?;
+            put_amount(out, radius)?;
+        }
+        ConstraintKind::TangentEllipse {
+            line,
+            ellipse,
+            side,
+        } => {
+            put_kind(out, "tangent-ellipse", &[line, ellipse])?;
             put(out, side_name(side))?;
         }
         ConstraintKind::TangentCircles { a, b, outside } => {
@@ -565,6 +629,15 @@ fn read_entity(words: &mut Words<'_>) -> Result<Entity, SketchError> {
             axis: [words.real()?, words.real()?],
             minor: words.real()?,
         },
+        "elliptical-arc" => EntityKind::EllipticalArc {
+            centre: words.id()?,
+            axis: [words.real()?, words.real()?],
+            minor: words.real()?,
+            start: words.id()?,
+            end: words.id()?,
+            from: words.id()?,
+            to: words.id()?,
+        },
         "spline" => EntityKind::Spline {
             degree: words.whole()?,
             points: read_list(words, Words::id)?,
@@ -727,6 +800,41 @@ fn read_constraint(words: &mut Words<'_>) -> Result<Constraint, SketchError> {
         "tangent-line" => ConstraintKind::TangentLine {
             line: words.id()?,
             circle: words.id()?,
+            side: words.side()?,
+        },
+        "tangent-at-point" => ConstraintKind::TangentAtPoint {
+            a: words.id()?,
+            b: words.id()?,
+            point: words.id()?,
+        },
+        "on-ellipse" => ConstraintKind::OnEllipse {
+            point: words.id()?,
+            ellipse: words.id()?,
+        },
+        "at-parameter" => ConstraintKind::AtParameter {
+            point: words.id()?,
+            parameter: words.id()?,
+        },
+        "point-ellipse" => ConstraintKind::FromEllipse {
+            point: words.id()?,
+            parameter: words.id()?,
+            distance: words.amount()?,
+        },
+        "elliptical-arc-length" => ConstraintKind::EllipticalArcLength {
+            arc: words.id()?,
+            length: words.amount()?,
+        },
+        "major-radius" => ConstraintKind::MajorRadius {
+            ellipse: words.id()?,
+            radius: words.amount()?,
+        },
+        "minor-radius" => ConstraintKind::MinorRadius {
+            ellipse: words.id()?,
+            radius: words.amount()?,
+        },
+        "tangent-ellipse" => ConstraintKind::TangentEllipse {
+            line: words.id()?,
+            ellipse: words.id()?,
             side: words.side()?,
         },
         "tangent-circles" => ConstraintKind::TangentCircles {
