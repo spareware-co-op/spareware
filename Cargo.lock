@@ -788,6 +788,7 @@ dependencies = [
  "geom-curve",
  "geom-linalg",
  "geom-math",
+ "geom-mesh",
  "geom-num",
  "geom-nurbs",
  "geom-run",
@@ -1020,6 +1021,7 @@ dependencies = [
  "geom-gen",
  "geom-linalg",
  "geom-math",
+ "geom-mesh",
  "geom-num",
  "geom-nurbs",
  "geom-run",
@@ -1158,7 +1160,9 @@ dependencies = [
  "geom-poly",
  "geom-run",
  "geom-surface",
+ "geom-test",
  "geom-topo",
+ "proptest",
 ]
 
 [[package]]

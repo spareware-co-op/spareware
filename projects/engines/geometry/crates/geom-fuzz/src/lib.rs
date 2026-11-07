@@ -4,7 +4,8 @@
 //! section 28.5): every operation, every reader and the operation-sequence generator get a fuzz
 //! target here. Fuzzing feeds a program huge numbers of machine-made inputs, steered towards code
 //! not yet reached, and watches for anything wrong: a panic, a broken law, an invalid result, a
-//! changed input. It has four targets so far: [`predicates`] (G11), `geom-num`'s exact
+//! changed input. It has these targets: [`cdt`] (G153), `geom-mesh`'s triangulation is a true constrained
+//! Delaunay triangulation and one answer in any input order; [`predicates`] (G11), `geom-num`'s exact
 //! predicates never panic and swapping two points flips their sign, on arbitrary grid points;
 //! [`orient2d`] (G14), orient2d, its exact path and its `f64` filter agree with the exact
 //! determinant of orient2d's definition, computed from scratch, which is also proven by Kani on a
@@ -119,6 +120,7 @@
 //! - `bolero` 0.13.7, a development dependency only: the `check!` front end, with its test-mode
 //!   engine and, under cargo-bolero, the engine chosen (`bolero-libfuzzer`, `bolero-afl`,
 //!   `bolero-honggfuzz` or `bolero-kani`).
+//! - `geom-mesh` and `geom-run` (Apache-2.0, ours), the triangulation under test and its meter.
 //! - `geom-gen` (Apache-2.0, ours, development only), whose description parser the [`variants`]
 //!   target reads the predicates with.
 //! - `dashu-ratio` 0.6.1 (MIT OR Apache-2.0), without its default features: the exact rationals
@@ -168,6 +170,7 @@
 use core::fmt;
 
 pub mod boxtree;
+pub mod cdt;
 pub mod curves;
 pub mod linalg;
 pub mod maths;

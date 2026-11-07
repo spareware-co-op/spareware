@@ -1246,11 +1246,6 @@ mod repository {
         ),
         ("geom-landxml", "G437"),
         ("geom-make", "G101"),
-        (
-            "geom-mesh",
-            "G146 G147 G148 G149 G150 G151 G152 G153 G288 G289 G290 G291 G298 G299 G300 G301 \
-             G302 G303 G304 G305 G306 G319 G341 G350 G411",
-        ),
         ("geom-meshio", "G354 G434 G435"),
         ("geom-name", "G87 G89 G90 G109 G374"),
         ("geom-offset", "G270 G275 G276 G277 G278 G279"),
