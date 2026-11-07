@@ -16,7 +16,7 @@
 //! untouched: two spheres, a sphere and a torus, two tori, and a cube against a rotated cube, each
 //! of about 1,000, 10,000 and 100,000 faces a side, made by a fixed generator (no random numbers).
 //! Thingi10K's own models cannot be read yet (the readers are not built), so this is the stand-in
-//! for EMBER's 1.6 ms; `shapes` takes the same filter text, such as `shapes sphere`.
+//! for EMBER's 1.6 ms; `shapes` takes the same filter text, such as `shapes sphere`, and `small` after it for radius 2^13 steps, where every plane's coefficients fit machine words (otherwise 2^24).
 //!
 //! Arguments: a side (23, 71 or 224; all three by default), then text a run's line must hold to
 //! run, such as "in a strip, as solids, 1 thread". Each timed run is the call `timed`, so a
@@ -339,8 +339,9 @@ fn cube(k: u32, half: i64, center: [i64; 3], turned: bool, name: u8) -> Polygons
 
 /// The pairs of the `shapes` mode at a size class (0, 1 or 2: about 1,000, 10,000 and 100,000
 /// faces a side).
-fn shape_pair(kind: &str, size: usize) -> (Polygons, Polygons) {
-    let s = 1_i64 << 24;
+fn shape_pair(kind: &str, size: usize, small: bool) -> (Polygons, Polygons) {
+    // Radius 2^24 grid steps, or 2^13 where every plane's coefficients fit machine words.
+    let s = 1_i64 << if small { 13 } else { 24 };
     let sf = s as f64;
     // Rings and points round a sphere, rings and points round a torus, and k of a cube.
     let round = [(17, 32), (51, 100), (159, 316)][size];
@@ -365,7 +366,7 @@ fn shape_pair(kind: &str, size: usize) -> (Polygons, Polygons) {
 
 /// The `shapes` mode: each pair at each size, as built (the models are closed), on 1 and 8
 /// threads, with the soup alone and the whole boolean.
-fn shapes(rayon: &Rayon, step: &OpPath, only: &str) {
+fn shapes(rayon: &Rayon, step: &OpPath, only: &str, small: bool) {
     for kind in [
         "two spheres",
         "a sphere and a torus",
@@ -373,11 +374,11 @@ fn shapes(rayon: &Rayon, step: &OpPath, only: &str) {
         "a cube and a turned cube",
     ] {
         for size in 0..3 {
-            let label = format!("{kind}, size class {size}");
+            let label = format!("{kind}, size class {size}{}", if small { ", small" } else { "" });
             if !only.is_empty() && !label.contains(only) && !only.contains(kind) {
                 continue;
             }
-            let (pa, pb) = shape_pair(kind, size);
+            let (pa, pb) = shape_pair(kind, size, small);
             let setup = Exec::with_pool(rayon);
             let (a, b) = (mesh(&pa, &setup), mesh(&pb, &setup));
             for (name, exec) in [
@@ -404,7 +405,8 @@ fn main() {
     let rayon = Rayon::new(NonZeroUsize::new(8).unwrap()).unwrap();
     let step = OpPath::new(OpId::from_bytes([7; 16]));
     if std::env::args().nth(1).as_deref() == Some("shapes") {
-        shapes(&rayon, &step, &std::env::args().nth(2).unwrap_or_default());
+        let filter = std::env::args().nth(2).unwrap_or_default();
+        shapes(&rayon, &step, &filter, std::env::args().nth(3).as_deref() == Some("small"));
         return;
     }
     let sides: Vec<u32> = match std::env::args().nth(1).and_then(|a| a.parse().ok()) {
