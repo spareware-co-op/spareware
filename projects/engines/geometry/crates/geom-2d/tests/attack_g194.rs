@@ -35,11 +35,13 @@
 use geom_2d::carrier::{Circle2, Line2};
 use geom_2d::entity::{
     Array, Attach, Attr, Becomes, BlockDef, BlockIx, DimKind, Dimension, Ends, Entity, EntityError,
-    EntityIx, Fill, FitIntent, Frac, Hatch, Insert, Island, Key, Leader, Param, Polyline, Ref,
-    Region, Shape, Spline, Tag, Text, ViewIx, Viewport, FRAC_LIMIT,
+    EntityIx, FRAC_LIMIT, Fill, FitIntent, Frac, Hatch, Insert, Island, Key, Leader, Param,
+    Polyline, Ref, Region, Shape, Spline, Tag, Text, ViewIx, Viewport,
 };
 use geom_2d::point::Pt2;
-use geom_math::{Axis, Box2, Classification, GridTransform, Transform, TransformKind, TypedTransform};
+use geom_math::{
+    Axis, Box2, Classification, GridTransform, Transform, TransformKind, TypedTransform,
+};
 use geom_num::arc::Circle2 as GridCircle;
 use geom_num::conic::Ellipse2;
 use geom_num::grid::{P2, Steps};
@@ -108,7 +110,14 @@ fn every_shape() -> Vec<Shape> {
         2,
         vec![p2(0, 0), p2(5, 5), p2(10, 0)],
         None,
-        vec![frac(0, 1), frac(0, 1), frac(0, 1), frac(1, 1), frac(1, 1), frac(1, 1)],
+        vec![
+            frac(0, 1),
+            frac(0, 1),
+            frac(0, 1),
+            frac(1, 1),
+            frac(1, 1),
+            frac(1, 1),
+        ],
         Some(FitIntent {
             points: vec![p2(0, 0), p2(10, 0)],
             start_tangent: None,
@@ -316,7 +325,10 @@ fn only_a_non_uniform_transform_changes_a_kind() {
 fn a_straight_polyline_stays_a_polyline_under_a_non_uniform_scale() {
     let straight = Shape::Polyline(polyline(0));
     let c = class(TransformKind::NonUniform, false);
-    assert_eq!(straight.under(c).unwrap().becomes, Becomes::One(Tag::Polyline));
+    assert_eq!(
+        straight.under(c).unwrap().becomes,
+        Becomes::One(Tag::Polyline)
+    );
     let curved = Shape::Polyline(polyline(1));
     assert_eq!(curved.under(c).unwrap().becomes, Becomes::Run);
     // One bulge anywhere is enough, and a negative one counts.
@@ -327,7 +339,10 @@ fn a_straight_polyline_stays_a_polyline_under_a_non_uniform_scale() {
         false,
     )
     .unwrap();
-    assert_eq!(Shape::Polyline(last).under(c).unwrap().becomes, Becomes::Run);
+    assert_eq!(
+        Shape::Polyline(last).under(c).unwrap().becomes,
+        Becomes::Run
+    );
 }
 
 #[test]
@@ -366,7 +381,10 @@ fn fractions_have_a_bound_and_no_zero_denominator() {
     assert!(Frac::new(1, FRAC_LIMIT - 1).is_ok());
     assert_eq!(Frac::new(FRAC_LIMIT, 1).unwrap_err(), EntityError::Fraction);
     assert_eq!(Frac::new(1, FRAC_LIMIT).unwrap_err(), EntityError::Fraction);
-    assert_eq!(Frac::new(-FRAC_LIMIT, 1).unwrap_err(), EntityError::Fraction);
+    assert_eq!(
+        Frac::new(-FRAC_LIMIT, 1).unwrap_err(),
+        EntityError::Fraction
+    );
     // Past the bound only until it reduces.
     assert_eq!(Frac::new(FRAC_LIMIT * 3, FRAC_LIMIT).unwrap(), frac(3, 1));
     assert_eq!(Frac::new(i64::MIN, 1).unwrap_err(), EntityError::Fraction);
@@ -461,11 +479,28 @@ fn a_spline_must_fit_its_knots_to_its_control_points() {
 #[test]
 fn spline_weights_are_one_positive_fraction_for_each_control_point() {
     let c = vec![p2(0, 0), p2(1, 1), p2(2, 0)];
-    let knots = vec![frac(0, 1), frac(0, 1), frac(0, 1), frac(1, 1), frac(1, 1), frac(1, 1)];
+    let knots = vec![
+        frac(0, 1),
+        frac(0, 1),
+        frac(0, 1),
+        frac(1, 1),
+        frac(1, 1),
+        frac(1, 1),
+    ];
     let w = |v: &[(i64, i64)]| v.iter().map(|(n, d)| frac(*n, *d)).collect::<Vec<_>>();
-    let ok = Spline::new(2, c.clone(), Some(w(&[(1, 1), (1, 2), (3, 1)])), knots.clone(), None);
+    let ok = Spline::new(
+        2,
+        c.clone(),
+        Some(w(&[(1, 1), (1, 2), (3, 1)])),
+        knots.clone(),
+        None,
+    );
     assert_eq!(ok.unwrap().weights().unwrap().len(), 3);
-    for bad in [w(&[(1, 1), (1, 1)]), w(&[(1, 1), (0, 1), (1, 1)]), w(&[(1, 1), (-1, 2), (1, 1)])] {
+    for bad in [
+        w(&[(1, 1), (1, 1)]),
+        w(&[(1, 1), (0, 1), (1, 1)]),
+        w(&[(1, 1), (-1, 2), (1, 1)]),
+    ] {
         assert_eq!(
             Spline::new(2, c.clone(), Some(bad), knots.clone(), None).unwrap_err(),
             EntityError::Spline
@@ -519,7 +554,12 @@ fn hatches_dimensions_leaders_arrays_and_viewports_refuse_the_empty() {
         Hatch::new(vec![], Island::Outer, Fill::Pattern(Key(1))).unwrap_err(),
         EntityError::Hatch
     );
-    let h = Hatch::new(vec![EntityIx(2), EntityIx(3)], Island::Ignore, Fill::Gradient(Key(4))).unwrap();
+    let h = Hatch::new(
+        vec![EntityIx(2), EntityIx(3)],
+        Island::Ignore,
+        Fill::Gradient(Key(4)),
+    )
+    .unwrap();
     assert_eq!(h.boundary(), &[EntityIx(2), EntityIx(3)]);
     assert_eq!(h.island(), Island::Ignore);
     assert_eq!(h.fill(), Fill::Gradient(Key(4)));
@@ -529,20 +569,37 @@ fn hatches_dimensions_leaders_arrays_and_viewports_refuse_the_empty() {
         EntityError::Annotation
     );
     let d = Dimension::new(DimKind::Diameter, vec![Ref::Entity(EntityIx(0))], Key(9)).unwrap();
-    assert_eq!((d.kind(), d.refs().len(), d.style()), (DimKind::Diameter, 1, Key(9)));
+    assert_eq!(
+        (d.kind(), d.refs().len(), d.style()),
+        (DimKind::Diameter, 1, Key(9))
+    );
 
     assert_eq!(
         Leader::new(vec![p2(0, 0)], None, Key(0)).unwrap_err(),
         EntityError::Annotation
     );
-    let l = Leader::new(vec![p2(0, 0), p2(1, 1)], Some(Ref::Entity(EntityIx(1))), Key(5)).unwrap();
+    let l = Leader::new(
+        vec![p2(0, 0), p2(1, 1)],
+        Some(Ref::Entity(EntityIx(1))),
+        Key(5),
+    )
+    .unwrap();
     assert_eq!((l.vertices().len(), l.style()), (2, Key(5)));
     assert!(l.target().is_some());
 
-    assert_eq!(Array::new(0, 1, [1, 0], [0, 1]).unwrap_err(), EntityError::Array);
-    assert_eq!(Array::new(1, 0, [1, 0], [0, 1]).unwrap_err(), EntityError::Array);
+    assert_eq!(
+        Array::new(0, 1, [1, 0], [0, 1]).unwrap_err(),
+        EntityError::Array
+    );
+    assert_eq!(
+        Array::new(1, 0, [1, 0], [0, 1]).unwrap_err(),
+        EntityError::Array
+    );
     let a = Array::new(4, 2, [10, 0], [0, -10]).unwrap();
-    assert_eq!((a.columns(), a.rows(), a.column_step(), a.row_step()), (4, 2, [10, 0], [0, -10]));
+    assert_eq!(
+        (a.columns(), a.rows(), a.column_step(), a.row_step()),
+        (4, 2, [10, 0], [0, -10])
+    );
 
     let w = Box2::new(p2(0, 0), p2(9, 9)).unwrap();
     assert_eq!(
@@ -553,8 +610,18 @@ fn hatches_dimensions_leaders_arrays_and_viewports_refuse_the_empty() {
         Viewport::new(w, ViewIx(0), frac(-1, 2), frac(0, 1), None).unwrap_err(),
         EntityError::Viewport
     );
-    let v = Viewport::new(w, ViewIx(3), frac(1, 100), frac(1, 2), Some(Region::new(sheet()).unwrap())).unwrap();
-    assert_eq!((v.view(), v.scale(), v.twist()), (ViewIx(3), frac(1, 100), frac(1, 2)));
+    let v = Viewport::new(
+        w,
+        ViewIx(3),
+        frac(1, 100),
+        frac(1, 2),
+        Some(Region::new(sheet()).unwrap()),
+    )
+    .unwrap();
+    assert_eq!(
+        (v.view(), v.scale(), v.twist()),
+        (ViewIx(3), frac(1, 100), frac(1, 2))
+    );
     assert_eq!(v.window(), w);
     assert!(v.clip().is_some());
 }
