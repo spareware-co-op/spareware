@@ -623,12 +623,12 @@ pub const SURFACES: &[(u64, &str, &str)] = &[
     (
         kinds::surface::CYLINDER,
         "cylinder",
-        "centre, radius, frame, domain, axial sign",
+        "centre, radius, frame, domain, axial factor",
     ),
     (
         kinds::surface::CONE,
         "cone",
-        "centre, radius, slope, frame, domain, axial sign",
+        "centre, radius, slope, frame, domain, axial factor",
     ),
     (
         kinds::surface::SPHERE,

@@ -56,6 +56,7 @@ option = [] / [real]
 optional-column = [] / [f64-column]
 flag = 0 / 1
 sign = 1 / -1
+axial = sign / real           ; a cylinder's or cone's axial factor, a double only when not 1 or -1
 frame = [x: vec, normal: [3*3 real]]
 axes = [0, frame, a: real, b: real] / [1, u: vec, v: vec]
 helix-axes = [0, frame, radius: real, pitch: real] / [1, u: vec, v: vec, w: vec]
@@ -95,8 +96,8 @@ curvature-law = [1..5, start: real, end: real]
 surface = [1, du: uint, ku: f64-column, dv: uint, kv: f64-column, points: f64-column,
            weights: optional-column]
         / [2, origin: vec, a: vec, b: vec, domain: param-box]
-        / [3, center: vec, radius: real, frame, domain: param-box, sign]
-        / [4, center: vec, radius: real, slope: real, frame, domain: param-box, sign]
+        / [3, center: vec, radius: real, frame, domain: param-box, axial]
+        / [4, center: vec, radius: real, slope: real, frame, domain: param-box, axial]
         / [5, center: vec, radius: real, frame, domain: param-box, sign]
         / [6, center: vec, major: real, minor: real, frame, domain: param-box, sign]
         / [7, center: vec, terms: [+ [u: 0..3, v: 0..3, w: vec]], domain: param-box,

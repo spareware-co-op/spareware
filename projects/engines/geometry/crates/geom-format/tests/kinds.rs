@@ -519,6 +519,55 @@ fn surfaces_as_the_operations_leave_them_read_back() {
     );
 }
 
+/// A similarity multiplies a cylinder's and a cone's axial factor by its scale (architecture 7),
+/// so a factor other than ±1 is written as a double and reads back as itself; ±1 has only the
+/// integer's form, and a sphere's or a torus's takes no other value.
+#[test]
+fn a_scaled_cylinder_and_cone_keep_their_axial_factor() {
+    let twice = TypedTransform::from(Transform::scale(2.0, 2.0, 2.0).unwrap());
+    let mut scaled = Vec::new();
+    for (what, s) in surfaces() {
+        let Ok(moved) = s.transformed(&twice, &mut meter()) else {
+            continue;
+        };
+        let m = moved.value;
+        let factor = match &m {
+            SurfaceKind::Cylinder(c) => c.axial_sign(),
+            SurfaceKind::Cone(c) => c.axial_sign(),
+            _ => continue,
+        };
+        assert_eq!(factor, 2.0, "{what}");
+        surface_trip(what, &m);
+        let back = m.reversed(Direction::V, &mut meter()).unwrap().value;
+        surface_trip(what, &back);
+        scaled.push((what, m));
+    }
+    assert_eq!(scaled.len(), 2);
+    // The factor is the last item: 2.0 as a half-width double, f9 40 00.
+    let (_, cylinder) = &scaled[0];
+    let mut one = surface_bytes(cylinder);
+    let at = one.len() - 3;
+    assert_eq!(one[at..], [0xf9, 0x40, 0x00]);
+    one[at + 1] = 0x3c;
+    assert!(matches!(
+        read_surface(&mut Decoder::new(&one, DEPTH), &mut meter()),
+        Err(KindError::Shape(_))
+    ));
+    // A sphere's sign, the integer 1 at its end, as 2.0: its constructor refuses it.
+    let sphere = surfaces()
+        .into_iter()
+        .find(|(w, _)| *w == "sphere")
+        .unwrap()
+        .1;
+    let mut b = surface_bytes(&sphere);
+    assert_eq!(b.pop(), Some(0x01));
+    b.extend_from_slice(&[0xf9, 0x40, 0x00]);
+    assert!(matches!(
+        read_surface(&mut Decoder::new(&b, DEPTH), &mut meter()),
+        Err(KindError::Curve(_))
+    ));
+}
+
 #[test]
 fn offset_surfaces_read_back_cached_split_and_nested() {
     let plane = surfaces()

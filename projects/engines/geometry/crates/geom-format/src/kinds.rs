@@ -5,7 +5,7 @@
 //! [`read_curve`] and [`read_surface`] read one back from a decoder, rebuilding it through the
 //! kind's own constructor, so a stored kind is checked as a built one is. The codes are in
 //! [`curve`] and [`surface`]; the fields of each are the values its constructor takes, in the
-//! order `format/cddl/kinds.cddl` gives them. Doubles are written in their shortest exact width,
+//! order `format/cddl/body.cddl` gives them. Doubles are written in their shortest exact width,
 //! lists of doubles as RFC 8746 `f64` columns (tag 86), an absent value as `[]`, a present one as
 //! `[value]`, and a flag as 0 or 1.
 //!
@@ -112,9 +112,9 @@ pub mod surface {
     pub const NURBS: u64 = 1;
     /// A plane: origin, two vectors, domain.
     pub const PLANE: u64 = 2;
-    /// A cylinder: centre, radius, frame, domain, axial sign.
+    /// A cylinder: centre, radius, frame, domain, axial factor.
     pub const CYLINDER: u64 = 3;
-    /// A cone: centre, radius, slope, frame, domain, axial sign.
+    /// A cone: centre, radius, slope, frame, domain, axial factor.
     pub const CONE: u64 = 4;
     /// A sphere: centre, radius, frame, domain, axial sign.
     pub const SPHERE: u64 = 5;
@@ -605,11 +605,21 @@ fn placement(e: &mut Encoder, (c, l): ([f64; 3], [[f64; 3]; 3])) -> Written {
     floats(e, &l)
 }
 
-/// A frame-based surface's tail: frame, domain, axial sign.
+/// A round kind's axial factor: ±1, as built or reversed, as the integer 1 or −1; any other, a
+/// cylinder's or a cone's that a similarity scaled, as a double.
+fn axial(e: &mut Encoder, s: f64) -> Written {
+    if s == 1.0 || s == -1.0 {
+        sign(e, s)
+    } else {
+        Ok(e.float(s)?)
+    }
+}
+
+/// A frame-based surface's tail: frame, domain, axial factor.
 fn round_tail(e: &mut Encoder, f: &Frame<3>, domain: ParamBox, s: f64) -> Written {
     frame(e, f)?;
     param_box(e, domain)?;
-    sign(e, s)
+    axial(e, s)
 }
 
 /// A term function's code: 0 for 1, 1 for t, 2 for cos πt, 3 for sin πt.
@@ -1261,12 +1271,25 @@ fn read_fun(d: &mut Decoder<'_>, m: &mut WorkMeter<'_>) -> Result<Fun, KindError
     }
 }
 
-/// A frame-based surface's tail: frame, domain, axial sign.
+/// A round kind's axial factor: the integer 1 or −1, or a double other than ±1, whose only form
+/// is the integer's.
+fn read_axial(d: &mut Decoder<'_>, m: &mut WorkMeter<'_>) -> Result<f64, KindError> {
+    match next(d, m)? {
+        Item::Uint(1) => Ok(1.0),
+        Item::Nint(0) => Ok(-1.0),
+        Item::Float(s) if s != 1.0 && s != -1.0 => Ok(s),
+        _ => Err(KindError::Shape(
+            "an axial factor other than 1, −1 or a double other than ±1",
+        )),
+    }
+}
+
+/// A frame-based surface's tail: frame, domain, axial factor.
 fn read_round_tail(
     d: &mut Decoder<'_>,
     m: &mut WorkMeter<'_>,
-) -> Result<(Frame<3>, ParamBox, bool), KindError> {
-    Ok((read_frame(d, m)?, read_box(d, m)?, read_sign(d, m)? < 0.0))
+) -> Result<(Frame<3>, ParamBox, f64), KindError> {
+    Ok((read_frame(d, m)?, read_box(d, m)?, read_axial(d, m)?))
 }
 
 /// Reads a surface kind.
@@ -1353,30 +1376,26 @@ fn read_surface_leaf(
         surface::CYLINDER => {
             want(6)?;
             let (center, radius) = (vector(d, m)?, float(d, m)?);
-            let (f, domain, flipped) = read_round_tail(d, m)?;
-            let c = Cylinder::new(center, radius, f, domain)?;
-            SurfaceKind::Cylinder(if flipped { c.flipped_axially()? } else { c })
+            let (f, domain, s) = read_round_tail(d, m)?;
+            SurfaceKind::Cylinder(Cylinder::new(center, radius, f, domain)?.with_axial_factor(s)?)
         }
         surface::CONE => {
             want(7)?;
             let (center, radius, slope) = (vector(d, m)?, float(d, m)?, float(d, m)?);
-            let (f, domain, flipped) = read_round_tail(d, m)?;
-            let c = Cone::new(center, radius, slope, f, domain)?;
-            SurfaceKind::Cone(if flipped { c.flipped_axially()? } else { c })
+            let (f, domain, s) = read_round_tail(d, m)?;
+            SurfaceKind::Cone(Cone::new(center, radius, slope, f, domain)?.with_axial_factor(s)?)
         }
         surface::SPHERE => {
             want(6)?;
             let (center, radius) = (vector(d, m)?, float(d, m)?);
-            let (f, domain, flipped) = read_round_tail(d, m)?;
-            let c = Sphere::new(center, radius, f, domain)?;
-            SurfaceKind::Sphere(if flipped { c.flipped_axially()? } else { c })
+            let (f, domain, s) = read_round_tail(d, m)?;
+            SurfaceKind::Sphere(Sphere::new(center, radius, f, domain)?.with_axial_factor(s)?)
         }
         surface::TORUS => {
             want(7)?;
             let (center, major, minor) = (vector(d, m)?, float(d, m)?, float(d, m)?);
-            let (f, domain, flipped) = read_round_tail(d, m)?;
-            let c = Torus::new(center, major, minor, f, domain)?;
-            SurfaceKind::Torus(if flipped { c.flipped_axially()? } else { c })
+            let (f, domain, s) = read_round_tail(d, m)?;
+            SurfaceKind::Torus(Torus::new(center, major, minor, f, domain)?.with_axial_factor(s)?)
         }
         surface::AFFINE => {
             want(6)?;

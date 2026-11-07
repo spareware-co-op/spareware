@@ -173,7 +173,7 @@ A reader checks the index against its chunks before anything is built: each list
 
 ## 11. Geometry kinds
 
-Each surface, curve and pcurve is an array `[code, fields…]`, its fields the values the kind's constructor takes; reading rebuilds it through that constructor. Doubles are written in their shortest exact width (section 3), lists of doubles as `f64` columns (RFC 8746, tag 86), an absent value as `[]` and a present one as `[value]`, a flag as 0 or 1, and an axial sign or σ as the integer 1 or −1. An interval is `[start, end]`, an end that is infinite on its own side (a ray's or a line's) written `[]`. A frame is `[x, normal]`; axes are `[0, frame, a, b]` or `[1, u, v]`; helix axes `[0, frame, radius, pitch]` or `[1, u, v, w]`. A swept surface's placement is `[c, L]`, L's nine entries by rows. An offset's fitted NURBS cache is not stored: the `cached` flag says whether it was there, and reading fits it again, with the same bits (23.1). A curve on a surface keeps its 3D curve, which defines it.
+Each surface, curve and pcurve is an array `[code, fields…]`, its fields the values the kind's constructor takes; reading rebuilds it through that constructor. Doubles are written in their shortest exact width (section 3), lists of doubles as `f64` columns (RFC 8746, tag 86), an absent value as `[]` and a present one as `[value]`, a flag as 0 or 1, and an axial sign or σ as the integer 1 or −1. A cylinder's and a cone's axial factor is ±1 as built and reversed, written as that integer, and a similarity multiplies it by its scale (architecture 7), so any other value is written as a double, never ±1. An interval is `[start, end]`, an end that is infinite on its own side (a ray's or a line's) written `[]`. A frame is `[x, normal]`; axes are `[0, frame, a, b]` or `[1, u, v]`; helix axes `[0, frame, radius, pitch]` or `[1, u, v, w]`. A swept surface's placement is `[c, L]`, L's nine entries by rows. An offset's fitted NURBS cache is not stored: the `cached` flag says whether it was there, and reading fits it again, with the same bits (23.1). A curve on a surface keeps its 3D curve, which defines it.
 
 The curve kinds:
 
@@ -204,8 +204,8 @@ The surface kinds:
 | --- | --- | --- |
 | 1 | NURBS | u degree, u knots, v degree, v knots, homogeneous points, weights |
 | 2 | plane | origin, a, b, domain |
-| 3 | cylinder | centre, radius, frame, domain, axial sign |
-| 4 | cone | centre, radius, slope, frame, domain, axial sign |
+| 3 | cylinder | centre, radius, frame, domain, axial factor |
+| 4 | cone | centre, radius, slope, frame, domain, axial factor |
 | 5 | sphere | centre, radius, frame, domain, axial sign |
 | 6 | torus | centre, major radius, minor radius, frame, domain, axial sign |
 | 7 | affine image | centre, terms, domain, angular u, angular v |
