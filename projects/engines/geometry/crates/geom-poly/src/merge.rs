@@ -66,6 +66,9 @@ const CORNERS: Phase = Phase::new("merge: corners");
 /// Sorting the corners.
 const SORT_CORNERS: Phase = Phase::new("merge: sort corners");
 
+/// Making each corner's wide coordinates, once, for the sort of corners that lack cells.
+const WIDES: Phase = Phase::new("merge: wide corners");
+
 /// Each piece's sheet key.
 const SHEETS: Phase = Phase::new("merge: sheet keys");
 
@@ -484,6 +487,49 @@ impl<const N: usize> Ord for CellKey<'_, N> {
     }
 }
 
+/// A corner's X and w with w positive, as [`wide_of`] makes them.
+type WideCorner = ([I320; 3], I256);
+
+/// The order of two corners' [`WideCorner`]s, as [`point_order`] orders the corners they come from:
+/// lexicographically by X / w, `None` where a product leaves 576 bits.
+fn wide_order(a: &WideCorner, b: &WideCorner) -> Option<Ordering> {
+    let ((own, under), (other, beneath)) = (a, b);
+    for (p, q) in own.iter().zip(other) {
+        let order = ratio_order::<5, 4, 9>(p, under, q, beneath)?;
+        if order != Ordering::Equal {
+            return Some(order);
+        }
+    }
+    Some(Ordering::Equal)
+}
+
+/// A corner's place in [`point_order`] for a sort on the pool when some corner has no [`Cell`]s:
+/// its [`WideCorner`], made once, where [`point_order`] makes both of a pair's on every comparison.
+/// A comparison that fails ranks as equal here, and the caller checks the sorted order pair by pair
+/// with [`wide_order`], falling back to the serial sort if any pair fails.
+#[derive(Clone, Copy, Debug)]
+struct WideKey<'a>(&'a WideCorner);
+
+impl PartialEq for WideKey<'_> {
+    fn eq(&self, other: &Self) -> bool {
+        self.cmp(other) == Ordering::Equal
+    }
+}
+
+impl Eq for WideKey<'_> {}
+
+impl PartialOrd for WideKey<'_> {
+    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+        Some(self.cmp(other))
+    }
+}
+
+impl Ord for WideKey<'_> {
+    fn cmp(&self, other: &Self) -> Ordering {
+        wide_order(self.0, other.0).unwrap_or(Ordering::Equal)
+    }
+}
+
 /// A parallel phase's error as the merge's: the item's own, the merge's or the arrangement's, or
 /// the meter's stop, which the helper latches; a stop it did not latch is the helper's defect.
 fn phase_error<E: Into<MergeError>>(error: RunError<E>, meter: &mut WorkMeter<'_>) -> MergeError {
@@ -508,14 +554,7 @@ fn point_order(a: &Corner, b: &Corner) -> Option<Ordering> {
         }
         return Some(Ordering::Equal);
     }
-    let ((own, under), (other, beneath)) = (wide_of(a)?, wide_of(b)?);
-    for (p, q) in own.iter().zip(&other) {
-        let order = ratio_order::<5, 4, 9>(p, &under, q, &beneath)?;
-        if order != Ordering::Equal {
-            return Some(order);
-        }
-    }
-    Some(Ordering::Equal)
+    wide_order(&wide_of(a)?, &wide_of(b)?)
 }
 
 /// A corner of `face` where `p` and `q` meet.
@@ -966,15 +1005,55 @@ fn numbered(
             });
         sorted.map_err(|e| phase_error(e, meter))?
     } else {
-        let mut order: Vec<usize> = (0..corners.len()).collect();
-        let mut failed = false;
-        let at = |i: &usize| corners.get(*i);
-        order.sort_by(|a, b| {
-            let found = at(a).zip(at(b)).and_then(|(p, q)| point_order(p, q));
-            noted(found, &mut failed)
-        });
-        (!failed).then_some(()).ok_or(NumError::BudgetExceeded)?;
-        order
+        // Some corner has no cells: every corner's wide coordinates are made once, on the pool, and
+        // sorted on the pool, where the serial sort below makes two on every comparison. The order
+        // is taken only if every neighbouring pair compares, and in order; else the serial sort,
+        // which reports a failed comparison, decides as it always did.
+        let wide = exec.try_map(
+            meter,
+            WIDES,
+            PIECES,
+            &corners,
+            |_, corner, m| -> Result<Option<WideCorner>, MergeError> {
+                m.charge(1)?;
+                Ok(wide_of(corner))
+            },
+        );
+        let wide = wide.map_err(|e| phase_error(e, meter))?;
+        let wide: Option<Vec<WideCorner>> = wide.into_iter().collect();
+        let pooled = match wide {
+            Some(wide) => {
+                let sorted = exec.sort_stable::<_, _, MergeError, _>(
+                    meter,
+                    SORT_CORNERS,
+                    SORT_PLAN,
+                    &wide,
+                    WideKey,
+                );
+                let sorted = sorted.map_err(|e| phase_error(e, meter))?;
+                let in_order = sorted.iter().zip(sorted.iter().skip(1)).all(|(a, b)| {
+                    wide.get(*a)
+                        .zip(wide.get(*b))
+                        .and_then(|(p, q)| wide_order(p, q))
+                        .is_some_and(|order| order != Ordering::Greater)
+                });
+                in_order.then_some(sorted)
+            }
+            None => None,
+        };
+        if let Some(sorted) = pooled {
+            sorted
+        } else {
+            let mut order: Vec<usize> = (0..corners.len()).collect();
+            let mut failed = false;
+            let at = |i: &usize| corners.get(*i);
+            order.sort_by(|a, b| {
+                let found = at(a).zip(at(b)).and_then(|(p, q)| point_order(p, q));
+                noted(found, &mut failed)
+            });
+            (!failed).then_some(()).ok_or(NumError::BudgetExceeded)?;
+            order
+        }
     };
     // Each run of equal points in that order is one place: the first corner's point and cells, and
     // every corner's planes in turn, gathered once.
