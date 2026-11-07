@@ -254,9 +254,15 @@
               "kind": "corpus",
               "piece": "G101",
               "why": "4 new count benchmarks on geom-make's hot paths (decision 32.44): a box and a cylinder built, a box moved and quarter-turned; no existing digest moved"
+            },
+            {
+              "sha256": "b085ebd6770937b858e6ae815f4e62125013af8c97d1bcf07a54eebeede27cbc",
+              "kind": "corpus",
+              "piece": "G105",
+              "why": "3 new benchmarks in a new group: format (a cache key, a memo store's lookup and a body's next version); no existing digest moved"
             }
           ],
-          "sha256": "b085ebd6770937b858e6ae815f4e62125013af8c97d1bcf07a54eebeede27cbc"
+          "sha256": "6dbe60fe9d44dce2a6f5d834008db333c7c2073e5ed89f9d02db9d315ebd0ca8"
         },
         {
           "id": "geom-nurbs/operations",
@@ -518,6 +524,16 @@
             "function": "golden_hash_is_the_same_on_every_target"
           },
           "sha256": "601faa6494c0ad3f9b1d7dd7b8a1e78724066b90ac4a998057959dae37206886"
+        },
+        {
+          "id": "geom-format/cache-keys",
+          "what": "geom-format's cache keys and content IDs (piece G105): keys with a path and name-free keys of two editions at final and preview precision; the content and geometry IDs of geom-topo's wall, of a body of 9,000 faces and of a wall named by a run; the content IDs of a chain of eight versions of the 9,000 faces; and a name-free wall restamped: its names' IDs and its records, in the encoding of tests/cache_determinism.rs.",
+          "check": {
+            "crate": "geom-format",
+            "test": "cache_determinism",
+            "function": "golden_hash_is_the_same_on_every_target"
+          },
+          "sha256": "6b400b80063ad59bfa4d6ea59a194596b2613a4854db06ad4ef1ad1aeb597cae"
         },
         {
           "id": "geom-format/body-records",

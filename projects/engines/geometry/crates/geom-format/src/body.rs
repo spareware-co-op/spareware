@@ -9,7 +9,10 @@
 //! publishes, so a stored body is never trusted further than a built one. The tables, by code in
 //! [`table`], are the arenas of chapter 8.2: regions, shells, faces, loops, fins, edges and
 //! vertices; the geometry pools (points, surfaces, curves and pcurves); and, for a body published
-//! by name, the names of its regions, faces, edges and vertices.
+//! by name, the names of its regions, faces, edges and vertices. A [`BodyVersion`] is a body with
+//! each chunk's content ID: [`BodyVersion::next`] writes a new version, encoding and hashing only
+//! the chunks it does not share with the one before (23.8). Its [`BodyVersion::geometry_id`] is
+//! the root of the same tree without the name tables, which a name-free cache key takes (23.8).
 //!
 //! Guarantees:
 //!
@@ -19,6 +22,11 @@
 //!   (`geom_topo::CHUNK_ROWS`, 4,096), so a chunk whose rows did not change encodes to the same
 //!   bytes and the same content ID, whatever else changed: an edit to 1% of a body's rows rewrites
 //!   only the chunks those rows are in.
+//! - **A new version hashes only what it changed, and gets the same IDs.** [`BodyVersion::next`]
+//!   reuses a chunk's ID only where every column of the chunk is the very chunk the version before
+//!   holds (`Column::shares_chunk`) or, for a name table, where the rows are equal, so its index
+//!   is byte for byte [`write_body`]'s. The version holds the earlier body's columns, so a chunk
+//!   it compares against is never freed and its address reused.
 //! - **References are checked.** Every reference is stored as its row plus one, 0 for none; a
 //!   required reference of 0, a row count that disagrees with the chunks, a chunk of the wrong table
 //!   or position, or a content ID that does not match its chunk is refused before anything is
@@ -31,6 +39,8 @@
 //!
 //! Cost: linear in the body: one pass over each table to write, one to read, one SHA-256 pass over
 //! every chunk; memory for one chunk's payload at a time plus the body itself.
+//! [`BodyVersion::next`] is linear in the chunks it checks and the rows of the name tables, and
+//! encodes and hashes only the chunks that changed, plus the index.
 
 #![allow(
     clippy::many_single_char_names,
@@ -113,6 +123,67 @@ impl StoredBody {
     #[must_use]
     pub fn content_id(&self) -> ContentId {
         self.index.content_id()
+    }
+}
+
+/// A body, with every chunk's content ID and the records this version wrote: what saving the next
+/// version needs (23.8, 24.2). It holds the body, so the chunks a later version is compared with
+/// stay alive.
+#[derive(Clone, Debug, PartialEq)]
+pub struct BodyVersion {
+    body: Body,
+    tables: Vec<Table>,
+    index: Record,
+    geometry: ContentId,
+    written: Vec<Record>,
+}
+
+impl BodyVersion {
+    /// The first version: every chunk written, as [`write_body`] writes them.
+    ///
+    /// # Errors
+    ///
+    /// As [`write_body`].
+    pub fn first(body: &Body, meter: &mut WorkMeter<'_>) -> Result<BodyVersion, BodyError> {
+        write(body, None, meter)
+    }
+
+    /// The version of `body` after this one: its index is [`write_body`]'s, and only the chunks
+    /// that are not this version's are encoded and hashed.
+    ///
+    /// # Errors
+    ///
+    /// As [`write_body`].
+    pub fn next(&self, body: &Body, meter: &mut WorkMeter<'_>) -> Result<BodyVersion, BodyError> {
+        write(body, Some(self), meter)
+    }
+
+    /// The index record.
+    #[must_use]
+    pub const fn index(&self) -> &Record {
+        &self.index
+    }
+
+    /// The chunks this version wrote: all of them for a first version, in the index's order, and
+    /// the ones that changed for a later one: what saving it adds (24.2).
+    #[must_use]
+    pub fn written(&self) -> &[Record] {
+        &self.written
+    }
+
+    /// The body's content ID: the index payload's, the root of the hash tree over its chunks.
+    #[must_use]
+    pub fn content_id(&self) -> ContentId {
+        self.index.content_id()
+    }
+
+    /// The content ID of the body's geometry without names: the root of the same tree without its
+    /// name tables, as a body without names has it. Arena order comes from the names (32.17), so
+    /// two bodies with equal geometry in another order have different IDs: a name-free cache key
+    /// then misses, and never answers wrongly.
+    #[must_use]
+    pub const fn geometry_id(&self) -> &ContentId {
+        &self.geometry
     }
 }
 
@@ -242,28 +313,64 @@ fn chunk_record(
     })
 }
 
+/// One table as written: its code, its rows and each chunk's content ID, in the index's order.
+#[derive(Clone, Debug, PartialEq)]
+struct Table {
+    code: u64,
+    rows: u64,
+    ids: Vec<ContentId>,
+}
+
+/// What a write gathers: the tables so far and the chunks it encoded, with the version it may
+/// reuse IDs from and the meter.
+struct Tables<'a, 'm> {
+    earlier: Option<&'a BodyVersion>,
+    done: Vec<Table>,
+    written: Vec<Record>,
+    meter: &'a mut WorkMeter<'m>,
+}
+
 /// Every chunk of a table: `count` chunks of `width` columns, chunk `i` holding `rows_of(i)` rows,
-/// its columns written by `write`; pushed onto `out` with the table's row count. Each chunk costs
-/// the meter one unit.
+/// its columns written by `write`; pushed onto `out` with the table's row count. A chunk `kept`
+/// says is unchanged takes its ID from the earlier version and is not encoded. Each chunk costs
+/// the meter one unit either way.
 fn table_chunks(
     table: u64,
     count: usize,
     width: u64,
     rows_of: impl Fn(usize) -> usize,
+    kept: impl Fn(usize) -> bool,
     mut write: impl FnMut(&mut Encoder, usize) -> Result<(), BodyError>,
-    out: &mut Vec<(u64, u64, Vec<Record>)>,
-    meter: &mut WorkMeter<'_>,
+    out: &mut Tables<'_, '_>,
 ) -> Result<(), BodyError> {
-    let mut records = Vec::with_capacity(count);
+    let earlier = out
+        .earlier
+        .and_then(|v| v.tables.iter().find(|t| t.code == table));
+    let mut ids = Vec::with_capacity(count);
     let mut total: u64 = 0;
     for i in 0..count {
-        meter.charge(1)?;
+        out.meter.charge(1)?;
         let rows = rows_of(i);
         total = total.saturating_add(u64::try_from(rows).unwrap_or(u64::MAX));
-        records.push(chunk_record(table, i, rows, width, |e| write(e, i))?);
+        if let Some(id) = earlier.and_then(|t| t.ids.get(i)).filter(|_| kept(i)) {
+            ids.push(id.clone());
+        } else {
+            let record = chunk_record(table, i, rows, width, |e| write(e, i))?;
+            ids.push(record.content_id());
+            out.written.push(record);
+        }
     }
-    out.push((table, total, records));
+    out.done.push(Table {
+        code: table,
+        rows: total,
+        ids,
+    });
     Ok(())
+}
+
+/// Whether every entry of `columns` says its chunk is shared.
+fn all_shared<const N: usize>(columns: [bool; N]) -> bool {
+    columns.into_iter().all(|shared| shared)
 }
 
 /// The body as records.
@@ -271,13 +378,32 @@ fn table_chunks(
 /// # Errors
 ///
 /// [`BodyError::Kind`] for a geometry kind that has no stored form, and the encoder's errors.
+pub fn write_body(body: &Body, meter: &mut WorkMeter<'_>) -> Result<StoredBody, BodyError> {
+    let version = write(body, None, meter)?;
+    Ok(StoredBody {
+        index: version.index,
+        chunks: version.written,
+    })
+}
+
+/// The body as a version: every chunk written, or, after `earlier`, those it does not share.
 #[allow(
     clippy::too_many_lines,
     reason = "one short block per table, in the index's order"
 )]
-pub fn write_body(body: &Body, meter: &mut WorkMeter<'_>) -> Result<StoredBody, BodyError> {
+fn write(
+    body: &Body,
+    earlier: Option<&BodyVersion>,
+    meter: &mut WorkMeter<'_>,
+) -> Result<BodyVersion, BodyError> {
     let a = body.arenas();
-    let mut tables: Vec<(u64, u64, Vec<Record>)> = Vec::new();
+    let old = earlier.map(|v| v.body.arenas());
+    let mut tables = Tables {
+        earlier,
+        done: Vec::new(),
+        written: Vec::new(),
+        meter,
+    };
 
     let kind = chunks_of(&a.regions.kind);
     let first_shell = chunks_of(&a.regions.first_shell);
@@ -286,6 +412,16 @@ pub fn write_body(body: &Body, meter: &mut WorkMeter<'_>) -> Result<StoredBody, 
         kind.len(),
         2,
         |i| kind.get(i).map_or(0, |c| c.len()),
+        |i| {
+            old.is_some_and(|o| {
+                all_shared([
+                    a.regions.kind.shares_chunk(&o.regions.kind, i),
+                    a.regions
+                        .first_shell
+                        .shares_chunk(&o.regions.first_shell, i),
+                ])
+            })
+        },
         |e, i| {
             uints(e, kind.get(i).copied().unwrap_or_default(), |k| match k {
                 RegionKind::Solid => 0,
@@ -297,7 +433,6 @@ pub fn write_body(body: &Body, meter: &mut WorkMeter<'_>) -> Result<StoredBody, 
             Ok(())
         },
         &mut tables,
-        meter,
     )?;
 
     let (region, next, first_face) = (
@@ -310,6 +445,15 @@ pub fn write_body(body: &Body, meter: &mut WorkMeter<'_>) -> Result<StoredBody, 
         region.len(),
         3,
         |i| region.get(i).map_or(0, |c| c.len()),
+        |i| {
+            old.is_some_and(|o| {
+                all_shared([
+                    a.shells.region.shares_chunk(&o.shells.region, i),
+                    a.shells.next.shares_chunk(&o.shells.next, i),
+                    a.shells.first_face.shares_chunk(&o.shells.first_face, i),
+                ])
+            })
+        },
         |e, i| {
             uints(e, region.get(i).copied().unwrap_or_default(), |r| {
                 reference(Some(*r))
@@ -323,7 +467,6 @@ pub fn write_body(body: &Body, meter: &mut WorkMeter<'_>) -> Result<StoredBody, 
             Ok(())
         },
         &mut tables,
-        meter,
     )?;
 
     let f = &a.faces;
@@ -340,6 +483,18 @@ pub fn write_body(body: &Body, meter: &mut WorkMeter<'_>) -> Result<StoredBody, 
         shell.len(),
         6,
         |i| shell.get(i).map_or(0, |c| c.len()),
+        |i| {
+            old.is_some_and(|o| {
+                all_shared([
+                    a.faces.shell.shares_chunk(&o.faces.shell, i),
+                    a.faces.next.shares_chunk(&o.faces.next, i),
+                    a.faces.surface.shares_chunk(&o.faces.surface, i),
+                    a.faces.sense.shares_chunk(&o.faces.sense, i),
+                    a.faces.first_loop.shares_chunk(&o.faces.first_loop, i),
+                    a.faces.bound.shares_chunk(&o.faces.bound, i),
+                ])
+            })
+        },
         |e, i| {
             uints(e, shell.get(i).copied().unwrap_or_default(), |r| {
                 reference(Some(*r))
@@ -375,7 +530,6 @@ pub fn write_body(body: &Body, meter: &mut WorkMeter<'_>) -> Result<StoredBody, 
             Ok(())
         },
         &mut tables,
-        meter,
     )?;
 
     let l = &a.loops;
@@ -389,6 +543,15 @@ pub fn write_body(body: &Body, meter: &mut WorkMeter<'_>) -> Result<StoredBody, 
         face.len(),
         3,
         |i| face.get(i).map_or(0, |c| c.len()),
+        |i| {
+            old.is_some_and(|o| {
+                all_shared([
+                    a.loops.face.shares_chunk(&o.loops.face, i),
+                    a.loops.next.shares_chunk(&o.loops.next, i),
+                    a.loops.first_fin.shares_chunk(&o.loops.first_fin, i),
+                ])
+            })
+        },
         |e, i| {
             uints(e, face.get(i).copied().unwrap_or_default(), |r| {
                 reference(Some(*r))
@@ -402,7 +565,6 @@ pub fn write_body(body: &Body, meter: &mut WorkMeter<'_>) -> Result<StoredBody, 
             Ok(())
         },
         &mut tables,
-        meter,
     )?;
 
     let n = &a.fins;
@@ -420,6 +582,19 @@ pub fn write_body(body: &Body, meter: &mut WorkMeter<'_>) -> Result<StoredBody, 
         lp.len(),
         7,
         |i| lp.get(i).map_or(0, |c| c.len()),
+        |i| {
+            old.is_some_and(|o| {
+                all_shared([
+                    a.fins.loop_.shares_chunk(&o.fins.loop_, i),
+                    a.fins.next.shares_chunk(&o.fins.next, i),
+                    a.fins.prev.shares_chunk(&o.fins.prev, i),
+                    a.fins.edge.shares_chunk(&o.fins.edge, i),
+                    a.fins.sense.shares_chunk(&o.fins.sense, i),
+                    a.fins.radial.shares_chunk(&o.fins.radial, i),
+                    a.fins.pcurve.shares_chunk(&o.fins.pcurve, i),
+                ])
+            })
+        },
         |e, i| {
             uints(e, lp.get(i).copied().unwrap_or_default(), |r| {
                 reference(Some(*r))
@@ -443,7 +618,6 @@ pub fn write_body(body: &Body, meter: &mut WorkMeter<'_>) -> Result<StoredBody, 
             Ok(())
         },
         &mut tables,
-        meter,
     )?;
 
     let d = &a.edges;
@@ -458,6 +632,16 @@ pub fn write_body(body: &Body, meter: &mut WorkMeter<'_>) -> Result<StoredBody, 
         curve.len(),
         4,
         |i| curve.get(i).map_or(0, |c| c.len()),
+        |i| {
+            old.is_some_and(|o| {
+                all_shared([
+                    a.edges.first_fin.shares_chunk(&o.edges.first_fin, i),
+                    a.edges.start.shares_chunk(&o.edges.start, i),
+                    a.edges.end.shares_chunk(&o.edges.end, i),
+                    a.edges.curve.shares_chunk(&o.edges.curve, i),
+                ])
+            })
+        },
         |e, i| {
             uints(e, first_fin.get(i).copied().unwrap_or_default(), |r| {
                 reference(*r)
@@ -474,7 +658,6 @@ pub fn write_body(body: &Body, meter: &mut WorkMeter<'_>) -> Result<StoredBody, 
             Ok(())
         },
         &mut tables,
-        meter,
     )?;
 
     let point = chunks_of(&a.vertices.point);
@@ -483,6 +666,7 @@ pub fn write_body(body: &Body, meter: &mut WorkMeter<'_>) -> Result<StoredBody, 
         point.len(),
         1,
         |i| point.get(i).map_or(0, |c| c.len()),
+        |i| old.is_some_and(|o| a.vertices.point.shares_chunk(&o.vertices.point, i)),
         |e, i| {
             uints(e, point.get(i).copied().unwrap_or_default(), |r| {
                 reference(Some(*r))
@@ -490,7 +674,6 @@ pub fn write_body(body: &Body, meter: &mut WorkMeter<'_>) -> Result<StoredBody, 
             Ok(())
         },
         &mut tables,
-        meter,
     )?;
 
     let points = chunks_of(&a.points);
@@ -499,6 +682,7 @@ pub fn write_body(body: &Body, meter: &mut WorkMeter<'_>) -> Result<StoredBody, 
         points.len(),
         1,
         |i| points.get(i).map_or(0, |c| c.len()),
+        |i| old.is_some_and(|o| a.points.shares_chunk(&o.points, i)),
         |e, i| {
             let xyz: Vec<i64> = points
                 .get(i)
@@ -511,7 +695,6 @@ pub fn write_body(body: &Body, meter: &mut WorkMeter<'_>) -> Result<StoredBody, 
             Ok(())
         },
         &mut tables,
-        meter,
     )?;
 
     let surfaces = chunks_of(&a.surfaces);
@@ -520,6 +703,7 @@ pub fn write_body(body: &Body, meter: &mut WorkMeter<'_>) -> Result<StoredBody, 
         surfaces.len(),
         1,
         |i| surfaces.get(i).map_or(0, |c| c.len()),
+        |i| old.is_some_and(|o| a.surfaces.shares_chunk(&o.surfaces, i)),
         |e, i| {
             let rows = surfaces.get(i).copied().unwrap_or_default();
             e.array(u64::try_from(rows.len()).unwrap_or(u64::MAX))?;
@@ -529,7 +713,6 @@ pub fn write_body(body: &Body, meter: &mut WorkMeter<'_>) -> Result<StoredBody, 
             Ok(())
         },
         &mut tables,
-        meter,
     )?;
     let curves = chunks_of(&a.curves);
     table_chunks(
@@ -537,6 +720,7 @@ pub fn write_body(body: &Body, meter: &mut WorkMeter<'_>) -> Result<StoredBody, 
         curves.len(),
         1,
         |i| curves.get(i).map_or(0, |c| c.len()),
+        |i| old.is_some_and(|o| a.curves.shares_chunk(&o.curves, i)),
         |e, i| {
             let rows = curves.get(i).copied().unwrap_or_default();
             e.array(u64::try_from(rows.len()).unwrap_or(u64::MAX))?;
@@ -546,7 +730,6 @@ pub fn write_body(body: &Body, meter: &mut WorkMeter<'_>) -> Result<StoredBody, 
             Ok(())
         },
         &mut tables,
-        meter,
     )?;
     let pcurves = chunks_of(&a.pcurves);
     table_chunks(
@@ -554,6 +737,7 @@ pub fn write_body(body: &Body, meter: &mut WorkMeter<'_>) -> Result<StoredBody, 
         pcurves.len(),
         1,
         |i| pcurves.get(i).map_or(0, |c| c.len()),
+        |i| old.is_some_and(|o| a.pcurves.shares_chunk(&o.pcurves, i)),
         |e, i| {
             let rows = pcurves.get(i).copied().unwrap_or_default();
             e.array(u64::try_from(rows.len()).unwrap_or(u64::MAX))?;
@@ -563,22 +747,34 @@ pub fn write_body(body: &Body, meter: &mut WorkMeter<'_>) -> Result<StoredBody, 
             Ok(())
         },
         &mut tables,
-        meter,
     )?;
 
     if let Some(names) = body.names() {
-        for (code, keys) in [
-            (table::REGION_NAMES, &names.regions),
-            (table::FACE_NAMES, &names.faces),
-            (table::EDGE_NAMES, &names.edges),
-            (table::VERTEX_NAMES, &names.vertices),
+        let before = earlier.and_then(|v| v.body.names());
+        for (code, keys, old_keys) in [
+            (
+                table::REGION_NAMES,
+                &names.regions,
+                before.map(|n| &n.regions),
+            ),
+            (table::FACE_NAMES, &names.faces, before.map(|n| &n.faces)),
+            (table::EDGE_NAMES, &names.edges, before.map(|n| &n.edges)),
+            (
+                table::VERTEX_NAMES,
+                &names.vertices,
+                before.map(|n| &n.vertices),
+            ),
         ] {
             let runs: Vec<&[NameKey]> = keys.chunks(CHUNK_ROWS as usize).collect();
+            let old_runs: Vec<&[NameKey]> = old_keys
+                .map(|k| k.chunks(CHUNK_ROWS as usize).collect())
+                .unwrap_or_default();
             table_chunks(
                 code,
                 runs.len(),
                 1,
                 |i| runs.get(i).map_or(0, |c| c.len()),
+                |i| old_runs.get(i) == runs.get(i),
                 |e, i| {
                     let bytes: Vec<u8> = runs
                         .get(i)
@@ -591,16 +787,15 @@ pub fn write_body(body: &Body, meter: &mut WorkMeter<'_>) -> Result<StoredBody, 
                     Ok(())
                 },
                 &mut tables,
-                meter,
             )?;
         }
     }
 
-    index(body, tables)
+    index(body, tables.done, tables.written)
 }
 
-/// The index record over the chunks, and the chunks in its order.
-fn index(body: &Body, tables: Vec<(u64, u64, Vec<Record>)>) -> Result<StoredBody, BodyError> {
+/// The index's payload over `tables`, which says whether the body has names.
+fn index_payload(body: &Body, tables: &[&Table], named: bool) -> Result<Vec<u8>, BodyError> {
     let mut e = Encoder::new();
     e.array(5)?;
     e.uint(match body.kind() {
@@ -612,30 +807,39 @@ fn index(body: &Body, tables: Vec<(u64, u64, Vec<Record>)>) -> Result<StoredBody
     })?;
     e.uint(reference(Some(body.outside())))?;
     e.array(u64::try_from(tables.len()).unwrap_or(u64::MAX))?;
-    let mut chunks = Vec::new();
-    let mut ids = Vec::new();
-    for (code, rows, records) in tables {
+    for table in tables {
         e.array(3)?;
-        e.uint(code)?;
-        e.uint(rows)?;
-        e.array(u64::try_from(records.len()).unwrap_or(u64::MAX))?;
-        for r in records {
-            let id = r.content_id();
+        e.uint(table.code)?;
+        e.uint(table.rows)?;
+        e.array(u64::try_from(table.ids.len()).unwrap_or(u64::MAX))?;
+        for id in &table.ids {
             e.item(&id.item()?)?;
-            ids.push(id);
-            chunks.push(r);
         }
     }
-    e.uint(u64::from(body.names().is_some()))?;
+    e.uint(u64::from(named))?;
     e.map(0)?;
-    let payload = e.finish()?.into_bytes();
+    Ok(e.finish()?.into_bytes())
+}
+
+/// The version over the tables written: its index record and its geometry's content ID.
+fn index(body: &Body, tables: Vec<Table>, written: Vec<Record>) -> Result<BodyVersion, BodyError> {
+    let all: Vec<&Table> = tables.iter().collect();
+    let payload = index_payload(body, &all, body.names().is_some())?;
+    let geometry: Vec<&Table> = tables
+        .iter()
+        .filter(|t| t.code < table::REGION_NAMES)
+        .collect();
+    let geometry = ContentId::of_payload(&index_payload(body, &geometry, false)?);
+    let mut ids: Vec<ContentId> = tables.iter().flat_map(|t| t.ids.iter().cloned()).collect();
     ids.sort_by_key(|id| {
         id.item()
             .map(geom_op::cbor::Item::into_bytes)
             .unwrap_or_default()
     });
     ids.dedup();
-    Ok(StoredBody {
+    Ok(BodyVersion {
+        body: body.clone(),
+        tables,
         index: Record {
             tag: BODY_TAG,
             flags: REQUIRED,
@@ -643,7 +847,8 @@ fn index(body: &Body, tables: Vec<(u64, u64, Vec<Record>)>) -> Result<StoredBody
             depends: ids,
             payload,
         },
-        chunks,
+        geometry,
+        written,
     })
 }
 
