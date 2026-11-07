@@ -87,6 +87,8 @@
 //! | [`ssi_side`] | 27 | `I256` | 5.3290705182007585e-15 · x^2·y^2 | — (not in predicates.c) | — (Geogram has no implicit crossing point) |
 //! | [`tpi_height`] | 77 | `I576` | 1.385558334732199e-13 · max{d1·n2·n3·n4·n5·n6, n1·d2·n3·n4·n5·n6, n1·n2·d3·n4·n5·n6, n1·n2·n3·d4·n5·n6, n1·n2·n3·n4·d5·n6, n1·n2·n3·n4·n5·d6} | — (not in predicates.c) | — (Geogram has no three-plane point) |
 //! | [`mitre_time`] | 195 | `I768` | 3.3040237212844784e-12 · max{s1·n2·n3·n4·d5·n6·n7·n8, s1·n2·n3·n4·n5·d6·n7·n8, s1·n2·n3·n4·n5·n6·d7·n8, s1·n2·n3·n4·n5·n6·n7·d8, d1·n2·n3·n4·s5·n6·n7·n8, d1·n2·n3·n4·n5·s6·n7·n8, d1·n2·n3·n4·n5·n6·s7·n8, d1·n2·n3·n4·n5·n6·n7·s8, n1·s2·n3·n4·d5·n6·n7·n8, n1·s2·n3·n4·n5·d6·n7·n8, n1·s2·n3·n4·n5·n6·d7·n8, n1·s2·n3·n4·n5·n6·n7·d8, n1·d2·n3·n4·s5·n6·n7·n8, n1·d2·n3·n4·n5·s6·n7·n8, n1·d2·n3·n4·n5·n6·s7·n8, n1·d2·n3·n4·n5·n6·n7·s8, n1·n2·s3·n4·d5·n6·n7·n8, n1·n2·s3·n4·n5·d6·n7·n8, n1·n2·s3·n4·n5·n6·d7·n8, n1·n2·s3·n4·n5·n6·n7·d8, n1·n2·d3·n4·s5·n6·n7·n8, n1·n2·d3·n4·n5·s6·n7·n8, n1·n2·d3·n4·n5·n6·s7·n8, n1·n2·d3·n4·n5·n6·n7·s8, n1·n2·n3·s4·d5·n6·n7·n8, n1·n2·n3·s4·n5·d6·n7·n8, n1·n2·n3·s4·n5·n6·d7·n8, n1·n2·n3·s4·n5·n6·n7·d8, n1·n2·n3·d4·s5·n6·n7·n8, n1·n2·n3·d4·n5·s6·n7·n8, n1·n2·n3·d4·n5·n6·s7·n8, n1·n2·n3·d4·n5·n6·n7·s8} | — (not in predicates.c) | — (Geogram has no moving plane) |
+//! | [`mitre_side`] | 178 | `I512` | 2.4069635173873444e-13 · max{s1·d2·n3·n4·n5, s1·n2·d3·n4·n5, s1·n2·n3·d4·n5, s1·n2·n3·n4·d5, d1·s2·n3·n4·n5, d1·n2·s3·n4·n5, d1·n2·n3·s4·n5, d1·n2·n3·n4·s5, n1·s2·d3·n4·n5, n1·s2·n3·d4·n5, n1·s2·n3·n4·d5, n1·d2·s3·n4·n5, n1·d2·n3·s4·n5, n1·d2·n3·n4·s5, n1·n2·s3·d4·n5, n1·n2·s3·n4·d5, n1·n2·d3·s4·n5, n1·n2·d3·n4·s5, n1·n2·n3·s4·d5, n1·n2·n3·d4·s5} | — (not in predicates.c) | — (Geogram has no moving plane) |
+//! | [`mitre_at`] | 99 | `I512` | 7.416289804496058e-14 · max{s1·n2·n3·n4·t, d1·n2·n3·n4, n1·s2·n3·n4·t, n1·d2·n3·n4, n1·n2·s3·n4·t, n1·n2·d3·n4, n1·n2·n3·s4·t, n1·n2·n3·d4} | — (not in predicates.c) | — (Geogram has no moving plane) |
 //!
 //! Method: Meyer and Pion's almost-static filters, which chapter 6.2 calls semi-static (*FPG: A
 //! code generator for fast and certified geometric predicates*, Real Numbers and Computers 2008,
@@ -121,6 +123,8 @@ pub mod insphere;
 pub mod limbs;
 pub mod lpi_side;
 pub mod lpi_weight;
+pub mod mitre_at;
+pub mod mitre_side;
 pub mod mitre_time;
 pub mod orient2d;
 pub mod orient3d;

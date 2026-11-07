@@ -40,7 +40,7 @@
 
 use core::cmp::Ordering;
 use geom_num::Sign;
-use geom_num::grid::P3;
+use geom_num::grid::{Coord, P3};
 
 use geom_num::plane::{Lpi, Moving, Plane, Tpi};
 
@@ -560,6 +560,84 @@ pub(crate) fn cmp_meeting_from(op: &str, class: Class) -> Vec<([Moving; 4], [Mov
             Moving::cmp_meeting(&a, &b).is_ok().then_some((a, b))
         }),
         Class::Overflow | Class::OnGrid | Class::WrongDirection => Vec::new(),
+    }
+}
+
+/// A time, a whole number of steps within `reach`, as `Moving::cmp_meeting_time` takes it.
+fn time_within(g: &mut SplitMix64, reach: i64) -> Option<Coord> {
+    Coord::new(within(g, reach)).ok()
+}
+
+/// Meetings of four moving planes with a time for [`Moving::cmp_meeting_time`] (piece G273).
+///
+/// - `typical`: typical planes at typical speeds, and a time within 2^20 steps.
+/// - `degenerate`: three planes standing still through one grid point and a fourth moving at its
+///   own value there, which meet at t = −1, and the time −1: the meeting is exactly then.
+/// - `extreme`: extreme planes at the largest speed either way, and a time at either end of the
+///   range.
+#[must_use]
+pub fn cmp_meeting_time(class: Class) -> Vec<([Moving; 4], Coord)> {
+    let mut g = rng("plane::cmp_meeting_time", class);
+    match class {
+        Class::Typical => batch_of(|_| {
+            let four = typical_meeting(&mut g)?;
+            let time = time_within(&mut g, 1 << 20)?;
+            Moving::cmp_meeting_time(&four, time)
+                .is_ok()
+                .then_some((four, time))
+        }),
+        Class::Degenerate => batch_of(|_| {
+            let at = typical3(&mut g);
+            let four = meeting_at(&mut g, at, 0)?;
+            let time = Coord::new(-1).ok()?;
+            (Moving::cmp_meeting_time(&four, time) == Ok(Ordering::Equal)).then_some((four, time))
+        }),
+        Class::Extreme => batch_of(|_| {
+            let four = extreme_meeting(&mut g)?;
+            let time = Coord::new(i64::from(g.sign()) * M).ok()?;
+            Moving::cmp_meeting_time(&four, time)
+                .is_ok()
+                .then_some((four, time))
+        }),
+        Class::NearlyDegenerate | Class::Overflow | Class::OnGrid | Class::WrongDirection => {
+            Vec::new()
+        }
+    }
+}
+
+/// Meetings of four moving planes and a fifth plane for [`Moving::side_at_meeting`] (piece
+/// G273).
+///
+/// - `typical`: typical planes at typical speeds.
+/// - `degenerate`: the fifth plane is one of the four, so the meeting lies on it.
+/// - `extreme`: extreme planes at the largest speed either way.
+#[must_use]
+pub fn side_at_meeting(class: Class) -> Vec<([Moving; 4], Moving)> {
+    let mut g = rng("plane::side_at_meeting", class);
+    match class {
+        Class::Typical => batch_of(|_| {
+            let four = typical_meeting(&mut g)?;
+            let other = moving(typical_plane(&mut g)?, i128::from(within(&mut g, 1 << 60)))?;
+            Moving::side_at_meeting(&four, &other)
+                .is_ok()
+                .then_some((four, other))
+        }),
+        Class::Degenerate => batch_of(|k| {
+            let at = typical3(&mut g);
+            let four = meeting_at(&mut g, at, 0)?;
+            let other = four[k % 4];
+            (Moving::side_at_meeting(&four, &other) == Ok(Sign::Zero)).then_some((four, other))
+        }),
+        Class::Extreme => batch_of(|_| {
+            let four = extreme_meeting(&mut g)?;
+            let other = moving(extreme_plane(&mut g)?, i128::from(g.sign()) * SPEED_LIMIT)?;
+            Moving::side_at_meeting(&four, &other)
+                .is_ok()
+                .then_some((four, other))
+        }),
+        Class::NearlyDegenerate | Class::Overflow | Class::OnGrid | Class::WrongDirection => {
+            Vec::new()
+        }
     }
 }
 

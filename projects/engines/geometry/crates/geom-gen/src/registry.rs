@@ -29,7 +29,7 @@ use crate::predicates;
 use crate::quadrature;
 
 /// Every generator, in the order they run.
-pub const GENERATORS: [Generator; 61] = [
+pub const GENERATORS: [Generator; 65] = [
     Generator {
         name: grid_steps::NAME,
         output: grid_steps::OUTPUT,
@@ -119,6 +119,18 @@ pub const GENERATORS: [Generator; 61] = [
         output: "projects/engines/geometry/crates/geom-num/src/generated/mitre_time.rs",
         about: "mitre_time's f64 filter, exact path and bit-range certificate, from its description",
         generate: Generate::Plain(predicates::generate_mitre_time),
+    },
+    Generator {
+        name: "predicate-mitre-side",
+        output: "projects/engines/geometry/crates/geom-num/src/generated/mitre_side.rs",
+        about: "mitre_side's f64 filter, exact path and bit-range certificate, from its description",
+        generate: Generate::Plain(predicates::generate_mitre_side),
+    },
+    Generator {
+        name: "predicate-mitre-at",
+        output: "projects/engines/geometry/crates/geom-num/src/generated/mitre_at.rs",
+        about: "mitre_at's f64 filter, exact path and bit-range certificate, from its description",
+        generate: Generate::Plain(predicates::generate_mitre_at),
     },
     Generator {
         name: predicates::PLAIN_GENERATOR,
@@ -389,6 +401,18 @@ pub const GENERATORS: [Generator; 61] = [
         output: "projects/engines/geometry/crates/geom-gen/generated/fptaylor-mitre-time.fpt",
         about: "mitre_time's normalised f64 filter for FPTaylor, whose certificate HOL Light checks",
         generate: Generate::Plain(predicates::generate_fptaylor_mitre_time),
+    },
+    Generator {
+        name: "fptaylor-mitre-side",
+        output: "projects/engines/geometry/crates/geom-gen/generated/fptaylor-mitre-side.fpt",
+        about: "mitre_side's normalised f64 filter for FPTaylor, whose certificate HOL Light checks",
+        generate: Generate::Plain(predicates::generate_fptaylor_mitre_side),
+    },
+    Generator {
+        name: "fptaylor-mitre-at",
+        output: "projects/engines/geometry/crates/geom-gen/generated/fptaylor-mitre-at.fpt",
+        about: "mitre_at's normalised f64 filter for FPTaylor, whose certificate HOL Light checks",
+        generate: Generate::Plain(predicates::generate_fptaylor_mitre_at),
     },
     Generator {
         name: quadrature::NAME,

@@ -892,10 +892,29 @@ pub mod plane {
         run
     }
 
+    #[library_benchmark(teardown = verify)]
+    #[bench::typical(leak("plane/cmp_meeting_time/typical"))]
+    #[bench::degenerate(leak("plane/cmp_meeting_time/degenerate"))]
+    #[bench::extreme(leak("plane/cmp_meeting_time/extreme"))]
+    fn cmp_meeting_time(run: &'static mut Named) -> &'static mut Named {
+        run.bench.measure();
+        run
+    }
+
+    #[library_benchmark(teardown = verify)]
+    #[bench::typical(leak("plane/side_at_meeting/typical"))]
+    #[bench::degenerate(leak("plane/side_at_meeting/degenerate"))]
+    #[bench::extreme(leak("plane/side_at_meeting/extreme"))]
+    fn side_at_meeting(run: &'static mut Named) -> &'static mut Named {
+        run.bench.measure();
+        run
+    }
+
     library_benchmark_group!(
         name = plane;
         benchmarks = through, side, tpi_new, tpi_homogeneous, side_of_tpi, to_grid, lpi_new,
-            lpi_homogeneous, side_of_lpi, lpi_to_grid, cmp_height, cmp_meeting
+            lpi_homogeneous, side_of_lpi, lpi_to_grid, cmp_height, cmp_meeting,
+            cmp_meeting_time, side_at_meeting
     );
 }
 

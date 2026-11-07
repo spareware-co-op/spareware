@@ -202,6 +202,8 @@ pub static OPS: &[Op] = &[
     Op { group: "plane", name: "side_of_tpi", measures: "Plane::side_of_tpi", classes: TDNE, prepare: |c| bind(inputs::plane::side_of_tpi(c), kernels::plane::side_of_tpi) },
     Op { group: "plane", name: "cmp_height", measures: "Tpi::cmp_height", classes: TDNE, prepare: |c| bind(inputs::plane::cmp_height(c), kernels::plane::cmp_height) },
     Op { group: "plane", name: "cmp_meeting", measures: "Moving::cmp_meeting", classes: TDNE, prepare: |c| bind(inputs::plane::cmp_meeting(c), kernels::plane::cmp_meeting) },
+    Op { group: "plane", name: "cmp_meeting_time", measures: "Moving::cmp_meeting_time", classes: TDE, prepare: |c| bind(inputs::plane::cmp_meeting_time(c), kernels::plane::cmp_meeting_time) },
+    Op { group: "plane", name: "side_at_meeting", measures: "Moving::side_at_meeting", classes: TDE, prepare: |c| bind(inputs::plane::side_at_meeting(c), kernels::plane::side_at_meeting) },
     Op { group: "plane", name: "to_grid", measures: "Tpi::to_grid", classes: &[Typical, OnGrid, Extreme, Overflow], prepare: |c| bind(inputs::plane::to_grid(c), kernels::plane::to_grid) },
     Op { group: "plane", name: "lpi_new", measures: "Lpi::new", classes: TDE, prepare: |c| bind(inputs::plane::lpi_new(c), kernels::plane::lpi_new) },
     Op { group: "plane", name: "lpi_homogeneous", measures: "Lpi::homogeneous", classes: TE, prepare: |c| bind(inputs::plane::lpi_homogeneous(c), kernels::plane::lpi_homogeneous) },

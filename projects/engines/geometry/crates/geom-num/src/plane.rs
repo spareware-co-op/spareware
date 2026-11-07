@@ -1031,6 +1031,105 @@ impl Moving {
         // t_a − t_b has the sign of the value times those of ns_a and ns_b; `Less` is a first.
         Ok(order(sign.mul(ns_a).mul(ns_b)))
     }
+
+    /// When four moving planes meet, against a time: whether the meeting is before, at or after
+    /// `time` (chapter 13.11, a mitre-offset event against the offset distance, which says
+    /// whether the plan has an event to handle before it gets there; piece G273). `Less` means
+    /// the meeting comes first.
+    ///
+    /// The four planes meet at t = −nd / ns (see [`Moving::cmp_meeting`]), and the 4 × 4
+    /// determinant of their rows at time T is nd + T ns = ns (T − t), so the order of T and t is
+    /// the sign of nd + T ns times the sign of ns. Nothing is divided or rounded. `time` is a whole
+    /// number of grid steps, as an offset distance is.
+    ///
+    /// Routing (chapter 6.2): the sign of ns by the generated `tpi_side`, and the sign of
+    /// nd + T ns by the generated `mitre_at`, each filter first, then its exact path.
+    ///
+    /// Bit budget, derived by `geom-gen` and certified step by step in `generated::mitre_at`'s
+    /// header (|`n_i`| < 2^83, |d| and |s| < 2^125, |T| < 2^40): nd and ns below 2^379, T ns below
+    /// 2^419 and the sum below 2^419, in [`crate::wide::I512`] (limit 2^511), the total path.
+    ///
+    /// # Errors
+    ///
+    /// [`NumError::Degenerate`] when ns = 0: the four planes never meet at one time, or meet at
+    /// every time. [`NumError::BudgetExceeded`] if a step of the exact path did not fit, which
+    /// the certificate rules out for planes and speeds within their budgets.
+    pub fn cmp_meeting_time(four: &[Moving; 4], time: Coord) -> Result<Ordering, NumError> {
+        let ns = speeds_side(four)?;
+        if ns == Sign::Zero {
+            return Err(NumError::Degenerate);
+        }
+        let [
+            ([n1x, n1y, n1z], d1, s1),
+            ([n2x, n2y, n2z], d2, s2),
+            ([n3x, n3y, n3z], d3, s3),
+            ([n4x, n4y, n4z], d4, s4),
+        ] = four.map(|m| (m.plane.n, m.plane.d, m.speed));
+        let t = i128::from(time.get());
+        let sign = generated::mitre_at::filter(
+            n1x, n1y, n1z, d1, s1, n2x, n2y, n2z, d2, s2, n3x, n3y, n3z, d3, s3, n4x, n4y, n4z, d4,
+            s4, t,
+        )
+        .or_else(|| {
+            generated::mitre_at::exact(
+                n1x, n1y, n1z, d1, s1, n2x, n2y, n2z, d2, s2, n3x, n3y, n3z, d3, s3, n4x, n4y, n4z,
+                d4, s4, t,
+            )
+        })
+        .ok_or(NumError::BudgetExceeded)?;
+        // nd + T ns = ns (T − t_meet): the sign of T − t_meet, so `Less` (T before) is its reverse.
+        Ok(order(sign.mul(ns)).reverse())
+    }
+
+    /// Which side of a fifth moving plane the meeting of four others lies on, at the time they
+    /// meet: the sign of the fifth plane's distance n · x + d + t s there, which says whether a
+    /// mitre-offset event is valid, and which of the other faces it touches (chapter 13.11; piece
+    /// G273). `Positive` is the side its normal points to.
+    ///
+    /// Planes 1 to 4 meet at the point and time that solve their four equations in (x, t). By
+    /// Schur's complement the fifth plane's distance there is D / ns, where D is the 5 × 5
+    /// determinant of the rows (n, s, d) of all five and ns the 4 × 4 determinant of the first
+    /// four rows of (n, s), so the sign is that of D times that of ns. Nothing is divided or
+    /// rounded.
+    ///
+    /// Routing (chapter 6.2): the sign of ns by the generated `tpi_side`, and the sign of D by the
+    /// generated `mitre_side`, each filter first, then its exact path.
+    ///
+    /// Bit budget, derived by `geom-gen` and certified step by step in `generated::mitre_side`'s
+    /// header (|`n_i`| < 2^83, |d| and |s| < 2^125): each 3 × 3 minor of normals is below 2^252,
+    /// each 2 × 2 minor of (s, d) below 2^251, each of ten products below 2^503 and D below 2^506,
+    /// in [`crate::wide::I512`] (limit 2^511), the total path.
+    ///
+    /// # Errors
+    ///
+    /// [`NumError::Degenerate`] when ns = 0 for the first four planes. [`NumError::BudgetExceeded`]
+    /// if a step of the exact path did not fit, which the certificate rules out for planes and
+    /// speeds within their budgets.
+    pub fn side_at_meeting(four: &[Moving; 4], other: &Moving) -> Result<Sign, NumError> {
+        let ns = speeds_side(four)?;
+        if ns == Sign::Zero {
+            return Err(NumError::Degenerate);
+        }
+        let [
+            ([n1x, n1y, n1z], d1, s1),
+            ([n2x, n2y, n2z], d2, s2),
+            ([n3x, n3y, n3z], d3, s3),
+            ([n4x, n4y, n4z], d4, s4),
+        ] = four.map(|m| (m.plane.n, m.plane.d, m.speed));
+        let ([n5x, n5y, n5z], d5, s5) = (other.plane.n, other.plane.d, other.speed);
+        let sign = generated::mitre_side::filter(
+            n1x, n1y, n1z, d1, s1, n2x, n2y, n2z, d2, s2, n3x, n3y, n3z, d3, s3, n4x, n4y, n4z, d4,
+            s4, n5x, n5y, n5z, d5, s5,
+        )
+        .or_else(|| {
+            generated::mitre_side::exact(
+                n1x, n1y, n1z, d1, s1, n2x, n2y, n2z, d2, s2, n3x, n3y, n3z, d3, s3, n4x, n4y, n4z,
+                d4, s4, n5x, n5y, n5z, d5, s5,
+            )
+        })
+        .ok_or(NumError::BudgetExceeded)?;
+        Ok(sign.mul(ns))
+    }
 }
 
 /// The sign of ns for four moving planes: the determinant of their rows (n, s), `tpi_side`'s value

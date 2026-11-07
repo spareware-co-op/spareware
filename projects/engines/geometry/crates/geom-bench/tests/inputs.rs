@@ -2444,6 +2444,31 @@ fn the_wide_orders_classes_are_what_they_say() {
                 .all(|m| m.speed().unsigned_abs() == p::SPEED_LIMIT.unsigned_abs())
     }));
 
+    // Piece G273: the time and side questions on a meeting.
+    for class in [Typical, Degenerate, Extreme] {
+        assert_eq!(p::cmp_meeting_time(class).len(), BATCH, "{class}");
+        assert_eq!(p::side_at_meeting(class).len(), BATCH, "{class}");
+    }
+    assert!(
+        p::cmp_meeting_time(Degenerate)
+            .iter()
+            .all(|(four, t)| Moving::cmp_meeting_time(four, *t) == Ok(Ordering::Equal))
+    );
+    assert!(p::cmp_meeting_time(Typical).iter().all(|(four, t)| {
+        matches!(
+            Moving::cmp_meeting_time(four, *t),
+            Ok(Ordering::Less | Ordering::Greater)
+        )
+    }));
+    assert!(
+        p::side_at_meeting(Degenerate)
+            .iter()
+            .all(|(four, o)| Moving::side_at_meeting(four, o) == Ok(Sign::Zero))
+    );
+    assert!(p::side_at_meeting(Typical).iter().all(|(four, o)| {
+        Moving::side_at_meeting(four, o).is_ok_and(|sign| sign != Sign::Zero)
+    }));
+
     // The generated batches: the filter decides typical inputs and not nearly degenerate ones, and
     // the exact value of degenerate ones is zero.
     let h = |[

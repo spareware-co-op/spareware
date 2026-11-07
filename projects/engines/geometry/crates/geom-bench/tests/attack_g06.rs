@@ -1027,6 +1027,16 @@ fn direct_digest(group: &str, name: &str, class: Class) -> Option<Digest> {
                 .iter()
                 .map(|(a, b)| geom_num::plane::Moving::cmp_meeting(a, b)),
         ),
+        ("plane", "cmp_meeting_time") => fold(
+            ip::cmp_meeting_time(class)
+                .iter()
+                .map(|(four, time)| geom_num::plane::Moving::cmp_meeting_time(four, *time)),
+        ),
+        ("plane", "side_at_meeting") => fold(
+            ip::side_at_meeting(class)
+                .iter()
+                .map(|(four, other)| geom_num::plane::Moving::side_at_meeting(four, other)),
+        ),
         ("plane", "to_grid") => fold(ip::to_grid(class).iter().map(Tpi::to_grid)),
         ("plane", "lpi_new") => fold(
             ip::lpi_new(class)

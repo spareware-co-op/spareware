@@ -1,7 +1,8 @@
 //! Generators `predicate-module`, `predicate-orient2d`, `predicate-orient3d`, `predicate-incircle`,
 //! `predicate-insphere`, `predicate-plane-side`, `predicate-tpi-weight`, `predicate-tpi-side`,
 //! `predicate-lpi-weight`, `predicate-lpi-side`, `predicate-ssi-weight`, `predicate-ssi-side`,
-//! `predicate-tpi-height`, `predicate-mitre-time`, `predicate-variant-plain` and
+//! `predicate-tpi-height`, `predicate-mitre-time`, `predicate-mitre-side`, `predicate-mitre-at`,
+//! `predicate-variant-plain` and
 //! `predicate-variant-limbs`: the kernel's predicates, from their
 //! descriptions; `verus-orient2d`, `verus-orient3d`, `verus-incircle`, `verus-insphere`,
 //! `verus-plane-side`, `verus-tpi-weight`, `verus-tpi-side`, `verus-lpi-weight`, `verus-lpi-side`,
@@ -13,8 +14,8 @@
 //! `gappa-ssi-side`, `gappa-lpi-weight-z-n`, `gappa-lpi-weight-y-n`, `gappa-lpi-weight-x-n`,
 //! `fptaylor-orient2d`, `fptaylor-orient3d`, `fptaylor-incircle`, `fptaylor-insphere`,
 //! `fptaylor-plane-side`, `fptaylor-tpi-weight`, `fptaylor-tpi-side`, `fptaylor-lpi-weight`,
-//! `fptaylor-lpi-side`, `fptaylor-ssi-weight`, `fptaylor-ssi-side`, `fptaylor-tpi-height` and
-//! `fptaylor-mitre-time`, the problems that
+//! `fptaylor-lpi-side`, `fptaylor-ssi-weight`, `fptaylor-ssi-side`, `fptaylor-tpi-height`,
+//! `fptaylor-mitre-time`, `fptaylor-mitre-side` and `fptaylor-mitre-at`, the problems that
 //! machine-check the filters' error bounds ([`crate::predicate_certificates`]).
 //!
 //! What it does: holds the description of each predicate on explicit grid points (chapter 6.2:
@@ -457,6 +458,130 @@ let t = b_nd * a_ns - a_nd * b_ns
 sign t
 ";
 
+/// `mitre_side`: which side of a fifth moving plane the meeting of four others lies on, at the
+/// time they meet: the validity test of a mitre-offset event (chapter 13.11, decision 32.29).
+pub const MITRE_SIDE: &str = "\
+# mitre_side: the sign of the 5 x 5 determinant of the rows (nk, sk, dk), k = 1 to 5, for five
+# moving planes nk . x + dk + t sk = 0. Planes 1 to 4 meet at the point and time that solve
+# their four equations in (x, t); by Schur's complement the fifth plane's signed distance there,
+# n5 . x + d5 + t s5, is this determinant over the 4 x 4 determinant ns of the rows (nk, sk), so
+# times the sign of ns (tpi_side of the speeds) it is that distance's sign, as
+# geom_num::plane::Moving::side_at_meeting computes it. The determinant is expanded along its
+# three normal columns, ten products of a 3 x 3 minor of normals and a 2 x 2 minor of
+# (speed, offset). Each plane's normal, offset and speed are groups of their own.
+predicate mitre_side
+input n1x n1y n1z: rounded 83 in n1
+input d1: rounded 125 in d1
+input s1: rounded 125 in s1
+input n2x n2y n2z: rounded 83 in n2
+input d2: rounded 125 in d2
+input s2: rounded 125 in s2
+input n3x n3y n3z: rounded 83 in n3
+input d3: rounded 125 in d3
+input s3: rounded 125 in s3
+input n4x n4y n4z: rounded 83 in n4
+input d4: rounded 125 in d4
+input s4: rounded 125 in s4
+input n5x n5y n5z: rounded 83 in n5
+input d5: rounded 125 in d5
+input s5: rounded 125 in s5
+let c23_x = n2y * n3z - n2z * n3y
+let c23_y = n2z * n3x - n2x * n3z
+let c23_z = n2x * n3y - n2y * n3x
+let c24_x = n2y * n4z - n2z * n4y
+let c24_y = n2z * n4x - n2x * n4z
+let c24_z = n2x * n4y - n2y * n4x
+let c25_x = n2y * n5z - n2z * n5y
+let c25_y = n2z * n5x - n2x * n5z
+let c25_z = n2x * n5y - n2y * n5x
+let c34_x = n3y * n4z - n3z * n4y
+let c34_y = n3z * n4x - n3x * n4z
+let c34_z = n3x * n4y - n3y * n4x
+let c35_x = n3y * n5z - n3z * n5y
+let c35_y = n3z * n5x - n3x * n5z
+let c35_z = n3x * n5y - n3y * n5x
+let c45_x = n4y * n5z - n4z * n5y
+let c45_y = n4z * n5x - n4x * n5z
+let c45_z = n4x * n5y - n4y * n5x
+let q12 = s1 * d2 - s2 * d1
+let q13 = s1 * d3 - s3 * d1
+let q14 = s1 * d4 - s4 * d1
+let q15 = s1 * d5 - s5 * d1
+let q23 = s2 * d3 - s3 * d2
+let q24 = s2 * d4 - s4 * d2
+let q25 = s2 * d5 - s5 * d2
+let q34 = s3 * d4 - s4 * d3
+let q35 = s3 * d5 - s5 * d3
+let q45 = s4 * d5 - s5 * d4
+let m123 = n1x * c23_x + n1y * c23_y + n1z * c23_z
+let p123 = m123 * q45
+let m124 = n1x * c24_x + n1y * c24_y + n1z * c24_z
+let p124 = m124 * q35
+let m125 = n1x * c25_x + n1y * c25_y + n1z * c25_z
+let p125 = m125 * q34
+let m134 = n1x * c34_x + n1y * c34_y + n1z * c34_z
+let p134 = m134 * q25
+let m135 = n1x * c35_x + n1y * c35_y + n1z * c35_z
+let p135 = m135 * q24
+let m145 = n1x * c45_x + n1y * c45_y + n1z * c45_z
+let p145 = m145 * q23
+let m234 = n2x * c34_x + n2y * c34_y + n2z * c34_z
+let p234 = m234 * q15
+let m235 = n2x * c35_x + n2y * c35_y + n2z * c35_z
+let p235 = m235 * q14
+let m245 = n2x * c45_x + n2y * c45_y + n2z * c45_z
+let p245 = m245 * q13
+let m345 = n3x * c45_x + n3y * c45_y + n3z * c45_z
+let p345 = m345 * q12
+let v = p123 - p124 + p125 + p134 - p135 + p145 - p234 + p235 - p245 + p345
+sign v
+";
+
+/// `mitre_at`: when four moving planes meet, against a given time: whether a mitre-offset event
+/// comes before the offset distance (chapter 13.11, decision 32.29).
+pub const MITRE_AT: &str = "\
+# mitre_at: the sign of nd + t ns for four moving planes nk . x + dk + t sk = 0 and a time t, a
+# whole number of grid steps. Four such planes meet when the 4 x 4 determinant of their rows
+# (nk, dk + t sk) is zero, at te = -nd / ns, with nd and ns as mitre_time has them; the
+# determinant at time t is nd + t ns = ns (t - te), so times the sign of ns (tpi_side of the
+# speeds) it is the sign of t - te, as geom_num::plane::Moving::cmp_meeting_time computes it.
+# Each plane's normal, offset and speed are groups of their own, and so is the time.
+predicate mitre_at
+input n1x n1y n1z: rounded 83 in n1
+input d1: rounded 125 in d1
+input s1: rounded 125 in s1
+input n2x n2y n2z: rounded 83 in n2
+input d2: rounded 125 in d2
+input s2: rounded 125 in s2
+input n3x n3y n3z: rounded 83 in n3
+input d3: rounded 125 in d3
+input s3: rounded 125 in s3
+input n4x n4y n4z: rounded 83 in n4
+input d4: rounded 125 in d4
+input s4: rounded 125 in s4
+input t: rounded 40 in t
+let bc_x = n2y * n3z - n2z * n3y
+let bc_y = n2z * n3x - n2x * n3z
+let bc_z = n2x * n3y - n2y * n3x
+let ca_x = n3y * n1z - n3z * n1y
+let ca_y = n3z * n1x - n3x * n1z
+let ca_z = n3x * n1y - n3y * n1x
+let ab_x = n1y * n2z - n1z * n2y
+let ab_y = n1z * n2x - n1x * n2z
+let ab_z = n1x * n2y - n1y * n2x
+let w = n1x * bc_x + n1y * bc_y + n1z * bc_z
+let mx_x = d1 * bc_x + d2 * ca_x + d3 * ab_x
+let mx_y = d1 * bc_y + d2 * ca_y + d3 * ab_y
+let mx_z = d1 * bc_z + d2 * ca_z + d3 * ab_z
+let ms_x = s1 * bc_x + s2 * ca_x + s3 * ab_x
+let ms_y = s1 * bc_y + s2 * ca_y + s3 * ab_y
+let ms_z = s1 * bc_z + s2 * ca_z + s3 * ab_z
+let nd = d4 * w - n4x * mx_x - n4y * mx_y - n4z * mx_z
+let ns = s4 * w - n4x * ms_x - n4y * ms_y - n4z * ms_z
+let f = nd + t * ns
+sign f
+";
+
 /// One predicate: its generator's name, the description's constant name, the description, its
 /// output file, and the comparison row of the parent module.
 pub struct Predicate {
@@ -473,7 +598,7 @@ pub struct Predicate {
 }
 
 /// The predicates, in the order the registry runs them.
-pub const PREDICATES: [Predicate; 13] = [
+pub const PREDICATES: [Predicate; 15] = [
     Predicate {
         generator: "predicate-orient2d",
         constant: "ORIENT2D",
@@ -663,6 +788,30 @@ pub const PREDICATES: [Predicate; 13] = [
             fpg: "— (Geogram has no moving plane)",
         },
     },
+    Predicate {
+        generator: "predicate-mitre-side",
+        constant: "MITRE_SIDE",
+        text: MITRE_SIDE,
+        output: "projects/engines/geometry/crates/geom-num/src/generated/mitre_side.rs",
+        comparison: Comparison {
+            name: "mitre_side",
+            serves: "which side of a fifth moving plane the meeting of four others lies on, at the time they meet, up to the sign of those four planes' speeds' determinant, a mitre-offset event's validity (chapter 13.11, piece G273): [`crate::plane::Moving::side_at_meeting`] calls it, filter first, and multiplies its sign by that sign; its documentation states the predicate and its bit budget",
+            shewchuk: "— (not in predicates.c)",
+            fpg: "— (Geogram has no moving plane)",
+        },
+    },
+    Predicate {
+        generator: "predicate-mitre-at",
+        constant: "MITRE_AT",
+        text: MITRE_AT,
+        output: "projects/engines/geometry/crates/geom-num/src/generated/mitre_at.rs",
+        comparison: Comparison {
+            name: "mitre_at",
+            serves: "when four moving planes meet, against a given time, up to the sign of their speeds' determinant, whether a mitre-offset event comes before the offset distance (chapter 13.11, piece G273): [`crate::plane::Moving::cmp_meeting_time`] calls it, filter first, and multiplies its sign by that sign; its documentation states the predicate and its bit budget",
+            shewchuk: "— (not in predicates.c)",
+            fpg: "— (Geogram has no moving plane)",
+        },
+    },
 ];
 
 /// The parent module's generator.
@@ -811,6 +960,24 @@ pub fn generate_tpi_height() -> Result<Vec<u8>, GenError> {
 /// [`GenError::Generator`] if the derivation or the emission fails.
 pub fn generate_mitre_time() -> Result<Vec<u8>, GenError> {
     module_of(named("mitre_time")?)
+}
+
+/// Generator `predicate-mitre-side` (piece G273).
+///
+/// # Errors
+///
+/// [`GenError::Generator`] if the derivation or the emission fails.
+pub fn generate_mitre_side() -> Result<Vec<u8>, GenError> {
+    module_of(named("mitre_side")?)
+}
+
+/// Generator `predicate-mitre-at` (piece G273).
+///
+/// # Errors
+///
+/// [`GenError::Generator`] if the derivation or the emission fails.
+pub fn generate_mitre_at() -> Result<Vec<u8>, GenError> {
+    module_of(named("mitre_at")?)
 }
 
 /// The folder of `geom-num`'s Verus crate that the predicate twins are generated into: modules of
@@ -1298,6 +1465,26 @@ pub fn generate_fptaylor_tpi_height() -> Result<Vec<u8>, GenError> {
 /// [`GenError::Generator`] if the derivation or the emission fails.
 pub fn generate_fptaylor_mitre_time() -> Result<Vec<u8>, GenError> {
     certificate("mitre_time", "fptaylor-mitre-time", fptaylor_problem)
+}
+
+/// Generator `fptaylor-mitre-side`: `mitre_side`'s normalised filter for `FPTaylor`, whose certificate HOL
+/// Light checks (piece G273).
+///
+/// # Errors
+///
+/// [`GenError::Generator`] if the derivation or the emission fails.
+pub fn generate_fptaylor_mitre_side() -> Result<Vec<u8>, GenError> {
+    certificate("mitre_side", "fptaylor-mitre-side", fptaylor_problem)
+}
+
+/// Generator `fptaylor-mitre-at`: `mitre_at`'s normalised filter for `FPTaylor`, whose certificate HOL
+/// Light checks (piece G273).
+///
+/// # Errors
+///
+/// [`GenError::Generator`] if the derivation or the emission fails.
+pub fn generate_fptaylor_mitre_at() -> Result<Vec<u8>, GenError> {
+    certificate("mitre_at", "fptaylor-mitre-at", fptaylor_problem)
 }
 
 /// Generator `fptaylor-lpi-weight`: `lpi_weight`'s normalised filter for `FPTaylor`, whose certificate

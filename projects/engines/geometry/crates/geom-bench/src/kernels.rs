@@ -252,7 +252,7 @@ pub mod wide32 {
 /// Plane-based geometry: `geom_num::plane`.
 pub mod plane {
     use core::cmp::Ordering;
-    use geom_num::grid::{P3, Rounded};
+    use geom_num::grid::{Coord, P3, Rounded};
 
     use geom_num::plane::{Lpi, Moving, Plane, Tpi};
     use geom_num::wide::{I256, I320};
@@ -333,6 +333,26 @@ pub mod plane {
         out: &mut Vec<Result<Ordering, NumError>>,
     ) {
         run(batch, out, |(a, b)| Moving::cmp_meeting(a, b));
+    }
+
+    /// `Moving::cmp_meeting_time` on each meeting of four moving planes and a time (piece G273).
+    #[inline(never)]
+    pub fn cmp_meeting_time(
+        batch: &[([Moving; 4], Coord)],
+        out: &mut Vec<Result<Ordering, NumError>>,
+    ) {
+        run(batch, out, |(four, time)| {
+            Moving::cmp_meeting_time(four, *time)
+        });
+    }
+
+    /// `Moving::side_at_meeting` on each meeting of four moving planes and a fifth plane (piece
+    /// G273).
+    #[inline(never)]
+    pub fn side_at_meeting(batch: &[([Moving; 4], Moving)], out: &mut Vec<Result<Sign, NumError>>) {
+        run(batch, out, |(four, other)| {
+            Moving::side_at_meeting(four, other)
+        });
     }
 }
 

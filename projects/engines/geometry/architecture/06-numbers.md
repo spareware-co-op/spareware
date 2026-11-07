@@ -40,6 +40,8 @@ A predicate is a yes, no or "exactly on it" question: which side of this plane i
   | Order of two hidden-line events along an edge, view along a grid axis | about 13B+27 = 547 | `I576` | 18.6; chapter 18, open question 1 |
   | The same, for any view direction and for perspective | about 15B+33 = 633 | `I640` | 18.6; chapter 18, open question 1 |
   | Order of two mitre-offset events in time (four moving planes) | 759, derived (G251) | `I768` | 13.11; chapter 13, open question 2 |
+  | Mitre-offset event against a time (four moving planes) | 419, derived (G273) | `I512` | 13.11 |
+  | Side of a fifth moving plane at a mitre-offset event | 506, derived (G273) | `I512` | 13.11 |
   | Pencil predicates for two quadrics in general position | several thousand, by a rough count | To be derived | 12.7; chapter 12, open question 7 |
   | 2D predicates on rational constructions (rational directions, rational centres) | not yet derived; possibly several thousand (unverified) | To be derived | 14; chapter 14, open question 2 |
 

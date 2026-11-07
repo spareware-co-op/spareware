@@ -77,7 +77,7 @@ struct Filter {
 }
 
 /// Every generated predicate, each with every problem committed for it.
-const FILTERS: [Filter; 13] = [
+const FILTERS: [Filter; 15] = [
     Filter {
         name: "orient2d",
         module: include_str!("../../geom-num/src/generated/orient2d.rs"),
@@ -260,6 +260,24 @@ const FILTERS: [Filter; 13] = [
         fptaylor: (
             "fptaylor-mitre-time.fpt",
             include_str!("../generated/fptaylor-mitre-time.fpt"),
+        ),
+    },
+    Filter {
+        name: "mitre_side",
+        module: include_str!("../../geom-num/src/generated/mitre_side.rs"),
+        gappa: &[],
+        fptaylor: (
+            "fptaylor-mitre-side.fpt",
+            include_str!("../generated/fptaylor-mitre-side.fpt"),
+        ),
+    },
+    Filter {
+        name: "mitre_at",
+        module: include_str!("../../geom-num/src/generated/mitre_at.rs"),
+        gappa: &[],
+        fptaylor: (
+            "fptaylor-mitre-at.fpt",
+            include_str!("../generated/fptaylor-mitre-at.fpt"),
         ),
     },
 ];
