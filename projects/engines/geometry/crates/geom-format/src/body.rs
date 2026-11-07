@@ -47,8 +47,8 @@ use geom_op::cbor::{EncodeError, Encoder};
 use geom_run::{Stopped, WorkMeter};
 use geom_topo::order::{NameKey, Names};
 use geom_topo::{
-    Arenas, Body, BodyKind, Builder, Column, Edge, Face, Fin, Ix, Loop, Region, RegionKind, Sense,
-    Shell, TopoError, Vertex,
+    Arenas, Body, BodyKind, Builder, Column, Edge, Face, Fin, Ix, Loop, PointKind, Region,
+    RegionKind, Sense, Shell, TopoError, Vertex,
 };
 
 use crate::cbor::{CborError, Decoder, Item, int_column};
@@ -500,13 +500,15 @@ pub fn write_body(body: &Body, meter: &mut WorkMeter<'_>) -> Result<StoredBody, 
         1,
         |i| points.get(i).map_or(0, |c| c.len()),
         |e, i| {
-            let xyz: Vec<i64> = points
-                .get(i)
-                .copied()
-                .unwrap_or_default()
-                .iter()
-                .flat_map(|p| [p.x.get(), p.y.get(), p.z.get()])
-                .collect();
+            let mut xyz: Vec<i64> = Vec::new();
+            for point in points.get(i).copied().unwrap_or_default() {
+                // A vertex where three planes meet has no coordinates to store: the format holds
+                // grid points until a piece stores the plane pool with them.
+                let PointKind::Grid(p) = point else {
+                    return Err(BodyError::Shape("a vertex where three planes meet"));
+                };
+                xyz.extend([p.x.get(), p.y.get(), p.z.get()]);
+            }
             e.i64_column(&xyz)?;
             Ok(())
         },
@@ -1038,7 +1040,7 @@ fn read_chunk(
                 return Err(BodyError::Shape("three coordinates per point"));
             }
             for &[x, y, z] in xyz.as_chunks::<3>().0 {
-                a.points.push(grid(x, y, z)?)?;
+                a.points.push(PointKind::Grid(grid(x, y, z)?))?;
             }
         }
         table::SURFACES => {
