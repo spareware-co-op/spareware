@@ -35,7 +35,23 @@ use geom_2d::arrange::{ArrangeError, Arrangement, arrange};
 use geom_num::carrier::Rational2;
 use geom_num::grid::P2;
 use geom_run::{Budget, WorkMeter};
-use geom_test::{Seed, SplitMix64};
+
+/// A small deterministic generator (SplitMix64, Steele, Lea and Flood 2014), for the drawings.
+struct SplitMix64(u64);
+
+impl SplitMix64 {
+    fn new(seed: u64) -> SplitMix64 {
+        SplitMix64(seed)
+    }
+
+    fn next_u64(&mut self) -> u64 {
+        self.0 = self.0.wrapping_add(0x9E37_79B9_7F4A_7C15);
+        let mut z = self.0;
+        z = (z ^ (z >> 30)).wrapping_mul(0xBF58_476D_1CE4_E5B9);
+        z = (z ^ (z >> 27)).wrapping_mul(0x94D0_49BB_1331_11EB);
+        z ^ (z >> 31)
+    }
+}
 
 fn p(x: i64, y: i64) -> P2 {
     P2::new(x, y).unwrap()
@@ -256,7 +272,7 @@ fn a_zero_length_segment_is_ignored_and_a_stopped_meter_stops() {
 
 #[test]
 fn the_arrangement_does_not_depend_on_the_input_order() {
-    let mut rng = SplitMix64::new(geom_test::seed::fixed("arrange permute", Seed::DEFAULT));
+    let mut rng = SplitMix64::new(0x5EED_0001);
     for round in 0..40 {
         let segs = random_segments(&mut rng, 9, 12);
         let a = run(&segs);
@@ -357,7 +373,7 @@ fn components(a: &Arrangement) -> usize {
 
 #[test]
 fn random_drawings_match_the_vertex_oracle_and_euler_s_formula() {
-    let mut rng = SplitMix64::new(geom_test::seed::fixed("arrange random", Seed::DEFAULT));
+    let mut rng = SplitMix64::new(0x5EED_0002);
     for round in 0..300 {
         let count = 3 + (rng.next_u64() % 9) as usize;
         let span = 4 + rng.next_u64() % 12;

@@ -34,6 +34,13 @@
 //! line crosses at once; the faces are linear in the edges, and finding the face around each hole
 //! is linear in the edges for each hole.
 
+#![allow(
+    clippy::many_single_char_names,
+    clippy::similar_names,
+    clippy::too_many_lines,
+    reason = "s, t, p, q, u, v, e, h are the geometry's own letters, and the sweep and the face walk are each one procedure of de Berg et al. that reads best whole"
+)]
+
 use alloc::vec::Vec;
 use core::cmp::Ordering;
 use core::fmt;
@@ -406,7 +413,10 @@ pub fn arrange(
             return Err(e);
         }
         let count = keep.len();
-        status.splice(lo..hi, keep);
+        let tail = status.split_off(hi);
+        status.truncate(lo);
+        status.extend(keep);
+        status.extend(tail);
         let end = lo.saturating_add(count);
         if count == 0 {
             if let (Some(l), Some(r)) = (
@@ -474,7 +484,7 @@ fn build(
         let e = usize::try_from(h / 2).map_err(|_| ArrangeError::TooMany)?;
         let s = rep.get(e).copied().ok_or(ArrangeError::TooMany)?;
         let [dx, dy] = seg_of(segs, s)?.dir;
-        if h % 2 == 0 {
+        if h.is_multiple_of(2) {
             Ok([dx, dy])
         } else {
             Ok([
@@ -523,7 +533,7 @@ fn build(
     let origin = |h: u32| -> Result<usize, ArrangeError> {
         let e = usize::try_from(h / 2).map_err(|_| ArrangeError::TooMany)?;
         let edge = edges.get(e).ok_or(ArrangeError::TooMany)?;
-        usize::try_from(if h % 2 == 0 { edge.from } else { edge.to })
+        usize::try_from(if h.is_multiple_of(2) { edge.from } else { edge.to })
             .map_err(|_| ArrangeError::TooMany)
     };
     let mut place_in: Vec<usize> = alloc::vec![0; edges.len().saturating_mul(2)];
