@@ -1078,9 +1078,11 @@ fn tpi_filtered(t: &Tpi, s: &Plane) -> Option<Sign> {
     let ([bx, by, bz], bd) = (q.n, q.d);
     let ([cx, cy, cz], cd) = (r.n, r.d);
     let ([sx, sy, sz], sd) = (s.n, s.d);
-    let side = generated::tpi_side::filter(
-        ax, ay, az, ad, bx, by, bz, bd, cx, cy, cz, cd, sx, sy, sz, sd,
-    )?;
+    let side = filtered(|| {
+        generated::tpi_side::filter(
+            ax, ay, az, ad, bx, by, bz, bd, cx, cy, cz, cd, sx, sy, sz, sd,
+        )
+    })?;
     Some(side.mul(t.weight))
 }
 
@@ -1115,9 +1117,11 @@ fn determinant_routed(p: &Plane, q: &Plane, r: &Plane, s: &Plane) -> Option<Sign
         let ([bx, by, bz], bd) = (q.n, q.d);
         let ([cx, cy, cz], cd) = (r.n, r.d);
         let ([sx, sy, sz], sd) = (s.n, s.d);
-        generated::tpi_side::filter(
-            ax, ay, az, ad, bx, by, bz, bd, cx, cy, cz, cd, sx, sy, sz, sd,
-        )
+        filtered(|| {
+            generated::tpi_side::filter(
+                ax, ay, az, ad, bx, by, bz, bd, cx, cy, cz, cd, sx, sy, sz, sd,
+            )
+        })
         .or_else(|| {
             generated::tpi_side::exact(
                 ax, ay, az, ad, bx, by, bz, bd, cx, cy, cz, cd, sx, sy, sz, sd,
