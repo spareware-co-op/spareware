@@ -1674,6 +1674,30 @@ fn trimmed(
     for run in runs(&stretches, loops) {
         out.extend(kept(curve, &stretches, &run, (lo, hi, loops), meter)?);
     }
+    // A piece with no stretch on both domains whose cut is on both is a meeting of zero width: the
+    // domains end at the same place on the curve (two cylinders over heights 0 to 5 and 5 to 10
+    // meet in a point on each line). It is a boundary touch, as a run no wider than [`STEP`] is,
+    // never nothing (the test wr_259_a_stretch_of_two_steps_or_less_is_a_point_and_more_is_a_line).
+    // Only where nothing else was kept: beside a kept part a cut on both domains is where that part
+    // ends or touches an edge, and the records of the closed forms hold no extra point there.
+    if out.is_empty() {
+        // Nothing kept means no stretch is on both domains (a stretch that is on always yields a
+        // run, and a run always a part), so every cut is between two stretches that are off. The
+        // stretches' own ends are the cuts, already merged where two edges cut at one point; on a
+        // loop the first stretch also starts at a cut, which the last runs on into.
+        let mut cuts_off: Vec<f64> = stretches.iter().skip(1).map(|s| s.from).collect();
+        if let (true, Some(first)) = (loops, stretches.first()) {
+            cuts_off.push(first.from);
+        }
+        for t in cuts_off {
+            if on_both(curve, t, a, b, meter)? {
+                out.push(Part::Point {
+                    at: at_parameter(curve, t, meter)?,
+                    width: 0.0,
+                });
+            }
+        }
+    }
     Ok(out)
 }
 
@@ -1797,6 +1821,31 @@ fn spans_of(
     Ok(Some(ParamBox::new(&[p, q, r, s])?))
 }
 
+/// Whether the boxes in space of `a` and `b` over their domains are apart, so the patches share no
+/// point. A surface with a side that runs on without end is never apart by this test.
+fn boxes_apart(
+    a: &SurfaceKind,
+    b: &SurfaceKind,
+    meter: &mut WorkMeter<'_>,
+) -> Result<bool, IntersectError> {
+    let bounded = |s: &SurfaceKind| {
+        let ((p, q), (r, t)) = ParamSurface::domain(s);
+        [p, q, r, t].iter().all(|x| x.is_finite())
+    };
+    if !bounded(a) || !bounded(b) {
+        return Ok(false);
+    }
+    let (x, y) = (
+        a.bound(ParamSurface::domain(a), meter)?,
+        b.bound(ParamSurface::domain(b), meter)?,
+    );
+    Ok(x.lo
+        .iter()
+        .zip(&x.hi)
+        .zip(y.lo.iter().zip(&y.hi))
+        .any(|((xl, xh), (yl, yh))| xh < yl || yh < xl))
+}
+
 /// The items of a pair's pieces.
 fn items_of(
     found: Vec<Piece>,
@@ -1808,6 +1857,12 @@ fn items_of(
     for piece in found {
         match piece {
             Piece::Same => {
+                // One surface, but patches of it whose boxes in space are apart share nothing:
+                // two cylinders of one axis and radius over heights that do not meet are no
+                // overlap (the test ub_123 in tests/attack_smlib_ssi.rs).
+                if boxes_apart(a, b, meter)? {
+                    continue;
+                }
                 let side = |(lo, hi): (f64, f64)| -> Result<Interval, IntersectError> {
                     Ok(Interval::new(
                         tight::larger(lo, -REACH),
