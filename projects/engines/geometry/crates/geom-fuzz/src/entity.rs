@@ -102,12 +102,15 @@ pub fn decode(data: &[u8]) -> (Case, usize) {
     let (a, b) = (src.word(), src.word());
     // Mode 0: raw words; 1: a byte each; 2: near the bound, where the size check matters.
     let (n, d) = match mode {
-        0 => (i64::from_le_bytes(a.to_le_bytes()), i64::from_le_bytes(b.to_le_bytes())),
-        1 => (i64::from(signed(a.to_le_bytes()[0])), i64::from(signed(b.to_le_bytes()[0]))),
-        _ => (
-            near_bound(a),
-            near_bound(b),
+        0 => (
+            i64::from_le_bytes(a.to_le_bytes()),
+            i64::from_le_bytes(b.to_le_bytes()),
         ),
+        1 => (
+            i64::from(signed(a.to_le_bytes()[0])),
+            i64::from(signed(b.to_le_bytes()[0])),
+        ),
+        _ => (near_bound(a), near_bound(b)),
     };
     let tag = src.byte();
     let count = src.byte() % (MAX_VERTICES + 1);
@@ -153,7 +156,9 @@ pub fn decode(data: &[u8]) -> (Case, usize) {
 /// A number within one of a multiple of half the bound: the edge of what a fraction may hold.
 fn near_bound(word: u64) -> i64 {
     let k = i64::try_from(word % 4).unwrap_or(0);
-    let step = i64::try_from((word >> 8) % 3).unwrap_or(0).saturating_sub(1);
+    let step = i64::try_from((word >> 8) % 3)
+        .unwrap_or(0)
+        .saturating_sub(1);
     k.saturating_mul(FRAC_LIMIT / 2).saturating_add(step)
 }
 
@@ -228,12 +233,20 @@ fn fraction(case: &Case) -> Result<(), Finding> {
 fn tags(case: &Case) -> Result<(), Finding> {
     let got = Tag::from_u8(case.tag);
     if got.is_some() != (1..=18).contains(&case.tag) {
-        return Err(fail(case, "a number names a tag exactly when it is 1 to 18"));
+        return Err(fail(
+            case,
+            "a number names a tag exactly when it is 1 to 18",
+        ));
     }
     if let Some(t) = got {
-        let place = usize::from(case.tag).checked_sub(1).and_then(|i| Tag::ALL.get(i));
+        let place = usize::from(case.tag)
+            .checked_sub(1)
+            .and_then(|i| Tag::ALL.get(i));
         if t.as_u8() != case.tag || place != Some(&t) {
-            return Err(fail(case, "a tag gives its number back and sits at that place"));
+            return Err(fail(
+                case,
+                "a tag gives its number back and sits at that place",
+            ));
         }
     }
     Ok(())
@@ -246,14 +259,18 @@ fn polyline(case: &Case) -> Result<Option<Polyline>, Finding> {
         .iter()
         .map(|&(x, y)| P2::new(x, y).map_err(|_| fail(case, "small points are on the grid")))
         .collect::<Result<Vec<P2>, Finding>>()?;
-    let bulge = Frac::new(i64::from(case.bulge), 3)
-        .map_err(|_| fail(case, "a small fraction is made"))?;
+    let bulge =
+        Frac::new(i64::from(case.bulge), 3).map_err(|_| fail(case, "a small fraction is made"))?;
     let bulges = vec![bulge; usize::from(case.bulges)];
     let widths = case
         .widths
         .then(|| vec![(Steps(1), Steps(2)); case.vertices.len()]);
     let n = case.vertices.len();
-    let segments = if case.closed { Some(n) } else { n.checked_sub(1) };
+    let segments = if case.closed {
+        Some(n)
+    } else {
+        n.checked_sub(1)
+    };
     let least = if case.closed { 3 } else { 2 };
     // Widths are offered one for each vertex, which is right only for a closed polyline.
     let widths_right = widths.as_ref().is_none_or(|w| Some(w.len()) == segments);
@@ -271,9 +288,7 @@ fn polyline(case: &Case) -> Result<Option<Polyline>, Finding> {
 /// A shape put under a classification becomes what 14.10 says, and its key is untouched.
 fn kinds(case: &Case, polyline: Option<Polyline>) -> Result<(), Finding> {
     let spare = |i: usize| i64::from(case.spare.get(i).copied().unwrap_or(0));
-    let at = |x: i64, y: i64| {
-        P2::new(x, y).map_err(|_| fail(case, "small points are on the grid"))
-    };
+    let at = |x: i64, y: i64| P2::new(x, y).map_err(|_| fail(case, "small points are on the grid"));
     let shape = match case.pick {
         0 => match polyline {
             Some(pl) => Shape::Polyline(pl),

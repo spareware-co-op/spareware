@@ -24,11 +24,12 @@ mod gate;
 #[cfg(target_os = "linux")]
 use gate::{
     ball::ball, brent::brent, bvh::bvh, crossing::crossing, curve::curve, dd::dd, dual::dual,
-    eft::eft, entity::entity, exact_sum::exact_sum, exactness::exactness, generated::generated, grid::grid,
-    growth::growth, helper::helper, interval::interval, isolate::isolate, linalg::linalg,
-    math::math, math_types::math_types, newton::newton, nurbs::nurbs, perturb::perturb,
-    plane::plane, predicate::predicate, quadrature::quadrature, real::real, rng::rng, sign::sign,
-    surface::surface, topo::topo, unproven::unproven, wide::wide, wide32::wide32,
+    eft::eft, entity::entity, exact_sum::exact_sum, exactness::exactness, generated::generated,
+    grid::grid, growth::growth, helper::helper, interval::interval, isolate::isolate,
+    linalg::linalg, math::math, math_types::math_types, newton::newton, nurbs::nurbs,
+    perturb::perturb, plane::plane, predicate::predicate, quadrature::quadrature, real::real,
+    rng::rng, sign::sign, surface::surface, topo::topo, unproven::unproven, wide::wide,
+    wide32::wide32,
 };
 
 #[cfg(target_os = "linux")]

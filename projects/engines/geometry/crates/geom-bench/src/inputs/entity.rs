@@ -35,7 +35,9 @@ fn point(g: &mut SplitMix64) -> Option<P2> {
 
 /// The vertices and bulges of one polyline: one bulge for each of the open polyline's segments.
 fn parts(g: &mut SplitMix64) -> Option<(Vec<P2>, Vec<Frac>)> {
-    let vertices = (0..VERTICES).map(|_| point(g)).collect::<Option<Vec<P2>>>()?;
+    let vertices = (0..VERTICES)
+        .map(|_| point(g))
+        .collect::<Option<Vec<P2>>>()?;
     let bulges = (1..VERTICES)
         .map(|_| Frac::new(g.range(-3, 3), g.range(1, 5)).ok())
         .collect::<Option<Vec<Frac>>>()?;
