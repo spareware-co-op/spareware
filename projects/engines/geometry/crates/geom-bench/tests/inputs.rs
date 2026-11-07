@@ -2297,6 +2297,8 @@ fn entity_typical_batches_all_succeed() {
     use geom_bench::kernels::entity as k;
     all_ok("polyline", k::polyline, &m::polyline(Typical));
     all_ok("under", k::under, &m::under(Typical));
+    all_ok("place", k::place, &m::place(Typical));
+    all_ok("length", k::length, &m::length(Typical));
 }
 
 /// Every typical batch of `geom-run`'s helper benchmarks (decision 32.44) maps every list.
@@ -2741,4 +2743,37 @@ fn the_conic_classes_are_what_they_say() {
                 gp::ellipse_line::exact(a, b, d, k, mx, my, p, q) == Some(Sign::Zero)
             })
     );
+}
+
+/// Every typical batch of `geom-intersect`'s benchmarks (decision 32.44) orders every list and
+/// reads every key.
+#[test]
+fn intersect_typical_batches_all_succeed() {
+    use geom_bench::inputs::intersect as m;
+    use geom_bench::kernels::intersect as k;
+    all_ok("sort_items", k::sorted, &m::items(Typical));
+    all_ok("key_circle", k::keys, &m::circles(Typical));
+    all_ok("pair_lines", k::paired, &m::lines(Typical));
+    all_ok("curve_segments", k::met, &m::segment_pairs(Typical));
+    all_ok("curve_circles", k::met, &m::circle_pairs(Typical));
+    all_ok("curve_line_circle", k::met, &m::line_circles(Typical));
+    all_ok("curve_cubics", k::met, &m::cubic_pairs(Typical));
+    all_ok("contact_spline_line", k::touched, &m::spline_lines(Typical));
+    all_ok("curve_loop", k::crossed, &m::loops(Typical));
+    all_ok("project_arc", k::on_arcs, &m::arcs(Typical));
+    all_ok("project_sphere", k::on_spheres, &m::spheres(Typical));
+}
+
+/// Every typical batch of the decisions on lines and quadrics (decision 32.44) is decided.
+#[test]
+fn quadric_typical_batches_all_succeed() {
+    use geom_bench::inputs::quadric as m;
+    use geom_bench::kernels::quadric as k;
+    all_ok("line_sphere", k::spheres, &m::spheres(Typical));
+    all_ok("line_cylinder", k::cylinders, &m::cylinders(Typical));
+    all_ok("line_cone", k::cones, &m::cones(Typical));
+    all_ok("line_torus", k::tori, &m::tori(Typical));
+    all_ok("parallel", k::directions, &m::directions(Typical));
+    all_ok("axis_gap", k::gaps, &m::gaps(Typical));
+    all_ok("tangent", k::tangents, &m::tangents(Typical));
 }
