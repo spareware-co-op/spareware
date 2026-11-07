@@ -29,6 +29,7 @@
 //!
 //! - [`operand`]: operands and selections, and an operand's faces as convex polygons (G130).
 //! - [`combine`]: the boolean's entry and its schema (G131).
+//! - [`decide`]: the exact analytic decision table of the certified curved path (G242).
 //! - [`half_space`]: everything on one side of a plane, as a solid operand (G130).
 //! - [`rebuild`]: merged pieces published as a body by canonical rules (G129).
 //!
@@ -41,6 +42,7 @@
 extern crate alloc;
 
 pub mod combine;
+pub mod decide;
 pub mod half_space;
 pub mod operand;
 pub mod rebuild;

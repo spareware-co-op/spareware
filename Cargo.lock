@@ -874,6 +874,7 @@ dependencies = [
  "geom-run",
  "geom-surface",
  "geom-topo",
+ "num-bigint",
  "proptest",
 ]
 

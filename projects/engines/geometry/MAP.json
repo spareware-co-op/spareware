@@ -1414,6 +1414,29 @@
           "target": "lib"
         },
         {
+          "cost": "constant, a few dozen wide multiplications. No allocation. Recursion: none.",
+          "does": "the decisions the curved builder takes with no enclosure at all, on grid points and on quadrics held by grid points and whole numbers of steps. A grid point against a plane, a sphere, a cylinder, a cone or a torus ([`point_sphere`], [`point_cylinder`], [`point_cone`], [`point_torus`]; the plane's is [`geom_num::plane::Plane::side`]). A plane against a sphere or a cylinder, apart, tangent or crossing ([`plane_sphere`], [`plane_cylinder`]). Two planes, two spheres or two cylinders coinciding ([`planes_coincide`], [`spheres_coincide`], [`cylinders_coincide`]). The quadrics are `geom_num::quadric`'s, the planes are `geom_num::plane`'s; this module adds only what a boolean asks of them.",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-bool/src/decide.rs",
+          "guarantees": [
+            "**Decided or refused.** Every answer is exact. Every step is a checked one, and a step that does not fit is [`NumError::BudgetExceeded`]: an input outside the ranges above, never a wrong sign.",
+            "**No square root, no division, no angle.** Each decision is the sign of a polynomial of the inputs: a quadric's implicit equation with its axis cleared of its length (11.4).",
+            "**Degenerate shapes are refused.** An axis of two equal points, a zero slope denominator and a radius of 2^41 or more are [`NumError::Degenerate`] or [`NumError::BudgetExceeded`]."
+          ],
+          "job": "The exact analytic decision table of the certified curved path (11.4, G242).",
+          "method": {
+            "links": [
+              "doi:10.1145/112515.112545",
+              "doi:10.1006/gmip.1995.1006"
+            ],
+            "text": "Goldman and Miller's implicit forms of the quadrics (SMA '91, doi:10.1145/112515.112545; GMIP 57(1), 1995, doi:10.1006/gmip.1995.1006), as `geom_num::quadric` takes them, here for a point and a plane. The implicit equations are as follows. A sphere: |x|² − r². A cylinder about the axis through a with direction d: |x × d|² − r²|d|². A cone with apex a, axis direction d and slope p/q: q²|x × d|² − p²(x · d)², both nappes. A torus about the axis through c with direction e, major radius R and minor radius r: |e|²(|x|² + R² − r²)² − 4R²(|e|²|x|² − (x · e)²), which is the tube's equation multiplied by |e|² so that no division is needed, as `geom_num::quadric` writes it for a line (Goldman and Miller; chapter 12.7). A plane n · x + d against a sphere (centre s, radius r): the distance is |n · s + d| / |n|, so it is compared as (n · s + d)² against r²|n|². Against a cylinder it crosses unless n · d = 0, and then the axis is parallel and the same comparison is made at a point of the axis."
+          },
+          "path": "geom_bool::decide",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
           "cost": "constant, and what [`rebuild`] costs on seven pieces.",
           "does": "[`half_space`] builds the solid bounded by a plane and the frame's range box, with corners at ±(2^40 − 1) steps. It is a body like any other, so it enters a boolean as a solid and stays exact: IFC's half-space that clips a wall under a roof is one of these, and its boxed half-space is the same one, since the box there is only a search aid.",
           "family": [],
