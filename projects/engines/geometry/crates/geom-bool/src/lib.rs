@@ -28,6 +28,7 @@
 //! Modules:
 //!
 //! - [`operand`]: operands and selections, and an operand's faces as convex polygons (G130).
+//! - [`broad`]: the broad phase: which pairs of entities may touch (G242).
 //! - [`carrier`]: what the curved builder stores: points, curves and their carriers (G242).
 //! - [`combine`]: the boolean's entry and its schema (G131).
 //! - [`decide`]: the exact analytic decision table of the certified curved path (G242).
@@ -45,6 +46,7 @@
 
 extern crate alloc;
 
+pub mod broad;
 pub mod carrier;
 pub mod combine;
 pub mod decide;

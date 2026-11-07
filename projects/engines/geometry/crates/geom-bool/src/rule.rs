@@ -31,6 +31,7 @@
 
 use core::fmt;
 
+use geom_bvh::BvhError;
 use geom_intersect::IntersectError;
 use geom_num::interval::Interval;
 use geom_num::sign::Sign;
@@ -165,6 +166,8 @@ pub enum ContactError {
     Intersect(IntersectError),
     /// The numbers layer refused.
     Num(NumError),
+    /// The box tree of the broad phase could not build or answer.
+    Broad(BvhError),
 }
 
 impl fmt::Display for ContactError {
@@ -178,6 +181,7 @@ impl fmt::Display for ContactError {
             ),
             ContactError::Intersect(e) => e.fmt(f),
             ContactError::Num(e) => e.fmt(f),
+            ContactError::Broad(e) => e.fmt(f),
         }
     }
 }
@@ -187,6 +191,12 @@ impl core::error::Error for ContactError {}
 impl From<IntersectError> for ContactError {
     fn from(e: IntersectError) -> Self {
         ContactError::Intersect(e)
+    }
+}
+
+impl From<BvhError> for ContactError {
+    fn from(e: BvhError) -> Self {
+        ContactError::Broad(e)
     }
 }
 

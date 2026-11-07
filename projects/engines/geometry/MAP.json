@@ -1394,6 +1394,11 @@
               "doc": "The numbers layer refused.",
               "name": "Num",
               "shape": "tuple"
+            },
+            {
+              "doc": "The box tree of the broad phase could not build or answer.",
+              "name": "Broad",
+              "shape": "tuple"
             }
           ],
           "module": "geom_bool::rule",
@@ -1417,6 +1422,28 @@
       "kind": "kernel",
       "layer": "6",
       "modules": [
+        {
+          "cost": "a tree build and a pair traversal, charged to the meter per fixed item. No recursion.",
+          "does": "[`candidate_pairs`] builds the box tree of `geom-bvh` over boxes the caller has padded by class (exact, certified or Tolerant) and lists every pair whose boxes meet, in key order. [`point_entries`] makes those boxes for points: the box of a point's committed grid point, padded by its bound and by the contact radius, so that two points that can touch have boxes that meet. [`point_pairs`] runs both and returns index pairs for [`crate::merge::merge_stage`].",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-bool/src/broad.rs",
+          "guarantees": [
+            "**No touch is missed.** A pair of points whose separation enclosure holds zero within the contact radius has overlapping boxes: each box reaches its point's bound plus the contact radius, whole steps rounded up, and the separation of two committed points is at most the sum of their bounds when they can be one.",
+            "**Pairs in name order.** Keys are the points' indices, every answer is sorted by key, and the pair list does not depend on the tree's shape, the thread count or the order entries were given in.",
+            "**Cheaper than all pairs.** The tree prunes by box, so a field of points far apart costs a tree build and a traversal, not n² tests."
+          ],
+          "job": "The broad phase: which pairs of entities may touch (11.4 step 1, G242).",
+          "method": {
+            "links": [
+              "projects/engines/geometry/architecture/11-booleans.md"
+            ],
+            "text": "the one box tree of `geom-bvh` (chapter 19.9 and 23.7), with boxes inflated by class; chapter 11.4 step 1, \"Broad phase\", for what it is asked to find (`projects/engines/geometry/architecture/11-booleans.md`)."
+          },
+          "path": "geom_bool::broad",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
         {
           "cost": "constant per entity; a carrier set costs its length. No recursion.",
           "does": "[`PointGeom`] and [`CurveGeom`] hold exact and certified geometry side by side, and every entity says which it is. A point is a committed grid point (exact), the meeting of three planes of the plane table (exact, implicit), or a grid point proven within a bound of the carriers it lies on (certified). A curve is the meeting of two planes (exact), a curve kind stored as itself, or a procedural meeting of two surfaces with an optional cached fit. A **carrier** ([`CarrierIx`]) is the surface a face lies on or the curve an edge lies on, named by its index into the builder's pools; a boolean never moves one. [`SortedVec`] keeps a certified point's carriers in one order, and [`Bound`] is a distance in whole grid steps.",
