@@ -631,7 +631,7 @@ pub(crate) fn boolean_into(
     exec: &Exec<'_>,
     meter: &mut WorkMeter<'_>,
 ) -> Result<ExactMesh, MeshError> {
-    let (_, classified) = classified(operands, core::slice::from_ref(test), exec, meter)?;
+    let (gathered, classified) = classified(operands, core::slice::from_ref(test), exec, meter)?;
     let kept = select(test, &classified)?;
     let merged = merge_on(
         exec,
@@ -640,7 +640,12 @@ pub(crate) fn boolean_into(
         meter,
     )?;
     let face_run = alloc::vec![0; merged.faces.len()];
-    let polygons = polygons_of(&merged, (face_run, alloc::vec![source]), exec, meter)?;
+    let polygons = polygons_of(
+        &merged,
+        (face_run, alloc::vec![source], gathered.class),
+        exec,
+        meter,
+    )?;
     // A boolean's result: its winding is its test's, 0 or 1, and no two of its faces cross.
     Ok(build(&polygons, exec, meter)?.proven_solid())
 }
