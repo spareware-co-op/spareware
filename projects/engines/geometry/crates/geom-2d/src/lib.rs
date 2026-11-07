@@ -37,5 +37,6 @@ pub mod accept;
 pub mod carrier;
 pub mod commit;
 pub mod entity;
+pub mod index;
 pub mod point;
 pub mod snap;

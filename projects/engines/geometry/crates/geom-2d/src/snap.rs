@@ -57,7 +57,8 @@
 
 use alloc::vec::Vec;
 
-use geom_name::resolve::{Lookup, Reference, Resolution, Target, resolve};
+pub use geom_name::resolve::Reference;
+use geom_name::resolve::{Lookup, Resolution, Target, resolve};
 use geom_num::carrier::{Carrier, Rational2};
 use geom_num::grid::P2;
 use geom_num::one_root::{Crossing2, Root};
@@ -352,7 +353,7 @@ impl Drawing {
 }
 
 /// What a reference came to.
-enum Subject<'a> {
+pub(crate) enum Subject<'a> {
     /// An entity.
     Entity(&'a Entity),
     /// A carrier alone: the whole curve.
@@ -371,12 +372,14 @@ fn subject<'a>(
                     .entity(name)
                     .map(Subject::Entity)
                     .ok_or(SnapError::NoEntity(name)),
-                Target::Carrier(ix) => drawing
-                    .carrier(ix)
-                    .map(|c| Subject::Carrier(*c))
-                    .ok_or(SnapError::Unresolved(Resolution::Unresolved {
-                        reason: geom_name::resolve::UnresolvedReason::NoCarrier,
-                    })),
+                Target::Carrier(ix) => {
+                    drawing
+                        .carrier(ix)
+                        .map(|c| Subject::Carrier(*c))
+                        .ok_or(SnapError::Unresolved(Resolution::Unresolved {
+                            reason: geom_name::resolve::UnresolvedReason::NoCarrier,
+                        }))
+                }
                 Target::Pieces(_) => Err(SnapError::Unresolved(Resolution::Unresolved {
                     reason: geom_name::resolve::UnresolvedReason::NameUnknown,
                 })),
@@ -634,12 +637,7 @@ fn place_of(p: &Pt2, carriers: &Carriers) -> Result<Crossing2, SnapError> {
 }
 
 /// Whether `z`, on the circle, is on the counter-clockwise arc from `start` to `end`.
-fn arc_holds(
-    z: &Crossing2,
-    circle: &Circle2,
-    start: &Pt2,
-    end: &Pt2,
-) -> Result<bool, SnapError> {
+fn arc_holds(z: &Crossing2, circle: &Circle2, start: &Pt2, end: &Pt2) -> Result<bool, SnapError> {
     let (c, s, e) = (centre_of(circle), rat(start)?, rat(end)?);
     let (ds, _) = vector(&s, &c)?;
     let (de, _) = vector(&e, &c)?;
@@ -700,6 +698,25 @@ impl SnapRef {
         }
         let on = self.on.as_ref().ok_or(SnapError::Missing("an entity"))?;
         let subject = subject(on, drawing, lookup)?;
+        self.on_subject(subject, carriers)
+    }
+
+    /// The point of a snap on a single subject, whichever way the subject was found: the part of
+    /// [`SnapRef::resolve`] after the references are read. The index uses it for the candidates
+    /// near a cursor.
+    ///
+    /// # Errors
+    ///
+    /// As [`SnapRef::resolve`], but for a reference.
+    #[allow(
+        clippy::too_many_lines,
+        reason = "one match on the kind: each arm is the construction of 14.8's table for that kind"
+    )]
+    pub(crate) fn on_subject(
+        &self,
+        subject: Subject<'_>,
+        carriers: &mut Carriers,
+    ) -> Result<Pt2, SnapError> {
         let kind = self.kind;
         let entity = match &subject {
             Subject::Entity(e) => Some(*e),
@@ -713,9 +730,7 @@ impl SnapRef {
             SnapKind::Start | SnapKind::End => self.end(kind == SnapKind::Start, entity),
             SnapKind::Mid => self.middle(entity, carriers),
             SnapKind::Center => match entity.map(Entity::shape) {
-                Some(Shape::Circle(c) | Shape::Arc { circle: c, .. }) => {
-                    Ok(point_of(centre_of(c)))
-                }
+                Some(Shape::Circle(c) | Shape::Arc { circle: c, .. }) => Ok(point_of(centre_of(c))),
                 Some(Shape::Ellipse(e) | Shape::EllipticArc { ellipse: e, .. }) => {
                     Ok(Pt2::Grid(e.centre()))
                 }
@@ -731,10 +746,9 @@ impl SnapRef {
             }
             SnapKind::Insertion => match entity.map(Entity::shape) {
                 Some(Shape::Insert(i)) => {
-                    let image = i
-                        .at
-                        .apply_2d(P2::new(0, 0).map_err(SnapError::Num)?)
-                        .map_err(|_| SnapError::Rounded)?;
+                    let image =
+                        i.at.apply_2d(P2::new(0, 0).map_err(SnapError::Num)?)
+                            .map_err(|_| SnapError::Rounded)?;
                     if image.is_exact() {
                         Ok(Pt2::Grid(image.value()))
                     } else {
@@ -769,14 +783,20 @@ impl SnapRef {
 
     /// An end or the start of an entity.
     fn end(&self, start: bool, entity: Option<&Entity>) -> Result<Pt2, SnapError> {
-        let kind = if start { SnapKind::Start } else { SnapKind::End };
+        let kind = if start {
+            SnapKind::Start
+        } else {
+            SnapKind::End
+        };
         match entity.map(Entity::shape) {
             Some(Shape::Line { ends, .. }) => match (ends, start) {
                 (Ends::Segment(a, _) | Ends::Ray(a), true) => Ok(*a),
                 (Ends::Segment(_, b), false) => Ok(*b),
                 _ => Err(unsupported(kind, entity)),
             },
-            Some(Shape::Arc { start: s, end: e, .. }) => Ok(if start { *s } else { *e }),
+            Some(Shape::Arc {
+                start: s, end: e, ..
+            }) => Ok(if start { *s } else { *e }),
             Some(Shape::Polyline(p)) => {
                 let vertices = p.vertices();
                 let at = match self.sub {
@@ -791,7 +811,11 @@ impl SnapRef {
             }
             Some(Shape::Spline(s)) => {
                 let control = s.control();
-                let end = if start { control.first() } else { control.last() };
+                let end = if start {
+                    control.first()
+                } else {
+                    control.last()
+                };
                 end.map(|v| Pt2::Grid(*v)).ok_or(SnapError::Param)
             }
             Some(Shape::EllipticArc {
@@ -825,7 +849,10 @@ impl SnapRef {
                 if p.bulges().get(n).is_some_and(|f| !f.is_zero()) {
                     return Err(unsupported(kind, entity));
                 }
-                Ok(point_of(midpoint(&Rational2::from(*a), &Rational2::from(*b))?))
+                Ok(point_of(midpoint(
+                    &Rational2::from(*a),
+                    &Rational2::from(*b),
+                )?))
             }
             Some(Shape::Arc { circle, start, end }) => {
                 let (c, s, e) = (centre_of(circle), rat(start)?, rat(end)?);
@@ -872,7 +899,10 @@ impl SnapRef {
         }
         match curve {
             Curve2::Circle(Circle2::Grid(c)) => {
-                let (cx, cy) = (i128::from(c.centre().x.get()), i128::from(c.centre().y.get()));
+                let (cx, cy) = (
+                    i128::from(c.centre().x.get()),
+                    i128::from(c.centre().y.get()),
+                );
                 let r = c.radius();
                 let (x, y) = match self.pick {
                     0 => (add(cx, r)?, cy),
@@ -894,15 +924,30 @@ impl SnapRef {
             Curve2::Ellipse(e) => {
                 let (p, q) = e.ratio();
                 let [mx, my] = e.major();
-                let (cx, cy) = (i128::from(e.centre().x.get()), i128::from(e.centre().y.get()));
+                let (cx, cy) = (
+                    i128::from(e.centre().x.get()),
+                    i128::from(e.centre().y.get()),
+                );
                 let (p, q) = (i128::from(p), i128::from(q));
                 let (mx, my) = (i128::from(mx), i128::from(my));
                 // The minor semi-axis is the major turned a quarter, scaled by p / q.
                 let (x, y) = match self.pick {
-                    0 => (add(mul(cx, q)?, mul(mx, q)?)?, add(mul(cy, q)?, mul(my, q)?)?),
-                    1 => (sub(mul(cx, q)?, mul(my, p)?)?, add(mul(cy, q)?, mul(mx, p)?)?),
-                    2 => (sub(mul(cx, q)?, mul(mx, q)?)?, sub(mul(cy, q)?, mul(my, q)?)?),
-                    _ => (add(mul(cx, q)?, mul(my, p)?)?, sub(mul(cy, q)?, mul(mx, p)?)?),
+                    0 => (
+                        add(mul(cx, q)?, mul(mx, q)?)?,
+                        add(mul(cy, q)?, mul(my, q)?)?,
+                    ),
+                    1 => (
+                        sub(mul(cx, q)?, mul(my, p)?)?,
+                        add(mul(cy, q)?, mul(mx, p)?)?,
+                    ),
+                    2 => (
+                        sub(mul(cx, q)?, mul(mx, q)?)?,
+                        sub(mul(cy, q)?, mul(my, q)?)?,
+                    ),
+                    _ => (
+                        add(mul(cx, q)?, mul(my, p)?)?,
+                        sub(mul(cy, q)?, mul(mx, p)?)?,
+                    ),
                 };
                 Ok(point_of(rational(x, y, q)?))
             }
@@ -933,7 +978,11 @@ impl SnapRef {
                     return Err(SnapError::NoDirection);
                 }
                 // `pick` 0 is the foot on the side of `from`, 1 the one opposite.
-                let d = if self.pick == 0 { d } else { [neg(d[0])?, neg(d[1])?] };
+                let d = if self.pick == 0 {
+                    d
+                } else {
+                    [neg(d[0])?, neg(d[1])?]
+                };
                 along_ray(carriers, curve, &c, d)
             }
             Curve2::Ellipse(_) => Err(SnapError::Unsupported(
@@ -1091,14 +1140,16 @@ impl SnapRef {
         let tracking = Curve2::Line(line_through(&through, d)?);
         if let Some(second) = &self.track2 {
             let there = rat(&second.through)?;
-            let d2 = [i128::from(second.direction[0]), i128::from(second.direction[1])];
+            let d2 = [
+                i128::from(second.direction[0]),
+                i128::from(second.direction[1]),
+            ];
             let other = Curve2::Line(line_through(&there, d2)?);
             return crossing_point(carriers, &tracking, &other, 0);
         }
-        let with = self
-            .with
-            .as_ref()
-            .ok_or(SnapError::Missing("a second line, an entity or a parameter"))?;
+        let with = self.with.as_ref().ok_or(SnapError::Missing(
+            "a second line, an entity or a parameter",
+        ))?;
         let subject = subject(with, drawing, lookup)?;
         let other = curve_of_subject(&subject, self.kind)?;
         let point = crossing_point(carriers, &other, &tracking, self.pick)?;
@@ -1134,7 +1185,9 @@ impl SnapRef {
             };
             return Ok((from, line.direction()));
         }
-        let t = self.track.ok_or(SnapError::Missing("a line to track along"))?;
+        let t = self
+            .track
+            .ok_or(SnapError::Missing("a line to track along"))?;
         let d = [i128::from(t.direction[0]), i128::from(t.direction[1])];
         if d == [0, 0] {
             return Err(SnapError::NoDirection);
@@ -1150,15 +1203,32 @@ impl SnapRef {
         carriers: &mut Carriers,
     ) -> Result<Pt2, SnapError> {
         let on = self.on.as_ref().ok_or(SnapError::Missing("an entity"))?;
-        let with = self.with.as_ref().ok_or(SnapError::Missing("a second entity"))?;
+        let with = self
+            .with
+            .as_ref()
+            .ok_or(SnapError::Missing("a second entity"))?;
         let first = subject(on, drawing, lookup)?;
         let second = subject(with, drawing, lookup)?;
+        self.cross_subjects(&first, &second, carriers)
+    }
+
+    /// The crossing of two subjects' carriers, `pick` choosing which, on both extents.
+    ///
+    /// # Errors
+    ///
+    /// As [`SnapRef::resolve`], but for a reference.
+    pub(crate) fn cross_subjects(
+        &self,
+        first: &Subject<'_>,
+        second: &Subject<'_>,
+        carriers: &mut Carriers,
+    ) -> Result<Pt2, SnapError> {
         let (a, b) = (
-            curve_of_subject(&first, self.kind)?,
-            curve_of_subject(&second, self.kind)?,
+            curve_of_subject(first, self.kind)?,
+            curve_of_subject(second, self.kind)?,
         );
         let point = crossing_point(carriers, &a, &b, self.pick)?;
-        for s in [&first, &second] {
+        for s in [first, second] {
             if let Subject::Entity(e) = s
                 && !within(&point, e, carriers)?
             {

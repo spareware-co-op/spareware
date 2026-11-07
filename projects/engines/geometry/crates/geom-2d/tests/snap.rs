@@ -19,16 +19,16 @@ use geom_2d::carrier::{Carriers, Circle2, Curve2};
 use geom_2d::entity::{Attr, Ends, Entity, Frac, Param, Polyline, Shape, Text};
 use geom_2d::point::{Place, Pt2};
 use geom_2d::snap::{Drawing, ExactParam, SnapError, SnapKind, SnapRef, Track};
+use geom_name::NameGraph;
 use geom_name::resolve::{
     Body, ElementId, EntityKind, Lookup, Reference, Resolution, Signature, Want,
 };
-use geom_name::NameGraph;
+use geom_num::Sign;
 use geom_num::arc::{Circle2 as GridCircle, Round};
 use geom_num::carrier::{Carrier, Rational2};
 use geom_num::conic::Ellipse2;
 use geom_num::grid::{P2, Steps};
 use geom_num::one_root::Crossing2;
-use geom_num::Sign;
 use geom_op::name::{NameList, NameSet, Role, TopoName};
 use geom_op::{NameId, OpId, OpPath};
 
@@ -244,8 +244,16 @@ fn the_middle_of_an_arc_is_a_one_root_point_on_the_bisector() {
     let mut c = Carriers::new();
     let round = GridCircle::new(p(0, 0), 10).unwrap();
     for (i, (diagonal, x_sign, y_sign)) in [
-        (Carrier::new(1, -1, 0).unwrap(), Sign::Positive, Sign::Positive),
-        (Carrier::new(1, 1, 0).unwrap(), Sign::Negative, Sign::Positive),
+        (
+            Carrier::new(1, -1, 0).unwrap(),
+            Sign::Positive,
+            Sign::Positive,
+        ),
+        (
+            Carrier::new(1, 1, 0).unwrap(),
+            Sign::Negative,
+            Sign::Positive,
+        ),
     ]
     .into_iter()
     .enumerate()
@@ -260,7 +268,10 @@ fn the_middle_of_an_arc_is_a_one_root_point_on_the_bisector() {
     }
     // The half turn's middle is straight north.
     let mid = s.resolve(&s.snap(SnapKind::Mid, 2), &mut c).unwrap();
-    assert!(is(&mid, &c, 0, 10, 1) || at(&mid, &c).side(&Carrier::new(1, 0, 0).unwrap()).unwrap() == Sign::Zero);
+    assert!(
+        is(&mid, &c, 0, 10, 1)
+            || at(&mid, &c).side(&Carrier::new(1, 0, 0).unwrap()).unwrap() == Sign::Zero
+    );
 }
 
 #[test]
@@ -336,7 +347,10 @@ fn an_arcs_extent_is_decided_exactly() {
 
 #[test]
 fn the_foot_of_a_perpendicular_is_rational_on_a_line_and_one_root_on_a_circle() {
-    let s = Scene::new(vec![segment((0, 0), (10, 10)), Shape::Circle(circle(0, 0, 5))]);
+    let s = Scene::new(vec![
+        segment((0, 0), (10, 10)),
+        Shape::Circle(circle(0, 0, 5)),
+    ]);
     let mut c = Carriers::new();
     let mut foot = s.snap(SnapKind::Perpendicular, 0);
     foot.from = Some(Pt2::Grid(p(0, 10)));
@@ -351,7 +365,10 @@ fn the_foot_of_a_perpendicular_is_rational_on_a_line_and_one_root_on_a_circle() 
         let z = at(&point, &c);
         assert_eq!(z.against_circle(&round).unwrap(), Sign::Zero);
         // On the line through the centre and the point, on the point's side or the other.
-        assert_eq!(z.side(&Carrier::new(4, -3, 0).unwrap()).unwrap(), Sign::Zero);
+        assert_eq!(
+            z.side(&Carrier::new(4, -3, 0).unwrap()).unwrap(),
+            Sign::Zero
+        );
         assert_eq!(
             z.side(&Carrier::new(3, 4, 0).unwrap()).unwrap(),
             toward,
@@ -363,7 +380,10 @@ fn the_foot_of_a_perpendicular_is_rational_on_a_line_and_one_root_on_a_circle() 
 #[test]
 fn tangent_points_lie_on_the_polar_line_of_the_chosen_point() {
     let ellipse = Ellipse2::new(p(0, 0), [10, 0], 1, 2).unwrap();
-    let s = Scene::new(vec![Shape::Circle(circle(0, 0, 10)), Shape::Ellipse(ellipse)]);
+    let s = Scene::new(vec![
+        Shape::Circle(circle(0, 0, 10)),
+        Shape::Ellipse(ellipse),
+    ]);
     let mut c = Carriers::new();
     let round = GridCircle::new(p(0, 0), 10).unwrap();
     for pick in 0..2 {
@@ -388,7 +408,10 @@ fn tangent_points_lie_on_the_polar_line_of_the_chosen_point() {
 
 #[test]
 fn the_nearest_point_is_at_the_stored_parameter_or_radial() {
-    let s = Scene::new(vec![segment((0, 0), (8, 4)), Shape::Circle(circle(0, 0, 5))]);
+    let s = Scene::new(vec![
+        segment((0, 0), (8, 4)),
+        Shape::Circle(circle(0, 0, 5)),
+    ]);
     let mut c = Carriers::new();
     let mut n = s.snap(SnapKind::Nearest, 0);
     n.at = Some(ExactParam::new(3, 3).unwrap());
@@ -401,7 +424,10 @@ fn the_nearest_point_is_at_the_stored_parameter_or_radial() {
     n.from = Some(Pt2::Grid(p(30, 40)));
     let z = at(&s.resolve(&n, &mut c).unwrap(), &c);
     // Radially towards (30, 40): the point (3, 4).
-    assert!(z.same(&Crossing2::of_point(&Rational2::new(3, 4, 1).unwrap()).unwrap()).unwrap());
+    assert!(
+        z.same(&Crossing2::of_point(&Rational2::new(3, 4, 1).unwrap()).unwrap())
+            .unwrap()
+    );
 }
 
 #[test]
@@ -483,9 +509,21 @@ fn the_centroid_of_a_closed_loop_is_rational() {
     .unwrap();
     let s = Scene::new(vec![Shape::Polyline(triangle), Shape::Polyline(l_shape)]);
     let mut c = Carriers::new();
-    assert!(is(&s.resolve(&s.snap(SnapKind::Centroid, 0), &mut c).unwrap(), &c, 2, 1, 1));
+    assert!(is(
+        &s.resolve(&s.snap(SnapKind::Centroid, 0), &mut c).unwrap(),
+        &c,
+        2,
+        1,
+        1
+    ));
     // A 3 by 1 bar and a 1 by 2 bar: area 5, moments 3 * 1.5 + 2 * 0.5 = 5.5 and 3 * 0.5 + 2 * 2 = 5.5.
-    assert!(is(&s.resolve(&s.snap(SnapKind::Centroid, 1), &mut c).unwrap(), &c, 11, 11, 10));
+    assert!(is(
+        &s.resolve(&s.snap(SnapKind::Centroid, 1), &mut c).unwrap(),
+        &c,
+        11,
+        11,
+        10
+    ));
 }
 
 #[test]
@@ -517,18 +555,48 @@ fn polylines_text_and_elliptic_arcs_give_their_own_points() {
         },
     ]);
     let mut c = Carriers::new();
-    assert!(is(&s.resolve(&s.snap(SnapKind::Start, 0), &mut c).unwrap(), &c, 0, 0, 1));
-    assert!(is(&s.resolve(&s.snap(SnapKind::End, 0), &mut c).unwrap(), &c, 4, 6, 1));
+    assert!(is(
+        &s.resolve(&s.snap(SnapKind::Start, 0), &mut c).unwrap(),
+        &c,
+        0,
+        0,
+        1
+    ));
+    assert!(is(
+        &s.resolve(&s.snap(SnapKind::End, 0), &mut c).unwrap(),
+        &c,
+        4,
+        6,
+        1
+    ));
     let mut vertex = s.snap(SnapKind::End, 0);
     vertex.sub = Some(1);
     assert!(is(&s.resolve(&vertex, &mut c).unwrap(), &c, 4, 0, 1));
     let mut mid = s.snap(SnapKind::Mid, 0);
     mid.sub = Some(1);
     assert!(is(&s.resolve(&mid, &mut c).unwrap(), &c, 4, 3, 1));
-    assert!(is(&s.resolve(&s.snap(SnapKind::Insertion, 1), &mut c).unwrap(), &c, 7, 8, 1));
+    assert!(is(
+        &s.resolve(&s.snap(SnapKind::Insertion, 1), &mut c).unwrap(),
+        &c,
+        7,
+        8,
+        1
+    ));
     // s = 0 is the major axis's near end, C + (8, 0); Far is its far end, C - (8, 0).
-    assert!(is(&s.resolve(&s.snap(SnapKind::Start, 2), &mut c).unwrap(), &c, 18, 20, 1));
-    assert!(is(&s.resolve(&s.snap(SnapKind::End, 2), &mut c).unwrap(), &c, 2, 20, 1));
+    assert!(is(
+        &s.resolve(&s.snap(SnapKind::Start, 2), &mut c).unwrap(),
+        &c,
+        18,
+        20,
+        1
+    ));
+    assert!(is(
+        &s.resolve(&s.snap(SnapKind::End, 2), &mut c).unwrap(),
+        &c,
+        2,
+        20,
+        1
+    ));
 }
 
 #[test]
