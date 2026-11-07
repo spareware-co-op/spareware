@@ -366,9 +366,12 @@ pub fn check(inputs: &Inputs) -> Result<(), Finding> {
                 InputKind::Rounded { bits, .. } if bits == NORMAL_BITS => {
                     inputs.normals.get(normal).map(|&v| Arg::Rounded(v))
                 }
-                // Every other width takes an offset cut down to it.
+                // Every other width takes an offset cut down to it: an extreme stays the extreme of
+                // the narrower width, and zero stays zero.
                 InputKind::Rounded { bits, .. } => {
-                    let shift = 1_i128 << OFFSET_BITS.saturating_sub(bits);
+                    let shift = 1_i128
+                        .checked_shl(OFFSET_BITS.saturating_sub(bits))
+                        .unwrap_or(1);
                     inputs
                         .offsets
                         .get(offset)
