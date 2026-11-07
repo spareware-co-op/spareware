@@ -564,7 +564,8 @@ fn distance_to(arc: &BiarcArc, q: [f64; 2]) -> f64 {
     let on = round.on();
     let (rx, ry) = (coordinate(on.x.get()) - c[0], coordinate(on.y.get()) - c[1]);
     let (qx, qy) = (q[0] - c[0], q[1] - c[1]);
-    let norm =
-        |x: f64, y: f64| geom_num::math::sqrt(x * x + y * y).map_or(f64::INFINITY, geom_num::Real::get);
+    let norm = |x: f64, y: f64| {
+        geom_num::math::sqrt(x * x + y * y).map_or(f64::INFINITY, geom_num::Real::get)
+    };
     norm(qx, qy) - norm(rx, ry)
 }
