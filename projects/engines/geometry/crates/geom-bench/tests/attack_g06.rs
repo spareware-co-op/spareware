@@ -1445,7 +1445,7 @@ fn direct_digest(group: &str, name: &str, class: Class) -> Option<Digest> {
                 let sketch = geom_sketch::text::parse(text)?;
                 let mut meter = geom_run::WorkMeter::new(geom_run::Budget::UNLIMITED);
                 let r = geom_sketch::diagnose::diagnose(&sketch, 10_000.0, &mut meter)?;
-                Ok([
+                Ok::<_, geom_sketch::model::SketchError>([
                     u32::try_from(r.dof_least).unwrap_or(u32::MAX),
                     u32::try_from(r.dof_most).unwrap_or(u32::MAX),
                     u32::try_from(r.redundant.len()).unwrap_or(u32::MAX),
@@ -1460,7 +1460,7 @@ fn direct_digest(group: &str, name: &str, class: Class) -> Option<Digest> {
                 let finder = geom_sketch::motions::MotionFinder::new(&sketch, &mut meter)?;
                 let all = finder.all(&mut meter)?;
                 let moved: usize = all.iter().map(|m| m.moves.len()).sum();
-                Ok([
+                Ok::<_, geom_sketch::model::SketchError>([
                     u32::try_from(finder.dof()).unwrap_or(u32::MAX),
                     u32::try_from(all.len()).unwrap_or(u32::MAX),
                     u32::try_from(moved).unwrap_or(u32::MAX),

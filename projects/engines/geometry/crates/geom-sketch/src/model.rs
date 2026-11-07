@@ -690,7 +690,7 @@ impl ConstraintKind {
     /// for a constraint that is not a dimension.
     #[must_use]
     pub fn with_stated(&self, value: f64) -> Option<ConstraintKind> {
-        let mut kind = self.clone();
+        let mut kind = *self;
         let amount = match &mut kind {
             ConstraintKind::Turned { angle, .. }
             | ConstraintKind::Heading { angle, .. }
