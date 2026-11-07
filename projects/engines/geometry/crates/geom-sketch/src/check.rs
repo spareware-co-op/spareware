@@ -122,7 +122,7 @@ fn ratio(x: i128, w: i128) -> Result<Interval, SketchError> {
 }
 
 /// An interval holding a stored point's coordinates.
-fn coordinates(point: &Stored) -> Result<[Interval; 2], SketchError> {
+pub(crate) fn coordinates(point: &Stored) -> Result<[Interval; 2], SketchError> {
     let ([x, y], w) = point.rational().coordinates();
     Ok([ratio(x, w)?, ratio(y, w)?])
 }

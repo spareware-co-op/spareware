@@ -97,3 +97,8 @@ harness = false
 [[bench]]
 name = "check"
 harness = false
+
+# A frame of a drag in a 1,000-entity sketch (piece G228), the same way.
+[[bench]]
+name = "drag"
+harness = false
