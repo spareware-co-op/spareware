@@ -762,6 +762,7 @@ dependencies = [
  "geom-num",
  "geom-nurbs",
  "geom-run",
+ "geom-sketch",
  "geom-surface",
  "geom-test",
  "gungraun",

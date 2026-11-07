@@ -1736,6 +1736,40 @@ pub mod linalg {
     }
 }
 
+/// `geom-sketch`'s spline rules (piece G220, decision 32.44): the arc length of a spline with its
+/// proven bound, and the assembly of rational spline rules, each from the sketch's text.
+pub mod spline {
+    use geom_sketch::equation::Assembly;
+    use geom_sketch::length::spline_length;
+    use geom_sketch::model::{ItemId, SketchError};
+    use geom_sketch::text::parse;
+
+    use super::run;
+
+    /// `spline_length` on spline 2.0 of each sketch: the value and the error bound.
+    #[inline(never)]
+    pub fn lengths(batch: &[String], out: &mut Vec<Result<[f64; 2], SketchError>>) {
+        run(batch, out, |text| {
+            let sketch = parse(text)?;
+            let l = spline_length(&sketch, ItemId::new(2, 0))?;
+            Ok([l.value, l.error])
+        });
+    }
+
+    /// `Assembly::new` and `evaluate` on each sketch: the sum of the residuals, and of their sizes.
+    #[inline(never)]
+    pub fn rational_rules(batch: &[String], out: &mut Vec<Result<[f64; 2], SketchError>>) {
+        run(batch, out, |text| {
+            let sketch = parse(text)?;
+            let mut a = Assembly::new(&sketch)?;
+            a.evaluate(&sketch)?;
+            let sum: f64 = a.residuals().iter().sum();
+            let sizes: f64 = a.residuals().iter().map(|r| r.abs()).sum();
+            Ok([sum, sizes])
+        });
+    }
+}
+
 /// `geom-bvh`'s hot paths (pieces G54 and G55, decision 32.44): building the box tree and the
 /// cell index of a scene and querying it, on the serial executor under an unlimited budget.
 pub mod bvh {

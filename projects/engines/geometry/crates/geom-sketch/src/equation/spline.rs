@@ -19,7 +19,8 @@
 //!
 //! Guarantees: as `equation`: deterministic, a NaN anywhere is an error, no panics, no recursion.
 //!
-//! Method: section 15.4, and the arc-length quadrature of [`crate::length`].
+//! Method: section 15.4, `projects/engines/geometry/architecture/15-sketches.md`, and the
+//! arc-length quadrature of [`crate::length`].
 //!
 //! Cost: linear in the inputs of the row.
 
@@ -146,13 +147,24 @@ fn against_rows<S: Scalar, const L: usize>(
     Ok(out)
 }
 
+/// The first five numbers of `x`.
+fn five<S: Scalar>(x: &[S]) -> Result<[S; 5], NumError> {
+    let at = |i: usize| x.get(i).copied().ok_or(NumError::Degenerate);
+    Ok([at(0)?, at(1)?, at(2)?, at(3)?, at(4)?])
+}
+
 /// A spline end smooth with a line (inputs: the end, the line's two points, a length).
 fn along_rows<S: Scalar, const L: usize>(x: &[S]) -> Result<[S; L], NumError> {
     let (end, rest) = x.split_at_checked(block(L)).ok_or(NumError::Degenerate)?;
-    let [ax, ay, bx, by, l] = *rest.first_chunk::<5>().ok_or(NumError::Degenerate)?;
+    let [ax, ay, bx, by, l] = five(rest)?;
     let jets = lin_jets::<S, L>(end)?;
     let direction = minus([bx, by], [ax, ay])?;
-    against_rows(&jets, |d1| sine(d1, direction), S::constant(Real::ZERO), l)
+    against_rows(
+        &jets,
+        |d1: [S; 2]| -> Result<S, NumError> { sine(d1, direction) },
+        S::constant(Real::ZERO),
+        l,
+    )
 }
 
 /// A spline end smooth with an arc (inputs: the end, the arc's centre, its radius, the sense of
@@ -160,7 +172,7 @@ fn along_rows<S: Scalar, const L: usize>(x: &[S]) -> Result<[S; L], NumError> {
 /// end's first point, and the arc's outward curvature is its sense over its radius.
 fn round_rows<S: Scalar, const L: usize>(x: &[S]) -> Result<[S; L], NumError> {
     let (end, rest) = x.split_at_checked(block(L)).ok_or(NumError::Degenerate)?;
-    let [cx, cy, r, sense, l] = *rest.first_chunk::<5>().ok_or(NumError::Degenerate)?;
+    let [cx, cy, r, sense, l] = five(rest)?;
     let p = [
         *end.first().ok_or(NumError::Degenerate)?,
         *end.get(1).ok_or(NumError::Degenerate)?,
@@ -169,7 +181,9 @@ fn round_rows<S: Scalar, const L: usize>(x: &[S]) -> Result<[S; L], NumError> {
     let radius = minus(p, [cx, cy])?;
     against_rows(
         &jets,
-        |d1| dot(radius, d1)?.div(dot(radius, radius)?.mul(dot(d1, d1)?)?.sqrt()?),
+        |d1: [S; 2]| -> Result<S, NumError> {
+            dot(radius, d1)?.div(dot(radius, radius)?.mul(dot(d1, d1)?)?.sqrt()?)
+        },
         sense.div(r)?,
         l,
     )
@@ -188,95 +202,122 @@ fn flat_one(x: &[f64], level: usize) -> bool {
     x.get(..block(level)).is_none_or(|a| lin_flat(a, level))
 }
 
-macro_rules! lin_rule {
-    ($name:ident, $doc:literal, $rows:ident, $level:literal, $n:literal, $flat:ident) => {
-        #[doc = $doc]
-        pub struct $name;
+#[doc = "G1 join of two spline ends in the linear layout."]
+pub struct LinJoin1;
 
-        impl Residual<$n, $level> for $name {
-            fn residuals<S: Scalar>(&self, x: [S; $n]) -> Result<[S; $level], NumError> {
-                $rows::<S, $level>(&x)
-            }
+impl Residual<13, 1> for LinJoin1 {
+    fn residuals<S: Scalar>(&self, x: [S; 13]) -> Result<[S; 1], NumError> {
+        join_rows::<S, 1>(&x)
+    }
 
-            fn singular(&self, x: &[f64; $n]) -> Option<Singular> {
-                $flat(x, $level).then_some(Singular::ZeroLengthLine)
-            }
-        }
-    };
+    fn singular(&self, x: &[f64; 13]) -> Option<Singular> {
+        flat_join(x, 1).then_some(Singular::ZeroLengthLine)
+    }
 }
 
-lin_rule!(
-    LinJoin1,
-    "G1 join of two spline ends in the linear layout.",
-    join_rows,
-    1,
-    13,
-    flat_join
-);
-lin_rule!(
-    LinJoin2,
-    "G2 join of two spline ends in the linear layout.",
-    join_rows,
-    2,
-    25,
-    flat_join
-);
-lin_rule!(
-    LinJoin3,
-    "G3 join of two spline ends in the linear layout.",
-    join_rows,
-    3,
-    41,
-    flat_join
-);
-lin_rule!(
-    LinAlong1,
-    "A spline end tangent to a line.",
-    along_rows,
-    1,
-    11,
-    flat_one
-);
-lin_rule!(
-    LinAlong2,
-    "A spline end G2 with a line.",
-    along_rows,
-    2,
-    17,
-    flat_one
-);
-lin_rule!(
-    LinAlong3,
-    "A spline end G3 with a line.",
-    along_rows,
-    3,
-    25,
-    flat_one
-);
-lin_rule!(
-    LinRound1,
-    "A spline end tangent to an arc.",
-    round_rows,
-    1,
-    11,
-    flat_one
-);
-lin_rule!(
-    LinRound2,
-    "A spline end G2 with an arc.",
-    round_rows,
-    2,
-    17,
-    flat_one
-);
-lin_rule!(
-    LinRound3,
-    "A spline end G3 with an arc.",
-    round_rows,
-    3,
-    25,
-    flat_one
-);
+#[doc = "G2 join of two spline ends in the linear layout."]
+pub struct LinJoin2;
+
+impl Residual<25, 2> for LinJoin2 {
+    fn residuals<S: Scalar>(&self, x: [S; 25]) -> Result<[S; 2], NumError> {
+        join_rows::<S, 2>(&x)
+    }
+
+    fn singular(&self, x: &[f64; 25]) -> Option<Singular> {
+        flat_join(x, 2).then_some(Singular::ZeroLengthLine)
+    }
+}
+
+#[doc = "G3 join of two spline ends in the linear layout."]
+pub struct LinJoin3;
+
+impl Residual<41, 3> for LinJoin3 {
+    fn residuals<S: Scalar>(&self, x: [S; 41]) -> Result<[S; 3], NumError> {
+        join_rows::<S, 3>(&x)
+    }
+
+    fn singular(&self, x: &[f64; 41]) -> Option<Singular> {
+        flat_join(x, 3).then_some(Singular::ZeroLengthLine)
+    }
+}
+
+#[doc = "A spline end tangent to a line."]
+pub struct LinAlong1;
+
+impl Residual<11, 1> for LinAlong1 {
+    fn residuals<S: Scalar>(&self, x: [S; 11]) -> Result<[S; 1], NumError> {
+        along_rows::<S, 1>(&x)
+    }
+
+    fn singular(&self, x: &[f64; 11]) -> Option<Singular> {
+        flat_one(x, 1).then_some(Singular::ZeroLengthLine)
+    }
+}
+
+#[doc = "A spline end G2 with a line."]
+pub struct LinAlong2;
+
+impl Residual<17, 2> for LinAlong2 {
+    fn residuals<S: Scalar>(&self, x: [S; 17]) -> Result<[S; 2], NumError> {
+        along_rows::<S, 2>(&x)
+    }
+
+    fn singular(&self, x: &[f64; 17]) -> Option<Singular> {
+        flat_one(x, 2).then_some(Singular::ZeroLengthLine)
+    }
+}
+
+#[doc = "A spline end G3 with a line."]
+pub struct LinAlong3;
+
+impl Residual<25, 3> for LinAlong3 {
+    fn residuals<S: Scalar>(&self, x: [S; 25]) -> Result<[S; 3], NumError> {
+        along_rows::<S, 3>(&x)
+    }
+
+    fn singular(&self, x: &[f64; 25]) -> Option<Singular> {
+        flat_one(x, 3).then_some(Singular::ZeroLengthLine)
+    }
+}
+
+#[doc = "A spline end tangent to an arc."]
+pub struct LinRound1;
+
+impl Residual<11, 1> for LinRound1 {
+    fn residuals<S: Scalar>(&self, x: [S; 11]) -> Result<[S; 1], NumError> {
+        round_rows::<S, 1>(&x)
+    }
+
+    fn singular(&self, x: &[f64; 11]) -> Option<Singular> {
+        flat_one(x, 1).then_some(Singular::ZeroLengthLine)
+    }
+}
+
+#[doc = "A spline end G2 with an arc."]
+pub struct LinRound2;
+
+impl Residual<17, 2> for LinRound2 {
+    fn residuals<S: Scalar>(&self, x: [S; 17]) -> Result<[S; 2], NumError> {
+        round_rows::<S, 2>(&x)
+    }
+
+    fn singular(&self, x: &[f64; 17]) -> Option<Singular> {
+        flat_one(x, 2).then_some(Singular::ZeroLengthLine)
+    }
+}
+
+#[doc = "A spline end G3 with an arc."]
+pub struct LinRound3;
+
+impl Residual<25, 3> for LinRound3 {
+    fn residuals<S: Scalar>(&self, x: [S; 25]) -> Result<[S; 3], NumError> {
+        round_rows::<S, 3>(&x)
+    }
+
+    fn singular(&self, x: &[f64; 25]) -> Option<Singular> {
+        flat_one(x, 3).then_some(Singular::ZeroLengthLine)
+    }
+}
 
 impl Assembly {
     /// The inputs of a row, read at `x`.

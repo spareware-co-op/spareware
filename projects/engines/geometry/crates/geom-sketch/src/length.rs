@@ -31,10 +31,12 @@
 //! - **Fixed work.** The panels and nodes depend on the stored spline alone, in a fixed order.
 //! - **No panics, no recursion, no unsafe code.**
 //!
-//! Method: P. J. Davis and P. Rabinowitz, *Methods of Numerical Integration*, 2nd ed., Academic
-//! Press (1984), section 2.7 (the Gauss remainder), on `geom_num`'s rules; the Taylor series of a
+//! Method: section 15.3, `projects/engines/geometry/architecture/15-sketches.md`; P. J. Davis and
+//! P. Rabinowitz, *Methods of Numerical Integration*, 2nd ed., Academic Press (1984), section 2.7
+//! (the Gauss remainder), on `geom_num`'s rules; the Taylor series of a
 //! square root is the recurrence s₀ = √q₀, sₖ = (qₖ − Σ sⱼ sₖ₋ⱼ) / (2 s₀) (R. E. Moore, *Methods
-//! and Applications of Interval Analysis*, SIAM (1979), chapter 11, interval Taylor forms). The
+//! and Applications of Interval Analysis*, SIAM (1979), <https://doi.org/10.1137/1.9781611970906>,
+//! chapter 11, interval Taylor forms). The
 //! interval series is written out here because no permissive crate gives a series over outward
 //! rounded intervals that the kernel's arithmetic could stand behind (principle 2).
 //!
