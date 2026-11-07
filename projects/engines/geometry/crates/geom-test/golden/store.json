@@ -236,9 +236,15 @@
               "kind": "corpus",
               "piece": "G148",
               "why": "2 new count benchmarks of geom-run's helper (decision 32.44): Exec::map of a list that fits one chunk, on the serial executor and on a pool, for the fix that runs a wave of one task on the calling thread (found in G148's timings); no existing digest moved"
+            },
+            {
+              "sha256": "57fb849de9d6eb8003fe3ff677db5373da1b40984777f2d573018b64e5601c1b",
+              "kind": "corpus",
+              "piece": "G194",
+              "why": "the benchmark groups of piece/G192's line and of G80 and G81 meet in one golden"
             }
           ],
-          "sha256": "57fb849de9d6eb8003fe3ff677db5373da1b40984777f2d573018b64e5601c1b"
+          "sha256": "d447eb75906f05514da32055b78c30ab5a248d51385dd15b17e7f694c57e7307"
         },
         {
           "id": "geom-nurbs/operations",

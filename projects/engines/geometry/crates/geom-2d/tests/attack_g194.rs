@@ -22,6 +22,10 @@
     reason = "oracles and generators; the rules are for kernel code"
 )]
 #![allow(
+    clippy::many_single_char_names,
+    reason = "a, b, h, d, l and the like are the entities'"
+)]
+#![allow(
     clippy::unwrap_used,
     clippy::expect_used,
     clippy::panic,
@@ -128,7 +132,7 @@ fn every_shape() -> Vec<Shape> {
     let leader = Leader::new(vec![p2(0, 0), p2(3, 3)], None, Key(2)).unwrap();
     let block = BlockDef {
         origin: p2(0, 0),
-        entities: vec![Entity::new(Attr(1), Shape::Point(p2(1, 1)))],
+        members: vec![EntityIx(0), EntityIx(4)],
     };
     let insert = Insert {
         block: BlockIx(0),
@@ -560,8 +564,8 @@ fn a_hatch_does_not_store_its_lines_and_a_block_keeps_its_own_entities() {
     let shapes = every_shape();
     match &shapes[15] {
         Shape::Block(b) => {
-            assert_eq!(b.entities.len(), 1);
-            assert_eq!(b.entities[0].attr(), Attr(1));
+            assert_eq!(b.members, vec![EntityIx(0), EntityIx(4)]);
+            assert_eq!(b.origin, p2(0, 0));
         }
         other => panic!("{other:?}"),
     }

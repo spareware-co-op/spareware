@@ -792,13 +792,15 @@ impl Leader {
     }
 }
 
-/// A block definition, in its own frame.
-#[derive(Clone, Debug)]
+/// A block definition, in its own frame: the point that sits at an insert's placement, and the
+/// entities of the drawing that belong to it. The members are places in the drawing's list, not
+/// copies, so an entity model has no cycle (a block cannot hold itself).
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct BlockDef {
     /// The point of the block that sits at the insert's placement.
     pub origin: P2,
-    /// What the block holds.
-    pub entities: Vec<Entity>,
+    /// The entities that belong to the block.
+    pub members: Vec<EntityIx>,
 }
 
 /// A rectangular array of copies.
