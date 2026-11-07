@@ -4,7 +4,7 @@
 //! histories and their composition.
 //!
 //! - **The rules of section 20.3**, written here from the chapter, not through `geom-op`'s own
-//!   checker: every output entity has its history; a deleted input has no modified outputs; an
+//!   checker, on primitives, transforms, pattern copies and booleans (G132's names and history): every output entity has its history; a deleted input has no modified outputs; an
 //!   input's generated and modified outputs do not overlap; every output traces to an input or is
 //!   generated; nothing is named as an input that is not one. They hold on every step of seeded
 //!   chains of operations, and the kit's chain check (`geom_test::history::check_chain`) passes on
@@ -23,8 +23,7 @@
 //!   its canonical encoding, has one digest, kept in the golden store
 //!   (`geom-test/names-on-every-target`) and checked on every target CI builds.
 //!
-//! Booleans name what they make with the operations to come (chapter 20.2); their histories join
-//! the row then. Seeds: each law prints `seed: <hex>` and replays with `SPAREKIT_SEED`; pull
+//! Seeds: each law prints `seed: <hex>` and replays with `SPAREKIT_SEED`; pull
 //! requests run the fixed default seed and the nightly workflow a fresh one. The golden's corpus
 //! has a seed of its own, which never changes.
 
@@ -46,8 +45,10 @@ mod catalogue;
 
 use std::collections::{BTreeMap, BTreeSet};
 
-use catalogue::flat::{draw_prism, p};
+use catalogue::flat::{SERIAL, draw_prism, key, p, solid};
 use catalogue::{Draw, Findings};
+use geom_bool::combine::{intersect, subtract, unite};
+use geom_bool::operand::Operand;
 use geom_make::{
     BoxInput, Instance, Made, Moved, PrismInput, RoundInput, SphereInput, TorusInput, cone,
     cylinder, make_box, mirror, move_by, pattern, prism, rotate, sphere, torus,
@@ -59,6 +60,7 @@ use geom_op::history::{History, Relations};
 use geom_op::{NameId, NameSet, OpContext, OpError, OpId, OpOutput, OpPath};
 use geom_run::Budget;
 use geom_test::golden::{self, hex, sha256};
+use geom_test::flat_reference::Op;
 use geom_test::history::{chain, check_chain};
 use geom_test::prop;
 use geom_test::{Seed, SplitMix64};
@@ -85,8 +87,8 @@ fn names(body: &Body) -> Vec<NameId> {
     })
 }
 
-/// A primitive of a drawn kind and size, made by the operation at `c`.
-fn draw_primitive(d: &mut Draw, c: &OpContext<'_>) -> (String, Result<OpOutput<Made>, OpError>) {
+/// A primitive of a drawn kind and size, made by the operation at `c`, and whether it is flat.
+fn draw_primitive(d: &mut Draw, c: &OpContext<'_>) -> (String, bool, Result<OpOutput<Made>, OpError>) {
     let at = p(d.between(-20, 20), d.between(-20, 20), d.between(-20, 20));
     let size = |d: &mut Draw| Steps(d.between(2, 12) as u64);
     match d.below(6) {
@@ -95,7 +97,7 @@ fn draw_primitive(d: &mut Draw, c: &OpContext<'_>) -> (String, Result<OpOutput<M
                 min: at,
                 size: [size(d), size(d), size(d)],
             };
-            (format!("{input:?}"), make_box(c, &input))
+            (format!("{input:?}"), true, make_box(c, &input))
         }
         1 => {
             let shape = draw_prism(d, None);
@@ -103,7 +105,7 @@ fn draw_primitive(d: &mut Draw, c: &OpContext<'_>) -> (String, Result<OpOutput<M
                 base: shape.base.iter().map(|b| p(b[0], b[1], shape.z)).collect(),
                 height: Steps(shape.height),
             };
-            (format!("{input:?}"), prism(c, &input))
+            (format!("{input:?}"), true, prism(c, &input))
         }
         2 | 3 => {
             let input = RoundInput {
@@ -117,7 +119,7 @@ fn draw_primitive(d: &mut Draw, c: &OpContext<'_>) -> (String, Result<OpOutput<M
             } else {
                 cone(c, &input)
             };
-            (format!("{input:?}"), made)
+            (format!("{input:?}"), false, made)
         }
         4 => {
             let input = SphereInput {
@@ -125,7 +127,7 @@ fn draw_primitive(d: &mut Draw, c: &OpContext<'_>) -> (String, Result<OpOutput<M
                 radius: size(d),
                 step: GridStep::Q0,
             };
-            (format!("{input:?}"), sphere(c, &input))
+            (format!("{input:?}"), false, sphere(c, &input))
         }
         _ => {
             let minor = d.between(1, 4) as u64;
@@ -135,35 +137,47 @@ fn draw_primitive(d: &mut Draw, c: &OpContext<'_>) -> (String, Result<OpOutput<M
                 minor: Steps(minor),
                 step: GridStep::Q0,
             };
-            (format!("{input:?}"), torus(c, &input))
+            (format!("{input:?}"), false, torus(c, &input))
         }
     }
 }
 
-/// One step after a primitive: a grid move, or one copy of a pattern.
+/// One step after a primitive: a grid move, one copy of a pattern, or a boolean with a box (for a
+/// flat body, which is all a boolean takes yet).
 #[derive(Clone, Copy, Debug)]
 enum Step {
     Move([i64; 3]),
     Turn(Axis, i32, P3),
     Mirror(Axis, P3),
     Copy([u8; 16], [i64; 3]),
+    Bool(Op, [i64; 3], [u64; 3]),
 }
 
 impl Step {
-    fn draw(d: &mut Draw) -> Step {
+    fn draw(d: &mut Draw, flat: bool) -> Step {
         let axis = [Axis::X, Axis::Y, Axis::Z][d.pick(3)];
         let centre = p(d.between(-5, 5), d.between(-5, 5), d.between(-5, 5));
         let by = [0; 3].map(|_: i64| d.between(-40, 40));
-        match d.below(4) {
+        match d.below(if flat { 6 } else { 4 }) {
             0 => Step::Move(by),
             1 => Step::Turn(axis, i32::try_from(d.between(1, 3)).unwrap(), centre),
             2 => Step::Mirror(axis, centre),
-            _ => Step::Copy([u8::try_from(d.below(200)).unwrap() + 1; 16], by),
+            3 => Step::Copy([u8::try_from(d.below(200)).unwrap() + 1; 16], by),
+            _ => Step::Bool(
+                [Op::Union, Op::Intersection, Op::Difference][d.pick(3)],
+                [0; 3].map(|_: i64| d.between(-20, 20)),
+                [0; 3].map(|_: u64| d.between(2, 30) as u64),
+            ),
         }
     }
 
-    /// The step run by the operation at `c` on `body`.
-    fn run(self, c: &OpContext<'_>, body: &Body, exactness: Exactness) -> Result<OpOutput<Made>, String> {
+    /// The step run by the operation at `c` on `body`, and the names of any other operand it took.
+    fn run(
+        self,
+        c: &OpContext<'_>,
+        body: &Body,
+        exactness: Exactness,
+    ) -> Result<(OpOutput<Made>, Vec<NameId>), String> {
         let moved = Moved {
             body,
             exactness,
@@ -184,12 +198,51 @@ impl Step {
                         out.result
                             .into_iter()
                             .next()
-                            .map(|(_, made)| OpOutput::new(made, exactness))
+                            .map(|(_, made)| (OpOutput::new(made, exactness), Vec::new()))
                             .ok_or_else(|| format!("{self:?}: no copy"))
                     });
             }
+            Step::Bool(op, low, size) => {
+                // The tool is made by an operation of its own, so its names are its own.
+                let tool = make_box(
+                    &ctx_at(200),
+                    &BoxInput {
+                        min: p(low[0], low[1], low[2]),
+                        size: size.map(Steps),
+                    },
+                )
+                .map_err(|e| format!("{self:?}: the tool: {e:?}"))?
+                .result
+                .body;
+                let both = [
+                    Operand {
+                        exactness,
+                        ..solid(1, body)
+                    },
+                    solid(2, &tool),
+                ];
+                let out = match op {
+                    Op::Union => unite(c, &SERIAL, &both),
+                    Op::Intersection => intersect(c, &SERIAL, &both),
+                    _ => subtract(c, &SERIAL, key(1), &both),
+                }
+                .map_err(|e| format!("{self:?}: {e:?}"))?;
+                let exactness = out.exactness;
+                let combined = out.result;
+                let history = combined
+                    .history
+                    .ok_or_else(|| format!("{self:?}: a boolean of named bodies has no history"))?;
+                let made = Made {
+                    body: combined.body,
+                    history,
+                    names: combined.names,
+                    motion: None,
+                };
+                return Ok((OpOutput::new(made, exactness), names(&tool)));
+            }
         };
-        out.map_err(|e| format!("{self:?}: {e:?}"))
+        out.map(|o| (o, Vec::new()))
+            .map_err(|e| format!("{self:?}: {e:?}"))
     }
 }
 
@@ -214,6 +267,9 @@ fn rules(f: &mut Findings, what: &str, history: &History, inputs: &[NameId], out
         "every output entity has its history",
         || what.to_owned(),
     );
+    f.check(first_duplicate(outputs).is_none(), "no two entities share a name", || {
+        what.to_owned()
+    });
     f.check(
         modified.iter().all(|(i, _)| !deleted.contains(i)),
         "a deleted input has no modified outputs",
@@ -345,7 +401,7 @@ fn every_operation_keeps_the_rules_of_20_3_and_its_chain_composes() {
     let mut d = Draw::new("names: operations and chains", 0x9001);
     let mut f = Findings::default();
     for _ in 0..40 {
-        let (what, made) = draw_primitive(&mut d, &ctx_at(1));
+        let (what, flat, made) = draw_primitive(&mut d, &ctx_at(1));
         let Ok(out) = made else {
             f.add("a primitive the kernel would not build", || what);
             continue;
@@ -357,10 +413,13 @@ fn every_operation_keeps_the_rules_of_20_3_and_its_chain_composes() {
         let mut steps: Vec<(History, NameSet)> = Vec::new();
         let mut done = what.clone();
         for k in 0..d.between(1, 4) {
-            let step = Step::draw(&mut d);
-            let inputs = names(&body);
+            let step = Step::draw(&mut d, flat);
+            let mut inputs = names(&body);
             let made = match step.run(&ctx_at(2 + u8::try_from(k).unwrap()), &body, exactness) {
-                Ok(m) => m,
+                Ok((m, others)) => {
+                    inputs.extend(others);
+                    m
+                }
                 Err(why) => {
                     f.add("a step the kernel refused", || format!("{done} then {why}"));
                     break;
@@ -420,7 +479,7 @@ fn no_two_entities_share_a_name() {
     let mut d = Draw::new("names: no duplicates", 0x9003);
     let mut f = Findings::default();
     for _ in 0..40 {
-        let (what, made) = draw_primitive(&mut d, &ctx_at(1));
+        let (what, _, made) = draw_primitive(&mut d, &ctx_at(1));
         let Ok(out) = made else {
             f.add("a primitive the kernel would not build", || what);
             continue;
@@ -462,7 +521,7 @@ fn untouched_entities_keep_their_names() {
     let mut d = Draw::new("names: untouched entities", 0x9004);
     let mut f = Findings::default();
     for _ in 0..40 {
-        let (what, made) = draw_primitive(&mut d, &ctx_at(1));
+        let (what, _, made) = draw_primitive(&mut d, &ctx_at(1));
         let Ok(out) = made else {
             f.add("a primitive the kernel would not build", || what);
             continue;
@@ -471,13 +530,13 @@ fn untouched_entities_keep_their_names() {
         let body = &out.result.body;
         // A transform keeps every name.
         let step = loop {
-            let s = Step::draw(&mut d);
+            let s = Step::draw(&mut d, false);
             if !matches!(s, Step::Copy(..)) {
                 break s;
             }
         };
         match step.run(&ctx_at(2), body, out.exactness) {
-            Ok(moved) => f.check(
+            Ok((moved, _)) => f.check(
                 names(&moved.result.body) == names(body),
                 "a transform keeps every name",
                 || format!("{what} then {step:?}"),
@@ -559,7 +618,8 @@ fn a_primitives_names_do_not_depend_on_its_place_or_size() {
 }
 
 /// The corpus of the names golden: from a fixed stream, 60 primitives, each followed by up to
-/// three steps, every body's names and every history in its canonical encoding, in order.
+/// three steps (grid moves, pattern copies and, on flat bodies, booleans with a box), every body's
+/// names and every history in its canonical encoding, in order.
 fn corpus() -> (Vec<u8>, usize) {
     let mut d = Draw(SplitMix64::new(geom_test::seed::fixed(
         "names on every target",
@@ -568,7 +628,7 @@ fn corpus() -> (Vec<u8>, usize) {
     let mut bytes = Vec::new();
     let mut count = 0_usize;
     for _ in 0..60 {
-        let (_, made) = draw_primitive(&mut d, &ctx_at(1));
+        let (_, flat, made) = draw_primitive(&mut d, &ctx_at(1));
         let Ok(out) = made else {
             bytes.push(0);
             continue;
@@ -588,8 +648,8 @@ fn corpus() -> (Vec<u8>, usize) {
         record(&mut bytes, 1, &body, &out.result.history);
         for k in 0..d.between(0, 3) {
             let at = 2 + u8::try_from(k).unwrap();
-            match Step::draw(&mut d).run(&ctx_at(at), &body, exactness) {
-                Ok(made) => {
+            match Step::draw(&mut d, flat).run(&ctx_at(at), &body, exactness) {
+                Ok((made, _)) => {
                     record(&mut bytes, at, &made.result.body, &made.result.history);
                     body = made.result.body;
                     exactness = made.exactness;

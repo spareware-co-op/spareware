@@ -208,7 +208,7 @@ fn a_stored_body_reads_back_equal_and_writes_the_same_records() {
                 [0; 3].map(|_: u64| d.between(1, 6) as u64),
             );
             match unite(&ctx(), &Exec::serial(), &[operand(1, &a), operand(2, &b)]) {
-                Ok(o) => o.result,
+                Ok(o) => o.result.body,
                 Err(e) => {
                     f.add("a union the kernel would not build", || format!("{e:?}"));
                     continue;

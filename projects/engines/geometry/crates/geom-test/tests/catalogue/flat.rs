@@ -173,7 +173,7 @@ pub fn operate(op: Op, a: &Body, b: &Body) -> Result<Body, String> {
         Op::Intersection => intersect(&ctx(), &SERIAL, &both),
         _ => subtract(&ctx(), &SERIAL, key(1), &both),
     }
-    .map(|out| out.result)
+    .map(|out| out.result.body)
     .map_err(|e| format!("{op:?}: {e:?}"))
 }
 

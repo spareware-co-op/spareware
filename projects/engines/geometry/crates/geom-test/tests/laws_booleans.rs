@@ -9,23 +9,29 @@
 //!   `vol(A − B) = vol A − vol(A ∩ B)`, on six times the volume, which is a whole number when every
 //!   vertex is a grid point (chapter 28.3's first care).
 //! - **`A − A` is empty, and `A ∪ A = A`.** The second as volume and as the same vertices.
-//! - **Imprint leaves volume unchanged**, and **cells partition the space**: the cells of two
-//!   operands (inside both, inside one only, inside the other only) have volumes that sum to the
-//!   union's, and each is what its test says.
+//! - **Imprint leaves volume unchanged**, and **cells partition the space**: the selections inside
+//!   both, inside one only and inside the other only have volumes that sum to the union's and to
+//!   each operand's; and the arrangement's own cells (`Selection::Cells`, G137) have volumes that
+//!   sum to the union's, every sampled point of the union lies in exactly one of them and none
+//!   outside it, and each cell knows which solids it lies inside.
 //! - **The membership law.** Every coordinate of the sampled points is odd and every box's is even,
 //!   so no point is on a boundary and the three-answer classification has two answers there:
 //!   a point is in `A op B` exactly when `op` applied to whether it is in `A` and in `B` says so.
 //!   The inputs' answers come from the flat reference (`geom_test::flat_reference`), written
 //!   from the definitions alone; the result's from the kernel's own shell queries.
 //! - **As shapes.** Union and intersection commute; grid translations, quarter turns and mirrors
-//!   commute with every boolean (the same vertices, the same volume); a batch cut equals the same
-//!   cuts one at a time, in either order.
+//!   commute with every boolean (the same vertices, the same volume); a batch cut, by the n-ary
+//!   subtraction and by `geom_bool::batch::cut`, equals the same cuts one at a time, in either
+//!   order.
+//! - **A cut again is a cut afresh** (G139's re-cut cache, with G140): after a tool is moved, added
+//!   or taken out, a cut carrying the last cut's cache, a stale one, another host's or an empty one
+//!   gives the fresh cut's body, names, history, report, cache and diagnostics, bit for bit, and
+//!   takes the same work.
 //! - **Against the reference.** On two boxes, the kernel's union, intersection and difference have
 //!   exactly the volumes the reference's brute force over a full plane arrangement gives.
 //!
-//! The re-cut cache (G139, the line of G140) is not in this branch; its laws join once it is
-//! integrated with G131. Seeds: each law prints `seed: <hex>`, replays with `SPAREKIT_SEED`;
-//! pull requests run the fixed default seed and the nightly workflow a fresh one.
+//! Seeds: each law prints `seed: <hex>`, replays with `SPAREKIT_SEED`; pull requests run the fixed
+//! default seed and the nightly workflow a fresh one.
 
 #![allow(
     clippy::arithmetic_side_effects,
@@ -47,13 +53,14 @@ mod catalogue;
 use std::collections::BTreeSet;
 
 use catalogue::{Draw, Findings};
-use geom_bool::combine::{combine, intersect, subtract, unite};
+use geom_bool::batch::{BatchRule, Cut, CutResult, Recut, cut};
+use geom_bool::combine::{Combined, combine, intersect, subtract, unite};
 use geom_bool::operand::{BooleanInput, Operand, OperandKey, OperandKind, Selection, Term};
 use geom_check::{Level, check};
 use geom_make::{BoxInput, Moved, make_box, mirror, move_by, rotate};
 use geom_math::{Axis, Rotation};
 use geom_num::{Exactness, P3, Steps};
-use geom_op::{OpContext, OpId, OpPath};
+use geom_op::{OpContext, OpError, OpId, OpOutput, OpPath};
 use geom_poly::merge::Merge;
 use geom_run::{Budget, Exec, WorkMeter};
 use geom_test::flat_reference::{Op, Solid, Where, boolean, int, point as qpoint};
@@ -189,7 +196,7 @@ fn joined(pieces: &[Body]) -> Result<Body, String> {
     match pieces {
         [one] => Ok(one.clone()),
         [a, b] => unite(&ctx(), &SERIAL, &[solid(1, a), solid(2, b)])
-            .map(|out| out.result)
+            .map(|out| out.result.body)
             .map_err(|e| format!("{e:?}")),
         _ => Err(format!("{} pieces", pieces.len())),
     }
@@ -291,9 +298,9 @@ fn volumes_add_up_exactly() {
         let (Ok(va), Ok(vb), Ok(vu), Ok(vi), Ok(vs)) = (
             six(&a.body),
             six(&b.body),
-            six(&u.result),
-            six(&i.result),
-            six(&s.result),
+            six(&u.result.body),
+            six(&i.result.body),
+            six(&s.result.body),
         ) else {
             f.add("volume", || describe(a, b));
             return;
@@ -304,7 +311,7 @@ fn volumes_add_up_exactly() {
         f.check(vs == va - vi, "vol(A - B) = vol A - vol(A n B)", || {
             format!("{} gives {vs} against {va} - {vi}", describe(a, b))
         });
-        for (name, body) in [("union", &u.result), ("intersection", &i.result), ("difference", &s.result)] {
+        for (name, body) in [("union", &u.result.body), ("intersection", &i.result.body), ("difference", &s.result.body)] {
             f.check(body.arenas().edges.is_empty() || checked(body), "full checker", || {
                 format!("{name} of {}", describe(a, b))
             });
@@ -320,16 +327,16 @@ fn a_solid_minus_itself_is_empty_and_united_with_itself_is_itself() {
         };
         let twin = [solid(1, &a.body), solid(2, &copy)];
         if let Some(none) = took(f, "refused", "A - A", subtract(&ctx(), &SERIAL, key(1), &twin)) {
-            f.check(none.result.arenas().edges.is_empty(), "A - A is empty", || {
-                format!("{:?} leaves {} edges", a.parts, none.result.arenas().edges.len())
+            f.check(none.result.body.arenas().edges.is_empty(), "A - A is empty", || {
+                format!("{:?} leaves {} edges", a.parts, none.result.body.arenas().edges.len())
             });
         }
         if let Some(same) = took(f, "refused", "A u A", unite(&ctx(), &SERIAL, &twin)) {
-            f.check(six(&same.result) == six(&a.body), "A u A has A's volume", || {
+            f.check(six(&same.result.body) == six(&a.body), "A u A has A's volume", || {
                 format!("{:?}", a.parts)
             });
             f.check(
-                vertices(&same.result) == vertices(&a.body),
+                vertices(&same.result.body) == vertices(&a.body),
                 "A u A has A's vertices",
                 || format!("{:?}", a.parts),
             );
@@ -367,7 +374,7 @@ fn imprint_keeps_the_volume_and_the_cells_partition_the_union() {
             .map(|bodies| {
                 bodies
                     .iter()
-                    .try_fold(0_i128, |sum, body| six(body).map(|v| sum + v))
+                    .try_fold(0_i128, |sum, cell| six(&cell.body).map(|v| sum + v))
             })
             .collect();
         let [Ok(imprint), Ok(only_a), Ok(only_b), Ok(both), Ok(union)] = volumes.as_slice() else {
@@ -426,9 +433,9 @@ fn a_point_is_in_the_result_when_the_operation_says_so_of_its_classes() {
             let x = [0; 3].map(|_: i64| 2 * d.between(-1, 7) + 1);
             let (ia, ib) = (a.contains(x), b.contains(x));
             for (name, body, expect) in [
-                ("union", &u.result, ia || ib),
-                ("intersection", &i.result, ia && ib),
-                ("difference", &s.result, ia && !ib),
+                ("union", &u.result.body, ia || ib),
+                ("intersection", &i.result.body, ia && ib),
+                ("difference", &s.result.body, ia && !ib),
             ] {
                 match kernel_inside(body, x) {
                     Ok(got) => f.check(got == expect, name, || {
@@ -463,9 +470,9 @@ fn the_kernels_volumes_are_the_references() {
         };
         let (ra, rb) = (ca.reference(), cb.reference());
         for (name, kernel, op) in [
-            ("union", &u.result, Op::Union),
-            ("intersection", &i.result, Op::Intersection),
-            ("difference", &s.result, Op::Difference),
+            ("union", &u.result.body, Op::Union),
+            ("intersection", &i.result.body, Op::Intersection),
+            ("difference", &s.result.body, Op::Difference),
         ] {
             let reference = boolean(&ra, &rb, op).unwrap().volume() * int(6);
             let got = six(kernel).map(|v| int(i64::try_from(v).unwrap()));
@@ -488,9 +495,9 @@ fn the_kernels_volumes_are_the_references() {
 fn operate(op: &str, a: &Body, b: &Body) -> Result<Body, String> {
     let both = [solid(1, a), solid(2, b)];
     match op {
-        "union" => unite(&ctx(), &SERIAL, &both).map(|o| o.result),
-        "intersection" => intersect(&ctx(), &SERIAL, &both).map(|o| o.result),
-        _ => subtract(&ctx(), &SERIAL, key(1), &both).map(|o| o.result),
+        "union" => unite(&ctx(), &SERIAL, &both).map(|o| o.result.body),
+        "intersection" => intersect(&ctx(), &SERIAL, &both).map(|o| o.result.body),
+        _ => subtract(&ctx(), &SERIAL, key(1), &both).map(|o| o.result.body),
     }
     .map_err(|e| format!("{op}: {e:?}"))
 }
@@ -638,21 +645,217 @@ fn a_batch_cut_equals_the_cuts_one_at_a_time_in_any_order() {
         let Some(batch) = took(&mut f, "refused", "batch", subtract(&ctx(), &SERIAL, key(1), &all)) else {
             continue;
         };
+        let tools = [t1.body.clone(), t2.body.clone()];
+        let Some(by_cut) = took(&mut f, "refused", "batch::cut", cut_once(cut_of(&a.body, &tools, None))) else {
+            continue;
+        };
+        let cut_body = &by_cut.result[0].result.body;
+        f.check(
+            six(cut_body) == six(&batch.result.body) && vertices(cut_body) == vertices(&batch.result.body),
+            "batch::cut is the n-ary subtraction",
+            || format!("A {:?}, tools {:?} and {:?}", a.parts, t1.parts, t2.parts),
+        );
         for (first, second, name) in [(&t1, &t2, "1 then 2"), (&t2, &t1, "2 then 1")] {
             let step1 = operate("difference", &a.body, &first.body);
             let step2 = step1.and_then(|s| operate("difference", &s, &second.body));
             let Some(one_by_one) = took(&mut f, "refused", name, step2) else {
                 continue;
             };
-            f.check(six(&batch.result) == six(&one_by_one), &format!("batch = one at a time, {name} (volume)"), || {
+            f.check(six(&batch.result.body) == six(&one_by_one), &format!("batch = one at a time, {name} (volume)"), || {
                 format!("A {:?}, tools {:?} and {:?}", a.parts, t1.parts, t2.parts)
             });
             f.check(
-                vertices(&batch.result) == vertices(&one_by_one),
+                vertices(&batch.result.body) == vertices(&one_by_one),
                 &format!("batch = one at a time, {name} (vertices)"),
                 || format!("A {:?}, tools {:?} and {:?}", a.parts, t1.parts, t2.parts),
             );
         }
     }
     f.assert_none("booleans: batch cuts", CASES / 2);
+}
+
+#[test]
+fn the_cells_partition_the_union() {
+    run("booleans: cells", 0x6009, |f, d, a, b| {
+        let input = BooleanInput {
+            operands: vec![solid(1, &a.body), solid(2, &b.body)],
+            select: vec![
+                Selection::Cells {
+                    test: vec![Term::AtLeast(1)],
+                    seeds: Vec::new(),
+                },
+                Selection::Unite,
+            ],
+            merge: Merge::RemoveRedundant,
+            accept: None,
+        };
+        let Some(out) = took(f, "refused", "the cells", combine(&ctx(), &SERIAL, &input)) else {
+            return;
+        };
+        let [cells, union] = out.result.as_slice() else {
+            f.add("one list per selection", || describe(a, b));
+            return;
+        };
+        let sizes: Result<Vec<i128>, String> = cells.iter().map(|c| six(&c.body)).collect();
+        let whole: Result<i128, String> = union.iter().map(|c| six(&c.body)).sum();
+        match (sizes, whole) {
+            (Ok(sizes), Ok(whole)) => f.check(
+                sizes.iter().sum::<i128>() == whole,
+                "the cells' volumes sum to the whole",
+                || format!("{sizes:?} against {whole} for {}", describe(a, b)),
+            ),
+            (s, w) => f.add("volume", || format!("{s:?} {w:?} for {}", describe(a, b))),
+        }
+        for _ in 0..24 {
+            let x = [0; 3].map(|_: i64| 2 * d.between(-1, 7) + 1);
+            let (ia, ib) = (a.contains(x), b.contains(x));
+            let holding: Vec<&Combined> = cells
+                .iter()
+                .filter(|c| kernel_inside(&c.body, x).unwrap_or(false))
+                .collect();
+            f.check(
+                holding.len() == usize::from(ia || ib),
+                "a point of the union lies in exactly one cell, and one outside it in none",
+                || {
+                    format!(
+                        "{x:?} in {} cells, {ia} in A, {ib} in B: {}",
+                        holding.len(),
+                        describe(a, b)
+                    )
+                },
+            );
+            if let [cell] = holding.as_slice() {
+                let elements = cell
+                    .cell
+                    .as_ref()
+                    .map(|r| r.elements.clone())
+                    .unwrap_or_default();
+                f.check(
+                    elements.contains(&key(1)) == ia && elements.contains(&key(2)) == ib,
+                    "a cell knows which solids it lies inside",
+                    || format!("{x:?}: {elements:?}, {ia} in A, {ib} in B: {}", describe(a, b)),
+                );
+            }
+        }
+    });
+}
+
+/// A cut of `host` by `tools`, from `reuse` when given.
+fn cut_of<'b>(host: &'b Body, tools: &'b [Body], reuse: Option<&'b Recut>) -> Cut<'b> {
+    Cut {
+        host: solid(1, host),
+        tools: (0_u8..).zip(tools).map(|(k, t)| solid(10 + k, t)).collect(),
+        reuse,
+    }
+}
+
+fn cut_once(one: Cut<'_>) -> Result<OpOutput<Vec<CutResult>>, OpError> {
+    cut(&ctx(), &SERIAL, &[one], BatchRule::Atomic)
+}
+
+/// The least budget a cut passes with, which is the work it takes.
+fn work(one: &Cut<'_>) -> u64 {
+    let (mut low, mut high) = (0_u64, 1 << 32);
+    while high - low > 1 {
+        let middle = low + (high - low) / 2;
+        let small = OpContext::new(
+            OpPath::new(OpId::from_bytes([7; 16])),
+            Budget::new(middle, u64::MAX),
+        );
+        if cut(&small, &SERIAL, core::slice::from_ref(one), BatchRule::Atomic).is_ok() {
+            high = middle;
+        } else {
+            low = middle;
+        }
+    }
+    high
+}
+
+#[test]
+fn a_cut_again_from_any_cache_is_a_fresh_cut() {
+    // G139's law: a cut that carries the cache of the last cut of its host, of a cut two changes
+    // back, of another host, or an empty one gives the fresh cut's result, report, cache and
+    // diagnostics, bit for bit, and the same work.
+    let mut d = Draw::new("booleans: cut again", 0x600a);
+    let mut f = Findings::default();
+    for case in 0..CASES / 2 {
+        let host = draw_shape(&mut d, None);
+        let stranger = draw_shape(&mut d, None);
+        let (Ok(host), Ok(stranger)) = (host, stranger) else {
+            f.add("a shape the kernel would not build", || "a host".to_owned());
+            continue;
+        };
+        let near = host.parts.first().copied();
+        let mut tools: Vec<Cuboid> = (0..d.between(1, 3))
+            .map(|_| draw_cuboid(&mut d, near.as_ref()))
+            .collect();
+        let bodies =
+            |tools: &[Cuboid]| tools.iter().map(make).collect::<Result<Vec<Body>, String>>();
+        let (Ok(before), Ok(others)) = (bodies(&tools), bodies(&tools)) else {
+            f.add("a tool the kernel would not build", || format!("{tools:?}"));
+            continue;
+        };
+        f.ran();
+        let first = cut_once(cut_of(&host.body, &before, None));
+        let Some(first) = took(&mut f, "refused", "the first cut", first) else {
+            continue;
+        };
+        let foreign = cut_once(cut_of(&stranger.body, &others, None));
+        let Some(foreign) = took(&mut f, "refused", "another host's cut", foreign) else {
+            continue;
+        };
+        // Two changes: a tool moved, added or taken out, each time.
+        let mut caches = vec![first.result[0].cache.clone()];
+        for _ in 0..2 {
+            match d.below(3) {
+                0 if tools.len() > 1 => {
+                    tools.remove(d.pick(tools.len()));
+                }
+                1 => tools.push(draw_cuboid(&mut d, near.as_ref())),
+                _ => {
+                    let at = d.pick(tools.len());
+                    let axis = d.pick(3);
+                    tools[at].low[axis] += 2 * d.between(-2, 2);
+                }
+            }
+            let Ok(now) = bodies(&tools) else {
+                f.add("a tool the kernel would not build", || format!("{tools:?}"));
+                break;
+            };
+            let fresh = cut_once(cut_of(&host.body, &now, None));
+            let empty = Recut::default();
+            let stale = caches.first().cloned().unwrap_or_default();
+            let last = caches.last().cloned().unwrap_or_default();
+            for (name, cache) in [
+                ("the last cut's", &last),
+                ("a stale", &stale),
+                ("another host's", &foreign.result[0].cache),
+                ("an empty", &empty),
+            ] {
+                let again = cut_once(cut_of(&host.body, &now, Some(cache)));
+                f.check(
+                    again == fresh,
+                    &format!("a cut again from {name} cache is a fresh cut"),
+                    || format!("host {:?}, tools {tools:?}", host.parts),
+                );
+            }
+            if case < 3 {
+                let fresh_work = work(&cut_of(&host.body, &now, None));
+                let again_work = work(&cut_of(&host.body, &now, Some(&last)));
+                f.check(
+                    fresh_work == again_work,
+                    "a cut again takes a fresh cut's work",
+                    || format!("{fresh_work} against {again_work}: host {:?}, tools {tools:?}", host.parts),
+                );
+            }
+            match fresh {
+                Ok(out) => caches.push(out.result[0].cache.clone()),
+                Err(e) => {
+                    f.add("refused", || format!("a cut: {e:?}"));
+                    break;
+                }
+            }
+        }
+    }
+    f.assert_none("booleans: cut again", CASES / 4);
 }
