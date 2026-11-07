@@ -6,7 +6,8 @@
 //! reported as [`FaultKind::Unchecked`], never passed (8.3: "certified with bounds, not sampled").
 //! For each fin, the vertex it starts at must lie on its face's surface, and its edge's line or
 //! circle on that surface; for each edge, its vertices must lie at its line's or circle's ends. An
-//! edge on another kind of curve, and a fin's pcurve, are reported unchecked.
+//! edge on another kind of curve, and a fin's pcurve, are reported unchecked. A vertex where three
+//! planes meet must have three that do meet ([`FaultKind::MeetSingular`]).
 //!
 //! The bound: the body's [`Exactness`] record, in the steps of its coordinates (a vertex is a whole
 //! number of grid steps, and the curves and surfaces are doubles in the same units, chapter 6.1):
@@ -22,6 +23,11 @@
 //!   double holds the squared normal of a long edge's plane, so an interval could not say 0. A
 //!   plane not given by integers is unchecked in a body recorded Exact, and measured in certified
 //!   intervals otherwise.
+//! - **Exact on plane-based bodies.** A vertex where three planes meet lies exactly on an integer
+//!   plane or it is a fault, in every class: `geom_num::plane::Plane::side_of_tpi`, the sign of a
+//!   determinant within 384 bits (6.3, 8.3). A line with such an end is only a shadow of the edge,
+//!   which is the two planes it lies on: the vertices decide what the edge lies on, and the line's
+//!   end must be within a step of the vertex rounded to the grid, or of the body's bound.
 //! - **Certified on lines and curved carriers.** Every other distance is a certified upper bound
 //!   (`crate::curved`, and a line's end points enclosed with `geom_curve::tight`, exact where the
 //!   doubles are), so a vertex exactly on the bound passes where the data are exact and one a step
@@ -44,12 +50,13 @@
 use geom_curve::tight;
 use geom_curve::{Circle, Line, ParamCurve};
 use geom_num::interval::Interval;
-use geom_num::plane::Plane as GridPlane;
+use geom_num::plane::{Plane as GridPlane, Tpi};
 use geom_num::wide::I320;
-use geom_num::{Coord, Exactness, P3};
+use geom_num::{Coord, Exactness, P3, Sign};
 use geom_run::Stopped;
-use geom_topo::entity::{Edge, Face, Fin, Vertex};
+use geom_topo::entity::{Edge, Face, Fin, PointKind, Vertex};
 use geom_topo::ix::Arena;
+use geom_topo::mass::Corner;
 use geom_topo::{Arenas, Body, CurveKind, Ix, SurfaceKind};
 
 use crate::combinatorial::{fin_edge, fin_ends, fin_face, rows};
@@ -74,6 +81,12 @@ pub(crate) fn check(
     )]
     let limit = b as f64;
     let exact = matches!(exactness, Exactness::Exact);
+    for v in rows::<Vertex>(a.rows(Arena::Vertex)) {
+        sink.charge()?;
+        if corner(a, v).is_none() {
+            sink.push(Fault::at(FaultKind::MeetSingular, Entity::Vertex(v)));
+        }
+    }
     for f in rows::<Face>(a.rows(Arena::Face)) {
         sink.charge()?;
         if surface(a, f, exact).is_none() {
@@ -96,7 +109,7 @@ pub(crate) fn check(
             continue;
         };
         if let Some((v, _)) = fin_ends(a, n)
-            && !on.holds_point(point(a, v), b, limit)
+            && !on.holds_vertex(a, v, b, limit)
         {
             sink.push(
                 Fault::at(FaultKind::VertexOffSurface, Entity::Vertex(v)).with(Entity::Face(face)),
@@ -127,7 +140,7 @@ pub(crate) fn check(
         let (lo, hi) = curve.domain();
         for (vertex, t) in ends.into_iter().zip([lo, hi]) {
             if let Some(v) = vertex
-                && !curve.holds(t, point(a, v), b, limit)
+                && !curve.holds_vertex(a, v, t, b, limit)
             {
                 sink.push(
                     Fault::at(FaultKind::VertexOffCurve, Entity::Vertex(v)).with(Entity::Edge(e)),
@@ -169,12 +182,24 @@ impl<'c> Ends<'c> {
             Ends::Circle(circle) => curved::at_circle_end(circle, t, p, limit),
         }
     }
+
+    /// Whether vertex `v` lies at the curve's point at `t`, within `b` steps (`limit` as a double);
+    /// a step more for a vertex where three planes meet, which the curve only shadows.
+    fn holds_vertex(&self, a: &Arenas, v: Ix<Vertex>, t: f64, b: u64, limit: f64) -> bool {
+        match corner(a, v) {
+            Some(Corner::Grid(p)) => self.holds(t, p, b, limit),
+            Some(Corner::Tpi(m)) => m.to_grid().is_ok_and(|rounded| {
+                self.holds(t, rounded.value(), b.saturating_add(1), limit + 1.0)
+            }),
+            _ => false,
+        }
+    }
 }
 
 /// What group 2 measures a face's vertices and edges against: its surface's closed form, and the
 /// exact integer plane when the surface is a plane given by integers.
 pub(crate) struct Surface {
-    grid: Option<GridPlane>,
+    pub(crate) grid: Option<GridPlane>,
     pub(crate) carrier: Carrier,
 }
 
@@ -185,6 +210,19 @@ impl Surface {
         match &self.grid {
             Some(plane) => on_plane(plane, p, b),
             None => self.carrier.holds_point(p, limit),
+        }
+    }
+
+    /// Whether vertex `v` lies within `b` steps (`limit` as a double) of the surface: a vertex
+    /// where three planes meet exactly on an integer plane, in any class, and on no other surface.
+    fn holds_vertex(&self, a: &Arenas, v: Ix<Vertex>, b: u64, limit: f64) -> bool {
+        match corner(a, v) {
+            Some(Corner::Grid(p)) => self.holds_point(p, b, limit),
+            Some(Corner::Tpi(m)) => self
+                .grid
+                .as_ref()
+                .is_some_and(|plane| plane.side_of_tpi(&m) == Ok(Sign::Zero)),
+            _ => false,
         }
     }
 
@@ -214,7 +252,7 @@ impl Surface {
 /// How two integer planes lie, exactly: crossing when their normals' cross product is not zero;
 /// parallel otherwise, and apart unless each is the other, which is left unknown. Every normal
 /// coordinate and offset is an `i128`, so each product and difference fits 320 bits.
-fn planes_lie(p: &GridPlane, q: &GridPlane) -> Pair {
+pub(crate) fn planes_lie(p: &GridPlane, q: &GridPlane) -> Pair {
     let [px, py, pz] = p.n().map(I320::from_i128);
     let [qx, qy, qz] = q.n().map(I320::from_i128);
     let (pd, qd) = (I320::from_i128(p.d()), I320::from_i128(q.d()));
@@ -269,9 +307,11 @@ pub(crate) fn surface(a: &Arenas, face: Ix<Face>, exact: bool) -> Option<Surface
 
 /// Whether edge `e`'s curve lies within `b` steps (`limit` as a double) of `on`: a line as
 /// [`Surface::holds_line`] says, a circle by its certified bound; any other curve is the edge rows'
-/// to report unchecked, so it is not reported again here.
+/// to report unchecked, so it is not reported again here. A straight edge with an end where three
+/// planes meet lies on a plane exactly when its ends do, and the fins' vertices are tested already.
 fn edge_on(a: &Arenas, e: Ix<Edge>, on: &Surface, b: u64, limit: f64) -> bool {
     match Ends::of(a.edges.curve.get(e).and_then(|c| a.curves.get(*c))) {
+        Some(Ends::Line(_)) if implicit_end(a, e) => true,
         Some(Ends::Line(line)) => on.holds_line(line, b, limit),
         Some(Ends::Circle(circle)) => on.carrier.holds_circle(circle, limit),
         None => true,
@@ -287,21 +327,24 @@ const fn bound(exactness: Exactness) -> u64 {
     }
 }
 
-/// The origin, the fallback of a vertex link no published body leaves dangling.
-const ORIGIN: P3 = P3 {
-    x: Coord::ZERO,
-    y: Coord::ZERO,
-    z: Coord::ZERO,
-};
+/// Where vertex `v` lies: `None` for three planes that do not meet in one point.
+pub(crate) fn corner(a: &Arenas, v: Ix<Vertex>) -> Option<Corner> {
+    match a.vertices.point.get(v).and_then(|p| a.points.get(*p))? {
+        PointKind::Grid(p) => Some(Corner::Grid(*p)),
+        PointKind::Meet(planes) => {
+            let [p, q, r] = planes.map(|ix| a.planes.get(ix).copied());
+            Tpi::new(p?, q?, r?).ok().map(Corner::Tpi)
+        }
+    }
+}
 
-/// A vertex's point.
-pub(crate) fn point(a: &Arenas, v: Ix<Vertex>) -> P3 {
-    a.vertices
-        .point
-        .get(v)
-        .and_then(|p| a.points.get(*p))
-        .copied()
-        .unwrap_or(ORIGIN)
+/// Whether edge `e` has an end where three planes meet.
+fn implicit_end(a: &Arenas, e: Ix<Edge>) -> bool {
+    [a.edges.start.get(e), a.edges.end.get(e)]
+        .into_iter()
+        .flatten()
+        .flatten()
+        .any(|v| !matches!(corner(a, *v), Some(Corner::Grid(_))))
 }
 
 /// The integer plane of a surface that is a plane given by integers: its origin and two spanning

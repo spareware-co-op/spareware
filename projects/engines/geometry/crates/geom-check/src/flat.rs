@@ -2,9 +2,11 @@
 //! runs the right way round its face (group 3) (issue #438's flat half, with G177 for curved
 //! faces).
 //!
-//! What it does: [`boxes`] tests every vertex of every flat face's loops against its stored box
-//! (`Box3::contains`). [`sense`] takes each loop's exact twice-area vector
-//! (`geom_topo::query::loop_area`) against the plane's normal turned by the face's sense. Exactly
+//! What it does: [`boxes`] tests every vertex of every flat face's loops against its stored box,
+//! by its exact side of each face of the box.
+//! [`sense`] takes each loop's exact twice-area vector (`geom_topo::query::loop_area`), or a loop
+//! with such a vertex its certified one (`geom_topo::query::certified_loop_area`), against the
+//! plane's normal turned by the face's sense. Exactly
 //! one loop must run counter-clockwise seen from outside the material, the face's outer loop;
 //! every other must run clockwise, a hole; none may enclose no area. The sense of a loop means
 //! something only for a loop that does not cross itself, so it runs after group 3's own tests,
@@ -17,8 +19,8 @@
 //! - **Exact on planes given by integers.** The area vector is below 2^114 in each component and an
 //!   integer plane's normal below 2^83, so the dot product, below 2^199, fits 256 bits: its sign is
 //!   exact, and the test holds at every coordinate at ±(2^40 − 1). A plane not given by integers
-//!   has its normal and the dot product in certified intervals; a sign they cannot decide is
-//!   [`FaultKind::Unchecked`], never a pass.
+//!   has its normal and the dot product in certified intervals, as has a loop with a vertex where
+//!   three planes meet; a sign they cannot decide is [`FaultKind::Unchecked`], never a pass.
 //! - **Runs on sound rings.** It runs only on a body group 1 passed, so every walk ends.
 //! - **Charged.** One meter unit per face and fin in each pass.
 //!
@@ -30,17 +32,19 @@
 //! Cost: each linear in faces and fins; nothing allocated. Recursion: none.
 
 use geom_curve::tight;
-use geom_num::Sign;
 use geom_num::interval::Interval;
+use geom_num::plane::Plane;
 use geom_num::wide::I256;
+use geom_num::{Coord, P3, Sign};
 use geom_run::Stopped;
 use geom_topo::entity::{Face, LoopIx};
 use geom_topo::ix::Arena;
-use geom_topo::query::{QueryError, loop_area};
+use geom_topo::mass::Corner;
+use geom_topo::query::{QueryError, certified_loop_area, loop_area};
 use geom_topo::{Arenas, Body, Ix, Sense, SurfaceKind};
 
 use crate::combinatorial::{face_fins, face_loops, fin_ends, rows};
-use crate::geometric::{plane, point};
+use crate::geometric::{corner, plane};
 use crate::report::{Entity, Fault, FaultKind};
 use crate::sink::Sink;
 
@@ -63,8 +67,35 @@ impl Normal {
                 }
                 Some(sum.signum())
             }
-            Normal::Spanned(a, b) => spanned(*a, *b, area),
+            Normal::Spanned(..) => self.dot_enclosed(area.map(around)),
         }
+    }
+
+    /// The normal, enclosed.
+    fn enclosed(&self) -> Option<[Interval; 3]> {
+        match self {
+            Normal::Grid(n) => {
+                let [x, y, z] = n.map(around);
+                Some([x?, y?, z?])
+            }
+            Normal::Spanned([ux, uy, uz], [vx, vy, vz]) => Some([
+                minor(*uy, *vz, *uz, *vy)?,
+                minor(*uz, *vx, *ux, *vz)?,
+                minor(*ux, *vy, *uy, *vx)?,
+            ]),
+        }
+    }
+
+    /// The sign of `area` · normal, `area` enclosed: `None` if the intervals cannot decide it.
+    fn dot_enclosed(&self, area: [Option<Interval>; 3]) -> Option<Sign> {
+        let [nx, ny, nz] = self.enclosed()?;
+        let [ax, ay, az] = area;
+        let along_x = tight::mul(ax?, nx).ok()?;
+        let along_y = tight::mul(ay?, ny).ok()?;
+        let along_z = tight::mul(az?, nz).ok()?;
+        tight::add(tight::add(along_x, along_y).ok()?, along_z)
+            .ok()?
+            .certain_sign()
     }
 }
 
@@ -82,17 +113,6 @@ fn around(x: i128) -> Option<Interval> {
 fn minor(p: f64, q: f64, r: f64, s: f64) -> Option<Interval> {
     let product = |x: f64, y: f64| tight::mul(tight::point(x)?, tight::point(y)?);
     tight::sub(product(p, q).ok()?, product(r, s).ok()?).ok()
-}
-
-/// The sign of `area` · (u × v) for a plane spanned by u and v, in certified intervals.
-fn spanned(u: [f64; 3], v: [f64; 3], area: [i128; 3]) -> Option<Sign> {
-    let ([ux, uy, uz], [vx, vy, vz]) = (u, v);
-    let [ax, ay, az] = area.map(around);
-    let along_x = tight::mul(ax?, minor(uy, vz, uz, vy)?).ok()?;
-    let along_y = tight::mul(ay?, minor(uz, vx, ux, vz)?).ok()?;
-    let along_z = tight::mul(az?, minor(ux, vy, uy, vx)?).ok()?;
-    let dot = tight::add(tight::add(along_x, along_y).ok()?, along_z).ok()?;
-    dot.certain_sign()
 }
 
 /// What one face's loops came to.
@@ -118,15 +138,20 @@ fn loops(
 ) -> Result<Loops, Stopped> {
     let mut found = Loops::default();
     for l in face_loops(body.arenas(), f) {
-        let area = match loop_area(body, l, sink.meter()) {
-            Ok(area) => area,
+        let dot = match loop_area(body, l, sink.meter()) {
+            Ok(area) => normal.dot(area),
             Err(QueryError::Stopped(stop)) => return Err(stop),
+            Err(QueryError::Implicit(_)) => match certified_loop_area(body, l, sink.meter()) {
+                Ok(area) => normal.dot_enclosed(area.map(Some)),
+                Err(QueryError::Stopped(stop)) => return Err(stop),
+                Err(_) => None,
+            },
             Err(_) => {
                 found.curved = true;
                 continue;
             }
         };
-        match normal.dot(area).map(|s| match sense {
+        match dot.map(|s| match sense {
             Sense::Forward => s,
             Sense::Reversed => s.negate(),
         }) {
@@ -144,13 +169,38 @@ fn loops(
     Ok(found)
 }
 
+/// Whether the box from `low` to `high` holds `at`: its side of each of the box's faces, so a
+/// meeting of planes is held exactly as a grid point is. `None`, three planes that do not meet, is
+/// held by nothing.
+fn in_box(low: P3, high: P3, at: Option<&Corner>) -> bool {
+    at.is_some_and(|point| {
+        let face = |normal: [i128; 3], at: Coord, wanted: Sign| {
+            let offset = i128::from(at.get()).checked_neg();
+            offset.is_some_and(|d| {
+                Plane::new(normal, d)
+                    .and_then(|plane| point.side(&plane))
+                    .is_ok_and(|side| side == Sign::Zero || side == wanted)
+            })
+        };
+        [
+            ([1, 0, 0], low.x, high.x),
+            ([0, 1, 0], low.y, high.y),
+            ([0, 0, 1], low.z, high.z),
+        ]
+        .into_iter()
+        .all(|(normal, lo, hi)| {
+            face(normal, lo, Sign::Positive) && face(normal, hi, Sign::Negative)
+        })
+    })
+}
+
 /// The face's box against every vertex of its loops.
 fn stored_box(a: &Arenas, f: Ix<Face>, sink: &mut Sink<'_, '_>) -> Result<(), Stopped> {
     let bound = a.faces.bound.get(f).copied();
     for n in face_fins(a, f) {
         sink.charge()?;
         if let Some((v, _)) = fin_ends(a, n)
-            && bound.is_some_and(|b| !b.contains(point(a, v)))
+            && bound.is_some_and(|b| !in_box(b.min(), b.max(), corner(a, v).as_ref()))
         {
             sink.push(Fault::at(FaultKind::FaceBound, Entity::Face(f)).with(Entity::Vertex(v)));
         }

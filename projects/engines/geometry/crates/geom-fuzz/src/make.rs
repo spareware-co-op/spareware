@@ -612,7 +612,13 @@ pub fn six_volume(body: &Body) -> i128 {
             };
             let forward = a.fins.sense.get(f) == Some(&Sense::Forward);
             let start = if forward { s } else { t };
-            if let Some(at) = a.vertices.point.get(start).and_then(|p| a.points.get(*p)) {
+            if let Some(at) = a
+                .vertices
+                .point
+                .get(start)
+                .and_then(|p| a.points.get(*p))
+                .and_then(|p| p.grid())
+            {
                 corners.push([at.x.get(), at.y.get(), at.z.get()].map(i128::from));
             }
             match a.fins.next.get(f) {

@@ -116,7 +116,12 @@ fn six_volume(body: &Body) -> i128 {
             } else {
                 t
             };
-            let at = *a.points.get(*a.vertices.point.get(start).unwrap()).unwrap();
+            let at = a
+                .points
+                .get(*a.vertices.point.get(start).unwrap())
+                .unwrap()
+                .grid()
+                .unwrap();
             corners.push([at.x.get(), at.y.get(), at.z.get()].map(i128::from));
             f = *a.fins.next.get(f).unwrap();
             if f == first {
@@ -356,12 +361,48 @@ fn transforms_keep_names_and_pass_the_checker() {
 }
 
 #[test]
+fn a_body_whose_vertices_meet_on_planes_waits_for_the_move_of_its_planes() {
+    let made = a_box();
+    let mut b = Builder::edit(&made.result.body);
+    let plane = |n: [i128; 3]| geom_num::plane::Plane::new(n, 0).unwrap();
+    b.arenas
+        .planes
+        .extend([plane([1, 0, 0]), plane([0, 1, 0]), plane([0, 0, 1])])
+        .unwrap();
+    b.arenas
+        .points
+        .set(
+            Ix::new(0).unwrap(),
+            geom_topo::PointKind::Meet([0, 1, 2].map(|k| Ix::new(k).unwrap())),
+        )
+        .unwrap();
+    let body = b
+        .publish_named(
+            made.result.body.names().unwrap(),
+            made.result.body.kind(),
+            made.result.body.outside(),
+            &mut WorkMeter::new(Budget::UNLIMITED),
+        )
+        .unwrap();
+    let moved = Moved {
+        body: &body,
+        exactness: made.exactness,
+        accept: None,
+    };
+    let e = move_by(&ctx(), moved, [1, 0, 0]).unwrap_err();
+    assert_eq!(
+        *e.detail(),
+        OpErrorDetail::Make(MakeDetail::NotCertifiedYet { piece: "G129" })
+    );
+}
+
+#[test]
 fn general_rotations_are_certified_where_the_checker_can_follow() {
     // A rotation by the direction (4, 3), its cosine 4/5 and its sine 3/5, accepted up to 64
     // steps: the box's corners, multiples of 5 apart, land on the grid; a sphere and a torus are
-    // certified on their own; a prism's corners round off its faces' planes, and a cylinder's or
-    // cone's caps tilt off the axis' exact data, which the checker follows only from G134 and
-    // G177.
+    // certified on their own; a prism's corners round off its faces' planes, and each face stands
+    // for its fan of triangles (G134); a cylinder's or cone's caps tilt off the axis' exact data,
+    // which the checker follows only from G177.
     for (name, out) in primitives() {
         for axis in [Axis::Z, Axis::Y] {
             let moved = Moved {
@@ -377,20 +418,19 @@ fn general_rotations_are_certified_where_the_checker_can_follow() {
                 p(0, 0, 0),
             );
             match name {
-                "box" | "sphere" | "torus" => {
+                "box" | "prism" | "sphere" | "torus" => {
                     let turned = valid(&format!("{name} {axis:?}"), turned.unwrap());
                     assert!(matches!(turned.exactness, Exactness::Certified { .. }));
                 }
                 _ => {
                     let e = turned.unwrap_err();
-                    let piece = if name == "prism" { "G134" } else { "G177" };
                     assert_eq!(
                         *e.detail(),
-                        OpErrorDetail::Make(MakeDetail::NotCertifiedYet { piece }),
+                        OpErrorDetail::Make(MakeDetail::NotCertifiedYet { piece: "G177" }),
                         "{name} {axis:?}"
                     );
                     assert_eq!(e.kind(), ErrorKind::Unsupported);
-                    assert_eq!(e.remedies(), [Remedy::AwaitPiece { piece }]);
+                    assert_eq!(e.remedies(), [Remedy::AwaitPiece { piece: "G177" }]);
                 }
             }
         }
@@ -1306,7 +1346,13 @@ fn face_corners(body: &Body) -> Vec<(geom_math::Box3, Vec<P3>)> {
                         &a.edges.end
                     };
                     let v = ends.get(e).copied().flatten().unwrap();
-                    corners.push(*a.points.get(*a.vertices.point.get(v).unwrap()).unwrap());
+                    corners.push(
+                        a.points
+                            .get(*a.vertices.point.get(v).unwrap())
+                            .unwrap()
+                            .grid()
+                            .unwrap(),
+                    );
                     at = *a.fins.next.get(at).unwrap();
                     if at == first {
                         break;

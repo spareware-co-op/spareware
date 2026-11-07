@@ -937,12 +937,15 @@ dependencies = [
  "geom-bvh",
  "geom-check",
  "geom-intersect",
+ "geom-make",
  "geom-name",
  "geom-num",
  "geom-op",
  "geom-poly",
  "geom-run",
+ "geom-surface",
  "geom-topo",
+ "proptest",
 ]
 
 [[package]]
@@ -1149,6 +1152,7 @@ dependencies = [
  "geom-num",
  "geom-nurbs",
  "geom-op",
+ "geom-poly",
  "geom-run",
  "geom-surface",
  "geom-test",
@@ -1423,6 +1427,8 @@ dependencies = [
  "geom-op",
  "geom-run",
  "geom-topo",
+ "num-bigint",
+ "proptest",
 ]
 
 [[package]]

@@ -4,7 +4,7 @@
 //! section 28.5): every operation, every reader and the operation-sequence generator get a fuzz
 //! target here. Fuzzing feeds a program huge numbers of machine-made inputs, steered towards code
 //! not yet reached, and watches for anything wrong: a panic, a broken law, an invalid result, a
-//! changed input. It has six targets so far: [`predicates`] (G11), `geom-num`'s exact
+//! changed input. It has seven targets so far: [`predicates`] (G11), `geom-num`'s exact
 //! predicates never panic and swapping two points flips their sign, on arbitrary grid points;
 //! [`orient2d`] (G14), orient2d, its exact path and its `f64` filter agree with the exact
 //! determinant of orient2d's definition, computed from scratch, which is also proven by Kani on a
@@ -25,7 +25,9 @@
 //! [`linalg`], the dense decompositions are refused or finite and the spectral ones backward stable
 //! (G49, G50), and [`roots`], the root engine misses no root and proves none twice, Brent's
 //! zero brackets its sign change (G51, G52, G53), and [`maths`], the proven maths functions are
-//! correctly rounded (G47). The layout every target follows, and how each engine runs it locally and in CI,
+//! correctly rounded (G47), and [`planes`] (G123), `geom-poly`'s canonical planes and arrangement
+//! predicates give one entry to one plane and one order to any points or rays. The layout every
+//! target follows, and how each engine runs it locally and in CI,
 //! is in this crate's `README.md`.
 //!
 //! Layer: Development, in chapter 27's crate table: a development crate, outside the
@@ -190,6 +192,7 @@ pub mod make;
 pub mod maths;
 pub mod nurbs;
 pub mod orient2d;
+pub mod planes;
 pub mod predicates;
 pub mod roots;
 pub mod seeded;

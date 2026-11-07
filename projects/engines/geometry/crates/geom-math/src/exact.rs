@@ -559,7 +559,8 @@ pub(crate) fn quotient_to_f64<const L: usize>(
 /// The greatest common divisor of two unsigned integers, by Euclid's algorithm (each step strictly
 /// decreases `b`); gcd(0, 0) = 0. The remainder is `None` exactly when `b` is zero, which ends the
 /// loop, so every remainder taken is of a nonzero divisor.
-pub(crate) const fn gcd_u128(mut a: u128, mut b: u128) -> u128 {
+#[must_use]
+pub const fn gcd_u128(mut a: u128, mut b: u128) -> u128 {
     while let Some(t) = a.checked_rem(b) {
         a = b;
         b = t;

@@ -48,6 +48,7 @@
 use geom_curve::CurveKind;
 use geom_math::Box3;
 use geom_num::grid::P3;
+use geom_num::plane::Plane;
 use geom_surface::SurfaceKind;
 
 use crate::column::{Column, Memory};
@@ -74,8 +75,37 @@ pub type SurfaceIx = Ix<SurfaceKind>;
 pub type CurveIx = Ix<CurveKind<3>>;
 /// The index of a pcurve, a 2D curve in a face's parameter space, in the pcurve pool.
 pub type PcurveIx = Ix<CurveKind<2>>;
-/// The index of a point in the point pool.
-pub type PointIx = Ix<P3>;
+/// The index of a place in the point pool.
+pub type PointIx = Ix<PointKind>;
+/// The index of a plane in the plane pool.
+pub type PlaneIx = Ix<Plane>;
+
+/// Where a vertex lies (6.3, 19.2, 24.3): a grid point, or where three of the body's planes meet,
+/// kept exactly and never rounded.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum PointKind {
+    /// A grid point.
+    Grid(P3),
+    /// The meeting of three planes of the plane pool.
+    Meet([PlaneIx; 3]),
+}
+
+impl From<P3> for PointKind {
+    fn from(p: P3) -> Self {
+        PointKind::Grid(p)
+    }
+}
+
+impl PointKind {
+    /// The grid point, for a vertex that has one.
+    #[must_use]
+    pub const fn grid(self) -> Option<P3> {
+        match self {
+            PointKind::Grid(p) => Some(p),
+            PointKind::Meet(_) => None,
+        }
+    }
+}
 
 /// Whether a region is material or empty.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
@@ -179,7 +209,7 @@ pub struct Edge {
 /// A vertex: a point of the topology (8.1).
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub struct Vertex {
-    /// The point it lies at.
+    /// Where it lies.
     pub point: PointIx,
 }
 
@@ -213,8 +243,11 @@ impl Kind for CurveKind<3> {
 impl Kind for CurveKind<2> {
     const ARENA: Arena = Arena::Pcurve;
 }
-impl Kind for P3 {
+impl Kind for PointKind {
     const ARENA: Arena = Arena::Point;
+}
+impl Kind for Plane {
+    const ARENA: Arena = Arena::Plane;
 }
 
 /// The region arena: one column per field of [`Region`].
