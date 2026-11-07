@@ -34,9 +34,7 @@
 )]
 
 use geom_2d::carrier::Circle2;
-use geom_2d::fit::{
-    BiarcArc, FIT_VERSION, FitError, biarc, fit_spline, spline_to_biarcs,
-};
+use geom_2d::fit::{BiarcArc, FIT_VERSION, FitError, biarc, fit_spline, spline_to_biarcs};
 use geom_math::F2;
 use geom_num::grid::{P2, Steps};
 use geom_nurbs::{Basis, Curve, Limit};
@@ -57,7 +55,10 @@ fn quarter(r: i64, n: i64) -> Vec<P2> {
         .map(|k| {
             let den = n * n + k * k;
             let half = den / 2;
-            p2((r * (n * n - k * k) + half) / den, (2 * r * n * k + half) / den)
+            p2(
+                (r * (n * n - k * k) + half) / den,
+                (2 * r * n * k + half) / den,
+            )
         })
         .collect()
 }
