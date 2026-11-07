@@ -760,6 +760,25 @@ fn fold<R: Canonical>(results: impl IntoIterator<Item = R>) -> Digest {
     canonical::digest(&results)
 }
 
+/// A context of one `geom-make` operation, as the benchmarks run it.
+fn make_context() -> geom_op::OpContext<'static> {
+    geom_op::OpContext::new(
+        geom_op::OpPath::new(geom_op::OpId::from_bytes([2; 16])),
+        geom_run::Budget::UNLIMITED,
+    )
+}
+
+/// What a `geom-make` result is read by.
+fn make_counts(out: &geom_op::OpOutput<geom_make::Made>) -> [u32; 4] {
+    let a = out.result.body.arenas();
+    [
+        a.rows(geom_topo::Arena::Face),
+        a.rows(geom_topo::Arena::Edge),
+        a.rows(geom_topo::Arena::Vertex),
+        u32::from(out.exactness.rank()),
+    ]
+}
+
 /// The output digest of one run of `kernel` over `batch`, as a benchmark computes it.
 fn kernel_digest<T, R: Canonical>(kernel: fn(&[T], &mut Vec<R>), batch: &[T]) -> Digest {
     let mut out = Vec::with_capacity(batch.len());
@@ -1357,6 +1376,89 @@ fn direct_digest(group: &str, name: &str, class: Class) -> Option<Digest> {
                         .bound(&mut geom_run::WorkMeter::new(geom_run::Budget::UNLIMITED))
                 }),
         ),
+        ("make", "build_box") => {
+            let ctx = make_context();
+            fold(
+                inputs::make::boxes(class)
+                    .iter()
+                    .map(|input| geom_make::make_box(&ctx, input).map(|out| make_counts(&out))),
+            )
+        }
+        ("make", "cylinder") => {
+            let ctx = make_context();
+            fold(
+                inputs::make::cylinders(class)
+                    .iter()
+                    .map(|input| geom_make::cylinder(&ctx, input).map(|out| make_counts(&out))),
+            )
+        }
+        ("make", "move_box") => {
+            let ctx = make_context();
+            fold(
+                inputs::make::moved_boxes(class)
+                    .iter()
+                    .map(|(body, offset)| {
+                        let moved = geom_make::Moved {
+                            body: &body.result.body,
+                            exactness: body.exactness,
+                            accept: None,
+                        };
+                        geom_make::move_by(&ctx, moved, *offset).map(|out| make_counts(&out))
+                    }),
+            )
+        }
+        ("make", "turn_box") => {
+            let ctx = make_context();
+            fold(
+                inputs::make::turned_boxes(class)
+                    .iter()
+                    .map(|(body, center)| {
+                        let moved = geom_make::Moved {
+                            body: &body.result.body,
+                            exactness: body.exactness,
+                            accept: None,
+                        };
+                        let turn = geom_math::Rotation::quarter_turns(1);
+                        geom_make::rotate(&ctx, moved, geom_math::Axis::Z, turn, *center)
+                            .map(|out| make_counts(&out))
+                    }),
+            )
+        }
+        ("attributes", "apply") => fold(inputs::attributes::apply(class).iter().map(
+            |scene| -> Result<u64, geom_name::AttrError> {
+                let (after, notes) = geom_name::apply(
+                    &scene.defs,
+                    &scene.before,
+                    &scene.history,
+                    &geom_name::Step::default(),
+                )?;
+                Ok(after.iter().count() as u64 + notes.len() as u64)
+            },
+        )),
+        ("topo", "column_edit") => fold(inputs::topo::column_edit(class).iter().map(
+            |(values, row, value)| -> Result<u64, geom_topo::TopoError> {
+                let mut column: geom_topo::Column<geom_topo::Face, u64> = geom_topo::Column::new();
+                for &v in values {
+                    column.push(v)?;
+                }
+                let original = column.clone();
+                column.set(geom_topo::Ix::new(*row).unwrap(), *value)?;
+                let a: u64 = original.iter().fold(0, |s, v| s.wrapping_add(*v));
+                let b: u64 = column.iter().fold(0, |s, v| s.wrapping_add(*v));
+                Ok(a.wrapping_add(b))
+            },
+        )),
+        ("topo", "publish") => fold(inputs::topo::publish(class).iter().map(
+            |builder| -> Result<u32, geom_topo::TopoError> {
+                let mut meter = geom_run::WorkMeter::new(geom_run::Budget::UNLIMITED);
+                let body = builder.clone().publish(
+                    geom_topo::BodyKind::Solid,
+                    geom_topo::Ix::new(1).unwrap(),
+                    &mut meter,
+                )?;
+                Ok(body.arenas().fins.len())
+            },
+        )),
         ("bvh", "tree_build_query") => fold(inputs::bvh::tree_build_query(class).iter().map(
             |(entries, query)| {
                 let mut meter = geom_run::WorkMeter::new(geom_run::Budget::UNLIMITED);

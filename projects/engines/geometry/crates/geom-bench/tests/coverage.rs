@@ -504,11 +504,35 @@ const OTHER_CRATES: &[(&str, &[(&str, &str)])] = &[
         ],
     ),
     (
+        "geom_make",
+        &[
+            (
+                "primitive",
+                include_str!("../../geom-make/src/primitive.rs"),
+            ),
+            (
+                "transform",
+                include_str!("../../geom-make/src/transform.rs"),
+            ),
+        ],
+    ),
+    (
         "geom_bvh",
         &[
             ("tree", include_str!("../../geom-bvh/src/tree.rs")),
             ("cells", include_str!("../../geom-bvh/src/cells.rs")),
         ],
+    ),
+    (
+        "geom_topo",
+        &[
+            ("column", include_str!("../../geom-topo/src/column.rs")),
+            ("builder", include_str!("../../geom-topo/src/builder.rs")),
+        ],
+    ),
+    (
+        "geom_name",
+        &[("classes", include_str!("../../geom-name/src/classes.rs"))],
     ),
     (
         "geom_nurbs",

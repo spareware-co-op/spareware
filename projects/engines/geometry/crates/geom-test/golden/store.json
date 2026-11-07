@@ -236,9 +236,27 @@
               "kind": "corpus",
               "piece": "G148",
               "why": "2 new count benchmarks of geom-run's helper (decision 32.44): Exec::map of a list that fits one chunk, on the serial executor and on a pool, for the fix that runs a wave of one task on the calling thread (found in G148's timings); no existing digest moved"
+            },
+            {
+              "sha256": "57fb849de9d6eb8003fe3ff677db5373da1b40984777f2d573018b64e5601c1b",
+              "kind": "corpus",
+              "piece": "G80",
+              "why": "2 new count benchmarks on the topology's hot paths (decision 32.44): topo/column_edit and topo/publish; no existing digest moved"
+            },
+            {
+              "sha256": "029ea44ae8ddb92d35bb461dca2a56b270e067d2a608dcc7e36413ba1036695f",
+              "kind": "corpus",
+              "piece": "G90",
+              "why": "1 new count benchmark on the attribute step (decision 32.44): attributes/apply; no existing digest moved"
+            },
+            {
+              "sha256": "9b4a5e0d5c0d13da0c6a564870d80a2dcc01cc20f84f7b571ac404a676fce526",
+              "kind": "corpus",
+              "piece": "G101",
+              "why": "4 new count benchmarks on geom-make's hot paths (decision 32.44): a box and a cylinder built, a box moved and quarter-turned; no existing digest moved"
             }
           ],
-          "sha256": "57fb849de9d6eb8003fe3ff677db5373da1b40984777f2d573018b64e5601c1b"
+          "sha256": "b085ebd6770937b858e6ae815f4e62125013af8c97d1bcf07a54eebeede27cbc"
         },
         {
           "id": "geom-nurbs/operations",
@@ -360,7 +378,7 @@
               "sha256": "2bd33237d0660e08df18570457cf4fd866770a5f14153d34e65e2a0e2864c0bd",
               "kind": "improvement",
               "piece": "G67",
-              "why": "The analytic surface kinds' bounds, derivative bounds and partials over a box are their closed-form extents now (piece G67): a plane's, cylinder's and cone's (and their affine images') by separating the parameters, a sphere's by its factored form, a torus's by c + (R + r·cos πv)·G(u) + Q(v), where G65 took the interval extension over eighths of a turn. The change is in that route alone (a region of one point keeps the terms' own enclosure, and normal bounds are unchanged); the result count (2693) and the refusals (5) are unchanged."
+              "why": "The analytic surface kinds' bounds, derivative bounds and partials over a box are their closed-form extents now (piece G67): a plane's, cylinder's and cone's (and their affine images') by separating the parameters, a sphere's by its factored form, a torus's by c + (R + rÂ·cos Ï€v)Â·G(u) + Q(v), where G65 took the interval extension over eighths of a turn. The change is in that route alone (a region of one point keeps the terms' own enclosure, and normal bounds are unchanged); the result count (2693) and the refusals (5) are unchanged."
             },
             {
               "sha256": "0681542ec51a8126cdc8ae8543832539c2cdbdd0af20fa6b6992534d590b4bf1",
@@ -482,6 +500,36 @@
           "sha256": "9c2a12093c3d4e85570d02e82f1a918d55300c7c14935ef8c3875ebac031d54a"
         },
         {
+          "id": "geom-op/determinism",
+          "what": "geom-op's canonical CBOR and SHA-256 corpus (piece G86): every power of two and the edges of each float width and integer head, 3,000 nested values of SKG's subset drawn from a fixed SplitMix64 stream, and the SHA-256 and 128-bit cut of each encoding and of seeded messages of every length to 300 bytes: 22,369 records in the encoding of tests/determinism.rs.",
+          "check": {
+            "crate": "geom-op",
+            "test": "determinism",
+            "function": "golden_hash_is_the_same_on_every_target"
+          },
+          "sha256": "9d3844529ba8b080138c3667380a91a2a7b2695dfd7b6a4f7651334d46b58d29"
+        },
+        {
+          "id": "geom-format/record-layer",
+          "what": "geom-format's record-layer corpus (piece G92): 40 files of random records written whole, each salvaged with one bit flipped (intact offsets and damaged spans), the CRC-32C of seeded messages of every length to 300 bytes, and the grid, real and plane range checks at the frame's edge, in the encoding of tests/record_determinism.rs.",
+          "check": {
+            "crate": "geom-format",
+            "test": "record_determinism",
+            "function": "golden_hash_is_the_same_on_every_target"
+          },
+          "sha256": "601faa6494c0ad3f9b1d7dd7b8a1e78724066b90ac4a998057959dae37206886"
+        },
+        {
+          "id": "geom-format/body-records",
+          "what": "geom-format's body records (piece G94): the records of geom-topo's wall, of a body of 9,000 faces and of that body with 90 faces moved to another surface, each read back and written again, and a cached offset curve, a reversed transition part and a cached offset cylinder, each read back (refitting the caches) and written again, in the encoding of tests/body_determinism.rs.",
+          "check": {
+            "crate": "geom-format",
+            "test": "body_determinism",
+            "function": "golden_hash_is_the_same_on_every_target"
+          },
+          "sha256": "24ff775319022741d62b771ab3c5e33beba0ff2da29bb39b005f30778c7c73e1"
+        },
+        {
           "id": "geom-linalg/dense",
           "what": "The dense decompositions and solves of geom-linalg (piece G49): 256 matrices of every shape from 1 x 1 to 8 x 8 (random, integer, graded to 2^-600 and exactly rank-deficient), each through the pivoted QR, the complete orthogonal decomposition (rank, least squares, null space) and the canonical null space, each square one also through LU (and a solve), both triangular solves, Cholesky of A^T A + I (and a solve) and of A itself, and the tridiagonal solve, and four refusals for want of work: 1568 results in the canonical encoding of tests/dense_determinism.rs.",
           "check": {
@@ -490,6 +538,36 @@
             "function": "dense_golden_hash_is_the_same_on_every_target"
           },
           "sha256": "507472559492ae92313b7e32156a0f64df25fa341cd6eab56772404bcfd55a91"
+        },
+        {
+          "id": "geom-topo/arenas",
+          "what": "The arenas of geom-topo (piece G80): 48 bodies of random sizes (six past three chunks of faces and fins), every link random and in range, filled row by row or each arena at once, each published with every column in row order, its chunk count and the work publishing charged; an edit of random rows published beside the unchanged original; and each body refused once with a link pointed past its arena and once with a column one row longer, as tests/arena_determinism.rs records them.",
+          "check": {
+            "crate": "geom-topo",
+            "test": "arena_determinism",
+            "function": "arenas_golden_hash_is_the_same_on_every_target"
+          },
+          "sha256": "9df6dc9250d028d90f299d94442c212ac16472679a9d22d207c6d6e0a0a161dc"
+        },
+        {
+          "id": "geom-make/queries",
+          "what": "The core queries (piece G102) over 32 boxes, each also moved, 32 prisms and 8 cylinders from a fixed stream: every face's row, name and roles, twice-area vectors, the bounding box, six times the volume, the exactness report's counts and the validity report's deferred count, as tests/query_determinism.rs records them.",
+          "check": {
+            "crate": "geom-make",
+            "test": "query_determinism",
+            "function": "queries_golden_hash_is_the_same_on_every_target"
+          },
+          "sha256": "b8f2e38d41f1e8a7dacd616b124f55c6b7b46cc691203456872debd94e8f9c4f"
+        },
+        {
+          "id": "geom-name/attributes",
+          "what": "The shared attribute step of geom-name (piece G90): 200 operations, each a history of up to 24 outputs (unchanged, changed, split, merged, modified from several, generated in a copy role or another, from nothing) with deleted inputs, three attributes with random behaviours (one of an unknown owner, one a point a transform moves in a third of them) holding values on up to 32 names; every output value and note of the step, as tests/attributes_determinism.rs records them.",
+          "check": {
+            "crate": "geom-name",
+            "test": "attributes_determinism",
+            "function": "attributes_golden_hash_is_the_same_on_every_target"
+          },
+          "sha256": "47b93b32a27411ae3fe176d5fc19248cf2be0d553d1bcdc8aab1b62f9ad8357b"
         }
       ]
     }

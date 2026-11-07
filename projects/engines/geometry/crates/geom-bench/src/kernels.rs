@@ -1771,6 +1771,68 @@ pub mod bvh {
     }
 }
 
+/// `geom-topo`'s hot paths (piece G80, decision 32.44): a column filled, copied and written, and
+/// a builder's arenas published.
+pub mod topo {
+    use geom_run::{Budget, WorkMeter};
+    use geom_topo::{Arena, BodyKind, Builder, Column, Face, Ix, TopoError};
+
+    use super::run;
+
+    /// Fills a column with [`Column::extend`], copies it, writes one row of the copy with
+    /// [`Column::set`], and sums what [`Column::get`] reads from both.
+    #[inline(never)]
+    pub fn column_edit(batch: &[(Vec<u64>, u32, u64)], out: &mut Vec<Result<u64, TopoError>>) {
+        run(batch, out, |(values, row, value)| {
+            let mut column: Column<Face, u64> = Column::new();
+            column.extend(values.iter().copied())?;
+            let mut copy = column.clone();
+            let missing = TopoError::Full(Arena::Face);
+            copy.set(Ix::new(*row).ok_or(missing)?, *value)?;
+            let mut sum = 0_u64;
+            for r in 0..column.len() {
+                let ix = Ix::new(r).ok_or(missing)?;
+                let (a, b) = (column.get(ix).ok_or(missing)?, copy.get(ix).ok_or(missing)?);
+                sum = sum.wrapping_add(*a).wrapping_add(*b);
+            }
+            Ok(sum)
+        });
+    }
+
+    /// [`Builder::publish`] on a copy of each builder, with its void region outside; the fins of
+    /// the body it gives.
+    #[inline(never)]
+    pub fn publish(batch: &[Builder], out: &mut Vec<Result<u32, TopoError>>) {
+        run(batch, out, |builder| {
+            let mut meter = WorkMeter::new(Budget::UNLIMITED);
+            let outside = Ix::new(1).ok_or(TopoError::Full(Arena::Region))?;
+            let body = builder
+                .clone()
+                .publish(BodyKind::Solid, outside, &mut meter)?;
+            Ok(body.arenas().fins.len())
+        });
+    }
+}
+
+/// The attribute step's hot path (piece G90, decision 32.44).
+pub mod attributes {
+    use geom_name::{AttrError, Step, apply as step};
+
+    use super::run;
+    use crate::inputs::attributes::Scene;
+
+    /// `geom_name::apply` on each scene; how many values come out.
+    #[inline(never)]
+    pub fn apply(batch: &[Scene], out: &mut Vec<Result<u64, AttrError>>) {
+        run(batch, out, |scene| {
+            let (after, notes) =
+                step(&scene.defs, &scene.before, &scene.history, &Step::default())?;
+            let values = after.iter().count().saturating_add(notes.len());
+            Ok(u64::try_from(values).unwrap_or(u64::MAX))
+        });
+    }
+}
+
 /// `geom-nurbs`'s hot paths (pieces G56, G58 and G59, decision 32.44): evaluating a clamped cubic,
 /// chord-length interpolation, and the bound of a cubic Bernstein piece, each under an unlimited
 /// budget where it takes one.
@@ -2022,6 +2084,82 @@ pub mod roots {
     pub fn gauss_legendre(batch: &[(Real, Real)], out: &mut Vec<Result<Real, QuadError>>) {
         run(batch, out, |&(a, b)| {
             quadrature::gauss_legendre(crate::inputs::roots::quintic, a, b, 8)
+        });
+    }
+}
+
+/// `geom-make`'s hot paths (piece G101, decision 32.44): a primitive built and a body moved, named,
+/// published and checked as the operation does it, under an unlimited budget.
+pub mod make {
+    use geom_make::{BoxInput, Made, Moved, RoundInput, cylinder, make_box, move_by, rotate};
+    use geom_math::{Axis, Rotation};
+    use geom_num::grid::P3;
+    use geom_op::{OpContext, OpError, OpId, OpOutput, OpPath};
+    use geom_run::Budget;
+    use geom_topo::Arena;
+
+    use super::run;
+
+    /// A context of one operation, under no limit.
+    fn context() -> OpContext<'static> {
+        OpContext::new(OpPath::new(OpId::from_bytes([2; 16])), Budget::UNLIMITED)
+    }
+
+    /// What a result is read by: its faces, edges and vertices, and its class's rank.
+    fn counts(made: Result<OpOutput<Made>, OpError>) -> Result<[u32; 4], OpError> {
+        made.map(|out| {
+            let a = out.result.body.arenas();
+            [
+                a.rows(Arena::Face),
+                a.rows(Arena::Edge),
+                a.rows(Arena::Vertex),
+                u32::from(out.exactness.rank()),
+            ]
+        })
+    }
+
+    /// A body to move, recorded as it was built, accepting no less.
+    fn moved(out: &OpOutput<Made>) -> Moved<'_> {
+        Moved {
+            body: &out.result.body,
+            exactness: out.exactness,
+            accept: None,
+        }
+    }
+
+    /// `make_box` on each input.
+    #[inline(never)]
+    pub fn boxes(batch: &[BoxInput], out: &mut Vec<Result<[u32; 4], OpError>>) {
+        let ctx = context();
+        run(batch, out, |input| counts(make_box(&ctx, input)));
+    }
+
+    /// `cylinder` on each input.
+    #[inline(never)]
+    pub fn cylinders(batch: &[RoundInput], out: &mut Vec<Result<[u32; 4], OpError>>) {
+        let ctx = context();
+        run(batch, out, |input| counts(cylinder(&ctx, input)));
+    }
+
+    /// `move_by` on each body.
+    #[inline(never)]
+    pub fn moved_boxes(
+        batch: &[(OpOutput<Made>, [i64; 3])],
+        out: &mut Vec<Result<[u32; 4], OpError>>,
+    ) {
+        let ctx = context();
+        run(batch, out, |(body, offset)| {
+            counts(move_by(&ctx, moved(body), *offset))
+        });
+    }
+
+    /// A quarter turn about z by `rotate` on each body.
+    #[inline(never)]
+    pub fn turned_boxes(batch: &[(OpOutput<Made>, P3)], out: &mut Vec<Result<[u32; 4], OpError>>) {
+        let ctx = context();
+        let turn = Rotation::quarter_turns(1);
+        run(batch, out, |(body, center)| {
+            counts(rotate(&ctx, moved(body), Axis::Z, turn, *center))
         });
     }
 }

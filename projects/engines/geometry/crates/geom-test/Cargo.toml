@@ -9,6 +9,9 @@ description = "Spare Kit geometry kernel, development only: shared test support,
 
 [dependencies]
 geom-num = { path = "../geom-num" }
+# The operation contract, for the history-law kit (src/history.rs, piece G88): the kit checks
+# histories through geom-op's own checker, so every operation's tests use the same laws.
+geom-op = { path = "../geom-op" }
 proptest = { version = "1.12.0", default-features = false, features = ["std", "bit-set"] }
 serde_json = "1.0.149"
 # Cargo's metadata in its typed model, and the command that asks for it, so the dependency rule
