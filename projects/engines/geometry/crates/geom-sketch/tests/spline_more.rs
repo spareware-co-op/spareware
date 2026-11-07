@@ -720,3 +720,16 @@ fn a_named_length_is_solved_for_as_well_as_driven() {
     a.evaluate_at(&x).unwrap();
     assert!((a.residuals()[rows - 1] - before + 1.0).abs() < 1e-12);
 }
+
+#[test]
+fn panels_off_zero_cover_their_span_too() {
+    // The same loop on a domain from 3 to 4: its length is the same, and no panel starts at 0.
+    let p = [[0.0, 0.0], [300.0, 10.0], [-300.0, 60.0], [0.0, 70.0]];
+    let mut text = HEAD.to_owned();
+    for (k, c) in p.iter().enumerate() {
+        point(&mut text, k as u64, c[0], c[1]);
+    }
+    spline(&mut text, 0, 3, 0, &[1.0; 4], "3 3 3 3 4 4 4 4");
+    let l = spline_length(&parse(&text).unwrap(), id(2, 0)).unwrap();
+    assert!((l.value - chord_length(p)).abs() < 1e-6, "{l:?}");
+}

@@ -5369,6 +5369,22 @@
       "occurrences": 1,
       "kind": "equivalent",
       "reason": "W is a sum of basis values times weights, and a spline's weights are positive finite numbers (checked when the spline is added), so W is above zero and never NaN: neither side of the test can be true."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-sketch/src/equation/spline.rs",
+      "mutant": "replace += with -= in lin_flat",
+      "line_text": "dx += c * points.get(at).copied().unwrap_or(0.0);",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "The loop only builds a sum to ask whether it is exactly zero. Subtracting every term gives the negated sum, which is zero exactly when the sum is."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-sketch/src/equation/spline.rs",
+      "mutant": "replace += with -= in lin_flat",
+      "line_text": "dy += c * points.get(at.saturating_add(1)).copied().unwrap_or(0.0);",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "The loop only builds a sum to ask whether it is exactly zero. Subtracting every term gives the negated sum, which is zero exactly when the sum is."
     }
   ],
   "coverage_off": [
