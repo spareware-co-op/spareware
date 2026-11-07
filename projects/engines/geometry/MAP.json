@@ -941,6 +941,26 @@
           "target": "lib"
         },
         {
+          "cost": "a few draws of [`SplitMix64`] and a short text per input, once per batch, outside every measured run.",
+          "does": null,
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-bench/src/inputs/spline.rs",
+          "guarantees": [
+            "every batch is full and the same on every target, and every result of a typical batch is `Ok` (`tests/inputs.rs`); every result is the operation's own, run directly (`tests/attack_g06.rs`)."
+          ],
+          "job": "Inputs for `geom-sketch`'s spline rules (piece G220, decision 32.44): small sketches in the `sketch v1` text form.",
+          "method": {
+            "links": [
+              "projects/engines/geometry/architecture/28-testing.md"
+            ],
+            "text": "the splines of `geom-sketch`'s `tests/spline_more.rs`, with the points drawn from [`SplitMix64`]. Each is measured as chapter 28.14 sets benchmarks out, `projects/engines/geometry/architecture/28-testing.md`."
+          },
+          "path": "geom_bench::inputs::spline",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
           "cost": "two draws of [`SplitMix64`] per pair, once per batch, outside every measured run.",
           "does": null,
           "family": [],
@@ -3644,7 +3664,7 @@
           "target": "lib"
         },
         {
-          "cost": "as charged; O(|R| + |V| + m + n) memory. No recursion.",
+          "cost": "as charged; O(|R| + |V| + m + n) memory. No recursion in the factoring or the solves.",
           "does": "[`SymbolicQr`] reads a pattern: the column order, the elimination tree of Aᵀ·A and the pattern of R. It is computed once for every matrix of that pattern (chapter 15.7). [`SparseQr::factor`] then factors one matrix, column by column from the left: each column takes the reflections of the earlier columns R says reach it, and makes its own on the rows it holds. A row enters at the first column it touches, and each column hands the rows it did not use as its pivot to its parent in the tree. A column with nothing left, to the rank tolerance, is dead: it makes no reflection and uses no pivot, and its rows go on up, so A·Π = Q·R with R a staircase. [`SparseQr::least_squares`] solves A·x = b in the least-squares sense with the least norm. On a staircase, and on any under-determined system, it factors Rᵀ too and solves through that. Where solvi fixes its rows in its symbolic step and fails on a rank-deficient matrix, a dead column here hands its rows on and the solve stays least-norm.",
           "family": [],
           "file": "projects/engines/geometry/crates/geom-linalg/src/sparse_qr.rs",
@@ -7745,6 +7765,94 @@
           "target": "lib"
         },
         {
+          "cost": "linear in the inputs of the row.",
+          "does": "a spline's weights and knots are fixed in a solve, so each derivative at an end, and the point and speed at a parameter, is a sum of control points times numbers that do not change ([`crate::linear`]). The rules here take those numbers as constants beside the control points, so one residual serves every degree, every weight and every knot vector.",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-sketch/src/equation/spline.rs",
+          "guarantees": [
+            "as `equation`: deterministic, a NaN anywhere is an error, no panics, no recursion."
+          ],
+          "job": "The spline rules of piece G220 that read a spline through fixed linear maps of its control points: joins and ends against lines and arcs for rational splines and to every order, arc length by quadrature, and a point pinned to a parameter.",
+          "method": {
+            "links": [
+              "projects/engines/geometry/architecture/15-sketches.md"
+            ],
+            "text": "section 15.4, `projects/engines/geometry/architecture/15-sketches.md`, and the arc-length quadrature of [`crate::length`]."
+          },
+          "path": "geom_sketch::equation::spline",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
+          "cost": "one banded interpolation, linear in the fit points.",
+          "does": "a fit-point spline is a spline whose author states the points it passes through. [`author`] interpolates the fit points with `geom-nurbs` (The NURBS Book, section 9.2 and algorithm A9.1: chord-length parameters, averaged knots, a banded solve), and gives the plain items a caller adds: a point for each control point, the spline on them, and for each fit point one [`ConstraintKind::SplineThrough`] at the parameter the fit used. Within a solve the parametrisation and knots are frozen, so the control points are a fixed linear function of the fit points and the Jacobian of the through-constraints is exact. [`reinterpolate`] is the step after a solve: it interpolates the fit points as they now stand and says how far the control points and the parameters moved, so the solver's loop (piece G220a, which has the solver) repeats until they move by less than q/64, and keeps the last parametrisation, which is the one stored in the constraints.",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-sketch/src/fit.rs",
+          "guarantees": [
+            "**A certified fit.** [`FitSpline::error`] is `geom-nurbs`'s certified bound on how far the interpolant misses any fit point.",
+            "**Plain items.** The items returned are ones a caller could write by hand; nothing is changed in the sketch, so a refusal leaves it as it was.",
+            "**Replayable.** Keys run up from the caller's first key, so one replay authors one set of ids.",
+            "**No panics, no recursion, no unsafe code.**"
+          ],
+          "job": "Fit-point splines (piece G220; chapter 15.2, \"Fit-point splines\").",
+          "method": {
+            "links": [
+              "https://doi.org/10.1007/978-3-642-59223-2"
+            ],
+            "text": "L. Piegl and W. Tiller, *The NURBS Book*, 2nd ed., Springer (1997), <https://doi.org/10.1007/978-3-642-59223-2>, section 9.2.1 and algorithm A9.1, through `geom_nurbs::Curve::interpolate` (versioned, byte-identical across targets)."
+          },
+          "path": "geom_sketch::fit",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
+          "cost": "per panel, 2m + 1 enclosures of derivative bounds and eight enclosures of the speed; at most six rounds of doubling.",
+          "does": "[`spline_length`] integrates the speed |C′(u)| of a spline over each span between distinct knots, cut into equal panels, with the eight-point Gauss–Legendre rule on each panel, and returns the value and a bound on how far it can be from the true length ([`Length`]). The panels are doubled, from one to a span, until the bound is under 2⁻⁴⁰ of the length (or 32 panels a span are in use, when the bound found is returned as it is). The constraint [`crate::model::ConstraintKind::SplineLength`] uses the same nodes and weights, fixed at the start of a solve, so a solved length is the one reported here.",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-sketch/src/length.rs",
+          "guarantees": [
+            "**A proof, not an estimate.** The returned error is a bound: the length of the spline the stored numbers define is within it of the value.",
+            "**Fixed work.** The panels and nodes depend on the stored spline alone, in a fixed order.",
+            "**No panics, no recursion, no unsafe code.**"
+          ],
+          "job": "The arc length of a spline, by fixed-node Gauss–Legendre quadrature with a proven bound on its error (piece G220; chapter 15.3, \"Size\").",
+          "method": {
+            "links": [
+              "projects/engines/geometry/architecture/15-sketches.md",
+              "https://doi.org/10.1137/1.9781611970906"
+            ],
+            "text": "section 15.3, `projects/engines/geometry/architecture/15-sketches.md`; P. J. Davis and P. Rabinowitz, *Methods of Numerical Integration*, 2nd ed., Academic Press (1984), section 2.7 (the Gauss remainder), on `geom_num`'s rules; the Taylor series of a square root is the recurrence s₀ = √q₀, sₖ = (qₖ − Σ sⱼ sₖ₋ⱼ) / (2 s₀) (R. E. Moore, *Methods and Applications of Interval Analysis*, SIAM (1979), <https://doi.org/10.1137/1.9781611970906>, chapter 11, interval Taylor forms). The interval series is written out here because no permissive crate gives a series over outward rounded intervals that the kernel's arithmetic could stand behind (principle 2)."
+          },
+          "path": "geom_sketch::length",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
+          "cost": "O(degree²·level) for an end, O(degree²) for a parameter.",
+          "does": "the weights and knots of a spline stay fixed in a solve, so the curve's point at a parameter, and each of its derivatives, is a sum of the control points times numbers that do not change: C⁽ᵏ⁾(u) = Σ cᵢ Pᵢ. [`end_coefficients`] gives those numbers for the first derivatives at a clamped end (the finish read as the start of the spline run backwards), rational or not, and [`point_coefficients`] the numbers for the point itself and for its first derivative at any parameter. The constraints that read rational splines, and the ones that pin a point or take an arc length, write their residuals over these numbers, so the Jacobian is generated from the residual and these numbers are the only thing computed beside it.",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-sketch/src/linear.rs",
+          "guarantees": [
+            "**Rational or not.** The numbers come from the basis functions and their derivatives (`geom-nurbs`, A2.3) and the quotient rule of rational curves (Piegl and Tiller, eq. 4.8), so one path serves every weight.",
+            "**Fixed.** They depend on degree, knots, weights and the parameter, never on the control points.",
+            "**No panics, no recursion, no unsafe code.**"
+          ],
+          "job": "A spline's derivatives and points as fixed linear maps of its control points (piece G220; chapter 15.3).",
+          "method": {
+            "links": [
+              "https://doi.org/10.1007/978-3-642-59223-2"
+            ],
+            "text": "L. Piegl and W. Tiller, *The NURBS Book*, 2nd ed., Springer (1997), <https://doi.org/10.1007/978-3-642-59223-2>, algorithm A2.3 and equations 4.5 to 4.8: with A = Σ Nᵢ wᵢ Pᵢ and W = Σ Nᵢ wᵢ, C = A / W and C⁽ᵏ⁾ = (A⁽ᵏ⁾ − Σⱼ₌₁ᵏ C(k, j) W⁽ʲ⁾ C⁽ᵏ⁻ʲ⁾) / W, which is linear in the points when the weights are fixed."
+          },
+          "path": "geom_sketch::linear",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
           "cost": "adding an item costs a binary search and a move of the items after it, nothing when items arrive in order; O(n) memory. No recursion.",
           "does": "a [`Sketch`] holds a plane, its [`Entity`]s and its [`Constraint`]s, each named by an [`ItemId`], the sequence number and key the caller stores with it. Everything is kept sorted by that id, older first, so plan order, factorisation order and every floating-point result that follows depend on stored data alone (chapter 15.2). [`Sketch::variables`] lays the entities' unknowns out in that order, each with the power of two that makes it act as a length (chapter 15.4). A constraint is driving, which the solver must meet, or reference, which is measured and never solved; its priority orders pivots and removal suggestions and nothing else (chapter 15.3).",
           "family": [],
@@ -7790,6 +7898,29 @@
             "text": "sections 15.1 and 6.1 (`projects/engines/geometry/architecture/15-sketches.md`). The grid of a plane n·x = d from Bézout's identity on n (D. E. Knuth, *The Art of Computer Programming* vol. 2, 3rd ed., section 4.5.2, algorithm X), and its two shortest vectors by Lagrange's reduction (P. Q. Nguyen and D. Stehlé, \"Low-dimensional lattice basis reduction revisited\", ACM Trans. Algorithms 5(4) (2009), doi:10.1145/1597036.1597050). The extended Euclidean step is written here since a kernel crate takes no integer library (chapter 27)."
           },
           "path": "geom_sketch::plane",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
+          "cost": "O(degree) to read an end and a few dozen arithmetic operations to take its derivatives.",
+          "does": "[`end_layout`] reads a spline end the way the constraints do: the first control points counted from the end, and the factors that turn their differences into the end's derivatives. [`end_jets`] gives those derivatives, outward from the end, and [`continuity`] measures how smooth the join of two spline ends is, on a sketch as it stands: how far the tangents are from one line (G1), how far the curvatures are from agreeing (G2) and how far the rates of change of curvature are (G3). The constraints of `equation` ([`crate::model::ConstraintKind::SplineJoin`]) write the same residuals over the same layout, so a join the solver meets measures as smooth here.",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-sketch/src/smooth.rs",
+          "guarantees": [
+            "**Not rational, clamped.** Only splines with unit weights and clamped ends are read ([`Sketch::spline_jets`]); anything else is [`SketchError::WrongKind`], never a wrong number.",
+            "**Deterministic.** The derivatives are the residuals' own functions on [`Real`].",
+            "**No panics, no recursion, no unsafe code.**"
+          ],
+          "job": "Spline ends: their derivatives, and the smoothness of a join measured (piece G220; chapter 15.3, \"Smoothness\").",
+          "method": {
+            "links": [
+              "projects/engines/geometry/architecture/15-sketches.md",
+              "https://doi.org/10.1007/978-3-642-59223-2"
+            ],
+            "text": "section 15.3 (`projects/engines/geometry/architecture/15-sketches.md`), with L. Piegl and W. Tiller, *The NURBS Book*, 2nd ed., Springer (1997), <https://doi.org/10.1007/978-3-642-59223-2>, section 3.3, for the derivative control points."
+          },
+          "path": "geom_sketch::smooth",
           "provenance": [],
           "spdx": null,
           "target": "lib"

@@ -5345,6 +5345,46 @@
       "occurrences": 1,
       "kind": "equivalent",
       "reason": "The two differ only when the values are equal, and then both keep the same low link."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-sketch/src/fit.rs",
+      "mutant": "delete match arm geom_nurbs::NurbsError::Stopped(_) in interpolate",
+      "line_text": "geom_nurbs::NurbsError::Stopped(_) => SketchError::Stopped,",
+      "occurrences": 1,
+      "kind": "harmless",
+      "reason": "The arm only names the error geom-nurbs reports when the work meter stops it. The meter here has a budget of 2^40 work units, which no interpolation reaches, so the arm cannot run; deleting it sends the same stop to the refusal arm, which is also an error."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-sketch/src/length.rs",
+      "mutant": "delete match arm CurveError::Stopped(_) in curve_error",
+      "line_text": "CurveError::Stopped(_) => SketchError::Stopped,",
+      "occurrences": 1,
+      "kind": "harmless",
+      "reason": "The arm only names the error geom-curve reports when the work meter stops it. The meter has a budget of 2^40 work units, which no measure reaches, so the arm cannot run; deleting it sends the same stop to the refusal arm, which is also an error."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-sketch/src/linear.rs",
+      "mutant": "replace || with && in rows",
+      "line_text": "if w0.is_nan() || w0 <= 0.0 {",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "W is a sum of basis values times weights, and a spline's weights are positive finite numbers (checked when the spline is added), so W is above zero and never NaN: neither side of the test can be true."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-sketch/src/equation/spline.rs",
+      "mutant": "replace += with -= in lin_flat",
+      "line_text": "dx += c * points.get(at).copied().unwrap_or(0.0);",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "The loop only builds a sum to ask whether it is exactly zero. Subtracting every term gives the negated sum, which is zero exactly when the sum is."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-sketch/src/equation/spline.rs",
+      "mutant": "replace += with -= in lin_flat",
+      "line_text": "dy += c * points.get(at.saturating_add(1)).copied().unwrap_or(0.0);",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "The loop only builds a sum to ask whether it is exactly zero. Subtracting every term gives the negated sum, which is zero exactly when the sum is."
     }
   ],
   "coverage_off": [
