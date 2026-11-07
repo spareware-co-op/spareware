@@ -814,6 +814,10 @@ pub(crate) fn inputs_of(
     })
 }
 
+/// Every rule's residuals enclosed, in authoring order, by the rule's id; `None` for a rule whose
+/// arithmetic the intervals refuse.
+pub type Enclosed = Vec<(ItemId, Option<Vec<Interval>>)>;
+
 /// A sketch's residuals and Jacobian.
 #[derive(Clone, Debug, PartialEq)]
 pub struct Assembly {
@@ -1465,10 +1469,7 @@ impl Assembly {
     /// [`SketchError::Internal`] for `held` of another length than the variables. A rule whose
     /// arithmetic the intervals refuse (a divisor holding zero, a square root of a negative range)
     /// has `None`.
-    pub fn enclose(
-        &self,
-        held: &[Interval],
-    ) -> Result<Vec<(ItemId, Option<Vec<Interval>>)>, SketchError> {
+    pub fn enclose(&self, held: &[Interval]) -> Result<Enclosed, SketchError> {
         if held.len() != self.variables.len() {
             return Err(SketchError::Internal);
         }

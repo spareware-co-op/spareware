@@ -1,7 +1,7 @@
 //! Tests of `geom_sketch::check` (piece G226): the checks after a commit.
 //!
-//! The board's done-when: "Exact re-check of root choices (CommitFlip), interval residual bounds
-//! per constraint, the ε_fit ceiling; flips near degeneracy and bounds against dashu tested; a
+//! The board's done-when: "Exact re-check of root choices (`CommitFlip`), interval residual bounds
+//! per constraint, the `ε_fit` ceiling; flips near degeneracy and bounds against `dashu` tested; a
 //! 1,000-entity sketch checked in 2 ms." The benchmark is `benches/check.rs`.
 //!
 //! What this file proves: a sketch the commit holds exactly checks as exact; a dimension the commit
@@ -249,5 +249,75 @@ fn checking_changes_nothing_and_a_small_budget_refuses() {
     assert_eq!(
         checker.check(&s, &c, Checker::fit(), &mut none),
         Err(SketchError::Stopped)
+    );
+}
+
+fn circle(key: u64, centre: u64, radius: f64) -> Entity {
+    Entity {
+        id: ItemId::new(4, key),
+        kind: EntityKind::Circle {
+            centre: pid(centre),
+            radius,
+        },
+        construction: false,
+    }
+}
+
+#[test]
+fn a_point_rounding_onto_a_circle_is_a_commit_flip() {
+    // A circle of radius 50.4 (stored 50) about (200, 200) and a point 50.3 away, inside it. The
+    // point rounds to (250, 200), exactly on the circle of radius 50: the stored inside is lost.
+    let s = build(
+        vec![
+            point(1, 200.0, 200.0),
+            point(2, 250.3, 200.0),
+            circle(1, 1, 50.4),
+        ],
+        vec![rule(
+            1,
+            ConstraintKind::FromCircle {
+                point: pid(2),
+                circle: ItemId::new(4, 1),
+                distance: Amount::Value(0.1),
+                outside: false,
+            },
+        )],
+    );
+    let c = commit(&s, &mut meter()).unwrap();
+    assert_eq!(
+        Checker::new(&s)
+            .unwrap()
+            .check(&s, &c, Checker::fit(), &mut meter()),
+        Err(SketchError::CommitFlip(cid(1)))
+    );
+}
+
+#[test]
+fn two_circles_rounding_into_a_tangency_it_was_not_are_a_commit_flip() {
+    // Two circles of radius 10 stored as touching from inside, whose centres round to (0, 0) and
+    // (10, 10): the distance between them squared is 200, the sum of the radii squared, so neither
+    // outside nor inside can be told.
+    let s = build(
+        vec![
+            point(1, 0.0, 0.0),
+            point(2, 10.2, 9.9),
+            circle(1, 1, 10.0),
+            circle(2, 2, 10.0),
+        ],
+        vec![rule(
+            1,
+            ConstraintKind::TangentCircles {
+                a: ItemId::new(4, 1),
+                b: ItemId::new(4, 2),
+                outside: false,
+            },
+        )],
+    );
+    let c = commit(&s, &mut meter()).unwrap();
+    assert_eq!(
+        Checker::new(&s)
+            .unwrap()
+            .check(&s, &c, Checker::fit(), &mut meter()),
+        Err(SketchError::CommitFlip(cid(1)))
     );
 }

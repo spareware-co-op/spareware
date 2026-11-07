@@ -146,8 +146,7 @@ fn circle_side(c: &Committed, circle: ItemId, p: &Rational2) -> Result<Option<Si
         return Ok(Some(r.side(p)?));
     }
     Ok(find(&c.arcs, circle)
-        .map(|a| a.round())
-        .map(|r| r.side(p))
+        .map(|a| a.round().side(p))
         .transpose()?)
 }
 

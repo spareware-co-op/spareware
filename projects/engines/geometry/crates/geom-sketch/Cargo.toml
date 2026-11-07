@@ -92,3 +92,8 @@ harness = false
 [[bench]]
 name = "commit"
 harness = false
+
+# The checks after the commit of a 1,000-entity sketch (piece G226), the same way.
+[[bench]]
+name = "check"
+harness = false
