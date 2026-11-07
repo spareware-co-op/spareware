@@ -12,7 +12,8 @@
     clippy::cast_possible_wrap,
     clippy::cast_sign_loss,
     clippy::indexing_slicing,
-    reason = "tests: native arithmetic on small numbers, and a failure stops the test"
+    clippy::many_single_char_names,
+    reason = "tests: native arithmetic on small numbers, corners named as the geometry names them, and a failure stops the test"
 )]
 
 use std::collections::BTreeSet;

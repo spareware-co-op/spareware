@@ -266,9 +266,15 @@
               "kind": "corpus",
               "piece": "G140",
               "why": "7 new count benchmarks of the flat boolean's scenarios (23.13's scenarios at reduced scale): a wall's openings, a moved door cut again from the arrangement cache, a slab's holes, a union of many boxes, one and three selections from one arrangement, and a storey's rooms; no existing digest moved"
+            },
+            {
+              "sha256": "140880972aada128e032227e06c6b82c68a6a73c9117783329fb6936345a8e2f",
+              "kind": "corpus",
+              "piece": "G155",
+              "why": "topo/publish's input pushes each vertex's point as a PointKind, the point pool's type since G136's line (a grid point or three planes' meeting), so the input's canonical encoding and its digest moved; its result digest is unchanged, and no other digest moved"
             }
           ],
-          "sha256": "140880972aada128e032227e06c6b82c68a6a73c9117783329fb6936345a8e2f"
+          "sha256": "c9d2b07a503c832f1c6c93a84e9fedcaace5e394be6cd7f8092e8315c037f9d0"
         },
         {
           "id": "geom-nurbs/operations",
