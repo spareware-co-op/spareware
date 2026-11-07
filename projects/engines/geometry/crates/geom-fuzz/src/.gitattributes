@@ -1,0 +1,4 @@
+# robustness.txt is compared byte for byte with what `render` prints (the seeded designs' counts, with
+# \n line ends), so git must never convert its line ends: a Windows checkout would otherwise turn
+# \n into \r\n and fail `robustness_never_falls`.
+robustness.txt -text
