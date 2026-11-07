@@ -119,7 +119,10 @@ fn geom_2d_exact_arrangement(bencher: Bencher) {
         .collect();
     let mut meter = WorkMeter::new(Budget::UNLIMITED);
     let checked = arrange(&segs, &mut meter).map(|a| a.edges().len());
-    assert!(checked.is_ok_and(|n| n >= segs.len() / 2), "the arrangement has edges");
+    assert!(
+        checked.is_ok_and(|n| n >= segs.len() / 2),
+        "the arrangement has edges"
+    );
     bencher
         .counter(ItemsCount::new(segs.len()))
         .bench_local(|| {
