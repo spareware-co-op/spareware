@@ -510,30 +510,126 @@ fn only_a_spline_a_constraint_can_read_is_accepted() {
     );
     quad.push_str("entity 2.0 spline 2 3 1.0 1.1 1.2 6 0 0 0 1 1 1 3 1 1 1\n");
     quad.push_str("entity 2.1 spline 2 3 1.3 1.4 1.5 6 0 0 0 1 1 1 3 1 1 1\n");
+    // A quadratic on four points has the points for a third derivative and not the degree.
+    let mut long = HEAD.to_owned();
+    points(
+        &mut long,
+        0,
+        &[
+            [0.0, 0.0],
+            [2.0, 1.0],
+            [5.0, 3.0],
+            [0.0, 4.0],
+            [3.0, 5.0],
+            [6.0, 6.0],
+            [9.0, 7.0],
+            [1.0, 9.0],
+        ],
+    );
+    long.push_str(
+        "entity 2.0 spline 2 4 1.0 1.1 1.2 1.3 7 0 0 0 0.5 1 1 1 4 1 1 1 1
+",
+    );
+    long.push_str(
+        "entity 2.1 spline 2 4 1.4 1.5 1.6 1.7 7 0 0 0 0.5 1 1 1 4 1 1 1 1
+",
+    );
+    for (order, ok) in [("g1", true), ("g2", true), ("g3", false)] {
+        let rule = format!(
+            "constraint 3.0 driving 0 spline-join 2.0 finish 2.1 start {order}
+"
+        );
+        assert_eq!(parse(&format!("{long}{rule}")).is_ok(), ok, "long {order}");
+    }
+    // Three points and a degree of three have no room for any derivative: all the knots are one.
+    let mut flat = HEAD.to_owned();
+    points(
+        &mut flat,
+        0,
+        &[
+            [0.0, 0.0],
+            [2.0, 1.0],
+            [5.0, 3.0],
+            [0.0, 4.0],
+            [3.0, 5.0],
+            [6.0, 6.0],
+        ],
+    );
+    flat.push_str(
+        "entity 2.0 spline 3 3 1.0 1.1 1.2 7 0 0 0 0 0 0 0 3 1 1 1
+",
+    );
+    flat.push_str(
+        "entity 2.1 spline 3 3 1.3 1.4 1.5 7 0 0 0 0 0 0 0 3 1 1 1
+",
+    );
+    for order in ["g1", "g2", "g3"] {
+        let rule = format!(
+            "constraint 3.0 driving 0 spline-join 2.0 finish 2.1 start {order}
+"
+        );
+        assert!(parse(&format!("{flat}{rule}")).is_err(), "flat {order}");
+    }
     for (order, ok) in [("g1", true), ("g2", true), ("g3", false)] {
         let rule = format!("constraint 3.0 driving 0 spline-join 2.0 finish 2.1 start {order}\n");
         assert_eq!(parse(&format!("{quad}{rule}")).is_ok(), ok, "{order}");
     }
 }
 
+/// The index of point `p`'s x among the variables.
+fn place(a: &Assembly, p: ItemId) -> usize {
+    a.variables().iter().position(|v| v.owner == p).unwrap()
+}
+
+/// Moves point `from` onto point `to` in `x`.
+fn onto(a: &Assembly, x: &mut [f64], from: ItemId, to: ItemId) {
+    let (f, t) = (place(a, from), place(a, to));
+    x[f] = x[t];
+    x[f + 1] = x[t + 1];
+}
+
 #[test]
-fn a_spline_end_with_no_tangent_is_degenerate() {
-    let text = cut_cubic();
-    let s = with_rule(&text, "spline-join 2.0 finish 2.1 start g2");
-    let mut a = Assembly::new(&s).unwrap();
-    let mut x = a.start().unwrap();
-    // Put the right half's second control point on its first.
-    let ix = a
-        .variables()
-        .iter()
-        .position(|v| v.owner == id(1, 5))
-        .unwrap();
-    let j0 = a
-        .variables()
-        .iter()
-        .position(|v| v.owner == id(1, 4))
-        .unwrap();
-    x[ix] = x[j0];
-    x[ix + 1] = x[j0 + 1];
-    assert_eq!(a.evaluate_at(&x), Err(SketchError::Degenerate(id(3, 0))));
+fn a_spline_end_with_no_tangent_or_a_line_with_no_direction_is_degenerate() {
+    let mut text = cut_cubic();
+    text.push_str(
+        "entity 1.8 point 3 3
+entity 1.9 point 9 3
+entity 2.2 line 1.8 1.9 segment
+",
+    );
+    let p = |k: u64| id(1, k);
+    // For each rule: the points whose collapse flattens an end (to, from), and the rule's id.
+    let cases: [(&str, &[(u64, u64)]); 5] = [
+        ("spline-join 2.0 finish 2.1 start g1", &[(3, 2), (4, 5)]),
+        ("spline-join 2.0 finish 2.1 start g2", &[(3, 2), (4, 5)]),
+        ("spline-join 2.0 finish 2.1 start g3", &[(3, 2), (4, 5)]),
+        ("spline-join 2.0 start 2.1 finish g3", &[(0, 1), (7, 6)]),
+        ("spline-tangent-line 2.1 finish 2.2", &[(7, 6), (8, 9)]),
+    ];
+    for (rule, flats) in cases {
+        let s = with_rule(&text, rule);
+        for &(to, from) in flats {
+            let mut a = Assembly::new(&s).unwrap();
+            let mut x = a.start().unwrap();
+            onto(&a, &mut x, p(from), p(to));
+            assert_eq!(
+                a.evaluate_at(&x),
+                Err(SketchError::Degenerate(id(3, 0))),
+                "{rule}: {from} onto {to}"
+            );
+        }
+        // Whole, and with a leg that is vertical or a line that is level: not degenerate.
+        let mut a = Assembly::new(&s).unwrap();
+        let mut x = a.start().unwrap();
+        assert_eq!(a.evaluate_at(&x), Ok(()), "{rule}");
+        for &(to, from) in flats {
+            let (f, t) = (place(&a, p(from)), place(&a, p(to)));
+            x[f] = x[t];
+            x[f + 1] = x[t + 1] + 1.0;
+            assert_eq!(a.evaluate_at(&x), Ok(()), "{rule}: {from} above {to}");
+            x[f] = x[t] + 1.0;
+            x[f + 1] = x[t + 1];
+            assert_eq!(a.evaluate_at(&x), Ok(()), "{rule}: {from} beside {to}");
+        }
+    }
 }

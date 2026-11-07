@@ -1060,7 +1060,7 @@ impl Sketch {
 
     /// The spline `id`'s degree, control points and knots, when it is one whose ends have `level`
     /// derivatives the constraints can read: not rational, clamped at both ends (the first and last
-    /// `degree` + 1 knots equal), of degree at least `level`, with more than `level` control points
+    /// `degree` + 1 knots equal), of degree at least `level`, with more than `degree` control points
     /// and the knot count a spline of that degree and size has.
     ///
     /// # Errors
@@ -1091,7 +1091,7 @@ impl Sketch {
             .is_some_and(clamped);
         let counted = n.checked_add(p).and_then(|k| k.checked_add(1)) == Some(knots.len());
         let plain = weights.iter().all(|w| *w == 1.0);
-        let enough = p >= level && n > level;
+        let enough = p >= level && n > p;
         if at_start && at_end && counted && plain && enough {
             Ok((p, points, knots))
         } else {
