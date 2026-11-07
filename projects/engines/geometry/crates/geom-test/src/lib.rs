@@ -156,7 +156,7 @@
 //!   recursion check's token printing.
 //! - `petgraph` 0.8, without default features: the recursion check's strongly connected
 //!   components (Tarjan's algorithm).
-//! - `pulldown-cmark` 0.13.5, a development dependency without its default features (the HTML
+//! - `pulldown-cmark` 0.13.6, a development dependency without its default features (the HTML
 //!   writer and the command line), so `tests/attack_g17.rs` reads the kernel's README.md,
 //!   AGENTS.md and GLOSSARY.md as Markdown.
 //! - `unicode-normalization` 0.1.26, a development dependency, so the same test sorts the
