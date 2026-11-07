@@ -19,6 +19,7 @@ geom-name = { path = "../geom-name" }
 geom-num = { path = "../geom-num" }
 geom-nurbs = { path = "../geom-nurbs" }
 geom-op = { path = "../geom-op" }
+geom-surface = { path = "../geom-surface" }
 geom-topo = { path = "../geom-topo" }
 
 [dev-dependencies]
