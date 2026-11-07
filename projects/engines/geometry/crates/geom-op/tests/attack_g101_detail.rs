@@ -60,7 +60,10 @@ fn every_detail_says_something_and_names_what_it_refers_to() {
         MakeDetail::NotCertifiedYet { piece: "G180" }.to_string(),
         "the checker cannot certify the transformed body yet; piece G180 widens it"
     );
-    assert_eq!(MakeDetail::BodyNotNamed.to_string(), "the body carries no names");
+    assert_eq!(
+        MakeDetail::BodyNotNamed.to_string(),
+        "the body carries no names"
+    );
     assert_eq!(
         MakeDetail::BuildFailed.to_string(),
         "the body could not be assembled"
