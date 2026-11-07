@@ -377,7 +377,7 @@ pub fn place_polyline(poly: &Polyline, map: &Similarity) -> Result<Polyline, Edi
             let k = map.scale.unsigned_abs();
             Some(
                 w.iter()
-                    .map(|(a, b)| {
+                    .map(|(a, b)| -> Result<(Steps, Steps), EditError> {
                         Ok((
                             Steps(a.0.checked_mul(k).ok_or(EditError::Range)?),
                             Steps(b.0.checked_mul(k).ok_or(EditError::Range)?),

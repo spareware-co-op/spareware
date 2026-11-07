@@ -2350,6 +2350,7 @@ pub mod bvh {
 /// shape's change under a transform's classification.
 pub mod entity {
     use geom_2d::edit::{Similarity, place_polyline, polyline_length};
+    use geom_2d::edit::{Similarity, place_polyline, polyline_length};
     use geom_2d::entity::{Becomes, Frac, Polyline, Shape};
     use geom_math::Classification;
     use geom_num::NumError;
@@ -2377,6 +2378,42 @@ pub mod entity {
                 Becomes::Run => 0,
             };
             Ok(tag.wrapping_mul(2).wrapping_add(u64::from(change.mirror)))
+        });
+    }
+
+    /// The placement a benchmark input names by its number, 0 to 7.
+    fn placement(k: i64) -> Result<Similarity, NumError> {
+        let origin = P2::new(0, 0)?;
+        let map = match k {
+            0..=3 => Similarity::quarter_turns(u8::try_from(k).unwrap_or(0), origin),
+            4 => Similarity::mirror_in_row(7),
+            5 => Similarity::mirror_in_column(-5),
+            6 => Similarity::scaling(3, origin),
+            _ => Ok(Similarity::translation(11, -4)),
+        };
+        map.map_err(|_| NumError::Degenerate)
+    }
+
+    /// `place_polyline` on each input: the first vertex's x, as a bit pattern, plus the bulge count.
+    #[inline(never)]
+    pub fn place(batch: &[((Vec<P2>, Vec<Frac>), i64)], out: &mut Vec<Result<u64, NumError>>) {
+        run(batch, out, |((vertices, bulges), k)| {
+            let poly = Polyline::new(vertices.clone(), bulges.clone(), None, false)
+                .map_err(|_| NumError::Degenerate)?;
+            let placed = place_polyline(&poly, &placement(*k)?).map_err(|_| NumError::Degenerate)?;
+            let first = placed.vertices().first().map_or(0, |p| p.x.get().unsigned_abs());
+            Ok(first.wrapping_add(u64::try_from(placed.bulges().len()).unwrap_or(0)))
+        });
+    }
+
+    /// `polyline_length` on each input: the upper bound of the certified length, as its bits.
+    #[inline(never)]
+    pub fn length(batch: &[(Vec<P2>, Vec<Frac>)], out: &mut Vec<Result<u64, NumError>>) {
+        run(batch, out, |(vertices, bulges)| {
+            let poly = Polyline::new(vertices.clone(), bulges.clone(), None, false)
+                .map_err(|_| NumError::Degenerate)?;
+            let len = polyline_length(&poly).map_err(|_| NumError::Degenerate)?;
+            Ok(len.hi().to_bits())
         });
     }
 }
