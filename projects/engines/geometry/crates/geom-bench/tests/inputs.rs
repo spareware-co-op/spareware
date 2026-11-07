@@ -2276,6 +2276,28 @@ fn bvh_typical_batches_all_succeed() {
     all_ok("cells_within", k::cells_within, &m::cells_within(Typical));
 }
 
+/// Every typical batch of `geom-topo`'s benchmarks (decision 32.44) edits every column and
+/// publishes every builder, and a column's write lands in its rows.
+#[test]
+fn topo_typical_batches_all_succeed() {
+    use geom_bench::inputs::topo as m;
+    use geom_bench::kernels::topo as k;
+    let columns = m::column_edit(Typical);
+    assert!(columns.iter().all(|(_, row, _)| (*row as usize) < m::ROWS));
+    assert!(columns.iter().all(|(values, _, _)| values.len() == m::ROWS));
+    all_ok("column_edit", k::column_edit, &columns);
+    all_ok("publish", k::publish, &m::publish(Typical));
+}
+
+/// Every typical batch of `geom-run`'s helper benchmarks (decision 32.44) maps every list.
+#[test]
+fn helper_typical_batches_all_succeed() {
+    use geom_bench::inputs::helper as m;
+    use geom_bench::kernels::helper as k;
+    all_ok("lone_serial", k::lone_serial, &m::lone_serial(Typical));
+    all_ok("lone_pool", k::lone_pool, &m::lone_pool(Typical));
+}
+
 /// Every typical batch of `geom-nurbs`'s benchmarks (decision 32.44) evaluates, interpolates and
 /// bounds every input.
 #[test]
@@ -2569,5 +2591,144 @@ fn the_circle_classes_are_what_they_say() {
         i::circle_gap_value(Degenerate)
             .iter()
             .all(|&(a, b, t)| gp::circle_gap::exact(a, b, t) == Some(Sign::Zero))
+    );
+}
+
+/// The one-root batches are what their classes claim (piece G189).
+#[test]
+fn the_one_root_classes_are_what_they_say() {
+    use geom_bench::inputs::one_root as r;
+    for class in [Typical, Degenerate, NearlyDegenerate, Extreme] {
+        assert_eq!(r::cmp_x(class).len(), BATCH, "{class}");
+        assert_eq!(r::side(class).len(), BATCH, "{class}");
+    }
+    for class in [Typical, Degenerate, Extreme] {
+        assert_eq!(r::of_circle(class).len(), BATCH, "{class}");
+        assert_eq!(r::against_circle(class).len(), BATCH, "{class}");
+    }
+    assert_eq!(r::of_round(Typical).len(), BATCH);
+    assert_eq!(r::of_round(Degenerate).len(), BATCH);
+    assert_eq!(r::order_crossings(Typical).len(), BATCH);
+    assert!(
+        r::cmp_x(Typical)
+            .iter()
+            .all(|(p, q)| p.cmp_x_filter(q).is_some())
+    );
+    assert!(
+        r::cmp_x(NearlyDegenerate)
+            .iter()
+            .all(|(p, q)| p.cmp_x_filter(q).is_none())
+    );
+    assert!(
+        r::cmp_x(Degenerate)
+            .iter()
+            .all(|(p, q)| p.same(q) == Ok(true))
+    );
+    assert!(
+        r::side(Degenerate)
+            .iter()
+            .all(|(p, l)| p.side(l) == Ok(Sign::Zero))
+    );
+    assert!(
+        r::side(NearlyDegenerate)
+            .iter()
+            .all(|(p, l)| p.side(l) != Ok(Sign::Zero))
+    );
+    assert!(
+        r::against_circle(Degenerate)
+            .iter()
+            .all(|(p, c)| p.against_circle(c) == Ok(Sign::Zero))
+    );
+    assert!(r::of_circle(Degenerate).iter().all(|(l, c)| {
+        geom_num::one_root::Crossing2::of_circle(l, c, geom_num::one_root::Root::First)
+            .is_ok_and(|p| p.parts().2.is_zero())
+    }));
+}
+
+/// The conic batches are what their classes claim, for the module and for the generated functions
+/// it calls (piece G190).
+#[test]
+fn the_conic_classes_are_what_they_say() {
+    use geom_bench::inputs::{conic as c, generated as i};
+    use geom_num::arc::Contact;
+    use geom_num::conic::{Conic, Meeting};
+    use geom_num::generated as gp;
+    use geom_num::one_root::{Crossing2, Root};
+    for class in [Typical, Degenerate, NearlyDegenerate, Extreme] {
+        assert_eq!(c::side(class).len(), BATCH, "{class}");
+        assert_eq!(c::meets(class).len(), BATCH, "{class}");
+        assert_eq!(c::meeting(class).len(), BATCH, "{class}");
+    }
+    for class in [Typical, Degenerate, Extreme] {
+        assert_eq!(c::of_ellipse(class).len(), BATCH, "{class}");
+        assert_eq!(c::against_ellipse(class).len(), BATCH, "{class}");
+        assert_eq!(c::compare(class).len(), BATCH, "{class}");
+    }
+    assert!(
+        c::side(Degenerate)
+            .iter()
+            .all(|(e, z)| e.side(z) == Ok(Sign::Zero))
+    );
+    assert!(
+        c::side(NearlyDegenerate)
+            .iter()
+            .all(|(e, z)| e.side(z) == Ok(Sign::Positive))
+    );
+    assert!(
+        c::meets(Degenerate)
+            .iter()
+            .all(|(e, l)| e.meets(l) == Ok(Contact::Tangent))
+    );
+    assert!(
+        c::meets(NearlyDegenerate)
+            .iter()
+            .all(|(e, l)| e.meets(l) == Ok(Contact::Crossing))
+    );
+    assert!(c::of_ellipse(Degenerate).iter().all(|(l, e)| {
+        Crossing2::of_ellipse(l, e, Root::First).is_ok_and(|p| p.parts().2.is_zero())
+    }));
+    assert!(
+        c::against_ellipse(Degenerate)
+            .iter()
+            .all(|(p, e)| p.against_ellipse(e) == Ok(Sign::Zero))
+    );
+    assert!(c::meeting(Typical).iter().all(|(e, o)| {
+        let meeting = Conic::of_ellipse(o).and_then(|c| e.meeting(&c));
+        matches!(meeting, Ok(Meeting::At { roots, .. }) if roots.count() == 4)
+    }));
+    assert!(c::meeting(Degenerate).iter().all(|(e, o)| {
+        let meeting = Conic::of_ellipse(o).and_then(|c| e.meeting(&c));
+        matches!(meeting, Ok(Meeting::At { roots, .. })
+            if roots.count() == 2 && roots.iter().all(|r| r.multiplicity() == 2))
+    }));
+    assert!(
+        c::compare(Degenerate)
+            .iter()
+            .all(|(p, a, q, b)| geom_num::quartic::compare(p, a, q, b) == Ok(Sign::Zero))
+    );
+
+    assert!(
+        i::ellipse_side_filter(Typical)
+            .iter()
+            .all(|&([x, y, w], k, [mx, my, p, q])| {
+                gp::ellipse_side::filter(x, y, w, k, mx, my, p, q).is_some()
+            })
+    );
+    assert!(i::ellipse_side_filter(NearlyDegenerate).iter().all(
+        |&([x, y, w], k, [mx, my, p, q])| {
+            gp::ellipse_side::filter(x, y, w, k, mx, my, p, q).is_none()
+        }
+    ));
+    assert!(i::ellipse_line_filter(NearlyDegenerate).iter().all(
+        |&([a, b, d], k, [mx, my, p, q])| {
+            gp::ellipse_line::filter(a, b, d, k, mx, my, p, q).is_none()
+        }
+    ));
+    assert!(
+        i::ellipse_line_value(Degenerate)
+            .iter()
+            .all(|&([a, b, d], k, [mx, my, p, q])| {
+                gp::ellipse_line::exact(a, b, d, k, mx, my, p, q) == Some(Sign::Zero)
+            })
     );
 }

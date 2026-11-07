@@ -35,7 +35,7 @@ const FACADE: &str = "projects/engines/crates/engine-geometry";
 const SHA: &str = "0123456789abcdef0123456789abcdef01234567";
 
 const KERNEL_MANIFEST: &str = "[package]\nname = \"geom-x\"\nversion = \"0.0.0\"\n\
-                               license = \"MPL-2.0 AND BSD-3-Clause\"\n\n[dependencies]\n\
+                               license = \"Apache-2.0 AND BSD-3-Clause\"\n\n[dependencies]\n\
                                geom-num = { path = \"../geom-num\" }\nlibm = \"0.2.16\"\n";
 
 const KERNEL_LIB: &str = "//! Spare Kit geometry kernel: an example.
@@ -85,7 +85,7 @@ const MODULE_A: &str = "//! An example module: every module field, written once.
 //!
 //! Consulted: J. R. Shewchuk, `predicates.c`, public domain,
 //!   <https://www.cs.cmu.edu/afs/cs/project/quake/public/code/predicates.c>, for its signs.
-//! SPDX-License-Identifier: MPL-2.0
+//! SPDX-License-Identifier: Apache-2.0
 
 /// A function.
 pub fn f() {}
@@ -169,7 +169,7 @@ const MODULE_PORTED: &str = "//! A ported module.
 //!   https://github.com/example/example/blob/0123456789abcdef0123456789abcdef01234567/src/x.c
 //!   Copyright (c) 2020 Example Authors
 //!   Changed for Spare Kit: rewritten in Rust with checked arithmetic.
-//! SPDX-License-Identifier: MPL-2.0 AND BSD-3-Clause
+//! SPDX-License-Identifier: Apache-2.0 AND BSD-3-Clause
 ";
 
 const BINARY: &str = "//! `tool`: an example binary.
@@ -428,7 +428,7 @@ fn the_good_workspace_passes_every_rule() {
     );
     assert_eq!(a["cost"], "constant.");
     assert_eq!(a["family"], serde_json::json!(["Query"]));
-    assert_eq!(a["spdx"], "MPL-2.0");
+    assert_eq!(a["spdx"], "Apache-2.0");
     assert_eq!(a["provenance"][0]["take"], "port-method");
     assert_eq!(a["provenance"][0]["licence"], "public domain");
     assert_eq!(a["provenance"][0]["purpose"], "for its signs.");
@@ -1014,7 +1014,7 @@ fn consulted() {
     breaks(
         &a_with_tail(
             "//! Consulted: X, MIT, <https://github.com/a/b/blob/main/x.rs>, for a test.\n\
-             //! SPDX-License-Identifier: MPL-2.0\n",
+             //! SPDX-License-Identifier: Apache-2.0\n",
         ),
         Rule::Consulted,
         "a.rs",
@@ -1070,7 +1070,7 @@ fn spdx() {
         &with(
             "ported.rs",
             replace(
-                "//! SPDX-License-Identifier: MPL-2.0 AND BSD-3-Clause\n",
+                "//! SPDX-License-Identifier: Apache-2.0 AND BSD-3-Clause\n",
                 "",
             ),
         ),
@@ -1078,7 +1078,10 @@ fn spdx() {
         "ported.rs",
     );
     breaks(
-        &with("ported.rs", replace("MPL-2.0 AND BSD-3-Clause", "MPL-2.0")),
+        &with(
+            "ported.rs",
+            replace("Apache-2.0 AND BSD-3-Clause", "Apache-2.0"),
+        ),
         Rule::Spdx,
         "ported.rs",
     );
@@ -1086,31 +1089,31 @@ fn spdx() {
         &with(
             "a.rs",
             replace(
-                "SPDX-License-Identifier: MPL-2.0",
-                "SPDX-License-Identifier: MPL 2!",
+                "SPDX-License-Identifier: Apache-2.0",
+                "SPDX-License-Identifier: Apache 2!",
             ),
         ),
         Rule::Spdx,
         "a.rs",
     );
-    // A module that ports nothing is MPL-2.0.
+    // A module that ports nothing is Apache-2.0.
     breaks(
         &with(
             "a.rs",
             replace(
-                "SPDX-License-Identifier: MPL-2.0",
+                "SPDX-License-Identifier: Apache-2.0",
                 "SPDX-License-Identifier: GPL-3.0-only",
             ),
         ),
         Rule::Spdx,
         "a.rs",
     );
-    // The crate's manifest names a ported file's licence beside MPL-2.0.
+    // The crate's manifest names a ported file's licence beside Apache-2.0.
     breaks(
         &with_manifest(|m| {
             m.replace(
-                "license = \"MPL-2.0 AND BSD-3-Clause\"",
-                "license = \"MPL-2.0\"",
+                "license = \"Apache-2.0 AND BSD-3-Clause\"",
+                "license = \"Apache-2.0\"",
             )
         }),
         Rule::Spdx,
@@ -1119,7 +1122,7 @@ fn spdx() {
     breaks(
         &with_manifest(|m| {
             m.replace(
-                "license = \"MPL-2.0 AND BSD-3-Clause\"",
+                "license = \"Apache-2.0 AND BSD-3-Clause\"",
                 "license.workspace = true",
             )
         }),
@@ -1254,6 +1257,176 @@ fn error_doc() {
     );
 }
 
+/// The good error module with a `kind` function for `XError` whose match arms are `arms`, written
+/// as a trait implementation so the module still defines no function of its own.
+fn with_kind(arms: &'static str) -> Input {
+    with("error.rs", move |t| {
+        format!(
+            "{t}
+impl Detail for XError {{
+    fn kind(&self) -> ErrorKind {{
+{arms}
+    }}
+}}
+"
+        )
+    })
+}
+
+/// The base kinds, as an `ErrorKind` enum the map finds.
+const ERROR_KIND: &str = "
+/// The base kinds.
+pub enum ErrorKind {
+    /// Degenerate.
+    Degenerate,
+    /// Out of range.
+    FrameRangeExceeded,
+}
+";
+
+#[test]
+fn error_base() {
+    let good_arms = "        match self {
+            XError::Degenerate => ErrorKind::Degenerate,
+                                 Self::OutOfRange { .. } => { ErrorKind::FrameRangeExceeded }
+        }";
+    // With no `ErrorKind` enum in the map, no kind is a base kind.
+    breaks(&with_kind(good_arms), Rule::ErrorBase, "error.rs");
+    let bad = [
+        // The body is not one `match self`.
+        "        let k = ErrorKind::Degenerate;
+        k",
+        // An arm in another form.
+        "        match self {
+            XError::Degenerate => other(),
+                     XError::OutOfRange { .. } => ErrorKind::FrameRangeExceeded,
+        }",
+        // A pattern in another form.
+        "        match self {
+            _ => ErrorKind::Degenerate,
+        }",
+        // A variant with no arm.
+        "        match self {
+            XError::Degenerate => ErrorKind::Degenerate,
+        }",
+        // A variant with two.
+        "        match self {
+            XError::Degenerate | XError::Degenerate => ErrorKind::Degenerate,
+                     XError::OutOfRange { .. } => ErrorKind::FrameRangeExceeded,
+        }",
+        // A variant that does not exist.
+        "        match self {
+            XError::Degenerate => ErrorKind::Degenerate,
+                     XError::OutOfRange { .. } => ErrorKind::FrameRangeExceeded,
+                     XError::Gone => ErrorKind::Degenerate,
+        }",
+        // A kind that is not a variant of `ErrorKind`.
+        "        match self {
+            XError::Degenerate => ErrorKind::Degenerate,
+                     XError::OutOfRange { .. } => ErrorKind::NoSolution,
+        }",
+    ];
+    for arms in bad {
+        let input = with_kind(arms);
+        let input = {
+            let mut input = input;
+            for f in &mut input.crates[0].files {
+                if f.path.ends_with("/error.rs") {
+                    f.text = Ok(format!("{}{ERROR_KIND}", f.text.clone().unwrap()));
+                }
+            }
+            input
+        };
+        breaks(&input, Rule::ErrorBase, "error.rs");
+    }
+}
+
+#[test]
+fn base_kinds_are_read_from_the_kind_function() {
+    let arms = "        match *self {
+            XError::Degenerate => crate::ErrorKind::Degenerate,
+                            Self::OutOfRange { .. } => {
+                ErrorKind::FrameRangeExceeded
+            }
+        }";
+    let mut input = with_kind(arms);
+    for f in &mut input.crates[0].files {
+        if f.path.ends_with("/error.rs") {
+            f.text = Ok(format!(
+                "{}{ERROR_KIND}
+/// A detail that holds another.
+pub enum HeldError {{
+                     /// The held one.
+    X(XError),
+}}
+
+impl HeldError {{
+                     pub fn kind(&self) -> ErrorKind {{
+        match self {{
+                             HeldError::X(detail) => detail.kind(),
+        }}
+    }}
+}}
+",
+                f.text.clone().unwrap()
+            ));
+        }
+    }
+    // The inherent `kind` makes the module define a function, so its Method needs a link.
+    let generated = build(&input, &[]);
+    let problems: Vec<String> = generated
+        .problems
+        .iter()
+        .filter(|p| p.rule != Rule::Method)
+        .map(ToString::to_string)
+        .collect();
+    assert_eq!(problems, Vec::<String>::new());
+    let map: serde_json::Value = serde_json::from_str(&generated.text).unwrap();
+    let krate = map["crates"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|c| c["name"] == "geom-x")
+        .unwrap();
+    let errors = krate["errors"].as_array().unwrap();
+    let kinds = |name: &str| -> Vec<(String, Option<String>)> {
+        errors.iter().find(|e| e["name"] == name).unwrap()["kinds"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|k| {
+                (
+                    k["name"].as_str().unwrap().to_owned(),
+                    k.get("base_kind").map(|b| b.as_str().unwrap().to_owned()),
+                )
+            })
+            .collect()
+    };
+    assert_eq!(
+        kinds("XError"),
+        [
+            ("Degenerate".to_owned(), Some("Degenerate".to_owned())),
+            (
+                "OutOfRange".to_owned(),
+                Some("FrameRangeExceeded".to_owned())
+            ),
+        ]
+    );
+    assert_eq!(
+        kinds("HeldError"),
+        [("X".to_owned(), Some("held detail".to_owned()))]
+    );
+    assert_eq!(
+        kinds("ErrorKind"),
+        [
+            ("Degenerate".to_owned(), None),
+            ("FrameRangeExceeded".to_owned(), None),
+        ]
+    );
+    // An enum without a `kind` function lists no base kinds.
+    assert_eq!(kinds("SweepFailure"), [("MitreMismatch".to_owned(), None)]);
+}
+
 #[test]
 fn stale() {
     let text = build(&good(), &[]).text;
@@ -1331,6 +1504,7 @@ fn every_rule_has_a_seeded_fixture_and_a_label() {
         Rule::Uncredited,
         Rule::ErrorEnum,
         Rule::ErrorDoc,
+        Rule::ErrorBase,
         Rule::Stale,
         Rule::GapStale,
     ];

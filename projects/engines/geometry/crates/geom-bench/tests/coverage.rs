@@ -58,7 +58,7 @@ const KERNEL_WORKFLOW: &str = include_str!("../../../../../../.github/workflows/
 /// This crate's own reference, Avnaim et al.'s signs (chapter 23.3, piece G42): measured beside
 /// `geom-num`'s exact paths, and not a `geom-num` function.
 const AVNAIM: &str = include_str!("../src/avnaim.rs");
-const GEOM_NUM: [(&str, &str); 30] = [
+const GEOM_NUM: [(&str, &str); 33] = [
     ("ball", include_str!("../../geom-num/src/ball.rs")),
     ("brent", include_str!("../../geom-num/src/brent.rs")),
     ("dd", include_str!("../../geom-num/src/dd.rs")),
@@ -78,11 +78,14 @@ const GEOM_NUM: [(&str, &str); 30] = [
     ("lib", include_str!("../../geom-num/src/lib.rs")),
     ("math", include_str!("../../geom-num/src/math.rs")),
     ("newton", include_str!("../../geom-num/src/newton.rs")),
+    ("one_root", include_str!("../../geom-num/src/one_root.rs")),
     ("perturb", include_str!("../../geom-num/src/perturb.rs")),
     ("plane", include_str!("../../geom-num/src/plane.rs")),
     ("arc", include_str!("../../geom-num/src/arc.rs")),
     ("carrier", include_str!("../../geom-num/src/carrier.rs")),
+    ("conic", include_str!("../../geom-num/src/conic.rs")),
     ("crossing", include_str!("../../geom-num/src/crossing.rs")),
+    ("quartic", include_str!("../../geom-num/src/quartic.rs")),
     ("predicate", include_str!("../../geom-num/src/predicate.rs")),
     (
         "quadrature",
@@ -121,7 +124,7 @@ const MATH_PRIVATE: [&str; 6] = ["atan2", "exp", "hexf", "log", "sincospi", "sup
 
 /// The modules of `geom-num`'s `generated`, one per predicate (piece G27), by path; their free
 /// functions are `generated::<predicate>::<function>`.
-const GENERATED_PARTS: [(&str, &str); 23] = [
+const GENERATED_PARTS: [(&str, &str); 25] = [
     (
         "generated::orient2d",
         include_str!("../../geom-num/src/generated/orient2d.rs"),
@@ -181,6 +184,14 @@ const GENERATED_PARTS: [(&str, &str); 23] = [
     (
         "generated::rational_orient",
         include_str!("../../geom-num/src/generated/rational_orient.rs"),
+    ),
+    (
+        "generated::ellipse_side",
+        include_str!("../../geom-num/src/generated/ellipse_side.rs"),
+    ),
+    (
+        "generated::ellipse_line",
+        include_str!("../../geom-num/src/generated/ellipse_line.rs"),
     ),
     (
         "generated::round_grid",
@@ -553,6 +564,13 @@ const OTHER_CRATES: &[(&str, &[(&str, &str)])] = &[
         ],
     ),
     (
+        "geom_topo",
+        &[
+            ("column", include_str!("../../geom-topo/src/column.rs")),
+            ("builder", include_str!("../../geom-topo/src/builder.rs")),
+        ],
+    ),
+    (
         "geom_nurbs",
         &[
             ("curve", include_str!("../../geom-nurbs/src/curve.rs")),
@@ -576,6 +594,10 @@ const OTHER_CRATES: &[(&str, &[(&str, &str)])] = &[
     (
         "geom_surface",
         &[("param", include_str!("../../geom-surface/src/param.rs"))],
+    ),
+    (
+        "geom_run",
+        &[("exec", include_str!("../../geom-run/src/exec.rs"))],
     ),
 ];
 
@@ -1007,7 +1029,9 @@ fn every_action_is_pinned_to_the_commit_kernel_yml_runs() {
     let uses = |text: &'static str| -> Vec<&'static str> {
         text.lines()
             .map(|line| line.trim().trim_start_matches("- "))
-            .filter(|line| line.starts_with("uses: "))
+            // A workflow of this repository at the same commit (`uses: ./.github/workflows/...`,
+            // the job `cheap`) is no action to pin.
+            .filter(|line| line.starts_with("uses: ") && !line.starts_with("uses: ./"))
             .collect()
     };
     let kernel = uses(KERNEL_WORKFLOW);

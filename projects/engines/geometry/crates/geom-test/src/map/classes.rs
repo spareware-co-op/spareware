@@ -281,7 +281,7 @@ mod tests {
             ("MIT", Class::Allowed),
             ("MIT OR Apache-2.0", Class::Allowed),
             ("Apache-2.0 WITH LLVM-exception", Class::Allowed),
-            ("MPL-2.0 AND BSD-3-Clause", Class::Allowed),
+            ("Apache-2.0 AND BSD-3-Clause", Class::Allowed),
             ("MIT OR GPL-2.0-only", Class::Allowed),
             ("public domain", Class::Readable),
             ("CC-BY-4.0", Class::Readable),
