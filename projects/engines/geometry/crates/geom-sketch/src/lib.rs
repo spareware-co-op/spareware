@@ -27,6 +27,7 @@
 //!
 //! - [`plane`]: sketch planes, their maps into 3D and the Gram metric (piece G216).
 //! - [`model`]: entities, variables and constraints, in authoring order (piece G217).
+//! - [`certify`]: chained Krawczyk certificates, block by block in the plan's order (piece G227).
 //! - [`check`]: the checks after a commit: root choices decided again and every bounded constraint
 //!   held to an interval bound under the fit ceiling (piece G226).
 //! - [`commit`]: the commit plan, from a solved sketch to stored geometry with every declared
@@ -49,6 +50,7 @@
 #![forbid(unsafe_code)]
 
 pub mod author;
+pub mod certify;
 pub mod check;
 pub mod commit;
 pub mod diagnose;

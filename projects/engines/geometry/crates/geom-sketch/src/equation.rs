@@ -814,6 +814,19 @@ pub(crate) fn inputs_of(
     })
 }
 
+/// One rule's residuals and their derivatives over a box (piece G227): the interval Jacobian that
+/// Krawczyk's test needs.
+#[derive(Clone, Debug, PartialEq)]
+pub struct Jet {
+    /// The row of the rule's first residual.
+    pub first: usize,
+    /// The residuals over the box, in the rule's order.
+    pub residuals: Vec<Interval>,
+    /// The derivatives over the box: the variable, which of the rule's residuals, and the enclosure.
+    /// A variable that comes twice in one rule, as a shared corner does, is summed.
+    pub partials: Vec<(usize, usize, Interval)>,
+}
+
 /// Every rule's residuals enclosed, in authoring order, by the rule's id; `None` for a rule whose
 /// arithmetic the intervals refuse.
 pub type Enclosed = Vec<(ItemId, Option<Vec<Interval>>)>;
@@ -1105,6 +1118,15 @@ impl Assembly {
             .partition_point(|rule| rule.first <= row)
             .checked_sub(1)
             .ok_or(SketchError::Internal)
+    }
+
+    /// The row of rule `rule`'s first residual.
+    ///
+    /// # Errors
+    ///
+    /// [`SketchError::Internal`] for a rule it does not have.
+    pub(crate) fn first_row(&self, rule: usize) -> Result<usize, SketchError> {
+        Ok(self.rows.get(rule).ok_or(SketchError::Internal)?.first)
     }
 
     /// The name of rule `rule`.
@@ -1460,6 +1482,99 @@ impl Assembly {
         dispatch(row, &mut Evaluate { assembly: self, x })
     }
 
+    /// How many rules the assembly has.
+    #[must_use]
+    pub fn rule_count(&self) -> usize {
+        self.rows.len()
+    }
+
+    /// Rule `rule`'s residuals and their derivatives over the box `held` (one interval per
+    /// variable): the natural interval extension of the one text the kind is written in, on dual
+    /// intervals, so the derivatives are enclosures of the true ones over the whole box. The
+    /// derivatives are with respect to the columns in `unknown` (increasing) alone: the dual numbers
+    /// are as wide as the rule has unknowns among its inputs, up to four, and a rule with more is as
+    /// wide as its inputs.
+    ///
+    /// # Errors
+    ///
+    /// [`SketchError::Internal`] for a rule it does not have or `held` of another length than the
+    /// variables; [`SketchError::Numeric`] where the interval arithmetic refuses.
+    pub fn jet(
+        &self,
+        rule: usize,
+        held: &[Interval],
+        unknown: &[usize],
+    ) -> Result<Jet, SketchError> {
+        if held.len() != self.variables.len() {
+            return Err(SketchError::Internal);
+        }
+        let row = *self.rows.get(rule).ok_or(SketchError::Internal)?;
+        let mut out = None;
+        dispatch(
+            &row,
+            &mut Jetter {
+                assembly: self,
+                held,
+                unknown,
+                out: &mut out,
+            },
+        )?;
+        out.ok_or(SketchError::Internal)
+    }
+
+    /// One rule's residuals over a box, without derivatives (piece G227): [`Assembly::jet`]'s
+    /// values at a fraction of its cost.
+    ///
+    /// # Errors
+    ///
+    /// [`SketchError::Internal`] for `held` of another length than the variables; what the
+    /// intervals refuse.
+    pub fn rule_values(
+        &self,
+        rule: usize,
+        held: &[Interval],
+    ) -> Result<Vec<Interval>, SketchError> {
+        if held.len() != self.variables.len() {
+            return Err(SketchError::Internal);
+        }
+        let row = *self.rows.get(rule).ok_or(SketchError::Internal)?;
+        let mut out = Vec::new();
+        dispatch(
+            &row,
+            &mut Enclose {
+                assembly: self,
+                held,
+                out: &mut out,
+            },
+        )?;
+        Ok(out)
+    }
+
+    /// One rule's derivatives at the point `x` in doubles: the variable, which of the rule's
+    /// residuals, and the slope, summed where a variable comes twice in a rule. Plain doubles, not
+    /// enclosures: for a preconditioner, which is only ever an approximation (piece G227).
+    ///
+    /// # Errors
+    ///
+    /// [`SketchError::Internal`] for `x` of another length than the variables; what the arithmetic
+    /// refuses.
+    pub fn slopes(&self, rule: usize, x: &[f64]) -> Result<Vec<(usize, usize, f64)>, SketchError> {
+        if x.len() != self.variables.len() {
+            return Err(SketchError::Internal);
+        }
+        let row = *self.rows.get(rule).ok_or(SketchError::Internal)?;
+        let mut out = Vec::new();
+        dispatch(
+            &row,
+            &mut Sloper {
+                assembly: self,
+                x,
+                out: &mut out,
+            },
+        )?;
+        Ok(out)
+    }
+
     /// Every rule's residuals over a box: the natural interval extension of the one text each kind
     /// is written in, at `held` (one interval per variable). Each rule's id is given with its
     /// residuals, in authoring order, so a bound on a stored geometry is one call (piece G226).
@@ -1549,6 +1664,156 @@ impl Visit for Enclose<'_> {
             .try_reserve(E)
             .map_err(|_| SketchError::OutOfMemory)?;
         self.out.extend(result);
+        Ok(())
+    }
+}
+
+/// Takes a rule's residuals and their derivatives over `held`, with respect to the variables in
+/// `unknown` alone.
+struct Jetter<'a> {
+    assembly: &'a Assembly,
+    held: &'a [Interval],
+    /// The columns to differentiate by, in increasing order.
+    unknown: &'a [usize],
+    out: &'a mut Option<Jet>,
+}
+
+impl Jetter<'_> {
+    /// The jet of one rule with `K` lanes, one for each of its inputs that is an unknown. The
+    /// other inputs are intervals with no derivative, so a rule of ten inputs and three unknowns
+    /// runs on dual numbers three wide.
+    fn lanes<R: Residual<N, E>, const N: usize, const E: usize, const K: usize>(
+        &mut self,
+        kind: &R,
+        row: &Row,
+        list: &[Slot; N],
+    ) -> Result<(), SketchError> {
+        let zero = Interval::point(0.0)?;
+        let one = Interval::point(1.0)?;
+        let mut seeds = [Dual::new(zero, [zero; K]); N];
+        // The variable each lane differentiates by.
+        let mut owner = [0_usize; K];
+        let mut lane = 0_usize;
+        for (seed, slot) in seeds.iter_mut().zip(list) {
+            let mut partials = [zero; K];
+            let value = match *slot {
+                Slot::Constant(c) => Interval::point(c)?,
+                Slot::Variable(i) => {
+                    if self.unknown.binary_search(&i).is_ok() {
+                        if let Some(unit) = partials.get_mut(lane) {
+                            *unit = one;
+                        }
+                        if let Some(own) = owner.get_mut(lane) {
+                            *own = i;
+                        }
+                        lane = lane.saturating_add(1);
+                    }
+                    *self.held.get(i).ok_or(SketchError::Internal)?
+                }
+            };
+            *seed = Dual::new(value, partials);
+        }
+        let result = kind.residuals(seeds)?;
+        let mut jet = Jet {
+            first: row.first,
+            residuals: Vec::new(),
+            partials: Vec::new(),
+        };
+        jet.residuals
+            .try_reserve_exact(E)
+            .map_err(|_| SketchError::OutOfMemory)?;
+        for (e, out) in result.iter().enumerate() {
+            jet.residuals.push(out.value());
+            for (partial, &v) in out.partials().iter().zip(&owner).take(lane) {
+                if let Some((_, _, sum)) =
+                    jet.partials.iter_mut().find(|(w, f, _)| *w == v && *f == e)
+                {
+                    *sum = sum.add(*partial)?;
+                } else {
+                    jet.partials
+                        .try_reserve(1)
+                        .map_err(|_| SketchError::OutOfMemory)?;
+                    jet.partials.push((v, e, *partial));
+                }
+            }
+        }
+        *self.out = Some(jet);
+        Ok(())
+    }
+}
+
+impl Visit for Jetter<'_> {
+    fn go<R: Residual<N, E>, const N: usize, const E: usize>(
+        &mut self,
+        kind: &R,
+        row: &Row,
+    ) -> Result<(), SketchError> {
+        let list: &[Slot; N] = self.assembly.list_of(row)?;
+        let mut count = 0_usize;
+        for slot in list {
+            if let Slot::Variable(i) = *slot
+                && self.unknown.binary_search(&i).is_ok()
+            {
+                count = count.saturating_add(1);
+            }
+        }
+        // Few lanes are the usual case; any more run as wide as the rule is.
+        match count {
+            0 => self.lanes::<R, N, E, 0>(kind, row, list),
+            1 => self.lanes::<R, N, E, 1>(kind, row, list),
+            2 => self.lanes::<R, N, E, 2>(kind, row, list),
+            3 => self.lanes::<R, N, E, 3>(kind, row, list),
+            4 => self.lanes::<R, N, E, 4>(kind, row, list),
+            _ => self.lanes::<R, N, E, N>(kind, row, list),
+        }
+    }
+}
+
+/// Takes a rule's derivatives at a point, in doubles.
+struct Sloper<'a> {
+    assembly: &'a Assembly,
+    x: &'a [f64],
+    out: &'a mut Vec<(usize, usize, f64)>,
+}
+
+impl Visit for Sloper<'_> {
+    fn go<R: Residual<N, E>, const N: usize, const E: usize>(
+        &mut self,
+        kind: &R,
+        row: &Row,
+    ) -> Result<(), SketchError> {
+        let list: &[Slot; N] = self.assembly.list_of(row)?;
+        let mut seeds = [Dual::new(Real::ZERO, [Real::ZERO; N]); N];
+        for (j, (seed, slot)) in seeds.iter_mut().zip(list).enumerate() {
+            let mut partials = [Real::ZERO; N];
+            let value = match *slot {
+                Slot::Constant(c) => Real::new(c)?,
+                Slot::Variable(i) => {
+                    if let Some(unit) = partials.get_mut(j) {
+                        *unit = Real::new(1.0)?;
+                    }
+                    Real::new(*self.x.get(i).ok_or(SketchError::Internal)?)?
+                }
+            };
+            *seed = Dual::new(value, partials);
+        }
+        let result = kind.residuals(seeds)?;
+        for (e, out) in result.iter().enumerate() {
+            for (partial, slot) in out.partials().iter().zip(list) {
+                if let Slot::Variable(v) = *slot {
+                    if let Some((_, _, sum)) =
+                        self.out.iter_mut().find(|(w, f, _)| *w == v && *f == e)
+                    {
+                        *sum += partial.get();
+                    } else {
+                        self.out
+                            .try_reserve(1)
+                            .map_err(|_| SketchError::OutOfMemory)?;
+                        self.out.push((v, e, partial.get()));
+                    }
+                }
+            }
+        }
         Ok(())
     }
 }
