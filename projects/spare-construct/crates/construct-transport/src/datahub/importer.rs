@@ -12,11 +12,19 @@ use serde_json::{Map, Value, json};
 /// nzta, at, user and ramm on and virtual off, with the project's own switches over them.
 pub fn ensure_data(p: &mut Project) {
     if !p.data.is_set() {
-        p.data = Maybe::Set(ProjectData { loaded: Maybe::Missing, msm: Maybe::Missing, controlled: Maybe::Missing, extra: Map::new() });
+        p.data = Maybe::Set(ProjectData {
+            loaded: Maybe::Missing,
+            msm: Maybe::Missing,
+            controlled: Maybe::Missing,
+            extra: Map::new(),
+        });
     }
     let d = p.data.get_mut().expect("just made");
     for k in ["counts", "crashes", "jt"] {
-        let falsy = matches!(d.extra.get(k), None | Some(Value::Null) | Some(Value::Bool(false)));
+        let falsy = matches!(
+            d.extra.get(k),
+            None | Some(Value::Null) | Some(Value::Bool(false))
+        );
         if falsy {
             d.extra.insert(k.to_string(), json!([]));
         }
@@ -25,7 +33,13 @@ pub fn ensure_data(p: &mut Project) {
         d.loaded = Maybe::Set(OrderedMap::new());
     }
     let mut use_ = Map::new();
-    for (k, v) in [("nzta", true), ("at", true), ("user", true), ("virtual", false), ("ramm", true)] {
+    for (k, v) in [
+        ("nzta", true),
+        ("at", true),
+        ("user", true),
+        ("virtual", false),
+        ("ramm", true),
+    ] {
         use_.insert(k.to_string(), json!(v));
     }
     if let Some(Value::Object(own)) = d.extra.get("use") {
@@ -90,7 +104,11 @@ pub fn import_csv(p: &mut Project, text: &str, ids: &mut dyn IdSource) -> Result
         match i {
             Some(i) => {
                 let v = cell(r, i);
-                if v.is_nan() || v == 0.0 { Value::Null } else { json_number(v) }
+                if v.is_nan() || v == 0.0 {
+                    Value::Null
+                } else {
+                    json_number(v)
+                }
             }
             None => Value::Null,
         }
@@ -128,13 +146,20 @@ pub fn import_csv(p: &mut Project, text: &str, ids: &mut dyn IdSource) -> Result
     let n = list.len();
     let d = p.data.get_mut().expect("ensured");
     let mut kept: Vec<Value> = match d.extra.get("counts") {
-        Some(Value::Array(a)) => a.iter().filter(|c| c.get("src").and_then(Value::as_str) != Some("user")).cloned().collect(),
+        Some(Value::Array(a)) => a
+            .iter()
+            .filter(|c| c.get("src").and_then(Value::as_str) != Some("user"))
+            .cloned()
+            .collect(),
         _ => Vec::new(),
     };
     kept.extend(list);
     d.extra.insert("counts".to_string(), Value::Array(kept));
     if let Some(l) = d.loaded.get_mut() {
-        l.insert("user".to_string(), json!({ "at": json_number(ids.now_ms()), "n": n }));
+        l.insert(
+            "user".to_string(),
+            json!({ "at": json_number(ids.now_ms()), "n": n }),
+        );
     }
     Ok(n)
 }

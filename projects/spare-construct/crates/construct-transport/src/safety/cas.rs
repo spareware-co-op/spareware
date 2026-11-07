@@ -158,10 +158,22 @@ pub fn cas_tuple(x: &JsonValue) -> Vec<Value> {
         }
     };
     // String(...)[0].toUpperCase(): the first UTF-16 unit
-    let first: String = sev_text.chars().next().map(|c| c.to_uppercase().collect()).unwrap_or_default();
-    let s = if "FSMN".contains(first.as_str()) && !first.is_empty() { first } else { "N".to_string() };
+    let first: String = sev_text
+        .chars()
+        .next()
+        .map(|c| c.to_uppercase().collect())
+        .unwrap_or_default();
+    let s = if "FSMN".contains(first.as_str()) && !first.is_empty() {
+        first
+    } else {
+        "N".to_string()
+    };
     let geom = x.get("geometry");
-    let coord = |k: &str| -> f64 { r7(geom.and_then(|g| g.get(k)).map_or(f64::NAN, JsonValue::to_number)) };
+    let coord = |k: &str| -> f64 {
+        r7(geom
+            .and_then(|g| g.get(k))
+            .map_or(f64::NAN, JsonValue::to_number))
+    };
     let locations: Vec<String> = ["crashLocation1", "crashLocation2"]
         .iter()
         .filter_map(|k| a.get(k))
@@ -198,7 +210,11 @@ pub fn cas_tuple(x: &JsonValue) -> Vec<Value> {
                     _ if missing => Value::Null,
                     Some(v) => {
                         let n = v.to_number();
-                        if n.is_finite() { crate::jsnum::json_number(n) } else { Value::Null }
+                        if n.is_finite() {
+                            crate::jsnum::json_number(n)
+                        } else {
+                            Value::Null
+                        }
                     }
                     None => Value::Null,
                 }

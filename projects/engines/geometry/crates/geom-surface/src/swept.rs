@@ -1041,6 +1041,33 @@ fn compatible_pair(
 /// The `ParamSurface` implementation of a swept kind, written once for the three.
 macro_rules! swept_surface {
     ($kind:ident, $variant:ident) => {
+        impl $kind {
+            /// The placement c + L·x the shape is moved by, (c, L) with L by rows: the identity
+            /// until a transform moves the surface.
+            #[must_use]
+            pub fn placement(&self) -> ([f64; 3], [[f64; 3]; 3]) {
+                (self.inner.place.c, self.inner.place.l)
+            }
+
+            /// The same shape placed by c + L·x instead (L by rows), as a transform leaves it:
+            /// what a stored surface is rebuilt from.
+            ///
+            /// # Errors
+            ///
+            /// [`CurveError::NotFinite`] for a value that is not finite.
+            pub fn placed(&self, c: [f64; 3], l: [[f64; 3]; 3]) -> Result<$kind, CurveError> {
+                if !c.iter().chain(l.iter().flatten()).all(|x| x.is_finite()) {
+                    return Err(CurveError::NotFinite);
+                }
+                Ok($kind {
+                    inner: Swept {
+                        place: Placement { c, l },
+                        ..self.inner.clone()
+                    },
+                })
+            }
+        }
+
         impl ParamSurface for $kind {
             fn domain(&self) -> ParamBox {
                 self.inner.domain
@@ -1219,6 +1246,22 @@ swept_surface!(Extrusion, Extrusion);
 swept_surface!(Ruled, Ruled);
 
 impl Revolution {
+    /// The profile, the axis direction and the frame, as [`Revolution::new`] took them.
+    ///
+    /// # Errors
+    ///
+    /// [`CurveError::Defect`] never: a revolution holds a revolution's shape.
+    pub fn shape(&self) -> Result<(&Trimmed<3>, [f64; 3], Frame<3>), CurveError> {
+        match &self.inner.shape {
+            Shape::Revolution {
+                profile,
+                axis,
+                frame,
+            } => Ok((profile, *axis, *frame)),
+            _ => Err(CurveError::Defect),
+        }
+    }
+
     /// The surface swept by `profile` turning about the axis through `axis` along the frame's
     /// normal, u in half-turns over `angles` (at most one turn), v the profile's parameter.
     ///
@@ -1254,6 +1297,18 @@ impl Revolution {
 }
 
 impl Extrusion {
+    /// The profile and the direction, as [`Extrusion::new`] took them.
+    ///
+    /// # Errors
+    ///
+    /// [`CurveError::Defect`] never: an extrusion holds an extrusion's shape.
+    pub fn shape(&self) -> Result<(&Trimmed<3>, [f64; 3]), CurveError> {
+        match &self.inner.shape {
+            Shape::Extrusion { profile, direction } => Ok((profile, *direction)),
+            _ => Err(CurveError::Defect),
+        }
+    }
+
     /// The surface swept by `profile` moving along `direction`, u the profile's parameter and v
     /// over `along`.
     ///
@@ -1278,6 +1333,39 @@ impl Extrusion {
 }
 
 impl Ruled {
+    /// The two profiles and σ, the sign of v: +1 from [`Ruled::new`], −1 once reversed in v.
+    ///
+    /// # Errors
+    ///
+    /// [`CurveError::Defect`] never: a ruled surface holds a ruled surface's shape.
+    pub fn shape(&self) -> Result<(&Trimmed<3>, &Trimmed<3>, f64), CurveError> {
+        match &self.inner.shape {
+            Shape::Ruled {
+                first,
+                second,
+                sigma,
+            } => Ok((first, second, *sigma)),
+            _ => Err(CurveError::Defect),
+        }
+    }
+
+    /// The same surface with σ = `sigma`, as reversing in v leaves it: what a stored ruled surface
+    /// is rebuilt from.
+    ///
+    /// # Errors
+    ///
+    /// [`CurveError::Degenerate`] unless σ is +1 or −1.
+    pub fn with_sigma(&self, sigma: f64) -> Result<Ruled, CurveError> {
+        if sigma != 1.0 && sigma != -1.0 {
+            return Err(CurveError::Degenerate);
+        }
+        let mut inner = self.inner.clone();
+        if let Shape::Ruled { sigma: s, .. } = &mut inner.shape {
+            *s = sigma;
+        }
+        Ok(Ruled { inner })
+    }
+
     /// The ruled surface from `first` (v = 0) to `second` (v = 1), on their one interval; v over
     /// `along` (usually [0, 1]).
     ///

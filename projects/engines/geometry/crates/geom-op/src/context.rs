@@ -31,6 +31,8 @@ use core::fmt;
 use geom_num::{GridStep, Steps};
 use geom_run::{Budget, Cancel};
 
+use crate::run::Tally;
+
 use crate::id::{OpId, OpPath};
 
 /// How exactly a result is asked for (chapters 10.1 and 23.6).
@@ -65,6 +67,7 @@ pub struct OpContext<'c> {
     budget: Budget,
     cancel: Option<&'c dyn Cancel>,
     precision: Precision,
+    tally: Option<&'c dyn Tally>,
 }
 
 impl<'c> OpContext<'c> {
@@ -77,6 +80,7 @@ impl<'c> OpContext<'c> {
             budget,
             cancel: None,
             precision: Precision::Final,
+            tally: None,
         }
     }
 
@@ -87,6 +91,21 @@ impl<'c> OpContext<'c> {
             cancel: Some(cancel),
             ..self
         }
+    }
+
+    /// The same context, reporting what each run of its operation charged to `tally`.
+    #[must_use]
+    pub fn with_tally(self, tally: &'c dyn Tally) -> Self {
+        Self {
+            tally: Some(tally),
+            ..self
+        }
+    }
+
+    /// Who hears what a run charged, if anyone.
+    #[must_use]
+    pub const fn tally(&self) -> Option<&'c dyn Tally> {
+        self.tally
     }
 
     /// The same context at `precision`.

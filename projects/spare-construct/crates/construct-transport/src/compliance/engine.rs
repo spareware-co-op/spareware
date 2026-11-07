@@ -22,17 +22,28 @@ use serde::de::DeserializeOwned;
 
 /// A typed value out of loose JSON (panics when the JSON is not what the type reads, which a project the prototype saved always is).
 pub fn typed<T: DeserializeOwned>(v: &V) -> T {
-    serde_json::from_str(&v.stringify()).unwrap_or_else(|e| panic!("compliance: cannot read {} as {}: {e}", short(v), std::any::type_name::<T>()))
+    serde_json::from_str(&v.stringify()).unwrap_or_else(|e| {
+        panic!(
+            "compliance: cannot read {} as {}: {e}",
+            short(v),
+            std::any::type_name::<T>()
+        )
+    })
 }
 
 fn short(v: &V) -> String {
     let t = v.stringify();
-    if t.chars().count() > 80 { t.chars().take(80).collect::<String>() + "..." } else { t }
+    if t.chars().count() > 80 {
+        t.chars().take(80).collect::<String>() + "..."
+    } else {
+        t
+    }
 }
 
 /// Loose JSON out of a typed value (numbers that are not finite come out as the text "NaN", "Infinity" or "-Infinity", as results hold them).
 pub fn loose<T: Serialize>(t: &T) -> V {
-    V::parse(&serde_json::to_string(t).expect("a result serialises")).expect("serialised JSON parses")
+    V::parse(&serde_json::to_string(t).expect("a result serialises"))
+        .expect("serialised JSON parses")
 }
 
 /// The typed project (`Store.P`).
@@ -47,7 +58,11 @@ pub fn scenario(sc: &V) -> Scenario {
 
 /// The scenario's results by period, typed.
 pub fn results_of(sc: &V) -> Results {
-    if sc.g("res").is_obj() { typed(sc.g("res")) } else { Results::new() }
+    if sc.g("res").is_obj() {
+        typed(sc.g("res"))
+    } else {
+        Results::new()
+    }
 }
 
 /// One result value, typed.
@@ -100,8 +115,15 @@ pub fn trip_ends(p: &V, z: &V, period: &str, sc: &V) -> (f64, f64) {
 pub fn extent_test(sc: &V, without: &V, with: &V, sc_without: Option<&V>) -> V {
     let s = scenario(sc);
     let sw = sc_without.map(scenario);
-    let (a, b): (Option<Res>, Option<Res>) = (without.t().then(|| res_typed(without)), with.t().then(|| res_typed(with)));
-    let opts = crate::analysis::ExtentOpts { floor: None, decade: None, sc_without: sw.as_ref() };
+    let (a, b): (Option<Res>, Option<Res>) = (
+        without.t().then(|| res_typed(without)),
+        with.t().then(|| res_typed(with)),
+    );
+    let opts = crate::analysis::ExtentOpts {
+        floor: None,
+        decade: None,
+        sc_without: sw.as_ref(),
+    };
     crate::analysis::extent_test(&s, a.as_ref(), b.as_ref(), opts).map_or(V::Null, |x| loose(&x))
 }
 
@@ -109,7 +131,15 @@ pub fn extent_test(sc: &V, without: &V, with: &V, sc_without: Option<&V>) -> V {
 pub fn econ(p: &V, base: &V, opt: &V, period: &str) -> V {
     let proj = project(p);
     let (bs, os) = (scenario(base), scenario(opt));
-    econ::econ(&proj.settings, &bs, &results_of(base), &os, &results_of(opt), period).map_or(V::Null, |e| loose(&e))
+    econ::econ(
+        &proj.settings,
+        &bs,
+        &results_of(base),
+        &os,
+        &results_of(opt),
+        period,
+    )
+    .map_or(V::Null, |e| loose(&e))
 }
 
 /// `Engine.capital(sc)`: capital cost of the proposed roads and upgraded junctions (NZ$m), as the engine reports it.
@@ -167,7 +197,10 @@ pub fn scenario_copy_without_links(sc: &V, drop: &std::collections::HashSet<Stri
     }
     let src = scenario(sc);
     let keep = |l: &Link| !drop.contains(&l.id);
-    let f = scenarios::CopyFilter { links: Some(&keep), zones: None };
+    let f = scenarios::CopyFilter {
+        links: Some(&keep),
+        zones: None,
+    };
     loose(&scenarios::copy(&src, &mut Ids(0), &f))
 }
 
@@ -191,7 +224,12 @@ pub fn link_unfunded(l: &V) -> bool {
 
 /// `Register.table(P)`: the committed-development register with each row's inclusion and reason.
 pub fn register_table(p: &V) -> V {
-    V::Array(register::table(&project(p)).iter().map(V::from_value).collect())
+    V::Array(
+        register::table(&project(p))
+            .iter()
+            .map(V::from_value)
+            .collect(),
+    )
 }
 
 /// `Register.inBaseline(row)`: `{ included, reason }`.
@@ -225,7 +263,13 @@ pub fn sidra_export(p: &V, sc: &V, res: &[&V]) -> V {
     let s = scenario(sc);
     let typed_res: Vec<Res> = res.iter().map(|r| res_typed(r)).collect();
     let refs: Vec<&Res> = typed_res.iter().collect();
-    let e = turns::sidra_export(Some(&s), &refs, &proj.settings, None, &turns::SidraOpts::default());
+    let e = turns::sidra_export(
+        Some(&s),
+        &refs,
+        &proj.settings,
+        None,
+        &turns::SidraOpts::default(),
+    );
     super::jv::jobj! { "ok" => e.ok, "why" => e.why, "csv" => e.csv }
 }
 

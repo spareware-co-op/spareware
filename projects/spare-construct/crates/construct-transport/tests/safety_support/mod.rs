@@ -9,7 +9,10 @@ use serde_json::Value;
 
 /// The text of a file under tools/transport-truth/fixtures/data.
 pub fn data_text(file: &str) -> String {
-    let p = crate::support::truth_dir().join("fixtures").join("data").join(file);
+    let p = crate::support::truth_dir()
+        .join("fixtures")
+        .join("data")
+        .join(file);
     std::fs::read_to_string(&p).unwrap_or_else(|e| panic!("cannot read {}: {e}", p.display()))
 }
 
@@ -29,22 +32,52 @@ pub fn base_project(name: &str) -> Project {
 
 /// A box recorded as { south, west, north, east }.
 pub fn bounds_of(v: &Value) -> Bounds {
-    Bounds { south: v["south"].as_f64().unwrap(), west: v["west"].as_f64().unwrap(), north: v["north"].as_f64().unwrap(), east: v["east"].as_f64().unwrap() }
+    Bounds {
+        south: v["south"].as_f64().unwrap(),
+        west: v["west"].as_f64().unwrap(),
+        north: v["north"].as_f64().unwrap(),
+        east: v["east"].as_f64().unwrap(),
+    }
 }
 
 /// Runs a recorded load against a project: every request must be the recorded one (same address), and is answered with the
 /// features the recorded run's server sent. Gives the load's messages and status lines.
 pub fn replay_load(p: &mut Project, project: &str, rec: &Value) -> (Vec<String>, Vec<String>) {
-    let which: Vec<&str> = rec["which"].as_array().unwrap().iter().map(|w| w.as_str().unwrap()).collect();
-    let opts = LoadOptions { cas_years: rec["opts"]["casYears"].as_f64(), timeout_ms: None };
-    let mut load = LoadAll::new(bounds_of(&rec["bounds"]), &which, &opts, rec["now"].as_f64().unwrap());
+    let which: Vec<&str> = rec["which"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|w| w.as_str().unwrap())
+        .collect();
+    let opts = LoadOptions {
+        cas_years: rec["opts"]["casYears"].as_f64(),
+        timeout_ms: None,
+    };
+    let mut load = LoadAll::new(
+        bounds_of(&rec["bounds"]),
+        &which,
+        &opts,
+        rec["now"].as_f64().unwrap(),
+    );
     let cas = features_of(&format!("cas-{project}.json"));
     let fc = features_of(&format!("fc-{project}.json"));
     for (k, exp) in rec["requests"].as_array().unwrap().iter().enumerate() {
-        let req = load.next_request(p).expect("no cancel").unwrap_or_else(|| panic!("request {k} is missing"));
+        let req = load
+            .next_request(p)
+            .expect("no cancel")
+            .unwrap_or_else(|| panic!("request {k} is missing"));
         assert_eq!(req.url, exp["url"].as_str().unwrap(), "request {k}");
-        let layer = if req.url.contains("CAS_Data_Public") { &cas } else { &fc };
-        let feats: Vec<JsonValue> = exp["idx"].as_array().unwrap().iter().map(|i| layer[i.as_u64().unwrap() as usize].clone()).collect();
+        let layer = if req.url.contains("CAS_Data_Public") {
+            &cas
+        } else {
+            &fc
+        };
+        let feats: Vec<JsonValue> = exp["idx"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|i| layer[i.as_u64().unwrap() as usize].clone())
+            .collect();
         let mut ans = JsonValue::object();
         ans.set("features", JsonValue::Array(feats));
         if exp["exceeded"].as_bool() == Some(true) {
@@ -52,6 +85,9 @@ pub fn replay_load(p: &mut Project, project: &str, rec: &Value) -> (Vec<String>,
         }
         load.answer(p, Ok(ans)).expect("answer");
     }
-    assert!(load.next_request(p).expect("no cancel").is_none(), "more requests than recorded");
+    assert!(
+        load.next_request(p).expect("no cancel").is_none(),
+        "more requests than recorded"
+    );
     (load.messages().to_vec(), load.statuses().to_vec())
 }

@@ -7,26 +7,30 @@
 //! banned movements. Everything is proposed as rows for the user to tick; the apply functions change the scenario.
 
 use super::arcgis::{Bounds, FetchFailure, HttpRequest};
-use super::flow::{env_params, form_body, host_text, resolve_fields, Answer, ArcQuery, Flow, LayerMeta, MetaCache};
+use super::flow::{
+    Answer, ArcQuery, Flow, LayerMeta, MetaCache, env_params, form_body, host_text, resolve_fields,
+};
+use super::geo::live_links;
 use super::jsregex::Regex;
 use super::load::strip_site_prefix;
-use super::sources::{CONTROL_PED_CYCLE, CONTROL_SIGN_M, CONTROL_SITE_M, CONTROL_TAIL_M, SRC_CONTROLLED};
+use super::sources::{
+    CONTROL_PED_CYCLE, CONTROL_SIGN_M, CONTROL_SITE_M, CONTROL_TAIL_M, SRC_CONTROLLED,
+};
 use super::vintage::{feeds_of, stamp};
-use super::geo::live_links;
 use crate::calibrate::junction_name;
 use crate::datahub::norm;
+use crate::edit::collate::locale_compare_f64;
 use crate::edit::ids::iso_string;
 use crate::edit::json::JsonValue;
 use crate::edit::net::{nearest_link, split_link};
-use crate::edit::{sites, IdSource};
+use crate::edit::{IdSource, sites};
 use crate::graph::js_sort_by;
-use crate::edit::collate::locale_compare_f64;
 use crate::importers::OVERPASS;
-use crate::jsnum::{json_number, math_max, to_fixed, value_to_js_string, value_truthy, Maybe};
+use crate::jsnum::{Maybe, json_number, math_max, to_fixed, value_to_js_string, value_truthy};
 use crate::project::{Project, Scenario};
-use crate::util::{self, dist, flat, LatLng};
+use crate::util::{self, LatLng, dist, flat};
 use serde::{Deserialize, Serialize};
-use serde_json::{json, Map, Value};
+use serde_json::{Map, Value, json};
 use std::collections::{HashMap, HashSet};
 
 /// One AT controlled intersection from the controlled intersections layer.
@@ -82,7 +86,12 @@ pub struct ControlData {
 
 fn geometry_xy(x: &JsonValue) -> (f64, f64) {
     let g = x.get("geometry");
-    let n = |k: &str| crate::util::r7(g.and_then(|g| g.get(k)).map_or(f64::NAN, JsonValue::to_number));
+    let n = |k: &str| {
+        crate::util::r7(
+            g.and_then(|g| g.get(k))
+                .map_or(f64::NAN, JsonValue::to_number),
+        )
+    };
     (n("y"), n("x"))
 }
 
@@ -94,7 +103,8 @@ fn text_or(v: Option<&JsonValue>, d: &str) -> String {
 }
 
 fn nn(v: Option<&JsonValue>) -> Value {
-    v.filter(|v| !v.is_null()).map_or(Value::Null, JsonValue::to_value)
+    v.filter(|v| !v.is_null())
+        .map_or(Value::Null, JsonValue::to_value)
 }
 
 /// The sites and signs of the download's two layers.
@@ -118,8 +128,13 @@ pub fn parse_control(ctl: &[JsonValue], signs: &[JsonValue]) -> ControlData {
                 id,
                 no: nn(a.get("intersection_no")),
                 name: strip_site_prefix(&text_or(a.get("intersection_desc"), "")),
-                controlled: a.get("controlled").is_some_and(|v| v.strict_eq(&JsonValue::String("Yes".to_string()))),
-                ped: a.get("ped_crossing_flg").is_some_and(|v| v.strict_eq(&JsonValue::String("Yes".to_string()))) || pedestrian.test(&kind),
+                controlled: a
+                    .get("controlled")
+                    .is_some_and(|v| v.strict_eq(&JsonValue::String("Yes".to_string()))),
+                ped: a
+                    .get("ped_crossing_flg")
+                    .is_some_and(|v| v.strict_eq(&JsonValue::String("Yes".to_string())))
+                    || pedestrian.test(&kind),
                 kind,
                 lat,
                 lng,
@@ -128,7 +143,13 @@ pub fn parse_control(ctl: &[JsonValue], signs: &[JsonValue]) -> ControlData {
         .collect();
     let signs = signs
         .iter()
-        .filter(|x| x.get("geometry").is_some_and(JsonValue::truthy) && sign_ok.test(&text_or(x.get("attributes").and_then(|a| a.get("sign_type")), "")))
+        .filter(|x| {
+            x.get("geometry").is_some_and(JsonValue::truthy)
+                && sign_ok.test(&text_or(
+                    x.get("attributes").and_then(|a| a.get("sign_type")),
+                    "",
+                ))
+        })
         .map(|x| {
             let a = x.get("attributes").filter(|a| a.truthy()).unwrap_or(&empty);
             let (lat, lng) = geometry_xy(x);
@@ -136,7 +157,9 @@ pub fn parse_control(ctl: &[JsonValue], signs: &[JsonValue]) -> ControlData {
                 Some(v) if !v.is_null() => v.to_value(),
                 _ => nn(a.get("OBJECTID")),
             };
-            let st = a.get("sign_type").map_or_else(|| "undefined".to_string(), JsonValue::js_string);
+            let st = a
+                .get("sign_type")
+                .map_or_else(|| "undefined".to_string(), JsonValue::js_string);
             ControlSign {
                 id,
                 kind: space.replace(&st, |_, _| " ".to_string()).to_uppercase(),
@@ -183,7 +206,10 @@ impl ControlLoad {
         }
     }
     fn query_for(&self, url: &str, where_: &str, fields: Vec<String>) -> ArcQuery {
-        let mut p: Vec<(String, String)> = vec![("where".into(), where_.to_string()), ("outFields".into(), fields.join(","))];
+        let mut p: Vec<(String, String)> = vec![
+            ("where".into(), where_.to_string()),
+            ("outFields".into(), fields.join(",")),
+        ];
         p.extend(env_params(&self.bounds));
         p.push(("orderByFields".into(), "OBJECTID".into()));
         ArcQuery::new(url, p, 40, self.timeout_ms)
@@ -206,8 +232,20 @@ impl Flow for ControlLoad {
                 ControlStage::MetaSigns => match self.meta_s.next_request() {
                     Some(r) => return Some(r),
                     None => {
-                        let cf = resolve_fields(self.meta_c.meta(), &["OBJECTID", "intersection_id", "intersection_no", "intersection_desc", "intersection_type", "controlled", "ped_crossing_flg"]);
-                        self.query = Some(self.query_for(SRC_CONTROLLED.url, "controlled='Yes'", cf));
+                        let cf = resolve_fields(
+                            self.meta_c.meta(),
+                            &[
+                                "OBJECTID",
+                                "intersection_id",
+                                "intersection_no",
+                                "intersection_desc",
+                                "intersection_type",
+                                "controlled",
+                                "ped_crossing_flg",
+                            ],
+                        );
+                        self.query =
+                            Some(self.query_for(SRC_CONTROLLED.url, "controlled='Yes'", cf));
                         self.stage = ControlStage::Controlled;
                     }
                 },
@@ -228,7 +266,18 @@ impl Flow for ControlLoad {
             }
             ControlStage::MetaSigns => {
                 let _ = self.meta_s.answer(a);
-                let cf = resolve_fields(self.meta_c.meta(), &["OBJECTID", "intersection_id", "intersection_no", "intersection_desc", "intersection_type", "controlled", "ped_crossing_flg"]);
+                let cf = resolve_fields(
+                    self.meta_c.meta(),
+                    &[
+                        "OBJECTID",
+                        "intersection_id",
+                        "intersection_no",
+                        "intersection_desc",
+                        "intersection_type",
+                        "controlled",
+                        "ped_crossing_flg",
+                    ],
+                );
                 self.query = Some(self.query_for(SRC_CONTROLLED.url, "controlled='Yes'", cf));
                 self.stage = ControlStage::Controlled;
                 Ok(())
@@ -238,8 +287,22 @@ impl Flow for ControlLoad {
                 q.answer(a)?;
                 if q.is_done() {
                     self.controlled = self.query.take().expect("query").into_features();
-                    let sf = resolve_fields(self.meta_s.meta(), &["OBJECTID", "sign_id", "sign_type", "side", "road_name", "legend_note"]);
-                    self.query = Some(self.query_for(super::sources::SRC_SIGNS.url, "sign_type IN ('RG 5','RG 6','RG 6R')", sf));
+                    let sf = resolve_fields(
+                        self.meta_s.meta(),
+                        &[
+                            "OBJECTID",
+                            "sign_id",
+                            "sign_type",
+                            "side",
+                            "road_name",
+                            "legend_note",
+                        ],
+                    );
+                    self.query = Some(self.query_for(
+                        super::sources::SRC_SIGNS.url,
+                        "sign_type IN ('RG 5','RG 6','RG 6R')",
+                        sf,
+                    ));
                     self.stage = ControlStage::Signs;
                 }
                 Ok(())
@@ -272,7 +335,10 @@ pub fn apply_control_load(p: &mut Project, data: &ControlData, now_ms: f64) {
             json!({ "at": json_number(now_ms), "n": data.sites.len(), "source": s.name, "url": s.url, "licence": s.licence }),
         );
     }
-    feeds_of(p).insert("control".to_string(), json!({ "at": iso_string(now_ms), "sites": data.sites.len(), "signs": data.signs.len() }));
+    feeds_of(p).insert(
+        "control".to_string(),
+        json!({ "at": iso_string(now_ms), "sites": data.sites.len(), "signs": data.signs.len() }),
+    );
     let mut e1 = Map::new();
     e1.insert("n".into(), json!(data.sites.len()));
     e1.insert("note".into(), json!(s.note.unwrap_or("")));
@@ -333,7 +399,10 @@ impl Plan {
         self.entries.iter().find(|(k, _)| k == id).map(|(_, v)| v)
     }
     fn get_mut(&mut self, id: &str) -> Option<&mut Row> {
-        self.entries.iter_mut().find(|(k, _)| k == id).map(|(_, v)| v)
+        self.entries
+            .iter_mut()
+            .find(|(k, _)| k == id)
+            .map(|(_, v)| v)
     }
     fn set(&mut self, id: &str, v: Row) {
         match self.entries.iter_mut().find(|(k, _)| k == id) {
@@ -344,7 +413,10 @@ impl Plan {
 }
 
 fn ranks_at_least(a: Option<&Value>, b: Option<&str>) -> bool {
-    match (a.and_then(Value::as_str).and_then(control_rank), b.and_then(control_rank)) {
+    match (
+        a.and_then(Value::as_str).and_then(control_rank),
+        b.and_then(control_rank),
+    ) {
         (Some(x), Some(y)) => x >= y,
         _ => false,
     }
@@ -401,7 +473,12 @@ fn add(plan: &mut Plan, node: &str, to: Option<&str>, src_text: &str, why: Strin
 /// road. Signs within 25 m belong to the approach whose last 30 m is nearest with the sign on the driver's left. Each row says
 /// what changes, why and from which source; rows the user changed themselves are marked `user`.
 pub fn control_proposals(sc: &Scenario, data: Option<&ControlData>) -> ControlProposals {
-    let Some(data) = data else { return ControlProposals { rows: Vec::new(), unmatched: Vec::new() } };
+    let Some(data) = data else {
+        return ControlProposals {
+            rows: Vec::new(),
+            unmatched: Vec::new(),
+        };
+    };
     let mut at: HashMap<&str, Vec<&crate::project::Link>> = HashMap::new();
     let mut ring: HashSet<&str> = HashSet::new();
     for l in live_links(sc) {
@@ -413,11 +490,18 @@ pub fn control_proposals(sc: &Scenario, data: Option<&ControlData>) -> ControlPr
             ring.insert(l.b.as_str());
         }
     }
-    let nodes: Vec<&crate::project::Node> = sc.nodes.values().filter(|n| at.contains_key(n.id.as_str())).collect();
+    let nodes: Vec<&crate::project::Node> = sc
+        .nodes
+        .values()
+        .filter(|n| at.contains_key(n.id.as_str()))
+        .collect();
     let deg = |n: &crate::project::Node| at.get(n.id.as_str()).map_or(0, Vec::len);
     let junction = |n: &crate::project::Node| deg(n) >= 3 || ring.contains(n.id.as_str());
     let ll = |n: &crate::project::Node| -> LatLng { [n.lat.num(), n.lng.num()] };
-    let near = |p: &LatLng, filt: &dyn Fn(&crate::project::Node) -> bool, max_m: f64| -> Option<(&crate::project::Node, f64)> {
+    let near = |p: &LatLng,
+                filt: &dyn Fn(&crate::project::Node) -> bool,
+                max_m: f64|
+     -> Option<(&crate::project::Node, f64)> {
         let mut best: Option<&crate::project::Node> = None;
         let mut bd = max_m;
         for n in &nodes {
@@ -432,21 +516,42 @@ pub fn control_proposals(sc: &Scenario, data: Option<&ControlData>) -> ControlPr
         }
         best.map(|n| (n, bd))
     };
-    let mut plan = Plan { entries: Vec::new() };
+    let mut plan = Plan {
+        entries: Vec::new(),
+    };
     let mut unmatched: Vec<Row> = Vec::new();
     let site_json = |s: &ControlSite| serde_json::to_value(s).expect("site");
     for s in &data.sites {
         let p: LatLng = [s.lat, s.lng];
         if s.ped {
-            let m = near(&p, &|n| deg(n) == 2 && !ring.contains(n.id.as_str()), CONTROL_SITE_M);
+            let m = near(
+                &p,
+                &|n| deg(n) == 2 && !ring.contains(n.id.as_str()),
+                CONTROL_SITE_M,
+            );
             if let Some((n, d)) = m {
                 let mut ex = Map::new();
                 ex.insert("atSiteNo".into(), s.no.clone());
                 ex.insert("d".into(), json_number(d));
                 ex.insert("ped".into(), json!(true));
-                add(&mut plan, &n.id, Some("signals"), SRC_CONTROLLED.name, format!("Signalised pedestrian crossing, AT site {}", value_to_js_string(&s.no)), ex);
+                add(
+                    &mut plan,
+                    &n.id,
+                    Some("signals"),
+                    SRC_CONTROLLED.name,
+                    format!(
+                        "Signalised pedestrian crossing, AT site {}",
+                        value_to_js_string(&s.no)
+                    ),
+                    ex,
+                );
             } else {
-                let lk = nearest_link(sc, p, CONTROL_SITE_M, Some(&|l: &crate::project::Link| !l.status.is("closed")));
+                let lk = nearest_link(
+                    sc,
+                    p,
+                    CONTROL_SITE_M,
+                    Some(&|l: &crate::project::Link| !l.status.is("closed")),
+                );
                 let mut u: Row = Map::new();
                 u.insert("site".into(), site_json(s));
                 if let Some(lk) = lk {
@@ -466,7 +571,11 @@ pub fn control_proposals(sc: &Scenario, data: Option<&ControlData>) -> ControlPr
         };
         let site = sites::of(sc, &m.id);
         let group: Vec<&crate::project::Node> = match site {
-            Some(site) => site.nodes.iter().filter_map(|id| sc.nodes.get(id)).collect(),
+            Some(site) => site
+                .nodes
+                .iter()
+                .filter_map(|id| sc.nodes.get(id))
+                .collect(),
             None => vec![m],
         };
         for n in group {
@@ -474,15 +583,32 @@ pub fn control_proposals(sc: &Scenario, data: Option<&ControlData>) -> ControlPr
             ex.insert("atSiteNo".into(), s.no.clone());
             ex.insert("d".into(), json_number(dist(&p, &ll(n))));
             ex.insert("site".into(), site.map_or(Value::Null, |s| json!(s.id)));
-            let why = format!("AT signal site {}{}", value_to_js_string(&s.no), if s.name.is_empty() { String::new() } else { format!(": {}", s.name) });
-            add(&mut plan, &n.id, Some("signals"), SRC_CONTROLLED.name, why, ex);
+            let why = format!(
+                "AT signal site {}{}",
+                value_to_js_string(&s.no),
+                if s.name.is_empty() {
+                    String::new()
+                } else {
+                    format!(": {}", s.name)
+                }
+            );
+            add(
+                &mut plan,
+                &n.id,
+                Some("signals"),
+                SRC_CONTROLLED.name,
+                why,
+                ex,
+            );
         }
     }
     // Signs: which approach a sign belongs to. The approach's last 30 m runs into the node; the sign must be on its left.
     let caps = Regex::lit(r"\b[a-z]", "g");
     for sg in &data.signs {
         let p: LatLng = [sg.lat, sg.lng];
-        let Some((m, m_d)) = near(&p, &junction, CONTROL_SIGN_M) else { continue };
+        let Some((m, m_d)) = near(&p, &junction, CONTROL_SIGN_M) else {
+            continue;
+        };
         let f = flat(p[0]);
         let (px, py) = (f.x(&p), f.y(&p));
         struct Best<'a> {
@@ -512,7 +638,12 @@ pub fn control_proposals(sc: &Scenario, data: Option<&ControlData>) -> ControlPr
             let mut bd = f64::INFINITY;
             let mut left = false;
             for i in 0..pts.len().saturating_sub(1) {
-                let (ax, ay, bx, by) = (f.x(&pts[i]), f.y(&pts[i]), f.x(&pts[i + 1]), f.y(&pts[i + 1]));
+                let (ax, ay, bx, by) = (
+                    f.x(&pts[i]),
+                    f.y(&pts[i]),
+                    f.x(&pts[i + 1]),
+                    f.y(&pts[i + 1]),
+                );
                 let r = util::seg_dist(px, py, ax, ay, bx, by);
                 if r.d < bd {
                     bd = r.d;
@@ -530,7 +661,10 @@ pub fn control_proposals(sc: &Scenario, data: Option<&ControlData>) -> ControlPr
             continue;
         }
         let cur = m.control.as_str();
-        if (ring.contains(m.id.as_str()) && to != Some("roundabout")) || cur == Some("signals") || (cur == Some("roundabout") && to != Some("roundabout")) {
+        if (ring.contains(m.id.as_str()) && to != Some("roundabout"))
+            || cur == Some("signals")
+            || (cur == Some("roundabout") && to != Some("roundabout"))
+        {
             if let Some(Value::Object(ps)) = plan.get_mut(&m.id).and_then(|r| r.get_mut("signs")) {
                 ps.insert(best.l.id.clone(), json!(sg.kind));
             }
@@ -540,9 +674,22 @@ pub fn control_proposals(sc: &Scenario, data: Option<&ControlData>) -> ControlPr
             String::new()
         } else {
             let t = norm(&sg.road);
-            format!(" on {}", caps.replace(&t, |mm, u| String::from_utf16_lossy(&u[mm.start..mm.end]).to_uppercase()))
+            format!(
+                " on {}",
+                caps.replace(&t, |mm, u| String::from_utf16_lossy(&u[mm.start..mm.end])
+                    .to_uppercase())
+            )
         };
-        let why = format!("{} sign{}{}", sg.kind, road, if best.left { "" } else { " (sign not on the driver\u{2019}s left: check)" });
+        let why = format!(
+            "{} sign{}{}",
+            sg.kind,
+            road,
+            if best.left {
+                ""
+            } else {
+                " (sign not on the driver\u{2019}s left: check)"
+            }
+        );
         let mut ex = Map::new();
         let mut sgn = Map::new();
         sgn.insert(best.l.id.clone(), json!(sg.kind));
@@ -560,7 +707,8 @@ pub fn control_proposals(sc: &Scenario, data: Option<&ControlData>) -> ControlPr
         let at_no = p.get("atSiteNo");
         let ns_at = n.extra.get("atSiteNo");
         let meta = !change
-            && ((at_no.is_some_and(|a| !a.is_null()) && !loose_eq_strict(ns_at, at_no)) || !n.extra.get("controlSrc").is_some_and(value_truthy));
+            && ((at_no.is_some_and(|a| !a.is_null()) && !loose_eq_strict(ns_at, at_no))
+                || !n.extra.get("controlSrc").is_some_and(value_truthy));
         if !change && !meta {
             continue;
         }
@@ -578,35 +726,75 @@ pub fn control_proposals(sc: &Scenario, data: Option<&ControlData>) -> ControlPr
     for u in unmatched.iter().filter(|u| u.contains_key("split")) {
         let site = &u["site"];
         let link = u["link"].as_str().expect("link");
-        let link_name = sc.links.get(link).and_then(|l| l.name.as_str()).filter(|n| !n.is_empty()).unwrap_or("the road");
+        let link_name = sc
+            .links
+            .get(link)
+            .and_then(|l| l.name.as_str())
+            .filter(|n| !n.is_empty())
+            .unwrap_or("the road");
         let mut r: Row = Map::new();
-        r.insert("id".into(), json!(format!("split:{}", site.get("id").map_or_else(|| "undefined".to_string(), value_to_js_string))));
+        r.insert(
+            "id".into(),
+            json!(format!(
+                "split:{}",
+                site.get("id")
+                    .map_or_else(|| "undefined".to_string(), value_to_js_string)
+            )),
+        );
         r.insert("node".into(), Value::Null);
-        r.insert("split".into(), json!({ "link": link, "ll": [site["lat"], site["lng"]] }));
+        r.insert(
+            "split".into(),
+            json!({ "link": link, "ll": [site["lat"], site["lng"]] }),
+        );
         r.insert("to".into(), json!("signals"));
         r.insert("ped".into(), json!(true));
         r.insert("change".into(), json!(true));
         r.insert("src".into(), json!(SRC_CONTROLLED.name));
-        r.insert("why".into(), json!(format!("Signalised pedestrian crossing, AT site {}: adds a node on {}", value_to_js_string(&site["no"]), link_name)));
+        r.insert(
+            "why".into(),
+            json!(format!(
+                "Signalised pedestrian crossing, AT site {}: adds a node on {}",
+                value_to_js_string(&site["no"]),
+                link_name
+            )),
+        );
         r.insert("atSiteNo".into(), site["no"].clone());
         r.insert("from".into(), json!("none"));
-        r.insert("name".into(), match site["name"].as_str() {
-            Some(n) if !n.is_empty() => json!(n),
-            _ => json!("Pedestrian crossing"),
-        });
+        r.insert(
+            "name".into(),
+            match site["name"].as_str() {
+                Some(n) if !n.is_empty() => json!(n),
+                _ => json!("Pedestrian crossing"),
+            },
+        );
         r.insert("d".into(), u["d"].clone());
         r.insert("signs".into(), json!({}));
         rows.push(r);
     }
     js_sort_by(&mut rows, |x, y| {
-        let c = |r: &Row| if r["change"].as_bool() == Some(true) { 1.0 } else { 0.0 };
+        let c = |r: &Row| {
+            if r["change"].as_bool() == Some(true) {
+                1.0
+            } else {
+                0.0
+            }
+        };
         let d = c(y) - c(x);
         if d != 0.0 {
             return d;
         }
-        locale_compare_f64(&value_to_js_string(&x["name"]), &value_to_js_string(&y["name"]))
+        locale_compare_f64(
+            &value_to_js_string(&x["name"]),
+            &value_to_js_string(&y["name"]),
+        )
     });
-    ControlProposals { rows, unmatched: unmatched.into_iter().filter(|u| !u.contains_key("split")).collect() }
+    ControlProposals {
+        rows,
+        unmatched: unmatched
+            .into_iter()
+            .filter(|u| !u.contains_key("split"))
+            .collect(),
+    }
 }
 
 // "AT signs": the name of the signs source up to its first " ("
@@ -628,7 +816,13 @@ fn loose_eq_strict(a: Option<&Value>, b: Option<&Value>) -> bool {
 ///
 /// A pedestrian crossing that splits a road adds the junction first. Sets the node's control, `controlAuto`, `controlSrc`, `controlAt`
 /// (the date given), its AT site number, pedestrian crossing and signs, and gives its junction site the AT site number when it has none.
-pub fn apply_controls(sc: &mut Scenario, ids: &mut dyn IdSource, rows: &[Row], pick: &[String], when: &str) -> usize {
+pub fn apply_controls(
+    sc: &mut Scenario,
+    ids: &mut dyn IdSource,
+    rows: &[Row],
+    pick: &[String],
+    when: &str,
+) -> usize {
     let pick: HashSet<&str> = pick.iter().map(String::as_str).collect();
     let mut n = 0;
     for r in rows {
@@ -636,23 +830,42 @@ pub fn apply_controls(sc: &mut Scenario, ids: &mut dyn IdSource, rows: &[Row], p
         if !pick.contains(rid) {
             continue;
         }
-        let mut id: String = r.get("node").and_then(Value::as_str).unwrap_or("").to_string();
+        let mut id: String = r
+            .get("node")
+            .and_then(Value::as_str)
+            .unwrap_or("")
+            .to_string();
         if let Some(Value::Object(sp)) = r.get("split").filter(|v| value_truthy(v)) {
             let link = sp.get("link").and_then(Value::as_str).unwrap_or("");
-            let ll = sp.get("ll").and_then(Value::as_array).map(|a| [a[0].as_f64().unwrap_or(f64::NAN), a[1].as_f64().unwrap_or(f64::NAN)]).unwrap_or([f64::NAN, f64::NAN]);
+            let ll = sp
+                .get("ll")
+                .and_then(Value::as_array)
+                .map(|a| {
+                    [
+                        a[0].as_f64().unwrap_or(f64::NAN),
+                        a[1].as_f64().unwrap_or(f64::NAN),
+                    ]
+                })
+                .unwrap_or([f64::NAN, f64::NAN]);
             match split_link(sc, ids, link, ll) {
                 Ok(nid) if !nid.is_empty() => id = nid,
                 _ => continue,
             }
         }
         let to = r.get("to").and_then(Value::as_str);
-        let Some(node) = sc.nodes.get_mut(&id) else { continue };
+        let Some(node) = sc.nodes.get_mut(&id) else {
+            continue;
+        };
         if node.control.as_str() != to {
             n += 1;
         }
         node.control = to.map_or(Maybe::Missing, |t| Maybe::Set(t.to_string()));
-        node.extra.insert("controlAuto".into(), to.map_or(Value::Null, |t| json!(t)));
-        node.extra.insert("controlSrc".into(), r.get("src").cloned().unwrap_or(Value::Null));
+        node.extra
+            .insert("controlAuto".into(), to.map_or(Value::Null, |t| json!(t)));
+        node.extra.insert(
+            "controlSrc".into(),
+            r.get("src").cloned().unwrap_or(Value::Null),
+        );
         node.extra.insert("controlAt".into(), json!(when));
         node.upgrade = Maybe::Set(false.into());
         let at_no = r.get("atSiteNo").filter(|v| !v.is_null()).cloned();
@@ -704,9 +917,15 @@ pub struct RestrictionsLoad {
 impl RestrictionsLoad {
     /// A download for an area.
     pub fn new(b: &Bounds, timeout_ms: f64) -> RestrictionsLoad {
-        let bb = [b.south, b.west, b.north, b.east].iter().map(|v| to_fixed(*v, 6)).collect::<Vec<_>>().join(",");
+        let bb = [b.south, b.west, b.north, b.east]
+            .iter()
+            .map(|v| to_fixed(*v, 6))
+            .collect::<Vec<_>>()
+            .join(",");
         RestrictionsLoad {
-            query: format!("[out:json][timeout:60];relation[\"type\"=\"restriction\"]({bb});out body;"),
+            query: format!(
+                "[out:json][timeout:60];relation[\"type\"=\"restriction\"]({bb});out body;"
+            ),
             timeout_ms,
             next: 0,
             last: None,
@@ -718,7 +937,9 @@ impl RestrictionsLoad {
     pub fn finish(self) -> Result<(Vec<JsonValue>, String), String> {
         match (self.rels, self.url) {
             (Some(r), Some(u)) => Ok((r, u)),
-            _ => Err(self.last.unwrap_or_else(|| "No OpenStreetMap server answered. Try again later.".to_string())),
+            _ => Err(self.last.unwrap_or_else(|| {
+                "No OpenStreetMap server answered. Try again later.".to_string()
+            })),
         }
     }
 }
@@ -732,7 +953,10 @@ impl Flow for RestrictionsLoad {
             method: "POST".to_string(),
             url: OVERPASS[self.next].to_string(),
             body: Some(form_body("data", &self.query)),
-            headers: vec![("Content-Type".to_string(), "application/x-www-form-urlencoded".to_string())],
+            headers: vec![(
+                "Content-Type".to_string(),
+                "application/x-www-form-urlencoded".to_string(),
+            )],
             timeout_ms: self.timeout_ms,
             expect: super::arcgis::Expect::Json,
         })
@@ -744,7 +968,11 @@ impl Flow for RestrictionsLoad {
             Ok(Answer::Json(j)) => match j.get("elements") {
                 Some(JsonValue::Array(els)) if j.truthy() => Ok(els
                     .iter()
-                    .filter(|e| e.get("type").is_some_and(|t| t.strict_eq(&JsonValue::String("relation".into()))) && matches!(e.get("members"), Some(JsonValue::Array(_))))
+                    .filter(|e| {
+                        e.get("type")
+                            .is_some_and(|t| t.strict_eq(&JsonValue::String("relation".into())))
+                            && matches!(e.get("members"), Some(JsonValue::Array(_)))
+                    })
                     .cloned()
                     .collect()),
                 _ => Err(format!("{} sent no OpenStreetMap data", host_text(&url))),
@@ -849,7 +1077,12 @@ fn string_set(v: &Maybe<Value>) -> HashSet<String> {
 /// `no_*` bans the one movement; `only_*` bans every other movement from that road. Restrictions for one vehicle type, with a time
 /// condition, that exempt cars or with a via way are left out and counted. A ban the user removed after Spare Construct added it is the user's.
 pub fn ban_proposals(sc: &Scenario, rels: Option<&[JsonValue]>) -> BanProposals {
-    let Some(rels) = rels else { return BanProposals { rows: Vec::new(), skipped: Vec::new() } };
+    let Some(rels) = rels else {
+        return BanProposals {
+            rows: Vec::new(),
+            skipped: Vec::new(),
+        };
+    };
     let mut by_osm: HashMap<String, &crate::project::Node> = HashMap::new();
     for n in sc.nodes.values() {
         if let Some(o) = n.osm.get().filter(|v| !v.is_null()) {
@@ -878,7 +1111,12 @@ pub fn ban_proposals(sc: &Scenario, rels: Option<&[JsonValue]>) -> BanProposals 
         let empty = JsonValue::object();
         let t = r.get("tags").filter(|t| t.truthy()).unwrap_or(&empty);
         let kind_v = t.get("restriction");
-        let mut skip = |why: String| skipped.push(BanSkipped { rel: rel_id.clone(), why });
+        let mut skip = |why: String| {
+            skipped.push(BanSkipped {
+                rel: rel_id.clone(),
+                why,
+            })
+        };
         let kind_s = kind_v.filter(|k| k.truthy()).map(JsonValue::js_string);
         let kind = kind_s.as_deref().and_then(|k| restrict_text(k).map(|_| k));
         let Some(kind) = kind else {
@@ -888,7 +1126,10 @@ pub fn ban_proposals(sc: &Scenario, rels: Option<&[JsonValue]>) -> BanProposals 
             });
             continue;
         };
-        if t.get("restriction:conditional").is_some_and(JsonValue::truthy) || except_re.test(&text_or(t.get("except"), "")) {
+        if t.get("restriction:conditional")
+            .is_some_and(JsonValue::truthy)
+            || except_re.test(&text_or(t.get("except"), ""))
+        {
             skip("conditional, or cars are exempt".to_string());
             continue;
         }
@@ -896,10 +1137,24 @@ pub fn ban_proposals(sc: &Scenario, rels: Option<&[JsonValue]>) -> BanProposals 
             Some(JsonValue::Array(a)) => a.iter().collect(),
             _ => Vec::new(),
         };
-        let m = |role: &str| -> Vec<&JsonValue> { members.iter().copied().filter(|x| x.get("role").is_some_and(|v| v.strict_eq(&JsonValue::String(role.to_string())))).collect() };
+        let m = |role: &str| -> Vec<&JsonValue> {
+            members
+                .iter()
+                .copied()
+                .filter(|x| {
+                    x.get("role")
+                        .is_some_and(|v| v.strict_eq(&JsonValue::String(role.to_string())))
+                })
+                .collect()
+        };
         let (from, via, to) = (m("from"), m("via"), m("to"));
         let ty = |x: &JsonValue| x.get("type").map(JsonValue::js_string);
-        if from.len() != 1 || to.len() != 1 || via.len() != 1 || ty(from[0]).as_deref() != Some("way") || ty(to[0]).as_deref() != Some("way") {
+        if from.len() != 1
+            || to.len() != 1
+            || via.len() != 1
+            || ty(from[0]).as_deref() != Some("way")
+            || ty(to[0]).as_deref() != Some("way")
+        {
             skip("not one from way, one via and one to way".to_string());
             continue;
         }
@@ -907,21 +1162,42 @@ pub fn ban_proposals(sc: &Scenario, rels: Option<&[JsonValue]>) -> BanProposals 
             skip("via a way (not read yet)".to_string());
             continue;
         }
-        let Some(n) = by_osm.get(&via[0].get("ref").map_or_else(|| "undefined".to_string(), JsonValue::js_string)) else { continue };
-        let links: &[&crate::project::Link] = at.get(n.id.as_str()).map(Vec::as_slice).unwrap_or(&[]);
-        let from_ref = from[0].get("ref").map_or_else(|| "undefined".to_string(), JsonValue::js_string);
-        let to_ref = to[0].get("ref").map_or_else(|| "undefined".to_string(), JsonValue::js_string);
-        let fl: Vec<&&crate::project::Link> = links.iter().filter(|l| way_of(l) == from_ref).collect();
-        let tl: Vec<&&crate::project::Link> = links.iter().filter(|l| way_of(l) == to_ref).collect();
+        let Some(n) = by_osm.get(
+            &via[0]
+                .get("ref")
+                .map_or_else(|| "undefined".to_string(), JsonValue::js_string),
+        ) else {
+            continue;
+        };
+        let links: &[&crate::project::Link] =
+            at.get(n.id.as_str()).map(Vec::as_slice).unwrap_or(&[]);
+        let from_ref = from[0]
+            .get("ref")
+            .map_or_else(|| "undefined".to_string(), JsonValue::js_string);
+        let to_ref = to[0]
+            .get("ref")
+            .map_or_else(|| "undefined".to_string(), JsonValue::js_string);
+        let fl: Vec<&&crate::project::Link> =
+            links.iter().filter(|l| way_of(l) == from_ref).collect();
+        let tl: Vec<&&crate::project::Link> =
+            links.iter().filter(|l| way_of(l) == to_ref).collect();
         // The from and to ways must end at the via node (OSM rule); a way running through it is ambiguous
         if fl.len() != 1 || tl.len() != 1 {
-            skip(if !fl.is_empty() && !tl.is_empty() { "the from or to way runs through the junction (split it in OSM)".to_string() } else { "its roads are not in the model".to_string() });
+            skip(if !fl.is_empty() && !tl.is_empty() {
+                "the from or to way runs through the junction (split it in OSM)".to_string()
+            } else {
+                "its roads are not in the model".to_string()
+            });
             continue;
         }
         let (f0, t0): (&crate::project::Link, &crate::project::Link) = (*fl[0], *tl[0]);
         let only = kind.starts_with("only_");
         let bans: Vec<String> = if only {
-            links.iter().filter(|l| !std::ptr::eq(**l, t0)).map(|l| format!("{}>{}", f0.id, l.id)).collect()
+            links
+                .iter()
+                .filter(|l| !std::ptr::eq(**l, t0))
+                .map(|l| format!("{}>{}", f0.id, l.id))
+                .collect()
         } else {
             vec![format!("{}>{}", f0.id, t0.id)]
         };
@@ -938,7 +1214,11 @@ pub fn ban_proposals(sc: &Scenario, rels: Option<&[JsonValue]>) -> BanProposals 
             "{} from {}{}",
             restrict_text(kind).expect("kind"),
             name_of(f0),
-            if only { format!(" (only into {})", name_of(t0)) } else { format!(" into {}", name_of(t0)) }
+            if only {
+                format!(" (only into {})", name_of(t0))
+            } else {
+                format!(" into {}", name_of(t0))
+            }
         );
         let user = add.iter().any(|x| auto.contains(x));
         rows.push(BanRow {
@@ -965,7 +1245,9 @@ pub fn apply_bans(sc: &mut Scenario, rows: &[BanRow], pick: &[String], when: &st
         if !pick.contains(r.id.as_str()) {
             continue;
         }
-        let Some(node) = sc.nodes.get_mut(&r.node) else { continue };
+        let Some(node) = sc.nodes.get_mut(&r.node) else {
+            continue;
+        };
         // Set(N.bans || []) keeps first-seen order
         let list = |v: Option<&Value>| -> Vec<String> {
             let mut out: Vec<String> = Vec::new();
@@ -993,7 +1275,10 @@ pub fn apply_bans(sc: &mut Scenario, rows: &[BanRow], pick: &[String], when: &st
             if !auto.contains(x) {
                 auto.push(x.clone());
             }
-            src.insert(x.clone(), json!(format!("{} ({}), {}", r.src, r.kind, when)));
+            src.insert(
+                x.clone(),
+                json!(format!("{} ({}), {}", r.src, r.kind, when)),
+            );
         }
         node.bans = Maybe::Set(json!(have));
         node.extra.insert("bansAuto".into(), json!(auto));

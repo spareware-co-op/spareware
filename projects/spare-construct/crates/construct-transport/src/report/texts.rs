@@ -7,19 +7,71 @@ pub const DISCLAIMERS_VERSION: &str = "2026-10-08";
 pub const DISCLAIMERS_VERSION_TEXT: &str = "8 October 2026";
 /// The standing disclaimers: id, title and text.
 pub const DISCLAIMER_ITEMS: [(&str, &str, &str); 13] = [
-    ("D1", "Screening status", "Spare Construct is a browser-based sketch and screening tool. It is not an approved regional transport model and it is not the Auckland Forecasting Centre Macro Strategic Model (MSM). Its results are indicative and are intended to scope, test and support a transport assessment. They must be reviewed, and where necessary confirmed with approved tools, by a suitably qualified transport planner or traffic engineer before they are relied on in any resource consent, plan change, notice of requirement, Fast-track application or funding decision."),
-    ("D2", "Expert evidence", "Spare Construct is not an expert witness and does not give opinions. Any person who relies on these outputs in evidence remains responsible for complying with the Code of Conduct for Expert Witnesses (Environment Court Practice Note 2023, section 9), including stating the assumptions and data relied on, the uncertainty in the results, and appropriate sensitivity and uncertainty analyses for any model. This report is DRAFT until adopted and signed by a named, suitably qualified author."),
-    ("D3", "Junction results", "Junction delay, degree of saturation, level of service and queue results are calculated by Spare Construct using HCM 6 / Akcelik-based methods. They are indicative and are not SIDRA output. Any junction result relied on for a consent decision, signal design (ATOC Traffic Signals Design Guidelines) or condition should be confirmed in SIDRA or another tool accepted by the road controlling authority."),
-    ("D4", "Economics", "The benefit-cost ratio is an indicative screening estimate following NZTA Monetised Benefits and Costs Manual v1.7.5 conventions. It is equivalent to an Indicative Efficiency Rating, not a funding-approval BCR. It is not MBCM-compliant unless the full procedures are applied to a model calibrated and validated to the NZTA Transport Model Development Guidelines and independently reviewed. IPM efficiency bands for 2027-30 are shown from NZTA's initial draft (August 2026) and may change after GPS 2027."),
-    ("D5", "ANOP", "ANOP levels of service are indicative Spare Construct estimates. Confirm them in Auckland Transport's ANOP Assessment Tool using AT speed data before relying on them."),
-    ("D6", "Calibration", "Calibration and validation statistics are reported against the NZTA Transport Model Development Guidelines (2019) for the stated model purpose category. Those criteria are not a pass/fail checklist, and meeting them does not by itself make a model fit for purpose. Fitness for purpose is a judgment for the analyst and peer reviewer and, where NZTA is involved, NZTA's modelling specialists."),
-    ("D7", "Regional consistency", "The AT ITA Guidelines 2025 v2 expect detailed modelling to be consistent with regional MSM forecasts where appropriate. Where this report states that MSM consistency was not checked, the forecasts should be reconciled with MSM or Auckland Forecasting Centre outputs before lodgement for any proposal with network-wide effects."),
-    ("D8", "Safety", "Crash histories are taken from NZTA CAS and the most recent months may be incomplete. Spare Construct's safety screening and audit briefing pack support, but do not replace, a Safe System Audit by an independent, qualified specialist, or sight distance assessment to Austroads Guide to Road Design Part 4A."),
-    ("D9", "Speed limits", "This cost benefit disclosure statement follows the structure of clause 3.3 of the Land Transport Rule: Setting of Speed Limits 2024. It is not an MBCM benefit-cost ratio and cannot be used in place of MBCM procedures for NLTF funding."),
-    ("D10", "Regulatory currency", "Statutory references reflect the law and guidance as at [version date] for the pathway and lodgement date shown. Under the Planning Act 2026, consents lodged before 30 October 2026 are processed under the RMA as it stood immediately before 30 September 2026, and those lodged later are processed under the amended RMA as at lodgement. The specified transition date to the new planning system has not been set. This report is not legal or planning advice. Confirm the applicable provisions at lodgement."),
-    ("D11", "Authorities", "Since 7 May 2026 Auckland Council is the road controlling authority for Auckland roads (Local Government (Auckland Council) Act 2009 s47), with local boards exercising specified powers on local and collector roads and Auckland Transport continuing as the transport CCO for public transport. AUP provisions that still refer to Auckland Transport are quoted as written. Confirm the reviewing and approving body for this application."),
-    ("D12", "Hand-over", "This export is prepared for use in [SIDRA / SATURN / Aimsun / AT ANOP tool / NZTA IER tool / MBCM workbook / Safe System Audit / NZTA access application]. Results produced in that tool, not the Spare Construct estimates, should be reported where the tool is required or accepted by the reviewing authority."),
-    ("D13", "Assumed thresholds", "Values marked \"Spare Construct assumption\" are Spare Construct defaults, not published rules. Agree them with the reviewing authority at scoping or replace them with project-specific values."),
+    (
+        "D1",
+        "Screening status",
+        "Spare Construct is a browser-based sketch and screening tool. It is not an approved regional transport model and it is not the Auckland Forecasting Centre Macro Strategic Model (MSM). Its results are indicative and are intended to scope, test and support a transport assessment. They must be reviewed, and where necessary confirmed with approved tools, by a suitably qualified transport planner or traffic engineer before they are relied on in any resource consent, plan change, notice of requirement, Fast-track application or funding decision.",
+    ),
+    (
+        "D2",
+        "Expert evidence",
+        "Spare Construct is not an expert witness and does not give opinions. Any person who relies on these outputs in evidence remains responsible for complying with the Code of Conduct for Expert Witnesses (Environment Court Practice Note 2023, section 9), including stating the assumptions and data relied on, the uncertainty in the results, and appropriate sensitivity and uncertainty analyses for any model. This report is DRAFT until adopted and signed by a named, suitably qualified author.",
+    ),
+    (
+        "D3",
+        "Junction results",
+        "Junction delay, degree of saturation, level of service and queue results are calculated by Spare Construct using HCM 6 / Akcelik-based methods. They are indicative and are not SIDRA output. Any junction result relied on for a consent decision, signal design (ATOC Traffic Signals Design Guidelines) or condition should be confirmed in SIDRA or another tool accepted by the road controlling authority.",
+    ),
+    (
+        "D4",
+        "Economics",
+        "The benefit-cost ratio is an indicative screening estimate following NZTA Monetised Benefits and Costs Manual v1.7.5 conventions. It is equivalent to an Indicative Efficiency Rating, not a funding-approval BCR. It is not MBCM-compliant unless the full procedures are applied to a model calibrated and validated to the NZTA Transport Model Development Guidelines and independently reviewed. IPM efficiency bands for 2027-30 are shown from NZTA's initial draft (August 2026) and may change after GPS 2027.",
+    ),
+    (
+        "D5",
+        "ANOP",
+        "ANOP levels of service are indicative Spare Construct estimates. Confirm them in Auckland Transport's ANOP Assessment Tool using AT speed data before relying on them.",
+    ),
+    (
+        "D6",
+        "Calibration",
+        "Calibration and validation statistics are reported against the NZTA Transport Model Development Guidelines (2019) for the stated model purpose category. Those criteria are not a pass/fail checklist, and meeting them does not by itself make a model fit for purpose. Fitness for purpose is a judgment for the analyst and peer reviewer and, where NZTA is involved, NZTA's modelling specialists.",
+    ),
+    (
+        "D7",
+        "Regional consistency",
+        "The AT ITA Guidelines 2025 v2 expect detailed modelling to be consistent with regional MSM forecasts where appropriate. Where this report states that MSM consistency was not checked, the forecasts should be reconciled with MSM or Auckland Forecasting Centre outputs before lodgement for any proposal with network-wide effects.",
+    ),
+    (
+        "D8",
+        "Safety",
+        "Crash histories are taken from NZTA CAS and the most recent months may be incomplete. Spare Construct's safety screening and audit briefing pack support, but do not replace, a Safe System Audit by an independent, qualified specialist, or sight distance assessment to Austroads Guide to Road Design Part 4A.",
+    ),
+    (
+        "D9",
+        "Speed limits",
+        "This cost benefit disclosure statement follows the structure of clause 3.3 of the Land Transport Rule: Setting of Speed Limits 2024. It is not an MBCM benefit-cost ratio and cannot be used in place of MBCM procedures for NLTF funding.",
+    ),
+    (
+        "D10",
+        "Regulatory currency",
+        "Statutory references reflect the law and guidance as at [version date] for the pathway and lodgement date shown. Under the Planning Act 2026, consents lodged before 30 October 2026 are processed under the RMA as it stood immediately before 30 September 2026, and those lodged later are processed under the amended RMA as at lodgement. The specified transition date to the new planning system has not been set. This report is not legal or planning advice. Confirm the applicable provisions at lodgement.",
+    ),
+    (
+        "D11",
+        "Authorities",
+        "Since 7 May 2026 Auckland Council is the road controlling authority for Auckland roads (Local Government (Auckland Council) Act 2009 s47), with local boards exercising specified powers on local and collector roads and Auckland Transport continuing as the transport CCO for public transport. AUP provisions that still refer to Auckland Transport are quoted as written. Confirm the reviewing and approving body for this application.",
+    ),
+    (
+        "D12",
+        "Hand-over",
+        "This export is prepared for use in [SIDRA / SATURN / Aimsun / AT ANOP tool / NZTA IER tool / MBCM workbook / Safe System Audit / NZTA access application]. Results produced in that tool, not the Spare Construct estimates, should be reported where the tool is required or accepted by the reviewing authority.",
+    ),
+    (
+        "D13",
+        "Assumed thresholds",
+        "Values marked \"Spare Construct assumption\" are Spare Construct defaults, not published rules. Agree them with the reviewing authority at scoping or replace them with project-specific values.",
+    ),
 ];
 
 /// The document's style sheet.
@@ -102,24 +154,69 @@ if __name__ == '__main__':
 
 /// The data pack's files and what each holds (`FILES`), in the prototype's order.
 pub const FILES: [(&str, &str); 18] = [
-    ("README.txt", "Column dictionary with units, scenario list, model version and data vintage"),
-    ("scenarios.csv", "One row per scenario and period with its year, role and headline results"),
-    ("links.csv", "Directional link results per scenario and period"),
-    ("junction_summary.csv", "Junction results per scenario and period"),
-    ("junction_movements.csv", "Junction approach results per scenario and period"),
-    ("turning_movements.csv", "Turning movements per junction, scenario and period"),
-    ("trip_generation.csv", "Vehicle trip generation per zone, land use and period"),
-    ("distribution.csv", "Gateway distribution of development traffic"),
-    ("counts_calibration.csv", "Every count used, with the modelled value and GEH"),
-    ("calibration_summary.csv", "Calibration checks against TMDG 2019 per period"),
+    (
+        "README.txt",
+        "Column dictionary with units, scenario list, model version and data vintage",
+    ),
+    (
+        "scenarios.csv",
+        "One row per scenario and period with its year, role and headline results",
+    ),
+    (
+        "links.csv",
+        "Directional link results per scenario and period",
+    ),
+    (
+        "junction_summary.csv",
+        "Junction results per scenario and period",
+    ),
+    (
+        "junction_movements.csv",
+        "Junction approach results per scenario and period",
+    ),
+    (
+        "turning_movements.csv",
+        "Turning movements per junction, scenario and period",
+    ),
+    (
+        "trip_generation.csv",
+        "Vehicle trip generation per zone, land use and period",
+    ),
+    (
+        "distribution.csv",
+        "Gateway distribution of development traffic",
+    ),
+    (
+        "counts_calibration.csv",
+        "Every count used, with the modelled value and GEH",
+    ),
+    (
+        "calibration_summary.csv",
+        "Calibration checks against TMDG 2019 per period",
+    ),
     ("route_times.csv", "Bus route times per scenario and period"),
-    ("corridor-sidra-volumes.csv", "SIDRA hand-over: movement volumes per junction and period (no disclaimer row, so the loader reads it as is; D1 and D12 are in this README and in the loader script)"),
-    ("load_corridor_volumes.py", "SIDRA INTERSECTION 11 loader script for corridor-sidra-volumes.csv (carries D1 and D12)"),
-    ("read_datapack.py", "Reads any data pack CSV in Python, skipping the D1 row"),
+    (
+        "corridor-sidra-volumes.csv",
+        "SIDRA hand-over: movement volumes per junction and period (no disclaimer row, so the loader reads it as is; D1 and D12 are in this README and in the loader script)",
+    ),
+    (
+        "load_corridor_volumes.py",
+        "SIDRA INTERSECTION 11 loader script for corridor-sidra-volumes.csv (carries D1 and D12)",
+    ),
+    (
+        "read_datapack.py",
+        "Reads any data pack CSV in Python, skipping the D1 row",
+    ),
     ("crashes.csv", "Every reported crash loaded from CAS"),
     ("crash_sites.csv", "Crash history per assessed site (HRIG)"),
-    ("provenance.csv", "Data sources, query dates, records and licences"),
-    ("assumptions.csv", "Standards and Spare Construct assumptions"),
+    (
+        "provenance.csv",
+        "Data sources, query dates, records and licences",
+    ),
+    (
+        "assumptions.csv",
+        "Standards and Spare Construct assumptions",
+    ),
 ];
 
 /// The data pack's column dictionary (`COLS`): each CSV with its columns and their units, in the prototype's order.
@@ -130,7 +227,10 @@ pub const COLS: [(&str, &[(&str, &str)]); 14] = [
             ("scenario_id", "Spare Construct scenario id"),
             ("scenario", "name"),
             ("code", "S0 to S3 where set"),
-            ("role", "existing, baseline, proposal, mitigation, sensitivity, permitted"),
+            (
+                "role",
+                "existing, baseline, proposal, mitigation, sensitivity, permitted",
+            ),
             ("year", "modelled year"),
             ("period", "AM or PM peak hour"),
             ("trips_veh_h", "veh/h"),
@@ -195,7 +295,10 @@ pub const COLS: [(&str, &[(&str, &str)]); 14] = [
             ("cycle_s", "s"),
             ("vol_veh_h", "veh/h"),
             ("worst_dos", "ratio"),
-            ("delay_s", "s (average for signals and roundabouts, worst movement otherwise)"),
+            (
+                "delay_s",
+                "s (average for signals and roundabouts, worst movement otherwise)",
+            ),
             ("los", "A to F"),
             ("los_basis", ""),
             ("max_q95_m", "m"),
@@ -325,14 +428,26 @@ pub const COLS: [(&str, &[(&str, &str)]); 14] = [
     (
         "crashes.csv",
         &[
-            ("cas_objectid", "CAS OBJECTID; blank when Spare Construct did not keep it"),
+            (
+                "cas_objectid",
+                "CAS OBJECTID; blank when Spare Construct did not keep it",
+            ),
             ("year", ""),
             ("severity", "F, S, M or N"),
             ("fatal_count", "people killed; blank when not loaded"),
-            ("serious_count", "people seriously injured; blank when not loaded"),
-            ("minor_count", "people with minor injuries; blank when not loaded"),
+            (
+                "serious_count",
+                "people seriously injured; blank when not loaded",
+            ),
+            (
+                "minor_count",
+                "people with minor injuries; blank when not loaded",
+            ),
             ("speed_limit", "km/h"),
-            ("traffic_control", "CAS trafficControl; blank when not loaded"),
+            (
+                "traffic_control",
+                "CAS trafficControl; blank when not loaded",
+            ),
             ("urban", "CAS urban; blank when not loaded"),
             ("ped", "true or false"),
             ("cyclist", "true or false"),
@@ -392,27 +507,137 @@ pub const COLS: [(&str, &[(&str, &str)]); 14] = [
 
 /// The Engine standards the assumptions register lists: name, edition, checked against source and whether it is a Spare Construct assumption, in the prototype's order.
 pub const ENGINE_ASSUMPTIONS: [(&str, &str, bool, bool); 23] = [
-    ("HCM 6 control delay", "Highway Capacity Manual, 6th edition (2016)", true, false),
-    ("SIDRA Delay (roundabouts as signals)", "SIDRA Intersection LoS method \"Delay (SIDRA)\"", false, false),
-    ("RTA NSW delay bands (option only)", "RTA NSW Guide to Traffic Generating Developments (2002), Table 4.2", false, false),
-    ("Link volume/capacity bands", "Spare Construct assumption", false, true),
-    ("Practical degree of saturation", "SIDRA Intersection defaults", false, false),
-    ("Peak flow factor", "TTOC-06 Traffic Signals Modelling Guidelines; SIDRA default convention", false, false),
-    ("Back of queue", "HCM 2000 Appendix G (signals, Akçelik form); HCM 6 eq. 20-68 (unsignalised)", false, false),
-    ("Assignment convergence", "UK TAG M3.1 (May 2026), Table 4", true, false),
-    ("Scenario signal to noise", "UK TAG M3.1 (May 2026)", false, false),
-    ("Gap needed for turn volume exports", "Spare Construct assumption", false, true),
-    ("NZTA Monetised Benefits and Costs Manual", "v1.7.5", false, false),
+    (
+        "HCM 6 control delay",
+        "Highway Capacity Manual, 6th edition (2016)",
+        true,
+        false,
+    ),
+    (
+        "SIDRA Delay (roundabouts as signals)",
+        "SIDRA Intersection LoS method \"Delay (SIDRA)\"",
+        false,
+        false,
+    ),
+    (
+        "RTA NSW delay bands (option only)",
+        "RTA NSW Guide to Traffic Generating Developments (2002), Table 4.2",
+        false,
+        false,
+    ),
+    (
+        "Link volume/capacity bands",
+        "Spare Construct assumption",
+        false,
+        true,
+    ),
+    (
+        "Practical degree of saturation",
+        "SIDRA Intersection defaults",
+        false,
+        false,
+    ),
+    (
+        "Peak flow factor",
+        "TTOC-06 Traffic Signals Modelling Guidelines; SIDRA default convention",
+        false,
+        false,
+    ),
+    (
+        "Back of queue",
+        "HCM 2000 Appendix G (signals, Akçelik form); HCM 6 eq. 20-68 (unsignalised)",
+        false,
+        false,
+    ),
+    (
+        "Assignment convergence",
+        "UK TAG M3.1 (May 2026), Table 4",
+        true,
+        false,
+    ),
+    (
+        "Scenario signal to noise",
+        "UK TAG M3.1 (May 2026)",
+        false,
+        false,
+    ),
+    (
+        "Gap needed for turn volume exports",
+        "Spare Construct assumption",
+        false,
+        true,
+    ),
+    (
+        "NZTA Monetised Benefits and Costs Manual",
+        "v1.7.5",
+        false,
+        false,
+    ),
     ("MBCM update factors", "July 2025", false, false),
-    ("Investment Prioritisation Method 2024–27 efficiency rating", "2024–27 NLTP (final)", false, false),
-    ("Investment Prioritisation Method 2027–30 efficiency rating", "Initial draft, August 2026", false, false),
-    ("Background traffic growth", "MBCM v1.7.5 arithmetic growth; NZ ITA practice", false, false),
-    ("Passenger car units per bus", "docs/spec/gtfs-bus (Spare Construct research spec)", false, false),
-    ("Critical gaps and follow-up headways", "HCM 6 ch. 20 (TWSC) base values, two-lane major road; mirrored for left-hand traffic", false, false),
-    ("Roundabout lane capacity", "HCM 6 ch. 22 lane-based entry capacity equations; NZ markings left lane L+T, right lane T+R", false, false),
-    ("Extent of effects (5% / 10% test)", "AT ITA Guidelines 2025 v2, s4.2.1.1", false, true),
-    ("Difference plot thresholds", "Spare Construct assumption", false, true),
-    ("NZTA Transport Model Development Guidelines", "2019", false, false),
-    ("MSM consistency threshold", "Spare Construct assumption", false, true),
-    ("Design year", "NZTA RR 422 s5.5; AT ITA Guidelines 2025 v2 s3.6", false, false),
+    (
+        "Investment Prioritisation Method 2024–27 efficiency rating",
+        "2024–27 NLTP (final)",
+        false,
+        false,
+    ),
+    (
+        "Investment Prioritisation Method 2027–30 efficiency rating",
+        "Initial draft, August 2026",
+        false,
+        false,
+    ),
+    (
+        "Background traffic growth",
+        "MBCM v1.7.5 arithmetic growth; NZ ITA practice",
+        false,
+        false,
+    ),
+    (
+        "Passenger car units per bus",
+        "docs/spec/gtfs-bus (Spare Construct research spec)",
+        false,
+        false,
+    ),
+    (
+        "Critical gaps and follow-up headways",
+        "HCM 6 ch. 20 (TWSC) base values, two-lane major road; mirrored for left-hand traffic",
+        false,
+        false,
+    ),
+    (
+        "Roundabout lane capacity",
+        "HCM 6 ch. 22 lane-based entry capacity equations; NZ markings left lane L+T, right lane T+R",
+        false,
+        false,
+    ),
+    (
+        "Extent of effects (5% / 10% test)",
+        "AT ITA Guidelines 2025 v2, s4.2.1.1",
+        false,
+        true,
+    ),
+    (
+        "Difference plot thresholds",
+        "Spare Construct assumption",
+        false,
+        true,
+    ),
+    (
+        "NZTA Transport Model Development Guidelines",
+        "2019",
+        false,
+        false,
+    ),
+    (
+        "MSM consistency threshold",
+        "Spare Construct assumption",
+        false,
+        true,
+    ),
+    (
+        "Design year",
+        "NZTA RR 422 s5.5; AT ITA Guidelines 2025 v2 s3.6",
+        false,
+        false,
+    ),
 ];

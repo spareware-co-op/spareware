@@ -121,7 +121,11 @@ pub struct TurnSite {
     #[serde(default, skip_serializing_if = "Maybe::is_missing")]
     pub role: Num,
     /// "measured_hour" or "modelled".
-    #[serde(default, rename = "obs_method", skip_serializing_if = "Maybe::is_missing")]
+    #[serde(
+        default,
+        rename = "obs_method",
+        skip_serializing_if = "Maybe::is_missing"
+    )]
     pub obs_method: Num,
     /// Longest count interval (minutes).
     #[serde(default, skip_serializing_if = "Maybe::is_missing")]

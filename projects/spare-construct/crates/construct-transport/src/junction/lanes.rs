@@ -399,7 +399,11 @@ pub fn approach_cap(
                         slip: Some(l.slip),
                         v: lv,
                         x: a.x[i] * f,
-                        c: if lv > 0.0 && a.x[i] > 0.0 { lv / a.x[i] } else { best(l) },
+                        c: if lv > 0.0 && a.x[i] > 0.0 {
+                            lv / a.x[i]
+                        } else {
+                            best(l)
+                        },
                         use_: u,
                         blocked: None,
                     }
@@ -418,7 +422,9 @@ pub fn approach_cap(
         };
     }
     let short_i: Vec<usize> = (0..lanes.len()).filter(|&i| lanes[i].len > 0.0).collect();
-    let full: Vec<usize> = (0..lanes.len()).filter(|&i| !(lanes[i].len > 0.0)).collect();
+    let full: Vec<usize> = (0..lanes.len())
+        .filter(|&i| !(lanes[i].len > 0.0))
+        .collect();
     let mut merged: Vec<Lane> = full.iter().map(|&i| lanes[i].clone()).collect();
     for &i in &short_i {
         let j: i64 = if i < full[0] {
@@ -445,7 +451,11 @@ pub fn approach_cap(
     for &i in &short_i {
         let u = sep.use_[i];
         let lv = u.l + u.t + u.r;
-        let c = if lv > 0.0 && sep.x[i] > 0.0 { lv / sep.x[i] } else { 0.0 };
+        let c = if lv > 0.0 && sep.x[i] > 0.0 {
+            lv / sep.x[i]
+        } else {
+            0.0
+        };
         let q = q95v(lv, c, t);
         let ns = (lanes[i].len / qs).floor();
         q95s = math_max(q95s, q);

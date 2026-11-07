@@ -60,21 +60,41 @@ fn mitigation_register() {
                 let n1 = mitigation::seed_mitigation(&mut p);
                 let rows1 = rows_of(&p, "mitigation");
                 let n2 = mitigation::seed_mitigation(&mut p);
-                obj(vec![("n1", count(n1)), ("rows1", rows1), ("n2", count(n2)), ("rows2", rows_of(&p, "mitigation"))])
+                obj(vec![
+                    ("n1", count(n1)),
+                    ("rows1", rows1),
+                    ("n2", count(n2)),
+                    ("rows2", rows_of(&p, "mitigation")),
+                ])
             }
             "seedConditions" => {
                 let n1 = mitigation::seed_conditions(&mut p);
                 let rows1 = rows_of(&p, "conditions");
                 let n2 = mitigation::seed_conditions(&mut p);
-                obj(vec![("n1", count(n1)), ("rows1", rows1), ("n2", count(n2)), ("rows2", rows_of(&p, "conditions"))])
+                obj(vec![
+                    ("n1", count(n1)),
+                    ("rows1", rows1),
+                    ("n2", count(n2)),
+                    ("rows2", rows_of(&p, "conditions")),
+                ])
             }
             "seedBoth" => {
                 let na = mitigation::seed_mitigation(&mut p);
                 let nb = mitigation::seed_conditions(&mut p);
-                let (mut table, mut cond) = (mitigation::mitigation_table(&p), mitigation::condition_table(&p));
+                let (mut table, mut cond) = (
+                    mitigation::mitigation_table(&p),
+                    mitigation::condition_table(&p),
+                );
                 norm_uids(&mut table);
                 norm_uids(&mut cond);
-                obj(vec![("a", count(na)), ("b", count(nb)), ("mitigation", rows_of(&p, "mitigation")), ("conditions", rows_of(&p, "conditions")), ("table", table), ("cond", cond)])
+                obj(vec![
+                    ("a", count(na)),
+                    ("b", count(nb)),
+                    ("mitigation", rows_of(&p, "mitigation")),
+                    ("conditions", rows_of(&p, "conditions")),
+                    ("table", table),
+                    ("cond", cond),
+                ])
             }
             "failsAt" => {
                 let sc = p.g("scenarios").ix(a.g("sc").n() as usize);
@@ -83,7 +103,11 @@ fn mitigation_register() {
                 if !sc.t() || !res.t() {
                     V::Null
                 } else {
-                    let only: Option<HashSet<String>> = if a.g("only").is_arr() { Some(a.g("only").items().iter().map(|x| x.s()).collect()) } else { None };
+                    let only: Option<HashSet<String>> = if a.g("only").is_arr() {
+                        Some(a.g("only").items().iter().map(|x| x.s()).collect())
+                    } else {
+                        None
+                    };
                     mitigation::fails_at(sc, res, a.g("crit"), only.as_ref())
                 }
             }
@@ -93,12 +117,23 @@ fn mitigation_register() {
                     for nd in sc.g("nodes").vals() {
                         for l in sc.g("links").vals() {
                             if l.g("a").strict_eq(nd.g("id")) || l.g("b").strict_eq(nd.g("id")) {
-                                o.set(format!("{}|{}|{}", sc.g("id").s(), nd.g("id").s(), l.g("id").s()), mitigation::storage_of(sc, &l.g("id").s(), &nd.g("id").s()));
+                                o.set(
+                                    format!(
+                                        "{}|{}|{}",
+                                        sc.g("id").s(),
+                                        nd.g("id").s(),
+                                        l.g("id").s()
+                                    ),
+                                    mitigation::storage_of(sc, &l.g("id").s(), &nd.g("id").s()),
+                                );
                             }
                         }
                     }
                 }
-                o.set("missing", mitigation::storage_of(p.g("scenarios").ix(0), "nope", "x"));
+                o.set(
+                    "missing",
+                    mitigation::storage_of(p.g("scenarios").ix(0), "nope", "x"),
+                );
                 o
             }
             other => panic!("{id}: unknown call {other}"),

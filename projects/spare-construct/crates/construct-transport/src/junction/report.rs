@@ -155,7 +155,11 @@ pub fn mov_rows(
                 .filter(|l| l.blocked == Some(true))
                 .fold(0.0, |s, l| s + l.use_.get(m));
             let p_eff = mj.map_or(f64::NAN, |j| j.p_eff);
-            d = if v > 0.0 { b / v * (1.0 - p_eff) * d_r } else { 0.0 };
+            d = if v > 0.0 {
+                b / v * (1.0 - p_eff) * d_r
+            } else {
+                0.0
+            };
             q = 0.0;
         } else {
             d = if v > 0.0 {
@@ -215,7 +219,13 @@ pub fn mov_rows(
             _ => Value::Null,
         },
         major: if is_maj {
-            mj.map(|j| (math_round(j.cap_t / pf), or_default(j.bay, 0.0), r3(1.0 - j.p_eff)))
+            mj.map(|j| {
+                (
+                    math_round(j.cap_t / pf),
+                    or_default(j.bay, 0.0),
+                    r3(1.0 - j.p_eff),
+                )
+            })
         } else {
             None
         },
@@ -324,7 +334,10 @@ impl ApproachRow {
         m.insert("dos".into(), plain_number(self.dos));
         m.insert("xp".into(), self.xp.map_or(Value::Null, plain_number));
         m.insert("psc".into(), self.psc.map_or(Value::Null, plain_number));
-        m.insert("dosBand".into(), self.dos_band.map_or(Value::Null, Value::from));
+        m.insert(
+            "dosBand".into(),
+            self.dos_band.map_or(Value::Null, Value::from),
+        );
         m.insert("delay".into(), plain_number(self.delay));
         m.insert("los".into(), self.los.into());
         m.insert("losDelay".into(), self.los_delay.into());
@@ -505,7 +518,11 @@ pub fn junction_result(
         let a = &g.arcs[ai];
         let r = arcs_res[ai];
         let nd = math_max(0.0, r.nd);
-        let mv = if movement && !a.ring { a.mv_res.as_ref() } else { None };
+        let mv = if movement && !a.ring {
+            a.mv_res.as_ref()
+        } else {
+            None
+        };
         let mjr = matches!(mv, Some(m) if a.major && a.mj.is_some() && m.v.r > 0.0);
         let free = a.ctrl == Ctrl::Free && !mjr;
         let cap_p = if mjr {
@@ -522,7 +539,12 @@ pub fn junction_result(
             let lanes = m.lanes.as_deref().unwrap_or(&[]);
             qv = math_max(
                 0.0,
-                math_max_of(&lanes.iter().map(|l| q95v(l.v, l.c, j.t)).collect::<Vec<_>>()),
+                math_max_of(
+                    &lanes
+                        .iter()
+                        .map(|l| q95v(l.v, l.c, j.t))
+                        .collect::<Vec<_>>(),
+                ),
             );
         } else if a.ctrl == Ctrl::Sig {
             let c_l = cap_v / gl;
@@ -534,13 +556,19 @@ pub fn junction_result(
             let q1 = v_l * c / 3600.0 * (1.0 - g_c) / (1.0 - math_min(1.0, x) * g_c);
             let k_b = STANDARDS.queue.k_b * crate::jsmath::pow(s_l * g_c * c / 3600.0, 0.7);
             let c_t = math_max(1e-9, c_l * j.t);
-            let q2 = 0.25 * c_l * j.t * ((x - 1.0) + ((x - 1.0) * (x - 1.0) + 8.0 * k_b * x / c_t).sqrt());
+            let q2 = 0.25
+                * c_l
+                * j.t
+                * ((x - 1.0) + ((x - 1.0) * (x - 1.0) + 8.0 * k_b * x / c_t).sqrt());
             qv = (q1 + q2) * j.f95;
         } else if !free {
             let c = math_max(1.0, cap_v);
             let x = dos;
             let t = j.t;
-            qv = 900.0 * t * ((x - 1.0) + ((x - 1.0) * (x - 1.0) + (3600.0 / c) * x / (150.0 * t)).sqrt()) * c
+            qv = 900.0
+                * t
+                * ((x - 1.0) + ((x - 1.0) * (x - 1.0) + (3600.0 / c) * x / (150.0 * t)).sqrt())
+                * c
                 / 3600.0
                 / gl;
         }
@@ -685,10 +713,12 @@ pub fn junction_result(
         } else {
             None
         },
-        site: ctl
-            .site
-            .as_ref()
-            .map(|st| (st.site.clone(), st.members.iter().map(|&n| g.ids[n].clone()).collect())),
+        site: ctl.site.as_ref().map(|st| {
+            (
+                st.site.clone(),
+                st.members.iter().map(|&n| g.ids[n].clone()).collect(),
+            )
+        }),
     }
 }
 
@@ -773,5 +803,9 @@ pub fn conv_text(o: &ConvInfo) -> String {
             tail
         );
     }
-    format!("Not converged: gap {} (target {}).", pct(o.gap), pct(o.gap_tol))
+    format!(
+        "Not converged: gap {} (target {}).",
+        pct(o.gap),
+        pct(o.gap_tol)
+    )
 }

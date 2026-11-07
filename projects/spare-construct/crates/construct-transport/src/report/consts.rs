@@ -13,7 +13,10 @@ pub const D1_SHORT: &str = "Indicative screening results from Spare Construct, a
 
 /// The title of a disclaimer.
 pub fn disclaimer_title(id: &str) -> &'static str {
-    DISCLAIMER_ITEMS.iter().find(|d| d.0 == id).map_or("", |d| d.1)
+    DISCLAIMER_ITEMS
+        .iter()
+        .find(|d| d.0 == id)
+        .map_or("", |d| d.1)
 }
 
 /// `dText(id, fill)`: the text of a disclaimer. D10 names the version date (`fill.version`, else the standing one) and D12 the
@@ -24,7 +27,13 @@ pub fn disclaimer_text(id: &str, version: Option<&str>, tools: Option<&str>) -> 
         .find(|d| d.0 == id)
         .map_or(String::new(), |d| d.2.to_string());
     if id == "D10" {
-        t = t.replacen("[version date]", version.filter(|v| !v.is_empty()).unwrap_or(DISCLAIMERS_VERSION_TEXT), 1);
+        t = t.replacen(
+            "[version date]",
+            version
+                .filter(|v| !v.is_empty())
+                .unwrap_or(DISCLAIMERS_VERSION_TEXT),
+            1,
+        );
     }
     if id == "D12"
         && let Some(tools) = tools.filter(|t| !t.is_empty())
@@ -71,19 +80,79 @@ pub enum Licence {
 
 /// Data vintage rows: loaded key, source, dataset, licence.
 pub const VINTAGE: [(&str, &str, &str, Licence); 13] = [
-    ("osm", "OpenStreetMap", "Road network (Overpass API)", Licence::Fixed("ODbL 1.0")),
-    ("nzta", "NZTA", "State highway traffic monitoring sites (AADT)", Licence::Fixed("CC BY 4.0")),
-    ("tms", "NZTA", "TMS daily traffic counts", Licence::Fixed("CC BY 4.0")),
-    ("at", "Auckland Transport", "Traffic counts (TrafficService)", Licence::At),
-    ("cas", "NZTA", "Crash Analysis System (CAS_Data_Public)", Licence::Fixed("CC BY 4.0")),
-    ("nslr", "NZTA", "National Speed Limit Register", Licence::Fixed("CC BY 4.0")),
-    ("fc", "Auckland Transport", "Future Connect integrated network", Licence::At),
-    ("controlled", "Auckland Transport", "Controlled intersections", Licence::At),
-    ("aup", "Auckland Council", "Auckland Unitary Plan zones and overlays", Licence::Fixed("Auckland Council open data")),
-    ("census", "Stats NZ", "Census 2023 (SA1 and SA2)", Licence::Fixed("CC BY 4.0")),
-    ("ags23", "Auckland Council", "Auckland Growth Scenario 2023 (AGS23)", Licence::Fixed("Auckland Council open data")),
+    (
+        "osm",
+        "OpenStreetMap",
+        "Road network (Overpass API)",
+        Licence::Fixed("ODbL 1.0"),
+    ),
+    (
+        "nzta",
+        "NZTA",
+        "State highway traffic monitoring sites (AADT)",
+        Licence::Fixed("CC BY 4.0"),
+    ),
+    (
+        "tms",
+        "NZTA",
+        "TMS daily traffic counts",
+        Licence::Fixed("CC BY 4.0"),
+    ),
+    (
+        "at",
+        "Auckland Transport",
+        "Traffic counts (TrafficService)",
+        Licence::At,
+    ),
+    (
+        "cas",
+        "NZTA",
+        "Crash Analysis System (CAS_Data_Public)",
+        Licence::Fixed("CC BY 4.0"),
+    ),
+    (
+        "nslr",
+        "NZTA",
+        "National Speed Limit Register",
+        Licence::Fixed("CC BY 4.0"),
+    ),
+    (
+        "fc",
+        "Auckland Transport",
+        "Future Connect integrated network",
+        Licence::At,
+    ),
+    (
+        "controlled",
+        "Auckland Transport",
+        "Controlled intersections",
+        Licence::At,
+    ),
+    (
+        "aup",
+        "Auckland Council",
+        "Auckland Unitary Plan zones and overlays",
+        Licence::Fixed("Auckland Council open data"),
+    ),
+    (
+        "census",
+        "Stats NZ",
+        "Census 2023 (SA1 and SA2)",
+        Licence::Fixed("CC BY 4.0"),
+    ),
+    (
+        "ags23",
+        "Auckland Council",
+        "Auckland Growth Scenario 2023 (AGS23)",
+        Licence::Fixed("Auckland Council open data"),
+    ),
     ("gtfs", "Auckland Transport", "GTFS timetable", Licence::At),
-    ("user", "Project team", "Your own counts (CSV)", Licence::Fixed("Your data")),
+    (
+        "user",
+        "Project team",
+        "Your own counts (CSV)",
+        Licence::Fixed("Your data"),
+    ),
 ];
 
 /// An RR 422 scope: its key, label and description.
@@ -98,10 +167,26 @@ pub struct Scope {
 
 /// NZTA RR 422 Table 6.1 scopes, in order.
 pub const SCOPES: [Scope; 4] = [
-    Scope { key: "simple", label: "Simple", text: "effects within the site and at its interface with the road network" },
-    Scope { key: "moderate", label: "Moderate", text: "effects on a small area or neighbourhood" },
-    Scope { key: "broad", label: "Broad", text: "effects on part or all of a suburb" },
-    Scope { key: "extensive", label: "Extensive", text: "effects on a district or region" },
+    Scope {
+        key: "simple",
+        label: "Simple",
+        text: "effects within the site and at its interface with the road network",
+    },
+    Scope {
+        key: "moderate",
+        label: "Moderate",
+        text: "effects on a small area or neighbourhood",
+    },
+    Scope {
+        key: "broad",
+        label: "Broad",
+        text: "effects on part or all of a suburb",
+    },
+    Scope {
+        key: "extensive",
+        label: "Extensive",
+        text: "effects on a district or region",
+    },
 ];
 
 /// The scope with this key.
@@ -135,14 +220,62 @@ pub struct Rr422Row {
 
 /// `RR422.rows`.
 pub const RR422_ROWS: [Rr422Row; 8] = [
-    Rr422Row { id: "crash", label: "Crash records", lv: "LPPP", chapter: "2", how: "Load NZTA CAS crashes (Traffic data tab)." },
-    Rr422Row { id: "flows", label: "Traffic flows", lv: "LLLP", chapter: "2", how: "Load NZTA and AT counts, or add your own." },
-    Rr422Row { id: "times", label: "Travel times", lv: "UUSL", chapter: "B", how: "Add journey-time checks with observed times." },
-    Rr422Row { id: "congestion", label: "Congestion", lv: "USLP", chapter: "4", how: "Run the model with junction controls set." },
-    Rr422Row { id: "vehtrips", label: "Vehicle trip generation, distribution and assignment", lv: "UPPP", chapter: "3", how: "Add development zones and run the model." },
-    Rr422Row { id: "persontrips", label: "Person trips and modal split", lv: "USLP", chapter: "3", how: "Set trip reductions for public transport and active modes, or load person-trip rates." },
-    Rr422Row { id: "sensitivity", label: "Sensitivity testing", lv: "USLP", chapter: "4", how: "Run the sensitivity pack (Report tab)." },
-    Rr422Row { id: "safety", label: "Safety and environmental appraisal", lv: "PPPP", chapter: "4", how: "Load crashes and run the model; complete the Safe System screening." },
+    Rr422Row {
+        id: "crash",
+        label: "Crash records",
+        lv: "LPPP",
+        chapter: "2",
+        how: "Load NZTA CAS crashes (Traffic data tab).",
+    },
+    Rr422Row {
+        id: "flows",
+        label: "Traffic flows",
+        lv: "LLLP",
+        chapter: "2",
+        how: "Load NZTA and AT counts, or add your own.",
+    },
+    Rr422Row {
+        id: "times",
+        label: "Travel times",
+        lv: "UUSL",
+        chapter: "B",
+        how: "Add journey-time checks with observed times.",
+    },
+    Rr422Row {
+        id: "congestion",
+        label: "Congestion",
+        lv: "USLP",
+        chapter: "4",
+        how: "Run the model with junction controls set.",
+    },
+    Rr422Row {
+        id: "vehtrips",
+        label: "Vehicle trip generation, distribution and assignment",
+        lv: "UPPP",
+        chapter: "3",
+        how: "Add development zones and run the model.",
+    },
+    Rr422Row {
+        id: "persontrips",
+        label: "Person trips and modal split",
+        lv: "USLP",
+        chapter: "3",
+        how: "Set trip reductions for public transport and active modes, or load person-trip rates.",
+    },
+    Rr422Row {
+        id: "sensitivity",
+        label: "Sensitivity testing",
+        lv: "USLP",
+        chapter: "4",
+        how: "Run the sensitivity pack (Report tab).",
+    },
+    Rr422Row {
+        id: "safety",
+        label: "Safety and environmental appraisal",
+        lv: "PPPP",
+        chapter: "4",
+        how: "Load crashes and run the model; complete the Safe System screening.",
+    },
 ];
 
 /// `RR422.name` and the rest of its description.
@@ -154,7 +287,8 @@ pub mod rr422 {
     /// Edition.
     pub const EDITION: &str = "NZTA RR 422 Integrated transport assessment guidelines (2010)";
     /// Link.
-    pub const URL: &str = "https://www.nzta.govt.nz/assets/resources/research/reports/422/docs/422.pdf";
+    pub const URL: &str =
+        "https://www.nzta.govt.nz/assets/resources/research/reports/422/docs/422.pdf";
     /// Checked against the source.
     pub const VERIFIED: bool = false;
     /// Note.
@@ -187,13 +321,69 @@ pub struct CecModel {
 
 /// `CEC.models`, in order.
 pub const CEC_MODELS: [CecModel; 7] = [
-    CecModel { key: "uncontrolledT", label: "Uncontrolled T", b0: 2.08e-3, b1: 0.19, b2: 0.36, per_approach: false, range: None },
-    CecModel { key: "priorityCross", label: "Priority crossroads", b0: 1.13e-3, b1: 0.51, b2: 0.21, per_approach: false, range: None },
-    CecModel { key: "priorityT", label: "Priority T", b0: 4.68e-5, b1: 0.20, b2: 0.76, per_approach: false, range: Some(([5000.0, 26000.0], [1000.0, 5000.0])) },
-    CecModel { key: "signalsCross", label: "Signalised crossroads", b0: 2.26e-3, b1: 0.14, b2: 0.46, per_approach: false, range: None },
-    CecModel { key: "signalsT", label: "Signalised T", b0: 1.21e-1, b1: 0.12, b2: 0.04, per_approach: false, range: None },
-    CecModel { key: "rbt1", label: "Roundabout, single-lane (per approach)", b0: 4.43e-4, b1: 0.58, b2: 0.0, per_approach: true, range: None },
-    CecModel { key: "rbtMulti", label: "Roundabout, multi-lane (per approach)", b0: 7.95e-4, b1: 0.58, b2: 0.0, per_approach: true, range: None },
+    CecModel {
+        key: "uncontrolledT",
+        label: "Uncontrolled T",
+        b0: 2.08e-3,
+        b1: 0.19,
+        b2: 0.36,
+        per_approach: false,
+        range: None,
+    },
+    CecModel {
+        key: "priorityCross",
+        label: "Priority crossroads",
+        b0: 1.13e-3,
+        b1: 0.51,
+        b2: 0.21,
+        per_approach: false,
+        range: None,
+    },
+    CecModel {
+        key: "priorityT",
+        label: "Priority T",
+        b0: 4.68e-5,
+        b1: 0.20,
+        b2: 0.76,
+        per_approach: false,
+        range: Some(([5000.0, 26000.0], [1000.0, 5000.0])),
+    },
+    CecModel {
+        key: "signalsCross",
+        label: "Signalised crossroads",
+        b0: 2.26e-3,
+        b1: 0.14,
+        b2: 0.46,
+        per_approach: false,
+        range: None,
+    },
+    CecModel {
+        key: "signalsT",
+        label: "Signalised T",
+        b0: 1.21e-1,
+        b1: 0.12,
+        b2: 0.04,
+        per_approach: false,
+        range: None,
+    },
+    CecModel {
+        key: "rbt1",
+        label: "Roundabout, single-lane (per approach)",
+        b0: 4.43e-4,
+        b1: 0.58,
+        b2: 0.0,
+        per_approach: true,
+        range: None,
+    },
+    CecModel {
+        key: "rbtMulti",
+        label: "Roundabout, multi-lane (per approach)",
+        b0: 7.95e-4,
+        b1: 0.58,
+        b2: 0.0,
+        per_approach: true,
+        range: None,
+    },
 ];
 
 /// `CEC` as data: name, edition, severity indices and the reference speed.
@@ -271,7 +461,8 @@ pub mod ssm {
     /// Edition.
     pub const EDITION: &str = "Austroads AP-R509-16 (2016)";
     /// Label.
-    pub const LABEL: &str = "Screening aid, not a Safe System Audit; scores not comparable between sites";
+    pub const LABEL: &str =
+        "Screening aid, not a Safe System Audit; scores not comparable between sites";
     /// Columns: key and label.
     pub const COLS: [(&str, &str); 7] = [
         ("ror", "Run-off-road"),
@@ -330,11 +521,14 @@ pub mod reg {
     /// The amendment date: consents lodged before it are processed under the earlier regime.
     pub const AMENDMENT: &str = "2026-10-30";
     /// The regime before the amendment.
-    pub const PRE: &str = "RMA as it stood immediately before 30 September 2026 (Planning Act 2026 Sch 1 cl 18, 20)";
+    pub const PRE: &str =
+        "RMA as it stood immediately before 30 September 2026 (Planning Act 2026 Sch 1 cl 18, 20)";
     /// The regime after.
-    pub const POST: &str = "RMA as amended by the Planning Act 2026, as at lodgement (Sch 1 cl 19, 21)";
+    pub const POST: &str =
+        "RMA as amended by the Planning Act 2026, as at lodgement (Sch 1 cl 19, 21)";
     /// Fast-track.
-    pub const FTAA: &str = "Fast-track Approvals Act 2024 as at lodgement (FTAA Sch 1 cl 16\u{2013}24)";
+    pub const FTAA: &str =
+        "Fast-track Approvals Act 2024 as at lodgement (FTAA Sch 1 cl 16\u{2013}24)";
     /// Versions relied on.
     pub const STAMPS: [&str; 8] = [
         "RMA (regime above)",
@@ -348,11 +542,26 @@ pub mod reg {
     ];
     /// Authorities: body and role.
     pub const AUTHORITIES: [(&str, &str); 5] = [
-        ("Auckland Council", "Road controlling authority for Auckland roads since 7 May 2026 (LGACA s47)"),
-        ("Local board", "Specified road controlling authority powers on local and collector roads (LGACA s47C, Sch 4)"),
-        ("Auckland Transport", "Transport CCO, focused on public transport"),
-        ("NZTA", "State highways, where affected (approvals cannot be granted through Fast-track, FTAA s42(4))"),
-        ("KiwiRail", "Rail corridor and level crossings, where affected"),
+        (
+            "Auckland Council",
+            "Road controlling authority for Auckland roads since 7 May 2026 (LGACA s47)",
+        ),
+        (
+            "Local board",
+            "Specified road controlling authority powers on local and collector roads (LGACA s47C, Sch 4)",
+        ),
+        (
+            "Auckland Transport",
+            "Transport CCO, focused on public transport",
+        ),
+        (
+            "NZTA",
+            "State highways, where affected (approvals cannot be granted through Fast-track, FTAA s42(4))",
+        ),
+        (
+            "KiwiRail",
+            "Rail corridor and level crossings, where affected",
+        ),
     ];
 }
 
@@ -382,22 +591,206 @@ pub struct Chapter {
 
 /// `CHAPTERS`.
 pub const CHAPTERS: [Chapter; 16] = [
-    Chapter { id: "front", num: "", app: false, title: "Front matter", alias: &["front", "front matter", "cover", "executive summary", "summary", "limitations"] },
-    Chapter { id: "1", num: "1", app: false, title: "Introduction", alias: &["introduction", "reason for consent", "scope", "scoping", "statutory context", "e27", "e27 screening", "triggers"] },
-    Chapter { id: "2", num: "2", app: false, title: "Transport and land use environment", alias: &["existing environment", "environment", "land use environment", "road network", "crash history", "traffic volumes", "speeds", "zoning", "receiving environment"] },
-    Chapter { id: "3", num: "3", app: false, title: "Description of proposal", alias: &["proposal", "description of proposal", "trip generation", "trip distribution", "distribution", "assignment", "access", "parking", "staging and sequencing", "construction traffic", "land use"] },
-    Chapter { id: "4", num: "4", app: false, title: "Transport assessment", alias: &["assessment", "transport assessment", "network performance", "modelling", "junctions", "junction performance", "safety", "road user safety", "sensitivity", "economics", "network alignment", "policy alignment", "climate", "climate adaptation", "state highway", "state highway effects", "anop", "anop fit", "freight"] },
-    Chapter { id: "5", num: "5", app: false, title: "Mitigation, conditions and monitoring", alias: &["mitigation", "conditions", "monitoring", "staging triggers", "affected parties", "notification"] },
-    Chapter { id: "6", num: "6", app: false, title: "Conclusion", alias: &["conclusion"] },
-    Chapter { id: "P", num: "P", app: true, title: "Pathway annexes", alias: &["pathway", "pathway annexes", "annex", "plan change", "notice of requirement", "fast-track", "funding", "speed limit", "cbds", "growth funding", "time-of-use"] },
-    Chapter { id: "A", num: "A", app: true, title: "Model inputs and standards register", alias: &["appendix a", "model inputs", "inputs", "settings", "standards register"] },
-    Chapter { id: "B", num: "B", app: true, title: "Calibration and validation", alias: &["appendix b", "calibration", "validation", "calibration and validation"] },
-    Chapter { id: "C", num: "C", app: true, title: "Full movement tables", alias: &["appendix c", "movement tables", "movements", "sidra tables"] },
-    Chapter { id: "D", num: "D", app: true, title: "Crash listing", alias: &["appendix d", "crash listing"] },
-    Chapter { id: "E", num: "E", app: true, title: "ANOP tool inputs", alias: &["appendix e", "anop inputs", "anop tool inputs"] },
-    Chapter { id: "F", num: "F", app: true, title: "Data pack manifest", alias: &["appendix f", "data pack", "data pack manifest"] },
-    Chapter { id: "G", num: "G", app: true, title: "Expert disclosure and sign-off", alias: &["appendix g", "expert disclosure", "expert"] },
-    Chapter { id: "H", num: "H", app: true, title: "Statutory timeline", alias: &["appendix h", "statutory timeline", "timeline", "rfi clock"] },
+    Chapter {
+        id: "front",
+        num: "",
+        app: false,
+        title: "Front matter",
+        alias: &[
+            "front",
+            "front matter",
+            "cover",
+            "executive summary",
+            "summary",
+            "limitations",
+        ],
+    },
+    Chapter {
+        id: "1",
+        num: "1",
+        app: false,
+        title: "Introduction",
+        alias: &[
+            "introduction",
+            "reason for consent",
+            "scope",
+            "scoping",
+            "statutory context",
+            "e27",
+            "e27 screening",
+            "triggers",
+        ],
+    },
+    Chapter {
+        id: "2",
+        num: "2",
+        app: false,
+        title: "Transport and land use environment",
+        alias: &[
+            "existing environment",
+            "environment",
+            "land use environment",
+            "road network",
+            "crash history",
+            "traffic volumes",
+            "speeds",
+            "zoning",
+            "receiving environment",
+        ],
+    },
+    Chapter {
+        id: "3",
+        num: "3",
+        app: false,
+        title: "Description of proposal",
+        alias: &[
+            "proposal",
+            "description of proposal",
+            "trip generation",
+            "trip distribution",
+            "distribution",
+            "assignment",
+            "access",
+            "parking",
+            "staging and sequencing",
+            "construction traffic",
+            "land use",
+        ],
+    },
+    Chapter {
+        id: "4",
+        num: "4",
+        app: false,
+        title: "Transport assessment",
+        alias: &[
+            "assessment",
+            "transport assessment",
+            "network performance",
+            "modelling",
+            "junctions",
+            "junction performance",
+            "safety",
+            "road user safety",
+            "sensitivity",
+            "economics",
+            "network alignment",
+            "policy alignment",
+            "climate",
+            "climate adaptation",
+            "state highway",
+            "state highway effects",
+            "anop",
+            "anop fit",
+            "freight",
+        ],
+    },
+    Chapter {
+        id: "5",
+        num: "5",
+        app: false,
+        title: "Mitigation, conditions and monitoring",
+        alias: &[
+            "mitigation",
+            "conditions",
+            "monitoring",
+            "staging triggers",
+            "affected parties",
+            "notification",
+        ],
+    },
+    Chapter {
+        id: "6",
+        num: "6",
+        app: false,
+        title: "Conclusion",
+        alias: &["conclusion"],
+    },
+    Chapter {
+        id: "P",
+        num: "P",
+        app: true,
+        title: "Pathway annexes",
+        alias: &[
+            "pathway",
+            "pathway annexes",
+            "annex",
+            "plan change",
+            "notice of requirement",
+            "fast-track",
+            "funding",
+            "speed limit",
+            "cbds",
+            "growth funding",
+            "time-of-use",
+        ],
+    },
+    Chapter {
+        id: "A",
+        num: "A",
+        app: true,
+        title: "Model inputs and standards register",
+        alias: &[
+            "appendix a",
+            "model inputs",
+            "inputs",
+            "settings",
+            "standards register",
+        ],
+    },
+    Chapter {
+        id: "B",
+        num: "B",
+        app: true,
+        title: "Calibration and validation",
+        alias: &[
+            "appendix b",
+            "calibration",
+            "validation",
+            "calibration and validation",
+        ],
+    },
+    Chapter {
+        id: "C",
+        num: "C",
+        app: true,
+        title: "Full movement tables",
+        alias: &["appendix c", "movement tables", "movements", "sidra tables"],
+    },
+    Chapter {
+        id: "D",
+        num: "D",
+        app: true,
+        title: "Crash listing",
+        alias: &["appendix d", "crash listing"],
+    },
+    Chapter {
+        id: "E",
+        num: "E",
+        app: true,
+        title: "ANOP tool inputs",
+        alias: &["appendix e", "anop inputs", "anop tool inputs"],
+    },
+    Chapter {
+        id: "F",
+        num: "F",
+        app: true,
+        title: "Data pack manifest",
+        alias: &["appendix f", "data pack", "data pack manifest"],
+    },
+    Chapter {
+        id: "G",
+        num: "G",
+        app: true,
+        title: "Expert disclosure and sign-off",
+        alias: &["appendix g", "expert disclosure", "expert"],
+    },
+    Chapter {
+        id: "H",
+        num: "H",
+        app: true,
+        title: "Statutory timeline",
+        alias: &["appendix h", "statutory timeline", "timeline", "rfi clock"],
+    },
 ];
 
 /// The last chapter (Appendix I), which the array above leaves out of its fixed size.
@@ -406,7 +799,12 @@ pub const CHAPTER_I: Chapter = Chapter {
     num: "I",
     app: true,
     title: "Regulatory checklist and other material",
-    alias: &["appendix i", "appendices", "regulatory checklist", "other material"],
+    alias: &[
+        "appendix i",
+        "appendices",
+        "regulatory checklist",
+        "other material",
+    ],
 };
 
 /// Every chapter, in order.

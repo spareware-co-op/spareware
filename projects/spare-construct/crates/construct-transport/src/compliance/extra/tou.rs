@@ -4,14 +4,17 @@
 //! each charged road (charge divided by the value of time, in seconds), passed to the assignment as `arcPenalty`: it steers route choice and the
 //! equilibrium, but the travel times, VHT and delay of a result never include it.
 
-use super::ctx::{arc_link, assumptions, data, data_mut, esc, is_sh, long_date_s, num, pair, res_of, stamped, today};
+use super::ctx::{
+    arc_link, assumptions, data, data_mut, esc, is_sh, long_date_s, num, pair, res_of, stamped,
+    today,
+};
 use super::gps::{in_poly, polygon_of};
 use super::packs::{n0, r1, r3, sv, t_table};
 use crate::compliance::data::x as xdata;
+use crate::compliance::dates;
 use crate::compliance::engine;
 use crate::compliance::html::{ReportCtx, rt};
 use crate::compliance::jv::{Jx, NULL, V, arr, csv, jobj, ns};
-use crate::compliance::dates;
 use crate::graph::{Graph, js_sort_by};
 use crate::jsnum::{math_max, math_round, truthy_number};
 use std::collections::{HashMap, HashSet};
@@ -24,7 +27,10 @@ pub fn tou_charged(sc: &V, poly: &[[f64; 2]], kind: &str) -> Vec<(String, &'stat
         if l.g("status").eq_s("closed") {
             continue;
         }
-        let (a, b) = (sc.g("nodes").g(&l.g("a").s()), sc.g("nodes").g(&l.g("b").s()));
+        let (a, b) = (
+            sc.g("nodes").g(&l.g("a").s()),
+            sc.g("nodes").g(&l.g("b").s()),
+        );
         if !a.t() || !b.t() {
             continue;
         }
@@ -64,7 +70,15 @@ pub struct TouTime {
 /// `touSkim(G, r, charged, applied, pen, zs, S)`: zone-to-zone generalised and real times on a time-of-use run: each arc costs its real time in the result
 /// plus the charge (`pen`, s) on charged roads, so the shortest route sees the true charge. `applied` is the time an earlier method added to an
 /// arc, taken off with its congestion factor (older callers).
-pub fn tou_skim(p: &V, g: &Graph, r: Option<&V>, charged: Option<&[(String, &'static str)]>, applied: Option<&HashMap<String, f64>>, pen: f64, zs: &[String]) -> HashMap<String, HashMap<String, TouTime>> {
+pub fn tou_skim(
+    p: &V,
+    g: &Graph,
+    r: Option<&V>,
+    charged: Option<&[(String, &'static str)]>,
+    applied: Option<&HashMap<String, f64>>,
+    pen: f64,
+    zs: &[String],
+) -> HashMap<String, HashMap<String, TouTime>> {
     let proj = engine::project(p);
     let perf = crate::junction::PerfSet::new(&proj.settings);
     let set: Option<HashSet<&str>> = charged.map(|c| c.iter().map(|x| x.0.as_str()).collect());
@@ -72,10 +86,20 @@ pub fn tou_skim(p: &V, g: &Graph, r: Option<&V>, charged: Option<&[(String, &'st
     let mut chg = vec![false; g.arcs.len()];
     for (i, a) in g.arcs.iter().enumerate() {
         let x = r.map_or(&NULL, |r| r.g("arcs").g(&a.key));
-        let ap = applied.map_or(0.0, |m| { let v = m.get(&a.key).copied().unwrap_or(0.0); if truthy_number(v) { v } else { 0.0 } });
-        let mut t = if x.t() { x.get("t").map_or(f64::NAN, |t| t.n()) } else { crate::junction::arc_time(a, 0.0, &perf) };
+        let ap = applied.map_or(0.0, |m| {
+            let v = m.get(&a.key).copied().unwrap_or(0.0);
+            if truthy_number(v) { v } else { 0.0 }
+        });
+        let mut t = if x.t() {
+            x.get("t").map_or(f64::NAN, |t| t.n())
+        } else {
+            crate::junction::arc_time(a, 0.0, &perf)
+        };
         if x.t() && ap > 0.0 && x.g("ff").n() > 0.0 {
-            t = math_max(0.1, t - ap * math_max(1.0, (x.g("t").n() - n0(x.g("nd"))) / x.g("ff").n()));
+            t = math_max(
+                0.1,
+                t - ap * math_max(1.0, (x.g("t").n() - n0(x.g("nd"))) / x.g("ff").n()),
+            );
         }
         if let Some(s) = &set {
             if !a.conn && s.contains(a.link.as_str()) {
@@ -88,14 +112,18 @@ pub fn tou_skim(p: &V, g: &Graph, r: Option<&V>, charged: Option<&[(String, &'st
     let mut w = g.workspace();
     let mut out: HashMap<String, HashMap<String, TouTime>> = HashMap::new();
     for f in zs {
-        let Some(&s) = g.idx.get(&format!("z:{f}")) else { continue };
+        let Some(&s) = g.idx.get(&format!("z:{f}")) else {
+            continue;
+        };
         g.spt(&cost, s, &mut w, -1, -1);
         let mut m: HashMap<String, TouTime> = HashMap::new();
         for t in zs {
             if t == f {
                 continue;
             }
-            let Some(&i) = g.idx.get(&format!("z:{t}")) else { continue };
+            let Some(&i) = g.idx.get(&format!("z:{t}")) else {
+                continue;
+            };
             if !w.nd[i].is_finite() {
                 continue;
             }
@@ -107,7 +135,14 @@ pub fn tou_skim(p: &V, g: &Graph, r: Option<&V>, charged: Option<&[(String, &'st
                     }
                 }
             }
-            m.insert(t.clone(), TouTime { gc: w.nd[i], n, real: w.nd[i] - n * pen });
+            m.insert(
+                t.clone(),
+                TouTime {
+                    gc: w.nd[i],
+                    n,
+                    real: w.nd[i] - n * pen,
+                },
+            );
         }
         out.insert(f.clone(), m);
     }
@@ -159,14 +194,21 @@ fn od_sample(o: &Od) -> V {
 pub fn tou_run(p: &mut V, opts: &V) -> V {
     let res = tou_compute(p, opts);
     if res.g("ok").t() && !opts.g("save").strict_eq(&V::Bool(false)) {
-        data_mut(p).get_mut("tou").expect("tou record").set("result", res.clone());
+        data_mut(p)
+            .get_mut("tou")
+            .expect("tou record")
+            .set("result", res.clone());
     }
     res
 }
 
 fn tou_compute(p: &V, opts: &V) -> V {
     let cx = data(p).g("tou").clone();
-    let now = if opts.g("today").t() { opts.g("today").s() } else { today() };
+    let now = if opts.g("today").t() {
+        opts.g("today").s()
+    } else {
+        today()
+    };
     let std_tou = xdata("STD.dates.tou").s();
     if now.as_str() < std_tou.as_str() {
         return jobj! { "ok" => false, "why" => format!("Time-of-use schemes can be proposed from {}, when LTMA ss65A-65ZO commence.", long_date_s(&std_tou)) };
@@ -185,7 +227,11 @@ fn tou_compute(p: &V, opts: &V) -> V {
         "AM".to_string()
     };
     let s_ = p.g("settings");
-    let e_set = if s_.g("econ").t() { s_.g("econ") } else { &NULL };
+    let e_set = if s_.g("econ").t() {
+        s_.g("econ")
+    } else {
+        &NULL
+    };
     let a = assumptions(p);
     let hv = n0(s_.g("hvPct")) / 100.0;
     let charge = n0(cx.g("light")) * (1.0 - hv) + n0(cx.g("heavy")) * hv;
@@ -194,7 +240,11 @@ fn tou_compute(p: &V, opts: &V) -> V {
         if truthy_number(v) { v } else { 32.0 }
     };
     let pen = charge / vot * 3600.0;
-    let kind = if cx.g("kind").eq_s("area") { "area" } else { "cordon" };
+    let kind = if cx.g("kind").eq_s("area") {
+        "area"
+    } else {
+        "cordon"
+    };
     let charged = tou_charged(sc, &poly, kind);
     if charged.is_empty() {
         return jobj! { "ok" => false, "why" => "No road crosses (or lies inside) the charging area." };
@@ -217,11 +267,20 @@ fn tou_compute(p: &V, opts: &V) -> V {
     }
     let g1 = engine::build_graph(p, sc, None);
     let zone_ids: Vec<String> = r0.g("zoneIds").items().iter().map(|x| x.s()).collect();
-    let zs: Vec<String> = zone_ids.iter().filter(|id| sc.g("zones").g(id).t()).cloned().collect();
+    let zs: Vec<String> = zone_ids
+        .iter()
+        .filter(|id| sc.g("zones").g(id).t())
+        .cloned()
+        .collect();
     let zn = zone_ids.len();
     let zi: HashMap<&String, usize> = zone_ids.iter().enumerate().map(|(k, id)| (id, k)).collect();
     let s0 = tou_skim(p, &g1, Some(r0), None, None, 0.0, &zs);
-    let r1_ = engine::assign(p, sc, None, &jobj! { "period" => period.as_str(), "arcPenalty" => &arc_penalty });
+    let r1_ = engine::assign(
+        p,
+        sc,
+        None,
+        &jobj! { "period" => period.as_str(), "arcPenalty" => &arc_penalty },
+    );
     let s1 = tou_skim(p, &g1, Some(&r1_), Some(&charged), None, pen, &zs);
     // one elastic-demand step on generalised time
     let mut ods: Vec<Od> = Vec::new();
@@ -235,7 +294,9 @@ fn tou_compute(p: &V, opts: &V) -> V {
             let q = n0(r0.g("T").ix(zi[i] * zn + zi[j]));
             let b0 = s0.get(i).and_then(|m| m.get(j));
             let b1 = s1.get(i).and_then(|m| m.get(j));
-            let (Some(b0), Some(b1)) = (b0, b1) else { continue };
+            let (Some(b0), Some(b1)) = (b0, b1) else {
+                continue;
+            };
             if !(q > 0.0) || !(b0.gc > 0.0) {
                 continue;
             }
@@ -244,19 +305,39 @@ fn tou_compute(p: &V, opts: &V) -> V {
             t1s += q1;
             let nm = |id: &String| {
                 let z = sc.g("zones").g(id);
-                if z.g("name").t() { z.g("name").clone() } else { V::String(id.clone()) }
+                if z.g("name").t() {
+                    z.g("name").clone()
+                } else {
+                    V::String(id.clone())
+                }
             };
-            ods.push(Od { i: i.clone(), j: j.clone(), from: nm(i), to: nm(j), q0: q, q1, t0: b0.gc, after: None });
+            ods.push(Od {
+                i: i.clone(),
+                j: j.clone(),
+                from: nm(i),
+                to: nm(j),
+                q0: q,
+                q1,
+                t0: b0.gc,
+                after: None,
+            });
         }
     }
     let d_f = if t0s > 0.0 { t1s / t0s } else { 1.0 };
-    let r2 = engine::assign(p, sc, None, &jobj! { "period" => period.as_str(), "arcPenalty" => &arc_penalty, "demandFactor" => d_f });
+    let r2 = engine::assign(
+        p,
+        sc,
+        None,
+        &jobj! { "period" => period.as_str(), "arcPenalty" => &arc_penalty, "demandFactor" => d_f },
+    );
     let s2 = tou_skim(p, &g1, Some(&r2), Some(&charged), None, pen, &zs);
     // rule of half per OD on generalised cost; revenue and the deadweight loss of priced-off trips (NZ$ per modelled hour)
     let (mut user, mut time, mut revenue, mut dwl) = (0.0, 0.0, 0.0, 0.0);
     let mut inc: Vec<Inc> = Vec::new();
     for o in ods.iter_mut() {
-        let Some(b) = s2.get(&o.i).and_then(|m| m.get(&o.j)) else { continue };
+        let Some(b) = s2.get(&o.i).and_then(|m| m.get(&o.j)) else {
+            continue;
+        };
         let pay = b.n * charge;
         o.after = Some((b.real, b.n, b.n > 0.0, pay));
         user += 0.5 * (o.q0 + o.q1) * (o.t0 - b.gc) / 3600.0 * vot;
@@ -274,7 +355,11 @@ fn tou_compute(p: &V, opts: &V) -> V {
                     paid_trips: 0.0,
                     d_gc: 0.0,
                     d_real: 0.0,
-                    income: if cxz.t() && cxz.has("income") { Some(cxz.g("income").clone()) } else { None },
+                    income: if cxz.t() && cxz.has("income") {
+                        Some(cxz.g("income").clone())
+                    } else {
+                        None
+                    },
                 });
                 inc.len() - 1
             }
@@ -293,43 +378,66 @@ fn tou_compute(p: &V, opts: &V) -> V {
         let (mut vkt, mut vht, mut co2) = (0.0, 0.0, 0.0);
         for (k, x) in r.g("arcs").entries() {
             let l = sc.g("links").g(&arc_link(k));
-            if !l.t() || (sh.is_some() && is_sh(p, l) != sh.unwrap_or(false)) || !(x.g("len").n() > 0.0) {
+            if !l.t()
+                || (sh.is_some() && is_sh(p, l) != sh.unwrap_or(false))
+                || !(x.g("len").n() > 0.0)
+            {
                 continue;
             }
             let t = x.g("t").n();
             vkt += x.g("v").n() * x.g("len").n() / 1000.0;
             vht += x.g("v").n() * t / 3600.0;
-            co2 += x.g("v").n() * x.g("len").n() / 1000.0 * crate::standards::ef(x.g("len").n() / t * 3.6, &proj.settings) / 1e6;
+            co2 += x.g("v").n() * x.g("len").n() / 1000.0
+                * crate::standards::ef(x.g("len").n() / t * 3.6, &proj.settings)
+                / 1e6;
         }
         NetTotals { vkt, vht, co2 }
     };
     let n0t = by_net(r0, None);
     let n2t = by_net(&r2, None);
-    let pt = |r: &V| r.g("routes").vals().iter().fold(0.0, |s, x| s + n0(x.g("t")));
+    let pt = |r: &V| {
+        r.g("routes")
+            .vals()
+            .iter()
+            .fold(0.0, |s, x| s + n0(x.g("t")))
+    };
     let hrs = {
         let h = e_set.g("periodHours").g(&period);
         let h = if h.nullish() { 600.0 } else { h.n() };
         if truthy_number(h) { h } else { 600.0 }
     };
     let std_tab = engine::standards_table();
-    let mb = if std_tab.g("mbcm").t() { std_tab.g("mbcm") } else { &NULL };
+    let mb = if std_tab.g("mbcm").t() {
+        std_tab.g("mbcm")
+    } else {
+        &NULL
+    };
     let rates: V = if e_set.g("rates").is_arr() && !e_set.g("rates").items().is_empty() {
         e_set.g("rates").clone()
     } else if mb.g("rates").t() {
         mb.g("rates").clone()
     } else {
-        arr([jobj! { "to" => 30, "r" => 2 }, jobj! { "to" => 60, "r" => 1.5 }])
+        arr([
+            jobj! { "to" => 30, "r" => 2 },
+            jobj! { "to" => 60, "r" => 1.5 },
+        ])
     };
     let yrs = {
         let y = e_set.g("years").n();
-        let y = if truthy_number(y) { y } else { let m = mb.g("years").n(); if truthy_number(m) { m } else { 40.0 } };
+        let y = if truthy_number(y) {
+            y
+        } else {
+            let m = mb.g("years").n();
+            if truthy_number(m) { m } else { 40.0 }
+        };
         math_max(1.0, math_round(y))
     };
     let m = |x: f64| x * hrs / 1e6;
     let voc = m((n0t.vkt - n2t.vkt) * a.g("vocPerKm").n());
     let co2v = m((n0t.co2 - n2t.co2) * a.g("co2PerT").n());
     let safety = m((n0t.vkt - n2t.vkt) * a.g("crashPerKm").n());
-    let (a_user, a_time, a_charges, a_dwl, a_revenue) = (m(user), m(time), -m(revenue + dwl), m(dwl), m(revenue));
+    let (a_user, a_time, a_charges, a_dwl, a_revenue) =
+        (m(user), m(time), -m(revenue + dwl), m(dwl), m(revenue));
     let ext = voc + co2v + safety;
     let a_total = a_user + a_revenue + ext;
     let a_gov = a_user + ext;
@@ -339,11 +447,22 @@ fn tou_compute(p: &V, opts: &V) -> V {
     let uspwf = engine::pwf(&rates, yrs).g("uspwf").n();
     let (pv_b, pv_g, pv_r) = (a_total * uspwf, a_gov * uspwf, a_revenue * uspwf);
     let cost = n0(cx.g("cost"));
-    let mut paid: Vec<&Od> = ods.iter().filter(|o| o.after.is_some_and(|x| x.2)).collect();
-    let mut unpaid: Vec<&Od> = ods.iter().filter(|o| o.after.is_some_and(|x| !x.2)).collect();
+    let mut paid: Vec<&Od> = ods
+        .iter()
+        .filter(|o| o.after.is_some_and(|x| x.2))
+        .collect();
+    let mut unpaid: Vec<&Od> = ods
+        .iter()
+        .filter(|o| o.after.is_some_and(|x| !x.2))
+        .collect();
     js_sort_by(&mut paid, |x, y| y.q0 - x.q0);
     js_sort_by(&mut unpaid, |x, y| y.q0 - x.q0);
-    let sample: Vec<V> = paid.iter().take(12).chain(unpaid.iter().take(4)).map(|o| od_sample(o)).collect();
+    let sample: Vec<V> = paid
+        .iter()
+        .take(12)
+        .chain(unpaid.iter().take(4))
+        .map(|o| od_sample(o))
+        .collect();
     let mut incidence: Vec<(f64, V)> = inc
         .iter()
         .map(|z| {
@@ -358,7 +477,23 @@ fn tou_compute(p: &V, opts: &V) -> V {
         })
         .collect();
     js_sort_by(&mut incidence, |x, y| y.0 - x.0);
-    let rate_text = rates.items().iter().enumerate().map(|(k, s)| format!("{}%{}", s.g("r").s(), if k > 0 { format!(" to year {}", s.g("to").s()) } else { format!(" years 1-{}", s.g("to").s()) })).collect::<Vec<_>>().join(", then ");
+    let rate_text = rates
+        .items()
+        .iter()
+        .enumerate()
+        .map(|(k, s)| {
+            format!(
+                "{}%{}",
+                s.g("r").s(),
+                if k > 0 {
+                    format!(" to year {}", s.g("to").s())
+                } else {
+                    format!(" years 1-{}", s.g("to").s())
+                }
+            )
+        })
+        .collect::<Vec<_>>()
+        .join(", then ");
     let appraisal = xdata("STD.tou.appraisal").s();
     let method = format!(
         "Charge NZ${} (light {}, heavy {}, HV {}%; one vehicle class) as {} min at NZ${}/h of generalised cost on {} charged road{}{}, in route choice and the equilibrium (Spare Construct's additive arc cost; travel times, VHT and delay exclude it)",
@@ -370,13 +505,22 @@ fn tou_compute(p: &V, opts: &V) -> V {
         ns(vot),
         charged.len(),
         if charged.len() == 1 { "" } else { "s" },
-        if cx.g("kind").eq_s("area") { "" } else { " (both directions of each cordon crossing)" }
+        if cx.g("kind").eq_s("area") {
+            ""
+        } else {
+            " (both directions of each cordon crossing)"
+        }
     ) + &format!(
         "; the gravity distribution does not see the charge; one elastic step (elasticity {}, {}) gives a demand factor of {}, applied to every OD pair in the network run",
         a.g("elasticity").s(),
         xdata("ASSUMPTION").s(),
         num(&V::Number(d_f), 3)
-    ) + &format!(". {}. Discounted at {} over {} years, benefits flat (NZTA GC 25/01)", appraisal, rate_text, ns(yrs));
+    ) + &format!(
+        ". {}. Discounted at {} over {} years, benefits flat (NZTA GC 25/01)",
+        appraisal,
+        rate_text,
+        ns(yrs)
+    );
     let impacts = jobj! {
         "sh" => arr([by_net(r0, Some(true)).to_v(), by_net(&r2, Some(true)).to_v()]),
         "local" => arr([by_net(r0, Some(false)).to_v(), by_net(&r2, Some(false)).to_v()]),
@@ -399,7 +543,11 @@ fn tou_compute(p: &V, opts: &V) -> V {
 pub fn tou_csv(p: &V) -> String {
     let r = data(p).g("tou").g("result").clone();
     if !r.t() || !r.g("ok").t() {
-        return stamped(&csv(&[vec![sv("Time-of-use screening has not been run.")]]), p, None);
+        return stamped(
+            &csv(&[vec![sv("Time-of-use screening has not been run.")]]),
+            p,
+            None,
+        );
     }
     let a = r.g("annual");
     let imp = r.g("impacts");
@@ -410,7 +558,16 @@ pub fn tou_csv(p: &V) -> String {
         vec![s("Method"), r.g("method").clone()],
         vec![],
         vec![s("Sampled trips (s65D(3))")],
-        head(&["From", "To", "Trips before (veh/h)", "Trips after (veh/h)", "Travel time before (min)", "Travel time after (min)", "Charge paid (NZ$)", "Charged"]),
+        head(&[
+            "From",
+            "To",
+            "Trips before (veh/h)",
+            "Trips after (veh/h)",
+            "Travel time before (min)",
+            "Travel time after (min)",
+            "Charge paid (NZ$)",
+            "Charged",
+        ]),
     ];
     for o in r.g("sample").items() {
         rows.push(vec![
@@ -420,24 +577,62 @@ pub fn tou_csv(p: &V) -> String {
             r1(o.g("q1")),
             r1(&V::Number(o.g("t0").n() / 60.0)),
             r1(&V::Number(o.g("t1").n() / 60.0)),
-            if !o.g("pay").nullish() { r3(o.g("pay")) } else { s("") },
+            if !o.g("pay").nullish() {
+                r3(o.g("pay"))
+            } else {
+                s("")
+            },
             s(if o.g("paid").t() { "yes" } else { "no" }),
         ]);
     }
     rows.push(vec![]);
-    rows.push(head(&["Network impacts (real travel times)", "VKT before", "VKT after", "VHT before", "VHT after"]));
+    rows.push(head(&[
+        "Network impacts (real travel times)",
+        "VKT before",
+        "VKT after",
+        "VHT before",
+        "VHT after",
+    ]));
     let net_row = |label: &str, k: &str| -> Vec<V> {
         let (b, a2) = (imp.g(k).ix(0), imp.g(k).ix(1));
-        vec![s(label), r1(b.g("vkt")), r1(a2.g("vkt")), r1(b.g("vht")), r1(a2.g("vht"))]
+        vec![
+            s(label),
+            r1(b.g("vkt")),
+            r1(a2.g("vkt")),
+            r1(b.g("vht")),
+            r1(a2.g("vht")),
+        ]
     };
     rows.push(net_row("State highways", "sh"));
     rows.push(net_row("Local roads", "local"));
-    rows.push(vec![s("Bus routes (total time, s)"), r1(imp.g("pt").ix(0)), r1(imp.g("pt").ix(1))]);
+    rows.push(vec![
+        s("Bus routes (total time, s)"),
+        r1(imp.g("pt").ix(0)),
+        r1(imp.g("pt").ix(1)),
+    ]);
     rows.push(vec![]);
     rows.push(vec![s("Incidence by zone")]);
-    rows.push(head(&["Zone", "Trips (veh/h)", "Charged share", "Average travel time change (s)", "Average generalised cost change (s, charge as time)", "Income proxy"]));
+    rows.push(head(&[
+        "Zone",
+        "Trips (veh/h)",
+        "Charged share",
+        "Average travel time change (s)",
+        "Average generalised cost change (s, charge as time)",
+        "Income proxy",
+    ]));
     for z in r.g("incidence").items() {
-        rows.push(vec![z.g("name").clone(), r1(z.g("trips")), r3(z.g("paidShare")), r1(z.g("dtAvg")), r1(z.g("dGcAvg")), if z.g("income").nullish() { s("") } else { z.g("income").clone() }]);
+        rows.push(vec![
+            z.g("name").clone(),
+            r1(z.g("trips")),
+            r3(z.g("paidShare")),
+            r1(z.g("dtAvg")),
+            r1(z.g("dGcAvg")),
+            if z.g("income").nullish() {
+                s("")
+            } else {
+                z.g("income").clone()
+            },
+        ]);
     }
     rows.push(vec![]);
     rows.push(head(&[
@@ -452,10 +647,37 @@ pub fn tou_csv(p: &V) -> String {
         "Safety",
         "National total",
     ]));
-    rows.push(vec![s(""), r3(a.g("user")), r3(a.g("time")), r3(a.g("charges")), r3(a.g("revenue")), r3(a.g("deadweight")), r3(a.g("voc")), r3(a.g("co2")), r3(a.g("safety")), r3(a.g("total"))]);
+    rows.push(vec![
+        s(""),
+        r3(a.g("user")),
+        r3(a.g("time")),
+        r3(a.g("charges")),
+        r3(a.g("revenue")),
+        r3(a.g("deadweight")),
+        r3(a.g("voc")),
+        r3(a.g("co2")),
+        r3(a.g("safety")),
+        r3(a.g("total")),
+    ]);
     rows.push(vec![s("Appraisal"), r.g("appraisal").clone()]);
-    rows.push(vec![s("BCR_N"), if !r.g("bcrN").nullish() { r1(r.g("bcrN")) } else { s("enter the scheme cost") }]);
-    rows.push(vec![s("BCR_G (revenue as Cp)"), if !r.g("bcrG").nullish() { r1(r.g("bcrG")) } else if r.g("bcrGText").t() { r.g("bcrGText").clone() } else { s("enter the scheme cost") }]);
+    rows.push(vec![
+        s("BCR_N"),
+        if !r.g("bcrN").nullish() {
+            r1(r.g("bcrN"))
+        } else {
+            s("enter the scheme cost")
+        },
+    ]);
+    rows.push(vec![
+        s("BCR_G (revenue as Cp)"),
+        if !r.g("bcrG").nullish() {
+            r1(r.g("bcrG"))
+        } else if r.g("bcrGText").t() {
+            r.g("bcrGText").clone()
+        } else {
+            s("enter the scheme cost")
+        },
+    ]);
     stamped(&csv(&rows), p, None)
 }
 
@@ -484,12 +706,37 @@ pub fn report(id: &str, p: &V, ctx: Option<&dyn ReportCtx>) -> Option<String> {
                 num(o.g("q1"), 1),
                 num(&V::Number(o.g("t0").n() / 60.0), 1),
                 num(&V::Number(o.g("t1").n() / 60.0), 1),
-                if o.g("paid").t() { num(o.g("pay"), 2) } else { "\u{2013}".to_string() },
+                if o.g("paid").t() {
+                    num(o.g("pay"), 2)
+                } else {
+                    "\u{2013}".to_string()
+                },
             ]
         })
         .collect();
-    let tbl = t_table(&["From", "To", "Trips before", "Trips after", "Time before (min)", "Time after (min)", "Charge (NZ$)"], rows, "");
-    Some(format!("<p class=\"note\"><b>{}</b></p>{}", esc(r.g("label")), rt(ctx, "Sampled trips before and after the charge (s65D(3))", &tbl, &esc(r.g("method")))))
+    let tbl = t_table(
+        &[
+            "From",
+            "To",
+            "Trips before",
+            "Trips after",
+            "Time before (min)",
+            "Time after (min)",
+            "Charge (NZ$)",
+        ],
+        rows,
+        "",
+    );
+    Some(format!(
+        "<p class=\"note\"><b>{}</b></p>{}",
+        esc(r.g("label")),
+        rt(
+            ctx,
+            "Sampled trips before and after the charge (s65D(3))",
+            &tbl,
+            &esc(r.g("method"))
+        )
+    ))
 }
 
 /// The exports of this part (`EXPORTS`, ids as the prototype registers them: "compliance-extra-<id>").

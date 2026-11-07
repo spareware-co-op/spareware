@@ -22,8 +22,15 @@ fn holidays_and_school_terms_match() {
             Value::String(s) => s.as_str(),
             _ => "Auckland",
         };
-        let got: Vec<Value> = holidays(h["year"].as_i64().unwrap(), region).into_iter().map(|d| json!(d)).collect();
-        assert_close(&Value::Array(got), &h["days"], &format!("holidays of {} in {:?}", h["year"], h["region"]));
+        let got: Vec<Value> = holidays(h["year"].as_i64().unwrap(), region)
+            .into_iter()
+            .map(|d| json!(d))
+            .collect();
+        assert_close(
+            &Value::Array(got),
+            &h["days"],
+            &format!("holidays of {} in {:?}", h["year"], h["region"]),
+        );
     }
     let ds = e["dates"].as_array().unwrap();
     assert_eq!(ds.len(), 68);
@@ -36,13 +43,20 @@ fn holidays_and_school_terms_match() {
             None => d["n"].as_f64().unwrap(),
         };
         assert_eq!(diso(n), d["diso"].as_str().unwrap(), "diso of {n}");
-        assert_eq!(in_term(n).map_or(Value::Null, Value::Bool), d["inTerm"], "in term on {n}");
+        assert_eq!(
+            in_term(n).map_or(Value::Null, Value::Bool),
+            d["inTerm"],
+            "in term on {n}"
+        );
     }
 }
 
 // What the prototype's `F()` shows: it makes the feeds record (with an empty vintage table) the first time anything looks at it.
 fn feeds_of_run(p: &construct_transport::project::Project) -> Value {
-    p.extra.get("feeds").cloned().unwrap_or_else(|| json!({ "vintage": {} }))
+    p.extra
+        .get("feeds")
+        .cloned()
+        .unwrap_or_else(|| json!({ "vintage": {} }))
 }
 
 fn site_rows(file_ref: &str) -> Vec<JsonValue> {
@@ -50,7 +64,9 @@ fn site_rows(file_ref: &str) -> Vec<JsonValue> {
         .into_iter()
         .filter_map(|f| {
             let a = f.get("attributes")?.clone();
-            let r = ["SiteRef", "siteref", "SITEREF"].iter().find_map(|k| a.get(k).filter(|v| !v.is_null()))?;
+            let r = ["SiteRef", "siteref", "SITEREF"]
+                .iter()
+                .find_map(|k| a.get(k).filter(|v| !v.is_null()))?;
             (r.js_string() == file_ref).then_some(a)
         })
         .collect()
@@ -65,16 +81,30 @@ fn site_statistics_match() {
         let label = rec["label"].as_str().unwrap();
         let rows: Vec<JsonValue> = match rec["rows"].get("fixtureSite") {
             Some(s) => site_rows(s.as_str().unwrap()),
-            None => rec["rows"].as_array().unwrap().iter().map(ordered).collect(),
+            None => rec["rows"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .map(ordered)
+                .collect(),
         };
         let o = &rec["opts"];
-        let hist: Option<Vec<JsonValue>> = o.get("hist").map(|h| h.as_array().unwrap().iter().map(ordered).collect());
-        let region = o.get("region").and_then(Value::as_str).unwrap_or("Auckland");
+        let hist: Option<Vec<JsonValue>> = o
+            .get("hist")
+            .map(|h| h.as_array().unwrap().iter().map(ordered).collect());
+        let region = o
+            .get("region")
+            .and_then(Value::as_str)
+            .unwrap_or("Auckland");
         let now = o["now"].as_f64().unwrap();
         let got = tms_stats(&rows, &o["ref"], region, hist.as_deref(), now, NOW);
         match (&got, rec.get("thrown")) {
             (Err(m), Some(t)) => assert_eq!(m, t.as_str().unwrap(), "{label}: error"),
-            (Ok(r), None) => assert_close(&serde_json::to_value(r).unwrap(), &rec["result"], &format!("stats {label}")),
+            (Ok(r), None) => assert_close(
+                &serde_json::to_value(r).unwrap(),
+                &rec["result"],
+                &format!("stats {label}"),
+            ),
             (g, t) => panic!("{label}: got {g:?}, recorded {t:?}"),
         }
     }
@@ -86,9 +116,18 @@ fn count_sites_are_chosen_as_recorded() {
     let mut p = project("corridor");
     construct_transport::datahub::ensure_data(&mut p);
     let counts = fixture_counts(&e);
-    p.data.get_mut().unwrap().extra.insert("counts".to_string(), counts);
+    p.data
+        .get_mut()
+        .unwrap()
+        .extra
+        .insert("counts".to_string(), counts);
     let ids: Vec<String> = tms_sites(&p).into_iter().map(|s| s.reference).collect();
-    let want: Vec<String> = e["sites"].as_array().unwrap().iter().map(|x| x.as_str().unwrap().trim_start_matches("nzta:").to_string()).collect();
+    let want: Vec<String> = e["sites"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|x| x.as_str().unwrap().trim_start_matches("nzta:").to_string())
+        .collect();
     assert_eq!(ids, want);
 }
 
@@ -106,12 +145,22 @@ fn downloads_match() {
         let label = rec["label"].as_str().unwrap();
         let mut p = project("corridor");
         construct_transport::datahub::ensure_data(&mut p);
-        p.data.get_mut().unwrap().extra.insert("counts".to_string(), rec["startCounts"].clone());
+        p.data
+            .get_mut()
+            .unwrap()
+            .extra
+            .insert("counts".to_string(), rec["startCounts"].clone());
         if let Some(f) = rec["startFeeds"].as_object() {
-            p.settings.extra.insert("feeds".to_string(), Value::Object(f.clone()));
+            p.settings
+                .extra
+                .insert("feeds".to_string(), Value::Object(f.clone()));
         }
         let cfg = FeedsConfig::of(&p);
-        let days = if rec["days"].get("undefined").is_some() { cfg.tms_days.clone() } else { rec["days"].clone() };
+        let days = if rec["days"].get("undefined").is_some() {
+            cfg.tms_days.clone()
+        } else {
+            rec["days"].clone()
+        };
         let mut load = TmsLoad::new(tms_sites(&p), &days, NOW, cfg.limit_ms());
         let log = rec["requests"].as_array().unwrap();
         let (used, res) = replay(&mut load, log, 0, label);
@@ -124,14 +173,30 @@ fn downloads_match() {
         };
         match (&result, rec.get("thrown")) {
             (Err(m), Some(t)) => assert_eq!(m, t.as_str().unwrap(), "{label}: error"),
-            (Ok(r), None) => assert_close(&serde_json::to_value(r).unwrap(), &rec["result"], &format!("{label} result")),
+            (Ok(r), None) => assert_close(
+                &serde_json::to_value(r).unwrap(),
+                &rec["result"],
+                &format!("{label} result"),
+            ),
             (g, t) => panic!("{label}: got {g:?}, recorded {t:?}"),
         }
         assert_close(&feeds_of_run(&p), &rec["feeds"], &format!("{label} feeds"));
-        assert_close(&p.data.get().unwrap().extra["counts"], &rec["counts"], &format!("{label} counts"));
+        assert_close(
+            &p.data.get().unwrap().extra["counts"],
+            &rec["counts"],
+            &format!("{label} counts"),
+        );
         let mut fresh = project_of_text(&p.serialise());
-        assert_eq!(attach_tms(&mut fresh) as u64, rec["attachFresh"].as_u64().unwrap(), "{label}: counts changed when the project is reopened");
-        assert_close(&fresh.data.get().unwrap().extra["counts"], &rec["countsFresh"], &format!("{label} counts after reopening"));
+        assert_eq!(
+            attach_tms(&mut fresh) as u64,
+            rec["attachFresh"].as_u64().unwrap(),
+            "{label}: counts changed when the project is reopened"
+        );
+        assert_close(
+            &fresh.data.get().unwrap().extra["counts"],
+            &rec["countsFresh"],
+            &format!("{label} counts after reopening"),
+        );
     }
 }
 
@@ -144,7 +209,11 @@ fn peak_profiles_match() {
         let label = rec["label"].as_str().unwrap();
         let mut p = project("corridor");
         construct_transport::datahub::ensure_data(&mut p);
-        p.data.get_mut().unwrap().extra.insert("counts".to_string(), e["loads"][0]["startCounts"].clone());
+        p.data
+            .get_mut()
+            .unwrap()
+            .extra
+            .insert("counts".to_string(), e["loads"][0]["startCounts"].clone());
         p.extra.insert(
             "feeds".to_string(),
             json!({ "vintage": {}, "tms": {
@@ -165,13 +234,29 @@ fn peak_profiles_match() {
         };
         match (&result, rec.get("thrown")) {
             (Err(m), Some(t)) => assert_eq!(m, t.as_str().unwrap(), "{label}: error"),
-            (Ok(n), None) => assert_eq!(*n as u64, rec["n"].as_u64().unwrap(), "{label}: counts changed"),
+            (Ok(n), None) => assert_eq!(
+                *n as u64,
+                rec["n"].as_u64().unwrap(),
+                "{label}: counts changed"
+            ),
             (g, t) => panic!("{label}: got {g:?}, recorded {t:?}"),
         }
         assert_close(&feeds_of_run(&p), &rec["feeds"], &format!("{label} feeds"));
-        assert_close(&p.data.get().unwrap().extra["counts"], &rec["counts"], &format!("{label} counts"));
+        assert_close(
+            &p.data.get().unwrap().extra["counts"],
+            &rec["counts"],
+            &format!("{label} counts"),
+        );
         let mut fresh = project_of_text(&p.serialise());
-        assert_eq!(attach_tms(&mut fresh) as u64, rec["attachFresh"].as_u64().unwrap(), "{label}: counts changed when the project is reopened");
-        assert_close(&fresh.data.get().unwrap().extra["counts"], &rec["countsFresh"], &format!("{label} counts after reopening"));
+        assert_eq!(
+            attach_tms(&mut fresh) as u64,
+            rec["attachFresh"].as_u64().unwrap(),
+            "{label}: counts changed when the project is reopened"
+        );
+        assert_close(
+            &fresh.data.get().unwrap().extra["counts"],
+            &rec["countsFresh"],
+            &format!("{label} counts after reopening"),
+        );
     }
 }

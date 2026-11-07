@@ -41,6 +41,9 @@
 //!   an arena's rows into name order that the builder applies before publishing (8.2, 32.17).
 //! - [`attributes`]: [`attributes::Attributes`], values keyed by persistent name, and the split and
 //!   merge classes that say what they do when their entity is split or merged (8.4).
+//! - [`definition`]: [`definition::Definition`], an attribute's owner, the entities that may carry
+//!   it, its value schema and its behaviour at every event of section 8.4, and
+//!   [`definition::Definitions`], a model's definitions, none ever changed (G90).
 //! - [`query`]: the core queries of 10.2 on topology and points (G102): faces listed, the bounding
 //!   box, exact twice-area vectors and six-times volumes of flat bodies, and which side of a flat
 //!   shell a point or another shell lies on.
@@ -60,6 +63,7 @@ pub mod attributes;
 pub mod body;
 pub mod builder;
 pub mod column;
+pub mod definition;
 pub mod entity;
 pub mod error;
 pub mod ix;

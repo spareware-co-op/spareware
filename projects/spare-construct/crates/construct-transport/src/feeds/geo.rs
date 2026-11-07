@@ -14,7 +14,12 @@ pub type RingsBox = [f64; 4];
 
 /// `ringsBox(rings)`: the box around every point of the rings (infinite and reversed for no points).
 pub fn rings_box(rings: &[Ring]) -> RingsBox {
-    let (mut x0, mut y0, mut x1, mut y1) = (f64::INFINITY, f64::INFINITY, f64::NEG_INFINITY, f64::NEG_INFINITY);
+    let (mut x0, mut y0, mut x1, mut y1) = (
+        f64::INFINITY,
+        f64::INFINITY,
+        f64::NEG_INFINITY,
+        f64::NEG_INFINITY,
+    );
     for r in rings {
         for p in r {
             if p[0] < x0 {
@@ -122,7 +127,11 @@ impl PolyIndex {
                     .filter(|&n| {
                         let p = &polys[n];
                         let bb = p.bb();
-                        x >= bb[0] && x <= bb[2] && y >= bb[1] && y <= bb[3] && in_rings(x, y, p.rings())
+                        x >= bb[0]
+                            && x <= bb[2]
+                            && y >= bb[1]
+                            && y <= bb[3]
+                            && in_rings(x, y, p.rings())
                     })
                     .collect()
             })
@@ -139,7 +148,10 @@ pub fn rings_of(v: Option<&JsonValue>) -> Vec<Ring> {
                 JsonValue::Array(pts) => pts
                     .iter()
                     .map(|p| match p {
-                        JsonValue::Array(c) => [c.first().map_or(f64::NAN, JsonValue::to_number), c.get(1).map_or(f64::NAN, JsonValue::to_number)],
+                        JsonValue::Array(c) => [
+                            c.first().map_or(f64::NAN, JsonValue::to_number),
+                            c.get(1).map_or(f64::NAN, JsonValue::to_number),
+                        ],
                         _ => [f64::NAN, f64::NAN],
                     })
                     .collect(),
@@ -152,7 +164,12 @@ pub fn rings_of(v: Option<&JsonValue>) -> Vec<Ring> {
 
 /// `liveLinks(sc)`: the links that are not closed and have both end junctions.
 pub fn live_links(sc: &Scenario) -> Vec<&Link> {
-    sc.links.values().filter(|l| !l.status.is("closed") && sc.nodes.contains_key(&l.a) && sc.nodes.contains_key(&l.b)).collect()
+    sc.links
+        .values()
+        .filter(|l| {
+            !l.status.is("closed") && sc.nodes.contains_key(&l.a) && sc.nodes.contains_key(&l.b)
+        })
+        .collect()
 }
 
 /// A box of latitudes and longitudes: south, north, west, east.
@@ -192,15 +209,30 @@ pub fn in_box(b: &LatLngBox, ll: &LatLng) -> bool {
 pub fn pad_box(b: &LatLngBox, m: f64) -> LatLngBox {
     let dy = m / 110574.0;
     let dx = m / (111320.0 * jsmath::cos((b.s + b.n) / 2.0 * std::f64::consts::PI / 180.0));
-    LatLngBox { s: b.s - dy, w: b.w - dx, n: b.n + dy, e: b.e + dx }
+    LatLngBox {
+        s: b.s - dy,
+        w: b.w - dx,
+        n: b.n + dy,
+        e: b.e + dx,
+    }
 }
 
 /// The Leaflet-style bounds of a box.
 pub fn bounds_of_box(b: &LatLngBox) -> crate::importers::Bounds {
-    crate::importers::Bounds { south: b.s, west: b.w, north: b.n, east: b.e }
+    crate::importers::Bounds {
+        south: b.s,
+        west: b.w,
+        north: b.n,
+        east: b.e,
+    }
 }
 
 /// A box from Leaflet-style bounds.
 pub fn box_of_bounds(b: &crate::importers::Bounds) -> LatLngBox {
-    LatLngBox { s: b.south, w: b.west, n: b.north, e: b.east }
+    LatLngBox {
+        s: b.south,
+        w: b.west,
+        n: b.north,
+        e: b.east,
+    }
 }

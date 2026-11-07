@@ -12,7 +12,11 @@ use crate::util::fmt;
 pub fn climate(p: &V, sc: Option<&V>) -> V {
     let sc = sc.unwrap_or_else(|| active_sc(p));
     let f = p.g("feeds").g("hazards").g(&sc.g("id").s());
-    let rows: Option<&V> = if f.t() && f.g("rows").is_arr() { Some(f.g("rows")) } else { None };
+    let rows: Option<&V> = if f.t() && f.g("rows").is_arr() {
+        Some(f.g("rows"))
+    } else {
+        None
+    };
     let out: Vec<V> = rows
         .map(|r| r.items())
         .unwrap_or(&[])
@@ -52,10 +56,27 @@ pub fn climate_csv(p: &V) -> String {
     let s = |x: &str| st(x);
     let mut rows: Vec<Vec<V>> = vec![
         vec![s("Climate adaptation (AT ITA s4.5)"), c.g("note").clone()],
-        ["Link", "Future Connect role", "Length in hazard (m)", "Hazard layer", "Only access", "Assessment"].iter().map(|h| s(h)).collect(),
+        [
+            "Link",
+            "Future Connect role",
+            "Length in hazard (m)",
+            "Hazard layer",
+            "Only access",
+            "Assessment",
+        ]
+        .iter()
+        .map(|h| s(h))
+        .collect(),
     ];
     for r in c.g("rows").items() {
-        rows.push(vec![r.g("name").clone(), r.g("fc").clone(), r.g("len").clone(), r.g("layer").clone(), s(if r.g("only").t() { "Y" } else { "N" }), r.g("assess").clone()]);
+        rows.push(vec![
+            r.g("name").clone(),
+            r.g("fc").clone(),
+            r.g("len").clone(),
+            r.g("layer").clone(),
+            s(if r.g("only").t() { "Y" } else { "N" }),
+            r.g("assess").clone(),
+        ]);
     }
     stamped(&csv(&rows), p, None)
 }
@@ -81,15 +102,35 @@ pub fn report(id: &str, p: &V, ctx: Option<&dyn ReportCtx>) -> Option<String> {
             vec![
                 esc(r.g("name")),
                 esc(r.g("fc")),
-                if r.has("len") { fmt::int(r.g("len").n()) } else { fmt::DASH.to_string() },
+                if r.has("len") {
+                    fmt::int(r.g("len").n())
+                } else {
+                    fmt::DASH.to_string()
+                },
                 esc(r.g("layer")),
                 if r.g("only").t() { "Yes" } else { "No" }.to_string(),
                 esc(r.g("assess")),
             ]
         })
         .collect();
-    let tbl = t_table(&["Link", "FC role", "Length in hazard (m)", "Hazard layer", "Only access", "Assessment"], rows, "No assessed road lies in a mapped hazard area.");
-    Some(rt(ctx, "Assessed roads in flood plains and coastal inundation areas", &tbl, &format!("{} Source: {}.", esc(x.g("note")), esc(x.g("source")))))
+    let tbl = t_table(
+        &[
+            "Link",
+            "FC role",
+            "Length in hazard (m)",
+            "Hazard layer",
+            "Only access",
+            "Assessment",
+        ],
+        rows,
+        "No assessed road lies in a mapped hazard area.",
+    );
+    Some(rt(
+        ctx,
+        "Assessed roads in flood plains and coastal inundation areas",
+        &tbl,
+        &format!("{} Source: {}.", esc(x.g("note")), esc(x.g("source"))),
+    ))
 }
 
 /// The exports of this part (`EXPORTS`, ids as the prototype registers them: "compliance-extra-<id>").

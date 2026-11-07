@@ -19,24 +19,29 @@ pub mod data;
 pub mod dates;
 pub mod jv;
 pub mod net;
-pub mod rx;
 pub mod record;
+pub mod rx;
 
-pub use record::{
-    active_sc, base_sc, blank, fill, in_auckland, num, numf, periods_of, pw, recheck, record_outputs, regime, res_of, settings, stamp, state, state_mut,
-    used_docs,
-};
 pub use dates::today;
-pub mod engine;
-pub mod docs;
-pub mod html;
+pub use record::{
+    active_sc, base_sc, blank, fill, in_auckland, num, numf, periods_of, pw, recheck,
+    record_outputs, regime, res_of, settings, stamp, state, state_mut, used_docs,
+};
 pub mod authority;
 pub mod clocks;
+pub mod docs;
+pub mod engine;
 pub mod extra;
 pub mod geom;
+pub mod html;
 
-pub use authority::{authorities, link_authority, link_authority_with, parse_precincts, site_info, site_point, sh_of};
-pub use clocks::{add_months, add_working_days, clock_for, clocks, holidays, is_working_day, rfi_template, working_days_between};
+pub use authority::{
+    authorities, link_authority, link_authority_with, parse_precincts, sh_of, site_info, site_point,
+};
+pub use clocks::{
+    add_months, add_working_days, clock_for, clocks, holidays, is_working_day, rfi_template,
+    working_days_between,
+};
 pub mod e27;
 pub mod fds;
 
@@ -48,19 +53,32 @@ pub mod rfi;
 pub use rfi::lint;
 pub mod access;
 
-pub use access::{access_check, access_geo, access_type, access_volume, evidence_pack, motorway_connectors, operators, operators_with, pavement, sh_check, sisd, zone_group};
-pub use e27::{crash_flags, depth_of, e27_sc, exemption_of, ita_scope, ita_scope_sc, link_change, proportionality, quantities, scoping_memo, sh_involved, table1};
+pub use access::{
+    access_check, access_geo, access_type, access_volume, evidence_pack, motorway_connectors,
+    operators, operators_with, pavement, sh_check, sisd, zone_group,
+};
+pub use e27::{
+    crash_flags, depth_of, e27_sc, exemption_of, ita_scope, ita_scope_sc, link_change,
+    proportionality, quantities, scoping_memo, sh_involved, table1,
+};
 pub use fds::{fds_check_sc, fds_pair};
 pub mod checklist;
 pub mod report;
 
 pub use checklist::{checklist, checklist_csv};
-pub use report::{export_build, export_enabled, export_filename, report_section, stamps_export};
 pub use docs::{csv_footer, disclaimer, disclaimer_html, fingerprint, sign_state, stamp_csv};
-pub use expert::{appendix_g, badge, clear_stale, data_sources, diff_params, jws_csv, missing_disclaimers, parse_other, run_diff, sign_off, supersession};
+pub use expert::{
+    appendix_g, badge, clear_stale, data_sources, diff_params, jws_csv, missing_disclaimers,
+    parse_other, run_diff, sign_off, supersession,
+};
+pub use report::{export_build, export_enabled, export_filename, report_section, stamps_export};
 
 /// `Compliance.supplementary(P)`: the label network level-of-service sections carry for an E27 tier 1 proposal, or empty when it is not tier 1.
 pub fn supplementary(p: &jv::V) -> String {
     use jv::Jx;
-    if e27::e27(p).g("supplementary").t() { data::c("E27.supplementary").s() } else { String::new() }
+    if e27::e27(p).g("supplementary").t() {
+        data::c("E27.supplementary").s()
+    } else {
+        String::new()
+    }
 }

@@ -21,12 +21,20 @@ impl ReportCtx for TestCtx {
 /// A fixture, read from disk once.
 fn cached_fixture(name: &str) -> V {
     thread_local! { static CACHE: std::cell::RefCell<std::collections::HashMap<String, V>> = std::cell::RefCell::new(std::collections::HashMap::new()); }
-    CACHE.with(|c| c.borrow_mut().entry(name.to_string()).or_insert_with(|| fixture(name)).clone())
+    CACHE.with(|c| {
+        c.borrow_mut()
+            .entry(name.to_string())
+            .or_insert_with(|| fixture(name))
+            .clone()
+    })
 }
 
 /// The recorded cases with their sets and args in the order the generator wrote them (`Object.entries` order matters to some checks).
 fn ordered(name: &str) -> V {
-    V::parse(&support::read_truth(&format!("expected/compliance-{name}.json"))).expect("expected file")
+    V::parse(&support::read_truth(&format!(
+        "expected/compliance-{name}.json"
+    )))
+    .expect("expected file")
 }
 
 /// The ids a case lists, as text.
@@ -50,16 +58,28 @@ fn speed_limits_cbds_and_exports() {
             set_path(&mut p, k, v.clone());
         }
         if case_error(case).is_some() {
-            panic!("{id}: the prototype refused this case: {}", case_error(case).unwrap());
+            panic!(
+                "{id}: the prototype refused this case: {}",
+                case_error(case).unwrap()
+            );
         }
         let want = case_ok(case);
         let args = oc.g("args").clone();
-        let sc_arg: Option<V> = if args.has("sc") && !args.g("sc").nullish() { Some(p.g("scenarios").ix(args.g("sc").n() as usize).clone()) } else { None };
+        let sc_arg: Option<V> = if args.has("sc") && !args.g("sc").nullish() {
+            Some(p.g("scenarios").ix(args.g("sc").n() as usize).clone())
+        } else {
+            None
+        };
         let got: V = match call {
             "minLenFor" => V::Number(speed::min_len_for(args.g("v").n())),
             "speedSections" => {
                 let sc = sc_arg.as_ref().expect("scenario");
-                V::Array(speed::speed_sections(sc).iter().map(|ls| V::Array(ls.iter().map(|l| l.g("id").clone()).collect())).collect())
+                V::Array(
+                    speed::speed_sections(sc)
+                        .iter()
+                        .map(|ls| V::Array(ls.iter().map(|l| l.g("id").clone()).collect()))
+                        .collect(),
+                )
             }
             "roadLen" => {
                 let sc = sc_arg.as_ref().expect("scenario");
@@ -76,20 +96,34 @@ fn speed_limits_cbds_and_exports() {
             "crashHistory" => {
                 let sc = sc_arg.as_ref().expect("scenario");
                 let ls: Vec<&V> = ids_of(&args).iter().map(|id| sc.g("links").g(id)).collect();
-                let since = if args.g("since").nullish() { None } else { Some(args.g("since").n()) };
+                let since = if args.g("since").nullish() {
+                    None
+                } else {
+                    Some(args.g("since").n())
+                };
                 speed::crash_history(&p, sc, &ls, since)
             }
             "cbds" => speed::cbds(&p, &ids_of(&args), sc_arg.as_ref()),
             "speedCSV" => V::String(speed::speed_csv(&p)),
             "export-speed" => {
                 let mut r = V::object();
-                r.set("text", V::String(extra::export_build("compliance-extra-speed", &p).expect("export")));
-                r.set("enabled", V::Bool(extra::export_enabled("compliance-extra-speed", &p).expect("enabled")));
+                r.set(
+                    "text",
+                    V::String(extra::export_build("compliance-extra-speed", &p).expect("export")),
+                );
+                r.set(
+                    "enabled",
+                    V::Bool(extra::export_enabled("compliance-extra-speed", &p).expect("enabled")),
+                );
                 r
             }
             "report-speed" | "report-speed-ctx" => {
                 let ctx = TestCtx;
-                let c: Option<&dyn ReportCtx> = if call.ends_with("-ctx") { Some(&ctx) } else { None };
+                let c: Option<&dyn ReportCtx> = if call.ends_with("-ctx") {
+                    Some(&ctx)
+                } else {
+                    None
+                };
                 V::String(extra::report("compliance-extra-speed", &p, c).expect("report section"))
             }
             other => panic!("{id}: unknown call {other}"),

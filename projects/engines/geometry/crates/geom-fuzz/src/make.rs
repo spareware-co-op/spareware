@@ -32,8 +32,7 @@ use geom_make::{
     cylinder, make_box, mirror, move_by, pattern, prism, rotate, scale, sphere, torus,
 };
 use geom_math::{Axis, GridTransform, RationalTransform, Rotation, Scale, TypedTransform};
-use geom_num::grid::COORD_MAX;
-use geom_num::{Coord, Exactness, GridStep, P3, Steps};
+use geom_num::{Exactness, GridStep, P3, Steps};
 use geom_op::{ErrorKind, NameId, NameSet, OpContext, OpError, OpId, OpOutput, OpPath};
 use geom_run::{Budget, WorkMeter};
 use geom_test::{ByteSource, Entropy};
@@ -41,6 +40,8 @@ use geom_topo::ix::Arena;
 use geom_topo::{Body, Ix, Sense};
 
 use crate::Finding;
+pub use crate::adversarial::MAX_CORNERS;
+use crate::adversarial::{POINT_BYTES, VALUE_BYTES, base, length, point};
 
 /// The most transforms a case runs.
 pub const MAX_STEPS: u8 = 4;
@@ -48,14 +49,8 @@ pub const MAX_STEPS: u8 = 4;
 /// The most copies a pattern of a case makes.
 pub const MAX_COPIES: u8 = 3;
 
-/// The most corners a prism's base has.
-pub const MAX_CORNERS: u8 = 8;
-
-/// The bytes one coordinate or length reads: a rule and a word.
-const VALUE_BYTES: usize = 1 + 8;
-
-/// The bytes a grid point reads.
-const POINT_BYTES: usize = 3 * VALUE_BYTES;
+/// The bytes a primitive reads: a choice, a point, three lengths, and a prism's corners.
+pub(crate) const SHAPE_BYTES: usize = 1 + POINT_BYTES + 3 * VALUE_BYTES + 1 + 8 * POINT_BYTES;
 
 /// The bytes a motion reads: a choice, an axis and a point.
 const MOTION_BYTES: usize = 1 + 1 + POINT_BYTES;
@@ -73,13 +68,6 @@ pub const MAX_INPUT_BYTES: usize =
     1 + POINT_BYTES + 3 * VALUE_BYTES + 1 + 8 * POINT_BYTES + 1 + 4 * STEP_BYTES;
 
 const _: () = assert!(MAX_INPUT_BYTES == 661);
-
-/// The grid's origin.
-const ORIGIN: P3 = P3 {
-    x: Coord::ZERO,
-    y: Coord::ZERO,
-    z: Coord::ZERO,
-};
 
 /// A primitive of a case.
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -142,68 +130,6 @@ pub struct Case {
     pub steps: Vec<Step>,
 }
 
-/// A coordinate through its rule byte: small, on a coarse sub-grid, one step off one, at the
-/// grid's edge, or anything.
-fn coordinate(src: &mut ByteSource<'_>) -> i64 {
-    let rule = src.byte();
-    let any = i64::from_le_bytes(src.word().to_le_bytes()) % (1 << 40);
-    let fine = (any % 1024).saturating_mul(2500);
-    match rule % 6 {
-        0 => any % 64,
-        1 => fine,
-        2 => fine.saturating_add(1),
-        3 => COORD_MAX.saturating_sub((any % 8).saturating_abs()),
-        4 => (any % 8).saturating_abs().saturating_sub(COORD_MAX),
-        _ => any,
-    }
-}
-
-/// A grid point.
-fn point(src: &mut ByteSource<'_>) -> P3 {
-    let (x, y, z) = (coordinate(src), coordinate(src), coordinate(src));
-    P3::new(x, y, z).unwrap_or(ORIGIN)
-}
-
-/// A length through its rule byte: one step, small, on a sub-grid, or past the grid.
-fn length(src: &mut ByteSource<'_>) -> Steps {
-    let rule = src.byte();
-    let word = src.word();
-    Steps(match rule % 6 {
-        0 => 1,
-        1 => word % 16,
-        2 => (word % 1024).saturating_mul(2500),
-        3 => word % 1_000_000,
-        4 => (word % (1 << 41)).saturating_add(1),
-        _ => word,
-    })
-}
-
-/// A prism's base through the fuzzer's bytes: most corners are refused, so when the count divides
-/// by three they are replaced by points on a parabola, convex by construction.
-fn base(src: &mut ByteSource<'_>) -> Vec<P3> {
-    let count = usize::from(src.byte() % (MAX_CORNERS + 1));
-    let mut corners = Vec::with_capacity(count);
-    for _ in 0..count {
-        corners.push(point(src));
-    }
-    let anchor = corners.first().copied().unwrap_or(ORIGIN);
-    let z = anchor.z.get();
-    if count % 3 == 0 {
-        let (x, y) = (anchor.x.get() % 4096, anchor.y.get() % 4096);
-        return (0..count)
-            .filter_map(|k| {
-                let k = i64::try_from(k).ok()?;
-                let dy = k.saturating_mul(k);
-                P3::new(x.saturating_add(k), y.saturating_add(dy), z).ok()
-            })
-            .collect();
-    }
-    corners
-        .iter()
-        .filter_map(|c| P3::new(c.x.get(), c.y.get(), z).ok())
-        .collect()
-}
-
 /// A motion.
 fn motion(src: &mut ByteSource<'_>) -> Motion {
     let choice = src.byte();
@@ -245,13 +171,11 @@ fn motion(src: &mut ByteSource<'_>) -> Motion {
     }
 }
 
-/// The case `data` decodes to, and how many bytes it read.
-#[must_use]
-pub fn decode(data: &[u8]) -> (Case, usize) {
-    let mut src = ByteSource::new(data);
+/// A primitive.
+pub(crate) fn shape(src: &mut ByteSource<'_>) -> Shape {
     let choice = src.byte();
-    let at = point(&mut src);
-    let (a, b, c) = (length(&mut src), length(&mut src), length(&mut src));
+    let at = point(src);
+    let (a, b, c) = (length(src), length(src), length(src));
     let step = GridStep::Q0;
     let round = RoundInput {
         base: at,
@@ -259,13 +183,13 @@ pub fn decode(data: &[u8]) -> (Case, usize) {
         height: b,
         step,
     };
-    let shape = match choice % 6 {
+    match choice % 6 {
         0 => Shape::Box(BoxInput {
             min: at,
             size: [a, b, c],
         }),
         1 => Shape::Prism(PrismInput {
-            base: base(&mut src),
+            base: base(src),
             height: a,
         }),
         2 => Shape::Cylinder(round),
@@ -281,31 +205,43 @@ pub fn decode(data: &[u8]) -> (Case, usize) {
             minor: b,
             step,
         }),
+    }
+}
+
+/// A step: a transform, or a pattern of up to [`MAX_COPIES`].
+pub(crate) fn step(src: &mut ByteSource<'_>) -> Step {
+    let rule = src.byte();
+    let accept = match rule % 4 {
+        0 => None,
+        1 => Some(1),
+        2 => Some(64),
+        _ => Some(1 << 30),
     };
+    let pattern = rule & 4 != 0;
+    let work = src.word() % 2000;
+    let copies = if pattern {
+        usize::from(src.byte() % MAX_COPIES).saturating_add(1)
+    } else {
+        1
+    };
+    let motions = (0..copies).map(|_| motion(src)).collect();
+    Step {
+        motions,
+        pattern,
+        accept,
+        work,
+    }
+}
+
+/// The case `data` decodes to, and how many bytes it read.
+#[must_use]
+pub fn decode(data: &[u8]) -> (Case, usize) {
+    let mut src = ByteSource::new(data);
+    let shape = shape(&mut src);
     let count = src.byte() % (MAX_STEPS + 1);
     let mut steps = Vec::with_capacity(usize::from(count));
     for _ in 0..count {
-        let rule = src.byte();
-        let accept = match rule % 4 {
-            0 => None,
-            1 => Some(1),
-            2 => Some(64),
-            _ => Some(1 << 30),
-        };
-        let pattern = rule & 4 != 0;
-        let work = src.word() % 2000;
-        let copies = if pattern {
-            usize::from(src.byte() % MAX_COPIES).saturating_add(1)
-        } else {
-            1
-        };
-        let motions = (0..copies).map(|_| motion(&mut src)).collect();
-        steps.push(Step {
-            motions,
-            pattern,
-            accept,
-            work,
-        });
+        steps.push(step(&mut src));
     }
     let read = data.len().saturating_sub(src.remaining());
     (Case { shape, steps }, read)

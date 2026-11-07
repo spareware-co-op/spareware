@@ -25,7 +25,20 @@ fn lint_matches_the_prototype() {
         check_ok(case, &got);
     }
     // every finding the linter can make was made by some case
-    for id in ["count-date", "count-source", "peak", "hv", "peds", "base", "sens", "cumulative", "rates", "rates-old", "tdm", "unfunded"] {
+    for id in [
+        "count-date",
+        "count-source",
+        "peak",
+        "hv",
+        "peds",
+        "base",
+        "sens",
+        "cumulative",
+        "rates",
+        "rates-old",
+        "tdm",
+        "unfunded",
+    ] {
         assert!(findings.contains(id), "no case produced the finding {id}");
     }
 }

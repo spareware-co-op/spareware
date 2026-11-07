@@ -54,7 +54,11 @@ pub(crate) fn reg_ctx(r: &Rep) -> RegCtx {
     {
         return RegCtx {
             from: "compliance",
-            label: if g.pathway.is_empty() { String::new() } else { g.pathway_label.clone() },
+            label: if g.pathway.is_empty() {
+                String::new()
+            } else {
+                g.pathway_label.clone()
+            },
             pathway: g.pathway,
             date: g.date,
             regime: g.text,
@@ -77,7 +81,11 @@ pub(crate) fn reg_ctx(r: &Rep) -> RegCtx {
             Some(JsonValue::String(s)) => js_str_lt(s, reg::AMENDMENT),
             other => js::num(other) < js::num(Some(&JsonValue::String(reg::AMENDMENT.to_string()))),
         };
-        if before { reg::PRE.to_string() } else { reg::POST.to_string() }
+        if before {
+            reg::PRE.to_string()
+        } else {
+            reg::POST.to_string()
+        }
     } else {
         "Lodgement date not stated: the regime cannot be set (Planning Act 2026 Sch 1 cl 18\u{2013}21).".to_string()
     };
@@ -191,7 +199,11 @@ pub(crate) fn assessed_sites(r: &Rep, with: Option<usize>) -> Assessed {
         .and_then(|e| e.get("sites"))
         .and_then(|s| s.as_array())
         .filter(|a| !a.is_empty())
-        .map(|a| a.iter().map(|v| crate::jsnum::value_to_js_string(v)).collect());
+        .map(|a| {
+            a.iter()
+                .map(|v| crate::jsnum::value_to_js_string(v))
+                .collect()
+        });
     if let Some(ext) = ext {
         let mut ids: Vec<String> = Vec::new();
         for id in &ext {
@@ -217,7 +229,11 @@ pub(crate) fn assessed_sites(r: &Rep, with: Option<usize>) -> Assessed {
             if nr.r#type == "none" {
                 continue;
             }
-            let dos = if nr.dos == 0.0 || nr.dos.is_nan() { 0.0 } else { nr.dos };
+            let dos = if nr.dos == 0.0 || nr.dos.is_nan() {
+                0.0
+            } else {
+                nr.dos
+            };
             match score.iter().position(|(k, _, _)| k == id) {
                 Some(p) => {
                     score[p].1 = math_max(score[p].1, dos);
@@ -236,7 +252,9 @@ pub(crate) fn assessed_sites(r: &Rep, with: Option<usize>) -> Assessed {
     js_sort_by(&mut must, |a, b| sc_of(b) - sc_of(a));
     let mut rest: Vec<String> = score
         .iter()
-        .filter(|(id, s, t)| !must.contains(id) && (*s >= 0.5 || t.contains("signals") || t.contains("roundabout")))
+        .filter(|(id, s, t)| {
+            !must.contains(id) && (*s >= 0.5 || t.contains("signals") || t.contains("roundabout"))
+        })
         .map(|(id, _, _)| id.clone())
         .collect();
     js_sort_by(&mut rest, |a, b| sc_of(b) - sc_of(a));
@@ -286,12 +304,20 @@ pub(crate) fn j_sum(nr: &NodeRes) -> JSum {
     let mut q = 0.0f64;
     let mut leg = String::new();
     for a in &nr.appr {
-        let a_q = if a.q95 == 0.0 || a.q95.is_nan() { 0.0 } else { a.q95 };
+        let a_q = if a.q95 == 0.0 || a.q95.is_nan() {
+            0.0
+        } else {
+            a.q95
+        };
         if a_q > q {
             q = a.q95;
             leg = format!(
                 "{}{}",
-                if a.approach.is_empty() { String::new() } else { format!("{}: ", a.approach) },
+                if a.approach.is_empty() {
+                    String::new()
+                } else {
+                    format!("{}: ", a.approach)
+                },
                 a.name
             );
         }
@@ -300,8 +326,16 @@ pub(crate) fn j_sum(nr: &NodeRes) -> JSum {
         dos: nr.dos,
         delay,
         los: nr.los.clone(),
-        los_text: if nr.los_text.is_empty() { nr.los.clone() } else { nr.los_text.clone() },
-        basis: if !nr.los_basis.is_empty() { nr.los_basis.clone() } else { nr.delay_basis.clone() },
+        los_text: if nr.los_text.is_empty() {
+            nr.los.clone()
+        } else {
+            nr.los_text.clone()
+        },
+        basis: if !nr.los_basis.is_empty() {
+            nr.los_basis.clone()
+        } else {
+            nr.delay_basis.clone()
+        },
         q95: q,
         leg,
         xp: nr.xp,
@@ -323,7 +357,12 @@ pub(crate) struct JRow<'a> {
 
 /// `junctionRows(P, c, sc, ids)`: the assessed junctions of a scenario by period. For a scenario other than the assessed
 /// one the prototype's list of the assessed junctions is empty, so it uses its own selection.
-pub(crate) fn junction_rows<'a>(r: &Rep<'a>, sel: &Sel, sc: usize, ids: Option<&[String]>) -> Vec<JRow<'a>> {
+pub(crate) fn junction_rows<'a>(
+    r: &Rep<'a>,
+    sel: &Sel,
+    sc: usize,
+    ids: Option<&[String]>,
+) -> Vec<JRow<'a>> {
     let rl = r.rep_periods(sc);
     let mut out = Vec::new();
     if rl.is_empty() {
@@ -344,7 +383,13 @@ pub(crate) fn junction_rows<'a>(r: &Rep<'a>, sel: &Sel, sc: usize, ids: Option<&
         let own = assessed_sites(r, Some(sc)).ids;
         use_ids = if !list.is_empty() {
             list.iter()
-                .filter(|id| rl.iter().any(|p| r.results[sc].get(p).is_some_and(|res| res.nodes.contains_key(*id))))
+                .filter(|id| {
+                    rl.iter().any(|p| {
+                        r.results[sc]
+                            .get(p)
+                            .is_some_and(|res| res.nodes.contains_key(*id))
+                    })
+                })
                 .cloned()
                 .collect()
         } else {
@@ -389,7 +434,11 @@ pub(crate) struct JGroup {
 /// else the node alone.
 pub(crate) fn junction_groups(r: &Rep, sc: usize, scw: usize, ids: &[String]) -> Vec<JGroup> {
     let has_crashes = !js::items(js::get(r.data(), "crashes")).is_empty();
-    let nr: Option<Vec<(String, super::host::NodeRiskInfo)>> = if has_crashes { r.host.node_risk(sc) } else { None };
+    let nr: Option<Vec<(String, super::host::NodeRiskInfo)>> = if has_crashes {
+        r.host.node_risk(sc)
+    } else {
+        None
+    };
     let nr = nr.unwrap_or_default();
     let rl: Vec<&Res> = r
         .rep_periods(scw)
@@ -403,7 +452,11 @@ pub(crate) fn junction_groups(r: &Rep, sc: usize, scw: usize, ids: &[String]) ->
         let mut key: Option<String> = None;
         let mut nodes = vec![id.clone()];
         let mut name = String::new();
-        let j = if scr.nodes.contains_key(id) { r.host.junction_of(sc, id) } else { None };
+        let j = if scr.nodes.contains_key(id) {
+            r.host.junction_of(sc, id)
+        } else {
+            None
+        };
         let hit = j.as_ref().and_then(|j| nr.iter().find(|(k, _)| k == j));
         if let (Some(j), Some((_, info))) = (&j, hit) {
             key = Some(format!("j:{j}"));
@@ -416,7 +469,9 @@ pub(crate) fn junction_groups(r: &Rep, sc: usize, scw: usize, ids: &[String]) ->
                 .find(|s| !s.is_empty());
             if let Some(site) = site {
                 key = Some(format!("s:{site}"));
-                let res = rl.iter().find(|x| x.sites.as_ref().is_some_and(|m| m.contains_key(&site)));
+                let res = rl
+                    .iter()
+                    .find(|x| x.sites.as_ref().is_some_and(|m| m.contains_key(&site)));
                 name = res
                     .and_then(|x| x.sites.as_ref().and_then(|m| m.get(&site)))
                     .map(|s| s.name.clone())
@@ -425,8 +480,11 @@ pub(crate) fn junction_groups(r: &Rep, sc: usize, scw: usize, ids: &[String]) ->
                     r0.nodes
                         .keys()
                         .filter(|k| {
-                            rl.iter()
-                                .any(|x| x.nodes.get(*k).is_some_and(|n| n.site.as_deref() == Some(site.as_str())))
+                            rl.iter().any(|x| {
+                                x.nodes
+                                    .get(*k)
+                                    .is_some_and(|n| n.site.as_deref() == Some(site.as_str()))
+                            })
                         })
                         .map(str::to_string)
                         .collect()
@@ -449,7 +507,11 @@ pub(crate) fn junction_groups(r: &Rep, sc: usize, scw: usize, ids: &[String]) ->
             id: id.clone(),
             ids: vec![id.clone()],
             nodes: members,
-            name: if !name.is_empty() && name != "Unnamed junction" { name } else { String::new() },
+            name: if !name.is_empty() && name != "Unnamed junction" {
+                name
+            } else {
+                String::new()
+            },
         });
     }
     out
@@ -582,7 +644,11 @@ pub(crate) fn crash_years(r: &Rep) -> Option<CrashYears> {
     let cas = js::get(r.loaded(), "cas");
     let yr = |v: Option<&JsonValue>| -> Option<f64> {
         let x = js::num(v);
-        if x > 1900.0 && x < 3000.0 { Some(x.floor()) } else { None }
+        if x > 1900.0 && x < 3000.0 {
+            Some(x.floor())
+        } else {
+            None
+        }
     };
     let ys: Vec<f64> = cr
         .iter()
@@ -595,7 +661,14 @@ pub(crate) fn crash_years(r: &Rep) -> Option<CrashYears> {
     let min_y = ys.iter().copied().fold(f64::INFINITY, f64::min);
     let max_y = ys.iter().copied().fold(f64::NEG_INFINITY, f64::max);
     let from = yr(js::get(cas, "from")).unwrap_or(min_y);
-    let to = yr(js::get(cas, "to")).unwrap_or(max_y - if js::truthy(js::get(cas, "ytd")) { 0.0 } else { 1.0 });
+    let to = yr(js::get(cas, "to")).unwrap_or(
+        max_y
+            - if js::truthy(js::get(cas, "ytd")) {
+                0.0
+            } else {
+                1.0
+            },
+    );
     let ytd = yr(js::get(cas, "ytd")).unwrap_or(to + 1.0);
     let mut years: Vec<(f64, Tally)> = Vec::new();
     let mut k = from;
@@ -614,7 +687,10 @@ pub(crate) fn crash_years(r: &Rep) -> Option<CrashYears> {
         // the target: a full year, or the year to date
         let target_is_years = in_years;
         let target_is_ytd = !in_years && yy == ytd;
-        if !(target_is_years || target_is_ytd) || sev_s.chars().count() != 1 || !"FSMN".contains(sev_s.as_str()) {
+        if !(target_is_years || target_is_ytd)
+            || sev_s.chars().count() != 1
+            || !"FSMN".contains(sev_s.as_str())
+        {
             continue;
         }
         let df = cnum(c, cx::FATAL);
@@ -710,7 +786,10 @@ pub(crate) fn speed_of(l: &Link) -> Speed {
         sl
     } else if let Some(n) = n {
         if n.is_object() {
-            let v = n.get("v").filter(|x| crate::jsnum::value_truthy(x)).or_else(|| n.get("limit"));
+            let v = n
+                .get("v")
+                .filter(|x| crate::jsnum::value_truthy(x))
+                .or_else(|| n.get("limit"));
             lv(v)
         } else {
             crate::jsnum::value_to_number(n)
@@ -728,9 +807,15 @@ pub(crate) fn speed_of(l: &Link) -> Speed {
     }
     let sp = l.speed.num();
     Speed {
-        v: if sp == 0.0 || sp.is_nan() { None } else { Some(sp) },
+        v: if sp == 0.0 || sp.is_nan() {
+            None
+        } else {
+            Some(sp)
+        },
         src: match source {
-            Some(s) if s.as_str() != Some("NSLR") => format!("{} (not NSLR)", crate::jsnum::value_to_js_string(s)),
+            Some(s) if s.as_str() != Some("NSLR") => {
+                format!("{} (not NSLR)", crate::jsnum::value_to_js_string(s))
+            }
             _ => match ex("speedSrc").filter(|v| crate::jsnum::value_truthy(v)) {
                 Some(s) => crate::jsnum::value_to_js_string(s),
                 None => "coded (not NSLR)".to_string(),
@@ -782,7 +867,11 @@ pub(crate) fn road_groups(sc: &Scenario) -> Vec<RoadGroup<'_>> {
         let ra = road_class(Some(a.cls.as_str())).rank;
         let rb = road_class(Some(b.cls.as_str())).rank;
         let d = rb - ra;
-        if d != 0.0 && !d.is_nan() { d } else { b.km - a.km }
+        if d != 0.0 && !d.is_nan() {
+            d
+        } else {
+            b.km - a.km
+        }
     });
     g
 }
@@ -791,4 +880,3 @@ pub(crate) fn road_groups(sc: &Scenario) -> Vec<RoadGroup<'_>> {
 pub(crate) fn plural(n: f64, one: &str, many: &str) -> String {
     format!("{} {}", fmt::int(n), if n == 1.0 { one } else { many })
 }
-

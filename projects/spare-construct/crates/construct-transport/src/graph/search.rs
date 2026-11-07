@@ -39,11 +39,14 @@ impl Graph {
     /// turn rules; a waypoint that can only be left by a banned turn starts its leg afresh.
     pub fn resolve_route(&self, r: &Route, cost: Option<&[f64]>) -> Vec<usize> {
         let cost = cost.unwrap_or(&self.ffc);
-        let wp: Vec<usize> = r
-            .wp
-            .get()
-            .map(|w| w.iter().filter_map(|id| self.idx.get(id).copied()).collect())
-            .unwrap_or_default();
+        let wp: Vec<usize> =
+            r.wp.get()
+                .map(|w| {
+                    w.iter()
+                        .filter_map(|id| self.idx.get(id).copied())
+                        .collect()
+                })
+                .unwrap_or_default();
         let mut w = self.workspace();
         let mut arcs: Vec<usize> = Vec::new();
         for k in 1..wp.len() {

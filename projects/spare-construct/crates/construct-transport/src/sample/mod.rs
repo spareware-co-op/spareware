@@ -142,11 +142,23 @@ pub const PROPOSAL: [Proposal; 2] = [
         key: "pc",
         name: "Appleby Road plan change area (illustrative)",
         ll: [-37.1012, 174.9775],
-        lu: &[("residential", 320.0), ("apartment", 120.0), ("retail", 1500.0), ("childcare", 60.0)],
+        lu: &[
+            ("residential", 320.0),
+            ("apartment", 120.0),
+            ("retail", 1500.0),
+            ("childcare", 60.0),
+        ],
         year: 2030.0,
         tg: true,
     },
-    Proposal { key: "biz", name: "Fitzgerald Road business area (illustrative)", ll: [-37.1088, 174.9640], lu: &[("industrial", 20000.0), ("office", 1500.0)], year: 2031.0, tg: false },
+    Proposal {
+        key: "biz",
+        name: "Fitzgerald Road business area (illustrative)",
+        ll: [-37.1088, 174.9640],
+        lu: &[("industrial", 20000.0), ("office", 1500.0)],
+        year: 2031.0,
+        tg: false,
+    },
 ];
 
 /// The full trip-generation schedule on the plan change area: person-trip rates with a mode split for the homes and the childcare centre, vehicle rates
@@ -175,9 +187,19 @@ pub type TurnVolumes = [(&'static str, [(&'static str, f64); 3]); 4];
 /// The turning-count volumes of a peak (`TURN_VOL[period]`).
 pub fn turn_vol(period: &str) -> TurnVolumes {
     if period == "AM" {
-        [("N", [("L", 180.0), ("T", 420.0), ("R", 60.0)]), ("S", [("L", 50.0), ("T", 520.0), ("R", 260.0)]), ("E", [("L", 300.0), ("T", 40.0), ("R", 380.0)]), ("W", [("L", 70.0), ("T", 30.0), ("R", 60.0)])]
+        [
+            ("N", [("L", 180.0), ("T", 420.0), ("R", 60.0)]),
+            ("S", [("L", 50.0), ("T", 520.0), ("R", 260.0)]),
+            ("E", [("L", 300.0), ("T", 40.0), ("R", 380.0)]),
+            ("W", [("L", 70.0), ("T", 30.0), ("R", 60.0)]),
+        ]
     } else {
-        [("N", [("L", 290.0), ("T", 560.0), ("R", 80.0)]), ("S", [("L", 70.0), ("T", 430.0), ("R", 210.0)]), ("E", [("L", 200.0), ("T", 50.0), ("R", 260.0)]), ("W", [("L", 60.0), ("T", 40.0), ("R", 90.0)])]
+        [
+            ("N", [("L", 290.0), ("T", 560.0), ("R", 80.0)]),
+            ("S", [("L", 70.0), ("T", 430.0), ("R", 210.0)]),
+            ("E", [("L", 200.0), ("T", 50.0), ("R", 260.0)]),
+            ("W", [("L", 60.0), ("T", 40.0), ("R", 90.0)]),
+        ]
     }
 }
 
@@ -185,7 +207,11 @@ pub fn turn_vol(period: &str) -> TurnVolumes {
 pub const BIN: [f64; 8] = [0.17, 0.2, 0.23, 0.26, 0.27, 0.24, 0.2, 0.18];
 /// The first minute of the day of each peak's turning count (07:00 and 16:00).
 pub fn window(period: &str) -> f64 {
-    if period == "AM" { 7.0 * 60.0 } else { 16.0 * 60.0 }
+    if period == "AM" {
+        7.0 * 60.0
+    } else {
+        16.0 * 60.0
+    }
 }
 
 /// Why a step stopped: the user cancelled, or it failed with a message.
@@ -205,7 +231,10 @@ pub enum SampleError {
 impl SampleError {
     /// A failure with a message and no stage.
     pub fn msg(message: impl Into<String>) -> SampleError {
-        SampleError::Failed { message: message.into(), stage: None }
+        SampleError::Failed {
+            message: message.into(),
+            stage: None,
+        }
     }
     /// The error's message (`e.message`).
     pub fn message(&self) -> String {
@@ -278,13 +307,33 @@ pub struct Modules {
 impl Default for Modules {
     /// Everything loaded.
     fn default() -> Self {
-        Modules { lp: true, cal: true, cb: true, jn: true, co: true, cx: true, fe: true, elu: true, rp: true }
+        Modules {
+            lp: true,
+            cal: true,
+            cb: true,
+            jn: true,
+            co: true,
+            cx: true,
+            fe: true,
+            elu: true,
+            rp: true,
+        }
     }
 }
 
 impl Modules {
     /// Nothing loaded.
     pub fn none() -> Modules {
-        Modules { lp: false, cal: false, cb: false, jn: false, co: false, cx: false, fe: false, elu: false, rp: false }
+        Modules {
+            lp: false,
+            cal: false,
+            cb: false,
+            jn: false,
+            co: false,
+            cx: false,
+            fe: false,
+            elu: false,
+            rp: false,
+        }
     }
 }

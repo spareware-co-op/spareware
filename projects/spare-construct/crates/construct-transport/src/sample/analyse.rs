@@ -1,9 +1,12 @@
 //! The model runs, matrix estimation and report tests on a built sample (`Sample.analyse`).
 
 use super::hooks::SampleHooks;
-use super::{MAX_SIZE, Modules, PERIODS, STAGING_STEPS, SENS_TESTS, SampleError};
+use super::{MAX_SIZE, Modules, PERIODS, SENS_TESTS, STAGING_STEPS, SampleError};
 use crate::assign::assign;
-use crate::calibrate::{Ctx, EvOpts, RunMeOpts, assess, keep_site_traces, match_sites, refresh_validation, run_me, site_traces, stored_res};
+use crate::calibrate::{
+    Ctx, EvOpts, RunMeOpts, assess, keep_site_traces, match_sites, refresh_validation, run_me,
+    site_traces, stored_res,
+};
 use crate::edit::IdSource;
 use crate::graph::js_sort_by;
 use crate::jsnum::{Maybe, json_number, number_to_js_string, value_to_number, value_truthy};
@@ -23,7 +26,9 @@ pub struct AnalyseOpts<'a> {
     pub cancel: Option<&'a dyn Fn() -> bool>,
     /// Runs AM and PM for the scenarios (indices into the project's scenarios); the default runs the engine on each (`opts.runs`).
     #[allow(clippy::type_complexity)]
-    pub runs: Option<&'a mut dyn FnMut(&mut Project, &[usize], &mut dyn FnMut(&str)) -> Result<(), SampleError>>,
+    pub runs: Option<
+        &'a mut dyn FnMut(&mut Project, &[usize], &mut dyn FnMut(&str)) -> Result<(), SampleError>,
+    >,
 }
 
 /// What `analyse` gave back (the notes are added to the list it was given).
@@ -36,12 +41,24 @@ pub struct AnalyseOut {
 }
 
 fn stop(cancel: Option<&dyn Fn() -> bool>) -> Result<(), SampleError> {
-    if cancel.is_some_and(|c| c()) { Err(SampleError::Cancelled) } else { Ok(()) }
+    if cancel.is_some_and(|c| c()) {
+        Err(SampleError::Cancelled)
+    } else {
+        Ok(())
+    }
 }
 
 /// `Engine.assign` for one scenario and period, kept as the scenario's result; gives the result.
-pub fn assign_period(p: &mut Project, idx: usize, period: &str, progress: Option<&mut dyn FnMut(f64, f64, &str)>) -> crate::results::Res {
-    let opts = AssignOpts { period: Some(period.to_string()), ..Default::default() };
+pub fn assign_period(
+    p: &mut Project,
+    idx: usize,
+    period: &str,
+    progress: Option<&mut dyn FnMut(f64, f64, &str)>,
+) -> crate::results::Res {
+    let opts = AssignOpts {
+        period: Some(period.to_string()),
+        ..Default::default()
+    };
     let s = p.settings.clone();
     let mut adapt = progress;
     let mut cb = |it: u32, gap: f64, msg: &str| {
@@ -54,13 +71,24 @@ pub fn assign_period(p: &mut Project, idx: usize, period: &str, progress: Option
         p.scenarios[idx].res = Maybe::Set(Value::Object(Map::new()));
     }
     if let Maybe::Set(Value::Object(m)) = &mut p.scenarios[idx].res {
-        m.insert(period.to_string(), serde_json::to_value(&res).expect("a result serialises"));
+        m.insert(
+            period.to_string(),
+            serde_json::to_value(&res).expect("a result serialises"),
+        );
     }
     res
 }
 
 #[allow(clippy::too_many_arguments)]
-fn engine_runs(p: &mut Project, scs: &[usize], status: &mut dyn FnMut(&str), cancel: Option<&dyn Fn() -> bool>, m: Modules, hooks: &mut dyn SampleHooks, ids: &dyn IdSource) -> Result<(), SampleError> {
+fn engine_runs(
+    p: &mut Project,
+    scs: &[usize],
+    status: &mut dyn FnMut(&str),
+    cancel: Option<&dyn Fn() -> bool>,
+    m: Modules,
+    hooks: &mut dyn SampleHooks,
+    ids: &dyn IdSource,
+) -> Result<(), SampleError> {
     for &si in scs {
         for period in PERIODS {
             stop(cancel)?;
@@ -78,7 +106,11 @@ fn engine_runs(p: &mut Project, scs: &[usize], status: &mut dyn FnMut(&str), can
                         return;
                     }
                     if it % 20.0 == 0.0 {
-                        let t = if msg.is_empty() { format!("iteration {}", number_to_js_string(it)) } else { msg.to_string() };
+                        let t = if msg.is_empty() {
+                            format!("iteration {}", number_to_js_string(it))
+                        } else {
+                            msg.to_string()
+                        };
                         status(&format!("{name} \u{b7} {period} peak \u{b7} {t}"));
                     }
                 };
@@ -120,10 +152,22 @@ pub fn analyse(
     let m = opts.modules;
     let t0 = ids.now_ms();
     let role = |p: &Project, r: &str| p.scenarios.iter().position(|s| s.role.is(r));
-    let Some(i0) = role(p, "existing") else { return Err(SampleError::msg("Cannot read properties of undefined (reading 'name')")) };
-    let rest: Vec<usize> = ["baseline", "proposal", "mitigation"].iter().filter_map(|r| role(p, r)).collect();
+    let Some(i0) = role(p, "existing") else {
+        return Err(SampleError::msg(
+            "Cannot read properties of undefined (reading 'name')",
+        ));
+    };
+    let rest: Vec<usize> = ["baseline", "proposal", "mitigation"]
+        .iter()
+        .filter_map(|r| role(p, r))
+        .collect();
     let s0 = p.scenarios[i0].id.clone();
-    let mut run = |p: &mut Project, scs: &[usize], status: &mut dyn FnMut(&str), hooks: &mut dyn SampleHooks, ids: &dyn IdSource| -> Result<(), SampleError> {
+    let mut run = |p: &mut Project,
+                   scs: &[usize],
+                   status: &mut dyn FnMut(&str),
+                   hooks: &mut dyn SampleHooks,
+                   ids: &dyn IdSource|
+     -> Result<(), SampleError> {
         match opts.runs.as_deref_mut() {
             Some(f) => f(p, scs, status),
             None => engine_runs(p, scs, status, cancel, m, hooks, ids),
@@ -133,17 +177,25 @@ pub fn analyse(
     run(p, &[i0], status, hooks, &*ids)?;
     // Matrix estimation on the calibration counts only: a first fit that makes no change is tried once more with smaller steps (XAMAX 1.5). The outcome of every
     // attempt is kept in P.sample.me.
-    super::helpers::object_at(&mut p.extra, "sample").insert("me".into(), Value::Object(Map::new()));
+    super::helpers::object_at(&mut p.extra, "sample")
+        .insert("me".into(), Value::Object(Map::new()));
     if m.cal && m.cb {
         for period in PERIODS {
             let mut tries: Vec<(f64, bool, String)> = Vec::new();
             for xamax in [2.0, 1.5] {
                 stop(cancel)?;
-                status(&format!("Fitting the {period} peak to the calibration counts{}\u{2026}", if xamax < 2.0 { " (smaller steps)" } else { "" }));
+                status(&format!(
+                    "Fitting the {period} peak to the calibration counts{}\u{2026}",
+                    if xamax < 2.0 { " (smaller steps)" } else { "" }
+                ));
                 let aborted = Cell::new(false);
                 let date = ids.now_iso();
                 // a cancel ends the estimation before it changes anything (the prototype's first progress call throws), so the project is put back
-                let snap = if cancel.is_some() { Some(p.clone()) } else { None };
+                let snap = if cancel.is_some() {
+                    Some(p.clone())
+                } else {
+                    None
+                };
                 let r = {
                     let mut prog = |_k: f64, _n: f64, msg: &str| {
                         if cancel.is_some_and(|c| c()) {
@@ -152,7 +204,16 @@ pub fn analyse(
                         }
                         status(&format!("Matrix estimation, {period} peak: {msg}"));
                     };
-                    run_me(p, &s0, &RunMeOpts { period: Some(period), xamax: Some(xamax), date: Some(&date) }, Some(&mut prog))
+                    run_me(
+                        p,
+                        &s0,
+                        &RunMeOpts {
+                            period: Some(period),
+                            xamax: Some(xamax),
+                            date: Some(&date),
+                        },
+                        Some(&mut prog),
+                    )
                 };
                 if aborted.get() {
                     if let Some(s) = snap {
@@ -164,24 +225,46 @@ pub fn analyse(
                     Ok(r) => (r.ok, r.note),
                     Err(e) => (false, format!("failed: {e}")),
                 };
-                let shown = if !note.is_empty() { note.clone() } else if ok { String::new() } else { "no calibration counts".to_string() };
+                let shown = if !note.is_empty() {
+                    note.clone()
+                } else if ok {
+                    String::new()
+                } else {
+                    "no calibration counts".to_string()
+                };
                 tries.push((xamax, ok, shown.trim_end_matches('.').to_string()));
                 if ok || !note.to_lowercase().contains("no pass improved") {
                     break;
                 }
             }
             let last = tries.last().cloned().expect("a try");
-            let info = p.me.get().and_then(|me| me.info.get()).and_then(|i| i.get(period)).is_some_and(|i| i.is_set());
+            let info =
+                p.me.get()
+                    .and_then(|me| me.info.get())
+                    .and_then(|i| i.get(period))
+                    .is_some_and(|i| i.is_set());
             let entry = json!({
-                    "at": ids.now_iso(), "ok": last.1,
-                    "tries": tries.iter().map(|(x, ok, note)| json!({ "xamax": json_number(*x), "ok": ok, "note": note })).collect::<Vec<_>>(),
-                    "info": info,
-                });
-            super::helpers::object_at(super::helpers::object_at(&mut p.extra, "sample"), "me").insert(period.to_string(), entry);
+                "at": ids.now_iso(), "ok": last.1,
+                "tries": tries.iter().map(|(x, ok, note)| json!({ "xamax": json_number(*x), "ok": ok, "note": note })).collect::<Vec<_>>(),
+                "info": info,
+            });
+            super::helpers::object_at(super::helpers::object_at(&mut p.extra, "sample"), "me")
+                .insert(period.to_string(), entry);
             notes.push(format!(
                 "{period} peak: {}.{}",
                 last.2,
-                if last.1 { String::new() } else { format!(" The {period} model uses the prior matrix{}.", if tries.len() > 1 { " (smaller steps were tried too)" } else { "" }) }
+                if last.1 {
+                    String::new()
+                } else {
+                    format!(
+                        " The {period} model uses the prior matrix{}.",
+                        if tries.len() > 1 {
+                            " (smaller steps were tried too)"
+                        } else {
+                            ""
+                        }
+                    )
+                }
             ));
         }
     }
@@ -198,7 +281,19 @@ pub fn analyse(
                 let ctx = Ctx::new(p);
                 let sc = &p.scenarios[i0];
                 let res = stored_res(sc, period);
-                assess(&ctx, sc, period, res.as_ref(), &EvOpts { set: Some("valid".into()), area: Some("auto".into()), standard: Some("tmdg".into()), ..EvOpts::default() }).line
+                assess(
+                    &ctx,
+                    sc,
+                    period,
+                    res.as_ref(),
+                    &EvOpts {
+                        set: Some("valid".into()),
+                        area: Some("auto".into()),
+                        standard: Some("tmdg".into()),
+                        ..EvOpts::default()
+                    },
+                )
+                .line
             };
             notes.push(format!("Validation ({period}, held-out counts): {line}"));
         }
@@ -208,22 +303,50 @@ pub fn analyse(
         let r = (|| -> Result<(), SampleError> {
             hooks.seed_mitigation(p)?;
             let list = hooks.mitigation(p);
-            let eff: HashMap<String, Value> = hooks.effects(p)?.into_iter().filter_map(|e| e.get("id").map(|i| (crate::jsnum::value_to_js_string(i), e.clone()))).collect();
+            let eff: HashMap<String, Value> = hooks
+                .effects(p)?
+                .into_iter()
+                .filter_map(|e| {
+                    e.get("id")
+                        .map(|i| (crate::jsnum::value_to_js_string(i), e.clone()))
+                })
+                .collect();
             let size = |x: &Value| -> f64 {
-                let e = x.get("effect").and_then(|i| eff.get(&crate::jsnum::value_to_js_string(i)));
+                let e = x
+                    .get("effect")
+                    .and_then(|i| eff.get(&crate::jsnum::value_to_js_string(i)));
                 match e {
                     Some(e) => {
                         let pick = |k: &str| e.get(k).filter(|v| value_truthy(v));
-                        pick("dos").or_else(|| pick("vc")).map_or(0.0, value_to_number)
+                        pick("dos")
+                            .or_else(|| pick("vc"))
+                            .map_or(0.0, value_to_number)
                     }
                     None => 0.0,
                 }
             };
-            let seed = |x: &Value| x.get("seed").filter(|s| value_truthy(s)).map(crate::jsnum::value_to_js_string).unwrap_or_default();
-            let measures: Vec<Value> = list.iter().filter(|x| seed(x).starts_with("diff:")).cloned().collect();
-            let mut open: Vec<Value> = list.iter().filter(|x| seed(x).starts_with("eff:")).cloned().collect();
+            let seed = |x: &Value| {
+                x.get("seed")
+                    .filter(|s| value_truthy(s))
+                    .map(crate::jsnum::value_to_js_string)
+                    .unwrap_or_default()
+            };
+            let measures: Vec<Value> = list
+                .iter()
+                .filter(|x| seed(x).starts_with("diff:"))
+                .cloned()
+                .collect();
+            let mut open: Vec<Value> = list
+                .iter()
+                .filter(|x| seed(x).starts_with("eff:"))
+                .cloned()
+                .collect();
             js_sort_by(&mut open, |a, b| size(b) - size(a));
-            let others: Vec<Value> = list.iter().filter(|x| !(seed(x).starts_with("diff:") || seed(x).starts_with("eff:"))).cloned().collect();
+            let others: Vec<Value> = list
+                .iter()
+                .filter(|x| !(seed(x).starts_with("diff:") || seed(x).starts_with("eff:")))
+                .cloned()
+                .collect();
             let mut out = measures;
             out.extend(open.iter().take(10).cloned());
             out.extend(others);
@@ -234,7 +357,10 @@ pub fn analyse(
             hooks.seed_conditions(p)
         })();
         if let Err(e) = r {
-            notes.push(format!("The mitigation register could not be seeded: {}", e.message()));
+            notes.push(format!(
+                "The mitigation register could not be seeded: {}",
+                e.message()
+            ));
         }
     }
     if opts.extras != Some(false) && m.rp {
@@ -259,7 +385,10 @@ pub fn analyse(
         });
         match r {
             Err(SampleError::Cancelled) => return Err(SampleError::Cancelled),
-            Err(e) => notes.push(format!("The sensitivity tests did not run: {}", e.message())),
+            Err(e) => notes.push(format!(
+                "The sensitivity tests did not run: {}",
+                e.message()
+            )),
             Ok(()) => {}
         }
     }
@@ -276,5 +405,8 @@ pub fn analyse(
             crate::util::fmt::num(MAX_SIZE / 1e6, 0)
         ));
     }
-    Ok(AnalyseOut { ms: ids.now_ms() - t0, size })
+    Ok(AnalyseOut {
+        ms: ids.now_ms() - t0,
+        size,
+    })
 }

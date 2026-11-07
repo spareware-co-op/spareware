@@ -82,7 +82,11 @@ pub fn build_graph(sc: &Scenario, s: &Settings, period: Option<&str>) -> Graph {
         let sa = &site_of0[ia];
         let internal = sa.is_some() && *sa == site_of0[ib];
         for dir in [1i8, -1] {
-            let lanes = if dir > 0 { l.lanes_ab.int32() } else { l.lanes_ba.int32() };
+            let lanes = if dir > 0 {
+                l.lanes_ab.int32()
+            } else {
+                l.lanes_ba.int32()
+            };
             if lanes <= 0 {
                 continue;
             }

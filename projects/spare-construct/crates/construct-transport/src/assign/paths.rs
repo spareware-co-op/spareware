@@ -39,12 +39,16 @@ impl<K: Hash + Eq + Clone, V> OMap<K, V> {
 
     /// The entries in order.
     pub fn iter(&self) -> impl Iterator<Item = (&K, &V)> {
-        self.slots.iter().filter_map(|e| e.as_ref().map(|e| (&e.0, &e.1)))
+        self.slots
+            .iter()
+            .filter_map(|e| e.as_ref().map(|e| (&e.0, &e.1)))
     }
 
     /// The entries in order, with values for changing.
     pub fn iter_mut(&mut self) -> impl Iterator<Item = (&K, &mut V)> {
-        self.slots.iter_mut().filter_map(|e| e.as_mut().map(|e| (&e.0, &mut e.1)))
+        self.slots
+            .iter_mut()
+            .filter_map(|e| e.as_mut().map(|e| (&e.0, &mut e.1)))
     }
 
     /// Visits every entry in order and deletes those for which f returns false.

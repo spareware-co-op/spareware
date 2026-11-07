@@ -25,8 +25,8 @@ mod zones;
 
 pub use build::{build_graph, speed_of, toll_of};
 pub use controls::{apply_signal, hash_offset, site_control, site_legs};
-pub use sites::{SiteMoveList, SiteMoves, site_flows, site_index, traced_exits};
 pub(crate) use sites::map_set as sites_map_set;
+pub use sites::{SiteMoveList, SiteMoves, site_flows, site_index, traced_exits};
 pub use sort::{js_sort_by, js_str_lt};
 pub use turns::{
     MVC, TURN_DEF_LEFT, TURN_DEF_RIGHT, TURN_DEF_RIGHT_SIGNALS, TurnSet, approach_name, turn_set,

@@ -68,7 +68,3 @@ pub(crate) fn text_or_empty(v: Option<&JsonValue>) -> String {
         _ => String::new(),
     }
 }
-
-
-
-

@@ -3,8 +3,8 @@
 use super::j1::los_method;
 use super::text::{Head, TableRow, ctl_name, dos_cell, kit_table, los_badge, x2};
 use super::{
-    Entry, FLOW_SCALE, FLOW_SCALE_FACTOR, LABEL, Sc, Tools, entries, legs_of, moves_of,
-    BALANCE_TOL, U_TURN_VPH,
+    BALANCE_TOL, Entry, FLOW_SCALE, FLOW_SCALE_FACTOR, LABEL, Sc, Tools, U_TURN_VPH, entries,
+    legs_of, moves_of,
 };
 use crate::graph::{apply_signal, build_graph, site_flows};
 use crate::jsnum::{math_max, math_round, number_to_js_string, plain_number, to_fixed};
@@ -257,13 +257,23 @@ fn el_list(appr: &[Approach]) -> Vec<(String, El)> {
             for mv in movs {
                 set(
                     format!("{}|{}", a.key, mv.mv),
-                    El { key: a.key.clone(), mv: mv.mv.clone(), dos: mv.dos, xp: a.xp },
+                    El {
+                        key: a.key.clone(),
+                        mv: mv.mv.clone(),
+                        dos: mv.dos,
+                        xp: a.xp,
+                    },
                 );
             }
         } else {
             set(
                 a.key.clone(),
-                El { key: a.key.clone(), mv: String::new(), dos: a.dos, xp: a.xp },
+                El {
+                    key: a.key.clone(),
+                    mv: String::new(),
+                    dos: a.dos,
+                    xp: a.xp,
+                },
             );
         }
     }
@@ -288,13 +298,23 @@ fn el_list_after(appr: &[crate::junction::ApproachRow]) -> Vec<(String, El)> {
             for mv in &mr.mov {
                 set(
                     format!("{}|{}", a.key, mv.mv),
-                    El { key: a.key.clone(), mv: mv.mv.to_string(), dos: mv.dos, xp: a.xp },
+                    El {
+                        key: a.key.clone(),
+                        mv: mv.mv.to_string(),
+                        dos: mv.dos,
+                        xp: a.xp,
+                    },
                 );
             }
         } else {
             set(
                 a.key.clone(),
-                El { key: a.key.clone(), mv: String::new(), dos: a.dos, xp: a.xp },
+                El {
+                    key: a.key.clone(),
+                    mv: String::new(),
+                    dos: a.dos,
+                    xp: a.xp,
+                },
             );
         }
     }
@@ -412,7 +432,9 @@ impl<'a> Tools<'a> {
                 }
             }
             let name = |x: &El| {
-                let base = by_in.get(x.key.as_str()).map_or(x.key.clone(), |l| l.to_string());
+                let base = by_in
+                    .get(x.key.as_str())
+                    .map_or(x.key.clone(), |l| l.to_string());
                 if x.mv.is_empty() {
                     base
                 } else {
@@ -453,7 +475,8 @@ impl<'a> Tools<'a> {
                     });
                 }
             }
-            let xp = e.nr.and_then(|nr| nr.appr.iter().find(|a| a.xp.is_some()).and_then(|a| a.xp));
+            let xp =
+                e.nr.and_then(|nr| nr.appr.iter().find(|a| a.xp.is_some()).and_then(|a| a.xp));
             let text = match (&first, &already) {
                 (Some(fi), al) => format!(
                     "Crosses practical DoS at {}: {} \u{2192} {}{}",
@@ -461,11 +484,8 @@ impl<'a> Tools<'a> {
                     x2(fi.before),
                     x2(Some(fi.dos)),
                     match al {
-                        Some(al) => format!(
-                            "; already above it at {} ({})",
-                            al.where_,
-                            x2(Some(al.dos))
-                        ),
+                        Some(al) =>
+                            format!("; already above it at {} ({})", al.where_, x2(Some(al.dos))),
                         None => String::new(),
                     }
                 ),
@@ -517,7 +537,8 @@ impl<'a> Tools<'a> {
     /// `scaleHtml(sc, res, opts)`: the flow-scale test as a note and a table. None for no result.
     pub fn scale_html(&self, sc: &Scenario, res: Option<&'a Res>) -> String {
         let Some(res) = res else {
-            return "<p class=\"note\">Run the model to test junctions at higher flows.</p>".to_string();
+            return "<p class=\"note\">Run the model to test junctions at higher flows.</p>"
+                .to_string();
         };
         let Some(r) = self.flow_scale(sc, res, FLOW_SCALE_FACTOR) else {
             return "<p class=\"note\">No controlled junctions to test.</p>".to_string();
@@ -539,7 +560,10 @@ impl<'a> Tools<'a> {
                     if x.crosses {
                         format!("<b style=\"color:var(--warn)\">{}</b>", esc(&x.text))
                     } else if x.already.is_some() {
-                        format!("<span style=\"color:var(--danger)\">{}</span>", esc(&x.text))
+                        format!(
+                            "<span style=\"color:var(--danger)\">{}</span>",
+                            esc(&x.text)
+                        )
                     } else {
                         esc(&x.text)
                     },
@@ -587,13 +611,22 @@ pub fn los_table(method: &str) -> String {
         let cell = |th: &[f64; 5]| {
             format!(
                 "{}{} {}",
-                if i > 0 { format!("> {} and ", n(th[i - 1])) } else { String::new() },
+                if i > 0 {
+                    format!("> {} and ", n(th[i - 1]))
+                } else {
+                    String::new()
+                },
                 op,
                 n(th[i])
             )
         };
         rows.push(TableRow {
-            cells: vec![los_badge(Some(lt)), cell(&l.signals), cell(&l.roundabout), cell(&l.sign)],
+            cells: vec![
+                los_badge(Some(lt)),
+                cell(&l.signals),
+                cell(&l.roundabout),
+                cell(&l.sign),
+            ],
             fly: None,
         });
     }
@@ -620,7 +653,11 @@ pub fn los_table(method: &str) -> String {
         ),
         esc(l.src.name),
         esc(l.src.edition),
-        if l.src.verified { "" } else { " (not yet checked against the source)" },
+        if l.src.verified {
+            ""
+        } else {
+            " (not yet checked against the source)"
+        },
         n(xp.signals),
         n(xp.roundabout),
         n(xp.sign),

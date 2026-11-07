@@ -1,15 +1,24 @@
 //! Employees, schools, early learning and Unitary Plan zones to zones, and the whole fill (landuse-plus.js `employeesToZones` to `record`).
 
-use super::alloc::{ApplyOpts, CensusReport, Building, census_to_zones, is_existing, land_zone_ids, prep_buildings, prov};
+use super::alloc::{
+    ApplyOpts, Building, CensusReport, census_to_zones, is_existing, land_zone_ids, prep_buildings,
+    prov,
+};
 use super::consts::{self, CHOICES, JOB_KEYS, NOT_LAND, std as std_};
-use super::geo::{Bx, area_box, bb_in_box, bb_meets, box_key, box_of, in_box, in_poly, lr, n0, rings_area, sample_share};
+use super::geo::{
+    Bx, area_box, bb_in_box, bb_meets, box_key, box_of, in_box, in_poly, lr, n0, rings_area,
+    sample_share,
+};
 use super::parse::{AupData, CensusData, EmployeeData, Moe};
 use super::requests::{Downloads, Net};
 use crate::edit::IdSource;
 use crate::edit::history::mark_stale;
 use crate::graph::js_sort_by;
 use crate::jsmath;
-use crate::jsnum::{Maybe, Num, json_number, math_hypot, math_round, value_to_js_string, value_to_number, value_truthy};
+use crate::jsnum::{
+    Maybe, Num, json_number, math_hypot, math_round, value_to_js_string, value_to_number,
+    value_truthy,
+};
 use crate::landuse::{self, BuildOpts, StudyBox};
 use crate::project::{OrderedMap, Project, Scenario, Zone};
 use crate::util::{self, fmt, r1, r3, r7};
@@ -52,7 +61,9 @@ pub fn num_json(n: &Num) -> Option<Value> {
 }
 
 fn obj<'a>(m: &'a mut Map<String, Value>, k: &str) -> &'a mut Map<String, Value> {
-    let e = m.entry(k.to_string()).or_insert_with(|| Value::Object(Map::new()));
+    let e = m
+        .entry(k.to_string())
+        .or_insert_with(|| Value::Object(Map::new()));
     if !e.is_object() {
         *e = Value::Object(Map::new());
     }
@@ -72,21 +83,32 @@ fn lu_q(z: &Zone, k: &str) -> f64 {
 
 /// `fromMoE(s)`: a provenance record from the Ministry of Education.
 pub fn from_moe(s: Option<&Value>) -> bool {
-    s.filter(|s| value_truthy(s)).and_then(|s| s.get("source")).filter(|x| value_truthy(x)).map_or(false, |x| value_to_js_string(x).starts_with("Ministry"))
+    s.filter(|s| value_truthy(s))
+        .and_then(|s| s.get("source"))
+        .filter(|x| value_truthy(x))
+        .map_or(false, |x| value_to_js_string(x).starts_with("Ministry"))
 }
 
 /// `luProv(z, k)`: where the quantity of land use k in a zone came from.
 pub fn lu_prov(z: &Zone, k: &str) -> Value {
-    let s = z.extra.get("luSrc").and_then(|l| l.get(k)).filter(|s| value_truthy(s));
+    let s = z
+        .extra
+        .get("luSrc")
+        .and_then(|l| l.get(k))
+        .filter(|s| value_truthy(s));
     if let Some(s) = s {
         let q = s.get("q");
-        if q.is_none_or(Value::is_null) || value_to_number(q.expect("q")) == crate::jsnum::or_default(lu_q(z, k), 0.0) {
+        if q.is_none_or(Value::is_null)
+            || value_to_number(q.expect("q")) == crate::jsnum::or_default(lu_q(z, k), 0.0)
+        {
             return s.clone();
         }
         return json!({ "source": "changed in Spare Construct after it was filled", "basis": "user" });
     }
     let name = z.name.str_or("");
-    if z.src.get().and_then(Value::as_str) == Some("existing-lu") || name.starts_with("Existing \u{b7} ") {
+    if z.src.get().and_then(Value::as_str) == Some("existing-lu")
+        || name.starts_with("Existing \u{b7} ")
+    {
         return json!({ "source": consts::OSM.name, "licence": consts::OSM.licence, "basis": "estimated" });
     }
     json!({ "source": "entered in Spare Construct", "basis": "user" })
@@ -96,9 +118,17 @@ pub fn lu_prov(z: &Zone, k: &str) -> Value {
 pub fn replace_lu(z: &mut Zone, k: &str, by: &str, when: &str) -> f64 {
     let q = lu_q(z, k);
     let pr = lu_prov(z, k);
-    let basis = pr.get("basis").filter(|x| value_truthy(x)).map(value_to_js_string);
-    let source = pr.get("source").filter(|x| value_truthy(x)).map(value_to_js_string);
-    if pr.get("basis").and_then(Value::as_str) == Some("estimated") || pr.get("source").and_then(Value::as_str) == Some(consts::OSM.name) {
+    let basis = pr
+        .get("basis")
+        .filter(|x| value_truthy(x))
+        .map(value_to_js_string);
+    let source = pr
+        .get("source")
+        .filter(|x| value_truthy(x))
+        .map(value_to_js_string);
+    if pr.get("basis").and_then(Value::as_str) == Some("estimated")
+        || pr.get("source").and_then(Value::as_str) == Some(consts::OSM.name)
+    {
         obj(&mut z.extra, "osm").insert(k.to_string(), json_number(q));
     } else {
         obj(&mut z.extra, "replaced").insert(
@@ -169,13 +199,25 @@ impl EmployeesReport {
 
 /// `employeesToZones(sc, E, B)`: each SA2 total is a hard control. The part inside the study area goes to the existing zones in the SA2 by
 /// commercial and industrial floor area; the rest is reported as outside, or unplaced when no floor area is mapped.
-pub fn employees_to_zones(sc: &mut Scenario, ids: &dyn IdSource, e: &EmployeeData, b: &Bx) -> EmployeesReport {
-    let zone_ids: Vec<String> = land_zone_ids(sc, Some(b)).into_iter().filter(|id| sc.zones.get(id).is_some_and(is_existing)).collect();
+pub fn employees_to_zones(
+    sc: &mut Scenario,
+    ids: &dyn IdSource,
+    e: &EmployeeData,
+    b: &Bx,
+) -> EmployeesReport {
+    let zone_ids: Vec<String> = land_zone_ids(sc, Some(b))
+        .into_iter()
+        .filter(|id| sc.zones.get(id).is_some_and(is_existing))
+        .collect();
     let when = ids.today();
     for id in &zone_ids {
         sc.zones.get_mut(id).expect("zone").extra.remove("jobs");
     }
-    let gfa = |z: &Zone| JOB_KEYS.iter().fold(0.0, |s, k| s + crate::jsnum::or_default(lu_q(z, k), 0.0));
+    let gfa = |z: &Zone| {
+        JOB_KEYS
+            .iter()
+            .fold(0.0, |s, k| s + crate::jsnum::or_default(lu_q(z, k), 0.0))
+    };
     let mut rows = Vec::new();
     let (mut allocated, mut growth_w, mut growth_s) = (0.0f64, 0.0f64, 0.0f64);
     for a in &e.sa2 {
@@ -184,12 +226,22 @@ pub fn employees_to_zones(sc: &mut Scenario, ids: &dyn IdSource, e: &EmployeeDat
             continue;
         }
         let within = bb_in_box(&a.poly.bb, b);
-        let in_share = if within { 1.0 } else { sample_share(&a.poly, b, 24).share };
+        let in_share = if within {
+            1.0
+        } else {
+            sample_share(&a.poly, b, 24).share
+        };
         if !(in_share > 0.0) {
             continue;
         }
         let in_n = math_round(an * in_share);
-        let zs: Vec<&String> = zone_ids.iter().filter(|id| { let z = &sc.zones[*id]; in_poly(&a.poly, z.lng.num(), z.lat.num()) && gfa(z) > 0.0 }).collect();
+        let zs: Vec<&String> = zone_ids
+            .iter()
+            .filter(|id| {
+                let z = &sc.zones[*id];
+                in_poly(&a.poly, z.lng.num(), z.lat.num()) && gfa(z) > 0.0
+            })
+            .collect();
         let weights: Vec<f64> = zs.iter().map(|id| gfa(&sc.zones[*id])).collect();
         let parts = lr(in_n, &weights);
         let zs: Vec<String> = zs.into_iter().cloned().collect();
@@ -202,7 +254,11 @@ pub fn employees_to_zones(sc: &mut Scenario, ids: &dyn IdSource, e: &EmployeeDat
                 z.extra.insert("jobs".into(), json!({ "n": 0, "by": [], "year": json_number(e.year), "source": consts::EMPLOYEES.name, "licence": consts::EMPLOYEES.licence,
                     "basis": "derived", "date": when, "note": "SA2 employees placed by commercial and industrial floor area" }));
             }
-            let jobs = z.extra.get_mut("jobs").and_then(Value::as_object_mut).expect("jobs");
+            let jobs = z
+                .extra
+                .get_mut("jobs")
+                .and_then(Value::as_object_mut)
+                .expect("jobs");
             let n = jobs.get("n").map_or(0.0, value_to_number);
             jobs.insert("n".into(), json_number(n + parts[i]));
             if let Some(by) = jobs.get_mut("by").and_then(Value::as_array_mut) {
@@ -225,15 +281,31 @@ pub fn employees_to_zones(sc: &mut Scenario, ids: &dyn IdSource, e: &EmployeeDat
             outside: an - in_n,
             unplaced: in_n - placed,
             growth: a.growth,
-            basis: if within { "inside the study area".into() } else { "area overlap at the study-area edge".into() },
+            basis: if within {
+                "inside the study area".into()
+            } else {
+                "area overlap at the study-area edge".into()
+            },
         });
     }
     let census = zone_ids.iter().fold(0.0, |s, id| {
-        let v = sc.zones[id].extra.get("census").and_then(|c| c.get("empWork")).map_or(0.0, |x| crate::jsnum::or_default(value_to_number(x), 0.0));
+        let v = sc.zones[id]
+            .extra
+            .get("census")
+            .and_then(|c| c.get("empWork"))
+            .map_or(0.0, |x| crate::jsnum::or_default(value_to_number(x), 0.0));
         s + v
     });
-    let ratio = if census > 0.0 { Some(allocated / census) } else { None };
-    let band = format!("{}\u{2013}{}", crate::jsnum::number_to_js_string(std_::JOBS_CHECK[0]), crate::jsnum::number_to_js_string(std_::JOBS_CHECK[1]));
+    let ratio = if census > 0.0 {
+        Some(allocated / census)
+    } else {
+        None
+    };
+    let band = format!(
+        "{}\u{2013}{}",
+        crate::jsnum::number_to_js_string(std_::JOBS_CHECK[0]),
+        crate::jsnum::number_to_js_string(std_::JOBS_CHECK[1])
+    );
     let check = match ratio {
         None => "No Census 2023 workplace counts to compare with.".to_string(),
         Some(r) if r < std_::JOBS_CHECK[0] || r > std_::JOBS_CHECK[1] => format!(
@@ -253,7 +325,11 @@ pub fn employees_to_zones(sc: &mut Scenario, ids: &dyn IdSource, e: &EmployeeDat
         allocated,
         census: r1(census),
         ratio: ratio.map(r3),
-        growth: if growth_w > 0.0 { Some(r1(growth_s / growth_w)) } else { None },
+        growth: if growth_w > 0.0 {
+            Some(r1(growth_s / growth_w))
+        } else {
+            None
+        },
         check,
     }
 }
@@ -296,23 +372,50 @@ impl SchoolsReport {
 // /home.?based/i
 fn home_based(s: &str) -> bool {
     let low: Vec<char> = s.to_lowercase().chars().collect();
-    let at = |i: usize, w: &str| low.len() >= i + w.chars().count() && low[i..i + w.chars().count()].iter().copied().eq(w.chars());
+    let at = |i: usize, w: &str| {
+        low.len() >= i + w.chars().count()
+            && low[i..i + w.chars().count()].iter().copied().eq(w.chars())
+    };
     (0..low.len()).any(|i| {
         at(i, "home")
-            && (at(i + 4, "based") || (i + 4 < low.len() && !matches!(low[i + 4], '\n' | '\r' | '\u{2028}' | '\u{2029}') && at(i + 5, "based")))
+            && (at(i + 4, "based")
+                || (i + 4 < low.len()
+                    && !matches!(low[i + 4], '\n' | '\r' | '\u{2028}' | '\u{2029}')
+                    && at(i + 5, "based")))
     })
 }
 
 fn moe_zone_id(sc: &Scenario, id: &str) -> Option<String> {
-    sc.zones.values().find(|z| z.extra.get("moe").and_then(|m| m.get("id")).and_then(Value::as_str) == Some(id)).map(|z| z.id.clone())
+    sc.zones
+        .values()
+        .find(|z| {
+            z.extra
+                .get("moe")
+                .and_then(|m| m.get("id"))
+                .and_then(Value::as_str)
+                == Some(id)
+        })
+        .map(|z| z.id.clone())
 }
 
 /// `schoolsToZones(sc, schools, ece, B, opts)`: schools become zones of their own with the Ministry roll (rolls the directory lacks come
 /// from `opts.rolls`); early learning places go to the nearest existing zone within 300 m, else a zone of their own. The school and early
 /// learning numbers in existing zones are replaced; development and committed zones are never touched.
-pub fn schools_to_zones(sc: &mut Scenario, ids: &mut dyn IdSource, schools: &[Moe], ece: &[Moe], b: &Bx, opts: &ApplyOpts, schools_loaded: bool, ece_loaded: bool) -> SchoolsReport {
+pub fn schools_to_zones(
+    sc: &mut Scenario,
+    ids: &mut dyn IdSource,
+    schools: &[Moe],
+    ece: &[Moe],
+    b: &Bx,
+    opts: &ApplyOpts,
+    schools_loaded: bool,
+    ece_loaded: bool,
+) -> SchoolsReport {
     let when = ids.today();
-    let zone_ids: Vec<String> = land_zone_ids(sc, Some(b)).into_iter().filter(|id| sc.zones.get(id).is_some_and(is_existing)).collect();
+    let zone_ids: Vec<String> = land_zone_ids(sc, Some(b))
+        .into_iter()
+        .filter(|id| sc.zones.get(id).is_some_and(is_existing))
+        .collect();
     let replace = opts.replace != Some(false);
     let by = "Ministry of Education directory";
     let mut out = SchoolsReport {
@@ -331,7 +434,10 @@ pub fn schools_to_zones(sc: &mut Scenario, ids: &mut dyn IdSource, schools: &[Mo
         for id in &zone_ids {
             let z = sc.zones.get_mut(id).expect("zone");
             let has_school = z.lu.get().is_some() && lu_q(z, "school") > 0.0;
-            if !z.extra.get("moe").is_some_and(value_truthy) && has_school && !from_moe(z.extra.get("luSrc").and_then(|l| l.get("school"))) {
+            if !z.extra.get("moe").is_some_and(value_truthy)
+                && has_school
+                && !from_moe(z.extra.get("luSrc").and_then(|l| l.get("school")))
+            {
                 out.replaced_school += replace_lu(z, "school", by, &when);
             }
         }
@@ -342,7 +448,13 @@ pub fn schools_to_zones(sc: &mut Scenario, ids: &mut dyn IdSource, schools: &[Mo
         }
         let roll: Option<f64> = match s.roll {
             Some(r) => Some(r),
-            None => opts.rolls.iter().find(|(k, _)| *k == s.id).and_then(|(_, v)| (!v.is_null() && value_to_number(v).is_finite()).then(|| value_to_number(v))),
+            None => opts
+                .rolls
+                .iter()
+                .find(|(k, _)| *k == s.id)
+                .and_then(|(_, v)| {
+                    (!v.is_null() && value_to_number(v).is_finite()).then(|| value_to_number(v))
+                }),
         };
         let opens = s.opens.filter(|o| crate::jsnum::truthy_number(*o));
         let Some(roll) = roll else {
@@ -355,10 +467,26 @@ pub fn schools_to_zones(sc: &mut Scenario, ids: &mut dyn IdSource, schools: &[Mo
             &consts::SCHOOLS,
             &when,
             vec![
-                ("basis", json!(if s.roll.is_some() { "measured" } else { "user" })),
+                (
+                    "basis",
+                    json!(if s.roll.is_some() { "measured" } else { "user" }),
+                ),
                 ("q", json_number(roll)),
-                ("vintage", json!(match s.roll_date.as_deref() { Some(d) if !d.is_empty() => format!("roll at {d}"), _ => "no roll date".to_string() })),
-                ("note", json!(if s.roll.is_some() { format!("MoE roll, {}", s.kind_of_org) } else { "Roll entered by the user (the MoE directory has none)".to_string() })),
+                (
+                    "vintage",
+                    json!(match s.roll_date.as_deref() {
+                        Some(d) if !d.is_empty() => format!("roll at {d}"),
+                        _ => "no roll date".to_string(),
+                    }),
+                ),
+                (
+                    "note",
+                    json!(if s.roll.is_some() {
+                        format!("MoE roll, {}", s.kind_of_org)
+                    } else {
+                        "Roll entered by the user (the MoE directory has none)".to_string()
+                    }),
+                ),
             ],
         );
         let id = match zid {
@@ -413,13 +541,21 @@ pub fn schools_to_zones(sc: &mut Scenario, ids: &mut dyn IdSource, schools: &[Mo
         if replace {
             for id in &zone_ids {
                 let z = sc.zones.get_mut(id).expect("zone");
-                if z.lu.get().is_some() && lu_q(z, "childcare") > 0.0 && !from_moe(Some(&lu_prov(z, "childcare"))) {
+                if z.lu.get().is_some()
+                    && lu_q(z, "childcare") > 0.0
+                    && !from_moe(Some(&lu_prov(z, "childcare")))
+                {
                     out.replaced_childcare += replace_lu(z, "childcare", by, &when);
                 }
             }
         }
         let f = util::flat((b.s + b.n) / 2.0);
-        let mut cands: Vec<String> = sc.zones.values().filter(|z| is_existing(z) && !z.extra.get("moe").is_some_and(value_truthy)).map(|z| z.id.clone()).collect();
+        let mut cands: Vec<String> = sc
+            .zones
+            .values()
+            .filter(|z| is_existing(z) && !z.extra.get("moe").is_some_and(value_truthy))
+            .map(|z| z.id.clone())
+            .collect();
         for c in ece {
             if !in_box(b, c.lat, c.lng) {
                 continue;
@@ -432,7 +568,8 @@ pub fn schools_to_zones(sc: &mut Scenario, ids: &mut dyn IdSource, schools: &[Mo
             let q = match q {
                 Some(q) if q > 0.0 => q,
                 _ => {
-                    out.skipped.push(format!("{} (no places or roll in the directory)", c.name));
+                    out.skipped
+                        .push(format!("{} (no places or roll in the directory)", c.name));
                     continue;
                 }
             };
@@ -469,19 +606,38 @@ pub fn schools_to_zones(sc: &mut Scenario, ids: &mut dyn IdSource, schools: &[Mo
             let cur = crate::jsnum::or_default(lu_q(z, "childcare"), 0.0);
             let total = cur + q;
             lu_of(z).insert("childcare", Num::number(total));
-            let me = z.extra.entry("moeEce".to_string()).or_insert_with(|| json!([]));
+            let me = z
+                .extra
+                .entry("moeEce".to_string())
+                .or_insert_with(|| json!([]));
             if let Some(a) = me.as_array_mut() {
                 a.push(json!(c.id));
             }
-            let n_ece = z.extra.get("moeEce").and_then(Value::as_array).map_or(0, Vec::len);
+            let n_ece = z
+                .extra
+                .get("moeEce")
+                .and_then(Value::as_array)
+                .map_or(0, Vec::len);
             let p = prov(
                 &consts::ECE,
                 &when,
                 vec![
                     ("basis", json!("measured")),
                     ("q", json_number(total)),
-                    ("vintage", json!(match c.roll_date.as_deref() { Some(d) if !d.is_empty() => format!("roll at {d}"), _ => String::new() })),
-                    ("note", json!(format!("MoE licensed places ({n_ece} service{})", if n_ece > 1 { "s" } else { "" }))),
+                    (
+                        "vintage",
+                        json!(match c.roll_date.as_deref() {
+                            Some(d) if !d.is_empty() => format!("roll at {d}"),
+                            _ => String::new(),
+                        }),
+                    ),
+                    (
+                        "note",
+                        json!(format!(
+                            "MoE licensed places ({n_ece} service{})",
+                            if n_ece > 1 { "s" } else { "" }
+                        )),
+                    ),
                 ],
             );
             obj(&mut z.extra, "luSrc").insert("childcare".into(), p);
@@ -503,8 +659,10 @@ fn aup_at<'a>(a: &'a AupData, lat: f64, lng: f64) -> Option<(&'a super::parse::A
     for m in [20.0, 40.0, 80.0] {
         for i in 0..8 {
             let bearing = i as f64 * std::f64::consts::PI / 4.0;
-            if let Some(f) = at(lat + m * jsmath::cos(bearing) / k.ky, lng + m * jsmath::sin(bearing) / k.kx)
-                && !NOT_LAND.iter().any(|c| f64::from(*c) == f.code)
+            if let Some(f) = at(
+                lat + m * jsmath::cos(bearing) / k.ky,
+                lng + m * jsmath::sin(bearing) / k.kx,
+            ) && !NOT_LAND.iter().any(|c| f64::from(*c) == f.code)
             {
                 return Some((f, m));
             }
@@ -540,7 +698,13 @@ pub fn aup_to_zones(sc: &mut Scenario, ids: &dyn IdSource, a: &AupData, b: &Bx) 
             o.insert("basis".into(), json!("derived"));
             if crate::jsnum::truthy_number(near) {
                 o.insert("near".into(), json_number(near));
-                o.insert("note".into(), json!(format!("Nearest zone within {} m: the zone centre is on road reserve or water", crate::jsnum::number_to_js_string(near))));
+                o.insert(
+                    "note".into(),
+                    json!(format!(
+                        "Nearest zone within {} m: the zone centre is on road reserve or water",
+                        crate::jsnum::number_to_js_string(near)
+                    )),
+                );
             }
             z.extra.insert("aup".into(), Value::Object(o));
             n += 1;
@@ -558,14 +722,24 @@ pub fn aup_to_zones(sc: &mut Scenario, ids: &dyn IdSource, a: &AupData, b: &Bx) 
         if !bb_meets(&f.poly.bb, b) {
             continue;
         }
-        let sh = if bb_in_box(&f.poly.bb, b) { 1.0 } else { sample_share(&f.poly, b, 16).share };
+        let sh = if bb_in_box(&f.poly.bb, b) {
+            1.0
+        } else {
+            sample_share(&f.poly, b, 16).share
+        };
         if !(sh > 0.0) {
             continue;
         }
         let i = match by.iter().position(|r| r.code == f.code) {
             Some(i) => i,
             None => {
-                by.push(Row { code: f.code, name: f.name.clone(), group: f.group.clone(), ha: 0.0, n: 0.0 });
+                by.push(Row {
+                    code: f.code,
+                    name: f.name.clone(),
+                    group: f.group.clone(),
+                    ha: 0.0,
+                    n: 0.0,
+                });
                 by.len() - 1
             }
         };
@@ -630,10 +804,31 @@ impl FillReport {
         o.insert("at".into(), json!(self.at));
         o.insert("bounds".into(), self.bounds.to_value());
         o.insert("warnings".into(), json!(self.warnings));
-        o.insert("census".into(), self.census.as_ref().map_or(Value::Null, CensusReport::to_value));
-        o.insert("employees".into(), self.employees.as_ref().map_or(Value::Null, EmployeesReport::to_value));
-        o.insert("schools".into(), self.schools.as_ref().map_or(Value::Null, SchoolsReport::to_value));
-        o.insert("aup".into(), self.aup.as_ref().map_or(Value::Null, |a| json!({ "zones": a.zones, "summary": a.summary })));
+        o.insert(
+            "census".into(),
+            self.census
+                .as_ref()
+                .map_or(Value::Null, CensusReport::to_value),
+        );
+        o.insert(
+            "employees".into(),
+            self.employees
+                .as_ref()
+                .map_or(Value::Null, EmployeesReport::to_value),
+        );
+        o.insert(
+            "schools".into(),
+            self.schools
+                .as_ref()
+                .map_or(Value::Null, SchoolsReport::to_value),
+        );
+        o.insert(
+            "aup".into(),
+            self.aup.as_ref().map_or(
+                Value::Null,
+                |a| json!({ "zones": a.zones, "summary": a.summary }),
+            ),
+        );
         o.insert("choices".into(), Value::Array(self.choices.clone()));
         if let Some(b) = self.built_from_osm {
             o.insert("builtFromOSM".into(), json!(b));
@@ -646,14 +841,43 @@ impl FillReport {
 }
 
 /// `choices(o)`: which source was used for each item, with what it gave.
-pub fn choices(c: Option<&CensusReport>, e: Option<&EmployeesReport>, s: Option<&SchoolsReport>, aup: Option<&AupReport>) -> Vec<Value> {
+pub fn choices(
+    c: Option<&CensusReport>,
+    e: Option<&EmployeesReport>,
+    s: Option<&SchoolsReport>,
+    aup: Option<&AupReport>,
+) -> Vec<Value> {
     let val = |id: &str| -> Option<String> {
         match id {
-            "dwellings" => c.filter(|c| c.dwellings).map(|c| format!("Census {} (OSM {})", n0(Some(c.placed)), n0(Some(c.osm_total)))),
+            "dwellings" => c.filter(|c| c.dwellings).map(|c| {
+                format!(
+                    "Census {} (OSM {})",
+                    n0(Some(c.placed)),
+                    n0(Some(c.osm_total))
+                )
+            }),
             "people" => c.map(|c| format!("{} SA1s", n0(Some(c.rows.len() as f64)))),
-            "jobs" => e.map(|e| format!("{} employees (Census workplace {})", n0(Some(e.allocated)), n0(Some(e.census)))),
-            "schools" => s.filter(|s| s.loaded_schools).map(|s| format!("{} schools (rolls replaced in existing zones: {} students)", s.schools.len(), n0(Some(s.replaced_school)))),
-            "ece" => s.filter(|s| s.loaded_ece).map(|s| format!("{} services (places replaced in existing zones: {})", crate::jsnum::number_to_js_string(s.ece), n0(Some(s.replaced_childcare)))),
+            "jobs" => e.map(|e| {
+                format!(
+                    "{} employees (Census workplace {})",
+                    n0(Some(e.allocated)),
+                    n0(Some(e.census))
+                )
+            }),
+            "schools" => s.filter(|s| s.loaded_schools).map(|s| {
+                format!(
+                    "{} schools (rolls replaced in existing zones: {} students)",
+                    s.schools.len(),
+                    n0(Some(s.replaced_school))
+                )
+            }),
+            "ece" => s.filter(|s| s.loaded_ece).map(|s| {
+                format!(
+                    "{} services (places replaced in existing zones: {})",
+                    crate::jsnum::number_to_js_string(s.ece),
+                    n0(Some(s.replaced_childcare))
+                )
+            }),
             "gfa" => Some("OSM".to_string()),
             "zoning" => aup.map(|a| format!("{} zones matched", a.zones)),
             _ => None,
@@ -669,12 +893,32 @@ pub fn choices(c: Option<&CensusReport>, e: Option<&EmployeesReport>, s: Option<
 }
 
 /// `apply(sc, data, opts)`: puts downloaded data in a scenario's zones. The study area is `bounds` when given, else the area of the project and scenario.
-pub fn apply(p: &mut Project, sc_idx: usize, ids: &mut dyn IdSource, data: &FillData, opts: &ApplyOpts, bounds: Option<&Bx>) -> Result<FillReport, String> {
+pub fn apply(
+    p: &mut Project,
+    sc_idx: usize,
+    ids: &mut dyn IdSource,
+    data: &FillData,
+    opts: &ApplyOpts,
+    bounds: Option<&Bx>,
+) -> Result<FillReport, String> {
     let b = match bounds {
-        Some(g) => Bx { basis: Some(g.basis.clone().filter(|b| !b.is_empty()).unwrap_or_else(|| "the area given".to_string())), ..g.clone() },
+        Some(g) => Bx {
+            basis: Some(
+                g.basis
+                    .clone()
+                    .filter(|b| !b.is_empty())
+                    .unwrap_or_else(|| "the area given".to_string()),
+            ),
+            ..g.clone()
+        },
         None => match area_box(p, &p.scenarios[sc_idx]) {
             Some(b) => b,
-            None => return Err("Add roads or zones first, so Spare Construct knows the study area.".to_string()),
+            None => {
+                return Err(
+                    "Add roads or zones first, so Spare Construct knows the study area."
+                        .to_string(),
+                );
+            }
         },
     };
     let sc = &mut p.scenarios[sc_idx];
@@ -696,7 +940,10 @@ pub fn apply(p: &mut Project, sc_idx: usize, ids: &mut dyn IdSource, data: &Fill
         r.buildings = Some(blds.len());
         out.warnings.extend(r.warnings.iter().cloned());
         if !c.missing.is_empty() {
-            out.warnings.push(format!("Census fields not found: {}. Those values are left blank.", c.missing.join(", ")));
+            out.warnings.push(format!(
+                "Census fields not found: {}. Those values are left blank.",
+                c.missing.join(", ")
+            ));
         }
         out.census = Some(r);
     }
@@ -704,19 +951,52 @@ pub fn apply(p: &mut Project, sc_idx: usize, ids: &mut dyn IdSource, data: &Fill
         out.employees = Some(employees_to_zones(sc, ids, e, &b));
     }
     if data.schools.is_some() || data.ece.is_some() {
-        out.schools = Some(schools_to_zones(sc, ids, data.schools.as_deref().unwrap_or(&[]), data.ece.as_deref().unwrap_or(&[]), &b, opts, data.schools.is_some(), data.ece.is_some()));
+        out.schools = Some(schools_to_zones(
+            sc,
+            ids,
+            data.schools.as_deref().unwrap_or(&[]),
+            data.ece.as_deref().unwrap_or(&[]),
+            &b,
+            opts,
+            data.schools.is_some(),
+            data.ece.is_some(),
+        ));
     }
     if let Some(a) = &data.aup {
         out.aup = Some(aup_to_zones(sc, ids, a, &b));
     }
-    out.choices = choices(out.census.as_ref(), out.employees.as_ref(), out.schools.as_ref(), out.aup.as_ref());
+    out.choices = choices(
+        out.census.as_ref(),
+        out.employees.as_ref(),
+        out.schools.as_ref(),
+        out.aup.as_ref(),
+    );
     Ok(out)
 }
 
 /// `ExistingLU.build` on a scenario's roads for a study area, as `fillAll` and the study-area setup do it.
-fn build_existing(sc: &mut Scenario, ids: &mut dyn IdSource, elements: &[Value], b: &Bx, cell: Option<f64>) -> usize {
-    let sbox = StudyBox { s: b.s, w: b.w, n: b.n, e: b.e };
-    let r = landuse::build(&Value::Array(elements.to_vec()), Some(&sbox), ids, &BuildOpts { cell, links: landuse::road_lines(sc) });
+fn build_existing(
+    sc: &mut Scenario,
+    ids: &mut dyn IdSource,
+    elements: &[Value],
+    b: &Bx,
+    cell: Option<f64>,
+) -> usize {
+    let sbox = StudyBox {
+        s: b.s,
+        w: b.w,
+        n: b.n,
+        e: b.e,
+    };
+    let r = landuse::build(
+        &Value::Array(elements.to_vec()),
+        Some(&sbox),
+        ids,
+        &BuildOpts {
+            cell,
+            links: landuse::road_lines(sc),
+        },
+    );
     let n = r.zones.len();
     for mut z in r.zones {
         z.src = Maybe::Set(json!("existing-lu"));
@@ -771,8 +1051,13 @@ pub fn fill_all(
     status: &mut dyn FnMut(&str),
 ) -> Result<FillReport, String> {
     let b = match &opts.bounds {
-        Some(g) => Bx { basis: Some("the area given".to_string()), ..g.clone() },
-        None => area_box(p, &p.scenarios[sc_idx]).ok_or_else(|| "Add roads or zones first, so Spare Construct knows the study area.".to_string())?,
+        Some(g) => Bx {
+            basis: Some("the area given".to_string()),
+            ..g.clone()
+        },
+        None => area_box(p, &p.scenarios[sc_idx]).ok_or_else(|| {
+            "Add roads or zones first, so Spare Construct knows the study area.".to_string()
+        })?,
     };
     let want = |o: Option<bool>| o.unwrap_or(true);
     let mut data = FillData::default();
@@ -816,12 +1101,18 @@ pub fn fill_all(
             Err(e) => warnings.push(e),
         }
     }
-    let targets: Vec<usize> = if opts.all { (0..p.scenarios.len()).collect() } else { vec![sc_idx] };
+    let targets: Vec<usize> = if opts.all {
+        (0..p.scenarios.len()).collect()
+    } else {
+        vec![sc_idx]
+    };
     let mut out: Option<FillReport> = None;
     let mut built = 0usize;
     for &si in &targets {
         if let Some(el) = &data.elements {
-            let has_existing = land_zone_ids(&p.scenarios[si], Some(&b)).iter().any(|id| p.scenarios[si].zones.get(id).is_some_and(is_existing));
+            let has_existing = land_zone_ids(&p.scenarios[si], Some(&b))
+                .iter()
+                .any(|id| p.scenarios[si].zones.get(id).is_some_and(is_existing));
             if !has_existing {
                 let n = build_existing(&mut p.scenarios[si], ids, el, &b, None);
                 if si == sc_idx {
@@ -889,16 +1180,36 @@ pub struct RollsReady {
 fn moe_from_saved(s: &Value, lat: f64, lng: f64) -> Moe {
     let text = |k: &str| s.get(k).filter(|x| value_truthy(x)).map(value_to_js_string);
     Moe {
-        id: s.get("id").map_or("undefined".to_string(), value_to_js_string),
+        id: s
+            .get("id")
+            .map_or("undefined".to_string(), value_to_js_string),
         kind: "schools".into(),
-        name: s.get("name").map_or(String::new(), |x| if x.is_null() { String::new() } else { value_to_js_string(x) }),
-        kind_of_org: s.get("type").map_or(String::new(), |x| if x.is_null() { String::new() } else { value_to_js_string(x) }),
+        name: s.get("name").map_or(String::new(), |x| {
+            if x.is_null() {
+                String::new()
+            } else {
+                value_to_js_string(x)
+            }
+        }),
+        kind_of_org: s.get("type").map_or(String::new(), |x| {
+            if x.is_null() {
+                String::new()
+            } else {
+                value_to_js_string(x)
+            }
+        }),
         roll: None,
         places: None,
         roll_date: text("rollDate"),
         lat,
         lng,
-        status: s.get("status").map_or(String::new(), |x| if x.is_null() { String::new() } else { value_to_js_string(x) }),
+        status: s.get("status").map_or(String::new(), |x| {
+            if x.is_null() {
+                String::new()
+            } else {
+                value_to_js_string(x)
+            }
+        }),
         opens: s.get("opens").filter(|x| !x.is_null()).map(value_to_number),
     }
 }
@@ -906,7 +1217,13 @@ fn moe_from_saved(s: &Value, lat: f64, lng: f64) -> Moe {
 /// `rollsReady(rolls, P)`: the schools the last fill had no roll for (saved with the project, with their location), or why there are none.
 pub fn rolls_ready(p: &Project, last: &LastFill, rolls: Option<&[(String, Value)]>) -> RollsReady {
     let l = p.extra.get("landuse");
-    let saved: Vec<Value> = l.and_then(|l| l.get("last")).and_then(|x| x.get("schools")).and_then(|x| x.get("needsRoll")).and_then(Value::as_array).cloned().unwrap_or_default();
+    let saved: Vec<Value> = l
+        .and_then(|l| l.get("last"))
+        .and_then(|x| x.get("schools"))
+        .and_then(|x| x.get("needsRoll"))
+        .and_then(Value::as_array)
+        .cloned()
+        .unwrap_or_default();
     let b = l.and_then(|l| l.get("bounds")).and_then(box_of);
     let run: Vec<&Moe> = match (&last.data.schools, &b, &last.bounds) {
         (Some(s), Some(b), Some(lb)) if box_key(lb) == box_key(b) => s.iter().collect(),
@@ -914,16 +1231,23 @@ pub fn rolls_ready(p: &Project, last: &LastFill, rolls: Option<&[(String, Value)
     };
     let mut list: Vec<Moe> = Vec::new();
     for s in saved.iter().filter(|s| value_truthy(s)) {
-        let id = s.get("id").map_or("undefined".to_string(), value_to_js_string);
+        let id = s
+            .get("id")
+            .map_or("undefined".to_string(), value_to_js_string);
         if let Some(r) = rolls
             && !r.iter().any(|(k, v)| *k == id && !v.is_null())
         {
             continue;
         }
         let (lat, lng) = (s.get("lat"), s.get("lng"));
-        let ok = lat.is_some_and(|x| !x.is_null() && value_to_number(x).is_finite()) && lng.is_some_and(|x| !x.is_null() && value_to_number(x).is_finite());
+        let ok = lat.is_some_and(|x| !x.is_null() && value_to_number(x).is_finite())
+            && lng.is_some_and(|x| !x.is_null() && value_to_number(x).is_finite());
         if ok {
-            list.push(moe_from_saved(s, value_to_number(lat.expect("lat")), value_to_number(lng.expect("lng"))));
+            list.push(moe_from_saved(
+                s,
+                value_to_number(lat.expect("lat")),
+                value_to_number(lng.expect("lng")),
+            ));
         } else if let Some(m) = run.iter().rev().find(|m| m.id == id) {
             let mut m = (*m).clone();
             m.roll = None;
@@ -931,7 +1255,11 @@ pub fn rolls_ready(p: &Project, last: &LastFill, rolls: Option<&[(String, Value)
         }
     }
     if !list.is_empty() && b.is_some() {
-        return RollsReady { list, bounds: b, why: None };
+        return RollsReady {
+            list,
+            bounds: b,
+            why: None,
+        };
     }
     RollsReady {
         list: Vec::new(),
@@ -945,7 +1273,13 @@ pub fn rolls_ready(p: &Project, last: &LastFill, rolls: Option<&[(String, Value)
 }
 
 /// `applyRolls(sc, rolls)`: adds the schools the directory had no roll for, with the user's numbers, to the given scenarios. None when there is nothing to apply.
-pub fn apply_rolls(p: &mut Project, last: &LastFill, ids: &mut dyn IdSource, targets: &[usize], rolls: &[(String, Value)]) -> Option<SchoolsReport> {
+pub fn apply_rolls(
+    p: &mut Project,
+    last: &LastFill,
+    ids: &mut dyn IdSource,
+    targets: &[usize],
+    rolls: &[(String, Value)],
+) -> Option<SchoolsReport> {
     let r = rolls_ready(p, last, Some(rolls));
     if r.list.is_empty() || targets.is_empty() {
         return None;
@@ -953,16 +1287,54 @@ pub fn apply_rolls(p: &mut Project, last: &LastFill, ids: &mut dyn IdSource, tar
     let b = r.bounds.expect("bounds");
     let mut first: Option<SchoolsReport> = None;
     for &si in targets {
-        let o = schools_to_zones(&mut p.scenarios[si], ids, &r.list, &[], &b, &ApplyOpts { rolls: rolls.to_vec(), replace: Some(false), ..Default::default() }, false, false);
+        let o = schools_to_zones(
+            &mut p.scenarios[si],
+            ids,
+            &r.list,
+            &[],
+            &b,
+            &ApplyOpts {
+                rolls: rolls.to_vec(),
+                replace: Some(false),
+                ..Default::default()
+            },
+            false,
+            false,
+        );
         if first.is_none() {
             first = Some(o);
         }
         mark_stale(&mut p.scenarios[si]);
     }
     let r = first?;
-    if let Some(s) = p.extra.get_mut("landuse").and_then(|l| l.get_mut("last")).and_then(|l| l.get_mut("schools")).filter(|s| value_truthy(s)) {
-        let done: Vec<String> = r.schools.iter().map(|y| y.get("id").map_or("undefined".to_string(), value_to_js_string)).collect();
-        let need: Vec<Value> = s.get("needsRoll").and_then(Value::as_array).cloned().unwrap_or_default().into_iter().filter(|x| !done.contains(&x.get("id").map_or("undefined".to_string(), value_to_js_string))).collect();
+    if let Some(s) = p
+        .extra
+        .get_mut("landuse")
+        .and_then(|l| l.get_mut("last"))
+        .and_then(|l| l.get_mut("schools"))
+        .filter(|s| value_truthy(s))
+    {
+        let done: Vec<String> = r
+            .schools
+            .iter()
+            .map(|y| {
+                y.get("id")
+                    .map_or("undefined".to_string(), value_to_js_string)
+            })
+            .collect();
+        let need: Vec<Value> = s
+            .get("needsRoll")
+            .and_then(Value::as_array)
+            .cloned()
+            .unwrap_or_default()
+            .into_iter()
+            .filter(|x| {
+                !done.contains(
+                    &x.get("id")
+                        .map_or("undefined".to_string(), value_to_js_string),
+                )
+            })
+            .collect();
         s["needsRoll"] = Value::Array(need);
         if !s.get("schools").is_some_and(value_truthy) {
             s["schools"] = json!([]);
@@ -970,7 +1342,9 @@ pub fn apply_rolls(p: &mut Project, last: &LastFill, ids: &mut dyn IdSource, tar
         if let Some(a) = s["schools"].as_array_mut() {
             a.extend(r.schools.iter().cloned());
         }
-        let created = s.get("created").map_or(0.0, |c| crate::jsnum::or_default(value_to_number(c), 0.0));
+        let created = s
+            .get("created")
+            .map_or(0.0, |c| crate::jsnum::or_default(value_to_number(c), 0.0));
         s["created"] = json_number(created + r.created);
     }
     Some(r)

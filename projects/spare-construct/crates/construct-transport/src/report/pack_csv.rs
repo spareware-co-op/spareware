@@ -1,7 +1,7 @@
 //! CSV text for the data pack: cells, RFC 4180 quoting with the formula guard, and the ASCII file-name part (`slug`).
 
 use crate::edit::json::JsonValue;
-use crate::jsnum::{Maybe, Num, JsNum, is_js_space, js_trim, number_to_js_string};
+use crate::jsnum::{JsNum, Maybe, Num, is_js_space, js_trim, number_to_js_string};
 
 /// A cell of a data pack table as the prototype's JavaScript holds it: text, a number, a flag, or nothing.
 #[derive(Clone, Debug, PartialEq)]
@@ -114,12 +114,19 @@ pub(crate) fn csv_cell(v: &Cell) -> String {
     {
         s = format!("'{s}");
     }
-    if s.contains(['"', ',', '\r', '\n']) { format!("\"{}\"", s.replace('"', "\"\"")) } else { s }
+    if s.contains(['"', ',', '\r', '\n']) {
+        format!("\"{}\"", s.replace('"', "\"\""))
+    } else {
+        s
+    }
 }
 
 /// `csvText(rows)`.
 pub(crate) fn csv_text(rows: &[Vec<Cell>]) -> String {
-    rows.iter().map(|r| r.iter().map(csv_cell).collect::<Vec<_>>().join(",")).collect::<Vec<_>>().join("\r\n")
+    rows.iter()
+        .map(|r| r.iter().map(csv_cell).collect::<Vec<_>>().join(","))
+        .collect::<Vec<_>>()
+        .join("\r\n")
 }
 
 /// The Latin letters with marks, ligatures and superscripts that NFKD turns into ASCII (the rest of what the prototype's

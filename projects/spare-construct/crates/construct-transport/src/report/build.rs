@@ -1,10 +1,10 @@
 //! Putting the sections together: which sections the report has, their chapters and numbers, the table and figure numbering, the
 //! disclaimers every table must carry and the contents list (`build` and the helpers it uses).
 
+use super::Sel;
 use super::consts::{Chapter, chapters};
 use super::ctx::{Ctx, FigRequest, MapImage};
 use super::host::ForeignSection;
-use super::Sel;
 use crate::jsnum::{is_js_space, js_trim};
 use crate::util::esc;
 use std::collections::HashMap;
@@ -83,7 +83,8 @@ pub(crate) fn has_word(s: &str, w: &str) -> bool {
 
 /// `/Spare Construct assumption/i.test(s)`.
 pub(crate) fn has_assumption(s: &str) -> bool {
-    s.to_ascii_lowercase().contains("spare construct assumption")
+    s.to_ascii_lowercase()
+        .contains("spare construct assumption")
 }
 
 /// `/class="src"|\bSource:/i.test(s)`: the text already says where it comes from.
@@ -112,7 +113,11 @@ pub fn chapter_of(name: &str, title: &str) -> String {
     // an appendix title names its letter: /^appendix\s+([a-h])\b/i
     let t = js_trim(title);
     let appendix_letter = |x: &str, ci: bool| -> Option<char> {
-        let x = if ci { x.to_ascii_lowercase() } else { x.to_string() };
+        let x = if ci {
+            x.to_ascii_lowercase()
+        } else {
+            x.to_string()
+        };
         let rest = x.strip_prefix("appendix")?;
         let e = ws_end(&rest, 0);
         if e == 0 {
@@ -130,7 +135,8 @@ pub fn chapter_of(name: &str, title: &str) -> String {
     };
     if let Some(l) = appendix_letter(t, true) {
         let is_app = s.strip_prefix("appendi").is_some_and(|r| {
-            (r.starts_with('x') && !r[1..].chars().next().is_some_and(is_word)) || (r.starts_with("ces") && !r[3..].chars().next().is_some_and(is_word))
+            (r.starts_with('x') && !r[1..].chars().next().is_some_and(is_word))
+                || (r.starts_with("ces") && !r[3..].chars().next().is_some_and(is_word))
         });
         if is_app {
             return l.to_ascii_uppercase().to_string();
@@ -175,7 +181,11 @@ pub fn chapter_of(name: &str, title: &str) -> String {
         .iter()
         .find(|c| c.title.to_lowercase() == s || c.alias.contains(&s.as_str()))
         .copied()
-        .or_else(|| all.iter().find(|c| c.alias.iter().any(|a| s.contains(a) && a.len() > 4)).copied());
+        .or_else(|| {
+            all.iter()
+                .find(|c| c.alias.iter().any(|a| s.contains(a) && a.len() > 4))
+                .copied()
+        });
     found.map_or("4".to_string(), |c| c.id.to_string())
 }
 
@@ -299,7 +309,10 @@ fn heading_before(out: &str) -> Option<(usize, String, String, String, String)> 
                 }
                 sb.get(q) == Some(&b'h')
                     && sb.get(q + 1).is_some_and(|c| (b'1'..=b'6').contains(c))
-                    && s[q + 2..].chars().next().is_some_and(|c| is_js_space(c) || c == '>')
+                    && s[q + 2..]
+                        .chars()
+                        .next()
+                        .is_some_and(|c| is_js_space(c) || c == '>')
             };
             if is_heading(rest) {
                 if rest.starts_with(&format!("</{tag}>")) {
@@ -315,7 +328,13 @@ fn heading_before(out: &str) -> Option<(usize, String, String, String, String)> 
         let inner = &out[inner_start..cp];
         let tail_start = cp + tag.len() + 3;
         if let Some(()) = tail_matches(&out[tail_start..]) {
-            return Some((a, tag.to_string(), attrs.to_string(), inner.to_string(), out[tail_start..].to_string()));
+            return Some((
+                a,
+                tag.to_string(),
+                attrs.to_string(),
+                inner.to_string(),
+                out[tail_start..].to_string(),
+            ));
         }
     }
     None
@@ -360,7 +379,12 @@ fn tail_matches(t: &str) -> Option<()> {
                 if sb.get(q2) == Some(&b'/') {
                     q2 += 1;
                 }
-                if sb.get(q2) == Some(&b'p') && s[q2 + 1..].chars().next().is_some_and(|c| is_js_space(c) || c == '>') {
+                if sb.get(q2) == Some(&b'p')
+                    && s[q2 + 1..]
+                        .chars()
+                        .next()
+                        .is_some_and(|c| is_js_space(c) || c == '>')
+                {
                     return None;
                 }
                 k = p + 1;
@@ -454,7 +478,11 @@ fn tno_len(s: &str) -> Option<usize> {
     }
     let r2 = r.strip_prefix(':')?;
     let e = r2.find('%')?;
-    if r2[e..].starts_with("%%") { Some(5 + 1 + e + 2) } else { None }
+    if r2[e..].starts_with("%%") {
+        Some(5 + 1 + e + 2)
+    } else {
+        None
+    }
 }
 
 /// `body.replace(/<figcaption([^>]*)>(?!\s*<span class="tno">)/g, '<figcaption$1><span class="tno">%%FNO%%</span>')`.
@@ -537,7 +565,11 @@ pub(crate) fn lp_tables(html: &str, title: &str) -> String {
                 && let Some(lt) = after[ws..].find('<')
                 && after[ws + lt..].starts_with("</h4>")
             {
-                out.push_str(&format!("<h4>Table T{} \u{b7} {}</h4>", &after[..id_end], &after[ws..ws + lt]));
+                out.push_str(&format!(
+                    "<h4>Table T{} \u{b7} {}</h4>",
+                    &after[..id_end],
+                    &after[ws..ws + lt]
+                ));
                 rest = &after[ws + lt + 5..];
                 replaced = true;
             }

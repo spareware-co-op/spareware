@@ -96,7 +96,12 @@ pub trait ReportHost: Features {
         None
     }
     /// `LandusePlus.tripTablesHtml(sc, { scope, parts })`: the trip generation tables; None when the land-use feature is not installed.
-    fn landuse_trip_tables(&self, _sc: usize, _scope: Option<&JsonValue>, _parts: &[&str]) -> Option<String> {
+    fn landuse_trip_tables(
+        &self,
+        _sc: usize,
+        _scope: Option<&JsonValue>,
+        _parts: &[&str],
+    ) -> Option<String> {
         None
     }
     /// `LandusePlus.t5Html(sc)`: the gateway distribution table, when the feature has one.
