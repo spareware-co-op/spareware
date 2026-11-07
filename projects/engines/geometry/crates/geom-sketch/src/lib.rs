@@ -27,6 +27,8 @@
 //!
 //! - [`plane`]: sketch planes, their maps into 3D and the Gram metric (piece G216).
 //! - [`model`]: entities, variables and constraints, in authoring order (piece G217).
+//! - [`commit`]: the commit plan, from a solved sketch to stored geometry with every declared
+//!   incidence exact (piece G225).
 //! - [`diagnose`]: degrees of freedom, free motions, redundant and conflicting groups and the report
 //!   text (piece G224).
 //! - [`motions`]: free motions, sparse and per entity (piece G224).
@@ -45,6 +47,7 @@
 #![forbid(unsafe_code)]
 
 pub mod author;
+pub mod commit;
 pub mod diagnose;
 pub mod equation;
 pub mod model;
