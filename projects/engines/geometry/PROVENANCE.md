@@ -9,7 +9,7 @@ This is the record of what the geometry kernel's code takes from outside sources
 | Class (29.1) | Sources | Files that take them |
 | --- | --- | --- |
 | PORT | 11 | 18 |
-| PORT METHOD | 42 | 44 |
+| PORT METHOD | 43 | 45 |
 | DEPEND | 5 | 4 |
 
 3 method note(s) under the method-only procedure (29.20, rule 6).
@@ -54,6 +54,7 @@ Each kernel file implements a published method in its own code and copied nothin
 | Clippy's `clippy_dev` token cursor | MIT OR Apache-2.0 | allowed | <https://github.com/rust-lang/rust-clippy/blob/3583eb8a9ae1161bd7d80907acfa09b3612a93f9/clippy_dev/src/parse/cursor.rs> | none | `projects/engines/geometry/crates/geom-test/src/map/errors.rs`: for the approach of finding declarations with a token cursor. No code copied. |
 | ezpz (Zoo) | MIT | allowed | <https://github.com/KittyCAD/ezpz/blob/915882cc731da31042ce494c89b10334ee57837a/README.md> | none | `projects/engines/geometry/crates/geom-sketch/src/text.rs`: for the idea of a problem file; none of its grammar is taken. |
 | ezpz (Zoo) | MIT | allowed | <https://github.com/KittyCAD/ezpz/blob/915882cc731da31042ce494c89b10334ee57837a/ezpz/src/constraints.rs> | none | `projects/engines/geometry/crates/geom-sketch/src/equation.rs`: for which kinds a sketch solver needs; its residuals are hand-differentiated and none is taken. |
+| fiksi | Apache-2.0 OR MIT | allowed | <https://github.com/endoli/fiksi/blob/ff4850546738fb82e95ff27c4db63e924d938473/fiksi/src/analyze/graph/recursive_assembly.rs> | none | `projects/engines/geometry/crates/geom-sketch/src/cluster.rs`: for what the decomposition must return and where its exhaustive search for a minimum subgraph is slow. No code copied, and its randomly seeded hash sets are not used here. |
 | fiksi (Endoli) | MIT | allowed | <https://github.com/endoli/fiksi/blob/ff4850546738fb82e95ff27c4db63e924d938473/fiksi/src/solve/lm.rs> | none | `projects/engines/geometry/crates/geom-sketch/src/solve.rs`: for solving the stacked system instead of the normal equations; no code is taken. |
 | Geogram `interval_nt.h` | BSD-3-Clause | allowed | <https://github.com/BrunoLevy/geogram/blob/40d72165ceeeb0a61977d6fdf74d929bfdd77b7b/src/lib/geogram/numerics/interval_nt.h> | none | `projects/engines/geometry/crates/geom-num/src/interval.rs`: for its round-to-nearest interval class `intervalRN`, which the Method above compares. |
 | Geogram PCK | BSD-3-Clause | allowed | <https://github.com/BrunoLevy/geogram/blob/16843b4804de35f14ef54667950ab4c8acdd0062/src/lib/geogram/numerics/predicates/orient2d.pck> | none | `projects/engines/geometry/crates/geom-gen/src/predicate_lang.rs`: for the form of its predicate descriptions. No code copied. |

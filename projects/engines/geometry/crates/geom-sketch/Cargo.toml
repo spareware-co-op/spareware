@@ -32,6 +32,11 @@ harness = false
 name = "catalogue"
 harness = false
 
+# The rigid clusters of a 1,000-entity family (piece G223), the same way.
+[[bench]]
+name = "cluster"
+harness = false
+
 # A family sketch and a floor outline solved (piece G222), the same way.
 [[bench]]
 name = "solve"

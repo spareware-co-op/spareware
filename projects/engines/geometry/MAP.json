@@ -10724,6 +10724,45 @@
           "target": "lib"
         },
         {
+          "cost": "one cluster costs a few maximum flows on the neighbourhood it grows through; a family of small rigid bodies costs time linear in its size; the worst case is the authors' O(n^2 (m + n)). No recursion.",
+          "does": "[`Problem`] is a geometric constraint graph. Its [`Node`]s are entities weighted by their freedoms, its [`Link`]s are constraints weighted by their equations (a link may join any number of nodes), and fixed nodes form the ground. [`plan`] finds clusters that are rigid by themselves, replaces each by one node of weight D and repeats, which is the Modified Frontier method, and returns the [`Plan`]: the clusters in the order to solve them, each over its own children, and what is left at the top.",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-sketch/src/cluster.rs",
+          "guarantees": [
+            "**Canonical.** Nodes and links are ordered by their persistent keys before anything else, and every tie goes to the lower position in that order, so shuffling the input (the order of `nodes` and `links`, and the order of a link's members) gives the same plan, written in keys.",
+            "**Exact.** Weights are whole numbers, every sum is checked, and density is an integer comparison; no value is read, so the plan is the same on every machine.",
+            "**Complete.** Each node belongs to at most one cluster of a level; a cluster is minimal; when [`plan`] returns, no dense set of two nodes or more with a constraint among them is left in a component within the size limit, so the top-level nodes are what no rigid body explains.",
+            "**The ground.** The fixed nodes form one ground cluster of weight D, made first. A cluster that absorbs it is `grounded`: it is placed in the sketch's frame and keeps no freedom. Any other cluster keeps D freedoms.",
+            "**Iterative.** Every search keeps an explicit stack or queue charged to the meter, so no sketch can overflow the machine's stack (principle 13).",
+            "**Size limit.** A component of more than `limit` nodes is not searched and is reported in [`Plan::too_large`], by its lowest key (15.5; until measured the limit is [`SIZE_LIMIT`])."
+          ],
+          "job": "Rigid clusters: the Hoffmann–Lomonosov–Sitharam decomposition of a constraint graph, for any number of rigid motions D.",
+          "method": {
+            "links": [
+              "doi:10.1007/BFb0017460",
+              "doi:10.1006/jsco.2000.0402",
+              "doi:10.1006/jsco.2000.0403",
+              "doi:10.1287/mnsc.22.11.1268"
+            ],
+            "text": "Hoffmann, Lomonosov and Sitharam, \"Finding solvable subsets of constraint graphs\" (CP'97, doi:10.1007/BFb0017460) and \"Decomposition plans for geometric constraint systems, Part I: Performance measures for CAD\" (J. Symbolic Computation 31, 2001, doi:10.1006/jsco.2000.0402), Part II: New algorithms (doi:10.1006/jsco.2000.0403). Dense subsets are found as the heaviest closure of a project-selection network (profit for each constraint, cost for each node, a constraint needing all its nodes), by a minimum cut (J.-C. Picard, \"Maximal closure of a graph and applications to combinatorial problems\", Management Science 22(11), 1976, doi:10.1287/mnsc.22.11.1268, and the flow of `flow`), the construction the authors use; a dense set is reduced to a minimal one by removing a node and searching what is left, O(n^2 (m + n)) in all. The search grows from each constraint outwards, a ring of neighbours at a time, so the small clusters of an interactive sketch cost little."
+          },
+          "path": "geom_sketch::cluster",
+          "provenance": [
+            {
+              "licence": "Apache-2.0 OR MIT",
+              "link": "https://github.com/endoli/fiksi/blob/ff4850546738fb82e95ff27c4db63e924d938473/fiksi/src/analyze/graph/recursive_assembly.rs",
+              "method_note": null,
+              "name": "fiksi",
+              "notice": [],
+              "pinned": true,
+              "purpose": "for what the decomposition must return and where its exhaustive search for a minimum subgraph is slow. No code copied, and its randomly seeded hash sets are not used here.",
+              "take": "port-method"
+            }
+          ],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
           "cost": "[`Assembly::new`] sorts the Jacobian's entries once; [`Assembly::evaluate_at`] is linear in the rows, with no allocation. No recursion.",
           "does": "a kind implements [`Residual`]: its residual function, a length that is zero exactly when the constraint holds, and the part of its inputs where it has no derivative. Its derivatives come from running that one function on dual numbers (`geom_num::dual`), never from a second text. A kind's inputs are [`Slot`]s: a sketch variable, or a constant, such as a dimension's value or the characteristic length of an angle, which carries no derivative. A dimension given as a named scalar is the same kind with a variable in that slot. [`Assembly::new`] lays out the rows of the driving constraints and of each arc's two ends, in authoring order, and the Jacobian's stored entries. [`Assembly::evaluate`] then fills the residuals and the Jacobian, in the variables the solver sees: each divided by its power of two, so each column is multiplied by it. It checks the inputs against each singular set first.",
           "family": [],
@@ -10761,6 +10800,28 @@
           "target": "lib"
         },
         {
+          "cost": "O(V²E) for a flow in the worst case, far less on the shallow networks the cluster search builds; O(V + E) memory. No recursion.",
+          "does": "[`Network`] is a directed graph with whole-number capacities. [`Network::max_flow`] pushes the most flow from a source to a sink by Dinic's method, and [`Network::source_side`] then names the nodes the source can still reach, which is the smallest set on the source's side of a minimum cut. The cluster search (`cluster`) reads a densest subgraph off that set.",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-sketch/src/flow.rs",
+          "guarantees": [
+            "**Exact.** Capacities and flows are `u64`; every sum is checked, and a capacity that would overflow is an error, never a wrapped value.",
+            "**Deterministic.** Arcs are visited in the order they were added; there is no hashing and no address-dependent order, so the same network gives the same flow and the same cut on every machine.",
+            "**Iterative.** The level search and the blocking-flow search each keep an explicit stack counted against the meter, so no network of any depth can overflow the machine's stack (principle 13)."
+          ],
+          "job": "Maximum flow and the cheapest cut, for the rigid-cluster search.",
+          "method": {
+            "links": [
+              "https://en.wikipedia.org/wiki/Dinic%27s_algorithm"
+            ],
+            "text": "Dinic's blocking-flow algorithm (E. A. Dinic, \"Algorithm for solution of a problem of maximum flow in networks with power estimation\", Soviet Math. Doklady 11, 1970; see also <https://en.wikipedia.org/wiki/Dinic%27s_algorithm>), with the current-arc pointer that makes each blocking flow O(VE). It is written here rather than taken from a crate because the kernel crates admit no new dependency without the owner's decision (`deny-no-std.toml`), and the rule of the crate is a fixed arc order and a metered, recursion-free search that a general graph library does not promise."
+          },
+          "path": "geom_sketch::flow",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
           "cost": "adding an item costs a binary search and a move of the items after it, nothing when items arrive in order; O(n) memory. No recursion.",
           "does": "a [`Sketch`] holds a plane, its [`Entity`]s and its [`Constraint`]s, each named by an [`ItemId`], the sequence number and key the caller stores with it. Everything is kept sorted by that id, older first, so plan order, factorisation order and every floating-point result that follows depend on stored data alone (chapter 15.2). [`Sketch::variables`] lays the entities' unknowns out in that order, each with the power of two that makes it act as a length (chapter 15.4). A constraint is driving, which the solver must meet, or reference, which is measured and never solved; its priority orders pivots and removal suggestions and nothing else (chapter 15.3).",
           "family": [],
@@ -10781,6 +10842,30 @@
             "text": "section 15.2's table of entities and variables, and sections 15.3 and 15.4 (`projects/engines/geometry/architecture/15-sketches.md`)."
           },
           "path": "geom_sketch::model",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
+          "cost": "O(kN² + N³) for k points in N dimensions; O(N²) memory. No recursion.",
+          "does": "a cluster is solved in its own frame (`local` positions). [`kabsch`] finds the rotation and translation that bring those positions closest, in the least-squares sense, to the positions the person drew (`drawn`), so geometry the person did not constrain stays where it was. [`place`] applies the ground rule first: a cluster that holds the ground is solved in the sketch's own frame and is not moved.",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-sketch/src/place.rs",
+          "guarantees": [
+            "**A proper rotation.** The result has determinant +1 for every N: when the best orthogonal fit is a reflection, the direction of the smallest singular value is flipped (Umeyama's correction), so a cluster is never mirrored.",
+            "**Deterministic.** Sums run in a fixed order over the points as given, and the decomposition is `geom-linalg`'s one-sided Jacobi SVD, which is bit-identical on every target.",
+            "**Honest about ambiguity.** The singular values of the correlation are returned; when more than one of them is zero (the points lie on a line in space, or on a point), the rotation about the missing directions is not determined by the data, and the caller decides.",
+            "**No partial result.** Mismatched lengths, no points or a non-finite coordinate is an error and nothing is placed."
+          ],
+          "job": "Placing a rigid cluster: the rigid motion that best carries its solved shape onto where it was drawn, in any dimension.",
+          "method": {
+            "links": [
+              "doi:10.1107/S0567739476001873",
+              "doi:10.1109/34.88573"
+            ],
+            "text": "W. Kabsch, \"A solution for the best rotation to relate two sets of vectors\", Acta Crystallographica A32 (1976), doi:10.1107/S0567739476001873, with the determinant correction of S. Umeyama, \"Least-squares estimation of transformation parameters between two point patterns\", IEEE TPAMI 13(4) (1991), doi:10.1109/34.88573: centre both sets, take the SVD of their correlation H = U S Vᵀ and set R = V diag(1, …, 1, ±1) Uᵀ, the sign that makes det R = +1."
+          },
+          "path": "geom_sketch::place",
           "provenance": [],
           "spdx": null,
           "target": "lib"
@@ -14714,6 +14799,17 @@
       "take": "port-method",
       "used_by": [
         "projects/engines/geometry/crates/geom-op/src/cbor.rs"
+      ]
+    },
+    {
+      "licence": "Apache-2.0 OR MIT",
+      "link": "https://github.com/endoli/fiksi/blob/ff4850546738fb82e95ff27c4db63e924d938473/fiksi/src/analyze/graph/recursive_assembly.rs",
+      "method_note": null,
+      "name": "fiksi",
+      "pinned": true,
+      "take": "port-method",
+      "used_by": [
+        "projects/engines/geometry/crates/geom-sketch/src/cluster.rs"
       ]
     },
     {
