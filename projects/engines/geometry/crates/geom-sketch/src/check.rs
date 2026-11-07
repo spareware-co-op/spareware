@@ -53,7 +53,9 @@ use geom_run::WorkMeter;
 
 use crate::commit::{Committed, Mark, Stored, find};
 use crate::equation::Assembly;
-use crate::model::{ConstraintKind, EntityKind, ItemId, Side, Sketch, SketchError, Standing};
+use crate::model::{
+    ConstraintKind, EntityKind, ItemId, Side, Sketch, SketchError, Standing, Variable,
+};
 
 /// What the checks found a constraint to hold to.
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -272,34 +274,7 @@ impl Checker {
 
     /// The committed values of the variables, as intervals holding them.
     fn held(&self, sketch: &Sketch, c: &Committed) -> Result<Vec<Interval>, SketchError> {
-        let mut held = Vec::new();
-        held.try_reserve_exact(self.assembly.variables().len())
-            .map_err(|_| SketchError::OutOfMemory)?;
-        for v in self.assembly.variables() {
-            let entity = sketch.entity(v.owner)?;
-            let value = match &entity.kind {
-                EntityKind::Point { .. } | EntityKind::Reference { .. } => {
-                    match find(&c.points, v.owner) {
-                        Some(p) => get(&coordinates(p)?, usize::from(v.slot))?,
-                        None => Interval::point(v.value)?,
-                    }
-                }
-                EntityKind::Circle { .. } => {
-                    match (find(&c.circles, v.owner), find(&c.rounds, v.owner)) {
-                        (Some(k), _) => whole(k.radius())?,
-                        (None, Some(r)) => radius_of(r)?,
-                        _ => Interval::point(v.value)?,
-                    }
-                }
-                EntityKind::Arc { .. } => match find(&c.arcs, v.owner) {
-                    Some(a) => radius_of(&a.round())?,
-                    None => Interval::point(v.value)?,
-                },
-                _ => Interval::point(v.value)?,
-            };
-            held.push(value);
-        }
-        Ok(held)
+        held_of(sketch, c, self.assembly.variables())
     }
 
     /// Runs the first two of chapter 15.10's checks on a committed sketch.
@@ -370,6 +345,43 @@ impl Checker {
         let steps = FIT.get() as f64;
         steps
     }
+}
+
+/// The committed values of `variables`, as intervals holding them: a stored point's coordinates, a
+/// circle's radius, the solved value of anything the commit does not give a form to.
+pub(crate) fn held_of(
+    sketch: &Sketch,
+    c: &Committed,
+    variables: &[Variable],
+) -> Result<Vec<Interval>, SketchError> {
+    let mut held = Vec::new();
+    held.try_reserve_exact(variables.len())
+        .map_err(|_| SketchError::OutOfMemory)?;
+    for v in variables {
+        let entity = sketch.entity(v.owner)?;
+        let value = match &entity.kind {
+            EntityKind::Point { .. } | EntityKind::Reference { .. } => {
+                match find(&c.points, v.owner) {
+                    Some(p) => get(&coordinates(p)?, usize::from(v.slot))?,
+                    None => Interval::point(v.value)?,
+                }
+            }
+            EntityKind::Circle { .. } => {
+                match (find(&c.circles, v.owner), find(&c.rounds, v.owner)) {
+                    (Some(k), _) => whole(k.radius())?,
+                    (None, Some(r)) => radius_of(r)?,
+                    _ => Interval::point(v.value)?,
+                }
+            }
+            EntityKind::Arc { .. } => match find(&c.arcs, v.owner) {
+                Some(a) => radius_of(&a.round())?,
+                None => Interval::point(v.value)?,
+            },
+            _ => Interval::point(v.value)?,
+        };
+        held.push(value);
+    }
+    Ok(held)
 }
 
 /// An interval holding the radius of a committed circle through a point: the square root of the
