@@ -632,6 +632,8 @@ fn a_line_at_the_other_end_and_any_slope_is_taken_against_the_spline() {
         ("20 12.5", "16 13.5"),
         ("16 13.5", "12 14.5"),
         ("12 14.5", "16 13.5"),
+        ("16 13.5", "15.5 23.5"),
+        ("15.5 23.5", "16 13.5"),
     ] {
         let mut text = pulled(0.0, "g1");
         writeln!(
@@ -641,9 +643,13 @@ fn a_line_at_the_other_end_and_any_slope_is_taken_against_the_spline() {
         .unwrap();
         let joins = measure_joins(&parse(&text).unwrap()).unwrap();
         let last = joins.last().unwrap();
-        // The line is not along the spline, so the angle is not zero, but it is the small one (well
-        // under a quarter turn) whichever way the line runs.
-        assert!(last.continuity.tangent.abs() < 0.25, "{a} to {b}: {last:?}");
+        // The line is not along the spline, so the angle is not zero, but it is the one of at most a
+        // quarter turn (half a half-turn) whichever way the line runs: a line the wrong way round
+        // would measure more.
+        assert!(
+            last.continuity.tangent.abs() <= 0.5 + 1e-9,
+            "{a} to {b}: {last:?}"
+        );
     }
 }
 
