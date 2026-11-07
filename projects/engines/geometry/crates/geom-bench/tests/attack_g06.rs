@@ -760,6 +760,25 @@ fn fold<R: Canonical>(results: impl IntoIterator<Item = R>) -> Digest {
     canonical::digest(&results)
 }
 
+/// A context of one `geom-make` operation, as the benchmarks run it.
+fn make_context() -> geom_op::OpContext<'static> {
+    geom_op::OpContext::new(
+        geom_op::OpPath::new(geom_op::OpId::from_bytes([2; 16])),
+        geom_run::Budget::UNLIMITED,
+    )
+}
+
+/// What a `geom-make` result is read by.
+fn make_counts(out: &geom_op::OpOutput<geom_make::Made>) -> [u32; 4] {
+    let a = out.result.body.arenas();
+    [
+        a.rows(geom_topo::Arena::Face),
+        a.rows(geom_topo::Arena::Edge),
+        a.rows(geom_topo::Arena::Vertex),
+        u32::from(out.exactness.rank()),
+    ]
+}
+
 /// The output digest of one run of `kernel` over `batch`, as a benchmark computes it.
 fn kernel_digest<T, R: Canonical>(kernel: fn(&[T], &mut Vec<R>), batch: &[T]) -> Digest {
     let mut out = Vec::with_capacity(batch.len());
@@ -1259,6 +1278,44 @@ fn direct_digest(group: &str, name: &str, class: Class) -> Option<Digest> {
                     .map(|(a, b)| geom_num::brent::zero(inputs::roots::cubic, a, b, tol, 100)),
             )
         }
+        ("intersect", "sort_items") => {
+            fold(inputs::intersect::items(class).into_iter().map(|items| {
+                geom_intersect::Intersection::new(
+                    items,
+                    geom_intersect::Coverage::CompleteOutsideFlagged,
+                    Vec::new(),
+                    &mut geom_run::WorkMeter::new(geom_run::Budget::UNLIMITED),
+                )
+            }))
+        }
+        ("intersect", "key_circle") => fold(inputs::intersect::circles(class).iter().map(|c| {
+            let mut meter = geom_run::WorkMeter::new(geom_run::Budget::UNLIMITED);
+            geom_intersect::CanonicalKey::of_curve(c, &mut meter)
+        })),
+        ("intersect", "pair_lines") => {
+            fold(inputs::intersect::lines(class).iter().map(|(a, b)| {
+                let operand = |curve| {
+                    let mut meter = geom_run::WorkMeter::new(geom_run::Budget::UNLIMITED);
+                    geom_intersect::CanonicalKey::of_curve(curve, &mut meter).map(|key| {
+                        geom_intersect::Operand {
+                            geom: geom_intersect::Geom::Curve(curve),
+                            domain: None,
+                            bound: Steps(0),
+                            key,
+                        }
+                    })
+                };
+                let (x, y) = (operand(a)?, operand(b)?);
+                geom_intersect::pair(&x, &y, |_, _| {
+                    geom_intersect::Intersection::new(
+                        Vec::new(),
+                        geom_intersect::Coverage::TopologyCertified,
+                        Vec::new(),
+                        &mut geom_run::WorkMeter::new(geom_run::Budget::UNLIMITED),
+                    )
+                })
+            }))
+        }
         ("quadrature", "gauss_legendre") => fold(
             inputs::roots::gauss_legendre(class)
                 .into_iter()
@@ -1283,6 +1340,40 @@ fn direct_digest(group: &str, name: &str, class: Class) -> Option<Digest> {
             let sides = (geom_nurbs::Limit::FromRight, geom_nurbs::Limit::FromRight);
             fold(pairs.into_iter().map(|(u, v)| s.point(u, v, sides)))
         }
+        ("format", "cache_key") => {
+            let path = inputs::format::path();
+            fold(
+                inputs::format::cache_key(class)
+                    .into_iter()
+                    .map(|(edition, seed)| {
+                        geom_format::cache::CacheKey::new(
+                            edition,
+                            &inputs::format::SCHEMA,
+                            &path,
+                            geom_op::Precision::Final,
+                            &[inputs::format::input(seed)],
+                        )
+                        .ok()
+                    }),
+            )
+        }
+        ("format", "memo_get") => {
+            let mut store = inputs::format::store();
+            fold(inputs::format::memo_get(class).into_iter().map(|key| {
+                match store.get(&key, geom_run::Budget::UNLIMITED) {
+                    Some(Ok(answer)) => Some(answer.result),
+                    _ => None,
+                }
+            }))
+        }
+        ("format", "next_version") => fold(inputs::format::next_version(class).into_iter().map(
+            |(_, body)| {
+                let mut meter = geom_run::WorkMeter::new(geom_run::Budget::UNLIMITED);
+                geom_format::body::write_body(&body, &mut meter)
+                    .ok()
+                    .map(|stored| stored.content_id())
+            },
+        )),
         ("surface", "torus_second_bound") => {
             use geom_surface::ParamSurface;
             let s = inputs::surface::torus().unwrap();
@@ -1357,6 +1448,54 @@ fn direct_digest(group: &str, name: &str, class: Class) -> Option<Digest> {
                         .bound(&mut geom_run::WorkMeter::new(geom_run::Budget::UNLIMITED))
                 }),
         ),
+        ("make", "build_box") => {
+            let ctx = make_context();
+            fold(
+                inputs::make::boxes(class)
+                    .iter()
+                    .map(|input| geom_make::make_box(&ctx, input).map(|out| make_counts(&out))),
+            )
+        }
+        ("make", "cylinder") => {
+            let ctx = make_context();
+            fold(
+                inputs::make::cylinders(class)
+                    .iter()
+                    .map(|input| geom_make::cylinder(&ctx, input).map(|out| make_counts(&out))),
+            )
+        }
+        ("make", "move_box") => {
+            let ctx = make_context();
+            fold(
+                inputs::make::moved_boxes(class)
+                    .iter()
+                    .map(|(body, offset)| {
+                        let moved = geom_make::Moved {
+                            body: &body.result.body,
+                            exactness: body.exactness,
+                            accept: None,
+                        };
+                        geom_make::move_by(&ctx, moved, *offset).map(|out| make_counts(&out))
+                    }),
+            )
+        }
+        ("make", "turn_box") => {
+            let ctx = make_context();
+            fold(
+                inputs::make::turned_boxes(class)
+                    .iter()
+                    .map(|(body, center)| {
+                        let moved = geom_make::Moved {
+                            body: &body.result.body,
+                            exactness: body.exactness,
+                            accept: None,
+                        };
+                        let turn = geom_math::Rotation::quarter_turns(1);
+                        geom_make::rotate(&ctx, moved, geom_math::Axis::Z, turn, *center)
+                            .map(|out| make_counts(&out))
+                    }),
+            )
+        }
         ("bvh", "tree_build_query") => fold(inputs::bvh::tree_build_query(class).iter().map(
             |(entries, query)| {
                 let mut meter = geom_run::WorkMeter::new(geom_run::Budget::UNLIMITED);

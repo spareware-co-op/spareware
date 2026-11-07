@@ -61,11 +61,11 @@ impl Author {
 /// The entities whose variables make up `id`: its points as well as itself.
 fn parts(sketch: &Sketch, id: ItemId) -> Result<Vec<ItemId>, SketchError> {
     let mut list = Vec::new();
-    let mut add = |ids: &[ItemId]| {
+    let mut add = |ids: &[ItemId]| -> Result<(), SketchError> {
         list.try_reserve(ids.len())
             .map_err(|_| SketchError::OutOfMemory)?;
         list.extend_from_slice(ids);
-        Ok::<(), SketchError>(())
+        Ok(())
     };
     match &sketch.entity(id)?.kind {
         EntityKind::Line { start, end, .. } => add(&[*start, *end])?,

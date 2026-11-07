@@ -1,0 +1,3 @@
+# Archived files are compared byte for byte and must never change line ends.
+* -text
+.gitattributes text eol=lf

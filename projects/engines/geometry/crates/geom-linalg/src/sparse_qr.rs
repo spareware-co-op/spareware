@@ -45,7 +45,16 @@
 //!   <https://github.com/endoli/fiksi/blob/ff4850546738fb82e95ff27c4db63e924d938473/solvi/src/decomposition/sparse/qr.rs>,
 //!   for its left-looking structure and the handing of rows up the tree.
 //!
-//! Cost: as charged; O(|R| + |V| + m + n) memory. No recursion.
+//! Cost: as charged; O(|R| + |V| + m + n) memory. No recursion in the factoring or the solves.
+//!
+//! Recursion:
+//!
+//! - Types: `SparseQr`.
+//!   Bound: 2.
+//!   Why: a `SparseQr` holds a second one only when a column is dead, and `SparseQr::factor`
+//!   makes that second from the plain factors of Rᵀ, which it never gives a second of its own, so a
+//!   value is at most itself and one more; its drop glue and derived implementations go no deeper.
+//!   Test: `a_staircase_clones_compares_and_prints_at_its_bound`.
 
 #![allow(
     clippy::many_single_char_names,
@@ -56,6 +65,7 @@ extern crate alloc;
 
 use alloc::boxed::Box;
 use alloc::vec::Vec;
+use core::cmp::Ordering;
 
 use geom_num::real::Real;
 
@@ -259,6 +269,25 @@ pub struct SparseQr {
     rank: usize,
     /// The QR of Rᵀ, when some column is dead.
     second: Option<Box<SparseQr>>,
+}
+
+/// Whether the permutation `p` of 0..n is odd: each cycle of length l is l − 1 swaps.
+fn odd(p: &[usize]) -> Result<bool, LinalgError> {
+    let mut seen = filled(p.len(), false)?;
+    let mut odd = false;
+    for start in 0..p.len() {
+        let mut i = start;
+        let mut first = true;
+        while !at(&seen, i)? {
+            *slot(&mut seen, i)? = true;
+            if !first {
+                odd = !odd;
+            }
+            first = false;
+            i = at(p, i)?;
+        }
+    }
+    Ok(odd)
 }
 
 /// H·x, for the reflection with `rows` and `values` and its `tau`.
@@ -482,6 +511,52 @@ impl SparseQr {
     #[must_use]
     pub fn order(&self) -> &[usize] {
         &self.order
+    }
+
+    /// The smallest pivot: the least |R[k, k]|, and 0 if a column is dead.
+    #[must_use]
+    pub fn smallest_pivot(&self) -> f64 {
+        if self.rank < self.diagonal.len() {
+            return 0.0;
+        }
+        let mut least = f64::INFINITY;
+        for pivot in &self.diagonal {
+            if pivot.abs() < least {
+                least = pivot.abs();
+            }
+        }
+        least
+    }
+
+    /// The sign of det A, for a square A with no dead column; `None` otherwise. A·Π = Q·P·R, with
+    /// P putting each column's pivot row in its place, so the sign is that of R's diagonal, turned
+    /// once for each reflection made (τ ≠ 0; τ = 0 is the identity), once if Π is odd and once if
+    /// P is. A path of solutions keeps this sign while it meets no singular configuration
+    /// (chapter 15.7), so a change says a step crossed to another branch.
+    ///
+    /// # Errors
+    ///
+    /// [`LinalgError::OutOfMemory`]; [`LinalgError::Defect`] if the pivots are not a permutation,
+    /// which only a defect can cause.
+    pub fn determinant_sign(&self) -> Result<Option<Ordering>, LinalgError> {
+        let n = self.diagonal.len();
+        if self.rows != n || self.rank < n {
+            return Ok(None);
+        }
+        let mut negative = odd(&self.order)? != odd(&self.pivot)?;
+        for (tau, beta) in self.tau.iter().zip(&self.diagonal) {
+            if *tau != 0.0 {
+                negative = !negative;
+            }
+            if *beta < 0.0 {
+                negative = !negative;
+            }
+        }
+        Ok(Some(if negative {
+            Ordering::Less
+        } else {
+            Ordering::Greater
+        }))
     }
 
     /// What a solve costs.

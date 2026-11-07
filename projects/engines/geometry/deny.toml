@@ -18,8 +18,8 @@
 # cargo-deny's checks only, not the gate's own rules below.
 #
 # Beside this file: deny-no-std.toml holds the rule for the no_std kernel crates alone (inside
-# them the only published crate is libm, chapter 29.1), and deny-ships.toml the rayon bans on what
-# the crates that ship build with (29.4).
+# them the only published crates are libm, chapter 29.1, and sha2 with the crates it brings, 32.20),
+# and deny-ships.toml the rayon bans on what the crates that ship build with (29.4).
 #
 # The gate's own rules (tests/scaffold/deny.rs, module `rules`) run on the same graph as every run
 # and close three gaps cargo-deny 0.20.2 leaves, read from its source: `private.ignore` below skips

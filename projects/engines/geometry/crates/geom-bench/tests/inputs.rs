@@ -2203,6 +2203,39 @@ fn isolate_and_ball_classes_are_what_they_claim() {
     );
 }
 
+/// Every typical batch of `geom-format`'s benchmarks is full and succeeds: every key is made, every
+/// lookup hits, and a new version writes the one chunk its edit touched.
+#[test]
+fn format_typical_batches_all_succeed() {
+    use geom_bench::inputs::format as m;
+    use geom_bench::kernels::format as k;
+    let keys = m::cache_key(Typical);
+    let mut out = Vec::with_capacity(BATCH);
+    k::cache_key(&keys, &mut out);
+    assert_eq!(out.len(), BATCH);
+    assert!(out.iter().all(Option::is_some));
+
+    let lookups = m::memo_get(Typical);
+    let mut out = Vec::with_capacity(BATCH);
+    k::memo_get(&lookups, &mut out);
+    assert_eq!(out.len(), BATCH);
+    assert!(out.iter().all(Option::is_some));
+
+    let versions = m::next_version(Typical);
+    let mut out = Vec::with_capacity(BATCH);
+    k::next_version(&versions, &mut out);
+    assert_eq!(out.len(), BATCH);
+    assert!(out.iter().all(Option::is_some));
+    let (first, body) = &versions[0];
+    let mut meter = geom_run::WorkMeter::new(geom_run::Budget::UNLIMITED);
+    assert_eq!(first.next(body, &mut meter).unwrap().written().len(), 1);
+    for class in [Degenerate, Extreme] {
+        assert!(m::cache_key(class).is_empty());
+        assert!(m::memo_get(class).is_empty());
+        assert!(m::next_version(class).is_empty());
+    }
+}
+
 /// Runs `kernel` on `batch` and requires a full batch of `Ok` results, naming the first error.
 fn all_ok<T, R, E: core::fmt::Debug>(
     name: &str,
@@ -2260,6 +2293,17 @@ fn linalg_typical_batches_all_succeed() {
     use geom_bench::kernels::linalg as k;
     all_ok("pivoted_qr", k::pivoted_qr, &m::pivoted_qr(Typical));
     all_ok("svd_jacobi", k::svd_jacobi, &m::svd_jacobi(Typical));
+}
+
+/// Every typical batch of `geom-make`'s benchmarks (decision 32.44) builds or moves every body.
+#[test]
+fn make_typical_batches_all_succeed() {
+    use geom_bench::inputs::make as m;
+    use geom_bench::kernels::make as k;
+    all_ok("build_box", k::boxes, &m::boxes(Typical));
+    all_ok("cylinder", k::cylinders, &m::cylinders(Typical));
+    all_ok("move_box", k::moved_boxes, &m::moved_boxes(Typical));
+    all_ok("turn_box", k::turned_boxes, &m::turned_boxes(Typical));
 }
 
 /// Every typical batch of `geom-bvh`'s benchmarks (decision 32.44) builds every scene and answers
@@ -2374,4 +2418,15 @@ fn roots_typical_batches_all_succeed() {
         k::gauss_legendre,
         &m::gauss_legendre(Typical),
     );
+}
+
+/// Every typical batch of `geom-intersect`'s benchmarks (decision 32.44) orders every list and
+/// reads every key.
+#[test]
+fn intersect_typical_batches_all_succeed() {
+    use geom_bench::inputs::intersect as m;
+    use geom_bench::kernels::intersect as k;
+    all_ok("sort_items", k::sorted, &m::items(Typical));
+    all_ok("key_circle", k::keys, &m::circles(Typical));
+    all_ok("pair_lines", k::paired, &m::lines(Typical));
 }
