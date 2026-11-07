@@ -45,6 +45,14 @@
 //! - [`history`]: chapter 20.3's history laws as a kit every operation's tests run (G88):
 //!   one history and a chain checked through `geom-op`'s checker, composition from both ends, and
 //!   proptest generators of valid histories and chains.
+//! - [`canonical`]: the canonical output of one case and its SHA-256, a fixture's golden hash
+//!   (28.13; G96): bodies, names, history, exactness and diagnostics, or an error's kind, entities
+//!   and evidence.
+//! - [`fixture`]: the stored test cases every failure ends as (28.16; G97): [`fixture::Fixture`],
+//!   its [`fixture::Expect`] per edition and operation versions and its [`fixture::Status`]; the
+//!   operation log in the native format; the runner's Pass, Fail and Improved; the operation-log
+//!   minimiser; what a pull request may do to a stored fixture; the fails-on-base list. The binary
+//!   `fixture` lists, checks and runs them.
 //! - [`guard`]: the proof that the toolchain and dependency guard of 28.13 trips: `libm`'s `sin`
 //!   changed by one bit must fail the golden `geom-num/determinism`. The binary `guard` patches
 //!   that change in and runs the golden (`-- prove`); `kernel.yml` runs it.
@@ -109,7 +117,13 @@
 //!   a dense sample of exact or 400-bit values (`tests/truth`, each kind's definition written from
 //!   its documentation); fixed seeds on pull requests, fresh ones nightly (`kernel-nightly.yml`).
 //!
-//! Fixtures, the other reference implementations, oracle clients and the other CI tools arrive
+//! Piece G136 adds the reference for flat solids:
+//!
+//! - [`flat_reference`]: booleans, imprint, cells, plane sections, In-On-Out, volumes, centroids,
+//!   clash and first contact in exact rationals, by brute force over a full plane arrangement,
+//!   written from the definitions alone; `tests/flat_reference.rs` holds it to hand cases.
+//!
+//! The other reference implementations, oracle clients and the other CI tools arrive
 //! with the pieces that need them. The sister development crates are `geom-fuzz` (fuzz harnesses),
 //! `geom-gen` (every generator whose output is committed) and `geom-bench` (benchmarks). `geom-bench` is built by
 //! piece G06 in its own worktree, so this piece leaves the benchmark to it.
@@ -184,6 +198,8 @@
 //!   `tests/nurbs_reference.rs` compares with the reference, and the work meter they take.
 //! - `geom-curve`, `geom-surface` and `geom-math` (Apache-2.0, ours), development dependencies (G69):
 //!   the kinds and transforms the law catalogue checks.
+//! - `geom-format` (Apache-2.0, ours), a dependency (G97): a fixture's operation log is a standalone
+//!   native file, read with the work meter `geom-run` supplies.
 //!
 //! Licences of every outside package this crate brings into a build, its own and its dependencies'
 //! on every target (`cargo tree --target all`), each record checked by `tests/licences.rs`. Where a
@@ -195,7 +211,7 @@
 //!   `serde_derive`, `itoa`, `proc-macro2`, `quote`, `syn`, `toml`, `toml_datetime`, `toml_parser`,
 //!   `toml_writer`, `serde_spanned`, `camino`, `cargo-platform`, `semver`, `thiserror`,
 //!   `thiserror-impl`, `clap`, `clap_builder`, `clap_derive`, `clap_lex`, `anstyle`, `heck`,
-//!   `yaml-rust2`, `hashlink`, `sha2`, `digest`, `block-buffer`, `crypto-common`, `hybrid-array`,
+//!   `yaml-rust2`, `hashlink`, `hex`, `wait-timeout`, `sha2`, `digest`, `block-buffer`, `crypto-common`, `hybrid-array`,
 //!   `typenum`, `petgraph`, `fixedbitset`, `hashbrown`, `indexmap`, `equivalent`, `num-rational`,
 //!   `num-bigint`, `num-integer`, `dashu-int`, `dashu-ratio`, `dashu-base`, `regex-lite` and
 //!   `static_assertions`.
@@ -210,9 +226,12 @@
 //! - Zlib: `foldhash`.
 #![forbid(unsafe_code)]
 
+pub mod canonical;
 pub mod coverage;
 pub mod deps;
 pub mod fixed;
+pub mod fixture;
+pub mod flat_reference;
 pub mod foundation;
 pub mod golden;
 pub mod grid;
