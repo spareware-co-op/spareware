@@ -236,9 +236,15 @@
               "kind": "corpus",
               "piece": "G148",
               "why": "2 new count benchmarks of geom-run's helper (decision 32.44): Exec::map of a list that fits one chunk, on the serial executor and on a pool, for the fix that runs a wave of one task on the calling thread (found in G148's timings); no existing digest moved"
+            },
+            {
+              "sha256": "57fb849de9d6eb8003fe3ff677db5373da1b40984777f2d573018b64e5601c1b",
+              "kind": "corpus",
+              "piece": "G359",
+              "why": "19 new benchmarks of piece G359 (principle 12; decision 32.44 for geom-2d): angle units' sine and cosine on one turn and at the ends of i64, the nearest unit of an enclosure in radians, bearings of vectors, reduction, turning, reversal and IFC's angles; angle text read, written, shortest and as quadrant bearings; and geom-2d's forward, inverse, nearest root and traverse misclosure; no existing digest moved"
             }
           ],
-          "sha256": "57fb849de9d6eb8003fe3ff677db5373da1b40984777f2d573018b64e5601c1b"
+          "sha256": "516f996022f4a13d9762d2f8923f1994fc12e3f4ac4982f30b8669faf5452c0b"
         },
         {
           "id": "geom-nurbs/operations",

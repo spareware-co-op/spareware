@@ -1251,6 +1251,7 @@ fn direct_digest(group: &str, name: &str, class: Class) -> Option<Digest> {
         ("generated", _) => generated_digest(name, class)?,
         ("math_types", _) => math_types_digest(name, class)?,
         ("curve", _) => curve_digest(name, class)?,
+        ("angle" | "angle_text" | "cogo", _) => g359_digest(group, name, class)?,
         ("brent", "zero") => {
             let tol = Real::new(1e-12).unwrap();
             fold(
@@ -1447,6 +1448,78 @@ fn curve_digest(name: &str, class: Class) -> Option<Digest> {
             m::transition_to_nurbs(class)
                 .into_iter()
                 .map(|l| inputs::curve::transition(l)?.to_nurbs(&mut meter())),
+        ),
+        _ => return None,
+    })
+}
+
+/// The digest of piece G359's benchmark `group/name` on `class`, from direct calls of
+/// `geom_num::angle`, `geom_num::angle_text` and `geom_2d::cogo` on its inputs.
+fn g359_digest(group: &str, name: &str, class: Class) -> Option<Digest> {
+    use geom_2d::cogo;
+    use geom_bench::inputs::{angle as ia, angle_text as it, cogo as ic};
+    use geom_num::angle::{AngleUnits, Bearing};
+    use geom_num::angle_text::{self as text, Notation};
+    let meter = || geom_run::WorkMeter::new(geom_run::Budget::UNLIMITED);
+    Some(match (group, name) {
+        ("angle", "sin_cos") => fold(ia::sin_cos(class).into_iter().map(AngleUnits::sin_cos)),
+        ("angle", "nearest_radians") => fold(
+            ia::nearest_radians(class)
+                .into_iter()
+                .map(AngleUnits::nearest_radians),
+        ),
+        ("angle", "of_vector") => fold(
+            ia::of_vector(class)
+                .into_iter()
+                .map(|(e, n)| Bearing::of_vector(e, n)),
+        ),
+        ("angle", "reduced") => fold(ia::reduced(class).into_iter().map(AngleUnits::reduced)),
+        ("angle", "rotated") => fold(ia::rotated(class).into_iter().map(|(b, a)| b.rotated(a))),
+        ("angle", "reversed") => fold(ia::reversed(class).into_iter().map(Bearing::reversed)),
+        ("angle", "from_ifc") => fold(ia::from_ifc(class).into_iter().map(Bearing::from_ifc)),
+        ("angle", "to_ifc") => fold(ia::to_ifc(class).into_iter().map(Bearing::to_ifc)),
+        ("angle_text", "parse") => fold(
+            it::parse(class)
+                .iter()
+                .map(|t| text::parse(t, Notation::Dms)),
+        ),
+        ("angle_text", "write") => fold(
+            it::write(class)
+                .into_iter()
+                .map(|a| text::write(a, Notation::Dms, 2)),
+        ),
+        ("angle_text", "shortest") => fold(
+            it::shortest(class)
+                .into_iter()
+                .map(|a| text::shortest(a, Notation::Dms)),
+        ),
+        ("angle_text", "parse_quadrant") => fold(
+            it::parse_quadrant(class)
+                .iter()
+                .map(|t| text::parse_quadrant(t)),
+        ),
+        ("angle_text", "write_quadrant") => fold(
+            it::write_quadrant(class)
+                .into_iter()
+                .map(|b| text::write_quadrant(b, 2)),
+        ),
+        ("cogo", "forward") => fold(
+            ic::forward(class)
+                .into_iter()
+                .map(|(p, b, d)| cogo::forward(p, b, d)),
+        ),
+        ("cogo", "inverse") => fold(
+            ic::inverse(class)
+                .into_iter()
+                .map(|(a, z)| cogo::inverse(a, z)),
+        ),
+        ("cogo", "nearest_root") => {
+            fold(ic::nearest_root(class).into_iter().map(cogo::nearest_root))
+        }
+        ("cogo", "misclosure") => fold(
+            ic::misclosure(class)
+                .into_iter()
+                .map(|(start, legs, end)| cogo::misclosure(start, &legs, end, &mut meter())),
         ),
         _ => return None,
     })

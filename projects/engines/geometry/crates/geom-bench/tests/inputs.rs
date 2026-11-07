@@ -2384,3 +2384,65 @@ fn roots_typical_batches_all_succeed() {
         &m::gauss_legendre(Typical),
     );
 }
+
+/// Every batch of piece G359's benchmarks succeeds, and each class is what its builder says: the
+/// sines and cosines of every octant, angles at the ends of `i64`, vectors off the axes and the
+/// diagonals, readings that read exactly, and traverses inside the frame.
+#[test]
+fn g359_batches_all_succeed_and_are_what_they_claim() {
+    use geom_2d::cogo;
+    use geom_bench::inputs::{angle as ia, angle_text as it, cogo as ic};
+    use geom_num::angle::{AngleUnits, Bearing, FULL_TURN};
+    use geom_num::angle_text::{self as text, Notation};
+    let octants: std::collections::BTreeSet<i64> = ia::sin_cos(Typical)
+        .iter()
+        .map(|a| a.get() / (FULL_TURN / 8))
+        .collect();
+    assert_eq!(octants.len(), 8, "{octants:?}");
+    for a in ia::sin_cos(Typical).into_iter().chain(ia::sin_cos(Extreme)) {
+        a.sin_cos().unwrap();
+    }
+    assert!(
+        ia::sin_cos(Extreme)
+            .iter()
+            .all(|a| a.get().unsigned_abs() > (1u64 << 62))
+    );
+    for theta in ia::nearest_radians(Typical) {
+        assert!(AngleUnits::nearest_radians(theta).unwrap().is_certain());
+    }
+    for (e, n) in ia::of_vector(Typical) {
+        let b = Bearing::of_vector(e, n).unwrap();
+        assert!(!b.is_exact());
+    }
+    for t in it::parse(Typical) {
+        assert!(text::parse(&t, Notation::Dms).unwrap().is_exact(), "{t}");
+    }
+    for t in it::parse_quadrant(Typical) {
+        assert!(text::parse_quadrant(&t).unwrap().is_exact(), "{t}");
+    }
+    for a in it::write(Typical).into_iter().chain(it::shortest(Typical)) {
+        text::write(a, Notation::Dms, 2).unwrap();
+        assert!(text::shortest(a, Notation::Dms).is_some());
+    }
+    for b in it::write_quadrant(Typical) {
+        text::write_quadrant(b, 2).unwrap();
+    }
+    for (p, b, d) in ic::forward(Typical) {
+        cogo::forward(p, b, d).unwrap();
+    }
+    for (a, z) in ic::inverse(Typical) {
+        assert!(cogo::inverse(a, z).unwrap().bearing().is_some());
+    }
+    let roots = ic::nearest_root(Typical);
+    assert!(
+        roots
+            .iter()
+            .filter(|n| cogo::nearest_root(**n).is_exact())
+            .count()
+            >= roots.len() / 4
+    );
+    for (start, legs, end) in ic::misclosure(Typical) {
+        let mut meter = geom_run::WorkMeter::new(geom_run::Budget::UNLIMITED);
+        cogo::misclosure(start, &legs, end, &mut meter).unwrap();
+    }
+}

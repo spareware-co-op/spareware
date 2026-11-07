@@ -29,3 +29,5 @@
 //! G201, G202, G203, G204, G205, G206, G207, G208, G209, G210, G211, G212, G213, G359, G360, G361.
 #![cfg_attr(not(test), no_std)]
 #![forbid(unsafe_code)]
+
+pub mod cogo;

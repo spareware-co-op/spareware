@@ -509,6 +509,13 @@ Geogram's PCK `_SOS` predicates
     projects/engines/geometry/crates/geom-num/src/perturb.rs
       for the shape of a cascade over keyed points, and its address ordering as the trap to avoid. No code copied.
 
+`GeographicLib` `DMS.cpp`
+  Licence:      MIT
+  Link:         https://github.com/geographiclib/geographiclib/blob/48959dfc4a581ad29f76b526726a801473767c98/src/DMS.cpp
+  Consulted by:
+    projects/engines/geometry/crates/geom-num/src/angle_text.rs
+      for the symbols it accepts for degrees, minutes, seconds and signs, the order of the parts, and its rules that only the last part has a fraction and that minutes and seconds are below 60. No code copied.
+
 `GeometricTools`' `BSPrecision.h`
   Licence:      BSL-1.0
   Link:         https://github.com/davideberly/GeometricTools/blob/e09f5b39a33da6b4bfd0ff8dbb64ddcb7fdfc763/GTE/Mathematics/BSPrecision.h
