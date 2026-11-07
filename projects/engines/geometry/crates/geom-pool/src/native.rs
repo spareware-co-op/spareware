@@ -2,8 +2,8 @@
 //!
 //! What it does: [`Rayon`] owns a `rayon::ThreadPool` of a fixed number of threads and implements
 //! [`Pool`]: [`Pool::run_all`] splits the tasks in halves and runs the halves with rayon's `join`,
-//! on that pool, and returns when all of them have finished. The helper (`geom_run::Exec::with_pool`) decides everything else: the
-//! fixed chunks, the order results are read in, the lowest-numbered failure, so every answer is the
+//! on that pool, and returns when all of them have finished. The helper
+//! (`geom_run::Exec::with_pool`) decides everything else: the fixed chunks, the order results are read in, the lowest-numbered failure, so every answer is the
 //! serial executor's, bit for bit, whatever the pool does (23.4).
 //!
 //! Guarantees:
@@ -36,13 +36,18 @@
 //! 2026-10-27, in no release yet). `join` keeps its jobs on the caller's stack and has no such
 //! window. Once a rayon-core release carries #1330 a scope would do again, but `join` is no worse.
 //!
+//! The halving itself is [`run_halves`](crate::halves::run_halves), over a [`Join`]; the bound of
+//! its recursion is stated here, because the cycle runs through this module's `Join` for rayon's
+//! pool and through `Inline`, which has no threads and lets the same halving run on WebAssembly's
+//! small stack.
+//!
 //! Recursion:
 //!
-//! - Cycle: `run_halves`.
+//! - Cycle: `run_halves`, `<crate::halves::Inline as Join>::join`, `<Rayon as Join>::join`.
 //!   Bound: 64.
-//!   Why: each call hands `join` two halves, each at most half the slice (rounded up), and a slice
-//!   of one task or none ends the recursion, so `n` tasks need at most `ceil(log2 n) + 1` frames,
-//!   and a slice is at most `isize::MAX` long, under 2^63 tasks.
+//!   Why: each call hands `Join::join` two halves, each at most half the slice (rounded up), and a
+//!   slice of one task or none ends the recursion, so `n` tasks need at most `ceil(log2 n) + 1`
+//!   frames, and a slice is at most `isize::MAX` long, under 2^63 tasks.
 //!   Test: `halving_reaches_every_task_of_a_large_wave`.
 //!
 //! Cost: `n - 1` calls of `join` for `n` tasks, each pushing one job on the worker's own deque
@@ -53,6 +58,8 @@ use core::fmt;
 use core::num::NonZeroUsize;
 
 use geom_run::Pool;
+
+use crate::halves::{Join, run_halves};
 
 /// A failure to build a [`Rayon`] pool.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -101,21 +108,20 @@ impl Rayon {
 
 impl Pool for Rayon {
     fn run_all(&self, tasks: &mut [&mut (dyn FnMut() + Send)]) {
-        run_halves(&self.pool, tasks);
+        run_halves(self, tasks);
     }
 }
 
-/// Run every task of `tasks` on `pool`: split them in halves and run the two with `join`.
+/// rayon's `join` on the pool as a [`Join`], so that [`run_halves`] halves a wave over it.
 ///
 /// The first call comes from any thread and `ThreadPool::join` moves it onto a worker; a later
 /// call is already on one, where `join` runs in place and the second half is open to thieves.
-fn run_halves(pool: &rayon::ThreadPool, tasks: &mut [&mut (dyn FnMut() + Send)]) {
-    match tasks {
-        [] => {}
-        [task] => (**task)(),
-        _ => {
-            let (first, second) = tasks.split_at_mut(tasks.len() / 2);
-            pool.join(|| run_halves(pool, first), || run_halves(pool, second));
-        }
+impl Join for Rayon {
+    fn join<A, B>(&self, first: A, second: B)
+    where
+        A: FnOnce() + Send,
+        B: FnOnce() + Send,
+    {
+        self.pool.join(first, second);
     }
 }
