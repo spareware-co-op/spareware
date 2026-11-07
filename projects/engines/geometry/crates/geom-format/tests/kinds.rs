@@ -554,6 +554,82 @@ fn offset_surfaces_read_back_cached_split_and_nested() {
     }
 }
 
+/// A similarity multiplies a cylinder's and a cone's axial factor by its scale (geom-surface), so
+/// a factor of 3, or of -3 after a mirror, is a surface the kernel makes and the format keeps.
+#[test]
+fn a_scaled_cylinder_and_cone_read_back_with_their_factor() {
+    let scale = TypedTransform::from(Transform::scale(3.0, 3.0, 3.0).unwrap());
+    let mirror = TypedTransform::Exact(GridTransform::mirror(Axis::Z));
+    let mut seen = 0;
+    for (what, s) in surfaces() {
+        if !matches!(s, SurfaceKind::Cylinder(_) | SurfaceKind::Cone(_)) {
+            continue;
+        }
+        let scaled = s.transformed(&scale, &mut meter()).unwrap().value;
+        let moved = match &scaled {
+            SurfaceKind::Cylinder(c) => c.axial_sign(),
+            SurfaceKind::Cone(c) => c.axial_sign(),
+            other => panic!("{what}: {other:?}"),
+        };
+        assert_eq!(moved, 3.0, "{what}");
+        surface_trip(what, &scaled);
+        let bytes = surface_bytes(&scaled);
+        let mut d = Decoder::new(&bytes, DEPTH);
+        assert_eq!(
+            read_surface(&mut d, &mut meter()).unwrap(),
+            scaled,
+            "{what}"
+        );
+        let back = scaled.transformed(&mirror, &mut meter()).unwrap().value;
+        surface_trip(what, &back);
+        seen += 1;
+    }
+    assert!(seen >= 2, "{seen}");
+}
+
+/// A round kind's axial factor is the integer 1 or -1, or a finite double that is not 0, 1 or -1:
+/// each other double in that place is refused (the integers are the form of 1 and -1, so a double
+/// 1 or -1 is a second spelling), and a finite one is kept. The factor is the item's last, and
+/// the writer gives a double in its shortest exact form, so a factor of 3 ends the bytes as the
+/// half-precision double `f9 42 00`; the checks swap those two bytes for another half.
+#[test]
+fn a_round_kinds_axial_factor_refuses_every_other_double() {
+    let scale = TypedTransform::from(Transform::scale(3.0, 3.0, 3.0).unwrap());
+    let mut seen = 0;
+    for (what, s) in surfaces() {
+        if !matches!(s, SurfaceKind::Cylinder(_) | SurfaceKind::Cone(_)) {
+            continue;
+        }
+        let bytes = surface_bytes(&s.transformed(&scale, &mut meter()).unwrap().value);
+        let at = bytes.len() - 3;
+        assert_eq!(bytes[at..], [0xf9, 0x42, 0x00], "{what}: {bytes:?}");
+        let with = |half: u16| {
+            let mut b = bytes.clone();
+            b[at + 1..].copy_from_slice(&half.to_be_bytes());
+            read_surface(&mut Decoder::new(&b, DEPTH), &mut meter())
+        };
+        // 0, -0, 1 and -1 are well-formed doubles that are not a factor.
+        for bad in [0x0000, 0x8000, 0x3c00, 0xbc00] {
+            assert!(
+                matches!(with(bad), Err(KindError::Shape(_))),
+                "{what}: a factor of half {bad:#06x}"
+            );
+        }
+        // Infinity, -infinity and a NaN are refused too, by the decoder or by the reader.
+        for bad in [0x7c00, 0xfc00, 0x7e00] {
+            assert!(with(bad).is_err(), "{what}: a factor of half {bad:#06x}");
+        }
+        // 3, -3, 0.5, -0.5, 1.5, -1.5, and the largest and smallest halves.
+        for good in [
+            0x4200, 0xc200, 0x3800, 0xb800, 0x3e00, 0xbe00, 0x7bff, 0xfbff, 0x0001,
+        ] {
+            assert!(with(good).is_ok(), "{what}: a factor of half {good:#06x}");
+        }
+        seen += 1;
+    }
+    assert!(seen >= 2, "{seen}");
+}
+
 #[test]
 fn a_kind_from_another_form_is_refused() {
     let line = CurveKind::Line(Line::new([1.0, 2.0, 3.0], [0.5, -0.25, 1.0], (-1.5, 2.0)).unwrap());
