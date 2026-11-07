@@ -47,22 +47,28 @@ fn readings(a: &SurfaceKind, b: &SurfaceKind) -> Vec<Reading> {
     analyse(a, b, &found, FLOOR, CEILING, &mut meter()).unwrap()
 }
 
+/// Whether `x` encloses a point within a hundredth of `at`.
+fn near(x: geom_num::interval::Interval, at: f64) -> bool {
+    x.lo() <= at + 0.01 && at - 0.01 <= x.hi() && x.hi() - x.lo() < 0.01
+}
+
 #[test]
 fn two_spheres_touching_on_a_seam_have_one_tangent_point() {
     let (a, b) = (sphere(0.0), sphere(2.0));
-    for found in [readings(&a, &b), readings(&b, &a)] {
+    // The point (1, 0, 0) is at u = 0 = 2 of the sphere at the origin (its seam) and at u = 1 of the
+    // other, and on both equators. Whichever sphere is first, the box holds the seam's parameter
+    // at its end, 2 (or, a hair past it, as the box of the chart cut elsewhere), never moved back to
+    // the start: the part past the end is the same points.
+    for (found, seam_first) in [(readings(&a, &b), true), (readings(&b, &a), false)] {
         let [Reading::Point { at, gap, contact }] = found.as_slice() else {
             panic!("{found:#?}");
         };
         assert_eq!(*contact, PointContact::IsolatedTangent);
         assert!(gap.lo() <= 0.0 && 0.0 <= gap.hi(), "{gap:?}");
-        // The point is at the seam of one sphere: u = 0 is u = 2, and the box may reach across the
-        // end, past 2 by what it reaches.
-        let seam = |u: f64| (u - 0.0).abs() < 0.01 || (u - 2.0).abs() < 0.01;
-        assert!(
-            at.iter()
-                .any(|x| seam(x.lo()) && seam(x.hi()) && x.hi() - x.lo() < 0.01),
-            "{at:?}"
-        );
+        let [u1, v1, u2, v2] = *at;
+        let (on_seam, other) = if seam_first { (u1, u2) } else { (u2, u1) };
+        assert!(near(on_seam, 2.0), "{at:?}");
+        assert!(near(other, 1.0), "{at:?}");
+        assert!(near(v1, 0.0) && near(v2, 0.0), "{at:?}");
     }
 }
