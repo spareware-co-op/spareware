@@ -118,6 +118,17 @@ pub struct Fit {
     pub deviation: Steps,
 }
 
+/// The larger of two doubles, by comparison (the kernel keeps `f64::max` out of its code, whose tie
+/// rule is not named).
+fn larger(a: f64, b: f64) -> f64 {
+    if b > a { b } else { a }
+}
+
+/// The smaller of two doubles, by comparison.
+fn smaller(a: f64, b: f64) -> f64 {
+    if b < a { b } else { a }
+}
+
 /// A coordinate as a double: exact, as grid coordinates are below 2^40.
 fn coordinate(c: i64) -> f64 {
     // A grid coordinate is below 2^40 in size, so the double holds it exactly.
@@ -218,7 +229,7 @@ pub fn fit_spline(
         );
         let dx = c[0] - coordinate(x);
         let dy = c[1] - coordinate(y);
-        moved = moved.max(geom_num::math::sqrt(dx * dx + dy * dy)?.get());
+        moved = larger(moved, geom_num::math::sqrt(dx * dx + dy * dy)?.get());
         control.push(P2::new(x, y)?);
     }
     // The bound in whole steps: the move and the solve's certified error, rounded up.
@@ -324,9 +335,14 @@ fn centre_f(c: &Rational2) -> [f64; 2] {
 
 /// Whether the curve turns counter-clockwise from `at` along `t` towards `to`.
 fn turns_left(at: P2, t: [i64; 2], to: P2) -> bool {
-    let dx = i128::from(to.x.get()) - i128::from(at.x.get());
-    let dy = i128::from(to.y.get()) - i128::from(at.y.get());
-    i128::from(t[0]) * dy - i128::from(t[1]) * dx > 0
+    let dx = i128::from(to.x.get()).checked_sub(i128::from(at.x.get()));
+    let dy = i128::from(to.y.get()).checked_sub(i128::from(at.y.get()));
+    let cross = dx.zip(dy).and_then(|(dx, dy)| {
+        i128::from(t[0])
+            .checked_mul(dy)?
+            .checked_sub(i128::from(t[1]).checked_mul(dx)?)
+    });
+    cross.is_some_and(|c| c > 0)
 }
 
 fn arc(on: P2, c: Rational2, from: P2, to: P2, left: bool) -> BiarcArc {
@@ -386,8 +402,8 @@ pub fn biarc(p0: P2, t0: [i64; 2], p1: P2, t1: [i64; 2]) -> Result<Biarc, FitErr
         coordinate(p1.y.get()) - d * u1[1],
     ];
     let j = P2::new(
-        nearest((a[0] + b[0]) / 2.0).ok_or(FitError::Range)?,
-        nearest((a[1] + b[1]) / 2.0).ok_or(FitError::Range)?,
+        nearest(f64::midpoint(a[0], b[0])).ok_or(FitError::Range)?,
+        nearest(f64::midpoint(a[1], b[1])).ok_or(FitError::Range)?,
     )?;
     let c0 = centre(p0, t0, j)?.ok_or(FitError::NoBiarc)?;
     let c1 = centre(p1, t1, j)?.ok_or(FitError::NoBiarc)?;
@@ -464,7 +480,7 @@ pub fn spline_to_biarcs(
             None => f64::INFINITY,
         };
         if off <= tol {
-            worst = worst.max(off);
+            worst = larger(worst, off);
             done.push((a, b));
             continue;
         }
@@ -481,7 +497,7 @@ pub fn spline_to_biarcs(
                 }
             });
         }
-        let m = (a + b) / 2.0;
+        let m = f64::midpoint(a, b);
         // The later half is pushed first so the earlier half is made first.
         todo.push((m, b, depth.saturating_add(1)));
         todo.push((a, m, depth.saturating_add(1)));
@@ -502,8 +518,8 @@ fn piece_biarc(curve: &Curve<2>, a: f64, b: f64) -> Result<Option<Biarc>, FitErr
     curve.derivs(a, Limit::FromRight, &mut d0).map_err(nurbs)?;
     curve.derivs(b, Limit::FromLeft, &mut d1).map_err(nurbs)?;
     let tan = |d: [f64; 2]| -> Option<[i64; 2]> {
-        let n = nearest(d[0] * 1024.0 / (d[0].abs() + d[1].abs()).max(1e-300))?;
-        let m = nearest(d[1] * 1024.0 / (d[0].abs() + d[1].abs()).max(1e-300))?;
+        let n = nearest(d[0] * 1024.0 / larger(d[0].abs() + d[1].abs(), 1e-300))?;
+        let m = nearest(d[1] * 1024.0 / larger(d[0].abs() + d[1].abs(), 1e-300))?;
         Some([n, m])
     };
     let (Some(t0), Some(t1)) = (tan(d0[1]), tan(d1[1])) else {
@@ -534,8 +550,8 @@ fn deviation_of(curve: &Curve<2>, a: f64, b: f64, bi: &Biarc) -> Result<f64, Fit
         let near = [&bi.first, &bi.second]
             .iter()
             .map(|arc| distance_to(arc, q))
-            .fold(f64::INFINITY, f64::min);
-        worst = worst.max(near);
+            .fold(f64::INFINITY, smaller);
+        worst = larger(worst, near);
     }
     Ok(worst)
 }
@@ -549,6 +565,6 @@ fn distance_to(arc: &BiarcArc, q: [f64; 2]) -> f64 {
     let (rx, ry) = (coordinate(on.x.get()) - c[0], coordinate(on.y.get()) - c[1]);
     let (qx, qy) = (q[0] - c[0], q[1] - c[1]);
     let norm =
-        |x: f64, y: f64| geom_num::math::sqrt(x * x + y * y).map_or(f64::INFINITY, |r| r.get());
+        |x: f64, y: f64| geom_num::math::sqrt(x * x + y * y).map_or(f64::INFINITY, geom_num::Real::get);
     norm(qx, qy) - norm(rx, ry)
 }
