@@ -45,3 +45,4 @@ pub mod index;
 pub mod point;
 pub mod snap;
 pub mod tangent;
+pub mod update;

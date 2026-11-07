@@ -49,13 +49,13 @@ use geom_curve::{CurveKind, Line};
 use geom_math::bbox::Box3;
 use geom_num::carrier::{Carrier, Rational2};
 use geom_num::grid::{P2, P3};
+use geom_num::{NumError, Sign};
+use geom_run::{Stopped, WorkMeter};
 use geom_surface::{Plane, SurfaceKind};
 use geom_topo::{
     Body, BodyKind, Builder, Edge as TopoEdge, Face as TopoFace, Fin, Ix, Loop, Region, RegionKind,
     Sense, Shell, TopoError, Vertex,
 };
-use geom_num::{NumError, Sign};
-use geom_run::{Stopped, WorkMeter};
 
 /// Why an arrangement was refused.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -970,10 +970,10 @@ impl Arrangement {
             a.edges.push(TopoEdge {
                 first_fin: first_fin.map(row).transpose()?,
                 start: Some(row(
-                    usize::try_from(edge.from).map_err(|_| BodyError::TooMany)?,
+                    usize::try_from(edge.from).map_err(|_| BodyError::TooMany)?
                 )?),
                 end: Some(row(
-                    usize::try_from(edge.to).map_err(|_| BodyError::TooMany)?,
+                    usize::try_from(edge.to).map_err(|_| BodyError::TooMany)?
                 )?),
                 curve,
             })?;
