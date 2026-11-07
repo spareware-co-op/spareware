@@ -414,6 +414,9 @@ pub(crate) fn starts_of(
                     let mut region = f.region;
                     meets_patch(&mut region, length, there)
                 });
+                // What the interior system left flagged on an end of the other surface's domain
+                // is read on the end itself.
+                at_the_ends(&edge, other.domain(), &domain, &mut found, meter)?;
                 // An end of the edge on a pole line is the pole, which that line's own test
                 // answers for every pair at once: a root or a flag the engine leaves there is that
                 // point, within the floor, and is not this edge's.
@@ -519,6 +522,244 @@ fn meets_patch(zero: &mut [Interval; 3], length: (f64, f64), there: Region) -> b
         }
     });
     cut(t, length.0, length.1) && cut(s, a, b) && cut(r, c, d)
+}
+
+/// The edge system restricted to the end of the other surface's domain: the other surface's
+/// parameter `fixed` (1 for its first, 2 for its second) held at `value`, the edge parameter and the
+/// other free parameter unknown, and two of the three residuals kept (`rows`).
+struct EdgeEnd<'a, 'b> {
+    edge: &'a Edge<'b>,
+    fixed: usize,
+    value: f64,
+    free: usize,
+    rows: [usize; 2],
+}
+
+impl EdgeEnd<'_, '_> {
+    /// The edge system's unknowns `[t, s, r]` for this system's `[t, free]`, the held one set to
+    /// `held`.
+    fn whole<T: Copy>(&self, x: [T; 2], held: T) -> [T; 3] {
+        let [t, other] = x;
+        let mut out = [t, held, held];
+        if let Some(slot) = out.get_mut(self.free) {
+            *slot = other;
+        }
+        if let Some(slot) = out.get_mut(self.fixed) {
+            *slot = held;
+        }
+        out
+    }
+
+    /// The kept rows of three residuals.
+    fn kept<T: Copy>(&self, all: &[T; 3]) -> Result<[T; 2], IntersectError> {
+        let [a, b] = self.rows;
+        match (all.get(a), all.get(b)) {
+            (Some(x), Some(y)) => Ok([*x, *y]),
+            _ => Err(IntersectError::Internal),
+        }
+    }
+}
+
+impl Field<2> for EdgeEnd<'_, '_> {
+    fn at(&self, x: [f64; 2], meter: &mut WorkMeter<'_>) -> Result<[Interval; 2], IntersectError> {
+        let whole = self.whole(x, self.value);
+        let all = self.edge.at(whole, meter)?;
+        self.kept(&all)
+    }
+
+    fn over(
+        &self,
+        x: &[Interval; 2],
+        meter: &mut WorkMeter<'_>,
+    ) -> Result<Option<[Interval; 2]>, IntersectError> {
+        let held = point(self.value)?;
+        let whole = self.whole(*x, held);
+        match self.edge.over(&whole, meter)? {
+            Some(all) => Ok(Some(self.kept(&all)?)),
+            None => Ok(None),
+        }
+    }
+
+    fn slope(
+        &self,
+        x: &[Interval; 2],
+        meter: &mut WorkMeter<'_>,
+    ) -> Result<Option<[[Interval; 2]; 2]>, IntersectError> {
+        let held = point(self.value)?;
+        let whole = self.whole(*x, held);
+        let Some(all) = self.edge.slope(&whole, meter)? else {
+            return Ok(None);
+        };
+        let [first, second] = self.kept(&all)?;
+        let column = |row: &[Interval; 3]| -> Result<[Interval; 2], IntersectError> {
+            let along = row.first().copied().ok_or(IntersectError::Internal)?;
+            let across = row
+                .get(self.free)
+                .copied()
+                .ok_or(IntersectError::Internal)?;
+            Ok([along, across])
+        };
+        Ok(Some([column(&first)?, column(&second)?]))
+    }
+
+    fn reach(&self, x: &[Interval; 2], meter: &mut WorkMeter<'_>) -> Result<f64, IntersectError> {
+        let held = point(self.value)?;
+        self.edge.reach(&self.whole(*x, held), meter)
+    }
+}
+
+/// The residual rows an end's system could keep, and the row each leaves out to be checked.
+const ROW_CHOICES: [([usize; 2], usize); 3] = [([0, 1], 2), ([0, 2], 1), ([1, 2], 0)];
+
+/// How well the rows `rows` of the edge system, over `whole`, determine the edge parameter and the
+/// free one: the least the determinant of their 2 by 2 partials can be, or `None` if it may be zero.
+fn determined(
+    edge: &Edge<'_>,
+    whole: &[Interval; 3],
+    rows: [usize; 2],
+    free: usize,
+    meter: &mut WorkMeter<'_>,
+) -> Result<Option<f64>, IntersectError> {
+    let Some(all) = edge.slope(whole, meter)? else {
+        return Ok(None);
+    };
+    let [a, b] = rows;
+    let (Some(first), Some(second)) = (all.get(a), all.get(b)) else {
+        return Err(IntersectError::Internal);
+    };
+    let (Some(a0), Some(a1), Some(b0), Some(b1)) = (
+        first.first(),
+        first.get(free),
+        second.first(),
+        second.get(free),
+    ) else {
+        return Err(IntersectError::Internal);
+    };
+    let det = a0.mul(*b1)?.sub(a1.mul(*b0)?)?;
+    Ok((det.lo() > 0.0 || det.hi() < 0.0).then(|| smaller(det.lo().abs(), det.hi().abs())))
+}
+
+/// A zero of the edge system on the end of the other surface's domain cannot be proven in a box
+/// that stops at the end: Krawczyk's image of the box leaves it on the outside. On the end itself
+/// the system has three equations in two unknowns, so two of them are solved there, the pair whose
+/// partials determine the unknowns best, near a flagged region, and a zero proven alone in its box;
+/// the third is checked over that zero's enclosure: it must hold zero, and the enclosure must reach
+/// no more than a step. Such a zero is where the edge meets the end to within the resolution floor,
+/// the standard a pole is taken to (12.10), and it stands for the flagged regions on that end that
+/// it meets, which it replaces in `found`. A NURBS surface is not defined past its end, so there is
+/// no room to search in (`roomy`); the ends of a plane, a cylinder and a cone are proven by the
+/// room already.
+fn at_the_ends(
+    edge: &Edge<'_>,
+    ends: Region,
+    domain: &[Interval; 3],
+    found: &mut crate::solve::Solved<3>,
+    meter: &mut WorkMeter<'_>,
+) -> Result<(), IntersectError> {
+    let (first, second) = ends;
+    for (fixed, (lo, hi), free) in [(1_usize, first, 2_usize), (2, second, 1)] {
+        for value in [lo, hi] {
+            let on_end = |flagged: &crate::solve::Flagged<3>| {
+                flagged
+                    .region
+                    .get(fixed)
+                    .is_some_and(|x| x.lo() <= value && value <= x.hi())
+            };
+            // Where the flagged regions on this end are, along the edge and across.
+            let mut near: Vec<[Interval; 2]> = Vec::new();
+            let mut hull: Option<[Interval; 3]> = None;
+            for flagged in found.flagged.iter().filter(|f| on_end(f)) {
+                let [t, ..] = flagged.region;
+                let Some(other) = flagged.region.get(free).copied() else {
+                    return Err(IntersectError::Internal);
+                };
+                near.push([t, other]);
+                let mut whole = flagged.region;
+                if let Some(slot) = whole.get_mut(fixed) {
+                    *slot = point(value)?;
+                }
+                hull = Some(match hull {
+                    None => whole,
+                    Some(h) => {
+                        let mut out = h;
+                        for (o, w) in out.iter_mut().zip(&whole) {
+                            *o = Interval::new(smaller(o.lo(), w.lo()), larger(o.hi(), w.hi()))?;
+                        }
+                        out
+                    }
+                });
+            }
+            let Some(hull) = hull else { continue };
+            let (Some(along), Some(across)) = (domain.first(), domain.get(free)) else {
+                return Err(IntersectError::Internal);
+            };
+            let mut choices: Vec<(f64, [usize; 2], usize)> = Vec::new();
+            for (rows, left) in ROW_CHOICES {
+                if let Some(least) = determined(edge, &hull, rows, free, meter)? {
+                    choices.push((least, rows, left));
+                }
+            }
+            choices.sort_by(|a, b| b.0.total_cmp(&a.0));
+            let keep = |x: &[Interval; 2], _: &mut WorkMeter<'_>| {
+                Ok(near.iter().any(|r| {
+                    x.iter()
+                        .zip(r)
+                        .all(|(a, b)| a.lo() <= b.hi() && b.lo() <= a.hi())
+                }))
+            };
+            let mut zeros: Vec<[Interval; 3]> = Vec::new();
+            for (_, rows, left) in choices {
+                let line = EdgeEnd {
+                    edge,
+                    fixed,
+                    value,
+                    free,
+                    rows,
+                };
+                let solved = solve(&line, [*along, *across], &keep, meter)?;
+                for zero in solved.zeros {
+                    let whole = line.whole(zero.enclosure, point(value)?);
+                    let Some(all) = edge.over(&whole, meter)? else {
+                        continue;
+                    };
+                    let holds = all
+                        .get(left)
+                        .is_some_and(|v| v.lo() <= 0.0 && 0.0 <= v.hi());
+                    // How far the edge's own point can be from the zero's: a NURBS surface's
+                    // bound over a box at an end of its domain is the bound of its whole span, so
+                    // the reach of the other side says nothing here.
+                    let along = edge.along(whole[0]);
+                    let small = match partials(edge.own, along, 0, meter)?.as_deref() {
+                        Some([own, ..]) => image(own) <= edge.floor,
+                        _ => false,
+                    };
+                    if holds && small && !zeros.contains(&whole) {
+                        zeros.push(whole);
+                    }
+                }
+                if !zeros.is_empty() {
+                    break;
+                }
+            }
+            for whole in zeros {
+                let meets = |flagged: &crate::solve::Flagged<3>| {
+                    flagged
+                        .region
+                        .iter()
+                        .zip(&whole)
+                        .all(|(a, b)| a.lo() <= b.hi() && b.lo() <= a.hi())
+                };
+                if found.flagged.iter().any(meets) {
+                    found.flagged.retain(|flagged| !meets(flagged));
+                    found.zeros.push(crate::solve::Zero {
+                        enclosure: whole,
+                        proof: whole,
+                    });
+                }
+            }
+        }
+    }
+    Ok(())
 }
 
 /// The point `share` of the way across a span, if it has one strictly inside.
