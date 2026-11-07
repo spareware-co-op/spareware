@@ -569,6 +569,10 @@ const OTHER_CRATES: &[(&str, &[(&str, &str)])] = &[
         "geom_run",
         &[("exec", include_str!("../../geom-run/src/exec.rs"))],
     ),
+    (
+        "geom_spatial",
+        &[("gjk", include_str!("../../geom-spatial/src/gjk.rs"))],
+    ),
 ];
 
 /// [`public_functions`], with the methods of every trait implementation in the file too: a kind's

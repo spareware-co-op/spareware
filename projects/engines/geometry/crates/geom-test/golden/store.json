@@ -278,9 +278,15 @@
               "kind": "corpus",
               "piece": "G149",
               "why": "2 new count benchmarks on exact hulls and plane slices (decision 32.44): mesh/hull and mesh/slice; no existing digest moved"
+            },
+            {
+              "sha256": "baac643f845957f016cf37e67d51f531c9d9b5bc745ceed3e4bd0edf35fbd99f",
+              "kind": "corpus",
+              "piece": "G294",
+              "why": "1 new count benchmark of the certified GJK filter (decision 32.44): spatial/gjk_filter; no existing digest moved"
             }
           ],
-          "sha256": "baac643f845957f016cf37e67d51f531c9d9b5bc745ceed3e4bd0edf35fbd99f"
+          "sha256": "bde3e8812263578837599be4f7661628bd4f6f66dfc222973bd92f7532b5623f"
         },
         {
           "id": "geom-nurbs/operations",

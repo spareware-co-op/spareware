@@ -613,6 +613,13 @@ NURBS-Python (geomdl)
     projects/engines/geometry/crates/geom-nurbs/src/fit.rs
       for the book's equation numbers of the parameter rules and the least-squares knot placement.
 
+parry
+  Licence:      Apache-2.0
+  Link:         https://github.com/dimforge/parry/blob/b3c3584ce9be9bf6edb821fd7548b817087131ff/src/query/gjk/gjk.rs
+  Consulted by:
+    projects/engines/geometry/crates/geom-spatial/src/gjk.rs
+      for GJK's loop: the origin's projection on the simplex, the support point along its negation, and the stop when the upper and lower bounds meet. No code copied.
+
 PROJ (its copy of the EPSG dataset, whose own terms of use cover the data)
   Licence:      MIT
   Link:         https://github.com/OSGeo/PROJ/blob/5fa31c29f0a806568ed7bc76c1a557604db4a804/data/sql/projected_crs.sql

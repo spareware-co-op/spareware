@@ -2934,3 +2934,20 @@ pub mod helper {
         benchmarks = lone_serial, lone_pool
     );
 }
+
+/// geom-spatial's certified GJK filter (piece G294; decision 32.44).
+pub mod spatial {
+    use super::*;
+
+    #[library_benchmark(teardown = verify)]
+    #[bench::typical(leak("spatial/gjk_filter/typical"))]
+    fn gjk_filter(run: &'static mut Named) -> &'static mut Named {
+        run.bench.measure();
+        run
+    }
+
+    library_benchmark_group!(
+        name = spatial;
+        benchmarks = gjk_filter
+    );
+}

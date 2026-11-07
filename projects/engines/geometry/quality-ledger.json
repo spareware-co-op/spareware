@@ -7057,6 +7057,270 @@
       "occurrences": 1,
       "kind": "equivalent",
       "reason": "grid_key only sorts an operand's vertices into buckets by grid point, so that found_vertex looks at a few. found_vertex takes a vertex only when same_point puts it exactly at the point: a grid vertex equal to the point's grid value, which must be exact, or a meeting whose three planes all pass through it. A vertex exactly at the point rounds to the point's own key, so with every vertex in one bucket, walked in the same row order, found_vertex returns the same first vertex, and so the same names. Each extra vertex it now reads, input() has read without error (at_vertex, to_grid), and side_of_tpi cannot fail for planes within budget, so no error is added either. Only the time taken changes: a walk of every vertex instead of a lookup."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-spatial/src/gjk.rs",
+      "mutant": "replace || with && in nearest_difference",
+      "line_text": "if vv - dot(v, w) <= vv * SETTLED || simplex.holds(w) {",
+      "occurrences": 1,
+      "kind": "harmless",
+      "reason": "Doubles only steer (the module's Guarantees): this arithmetic chooses the search direction. A mutant steers worse, so the filter answers Undecided more often; every Clear is still proved by the exact integer certificate, which the tests check against exact distances, so no wrong answer follows."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-spatial/src/gjk.rs",
+      "mutant": "replace > with >= in support",
+      "line_text": "if best.is_none_or(|(_, top)| along > top) {",
+      "occurrences": 1,
+      "kind": "harmless",
+      "reason": "Doubles only steer (the module's Guarantees): this arithmetic chooses the search direction. A mutant steers worse, so the filter answers Undecided more often; every Clear is still proved by the exact integer certificate, which the tests check against exact distances, so no wrong answer follows."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-spatial/src/gjk.rs",
+      "mutant": "replace > with >= in integer_direction",
+      "line_text": "if size > largest {",
+      "occurrences": 1,
+      "kind": "harmless",
+      "reason": "Doubles only steer (the module's Guarantees): this arithmetic chooses the search direction. A mutant steers worse, so the filter answers Undecided more often; every Clear is still proved by the exact integer certificate, which the tests check against exact distances, so no wrong answer follows."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-spatial/src/gjk.rs",
+      "mutant": "replace || with && in integer_direction",
+      "line_text": "if !above_zero(largest) || !largest.is_finite() {",
+      "occurrences": 1,
+      "kind": "harmless",
+      "reason": "Doubles only steer (the module's Guarantees): this arithmetic chooses the search direction. A mutant steers worse, so the filter answers Undecided more often; every Clear is still proved by the exact integer certificate, which the tests check against exact distances, so no wrong answer follows."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-spatial/src/gjk.rs",
+      "mutant": "replace Simplex::holds -> bool with false",
+      "line_text": "self.points.iter().take(self.len).any(|p| *p == w)",
+      "occurrences": 1,
+      "kind": "harmless",
+      "reason": "Doubles only steer (the module's Guarantees): this arithmetic chooses the search direction. A mutant steers worse, so the filter answers Undecided more often; every Clear is still proved by the exact integer certificate, which the tests check against exact distances, so no wrong answer follows."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-spatial/src/gjk.rs",
+      "mutant": "replace || with && in segment",
+      "line_text": "if !above_zero(length) || t <= 0.0 {",
+      "occurrences": 1,
+      "kind": "harmless",
+      "reason": "Doubles only steer (the module's Guarantees): this arithmetic chooses the search direction. A mutant steers worse, so the filter answers Undecided more often; every Clear is still proved by the exact integer certificate, which the tests check against exact distances, so no wrong answer follows."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-spatial/src/gjk.rs",
+      "mutant": "replace <= with > in triangle",
+      "line_text": "if d1 <= 0.0 && d2 <= 0.0 {",
+      "occurrences": 1,
+      "kind": "harmless",
+      "reason": "Doubles only steer (the module's Guarantees): this arithmetic chooses the search direction. A mutant steers worse, so the filter answers Undecided more often; every Clear is still proved by the exact integer certificate, which the tests check against exact distances, so no wrong answer follows."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-spatial/src/gjk.rs",
+      "mutant": "replace && with || in triangle",
+      "line_text": "if d3 >= 0.0 && d4 <= d3 {",
+      "occurrences": 1,
+      "kind": "harmless",
+      "reason": "Doubles only steer (the module's Guarantees): this arithmetic chooses the search direction. A mutant steers worse, so the filter answers Undecided more often; every Clear is still proved by the exact integer certificate, which the tests check against exact distances, so no wrong answer follows."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-spatial/src/gjk.rs",
+      "mutant": "replace >= with < in triangle",
+      "line_text": "if d3 >= 0.0 && d4 <= d3 {",
+      "occurrences": 1,
+      "kind": "harmless",
+      "reason": "Doubles only steer (the module's Guarantees): this arithmetic chooses the search direction. A mutant steers worse, so the filter answers Undecided more often; every Clear is still proved by the exact integer certificate, which the tests check against exact distances, so no wrong answer follows."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-spatial/src/gjk.rs",
+      "mutant": "replace <= with > in triangle",
+      "line_text": "if d3 >= 0.0 && d4 <= d3 {",
+      "occurrences": 1,
+      "kind": "harmless",
+      "reason": "Doubles only steer (the module's Guarantees): this arithmetic chooses the search direction. A mutant steers worse, so the filter answers Undecided more often; every Clear is still proved by the exact integer certificate, which the tests check against exact distances, so no wrong answer follows."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-spatial/src/gjk.rs",
+      "mutant": "replace >= with < in triangle",
+      "line_text": "if vc <= 0.0 && d1 >= 0.0 && d3 <= 0.0 {",
+      "occurrences": 1,
+      "kind": "harmless",
+      "reason": "Doubles only steer (the module's Guarantees): this arithmetic chooses the search direction. A mutant steers worse, so the filter answers Undecided more often; every Clear is still proved by the exact integer certificate, which the tests check against exact distances, so no wrong answer follows."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-spatial/src/gjk.rs",
+      "mutant": "replace <= with > in triangle",
+      "line_text": "if vc <= 0.0 && d1 >= 0.0 && d3 <= 0.0 {",
+      "occurrences": 1,
+      "kind": "harmless",
+      "reason": "Doubles only steer (the module's Guarantees): this arithmetic chooses the search direction. A mutant steers worse, so the filter answers Undecided more often; every Clear is still proved by the exact integer certificate, which the tests check against exact distances, so no wrong answer follows."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-spatial/src/gjk.rs",
+      "mutant": "replace - with + in triangle",
+      "line_text": "return edge(a, b, d1, d1 - d3);",
+      "occurrences": 1,
+      "kind": "harmless",
+      "reason": "Doubles only steer (the module's Guarantees): this arithmetic chooses the search direction. A mutant steers worse, so the filter answers Undecided more often; every Clear is still proved by the exact integer certificate, which the tests check against exact distances, so no wrong answer follows."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-spatial/src/gjk.rs",
+      "mutant": "replace - with / in triangle",
+      "line_text": "return edge(a, b, d1, d1 - d3);",
+      "occurrences": 1,
+      "kind": "harmless",
+      "reason": "Doubles only steer (the module's Guarantees): this arithmetic chooses the search direction. A mutant steers worse, so the filter answers Undecided more often; every Clear is still proved by the exact integer certificate, which the tests check against exact distances, so no wrong answer follows."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-spatial/src/gjk.rs",
+      "mutant": "replace <= with > in triangle",
+      "line_text": "if d6 >= 0.0 && d5 <= d6 {",
+      "occurrences": 1,
+      "kind": "harmless",
+      "reason": "Doubles only steer (the module's Guarantees): this arithmetic chooses the search direction. A mutant steers worse, so the filter answers Undecided more often; every Clear is still proved by the exact integer certificate, which the tests check against exact distances, so no wrong answer follows."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-spatial/src/gjk.rs",
+      "mutant": "replace >= with < in triangle",
+      "line_text": "if vb <= 0.0 && d2 >= 0.0 && d6 <= 0.0 {",
+      "occurrences": 1,
+      "kind": "harmless",
+      "reason": "Doubles only steer (the module's Guarantees): this arithmetic chooses the search direction. A mutant steers worse, so the filter answers Undecided more often; every Clear is still proved by the exact integer certificate, which the tests check against exact distances, so no wrong answer follows."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-spatial/src/gjk.rs",
+      "mutant": "replace <= with > in triangle",
+      "line_text": "if vb <= 0.0 && d2 >= 0.0 && d6 <= 0.0 {",
+      "occurrences": 1,
+      "kind": "harmless",
+      "reason": "Doubles only steer (the module's Guarantees): this arithmetic chooses the search direction. A mutant steers worse, so the filter answers Undecided more often; every Clear is still proved by the exact integer certificate, which the tests check against exact distances, so no wrong answer follows."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-spatial/src/gjk.rs",
+      "mutant": "replace - with + in triangle",
+      "line_text": "if va <= 0.0 && d4 - d3 >= 0.0 && d5 - d6 >= 0.0 {",
+      "occurrences": 2,
+      "kind": "harmless",
+      "reason": "Doubles only steer (the module's Guarantees): this arithmetic chooses the search direction. A mutant steers worse, so the filter answers Undecided more often; every Clear is still proved by the exact integer certificate, which the tests check against exact distances, so no wrong answer follows."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-spatial/src/gjk.rs",
+      "mutant": "replace + with - in triangle",
+      "line_text": "return edge(b, c, d4 - d3, (d4 - d3) + (d5 - d6));",
+      "occurrences": 1,
+      "kind": "harmless",
+      "reason": "Doubles only steer (the module's Guarantees): this arithmetic chooses the search direction. A mutant steers worse, so the filter answers Undecided more often; every Clear is still proved by the exact integer certificate, which the tests check against exact distances, so no wrong answer follows."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-spatial/src/gjk.rs",
+      "mutant": "replace >= with < in triangle",
+      "line_text": "return segment(a, if dot(ab, ab) >= dot(ac, ac) { b } else { c });",
+      "occurrences": 1,
+      "kind": "harmless",
+      "reason": "Doubles only steer (the module's Guarantees): this arithmetic chooses the search direction. A mutant steers worse, so the filter answers Undecided more often; every Clear is still proved by the exact integer certificate, which the tests check against exact distances, so no wrong answer follows."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-spatial/src/gjk.rs",
+      "mutant": "replace < with == in tetrahedron",
+      "line_text": "if best.as_ref().is_none_or(|(_, _, top)| size < *top) {",
+      "occurrences": 1,
+      "kind": "harmless",
+      "reason": "Doubles only steer (the module's Guarantees): this arithmetic chooses the search direction. A mutant steers worse, so the filter answers Undecided more often; every Clear is still proved by the exact integer certificate, which the tests check against exact distances, so no wrong answer follows."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-spatial/src/gjk.rs",
+      "mutant": "replace < with > in tetrahedron",
+      "line_text": "if best.as_ref().is_none_or(|(_, _, top)| size < *top) {",
+      "occurrences": 1,
+      "kind": "harmless",
+      "reason": "Doubles only steer (the module's Guarantees): this arithmetic chooses the search direction. A mutant steers worse, so the filter answers Undecided more often; every Clear is still proved by the exact integer certificate, which the tests check against exact distances, so no wrong answer follows."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-spatial/src/gjk.rs",
+      "mutant": "replace < with <= in tetrahedron",
+      "line_text": "if best.as_ref().is_none_or(|(_, _, top)| size < *top) {",
+      "occurrences": 1,
+      "kind": "harmless",
+      "reason": "Doubles only steer (the module's Guarantees): this arithmetic chooses the search direction. A mutant steers worse, so the filter answers Undecided more often; every Clear is still proved by the exact integer certificate, which the tests check against exact distances, so no wrong answer follows."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-spatial/src/gjk.rs",
+      "mutant": "replace outside -> bool with true",
+      "line_text": "let normal = cross(sub(q, p), sub(r, p));",
+      "occurrences": 1,
+      "kind": "harmless",
+      "reason": "Doubles only steer (the module's Guarantees): this arithmetic chooses the search direction. A mutant steers worse, so the filter answers Undecided more often; every Clear is still proved by the exact integer certificate, which the tests check against exact distances, so no wrong answer follows."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-spatial/src/gjk.rs",
+      "mutant": "replace == with != in outside",
+      "line_text": "other == 0.0 || origin * other < 0.0",
+      "occurrences": 1,
+      "kind": "harmless",
+      "reason": "Doubles only steer (the module's Guarantees): this arithmetic chooses the search direction. A mutant steers worse, so the filter answers Undecided more often; every Clear is still proved by the exact integer certificate, which the tests check against exact distances, so no wrong answer follows."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-spatial/src/gjk.rs",
+      "mutant": "replace < with <= in outside",
+      "line_text": "other == 0.0 || origin * other < 0.0",
+      "occurrences": 1,
+      "kind": "harmless",
+      "reason": "Doubles only steer (the module's Guarantees): this arithmetic chooses the search direction. A mutant steers worse, so the filter answers Undecided more often; every Clear is still proved by the exact integer certificate, which the tests check against exact distances, so no wrong answer follows."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-spatial/src/gjk.rs",
+      "mutant": "replace * with / in outside",
+      "line_text": "other == 0.0 || origin * other < 0.0",
+      "occurrences": 1,
+      "kind": "harmless",
+      "reason": "Doubles only steer (the module's Guarantees): this arithmetic chooses the search direction. A mutant steers worse, so the filter answers Undecided more often; every Clear is still proved by the exact integer certificate, which the tests check against exact distances, so no wrong answer follows."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-spatial/src/gjk.rs",
+      "mutant": "replace above_zero -> bool with true",
+      "line_text": "x > 0.0",
+      "occurrences": 1,
+      "kind": "harmless",
+      "reason": "Doubles only steer (the module's Guarantees): this arithmetic chooses the search direction. A mutant steers worse, so the filter answers Undecided more often; every Clear is still proved by the exact integer certificate, which the tests check against exact distances, so no wrong answer follows."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-spatial/src/gjk.rs",
+      "mutant": "replace > with >= in above_zero",
+      "line_text": "x > 0.0",
+      "occurrences": 1,
+      "kind": "harmless",
+      "reason": "Doubles only steer (the module's Guarantees): this arithmetic chooses the search direction. A mutant steers worse, so the filter answers Undecided more often; every Clear is still proved by the exact integer certificate, which the tests check against exact distances, so no wrong answer follows."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-spatial/src/gjk.rs",
+      "mutant": "replace < with <= in magnitude",
+      "line_text": "if x < 0.0 { -x } else { x }",
+      "occurrences": 1,
+      "kind": "harmless",
+      "reason": "Doubles only steer (the module's Guarantees): this arithmetic chooses the search direction. A mutant steers worse, so the filter answers Undecided more often; every Clear is still proved by the exact integer certificate, which the tests check against exact distances, so no wrong answer follows."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-spatial/src/gjk.rs",
+      "mutant": "replace cross -> [f64; 3] with [0.0; 3]",
+      "line_text": "[ay * bz - az * by, az * bx - ax * bz, ax * by - ay * bx]",
+      "occurrences": 1,
+      "kind": "harmless",
+      "reason": "Doubles only steer (the module's Guarantees): this arithmetic chooses the search direction. A mutant steers worse, so the filter answers Undecided more often; every Clear is still proved by the exact integer certificate, which the tests check against exact distances, so no wrong answer follows."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-spatial/src/gjk.rs",
+      "mutant": "replace - with + in cross",
+      "line_text": "[ay * bz - az * by, az * bx - ax * bz, ax * by - ay * bx]",
+      "occurrences": 3,
+      "kind": "harmless",
+      "reason": "Doubles only steer (the module's Guarantees): this arithmetic chooses the search direction. A mutant steers worse, so the filter answers Undecided more often; every Clear is still proved by the exact integer certificate, which the tests check against exact distances, so no wrong answer follows."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-spatial/src/gjk.rs",
+      "mutant": "replace * with + in cross",
+      "line_text": "[ay * bz - az * by, az * bx - ax * bz, ax * by - ay * bx]",
+      "occurrences": 6,
+      "kind": "harmless",
+      "reason": "Doubles only steer (the module's Guarantees): this arithmetic chooses the search direction. A mutant steers worse, so the filter answers Undecided more often; every Clear is still proved by the exact integer certificate, which the tests check against exact distances, so no wrong answer follows."
     }
   ],
   "coverage_off": [

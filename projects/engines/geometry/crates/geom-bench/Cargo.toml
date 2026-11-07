@@ -52,6 +52,8 @@ geom-op = { path = "../geom-op" }
 # The winding tests a boolean takes (piece G148).
 geom-poly = { path = "../geom-poly" }
 geom-topo = { path = "../geom-topo" }
+# The certified GJK filter of phase 8 (piece G294), for the same count benchmarks.
+geom-spatial = { path = "../geom-spatial" }
 # SHA-256 (FIPS 180-4) for the golden digests, and their hexadecimal form in golden.txt: standard
 # crates in place of the copy this crate held (piece G12a; chapter 29.1, a development crate).
 # sha2 0.11.0: MIT OR Apache-2.0, RustCrypto, without its default alloc and oid features, which

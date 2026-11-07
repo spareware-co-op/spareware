@@ -1056,6 +1056,26 @@
           "target": "lib"
         },
         {
+          "cost": "about 150 draws of [`SplitMix64`] per input, once per batch, outside every measured run.",
+          "does": null,
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-bench/src/inputs/spatial.rs",
+          "guarantees": [
+            "every batch is full and the same on every target, and every result of a typical batch is `Clear` (`tests/inputs.rs`); every result is the operation's own, run directly (`tests/attack_g06.rs`)."
+          ],
+          "job": "Inputs for `geom-spatial`'s certified GJK filter (piece G294, decision 32.44): two small clouds of grid points and a reach.",
+          "method": {
+            "links": [
+              "projects/engines/geometry/architecture/28-testing.md"
+            ],
+            "text": "the filter's work at the size the narrow phase hands it, two hulls of a few dozen points (19.11). Each is measured as chapter 28.14 sets benchmarks out, `projects/engines/geometry/architecture/28-testing.md`."
+          },
+          "path": "geom_bench::inputs::spatial",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
           "cost": "two draws of [`SplitMix64`] per pair, once per batch, outside every measured run.",
           "does": null,
           "family": [],
@@ -10622,7 +10642,32 @@
         23
       ],
       "depends": [],
-      "errors": [],
+      "errors": [
+        {
+          "doc": "Why the filter gave no answer.",
+          "file": "projects/engines/geometry/crates/geom-spatial/src/gjk.rs",
+          "kinds": [
+            {
+              "doc": "A set had no points.",
+              "name": "Empty",
+              "shape": "unit"
+            },
+            {
+              "doc": "The reach was over [`MAX_REACH`].",
+              "name": "ReachTooLarge",
+              "shape": "unit"
+            },
+            {
+              "doc": "The meter stopped the filter.",
+              "name": "Stopped",
+              "shape": "tuple"
+            }
+          ],
+          "module": "geom_spatial::gjk",
+          "name": "GjkError",
+          "non_exhaustive": false
+        }
+      ],
       "family": [
         "Query"
       ],
@@ -10638,12 +10683,46 @@
       "job": "Spatial queries on the box tree, distance, clearance, clash, contact over time, the instance tree.",
       "kind": "kernel",
       "layer": "7",
-      "modules": [],
+      "modules": [
+        {
+          "cost": "at most [`STEPS`] steps, each one support search over both sets, O(n + m) and charged to the meter; then one exact pass for the certificate. No allocation.",
+          "does": "[`filter`] runs GJK on the convex hulls of two sets of grid points, in doubles, to find a direction that separates them. The direction is cut to integers and each set's extreme along it is found exactly. The sets are [`Filter::Clear`] only when those extremes prove a gap of at least the reach; otherwise they are [`Filter::Undecided`], for the exact narrow phase. The reach is the clearance plus each set's own bound (19.10): for the hulls of two certified tessellations, `Clear` proves the true shapes a clearance apart.",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-spatial/src/gjk.rs",
+          "guarantees": [
+            "**Never clear below the reach.** `Clear` carries a [`Certificate`]: an integer direction n, the largest n · p over the first set and the smallest n · q over the second, all exact. The second exceeds the first by g > 0 with g² ≥ r² · |n|², so for every p and q, |q − p| ≥ (q − p) · n / |n| ≥ g / |n| ≥ r (Cauchy and Schwarz): every point of the second hull is at least r from every point of the first. [`Certificate::proves`] checks one against the points.",
+            "**Doubles only steer.** GJK's arithmetic picks the direction. A poor step makes the filter answer `Undecided` more often, never `Clear` wrongly.",
+            "**Deterministic.** Only +, −, × and ÷ on doubles, in a fixed order, with ties going to the lowest index: the same points in the same order give the same answer on every target."
+          ],
+          "job": "The certified GJK filter: two sets of grid points proven at least a reach apart, or nothing claimed (19.10).",
+          "method": {
+            "links": [
+              "https://doi.org/10.1109/56.2083"
+            ],
+            "text": "GJK (Gilbert, Johnson and Keerthi, 1988, <https://doi.org/10.1109/56.2083>) on the Minkowski difference of the two hulls: the point of the simplex nearest the origin, by the regions of its vertices, edges and faces (Ericson, *Real-Time Collision Detection*, 2005, sections 5.1.5 and 5.1.6), then the support point along its negation, until the two bounds meet. The certificate is the separating plane 19.10 asks for, checked in integers."
+          },
+          "path": "geom_spatial::gjk",
+          "provenance": [
+            {
+              "licence": "Apache-2.0",
+              "link": "https://github.com/dimforge/parry/blob/b3c3584ce9be9bf6edb821fd7548b817087131ff/src/query/gjk/gjk.rs",
+              "method_note": null,
+              "name": "parry",
+              "notice": [],
+              "pinned": true,
+              "purpose": "for GJK's loop: the origin's projection on the simplex, the support point along its negation, and the stop when the upper and lower bounds meet. No code copied.",
+              "take": "port-method"
+            }
+          ],
+          "spdx": null,
+          "target": "lib"
+        }
+      ],
       "name": "geom-spatial",
       "provenance": [],
       "sections": "10.2, 19.9 to 19.12 and 23.9; open questions OQ-19.7 and OQ-19.17, in the kernel architecture (`projects/engines/geometry/architecture/`).",
       "spdx": null,
-      "status": "scaffold only; built by pieces G293, G294, G295, G296, G297.",
+      "status": "built by pieces G293, G294, G295, G296, G297; G294's [`gjk`], the certified GJK filter, is in. Chapter 19's table puts the filter beside `distance`, which G293 builds.",
       "summary": "Spare Kit geometry kernel: spatial queries, distance and clash."
     },
     {
@@ -13718,6 +13797,17 @@
       "take": "port-method",
       "used_by": [
         "projects/engines/geometry/crates/geom-gen/src/predicate_derive.rs"
+      ]
+    },
+    {
+      "licence": "Apache-2.0",
+      "link": "https://github.com/dimforge/parry/blob/b3c3584ce9be9bf6edb821fd7548b817087131ff/src/query/gjk/gjk.rs",
+      "method_note": null,
+      "name": "parry",
+      "pinned": true,
+      "take": "port-method",
+      "used_by": [
+        "projects/engines/geometry/crates/geom-spatial/src/gjk.rs"
       ]
     },
     {
