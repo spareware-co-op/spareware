@@ -383,3 +383,34 @@ fn the_contract_kit_steps_past_huge_domain_ends() {
         );
     }
 }
+
+/// How many pieces a conversion has: the distinct knots, less one.
+fn pieces(knots: &[f64]) -> usize {
+    let mut knots = knots.to_vec();
+    knots.dedup();
+    knots.len() - 1
+}
+
+#[test]
+fn an_offset_is_cut_evenly_finer_before_any_piece_is_halved() {
+    // C(t) = (t²/2, t²/2 − δ·t) offset by 0.25, whose normal turns through a right angle between
+    // t = 0 and t = δ. At δ = 2^−5 the conversion goes down the even cuts, 8, 16, 32, 64 and 128 pieces, and the
+    // finest is taken as it stands, however large its stated deviation (an offset that folds states
+    // a large one, which the law catalogue checks against the definition). It halves no piece
+    // before the finest even cut has been tried: the result has exactly 128 pieces.
+    let m = &mut WorkMeter::new(WITHIN);
+    let n = turning_at(1.0 / 32.0).to_nurbs(m).unwrap();
+    assert_eq!(pieces(n.value.curve.basis().knots()), 128);
+    assert!(n.deviation > 1e-5, "{}", n.deviation);
+    // At δ = 2^−8 even 128 pieces leave some unbounded, so the pieces that need it are halved from
+    // there: the result has more than the finest even cut's 128 pieces, and every one of the even
+    // cut's pieces is cut or kept, never replaced by a coarser cut.
+    let m = &mut WorkMeter::new(WITHIN);
+    let n = turning_at(1.0 / 256.0).to_nurbs(m).unwrap();
+    let knots = n.value.curve.basis().knots();
+    assert!(pieces(knots) > 128, "{}", pieces(knots));
+    for k in 1..128 {
+        let cut = -1.0 + 2.0 * f64::from(k) / 128.0;
+        assert!(knots.contains(&cut), "the even cut at {cut} is kept");
+    }
+}
