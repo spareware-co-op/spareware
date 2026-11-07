@@ -254,9 +254,21 @@
               "kind": "corpus",
               "piece": "G101",
               "why": "4 new count benchmarks on geom-make's hot paths (decision 32.44): a box and a cylinder built, a box moved and quarter-turned; no existing digest moved"
+            },
+            {
+              "sha256": "b085ebd6770937b858e6ae815f4e62125013af8c97d1bcf07a54eebeede27cbc",
+              "kind": "corpus",
+              "piece": "G138",
+              "why": "14 new benchmarks of geom-num's three new public functions (principle 12): plane::determinant_sign on side_of_tpi's four classes and on the planes of a building's faces, which its machine-word rung decides; plane::normals_sign on Tpi::new's three classes and on faces; Tpi::meeting on Tpi::new's three classes; no existing digest moved"
+            },
+            {
+              "sha256": "ed40c8a1c4fe29d63781a35a451cc5565b53429f5680c337ff9247e4b9e657b2",
+              "kind": "corpus",
+              "piece": "G140",
+              "why": "7 new count benchmarks of the flat boolean's scenarios (23.13's scenarios at reduced scale): a wall's openings, a moved door cut again from the arrangement cache, a slab's holes, a union of many boxes, one and three selections from one arrangement, and a storey's rooms; no existing digest moved"
             }
           ],
-          "sha256": "b085ebd6770937b858e6ae815f4e62125013af8c97d1bcf07a54eebeede27cbc"
+          "sha256": "140880972aada128e032227e06c6b82c68a6a73c9117783329fb6936345a8e2f"
         },
         {
           "id": "geom-nurbs/operations",

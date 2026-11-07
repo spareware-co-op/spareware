@@ -371,9 +371,12 @@ impl Built {
     }
 
     fn curves(self) -> Curves {
+        // A wire's pieces lie on its own edges, where no polygons meet: no edge has pieces.
+        let meets = alloc::vec![Vec::new(); self.edges.len()];
         Curves {
             vertices: self.vertices,
             edges: self.edges,
+            meets,
         }
     }
 }

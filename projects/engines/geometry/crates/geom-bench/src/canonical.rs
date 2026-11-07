@@ -1001,6 +1001,73 @@ impl<T: Canonical> Canonical for Result<T, geom_num::quadrature::QuadError> {
     }
 }
 
+// The flat boolean's scenarios (piece G140).
+
+/// A body, as a scenario's input: its faces, edges and vertices counted, then its corners on the
+/// grid, in row order.
+fn body(b: &geom_topo::Body, h: &mut Sha256) {
+    let a = b.arenas();
+    for arena in [
+        geom_topo::Arena::Face,
+        geom_topo::Arena::Edge,
+        geom_topo::Arena::Vertex,
+    ] {
+        a.rows(arena).encode(h);
+    }
+    for point in a.points.iter() {
+        if let Some(p) = point.grid() {
+            p.encode(h);
+        }
+    }
+}
+
+/// Bodies, as a scenario's input: how many, then each.
+fn bodies(list: &[geom_topo::Body], h: &mut Sha256) {
+    u64::try_from(list.len()).unwrap_or(u64::MAX).encode(h);
+    for b in list {
+        body(b, h);
+    }
+}
+
+impl Canonical for crate::inputs::scenario::Host {
+    fn encode(&self, h: &mut Sha256) {
+        body(&self.host, h);
+        bodies(&self.tools, h);
+    }
+}
+
+impl Canonical for crate::inputs::scenario::Recut {
+    // The host and its tools after the move: the cache follows from the first cut of the same
+    // wall, which the tools before the move would give.
+    fn encode(&self, h: &mut Sha256) {
+        self.host.encode(h);
+        u64::try_from(self.cache.boxes().len())
+            .unwrap_or(u64::MAX)
+            .encode(h);
+    }
+}
+
+impl Canonical for crate::inputs::scenario::Picks {
+    fn encode(&self, h: &mut Sha256) {
+        self.host.encode(h);
+        u64::try_from(self.count).unwrap_or(u64::MAX).encode(h);
+    }
+}
+
+impl Canonical for crate::inputs::scenario::Many {
+    fn encode(&self, h: &mut Sha256) {
+        bodies(&self.bodies, h);
+    }
+}
+
+impl Canonical for crate::inputs::scenario::Storey {
+    fn encode(&self, h: &mut Sha256) {
+        body(&self.envelope, h);
+        bodies(&self.walls, h);
+        self.seeds.encode(h);
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

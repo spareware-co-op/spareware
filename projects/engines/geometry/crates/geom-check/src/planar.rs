@@ -56,6 +56,11 @@
 //! sorting of their crossings, a pair of faces on one plane the product of their sides. Each test
 //! allocates a short list, reserved fallibly with its logical bytes on the meter. Recursion: none.
 
+#![allow(
+    clippy::many_single_char_names,
+    reason = "the names are the method's: f and g faces, s and t sides or stretches, x, y and z the planes through a point, p, q and r points or planes"
+)]
+
 use alloc::vec::Vec;
 use core::cmp::Ordering;
 
@@ -100,6 +105,11 @@ fn settled<T>(found: Result<T, Stuck>, unknown: T) -> Result<T, Stopped> {
     })
 }
 
+/// A list's length as the meter counts it.
+fn count(n: usize) -> u64 {
+    u64::try_from(n).unwrap_or(u64::MAX)
+}
+
 /// The answer to a step of a test, if it had one.
 fn known<T>(step: Option<T>) -> Result<T, Stuck> {
     step.ok_or(Stuck::Undecided)
@@ -124,8 +134,8 @@ struct Side {
 }
 
 impl LogicalSize for Side {
-    /// Two corners with their vertices, a plane and the edge.
-    const LOGICAL_BYTES: u64 = 2 * (Corner::LOGICAL_BYTES + 4) + 64 + 4;
+    /// Two corners of 200 bytes with their vertices, a plane of 64, and the edge.
+    const LOGICAL_BYTES: u64 = 480;
 }
 
 /// A flat face, as this module reads it.
@@ -147,7 +157,7 @@ impl LogicalSize for Slot {
 
 impl LogicalSize for Outline {
     /// A list's three words, the plane, the face and the flag.
-    const LOGICAL_BYTES: u64 = 24 + 64 + 8;
+    const LOGICAL_BYTES: u64 = 96;
 }
 
 /// A point of a line: the plane that crosses the line there.
@@ -168,7 +178,7 @@ struct Stretch {
 
 impl LogicalSize for Stretch {
     /// Two marks.
-    const LOGICAL_BYTES: u64 = 2 * Mark::LOGICAL_BYTES;
+    const LOGICAL_BYTES: u64 = 128;
 }
 
 /// A sign as an ordering.
@@ -262,34 +272,38 @@ impl Cut {
         Ok((self.order(&from, &to)? != Ordering::Greater).then_some(Stretch { from, to }))
     }
 
+    /// The farthest end of the runs that hold `at`.
+    fn farthest(&self, runs: &[Stretch], at: &Mark) -> Result<Option<Mark>, Stuck> {
+        let mut far: Option<Mark> = None;
+        for run in runs {
+            let holds = self.order(&run.from, at)? != Ordering::Greater
+                && self.order(at, &run.to)? != Ordering::Greater;
+            let beyond = match &far {
+                Some(mark) => self.order(&run.to, mark)? == Ordering::Greater,
+                None => true,
+            };
+            if holds && beyond {
+                far = Some(run.to);
+            }
+        }
+        Ok(far)
+    }
+
     /// Whether `runs`, joined end to end, hold all of `wanted`: from its start, each step takes the
-    /// run that holds the place reached and goes farthest, so the walk ends within one step per run.
+    /// run that holds the place reached and goes farthest, so one step per run reaches all they
+    /// join up to.
     fn covered(&self, runs: &[Stretch], wanted: &Stretch) -> Result<bool, Stuck> {
         let mut at = wanted.from;
-        loop {
-            let mut farthest: Option<Mark> = None;
-            for run in runs {
-                let holds = self.order(&run.from, &at)? != Ordering::Greater
-                    && self.order(&at, &run.to)? != Ordering::Greater;
-                if holds
-                    && farthest.as_ref().map_or(Ok(true), |far| {
-                        self.order(&run.to, far).map(|o| o == Ordering::Greater)
-                    })?
-                {
-                    farthest = Some(run.to);
-                }
-            }
-            let Some(reached) = farthest else {
+        for _ in runs {
+            let Some(reached) = self.farthest(runs, &at)? else {
                 return Ok(false);
             };
             if self.order(&reached, &wanted.to)? != Ordering::Less {
                 return Ok(true);
             }
-            if self.order(&reached, &at)? == Ordering::Equal {
-                return Ok(false);
-            }
             at = reached;
         }
+        Ok(false)
     }
 
     /// `marks` with `mark` put in its place, by binary search.
@@ -363,9 +377,13 @@ fn across(
 /// The plane `f`'s grid corners lie on exactly: `None` if a corner is not a grid point, if they
 /// lie on one line, or if they leave the plane of the first three that do not.
 fn corners_plane(a: &Arenas, f: Ix<Face>) -> Option<Plane> {
-    let grid = |n| match corner(a, fin_ends(a, n)?.0)? {
-        Corner::Grid(p) => Some(p),
-        _ => None,
+    let grid = |n| {
+        let (v, _) = fin_ends(a, n)?;
+        a.vertices
+            .point
+            .get(v)
+            .and_then(|p| a.points.get(*p))?
+            .grid()
     };
     let first = face_fins(a, f).find_map(grid)?;
     let plane = face_fins(a, f).filter_map(grid).find_map(|q| {
@@ -422,8 +440,7 @@ fn outline(
     else {
         return Ok(None);
     };
-    let fins = face_fins(a, f).count();
-    let mut sides: Vec<Side> = reserve(sink.meter(), u64::try_from(fins).unwrap_or(u64::MAX))?;
+    let mut sides: Vec<Side> = reserve(sink.meter(), count(face_fins(a, f).count()))?;
     for n in face_fins(a, f) {
         sink.charge()?;
         let Some(side) = side_of(a, f, n, &plane, exact) else {
@@ -457,86 +474,121 @@ fn same_way(first: [i128; 3], second: [i128; 3]) -> bool {
     sum.is_some_and(|s| s.signum() == Sign::Positive)
 }
 
-/// One triangle of a fan, its three corners with the edges along its sides.
+/// A corner of a face a fan stands for: where it lies, and the edge from it to the next.
+#[derive(Clone, Copy)]
+struct Spoke {
+    at: P3,
+    vertex: Ix<Vertex>,
+    edge: Ix<Edge>,
+}
+
+impl LogicalSize for Spoke {
+    /// A grid point, and the vertex's and edge's rows.
+    const LOGICAL_BYTES: u64 = 32;
+}
+
+/// The corners of flat face `f`, if it has one loop of straight edges between grid points.
+fn ring(a: &Arenas, f: Ix<Face>, sink: &mut Sink<'_, '_>) -> Result<Option<Vec<Spoke>>, Stopped> {
+    let kind = a.faces.surface.get(f).and_then(|s| a.surfaces.get(*s));
+    if !matches!(kind, Some(SurfaceKind::Plane(_))) || face_loops(a, f).nth(1).is_some() {
+        return Ok(None);
+    }
+    let spoke = |n| {
+        let edge = fin_edge(a, n)?;
+        let curve = a.edges.curve.get(edge).and_then(|c| a.curves.get(*c));
+        let (vertex, _) = fin_ends(a, n)?;
+        let place = a
+            .vertices
+            .point
+            .get(vertex)
+            .and_then(|p| a.points.get(*p))?;
+        matches!(curve, Some(CurveKind::Line(_))).then_some(Spoke {
+            at: place.grid()?,
+            vertex,
+            edge,
+        })
+    };
+    let mut out: Vec<Spoke> = reserve(sink.meter(), count(face_fins(a, f).count()))?;
+    for n in face_fins(a, f) {
+        let Some(one) = spoke(n) else {
+            return Ok(None);
+        };
+        out.push(one);
+    }
+    Ok(Some(out))
+}
+
+/// One triangle of a fan, its three corners with the edges along its sides: `None` for corners on
+/// one line.
 fn triangle(
     face: Ix<Face>,
-    ends: [(P3, Ix<Vertex>); 3],
+    [p, q, r]: [Option<&Spoke>; 3],
     edges: [Option<Ix<Edge>>; 3],
-) -> Option<(Outline, [i128; 3])> {
-    let [(p, _), (q, _), (r, _)] = ends;
-    let plane = Plane::through(p, q, r).ok()?;
-    let sides = [(0, 1), (1, 2), (2, 0)]
-        .iter()
-        .zip(edges)
-        .map(|(&(i, j), edge)| {
-            let ((from, s), (to, t)) = (*ends.get(i)?, *ends.get(j)?);
+    sink: &mut Sink<'_, '_>,
+) -> Result<Option<Outline>, Stopped> {
+    let plane = p
+        .zip(q)
+        .zip(r)
+        .and_then(|((p, q), r)| Plane::through(p.at, q.at, r.at).ok());
+    let Some(plane) = plane else {
+        return Ok(None);
+    };
+    let mut sides: Vec<Side> = reserve(sink.meter(), 3)?;
+    for ((from, to), edge) in [(p, q), (q, r), (r, p)].into_iter().zip(edges) {
+        sides.extend(from.zip(to).and_then(|(s, t)| {
             Some(Side {
                 edge,
                 start: End {
-                    vertex: s,
-                    at: Corner::Grid(from),
+                    vertex: s.vertex,
+                    at: Corner::Grid(s.at),
                 },
                 end: End {
-                    vertex: t,
-                    at: Corner::Grid(to),
+                    vertex: t.vertex,
+                    at: Corner::Grid(t.at),
                 },
-                across: stood_on(&plane, from, to)?,
+                across: stood_on(&plane, s.at, t.at)?,
             })
-        });
-    let sides = sides.collect::<Option<Vec<Side>>>()?;
-    Some((
-        Outline {
-            face,
-            plane,
-            sides,
-            implicit: false,
-        },
-        plane.n(),
-    ))
+        }));
+    }
+    Ok((sides.len() == 3).then_some(Outline {
+        face,
+        plane,
+        sides,
+        implicit: false,
+    }))
 }
 
-/// Face `f`, with one loop of straight edges between distinct grid corners, as the fan of
-/// triangles from its first corner, if every triangle turns the way the first does.
-fn fan(a: &Arenas, f: Ix<Face>) -> Vec<Outline> {
-    let ring = || -> Option<Vec<(P3, Ix<Vertex>, Ix<Edge>)>> {
-        if face_loops(a, f).nth(1).is_some() {
-            return None;
-        }
-        face_fins(a, f)
-            .map(|n| {
-                let edge = fin_edge(a, n)?;
-                let curve = a.edges.curve.get(edge).and_then(|c| a.curves.get(*c));
-                let (v, _) = fin_ends(a, n)?;
-                match (curve, corner(a, v)?) {
-                    (Some(CurveKind::Line(_)), Corner::Grid(p)) => Some((p, v, edge)),
-                    _ => None,
-                }
-            })
-            .collect()
+/// Flat face `f` as the fan of triangles from its first corner, if it has a ring of grid corners and
+/// every triangle turns the way the first does; none otherwise.
+fn fan(a: &Arenas, f: Ix<Face>, sink: &mut Sink<'_, '_>) -> Result<Vec<Outline>, Stopped> {
+    let Some(ring) = ring(a, f, sink)? else {
+        return Ok(Vec::new());
     };
-    let triangles = || -> Option<Vec<Outline>> {
-        let ring = ring()?;
-        let (&(apex, first, opening), rest) = ring.split_first()?;
-        let last = rest.len().checked_sub(2)?;
-        let mut out = Vec::new();
-        let mut turn: Option<[i128; 3]> = None;
-        for (k, pair) in rest.windows(2).enumerate() {
-            let (&(p, s, across), &(q, t, _)) = (pair.first()?, pair.get(1)?);
-            let before = (k == 0).then_some(opening);
-            let after = (k == last).then(|| rest.last().map(|c| c.2)).flatten();
-            let (piece, normal) = triangle(
-                f,
-                [(apex, first), (p, s), (q, t)],
-                [before, Some(across), after],
-            )?;
-            if !same_way(*turn.get_or_insert(normal), normal) {
-                return None;
-            }
-            out.push(piece);
-        }
-        Some(out)
-    };
-    triangles().unwrap_or_default()
+    let pieces = ring.len().saturating_sub(2);
+    let mut out: Vec<Outline> = reserve(sink.meter(), count(pieces))?;
+    let mut turn: Option<[i128; 3]> = None;
+    let edge = |k: usize| ring.get(k).map(|s| s.edge);
+    for k in 0..pieces {
+        let (next, after) = (k.saturating_add(1), k.saturating_add(2));
+        let corners = [ring.first(), ring.get(next), ring.get(after)];
+        // Only the first triangle has the first edge, and only the last the edge back.
+        let edges = [
+            (k == 0).then(|| edge(0)).flatten(),
+            edge(next),
+            (after.saturating_add(1) == ring.len())
+                .then(|| edge(after))
+                .flatten(),
+        ];
+        let piece = triangle(f, corners, edges, sink)?.filter(|one| {
+            let normal = one.plane.n();
+            same_way(*turn.get_or_insert(normal), normal)
+        });
+        let Some(one) = piece else {
+            return Ok(Vec::new());
+        };
+        out.push(one);
+    }
+    Ok(out)
 }
 
 /// One slot per face of `a`.
@@ -553,8 +605,7 @@ pub(crate) fn outlines(
                 list.push(one);
                 list
             }
-            None if exact => Vec::new(),
-            None => fan(a, f),
+            None => fan(a, f, sink)?,
         }));
     }
     Ok(out)
@@ -571,8 +622,7 @@ impl Outline {
         above: Sign,
         sink: &mut Sink<'_, '_>,
     ) -> Result<Vec<Mark>, Stuck> {
-        let count = u64::try_from(self.sides.len()).unwrap_or(u64::MAX);
-        let mut marks: Vec<Mark> = reserve(sink.meter(), count)?;
+        let mut marks: Vec<Mark> = reserve(sink.meter(), count(self.sides.len()))?;
         for side in &self.sides {
             sink.charge()?;
             let from = known(side.start.at.side(against).ok())?;
@@ -599,8 +649,12 @@ impl Outline {
         cut: &Cut,
         sink: &mut Sink<'_, '_>,
     ) -> Result<Vec<Stretch>, Stuck> {
-        let mut out = self.moved(against, cut, Sign::Positive, sink)?;
-        out.extend(self.moved(against, cut, Sign::Negative, sink)?);
+        let above = self.moved(against, cut, Sign::Positive, sink)?;
+        let below = self.moved(against, cut, Sign::Negative, sink)?;
+        let both = count(above.len().saturating_add(below.len()));
+        let mut out: Vec<Stretch> = reserve(sink.meter(), both)?;
+        out.extend(above);
+        out.extend(below);
         Ok(out)
     }
 
@@ -613,14 +667,17 @@ impl Outline {
         sink: &mut Sink<'_, '_>,
     ) -> Result<Vec<Stretch>, Stuck> {
         let marks = self.crossings(against, cut, above, sink)?;
+        let mut out: Vec<Stretch> = reserve(sink.meter(), count(marks.len()))?;
         // A closed boundary crosses a line an even number of times.
         let ends = marks.iter().skip(1).step_by(2);
-        Ok(marks
-            .iter()
-            .step_by(2)
-            .zip(ends)
-            .map(|(&from, &to)| Stretch { from, to })
-            .collect())
+        out.extend(
+            marks
+                .iter()
+                .step_by(2)
+                .zip(ends)
+                .map(|(&from, &to)| Stretch { from, to }),
+        );
+        Ok(out)
     }
 }
 
@@ -632,8 +689,7 @@ fn joins(
     cut: &Cut,
     sink: &mut Sink<'_, '_>,
 ) -> Result<Vec<Stretch>, Stuck> {
-    let count = u64::try_from(f.sides.len().saturating_mul(2)).unwrap_or(u64::MAX);
-    let mut out: Vec<Stretch> = reserve(sink.meter(), count)?;
+    let mut out: Vec<Stretch> = reserve(sink.meter(), count(f.sides.len().saturating_mul(2)))?;
     for s in &f.sides {
         let shared = s.edge.is_some() && g.sides.iter().any(|t| t.edge == s.edge);
         if shared && cut.holds(&s.start.at) && cut.holds(&s.end.at) {
@@ -720,7 +776,7 @@ fn same_side(
 }
 
 /// How two faces on one plane meet: each side of each, as a stretch of its own line, against the
-/// other; then each edge they share, which must keep them on opposite sides.
+/// other; then each side, which must keep them on opposite sides of it if they both reach it.
 fn coplanar(f: &Outline, g: &Outline, sink: &mut Sink<'_, '_>) -> Result<Meet, Stuck> {
     for (one, other) in [(f, g), (g, f)] {
         for side in &one.sides {
@@ -738,16 +794,14 @@ fn coplanar(f: &Outline, g: &Outline, sink: &mut Sink<'_, '_>) -> Result<Meet, S
         }
     }
     for side in &f.sides {
-        let shared = side.edge.is_some() && g.sides.iter().any(|t| t.edge == side.edge);
-        if shared && same_side(f, g, side, sink)? {
+        if same_side(f, g, side, sink)? {
             return Ok(Meet::Cross);
         }
     }
     Ok(Meet::Apart)
 }
 
-/// How the faces of `first` and `second` meet: where any two of their outlines do, a crossing
-/// before anything else.
+/// How the faces of `first` and `second` meet: what any two of their outlines found.
 pub(crate) fn slots_meet(
     a: &Arenas,
     first: &[Outline],
@@ -757,11 +811,7 @@ pub(crate) fn slots_meet(
     let mut found = Meet::Apart;
     for f in first {
         for g in second {
-            match faces_meet(a, f, g, sink)? {
-                Meet::Cross => return Ok(Meet::Cross),
-                Meet::Unknown => found = Meet::Unknown,
-                Meet::Apart => {}
-            }
+            found = found.or(faces_meet(a, f, g, sink)?);
         }
     }
     Ok(found)
@@ -797,9 +847,8 @@ fn contact(cut: &Cut, s: &Side, t: &Side) -> Result<Option<Stretch>, Stuck> {
             let (p, q) = (cut.mark(&t.start.at)?, cut.mark(&t.end.at)?);
             Some(cut.stretch(p, q)?)
         }
-        (Sign::Zero, _) => Some(point(cut.mark(&t.start.at)?)),
-        (_, Sign::Zero) => Some(point(cut.mark(&t.end.at)?)),
         (p, q) if p == q => None,
+        // An end of `t` on the line is where `t`'s own plane crosses it.
         _ => Some(point(Mark(t.across))),
     })
 }
@@ -822,11 +871,10 @@ pub(crate) fn edges_meet(
         };
         let (from, to) = (cut.mark(&s.start.at)?, cut.mark(&s.end.at)?);
         let own = cut.stretch(from, to)?;
-        let Some(common) = contact(&cut, s, t)?
-            .map(|c| cut.overlap(&own, &c))
-            .transpose()?
-            .flatten()
-        else {
+        let Some(touch) = contact(&cut, s, t)? else {
+            return Ok(Meet::Apart);
+        };
+        let Some(common) = cut.overlap(&own, &touch)? else {
             return Ok(Meet::Apart);
         };
         let mut runs: Vec<Stretch> = reserve(sink.meter(), 2)?;
@@ -921,22 +969,131 @@ pub(crate) fn shell_side(
     let of = |shell: Ix<Shell>| {
         rows::<Face>(a.rows(Arena::Face)).filter(move |&f| a.faces.shell.get(f) == Some(&shell))
     };
-    let faces = u64::try_from(of(t).count()).unwrap_or(u64::MAX);
-    let mut shell: Vec<Outline> = reserve(sink.meter(), faces)?;
+    let mut shell: Vec<Outline> = reserve(sink.meter(), count(of(t).count()))?;
     for f in of(t) {
         let Some(one) = outline(a, f, false, sink)? else {
             return Ok(None);
         };
         shell.push(one);
     }
-    for n in of(s).flat_map(|f| face_fins(a, f)) {
-        let Some(p) = fin_ends(a, n).and_then(|(v, _)| corner(a, v)) else {
-            continue;
-        };
+    let corners = of(s)
+        .flat_map(|f| face_fins(a, f))
+        .filter_map(|n| fin_ends(a, n).and_then(|(v, _)| corner(a, v)));
+    for p in corners {
         let side = settled(point_side(&p, &shell, sink), None)?;
         if side.is_some() {
             return Ok(side);
         }
     }
     Ok(None)
+}
+
+#[cfg(test)]
+mod tests {
+    #![allow(
+        clippy::arithmetic_side_effects,
+        clippy::unwrap_used,
+        reason = "test code: a failure should stop loudly"
+    )]
+
+    use geom_num::plane::Lpi;
+
+    use super::*;
+
+    /// The plane x = `at`.
+    fn wall(at: i128) -> Plane {
+        Plane::new([1, 0, 0], -at).unwrap()
+    }
+
+    /// A point where a line meets a plane, of the one kind no vertex is.
+    fn crossing_point() -> Corner {
+        let (p, q) = (P3::new(0, 0, 0).unwrap(), P3::new(10, 0, 0).unwrap());
+        Corner::Lpi(Lpi::new(p, q, wall(5)).unwrap())
+    }
+
+    #[test]
+    fn a_step_with_no_answer_is_unknown_never_a_pass() {
+        assert!(matches!(known::<u8>(None), Err(Stuck::Undecided)));
+        assert!(matches!(known(Some(3)), Ok(3)));
+        assert_eq!(
+            settled(Err(Stuck::Undecided), Meet::Unknown).ok(),
+            Some(Meet::Unknown)
+        );
+    }
+
+    #[test]
+    fn a_point_of_no_vertex_kind_has_no_mark_and_no_frame() {
+        let cut = Cut {
+            first: wall(5),
+            second: Plane::new([0, 1, 0], 0).unwrap(),
+        };
+        assert!(matches!(cut.mark(&crossing_point()), Err(Stuck::Undecided)));
+        assert!(frame(&crossing_point()).is_none());
+    }
+
+    /// The line along x where z = 0 meets y = 0, and the mark of each place along it.
+    fn x_axis() -> (Cut, impl Fn(i128) -> Mark) {
+        let cut = Cut {
+            first: Plane::new([0, 0, 1], 0).unwrap(),
+            second: Plane::new([0, 1, 0], 0).unwrap(),
+        };
+        (cut, |at| Mark(wall(at)))
+    }
+
+    #[test]
+    fn a_line_runs_the_way_its_two_planes_turn() {
+        // (0, 0, 1) × (0, 1, 0) is (−1, 0, 0): the line runs down x.
+        let (cut, at) = x_axis();
+        assert_eq!(cut.order(&at(5), &at(2)).ok(), Some(Ordering::Less));
+        assert_eq!(cut.order(&at(2), &at(5)).ok(), Some(Ordering::Greater));
+        assert_eq!(cut.order(&at(2), &at(2)).ok(), Some(Ordering::Equal));
+    }
+
+    #[test]
+    fn a_line_holds_only_what_lies_on_both_planes() {
+        let (cut, _) = x_axis();
+        assert!(cut.holds(&Corner::Grid(P3::new(7, 0, 0).unwrap())));
+        assert!(!cut.holds(&Corner::Grid(P3::new(7, 1, 0).unwrap())));
+        assert!(!cut.holds(&Corner::Grid(P3::new(7, 0, 1).unwrap())));
+    }
+
+    #[test]
+    fn stretches_cover_what_their_runs_join_up_to() {
+        let (cut, at) = x_axis();
+        let run = |a: i128, b: i128| Stretch {
+            from: at(a),
+            to: at(b),
+        };
+        let covered = |runs: &[Stretch], wanted| cut.covered(runs, &wanted).ok();
+        // Joined end to end, in either order.
+        let two = [run(9, 5), run(5, 1)];
+        assert_eq!(covered(&two, run(8, 2)), Some(true));
+        assert_eq!(covered(&[two[1], two[0]], run(8, 2)), Some(true));
+        // A place no run holds, one reached short of the end, and a run that only touches.
+        assert_eq!(covered(&two, run(10, 2)), Some(false));
+        assert_eq!(covered(&two, run(8, 0)), Some(false));
+        assert_eq!(covered(&[run(9, 7), run(5, 1)], run(8, 2)), Some(false));
+        assert_eq!(covered(&[run(5, 5)], run(5, 5)), Some(true));
+        assert_eq!(covered(&[run(5, 5)], run(6, 4)), Some(false));
+        assert_eq!(covered(&[], run(5, 5)), Some(false));
+        // What two stretches have in common.
+        let common = cut.overlap(&run(9, 3), &run(6, 1)).ok().flatten().unwrap();
+        assert_eq!(common.from.0, at(6).0);
+        assert_eq!(common.to.0, at(3).0);
+        assert!(cut.overlap(&run(9, 7), &run(5, 1)).ok().flatten().is_none());
+    }
+
+    #[test]
+    fn found_together_a_crossing_outranks_an_unknown_and_an_unknown_apart() {
+        for (first, second, both) in [
+            (Meet::Apart, Meet::Apart, Meet::Apart),
+            (Meet::Apart, Meet::Unknown, Meet::Unknown),
+            (Meet::Unknown, Meet::Apart, Meet::Unknown),
+            (Meet::Unknown, Meet::Cross, Meet::Cross),
+            (Meet::Cross, Meet::Unknown, Meet::Cross),
+            (Meet::Cross, Meet::Apart, Meet::Cross),
+        ] {
+            assert_eq!(first.or(second), both);
+        }
+    }
 }

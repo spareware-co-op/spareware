@@ -28,9 +28,12 @@
 //! Modules:
 //!
 //! - [`operand`]: operands and selections, and an operand's faces as convex polygons (G130).
+//! - [`batch`]: any number of tools through any number of hosts (G138).
 //! - [`certificate`]: what a result must show before it is returned (G133).
 //! - [`combine`]: the boolean's entry and its schema (G131).
 //! - [`half_space`]: everything on one side of a plane, as a solid operand (G130).
+//! - [`names`]: the names and history of a result (G132).
+//! - [`passage`]: the narrowest passage between two seeds of one cell (G137).
 //! - [`rebuild`]: merged pieces published as a body by canonical rules (G129).
 //!
 //! Status: the rebuild (G129), operands and selections (G130) and the entry (G131) built; the rest
@@ -41,9 +44,12 @@
 
 extern crate alloc;
 
+pub mod batch;
 pub mod certificate;
 pub mod combine;
 pub mod half_space;
+pub mod names;
 pub mod operand;
+pub mod passage;
 pub mod rebuild;
 mod wires;

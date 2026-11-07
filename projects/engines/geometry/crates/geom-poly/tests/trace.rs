@@ -451,6 +451,77 @@ fn a_small_budget_stops_the_trace() {
     assert_eq!(got.unwrap_err().to_string(), "the meter stopped the trace");
 }
 
+/// The three planes through a point in quarter steps.
+fn through(p: [i64; 3]) -> [Plane; 3] {
+    [0, 1, 2].map(|axis| {
+        let mut n = [0i128; 3];
+        n[axis] = 4;
+        Plane::new(n, -i128::from(p[axis])).unwrap()
+    })
+}
+
+#[test]
+fn a_point_is_traced_to_what_the_oracle_counts() {
+    let blocks = [
+        Block {
+            low: [0, 0, 0],
+            high: [8, 8, 8],
+        },
+        Block {
+            low: [4, 4, 4],
+            high: [12, 12, 12],
+        },
+    ];
+    let polygons: Vec<Polygon> = blocks
+        .iter()
+        .enumerate()
+        .flat_map(|(i, b)| faces(b, Some(i as u32)))
+        .collect();
+    let cell = Cell {
+        low: [-100; 3],
+        high: [100; 3],
+    };
+    let outside = Winding::new();
+    for x in (-7..60).step_by(10) {
+        for y in (-7..60).step_by(10) {
+            for z in (-7..60).step_by(10) {
+                let p = [x, y, z];
+                let got = winding_at(&cell, &outside, &polygons, through(p), &mut meter());
+                assert_eq!(got.unwrap(), oracle(&blocks, p), "{p:?}");
+            }
+        }
+    }
+    // A box inside the scene starts from the vector at its own corner.
+    let cell = Cell {
+        low: [2; 3],
+        high: [10; 3],
+    };
+    let start = oracle(&blocks, [9, 9, 9]);
+    assert_eq!(start.count(0), 1);
+    for p in [[9, 9, 9], [19, 19, 19], [39, 39, 39], [39, 9, 19]] {
+        let got = winding_at(&cell, &start, &polygons, through(p), &mut meter());
+        assert_eq!(got.unwrap(), oracle(&blocks, p), "{p:?}");
+    }
+}
+
+#[test]
+fn a_small_budget_stops_the_trace_to_a_point() {
+    let polygons = faces(&A, Some(0));
+    let cell = Cell {
+        low: [-100; 3],
+        high: [100; 3],
+    };
+    let mut small = WorkMeter::new(Budget::new(3, u64::MAX));
+    let got = winding_at(
+        &cell,
+        &Winding::new(),
+        &polygons,
+        through([9; 3]),
+        &mut small,
+    );
+    assert!(matches!(got, Err(TraceError::Stopped(_))), "{got:?}");
+}
+
 #[test]
 fn a_count_past_its_range_is_refused() {
     let polygons = faces(&A, Some(0));

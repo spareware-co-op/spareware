@@ -12,12 +12,12 @@
     reason = "tests: native arithmetic and short names, and a failure stops the test"
 )]
 
-use geom_num::plane::{Plane, Tpi};
+use geom_num::plane::{Plane, Tpi, normals_sign};
 use geom_num::{NumError, P3, Sign};
 use geom_poly::convex::{Piece, convex_pieces};
 use geom_poly::merge::{
-    Merge, MergeError, Merged, Outward, Rules, as_kept, both_ways, merge, merge_with, section,
-    select,
+    Memo, Merge, MergeError, Merged, Outward, Rules, as_kept, both_ways, merge, merge_with,
+    merge_with_reusing, section, select,
 };
 use geom_poly::subdivide::{LEAF_POLYGONS, around, arrange};
 use geom_poly::trace::{Classified, Polygon, TraceError};
@@ -258,6 +258,47 @@ fn a_cavity_is_held_by_the_innermost_shell_around_it() {
     assert!(m.shells[at_depth(0)].outer && m.shells[at_depth(2)].outer);
     assert_eq!(m.shells[at_depth(1)].holder, Some(at_depth(0)));
     assert_eq!(m.shells[at_depth(3)].holder, Some(at_depth(2)));
+}
+
+#[test]
+fn a_cavity_is_held_by_the_innermost_shell_whatever_their_numbers() {
+    // A tilted solid's first face sorts before a block's, so the inner solid is numbered first.
+    let mut polygons = scene(&[
+        block([0, 0, 0], [100, 100, 100]),
+        block([10, 10, 10], [90, 90, 90]),
+    ]);
+    let solid = [[20, 20, 20], [80, 20, 21], [20, 80, 22], [21, 22, 80]];
+    let cavity = [[30, 30, 30], [50, 30, 31], [30, 50, 32], [31, 32, 50]];
+    for (entry, corners) in [(2, solid), (3, cavity)] {
+        let turned = [corners[1], corners[0], corners[2], corners[3]];
+        tetrahedron(corners, entry, &mut polygons)
+            .or_else(|| tetrahedron(turned, entry, &mut polygons))
+            .unwrap();
+    }
+    let test = WindingTest::new(vec![
+        Term::Inside(0),
+        Term::Inside(1),
+        Term::Not,
+        Term::And,
+        Term::Inside(2),
+        Term::Inside(3),
+        Term::Not,
+        Term::And,
+        Term::Or,
+    ])
+    .unwrap();
+    let pieces = kept(&polygons, &test, LEAF_POLYGONS);
+    let m = merge(&pieces, Merge::RemoveRedundant, &mut meter()).unwrap();
+    closed(&m, &pieces);
+    assert_eq!(m.shells.len(), 4);
+    let find = |outer: bool, sides: usize| {
+        (0..4)
+            .find(|s| m.shells[*s].outer == outer && m.shells[*s].faces.len() == sides)
+            .unwrap()
+    };
+    assert!(find(true, 4) < find(true, 6));
+    assert_eq!(m.shells[find(false, 4)].holder, Some(find(true, 4)));
+    assert_eq!(m.shells[find(false, 6)].holder, Some(find(true, 6)));
 }
 
 #[test]
@@ -783,6 +824,21 @@ fn tilted(solids: &[[[i64; 3]; 4]], test: &WindingTest, leaf: usize) -> Option<M
 }
 
 #[test]
+fn tilted_solids_near_the_edge_of_the_grid_merge_as_they_do_near_the_origin() {
+    // Scaled by 2^32, the planes' normals reach about 2^77 and the points' homogeneous coordinates
+    // pass what an i128 holds, so the merge compares them on its wide path, not in machine words.
+    let a = [[0, 0, 0], [90, 10, 0], [10, 80, 10], [20, 10, 70]];
+    let b = [[10, 10, 10], [80, 30, 20], [30, 90, 40], [40, 20, 90]];
+    let scaled = |solid: [[i64; 3]; 4]| solid.map(|p| p.map(|v| v << 32));
+    let test = WindingTest::unite();
+    let near = tilted(&[a, b], &test, 1000).unwrap();
+    for leaf in [1, 1000] {
+        let far = tilted(&[scaled(a), scaled(b)], &test, leaf).unwrap();
+        assert_eq!(counts(&far), counts(&near), "leaf {leaf}");
+    }
+}
+
+#[test]
 fn tilted_solids_meet_where_three_planes_do() {
     let a = [[0, 0, 0], [90, 10, 0], [10, 80, 10], [20, 10, 70]];
     let b = [[10, 10, 10], [80, 30, 20], [30, 90, 40], [40, 20, 90]];
@@ -801,6 +857,118 @@ fn tilted_solids_meet_where_three_planes_do() {
     }
     for test in [WindingTest::intersect(2), WindingTest::subtract(0)] {
         tilted(&[a, b], &test, 4).unwrap();
+    }
+}
+
+#[test]
+fn a_point_on_a_split_is_not_named_by_it() {
+    // The edge from (0, 0, -1) to (1, 2, 1) pierces the wide solid's top at (1/2, 1, 0), and the
+    // first split, half way along x, runs through that point.
+    let turned_out = |t: [[i64; 3]; 4]| {
+        let fits = tetrahedron(t, 0, &mut Vec::new()).is_some();
+        if fits { t } else { [t[1], t[0], t[2], t[3]] }
+    };
+    let wide = turned_out([[-20, -15, 0], [21, -15, 0], [0, 15, 0], [0, 0, -30]]);
+    let spike = turned_out([[0, 0, -1], [1, 2, 1], [3, 0, 1], [0, 4, 1]]);
+    let test = WindingTest::unite();
+    let whole = tilted(&[wide, spike], &test, 1000).unwrap();
+    for leaf in [1, 2, 4, 8] {
+        let m = tilted(&[wide, spike], &test, leaf).unwrap();
+        assert_eq!(m.vertices, whole.vertices, "leaf {leaf}");
+    }
+}
+
+/// `polygons` with every plane's coefficients multiplied by `k`: the same planes, written longer.
+fn scaled(polygons: &[Polygon], k: i128) -> Vec<Polygon> {
+    let times = |p: &Plane| Plane::new(p.n().map(|v| v * k), p.d() * k).unwrap();
+    polygons
+        .iter()
+        .map(|polygon| Polygon {
+            piece: Piece {
+                face: times(&polygon.piece.face),
+                bounds: polygon.piece.bounds.iter().map(times).collect(),
+            },
+            entry: polygon.entry,
+        })
+        .collect()
+}
+
+/// The name the merge gives the point `at` among `pieces`: a grid point's three axis planes; for a
+/// point off the grid, of the planes of every corner there (a piece's face and two bounds in turn),
+/// the first three in plane order that meet in one point.
+fn first_three(pieces: &[Outward], at: &Tpi) -> Tpi {
+    let near = at.to_grid().unwrap();
+    if near.is_exact() {
+        let p = near.value();
+        return Tpi::meeting(up(0, p.x.get()), up(1, p.y.get()), up(2, p.z.get())).unwrap();
+    }
+    let mut through = Vec::new();
+    for outward in pieces {
+        let Piece { face, bounds } = &outward.piece;
+        let after = bounds.iter().cycle().skip(1);
+        for (bound, next) in bounds.iter().zip(after) {
+            let corner = [*face, *bound, *next];
+            if corner
+                .iter()
+                .all(|plane| plane.side_of_tpi(at).unwrap() == Sign::Zero)
+            {
+                through.extend(corner);
+            }
+        }
+    }
+    // The scene keeps every split of the boxes, 2x = odd on one axis, away from these points.
+    let split = |p: &Plane| {
+        let n = p.n();
+        n.iter().filter(|v| **v != 0).count() == 1
+            && n.iter().any(|v| v.abs() == 2)
+            && p.d() % 2 != 0
+    };
+    assert!(!through.iter().any(split), "a split through {at:?}");
+    through.sort_unstable_by_key(|plane| (plane.n(), plane.d()));
+    through.dedup();
+    for (i, a) in through.iter().enumerate() {
+        for (j, b) in through.iter().enumerate().skip(i + 1) {
+            for c in through.iter().skip(j + 1) {
+                if normals_sign(a, b, c).unwrap() != Sign::Zero {
+                    return Tpi::meeting(*a, *b, *c).unwrap();
+                }
+            }
+        }
+    }
+    panic!("no three planes meet at {at:?}")
+}
+
+#[test]
+fn a_point_is_named_the_same_however_its_planes_are_written() {
+    // A block's faces on odd whole steps, written with normals one long, and the same faces written
+    // with normals two long and even offsets. Neither is a split of the boxes, 2x = odd, though the
+    // one shares its odd offset with them and the other its normal. A grid point is named by its
+    // axis planes. A spike's three edges up from (4, 4, 4) cross the block's top, z = 9, off the
+    // grid at thirds and seventeenths, never on a half step, so no split passes there, and the
+    // first three planes through each such point name it.
+    let mut polygons = scene(&[block([1, 1, 1], [9, 9, 9])]);
+    let spike = [[4, 4, 4], [6, 5, 19], [5, 7, 19], [3, 6, 21]];
+    tetrahedron(spike, 1, &mut polygons).unwrap();
+    for k in [1, 2] {
+        let polygons = scaled(&polygons, k);
+        for leaf in [1, 2, 4, 1000] {
+            let pieces = kept(&polygons, &WindingTest::unite(), leaf);
+            let m = merge(&pieces, Merge::RemoveRedundant, &mut meter()).unwrap();
+            closed(&m, &pieces);
+            let off = m
+                .vertices
+                .iter()
+                .filter(|v| !v.to_grid().unwrap().is_exact());
+            assert_eq!(
+                off.count(),
+                3,
+                "k {k}, leaf {leaf}: the spike's edges through the top"
+            );
+            for (at, point) in m.vertices.iter().enumerate() {
+                let name = first_three(&pieces, point);
+                assert_eq!(*point, name, "k {k}, leaf {leaf}, vertex {at}");
+            }
+        }
     }
 }
 
@@ -858,37 +1026,117 @@ fn an_edge_breaks_where_a_corner_rests_on_it() {
     assert_eq!(counts(&m), [2, 10, 10, 19, 12]);
 }
 
-#[test]
-fn a_point_on_a_split_is_not_named_by_it() {
-    // The edge from (0, 0, -1) to (1, 2, 1) pierces the wide solid's top at (1/2, 1, 0), and the
-    // first split, half way along x, runs through that point.
-    let turned_out = |t: [[i64; 3]; 4]| {
-        let fits = tetrahedron(t, 0, &mut Vec::new()).is_some();
-        if fits { t } else { [t[1], t[0], t[2], t[3]] }
-    };
-    let wide = turned_out([[-20, -15, 0], [21, -15, 0], [0, 15, 0], [0, 0, -30]]);
-    let spike = turned_out([[0, 0, -1], [1, 2, 1], [3, 0, 1], [0, 4, 1]]);
-    let test = WindingTest::unite();
-    let whole = tilted(&[wide, spike], &test, 1000).unwrap();
-    for leaf in [1, 2, 4, 8] {
-        let m = tilted(&[wide, spike], &test, leaf).unwrap();
-        assert_eq!(m.vertices, whole.vertices, "leaf {leaf}");
-    }
+/// The merge of `pieces` from what the merge of `before` kept, under `budget`, checked against
+/// the merge without it: the same body or error, the same memo, the same work charged (G139). How
+/// many pieces it took from the memo, with its result.
+fn merged_again(
+    before: &[Outward],
+    pieces: &[Outward],
+    budget: Option<u64>,
+) -> (Result<Merged, MergeError>, usize) {
+    merged_again_with((before, &[]), (pieces, &[]), budget)
 }
 
-/// `polygons` with every plane's coefficients multiplied by `k`: the same planes, written longer.
-fn scaled(polygons: &[Polygon], k: i128) -> Vec<Polygon> {
-    let times = |p: &Plane| Plane::new(p.n().map(|v| v * k), p.d() * k).unwrap();
-    polygons
-        .iter()
-        .map(|polygon| Polygon {
-            piece: Piece {
-                face: times(&polygon.piece.face),
-                bounds: polygon.piece.bounds.iter().map(times).collect(),
-            },
-            entry: polygon.entry,
-        })
-        .collect()
+/// [`merged_again`], each merge under its cuts.
+fn merged_again_with(
+    (before, before_cuts): (&[Outward], &[Piece]),
+    (pieces, cuts): (&[Outward], &[Piece]),
+    budget: Option<u64>,
+) -> (Result<Merged, MergeError>, usize) {
+    let cap = budget.map_or(Budget::UNLIMITED, |work| Budget::new(work, u64::MAX));
+    let mode = Merge::RemoveRedundant;
+    let rules = |cuts| Rules { cuts, open: false };
+    let memo = merge_with_reusing(before, mode, rules(before_cuts), None, &mut meter());
+    let memo = memo.map(|m| m.1);
+    let mut fresh_meter = WorkMeter::new(cap);
+    let fresh = merge_with_reusing(pieces, mode, rules(cuts), None, &mut fresh_meter);
+    let mut again_meter = WorkMeter::new(cap);
+    let reuse = memo.as_ref().ok();
+    let again = merge_with_reusing(pieces, mode, rules(cuts), reuse, &mut again_meter);
+    assert_eq!(again, fresh);
+    assert_eq!(again_meter.used(), fresh_meter.used());
+    let fresh_alone = merge_with(pieces, mode, rules(cuts), &mut WorkMeter::new(cap));
+    assert_eq!(fresh.as_ref().map(|m| &m.0).ok(), fresh_alone.as_ref().ok());
+    let shared = match (&again, reuse) {
+        (Ok((_, now)), Some(memo)) => now.shared_with(memo),
+        _ => 0,
+    };
+    (again.map(|m| m.0), shared)
+}
+
+#[test]
+fn a_merge_from_another_merges_memo_is_the_merge_without_it() {
+    // A wall with three openings, the last moved along it: most pieces stay as they were.
+    let wall = block([0, 0, 0], [40, 2, 10]);
+    let opening = |at: i64| block([at, -1, 2], [at + 4, 3, 8]);
+    let scene_with = |last: i64| scene(&[wall, opening(4), opening(14), opening(last)]);
+    let test = WindingTest::subtract(0);
+    let before = kept(&scene_with(26), &test, LEAF_POLYGONS);
+    let after = kept(&scene_with(30), &test, LEAF_POLYGONS);
+    let (m, shared) = merged_again(&before, &after, None);
+    closed(&m.unwrap(), &after);
+    assert!(shared > after.len() / 2, "took {shared} of {}", after.len());
+    // Everything again, nothing again, and a memo of nothing.
+    let (_, all) = merged_again(&after, &after, None);
+    assert_eq!(all, after.len());
+    let (_, none) = merged_again(&kept(&scene(&[A]), &test, 1), &after, None);
+    assert_eq!(none, 0);
+    let (m, _) = merged_again(&[], &after, None);
+    assert!(m.is_ok());
+    assert!(Memo::default().is_empty());
+    // A doubled piece takes nothing, and is refused as without.
+    let mut doubled = after.clone();
+    doubled.push(after[0].clone());
+    let (m, shared) = merged_again(&after, &doubled, None);
+    assert!(m.is_err());
+    assert_eq!(shared, 0);
+    let (m, _) = merged_again(&after, &after, None);
+    let memo = merge_with_reusing(
+        &after,
+        Merge::RemoveRedundant,
+        Rules::default(),
+        None,
+        &mut meter(),
+    );
+    let (again, memo) = memo.unwrap();
+    assert_eq!(again, m.unwrap());
+    assert_eq!(memo.len(), after.len());
+    assert!(!memo.is_empty());
+}
+
+#[test]
+fn a_piece_held_twice_starts_the_sorts_from_nothing() {
+    // The same cut twice is held twice, and the memo's orders hold one place for both: the merge
+    // takes the parts but not the orders, and is the merge without the memo. A memo that holds a
+    // piece twice gives its parts once.
+    let (found, solid) = with_wall([-1, -1], [5, 5]);
+    let (kept, wall) = parts(&found, solid);
+    let cuts: Vec<Piece> = wall.iter().map(|c| c.piece.clone()).collect();
+    let twice: Vec<Piece> = cuts.iter().chain(&cuts).cloned().collect();
+    let (m, shared) = merged_again_with((&kept, &cuts), (&kept, &twice), None);
+    assert!(m.is_ok());
+    assert_eq!(shared, kept.len() + twice.len());
+    let (m, shared) = merged_again_with((&kept, &twice), (&kept, &cuts), None);
+    assert!(m.is_ok());
+    assert_eq!(shared, kept.len() + cuts.len());
+}
+
+#[test]
+fn a_memo_starts_the_sorts_but_the_budget_stops_them_where_it_would() {
+    let tool = block([1, 1, 1], [3, 3, 3]);
+    let moved = block([1, 1, 2], [3, 3, 4]);
+    let before = kept(&scene(&[A, tool]), &WindingTest::subtract(0), LEAF_POLYGONS);
+    let after = kept(
+        &scene(&[A, moved]),
+        &WindingTest::subtract(0),
+        LEAF_POLYGONS,
+    );
+    let mut stops = 0;
+    for budget in (0..4000).step_by(7) {
+        let (m, _) = merged_again(&before, &after, Some(budget));
+        stops += usize::from(m.is_err());
+    }
+    assert!(stops > 0);
 }
 
 /// The name the merge gives a point off the grid: the first three planes through it, among the
@@ -987,6 +1235,43 @@ proptest! {
         let whole = merged(&blocks, &test, 1000);
         prop_assert_eq!(&once.edges, &whole.edges);
         prop_assert_eq!(&once.shells, &whole.shells);
+    }
+
+    #[test]
+    fn a_merge_from_a_memo_is_the_merge_without_it(
+        blocks in prop::collection::vec(any_block(), 1..4),
+        moved in any_block(),
+        which in 0usize..4,
+        leaf in 1usize..10,
+        budget in prop::option::of(0u64..3000),
+    ) {
+        let test = WindingTest::unite();
+        let before = kept(&scene(&blocks), &test, leaf);
+        let mut after_blocks = blocks.clone();
+        let at = which % after_blocks.len();
+        after_blocks[at] = moved;
+        let after = kept(&scene(&after_blocks), &test, leaf);
+        let _ = merged_again(&before, &after, budget);
+    }
+
+    #[test]
+    fn a_tilted_merge_from_a_memo_is_the_merge_without_it(
+        solids in prop::collection::vec(any_corners(), 2..4),
+        moved in any_corners(),
+        leaf in 1usize..10,
+    ) {
+        let solid_pieces = |solids: &[[[i64; 3]; 4]]| {
+            let mut polygons = Vec::new();
+            for (entry, corners) in solids.iter().enumerate() {
+                tetrahedron(*corners, entry as u32, &mut polygons)?;
+            }
+            Some(kept(&polygons, &WindingTest::unite(), leaf))
+        };
+        let mut after = solids.clone();
+        after[0] = moved;
+        let (before, after) = (solid_pieces(&solids), solid_pieces(&after));
+        prop_assume!(before.is_some() && after.is_some());
+        let _ = merged_again(&before.unwrap(), &after.unwrap(), None);
     }
 
     #[test]

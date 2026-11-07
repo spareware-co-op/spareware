@@ -15,7 +15,7 @@
 use geom_num::NumError;
 use geom_num::plane::{Plane, Tpi};
 use geom_poly::convex::Piece;
-use geom_poly::subdivide::{LEAF_POLYGONS, around, arrange};
+use geom_poly::subdivide::{LEAF_POLYGONS, Solved, around, arrange, arrange_reusing};
 use geom_poly::trace::{Cell, Classified, Polygon, TraceError};
 use geom_poly::winding::{Kept, Winding, WindingTest, kept};
 #[cfg(not(target_family = "wasm"))]
@@ -568,6 +568,135 @@ proptest! {
             let want = counted(&test, &blocks, -7..12);
             prop_assert_eq!(volume(&test, &classified), want);
             prop_assert_eq!(volume(&test, &dropped), want);
+        }
+    }
+}
+
+/// The arrangement of `blocks`, taking what it can from `reuse`, with what it solved and the work
+/// it charged.
+fn reusing(
+    blocks: &[Block],
+    leaf: usize,
+    reuse: Option<&Solved>,
+) -> (Vec<Classified>, Solved, u128) {
+    reusing_under(blocks, leaf, &[], reuse)
+}
+
+/// [`reusing`], under `tests`.
+fn reusing_under(
+    blocks: &[Block],
+    leaf: usize,
+    tests: &[WindingTest],
+    reuse: Option<&Solved>,
+) -> (Vec<Classified>, Solved, u128) {
+    let list = polygons(blocks);
+    let cell = around(&list).unwrap();
+    let mut m = meter();
+    let (classified, solved) = arrange_reusing(
+        &Exec::serial(),
+        cell,
+        Winding::new(),
+        &list,
+        leaf,
+        tests,
+        reuse,
+        &mut m,
+    )
+    .unwrap();
+    (classified, solved, m.used().work)
+}
+
+fn moved(block: Block, by: [i64; 3]) -> Block {
+    Block {
+        low: [0, 1, 2].map(|k| block.low[k] + by[k]),
+        high: [0, 1, 2].map(|k| block.high[k] + by[k]),
+    }
+}
+
+#[test]
+fn an_edit_far_from_a_box_leaves_its_answer_to_be_reused() {
+    // Two blocks far apart, and the far one moved: the boxes around the near one are the same
+    // boxes holding the same polygons, so their answers come from the cache, and the whole is what
+    // a full arrangement gives, at the same work.
+    let far = Block {
+        low: [100, 0, 0],
+        high: [104, 4, 4],
+    };
+    let (_, before, _) = reusing(&[A, far], 1, None);
+    let now = [A, moved(far, [0, 1, 0])];
+    let (full, solved, work) = reusing(&now, 1, None);
+    let (local, again, local_work) = reusing(&now, 1, Some(&before));
+    assert_eq!(local, full);
+    assert_eq!(local_work, work);
+    assert_eq!(again, solved);
+    let kept = before.shared_with(&solved);
+    assert!(
+        kept > 0 && kept < solved.len(),
+        "{kept} of {}",
+        solved.len()
+    );
+    assert_eq!(run(&now, 1, &[]), full);
+    // The boxes about the near block are taken whole from the last tree, not divided again.
+    let (held, fresh) = (
+        again.divisions_shared_with(&before),
+        solved.divisions_shared_with(&before),
+    );
+    assert!(held > 0, "no box taken");
+    assert_eq!(fresh, 0);
+    assert!(before.divisions_shared_with(&before) > held);
+}
+
+#[test]
+fn a_tree_divided_for_other_tests_or_leaves_is_divided_again() {
+    // A tree divided with no tests keeps every box; under a test that drops boxes, or with another
+    // leaf size, the boxes divide otherwise, so the tree is not taken, and the answer is the full one.
+    let blocks = [A, B];
+    let test = WindingTest::intersect(2);
+    let (_, plain, _) = reusing(&blocks, 1, None);
+    let (full, solved, work) = reusing_under(&blocks, 1, std::slice::from_ref(&test), None);
+    let (local, again, local_work) =
+        reusing_under(&blocks, 1, std::slice::from_ref(&test), Some(&plain));
+    assert_eq!((local, again.clone(), local_work), (full, solved, work));
+    assert_eq!(again.divisions_shared_with(&plain), 0);
+    let (full, solved, work) = reusing(&blocks, 3, None);
+    let (local, again, local_work) = reusing(&blocks, 3, Some(&plain));
+    assert_eq!((local, again.clone(), local_work), (full, solved, work));
+    assert_eq!(again.divisions_shared_with(&plain), 0);
+    // The same tests and leaf take the whole tree.
+    let (_, all, _) = reusing(&blocks, 1, Some(&plain));
+    assert!(all.divisions_shared_with(&plain) > 0);
+}
+
+#[test]
+fn a_cache_from_other_inputs_changes_nothing() {
+    let (_, other, _) = reusing(&[B], 1, None);
+    let (full, solved, work) = reusing(&[A], 1, None);
+    let (local, again, local_work) = reusing(&[A], 1, Some(&other));
+    assert_eq!((local, again, local_work), (full, solved.clone(), work));
+    assert_eq!(other.shared_with(&solved), 0);
+    assert!(!solved.is_empty());
+}
+
+proptest! {
+    #![proptest_config(ProptestConfig::with_cases(64))]
+
+    #[test]
+    fn a_reused_arrangement_is_the_full_one_bit_for_bit_at_the_same_work(
+        blocks in prop::collection::vec(any_block(), 1..5),
+        edits in prop::collection::vec((0usize..5, [-2i64..3, -2i64..3, -2i64..3]), 1..4),
+        leaf in 1usize..12,
+    ) {
+        let mut now = blocks;
+        let (_, mut cache, _) = reusing(&now, leaf, None);
+        for (which, by) in edits {
+            let at = which % now.len();
+            now[at] = moved(now[at], by);
+            let (full, solved, work) = reusing(&now, leaf, None);
+            let (local, next, local_work) = reusing(&now, leaf, Some(&cache));
+            prop_assert_eq!(&local, &full);
+            prop_assert_eq!(local_work, work);
+            prop_assert_eq!(&next, &solved);
+            cache = next;
         }
     }
 }
