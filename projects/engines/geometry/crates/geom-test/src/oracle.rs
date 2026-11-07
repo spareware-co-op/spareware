@@ -42,6 +42,7 @@
 pub mod catalogue;
 pub mod compare;
 pub mod exact;
+pub mod families;
 pub mod geomdl;
 pub mod sketches;
 pub mod smlib;
