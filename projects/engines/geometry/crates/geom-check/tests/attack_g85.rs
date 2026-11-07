@@ -21,6 +21,7 @@ use common::{
 };
 use geom_check::{Entity, Fault, FaultKind, Group, Level, check};
 use geom_curve::{Axes, Basis, CurveKind, Ellipse, Frame, Line, Trimmed};
+use geom_math::Box3;
 use geom_num::{Exactness, GridStep, P3, Steps};
 use geom_run::BudgetKind;
 use geom_surface::Cone;
@@ -38,7 +39,12 @@ fn certified(bound: u64) -> Exactness {
 /// lines stay where the corner was.
 fn moved(by: [i64; 3]) -> Rows {
     let mut r = cube();
-    r.points[0] = P3::new(by[0], by[1], by[2]).unwrap();
+    let p = P3::new(by[0], by[1], by[2]).unwrap();
+    r.points[0] = p;
+    // The stored boxes follow: what these tests attack is the vertex against its carriers.
+    for face in &mut r.faces {
+        face.bound = face.bound.union(&Box3::new(p, p).unwrap());
+    }
     r
 }
 
@@ -484,15 +490,25 @@ fn groups_2_and_3_charge_one_unit_per_row_and_pair_visited() {
         check(&body, certified(1), level, &mut m).unwrap();
         m.used().get(BudgetKind::Work)
     };
-    // Group 2, one unit per face, fin and edge; group 3, one per face, per pair of a face's edges,
-    // per pair of faces and per edge tested against a face. The cube: 6 faces, 24 fins and 12
-    // edges; 6 faces, 6 pairs of edges in each, 15 pairs of faces, and each of the 12 pairs that
-    // meet at an edge tests its 8 edges. The cylinder with a seam: 3 faces, 6 fins and 3 edges; 3
-    // faces, the 3 pairs of the side's edges, 3 pairs of faces (parallel caps, and caps that share
-    // a circle with the side, tested without their edges).
+    // Group 2, one unit per face, fin and edge, then one per face and per fin of a flat face for
+    // its box; group 3, one per face, per pair of a face's edges, per pair of faces and per edge
+    // tested against a face, then one per face and fin for the loops, and one per shell, face,
+    // loop and fin for the volume, one per shell of its region. The cube: 6 faces, 24 fins and 12
+    // edges, 6 and 24; 6 faces, 6 pairs of edges in each, 15 pairs of faces, and each of the 12
+    // pairs that meet at an edge tests its 8 edges, then 6 and 24, and 1, 6, 6, 24 and 1. The
+    // cylinder with a seam: 3 faces, 6 fins and 3 edges, 3 and the caps' 2 fins; 3 faces, the 3
+    // pairs of the side's edges, 3 pairs of faces (parallel caps, and caps that share a circle with
+    // the side, tested without their edges), then 3 and the caps' 2, and the shell, its first
+    // face, cap and circle, and 1.
     for (rows, rows_visited) in [
-        (cube(), (6 + 24 + 12) + (6 + 6 * 6 + 15 + 12 * 8)),
-        (seamed_cylinder(), (3 + 6 + 3) + (3 + 3 + 3)),
+        (
+            cube(),
+            (6 + 24 + 12) + (6 + 24) + (6 + 6 * 6 + 15 + 12 * 8) + (6 + 24) + (1 + 6 + 6 + 24 + 1),
+        ),
+        (
+            seamed_cylinder(),
+            (3 + 6 + 3) + (3 + 2) + (3 + 3 + 3) + (3 + 2) + (1 + 3 + 1),
+        ),
     ] {
         assert_eq!(
             work(&rows, Level::Full) - work(&rows, Level::Cheap),
