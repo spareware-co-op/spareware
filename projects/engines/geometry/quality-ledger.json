@@ -5331,46 +5331,6 @@
       "reason": "Since G85 every group of 8.3 is built: the matches! lists all four Group variants, so built returns true for each, as the mutant does. It stays a function so that a group added later, or a level that drops one, can say it is not built."
     },
     {
-      "file": "projects/engines/geometry/crates/geom-check/src/combinatorial.rs",
-      "mutant": "replace != with == in check",
-      "line_text": "if sink.found() != before {",
-      "occurrences": 1,
-      "kind": "hangs",
-      "reason": "Group 1's first stage is what proves every list and ring finite before anything walks them again (combinatorial.rs header, 23.11). The mutant lets a broken body through to the second stage (it runs exactly when the first stage found faults) through, or never ends a walk, so a test body with a broken ring (faults.rs, and the gating tests in attack_g85.rs, the first test binary cargo-mutants runs) walks it forever: the run times out rather than failing an assertion. Caught as a hang."
-    },
-    {
-      "file": "projects/engines/geometry/crates/geom-check/src/combinatorial.rs",
-      "mutant": "replace != with == in ring",
-      "line_text": "(n != first).then_some(n)",
-      "occurrences": 1,
-      "kind": "hangs",
-      "reason": "Group 1's first stage is what proves every list and ring finite before anything walks them again (combinatorial.rs header, 23.11). The mutant lets a broken ring walk: a ring of one fin (each edge of a sheet) yields its fin forever through, or never ends a walk, so a test body with a broken ring (faults.rs, and the gating tests in attack_g85.rs, the first test binary cargo-mutants runs) walks it forever: the run times out rather than failing an assertion. Caught as a hang."
-    },
-    {
-      "file": "projects/engines/geometry/crates/geom-check/src/combinatorial.rs",
-      "mutant": "replace fin_rings -> Result<(), Stopped> with Ok(())",
-      "line_text": "let (owner, _) = take(scratch, a.rows(Arena::Fin));",
-      "occurrences": 1,
-      "kind": "hangs",
-      "reason": "Group 1's first stage is what proves every list and ring finite before anything walks them again (combinatorial.rs header, 23.11). The mutant lets a broken loop ring (its check is skipped) through, or never ends a walk, so a test body with a broken ring (faults.rs, and the gating tests in attack_g85.rs, the first test binary cargo-mutants runs) walks it forever: the run times out rather than failing an assertion. Caught as a hang."
-    },
-    {
-      "file": "projects/engines/geometry/crates/geom-check/src/combinatorial.rs",
-      "mutant": "replace radial_rings -> Result<(), Stopped> with Ok(())",
-      "line_text": "let (on, _) = take(scratch, a.rows(Arena::Fin));",
-      "occurrences": 1,
-      "kind": "hangs",
-      "reason": "Group 1's first stage is what proves every list and ring finite before anything walks them again (combinatorial.rs header, 23.11). The mutant lets a broken radial ring (its check is skipped) through, or never ends a walk, so a test body with a broken ring (faults.rs, and the gating tests in attack_g85.rs, the first test binary cargo-mutants runs) walks it forever: the run times out rather than failing an assertion. Caught as a hang."
-    },
-    {
-      "file": "projects/engines/geometry/crates/geom-check/src/combinatorial.rs",
-      "mutant": "replace == with != in Sets<'s>::find",
-      "line_text": "if up == row {",
-      "occurrences": 1,
-      "kind": "hangs",
-      "reason": "The mutant's find returns only from a row that is not a root and loops at a root, where up == row makes grand = row forever. shells() calls find on every valid body (attack_g85.rs's first test builds cubes), so the first test binary never ends: caught as a hang."
-    },
-    {
       "file": "projects/engines/geometry/crates/geom-make/src/pattern.rs",
       "mutant": "replace > with >= in less_exact",
       "line_text": "if key(b) > key(a) { b } else { a }",
