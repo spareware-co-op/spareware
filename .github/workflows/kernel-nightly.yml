@@ -24,7 +24,9 @@ name: Kernel nightly
 # kernel's bytes back, and the test fails on any byte that differs. Piece G97 adds the slow fixtures
 # (28.16): geom-test's `fixture run --tier slow`. Piece G114 adds the fetched corpora (28.12):
 # geom-test's `corpus fetch` downloads each at its pinned source and checks it against the register's
-# digest, so a source that moves or disappears shows up the night it happens. Piece G160 adds the
+# digest, so a source that moves or disappears shows up the night it happens; piece G262a adds, in
+# the same job, the blend plan judged on SMLib's own fillet fixtures (geom-blend's
+# tests/smlib_fillets.rs, on the fetched corpus smlib-fillet-fixtures). Piece G160 adds the
 # intersection acceptance harness (12.17): the ssi-corpus and our failure catalogue, scored by the
 # corpus's own scorer in a container pinned by digest, and held to the gate. There is no
 # surface/surface method yet, so the stand-ins in geom-test's ssi module answer: the truth must pass,
@@ -82,6 +84,10 @@ jobs:
           toolchain: ${{ env.RUST_TOOLCHAIN }}
       - name: Every fetched corpus, unmodified
         run: cargo run --locked --release -p geom-test --bin corpus -- fetch --cache "$RUNNER_TEMP/corpora"
+      - name: The blend plan on SMLib's fillet fixtures (G262a)
+        env:
+          SPAREKIT_CORPORA: ${{ runner.temp }}/corpora
+        run: cargo test --locked --release -p geom-blend --test smlib_fillets -- --ignored --nocapture
 
   ssi-acceptance:
     name: Intersection acceptance harness, on the ssi-corpus
