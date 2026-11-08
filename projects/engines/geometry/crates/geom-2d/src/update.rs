@@ -559,10 +559,17 @@ impl Live {
             return Err(e);
         }
         let len = pieces.len();
+        // Each chunk is collected into a vector of its own size. (Splitting the front off a long
+        // vector keeps the long vector's buffer in the chunk, and copies the rest each time: a
+        // million pieces was tens of gigabytes.)
         let mut chunks = Vec::new();
-        while !pieces.is_empty() {
-            let rest = pieces.split_off(CHUNK.min(pieces.len()));
-            chunks.push(Arc::new(Chunk::of(core::mem::replace(&mut pieces, rest))));
+        let mut rest = pieces.into_iter();
+        loop {
+            let run: Vec<Piece> = rest.by_ref().take(CHUNK).collect();
+            if run.is_empty() {
+                break;
+            }
+            chunks.push(Arc::new(Chunk::of(run)));
         }
         Ok(Live { chunks, len })
     }
@@ -934,4 +941,40 @@ fn merge(a: &[u32], b: &[u32]) -> Arc<[u32]> {
         }
     }
     Arc::from(all)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// A lattice of unit segments, noded by construction.
+    fn lattice(side: i64) -> Vec<(P2, P2, u32)> {
+        let mut out = Vec::new();
+        let mut label = 0_u32;
+        for y in 0..=side {
+            for x in 0..=side {
+                for (dx, dy) in [(1, 0), (0, 1)] {
+                    if x + dx <= side
+                        && y + dy <= side
+                        && let (Ok(a), Ok(b)) = (P2::new(x, y), P2::new(x + dx, y + dy))
+                    {
+                        out.push((a, b, label));
+                        label += 1;
+                    }
+                }
+            }
+        }
+        out
+    }
+
+    /// A chunk holds a buffer about its own size, never the buffer of the list it was cut from.
+    #[test]
+    fn from_noded_chunks_hold_buffers_of_their_own_size() {
+        let live = Live::from_noded(&lattice(60)).unwrap();
+        assert_eq!(live.chunk_count(), live.len().div_ceil(CHUNK));
+        for chunk in &live.chunks {
+            assert!(chunk.pieces.len() <= CHUNK);
+            assert!(chunk.pieces.capacity() <= CHUNK.saturating_mul(2));
+        }
+    }
 }
