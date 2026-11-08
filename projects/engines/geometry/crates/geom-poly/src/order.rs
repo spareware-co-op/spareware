@@ -569,6 +569,7 @@ mod tests {
 
     use geom_num::Sign;
     use geom_num::plane::{Plane, Tpi, determinant_sign, normals_sign};
+    use geom_test::seed::Seed;
     use num_bigint::BigInt;
     use proptest::prelude::*;
 
@@ -579,7 +580,7 @@ mod tests {
     fn planes(normal: i128, offset: i128) -> impl Strategy<Value = Vec<Plane>> {
         let one = (prop::array::uniform3(-normal..=normal), -offset..=offset)
             .prop_filter_map("a zero normal", |(n, d)| Plane::new(n, d).ok());
-        prop::collection::vec(one, 4)
+        prop::array::uniform4(one).prop_map(|rows| rows.to_vec())
     }
 
     fn agrees(rows: &[Plane]) {
@@ -592,16 +593,37 @@ mod tests {
         );
     }
 
-    proptest! {
-        #[test]
-        fn a_reading_is_the_determinant_when_ties_are_common(rows in planes(2, 3)) {
-            agrees(&rows);
-        }
+    /// Runs `check` on 256 sets of rows of `planes`, from `default`.
+    fn on_planes(
+        label: &str,
+        default: u64,
+        rows: &impl Strategy<Value = Vec<Plane>>,
+        check: impl Fn(&[Plane]),
+    ) {
+        seeded(label, default, 256, rows, |rows| {
+            check(&rows);
+            Ok(())
+        });
+    }
 
-        #[test]
-        fn a_reading_is_the_determinant_for_a_building(rows in planes(1 << 24, 1 << 44)) {
-            agrees(&rows);
-        }
+    #[test]
+    fn a_reading_is_the_determinant_when_ties_are_common() {
+        on_planes(
+            "geom-poly order: readings with ties",
+            0x6144_0201,
+            &planes(2, 3),
+            agrees,
+        );
+    }
+
+    #[test]
+    fn a_reading_is_the_determinant_for_a_building() {
+        on_planes(
+            "geom-poly order: readings of a building",
+            0x6144_0202,
+            &planes(1 << 24, 1 << 44),
+            agrees,
+        );
     }
 
     #[test]
@@ -637,26 +659,44 @@ mod tests {
         }
     }
 
-    proptest! {
-        #[test]
-        fn a_rounding_is_the_grid_s_with_ties(rows in planes(2, 7)) {
-            rounds_as_the_grid_does(&rows);
-        }
+    #[test]
+    fn a_rounding_is_the_grid_s_with_ties() {
+        on_planes(
+            "geom-poly order: roundings with ties",
+            0x6144_0203,
+            &planes(2, 7),
+            rounds_as_the_grid_does,
+        );
+    }
 
-        #[test]
-        fn a_rounding_is_the_grid_s_for_a_building(rows in planes(1 << 24, 1 << 44)) {
-            rounds_as_the_grid_does(&rows);
-        }
+    #[test]
+    fn a_rounding_is_the_grid_s_for_a_building() {
+        on_planes(
+            "geom-poly order: roundings of a building",
+            0x6144_0204,
+            &planes(1 << 24, 1 << 44),
+            rounds_as_the_grid_does,
+        );
+    }
 
-        #[test]
-        fn floors_are_exact_floors(rows in planes(1 << 24, 1 << 44)) {
-            floors_as_divided(&rows);
-        }
+    #[test]
+    fn floors_are_exact_floors() {
+        on_planes(
+            "geom-poly order: floors of a building",
+            0x6144_0205,
+            &planes(1 << 24, 1 << 44),
+            floors_as_divided,
+        );
+    }
 
-        #[test]
-        fn floors_are_exact_floors_with_ties(rows in planes(2, 7)) {
-            floors_as_divided(&rows);
-        }
+    #[test]
+    fn floors_are_exact_floors_with_ties() {
+        on_planes(
+            "geom-poly order: floors with ties",
+            0x6144_0206,
+            &planes(2, 7),
+            floors_as_divided,
+        );
     }
 
     /// [`along`] and [`Line::new`] as the three-plane point and the wide cross product give them.
@@ -686,16 +726,24 @@ mod tests {
         assert_eq!(got, want);
     }
 
-    proptest! {
-        #[test]
-        fn along_is_the_point_s_side_with_ties(rows in planes(2, 3)) {
-            along_as_points(&rows);
-        }
+    #[test]
+    fn along_is_the_point_s_side_with_ties() {
+        on_planes(
+            "geom-poly order: along with ties",
+            0x6144_0207,
+            &planes(2, 3),
+            along_as_points,
+        );
+    }
 
-        #[test]
-        fn along_is_the_point_s_side_for_a_building(rows in planes(1 << 24, 1 << 44)) {
-            along_as_points(&rows);
-        }
+    #[test]
+    fn along_is_the_point_s_side_for_a_building() {
+        on_planes(
+            "geom-poly order: along a building",
+            0x6144_0208,
+            &planes(1 << 24, 1 << 44),
+            along_as_points,
+        );
     }
 
     /// [`Meeting::floors`] against a floor of big integers, for words and for `i128`.
@@ -762,41 +810,93 @@ mod tests {
         );
     }
 
-    fn small_plane() -> impl Strategy<Value = Plane> {
+    fn small_plane() -> impl Strategy<Value = Plane> + Clone {
         ([-9i128..9, -9i128..9, -9i128..9], -999i128..999)
             .prop_filter_map("a normal", |(n, d)| Plane::new(n, d).ok())
     }
 
-    proptest! {
-        /// Every point a span is made of lies a unit inside it, exactly.
-        #[test]
-        fn a_span_holds_its_points_a_unit_inside(rows in prop::collection::vec((small_plane(), small_plane(), small_plane()), 1..5)) {
-            let points: Vec<Option<Meeting>> = rows.iter().map(|(p, q, r)| Meeting::new(p, q, r)).collect();
-            let Some(span) = Span::of(points.iter().copied()) else {
-                return Ok(());
-            };
-            for point in points.iter().flatten() {
-                let (x, w) = point.coordinates();
-                let (x, w) = if w < 0 { (x.map(|v| -v), -w) } else { (x, w) };
-                for ((v, low), high) in x.iter().zip(span.low).zip(span.high) {
-                    let at = BigInt::from(*v);
-                    let (low, high) = (BigInt::from(low + 1), BigInt::from(high - 1));
-                    prop_assert!(at >= &low * w && at <= &high * w);
+    /// Every point a span is made of lies a unit inside it, exactly.
+    #[test]
+    fn a_span_holds_its_points_a_unit_inside() {
+        let cases = some::<_, 4>((small_plane(), small_plane(), small_plane()), 1);
+        seeded(
+            "geom-poly order: every span",
+            0x6144_0209,
+            256,
+            &cases,
+            |rows| {
+                let points: Vec<Option<Meeting>> =
+                    rows.iter().map(|(p, q, r)| Meeting::new(p, q, r)).collect();
+                let Some(span) = Span::of(points.iter().copied()) else {
+                    return Ok(());
+                };
+                for point in points.iter().flatten() {
+                    let (x, w) = point.coordinates();
+                    let (x, w) = if w < 0 { (x.map(|v| -v), -w) } else { (x, w) };
+                    for ((v, low), high) in x.iter().zip(span.low).zip(span.high) {
+                        let at = BigInt::from(*v);
+                        let (low, high) = (BigInt::from(low + 1), BigInt::from(high - 1));
+                        prop_assert!(at >= &low * w && at <= &high * w);
+                    }
                 }
-            }
-        }
+                Ok(())
+            },
+        );
+    }
 
-        /// Spans miss exactly when they are apart on an axis, either way round.
-        #[test]
-        fn spans_miss_when_apart(a in prop::array::uniform6(-9i64..9), b in prop::array::uniform6(-9i64..9)) {
-            let span = |v: [i64; 6]| Span {
-                low: [v[0].min(v[1]), v[2].min(v[3]), v[4].min(v[5])],
-                high: [v[0].max(v[1]), v[2].max(v[3]), v[4].max(v[5])],
-            };
-            let (s, t) = (span(a), span(b));
-            let apart = (0..3).any(|i| s.high[i] < t.low[i] || t.high[i] < s.low[i]);
-            prop_assert_eq!(s.misses(&t), apart);
-            prop_assert_eq!(t.misses(&s), apart);
-        }
+    /// Spans miss exactly when they are apart on an axis, either way round.
+    #[test]
+    fn spans_miss_when_apart() {
+        let cases = (
+            prop::array::uniform6(-9i64..9),
+            prop::array::uniform6(-9i64..9),
+        );
+        seeded(
+            "geom-poly order: spans apart",
+            0x6144_0210,
+            256,
+            &cases,
+            |(a, b)| {
+                let span = |v: [i64; 6]| Span {
+                    low: [v[0].min(v[1]), v[2].min(v[3]), v[4].min(v[5])],
+                    high: [v[0].max(v[1]), v[2].max(v[3]), v[4].max(v[5])],
+                };
+                let (s, t) = (span(a), span(b));
+                let apart = (0..3).any(|i| s.high[i] < t.low[i] || t.high[i] < s.low[i]);
+                prop_assert_eq!(s.misses(&t), apart);
+                prop_assert_eq!(t.misses(&s), apart);
+                Ok(())
+            },
+        );
+    }
+
+    /// Runs `test` on `cases` cases of `strategy`, drawn from `SPAREKIT_SEED` if it is set and
+    /// from `default` otherwise; the seed is printed first, and a failure names the seed that
+    /// replays it.
+    fn seeded<S>(
+        label: &str,
+        default: u64,
+        cases: u32,
+        strategy: &S,
+        test: impl Fn(S::Value) -> Result<(), TestCaseError>,
+    ) where
+        S: Strategy,
+        S::Value: core::fmt::Debug,
+    {
+        geom_test::prop::run(label, Seed(default), cases, strategy, test).unwrap();
+    }
+
+    /// `least` to `N` values of `item`. The count is an `i64` and the values a fixed array, so
+    /// every target draws the same cases: proptest samples a `usize` range, a collection's size
+    /// among them, as a `u64` on 64-bit targets and as a `u32` on wasm32 (`geom_test::prop`'s
+    /// header).
+    fn some<S, const N: usize>(item: S, least: i64) -> impl Strategy<Value = Vec<S::Value>> + Clone
+    where
+        S: Strategy + Clone,
+        S::Value: Clone,
+    {
+        let most = i64::try_from(N).unwrap();
+        (least..=most, proptest::array::uniform::<S, N>(item))
+            .prop_map(|(count, all)| all[..usize::try_from(count).unwrap()].to_vec())
     }
 }

@@ -379,6 +379,7 @@ mod tests {
     use geom_num::P3;
     use geom_num::plane::Plane;
     use geom_run::{Budget, WorkMeter};
+    use geom_test::seed::Seed;
     use proptest::prelude::*;
 
     use super::{convex_pieces, opposite, partition};
@@ -413,31 +414,36 @@ mod tests {
         assert_eq!(quick, cut);
     }
 
-    proptest! {
-        #![proptest_config(ProptestConfig::with_cases(256))]
-
-        #[test]
-        fn a_triangle_or_quadrilateral_is_what_the_partition_gives(
-            corners in prop::collection::vec((-30i64..30, -30i64..30), 3..=5),
-        ) {
-            let cross = |o: (i64, i64), a: (i64, i64), b: (i64, i64)| {
-                (a.0 - o.0) * (b.1 - o.1) - (a.1 - o.1) * (b.0 - o.0)
-            };
-            let k = corners.len();
-            let distinct = (0..k).all(|i| corners[i] != corners[(i + 1) % k]);
-            prop_assume!(distinct);
-            let turns: Vec<i64> = (0..k)
-                .map(|i| cross(corners[i], corners[(i + 1) % k], corners[(i + 2) % k]))
-                .collect();
-            prop_assume!(turns.iter().all(|t| *t != 0));
-            // Either way round, convex or not, stars and bow ties among them.
-            for list in [corners.clone(), corners.iter().rev().copied().collect()] {
-                let rings = [ring(&list)];
-                agrees(&rings);
-                let outward: Vec<Plane> = rings[0].iter().map(|s| opposite(s).unwrap()).collect();
-                agrees(&[outward]);
-            }
-        }
+    #[test]
+    fn a_triangle_or_quadrilateral_is_what_the_partition_gives() {
+        let cases = some::<_, 5>((-30i64..30, -30i64..30), 3);
+        seeded(
+            "geom-poly convex: every small ring",
+            0x6144_0101,
+            256,
+            &cases,
+            |corners| {
+                let cross = |o: (i64, i64), a: (i64, i64), b: (i64, i64)| {
+                    (a.0 - o.0) * (b.1 - o.1) - (a.1 - o.1) * (b.0 - o.0)
+                };
+                let k = corners.len();
+                let distinct = (0..k).all(|i| corners[i] != corners[(i + 1) % k]);
+                prop_assume!(distinct);
+                let turns: Vec<i64> = (0..k)
+                    .map(|i| cross(corners[i], corners[(i + 1) % k], corners[(i + 2) % k]))
+                    .collect();
+                prop_assume!(turns.iter().all(|t| *t != 0));
+                // Either way round, convex or not, stars and bow ties among them.
+                for list in [corners.clone(), corners.iter().rev().copied().collect()] {
+                    let rings = [ring(&list)];
+                    agrees(&rings);
+                    let outward: Vec<Plane> =
+                        rings[0].iter().map(|s| opposite(s).unwrap()).collect();
+                    agrees(&[outward]);
+                }
+                Ok(())
+            },
+        );
     }
 
     #[test]
@@ -451,5 +457,35 @@ mod tests {
         assert!(convex_pieces(&floor(), &rings, &mut tight).is_ok());
         let mut tight = WorkMeter::new(Budget::new(4, u64::MAX));
         assert!(partition(&floor(), &rings, &mut tight).is_err());
+    }
+
+    /// Runs `test` on `cases` cases of `strategy`, drawn from `SPAREKIT_SEED` if it is set and
+    /// from `default` otherwise; the seed is printed first, and a failure names the seed that
+    /// replays it.
+    fn seeded<S>(
+        label: &str,
+        default: u64,
+        cases: u32,
+        strategy: &S,
+        test: impl Fn(S::Value) -> Result<(), TestCaseError>,
+    ) where
+        S: Strategy,
+        S::Value: core::fmt::Debug,
+    {
+        geom_test::prop::run(label, Seed(default), cases, strategy, test).unwrap();
+    }
+
+    /// `least` to `N` values of `item`. The count is an `i64` and the values a fixed array, so
+    /// every target draws the same cases: proptest samples a `usize` range, a collection's size
+    /// among them, as a `u64` on 64-bit targets and as a `u32` on wasm32 (`geom_test::prop`'s
+    /// header).
+    fn some<S, const N: usize>(item: S, least: i64) -> impl Strategy<Value = Vec<S::Value>> + Clone
+    where
+        S: Strategy + Clone,
+        S::Value: Clone,
+    {
+        let most = i64::try_from(N).unwrap();
+        (least..=most, proptest::array::uniform::<S, N>(item))
+            .prop_map(|(count, all)| all[..usize::try_from(count).unwrap()].to_vec())
     }
 }
