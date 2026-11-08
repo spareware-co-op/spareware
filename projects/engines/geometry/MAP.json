@@ -39,6 +39,65 @@
       "depends": [],
       "errors": [
         {
+          "doc": "Why an entity could not be made or changed.",
+          "file": "projects/engines/geometry/crates/geom-2d/src/entity.rs",
+          "kinds": [
+            {
+              "doc": "A fraction with a zero denominator, or one of a size past [`FRAC_LIMIT`].",
+              "name": "Fraction",
+              "shape": "unit"
+            },
+            {
+              "doc": "A polyline with too few vertices, or with a bulge or width count that is not its segment count.",
+              "name": "Polyline",
+              "shape": "unit"
+            },
+            {
+              "doc": "A spline whose degree, control points, weights or knots do not fit each other.",
+              "name": "Spline",
+              "shape": "unit"
+            },
+            {
+              "doc": "A region whose body is not a Sheet.",
+              "name": "NotASheet",
+              "shape": "unit"
+            },
+            {
+              "doc": "A text height that is not positive, or a direction that is the zero vector.",
+              "name": "Text",
+              "shape": "unit"
+            },
+            {
+              "doc": "A hatch with no boundary.",
+              "name": "Hatch",
+              "shape": "unit"
+            },
+            {
+              "doc": "A dimension with no reference, or a leader with fewer than two vertices.",
+              "name": "Annotation",
+              "shape": "unit"
+            },
+            {
+              "doc": "An array with no rows or no columns.",
+              "name": "Array",
+              "shape": "unit"
+            },
+            {
+              "doc": "A viewport scale that is not positive.",
+              "name": "Viewport",
+              "shape": "unit"
+            },
+            {
+              "doc": "A transform that collapses space: no entity has an image.",
+              "name": "Degenerate",
+              "shape": "unit"
+            }
+          ],
+          "module": "geom_2d::entity",
+          "name": "EntityError",
+          "non_exhaustive": false
+        },
+        {
           "doc": "Why a point could not be read, or a result could not be given.",
           "file": "projects/engines/geometry/crates/geom-2d/src/point.rs",
           "kinds": [
@@ -160,6 +219,32 @@
           "target": "lib"
         },
         {
+          "cost": "constructors are linear in what they check; [`Shape::tag`] and [`Shape::under`] are constant time.",
+          "does": "[`Shape`] is the closed list of what a drawing holds: points, lines, rays and infinite lines, circles and arcs, ellipses and elliptical arcs, splines, polylines with bulges, regions, hatches, text, dimensions and leaders, blocks and inserts, and viewports. An [`Entity`] is a [`Shape`] with an [`Attr`], the program's opaque attribute key (layer, colour, weight and style are program data), which every operation passes through untouched. Each shape has a [`Tag`], a number that is written into files and never reused. A region is a planar Sheet body of `geom-topo`. [`Shape::under`] says what a shape becomes under a transform (chapter 14.10): a circle under a non-uniform scale is an ellipse, a mirror reverses an arc and negates a bulge.",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-2d/src/entity.rs",
+          "guarantees": [
+            "**Closed.** [`Tag`] and [`Shape`] list every entity of 14.1 and nothing else; a tag read from a file that names none is refused ([`Tag::from_u8`]), never guessed.",
+            "**Stable.** A tag's number is part of the native format. A new entity takes a new number.",
+            "**Exact.** A stored number is a whole number of grid steps or a [`Frac`], a fraction of bounded size ([`FRAC_LIMIT`]), reduced, with a positive denominator. Nothing is a double; a bulge is the fraction tan(sweep / 4) and an ellipse's end is a fraction, not a polar angle.",
+            "**Attribute pass-through.** [`Entity::under`] returns the same [`Attr`] it was given, whatever the shape becomes.",
+            "**Valid by construction.** The constructors refuse a polyline with the wrong number of bulges, a spline whose knots do not fit its control points, a region that is not a Sheet, a zero text direction and the like, with a typed [`EntityError`].",
+            "**Kind changes are written down.** [`Shape::under`] never loses a shape silently: a polyline with a bulge under a non-uniform scale becomes a run of lines and elliptical arcs ([`Becomes::Run`]), and a degenerate transform is refused."
+          ],
+          "job": "The drafting entity model: every entity of chapter 14.1 as a closed enum with a stable tag.",
+          "method": {
+            "links": [
+              "projects/engines/geometry/architecture/14-2d-drafting.md",
+              "projects/kit/notes/G01-evidence/06-2d-drafting.md"
+            ],
+            "text": "the entity table of chapter 14.1 and the transform rules of 14.10 (`projects/engines/geometry/architecture/14-2d-drafting.md`), in our own words from the public DXF reference (`projects/kit/notes/G01-evidence/06-2d-drafting.md`, section 1)."
+          },
+          "path": "geom_2d::entity",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
           "cost": "reading a one-root point is one `Crossing2` construction, a few dozen products; reading a conic root is a quartic and its roots, as [`geom_num::quartic`] says. No allocation.",
           "does": "a [`Pt2`] is one of chapter 14.2's four classes. A grid point is whole steps and a rational point homogeneous integers. The other two are implicit: where two carriers cross, stored as the carriers and which crossing, or where an ellipse meets another conic, stored as the two and which root. [`Pt2::place`] reads a point's definition into exact numbers each time it is asked, and every question is asked of those: a rounded copy is never kept, so nothing decided here can differ from what the definition says (chapter 6.3).",
           "family": [],
@@ -187,7 +272,7 @@
       "provenance": [],
       "sections": "14 and 17.2; open questions OQ-12.1 and OQ-14.9, in the kernel architecture (`projects/engines/geometry/architecture/`).",
       "spdx": null,
-      "status": "carriers, points and commits (G192); built on by pieces G193, G194, G195, G196, G197, G198, G199, G200, G201, G202, G203, G204, G205, G206, G207, G208, G209, G210, G211, G212, G213, G359, G360, G361.",
+      "status": "carriers, points and commits (G192); the entity model (G194); built on by pieces G193, G195, G196, G197, G198, G199, G200, G201, G202, G203, G204, G205, G206, G207, G208, G209, G210, G211, G212, G213, G359, G360, G361.",
       "summary": "Spare Kit geometry kernel: 2D drafting."
     },
     {
@@ -718,6 +803,26 @@
             "text": "boundary-value analysis (<https://en.wikipedia.org/wiki/Boundary-value_analysis>) on the paths of the error-free transformations of Dekker (1971, <https://doi.org/10.1007/BF01397083>) and Knuth (volume 2, section 4.2.2), as Shewchuk states them (1997, <https://doi.org/10.1007/PL00009321>) and `geom_num::eft` extends them to every double."
           },
           "path": "geom_bench::inputs::eft",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
+          "cost": "a few dozen draws of [`SplitMix64`](crate::rng::SplitMix64) per input, once per batch, outside every measured run.",
+          "does": null,
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-bench/src/inputs/entity.rs",
+          "guarantees": [
+            "every batch is full and the same on every target, and every result of a typical batch is `Ok` (`tests/inputs.rs`); every result is the operation's own, run directly (`tests/attack_g06.rs`)."
+          ],
+          "job": "Inputs for `geom-2d`'s entity model (piece G194, decision 32.44): a polyline built and checked, and a shape put through a transform's classification.",
+          "method": {
+            "links": [
+              "projects/engines/geometry/architecture/28-testing.md"
+            ],
+            "text": "the entity table of chapter 14.1 and the transform rules of 14.10, measured as chapter 28.14 sets benchmarks out, `projects/engines/geometry/architecture/28-testing.md`."
+          },
+          "path": "geom_bench::inputs::entity",
           "provenance": [],
           "spdx": null,
           "target": "lib"
@@ -2769,6 +2874,28 @@
             "text": "the kind contract of chapter 7 as `geom_curve::contract` states it, driven by coverage-guided fuzzing (chapter 28.5), with inputs aimed at the hard cases 28.5 lists (`projects/engines/geometry/architecture/28-testing.md`)."
           },
           "path": "geom_fuzz::curves",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
+          "cost": "constant per case, at most [`MAX_VERTICES`] vertices; at most [`MAX_INPUT_BYTES`] bytes read.",
+          "does": "[`decode`] turns a fuzzer's bytes into a [`Case`]: a fraction's numerator and denominator, a byte that may name a tag, a polyline's vertices, bulge count, closing flag and width flag, a shape to build, an attribute key and a transform's classification. [`check`] tests each of the model's rules against an independent reading of it: a fraction is refused exactly when its denominator is zero or its reduced size is past the bound, and is otherwise the same number, reduced, with a positive denominator; a number names a tag exactly when it is one of the eighteen and the tag gives the number back; a polyline is made exactly when its counts are right; and a shape put under a classification becomes what chapter 14.10 says (a circle an ellipse under a non-uniform transform, a polyline with a bulge a run, nothing else changes kind, a degenerate transform is refused), with its attribute key untouched. [`harness`] is `decode` then `check`.",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-fuzz/src/entity.rs",
+          "guarantees": [
+            "**Any bytes are a case.** Every byte string, the empty one included, decodes to a case.",
+            "**A bounded input.** [`decode`] reads at most [`MAX_INPUT_BYTES`] bytes, derived below; a unit test builds the input that reaches it.",
+            "**A panic is a failure; a disagreement is a [`Finding`]** naming the law and the case."
+          ],
+          "job": "Fuzz target: `geom-2d`'s entity model keeps its stated laws on any input.",
+          "method": {
+            "links": [
+              "projects/engines/geometry/architecture/14-2d-drafting.md"
+            ],
+            "text": "differential testing against the rules of chapters 14.1 and 14.10 (`projects/engines/geometry/architecture/14-2d-drafting.md`), written here from the rules and not from the code: Euclid's algorithm on 128-bit numbers for the fractions, and a table of the kind changes."
+          },
+          "path": "geom_fuzz::entity",
           "provenance": [],
           "spdx": null,
           "target": "lib"

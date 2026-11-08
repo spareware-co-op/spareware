@@ -40,6 +40,7 @@ pub mod crossing;
 pub mod curve;
 pub mod dd;
 pub mod eft;
+pub mod entity;
 pub mod exact_sum;
 pub mod exactness;
 pub mod generated;
