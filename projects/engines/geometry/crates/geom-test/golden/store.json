@@ -254,9 +254,15 @@
               "kind": "corpus",
               "piece": "G190",
               "why": "53 new benchmarks: ellipses, their generated predicates, their crossings and the roots of their quartics; no existing digest moved"
+            },
+            {
+              "sha256": "761e00e8fb8501231bdaf94d17ef5dc7818c56bc86be4beae74d14048964e5bd",
+              "kind": "corpus",
+              "piece": "G192",
+              "why": "4 count benchmarks that piece/G87's merge brought in: G80's topo/column_edit and topo/publish, and G148's helper/lone_serial and helper/lone_pool; no existing digest moved"
             }
           ],
-          "sha256": "761e00e8fb8501231bdaf94d17ef5dc7818c56bc86be4beae74d14048964e5bd"
+          "sha256": "d447eb75906f05514da32055b78c30ab5a248d51385dd15b17e7f694c57e7307"
         },
         {
           "id": "geom-nurbs/operations",
