@@ -16,6 +16,10 @@ geom-num = { path = "../geom-num" }
 # RustCrypto's sha2, MIT OR Apache-2.0, without its default alloc and oid features. On the vetted
 # allow-list in deny-no-std.toml, with its audit (projects/kit/notes/G86-sha2-audit.md).
 sha2 = { version = "0.11.0", default-features = false }
+# Normalization Form C checks of text hashed into names, under Unicode 18.0.0 (owner action G78,
+# 32.19): (MIT OR Apache-2.0) AND Unicode-3.0, without its std feature. On the vetted allow-list in
+# deny-no-std.toml, with its audit (projects/kit/notes/G87-unicode-normalization-audit.md).
+unicode-normalization = { version = "=0.1.26", default-features = false }
 
 [dev-dependencies]
 # Property tests only, never linked into the kernel (chapter 29: a development dependency).

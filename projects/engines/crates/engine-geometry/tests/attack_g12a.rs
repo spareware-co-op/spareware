@@ -74,19 +74,24 @@ fn attack_the_real_allow_list_is_vetted_and_pinned_to_the_lock() {
             "hybrid-array",
             "libc",
             "sha2",
-            "typenum"
+            "tinyvec",
+            "typenum",
+            "unicode-normalization"
         ],
-        "the list holds libm, and sha2 with the crates it brings (G86)"
+        "the list holds libm, sha2 with the crates it brings (G86), and unicode-normalization with tinyvec (G87)"
     );
     let lock = fs::read_to_string(root().join("Cargo.lock")).unwrap();
     assert_eq!(vetted::against_lock(&list, &lock), Vec::<String>::new());
     // Each audit is the one the board gave its piece, and it is committed: G24's for libm ("the
-    // committed libm audit"), G86's for sha2 and every crate it brings (32.20).
+    // committed libm audit"), G86's for sha2 and every crate it brings (32.20), and G87's for
+    // unicode-normalization and the crate it brings (32.19).
     for entry in &list {
-        let audit = if entry.name == "libm" {
-            "projects/kit/notes/G24-libm-audit.md"
-        } else {
-            "projects/kit/notes/G86-sha2-audit.md"
+        let audit = match entry.name.as_str() {
+            "libm" => "projects/kit/notes/G24-libm-audit.md",
+            "unicode-normalization" | "tinyvec" => {
+                "projects/kit/notes/G87-unicode-normalization-audit.md"
+            }
+            _ => "projects/kit/notes/G86-sha2-audit.md",
         };
         assert!(
             matches!(&entry.audited, vetted::Audit::File(path) if path == audit),
