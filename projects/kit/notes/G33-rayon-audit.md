@@ -4,7 +4,7 @@
 
 ## The answer in plain words
 
-rayon gives `geom-pool` its threads on native targets. `geom-pool` uses four of its calls: build a pool of a fixed number of threads, open a scope on it, spawn a job into the scope, and ask the pool its size. Behind those sit rayon's own pool, `rayon-core`, and three crossbeam crates that carry its work-stealing queues.
+rayon gives `geom-pool` its threads on native targets. `geom-pool` uses three of its calls: build a pool of a fixed number of threads, run two closures on it with `join`, and ask the pool its size. Behind those sit rayon's own pool, `rayon-core`, and three crossbeam crates that carry its work-stealing queues.
 
 They are fit to ship in `geom-pool`, with these things to know:
 
@@ -32,8 +32,7 @@ rayon 1.12.0 is the version `clippy.toml`'s bans were first checked against (G32
 `geom_pool::native::Rayon` (G33) calls exactly:
 
 - `rayon::ThreadPoolBuilder::new().num_threads(n).build()`, with n ≥ 1;
-- `rayon::ThreadPool::in_place_scope`;
-- `rayon::Scope::spawn`;
+- `rayon::ThreadPool::join`, on the pool's own threads, recursively: `run_all` halves the task slice and joins the halves (this replaced `ThreadPool::in_place_scope` and `Scope::spawn`, see the Miri point on scopes below);
 - `rayon::ThreadPool::current_num_threads`.
 
 Dropping the pool stops its threads. Everything else rayon offers is unused. Its global-pool entry points (`join`, `scope`, `spawn`, `broadcast`, the parallel iterators, the same on a `ThreadPool`) are banned in every kernel crate by `clippy.toml`, which `geom-pool` is also built with.
@@ -55,18 +54,18 @@ Counted outside comments: rayon 69 uses, rayon-core 88, crossbeam-deque 42, cros
 
 What the code `geom-pool` reaches does with it:
 
-- **Scope jobs outlive their borrows on paper, not in fact.** `Scope::spawn` boxes the job as a `HeapJob` and erases its `'scope` lifetime to hand it to the pool (`scope/mod.rs`, the `HeapJob::new(move || unsafe { ... })` sites). It is sound because the scope does not return until every job spawned into it has finished: `ScopeBase::complete` waits on the scope's latch. That is the documented contract `geom-pool` relies on, and its tests attack it (every task runs exactly once, before `run_all` returns).
+- **Join jobs live on a stack and outlive their borrows on paper, not in fact.** `ThreadPool::join` runs on a worker (`Registry::in_worker`, which injects the call into the pool and blocks the outside caller on a thread-local `LockLatch` when it is not on one). `join_context` (`join/mod.rs`) puts the second closure in a `StackJob` on that worker's own stack, hands a raw `JobRef` to the deque and does not return until the job's latch is set: it pops the job back and runs it itself if no thief took it, and otherwise runs other jobs until the thief finishes. That is the documented contract `geom-pool` relies on (both closures have run when `join` returns), and its tests attack it (every task runs exactly once, before `run_all` returns). `Latch::set` takes a raw `*const Self`, so no reference into the job is live when the waiting thread is released and returns.
 - **Jobs are raw pointers on the queues** (`job.rs`, `JobRef`), executed once and freed by the job type that made them.
 - **Each worker thread knows itself through a thread-local raw pointer** (`registry.rs`, `WORKER_THREAD_STATE`), set when the thread starts and cleared when it stops.
 - **The queues are lock-free.** crossbeam-deque's Chase–Lev work-stealing deques, and crossbeam-epoch's epoch-based reclamation of the buffers they grow out of, are where most of the `unsafe` lives. They are the crossbeam project's core, used across the Rust ecosystem; this audit did not re-prove them.
 - **Miri finds one aliasing violation in crossbeam-epoch 0.9.21** (added after G33 merged, from the weekly Miri run's first pass over `tests/attack_g33.rs`). `IsElement::element_of` (`internal.rs`) turns a `&Entry`, a reference to the first field of a thread's `Local` record, into a `&Local` covering the whole record. Stacked Borrows, Miri's default model, refuses it: the `&Entry` grants access to its own 8 bytes only. Tree Borrows, the newer model, allows it. crossbeam fixed it upstream by passing raw pointers instead (crossbeam-rs/crossbeam#871, commit `02fb08a6c`, "epoch: Fix stacked borrows violations"), which changes a public trait, so it ships only in a 0.10 release; 0.9.21, released after it, does not carry it. Until the lock moves, Miri runs `geom-pool`'s tests under Tree Borrows and every other crate's under Stacked Borrows (`.github/workflows/kernel-quality.yml`); geom-test's `kernel_quality_workflow` test fails once the lock leaves 0.9.21, so the exception is looked at again then. That step also turns Miri's leak check off, as rayon's own CI does (`-Zmiri-tree-borrows -Zmiri-ignore-leaks`): dropping a `ThreadPool` signals its threads to stop and does not join them, so each worker's crossbeam-epoch registration is still alive when a test ends.
-- **Miri finds one aliasing violation in rayon-core 1.13.0's scopes** (added after G43, from the first full kernel-quality run, under Tree Borrows). The first point above holds for the scope's lifetime but not for one reference. A spawned job sets the scope's latch from inside `ScopeBase::execute_job_closure`, while that function's closure argument still holds a `&Scope`. Miri protects that reference until the call returns, but the thread that opened the scope can see the latch first, return and free the scope. Every scope has the race, whether it was opened on a worker or not: a two-thread pool's `in_place_scope` with one empty job, opened from outside the pool, lost it under 4 of 64 Miri seeds. Reported as rayon-rs/rayon#1328 and fixed upstream by rayon-rs/rayon#1330 (merged 2026-10-27: the job captures a raw scope pointer and wraps its body in `MaybeUninit`), which no release carries yet. Until the lock moves past 1.13.0, `tests/attack_g33.rs`'s `attack_the_pool_is_reentrant`, the one test whose schedule loses the race under Miri's fixed seed, is ignored under Miri. Because every scope has the race, upgrade rayon-core to the first release that contains rayon-rs/rayon#1330, then drop the ignore.
+- **Miri finds one aliasing violation in rayon-core 1.13.0's scopes, which `geom-pool` therefore does not use** (found by the first full kernel-quality run under Tree Borrows; `geom-pool` used `in_place_scope` and `Scope::spawn` until then). A spawned job sets the scope's latch from inside `ScopeBase::execute_job_closure`, while that function's closure argument still holds a `&Scope`. Miri protects that reference until the call returns, but the thread that opened the scope can see the latch first, return and free the scope. Every scope has the race, whether it was opened on a worker or not, and which Miri schedule loses it depends on the seed (run 42288828480, `attack_g33`'s sweep test; 4 of 64 seeds on a two-thread pool with one empty job). Reported as rayon-rs/rayon#1328 and fixed upstream by rayon-rs/rayon#1330 (merged 2026-10-27: the job captures a raw scope pointer and wraps its body in `MaybeUninit`), which no release carries yet. `geom-pool` now runs its tasks with `ThreadPool::join`, which does not have the race (`Latch::set` takes a raw pointer, see the first point above), so nothing is ignored under Miri. A later rayon-core release with #1330 makes scopes usable again; there is no need to go back.
 
-`geom-pool` adds no `unsafe` of its own. Its four calls are safe functions.
+`geom-pool` adds no `unsafe` of its own. Its three calls are safe functions.
 
 ## 5. Panics
 
-- **A job that panics inside a scope** has its panic caught and stored. The scope resumes it when it ends, after every other job has finished (`scope/mod.rs`, `job_panicked` and `maybe_propagate_panic`). This is the "pass on a task's panic" the `Pool` trait allows. `tests/attack_g33.rs` checks it, and that the pool still works after.
+- **A closure that panics inside `join`** has its panic caught (`unwind::halt_unwinding`) and held while the other closure finishes: if the first one panics, `join_recover_from_panic` waits for the second (running it itself if no thief took it) before resuming the panic; if the second panics, its result is stored in the `StackJob` and resumed once the first returns. With nested joins, every task has therefore run when the panic reaches `run_all`, which is the "pass on a task's panic" the `Pool` trait allows. `tests/attack_g33.rs` checks it, and that the pool still works after.
 - **A job spawned outside a scope** (`rayon::spawn`) that panics goes to the pool's panic handler, and with none set rayon aborts the process (`registry.rs`, `catch_unwind`). `geom-pool` never spawns outside a scope, and kernel crates cannot (`clippy.toml`).
 - **rayon's own code** runs under `AbortIfPanic` guards in a few places, a job's execution bookkeeping and a worker thread's main loop: a panic there aborts the process. Only a rayon bug reaches them.
 - **Building a pool can fail**, if the operating system refuses a thread. `ThreadPoolBuilder::build` reports it, and `geom-pool` returns it as `PoolError::CannotStartThreads`.
@@ -106,14 +105,14 @@ So the pool decides only how fast the answer comes. `geom-pool`'s `tests/attack_
 
 ## 8. Findings and what follows
 
-- **Fit to ship in `geom-pool`**, under the conditions above: only scoped spawning; an explicit thread count; no `unsafe` of our own. The kernel crates reach none of it (`deny-ships.toml`; `clippy.toml`).
+- **Fit to ship in `geom-pool`**, under the conditions above: only `join` on the pool; an explicit thread count; no `unsafe` of our own. The kernel crates reach none of it (`deny-ships.toml`; `clippy.toml`).
 - **The notices** go into the generated third-party notices file with piece G481.
 - **On WebAssembly** rayon is not built (`geom-pool`'s manifest gates it to native targets). The browser's workers, through wasm-bindgen-rayon, are piece G456's, with its own audit.
 - **A rayon or crossbeam version change** is a change to `Cargo.lock` and needs this audit redone. The merge gate already holds the versions to the lock, and cargo-deny checks advisories on every pull request.
 
 ## Method
 
-The audit read each published crate at the checksum above and traced the four calls of section 2 into `rayon-core` and crossbeam. For each crate it recorded:
+The audit read each published crate at the checksum above and traced the calls of section 2 into `rayon-core` and crossbeam. For each crate it recorded:
 
 - the licence texts and any notice;
 - every `unsafe`, counted, and in the code reached, what it relies on;
