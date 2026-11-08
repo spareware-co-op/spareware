@@ -256,3 +256,57 @@ fn errors_are_typed() {
         NurbsError::Weight { index: 5 }
     );
 }
+
+/// The surface form of the `nurbs` fuzz finding (`curve.rs`,
+/// `weight_sums_past_the_doubles_still_give_the_point`): a bilinear patch of weight `f64::MAX`,
+/// whose weight sum passes the doubles at most parameters, gives every point and partial within
+/// its bound.
+#[test]
+fn weight_sums_past_the_doubles_still_give_the_point() {
+    let max = f64::MAX;
+    let unit = || Basis::new(1, vec![0.0, 0.0, 1.0, 1.0]).unwrap();
+    let s = Surface::from_homogeneous(
+        unit(),
+        unit(),
+        vec![
+            [max, 0.5 * max, 0.25 * max],
+            [0.5 * max, max, -0.25 * max],
+            [-0.5 * max, 0.25 * max, max],
+            [0.75 * max, -max, 0.5 * max],
+        ],
+        Some(vec![max; 4]),
+    )
+    .unwrap();
+    let mut rng = Lcg(70);
+    let (du, dv) = (1, 1);
+    let us: Vec<f64> = (0..24).map(|_| rng.unit()).collect();
+    let vs: Vec<f64> = (0..24).map(|_| rng.unit()).collect();
+    for &u in &us {
+        for &v in &vs {
+            for limits in LIMITS {
+                let point = s.point(u, v, limits).unwrap();
+                let mut out = vec![[0.0; 3]; 4];
+                s.derivs(u, v, limits, (du, dv), &mut out).unwrap();
+                assert_eq!(out[0], point);
+                let (e, m) = exact(&s, u, v, limits, du, dv);
+                for k in 0..=du {
+                    for l in 0..=dv {
+                        let order = k + l;
+                        let factor = gamma((order + 1) * (14 * 2 + 2 * order + 12));
+                        for d in 0..3 {
+                            assert!(
+                                within(
+                                    out[k * (dv + 1) + l][d],
+                                    &e[k][l][d],
+                                    &(&factor * &m[k][l][d])
+                                ),
+                                "({u}, {v}), order ({k}, {l}), coordinate {d}: {:?}",
+                                out[k * (dv + 1) + l]
+                            );
+                        }
+                    }
+                }
+            }
+        }
+    }
+}

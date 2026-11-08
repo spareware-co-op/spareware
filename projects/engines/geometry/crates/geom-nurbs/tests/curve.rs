@@ -461,3 +461,80 @@ fn corner_cutting_is_within_its_bound() {
         }
     }
 }
+
+/// A fuzz finding (Gate 2's `nurbs` target, the nightly campaign of 4 November 2026): weights at
+/// the largest double. Every w·P and w is finite, but the weight sum at most parameters is not, and
+/// the point came out as zeros. Now the sums are taken again halved ("Overflow" in
+/// `geom_nurbs::curve`): the campaign's own curve gives its point within the bound at the
+/// campaign's parameter and everywhere else, and a line of weight `f64::MAX` every point and
+/// derivative.
+#[test]
+fn weight_sums_past_the_doubles_still_give_the_point() {
+    let max = f64::MAX;
+    let fuzz = Curve::from_homogeneous(
+        Basis::new(1, vec![0.0, 0.0, 0.25, 0.75, 4.5, 5.25, 5.25]).unwrap(),
+        vec![
+            [
+                -1.455_191_522_836_685_2e-11,
+                -2.182_787_284_255_027_8e-10,
+                -2.182_787_284_255_027_8e-10,
+            ],
+            [3.388_131_789_017_201_4e-21; 3],
+            [max, 2.615_987_810_513_347_7e297, 0.0],
+            [0.0, 0.0, 3.105_036_184_601_417_2e231],
+            [
+                -4.123_526_754_572_714e306,
+                8.673_617_379_884_035e-19,
+                -4.123_154_411_546_043_4e306,
+            ],
+        ],
+        Some(vec![
+            1.455_191_522_836_685_2e-11,
+            2.328_306_436_538_696_3e-10,
+            max,
+            max,
+            1.0,
+        ]),
+    )
+    .unwrap();
+    let line = Curve::from_homogeneous(
+        Basis::new(1, vec![0.0, 0.0, 1.0, 1.0]).unwrap(),
+        vec![[max, 0.5 * max, 0.25 * max], [0.5 * max, max, -0.25 * max]],
+        Some(vec![max, max]),
+    )
+    .unwrap();
+    let mut rng = Lcg(70);
+    let factor = gamma(14 + 3);
+    let mut us = parameters(&fuzz, &mut rng, 200);
+    us.push(1.338_235_294_117_647);
+    for u in us {
+        for limit in LIMITS {
+            let c = fuzz.point(u, limit).unwrap();
+            let (e, m) = exact(&fuzz, u, limit, 0);
+            for d in 0..3 {
+                assert!(
+                    within(c[d], &e[0][d], &(&factor * &m[0][d])),
+                    "u {u}, coordinate {d}: {c:?}"
+                );
+            }
+        }
+    }
+    for u in parameters(&line, &mut rng, 200) {
+        for limit in LIMITS {
+            let mut out = vec![[0.0; 3]; 3];
+            line.derivs(u, limit, &mut out).unwrap();
+            assert_eq!(out[0], line.point(u, limit).unwrap());
+            let (e, m) = exact(&line, u, limit, 2);
+            for k in 0..=2 {
+                let factor = gamma((k + 1) * (14 + 8 + k));
+                for d in 0..3 {
+                    assert!(
+                        within(out[k][d], &e[k][d], &(&factor * &m[k][d])),
+                        "u {u}, derivative {k}, coordinate {d}: {:?}",
+                        out[k]
+                    );
+                }
+            }
+        }
+    }
+}
