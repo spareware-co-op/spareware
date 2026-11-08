@@ -41,8 +41,7 @@
 //! analytic and swept kinds (G65); the offset kind, and every kind's partials of any order
 //! (G66); the analytic kinds' closed-form extents (G67); certified second-derivative and
 //! normal-derivative bounds for every kind (G68); the frame rules and laws (G254); the other kinds
-//! to come in G253, G260,
-//! G264, G315, G316, G317, G318 and G470.
+//! to come in G253, G260, G264, G315, G316, G317, G318 and G470.
 #![cfg_attr(not(test), no_std)]
 #![forbid(unsafe_code)]
 

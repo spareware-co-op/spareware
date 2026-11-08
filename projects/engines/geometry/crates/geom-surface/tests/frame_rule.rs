@@ -231,7 +231,7 @@ fn every_rules_frame_is_orthonormal_right_handed_and_travels_along_its_path() {
                         z: rng.direction(),
                     },
                     StationPlacement {
-                        at: 0.5 * (a + b),
+                        at: f64::midpoint(a, b),
                         x: rng.direction(),
                         z: rng.direction(),
                     },
@@ -306,6 +306,66 @@ fn every_rules_frame_is_orthonormal_right_handed_and_travels_along_its_path() {
     }
 }
 
+/// How far the frame of stations `s` may be from the exact rotation-minimising frame on a line, an
+/// arc or a circular helix, in radians: derived, not fitted.
+///
+/// - **One step's error.** Wang et al.'s step is time-symmetric (the step back from x to xᵢ undoes
+///   it), so on a helix its twist error is odd in the step's length Δs: e = E·(1 + ρ + O(Θ⁴)) with
+///   E = −κ²τ³Δs⁵/720 and ρ = (κ²/42 − τ²/28)·Δs², for a step that turns Θ = Δs·√(κ² + τ²)
+///   radians about the axis, so |ρ| ≤ Θ²/28. That is the series of the step on the helix, checked
+///   against the step in 80-digit arithmetic, where the O(Θ⁴) term is 6·10⁻⁴·Θ⁴. On a line or an
+///   arc τ = 0, and the step is exact.
+/// - **The estimate.** Every point of a helix is alike, so the rule's estimate of a step,
+///   (16/15)·(e(Δs) − 2·e(Δs/2)), is E·(1 + 21ρ/20 + O(Θ⁴)), so |E| is at most m/(1 − 21|ρ|/20)
+///   for the largest estimate m.
+/// - **Adding up.** Each step is an orthogonal map from one station's plane across the tangent to
+///   the next one's, so the stations' errors add. Between stations the C1 correction makes the
+///   error E·((u⁵ − 5u³ + 5u²) + ρ·(u⁷ − 7u³ + 7u²)) a fraction u of the way along, at most
+///   E·(1 + 1.12·|ρ|). So with n stations the frame is everywhere within
+///   (n − 1)·m·(1 + 2.3·|ρ| + O(Θ⁴)), which is at most (n − 1)·m·(1 + Θ²/8) for the widest
+///   step's Θ up to 3/4, the O(Θ⁴) terms being below 10⁻³·Θ² there.
+/// - **Rounding.** The chord x − xᵢ carries the points' rounding, a few units in the last place of
+///   X, the largest coordinate, and the step's twist moves with the chord's direction by at most
+///   the tangent's turn κ·Δs ≈ κ·|x − xᵢ| per radian (when the tangent does not turn, the two
+///   reflections are one and the step is the identity), so by a few times κ·X units; the step's
+///   hundred other operations round unit vectors. So each station's normal is within
+///   R = 2⁷·(1 + κ·X) units of 2⁻⁵³, the estimate within (16/15)·2R, and the frame, with the
+///   closed form's own rounding, within 4·(n + 1)·R in all.
+fn closed_form_allowance(path: &CurveKind<3>, s: &Stations) -> f64 {
+    let bound = path.bound(path.domain(), &mut meter()).unwrap();
+    let reach = bound
+        .lo
+        .iter()
+        .chain(bound.hi.iter())
+        .fold(0.0_f64, |m, x| m.max(x.abs()));
+    let widest = s
+        .frames()
+        .windows(2)
+        .map(|w| w[1].at - w[0].at)
+        .fold(0.0, f64::max);
+    let (curvature, turn) = match path {
+        CurveKind::Line(_) => (0.0, 0.0),
+        // τ = 0: the step is exact on an arc whatever its turn.
+        CurveKind::Circle(c) => (1.0 / c.radius(), 0.0),
+        CurveKind::Helix(h) => {
+            let HelixAxes::Frame { radius, pitch, .. } = h.axes() else {
+                unreachable!()
+            };
+            // The helix's parameter is its turn about the axis in half-turns.
+            let rise = pitch / (2.0 * PI);
+            (radius / (radius * radius + rise * rise), PI * widest)
+        }
+        _ => unreachable!(),
+    };
+    assert!(
+        turn <= 0.75,
+        "a step turns {turn} radians, beyond the series' range"
+    );
+    let steps = (s.frames().len() - 1) as f64;
+    let units = 4.0 * (steps + 2.0) * 128.0 * (1.0 + curvature * reach);
+    steps * s.measured_twist() * PI * (1.0 + turn * turn / 8.0) + units * f64::EPSILON / 2.0
+}
+
 #[test]
 fn rotation_minimising_stations_meet_the_closed_forms_on_lines_arcs_and_helices() {
     let mut rng = Rng::new("frames: closed forms", 0x2540_0002);
@@ -319,8 +379,7 @@ fn rotation_minimising_stations_meet_the_closed_forms_on_lines_arcs_and_helices(
         let tolerance = [1e-6, 1e-8, 1e-10][round % 3];
         let s = Stations::build(&path, start, 1.0, tolerance, Closing::Open, &mut meter()).unwrap();
         let rule = FrameRule::RotationMinimising(s.clone());
-        // The stations' estimate is per step; over n steps the errors add.
-        let allowed = 2.0 * s.frames().len() as f64 * s.measured_twist() * PI + 1e-11;
+        let allowed = closed_form_allowance(&path, &s);
         for t in samples(&path, 40) {
             let exact = closed_form_frame(&path, start, t).unwrap().unwrap();
             let p = placement(&rule, &Laws::default(), &path, t).unwrap();
@@ -508,6 +567,42 @@ fn a_closed_paths_twist_is_spread_or_refused() {
     .unwrap();
     let (a, b) = full.domain();
     assert!(angle(x_on(&full, &s, a), x_on(&full, &s, b)) < 1e-12);
+    // A closing rule on a path that is not closed is refused: an open arc, and a loop whose end is
+    // its start but whose tangent there turns a corner.
+    let open_arc = circle(&mut rng);
+    let start = start_normal(&open_arc, &mut rng);
+    let corner = CurveKind::Nurbs(
+        Curve::new(
+            Basis::new(3, vec![0.0, 0.0, 0.0, 0.0, 1.0, 1.0, 1.0, 1.0]).unwrap(),
+            &[
+                [0.0, 0.0, 0.0],
+                [1.0, 0.0, 0.0],
+                [0.0, 1.0, 0.0],
+                [0.0, 0.0, 0.0],
+            ],
+        )
+        .unwrap(),
+    );
+    for closing in [Closing::Spread, Closing::Refuse] {
+        assert!(matches!(
+            Stations::build(&open_arc, start, 1.0, 1e-9, closing, &mut meter()),
+            Err(FrameError::InvalidRule(_))
+        ));
+        assert!(matches!(
+            Stations::build(&corner, [0.0, 0.0, 1.0], 1.0, 1e-9, closing, &mut meter()),
+            Err(FrameError::InvalidRule(_))
+        ));
+    }
+    // Left open, the same loop is fine.
+    Stations::build(
+        &corner,
+        [0.0, 0.0, 1.0],
+        1.0,
+        1e-9,
+        Closing::Open,
+        &mut meter(),
+    )
+    .unwrap();
 }
 
 fn x_on(path: &CurveKind<3>, s: &Stations, t: f64) -> V {
@@ -682,6 +777,69 @@ fn placements_are_met_and_the_turn_between_them_is_shared_evenly() {
         let got = placement(&rule, &Laws::default(), &path, t).unwrap();
         assert!(angle(got.x, turned(expect)) < 1e-12, "at {t}");
     }
+    // Just short of a half turn, about an axis off every coordinate axis, the turn's axis is still
+    // found to full accuracy (Shepperd's method; the antisymmetric part alone would lose it in
+    // sin θ ≈ 3·10⁻⁶); a half turn exactly has no shorter way round, and is refused.
+    let mut rng = Rng::new("frames: near a half turn", 0x2540_000b);
+    let nearly = 1.0 - 1.0 / 1_048_576.0;
+    for _ in 0..16 {
+        let k = rng.direction();
+        let z0 = rng.direction();
+        let x0 = unit(cross(z0, rng.direction()));
+        let rule = FrameRule::Placements(vec![
+            StationPlacement {
+                at: 0.0,
+                x: x0,
+                z: z0,
+            },
+            StationPlacement {
+                at: 4.0,
+                x: rodrigues(x0, k, nearly),
+                z: rodrigues(z0, k, nearly),
+            },
+        ]);
+        for (t, share) in [(1.0, 0.25), (2.0, 0.5), (3.0, 0.75)] {
+            let got = placement(&rule, &Laws::default(), &path, t).unwrap();
+            let (x, z) = (
+                rodrigues(x0, k, nearly * share),
+                rodrigues(z0, k, nearly * share),
+            );
+            assert!(
+                angle(got.x, x) < 1e-14 && angle(got.z, z) < 1e-14,
+                "at {t}: {} and {}",
+                angle(got.x, x),
+                angle(got.z, z)
+            );
+        }
+    }
+    let half = FrameRule::Placements(vec![
+        StationPlacement {
+            at: 0.0,
+            x: [1.0, 0.0, 0.0],
+            z: [0.0, 0.0, 1.0],
+        },
+        StationPlacement {
+            at: 4.0,
+            x: [-1.0, 0.0, 0.0],
+            z: [0.0, 0.0, 1.0],
+        },
+    ]);
+    assert!(matches!(
+        placement(&half, &Laws::default(), &path, 2.0),
+        Err(FrameError::InvalidRule(_))
+    ));
+}
+
+/// `v` turned about the unit `k` by `half_turns` (Rodrigues' formula).
+fn rodrigues(v: V, k: V, half_turns: f64) -> V {
+    let (c, s) = ((PI * half_turns).cos(), (PI * half_turns).sin());
+    let kv = cross(k, v);
+    let along = dot(k, v) * (1.0 - c);
+    [
+        c * v[0] + s * kv[0] + along * k[0],
+        c * v[1] + s * kv[1] + along * k[1],
+        c * v[2] + s * kv[2] + along * k[2],
+    ]
 }
 
 #[test]
@@ -724,7 +882,8 @@ fn a_helical_rule_is_a_screw_motion() {
         radius: Law::Constant(1.0),
     };
     let p = placement(&rule, &Laws::default(), &path, 4.0).unwrap();
-    assert!((p.origin[2] - 0.5 * (2.0 * 4.0 + 0.25 * 16.0)).abs() < 1e-12);
+    let integral = 2.0 * 4.0 + 0.25 * 16.0;
+    assert!((p.origin[2] - integral / 2.0).abs() < 1e-12);
 }
 
 #[test]
@@ -789,7 +948,7 @@ fn laws_are_exact_where_given_exactly() {
     let q = |x: f64| RBig::try_from(x).unwrap();
     for _ in 0..64 {
         // Dyadic coefficients and points, so every product and sum is exact in doubles.
-        let c: Vec<f64> = (0..1 + (rng.0.next_u64() % 5) as usize)
+        let c: Vec<f64> = (0..=(rng.0.next_u64() % 5) as usize)
             .map(|_| (rng.real(-8.0, 8.0) * 16.0).round() / 16.0)
             .collect();
         let s = (rng.real(-2.0, 2.0) * 8.0).round() / 8.0;

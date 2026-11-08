@@ -27,16 +27,23 @@
 //! (v₁ = x − xᵢ: r̂ᴸ = r̂ᵢ − (2 v₁·r̂ᵢ / v₁·v₁) v₁, t̂ᴸ likewise), then in the plane that takes t̂ᴸ
 //! to the path's tangent t̂ there (v₂ = t̂ − t̂ᴸ: r̂ = r̂ᴸ − (2 v₂·r̂ᴸ / v₂·v₂) v₂). [`Stations`]
 //! holds frames F₀ … Fₙ at s₀ < … < sₙ, each one step from the last, placed by a deterministic
-//! rule until the measured twist difference times the profile's radius is within the asked
-//! tolerance (a step against two half steps, the method's own error estimate), and stored as the
-//! doubles the steps produced (decision 32.28). Between stations the frame at s is the step from
-//! Fᵢ to s turned about t̂ by a cubic correction h, zero at both stations, whose end slopes cancel
-//! the step's own spin about t̂ there: the step's spin is zero at sᵢ (it agrees with the true frame
-//! to fifth order) and ωᵢ₊₁ at sᵢ₊₁, so h(u) = −ωᵢ₊₁·Δ·(u³ − u²), u = (s − sᵢ)/Δ. The frame meets
-//! every station exactly and its spin about the tangent is zero at every station from both sides,
-//! so it is C1 along the whole path. This rule is ours, built on Wang et al.'s step (13.3). On a
-//! closed path the closing angle is spread at a constant twist rate, or refused when the caller
-//! asks for none ([`Closing`]).
+//! rule until each step's estimated twist error times the profile's radius is within the asked
+//! tolerance, and stored as the doubles the steps produced (decision 32.28). The estimate is the
+//! method's own: a step's error is fifth order in its length, so two half steps err a sixteenth
+//! as much as one, and the stored step's error is 16/15 of the difference between one step and
+//! two half steps (Richardson's argument). Each step is an orthogonal map that takes one station's
+//! plane across the tangent to the next one's, so the steps' errors add along the path. Between
+//! stations the frame at s is the step from Fᵢ to s turned about t̂ by a cubic correction h, zero
+//! at both stations, whose end slopes cancel the step's own spin about t̂ there: the step's spin is
+//! zero at sᵢ (it agrees with the true frame to fifth order) and ωᵢ₊₁ at sᵢ₊₁, so
+//! h(u) = −ωᵢ₊₁·Δ·(u³ − u²), u = (s − sᵢ)/Δ. The frame meets every station exactly and its spin
+//! about the tangent is zero at every station from both sides, so it is C1 along the whole path.
+//! To leading order the error it adds between two stations rises steadily from 0 to the step's
+//! own error e: the step's error u⁵·e and the correction's 5(u² − u³)·e add to
+//! (u⁵ − 5u³ + 5u²)·e, whose slope 5u(1 − u)²(u + 2) is never negative. This rule is ours, built on
+//! Wang et al.'s step (13.3). On a closed path the closing angle is spread at a constant twist
+//! rate, or refused when the caller asks for none ([`Closing`]); the stations are stored as the
+//! steps produced them, before the spread.
 //!
 //! **Closed forms.** [`closed_form_frame`] gives the exact rotation-minimising frame on a line (a
 //! constant frame), a circular arc (the start frame turned about the arc's axis by the angle the
@@ -53,7 +60,8 @@
 //! - **The stored definition is the shape.** A rotation-minimising rule's frames are the stored
 //!   stations and the C1 rule above, whatever later improvements the station rule gets; the
 //!   difference from the mathematical frame is measured and reported
-//!   ([`Stations::measured_twist`]), never claimed proven (32.3, 32.28).
+//!   ([`Stations::measured_twist`], each step's estimated error, which the steps add), never
+//!   claimed proven (32.3, 32.28).
 //! - **Undefined is an error, never a guess.** A Frenet frame where the curvature may vanish, a
 //!   fixed reference along the tangent, a zero tangent, a scale that is not positive and a law
 //!   that is not finite are [`FrameError`]s, each naming where.
@@ -62,9 +70,9 @@
 //!   pass has nonzero curvature (or a tangent off the reference) at every parameter, and a span
 //!   they report holds every parameter where it may vanish, to a width of 2⁻²⁴ of the domain.
 //! - **Twist and scale on top of any rule.** Laws are functions of the arc length from the path's
-//!   start, exact in closed form on lines, arcs and helices and by deterministic Gauss-Kronrod
-//!   quadrature elsewhere; they need a tangent-continuous path, which the caller's sweep
-//!   enforces (13.3).
+//!   start (of the turned angle under a helical rule), the length in closed form on lines, arcs
+//!   and helices and by deterministic Gauss-Kronrod quadrature elsewhere; they need a
+//!   tangent-continuous path, which the caller's sweep enforces (13.3).
 //!
 //! Method: the double reflection method of W. Wang, B. Jüttler, D. Zheng and Y. Liu, "Computation
 //! of rotation minimizing frames", ACM Transactions on Graphics 27(1), 2008,
@@ -74,7 +82,9 @@
 //! tangent, R. L. Bishop, "There is more than one way to frame a curve", American Mathematical
 //! Monthly 82(3), 1975, <https://doi.org/10.1080/00029890.1975.11993807>); IFC's fixed reference
 //! swept area solid and its placements along a directrix (ISO 16739-1, `IfcFixedReferenceSweptAreaSolid`
-//! and `IfcLinearPlacement`); interval subdivision for the certified zero tests
+//! and `IfcLinearPlacement`), the turn between two placements by its quaternion from S. W.
+//! Shepperd, "Quaternion from rotation matrix", Journal of Guidance and Control 1(3), 1978,
+//! <https://doi.org/10.2514/3.55767b>; interval subdivision for the certified zero tests
 //! (R. E. Moore, *Interval Analysis*, Prentice-Hall, 1966).
 //! Source: PORT from tinyspline, MIT,
 //!   <https://github.com/msteinbeck/tinyspline/blob/bb3b02cdfaa039aa236a5240f2ba8bce66bea527/src/tinyspline.c#L1537-L1687>
@@ -122,6 +132,12 @@ const NARROWEST: f64 = 1.0 / 16_777_216.0;
 
 /// A stations' first split of the domain, in quarters, before the rule refines it.
 const QUARTERS: [f64; 5] = [0.0, 0.25, 0.5, 0.75, 1.0];
+
+/// A stored step's twist error over the difference between it and two half steps, to leading
+/// order. The step's error is e·Δ⁵ + O(Δ⁶) for a step of length Δ (Wang et al.; on a circular
+/// helix it is −κ²τ³Δ⁵/720 to leading order), so two half steps err 2·e·(Δ/2)⁵ = e·Δ⁵/16, the
+/// difference is (15/16)·e·Δ⁵, and the step's own error is 16/15 of it (Richardson).
+const RICHARDSON: f64 = 16.0 / 15.0;
 
 /// What went wrong with a frame rule.
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -363,8 +379,9 @@ impl Law {
 }
 
 /// The twist and scale laws that act on top of any rule: functions of arc length from the path's
-/// start. The twist turns the profile about the tangent by its value in half-turns; the scale
-/// multiplies the profile's coordinates and must stay positive.
+/// start, or under [`FrameRule::Helical`], which does not follow the path, of its turned angle in
+/// half-turns. The twist turns the profile about its direction of travel by its value in
+/// half-turns; the scale multiplies the profile's coordinates and must stay positive.
 #[derive(Clone, Debug, Default, PartialEq)]
 pub struct Laws {
     /// The twist, in half-turns about the tangent.
@@ -411,7 +428,7 @@ pub struct Stations {
     frames: Vec<StationFrame>,
     /// The closing angle spread along the path, in half-turns (0 for an open path).
     closing: f64,
-    /// The largest measured twist difference the rule placed them by, in half-turns.
+    /// The largest estimated twist error of one step the rule placed them by, in half-turns.
     measured: f64,
 }
 
@@ -502,19 +519,22 @@ fn angle_about(axis: V, a: V, b: V) -> Result<f64, FrameError> {
 
 impl Stations {
     /// The stations of `path`'s rotation-minimising frame from `start_normal` (any vector across
-    /// the start tangent; its part across it is taken), placed until the measured twist
-    /// difference times `radius` is within `tolerance`, and closed as `closing` says.
+    /// the start tangent; its part across it is taken), placed until each step's estimated twist
+    /// error times `radius` is within `tolerance`, and closed as `closing` says.
     ///
     /// The rule: the domain in four equal spans, then from the start, span by span,
-    /// one step against two half steps; a span whose two answers differ by more than the
-    /// tolerance allows is halved, its first half taken next. So the stations depend on the
-    /// path, the start, the tolerance and nothing else.
+    /// one step against two half steps; a span whose step's estimated error, 16/15 of the two
+    /// answers' difference (module documentation), is more than the tolerance allows is halved,
+    /// its first half taken next. So the stations depend on the path, the start, the tolerance
+    /// and nothing else.
     ///
     /// # Errors
     ///
-    /// [`FrameError::InvalidRule`] for a start along the tangent, or a radius or tolerance that
-    /// is not positive and finite; [`FrameError::ZeroTangent`]; [`FrameError::TooManyStations`];
-    /// [`FrameError::ClosingTwist`] under [`Closing::Refuse`]; the path's and the meter's errors.
+    /// [`FrameError::InvalidRule`] for a start along the tangent, a radius or tolerance that is not
+    /// positive and finite, or [`Closing::Spread`] or [`Closing::Refuse`] on a path whose end is
+    /// not its start, or whose tangent there is not its start tangent, within the tolerance;
+    /// [`FrameError::ZeroTangent`]; [`FrameError::TooManyStations`]; [`FrameError::ClosingTwist`]
+    /// under [`Closing::Refuse`]; the path's and the meter's errors.
     pub fn build(
         path: &CurveKind<3>,
         start_normal: V,
@@ -537,6 +557,19 @@ impl Stations {
         let normal =
             unit(across)?.ok_or(FrameError::InvalidRule("a start normal along the tangent"))?;
         let limit = tolerance / radius / core::f64::consts::PI;
+        if closing != Closing::Open {
+            // A closing angle means something only on a closed path: its end at its start, with
+            // the same tangent there, within the tolerance (a closed sweep's path is G1, 13.3).
+            let last = jet(path, b, Limit::FromLeft)?;
+            let gap = length(sub(last.x, first.x))?;
+            let turn = math::atan2(length(cross(first.t, last.t))?, dot(first.t, last.t))?.get()
+                / core::f64::consts::PI;
+            if !(gap <= tolerance && turn <= limit) {
+                return Err(FrameError::InvalidRule(
+                    "a closing rule on a path that is not closed",
+                ));
+            }
+        }
         let mut frames = Vec::new();
         frames.push(StationFrame {
             at: a,
@@ -575,10 +608,14 @@ impl Stations {
                 normal: unit(half)?.ok_or(FrameError::InvalidRule("a degenerate step"))?,
             };
             let (two, _) = step(middle.x, &halfway, &end);
-            let differ = angle_about(end.t, one, two)?.abs();
+            let estimate = RICHARDSON * angle_about(end.t, one, two)?.abs();
             let narrow = (to - from) <= (b - a) * NARROWEST;
-            if differ <= limit || narrow {
-                measured = if differ > measured { differ } else { measured };
+            if estimate <= limit || narrow {
+                measured = if estimate > measured {
+                    estimate
+                } else {
+                    measured
+                };
                 let normal = unit(one)?.ok_or(FrameError::InvalidRule("a degenerate step"))?;
                 if frames.len() >= MAX_STATIONS {
                     return Err(FrameError::TooManyStations);
@@ -614,7 +651,9 @@ impl Stations {
     }
 
     /// Stations from stored frames, as a file reads them back: each frame as it was produced,
-    /// bit for bit, and the closing angle spread along the path.
+    /// bit for bit, and the closing angle spread along the path. The frames are the definition,
+    /// so they give the same frame everywhere as the stations they were stored from; the
+    /// estimate [`Stations::measured_twist`] is not part of it, and reads 0.
     ///
     /// # Errors
     ///
@@ -654,8 +693,11 @@ impl Stations {
         self.closing
     }
 
-    /// The largest twist difference the rule measured placing them, in half-turns: one step
-    /// against two half steps, the method's own error estimate. Measured, not proven (13.3).
+    /// The largest estimated twist error of one step the rule placed them by, in half-turns: 16/15
+    /// of the difference between one step and two half steps, the method's own estimate of the
+    /// stored step's error to leading order (module documentation). The steps' errors add, so
+    /// with n stations the frame is within about (n − 1) times this of the mathematical frame
+    /// everywhere. Measured, not proven (13.3).
     #[must_use]
     pub const fn measured_twist(&self) -> f64 {
         self.measured
@@ -1002,8 +1044,7 @@ pub fn closed_form_frame(path: &CurveKind<3>, start: V, t: f64) -> Result<Option
 fn share_turn(x0: V, z0: V, x1: V, z1: V, share: f64) -> Result<(V, V), FrameError> {
     let y0 = cross(z0, x0);
     let y1 = cross(z1, x1);
-    // The rotation R = F₁·F₀ᵀ as a matrix with columns R·e_k; its quaternion by Shepperd's
-    // method: w = √(1 + trace)/2 when the trace is not too negative.
+    // The rotation R = F₁·F₀ᵀ as a matrix with columns R·e_k.
     let r = |v: V| {
         add(
             add(times(dot(v, x0), x1), times(dot(v, y0), y1)),
@@ -1013,18 +1054,41 @@ fn share_turn(x0: V, z0: V, x1: V, z1: V, share: f64) -> Result<(V, V), FrameErr
     let [c0, c1, c2] = [r([1.0, 0.0, 0.0]), r([0.0, 1.0, 0.0]), r([0.0, 0.0, 1.0])];
     let ([m00, m10, m20], [m01, m11, m21], [m02, m12, m22]) = (c0, c1, c2);
     let trace = m00 + m11 + m22;
-    // The axis is the antisymmetric part's vector; its length is sin θ, and cos θ = (trace − 1)/2.
-    let axis = [m21 - m12, m02 - m20, m10 - m01];
-    let sine = 0.5 * length(axis)?;
-    let cosine = 0.5 * (trace - 1.0);
-    let angle = math::atan2(sine, cosine)?.get() / core::f64::consts::PI;
-    let Some(k) = unit(axis)? else {
-        // No turn, or a half turn whose axis the antisymmetric part cannot give.
-        if cosine > 0.0 {
-            return Ok((x0, z0));
-        }
-        return Err(FrameError::InvalidRule("placements a half turn apart"));
+    // R's quaternion (w, q) by Shepperd's method. Of 4w² = 1 + trace and 4qₖ² = 1 + 2mₖₖ − trace,
+    // which sum to 4, the largest gives its component by a square root (at least 1/2), and the
+    // other three come from R's symmetric and antisymmetric parts divided by it, so the axis
+    // stays accurate up to a half turn.
+    let quarter = |square: f64| -> Result<(f64, f64), FrameError> {
+        let big = 0.5 * math::sqrt(square)?.get();
+        Ok((big, 0.25 / big))
     };
+    let (w, q) = if trace >= m00 && trace >= m11 && trace >= m22 {
+        let (w, f) = quarter(1.0 + trace)?;
+        (w, [(m21 - m12) * f, (m02 - m20) * f, (m10 - m01) * f])
+    } else if m00 >= m11 && m00 >= m22 {
+        let (x, f) = quarter(1.0 + m00 - m11 - m22)?;
+        ((m21 - m12) * f, [x, (m01 + m10) * f, (m02 + m20) * f])
+    } else if m11 >= m22 {
+        let (y, f) = quarter(1.0 - m00 + m11 - m22)?;
+        ((m02 - m20) * f, [(m01 + m10) * f, y, (m12 + m21) * f])
+    } else {
+        let (z, f) = quarter(1.0 - m00 - m11 + m22)?;
+        ((m10 - m01) * f, [(m02 + m20) * f, (m12 + m21) * f, z])
+    };
+    // (w, q) and (−w, −q) are the same turn; with w > 0 it is the shorter way round, by
+    // θ = 2·atan2(|q|, w) < π. With w = 0 it is a half turn, which has no shorter way.
+    if w == 0.0 {
+        return Err(FrameError::InvalidRule("placements a half turn apart"));
+    }
+    let (w, q) = if w < 0.0 {
+        (-w, times(-1.0, q))
+    } else {
+        (w, q)
+    };
+    let Some(k) = unit(q)? else {
+        return Ok((x0, z0));
+    };
+    let angle = 2.0 * math::atan2(length(q)?, w)?.get() / core::f64::consts::PI;
     let part = angle * share;
     let turn = |v: V| -> Result<V, FrameError> {
         // Rodrigues: v cos + (k × v) sin + k (k·v)(1 − cos).

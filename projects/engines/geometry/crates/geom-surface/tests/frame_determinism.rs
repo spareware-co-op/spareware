@@ -3,11 +3,12 @@
 //! G19).
 //!
 //! The corpus: a circular helix, a twisted cubic, a circular arc and a closed cubic B-spline; on
-//! each, rotation-minimising stations at two tolerances (every station's parameter, tangent and
-//! normal, the closing angle and the measured twist), and placements at 13 parameters under every
-//! rule (translate, rotation-minimising, Frenet, fixed reference and up-vector, placements,
-//! helical), plain and with twist and scale laws; the certified Frenet and fixed-reference tests'
-//! answers; and the refusals. Every double is written as its bits.
+//! each, rotation-minimising stations at two tolerances, the loop's closing angle spread at the
+//! finer (every station's parameter, tangent and normal, the closing angle and the measured
+//! twist), and placements at 13 parameters under every rule (translate, rotation-minimising,
+//! Frenet, fixed reference and up-vector, placements, helical), plain and with twist and scale
+//! laws; the certified Frenet and fixed-reference tests' answers; and the refusals. Every double
+//! is written as its bits.
 
 #![allow(
     clippy::arithmetic_side_effects,
@@ -169,7 +170,14 @@ fn corpus() -> (Vec<u8>, usize) {
                 radius: Law::Polynomial(vec![2.0, 0.0, 0.0625]),
             },
         ];
-        for (tolerance, closing) in [(1e-6, Closing::Open), (1e-10, Closing::Spread)] {
+        // The loop's closing angle is spread at the finer tolerance; the open paths stay open.
+        let closed = matches!(path, CurveKind::Nurbs(_));
+        let fine = if closed {
+            Closing::Spread
+        } else {
+            Closing::Open
+        };
+        for (tolerance, closing) in [(1e-6, Closing::Open), (1e-10, fine)] {
             match Stations::build(&path, start, 1.5, tolerance, closing, &mut meter()) {
                 Ok(s) => {
                     out.push(1);
@@ -190,7 +198,7 @@ fn corpus() -> (Vec<u8>, usize) {
                 start: 0.25,
                 rate: -0.0625,
             }),
-            scale: Some(Law::Polynomial(vec![1.0, 0.125, -0.015625])),
+            scale: Some(Law::Polynomial(vec![1.0, 0.125, -0.015_625])),
         };
         for rule in &rules {
             for laws in [Laws::default(), laws.clone()] {
@@ -238,6 +246,15 @@ fn corpus() -> (Vec<u8>, usize) {
             0.0,
             1e-9,
             Closing::Open,
+            &mut meter(),
+        )
+        .err(),
+        Stations::build(
+            &path,
+            [0.0, 1.0, 0.0],
+            1.0,
+            1e-9,
+            Closing::Spread,
             &mut meter(),
         )
         .err(),
