@@ -120,7 +120,9 @@ fn every_real_entry_carries_its_contract() {
     for entry in map()["operations"].as_array().unwrap() {
         // A Preview operation may lack the contract evidence if its entry says so (the gate's own
         // rule; the queries of piece G102 have no driver in `contract_laws.rs` yet).
-        let says_so = entry["tier"].as_str().is_some_and(|t| t.starts_with("Preview"))
+        let says_so = entry["tier"]
+            .as_str()
+            .is_some_and(|t| t.starts_with("Preview"))
             && entry["missing"]
                 .as_array()
                 .is_some_and(|m| m.iter().any(|p| p == "contract"));
