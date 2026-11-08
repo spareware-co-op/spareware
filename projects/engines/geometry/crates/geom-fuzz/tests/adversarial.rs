@@ -119,7 +119,9 @@ fn robustness_never_falls() {
     let counts = tally();
     let now = render(&counts);
     println!("{now}");
-    assert_eq!(now, RECORDED, "the seeded designs' successes moved");
+    // A Windows checkout with Git's `core.autocrlf` gives the recorded file `\r\n` line ends.
+    let recorded = RECORDED.replace("\r\n", "\n");
+    assert_eq!(now, recorded, "the seeded designs' successes moved");
     let (made, designs) = counts["make"];
     assert_eq!(designs, DESIGNS);
     assert!(made * 10 >= designs * 9, "{made} of {designs}");
