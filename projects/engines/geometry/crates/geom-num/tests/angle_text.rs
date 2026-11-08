@@ -486,3 +486,89 @@ fn shortest_texts_read_back_and_exist_in_degrees_and_gon_just_when_whole() {
         }
     }
 }
+
+#[test]
+fn a_colon_is_not_a_digit() {
+    // ':' is the byte after '9'.
+    for notation in [Notation::Dms, Notation::Degrees, Notation::Gon] {
+        assert_eq!(
+            parse("12:", notation).unwrap_err(),
+            parse("12x", notation).unwrap_err(),
+            "{notation:?}"
+        );
+    }
+    assert_eq!(
+        parse("12:", Notation::Dms).unwrap_err(),
+        AngleTextError::MissingSymbol { at: 2 }
+    );
+}
+
+#[test]
+fn the_compact_forms_positions_count_every_digit_of_the_degrees() {
+    for (text, error) in [
+        ("7.6000", AngleTextError::MinutesOutOfRange { at: 2 }),
+        ("123.6000", AngleTextError::MinutesOutOfRange { at: 4 }),
+        ("1234.0060", AngleTextError::SecondsOutOfRange { at: 7 }),
+        ("1234567.0060", AngleTextError::SecondsOutOfRange { at: 10 }),
+    ] {
+        assert_eq!(parse(text, Notation::Compact).unwrap_err(), error, "{text}");
+    }
+}
+
+#[test]
+fn a_written_angle_has_a_point_only_with_places_and_a_sign_only_when_not_zero() {
+    let text = |angle: i64, notation, places| {
+        write(AngleUnits(angle), notation, places)
+            .unwrap()
+            .value()
+            .to_string()
+    };
+    let d = PER_DEGREE;
+    assert_eq!(text(12 * d, Notation::Dms, 0), "12\u{b0}00'00\"");
+    assert_eq!(text(12 * d, Notation::Dms, 1), "12\u{b0}00'00.0\"");
+    assert_eq!(text(12 * d, Notation::Degrees, 0), "12\u{b0}");
+    assert_eq!(text(12 * d, Notation::Degrees, 2), "12.00\u{b0}");
+    assert_eq!(text(12 * PER_GON, Notation::Gon, 0), "12 gon");
+    assert_eq!(text(-12 * d, Notation::Degrees, 0), "-12\u{b0}");
+    // An angle that rounds to zero is written without a sign, and is the same written text as
+    // zero, which is never negative.
+    for notation in [
+        Notation::Dms,
+        Notation::Compact,
+        Notation::Degrees,
+        Notation::Gon,
+    ] {
+        let zero = write(AngleUnits(0), notation, 0).unwrap().value();
+        assert_eq!(zero, write(AngleUnits(1), notation, 0).unwrap().value());
+        let tiny = write(AngleUnits(-1), notation, 0).unwrap().value();
+        assert_eq!(tiny.to_string(), zero.to_string(), "{notation:?}");
+        assert!(!zero.to_string().starts_with('-'));
+    }
+    // The most places are written; one more is refused.
+    let most = write(AngleUnits(1), Notation::Dms, MAX_WRITE_PLACES).unwrap();
+    assert_eq!(most.value().places(), MAX_WRITE_PLACES);
+    assert_eq!(
+        most.value().to_string(),
+        "0\u{b0}00'00.000400000000000000\""
+    );
+    assert_eq!(
+        write(AngleUnits(1), Notation::Dms, MAX_WRITE_PLACES + 1),
+        Err(AngleTextError::TooManyPlaces)
+    );
+}
+
+#[test]
+fn spaces_before_after_and_between_the_parts_are_stepped_over() {
+    let d = PER_DEGREE;
+    assert_eq!(exact(" \t12\u{b0} 30'\r\n", Notation::Dms), 12 * d + d / 2);
+    assert_eq!(
+        exact("\n-12.5\u{b0} ", Notation::Degrees),
+        -(12 * d + d / 2)
+    );
+    let read = parse_quadrant(" N 30\u{b0} E \t\r\n").unwrap();
+    assert_eq!(read.value().units().get(), 30 * d);
+    assert_eq!(
+        parse_quadrant("N 30\u{b0}  \t").unwrap_err(),
+        AngleTextError::Unexpected { at: 5 }
+    );
+}

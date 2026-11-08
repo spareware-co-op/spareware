@@ -362,3 +362,63 @@ fn a_traverse_charges_a_unit_a_leg_and_stops_cleanly() {
         assert!(e.to_string().len() > 10);
     }
 }
+
+#[test]
+fn the_longest_distance_is_taken_and_one_step_more_is_refused() {
+    // Forward takes LONGEST itself; from the frame's middle it then leaves the frame, which the
+    // point refuses, and one step more is too long before any point is formed.
+    assert_eq!(
+        forward(p(0, 0), Bearing::NORTH, LONGEST),
+        Err(CogoError::Num(NumError::OutOfRange {
+            value: i128::from(LONGEST.0)
+        }))
+    );
+    assert_eq!(
+        forward(p(0, 0), Bearing::NORTH, Steps(LONGEST.0 + 1)),
+        Err(CogoError::TooLong)
+    );
+    // A traverse's leg may be LONGEST too, and not a step more.
+    let leg = |distance| Leg {
+        bearing: Bearing::new(AngleUnits(30 * PER_DEGREE)),
+        distance,
+    };
+    let m = misclosure(p(0, 0), &[leg(LONGEST)], p(0, 0), &mut meter()).unwrap();
+    assert_eq!(m.travelled(), u128::from(LONGEST.0));
+    assert_eq!(
+        misclosure(p(0, 0), &[leg(Steps(LONGEST.0 + 1))], p(0, 0), &mut meter()),
+        Err(CogoError::TooLong)
+    );
+}
+
+#[test]
+fn forward_off_the_quarter_turns_is_certified_not_exact() {
+    let from = p(1000, -2000);
+    for degrees in [1, 30, 45, 60, 89, 91, 135, 200, 300, 359] {
+        let b = Bearing::new(AngleUnits(degrees * PER_DEGREE));
+        let f = forward(from, b, Steps(1_000_000_007)).unwrap();
+        assert!(!f.is_exact(), "{degrees}°");
+        assert!(f.bound().0 >= 1, "{degrees}°");
+        assert!(matches!(
+            f.exactness(GridStep::Q0),
+            Exactness::Certified { .. }
+        ));
+    }
+}
+
+#[test]
+fn inverse_along_an_axis_has_its_exact_bearing() {
+    for (to, degrees) in [
+        (p(0, 7), 0),
+        (p(7, 0), 90),
+        (p(0, -7), 180),
+        (p(-7, 0), 270),
+    ] {
+        let b = inverse(p(0, 0), to).unwrap().bearing().unwrap();
+        assert!(b.is_exact(), "{to:?}");
+        assert_eq!(
+            b.value().units(),
+            AngleUnits(degrees * PER_DEGREE),
+            "{to:?}"
+        );
+    }
+}

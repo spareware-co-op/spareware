@@ -401,15 +401,21 @@ fn the_nearest_unit_is_certain_away_from_half_units_and_says_so_at_them() {
     assert!(!wide.is_certain());
     let k = wide.value().get() as f64;
     assert!(wide.bound() as f64 >= k && wide.bound() as f64 <= k + 2.0);
-    // Beyond ±2^62 units, refused.
-    assert_eq!(
-        AngleUnits::nearest_radians(Interval::point(1e10).unwrap()),
-        Err(NumError::OutsideDomain)
-    );
-    assert_eq!(
-        AngleUnits::nearest_radians(Interval::point(-1e10).unwrap()),
-        Err(NumError::OutsideDomain)
-    );
+    // Taken while i64 holds the unit and u64 its bound, and refused past either: 10^10 radians
+    // is about 5.2 · 10^18 units, below 2^63; 2 · 10^10 is past it; and an enclosure of ±4 · 10^10
+    // radians, centred on 0, is about 4.1 · 10^19 units wide, past 2^64.
+    let near = |lo: f64, hi: f64| AngleUnits::nearest_radians(Interval::new(lo, hi).unwrap());
+    for theta in [1e10, -1e10] {
+        let n = near(theta, theta).unwrap();
+        let want = theta / std::f64::consts::PI * HALF_TURN as f64;
+        assert!((n.value().get() as f64 - want).abs() <= 2048.0, "{theta}");
+    }
+    for (lo, hi) in [(2e10, 2e10), (-2e10, -2e10), (-4e10, 4e10)] {
+        assert_eq!(near(lo, hi), Err(NumError::OutsideDomain), "[{lo}, {hi}]");
+    }
+    let wide = near(-2e10, 2e10).unwrap();
+    assert_eq!(wide.value(), AngleUnits::ZERO);
+    assert!(wide.bound() > 1 << 63, "{}", wide.bound());
 }
 
 #[test]
@@ -492,5 +498,55 @@ fn a_vector_lies_between_the_directions_a_unit_either_side_of_its_bearing() {
             Some(std::cmp::Ordering::Greater),
             "{e} {n}"
         );
+    }
+}
+
+#[test]
+fn sines_and_cosines_come_from_the_first_octant_by_its_symmetries() {
+    // The reduction is part of the definition, since the bits are (the same on every target and
+    // in every later version): an angle within the first eighth of its quarter turn, the eighth
+    // itself included, takes sinpi and cospi of its part in half-turns, and one past it those of
+    // the rest of the quarter, swapped. Beside a quarter turn, where one of them is tiny, each is
+    // still within a few ulps of its value.
+    let half = Interval::point(HALF_TURN as f64).unwrap();
+    let of = |part: i64| Interval::point(part as f64).unwrap().div(half).unwrap();
+    let eighth = QUARTER_TURN / 2;
+    for q in 0..4 {
+        for part in [
+            1,
+            2,
+            7,
+            1_000,
+            eighth - 1,
+            eighth,
+            eighth + 1,
+            QUARTER_TURN - 1_000,
+            QUARTER_TURN - 1,
+        ] {
+            let (s, c) = AngleUnits(q * QUARTER_TURN + part).sin_cos().unwrap();
+            let (u, v) = if part <= eighth {
+                let h = of(part);
+                (h.sinpi().unwrap(), h.cospi().unwrap())
+            } else {
+                let h = of(QUARTER_TURN - part);
+                (h.cospi().unwrap(), h.sinpi().unwrap())
+            };
+            let want = match q {
+                0 => (u, v),
+                1 => (v, u.neg()),
+                2 => (u.neg(), v.neg()),
+                _ => (v.neg(), u),
+            };
+            assert_eq!((s, c), want, "{q} quarter turns and {part} units");
+            for e in [s, c] {
+                let size = e.lo().abs().max(e.hi().abs());
+                assert!(
+                    e.hi() - e.lo() <= 8.0 * f64::EPSILON * size,
+                    "{q} quarter turns and {part} units: [{}, {}]",
+                    e.lo(),
+                    e.hi()
+                );
+            }
+        }
     }
 }

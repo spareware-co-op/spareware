@@ -54,6 +54,7 @@
 use crate::error::NumError;
 use crate::interval::Interval;
 use crate::math;
+use crate::real::Real;
 
 /// Angle units in one arc-second.
 pub const PER_SECOND: i64 = 2_500;
@@ -108,14 +109,16 @@ const fn exactly(v: i64) -> f64 {
     v as f64
 }
 
-/// A whole double as an `i64`: every caller passes a whole number of magnitude at most 2^62,
-/// checked beside each call.
-#[allow(
-    clippy::cast_possible_truncation,
-    reason = "every caller passes a whole number of magnitude at most 2^62, which i64 holds exactly"
-)]
-const fn whole(v: f64) -> i64 {
-    v as i64
+/// A whole double as an `i64`, or [`NumError::OutsideDomain`] if `i64` does not hold it.
+fn whole(v: f64) -> Result<i64, NumError> {
+    // A whole double within ±2^127 is an `i128` exactly; one beyond goes to the nearer end of
+    // `i128`, which no `i64` holds either, so the conversion refuses it as it should.
+    #[allow(
+        clippy::cast_possible_truncation,
+        reason = "exact for a whole double within ±2^127; beyond, the saturated i128 is refused below"
+    )]
+    let wide = v as i128;
+    i64::try_from(wide).map_err(|_| NumError::OutsideDomain)
 }
 
 impl AngleUnits {
@@ -215,8 +218,10 @@ impl AngleUnits {
     ///
     /// # Errors
     ///
-    /// [`NumError::OutsideDomain`] for an enclosure in units beyond ±2^62, which `i64` cannot hold
-    /// with room to reduce (about ±1.4 × 10^9 turns).
+    /// [`NumError::OutsideDomain`] when `i64` does not hold the unit or `u64` its bound: for an
+    /// enclosure whose midpoint is about 2^63 units from zero (about 2.8 × 10^9 turns) or more,
+    /// or which is about 2^64 units wide or wider; the interval operations' errors for one
+    /// beyond what a double holds.
     pub fn nearest_radians(theta: Interval) -> Result<Nearest<AngleUnits>, NumError> {
         // Zero radians is zero units exactly, the one angle a double holds that is a whole number
         // of units: every other is π times an irrational number of half-turns or not a unit.
@@ -231,35 +236,35 @@ impl AngleUnits {
             .div(Interval::PI)?
             .mul(Interval::point(exactly(HALF_TURN))?)?;
         let (lo, hi) = (units.lo(), units.hi());
-        let most = exactly(1 << 62);
-        if lo < -most || hi > most {
-            return Err(NumError::OutsideDomain);
-        }
-        // The midpoint of two doubles within ±2^62, halved first so it cannot overflow.
+        // The midpoint of the two ends, each halved first so the sum cannot overflow.
         let k = math::round_ties_even(lo * 0.5 + hi * 0.5)?.get();
         let certain =
             math::round_ties_even(lo)?.get() == k && math::round_ties_even(hi)?.get() == k;
+        let value = AngleUnits(whole(k)?);
         // Each distance to an end, rounded to nearest and moved a step up, is at least the exact
-        // distance; both are at most 2^63 + 1, so the ceiling fits a u64.
+        // distance, and the larger is not negative, since the two add up to the enclosure's width.
         let (below, above) = ((k - lo).next_up(), (hi - k).next_up());
-        let bound = ceiling(if above > below { above } else { below })?;
-        // |k| ≤ 2^62: k is the rounded midpoint of two doubles within ±2^62.
+        let bound = ceiling(Real::new(above)?.total_max(Real::new(below)?).get())?;
         Ok(Nearest {
-            value: AngleUnits(whole(k)),
+            value,
             bound,
             certain,
         })
     }
 }
 
-/// The ceiling of a positive double of at most 2^63 + 2, as a whole number of units.
-#[allow(
-    clippy::cast_possible_truncation,
-    clippy::cast_sign_loss,
-    reason = "the caller passes a positive double of at most 2^63 + 2, whose ceiling u64 holds"
-)]
+/// The ceiling of a double that is not negative, as a whole number of units, or
+/// [`NumError::OutsideDomain`] if `u64` does not hold it.
 fn ceiling(v: f64) -> Result<u64, NumError> {
-    Ok(math::ceil(v)?.get() as u64)
+    // The ceiling is whole, so within 2^128 it is a `u128` exactly; beyond, it goes to `u128::MAX`,
+    // which no `u64` holds either, so the conversion refuses it as it should.
+    #[allow(
+        clippy::cast_possible_truncation,
+        clippy::cast_sign_loss,
+        reason = "exact for a whole double from 0 to 2^128; beyond, the saturated u128 is refused below"
+    )]
+    let wide = math::ceil(v)?.get() as u128;
+    u64::try_from(wide).map_err(|_| NumError::OutsideDomain)
 }
 
 /// A whole number of angle units chosen as the nearest to an angle that is only known within an
@@ -440,10 +445,24 @@ mod tests {
     fn whole_and_exact_conversions_keep_their_values() {
         assert_eq!(exactly(1 << 53), 9_007_199_254_740_992.0);
         assert_eq!(exactly(-(1 << 53)), -9_007_199_254_740_992.0);
-        assert_eq!(whole(-4.0), -4);
-        assert_eq!(whole(4_611_686_018_427_387_904.0), 1 << 62);
-        assert_eq!(ceiling(0.25).unwrap(), 1);
-        assert_eq!(ceiling(1.0).unwrap(), 1);
-        assert_eq!(ceiling(1.5).unwrap(), 2);
+        assert_eq!(whole(-4.0), Ok(-4));
+        assert_eq!(whole(4_611_686_018_427_387_904.0), Ok(1 << 62));
+        // i64 holds −2^63 but not 2^63; nor anything beyond 2^127, which the cast saturates.
+        assert_eq!(whole(-9_223_372_036_854_775_808.0), Ok(i64::MIN));
+        assert_eq!(
+            whole(9_223_372_036_854_775_808.0),
+            Err(NumError::OutsideDomain)
+        );
+        assert_eq!(whole(-1e300), Err(NumError::OutsideDomain));
+        assert_eq!(ceiling(0.25), Ok(1));
+        assert_eq!(ceiling(1.0), Ok(1));
+        assert_eq!(ceiling(1.5), Ok(2));
+        // u64 holds 2^64 − 2048, the double below 2^64, but not 2^64.
+        assert_eq!(ceiling(18_446_744_073_709_549_568.0), Ok(u64::MAX - 2047));
+        assert_eq!(
+            ceiling(18_446_744_073_709_551_616.0),
+            Err(NumError::OutsideDomain)
+        );
+        assert_eq!(ceiling(1e300), Err(NumError::OutsideDomain));
     }
 }

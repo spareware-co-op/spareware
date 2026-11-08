@@ -42,7 +42,7 @@
 use geom_num::angle::{Bearing, Nearest, QUARTER_TURN};
 use geom_num::interval::Interval;
 use geom_num::math;
-use geom_num::{Exactness, GridStep, NumError, P2, Steps};
+use geom_num::{Exactness, GridStep, NumError, P2, Real, Steps};
 use geom_run::{Stopped, WorkMeter};
 
 /// The longest distance [`forward`] takes, 2^42 steps: longer than any line inside a frame, whose
@@ -119,7 +119,7 @@ fn committed(x: Interval) -> Result<(i64, u64, bool), CogoError> {
     // Each distance to an end, rounded to nearest and moved a step up, is at least the exact
     // distance; both are below 2^54 + 1.
     let (below, above) = ((k - lo).next_up(), (hi - k).next_up());
-    let far = math::ceil(if above > below { above } else { below })?.get();
+    let far = math::ceil(Real::new(above)?.total_max(Real::new(below)?).get())?.get();
     // |k| ≤ 2^53 and 0 < far ≤ 2^54 + 2.
     Ok((whole(k), whole(far).unsigned_abs(), certain))
 }
@@ -213,7 +213,7 @@ pub fn forward(from: P2, bearing: Bearing, distance: Steps) -> Result<Forward, C
     let (py, by, cy) = committed(at_y)?;
     Ok(Forward {
         point: P2::new(px, py)?,
-        bound: Steps(if bx > by { bx } else { by }),
+        bound: Steps(bx.max(by)),
         certain: cx && cy,
     })
 }

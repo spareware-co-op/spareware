@@ -58,6 +58,7 @@
 //! at most 128 bits wide.
 
 use core::fmt;
+use core::num::NonZeroU128;
 
 use crate::angle::{
     AngleUnits, Bearing, FULL_TURN, HALF_TURN, PER_DEGREE, PER_GON, PER_MINUTE, PER_SECOND,
@@ -244,15 +245,8 @@ impl<'t> Cursor<'t> {
 
     /// Steps over any spaces: ASCII spaces, tabs and line ends.
     fn spaces(&mut self) {
-        while self
-            .rest()
-            .as_bytes()
-            .first()
-            .copied()
-            .is_some_and(is_space)
-        {
-            self.step(1);
-        }
+        let n = self.rest().bytes().take_while(|b| is_space(*b)).count();
+        self.step(n);
     }
 
     /// Whether the text goes on with one of `options`, stepping over the first that it does.
@@ -342,6 +336,9 @@ const fn is_space(byte: u8) -> bool {
     matches!(byte, b' ' | b'\t' | b'\n' | b'\r')
 }
 
+/// The spaces [`is_space`] accepts, as characters.
+const SPACES: [char; 4] = [' ', '\t', '\n', '\r'];
+
 /// `value`'s last `count` decimal digits, with leading zeros: a fraction's digits after the point.
 fn fixed_digits(f: &mut fmt::Formatter<'_>, value: u128, count: usize) -> fmt::Result {
     for place in (0..count).rev() {
@@ -349,21 +346,20 @@ fn fixed_digits(f: &mut fmt::Formatter<'_>, value: u128, count: usize) -> fmt::R
         let digit = value.checked_div(scale).ok_or(fmt::Error)? % 10;
         // A digit is below 10, so it is a u8 and an ASCII digit.
         let byte = u8::try_from(digit)
-            .map_err(|_| fmt::Error)?
+            .ok()
+            .ok_or(fmt::Error)?
             .saturating_add(b'0');
         fmt::Write::write_char(f, char::from(byte))?;
     }
     Ok(())
 }
 
-/// `n / d` rounded to nearest, ties to even, and whether it was exact; `d` is a power of ten.
-fn divided(n: u128, d: u128) -> (u128, bool) {
-    let (Some(quotient), Some(rest)) = (n.checked_div(d), n.checked_rem(d)) else {
-        return (0, n == 0);
-    };
+/// `n / d` rounded to nearest, ties to even, and whether it was exact.
+fn divided(n: u128, d: NonZeroU128) -> (u128, bool) {
+    let (quotient, rest) = (n / d, n % d);
     // Twice the remainder cannot overflow: it is below d ≤ 10^30.
     let twice = rest.saturating_mul(2);
-    let up = twice > d || (twice == d && quotient % 2 == 1);
+    let up = twice > d.get() || (twice == d.get() && quotient % 2 == 1);
     let rounded = if up {
         quotient.saturating_add(1)
     } else {
@@ -381,7 +377,8 @@ fn units_of(n: &Number, per: i64) -> (u128, bool) {
     let scale = TEN
         .get(usize::try_from(n.places).unwrap_or(usize::MAX))
         .copied()
-        .unwrap_or(1);
+        .and_then(NonZeroU128::new)
+        .unwrap_or(NonZeroU128::MIN);
     // Below 10^30 · 9,000,000 < 2^123: MAX_PLACES's bound.
     let (part, exact) = divided(n.fraction.saturating_mul(u128::from(per)), scale);
     (whole.saturating_add(part), exact)
@@ -450,7 +447,7 @@ fn dms(cursor: &mut Cursor<'_>) -> Result<(u128, bool), AngleTextError> {
         let per = PARTS.get(part).map_or(PER_SECOND, |(_, per)| *per);
         let (units, whole) = units_of(&n, per);
         total = total.checked_add(units).ok_or(AngleTextError::TooLarge)?;
-        exact = exact && whole;
+        exact &= whole;
         fractional = n.places > 0;
         next = part.saturating_add(1);
         any = true;
@@ -515,13 +512,8 @@ fn compact(cursor: &mut Cursor<'_>) -> Result<(u128, bool), AngleTextError> {
 }
 
 /// How many decimal digits `v` has: 1 for 0.
-fn decimal_length(mut v: u64) -> u32 {
-    let mut digits = 1u32;
-    while v >= 10 {
-        v /= 10;
-        digits = digits.saturating_add(1);
-    }
-    digits
+fn decimal_length(v: u64) -> u32 {
+    v.checked_ilog10().map_or(1, |d| d.saturating_add(1))
 }
 
 /// A decimal number of `per` units each, then one of `symbols` or none.
@@ -658,7 +650,8 @@ pub fn write(
         .ok_or(AngleTextError::TooManyPlaces)?;
     // |angle| ≤ 2^63 and scale ≤ 10^18, so the product is below 10^37.
     let scaled = u128::from(angle.0.unsigned_abs()).saturating_mul(scale);
-    let (magnitude, exact) = divided(scaled, u128::from(last_unit(notation).unsigned_abs()));
+    let unit = NonZeroU128::new(u128::from(last_unit(notation).unsigned_abs()));
+    let (magnitude, exact) = divided(scaled, unit.unwrap_or(NonZeroU128::MIN));
     let written = Written {
         negative: angle.0 < 0,
         magnitude,
@@ -726,15 +719,7 @@ pub fn parse_quadrant(text: &str) -> Result<Rounded<Bearing>, AngleTextError> {
     // The text's end without trailing spaces, and the letter before it, read as bytes: E and W
     // are one byte each, and a byte of a longer character never equals either.
     let bytes = text.as_bytes();
-    let mut last = bytes.len();
-    while last > 0
-        && bytes
-            .get(last.saturating_sub(1))
-            .copied()
-            .is_some_and(is_space)
-    {
-        last = last.saturating_sub(1);
-    }
+    let last = text.trim_end_matches(SPACES).len();
     let letter = last.saturating_sub(1);
     let east = match bytes.get(letter) {
         Some(b'E' | b'e') => true,
@@ -812,14 +797,13 @@ mod tests {
 
     #[test]
     fn ties_round_to_even_and_report_exactness() {
+        let divided = |n: u128, d: u128| divided(n, NonZeroU128::new(d).unwrap());
         assert_eq!(divided(15, 10), (2, false));
         assert_eq!(divided(25, 10), (2, false));
         assert_eq!(divided(26, 10), (3, false));
         assert_eq!(divided(24, 10), (2, false));
         assert_eq!(divided(30, 10), (3, true));
         assert_eq!(divided(0, 10), (0, true));
-        assert_eq!(divided(7, 0), (0, false));
-        assert_eq!(divided(0, 0), (0, true));
     }
 
     #[test]
