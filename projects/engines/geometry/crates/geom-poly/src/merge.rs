@@ -966,45 +966,81 @@ fn sweep(
         sheets.get(first.sheet).ok_or(MergeError::Open)?.face,
         first.bound,
     ];
+    // A line whose sides all run between the same two points, as most do, is one stretch with
+    // every side along it, taken in the order [`stretches`] would take them, last first.
+    let ends = (first.low, first.high);
+    if sides.iter().all(|side| (side.low, side.high) == ends) {
+        let along = sides.iter().rev().copied();
+        return stretch((line, ends, on), along, joins, runs);
+    }
     for (low, high, active) in stretches(sides) {
-        let cut = active.iter().any(|side| side.sheet == CUT);
-        let mut held: BTreeMap<usize, Holding<'_>> = BTreeMap::new();
-        for side in active.iter().filter(|side| side.sheet != CUT) {
-            let slot = held.entry(side.sheet).or_insert((0, None, None));
+        stretch((line, (low, high), on), active.iter().copied(), joins, runs)?;
+    }
+    Ok(())
+}
+
+/// One stretch of line `line`, between its two points and on its two planes, with `active` the
+/// sides along all of it: pieces of one sheet on both sides of it join unless a cut lies along it,
+/// and the rest are a run's fins, in sheet order.
+fn stretch<'s, I>(
+    (line, (low, high), on): (usize, (usize, usize), [Plane; 2]),
+    active: I,
+    joins: &mut Vec<(usize, usize)>,
+    runs: &mut Vec<Run>,
+) -> Result<(), MergeError>
+where
+    I: Iterator<Item = &'s Side>,
+{
+    let mut cut = false;
+    // Each sheet's holding, in sheet order: a stretch holds few sheets, so a sorted list.
+    let mut held: Vec<(usize, Holding<'s>)> = Vec::with_capacity(2);
+    for side in active {
+        if side.sheet == CUT {
+            cut = true;
+            continue;
+        }
+        let at = match held.binary_search_by_key(&side.sheet, |(sheet, _)| *sheet) {
+            Ok(at) => at,
+            Err(at) => {
+                held.insert(at, (side.sheet, (0, None, None)));
+                at
+            }
+        };
+        for (_, slot) in held.iter_mut().skip(at).take(1) {
             if side.rising {
-                *slot = (slot.0.saturating_add(1), Some(*side), slot.2);
+                *slot = (slot.0.saturating_add(1), Some(side), slot.2);
             } else {
-                *slot = (slot.0.saturating_sub(1), slot.1, Some(*side));
+                *slot = (slot.0.saturating_sub(1), slot.1, Some(side));
             }
         }
-        let mut fins = Vec::new();
-        for (sheet, (net, up, down)) in held {
-            let fin = |side: &Side, rising: bool| RunFin {
-                sheet,
-                rising,
-                held: side.held,
-                bound: side.bound,
-            };
-            match (net, up, down) {
-                (0, Some(a), Some(b)) if cut => {
-                    fins.push(fin(a, true));
-                    fins.push(fin(b, false));
-                }
-                (0, Some(a), Some(b)) => joins.push((a.held, b.held)),
-                (1, Some(side), None) => fins.push(fin(side, true)),
-                (-1, None, Some(side)) => fins.push(fin(side, false)),
-                _ => return Err(MergeError::Overlap),
+    }
+    let mut fins = Vec::with_capacity(held.len());
+    for (sheet, (net, up, down)) in held {
+        let fin = |side: &Side, rising: bool| RunFin {
+            sheet,
+            rising,
+            held: side.held,
+            bound: side.bound,
+        };
+        match (net, up, down) {
+            (0, Some(a), Some(b)) if cut => {
+                fins.push(fin(a, true));
+                fins.push(fin(b, false));
             }
+            (0, Some(a), Some(b)) => joins.push((a.held, b.held)),
+            (1, Some(side), None) => fins.push(fin(side, true)),
+            (-1, None, Some(side)) => fins.push(fin(side, false)),
+            _ => return Err(MergeError::Overlap),
         }
-        if !fins.is_empty() {
-            runs.push(Run {
-                line,
-                low,
-                high,
-                fins,
-                on,
-            });
-        }
+    }
+    if !fins.is_empty() {
+        runs.push(Run {
+            line,
+            low,
+            high,
+            fins,
+            on,
+        });
     }
     Ok(())
 }
