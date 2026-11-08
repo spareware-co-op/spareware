@@ -519,15 +519,24 @@ fn weight_sums_past_the_doubles_still_give_the_point() {
     assert_eq!(out[0], [tiny, 1.0, 0.0]);
     let mut rng = Lcg(70);
     let factor = gamma(14 + 3);
+    let weights = fuzz.weights().unwrap().to_vec();
     let mut us = parameters(&fuzz, &mut rng, 200);
     us.push(1.338_235_294_117_647);
     for u in us {
         for limit in LIMITS {
             let c = fuzz.point(u, limit).unwrap();
             let (e, m) = exact(&fuzz, u, limit, 0);
+            // The module's underflow term, (7p + 1)·2^−1074·(1 + 1 / Σ N_j·w_j): near the first
+            // point the weights are near 1e-10, and where w·P is near 1e-21 the point underflows.
+            let n = derivatives(fuzz.basis().knots(), 1, u, limit, 0);
+            let mut w = zero();
+            for (nj, &wj) in n[0].iter().zip(&weights) {
+                w += nj * q(wj);
+            }
+            let tiny = qi(8) * q(f64::from_bits(1)) * (qi(1) + qi(1) / w);
             for d in 0..3 {
                 assert!(
-                    within(c[d], &e[0][d], &(&factor * &m[0][d])),
+                    within(c[d], &e[0][d], &(&factor * &m[0][d] + &tiny)),
                     "u {u}, coordinate {d}: {c:?}"
                 );
             }

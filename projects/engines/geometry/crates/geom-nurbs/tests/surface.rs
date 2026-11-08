@@ -268,11 +268,13 @@ fn weight_sums_past_the_doubles_still_give_the_point() {
     let s = Surface::from_homogeneous(
         unit(),
         unit(),
+        // Euclidean points in [−1/4, 1/2], so the homogeneous partials, differences of these,
+        // stay inside the doubles while the weight sum does not.
         vec![
-            [max, 0.5 * max, 0.25 * max],
-            [0.5 * max, max, -0.25 * max],
-            [-0.5 * max, 0.25 * max, max],
-            [0.75 * max, -max, 0.5 * max],
+            [0.5 * max, 0.25 * max, 0.125 * max],
+            [0.25 * max, 0.5 * max, -0.125 * max],
+            [-0.25 * max, 0.125 * max, 0.5 * max],
+            [0.375 * max, -0.25 * max, 0.25 * max],
         ],
         Some(vec![max; 4]),
     )
