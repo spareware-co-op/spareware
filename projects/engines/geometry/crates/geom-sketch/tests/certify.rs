@@ -430,7 +430,7 @@ fn a_rules_derivatives_are_kept_apart_by_residual_and_match_its_differences() {
         a.rule_values(0, &point_box(x))
             .unwrap()
             .iter()
-            .map(|r| (r.lo() + r.hi()) / 2.0)
+            .map(|r| f64::midpoint(r.lo(), r.hi()))
             .collect()
     };
     let n = x.len();
