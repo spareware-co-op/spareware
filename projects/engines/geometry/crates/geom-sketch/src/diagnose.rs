@@ -273,6 +273,15 @@ fn entry(list: &[Vec<f64>], j: usize, i: usize) -> Result<f64, SketchError> {
         .ok_or(SketchError::Internal)
 }
 
+/// How much a downdated column norm still rests on the norm it was last computed from: the share
+/// `kept` of the norm the last step left, times the square of the norm `old` against the computed
+/// `fresh` (LAPACK xGEQP3's test, as Businger and Golub's method keeps it). At most `RECOMPUTE`, the
+/// norm is computed again from the column.
+fn drift(kept: f64, old: f64, fresh: f64) -> f64 {
+    let ratio = old / fresh;
+    kept * ratio * ratio
+}
+
 fn root(x: f64) -> Result<f64, SketchError> {
     Ok(Real::new(x)?.sqrt()?.get())
 }
@@ -414,7 +423,7 @@ fn factor(
             }
             let ratio = entry(&a, j, k)?.abs() / old;
             let kept = larger(1.0 - ratio * ratio, 0.0);
-            let drift = kept * (old / get(&fresh, j)?) * (old / get(&fresh, j)?);
+            let drift = drift(kept, old, get(&fresh, j)?);
             let value = if drift <= RECOMPUTE {
                 let exact = tail_norm(&a, j, k.saturating_add(1))?;
                 *fresh.get_mut(j).ok_or(SketchError::Internal)? = exact;
@@ -1360,5 +1369,31 @@ mod tests {
         }
         amounts.dedup();
         assert!(amounts.len() > 1, "{amounts:?}");
+    }
+
+    /// The drift is the share kept times the square of the norm against the one computed.
+    #[test]
+    fn the_drift_is_the_share_kept_times_the_square_of_the_norm_against_the_computed_one() {
+        assert_eq!(drift(0.5, 1.0, 1.0), 0.5);
+        assert_eq!(drift(0.5, 1.0, 4.0), 0.5 / 16.0);
+        assert_eq!(drift(0.25, 3.0, 2.0), 0.25 * 1.5 * 1.5);
+        assert_eq!(drift(0.0, 3.0, 2.0), 0.0);
+    }
+
+    /// A pivot is near a threshold within a factor of 16 either way, the factor itself included.
+    #[test]
+    fn near_is_within_a_factor_of_sixteen_either_way() {
+        let t = 0.000_244_140_625;
+        for (size, want) in [
+            (t, true),
+            (16.0 * t, true),
+            (t / 16.0, true),
+            (17.0 * t, false),
+            (t / 17.0, false),
+            (1.0, false),
+            (0.0, false),
+        ] {
+            assert_eq!(near(size, t), want, "{size:e}");
+        }
     }
 }
