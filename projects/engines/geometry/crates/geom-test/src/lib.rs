@@ -66,6 +66,8 @@
 //! - [`corpus`]: the corpus register of 28.12 (G114): every outside corpus with its source, version,
 //!   SHA-256, licence and whether we may store it, the licence rules of 29.15 and 32.11, and the
 //!   hash-checked fetcher. The binary `corpus` lists, checks and fetches.
+//! - [`smb`]: `SMLib`'s B-rep files (`.smb`), read as `SMLib` reads them (G262a): its ASCII reader
+//!   translated, so NVIDIA's fixtures reach the kernel's tests as the values `SMLib` reads.
 //! - [`museum`]: the format museum (28.13, 24.6; G99): sample files and operation logs of every
 //!   released format version and edition, compiled in and held to their recorded hashes on every
 //!   target.
@@ -277,6 +279,7 @@ pub mod rust_source;
 pub mod scan;
 pub mod second_check;
 pub mod seed;
+pub mod smb;
 pub mod ssi;
 pub mod trip;
 
