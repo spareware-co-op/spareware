@@ -2346,6 +2346,49 @@ pub mod bvh {
     }
 }
 
+/// `geom-topo`'s hot paths (piece G80, decision 32.44): a column filled, copied and written, and
+/// a builder's arenas published.
+pub mod topo {
+    use geom_run::{Budget, WorkMeter};
+    use geom_topo::{Arena, BodyKind, Builder, Column, Face, Ix, TopoError};
+
+    use super::run;
+
+    /// Fills a column with [`Column::extend`], copies it, writes one row of the copy with
+    /// [`Column::set`], and sums what [`Column::get`] reads from both.
+    #[inline(never)]
+    pub fn column_edit(batch: &[(Vec<u64>, u32, u64)], out: &mut Vec<Result<u64, TopoError>>) {
+        run(batch, out, |(values, row, value)| {
+            let mut column: Column<Face, u64> = Column::new();
+            column.extend(values.iter().copied())?;
+            let mut copy = column.clone();
+            let missing = TopoError::Full(Arena::Face);
+            copy.set(Ix::new(*row).ok_or(missing)?, *value)?;
+            let mut sum = 0_u64;
+            for r in 0..column.len() {
+                let ix = Ix::new(r).ok_or(missing)?;
+                let (a, b) = (column.get(ix).ok_or(missing)?, copy.get(ix).ok_or(missing)?);
+                sum = sum.wrapping_add(*a).wrapping_add(*b);
+            }
+            Ok(sum)
+        });
+    }
+
+    /// [`Builder::publish`] on a copy of each builder, with its void region outside; the fins of
+    /// the body it gives.
+    #[inline(never)]
+    pub fn publish(batch: &[Builder], out: &mut Vec<Result<u32, TopoError>>) {
+        run(batch, out, |builder| {
+            let mut meter = WorkMeter::new(Budget::UNLIMITED);
+            let outside = Ix::new(1).ok_or(TopoError::Full(Arena::Region))?;
+            let body = builder
+                .clone()
+                .publish(BodyKind::Solid, outside, &mut meter)?;
+            Ok(body.arenas().fins.len())
+        });
+    }
+}
+
 /// `geom-nurbs`'s hot paths (pieces G56, G58 and G59, decision 32.44): evaluating a clamped cubic,
 /// chord-length interpolation, and the bound of a cubic Bernstein piece, each under an unlimited
 /// budget where it takes one.
@@ -2597,6 +2640,56 @@ pub mod roots {
     pub fn gauss_legendre(batch: &[(Real, Real)], out: &mut Vec<Result<Real, QuadError>>) {
         run(batch, out, |&(a, b)| {
             quadrature::gauss_legendre(crate::inputs::roots::quintic, a, b, 8)
+        });
+    }
+}
+
+/// `geom-run`'s parallel helper (decision 32.44): `Exec::map` over a list that fits one chunk, on
+/// the serial executor and on a pool, under an unlimited budget. The pool runs its tasks on the
+/// calling thread, in order, so the two counts differ by the helper's own dispatch only, never by
+/// a thread's wake-up: a lone wave runs on the calling thread on either, so they should match.
+pub mod helper {
+    use geom_run::{Budget, ChunkPlan, Exec, Phase, Pool, RunError, Stopped, WorkMeter};
+
+    use super::run;
+
+    /// The phase every call runs as.
+    const PHASE: Phase = Phase::new("bench");
+    /// The chunk size: above every list's length, so each list is one chunk.
+    const PLAN: ChunkPlan = ChunkPlan::fixed::<64>();
+
+    /// A pool that runs every task on the calling thread, in order.
+    struct InOrder;
+
+    impl Pool for InOrder {
+        fn run_all(&self, tasks: &mut [&mut (dyn FnMut() + Send)]) {
+            for task in tasks.iter_mut() {
+                task();
+            }
+        }
+    }
+
+    /// One item's work: a unit of the budget and a multiply.
+    fn item(_: usize, x: &u64, meter: &mut WorkMeter<'_>) -> Result<u64, Stopped> {
+        meter.charge(1)?;
+        Ok(x.wrapping_mul(3))
+    }
+
+    /// `Exec::map` of each list on the serial executor.
+    #[inline(never)]
+    pub fn lone_serial(batch: &[Vec<u64>], out: &mut Vec<Result<Vec<u64>, RunError>>) {
+        run(batch, out, |items| {
+            let mut meter = WorkMeter::new(Budget::UNLIMITED);
+            Exec::serial().map(&mut meter, PHASE, PLAN, items, item)
+        });
+    }
+
+    /// `Exec::map` of each list on a pool.
+    #[inline(never)]
+    pub fn lone_pool(batch: &[Vec<u64>], out: &mut Vec<Result<Vec<u64>, RunError>>) {
+        run(batch, out, |items| {
+            let mut meter = WorkMeter::new(Budget::UNLIMITED);
+            Exec::with_pool(&InOrder).map(&mut meter, PHASE, PLAN, items, item)
         });
     }
 }

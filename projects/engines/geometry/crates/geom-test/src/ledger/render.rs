@@ -55,8 +55,8 @@ source, and every STUDY, REJECT and unvetted row, are the ledger of \
 const NOTICE_INTRO: &str = "Spare Kit geometry kernel: notices
 ==================================
 
-The geometry kernel (projects/engines/geometry) is Spare Kit's own work under the Mozilla Public
-License 2.0 (LICENSE at the repository root), except where a file says it is ported from an
+The geometry kernel (projects/engines/geometry) is Spare Kit's own work under the Apache License
+2.0 (LICENSE at the repository root), except where a file says it is ported from an
 outside source. This file holds the licence text of every outside source the kernel takes code
 from, and the credit owed to every source the kernel takes code or a method from, as rule 4 of
 section 29.20 of the kernel's architecture (chapter 29, sources and licences) requires. It ships

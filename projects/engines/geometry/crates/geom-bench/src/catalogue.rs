@@ -466,6 +466,9 @@ pub static OPS: &[Op] = &[
     // each built for a scene and queried.
     Op { group: "bvh", name: "tree_build_query", measures: "geom_bvh::BoxTree::build", classes: T, prepare: |c| bind(inputs::bvh::tree_build_query(c), kernels::bvh::tree_build_query) },
     Op { group: "bvh", name: "cells_within", measures: "geom_bvh::CellIndex::build", classes: T, prepare: |c| bind(inputs::bvh::cells_within(c), kernels::bvh::cells_within) },
+    // geom-topo's hot paths (piece G80; decision 32.44): a column's copy on write, and publishing.
+    Op { group: "topo", name: "column_edit", measures: "geom_topo::Column::set", classes: T, prepare: |c| bind(inputs::topo::column_edit(c), kernels::topo::column_edit) },
+    Op { group: "topo", name: "publish", measures: "geom_topo::Builder::publish", classes: T, prepare: |c| bind(inputs::topo::publish(c), kernels::topo::publish) },
     // geom-nurbs's hot paths (pieces G56, G58 and G59; decision 32.44): evaluation, interpolation
     // and the Bernstein bound.
     Op { group: "nurbs", name: "curve_point", measures: "geom_nurbs::Curve::point", classes: T, prepare: |c| bind(inputs::nurbs::curve_point(c), kernels::nurbs::curve_point) },
@@ -490,10 +493,14 @@ pub static OPS: &[Op] = &[
     Op { group: "brent", name: "zero", measures: "brent::zero", classes: T, prepare: |c| bind(inputs::roots::zero(c), kernels::roots::zero) },
     Op { group: "quadrature", name: "gauss_legendre", measures: "quadrature::gauss_legendre", classes: T, prepare: |c| bind(inputs::roots::gauss_legendre(c), kernels::roots::gauss_legendre) },
     Op { group: "math_types", name: "decimal_parse", measures: "geom_math::Decimal::parse", classes: T, prepare: |c| bind(inputs::math_types::decimal_parse(c), kernels::math_types::decimal_parse) },
+    // geom-run's parallel helper: a map whose items fit one chunk, on the serial executor and on a
+    // pool, so its lone wave is counted both ways (decision 32.44).
+    Op { group: "helper", name: "lone_serial", measures: "geom_run::Exec::map", classes: T, prepare: |c| bind(inputs::helper::lone_serial(c), kernels::helper::lone_serial) },
+    Op { group: "helper", name: "lone_pool", measures: "geom_run::Exec::map", classes: T, prepare: |c| bind(inputs::helper::lone_pool(c), kernels::helper::lone_pool) },
 ];
 
 /// The groups of [`OPS`], in order.
-pub const GROUPS: [&str; 30] = [
+pub const GROUPS: [&str; 32] = [
     "predicate",
     "sign",
     "wide",
@@ -518,12 +525,14 @@ pub const GROUPS: [&str; 30] = [
     "ball",
     "math_types",
     "bvh",
+    "topo",
     "nurbs",
     "curve",
     "surface",
     "brent",
     "quadrature",
     "linalg",
+    "helper",
 ];
 
 /// The group of the growth checks.

@@ -27,9 +27,9 @@ name: Kernel fuzzing and proofs
 #   found.
 #
 # Path filters: the workflow runs when the code a target fuzzes or proves changes: geom-fuzz and
-# every crate of the workspace it depends on (geom-gen, geom-num, geom-run and geom-test today;
-# geom-fuzz's tests/attack_g14.rs fails until a new target's crates are listed here), geom-op for
-# its job kani-op, the workspace
+# every crate of the workspace it depends on (geom-bench, geom-curve, geom-gen, geom-linalg,
+# geom-math, geom-num, geom-nurbs, geom-op, geom-run, geom-surface, geom-test and geom-topo today;
+# geom-fuzz's tests/attack_g14.rs fails until a new target's crates are listed here), the workspace
 # files that change any build (Cargo.toml, Cargo.lock, .cargo/, the toolchain file), the
 # ClusterFuzzLite files and this workflow.
 #
@@ -61,6 +61,7 @@ on:
       - "projects/engines/geometry/crates/geom-run/**"
       - "projects/engines/geometry/crates/geom-surface/**"
       - "projects/engines/geometry/crates/geom-test/**"
+      - "projects/engines/geometry/crates/geom-topo/**"
       - "Cargo.toml"
       - "Cargo.lock"
       - ".cargo/**"
@@ -84,6 +85,7 @@ on:
       - "projects/engines/geometry/crates/geom-run/**"
       - "projects/engines/geometry/crates/geom-surface/**"
       - "projects/engines/geometry/crates/geom-test/**"
+      - "projects/engines/geometry/crates/geom-topo/**"
       - "Cargo.toml"
       - "Cargo.lock"
       - ".cargo/**"
@@ -111,14 +113,21 @@ env:
   KANI_VERSION: 0.68.0
 
 jobs:
+  cheap:
+    name: Cheap checks first
+    # Waits for format, lints, the scaffold and the sign-off (cheap-checks.yml), so a push that
+    # fails one of them stops here; every heavy job below lists this job under `needs`.
+    uses: ./.github/workflows/cheap-checks.yml
+
   libfuzzer:
     name: libFuzzer under cargo-bolero (${{ matrix.target }})
+    needs: cheap
     runs-on: ubuntu-latest
     timeout-minutes: 45
     strategy:
       fail-fast: false
       matrix:
-        target: [orient2d_fuzz, predicates_fuzz, variants_fuzz, wide_fuzz]
+        target: [arenas_fuzz, boxtree_fuzz, curves_fuzz, linalg_fuzz, maths_fuzz, nurbs_fuzz, orient2d_fuzz, predicates_fuzz, roots_fuzz, surfaces_fuzz, transforms_fuzz, variants_fuzz, wide_fuzz]
     defaults:
       run:
         shell: bash
@@ -132,6 +141,10 @@ jobs:
       - name: Install the pinned nightly compiler
         run: rustup toolchain install "$FUZZ_NIGHTLY" --profile minimal
       - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
+        with:
+          # Only main saves the cache; a pull request restores main's (a pull request's own
+          # caches filled the repository's cache limit and evicted what main saved).
+          save-if: ${{ github.ref == 'refs/heads/main' }}
       - name: Install cargo-bolero ${{ env.CARGO_BOLERO_VERSION }}
         run: >-
           cargo install cargo-bolero --version "$CARGO_BOLERO_VERSION" --locked
@@ -161,6 +174,7 @@ jobs:
 
   kani:
     name: Kani (${{ matrix.harness }})
+    needs: cheap
     runs-on: ubuntu-latest
     # orient2d_proof is the slowest harness: on G37's rewritten wide integers, which its total
     # path reaches, kissat proved it in 47 minutes (run 40291338626) and then in 75 (run
@@ -214,6 +228,7 @@ jobs:
   # splitter 54 and dd's from_i128 46; 120 minutes is the margin orient2d_proof's job above keeps.
   kani-num:
     name: Kani, geom-num (${{ matrix.proof }})
+    needs: cheap
     runs-on: ubuntu-latest
     timeout-minutes: 120
     strategy:
@@ -334,6 +349,7 @@ jobs:
 
   kani-limbs:
     name: Kani, geom-num limb steps
+    needs: cheap
     runs-on: ubuntu-latest
     # Piece G42: one bounded proof for every kind of step the generated limb variant performs
     # (chapter 23.3), all in one run so they share one build; the generator writes them beside the
@@ -403,13 +419,13 @@ jobs:
           cargo kani setup
       - name: Cargo.lock is the reviewed one
         run: cargo metadata --locked --format-version 1 > /dev/null
-      # Gate 1 (G43): on the first leg, Kani must first fail on a planted violation, the narrowing
-      # dropping a set bit (geom-test's trip module and binary).
+      # Gate 1 (G43): on the first leg, Kani must first fail on a planted violation, the binary16
+      # narrowing keeping a value one bit too fine for a half (geom-test's trip module and binary).
       - name: Kani fails on a planted violation
         if: strategy.job-index == 0
         run: >-
           cargo run --locked -q -p geom-test --bin trip -- kani-op --
-          cargo kani -p geom-op --harness cbor::proofs::binary32_is_exact_and_shortest --exact
+          cargo kani -p geom-op --harness cbor::proofs::binary16_is_exact_and_shortest --exact
       - name: Prove ${{ matrix.proof }}
         run: |
           start=$(date +%s)
@@ -420,6 +436,7 @@ jobs:
 
   clusterfuzzlite:
     name: ClusterFuzzLite (address sanitizer)
+    needs: cheap
     if: github.event_name == 'pull_request'
     runs-on: ubuntu-latest
     timeout-minutes: 60
@@ -454,6 +471,7 @@ jobs:
   # (.clusterfuzzlite/seeded.sh says what differs and why). run_fuzzers must report the crash.
   clusterfuzzlite-seeded:
     name: ClusterFuzzLite finds a planted violation
+    needs: cheap
     if: github.event_name == 'pull_request'
     runs-on: ubuntu-latest
     timeout-minutes: 60
