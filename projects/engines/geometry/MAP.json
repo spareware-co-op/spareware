@@ -4440,6 +4440,30 @@
           "target": "lib"
         },
         {
+          "cost": "a few diagnoses and solves of sketches of up to a dozen points per input.",
+          "does": "[`harness`] reads the first eight bytes as a seed and the next as a count of cases (one to twelve), draws them with `geom_test::oracle::families::cases`, and holds the kernel's diagnosis of each to what its family is built to have. The bytes after those pick one case and scale one of its lengths, which makes a sketch no family promised anything of; the block solver must then either refuse it or meet every rule.",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-fuzz/src/sketch_corpus.rs",
+          "guarantees": [
+            "**Never a panic.** Every sketch is diagnosed and solved or refused with a typed error.",
+            "**A family is what it is built to be.** Degrees of freedom, redundant groups, conflicting groups and whether the rules can all hold are the family's, for every seed.",
+            "**A solve is a solve.** When the block solver answers, every rule holds within a grid step.",
+            "**Deterministic.** The same bytes give the same cases and the same replay text."
+          ],
+          "job": "The fuzz target of the generated sketch families (piece G231): any bytes are read as a seed for a night of cases, each with the diagnosis it is built to have, and the kernel must give it.",
+          "method": {
+            "links": [
+              "projects/engines/geometry/architecture/28-testing.md",
+              "projects/engines/geometry/architecture/15-sketches.md"
+            ],
+            "text": "the property-based fuzzing of 28.5 (`projects/engines/geometry/architecture/28-testing.md`), on the families of `geom_test::oracle::families` (15.8 and 15.16 in `projects/engines/geometry/architecture/15-sketches.md`)."
+          },
+          "path": "geom_fuzz::sketch_corpus",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
           "cost": "a few small sparse factorisations per input.",
           "does": "[`harness`] reads the fuzzer's bytes as a few points and a few dimensions on them, writes the `sketch v1` text, and hands the sketch to `geom_sketch::motions::MotionFinder`.",
           "family": [],
@@ -11826,6 +11850,30 @@
           "target": "lib"
         },
         {
+          "cost": "Bareiss on an m by n matrix is O(m·n·rank) big-integer multiplications whose operands grow to about rank times the entries' bit length; the note has the measured table.",
+          "does": "[`jacobian`] writes the Jacobian of a sketch job's rules, in the polynomial form of each (a distance by its square, a point's distance from a line by the square of the cross product), at the job's starting points read as the exact rationals they are, with each row scaled to whole numbers. [`bareiss_rank`] eliminates it without a division that leaves a remainder and says the rank, which columns carry it, and what it cost. [`gauss_rank`] does the same with plain rational elimination, the independent reference the tests hold [`bareiss_rank`] to.",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-test/src/exact_rank.rs",
+          "guarantees": [
+            "**Exact.** Every entry is a whole number and every division exact (checked: a remainder is an error, never a rounded rank).",
+            "**A witness, not a proof of all points.** The rank is that of the Jacobian at the point given. A rule's polynomial form has the gradient of the rule up to a nonzero factor wherever the rule holds, so at a configuration that meets the rules the ranks are the same; elsewhere they can differ, which is why the point is a seeded generic one.",
+            "**What it cannot state.** An angle rule has no polynomial form over the rationals (its sine and cosine are not rational), so [`jacobian`] refuses a job that has one."
+          ],
+          "job": "The exact-rank spike (piece G231; risk \"Exact rank by Bareiss elimination\", chapter 31, and chapter 15.8): the rank of a sketch's Jacobian in exact rationals at a witness point, by Bareiss' fraction-free elimination on big integers, held against the kernel's pivoted-QR diagnosis.",
+          "method": {
+            "links": [
+              "https://doi.org/10.2307/2004533",
+              "projects/engines/geometry/architecture/15-sketches.md",
+              "projects/kit/notes/G231-exact-rank-spike.md"
+            ],
+            "text": "E. H. Bareiss, \"Sylvester's identity and multistep integer-preserving Gaussian elimination\", Mathematics of Computation 22 (1968), <https://doi.org/10.2307/2004533>; the sketch rank question is chapter 15.8's (`projects/engines/geometry/architecture/15-sketches.md`). The recommendation the spike reaches is in `projects/kit/notes/G231-exact-rank-spike.md`. Big integers are `dashu-int` (MIT OR Apache-2.0), the version the NURBS reference pins; nothing here is for the kernel's own code, which the note explains."
+          },
+          "path": "geom_test::exact_rank",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
           "cost": "a product or quotient of k-bit numbers is O(k²) at these sizes; [`cos_sin`] and [`exp`] about 150 terms each; no recursion.",
           "does": "an [`IBig`] n stands for n / 2^400. [`of`] reads a double exactly but for the bits below 2^−400, [`mul`] and [`div`] cut their results to a whole number of 2^−400, [`sqrt`] is the floor of the root, [`cos_sin`] and [`exp`] sum their Taylor series until a term vanishes, and π is read from its first 100 decimal places. [`cos_sin_pi`], [`tan_pi`] and [`tanh`] are built on them, for the half-turn angles and the tangent half-angle maps of the kinds. [`rational`] and [`of_rational`] pass values to and from the exact rationals of [`crate::nurbs_reference`], and [`within`] decides whether two points are at most a distance apart.",
           "family": [],
@@ -13025,6 +13073,29 @@
           "target": "lib"
         },
         {
+          "cost": "linear in the cases; a check is one parse, one diagnosis and one solve.",
+          "does": "[`cases`] draws a night's sketches from six named families, each built so that its diagnosis is known by construction, and each a [`super::sketches::Job`] every sketch oracle already reads:",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-test/src/oracle/families.rs",
+          "guarantees": [
+            "**Known by construction.** The expected counts follow from how each family is built, not from running any solver, so a disagreement names the side that is off.",
+            "**Consistent or not, said so.** A case whose rules cannot all hold ([`Expect::consistent`] is false) has a truth that does not meet them; the position judgements skip it, and the kernel's solve must refuse it.",
+            "**Deterministic.** A seed gives the same cases on every target."
+          ],
+          "job": "Generated sketch families with known diagnoses, and the differential check of degrees of freedom, redundancy and conflicts (piece G231; chapters 15.8, 15.16 and 28.10).",
+          "method": {
+            "links": [
+              "projects/engines/geometry/architecture/15-sketches.md",
+              "projects/engines/geometry/architecture/28-testing.md"
+            ],
+            "text": "chapter 15.8's diagnosis and 15.16's differential runs (`projects/engines/geometry/architecture/15-sketches.md`), and 28.10's rules for oracles (`projects/engines/geometry/architecture/28-testing.md`). The expected counts are the ranks of the families' equations, which the construction makes plain."
+          },
+          "path": "geom_test::oracle::families",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
           "cost": "linear in the jobs; the exact reference runs only on a difference.",
           "does": "[`jobs`] draws a night's seeded curves and what to do with each: evaluate a point, the basis functions at a parameter, or a knot insertion. Each job is one JSON line, with every double written by [`super::exact::float`], so geomdl reads the bits the kernel read. The harness in the oracle repository answers one JSON line per job. [`judge`] compares an answer with `geom-nurbs`, and settles any difference by the exact rational reference ([`crate::nurbs_reference`]): a difference the kernel is within its own bound of the truth on is geomdl's rounding; anything else is ours.",
           "family": [],
@@ -13053,18 +13124,18 @@
           "file": "projects/engines/geometry/crates/geom-test/src/oracle/sketches.rs",
           "guarantees": [
             "**Drawn from a truth.** Every value is measured on a known configuration, so a difference is settled on the spot: the truth says which side is off.",
-            "**Each oracle sees only what it can state.** fiksi has no midpoint and no mirror rule, so its sketches are drawn from the other kinds; level and plumb lines its harness states as parallel to a fixed axis.",
+            "**Each oracle sees only what it can state.** fiksi has no midpoint and no mirror rule, and planegcs no midpoint, so their sketches are drawn from the other kinds; level and plumb lines its harness states as parallel to a fixed axis.",
             "**Grouped by what the oracle did.** Where the kernel is on the truth and the oracle is not, the difference's family says how: `another-root` when the oracle's answer meets every rule within its tolerance (a sketch has other solutions than the drawn one), `unmet` when it does not, `refused` when it gave none, `short` when it gave too few points. Where the kernel is off the truth, the family is the job's kinds of rule, the kernel's to fix.",
             "**Within a tolerance, never bits** (15.16): the kernel's points and ezpz's agree within a grid step of the truth. fiksi stops once its residuals' sum of squares is below 1e-8 in a system divided by the root mean square of its coordinates and lengths (`solve/lm.rs`, `assemble/mod.rs` at the pinned commit), so its points are only as near as that: its answer agrees within [`FIKSI_SLACK`] times 1e-4 of the job's scale ([`near`]), still far inside the two units that separate a sketch's branches.",
             "**Deterministic.** A seed gives the same jobs on every target."
           ],
-          "job": "Sketch solvers as oracles: ezpz and fiksi, each out of process, against the block solver of `geom-sketch` (piece G222's differential runs; chapters 15.16 and 28.10).",
+          "job": "Sketch solvers as oracles: ezpz, fiksi, `SolveSpace` and planegcs, each out of process, against the block solver of `geom-sketch` (pieces G222's and G231's differential runs; chapters 15.16 and 28.10). `SolveSpace` (GPL-3.0) and planegcs (LGPL-2.1-or-later) are only ever run as separate programs from the oracle repository: nothing of either is linked, vendored or read here.",
           "method": {
             "links": [
               "projects/engines/geometry/architecture/15-sketches.md",
               "projects/engines/geometry/architecture/28-testing.md"
             ],
-            "text": "chapter 15.16's verdict on ezpz and fiksi (\"running both as differential test oracles, solved positions compared within tolerance, not bits\"), and 28.10 (`projects/engines/geometry/architecture/15-sketches.md`, `projects/engines/geometry/architecture/28-testing.md`). Both run out of process: ezpz's numerics bring in `paste`, which the `RustSec` database marks unmaintained and `deny.toml` refuses anywhere in the graph, and fiksi is not on crates.io, whose registry is the only source `deny.toml` allows. The fuller sketch corpus and the other solvers come with G231."
+            "text": "chapter 15.16's verdict on ezpz and fiksi (\"running both as differential test oracles, solved positions compared within tolerance, not bits\"), and 28.10 (`projects/engines/geometry/architecture/15-sketches.md`, `projects/engines/geometry/architecture/28-testing.md`). Both run out of process: ezpz's numerics bring in `paste`, which the `RustSec` database marks unmaintained and `deny.toml` refuses anywhere in the graph, and fiksi is not on crates.io, whose registry is the only source `deny.toml` allows. The generated families with known diagnoses are `families`'s (G231)."
           },
           "path": "geom_test::oracle::sketches",
           "provenance": [],
