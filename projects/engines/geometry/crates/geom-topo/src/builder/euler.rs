@@ -22,7 +22,9 @@
 //!
 //! - **Euler's formula is kept.** Each operator changes the counts by its row of the table above,
 //!   so V − E + F − R = 2 (S − H) holds after it when it held before; `R` is loops less faces, and
-//!   `H` is the count the model of `tests/euler_model.rs` keeps.
+//!   `H` is the count the model of `tests/euler_model.rs` keeps. `verus/euler.rs` proves this, and
+//!   the next guarantee, on a model of these operators (piece G111); `tests/euler_model.rs` ties
+//!   the model to this code.
 //! - **Loops stay closed and rings stay paired.** Every operator leaves each loop's fins one cycle
 //!   by `next` and `prev`, each the inverse of the other, each fin's start the end of the fin before
 //!   it, and each edge it makes with two fins, each the other's radial neighbour.
