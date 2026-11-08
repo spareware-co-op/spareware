@@ -77,7 +77,7 @@ mod piece;
 
 use piece::{
     On, Piece, Shapes, Way, circles_of, cmp_pt, cut, cut_oval, cut_oval_arc, meetings, order_at,
-    ordering, ovals_of, side, way, west_not_left,
+    ordering, ovals_of, side, way,
 };
 
 use crate::entity::Param;
@@ -422,8 +422,7 @@ impl Heap {
     fn push(&mut self, e: Event) -> Result<(), ArrangeError> {
         self.items.push(e);
         let mut i = self.items.len().saturating_sub(1);
-        while i > 0 {
-            let parent = i.saturating_sub(1) / 2;
+        while let Some(parent) = i.checked_sub(1).map(|j| j / 2) {
             if !self.before(i, parent)? {
                 break;
             }
@@ -445,7 +444,8 @@ impl Heap {
         let out = self.items.pop();
         let n = self.items.len();
         let mut i = 0_usize;
-        loop {
+        // Each step goes a level down, so fewer than n steps end it.
+        for _ in 0..n {
             let l = i.saturating_mul(2).saturating_add(1);
             let r = l.saturating_add(1);
             let mut least = i;
@@ -714,7 +714,7 @@ fn sweep(
             let e = heap.pop()?.ok_or(ArrangeError::TooMany)?;
             starting.extend(e.start);
             // One place may come as a crossing and as a rational point: keep the rational.
-            if p.rational().is_none() && e.at.rational().is_some() {
+            if let (None, Some(_)) = (p.rational(), e.at.rational()) {
                 p = e.at;
             }
         }
@@ -778,7 +778,7 @@ fn sweep(
                 at.checked_sub(1).and_then(|i| status.get(i)).copied(),
                 status.get(at).copied(),
             ) {
-                let inside = at > lo && at < end;
+                let inside = at != lo && at != end;
                 let lines = matches!(piece_of(pieces, l)?.on, On::Line { .. })
                     && matches!(piece_of(pieces, r)?.on, On::Line { .. });
                 if !(inside && lines) {
@@ -950,7 +950,8 @@ fn build(
         }
         let mut cycle: Vec<u32> = Vec::new();
         let mut h = index(start)?;
-        loop {
+        // A cycle holds each half-edge once at most, so the walk is never longer than there are.
+        for _ in 0..total {
             let k = usize::try_from(h).map_err(|_| ArrangeError::TooMany)?;
             if seen.get(k).copied().unwrap_or(true) {
                 break;
@@ -962,12 +963,14 @@ fn build(
         cycles.push(cycle);
     }
     // Orientation. A component's outside boundary is the cycle that has the wedge toward the
-    // negative x direction at the component's lowest-leftmost vertex; with the sweep line tilted,
-    // that direction points west and a hair south, so it lies just after the half-edges that leave
-    // exactly west without bending left, which come first in the list. Every other cycle of the
-    // component bounds a face from inside. At a cycle's own lowest-leftmost vertex, the cycle is the
-    // outside kind exactly when it holds the half-edge that leaves that vertex just before the
-    // wedge, going counter-clockwise.
+    // negative x direction at the component's lowest-leftmost vertex, where no half-edge leaves
+    // westwards; every other cycle of the component bounds a face from inside. The wedge from the
+    // last half-edge of a vertex's list round to its first holds the negative x direction, and is
+    // the last half-edge's cycle's. So at a cycle's own lowest-leftmost vertex, the cycle is the
+    // outside kind exactly when it holds the last half-edge there. A half-edge that leaves a vertex
+    // westwards runs to a lower vertex, along a line or an arc cut where it turns back in x, so
+    // where the list starts with one the last half-edge's cycle holds that lower vertex: the cycle
+    // whose lowest-leftmost vertex this is cannot be it, and is not the outside kind.
     let mut cycle_of_half: Vec<usize> = alloc::vec![0; total];
     for (c, cycle) in cycles.iter().enumerate() {
         for &h in cycle {
@@ -978,30 +981,12 @@ fn build(
     let mut counter: Vec<bool> = Vec::new();
     let mut low: Vec<usize> = Vec::new();
     for (c, cycle) in cycles.iter().enumerate() {
-        let mut best: Option<usize> = None;
-        for &h in cycle {
-            let o = origin(h)?;
-            if best.is_none_or(|b| o < b) {
-                best = Some(o);
-            }
-        }
-        let m = best.ok_or(ArrangeError::TooMany)?;
+        // A cycle has half-edges, so its lowest vertex is one of theirs, never the starting bound.
+        let m = cycle
+            .iter()
+            .try_fold(usize::MAX, |m, &h| origin(h).map(|o| m.min(o)))?;
         let list = around.get(m).ok_or(ArrangeError::TooMany)?;
-        let at = vertices.get(m).ok_or(ArrangeError::TooMany)?;
-        let mut skip = 0_usize;
-        for &h in list {
-            if !west_not_left(at, &way_of(h)?)? {
-                break;
-            }
-            skip = skip.saturating_add(1);
-        }
-        let n = list.len();
-        let before = skip
-            .checked_add(n)
-            .and_then(|v| v.checked_sub(1))
-            .and_then(|v| v.checked_rem(n))
-            .ok_or(ArrangeError::TooMany)?;
-        let out = list.get(before).copied().ok_or(ArrangeError::TooMany)?;
+        let out = list.last().copied().ok_or(ArrangeError::TooMany)?;
         let outside = usize::try_from(out)
             .ok()
             .and_then(|k| cycle_of_half.get(k))
