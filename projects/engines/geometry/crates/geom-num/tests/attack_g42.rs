@@ -42,8 +42,9 @@
 )]
 
 use geom_num::generated::{
-    incircle, insphere, limbs, lpi_side, lpi_weight, orient2d, orient3d, plain, plane_side,
-    ssi_side, ssi_weight, tpi_side, tpi_weight,
+    carrier_order, carrier_side, circle_gap, circle_line, circle_side, incircle, insphere, limbs,
+    lpi_side, lpi_weight, orient2d, orient3d, plain, plane_side, rational_cmp, rational_orient,
+    round_grid, round_line, round_rational, ssi_side, ssi_weight, tpi_side, tpi_weight,
 };
 use geom_num::grid::{COORD_MAX, P2, P3};
 use geom_num::{I512, Sign, Wide, Wide32};
@@ -167,6 +168,46 @@ fn explicit_point_predicates_agree_on_random_inputs() {
 }
 
 #[test]
+fn carrier_predicates_agree_on_random_inputs() {
+    let mut g = Draw::new("attack_g42::carrier_predicates_agree_on_random_inputs");
+    for _ in 0..CASES {
+        let [a, b] = [g.value(41), g.value(41)];
+        let c = g.value(82);
+        let [xp, yp, xq, yq, xr, yr] = [(); 6].map(|()| g.value(124));
+        let [wp, wq, wr] = [(); 3].map(|()| g.value(83));
+        agree!(carrier_side, carrier_side_value; a, b, c, xp, yp, wp);
+        agree!(carrier_order, carrier_order_value; a, b, xp, yp, xq, yq, wp, wq);
+        agree!(rational_cmp, rational_cmp_value; xp, xq, wp, wq);
+        agree!(rational_orient, rational_orient_value; xp, yp, xq, yq, xr, yr, wp, wq, wr);
+    }
+}
+
+/// A weight: positive, as the round and circle predicates take it, below 2^83.
+fn weight(g: &mut Draw) -> i128 {
+    g.value(83).abs().max(1)
+}
+
+#[test]
+fn round_and_circle_predicates_agree_on_random_inputs() {
+    let mut g = Draw::new("attack_g42::round_and_circle_predicates_agree_on_random_inputs");
+    for _ in 0..CASES {
+        let (z, p, k) = (g.p2(), g.p2(), g.p2());
+        let [cx, cy, x, y] = [(); 4].map(|()| g.value(124));
+        let (w, v) = (weight(&mut g), weight(&mut g));
+        let [a, b] = [g.value(41), g.value(41)];
+        let d = g.value(82);
+        let r = g.value(41);
+        let t = g.value(42);
+        agree!(round_grid, round_grid_value; z, p, cx, cy, w);
+        agree!(round_rational, round_rational_value; x, y, v, p, cx, cy, w);
+        agree!(round_line, round_line_value; a, b, d, p, cx, cy, w);
+        agree!(circle_side, circle_side_value; x, y, v, k, r);
+        agree!(circle_line, circle_line_value; a, b, d, k, r);
+        agree!(circle_gap, circle_gap_value; z, p, t);
+    }
+}
+
+#[test]
 fn plane_predicates_agree_on_random_inputs() {
     let mut g = Draw::new("attack_g42::plane_predicates_agree_on_random_inputs");
     for _ in 0..CASES {
@@ -248,6 +289,35 @@ fn a_rounded_input_past_its_range_is_refused_by_every_variant() {
     assert_eq!(lpi_weight::value(n + 1, n, n, p, p), None);
     assert_eq!(plain::lpi_weight_value(n + 1, n, n, p, p), None);
     assert_eq!(limbs::lpi_weight_value(n + 1, n, n, p, p), None);
+    // The round and circle predicates: one past each declared range.
+    let q = P2::new(1, 2).unwrap();
+    let (c, w, r, t) = (
+        (1i128 << 124) - 1,
+        (1i128 << 83) - 1,
+        (1i128 << 41) - 1,
+        (1i128 << 42) - 1,
+    );
+    assert!(round_grid::value(q, q, c, c, w).is_some());
+    for (cx, w) in [(c + 1, w), (c, w + 1)] {
+        assert_eq!(round_grid::value(q, q, cx, c, w), None);
+        assert_eq!(plain::round_grid_value(q, q, cx, c, w), None);
+        assert_eq!(limbs::round_grid_value(q, q, cx, c, w), None);
+        assert_eq!(round_rational::value(cx, c, w, q, c, c, w), None);
+        assert_eq!(plain::round_rational_value(cx, c, w, q, c, c, w), None);
+        assert_eq!(limbs::round_rational_value(cx, c, w, q, c, c, w), None);
+        assert_eq!(round_line::value(r, r, r, q, cx, c, w), None);
+        assert_eq!(plain::round_line_value(r, r, r, q, cx, c, w), None);
+        assert_eq!(limbs::round_line_value(r, r, r, q, cx, c, w), None);
+    }
+    assert_eq!(circle_side::value(c, c, w, q, r + 1), None);
+    assert_eq!(plain::circle_side_value(c, c, w, q, r + 1), None);
+    assert_eq!(limbs::circle_side_value(c, c, w, q, r + 1), None);
+    assert_eq!(circle_line::value(r + 1, r, r, q, r), None);
+    assert_eq!(plain::circle_line_value(r + 1, r, r, q, r), None);
+    assert_eq!(limbs::circle_line_value(r + 1, r, r, q, r), None);
+    assert_eq!(circle_gap::value(q, q, t + 1), None);
+    assert_eq!(plain::circle_gap_value(q, q, t + 1), None);
+    assert_eq!(limbs::circle_gap_value(q, q, t + 1), None);
 }
 
 /// `Wide32`'s extremes, its order and its `Debug` form (the two's-complement bits, most significant
