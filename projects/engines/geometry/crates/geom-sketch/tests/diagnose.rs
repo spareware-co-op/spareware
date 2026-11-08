@@ -19,8 +19,9 @@
 use geom_run::{Budget, WorkMeter};
 use geom_sketch::diagnose::{
     Class, Equation, Outcome, RANGE_HALVINGS, RANGE_RESOLUTION, SketchReport, Thresholds, Verdict,
-    analyse_columns, diagnose, free_motions, remedies, solve_checked,
+    analyse_columns, diagnose, free_motions, remedies, solve_checked, witness_point,
 };
+use geom_sketch::equation::Assembly;
 use geom_sketch::model::{ItemId, Sketch, SketchError};
 use geom_sketch::text::parse;
 
@@ -866,4 +867,48 @@ fn a_column_at_right_angles_to_those_chosen_is_confirmed_on_its_own() {
         (last.verdict, last.confirmed),
         (Verdict::Independent, false)
     );
+}
+
+#[test]
+fn the_witness_moves_each_variable_up_by_its_own_small_amount() {
+    // 1 to 61 of 2^-7 of a step, from each variable's owner, slot and key, and nothing else.
+    let s = sketch(
+        "entity 1.0 point 0 0
+entity 1.1 point 3 4
+entity 2.7 point 5 1
+",
+    );
+    let assembly = Assembly::new(&s).unwrap();
+    let start = assembly.start().unwrap();
+    let moved = witness_point(&assembly).unwrap();
+    assert_eq!(moved.len(), start.len());
+    let mut amounts = Vec::new();
+    for (v, var) in assembly.variables().iter().enumerate() {
+        let h = var.owner.sequence * 31 + var.owner.key * 17 + u64::from(var.slot) * 7;
+        let amount = f64::from(u32::try_from(h % 61).unwrap() + 1) / 128.0;
+        assert_eq!(moved[v] - start[v], amount, "variable {v}");
+        amounts.push(amount);
+    }
+    amounts.dedup();
+    assert!(amounts.len() > 1, "{amounts:?}");
+}
+
+#[test]
+fn a_pivot_is_confirmed_within_a_factor_of_sixteen_of_either_threshold() {
+    let t = Thresholds::for_block(1.0e4, 2, 2, 1.0);
+    let (ind, dep) = (t.independent, t.dependent);
+    for (size, want) in [
+        (ind, true),
+        (16.0 * ind, true),
+        (ind / 16.0, true),
+        (17.0 * ind, false),
+        (dep, true),
+        (16.0 * dep, true),
+        (dep / 16.0, true),
+        (dep / 17.0, false),
+        (1.0, false),
+        (0.0, false),
+    ] {
+        assert_eq!(t.confirms(size), want, "{size:e}");
+    }
 }

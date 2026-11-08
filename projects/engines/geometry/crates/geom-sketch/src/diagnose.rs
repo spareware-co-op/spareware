@@ -131,6 +131,13 @@ impl Thresholds {
             limited_by_rounding,
         }
     }
+
+    /// Whether a pivot of `size` is within a factor of [`CONFIRM_WITHIN`] of either threshold,
+    /// either way, so that a singular value decomposition of its group confirms its verdict.
+    #[must_use]
+    pub fn confirms(&self, size: f64) -> bool {
+        near(size, self.independent) || near(size, self.dependent)
+    }
 }
 
 /// One equation, as the diagnosis sees it: whose it is and how it is ranked.
@@ -551,7 +558,7 @@ pub fn analyse_columns(
         let mut verdict = verdict_of(s, top, &thresholds);
         let mut confirmed = false;
         if k < rows
-            && (near(s, thresholds.independent) || near(s, thresholds.dependent))
+            && thresholds.confirms(s)
             && !(verdict == Verdict::Dependent && k >= first_dependent)
         {
             // Confirm on the group: the pivot's column and the chosen columns it leans on.
@@ -894,7 +901,11 @@ pub fn diagnose(
 
 /// The start moved by small amounts derived from each variable's owner, slot and key: a different
 /// point for each sketch, the same for the same sketch on every target.
-fn witness_point(assembly: &Assembly) -> Result<Vec<f64>, SketchError> {
+///
+/// # Errors
+///
+/// What [`Assembly::start`] refuses, and [`SketchError::Internal`] if the lists disagree.
+pub fn witness_point(assembly: &Assembly) -> Result<Vec<f64>, SketchError> {
     let mut x = assembly.start()?;
     for (v, var) in assembly.variables().iter().enumerate() {
         let h = var
@@ -1338,38 +1349,11 @@ pub fn free_motions(
 
 #[cfg(test)]
 #[allow(
-    clippy::arithmetic_side_effects,
     clippy::float_cmp,
-    clippy::indexing_slicing,
-    clippy::unwrap_used,
     reason = "a test of exact small values; the rules are for kernel code"
 )]
 mod tests {
     use super::*;
-    use crate::text::parse;
-
-    /// The witness moves each variable up by its own amount, 1 to 61 of 2^-7 of a step, from its
-    /// owner, slot and key, and by nothing else.
-    #[test]
-    fn the_witness_moves_each_variable_up_by_its_own_small_amount() {
-        let sketch = parse(
-            "sketch v1\nplane lattice 0 0 0 1 0 0 0 1 0 q0\nentity 1.0 point 0 0\nentity 1.1 point 3 4\nentity 2.7 point 5 1\n",
-        )
-        .unwrap();
-        let assembly = Assembly::new(&sketch).unwrap();
-        let start = assembly.start().unwrap();
-        let moved = witness_point(&assembly).unwrap();
-        assert_eq!(moved.len(), start.len());
-        let mut amounts = Vec::new();
-        for (v, var) in assembly.variables().iter().enumerate() {
-            let h = var.owner.sequence * 31 + var.owner.key * 17 + u64::from(var.slot) * 7;
-            let amount = f64::from(u32::try_from(h % 61).unwrap() + 1) / 128.0;
-            assert_eq!(moved[v] - start[v], amount, "variable {v}");
-            amounts.push(amount);
-        }
-        amounts.dedup();
-        assert!(amounts.len() > 1, "{amounts:?}");
-    }
 
     /// The drift is the share kept times the square of the norm against the one computed.
     #[test]
@@ -1378,22 +1362,5 @@ mod tests {
         assert_eq!(drift(0.5, 1.0, 4.0), 0.5 / 16.0);
         assert_eq!(drift(0.25, 3.0, 2.0), 0.25 * 1.5 * 1.5);
         assert_eq!(drift(0.0, 3.0, 2.0), 0.0);
-    }
-
-    /// A pivot is near a threshold within a factor of 16 either way, the factor itself included.
-    #[test]
-    fn near_is_within_a_factor_of_sixteen_either_way() {
-        let t = 0.000_244_140_625;
-        for (size, want) in [
-            (t, true),
-            (16.0 * t, true),
-            (t / 16.0, true),
-            (17.0 * t, false),
-            (t / 17.0, false),
-            (1.0, false),
-            (0.0, false),
-        ] {
-            assert_eq!(near(size, t), want, "{size:e}");
-        }
     }
 }
