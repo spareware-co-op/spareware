@@ -296,9 +296,15 @@
               "kind": "corpus",
               "piece": "G174",
               "why": "1 new count benchmark on geom-intersect's known curves (decision 32.44): sheets tangent to a plane along a known line, the tube about it proven and taken out of the search; no existing digest moved"
+            },
+            {
+              "sha256": "b2e51b5ead94579078afedb5f158f0fcf2f81c789d8b85222803caaec634d009",
+              "kind": "improvement",
+              "piece": "G173",
+              "why": "The edge room: an edge's zeros on the end of a plane's, cylinder's or cone's domain are proven in a box that reaches past the end, so intersect/subdivide_patch, march_plate and march_poles return other valid enclosures of the same start points (same 11 settled pairs and 22 starts, the work differs); no other digest moved"
             }
           ],
-          "sha256": "b2e51b5ead94579078afedb5f158f0fcf2f81c789d8b85222803caaec634d009"
+          "sha256": "a3d6fcd8fc8d181f2e712ce93d72be6fbc2216f63716822e7feb67773e26966c"
         },
         {
           "id": "geom-nurbs/operations",
