@@ -400,11 +400,11 @@ mod tests {
             .collect()
     }
 
-    fn missing(module: &'static str, unclassified: &[&str]) -> Option<MissingModule> {
-        Some(MissingModule {
+    fn missing(module: &'static str, unclassified: &[&str]) -> MissingModule {
+        MissingModule {
             module,
             unclassified: unclassified.iter().map(|u| (*u).to_owned()).collect(),
-        })
+        }
     }
 
     #[test]
@@ -412,7 +412,7 @@ mod tests {
         let lib = files("geom-topo", &[("src/lib.rs", true)]);
         assert_eq!(
             missing_foundation_module("geom-topo", &lib),
-            missing("builder", &["src/lib.rs"])
+            Some(missing("builder", &["src/lib.rs"]))
         );
         let scaffold = files("geom-topo", &[("src/lib.rs", false)]);
         assert_eq!(missing_foundation_module("geom-topo", &scaffold), None);
@@ -452,7 +452,7 @@ mod tests {
             new.push((format!("{K}/geom-2d/src/regions.rs"), code));
             assert_eq!(
                 missing_foundation_module("geom-2d", &new),
-                missing("arrange", &["src/regions.rs"])
+                Some(missing("arrange", &["src/regions.rs"]))
             );
         }
         let mut folder = classified.clone();
@@ -460,7 +460,7 @@ mod tests {
         folder.push((format!("{K}/geom-2d/src/hatch/mod.rs"), true));
         assert_eq!(
             missing_foundation_module("geom-2d", &folder),
-            missing("arrange", &["src/hatch/"])
+            Some(missing("arrange", &["src/hatch/"]))
         );
 
         // The arrangement under the name the list used to give it is not the foundation module,
@@ -469,7 +469,7 @@ mod tests {
         old_name.push((format!("{K}/geom-2d/src/arrangement.rs"), true));
         assert_eq!(
             missing_foundation_module("geom-2d", &old_name),
-            missing("arrange", &["src/arrangement.rs"])
+            Some(missing("arrange", &["src/arrangement.rs"]))
         );
 
         // Code in the root file is not classified.
@@ -477,7 +477,7 @@ mod tests {
         root[0].1 = true;
         assert_eq!(
             missing_foundation_module("geom-2d", &root),
-            missing("arrange", &["src/lib.rs"])
+            Some(missing("arrange", &["src/lib.rs"]))
         );
 
         // With the foundation module present, the gate holds it to the foundation bar instead.
@@ -489,7 +489,7 @@ mod tests {
         let topo = files("geom-topo", &[("src/lib.rs", false), ("src/cogo.rs", true)]);
         assert_eq!(
             missing_foundation_module("geom-topo", &topo),
-            missing("builder", &["src/cogo.rs"])
+            Some(missing("builder", &["src/cogo.rs"]))
         );
     }
 
