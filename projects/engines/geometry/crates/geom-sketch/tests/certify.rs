@@ -565,21 +565,19 @@ fn a_commit_the_proof_cannot_reach_is_left_unproven_with_no_box() {
     );
 }
 
-/// A ring of `n` points on a circle of radius 1000 about a fixed point: each point 1000 from the
-/// centre and the next point a chord away, the last joined to the first. Its `2n` equations in `2n`
-/// unknowns are one square block (each point's place leans on its neighbours' all the way round).
+/// A ring of `n` points, each at a distance from one fixed point and from the next, the last joined
+/// to the first. Its `2n` equations in `2n` unknowns are one square block (each point's place
+/// leans on its neighbours' all the way round). Only its structure matters here: the points sit in
+/// a row 10 apart and the stated distances are round numbers, not a solved figure.
 fn ring(n: u64) -> Sketch {
-    let mut entities = vec![reference(1000, 0.0, 0.0)];
+    let mut entities = vec![reference(1000, 0.0, 1000.0)];
     let mut constraints = Vec::new();
-    #[allow(clippy::cast_precision_loss, reason = "a small count")]
-    let step = core::f64::consts::TAU / n as f64;
-    let chord = 2000.0 * (step / 2.0).sin();
     for k in 1..=n {
         #[allow(clippy::cast_precision_loss, reason = "a small count")]
-        let at = step * k as f64;
-        entities.push(point(k, 1000.0 * at.cos(), 1000.0 * at.sin()));
+        let x = 10.0 * k as f64;
+        entities.push(point(k, x, 0.0));
         constraints.push(distance(k, 1000, k, 1000.0));
-        constraints.push(distance(2000 + k, k, k % n + 1, chord));
+        constraints.push(distance(2000 + k, k, k % n + 1, 10.0));
     }
     build(entities, constraints)
 }
