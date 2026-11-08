@@ -663,6 +663,26 @@ pub fn classify(
     pieces: &[Vec<Piece>],
     meter: &mut WorkMeter<'_>,
 ) -> Result<Vec<Classified>, TraceError> {
+    let mut held = Vec::with_capacity(polygons.len());
+    for polygon in polygons {
+        held.push((polygon, canonical(&polygon.piece.face)?));
+    }
+    classify_with(cell, reference, &held, pieces, meter)
+}
+
+/// [`classify`], each polygon given with its face in canonical form, which a caller that has
+/// reduced every face already need not reduce again.
+///
+/// # Errors
+///
+/// As [`classify`].
+pub fn classify_with(
+    cell: &Cell,
+    reference: &Winding,
+    polygons: &[(&Polygon, Canonical)],
+    pieces: &[Vec<Piece>],
+    meter: &mut WorkMeter<'_>,
+) -> Result<Vec<Classified>, TraceError> {
     let faces = faces(cell)?;
     let mut boxes = Vec::with_capacity(6);
     for face in faces.iter().flatten() {
@@ -675,9 +695,9 @@ pub fn classify(
         paths = paths.saturating_add(list.len());
     }
     let mut held = Vec::with_capacity(polygons.len());
-    for polygon in polygons {
+    for (polygon, face) in polygons {
         let span = (paths > 1).then(|| piece_span(&polygon.piece)).flatten();
-        held.push((polygon, canonical(&polygon.piece.face)?, span));
+        held.push((*polygon, *face, span));
     }
     let mut out = Vec::new();
     for (index, list) in pieces.iter().enumerate() {
