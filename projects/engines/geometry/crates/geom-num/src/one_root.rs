@@ -573,16 +573,11 @@ impl Crossing2 {
         let scale_w = |v: &Big| mul(v, &x.w);
         let u = [sub(&x.a, &scale_w(px)?)?, sub(&y.a, &scale_w(py)?)?];
         let twice = |v: &Big| add(v, v);
-        let t = [
-            sub(
-                &mul(&cw, &add(&x.a, &scale_w(px)?)?)?,
-                &twice(&scale_w(cx)?)?,
-            )?,
-            sub(
-                &mul(&cw, &add(&y.a, &scale_w(py)?)?)?,
-                &twice(&scale_w(cy)?)?,
-            )?,
-        ];
+        // T's coordinate from A's, P's and C's.
+        let lift = |a: &Big, p: &Big, c: &Big| -> Result<Big, NumError> {
+            sub(&mul(&cw, &add(a, &scale_w(p)?)?)?, &twice(&scale_w(c)?)?)
+        };
+        let t = [lift(&x.a, px, cx)?, lift(&y.a, py, cy)?];
         let b = [x.b, y.b];
         let whole = add(&dot(&u, &t)?, &mul(&mul(&cw, &dot(&b, &b)?)?, &x.k)?)?;
         let root = add(&mul(&cw, &dot(&u, &b)?)?, &dot(&t, &b)?)?;
@@ -611,10 +606,8 @@ impl Crossing2 {
         ];
         let b = [x.b, y.b];
         let rw = mul(&r, &x.w)?;
-        let whole = sub(
-            &add(&dot(&u, &u)?, &mul(&dot(&b, &b)?, &x.k)?)?,
-            &mul(&rw, &rw)?,
-        )?;
+        let squares = add(&dot(&u, &u)?, &mul(&dot(&b, &b)?, &x.k)?)?;
+        let whole = sub(&squares, &mul(&rw, &rw)?)?;
         let half = dot(&u, &b)?;
         root_sign(&whole, &add(&half, &half)?, &x.k)
     }
@@ -671,5 +664,31 @@ impl Arc2 {
             return root_sign(&add(&alpha, &mul(&delta, &ka)?)?, &add(&beta, &gamma)?, &ka);
         }
         two_roots_sign(&[alpha, beta, gamma, delta], &ka, &kb)
+    }
+}
+
+#[cfg(test)]
+#[allow(
+    clippy::arithmetic_side_effects,
+    reason = "tests may use native arithmetic"
+)]
+mod tests {
+    use super::Crossing2;
+    use crate::carrier::Rational2;
+
+    #[test]
+    fn a_coordinate_past_y_is_refused() {
+        let z = Crossing2::of_point(&Rational2::new(1, 2, 3).unwrap()).unwrap();
+        assert!(z.part(0).is_ok() && z.part(1).is_ok());
+        assert!(z.part(2).is_err());
+    }
+
+    #[test]
+    fn the_enclosure_holds_the_point() {
+        let z = Crossing2::of_point(&Rational2::new(1, -2, 3).unwrap()).unwrap();
+        let [x, y] = z.enclosure();
+        assert!(x.lo() <= 1.0 / 3.0 && 1.0 / 3.0 <= x.hi());
+        assert!(y.lo() <= -2.0 / 3.0 && -2.0 / 3.0 <= y.hi());
+        assert!(x.hi() - x.lo() < 1e-15 && y.hi() - y.lo() < 1e-15);
     }
 }
