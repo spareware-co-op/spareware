@@ -5123,6 +5123,38 @@
       "reason": "The two differ only when a column's norm equals the largest so far, and then both keep the same value."
     },
     {
+      "file": "projects/engines/geometry/crates/geom-sketch/src/diagnose.rs",
+      "mutant": "replace > with >= in walk",
+      "line_text": "let mut step = RANGE_FIRST * if at.abs() > 1.0 { at.abs() } else { 1.0 };",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "The forms differ only when the value is exactly 1 or -1, and then both branches give the same size: |at| and 1.0 are the same number."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-sketch/src/motions.rs",
+      "mutant": "replace > with >= in MotionFinder::motion",
+      "line_text": "if value.abs() > NEGLIGIBLE {",
+      "occurrences": 1,
+      "kind": "harmless",
+      "reason": "The forms differ only for an entry of exactly 1e-12 in size. That cut-off is a convenience that keeps rounding dust out of a motion, and the crate promises nothing about an entry at the cut-off itself: the dense form it is held to uses the same cut, and entries are either dust far below it or amounts of a step."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-sketch/src/motions.rs",
+      "mutant": "replace < with == in MotionFinder::motion",
+      "line_text": "let place = solved.partition_point(|&(j, _)| j < index);",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "Every other entry of a motion lies after its leading variable (a leading column is dead because it is a combination of the live columns after it, and the least-squares solve is unique), so the predicate is false for all of them and the insertion point is 0 for <, <= and ==."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-sketch/src/motions.rs",
+      "mutant": "replace < with <= in MotionFinder::motion",
+      "line_text": "let place = solved.partition_point(|&(j, _)| j < index);",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "Every other entry of a motion lies after its leading variable, and none is the leading variable itself, so < and <= are the same predicate on every entry: the insertion point is 0 for both."
+    },
+    {
       "file": "projects/engines/geometry/crates/geom-sketch/src/plane.rs",
       "mutant": "replace sum -> Result<i128, PlaneError> with Ok(-1)",
       "line_text": "a.checked_add(b).ok_or(PlaneError::OutOfRange)",
@@ -5953,6 +5985,142 @@
       "occurrences": 1,
       "kind": "harmless",
       "reason": "The damping runs out only if every damped step up to 10^12 is refused. Every residual is a length with a gradient near one (equation.rs), so once λ passes the Jacobian's scale the step shrinks as 1/λ and the linear model predicts it ever better: no test, and no sketch tried, runs out (replacing the return with another error fails no test). Were one to, the mutant would keep raising λ, and end at the flat-step test with the same Unsolved, at λ's overflow with Numeric, or with a step taken whose result finish still holds to the tolerance: an error or a checked answer, never a wrong one."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-sketch/src/diagnose.rs",
+      "mutant": "replace > with >= in Thresholds::for_block",
+      "line_text": "let wanted = if size > 1.0 {",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "At a size of exactly 1 both arms give 1/64, since 1/(64 x 1) is 1/64, so taking size 1 into the first arm changes no threshold."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-sketch/src/diagnose.rs",
+      "mutant": "replace > with >= in larger",
+      "line_text": "if b > a { b } else { a }",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "With b equal to a both arms return the same number. The only equal numbers that differ are +0 and -0, and every call compares norms, absolute values or 1 - ratio^2 (never -0, since 1 - 1 is +0) with +0 or with each other."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-sketch/src/diagnose.rs",
+      "mutant": "replace < with <= in smaller",
+      "line_text": "if b < a { b } else { a }",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "With b equal to a both arms return the same number. The only equal numbers that differ are +0 and -0, and the calls compare a positive threshold with sigma_ind, or singular values (never -0) with infinity and each other."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-sketch/src/diagnose.rs",
+      "mutant": "replace > with >= in tail_norm",
+      "line_text": "if plain > 1e-250 && plain < 1e250 {",
+      "occurrences": 1,
+      "kind": "harmless",
+      "reason": "It moves the edge between the plain sum of squares and the scaled one by one value. At a sum of exactly 1e-250 both ways compute the column's norm, differing at most in the last bits of rounding; no verdict is decided anywhere near such a norm, and the module promises the norm, not its last bit."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-sketch/src/diagnose.rs",
+      "mutant": "replace < with <= in tail_norm",
+      "line_text": "if plain > 1e-250 && plain < 1e250 {",
+      "occurrences": 1,
+      "kind": "harmless",
+      "reason": "It moves the edge between the plain sum of squares and the scaled one by one value. At a sum of exactly 1e250 both ways compute the column's norm, differing at most in the last bits of rounding; no verdict is decided anywhere near such a norm, and the module promises the norm, not its last bit."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-sketch/src/diagnose.rs",
+      "mutant": "replace > with >= in factor",
+      "line_text": "let squared = vv > 1e-250 && vv < 1e250;",
+      "occurrences": 1,
+      "kind": "harmless",
+      "reason": "It moves the edge at which the reflector's vector is scaled before squaring by one value. A reflection does not depend on its vector's length, so at a square of exactly 1e-250 both ways reflect the same, differing at most by rounding in the last bits."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-sketch/src/diagnose.rs",
+      "mutant": "replace < with <= in factor",
+      "line_text": "let squared = vv > 1e-250 && vv < 1e250;",
+      "occurrences": 1,
+      "kind": "harmless",
+      "reason": "It moves the edge at which the reflector's vector is scaled before squaring by one value. A reflection does not depend on its vector's length, so at a square of exactly 1e250 both ways reflect the same, differing at most by rounding in the last bits."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-sketch/src/diagnose.rs",
+      "mutant": "replace > with >= in factor",
+      "line_text": "if big > 0.0 {",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "big is the largest magnitude in the reflector's vector, whose first entry alpha - beta has magnitude |alpha| plus the column's tail norm; the column chosen has a tail within a factor of 2 of the largest remaining norm, which is positive (a zero largest returns before any reflection), so big is never 0."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-sketch/src/diagnose.rs",
+      "mutant": "replace > with >= in factor",
+      "line_text": "if vv > 0.0 {",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "The reflector's vector is never zero (its first entry has magnitude at least the chosen column's tail norm, which is positive), and its square is either inside (1e-250, 1e250) or taken after scaling by the largest entry, so at least 1: vv is never 0, and > and >= agree."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-sketch/src/diagnose.rs",
+      "mutant": "replace > with >= in suggest_removals",
+      "line_text": "Some(b) => (key.0, key.1, key.2) > (b.0, b.1, b.2),",
+      "occurrences": 1,
+      "kind": "harmless",
+      "reason": "Two constraints tie here only with the same priority, the same number of groups and the same authoring order. diagnose never builds that (an equation's order is its rule's index, and no two constraints share a rule); on bare data with a repeated order there is no newest constraint, and which of the tied ones is suggested is not promised."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-sketch/src/diagnose.rs",
+      "mutant": "replace > with >= in free_motions",
+      "line_text": "if x.abs() > 1e-12 {",
+      "occurrences": 1,
+      "kind": "harmless",
+      "reason": "The cut only keeps negligible entries of the null space out of a motion's list. An entry of exactly 1e-12 is listed, or not, as a move of 1e-12 of its variable's scale, negligible either way, and the module promises the motions' directions, not which negligible entries are listed."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-sketch/src/diagnose.rs",
+      "mutant": "replace < with <= in analyse_columns",
+      "line_text": "if k < rows",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "At k equal to rows no row is left below the last step, so the pivot is 0, and a pivot of 0 is near no positive threshold (0 times 16 is below it), so the confirmation is not entered either way."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-sketch/src/diagnose.rs",
+      "mutant": "replace drift -> f64 with 0.0",
+      "line_text": "let ratio = old / fresh;",
+      "occurrences": 1,
+      "kind": "harmless",
+      "reason": "A drift of 0 recomputes every downdated column norm from the column instead of downdating it. The norms only choose the next pivot (within a factor of 2 of the largest) and give each step's largest norm, and recomputing gives the same norm as downdating up to rounding; every pivot's own size is computed from the column either way."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-sketch/src/diagnose.rs",
+      "mutant": "replace drift -> f64 with -1.0",
+      "line_text": "let ratio = old / fresh;",
+      "occurrences": 1,
+      "kind": "harmless",
+      "reason": "A drift of -1 recomputes every downdated column norm from the column instead of downdating it. The norms only choose the next pivot (within a factor of 2 of the largest) and give each step's largest norm, and recomputing gives the same norm as downdating up to rounding; every pivot's own size is computed from the column either way."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-sketch/src/diagnose.rs",
+      "mutant": "replace / with % in drift",
+      "line_text": "let ratio = old / fresh;",
+      "occurrences": 1,
+      "kind": "harmless",
+      "reason": "It changes only when a downdated column norm is recomputed rather than downdated (old % fresh is old, or 0 when they are equal). Both give the same norm up to rounding unless the downdate cancels, and a cancelled downdate keeps nothing (kept = 0), so its drift is still 0 and it is still recomputed (a_cancelled_downdate_is_recomputed). The norms only steer the pivot choice; each pivot's size is computed from the column."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-sketch/src/diagnose.rs",
+      "mutant": "replace / with * in drift",
+      "line_text": "let ratio = old / fresh;",
+      "occurrences": 1,
+      "kind": "harmless",
+      "reason": "It changes only when a downdated column norm is recomputed rather than downdated. Both give the same norm up to rounding unless the downdate cancels, and a cancelled downdate keeps nothing (kept = 0), so its drift is still 0 and it is still recomputed (a_cancelled_downdate_is_recomputed). The norms only steer the pivot choice; each pivot's size is computed from the column."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-sketch/src/diagnose.rs",
+      "mutant": "replace * with / in drift",
+      "line_text": "kept * ratio * ratio",
+      "occurrences": 2,
+      "kind": "harmless",
+      "reason": "Either product made a quotient leaves the drift kept times ratio^0 or ratio^2 over ratio^2, which changes only when a downdated column norm is recomputed rather than downdated. Both give the same norm up to rounding unless the downdate cancels, and a cancelled downdate keeps nothing (kept = 0), so its drift is still 0 and it is still recomputed. The norms only steer the pivot choice; each pivot's size is computed from the column."
     }
   ],
   "coverage_off": [

@@ -168,7 +168,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        target: [arenas_fuzz, boxtree_fuzz, cache_fuzz, cbor_fuzz, curves_fuzz, intersect_fuzz, linalg_fuzz, make_fuzz, maths_fuzz, nurbs_fuzz, orient2d_fuzz, predicates_fuzz, roots_fuzz, sequence_fuzz, sketch_text_fuzz, surfaces_fuzz, transforms_fuzz, variants_fuzz, wide_fuzz]
+        target: [arenas_fuzz, boxtree_fuzz, cache_fuzz, cbor_fuzz, curves_fuzz, intersect_fuzz, linalg_fuzz, make_fuzz, maths_fuzz, nurbs_fuzz, orient2d_fuzz, predicates_fuzz, roots_fuzz, sequence_fuzz, sketch_motions_fuzz, sketch_text_fuzz, surfaces_fuzz, transforms_fuzz, variants_fuzz, wide_fuzz]
     defaults:
       run:
         shell: bash
@@ -505,7 +505,7 @@ jobs:
         if: strategy.job-index == 0
         run: >-
           cargo run --locked -q -p geom-test --bin trip -- kani-format --
-          cargo kani -p geom-format --harness range::proofs::bits_is_the_magnitude_width --exact
+          cargo kani -p geom-format --harness range::proofs::real_accepts_exactly_the_finite_frame --exact
       - name: Prove ${{ matrix.proof }}
         run: |
           start=$(date +%s)

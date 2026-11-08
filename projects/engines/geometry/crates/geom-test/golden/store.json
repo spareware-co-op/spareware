@@ -248,9 +248,15 @@
               "kind": "corpus",
               "piece": "G101",
               "why": "4 new count benchmarks on geom-make's hot paths (decision 32.44): a box and a cylinder built, a box moved and quarter-turned; no existing digest moved"
+            },
+            {
+              "sha256": "cce98ea6ef149cfc6f915d2d4604fd511f459776f1b057a79fd2307846da82c1",
+              "kind": "corpus",
+              "piece": "G224",
+              "why": "2 new count benchmarks on geom-sketch's hot paths (decision 32.44): a chain diagnosed and the free motions of a chain by the sparse form; no existing digest moved"
             }
           ],
-          "sha256": "cce98ea6ef149cfc6f915d2d4604fd511f459776f1b057a79fd2307846da82c1"
+          "sha256": "ff57bf8f55d864e010b2cf05b41eb4177589ec871e987ac4e411e836d277e084"
         },
         {
           "id": "geom-nurbs/operations",
@@ -502,6 +508,16 @@
             "function": "sparse_golden_hash_is_the_same_on_every_target"
           },
           "sha256": "e68d26596c3a333daec2af7e3acd4bccf86ea191b961f61a060777d96d8c3a8e"
+        },
+        {
+          "id": "geom-sketch/diagnose",
+          "what": "The diagnosis of geom-sketch (piece G224): 51 sketches (a free pair, a triangle, three collinear points under a triangle's distances, and 48 chains with an extra distance that is the chain's own or not), each diagnosed, the report text, every pivot's equation, size bits and verdict, and every group's defect bits and equations.",
+          "check": {
+            "crate": "geom-sketch",
+            "test": "diagnose_determinism",
+            "function": "diagnose_golden_hash_is_the_same_on_every_target"
+          },
+          "sha256": "f4698e6ab9dd38a2ac8d0c0545353fbc493398314e6f869b05127e232dfe5c70"
         },
         {
           "id": "geom-sketch/solve",

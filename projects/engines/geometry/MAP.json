@@ -1056,6 +1056,26 @@
           "target": "lib"
         },
         {
+          "cost": "a few draws of [`SplitMix64`] and a short text per input, once per batch, outside every measured run.",
+          "does": null,
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-bench/src/inputs/sketch.rs",
+          "guarantees": [
+            "every batch is full and the same on every target, and every result of a typical batch is `Ok` (`tests/inputs.rs`); every result is the operation's own, run directly (`tests/attack_g06.rs`)."
+          ],
+          "job": "Inputs for `geom-sketch`'s diagnosis and free motions (piece G224, decision 32.44): small sketches in the `sketch v1` text form, each held at its start by a fixed first point and dimensioned along a chain.",
+          "method": {
+            "links": [
+              "projects/engines/geometry/architecture/28-testing.md"
+            ],
+            "text": "the chains of `geom-sketch`'s `benches/diagnose.rs`, at one small size. Each is measured as chapter 28.14 sets benchmarks out, `projects/engines/geometry/architecture/28-testing.md`."
+          },
+          "path": "geom_bench::inputs::sketch",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
           "cost": "two draws of [`SplitMix64`] per pair, once per batch, outside every measured run.",
           "does": null,
           "family": [],
@@ -4415,6 +4435,30 @@
             "text": "chapter 28.5's sequence target and oracle stack (`projects/engines/geometry/architecture/28-testing.md`), run through chapter 28.16's replay."
           },
           "path": "geom_fuzz::sequence",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
+          "cost": "a few small sparse factorisations per input.",
+          "does": "[`harness`] reads the fuzzer's bytes as a few points and a few dimensions on them, writes the `sketch v1` text, and hands the sketch to `geom_sketch::motions::MotionFinder`.",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-fuzz/src/sketch_motions.rs",
+          "guarantees": [
+            "**Never a panic.** A finder is made or refused with a typed error on every sketch.",
+            "**A motion is a motion.** Each motion moves the Jacobian's equations by no more than the rank tolerance lets through: `|J·x|` is at most `σ_ind` times the largest column, with the leading variable at 1, plus rounding (15.8).",
+            "**One motion for each degree of freedom,** in leading-variable order, and a motion of one entity is one of the motions of all.",
+            "**Deterministic.** A second finder gives equal motions."
+          ],
+          "job": "The fuzz target of a sketch's free motions (piece G224): any bytes are read as a small sketch, and the motions the sparse form finds must be motions.",
+          "method": {
+            "links": [
+              "projects/engines/geometry/architecture/28-testing.md",
+              "projects/engines/geometry/architecture/15-sketches.md"
+            ],
+            "text": "the property-based fuzzing of 28.5 (`projects/engines/geometry/architecture/28-testing.md`), on section 15.8's free motions (`projects/engines/geometry/architecture/15-sketches.md`)."
+          },
+          "path": "geom_fuzz::sketch_motions",
           "provenance": [],
           "spdx": null,
           "target": "lib"
@@ -10724,6 +10768,30 @@
           "target": "lib"
         },
         {
+          "cost": "O(m·n·min(m, n)) multiply-adds for m equations and n variables, charged to the meter before the work, then the same for the confirming decompositions of small groups.",
+          "does": "[`diagnose`] reads a sketch's Jacobian at its values and says how many ways the sketch can still move, which equations repeat others, and which of those repeats conflict. [`analyse_columns`] is the same on bare data, so the numerics are tested without a sketch. [`free_motions`] gives the directions the sketch can still move in, in the canonical echelon form, and [`SketchReport::text`] prints a report in words.",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-sketch/src/diagnose.rs",
+          "guarantees": [
+            "**Deterministic.** Pivots tie-break on priority, then authoring order; reports list their constraints in authoring order; the report text is the same on every target.",
+            "**Nothing hidden.** A pivot between the thresholds is a [`Verdict::NearSingular`], and the degrees of freedom are given as a least and a most when any are.",
+            "**No panics, no recursion, no unsafe code.** Every index is checked."
+          ],
+          "job": "Degrees of freedom, redundancy and conflicts (piece G224; chapter 15.8).",
+          "method": {
+            "links": [
+              "projects/engines/geometry/architecture/15-sketches.md",
+              "doi:10.1007/BF01436084",
+              "doi:10.1137/1.9780898718027"
+            ],
+            "text": "section 15.8 (`projects/engines/geometry/architecture/15-sketches.md`): P. Businger and G. H. Golub, \"Linear least squares solutions by Householder transformations\", Numer. Math. 7 (1965), doi:10.1007/BF01436084, for the pivoted QR; N. J. Higham, \"Accuracy and Stability of Numerical Algorithms\", 2nd ed. (2002), chapter 19, doi:10.1137/1.9780898718027, for the rounding bound on a pivot; and the dependency groups in our own words from the method G01 report 06, section 5, describes."
+          },
+          "path": "geom_sketch::diagnose",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
           "cost": "[`Assembly::new`] sorts the Jacobian's entries once; [`Assembly::evaluate_at`] is linear in the rows, with no allocation. No recursion.",
           "does": "a kind implements [`Residual`]: its residual function, a length that is zero exactly when the constraint holds, and the part of its inputs where it has no derivative. Its derivatives come from running that one function on dual numbers (`geom_num::dual`), never from a second text. A kind's inputs are [`Slot`]s: a sketch variable, or a constant, such as a dimension's value or the characteristic length of an angle, which carries no derivative. A dimension given as a named scalar is the same kind with a variable in that slot. [`Assembly::new`] lays out the rows of the driving constraints and of each arc's two ends, in authoring order, and the Jacobian's stored entries. [`Assembly::evaluate`] then fills the residuals and the Jacobian, in the variables the solver sees: each divided by its power of two, so each column is multiplied by it. It checks the inputs against each singular set first.",
           "family": [],
@@ -10781,6 +10849,29 @@
             "text": "section 15.2's table of entities and variables, and sections 15.3 and 15.4 (`projects/engines/geometry/architecture/15-sketches.md`)."
           },
           "path": "geom_sketch::model",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
+          "cost": "one sparse QR of J to find the leading variables and one of `J_P`, once; then 2·(|V| + |R|) multiply-adds and an O(n) vector for each motion. No recursion.",
+          "does": "[`MotionFinder`] factors a sketch's Jacobian once, sparsely, and then gives the directions one entity can still move in, or all of them, without ever forming the dense null space. Each direction is a [`crate::diagnose::Motion`], the same canonical echelon form as [`crate::diagnose::free_motions`], which stays as the dense reference the tests hold this to.",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-sketch/src/motions.rs",
+          "guarantees": [
+            "**Same answer as the dense form** to rounding, motion for motion, in the same order.",
+            "**Deterministic.** Natural column order for the scan, COLAMD (ties by variable order) for the solve; plain scalar loops (`geom-linalg`).",
+            "**Charged first** to the meter: the factorisations when the finder is made, each solve when it is asked for.",
+            "**No panics, no recursion, no unsafe code.**"
+          ],
+          "job": "Free motions, sparse and per entity (piece G224; chapter 15.8, \"free motions\").",
+          "method": {
+            "links": [
+              "projects/engines/geometry/architecture/15-sketches.md"
+            ],
+            "text": "section 15.8 (`projects/engines/geometry/architecture/15-sketches.md`), with `geom-linalg`'s sparse QR for the factors (piece G215)."
+          },
+          "path": "geom_sketch::motions",
           "provenance": [],
           "spdx": null,
           "target": "lib"

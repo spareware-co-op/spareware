@@ -2306,6 +2306,20 @@ fn make_typical_batches_all_succeed() {
     all_ok("turn_box", k::turned_boxes, &m::turned_boxes(Typical));
 }
 
+/// Every typical batch of `geom-sketch`'s benchmarks (decision 32.44) reads, diagnoses and factors
+/// every sketch.
+#[test]
+fn sketch_typical_batches_all_succeed() {
+    use geom_bench::inputs::sketch as m;
+    use geom_bench::kernels::sketch as k;
+    all_ok(
+        "diagnose_chain",
+        k::diagnosed,
+        &m::determined_chains(Typical),
+    );
+    all_ok("free_motions_chain", k::motions, &m::free_chains(Typical));
+}
+
 /// Every typical batch of `geom-bvh`'s benchmarks (decision 32.44) builds every scene and answers
 /// every query.
 #[test]
