@@ -751,6 +751,21 @@ fn root(parents: &[usize], mut at: usize) -> usize {
     }
 }
 
+/// Points every element of a forest [`join`] made straight at its root, so that [`root`] takes at
+/// most one step. [`join`] puts the lower root on top, so each element's parent comes before it,
+/// and in index order that parent already points at its root.
+fn flatten(parents: &mut [usize]) {
+    for at in 0..parents.len() {
+        let up = parents.get(at).copied().unwrap_or(at);
+        let top = parents.get(up).copied().unwrap_or(up);
+        parents
+            .iter_mut()
+            .skip(at)
+            .take(1)
+            .for_each(|slot| *slot = top);
+    }
+}
+
 /// Joins the sets of `a` and `b`, the lower root on top.
 fn join(parents: &mut [usize], a: usize, b: usize) {
     let (a, b) = (root(parents, a), root(parents, b));
@@ -1728,31 +1743,38 @@ pub fn merge_on(
         }
         runs.extend(found);
     }
+    flatten(&mut same_piece);
     let runs = without_slits(runs, &same_piece);
     let runs = cut_at_ends(&whole_runs(runs, &same_piece), &points, exec, meter)?;
 
     // Faces: the connected pieces of a sheet, numbered by the sheet and their lowest fin, which
-    // only one face of a sheet can hold.
-    let mut lowest: BTreeMap<usize, FaceKey> = BTreeMap::new();
+    // only one face of a sheet can hold. Each piece's set is listed at its root, a piece's index,
+    // so the faces are found in the order of their roots, as a map by root would list them.
+    let mut lowest: Vec<Option<FaceKey>> = alloc::vec![None; held.len()];
     for run in &runs {
         for fin in &run.fins {
             let key = (fin.sheet, run.low, run.high, fin.rising);
-            let slot = lowest.entry(root(&same_piece, fin.held)).or_insert(key);
-            *slot = key.min(*slot);
+            let slot = lowest
+                .get_mut(root(&same_piece, fin.held))
+                .ok_or(MergeError::Open)?;
+            *slot = Some(slot.map_or(key, |held_key| held_key.min(key)));
         }
     }
-    let mut face_list: Vec<(FaceKey, usize)> =
-        lowest.iter().map(|(top, key)| (*key, *top)).collect();
-    face_list.sort_unstable();
-    let numbered_faces: BTreeMap<usize, usize> = face_list
+    let mut face_list: Vec<(FaceKey, usize)> = lowest
         .iter()
         .enumerate()
-        .map(|(at, (_, top))| (*top, at))
+        .filter_map(|(top, key)| key.map(|key| (key, top)))
         .collect();
+    face_list.sort_unstable();
+    let mut numbered_faces: Vec<Option<usize>> = alloc::vec![None; held.len()];
+    for (at, (_, top)) in face_list.iter().enumerate() {
+        *numbered_faces.get_mut(*top).ok_or(MergeError::Open)? = Some(at);
+    }
     let face_of = |at: usize| {
         numbered_faces
-            .get(&root(&same_piece, at))
+            .get(root(&same_piece, at))
             .copied()
+            .flatten()
             .ok_or(MergeError::Open)
     };
     let mut planes: Vec<Plane> = Vec::with_capacity(face_list.len());
@@ -1813,6 +1835,7 @@ pub fn merge_on(
             fins: order,
         });
     }
+    flatten(&mut same_shell);
     let mut tops: Vec<usize> = (0..face_list.len()).map(|f| root(&same_shell, f)).collect();
     tops.sort_unstable();
     tops.dedup();
