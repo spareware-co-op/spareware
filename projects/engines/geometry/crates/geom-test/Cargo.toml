@@ -4,7 +4,7 @@ version = "0.0.0"
 edition.workspace = true
 rust-version = "1.86"
 publish.workspace = true
-license.workspace = true
+license = "(Apache-2.0 OR MIT) AND MPL-2.0"
 description = "Spare Kit geometry kernel, development only: shared test support, seeds, generators and the dependency rule."
 
 [dependencies]
@@ -94,6 +94,9 @@ geom-run = { path = "../geom-run" }
 geom-curve = { path = "../geom-curve" }
 geom-surface = { path = "../geom-surface" }
 geom-math = { path = "../geom-math" }
+# The certified surface-surface intersection the SSI corpus is run through (tests/ssi_corpus.rs).
+# Ours, MPL-2.0; a development dependency, so no kernel crate comes to depend on this one.
+geom-intersect = { path = "../geom-intersect" }
 
 [lints.rust]
 unsafe_code = "forbid"
