@@ -24,6 +24,44 @@
 //! Its direct dependencies are its row of chapter 27's crate table, checked by the
 //! scaffold test in `engine-geometry` (`tests/scaffold`).
 //!
-//! Status: scaffold only; built by pieces G80, G81, G90, G102, G111, G112, G143, G145, G247, G398.
+//! Modules today (piece G80, the arenas):
+//!
+//! - [`ix`]: [`Ix`], the typed 32-bit index of one row of one arena, the [`Kind`] of row each arena
+//!   holds and the [`Arena`]s' names.
+//! - [`column`]: [`Column`], one field of one arena, cut into chunks of [`CHUNK_ROWS`] rows that
+//!   body versions share until written to, and [`Memory`], what chunks hold, for measurement.
+//! - [`entity`]: the rows of chapter 8.1, [`Region`] to [`Vertex`], each with its arena of columns
+//!   ([`Regions`] to [`Vertices`]), and [`Link`], every column that holds an index.
+//! - [`arenas`]: [`Arenas`], every arena of one body with its four geometry [`Pool`]s.
+//! - [`body`]: [`Body`], one shape, immutable once published, and its [`BodyKind`].
+//! - [`builder`]: [`Builder`], the one way to make a body: arenas filled or edited, checked and
+//!   published.
+//! - [`TopoError`], in [`error`]: why an arena could not change or a body could not be published.
+//!
+//! Status: the arenas, their typed indices and the publishing builder (G80) built; the Euler
+//! operators, name order, attributes, regions and cells, queries, proofs and instances to come in
+//! G81, G90, G102, G111, G112, G143, G145, G247 and G398.
 #![cfg_attr(not(test), no_std)]
 #![forbid(unsafe_code)]
+
+extern crate alloc;
+
+pub mod arenas;
+pub mod body;
+pub mod builder;
+pub mod column;
+pub mod entity;
+pub mod error;
+pub mod ix;
+
+pub use arenas::{Arenas, Pool};
+pub use body::{Body, BodyKind};
+pub use builder::Builder;
+pub use column::{CHUNK_ROWS, Column, Memory};
+pub use entity::{
+    CurveIx, Edge, EdgeIx, Edges, Face, FaceIx, Faces, Fin, FinIx, Fins, Link, Loop, LoopIx, Loops,
+    PcurveIx, PointIx, Region, RegionIx, RegionKind, Regions, Sense, Shell, ShellIx, Shells,
+    SurfaceIx, Vertex, VertexIx, Vertices,
+};
+pub use error::TopoError;
+pub use ix::{Arena, Ix, Kind};
