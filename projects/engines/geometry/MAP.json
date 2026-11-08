@@ -8048,6 +8048,54 @@
           "non_exhaustive": false
         },
         {
+          "doc": "Why records cannot make a history.",
+          "file": "projects/engines/geometry/crates/geom-op/src/history.rs",
+          "kinds": [
+            {
+              "doc": "Two records for one output.",
+              "name": "RepeatedOutput",
+              "shape": "struct"
+            },
+            {
+              "doc": "A `Modified` record from no input: an output made from nothing is `Generated`.",
+              "name": "ModifiedFromNothing",
+              "shape": "struct"
+            },
+            {
+              "doc": "A `Merged` record of fewer than two inputs: one input changed is `Modified`.",
+              "name": "MergeOfOne",
+              "shape": "struct"
+            }
+          ],
+          "module": "geom_op::history",
+          "name": "HistoryError",
+          "non_exhaustive": false
+        },
+        {
+          "doc": "Which law of chapter 20.3 (or 13.14's recording rule) a history breaks, and where.",
+          "file": "projects/engines/geometry/crates/geom-op/src/history.rs",
+          "kinds": [
+            {
+              "doc": "Law 1: a deleted input has a modified output (or passed through unchanged).",
+              "name": "DeletedButModified",
+              "shape": "struct"
+            },
+            {
+              "doc": "Law 3: a record or the deleted set names something that is not an input.",
+              "name": "NotAnInput",
+              "shape": "struct"
+            },
+            {
+              "doc": "13.14: a topology change the records and the deleted set do not show.",
+              "name": "ChangeNotRecorded",
+              "shape": "struct"
+            }
+          ],
+          "module": "geom_op::history",
+          "name": "LawBreak",
+          "non_exhaustive": false
+        },
+        {
           "doc": "The shared base of every error (chapter 22): one of a closed set, each kind defined once.",
           "file": "projects/engines/geometry/crates/geom-op/src/kind.rs",
           "kinds": [
@@ -8273,6 +8321,32 @@
             "text": "NIST FIPS 180-4, *Secure Hash Standard* (2015), <https://csrc.nist.gov/pubs/fips/180-4/upd1/final>, computed by the `sha2` crate (`RustCrypto`, MIT OR Apache-2.0, a dependency, not a port); the cut follows NIST SP 800-107 Rev. 1 section 5.1, <https://csrc.nist.gov/pubs/sp/800/107/r1/final>. The owner's choice and its reasons are `projects/engines/geometry/architecture/32-decisions.md` (32.19 and 32.20). The test vectors are NIST's, <https://csrc.nist.gov/projects/cryptographic-algorithm-validation-program/secure-hashing>."
           },
           "path": "geom_op::hash",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
+          "cost": "making a history sorts its records and changes, `O(n log n)` in their number; a check and a composition are `O(m log m)` in the number of relation pairs, on sorted vectors searched by bisection, never hashed sets. Recursion: none.",
+          "does": "a [`History`] holds one [`Record`] per output entity, sorted by name, saying whether the output passed through unchanged, was modified from inputs, generated from inputs (or from nothing) in a role, split from one input by cutting faces, or merged from several (chapter 20.3); the set of inputs it deleted; and the [`TopologyChange`]s of chapter 13.14 it made. [`History::check`] tests the laws every operation's history keeps. [`Relations`] is the same history as three relations between inputs and outputs (modified, generated, deleted), the form in which histories compose ([`Relations::then`]) across a chain of operations.",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-op/src/history.rs",
+          "guarantees": [
+            "**Sorted by name, never by report order.** Records are in output-name order, each output once; changes and every set in them are in name order (20.2). Two operations that report the same history in different orders hold equal histories.",
+            "**The four laws hold** for every history and composition. Law 1 (a deleted input has no modified output) and law 3 (every output traces to an input or is generated, and every input a record names is an input of the operation) are checked ([`History::check`], [`Relations::check`]). Law 2 (an input's generated and modified outputs do not overlap) holds by construction: a history gives each output one origin, and composition takes the modified pairs out of the generated ones. Law 4 (histories compose, keeping the others) is [`Relations::then`]; `geom-test`'s history kit checks laws 2 and 4 on generated chains.",
+            "**Every topology change is recorded in the history** (13.14): a vanished face or an overshoot removed is deleted, faces merged are one `Merged` output of exactly those faces, and a face added is generated in the role the change gives.",
+            "**Composition is associative and keeps the laws.** Composing follows the method note's three rules, with one more where a part reaches an input by both relations through a chain: there it is modified, not generated, because it carries on a part of that input (the \"two paths\" case, decided here and written into 20.3). Grouping a chain either way gives the same relations."
+          ],
+          "job": "History: how every output of an operation relates to its inputs, which inputs it removed and what topology changes it made; the four laws of chapter 20.3; and how histories compose.",
+          "method": {
+            "links": [
+              "projects/engines/geometry/architecture/20-naming-history.md",
+              "projects/engines/geometry/architecture/13-sweeps-blends-offsets.md",
+              "projects/engines/geometry/methods/occt-history-contract.md",
+              "doi:10.1016/S0010-4485(96"
+            ],
+            "text": "chapter 20.3's history contract and 13.14's topology-change records (`projects/engines/geometry/architecture/20-naming-history.md`, `projects/engines/geometry/architecture/13-sweeps-blends-offsets.md`), after OCCT's history contract as the method note records it, its composition rules derived there (`projects/engines/geometry/methods/occt-history-contract.md`), and Kripac's face history graph (doi:10.1016/S0010-4485(96)00040-1)."
+          },
+          "path": "geom_op::history",
           "provenance": [],
           "spdx": null,
           "target": "lib"
@@ -10176,6 +10250,30 @@
             "text": "Cargo's documented `[patch]` table for overriding a dependency with a local copy (<https://doc.rust-lang.org/cargo/reference/overriding-dependencies.html>), set from the command line (<https://doc.rust-lang.org/cargo/reference/config.html#command-line-overrides>), and the seeded-violation pattern of the kernel's merge gate (G12): each gate is shown to fail on a violation planted on purpose."
           },
           "path": "geom_test::guard",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
+          "cost": "linear in a history's records, times the composition's ordered-set operations; a chain of `k` steps composes twice, `O(k)` compositions.",
+          "does": "[`check_laws`] checks one operation's history against laws 1 to 3 and 13.14's recording rule. [`check_chain`] checks every step of a chain, composes it, checks the composition against the chain's first inputs (law 4: histories compose and keep laws 1 to 3), and checks that composing left to right and right to left give the same relations; it says which step or which part failed ([`ChainBreak`]). [`step`] and [`chain`] are proptest strategies of valid histories: every input unchanged, modified, split, merged with others, deleted, or deleted while generating, plus outputs generated from nothing, each output under a fresh name.",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-test/src/history.rs",
+          "guarantees": [
+            "**Every law is checked through `geom-op`'s own checker**, so the kit and the contract cannot disagree; the kit adds the chain's composition and its associativity.",
+            "**The generators only make histories the laws allow**, so a law break the kit reports on them is a defect of `geom-op`'s checker or composition; its tests seed one break of each law to show the checker finds it.",
+            "**Seeded and repeatable**: names are made from the step and position, never drawn at random beyond proptest's own seeded runner."
+          ],
+          "job": "The history laws as a kit every operation's tests run: chapter 20.3's four laws checked on one history and on a chain, and seeded generators of valid histories and chains.",
+          "method": {
+            "links": [
+              "projects/engines/geometry/architecture/20-naming-history.md",
+              "projects/engines/geometry/methods/occt-history-contract.md",
+              "https://proptest-rs.github.io/proptest/proptest/tutorial/strategy-basics.html"
+            ],
+            "text": "chapter 20.3's laws and the method note's composition rules (`projects/engines/geometry/architecture/20-naming-history.md`, `projects/engines/geometry/methods/occt-history-contract.md`), as property-based tests in proptest's strategies (<https://proptest-rs.github.io/proptest/proptest/tutorial/strategy-basics.html>)."
+          },
+          "path": "geom_test::history",
           "provenance": [],
           "spdx": null,
           "target": "lib"

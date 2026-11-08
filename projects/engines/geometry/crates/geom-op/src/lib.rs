@@ -69,9 +69,9 @@
 //! layer, the exactness class and warnings of an output, operation identity and the schema types
 //! built (G82); budgets in the contract, the charge schedule and fallible reservations (G83); the
 //! canonical CBOR encoder ([`cbor`]) and SHA-256 ([`hash`]) built (G86); persistent names and their
-//! `NameId`s under `NameScheme v1` ([`name`]) built (G87); the batch driver built (G104); history
-//! to come in G88, per-entity bounds in G143, the local-operation driver in G144 and preview
-//! precision in G459.
+//! `NameId`s under `NameScheme v1` ([`name`]) built (G87); history records, their laws and their
+//! composition ([`history`]) built (G88); the batch driver built (G104); per-entity bounds to come
+//! in G143, the local-operation driver in G144 and preview precision in G459.
 #![cfg_attr(not(test), no_std)]
 #![forbid(unsafe_code)]
 
@@ -84,6 +84,7 @@ pub mod detail;
 pub mod error;
 pub mod evidence;
 pub mod hash;
+pub mod history;
 pub mod id;
 pub mod kind;
 pub mod name;
@@ -98,6 +99,10 @@ pub use detail::{NumDetail, OpErrorDetail, RunDetail};
 pub use error::OpError;
 pub use evidence::{Evidence, Value};
 pub use geom_num::Exactness;
+pub use history::{
+    ChangeClass, History, HistoryError, LawBreak, LoopChange, Origin, Record, Relations,
+    TopologyChange, Vanish,
+};
 pub use id::{Label, NameId, OpId, OpPath};
 pub use kind::ErrorKind;
 pub use name::{
