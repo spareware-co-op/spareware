@@ -743,3 +743,16 @@ pub fn certify(
 ) -> Result<Certified, SketchError> {
     Certifier::new(sketch, meter)?.certify(sketch, committed, meter)
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// The meter is charged for what was asked: a count, or all of it when it cannot be told.
+    #[test]
+    fn the_cost_is_the_count() {
+        assert_eq!(cost(0), 0);
+        assert_eq!(cost(7), 7);
+        assert_eq!(cost(1_000), 1_000);
+    }
+}
