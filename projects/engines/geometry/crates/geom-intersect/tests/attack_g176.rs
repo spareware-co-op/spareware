@@ -157,12 +157,13 @@ fn a_looped_sweep_crosses_itself_along_one_line() {
     let found = self_intersect(&sweep([LOOP, LOOP]), FLOOR, CEILING, &mut meter()).unwrap();
     check_line(&found, FLOOR);
     // One branch from each sheet, ending where the crossing meets the domain's edges on both
-    // sheets at once: there no start can be proven, and a box a floor across is flagged.
+    // sheets at once: the edge room proves each end's zero there, a box reaching past the end, so
+    // both ends are boundary ends and nothing is left flagged.
     assert_eq!(found.branches.len(), 2, "{:?}", found.branches);
     for branch in &found.branches {
-        assert_eq!(branch.ends, [CurveEnd::Flagged, CurveEnd::Flagged]);
+        assert_eq!(branch.ends, [CurveEnd::Boundary, CurveEnd::Boundary]);
     }
-    assert_eq!(found.flagged.len(), 4, "{:?}", found.flagged);
+    assert!(found.flagged.is_empty(), "{:?}", found.flagged);
 }
 
 #[test]
