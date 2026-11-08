@@ -49,9 +49,9 @@ use geom_run::{ChunkPlan, Exec, Phase, RunError, Stopped, WorkMeter};
 
 use crate::convex::{Piece, opposite};
 use crate::order::{Flap, Line, Meeting, Ray, about, around, plane_words, wide_product};
-use crate::plane::canonical;
+use crate::plane::{Canonical, canonical};
 use crate::subdivide::around_on;
-use crate::trace::{Cell as Box3, Classified, Polygon, TraceError, classify};
+use crate::trace::{Cell as Box3, Classified, Polygon, TraceError, classify_with};
 use crate::winding::{Entry, Kept, Winding, WindingTest, kept};
 
 /// Making corners or sides, a few dozen pieces a task.
@@ -341,6 +341,8 @@ struct Held<'p> {
     piece: &'p Piece,
     /// Its index in the pieces given.
     given: usize,
+    /// Its face in canonical form, reduced once, which [`nest`]'s tracing reads.
+    face: Canonical,
 }
 
 /// A corner of a piece: the point where its face and two of its bounds meet, which holds those
@@ -1099,7 +1101,7 @@ fn sheets_of<'p>(
         SHEETS,
         PIECES,
         pieces,
-        |_, piece, _| -> Result<SheetKey, MergeError> {
+        |_, piece, _| -> Result<(SheetKey, Canonical), MergeError> {
             let face = canonical(&piece.piece.face)?;
             let pairs = |w: &Winding| {
                 if seams {
@@ -1108,13 +1110,14 @@ fn sheets_of<'p>(
                     Vec::new()
                 }
             };
-            Ok((
+            let key = (
                 (face.plane.d(), face.plane.n()),
                 face.flipped,
                 if seams { piece.source } else { 0 },
                 pairs(&piece.front),
                 pairs(&piece.back),
-            ))
+            );
+            Ok((key, face))
         },
     );
     let keys = made.map_err(|e| phase_error(e, meter))?;
@@ -1123,7 +1126,7 @@ fn sheets_of<'p>(
     let keyed: Vec<(&SheetKey, (bool, usize))> = keys
         .iter()
         .zip(pieces)
-        .map(|(key, piece)| (key, (piece.turned, piece.polygon)))
+        .map(|((key, _), piece)| (key, (piece.turned, piece.polygon)))
         .collect();
     let sorted = exec.sort_stable::<_, _, MergeError, _>(
         meter,
@@ -1138,7 +1141,7 @@ fn sheets_of<'p>(
     let mut last: Option<&SheetKey> = None;
     for at in order {
         let outward = pieces.get(at).ok_or(MergeError::Open)?;
-        let key = keys.get(at).ok_or(MergeError::Open)?;
+        let (key, face) = keys.get(at).ok_or(MergeError::Open)?;
         if last != Some(key) {
             sheets.push(Sheet {
                 face: outward.piece.face,
@@ -1151,6 +1154,7 @@ fn sheets_of<'p>(
             sheet: sheets.len().saturating_sub(1),
             piece: &outward.piece,
             given: at,
+            face: *face,
         });
     }
     Ok((sheets, held))
@@ -1702,15 +1706,21 @@ fn join_around(
     Ok(())
 }
 
-/// `pieces` as polygons of one shell, each with `entry`.
-fn polygons_of(pieces: &[&Piece], entry: Option<Entry>) -> Vec<Polygon> {
+/// `pieces` as polygons of one shell, each with `entry`, and their faces in canonical form.
+fn polygons_of(
+    pieces: &[(&Piece, Canonical)],
+    entry: Option<Entry>,
+) -> (Vec<Polygon>, Vec<Canonical>) {
     pieces
         .iter()
-        .map(|piece| Polygon {
-            piece: (*piece).clone(),
-            entry,
+        .map(|(piece, face)| {
+            let polygon = Polygon {
+                piece: (*piece).clone(),
+                entry,
+            };
+            (polygon, *face)
         })
-        .collect()
+        .unzip()
 }
 
 /// The grid range of `corners` where each has [`Cell`]s and lies in the frame: their floors, and
@@ -1732,10 +1742,11 @@ fn grid_range(corners: &[Corner]) -> Option<GridRange> {
 /// A grid range: its lowest and highest coordinates.
 type GridRange = ([i64; 3], [i64; 3]);
 
-/// The vectors in front of and behind the first of `polygons`, traced through all of them inside
-/// `cell`, or the box [`around_on`] finds for them where there is none.
+/// The vectors in front of and behind the first of `polygons`, whose faces in canonical form are
+/// `faces`, traced through all of them inside `cell`, or the box [`around_on`] finds for them
+/// where there is none.
 fn sides_of_first(
-    polygons: &[Polygon],
+    (polygons, faces): (&[Polygon], &[Canonical]),
     cell: Option<Box3>,
     exec: &Exec<'_>,
     meter: &mut WorkMeter<'_>,
@@ -1749,26 +1760,29 @@ fn sides_of_first(
         .take(1)
         .map(|polygon| alloc::vec![polygon.piece.clone()])
         .collect();
-    let found = classify(&cell, &Winding::new(), polygons, &lists, meter)?;
+    let held: Vec<(&Polygon, Canonical)> = polygons.iter().zip(faces.iter().copied()).collect();
+    let found = classify_with(&cell, &Winding::new(), &held, &lists, meter)?;
     let first = found.into_iter().next();
     Ok(first.map_or_else(|| (Winding::new(), Winding::new()), |c| (c.front, c.back)))
 }
 
 /// Which of the shells `among` lie around a point behind shell `at`.
 fn around_shell(
-    of_shell: &[Vec<&Piece>],
+    of_shell: &[Vec<(&Piece, Canonical)>],
     (at, among): (usize, &[usize]),
     exec: &Exec<'_>,
     meter: &mut WorkMeter<'_>,
 ) -> Result<Vec<usize>, MergeError> {
     let number = |shell: usize| u32::try_from(shell).unwrap_or(u32::MAX);
     let list = of_shell.get(at).ok_or(MergeError::Open)?;
-    let mut polygons = polygons_of(list, None);
+    let (mut polygons, mut faces) = polygons_of(list, None);
     for shell in among.iter().filter(|shell| **shell != at) {
         let others = of_shell.get(*shell).ok_or(MergeError::Open)?;
-        polygons.extend(polygons_of(others, Some(number(*shell))));
+        let (more, their_faces) = polygons_of(others, Some(number(*shell)));
+        polygons.extend(more);
+        faces.extend(their_faces);
     }
-    let (_, back) = sides_of_first(&polygons, None, exec, meter)?;
+    let (_, back) = sides_of_first((&polygons, &faces), None, exec, meter)?;
     Ok(among
         .iter()
         .copied()
@@ -1790,7 +1804,7 @@ fn nest(
     exec: &Exec<'_>,
     meter: &mut WorkMeter<'_>,
 ) -> Result<Vec<(bool, Option<usize>)>, MergeError> {
-    let mut of_shell: Vec<Vec<&Piece>> = alloc::vec![Vec::new(); shells];
+    let mut of_shell: Vec<Vec<(&Piece, Canonical)>> = alloc::vec![Vec::new(); shells];
     let mut range_of_shell: Vec<Option<GridRange>> =
         alloc::vec![Some(([i64::MAX; 3], [i64::MIN; 3])); shells];
     for ((entry, shell), range) in held.iter().zip(shell_of_piece).zip(ranges) {
@@ -1798,7 +1812,7 @@ fn nest(
             .iter_mut()
             .skip(*shell)
             .take(1)
-            .for_each(|list| list.push(entry.piece));
+            .for_each(|list| list.push((entry.piece, entry.face)));
         range_of_shell
             .iter_mut()
             .skip(*shell)
@@ -1813,7 +1827,8 @@ fn nest(
             low: low.map(|v| half(v, -3)),
             high: high.map(|v| half(v, 3)),
         });
-        let (front, _) = sides_of_first(&polygons_of(list, Some(0)), cell, exec, meter)?;
+        let (polygons, faces) = polygons_of(list, Some(0));
+        let (front, _) = sides_of_first((&polygons, &faces), cell, exec, meter)?;
         outer.push(front.count(0) == 0);
     }
     let outers: Vec<usize> = (0..shells)
@@ -1921,15 +1936,15 @@ fn meetings(
 ///
 /// A [`MergeError`]: a stopped meter, or what the numbers layer refuses.
 pub fn section(pieces: &[(Piece, usize)], meter: &mut WorkMeter<'_>) -> Result<Curves, MergeError> {
-    let held: Vec<Held<'_>> = pieces
-        .iter()
-        .enumerate()
-        .map(|(given, (piece, owner))| Held {
+    let mut held: Vec<Held<'_>> = Vec::with_capacity(pieces.len());
+    for (given, (piece, owner)) in pieces.iter().enumerate() {
+        held.push(Held {
             sheet: *owner,
             piece,
             given,
-        })
-        .collect();
+            face: canonical(&piece.face)?,
+        });
+    }
     let made = corners_of(&held, &Exec::serial(), meter)?;
     let (number, points) = numbered(&made, &Exec::serial(), meter)?;
     let by_piece = sides_of(&held, &number, &Exec::serial(), meter)?;
@@ -2012,11 +2027,14 @@ pub fn merge_on(
 ) -> Result<Merged, MergeError> {
     let (sheets, mut held) = sheets_of(pieces, mode, exec, meter)?;
     let kept = held.len();
-    held.extend(rules.cuts.iter().map(|piece| Held {
-        sheet: CUT,
-        piece,
-        given: CUT,
-    }));
+    for piece in rules.cuts {
+        held.push(Held {
+            sheet: CUT,
+            piece,
+            given: CUT,
+            face: canonical(&piece.face)?,
+        });
+    }
     let corners = corners_of(&held, exec, meter)?;
     let (number, points) = numbered(&corners, exec, meter)?;
     // Each piece's sides stay in the list its task made, and are reached by reference, in piece
