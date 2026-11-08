@@ -77,7 +77,7 @@
 //! Method: the double reflection method of W. Wang, B. Jüttler, D. Zheng and Y. Liu, "Computation
 //! of rotation minimizing frames", ACM Transactions on Graphics 27(1), 2008,
 //! <https://doi.org/10.1145/1330511.1330513>, as tinyspline converts it (its
-//! `ts_bspline_compute_rmf`); the C1 rule between stations is ours (13.3); the rotation-minimising
+//! `ts_bspline_compute_rmf`, lines 1537 to 1687 of `src/tinyspline.c`); the C1 rule between stations is ours (13.3); the rotation-minimising
 //! frame's closed forms on lines, circles and helices from its definition (zero spin about the
 //! tangent, R. L. Bishop, "There is more than one way to frame a curve", American Mathematical
 //! Monthly 82(3), 1975, <https://doi.org/10.1080/00029890.1975.11993807>); IFC's fixed reference
@@ -87,7 +87,7 @@
 //! <https://doi.org/10.2514/3.55767b>; interval subdivision for the certified zero tests
 //! (R. E. Moore, *Interval Analysis*, Prentice-Hall, 1966).
 //! Source: PORT from tinyspline, MIT,
-//!   <https://github.com/msteinbeck/tinyspline/blob/bb3b02cdfaa039aa236a5240f2ba8bce66bea527/src/tinyspline.c#L1537-L1687>
+//!   <https://github.com/msteinbeck/tinyspline/blob/bb3b02cdfaa039aa236a5240f2ba8bce66bea527/src/tinyspline.c>
 //!   Copyright (c) 2016 Marcel Steinbeck
 //!   Changed for Spare Kit: the double reflection step converted into Rust over arrays, with the
 //!   step's derivative in the path parameter for the C1 rule between stored stations, the
@@ -115,7 +115,7 @@ use core::fmt;
 use geom_curve::{CurveError, CurveKind, HelixAxes, ParamCurve};
 use geom_num::interval::Interval;
 use geom_num::quadrature::{QuadError, integrate};
-use geom_num::{NumError, Real, math};
+use geom_num::{NumError, Real, Sign, math};
 use geom_nurbs::{Bounds, Limit};
 use geom_run::{Stopped, WorkMeter};
 
@@ -611,11 +611,7 @@ impl Stations {
             let estimate = RICHARDSON * angle_about(end.t, one, two)?.abs();
             let narrow = (to - from) <= (b - a) * NARROWEST;
             if estimate <= limit || narrow {
-                measured = if estimate > measured {
-                    estimate
-                } else {
-                    measured
-                };
+                measured = Real::new(measured)?.total_max(Real::new(estimate)?).get();
                 let normal = unit(one)?.ok_or(FrameError::InvalidRule("a degenerate step"))?;
                 if frames.len() >= MAX_STATIONS {
                     return Err(FrameError::TooManyStations);
@@ -892,12 +888,13 @@ fn interval_cross(a: [Interval; 3], b: [Interval; 3]) -> Result<[Interval; 3], F
 
 /// Whether some component of `v` is certainly not zero.
 fn certainly_nonzero(v: [Interval; 3]) -> bool {
-    v.iter().any(|c| c.lo() > 0.0 || c.hi() < 0.0)
+    v.iter()
+        .any(|c| matches!(c.certain_sign(), Some(Sign::Positive | Sign::Negative)))
 }
 
 /// Whether every component of `v` is exactly zero.
 fn certainly_zero(v: [Interval; 3]) -> bool {
-    v.iter().all(|c| c.lo() == 0.0 && c.hi() == 0.0)
+    v.iter().all(|c| c.certain_sign() == Some(Sign::Zero))
 }
 
 /// Splits the path's domain until `decided` passes every span, or a span narrower than 2⁻²⁴ of
@@ -943,8 +940,9 @@ fn certify(
 ///
 /// [`FrameError::FrameUndefined`] with a span holding every parameter where the curvature may
 /// vanish (a line, an inflection), at most 2⁻²⁴ of the domain wide unless the curvature is
-/// certainly zero there; [`FrameError::Undecided`] past [`MAX_SPANS`]; the path's and the meter's
-/// errors.
+/// certainly zero there (the second derivative's bound exactly zero over the span, as on a line,
+/// whose whole domain is reported); [`FrameError::Undecided`] past [`MAX_SPANS`]; the path's and
+/// the meter's errors.
 pub fn frenet_defined(path: &CurveKind<3>, meter: &mut WorkMeter<'_>) -> Result<(), FrameError> {
     certify(path, meter, |p, span, m| {
         let (DerivativeBound::Bounded(d1), DerivativeBound::Bounded(d2)) = (
@@ -953,7 +951,13 @@ pub fn frenet_defined(path: &CurveKind<3>, meter: &mut WorkMeter<'_>) -> Result<
         ) else {
             return Ok(None);
         };
-        Ok(Some(interval_cross(boxed(&d1)?, boxed(&d2)?)?))
+        let d2 = boxed(&d2)?;
+        if certainly_zero(d2) {
+            // C'' is exactly zero over the span (a line), so C' × C'' is too: the curvature
+            // vanishes on all of it. The interval product, widened by a step, could never show it.
+            return Ok(Some(d2));
+        }
+        Ok(Some(interval_cross(boxed(&d1)?, d2)?))
     })
 }
 

@@ -27,12 +27,16 @@
 use core::f64::consts::PI;
 
 use dashu_ratio::RBig;
-use geom_curve::{Circle, CurveKind, Frame, Helix, HelixAxes, Line, ParamCurve, Polynomial};
+use geom_curve::{
+    Circle, CurveError, CurveKind, Frame, Helix, HelixAxes, Line, ParamCurve, Polynomial, Trimmed,
+};
+use geom_num::NumError;
 use geom_nurbs::{Basis, Curve, Limit};
 use geom_run::{Budget, WorkMeter};
 use geom_surface::frame_rule::{
-    Closing, FrameError, FrameRule, Law, Laws, ProfileAxis, StationPlacement, Stations, arc_length,
-    closed_form_frame, frenet_defined, placement, reference_defined,
+    Closing, FrameError, FrameRule, Law, Laws, MAX_SPANS, ProfileAxis, StationFrame,
+    StationPlacement, Stations, arc_length, closed_form_frame, frenet_defined, placement,
+    reference_defined,
 };
 use geom_test::{Seed, SplitMix64};
 
@@ -923,6 +927,19 @@ fn twist_and_scale_laws_act_on_top_of_any_rule() {
             assert!(angle(lawful.x, want) < 1e-12);
             assert!((lawful.scale - (1.0 + 0.01 * s)).abs() < 1e-12);
             assert_eq!(lawful.z, plain.z);
+            // Each law alone reads the same arc length.
+            let twisted = Laws {
+                twist: laws.twist.clone(),
+                scale: None,
+            };
+            let twisted = placement(&rule, &twisted, &path, t).unwrap();
+            assert!(angle(twisted.x, want) < 1e-12 && twisted.scale == 1.0);
+            let scaled = Laws {
+                twist: None,
+                scale: laws.scale.clone(),
+            };
+            let scaled = placement(&rule, &scaled, &path, t).unwrap();
+            assert!((scaled.scale - (1.0 + 0.01 * s)).abs() < 1e-12 && scaled.x == plain.x);
         }
     }
     // A scale that is not positive is refused.
@@ -987,4 +1004,597 @@ fn laws_are_exact_where_given_exactly() {
         4.0
     );
     assert_eq!(Law::Polynomial(vec![0.0, 0.0, 3.0]).derivative(2.0), 12.0);
+}
+
+#[test]
+fn every_error_says_what_went_wrong_and_where() {
+    let line = CurveKind::Line(Line::new([0.0; 3], [1.0, 0.0, 0.0], (0.0, 1.0)).unwrap());
+    let stopped = match Stations::build(
+        &line,
+        [0.0, 0.0, 1.0],
+        1.0,
+        1e-9,
+        Closing::Open,
+        &mut WorkMeter::new(Budget::new(0, u64::MAX)),
+    ) {
+        Err(e @ FrameError::Stopped(_)) => e,
+        other => panic!("a meter with no work left: {other:?}"),
+    };
+    let cases = [
+        (
+            FrameError::Curve(CurveError::Degenerate),
+            vec!["path", "Degenerate"],
+        ),
+        (
+            FrameError::Num(NumError::NotFinite),
+            vec!["numbers", "NotFinite"],
+        ),
+        (
+            FrameError::FrameUndefined {
+                from: 0.25,
+                to: 0.75,
+            },
+            vec!["undefined", "0.25", "0.75"],
+        ),
+        (
+            FrameError::ZeroTangent { at: 0.375 },
+            vec!["tangent", "0.375"],
+        ),
+        (
+            FrameError::InvalidRule("a reason of its own"),
+            vec!["a reason of its own"],
+        ),
+        (
+            FrameError::ClosingTwist { half_turns: 0.125 },
+            vec!["does not close", "0.125"],
+        ),
+        (
+            FrameError::Undecided { from: 1.5, to: 2.5 },
+            vec!["could not decide", "1.5", "2.5"],
+        ),
+        (FrameError::TooManyStations, vec!["too many stations"]),
+        (FrameError::Quadrature, vec!["arc length"]),
+        (stopped, vec!["stopped"]),
+    ];
+    for (error, words) in cases {
+        let text = error.to_string();
+        for w in words {
+            assert!(text.contains(w), "{error:?} says {text:?}, without {w:?}");
+        }
+    }
+}
+
+#[test]
+fn laws_that_are_not_finite_or_empty_are_refused() {
+    let path = CurveKind::Line(Line::new([0.0; 3], [1.0, 0.0, 0.0], (0.0, 4.0)).unwrap());
+    let screw = |pitch: Law, radius: Law| FrameRule::Helical {
+        point: [0.0; 3],
+        axis: [0.0, 0.0, 1.0],
+        reference: [1.0, 0.0, 0.0],
+        pitch,
+        radius,
+    };
+    let refused = |rule: &FrameRule, laws: &Laws| {
+        matches!(
+            placement(rule, laws, &path, 1.0),
+            Err(FrameError::InvalidRule("a law that is not finite"))
+        )
+    };
+    // Unrefused, each of these would place the profile at an infinite origin, or (empty) give a
+    // rise, radius or twist of 0, with no other error.
+    let bad = [
+        Law::Constant(f64::INFINITY),
+        Law::Linear {
+            start: 1.0,
+            rate: f64::INFINITY,
+        },
+        Law::Linear {
+            start: f64::INFINITY,
+            rate: 1.0,
+        },
+        Law::Polynomial(Vec::new()),
+        Law::Polynomial(vec![1.0, f64::INFINITY]),
+        Law::Polynomial(vec![f64::NAN]),
+    ];
+    for law in &bad {
+        let one = Law::Constant(1.0);
+        assert!(
+            refused(&screw(law.clone(), one.clone()), &Laws::default()),
+            "pitch {law:?}"
+        );
+        assert!(
+            refused(&screw(one, law.clone()), &Laws::default()),
+            "radius {law:?}"
+        );
+        let twist = Laws {
+            twist: Some(law.clone()),
+            scale: None,
+        };
+        assert!(refused(&FrameRule::Translate, &twist), "twist {law:?}");
+    }
+    // Finite laws of the same forms are used.
+    for law in [
+        Law::Constant(2.0),
+        Law::Linear {
+            start: 1.0,
+            rate: 0.5,
+        },
+        Law::Polynomial(vec![1.0, 0.5]),
+    ] {
+        let laws = Laws {
+            twist: Some(law.clone()),
+            scale: Some(law.clone()),
+        };
+        placement(&screw(law.clone(), law), &laws, &path, 1.0).unwrap();
+    }
+}
+
+#[test]
+fn stored_frames_are_refused_unless_they_are_stations() {
+    let mut rng = Rng::new("frames: stored frames", 0x2540_000c);
+    let path = cubic(&mut rng);
+    let s = stations(&path, &mut rng);
+    for f in s.frames() {
+        assert_eq!(f.binormal(), cross(f.tangent, f.normal));
+        assert!((norm(f.binormal()) - 1.0).abs() < 1e-15);
+    }
+    let frames = s.frames().to_vec();
+    Stations::from_frames(frames.clone(), 0.25).unwrap();
+    let spoilt = |change: &dyn Fn(&mut StationFrame)| {
+        let mut f = frames.clone();
+        change(&mut f[1]);
+        Stations::from_frames(f, 0.0)
+    };
+    let first = frames[0].at;
+    for (what, result) in [
+        ("a tangent", spoilt(&|f| f.tangent[1] = f64::NAN)),
+        ("a normal", spoilt(&|f| f.normal[2] = f64::INFINITY)),
+        ("a parameter", spoilt(&|f| f.at = f64::NAN)),
+        ("a repeated parameter", spoilt(&|f| f.at = first)),
+        (
+            "a closing angle",
+            Stations::from_frames(frames.clone(), f64::NAN),
+        ),
+    ] {
+        assert!(
+            matches!(result, Err(FrameError::InvalidRule(_))),
+            "{what}: {result:?}"
+        );
+    }
+}
+
+#[test]
+fn a_path_is_read_from_the_left_at_its_end_and_from_the_right_inside() {
+    // A polyline with a corner at 1: (0, 0, 0) to (1, 0, 0) to (1, 1, 0).
+    let corner = Curve::new(
+        Basis::new(1, vec![0.0, 0.0, 1.0, 2.0, 2.0]).unwrap(),
+        &[[0.0; 3], [1.0, 0.0, 0.0], [1.0, 1.0, 0.0]],
+    )
+    .unwrap();
+    let fixed = FrameRule::FixedReference {
+        reference: [0.0, 0.0, 1.0],
+        axis: ProfileAxis::X,
+    };
+    let z = |path: &CurveKind<3>, t: f64| placement(&fixed, &Laws::default(), path, t).unwrap().z;
+    // Inside the domain the corner is read from the right: the next leg's direction.
+    let whole = CurveKind::Nurbs(corner.clone());
+    assert_eq!(z(&whole, 1.0), [0.0, 1.0, 0.0]);
+    // Trimmed to end at the corner, the path's end is read from the left: its own last direction,
+    // not the leg beyond the trim.
+    let first_leg =
+        CurveKind::Trimmed(Trimmed::new(geom_curve::Basis::Nurbs(corner), (0.0, 1.0)).unwrap());
+    assert_eq!(z(&first_leg, 1.0), [1.0, 0.0, 0.0]);
+}
+
+#[test]
+fn stations_refuse_a_radius_tolerance_or_domain_they_cannot_meet() {
+    let line = CurveKind::Line(Line::new([0.0; 3], [1.0, 0.0, 0.0], (0.0, 1.0)).unwrap());
+    let build = |path: &CurveKind<3>, radius: f64, tolerance: f64| {
+        Stations::build(
+            path,
+            [0.0, 0.0, 1.0],
+            radius,
+            tolerance,
+            Closing::Open,
+            &mut meter(),
+        )
+    };
+    for (radius, tolerance) in [
+        (1.0, 0.0),
+        (1.0, -1e-9),
+        (1.0, f64::INFINITY),
+        (1.0, f64::NAN),
+        (0.0, 1e-9),
+        (-1.0, 1e-9),
+        (f64::INFINITY, 1e-9),
+        (f64::NAN, 1e-9),
+    ] {
+        assert!(
+            matches!(
+                build(&line, radius, tolerance),
+                Err(FrameError::InvalidRule(
+                    "a radius or tolerance that is not positive"
+                ))
+            ),
+            "radius {radius}, tolerance {tolerance}"
+        );
+    }
+    // A ray, or a line infinite at its start, has no finite domain to place stations on.
+    for domain in [
+        (0.0, f64::INFINITY),
+        (f64::NEG_INFINITY, 0.0),
+        (f64::NEG_INFINITY, f64::INFINITY),
+    ] {
+        let ray = CurveKind::Line(Line::new([0.0; 3], [1.0, 0.0, 0.0], domain).unwrap());
+        assert!(
+            matches!(
+                build(&ray, 1.0, 1e-9),
+                Err(FrameError::InvalidRule("a path with no finite domain"))
+            ),
+            "{domain:?}"
+        );
+    }
+}
+
+/// A closed cubic B-spline like [`closed_loop`], on the domain [1, 4], its control points' heights
+/// `lift` (1 in [`closed_loop`]) and its fifth control point moved by `lean` along x, so that its
+/// end tangent turns from its start tangent by atan(lean / √(1 + lift²)).
+fn leaning_loop(lean: f64, lift: f64) -> CurveKind<3> {
+    let basis = Basis::new(3, vec![1.0, 1.0, 1.0, 1.0, 2.0, 3.0, 4.0, 4.0, 4.0, 4.0]).unwrap();
+    let points: [[f64; 3]; 6] = [
+        [1.0, 0.0, 0.0],
+        [1.0, 1.0, lift],
+        [-1.0, 1.0, -lift],
+        [-1.0, -1.0, lift],
+        [1.0 + lean, -1.0, -lift],
+        [1.0, 0.0, 0.0],
+    ];
+    CurveKind::Nurbs(Curve::new(basis, &points).unwrap())
+}
+
+#[test]
+fn a_closing_rule_needs_the_end_tangent_within_the_tolerance() {
+    // With a radius r, a tangent that turns by θ radians at the join twists the profile's edge by
+    // r·θ, so the join is closed when r·θ is within the tolerance.
+    let tolerance = 1e-3;
+    let lean = |radians: f64| radians.tan() * 2.0_f64.sqrt();
+    for (radius, radians, closed) in [
+        (1.0, 0.5 * tolerance, true),
+        (1.0, 2.0 * tolerance, false),
+        (2.0, 0.4 * tolerance, true),
+        (2.0, 0.6 * tolerance, false),
+    ] {
+        let path = leaning_loop(lean(radians), 1.0);
+        let built = Stations::build(
+            &path,
+            [0.0, 0.0, 1.0],
+            radius,
+            tolerance,
+            Closing::Spread,
+            &mut meter(),
+        );
+        let refused = matches!(
+            built,
+            Err(FrameError::InvalidRule(
+                "a closing rule on a path that is not closed"
+            ))
+        );
+        assert_eq!(
+            refused, !closed,
+            "radius {radius}, {radians} radians: {built:?}"
+        );
+    }
+}
+
+#[test]
+fn a_spread_closing_angle_turns_the_frame_in_proportion_to_the_parameter() {
+    let path = leaning_loop(0.0, 1.0);
+    let (a, b) = path.domain();
+    let build = |closing: Closing| {
+        Stations::build(&path, [0.0, 0.0, 1.0], 1.0, 1e-9, closing, &mut meter()).unwrap()
+    };
+    let (open, spread) = (build(Closing::Open), build(Closing::Spread));
+    assert_eq!(open.frames(), spread.frames());
+    assert_eq!(open.closing(), 0.0);
+    assert!(spread.closing().abs() > 1e-3, "{}", spread.closing());
+    for t in samples(&path, 12) {
+        let at = |s: &Stations| {
+            placement(
+                &FrameRule::RotationMinimising(s.clone()),
+                &Laws::default(),
+                &path,
+                t,
+            )
+            .unwrap()
+        };
+        let (p, q) = (at(&open), at(&spread));
+        let turned = dot(cross(p.x, q.x), p.z).atan2(dot(p.x, q.x));
+        let want = -spread.closing() * PI * (t - a) / (b - a);
+        assert!(
+            (turned - want).abs() < 1e-12,
+            "at {t}: {turned} against {want}"
+        );
+    }
+}
+
+#[test]
+fn a_placement_puts_a_profile_point_at_its_origin_plus_its_scaled_axes() {
+    let mut rng = Rng::new("frames: place", 0x2540_000d);
+    let path = helix(&mut rng);
+    let rule = FrameRule::RotationMinimising(stations(&path, &mut rng));
+    let laws = Laws {
+        twist: Some(Law::Constant(0.25)),
+        scale: Some(Law::Linear {
+            start: 2.0,
+            rate: 0.125,
+        }),
+    };
+    for t in samples(&path, 7) {
+        let p = placement(&rule, &laws, &path, t).unwrap();
+        assert_eq!(p.place([0.0, 0.0]), p.origin);
+        for _ in 0..4 {
+            let (u, v) = (rng.real(-2.0, 2.0), rng.real(-2.0, 2.0));
+            let want: V =
+                core::array::from_fn(|i| p.origin[i] + p.scale * (u * p.x[i] + v * p.y[i]));
+            let got = p.place([u, v]);
+            assert!(
+                norm(sub(got, want)) <= 1e-14 * (1.0 + norm(want)),
+                "{got:?} against {want:?}"
+            );
+        }
+    }
+}
+
+#[test]
+fn arc_length_is_exact_in_closed_form_and_by_quadrature_elsewhere() {
+    let mut rng = Rng::new("frames: arc length", 0x2540_000e);
+    for round in 0..48 {
+        let path = match round % 3 {
+            0 => line(&mut rng),
+            1 => circle(&mut rng),
+            _ => helix(&mut rng),
+        };
+        let speed = match &path {
+            CurveKind::Line(l) => norm(l.direction()),
+            CurveKind::Circle(c) => PI * c.radius(),
+            CurveKind::Helix(h) => {
+                let HelixAxes::Frame { radius, pitch, .. } = h.axes() else {
+                    unreachable!()
+                };
+                let (round, rise) = (PI * radius, 0.5 * pitch);
+                (round * round + rise * rise).sqrt()
+            }
+            _ => unreachable!(),
+        };
+        let (a, _) = path.domain();
+        for t in samples(&path, 9) {
+            assert_eq!(
+                arc_length(&path, t).unwrap(),
+                speed * (t - a),
+                "round {round} at {t}"
+            );
+        }
+    }
+    // A Pythagorean-hodograph cubic, (t − t³/3, t², 0), whose speed is 1 + t², on a domain mostly
+    // left of 0: its arc length from −2 to t is (t + 2) + (t³ + 8)/3.
+    let ph = CurveKind::Polynomial(
+        Polynomial::new(
+            vec![
+                [0.0; 3],
+                [1.0, 0.0, 0.0],
+                [0.0, 1.0, 0.0],
+                [-1.0 / 3.0, 0.0, 0.0],
+            ],
+            (-2.0, 1.0),
+        )
+        .unwrap(),
+    );
+    for t in [-2.0, -1.5, -1.0, -0.25, 0.0, 0.5, 1.0] {
+        let want = (t + 2.0) + (t * t * t + 8.0) / 3.0;
+        let got = arc_length(&ph, t).unwrap();
+        assert!(
+            (got - want).abs() <= 1e-12 * want.max(1.0),
+            "at {t}: {got} against {want}"
+        );
+    }
+}
+
+#[test]
+fn a_lines_frenet_frame_is_undefined_on_its_whole_domain() {
+    let mut rng = Rng::new("frames: Frenet on a line", 0x2540_000f);
+    for _ in 0..8 {
+        let l = line(&mut rng);
+        let (a, b) = l.domain();
+        assert_eq!(
+            frenet_defined(&l, &mut meter()),
+            Err(FrameError::FrameUndefined { from: a, to: b })
+        );
+    }
+}
+
+#[test]
+fn the_turn_between_placements_is_shared_out_about_any_axis_by_any_angle() {
+    let path = CurveKind::Line(Line::new([0.0; 3], [0.0, 0.0, 1.0], (0.0, 4.0)).unwrap());
+    let mut rng = Rng::new("frames: placement turns", 0x2540_0010);
+    // The coordinate axes and axes in each coordinate plane put each of Shepperd's four cases
+    // where another would lose accuracy: small turns, where w is the largest component, and
+    // nearly half turns, where one of q's is.
+    let mut axes: Vec<V> = vec![
+        [1.0, 0.0, 0.0],
+        [0.0, 1.0, 0.0],
+        [0.0, 0.0, 1.0],
+        [0.6, 0.8, 0.0],
+        [0.0, 0.6, 0.8],
+        [0.8, 0.0, 0.6],
+    ];
+    for _ in 0..6 {
+        axes.push(rng.direction());
+    }
+    let tiny = 1.0 / 1_048_576.0;
+    for k in axes {
+        for turn in [tiny, 0.3, 1.0 - tiny] {
+            let z0 = rng.direction();
+            let x0 = unit(cross(z0, rng.direction()));
+            let rule = FrameRule::Placements(vec![
+                StationPlacement {
+                    at: 0.0,
+                    x: x0,
+                    z: z0,
+                },
+                StationPlacement {
+                    at: 4.0,
+                    x: rodrigues(x0, k, turn),
+                    z: rodrigues(z0, k, turn),
+                },
+            ]);
+            for (t, share) in [(1.0, 0.25), (2.0, 0.5), (3.0, 0.75)] {
+                let got = placement(&rule, &Laws::default(), &path, t).unwrap();
+                let (x, z) = (
+                    rodrigues(x0, k, turn * share),
+                    rodrigues(z0, k, turn * share),
+                );
+                assert!(
+                    angle(got.x, x) < 1e-14 && angle(got.z, z) < 1e-14,
+                    "{k:?} by {turn} at {t}: {} and {}",
+                    angle(got.x, x),
+                    angle(got.z, z)
+                );
+            }
+        }
+    }
+}
+
+#[test]
+fn placements_a_half_turn_apart_are_met_at_their_parameters_and_refused_between() {
+    let path = CurveKind::Line(Line::new([0.0; 3], [0.0, 0.0, 1.0], (0.0, 4.0)).unwrap());
+    let half = FrameRule::Placements(vec![
+        StationPlacement {
+            at: 0.0,
+            x: [1.0, 0.0, 0.0],
+            z: [0.0, 0.0, 1.0],
+        },
+        StationPlacement {
+            at: 4.0,
+            x: [-1.0, 0.0, 0.0],
+            z: [0.0, 0.0, 1.0],
+        },
+    ]);
+    let x = |t: f64| placement(&half, &Laws::default(), &path, t).map(|p| p.x);
+    assert_eq!(x(0.0), Ok([1.0, 0.0, 0.0]));
+    assert_eq!(x(4.0), Ok([-1.0, 0.0, 0.0]));
+    for t in [1e-12, 2.0, 4.0 - 1e-12] {
+        assert!(matches!(x(t), Err(FrameError::InvalidRule(_))), "at {t}");
+    }
+}
+
+#[test]
+fn every_placed_step_meets_the_tolerance_on_any_domain() {
+    let mut rng = Rng::new("frames: steps within the tolerance", 0x2540_0011);
+    for round in 0..12 {
+        // Domains left of 0, about 0 and right of it.
+        let shift = [-7.0, -0.5, 6.0][round % 3];
+        let a = shift + rng.real(0.0, 0.5);
+        let path = if round % 2 == 0 {
+            let frame = Frame::new(rng.direction(), rng.direction()).unwrap();
+            let axes = HelixAxes::Frame {
+                frame,
+                radius: rng.real(0.5, 3.0),
+                pitch: rng.real(0.5, 6.0),
+            };
+            let domain = (a, a + rng.real(1.0, 3.0));
+            CurveKind::Helix(Helix::new(rng.vector(5.0), axes, domain).unwrap())
+        } else {
+            let k = rng.real(0.5, 2.0);
+            let coefficients = vec![
+                rng.vector(3.0),
+                [1.0, 0.0, 0.0],
+                [0.0, k, 0.0],
+                [0.0, 0.0, k * 0.5],
+            ];
+            let domain = (a, a + rng.real(1.0, 1.5));
+            CurveKind::Polynomial(Polynomial::new(coefficients, domain).unwrap())
+        };
+        let radius = rng.real(0.5, 2.0);
+        let tolerance = [1e-6, 1e-8][round % 2];
+        let s = Stations::build(
+            &path,
+            start_normal(&path, &mut rng),
+            radius,
+            tolerance,
+            Closing::Open,
+            &mut meter(),
+        )
+        .unwrap();
+        assert!(
+            s.measured_twist() <= tolerance / radius / PI,
+            "round {round}: {} stations, measured {}",
+            s.frames().len(),
+            s.measured_twist()
+        );
+    }
+}
+
+#[test]
+fn asking_for_no_twist_refuses_a_closing_angle_only_beyond_the_tolerance() {
+    // A loop lifted a fifth as far as `closed_loop`: its quarters' steps err less than a fifth of
+    // its closing angle, so for any tolerance near that angle the stations are the quarters and
+    // the angle stays the same. Of a few such loops, take one whose angle is exactly the limit,
+    // tolerance / radius / π half-turns, of some tolerance.
+    let start = [0.0, 0.0, 1.0];
+    let build = |path: &CurveKind<3>, tolerance: f64, closing: Closing| {
+        Stations::build(path, start, 1.0, tolerance, closing, &mut meter())
+    };
+    let limit = |tolerance: f64| tolerance / 1.0 / PI;
+    let (path, angle, tolerance) = [0.2, 0.21, 0.22, 0.23, 0.24, 0.25]
+        .into_iter()
+        .find_map(|lift| {
+            let path = leaning_loop(0.0, lift);
+            let quarters = build(&path, 1.0, Closing::Spread).unwrap();
+            let angle = quarters.closing().abs();
+            assert!(quarters.frames().len() == 5 && quarters.measured_twist() < 0.2 * angle);
+            let mut tolerance = angle * PI;
+            for _ in 0..8 {
+                if limit(tolerance) < angle {
+                    tolerance = tolerance.next_up();
+                } else if limit(tolerance) > angle {
+                    tolerance = tolerance.next_down();
+                }
+            }
+            (limit(tolerance) == angle).then_some((path, angle, tolerance))
+        })
+        .unwrap();
+    // An angle equal to the limit is within the tolerance: it is spread.
+    let met = build(&path, tolerance, Closing::Refuse).unwrap();
+    assert_eq!(met.closing().abs(), angle);
+    // The next tolerance down whose limit is below the angle refuses it.
+    let mut below = tolerance;
+    while limit(below) >= angle {
+        below = below.next_down();
+    }
+    assert!(matches!(
+        build(&path, below, Closing::Refuse),
+        Err(FrameError::ClosingTwist { half_turns }) if half_turns.abs() == angle
+    ));
+}
+
+#[test]
+fn a_certified_test_examines_exactly_its_budget_of_spans() {
+    // (t³, t³ + εt², 0) on [1, 2]: C' × C'' = (0, 0, −6εt²) is small beside the two products it is
+    // the difference of (each about 18t³), so its bounds decide a span only once the span is about
+    // ε/9 wide or less: with ε = 0.00078 every span of 2⁻¹⁴ of the domain is decided and none of
+    // 2⁻¹³. Depth first, the whole domain is the first span examined and the first half's
+    // 2¹⁴ − 1 spans the next, which spends MAX_SPANS; the second half is the first span past it.
+    assert_eq!(MAX_SPANS, 1 << 14);
+    let eps = 0.00078;
+    let path = CurveKind::Polynomial(
+        Polynomial::new(
+            vec![[0.0; 3], [0.0; 3], [0.0, eps, 0.0], [1.0, 1.0, 0.0]],
+            (1.0, 2.0),
+        )
+        .unwrap(),
+    );
+    assert_eq!(
+        frenet_defined(&path, &mut meter()),
+        Err(FrameError::Undecided { from: 1.5, to: 2.0 })
+    );
 }
