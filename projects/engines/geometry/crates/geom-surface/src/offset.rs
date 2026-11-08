@@ -267,6 +267,37 @@ impl Offset {
         })
     }
 
+    /// The same offset on `domain`, inside its own, without a cache: as a split leaves it, and
+    /// what a stored offset is rebuilt from.
+    ///
+    /// # Errors
+    ///
+    /// [`CurveError::SpanOutside`] unless each side of `domain` is finite, ordered and inside this
+    /// offset's.
+    pub fn restricted(&self, domain: ParamBox) -> Result<Offset, CurveError> {
+        let ((u0, u1), (v0, v1)) = domain;
+        let ((a, b), (c, d)) = self.domain;
+        let inside = u0.is_finite()
+            && u1.is_finite()
+            && v0.is_finite()
+            && v1.is_finite()
+            && a <= u0
+            && u0 < u1
+            && u1 <= b
+            && c <= v0
+            && v0 < v1
+            && v1 <= d;
+        if !inside {
+            return Err(CurveError::SpanOutside);
+        }
+        Ok(Offset {
+            base: self.base.clone(),
+            domain,
+            distance: self.distance,
+            cache: None,
+        })
+    }
+
     /// The base.
     #[must_use]
     pub fn base(&self) -> &SurfaceKind {
