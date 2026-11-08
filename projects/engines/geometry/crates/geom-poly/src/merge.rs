@@ -37,7 +37,6 @@
 //! Cost: O(n log n) exact comparisons for n sides of pieces, and a sweep of each line. Charges the
 //! meter one unit per side of a piece, per fin and per shell.
 
-use alloc::collections::BTreeMap;
 use alloc::vec::Vec;
 use core::cmp::{Ordering, Reverse};
 use core::fmt;
@@ -1579,31 +1578,38 @@ fn cuts_of(
 
 /// The face's rings, each a ring of fin numbers, in turn, starting at its lowest fin.
 fn rings(fins: &[Fin], of_face: &[usize], plane: &Plane) -> Result<Vec<Vec<usize>>, MergeError> {
-    let mut leaving: BTreeMap<usize, Vec<usize>> = BTreeMap::new();
-    for at in of_face {
-        let fin = fins.get(*at).ok_or(MergeError::Open)?;
-        leaving.entry(fin.from).or_default().push(*at);
+    // Each fin's vertex it runs from, with its place in `of_face`, sorted: the fins leaving a
+    // vertex are one stretch of it, in `of_face`'s order. A fin is used by its place.
+    let mut leaving: Vec<(usize, usize)> = Vec::with_capacity(of_face.len());
+    for (k, at) in of_face.iter().enumerate() {
+        leaving.push((fins.get(*at).ok_or(MergeError::Open)?.from, k));
     }
-    let mut used: BTreeMap<usize, bool> = BTreeMap::new();
+    leaving.sort_unstable();
+    let mut used = alloc::vec![false; of_face.len()];
+    let fin_at = |k: usize| -> Result<&Fin, MergeError> {
+        let at = of_face.get(k).ok_or(MergeError::Open)?;
+        fins.get(*at).ok_or(MergeError::Open)
+    };
     let mut out = Vec::new();
-    for start in of_face {
-        if used.contains_key(start) {
+    for start in 0..of_face.len() {
+        if used.get(start).copied().unwrap_or(true) {
             continue;
         }
         let mut ring = Vec::new();
-        let mut at = *start;
+        let mut now = start;
         loop {
-            used.insert(at, true);
-            ring.push(at);
-            let fin = fins.get(at).ok_or(MergeError::Open)?;
-            let options: Vec<usize> = leaving
-                .get(&fin.to)
+            used.iter_mut().skip(now).take(1).for_each(|u| *u = true);
+            ring.push(*of_face.get(now).ok_or(MergeError::Open)?);
+            let fin = fin_at(now)?;
+            let low = leaving.partition_point(|(v, _)| *v < fin.to);
+            let high = leaving.partition_point(|(v, _)| *v <= fin.to);
+            let here = leaving.get(low..high).filter(|here| !here.is_empty());
+            let mut options = here
                 .ok_or(MergeError::Open)?
                 .iter()
-                .copied()
-                .filter(|o| !used.contains_key(o))
-                .collect();
-            let Some((&first, rest)) = options.split_first() else {
+                .map(|(_, option)| *option)
+                .filter(|option| used.get(*option) == Some(&false));
+            let Some(first) = options.next() else {
                 break;
             };
             let mut best = first;
@@ -1615,16 +1621,16 @@ fn rings(fins: &[Fin], of_face: &[usize], plane: &Plane) -> Result<Vec<Vec<usize
             };
             let ray = |o: usize| -> Result<Ray, MergeError> {
                 Ok(Ray {
-                    with: fins.get(o).ok_or(MergeError::Open)?.bound,
+                    with: fin_at(o)?.bound,
                     reversed: true,
                 })
             };
-            for option in rest {
-                if around(plane, &back, &ray(*option)?, &ray(best)?)? == Ordering::Greater {
-                    best = *option;
+            for option in options {
+                if around(plane, &back, &ray(option)?, &ray(best)?)? == Ordering::Greater {
+                    best = option;
                 }
             }
-            at = best;
+            now = best;
         }
         out.push(ring);
     }
