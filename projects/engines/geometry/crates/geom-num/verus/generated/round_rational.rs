@@ -232,13 +232,13 @@ pub open spec fn bound_of_s() -> int {
     clippy::similar_names,
     reason = "names, parameters and lines follow the description: one per input and step"
 )]
-#[verus_spec(r =>
+#[verus_spec(result_ =>
     requires
         q.x.on_grid(),
         q.y.on_grid(),
     ensures
-        match r {
-            Some(v) => in_range(x, 124) && in_range(y, 124) && in_range(v, 83) && in_range(cx, 124) && in_range(cy, 124) && in_range(w, 83) && v.value() == spec_value(x, y, v, q, cx, cy, w),
+        match result_ {
+            Some(held_) => in_range(x, 124) && in_range(y, 124) && in_range(v, 83) && in_range(cx, 124) && in_range(cy, 124) && in_range(w, 83) && held_.value() == spec_value(x, y, v, q, cx, cy, w),
             None => !(in_range(x, 124) && in_range(y, 124) && in_range(v, 83) && in_range(cx, 124) && in_range(cy, 124) && in_range(w, 83)),
         },
 )]
