@@ -1813,6 +1813,7 @@ mod tests {
 
     use core::cmp::Ordering;
 
+    use geom_test::seed::Seed;
     use num_bigint::BigInt;
     use proptest::prelude::*;
 
@@ -1854,20 +1855,34 @@ mod tests {
         }
     }
 
-    proptest! {
-        #[test]
-        fn cells_order_as_their_ratios_when_ties_are_common(
-            a in -40i128..40, b in 1i128..9, c in -40i128..40, d in 1i128..9,
-        ) {
-            agrees(a, b, c, d);
-        }
+    #[test]
+    fn cells_order_as_their_ratios_when_ties_are_common() {
+        let cases = (-40i128..40, 1i128..9, -40i128..40, 1i128..9);
+        seeded(
+            "geom-poly merge: cells with ties",
+            0x6144_0102,
+            256,
+            &cases,
+            |(a, b, c, d)| {
+                agrees(a, b, c, d);
+                Ok(())
+            },
+        );
+    }
 
-        #[test]
-        fn cells_order_as_their_ratios_across_i128(
-            a in any::<i128>(), b in 1i128.., c in any::<i128>(), d in 1i128..,
-        ) {
-            agrees(a, b, c, d);
-        }
+    #[test]
+    fn cells_order_as_their_ratios_across_i128() {
+        let cases = (any::<i128>(), 1i128.., any::<i128>(), 1i128..);
+        seeded(
+            "geom-poly merge: cells across i128",
+            0x6144_0103,
+            256,
+            &cases,
+            |(a, b, c, d)| {
+                agrees(a, b, c, d);
+                Ok(())
+            },
+        );
     }
 
     #[test]
@@ -1948,22 +1963,42 @@ mod tests {
         }
     }
 
-    proptest! {
-        #[test]
-        fn a_line_in_words_is_the_wide_line(
-            p in ([-9i64..9, -9i64..9, -9i64..9], -99i64..99),
-            q in ([-9i64..9, -9i64..9, -9i64..9], -99i64..99),
-        ) {
-            same_line(p, q);
-        }
+    #[test]
+    fn a_line_in_words_is_the_wide_line() {
+        let one = || ([-9i64..9, -9i64..9, -9i64..9], -99i64..99);
+        seeded(
+            "geom-poly merge: small lines",
+            0x6144_0104,
+            256,
+            &(one(), one()),
+            |(p, q)| {
+                same_line(p, q);
+                Ok(())
+            },
+        );
+    }
 
-        #[test]
-        fn a_line_in_words_is_the_wide_line_across_i64(
-            p in (any::<[i64; 3]>(), any::<i64>()),
-            q in (any::<[i64; 3]>(), any::<i64>()),
-        ) {
-            same_line(p, q);
-        }
+    /// The cases proptest's failure file kept for this module before its property tests were
+    /// seeded: two axis planes, either way up.
+    #[test]
+    fn the_lines_the_failure_file_kept_are_the_wide_lines() {
+        same_line(([0, 0, -1], 0), ([0, 1, 0], 0));
+        same_line(([0, 0, 1], 0), ([0, 1, 0], 0));
+    }
+
+    #[test]
+    fn a_line_in_words_is_the_wide_line_across_i64() {
+        let one = || (any::<[i64; 3]>(), any::<i64>());
+        seeded(
+            "geom-poly merge: lines across i64",
+            0x6144_0105,
+            256,
+            &(one(), one()),
+            |(p, q)| {
+                same_line(p, q);
+                Ok(())
+            },
+        );
     }
 
     #[test]
@@ -1986,5 +2021,21 @@ mod tests {
         assert_eq!(first, 2);
         assert_eq!(coordinates.get(3), Some(&(i128::MAX - (1 << 63) + 1)));
         same_line(([low, 0, 0], low), ([low, low, 0], high));
+    }
+
+    /// Runs `test` on `cases` cases of `strategy`, drawn from `SPAREKIT_SEED` if it is set and
+    /// from `default` otherwise; the seed is printed first, and a failure names the seed that
+    /// replays it.
+    fn seeded<S>(
+        label: &str,
+        default: u64,
+        cases: u32,
+        strategy: &S,
+        test: impl Fn(S::Value) -> Result<(), TestCaseError>,
+    ) where
+        S: Strategy,
+        S::Value: core::fmt::Debug,
+    {
+        geom_test::prop::run(label, Seed(default), cases, strategy, test).unwrap();
     }
 }

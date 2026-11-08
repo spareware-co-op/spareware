@@ -9,6 +9,7 @@
 )]
 
 use geom_poly::winding::{Kept, Term, Winding, WindingError, WindingTest, kept};
+use geom_test::seed::Seed;
 use proptest::prelude::*;
 
 fn vector(pairs: &[(u32, i32)]) -> Winding {
@@ -215,26 +216,59 @@ fn a_piece_is_kept_where_the_test_differs_across_it() {
     assert_eq!(kept(&test, &out, &out), Kept::No);
 }
 
-proptest! {
-    #![proptest_config(ProptestConfig::with_cases(256))]
+#[test]
+fn any_order_of_crossings_gives_one_list() {
+    let cases = some::<_, 39>((0u32..6, -2i32..=2), 0);
+    seeded(
+        "geom-poly winding: every order of crossings",
+        0x6144_0009,
+        256,
+        &cases,
+        |crossings| {
+            let forward = vector(&crossings);
+            let mut reversed = crossings.clone();
+            reversed.reverse();
+            prop_assert_eq!(&forward, &vector(&reversed));
+            prop_assert!(forward.pairs().windows(2).all(|p| p[0].0 < p[1].0));
+            prop_assert!(forward.pairs().iter().all(|(_, c)| *c != 0));
+            for entry in 0..6 {
+                let total: i32 = crossings
+                    .iter()
+                    .filter(|(e, _)| *e == entry)
+                    .map(|(_, by)| *by)
+                    .sum();
+                prop_assert_eq!(forward.count(entry), total);
+            }
+            Ok(())
+        },
+    );
+}
 
-    #[test]
-    fn any_order_of_crossings_gives_one_list(
-        crossings in prop::collection::vec((0u32..6, -2i32..=2), 0..40)
-    ) {
-        let forward = vector(&crossings);
-        let mut reversed = crossings.clone();
-        reversed.reverse();
-        prop_assert_eq!(&forward, &vector(&reversed));
-        prop_assert!(forward.pairs().windows(2).all(|p| p[0].0 < p[1].0));
-        prop_assert!(forward.pairs().iter().all(|(_, c)| *c != 0));
-        for entry in 0..6 {
-            let total: i32 = crossings
-                .iter()
-                .filter(|(e, _)| *e == entry)
-                .map(|(_, by)| *by)
-                .sum();
-            prop_assert_eq!(forward.count(entry), total);
-        }
-    }
+/// Runs `test` on `cases` cases of `strategy`, drawn from `SPAREKIT_SEED` if it is set and from
+/// `default` otherwise; the seed is printed first, and a failure's report names the seed that
+/// replays it.
+fn seeded<S>(
+    label: &str,
+    default: u64,
+    cases: u32,
+    strategy: &S,
+    test: impl Fn(S::Value) -> Result<(), TestCaseError>,
+) where
+    S: Strategy,
+    S::Value: core::fmt::Debug,
+{
+    geom_test::prop::run(label, Seed(default), cases, strategy, test).unwrap();
+}
+
+/// `least` to `N` values of `item`. The count is an `i64` and the values a fixed array, so every
+/// target draws the same cases: proptest samples a `usize` range, a collection's size among them,
+/// as a `u64` on 64-bit targets and as a `u32` on wasm32 (`geom_test::prop`'s header).
+fn some<S, const N: usize>(item: S, least: i64) -> impl Strategy<Value = Vec<S::Value>> + Clone
+where
+    S: Strategy + Clone,
+    S::Value: Clone,
+{
+    let most = i64::try_from(N).unwrap();
+    (least..=most, proptest::array::uniform::<S, N>(item))
+        .prop_map(|(count, all)| all[..usize::try_from(count).unwrap()].to_vec())
 }

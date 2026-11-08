@@ -21,6 +21,7 @@ use geom_poly::winding::{Kept, Winding, WindingTest, kept};
 #[cfg(not(target_family = "wasm"))]
 use geom_run::Pool;
 use geom_run::{Budget, Exec, RunError, WorkMeter};
+use geom_test::seed::Seed;
 use proptest::prelude::*;
 
 fn meter() -> WorkMeter<'static> {
@@ -569,95 +570,134 @@ fn a_small_budget_stops_the_arrangement() {
     );
 }
 
-fn any_block() -> impl Strategy<Value = Block> {
+fn any_block() -> impl Strategy<Value = Block> + Clone {
     ([-6i64..6, -6i64..6, -6i64..6], [1i64..6, 1i64..6, 1i64..6]).prop_map(|(low, size)| Block {
         low,
         high: [low[0] + size[0], low[1] + size[1], low[2] + size[2]],
     })
 }
 
-proptest! {
-    #![proptest_config(ProptestConfig::with_cases(96))]
+/// Every block is a solid, so a box of one block's faces is a leaf, solved without cuts or
+/// tracing: no more pieces than tracing gives, each with the blocks' own vectors, and the same
+/// volumes.
+#[test]
+fn a_solid_s_leaves_are_what_tracing_gives() {
+    let cases = (some::<_, 4>(any_block(), 1), 1i64..12);
+    seeded(
+        "geom-poly subdivide: every solid's leaves",
+        0x6144_0005,
+        96,
+        &cases,
+        |(blocks, leaf)| {
+            let leaf = size(leaf);
+            let list = polygons(&blocks);
+            let cell = around(&list).unwrap();
+            let solids: Vec<u32> = (0..blocks.len() as u32).collect();
+            let quick = arrange_with(
+                &Exec::serial(),
+                (cell, Winding::new()),
+                &list,
+                (leaf, &[]),
+                &solids,
+                &mut meter(),
+            )
+            .unwrap();
+            let traced = run(&blocks, leaf, &[]);
+            prop_assert!(quick.len() <= traced.len());
+            agrees(&blocks, &quick);
+            for test in [
+                WindingTest::unite(),
+                WindingTest::intersect(blocks.len() as u32),
+                WindingTest::subtract(0),
+            ] {
+                prop_assert_eq!(volume(&test, &quick), volume(&test, &traced));
+            }
+            Ok(())
+        },
+    );
+}
 
-    /// Every block is a solid, so a box of one block's faces is a leaf, solved without cuts or
-    /// tracing: no more pieces than tracing gives, each with the blocks' own vectors, and the same
-    /// volumes.
-    #[test]
-    fn a_solid_s_leaves_are_what_tracing_gives(
-        blocks in prop::collection::vec(any_block(), 1..5),
-        leaf in 1usize..12,
-    ) {
-        let list = polygons(&blocks);
-        let cell = around(&list).unwrap();
-        let solids: Vec<u32> = (0..blocks.len() as u32).collect();
-        let quick = arrange_with(
-            &Exec::serial(),
-            (cell, Winding::new()),
-            &list,
-            (leaf, &[]),
-            &solids,
-            &mut meter(),
-        )
-        .unwrap();
-        let traced = run(&blocks, leaf, &[]);
-        prop_assert!(quick.len() <= traced.len());
-        agrees(&blocks, &quick);
-        for test in [
-            WindingTest::unite(),
-            WindingTest::intersect(blocks.len() as u32),
-            WindingTest::subtract(0),
-        ] {
-            prop_assert_eq!(volume(&test, &quick), volume(&test, &traced));
-        }
-    }
+/// The box around, made on a pool, is the box made one polygon at a time.
+#[test]
+fn the_box_around_is_the_same_on_a_pool() {
+    let cases = some::<_, 4>(any_block(), 0);
+    seeded(
+        "geom-poly subdivide: every box around",
+        0x6144_0006,
+        96,
+        &cases,
+        |blocks| {
+            let list = polygons(&blocks);
+            let one = around(&list).unwrap();
+            prop_assert_eq!(
+                around_on(&Exec::serial(), &list, &mut meter()).unwrap(),
+                one
+            );
+            #[cfg(not(target_family = "wasm"))]
+            prop_assert_eq!(
+                around_on(&Exec::with_pool(&Threads), &list, &mut meter()).unwrap(),
+                one
+            );
+            Ok(())
+        },
+    );
+}
 
-    /// The box around, made on a pool, is the box made one polygon at a time.
-    #[test]
-    fn the_box_around_is_the_same_on_a_pool(blocks in prop::collection::vec(any_block(), 0..5)) {
-        let list = polygons(&blocks);
-        let one = around(&list).unwrap();
-        prop_assert_eq!(around_on(&Exec::serial(), &list, &mut meter()).unwrap(), one);
-        #[cfg(not(target_family = "wasm"))]
-        prop_assert_eq!(around_on(&Exec::with_pool(&Threads), &list, &mut meter()).unwrap(), one);
-    }
+/// One block alone, a solid, is one leaf whatever the leaf size: its six faces whole.
+#[test]
+fn a_lone_solid_is_one_leaf() {
+    let cases = (any_block(), 1i64..6);
+    seeded(
+        "geom-poly subdivide: every lone solid",
+        0x6144_0007,
+        96,
+        &cases,
+        |(block, leaf)| {
+            let leaf = size(leaf);
+            let list = polygons(&[block]);
+            let cell = around(&list).unwrap();
+            let quick = arrange_with(
+                &Exec::serial(),
+                (cell, Winding::new()),
+                &list,
+                (leaf, &[]),
+                &[0],
+                &mut meter(),
+            )
+            .unwrap();
+            let pieces: Vec<&Piece> = quick.iter().map(|c| &c.piece).collect();
+            let whole: Vec<&Piece> = list.iter().map(|p| &p.piece).collect();
+            prop_assert_eq!(pieces, whole);
+            Ok(())
+        },
+    );
+}
 
-    /// One block alone, a solid, is one leaf whatever the leaf size: its six faces whole.
-    #[test]
-    fn a_lone_solid_is_one_leaf(block in any_block(), leaf in 1usize..6) {
-        let list = polygons(&[block]);
-        let cell = around(&list).unwrap();
-        let quick = arrange_with(
-            &Exec::serial(),
-            (cell, Winding::new()),
-            &list,
-            (leaf, &[]),
-            &[0],
-            &mut meter(),
-        )
-        .unwrap();
-        let pieces: Vec<&Piece> = quick.iter().map(|c| &c.piece).collect();
-        let whole: Vec<&Piece> = list.iter().map(|p| &p.piece).collect();
-        prop_assert_eq!(pieces, whole);
-    }
-
-    #[test]
-    fn every_arrangement_agrees_with_the_blocks(
-        blocks in prop::collection::vec(any_block(), 1..5),
-        leaf in 1usize..12,
-    ) {
-        let classified = run(&blocks, leaf, &[]);
-        agrees(&blocks, &classified);
-        for test in [
-            WindingTest::unite(),
-            WindingTest::intersect(blocks.len() as u32),
-            WindingTest::subtract(0),
-        ] {
-            let dropped = run(&blocks, leaf, std::slice::from_ref(&test));
-            let want = counted(&test, &blocks, -7..12);
-            prop_assert_eq!(volume(&test, &classified), want);
-            prop_assert_eq!(volume(&test, &dropped), want);
-        }
-    }
+#[test]
+fn every_arrangement_agrees_with_the_blocks() {
+    let cases = (some::<_, 4>(any_block(), 1), 1i64..12);
+    seeded(
+        "geom-poly subdivide: every arrangement",
+        0x6144_0008,
+        96,
+        &cases,
+        |(blocks, leaf)| {
+            let leaf = size(leaf);
+            let classified = run(&blocks, leaf, &[]);
+            agrees(&blocks, &classified);
+            for test in [
+                WindingTest::unite(),
+                WindingTest::intersect(blocks.len() as u32),
+                WindingTest::subtract(0),
+            ] {
+                let dropped = run(&blocks, leaf, std::slice::from_ref(&test));
+                let want = counted(&test, &blocks, -7..12);
+                prop_assert_eq!(volume(&test, &classified), want);
+                prop_assert_eq!(volume(&test, &dropped), want);
+            }
+            Ok(())
+        },
+    );
 }
 
 #[test]
@@ -705,4 +745,38 @@ fn a_box_over_the_subtree_size_splits_level_by_level() {
         volume(&WindingTest::unite(), &run(&blocks, 1_000_000, &[])),
         26 * 64
     );
+}
+
+/// Runs `test` on `cases` cases of `strategy`, drawn from `SPAREKIT_SEED` if it is set and from
+/// `default` otherwise; the seed is printed first, and a failure's report names the seed that
+/// replays it.
+fn seeded<S>(
+    label: &str,
+    default: u64,
+    cases: u32,
+    strategy: &S,
+    test: impl Fn(S::Value) -> Result<(), TestCaseError>,
+) where
+    S: Strategy,
+    S::Value: core::fmt::Debug,
+{
+    geom_test::prop::run(label, Seed(default), cases, strategy, test).unwrap();
+}
+
+/// `least` to `N` values of `item`. The count is an `i64` and the values a fixed array, so every
+/// target draws the same cases: proptest samples a `usize` range, a collection's size among them,
+/// as a `u64` on 64-bit targets and as a `u32` on wasm32 (`geom_test::prop`'s header).
+fn some<S, const N: usize>(item: S, least: i64) -> impl Strategy<Value = Vec<S::Value>> + Clone
+where
+    S: Strategy + Clone,
+    S::Value: Clone,
+{
+    let most = i64::try_from(N).unwrap();
+    (least..=most, proptest::array::uniform::<S, N>(item))
+        .prop_map(|(count, all)| all[..usize::try_from(count).unwrap()].to_vec())
+}
+
+/// A size drawn as an `i64`, for the same reason.
+fn size(v: i64) -> usize {
+    usize::try_from(v).unwrap()
 }

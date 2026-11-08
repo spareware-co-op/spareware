@@ -23,6 +23,7 @@ use geom_poly::subdivide::{LEAF_POLYGONS, around, arrange};
 use geom_poly::trace::{Classified, Polygon, TraceError};
 use geom_poly::winding::{Term, Winding, WindingTest};
 use geom_run::{Budget, Exec, WorkMeter};
+use geom_test::seed::Seed;
 use proptest::prelude::*;
 
 fn meter() -> WorkMeter<'static> {
@@ -1144,44 +1145,114 @@ fn an_edge_breaks_where_a_corner_rests_on_it() {
     assert_eq!(counts(&m), [2, 10, 10, 19, 12]);
 }
 
-fn any_block() -> impl Strategy<Value = Block> {
+fn any_block() -> impl Strategy<Value = Block> + Clone {
     ([-6i64..6, -6i64..6, -6i64..6], [1i64..6, 1i64..6, 1i64..6]).prop_map(|(low, size)| Block {
         low,
         high: [low[0] + size[0], low[1] + size[1], low[2] + size[2]],
     })
 }
 
-fn any_corners() -> impl Strategy<Value = [[i64; 3]; 4]> {
+fn any_corners() -> impl Strategy<Value = [[i64; 3]; 4]> + Clone {
     let corner = || [-40i64..=40, -40i64..=40, -40i64..=40];
     [corner(), corner(), corner(), corner()]
 }
 
-proptest! {
-    #![proptest_config(ProptestConfig::with_cases(64))]
+#[test]
+fn every_union_closes_and_the_boxes_do_not_show() {
+    let cases = (some::<_, 3>(any_block(), 1), 1i64..10);
+    seeded(
+        "geom-poly merge: every union of boxes",
+        0x6144_0003,
+        64,
+        &cases,
+        |(blocks, leaf)| {
+            let test = WindingTest::unite();
+            let once = merged(&blocks, &test, size(leaf));
+            let whole = merged(&blocks, &test, 1000);
+            prop_assert_eq!(&once.edges, &whole.edges);
+            prop_assert_eq!(&once.shells, &whole.shells);
+            Ok(())
+        },
+    );
+}
 
-    #[test]
-    fn every_union_closes_and_the_boxes_do_not_show(
-        blocks in prop::collection::vec(any_block(), 1..4),
-        leaf in 1usize..10,
-    ) {
-        let test = WindingTest::unite();
-        let once = merged(&blocks, &test, leaf);
-        let whole = merged(&blocks, &test, 1000);
-        prop_assert_eq!(&once.edges, &whole.edges);
-        prop_assert_eq!(&once.shells, &whole.shells);
-    }
+#[test]
+fn every_tilted_union_closes_and_the_boxes_do_not_show() {
+    let cases = (some::<_, 3>(any_corners(), 1), 1i64..10);
+    seeded(
+        "geom-poly merge: every tilted union",
+        0x6144_0004,
+        64,
+        &cases,
+        |(solids, leaf)| tilted_unions_agree(&solids, size(leaf)),
+    );
+}
 
-    #[test]
-    fn every_tilted_union_closes_and_the_boxes_do_not_show(
-        solids in prop::collection::vec(any_corners(), 1..4),
-        leaf in 1usize..10,
-    ) {
-        let test = WindingTest::unite();
-        let once = tilted(&solids, &test, leaf);
-        prop_assume!(once.is_some());
-        let once = once.unwrap();
-        let whole = tilted(&solids, &test, 1000).unwrap();
-        prop_assert_eq!(&once.vertices, &whole.vertices);
-        prop_assert_eq!(&once.edges, &whole.edges);
+/// The cases proptest's failure file kept for this file before the property tests were seeded,
+/// each at a leaf of one polygon.
+#[test]
+fn the_tilted_unions_the_failure_file_kept_close() {
+    let kept = [
+        vec![
+            [[25, 40, -25], [0, 0, 0], [0, 0, -1], [13, -23, -35]],
+            [[0, 0, 0], [31, 31, -23], [12, 37, -31], [0, 0, -1]],
+        ],
+        vec![
+            [[0, -18, 2], [0, 0, -12], [-1, 21, -28], [0, 0, 3]],
+            [[0, -5, 0], [9, -25, 0], [0, 0, 0], [0, 0, 1]],
+            [[0, -36, 0], [25, 0, 1], [-12, 18, -1], [0, 0, 0]],
+        ],
+    ];
+    for solids in kept {
+        match tilted_unions_agree(&solids, 1) {
+            Ok(()) | Err(TestCaseError::Reject(_)) => {}
+            Err(e) => panic!("{e}"),
+        }
     }
+}
+
+/// A union of tilted solids merged in boxes of `leaf` polygons is the one merged whole.
+fn tilted_unions_agree(solids: &[[[i64; 3]; 4]], leaf: usize) -> Result<(), TestCaseError> {
+    let test = WindingTest::unite();
+    let once = tilted(solids, &test, leaf);
+    prop_assume!(once.is_some());
+    let once = once.unwrap();
+    let whole = tilted(solids, &test, 1000).unwrap();
+    prop_assert_eq!(&once.vertices, &whole.vertices);
+    prop_assert_eq!(&once.edges, &whole.edges);
+    Ok(())
+}
+
+/// Runs `test` on `cases` cases of `strategy`, drawn from `SPAREKIT_SEED` if it is set and from
+/// `default` otherwise; the seed is printed first, and a failure's report names the seed that
+/// replays it.
+fn seeded<S>(
+    label: &str,
+    default: u64,
+    cases: u32,
+    strategy: &S,
+    test: impl Fn(S::Value) -> Result<(), TestCaseError>,
+) where
+    S: Strategy,
+    S::Value: core::fmt::Debug,
+{
+    geom_test::prop::run(label, Seed(default), cases, strategy, test).unwrap();
+}
+
+/// `least` to `N` values of `item`. The count is an `i64` and the values a fixed array, so every
+/// target draws the same cases: proptest samples a `usize` range, a collection's size among them,
+/// as a `u64` on 64-bit targets and as a `u32` on wasm32 (`geom_test::prop`'s header).
+fn some<S, const N: usize>(item: S, least: i64) -> impl Strategy<Value = Vec<S::Value>> + Clone
+where
+    S: Strategy + Clone,
+    S::Value: Clone,
+{
+    let most = i64::try_from(N).unwrap();
+    (least..=most, proptest::array::uniform::<S, N>(item))
+        .prop_map(|(count, all)| all[..usize::try_from(count).unwrap()].to_vec())
+}
+
+/// A size drawn as an `i64`, for the same reason.
+fn size(v: i64) -> usize {
+    usize::try_from(v).unwrap()
 }

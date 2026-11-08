@@ -16,6 +16,7 @@ use geom_num::plane::{Plane, Tpi};
 use geom_num::{NumError, P3};
 use geom_poly::convex::{ConvexError, Piece, convex_pieces};
 use geom_run::{Budget, WorkMeter};
+use geom_test::seed::Seed;
 use num_bigint::BigInt;
 use proptest::prelude::*;
 
@@ -282,45 +283,87 @@ fn a_convex_error_says_what_was_wrong() {
 }
 
 /// A star-shaped polygon about the origin: its corners by angle, on small grid steps.
-fn star() -> impl Strategy<Value = Vec<(i64, i64)>> {
-    prop::collection::btree_set((-20i64..=20, -20i64..=20), 3..14).prop_filter_map(
-        "no star here",
-        |points| {
-            let mut corners: Vec<(i64, i64)> = points
-                .into_iter()
-                .filter(|(x, y)| x.abs() + y.abs() >= 4)
-                .collect();
-            corners.sort_by(|a, b| {
-                let half = |p: &(i64, i64)| u8::from(p.1 < 0 || (p.1 == 0 && p.0 < 0));
-                half(a)
-                    .cmp(&half(b))
-                    .then((b.0 * a.1 - b.1 * a.0).cmp(&0))
-                    .then((a.0 * a.0 + a.1 * a.1).cmp(&(b.0 * b.0 + b.1 * b.1)))
-            });
-            let k = corners.len();
-            if k < 3 {
-                return None;
-            }
-            // Strictly around the origin, with no three corners in a row on one line.
-            let cross = |o: (i64, i64), a: (i64, i64), b: (i64, i64)| {
-                (a.0 - o.0) * (b.1 - o.1) - (a.1 - o.1) * (b.0 - o.0)
-            };
-            let good = (0..k).all(|i| {
-                let (a, b, c) = (corners[i], corners[(i + 1) % k], corners[(i + 2) % k]);
-                a.0 * b.1 - a.1 * b.0 > 0 && cross(a, b, c) != 0
-            });
-            good.then_some(corners)
-        },
-    )
+fn star() -> impl Strategy<Value = Vec<(i64, i64)>> + Clone {
+    some::<_, 13>((-20i64..=20, -20i64..=20), 3).prop_filter_map("no star here", |points| {
+        let distinct: std::collections::BTreeSet<(i64, i64)> = points.into_iter().collect();
+        let mut corners: Vec<(i64, i64)> = distinct
+            .into_iter()
+            .filter(|(x, y)| x.abs() + y.abs() >= 4)
+            .collect();
+        corners.sort_by(|a, b| {
+            let half = |p: &(i64, i64)| u8::from(p.1 < 0 || (p.1 == 0 && p.0 < 0));
+            half(a)
+                .cmp(&half(b))
+                .then((b.0 * a.1 - b.1 * a.0).cmp(&0))
+                .then((a.0 * a.0 + a.1 * a.1).cmp(&(b.0 * b.0 + b.1 * b.1)))
+        });
+        let k = corners.len();
+        if k < 3 {
+            return None;
+        }
+        // Strictly around the origin, with no three corners in a row on one line.
+        let cross = |o: (i64, i64), a: (i64, i64), b: (i64, i64)| {
+            (a.0 - o.0) * (b.1 - o.1) - (a.1 - o.1) * (b.0 - o.0)
+        };
+        let good = (0..k).all(|i| {
+            let (a, b, c) = (corners[i], corners[(i + 1) % k], corners[(i + 2) % k]);
+            a.0 * b.1 - a.1 * b.0 > 0 && cross(a, b, c) != 0
+        });
+        good.then_some(corners)
+    })
 }
 
-proptest! {
-    #![proptest_config(ProptestConfig::with_cases(128))]
+#[test]
+fn a_star_adds_up_whatever_its_shape() {
+    seeded(
+        "geom-poly convex: every star",
+        0x6144_0001,
+        128,
+        &star(),
+        |corners| adds_up(&corners),
+    );
+}
 
-    #[test]
-    fn a_star_adds_up_whatever_its_shape(corners in star()) {
-        let rings = [ring(&corners)];
-        let pieces = split(&rings);
-        prop_assert!(is(&total(&pieces), shoelace(&corners)));
-    }
+/// The cases proptest's failure file kept for this file before the property tests were seeded.
+#[test]
+fn the_stars_the_failure_file_kept_add_up() {
+    adds_up(&[(0, 4), (-1, -3), (2, -2)]).unwrap();
+    adds_up(&[(11, 6), (9, 11), (-4, 0), (18, -16), (15, -7)]).unwrap();
+}
+
+/// The pieces of the polygon through `corners` add up to its area.
+fn adds_up(corners: &[(i64, i64)]) -> Result<(), TestCaseError> {
+    let rings = [ring(corners)];
+    let pieces = split(&rings);
+    prop_assert!(is(&total(&pieces), shoelace(corners)));
+    Ok(())
+}
+
+/// Runs `test` on `cases` cases of `strategy`, drawn from `SPAREKIT_SEED` if it is set and from
+/// `default` otherwise; the seed is printed first, and a failure's report names the seed that
+/// replays it.
+fn seeded<S>(
+    label: &str,
+    default: u64,
+    cases: u32,
+    strategy: &S,
+    test: impl Fn(S::Value) -> Result<(), TestCaseError>,
+) where
+    S: Strategy,
+    S::Value: core::fmt::Debug,
+{
+    geom_test::prop::run(label, Seed(default), cases, strategy, test).unwrap();
+}
+
+/// `least` to `N` values of `item`. The count is an `i64` and the values a fixed array, so every
+/// target draws the same cases: proptest samples a `usize` range, a collection's size among them,
+/// as a `u64` on 64-bit targets and as a `u32` on wasm32 (`geom_test::prop`'s header).
+fn some<S, const N: usize>(item: S, least: i64) -> impl Strategy<Value = Vec<S::Value>> + Clone
+where
+    S: Strategy + Clone,
+    S::Value: Clone,
+{
+    let most = i64::try_from(N).unwrap();
+    (least..=most, proptest::array::uniform::<S, N>(item))
+        .prop_map(|(count, all)| all[..usize::try_from(count).unwrap()].to_vec())
 }

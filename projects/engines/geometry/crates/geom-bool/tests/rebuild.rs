@@ -24,6 +24,7 @@ use geom_poly::trace::{Classified, Polygon};
 use geom_poly::winding::{Winding, WindingTest};
 use geom_run::{Budget, Exec, WorkMeter};
 use geom_surface::Plane as Flat;
+use geom_test::seed::Seed;
 use geom_topo::{Body, BodyKind, Ix, PointKind, Sense, SurfaceKind};
 use proptest::prelude::*;
 
@@ -503,46 +504,116 @@ fn may_touch_at_a_point(one: &[[i64; 3]; 4], other: &[[i64; 3]; 4]) -> bool {
     false
 }
 
-fn any_block() -> impl Strategy<Value = Block> {
+fn any_block() -> impl Strategy<Value = Block> + Clone {
     ([-6i64..6, -6i64..6, -6i64..6], [1i64..6, 1i64..6, 1i64..6]).prop_map(|(low, size)| Block {
         low,
         high: [low[0] + size[0], low[1] + size[1], low[2] + size[2]],
     })
 }
 
-fn any_corners() -> impl Strategy<Value = [[i64; 3]; 4]> {
+fn any_corners() -> impl Strategy<Value = [[i64; 3]; 4]> + Clone {
     let corner = || [-40i64..=40, -40i64..=40, -40i64..=40];
     [corner(), corner(), corner(), corner()]
 }
 
-proptest! {
-    #![proptest_config(ProptestConfig::with_cases(64))]
+#[test]
+fn every_tilted_union_is_a_valid_body_and_the_boxes_do_not_show() {
+    let cases = (some::<_, 3>(any_corners(), 1), 1i64..10);
+    seeded(
+        "geom-bool rebuild: every tilted union",
+        0x6144_0303,
+        64,
+        &cases,
+        |(solids, leaf)| tilted_union_holds(&solids, size(leaf)),
+    );
+}
 
-    #[test]
-    fn every_tilted_union_is_a_valid_body_and_the_boxes_do_not_show(
-        solids in prop::collection::vec(any_corners(), 1..4),
-        leaf in 1usize..10,
-    ) {
-        let test = WindingTest::unite();
-        let once = tilted(&solids, &test, leaf);
-        prop_assume!(once.is_some());
-        let touching = solids.iter().enumerate().any(|(at, one)| {
-            solids.iter().enumerate().any(|(k, other)| at != k && may_touch_at_a_point(one, other))
-        });
-        prop_assume!(!touching);
-        let once = once.unwrap();
-        prop_assert_eq!(&once, &tilted(&solids, &test, 1000).unwrap());
-        checked(&once);
+/// The cases proptest's failure file kept for this file before the property tests were seeded,
+/// each at a leaf of one polygon.
+#[test]
+fn the_tilted_unions_the_failure_file_kept_are_valid() {
+    let kept = [
+        vec![[[0, 0, 0], [0, 0, 1], [0, 1, 0], [1, 0, 0]]],
+        vec![
+            [[17, -2, -24], [0, 0, 0], [0, 0, -14], [0, 1, 0]],
+            [[38, 2, -35], [0, 0, -12], [-16, 33, 20], [-13, -33, -21]],
+        ],
+    ];
+    for solids in kept {
+        match tilted_union_holds(&solids, 1) {
+            Ok(()) | Err(TestCaseError::Reject(_)) => {}
+            Err(e) => panic!("{e}"),
+        }
     }
+}
 
-    #[test]
-    fn every_union_is_a_valid_body_and_the_boxes_do_not_show(
-        blocks in prop::collection::vec(any_block(), 1..4),
-        leaf in 1usize..10,
-    ) {
-        let test = WindingTest::unite();
-        let once = body(&blocks, &test, leaf);
-        prop_assert_eq!(&once, &body(&blocks, &test, 1000));
-        checked(&once);
-    }
+/// A union of tilted solids rebuilt in boxes of `leaf` polygons is the one rebuilt whole, and
+/// valid.
+fn tilted_union_holds(solids: &[[[i64; 3]; 4]], leaf: usize) -> Result<(), TestCaseError> {
+    let test = WindingTest::unite();
+    let once = tilted(solids, &test, leaf);
+    prop_assume!(once.is_some());
+    let touching = solids.iter().enumerate().any(|(at, one)| {
+        solids
+            .iter()
+            .enumerate()
+            .any(|(k, other)| at != k && may_touch_at_a_point(one, other))
+    });
+    prop_assume!(!touching);
+    let once = once.unwrap();
+    prop_assert_eq!(&once, &tilted(solids, &test, 1000).unwrap());
+    checked(&once);
+    Ok(())
+}
+
+#[test]
+fn every_union_is_a_valid_body_and_the_boxes_do_not_show() {
+    let cases = (some::<_, 3>(any_block(), 1), 1i64..10);
+    seeded(
+        "geom-bool rebuild: every union",
+        0x6144_0304,
+        64,
+        &cases,
+        |(blocks, leaf)| {
+            let test = WindingTest::unite();
+            let once = body(&blocks, &test, size(leaf));
+            prop_assert_eq!(&once, &body(&blocks, &test, 1000));
+            checked(&once);
+            Ok(())
+        },
+    );
+}
+
+/// Runs `test` on `cases` cases of `strategy`, drawn from `SPAREKIT_SEED` if it is set and from
+/// `default` otherwise; the seed is printed first, and a failure's report names the seed that
+/// replays it.
+fn seeded<S>(
+    label: &str,
+    default: u64,
+    cases: u32,
+    strategy: &S,
+    test: impl Fn(S::Value) -> Result<(), TestCaseError>,
+) where
+    S: Strategy,
+    S::Value: core::fmt::Debug,
+{
+    geom_test::prop::run(label, Seed(default), cases, strategy, test).unwrap();
+}
+
+/// `least` to `N` values of `item`. The count is an `i64` and the values a fixed array, so every
+/// target draws the same cases: proptest samples a `usize` range, a collection's size among them,
+/// as a `u64` on 64-bit targets and as a `u32` on wasm32 (`geom_test::prop`'s header).
+fn some<S, const N: usize>(item: S, least: i64) -> impl Strategy<Value = Vec<S::Value>> + Clone
+where
+    S: Strategy + Clone,
+    S::Value: Clone,
+{
+    let most = i64::try_from(N).unwrap();
+    (least..=most, proptest::array::uniform::<S, N>(item))
+        .prop_map(|(count, all)| all[..usize::try_from(count).unwrap()].to_vec())
+}
+
+/// A size drawn as an `i64`, for the same reason.
+fn size(v: i64) -> usize {
+    usize::try_from(v).unwrap()
 }
