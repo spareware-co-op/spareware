@@ -4928,7 +4928,7 @@
         },
         {
           "cost": "linear in a kind's values, plus, for an offset stored with its cache, the cost of fitting it again.",
-          "does": "[`write_curve`] and [`write_surface`] append one kind to an encoder; [`read_curve`] and [`read_surface`] read one back from a decoder, rebuilding it through the kind's own constructor, so a stored kind is checked as a built one is. The codes are in [`curve`] and [`surface`]; the fields of each are the values its constructor takes, in the order `format/cddl/kinds.cddl` gives them. Doubles are written in their shortest exact width, lists of doubles as RFC 8746 `f64` columns (tag 86), an absent value as `[]`, a present one as `[value]`, and a flag as 0 or 1.",
+          "does": "[`write_curve`] and [`write_surface`] append one kind to an encoder; [`read_curve`] and [`read_surface`] read one back from a decoder, rebuilding it through the kind's own constructor, so a stored kind is checked as a built one is. The codes are in [`curve`] and [`surface`]; the fields of each are the values its constructor takes, in the order `format/cddl/body.cddl` gives them. Doubles are written in their shortest exact width, lists of doubles as RFC 8746 `f64` columns (tag 86), an absent value as `[]`, a present one as `[value]`, and a flag as 0 or 1.",
           "family": [],
           "file": "projects/engines/geometry/crates/geom-format/src/kinds.rs",
           "guarantees": [
@@ -16808,6 +16808,184 @@
           "target": "lib"
         },
         {
+          "cost": "linear in the file's bytes; each count is bounded by the bytes left before anything is allocated for it.",
+          "does": "[`read`] takes an ASCII `.smb` file's bytes and returns its [`Smb`]: the database version, the B-rep's properties, its topology records ([`records`]) in the order they are written, and its UV curves, 3D curves and surfaces ([`nurbs`]). It follows `SmBrepData::ReadFromFile` and `SmBrepData::ReadFromDB` step for step: the version line (a file without one is version 30) and, from version 42, the healer version; then each section's count and records, the comment lines between them skipped as `SMLib` skips them, one `GoToNextLine` each. [`Smb::edges_of`] and [`Smb::faces_of_edge`] read the records' links.",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-test/src/smb.rs",
+          "guarantees": [
+            "**`SMLib`'s reading, not a parser of our own.** Every value is taken by the same extraction, in the same order, with the same lines skipped, as `SMLib`'s ASCII reader ([`stream`] holds the `std::istream` rules), so a file reads to the values `SMLib` reads from it.",
+            "**A file that does not read is an error, never a guess.** A value that does not read, a count the rest of the file cannot hold, a geometry kind this reader does not hold or a binary file is an [`SmbError`].",
+            "**No attributes.** `ReadFromFile` reads none, so none are read here."
+          ],
+          "job": "`SMLib`'s B-rep files (`.smb`), read as `SMLib` reads them: the reader of NVIDIA's fixtures (piece G262a).",
+          "method": {
+            "links": [
+              "https://github.com/NVIDIA-Omniverse/usd-brep/blob/c9c5979f04cea8c38213004d4f04df0dcfb40d05/source/SMLib/src/SmBrepData.cpp"
+            ],
+            "text": "`SmBrepData::ReadFromFile` and `SmBrepData::ReadFromDB` of `SMLib` (<https://github.com/NVIDIA-Omniverse/usd-brep/blob/c9c5979f04cea8c38213004d4f04df0dcfb40d05/source/SMLib/src/SmBrepData.cpp>), as solidcore's port reproduces them (its `topology::brep_data`)."
+          },
+          "path": "geom_test::smb",
+          "provenance": [
+            {
+              "licence": "Apache-2.0",
+              "link": "https://github.com/NVIDIA-Omniverse/usd-brep/blob/c9c5979f04cea8c38213004d4f04df0dcfb40d05/source/SMLib/src/SmBrepData.cpp",
+              "method_note": null,
+              "name": "NVIDIA USD `BRep` `SMLib`",
+              "notice": [
+                "<https://github.com/NVIDIA-Omniverse/usd-brep/blob/c9c5979f04cea8c38213004d4f04df0dcfb40d05/source/SMLib/src/SmDatabaseIO.cpp>",
+                "SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved."
+              ],
+              "pinned": true,
+              "purpose": "translated from `ReadFromFile`, `ReadFromDB`, `ReadCurveFromDB`, `ReadSurfaceFromDB`, `GoToNextLine` and `ReadType` through solidcore's port; ASCII only, no attributes, and B-spline geometry only.",
+              "take": "port"
+            },
+            {
+              "licence": "Apache-2.0",
+              "link": "https://github.com/tangency-labs/solidcore/blob/7a593124c98e2bdfc7adc4fa94aeeb9b758cf450/crates/solidcore/src/topology/brep_data.rs",
+              "method_note": null,
+              "name": "solidcore",
+              "notice": [
+                "<https://github.com/tangency-labs/solidcore/blob/7a593124c98e2bdfc7adc4fa94aeeb9b758cf450/crates/solidcore/src/topology/database_io.rs>",
+                "Copyright (c) 2026 The solidcore contributors"
+              ],
+              "pinned": true,
+              "purpose": "the ASCII path alone, every count checked against the data left before it allocates, as solidcore checks it, and the stream checked after each record; the records kept as plain structs and the geometry as the values read.",
+              "take": "port"
+            }
+          ],
+          "spdx": "Apache-2.0",
+          "target": "lib"
+        },
+        {
+          "cost": "linear in the control points and knots read.",
+          "does": "[`Curve::read`] reads the header (last control point index, degree, rational flag, dimension, and from database version 33 on the knot type and form), the control points one per line and the knots one per line; [`Surface::read`] the same in two directions, the control points v index fastest. Values are kept as written: a rational net's points are the weighted ones, w·P, with their weights beside them.",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-test/src/smb/nurbs.rs",
+          "guarantees": [
+            "**What `SMLib` accepts, and only that.** Degrees from 1 to `NL_MAXDEG` (17), at least degree + 1 control points in each direction, and a rational flag of 0 or 1; anything else, a count the rest of the file cannot hold, or a value that does not read is an [`SmbError`].",
+            "**The values written.** Every control point and knot is the double the stream reads; nothing is normalised, refitted or reordered."
+          ],
+          "job": "The B-spline curves and surfaces of an `SMLib` database, read as `SmBSplineCurve::ReadFromDB` and `SmBSplineSurface::ReadFromDB` read their ASCII form.",
+          "method": {
+            "links": [
+              "https://github.com/NVIDIA-Omniverse/usd-brep/blob/c9c5979f04cea8c38213004d4f04df0dcfb40d05/source/SMLib/src/SmBSplineSurface.cpp"
+            ],
+            "text": "`SmBSplineCurve::ReadFromDB` and `SmBSplineSurface::ReadFromDB` (<https://github.com/NVIDIA-Omniverse/usd-brep/blob/c9c5979f04cea8c38213004d4f04df0dcfb40d05/source/SMLib/src/SmBSplineSurface.cpp>), as solidcore ports them."
+          },
+          "path": "geom_test::smb::nurbs",
+          "provenance": [
+            {
+              "licence": "Apache-2.0",
+              "link": "https://github.com/NVIDIA-Omniverse/usd-brep/blob/c9c5979f04cea8c38213004d4f04df0dcfb40d05/source/SMLib/src/SmBSplineCurve.cpp",
+              "method_note": null,
+              "name": "NVIDIA USD `BRep` `SMLib`",
+              "notice": [
+                "<https://github.com/NVIDIA-Omniverse/usd-brep/blob/c9c5979f04cea8c38213004d4f04df0dcfb40d05/source/SMLib/src/SmBSplineSurface.cpp>",
+                "SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved."
+              ],
+              "pinned": true,
+              "purpose": "translated from the ASCII branches of the two `ReadFromDB`s through solidcore's port; the result is plain arrays of the values read, not an `NLib` curve or surface.",
+              "take": "port"
+            },
+            {
+              "licence": "Apache-2.0",
+              "link": "https://github.com/tangency-labs/solidcore/blob/7a593124c98e2bdfc7adc4fa94aeeb9b758cf450/crates/solidcore/src/nurbs/b_spline_curve/p2.rs",
+              "method_note": null,
+              "name": "solidcore",
+              "notice": [
+                "<https://github.com/tangency-labs/solidcore/blob/7a593124c98e2bdfc7adc4fa94aeeb9b758cf450/crates/solidcore/src/nurbs/b_spline_surface/p1.rs>",
+                "Copyright (c) 2026 The solidcore contributors"
+              ],
+              "pinned": true,
+              "purpose": "the ASCII readers alone, every size checked before it allocates, and the values kept as read; a 3D curve read where a 2D one is wanted is refused rather than projected, which no fixture needs.",
+              "take": "port"
+            }
+          ],
+          "spdx": "Apache-2.0",
+          "target": "lib"
+        },
+        {
+          "cost": "constant per record.",
+          "does": "each record type holds the fields its line carries, and its `read` takes them from a [`Reader`] in the order `SMLib` writes them, with the fields a later database version added read only from that version on. A record starts with every field zero, as `SmTArray` leaves the records it sizes, so a field its line does not carry stays zero.",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-test/src/smb/records.rs",
+          "guarantees": [
+            "**Field for field.** A record holds the values of its line in `SMLib`'s order, every index and flag as the integer written and every double as the stream reads it.",
+            "**What a line lacks stays zero.** An extraction that fails stores nothing (as in C++), and the caller sees the stream fail ([`Reader::failed`]) rather than a value made up."
+          ],
+          "job": "The topology records of an `SMLib` B-rep database: regions, shells, faceuses, faces, loops, edge uses, edges and vertices, each read from its ASCII line as `SmBrepData`'s record readers read it.",
+          "method": {
+            "links": [
+              "https://github.com/NVIDIA-Omniverse/usd-brep/blob/c9c5979f04cea8c38213004d4f04df0dcfb40d05/source/SMLib/src/SmBrepData.cpp"
+            ],
+            "text": "`SmBrepData::ReadFromDB` and its record classes' `ReadFromDB` (<https://github.com/NVIDIA-Omniverse/usd-brep/blob/c9c5979f04cea8c38213004d4f04df0dcfb40d05/source/SMLib/src/SmBrepData.cpp>), as solidcore ports them."
+          },
+          "path": "geom_test::smb::records",
+          "provenance": [
+            {
+              "licence": "Apache-2.0",
+              "link": "https://github.com/NVIDIA-Omniverse/usd-brep/blob/c9c5979f04cea8c38213004d4f04df0dcfb40d05/source/SMLib/src/SmBrepData.cpp",
+              "method_note": null,
+              "name": "NVIDIA USD `BRep` `SMLib`",
+              "notice": [
+                "SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved."
+              ],
+              "pinned": true,
+              "purpose": "translated from the record classes' ASCII `ReadFromDB` branches through solidcore's port; no attributes, which `SmBrepData::ReadFromFile` does not read either.",
+              "take": "port"
+            },
+            {
+              "licence": "Apache-2.0",
+              "link": "https://github.com/tangency-labs/solidcore/blob/7a593124c98e2bdfc7adc4fa94aeeb9b758cf450/crates/solidcore/src/topology/brep_data.rs",
+              "method_note": null,
+              "name": "solidcore",
+              "notice": [
+                "Copyright (c) 2026 The solidcore contributors"
+              ],
+              "pinned": true,
+              "purpose": "the ASCII readers alone, one plain struct per record with the fields the reader of a B-rep's shape needs, and no binary branch.",
+              "take": "port"
+            }
+          ],
+          "spdx": "Apache-2.0",
+          "target": "lib"
+        },
+        {
+          "cost": "linear in the bytes read; a double's characters are collected once.",
+          "does": "[`Stream`] holds a file's bytes, a position and the stream state (good, end of data, failed). Its extractions are the ones `SMLib`'s readers use, `>>` into a word, an integer or a double, and `ignore`, `get` and `unget`, each with libstdc++'s rules: a sentry that skips white space and fails on a stream that is not good, `num_get`'s scan of the characters, and the state each leaves.",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-test/src/smb/stream.rs",
+          "guarantees": [
+            "**An extraction that fails stores nothing.** Each returns `None` when its sentry fails, as a C++ extraction leaves its variable unchanged, so a reader keeps what it had.",
+            "**Numbers as libstdc++ scans them.** An integer is the longest run of digits after an optional sign; one out of range is clamped and fails the stream. A double is `num_get`'s characters (sign, digits, one point, one exponent) read by Rust's correctly rounded parser, which gives the double `strtod` gives in the \"C\" locale.",
+            "**Never past the data.** Every step reads within the bytes held; at their end the stream reports end of data, and a read that finds nothing fails it."
+          ],
+          "job": "The text stream an `SMLib` database is read through: `std::istream`'s state and extraction rules, as libstdc++ implements them, for the ASCII readers of [`crate::smb`].",
+          "method": {
+            "links": [
+              "https://www.iso.org/standard/68564.html"
+            ],
+            "text": "the `std::istream` rules of C++17 (ISO/IEC 14882:2017, sections 30.7.4.1 and 25.4.2.1, <https://www.iso.org/standard/68564.html>), as libstdc++ implements them and solidcore's port of `SMLib`'s database reader follows them."
+          },
+          "path": "geom_test::smb::stream",
+          "provenance": [
+            {
+              "licence": "Apache-2.0",
+              "link": "https://github.com/tangency-labs/solidcore/blob/7a593124c98e2bdfc7adc4fa94aeeb9b758cf450/crates/solidcore/src/topology/database_io.rs",
+              "method_note": null,
+              "name": "solidcore",
+              "notice": [
+                "Copyright (c) 2026 The solidcore contributors"
+              ],
+              "pinned": true,
+              "purpose": "the ASCII side of `InputStream` alone (no binary reads, no write side, no byte swapping), with every step a checked or saturating operation and every byte read through `get`.",
+              "take": "port"
+            }
+          ],
+          "spdx": "Apache-2.0",
+          "target": "lib"
+        },
+        {
           "cost": "a case's placement is linear in its truth samples, once per scale tried; judging is quadratic in its samples (see [`cover`]).",
           "does": "the ssi-corpus holds 119 surface/surface cases with exact truth, and a scorer that grades any engine that keeps its runner contract. [`case`] reads a case. [`place`] puts it on the grid, at the smallest scale that keeps its truth. A runner ([`output`]'s contract, the `ssi-runner` binary) answers it. The scorer, which is the corpus's own Python and runs only on CI in a container pinned by digest, gives each answer a verdict. [`gate`] then holds the verdicts and the flagged regions to 12.17, per case and per class. [`catalogue`] rebuilds the published failure lists with inputs of our own, in the corpus's schema, so they run the same way.",
           "family": [],
@@ -18551,6 +18729,63 @@
       "take": "port",
       "used_by": [
         "projects/engines/geometry/crates/geom-nurbs/src/net.rs"
+      ]
+    },
+    {
+      "licence": "Apache-2.0",
+      "link": "https://github.com/NVIDIA-Omniverse/usd-brep/blob/c9c5979f04cea8c38213004d4f04df0dcfb40d05/source/SMLib/src/SmBSplineCurve.cpp",
+      "method_note": null,
+      "name": "NVIDIA USD `BRep` `SMLib`",
+      "pinned": true,
+      "take": "port",
+      "used_by": [
+        "projects/engines/geometry/crates/geom-test/src/smb/nurbs.rs"
+      ]
+    },
+    {
+      "licence": "Apache-2.0",
+      "link": "https://github.com/NVIDIA-Omniverse/usd-brep/blob/c9c5979f04cea8c38213004d4f04df0dcfb40d05/source/SMLib/src/SmBrepData.cpp",
+      "method_note": null,
+      "name": "NVIDIA USD `BRep` `SMLib`",
+      "pinned": true,
+      "take": "port",
+      "used_by": [
+        "projects/engines/geometry/crates/geom-test/src/smb.rs",
+        "projects/engines/geometry/crates/geom-test/src/smb/records.rs"
+      ]
+    },
+    {
+      "licence": "Apache-2.0",
+      "link": "https://github.com/tangency-labs/solidcore/blob/7a593124c98e2bdfc7adc4fa94aeeb9b758cf450/crates/solidcore/src/nurbs/b_spline_curve/p2.rs",
+      "method_note": null,
+      "name": "solidcore",
+      "pinned": true,
+      "take": "port",
+      "used_by": [
+        "projects/engines/geometry/crates/geom-test/src/smb/nurbs.rs"
+      ]
+    },
+    {
+      "licence": "Apache-2.0",
+      "link": "https://github.com/tangency-labs/solidcore/blob/7a593124c98e2bdfc7adc4fa94aeeb9b758cf450/crates/solidcore/src/topology/brep_data.rs",
+      "method_note": null,
+      "name": "solidcore",
+      "pinned": true,
+      "take": "port",
+      "used_by": [
+        "projects/engines/geometry/crates/geom-test/src/smb.rs",
+        "projects/engines/geometry/crates/geom-test/src/smb/records.rs"
+      ]
+    },
+    {
+      "licence": "Apache-2.0",
+      "link": "https://github.com/tangency-labs/solidcore/blob/7a593124c98e2bdfc7adc4fa94aeeb9b758cf450/crates/solidcore/src/topology/database_io.rs",
+      "method_note": null,
+      "name": "solidcore",
+      "pinned": true,
+      "take": "port",
+      "used_by": [
+        "projects/engines/geometry/crates/geom-test/src/smb/stream.rs"
       ]
     },
     {

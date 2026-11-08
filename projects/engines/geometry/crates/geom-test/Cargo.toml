@@ -4,7 +4,7 @@ version = "0.0.0"
 edition.workspace = true
 rust-version = "1.86"
 publish.workspace = true
-license.workspace = true
+license = "Apache-2.0"
 description = "Spare Kit geometry kernel, development only: shared test support, seeds, generators and the dependency rule."
 
 [features]

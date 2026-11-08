@@ -23,8 +23,9 @@
 //! and surfaces (lines, arcs, analytic surfaces, offsets, composites), which `SMLib` writes from
 //! database version 33 on and no fixture of G262a holds; each is refused with its type code.
 //!
-//! Method: `SmBrepData::ReadFromFile` and `SmBrepData::ReadFromDB` of `SMLib`, as solidcore's port
-//! reproduces them (its `topology::brep_data`).
+//! Method: `SmBrepData::ReadFromFile` and `SmBrepData::ReadFromDB` of `SMLib`
+//! (<https://github.com/NVIDIA-Omniverse/usd-brep/blob/c9c5979f04cea8c38213004d4f04df0dcfb40d05/source/SMLib/src/SmBrepData.cpp>),
+//! as solidcore's port reproduces them (its `topology::brep_data`).
 //!
 //! Source: PORT from NVIDIA USD `BRep` `SMLib`, Apache-2.0,
 //!   <https://github.com/NVIDIA-Omniverse/usd-brep/blob/c9c5979f04cea8c38213004d4f04df0dcfb40d05/source/SMLib/src/SmBrepData.cpp>

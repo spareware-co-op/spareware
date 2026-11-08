@@ -15,7 +15,9 @@
 //! - **The values written.** Every control point and knot is the double the stream reads; nothing
 //!   is normalised, refitted or reordered.
 //!
-//! Method: `SmBSplineCurve::ReadFromDB` and `SmBSplineSurface::ReadFromDB`, as solidcore ports them.
+//! Method: `SmBSplineCurve::ReadFromDB` and `SmBSplineSurface::ReadFromDB`
+//! (<https://github.com/NVIDIA-Omniverse/usd-brep/blob/c9c5979f04cea8c38213004d4f04df0dcfb40d05/source/SMLib/src/SmBSplineSurface.cpp>),
+//! as solidcore ports them.
 //!
 //! Source: PORT from NVIDIA USD `BRep` `SMLib`, Apache-2.0,
 //!   <https://github.com/NVIDIA-Omniverse/usd-brep/blob/c9c5979f04cea8c38213004d4f04df0dcfb40d05/source/SMLib/src/SmBSplineCurve.cpp>
