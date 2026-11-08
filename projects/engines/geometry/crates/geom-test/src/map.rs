@@ -150,6 +150,9 @@ pub enum Rule {
     ErrorEnum,
     /// An error enum or error kind without a doc comment.
     ErrorDoc,
+    /// A detail whose base kind the map cannot read from its enum's `kind` function, or a base kind
+    /// that is not a variant of `ErrorKind`.
+    ErrorBase,
     /// The committed map is missing or differs from the generated one.
     Stale,
     /// A known gap that no longer occurs.
@@ -158,7 +161,7 @@ pub enum Rule {
 
 impl Rule {
     /// Every rule, in the order `HEADERS.md` lists them.
-    pub const ALL: [Rule; 22] = [
+    pub const ALL: [Rule; 23] = [
         Rule::Manifest,
         Rule::Root,
         Rule::Unreadable,
@@ -179,6 +182,7 @@ impl Rule {
         Rule::Uncredited,
         Rule::ErrorEnum,
         Rule::ErrorDoc,
+        Rule::ErrorBase,
         Rule::Stale,
         Rule::GapStale,
     ];
@@ -207,6 +211,7 @@ impl Rule {
             Rule::Uncredited => "Uncredited",
             Rule::ErrorEnum => "Error enum",
             Rule::ErrorDoc => "Error doc",
+            Rule::ErrorBase => "Error base",
             Rule::Stale => "Stale map",
             Rule::GapStale => "Stale gap",
         }
@@ -747,11 +752,15 @@ fn error_values(
                 .variants
                 .into_iter()
                 .map(|v| {
-                    object([
+                    let mut kind = object([
                         ("doc", Value::from(v.doc)),
                         ("name", Value::from(v.name)),
                         ("shape", Value::from(v.shape.name())),
-                    ])
+                    ]);
+                    if let (Value::Object(fields), Some(base)) = (&mut kind, &v.base) {
+                        fields.insert("base_kind".to_owned(), Value::from(base.name()));
+                    }
+                    kind
                 })
                 .collect();
             object([
@@ -1107,6 +1116,36 @@ fn merge(merged: &mut BTreeMap<(String, String), Merging>, file: &str, records: 
 
 /// The sources of every record in the map, merged by take and source ([`links::source_key`]), and
 /// a problem in each file of a source that two headers give different licences.
+/// Every base kind a detail names that is not a kind of an `ErrorKind` enum in the map: chapter
+/// 22's base kinds are the variants of `geom-op`'s `ErrorKind`, and a detail maps to one of them.
+fn base_kind_problems(crates: &[Value]) -> Vec<Problem> {
+    let enums: Vec<&Value> = crates.iter().flat_map(|c| c.list("errors")).collect();
+    let kinds: BTreeSet<&str> = enums
+        .iter()
+        .filter(|e| e.text("name") == "ErrorKind")
+        .flat_map(|e| e.list("kinds"))
+        .map(|k| k.text("name"))
+        .collect();
+    let mut problems = Vec::new();
+    for e in &enums {
+        for k in e.list("kinds") {
+            let base = k.text("base_kind");
+            if !base.is_empty() && base != errors::HELD && !kinds.contains(base) {
+                problems.push(Problem {
+                    file: e.text("file").to_owned(),
+                    rule: Rule::ErrorBase,
+                    message: format!(
+                        "`{}::{}` maps to `ErrorKind::{base}`, which is not one of the base kinds                          (the variants of `ErrorKind`)",
+                        e.text("name"),
+                        k.text("name")
+                    ),
+                });
+            }
+        }
+    }
+    problems
+}
+
 fn merged_sources(crates: &[Value]) -> (Vec<Value>, Vec<Problem>) {
     let mut merged: BTreeMap<(String, String), Merging> = BTreeMap::new();
     let mut visit = |file: &str, records: &[Value]| merge(&mut merged, file, records);
@@ -1195,6 +1234,7 @@ pub fn build(input: &Input, gaps: &[Gap]) -> Generated {
         .collect();
     let (sources, source_problems) = merged_sources(&crate_values);
     collected.problems.extend(source_problems);
+    collected.problems.extend(base_kind_problems(&crate_values));
 
     let mut problems = Vec::new();
     let mut used = vec![false; gaps.len()];

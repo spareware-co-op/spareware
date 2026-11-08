@@ -1,0 +1,1069 @@
+//! General surface with surface, first part: subdivision until no pair of patches can hide a loop,
+//! and the start points every branch must pass (12.8, steps 1 to 5).
+//!
+//! What it does: [`subdivide`] keeps pairs of patches on a work list. A pair is culled when the
+//! patches are proven apart, settled when one coordinate of n₁ × n₂ keeps its sign over it, and
+//! split otherwise. Where each settled pair's patch edges meet the other patch are its start
+//! points, which G170 marches between.
+//!
+//! Guarantees:
+//!
+//! - **A settled pair holds no loop.** n₁ × n₂ is the tangent of any intersection branch. Where one
+//!   of its coordinates keeps its sign that coordinate of space moves strictly one way along every
+//!   branch, so no branch closes, and the normals are never parallel, so there is no tangent or
+//!   singular point in the pair.
+//! - **Every component reaches a start point, or a flag.** A pair is dropped only when its patches
+//!   are proven apart. So every branch lies in settled pairs or flagged ones, and a branch in a
+//!   settled pair, being no loop, crosses the pair's boundary.
+//! - **Everything is accounted for.** A branch through a settled pair enters and leaves, so each
+//!   pair holds an even number of start points, or its count goes to [`Subdivided::flagged`].
+//! - **Nothing is decided below the floor.** A pair still undecided there is flagged, for 12.9.
+//! - **Coincidence is by data, and answered before any work.** Two surfaces with equal data, or two
+//!   patches of one plane, cylinder, sphere or torus (equal centre, frame and radii, exactly, so no
+//!   sampling is involved) are one carrier. [`subdivide`] spends nothing on them: it returns the
+//!   one pair of the parameters they share, flagged as coincident at a gap of exactly zero, for
+//!   G171's analysis to read as an overlap. It does so only where the shared parameters are one
+//!   region: when a patch wraps round onto itself so that two regions would share, or the patches
+//!   only touch, the pair goes the ordinary way.
+//!
+//! Method: Hohmeyer's subdivision (UCB/CSD-92-681, 1992,
+//! <https://www2.eecs.berkeley.edu/Pubs/TechRpts/1992/6140.html>) with Patrikalakis and Maekawa's
+//! structure (12.8). Chapter 12.8 asked this piece to re-derive Hohmeyer's weaker criterion, Gauss maps a
+//! plane can separate. As the chapter states it, it is false: the lens between z = x² + y² − 1 and
+//! z = 1 − x² − y² has outward normals a plane separates, and meets in a closed circle. It is not
+//! used. What is used needs no thesis: the test above is the tangent's own.
+//!
+//! Nor does completeness need the chapter's step 4, the search for collinear-normal points. Every
+//! pair ends apart, settled or flagged, so a loop around such a point is found all the same: the
+//! pairs along the loop shrink until its tangent keeps a sign, and the pair at the point itself is
+//! culled, since the gap holds its patches apart. Step 4 saves work only near a tangency, where
+//! pairs otherwise run down to the floor and are flagged, so it belongs with G171's analysis of
+//! them, not here.
+//!
+//! The two surfaces are cut at different shares, off the middle. Two surfaces parameterised alike
+//! would otherwise be cut along the same lines, and a branch would cross the corners of both, where
+//! neither edge can be told from the other.
+//!
+//! A fat plane here is the mean-value form of a patch along its middle normal, rather than the
+//! control net's slab, so it serves every kind and tightens with the square of the patch's width.
+//!
+//! Where a parameterisation is not regular (G173, [`crate::seam`]): the work list starts from each
+//! domain cut at its creases and inner poles, so no patch reaches across one, and an edge on a pole
+//! line is the one point it is, tested as a point. An edge that ends on a pole line leaves the pole
+//! to that test: a root or a flag the engine finds at that end is the pole itself.
+//!
+//! Cost: a pair takes two bounds, and two sets of partials if neither culls it; pairs number about
+//! the length of the intersection over the patch size where the normals part, near one per step of
+//! a branch. Each settled pair's eight edges run the engine of [`crate::solve`]. All of it is
+//! charged to the meter. Recursion: none.
+
+#![allow(
+    clippy::many_single_char_names,
+    reason = "the names are chapter 12.8's: S the surfaces, u and v their parameters, n the normals"
+)]
+
+use alloc::vec::Vec;
+
+use geom_curve::CurveError;
+use geom_curve::tight::{larger, smaller};
+use geom_num::NumError;
+use geom_num::grid::Steps;
+use geom_num::interval::Interval;
+use geom_num::math;
+use geom_nurbs::{Bounds, Limit};
+use geom_run::WorkMeter;
+use geom_surface::{ParamBox as Region, ParamSurface, SurfaceKind};
+
+use crate::IntersectError;
+use crate::boundary::{Lying, lies_in};
+use crate::known::Tube;
+use crate::project::{boxed, dot, image, negative, positive};
+use crate::result::{Degeneracy, StepsInterval, Test, Unresolved};
+use crate::seam::{Charts, PoleStarts, Poles, cells, charts};
+use crate::solve::{Field, solve};
+
+/// What a pair of patches costs the meter, besides the kinds' own charges.
+const STEP: u64 = 1;
+
+/// Where the first surface's patches are cut, as a share of their width (module documentation).
+const FIRST_CUT: f64 = 0.4375;
+
+/// Where the second surface's are.
+const SECOND_CUT: f64 = 0.3125;
+
+/// A settled pair of patches, and where its branches enter and leave.
+#[derive(Clone, Debug, PartialEq)]
+pub struct Settled {
+    /// The patch of the first surface.
+    pub first: Region,
+    /// The patch of the second.
+    pub second: Region,
+    /// Its start points: (u₁, v₁, u₂, v₂), each holding one exact point.
+    pub starts: Vec<[Interval; 4]>,
+}
+
+/// A pair of patches left undecided.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct FlaggedPair {
+    /// The patch of the first surface.
+    pub first: Region,
+    /// The patch of the second.
+    pub second: Region,
+    /// Why.
+    pub why: Unresolved,
+}
+
+/// What [`subdivide`] leaves.
+#[derive(Clone, Debug, PartialEq)]
+pub struct Subdivided {
+    /// The settled pairs holding a branch, in the order the work list took them.
+    pub settled: Vec<Settled>,
+    /// What could not be decided.
+    pub flagged: Vec<FlaggedPair>,
+}
+
+/// `a × b`.
+pub(crate) fn cross(a: &[Interval; 3], b: &[Interval; 3]) -> Result<[Interval; 3], NumError> {
+    let [a0, a1, a2] = *a;
+    let [b0, b1, b2] = *b;
+    Ok([
+        a1.mul(b2)?.sub(a2.mul(b1)?)?,
+        a2.mul(b0)?.sub(a0.mul(b2)?)?,
+        a0.mul(b1)?.sub(a1.mul(b0)?)?,
+    ])
+}
+
+/// A span as an interval.
+pub(crate) fn span((a, b): (f64, f64)) -> Result<Interval, NumError> {
+    Interval::new(a, b)
+}
+
+/// An interval's ends as a span.
+pub(crate) const fn ends(x: Interval) -> (f64, f64) {
+    (x.lo(), x.hi())
+}
+
+/// The side a parameter is read from, inside its domain.
+fn inward(at: f64, (_, hi): (f64, f64)) -> Limit {
+    if at < hi {
+        Limit::FromRight
+    } else {
+        Limit::FromLeft
+    }
+}
+
+/// The partials of `surface` to `order` over `region`, or `None` where they cannot be bounded.
+pub(crate) fn partials(
+    surface: &SurfaceKind,
+    region: Region,
+    order: usize,
+    meter: &mut WorkMeter<'_>,
+) -> Result<Option<Vec<[Interval; 3]>>, IntersectError> {
+    let (us, vs) = surface.domain();
+    let sides = (inward(region.0.0, us), inward(region.1.0, vs));
+    match surface.partials_over(region, sides, order, meter) {
+        Ok(found) => Ok(Some(found)),
+        Err(CurveError::Unbounded) => Ok(None),
+        Err(e) => Err(e.into()),
+    }
+}
+
+/// Whether two boxes in space are apart.
+fn apart(a: &[Interval; 3], b: &[Interval; 3]) -> bool {
+    a.iter()
+        .zip(b)
+        .any(|(x, y)| x.hi() < y.lo() || y.hi() < x.lo())
+}
+
+/// Whether `other` lies clear of the mean-value slab of `surface` over `region` along its middle
+/// normal: the fat plane of 12.8's step 1.
+fn clear_of_slab(
+    surface: &SurfaceKind,
+    region: Region,
+    other: &[Interval; 3],
+    meter: &mut WorkMeter<'_>,
+) -> Result<bool, IntersectError> {
+    let ((a, b), (c, d)) = region;
+    let (m, n) = (a / 2.0 + b / 2.0, c / 2.0 + d / 2.0);
+    let Some(whole) = partials(surface, region, 1, meter)? else {
+        return Ok(false);
+    };
+    let Some(middle) = partials(surface, ((m, m), (n, n)), 1, meter)? else {
+        return Ok(false);
+    };
+    let ([_, su, sv, ..], [s, mu, mv, ..]) = (whole.as_slice(), middle.as_slice()) else {
+        return Err(IntersectError::Internal);
+    };
+    let normal = cross(mu, mv)?;
+    let u = span((a, b))?.sub(Interval::point(m)?)?;
+    let v = span((c, d))?.sub(Interval::point(n)?)?;
+    let slab = dot(&normal, s)?
+        .add(dot(&normal, su)?.mul(u)?)?
+        .add(dot(&normal, sv)?.mul(v)?)?;
+    let away = dot(&normal, other)?;
+    Ok(away.hi() < slab.lo() || slab.hi() < away.lo())
+}
+
+/// A box around a patch.
+pub(crate) fn around(
+    surface: &SurfaceKind,
+    region: Region,
+    meter: &mut WorkMeter<'_>,
+) -> Result<[Interval; 3], IntersectError> {
+    boxed(&surface.bound(region, meter)?)
+}
+
+/// A box around a patch's normals.
+pub(crate) fn normals(
+    surface: &SurfaceKind,
+    region: Region,
+    meter: &mut WorkMeter<'_>,
+) -> Result<[Interval; 3], IntersectError> {
+    let bounds: Bounds<3> = surface.normal_bound(region, meter)?;
+    boxed(&bounds)
+}
+
+/// Whether the normals over two patches may be parallel: no coordinate of n₁ × n₂ keeps its sign.
+pub(crate) fn may_be_parallel(a: &[Interval; 3], b: &[Interval; 3]) -> Result<bool, NumError> {
+    let tangent = cross(a, b)?;
+    Ok(!tangent.iter().any(|&x| positive(x) || negative(x)))
+}
+
+/// The partials of an edge and of the patch it meets.
+type Read = (Vec<[Interval; 3]>, Vec<[Interval; 3]>);
+
+/// `a − b`.
+pub(crate) fn minus_box(a: &[Interval; 3], b: &[Interval; 3]) -> Result<[Interval; 3], NumError> {
+    let [a0, a1, a2] = *a;
+    let [b0, b1, b2] = *b;
+    Ok([a0.sub(b0)?, a1.sub(b1)?, a2.sub(b2)?])
+}
+
+/// A point as a box of one point.
+pub(crate) fn point(x: f64) -> Result<Interval, NumError> {
+    Interval::point(x)
+}
+
+/// One edge of a patch against the other patch: `S₁(t) − S₂(s, r)`, three equations in three
+/// unknowns, for 12.8's step 5.
+pub(crate) struct Edge<'a> {
+    /// The surface whose edge it is.
+    pub(crate) own: &'a SurfaceKind,
+    /// The surface it meets.
+    pub(crate) other: &'a SurfaceKind,
+    /// The fixed parameter's value.
+    pub(crate) at: f64,
+    /// Whether u is the one that is fixed.
+    pub(crate) fixed_u: bool,
+    /// The resolution floor, in steps.
+    pub(crate) floor: f64,
+}
+
+impl Edge<'_> {
+    /// The region of `t` along the edge.
+    pub(crate) fn along(&self, t: Interval) -> Region {
+        if self.fixed_u {
+            ((self.at, self.at), ends(t))
+        } else {
+            (ends(t), (self.at, self.at))
+        }
+    }
+
+    /// The residuals over `x`, and the partials they came from.
+    fn read(
+        &self,
+        x: &[Interval; 3],
+        meter: &mut WorkMeter<'_>,
+    ) -> Result<Option<Read>, IntersectError> {
+        let [t, s, r] = *x;
+        let a = partials(self.own, self.along(t), 1, meter)?;
+        let b = partials(self.other, (ends(s), ends(r)), 1, meter)?;
+        Ok(a.zip(b))
+    }
+}
+
+impl Field<3> for Edge<'_> {
+    fn at(&self, x: [f64; 3], meter: &mut WorkMeter<'_>) -> Result<[Interval; 3], IntersectError> {
+        let [t, s, r] = x;
+        let boxed = [point(t)?, point(s)?, point(r)?];
+        match self.over(&boxed, meter)? {
+            Some(r) => Ok(r),
+            None => Err(IntersectError::Internal),
+        }
+    }
+
+    fn over(
+        &self,
+        x: &[Interval; 3],
+        meter: &mut WorkMeter<'_>,
+    ) -> Result<Option<[Interval; 3]>, IntersectError> {
+        let Some((a, b)) = self.read(x, meter)? else {
+            return Ok(None);
+        };
+        let ([s, ..], [t, ..]) = (a.as_slice(), b.as_slice()) else {
+            return Err(IntersectError::Internal);
+        };
+        Ok(Some(minus_box(s, t)?))
+    }
+
+    fn slope(
+        &self,
+        x: &[Interval; 3],
+        meter: &mut WorkMeter<'_>,
+    ) -> Result<Option<[[Interval; 3]; 3]>, IntersectError> {
+        let Some((a, b)) = self.read(x, meter)? else {
+            return Ok(None);
+        };
+        let ([_, su, sv, ..], [_, tu, tv, ..]) = (a.as_slice(), b.as_slice()) else {
+            return Err(IntersectError::Internal);
+        };
+        let along = if self.fixed_u { sv } else { su };
+        let row = |k: usize| -> Option<[Interval; 3]> {
+            Some([*along.get(k)?, tu.get(k)?.neg(), tv.get(k)?.neg()])
+        };
+        match (row(0), row(1), row(2)) {
+            (Some(x), Some(y), Some(z)) => Ok(Some([x, y, z])),
+            _ => Err(IntersectError::Internal),
+        }
+    }
+
+    fn reach(&self, x: &[Interval; 3], meter: &mut WorkMeter<'_>) -> Result<f64, IntersectError> {
+        let [t, s, r] = *x;
+        let Some(a) = partials(self.own, self.along(t), 0, meter)? else {
+            return Ok(f64::INFINITY);
+        };
+        let [own, ..] = a.as_slice() else {
+            return Err(IntersectError::Internal);
+        };
+        let b = around(self.other, (ends(s), ends(r)), meter)?;
+        Ok(larger(image(own), image(&b)) / self.floor)
+    }
+}
+
+/// Whether two parameter boxes of a pair overlap.
+pub(crate) fn same(a: &[Interval; 4], b: &[Interval; 4]) -> bool {
+    a.iter()
+        .zip(b)
+        .all(|(x, y)| x.lo() <= y.hi() && y.lo() <= x.hi())
+}
+
+/// What the edges of a pair whose normals part give.
+pub(crate) enum Starts {
+    /// Its start points, every one proven.
+    Found(Vec<[Interval; 4]>),
+    /// Some could not be proven.
+    Undecided,
+    /// A pole of one surface lies on the other in the pair, and no branch leaves it: a lone point.
+    Lone,
+}
+
+/// Whether a flagged box of `edge`'s system is the edge's own: the edge is on an end of its
+/// surface's domain, lies in the other surface for all of `length`, and the box, less than a floor
+/// across, meets the run that proves it. `ends` are the ends of the own surface's parameter that is
+/// held. The run is proven once, into `lies`.
+fn runs_along(
+    edge: &Edge<'_>,
+    (length, ends): ((f64, f64), (f64, f64)),
+    lies: &mut Lying,
+    region: &[Interval; 3],
+    meter: &mut WorkMeter<'_>,
+) -> Result<bool, IntersectError> {
+    if !(edge.at == ends.0 || edge.at == ends.1) || edge.reach(region, meter)? > 1.0 {
+        return Ok(false);
+    }
+    if !lies.tried {
+        lies.tried = true;
+        lies.run = lies_in(edge, length, f64::MAX, meter)?;
+    }
+    Ok(lies.run.as_ref().is_some_and(|run| run.holds(region)))
+}
+
+/// The start points of one pair, or why there are none to take. An edge on a pole line of its
+/// surface ([`crate::seam`]) is one point, tested as a point.
+pub(crate) fn starts_of(
+    first: &SurfaceKind,
+    second: &SurfaceKind,
+    pair: (Region, Region),
+    floor: f64,
+    (seams, read): ([&Charts; 2], &Poles),
+    meter: &mut WorkMeter<'_>,
+) -> Result<Starts, IntersectError> {
+    let (one, two) = pair;
+    let [first_seams, second_seams] = seams;
+    let mut out: Vec<[Interval; 4]> = Vec::new();
+    for (own, other, here, there, swapped, poles) in [
+        (first, second, one, two, false, &first_seams.poles),
+        (second, first, two, one, true, &second_seams.poles),
+    ] {
+        let ((a, b), (c, d)) = here;
+        for (at, fixed_u) in [(a, true), (b, true), (c, false), (d, false)] {
+            let on_pole = if fixed_u { &poles.0 } else { &poles.1 }.contains(&at);
+            let zeros = if on_pole {
+                match read.starts(swapped, (at, fixed_u), (here, there)) {
+                    PoleStarts::Starts(zeros) => zeros,
+                    PoleStarts::Lone => return Ok(Starts::Lone),
+                    PoleStarts::Undecided => return Ok(Starts::Undecided),
+                }
+            } else {
+                let edge = Edge {
+                    own,
+                    other,
+                    at,
+                    fixed_u,
+                    floor,
+                };
+                let length = if fixed_u { (c, d) } else { (a, b) };
+                let (wide, room) = match roomy(other, there) {
+                    Some((wide, room)) => (Some(wide), room),
+                    None => (None, there),
+                };
+                let (wide_own, own_room) = match roomy(own, here) {
+                    Some((wide, room)) => (Some(wide), room),
+                    None => (None, here),
+                };
+                let search = if fixed_u { own_room.1 } else { own_room.0 };
+                let edge = Edge {
+                    own: wide_own.as_ref().unwrap_or(own),
+                    other: wide.as_ref().unwrap_or(other),
+                    ..edge
+                };
+                let domain = [span(search)?, span(room.0)?, span(room.1)?];
+                let mut found = solve(&edge, domain, |_, _| Ok(true), meter)?;
+                // A zero is the patches' if its enclosure meets them both: it is cut to them, and
+                // one wholly in the room past an end is another patch's or none.
+                found
+                    .zeros
+                    .retain_mut(|z| meets_patch(&mut z.enclosure, length, there));
+                found.flagged.retain(|f| {
+                    let mut region = f.region;
+                    meets_patch(&mut region, length, there)
+                });
+                // What the interior system left flagged on an end of the other surface's domain
+                // is read on the end itself.
+                at_the_ends(&edge, other.domain(), &domain, &mut found, meter)?;
+                // An end of the edge on a pole line is the pole, which that line's own test
+                // answers for every pair at once: a root or a flag the engine leaves there is that
+                // point, within the floor, and is not this edge's.
+                let across = if fixed_u { &poles.1 } else { &poles.0 };
+                let at_pole = |t: Interval| {
+                    [length.0, length.1]
+                        .iter()
+                        .any(|&end| across.contains(&end) && t.contains(end))
+                };
+                // An edge on an end of its own surface's domain may lie in the other surface: the
+                // branch runs along it and the march traces it (`crate::boundary`). Its flagged
+                // boxes, each less than a floor across, are then that run's, not a doubt.
+                let held = if fixed_u {
+                    own.domain().0
+                } else {
+                    own.domain().1
+                };
+                let mut lies = Lying::default();
+                for flagged in &found.flagged {
+                    let [t, ..] = flagged.region;
+                    let explained = (at_pole(t) && edge.reach(&flagged.region, meter)? <= 1.0)
+                        || runs_along(&edge, (length, held), &mut lies, &flagged.region, meter)?;
+                    if !explained {
+                        return Ok(Starts::Undecided);
+                    }
+                }
+                found
+                    .zeros
+                    .into_iter()
+                    .map(|z| z.enclosure)
+                    .filter(|[t, ..]| !at_pole(*t))
+                    .collect()
+            };
+            for [t, s, r] in zeros {
+                let held = point(at)?;
+                let on = if fixed_u { [held, t] } else { [t, held] };
+                let [x, y] = on;
+                let whole = if swapped { [s, r, x, y] } else { [x, y, s, r] };
+                if !out.iter().any(|known| same(known, &whole)) {
+                    out.push(whole);
+                }
+            }
+        }
+    }
+    Ok(Starts::Found(out))
+}
+
+/// `surface` and `there`, a patch of it that an edge is searched against, both widened past each
+/// end that is an end of the surface's own domain, on the parameters along which the kind goes on
+/// past it: a plane's both, a cylinder's and a cone's axial one (their round one closes on itself
+/// instead). `None` when there is nothing to widen.
+///
+/// A zero of the edge's system on the end of the other surface's domain cannot be proven in a box
+/// that stops at the end: Krawczyk's image of the box leaves it on the outside. In a box that goes
+/// on past the end the same zero is inside, and is proven there (12.3). The kinds' formulas do not
+/// stop at the end, so the same surface over a wider domain (`with_domain`) is read there; a NURBS
+/// surface is not defined past its end, so it has no room. What lies past the end is cut off
+/// again by [`meets_patch`].
+pub(crate) fn roomy(surface: &SurfaceKind, there: Region) -> Option<(SurfaceKind, Region)> {
+    let (us, vs) = surface.domain();
+    let (free_u, free_v) = match surface {
+        SurfaceKind::Plane(_) => (true, true),
+        SurfaceKind::Cylinder(_) | SurfaceKind::Cone(_) => (false, true),
+        _ => (false, false),
+    };
+    // The patch and the domain, each widened by the same room at the ends they share.
+    let widen = |(a, b): (f64, f64), (lo, hi): (f64, f64), free: bool| {
+        let room = (b - a) / ROOM;
+        if !free || room.is_nan() || room <= 0.0 {
+            return ((a, b), (lo, hi));
+        }
+        let (down, up) = (a == lo, b == hi);
+        (
+            (
+                if down { a - room } else { a },
+                if up { b + room } else { b },
+            ),
+            (
+                if down { lo - room } else { lo },
+                if up { hi + room } else { hi },
+            ),
+        )
+    };
+    let (ru, du) = widen(there.0, us, free_u);
+    let (rv, dv) = widen(there.1, vs, free_v);
+    if (ru, rv) == there {
+        return None;
+    }
+    let domain = (du, dv);
+    let wide = match surface {
+        SurfaceKind::Plane(k) => SurfaceKind::Plane(k.with_domain(domain).ok()?),
+        SurfaceKind::Cylinder(k) => SurfaceKind::Cylinder(k.with_domain(domain).ok()?),
+        SurfaceKind::Cone(k) => SurfaceKind::Cone(k.with_domain(domain).ok()?),
+        _ => return None,
+    };
+    Some((wide, (ru, rv)))
+}
+
+/// How much of a patch's width the room past its end is: a sixteenth.
+const ROOM: f64 = 16.0;
+
+/// Whether the enclosure `[t, s, r]` of a zero of an edge system meets the edge (`length`) and the patch `there` of the
+/// other surface, and if so cut to it (a zero within the floor of the patch's end is the end's).
+fn meets_patch(zero: &mut [Interval; 3], length: (f64, f64), there: Region) -> bool {
+    let [t, s, r] = zero;
+    let (((a, b), (c, d)), cut) = (there, |x: &mut Interval, lo: f64, hi: f64| {
+        let (low, high) = (larger(x.lo(), lo), smaller(x.hi(), hi));
+        match Interval::new(low, high) {
+            Ok(met) => {
+                *x = met;
+                true
+            }
+            Err(_) => false,
+        }
+    });
+    cut(t, length.0, length.1) && cut(s, a, b) && cut(r, c, d)
+}
+
+/// The edge system restricted to the end of the other surface's domain: the other surface's
+/// parameter `fixed` (1 for its first, 2 for its second) held at `value`, the edge parameter and the
+/// other free parameter unknown, and two of the three residuals kept (`rows`).
+struct EdgeEnd<'a, 'b> {
+    edge: &'a Edge<'b>,
+    fixed: usize,
+    value: f64,
+    free: usize,
+    rows: [usize; 2],
+}
+
+impl EdgeEnd<'_, '_> {
+    /// The edge system's unknowns `[t, s, r]` for this system's `[t, free]`, the held one set to
+    /// `held`.
+    fn whole<T: Copy>(&self, x: [T; 2], held: T) -> [T; 3] {
+        let [t, other] = x;
+        let mut out = [t, held, held];
+        if let Some(slot) = out.get_mut(self.free) {
+            *slot = other;
+        }
+        if let Some(slot) = out.get_mut(self.fixed) {
+            *slot = held;
+        }
+        out
+    }
+
+    /// The kept rows of three residuals.
+    fn kept<T: Copy>(&self, all: &[T; 3]) -> Result<[T; 2], IntersectError> {
+        let [a, b] = self.rows;
+        match (all.get(a), all.get(b)) {
+            (Some(x), Some(y)) => Ok([*x, *y]),
+            _ => Err(IntersectError::Internal),
+        }
+    }
+}
+
+impl Field<2> for EdgeEnd<'_, '_> {
+    fn at(&self, x: [f64; 2], meter: &mut WorkMeter<'_>) -> Result<[Interval; 2], IntersectError> {
+        let whole = self.whole(x, self.value);
+        let all = self.edge.at(whole, meter)?;
+        self.kept(&all)
+    }
+
+    fn over(
+        &self,
+        x: &[Interval; 2],
+        meter: &mut WorkMeter<'_>,
+    ) -> Result<Option<[Interval; 2]>, IntersectError> {
+        let held = point(self.value)?;
+        let whole = self.whole(*x, held);
+        match self.edge.over(&whole, meter)? {
+            Some(all) => Ok(Some(self.kept(&all)?)),
+            None => Ok(None),
+        }
+    }
+
+    fn slope(
+        &self,
+        x: &[Interval; 2],
+        meter: &mut WorkMeter<'_>,
+    ) -> Result<Option<[[Interval; 2]; 2]>, IntersectError> {
+        let held = point(self.value)?;
+        let whole = self.whole(*x, held);
+        let Some(all) = self.edge.slope(&whole, meter)? else {
+            return Ok(None);
+        };
+        let [first, second] = self.kept(&all)?;
+        let column = |row: &[Interval; 3]| -> Result<[Interval; 2], IntersectError> {
+            let along = row.first().copied().ok_or(IntersectError::Internal)?;
+            let across = row
+                .get(self.free)
+                .copied()
+                .ok_or(IntersectError::Internal)?;
+            Ok([along, across])
+        };
+        Ok(Some([column(&first)?, column(&second)?]))
+    }
+
+    fn reach(&self, x: &[Interval; 2], meter: &mut WorkMeter<'_>) -> Result<f64, IntersectError> {
+        let held = point(self.value)?;
+        self.edge.reach(&self.whole(*x, held), meter)
+    }
+}
+
+/// The residual rows an end's system could keep, and the row each leaves out to be checked.
+const ROW_CHOICES: [([usize; 2], usize); 3] = [([0, 1], 2), ([0, 2], 1), ([1, 2], 0)];
+
+/// How well the rows `rows` of the edge system, over `whole`, determine the edge parameter and the
+/// free one: the least the determinant of their 2 by 2 partials can be, or `None` if it may be zero.
+fn determined(
+    edge: &Edge<'_>,
+    whole: &[Interval; 3],
+    rows: [usize; 2],
+    free: usize,
+    meter: &mut WorkMeter<'_>,
+) -> Result<Option<f64>, IntersectError> {
+    let Some(all) = edge.slope(whole, meter)? else {
+        return Ok(None);
+    };
+    let [a, b] = rows;
+    let (Some(first), Some(second)) = (all.get(a), all.get(b)) else {
+        return Err(IntersectError::Internal);
+    };
+    let (Some(a0), Some(a1), Some(b0), Some(b1)) = (
+        first.first(),
+        first.get(free),
+        second.first(),
+        second.get(free),
+    ) else {
+        return Err(IntersectError::Internal);
+    };
+    let det = a0.mul(*b1)?.sub(a1.mul(*b0)?)?;
+    Ok((det.lo() > 0.0 || det.hi() < 0.0).then(|| smaller(det.lo().abs(), det.hi().abs())))
+}
+
+/// A zero of the edge system on the end of the other surface's domain cannot be proven in a box
+/// that stops at the end: Krawczyk's image of the box leaves it on the outside. On the end itself
+/// the system has three equations in two unknowns, so two of them are solved there, the pair whose
+/// partials determine the unknowns best, near a flagged region, and a zero proven alone in its box;
+/// the third is checked over that zero's enclosure: it must hold zero, and the enclosure must reach
+/// no more than a step. Such a zero is where the edge meets the end to within the resolution floor,
+/// the standard a pole is taken to (12.10), and it stands for the flagged regions on that end that
+/// it meets, which it replaces in `found`. A NURBS surface is not defined past its end, so there is
+/// no room to search in (`roomy`); the ends of a plane, a cylinder and a cone are proven by the
+/// room already.
+fn at_the_ends(
+    edge: &Edge<'_>,
+    ends: Region,
+    domain: &[Interval; 3],
+    found: &mut crate::solve::Solved<3>,
+    meter: &mut WorkMeter<'_>,
+) -> Result<(), IntersectError> {
+    let (first, second) = ends;
+    for (fixed, (lo, hi), free) in [(1_usize, first, 2_usize), (2, second, 1)] {
+        for value in [lo, hi] {
+            let on_end = |flagged: &crate::solve::Flagged<3>| {
+                flagged
+                    .region
+                    .get(fixed)
+                    .is_some_and(|x| x.lo() <= value && value <= x.hi())
+            };
+            // Where the flagged regions on this end are, along the edge and across.
+            let mut near: Vec<[Interval; 2]> = Vec::new();
+            let mut hull: Option<[Interval; 3]> = None;
+            for flagged in found.flagged.iter().filter(|f| on_end(f)) {
+                let [t, ..] = flagged.region;
+                let Some(other) = flagged.region.get(free).copied() else {
+                    return Err(IntersectError::Internal);
+                };
+                near.push([t, other]);
+                let mut whole = flagged.region;
+                if let Some(slot) = whole.get_mut(fixed) {
+                    *slot = point(value)?;
+                }
+                hull = Some(match hull {
+                    None => whole,
+                    Some(h) => {
+                        let mut out = h;
+                        for (o, w) in out.iter_mut().zip(&whole) {
+                            *o = Interval::new(smaller(o.lo(), w.lo()), larger(o.hi(), w.hi()))?;
+                        }
+                        out
+                    }
+                });
+            }
+            let Some(hull) = hull else { continue };
+            let (Some(along), Some(across)) = (domain.first(), domain.get(free)) else {
+                return Err(IntersectError::Internal);
+            };
+            let mut choices: Vec<(f64, [usize; 2], usize)> = Vec::new();
+            for (rows, left) in ROW_CHOICES {
+                if let Some(least) = determined(edge, &hull, rows, free, meter)? {
+                    choices.push((least, rows, left));
+                }
+            }
+            choices.sort_by(|a, b| b.0.total_cmp(&a.0));
+            let keep = |x: &[Interval; 2], _: &mut WorkMeter<'_>| {
+                Ok(near.iter().any(|r| {
+                    x.iter()
+                        .zip(r)
+                        .all(|(a, b)| a.lo() <= b.hi() && b.lo() <= a.hi())
+                }))
+            };
+            let mut zeros: Vec<[Interval; 3]> = Vec::new();
+            for (_, rows, left) in choices {
+                let line = EdgeEnd {
+                    edge,
+                    fixed,
+                    value,
+                    free,
+                    rows,
+                };
+                let solved = solve(&line, [*along, *across], &keep, meter)?;
+                for zero in solved.zeros {
+                    let whole = line.whole(zero.enclosure, point(value)?);
+                    let Some(all) = edge.over(&whole, meter)? else {
+                        continue;
+                    };
+                    let holds = all
+                        .get(left)
+                        .is_some_and(|v| v.lo() <= 0.0 && 0.0 <= v.hi());
+                    // How far the edge's own point can be from the zero's: a NURBS surface's
+                    // bound over a box at an end of its domain is the bound of its whole span, so
+                    // the reach of the other side says nothing here.
+                    let along = edge.along(whole[0]);
+                    let small = match partials(edge.own, along, 0, meter)?.as_deref() {
+                        Some([own, ..]) => image(own) <= edge.floor,
+                        _ => false,
+                    };
+                    if holds && small && !zeros.contains(&whole) {
+                        zeros.push(whole);
+                    }
+                }
+                if !zeros.is_empty() {
+                    break;
+                }
+            }
+            for whole in zeros {
+                let meets = |flagged: &crate::solve::Flagged<3>| {
+                    flagged
+                        .region
+                        .iter()
+                        .zip(&whole)
+                        .all(|(a, b)| a.lo() <= b.hi() && b.lo() <= a.hi())
+                };
+                if found.flagged.iter().any(meets) {
+                    found.flagged.retain(|flagged| !meets(flagged));
+                    found.zeros.push(crate::solve::Zero {
+                        enclosure: whole,
+                        proof: whole,
+                    });
+                }
+            }
+        }
+    }
+    Ok(())
+}
+
+/// The point `share` of the way across a span, if it has one strictly inside.
+fn across((a, b): (f64, f64), share: f64) -> Option<f64> {
+    let m = a + (b - a) * share;
+    (a < m && m < b).then_some(m)
+}
+
+/// `region` cut across its longer side in space, or `None` if it has no room.
+fn halved(region: Region, speed: [f64; 2], share: f64) -> Option<(Region, Region)> {
+    let ((a, b), (c, d)) = region;
+    let [su, sv] = speed;
+    let cut_u = || across((a, b), share).map(|m| (((a, m), (c, d)), ((m, b), (c, d))));
+    let cut_v = || across((c, d), share).map(|m| (((a, b), (c, m)), ((a, b), (m, d))));
+    if (b - a) * su >= (d - c) * sv {
+        cut_u().or_else(cut_v)
+    } else {
+        cut_v().or_else(cut_u)
+    }
+}
+
+/// The speeds of a patch along its parameters.
+pub(crate) fn speeds(
+    surface: &SurfaceKind,
+    region: Region,
+    meter: &mut WorkMeter<'_>,
+) -> Result<[f64; 2], IntersectError> {
+    let Some(found) = partials(surface, region, 1, meter)? else {
+        return Ok([1.0, 1.0]);
+    };
+    let [_, su, sv, ..] = found.as_slice() else {
+        return Err(IntersectError::Internal);
+    };
+    Ok([Interval::norm(su)?.hi(), Interval::norm(sv)?.hi()])
+}
+
+/// The two ranges' common part, if it has a width.
+fn common(a: (f64, f64), b: (f64, f64)) -> Option<(f64, f64)> {
+    let (lo, hi) = (larger(a.0, b.0), smaller(a.1, b.1));
+    (lo < hi).then_some((lo, hi))
+}
+
+/// How many of `b`'s copies, shifted by whole periods of 2 (a turn), share a width with `a`, and
+/// the common part of the unshifted one. `None` where the ranges are not finite and near.
+fn wraps(a: (f64, f64), b: (f64, f64)) -> Option<(usize, Option<(f64, f64)>)> {
+    let (lo, hi) = ((a.0 - b.1) / 2.0, (a.1 - b.0) / 2.0);
+    if !(lo.is_finite() && hi.is_finite() && lo.abs() < 1e9 && hi.abs() < 1e9) {
+        return None;
+    }
+    let mut count = 0_usize;
+    let mut here = None;
+    let mut k = math::ceil(lo).ok()?.get();
+    let last = math::floor(hi).ok()?.get();
+    while k <= last {
+        let shifted = (b.0 + 2.0 * k, b.1 + 2.0 * k);
+        if let Some(part) = common(a, shifted) {
+            count = count.saturating_add(1);
+            if k == 0.0 {
+                here = Some(part);
+            }
+        }
+        k += 1.0;
+    }
+    Some((count, here))
+}
+
+/// The parameters two patches of one carrier share, when they are one region and exactly that: the
+/// same plane, cylinder, sphere or torus (equal data, compared exactly), over domains whose common
+/// part has an area, and no other copy of a patch, one turn round, shares with the other. `None` for
+/// anything else, which the ordinary search then decides.
+#[allow(
+    clippy::float_cmp,
+    reason = "a carrier is the same only if its data are equal, exactly"
+)]
+pub(crate) fn shared_carrier(first: &SurfaceKind, second: &SurfaceKind) -> Option<Region> {
+    let (turns, same) = match (first, second) {
+        (SurfaceKind::Plane(a), SurfaceKind::Plane(b)) => {
+            ([false, false], a.vectors() == b.vectors())
+        }
+        (SurfaceKind::Cylinder(a), SurfaceKind::Cylinder(b)) => (
+            [true, false],
+            a.center() == b.center()
+                && a.frame() == b.frame()
+                && a.axial_sign() == b.axial_sign()
+                && a.radius() == b.radius(),
+        ),
+        (SurfaceKind::Sphere(a), SurfaceKind::Sphere(b)) => (
+            [true, false],
+            a.center() == b.center()
+                && a.frame() == b.frame()
+                && a.axial_sign() == b.axial_sign()
+                && a.radius() == b.radius(),
+        ),
+        (SurfaceKind::Torus(a), SurfaceKind::Torus(b)) => (
+            [true, true],
+            a.center() == b.center()
+                && a.frame() == b.frame()
+                && a.axial_sign() == b.axial_sign()
+                && a.radii() == b.radii(),
+        ),
+        _ => return None,
+    };
+    if !same {
+        return None;
+    }
+    let ((au, av), (bu, bv)) = (first.domain(), second.domain());
+    let axis = |a, b, turns| {
+        if turns {
+            wraps(a, b)
+        } else {
+            let part = common(a, b);
+            Some((usize::from(part.is_some()), part))
+        }
+    };
+    let ((cu, here_u), (cv, here_v)) = (axis(au, bu, turns[0])?, axis(av, bv, turns[1])?);
+    // One shared copy on each axis, and it is the unshifted one.
+    if cu != 1 || cv != 1 {
+        return None;
+    }
+    Some((here_u?, here_v?))
+}
+
+/// Subdivides the pair of `first` and `second` until each piece is apart, settled or flagged, to a
+/// floor of `floor` in space, and finds the settled pairs' start points.
+///
+/// # Errors
+///
+/// [`IntersectError::InvalidInput`] for a floor that is not positive;
+/// [`IntersectError::BudgetExceeded`] and [`IntersectError::Cancelled`];
+/// [`IntersectError::UnprovenMaths`] where a kind's bound needs one.
+pub fn subdivide(
+    first: &SurfaceKind,
+    second: &SurfaceKind,
+    floor: f64,
+    meter: &mut WorkMeter<'_>,
+) -> Result<Subdivided, IntersectError> {
+    if floor.is_nan() || floor <= 0.0 {
+        return Err(IntersectError::InvalidInput);
+    }
+    let shared = if first == second {
+        Some(first.domain())
+    } else {
+        shared_carrier(first, second)
+    };
+    if let (Some(region), Some(gap)) = (shared, StepsInterval::new(Steps::ZERO, Steps::ZERO)) {
+        return Ok(Subdivided {
+            settled: Vec::new(),
+            flagged: alloc::vec![FlaggedPair {
+                first: region,
+                second: region,
+                why: Unresolved::NearCoincident { gap },
+            }],
+        });
+    }
+    subdivide_with(first, second, floor, &Tube::default(), meter)
+}
+
+/// [`subdivide`] with the proven `tube` of known curves taken out ([`crate::known`], 12.11): a pair
+/// a cell holds is dropped, one that meets a known curve's stretch but no cell holds is split down
+/// to the floor and flagged there, and a flag near a known curve says
+/// [`Unresolved::KnownCurveUnproven`].
+pub(crate) fn subdivide_with(
+    first: &SurfaceKind,
+    second: &SurfaceKind,
+    floor: f64,
+    tube: &Tube,
+    meter: &mut WorkMeter<'_>,
+) -> Result<Subdivided, IntersectError> {
+    let mut out = Subdivided {
+        settled: Vec::new(),
+        flagged: Vec::new(),
+    };
+    // Cut first at the lines where a kind is not regular (12.10): its creases and the poles inside
+    // its domain, so no patch reaches across one.
+    let seams = (charts(first), charts(second));
+    let poles = Poles::of(first, second, [&seams.0, &seams.1], floor, meter)?;
+    let mut work = Vec::new();
+    for a in cells(first, &seams.0) {
+        for b in cells(second, &seams.1) {
+            work.push((a, b));
+        }
+    }
+    work.reverse();
+    while let Some((a, b)) = work.pop() {
+        meter.charge(STEP)?;
+        let (over_a, over_b) = (around(first, a, meter)?, around(second, b, meter)?);
+        if apart(&over_a, &over_b)
+            || clear_of_slab(first, a, &over_b, meter)?
+            || clear_of_slab(second, b, &over_a, meter)?
+        {
+            continue;
+        }
+        if tube.holds(first, (a, b), meter)? {
+            continue;
+        }
+        let near = tube.near((a, b))?;
+        let (na, nb) = (normals(first, a, meter)?, normals(second, b, meter)?);
+        // Why the pair is split, and flagged once it reaches the floor: its normals may be
+        // parallel, or a pole touches the other surface here with no branch out of it, a lone point
+        // kept as small as the floor allows (12.10), or a known curve passes that no proven cell
+        // holds the pair about (12.11).
+        let mut why = Unresolved::UndecidedAtFloor {
+            test: Test::LoopFreedom,
+        };
+        if near.is_some() {
+            why = Unresolved::KnownCurveUnproven;
+        }
+        // Next to a proven stretch, a pair is split until a cell holds it, never settled: its
+        // starts would trace the known curve again.
+        if near != Some(true) && !may_be_parallel(&na, &nb)? {
+            let lines = ([&seams.0, &seams.1], &poles);
+            match starts_of(first, second, (a, b), floor, lines, meter)? {
+                Starts::Found(starts) if starts.len() % 2 == 0 => {
+                    if !starts.is_empty() {
+                        out.settled.push(Settled {
+                            first: a,
+                            second: b,
+                            starts,
+                        });
+                    }
+                    continue;
+                }
+                Starts::Found(_) | Starts::Undecided => {
+                    out.flagged.push(FlaggedPair {
+                        first: a,
+                        second: b,
+                        why: if near.is_some() {
+                            Unresolved::KnownCurveUnproven
+                        } else {
+                            Unresolved::UndecidedAtFloor {
+                                test: Test::Exclusion,
+                            }
+                        },
+                    });
+                    continue;
+                }
+                Starts::Lone if near.is_none() => {
+                    why = Unresolved::NonSmooth {
+                        at: Degeneracy::Pole,
+                    };
+                }
+                Starts::Lone => {}
+            }
+        }
+        if larger(image(&over_a), image(&over_b)) <= floor {
+            out.flagged.push(FlaggedPair {
+                first: a,
+                second: b,
+                why,
+            });
+            continue;
+        }
+        // The wider patch is the one split: two pairs, where splitting both would make four.
+        if image(&over_a) >= image(&over_b) {
+            if let Some((x, y)) = halved(a, speeds(first, a, meter)?, FIRST_CUT) {
+                work.push((y, b));
+                work.push((x, b));
+                continue;
+            }
+        } else if let Some((x, y)) = halved(b, speeds(second, b, meter)?, SECOND_CUT) {
+            work.push((a, y));
+            work.push((a, x));
+            continue;
+        }
+        out.flagged.push(FlaggedPair {
+            first: a,
+            second: b,
+            why,
+        });
+    }
+    Ok(out)
+}

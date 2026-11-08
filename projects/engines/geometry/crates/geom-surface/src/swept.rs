@@ -1251,6 +1251,21 @@ impl Revolution {
         inner.check()?;
         Ok(Revolution { inner })
     }
+
+    /// Its axis in space, a point on it and the frame it turns in (the frame's normal is the
+    /// axis), while it has only been moved along: its placement's linear part is the identity, so
+    /// it is still a surface of revolution about that axis, every parallel a circle about it.
+    /// `None` once a transform has turned or scaled it, whose rounded linear part makes it a
+    /// surface of revolution no longer exactly.
+    #[must_use]
+    pub fn axis(&self) -> Option<([f64; 3], Frame<3>)> {
+        match &self.inner.shape {
+            Shape::Revolution { frame, .. } if self.inner.place.l == IDENTITY.l => {
+                Some((self.inner.place.c, *frame))
+            }
+            _ => None,
+        }
+    }
 }
 
 impl Extrusion {
