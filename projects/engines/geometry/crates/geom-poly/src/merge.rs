@@ -42,7 +42,6 @@ use alloc::vec::Vec;
 use core::cmp::{Ordering, Reverse};
 use core::fmt;
 
-use geom_math::gcd_u128;
 use geom_num::plane::{Plane, Tpi, normals_sign};
 use geom_num::{I256, I320, NumError, Sign, Wide};
 use geom_run::{ChunkPlan, Exec, Phase, RunError, Stopped, WorkMeter};
@@ -375,12 +374,15 @@ fn narrow_order(a: i128, b: i128, c: i128, d: i128) -> Option<Ordering> {
     Some(left.checked_sub(&right)?.signum().as_i8().cmp(&0))
 }
 
-/// A ratio v / over, over positive, as its floor and its remainder in [0, over), the remainder
-/// and divisor in lowest terms: two ratios compare by their floors, a zero remainder settles a
-/// tie, equal fractions are equal terms, and only then do their cross products decide, in `i128`
-/// where the terms fit `i64`, else [`narrow_order`]'s. A corner of a building's faces on the grid
-/// has every remainder zero, one on a box's split a half, and so do most of a line's coordinates
-/// over a short direction.
+/// A ratio v / over, over positive, as its floor and its remainder in [0, over): two ratios
+/// compare by their floors, a zero remainder settles a tie, identical terms are equal, and only
+/// then do their cross products decide, in `i128` where the terms fit `i64`, else
+/// [`narrow_order`]'s, whose products of two `i128` terms stay below 2^254. The terms are the
+/// ratio's own, not reduced: nothing reads them but this order, which decides equal fractions in
+/// other terms by the cross products, and reducing every ratio cost a greatest common divisor, a
+/// loop of 128-bit remainders, on each of a corner's three cells and a line's six. A corner of a building's faces on the grid has every
+/// remainder zero, one on a box's split a half, and so do most of a line's coordinates over a
+/// short direction.
 #[derive(Clone, Copy, Debug)]
 struct Cell {
     floor: i128,
@@ -389,18 +391,16 @@ struct Cell {
 }
 
 impl Cell {
-    /// v / `over` split, or `None` unless `over` is positive.
+    /// v / `over` split, or `None` unless `over` is positive. Every v has its cell: the floor
+    /// and the Euclidean remainder of any `i128` by a positive divisor fit `i128`.
     fn new(v: i128, over: i128) -> Option<Self> {
         if over <= 0 {
             return None;
         }
-        let rest = v.checked_rem_euclid(over)?;
-        // Both are positive or the rest zero, so the divisor is at least 1.
-        let common = i128::try_from(gcd_u128(rest.unsigned_abs(), over.unsigned_abs())).ok()?;
         Some(Cell {
             floor: v.checked_div_euclid(over)?,
-            rest: rest.checked_div(common)?,
-            over: over.checked_div(common)?,
+            rest: v.checked_rem_euclid(over)?,
+            over,
         })
     }
 
@@ -2033,7 +2033,7 @@ mod tests {
                 Some(Ordering::Equal)
             );
         }
-        // Terms past i64 after reduction take the wide products.
+        // Terms past i64 take the wide products.
         agrees((1 << 100) + 1, 1 << 101, (1 << 99) + 1, 1 << 100);
     }
 
