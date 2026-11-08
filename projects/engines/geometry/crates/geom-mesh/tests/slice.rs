@@ -15,6 +15,7 @@
 )]
 #![allow(clippy::unwrap_used, clippy::panic, clippy::indexing_slicing)]
 
+#[cfg(not(target_family = "wasm"))]
 use std::num::NonZeroUsize;
 
 use geom_mesh::classify::{Classifier, Located};
@@ -24,6 +25,7 @@ use geom_mesh::slice::{Contour, Cut, Point, point, slice};
 use geom_num::Sign;
 use geom_num::grid::P3;
 use geom_num::plane::Plane;
+#[cfg(not(target_family = "wasm"))]
 use geom_pool::native::Rayon;
 use geom_run::{Budget, Exec, WorkMeter};
 
@@ -327,6 +329,7 @@ fn an_open_mesh_and_bad_planes_are_refused() {
     );
 }
 
+#[cfg(not(target_family = "wasm"))]
 #[test]
 fn the_threads_do_not_show() {
     let heights: Vec<Vec<i64>> = (0..12)
