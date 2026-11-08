@@ -27,7 +27,8 @@
 //!
 //! - [`check`], in `run`: one check of a body at a [`Level`], returning a [`Report`].
 //! - [`report`]: the [`Group`]s of 8.3, the [`Level`]s, the [`Entity`] a [`Fault`] is at, its
-//!   [`FaultKind`], and the [`Report`].
+//!   [`FaultKind`], the [`Report`], and the checker's [`VERSION`], which validation stamps record
+//!   (G108).
 //! - `combinatorial`: group 1, loops close, fin partners, shells closed and oriented, regions,
 //!   Euler's formula.
 //! - `geometric`: group 2, vertices on their faces' surfaces and at their edges' curve ends, and
@@ -59,6 +60,6 @@ mod run;
 mod self_intersection;
 mod sink;
 
-pub use report::{Entity, Fault, FaultKind, Group, Level, Report};
+pub use report::{Entity, Fault, FaultKind, Group, Level, Report, VERSION};
 pub use run::check;
 pub use sink::MAX_FAULTS;

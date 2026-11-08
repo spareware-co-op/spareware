@@ -1013,7 +1013,7 @@ How to read an entry:
 
 ## V
 
-**Validation stamp**: The record in a body's index of which checker version and groups it passed, under which edition (24.7).
+**Validation stamp**: A record of its own about one body index (type 5): which checker version passed the body, which groups it passed, and under which edition (24.7; piece G108).
 
 **Validity checker** (also: checker): `geom-check`, the checks every result passes before an operation returns it, in four groups (8.3; pieces G84 and G85). Passing it is every operation's postcondition.
 
