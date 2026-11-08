@@ -11067,7 +11067,7 @@
           "target": "lib"
         },
         {
-          "cost": "one interval evaluation of every rule, and one exact predicate for every root choice; linear in the sketch, no recursion. A 1,000-entity sketch is checked in about 2 ms (`benches/check.rs`).",
+          "cost": "one interval evaluation of every rule, and one exact predicate for every root choice; linear in the sketch, no recursion. A 1,000-entity sketch is checked in about 2 ms (`benches/check.rs`). The meter is charged eight units of work for each constraint, before anything is read.",
           "does": "[`Checker::new`] builds a sketch's equations once. [`Checker::check`] then takes a [`Committed`] sketch (`commit`) and runs chapter 15.10's first two checks, in order. **Root choices:** a side, an outside or a tangency stored on a constraint is decided again with exact predicates on the committed geometry; one that has flipped, or whose point now lies on the boundary where the choice cannot be told, fails the commit with [`SketchError::CommitFlip`], naming the constraint. **Ceiling:** the residual of every constraint the commit did not make exact is enclosed in interval arithmetic on the committed values, by the very text the solver differentiates (`Assembly::enclose`), and must be at most the ceiling, or the commit fails with [`SketchError::ExactnessNotAccepted`], naming the constraint and its bound. What it returns is each constraint's [`Holds`]: `Exact`, `Within` a bound in grid steps, or `Unresolved`.",
           "family": [],
           "file": "projects/engines/geometry/crates/geom-sketch/src/check.rs",
