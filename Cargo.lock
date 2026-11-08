@@ -890,6 +890,7 @@ dependencies = [
  "divan",
  "geom-bvh",
  "geom-curve",
+ "geom-format",
  "geom-linalg",
  "geom-math",
  "geom-name",
