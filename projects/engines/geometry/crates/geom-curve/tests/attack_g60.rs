@@ -22,7 +22,8 @@ use geom_curve::{
     ContractError, CurveError, CurveKind, DerivativeBound, Law, NurbsForm, ParamCurve, ParamMap,
 };
 use geom_math::{
-    Axis, GridTransform, MathError, RationalRotation, RationalTransform, Rotation, TypedTransform,
+    Axis, GridTransform, MathError, RationalRotation, RationalTransform, Rotation, Transform,
+    TypedTransform,
 };
 use geom_num::interval::Interval;
 use geom_nurbs::{Basis, Bounds, Changed, Curve, Limit, NurbsError};
@@ -466,5 +467,34 @@ fn exact_rotations_give_their_entries() {
             );
             assert!(c.hi() - c.lo() < 1e-14, "{i}, {j}: {c:?}");
         }
+    }
+}
+
+/// `Entries::stretch` is an upper bound on how far the linear part stretches a vector: the
+/// Frobenius norm of the exact entries, here √29 for a scale by 2, 3 and 4, √3 for a uniform scale
+/// of 1 and for a quarter turn, and 2^60·√2 beside 1 for the plane scale of the curves fuzz
+/// campaign's finding (`compound.rs`).
+#[test]
+fn the_stretch_is_the_frobenius_norm_of_the_exact_entries() {
+    let huge = 1_152_921_504_606_846_976.0;
+    let cases = [
+        (
+            TypedTransform::from(Transform::scale(2.0, 3.0, 4.0).unwrap()),
+            29.0,
+        ),
+        (
+            TypedTransform::from(Transform::uniform_scale(1.0).unwrap()),
+            3.0,
+        ),
+        (quarter(), 3.0),
+        (
+            TypedTransform::from(Transform::scale(huge, huge, 1.0).unwrap()),
+            2.0 * huge * huge + 1.0,
+        ),
+    ];
+    for (t, square) in cases {
+        let s = Entries::of(&t).unwrap().stretch().unwrap();
+        assert!(s * s >= square, "{t:?}: {s}");
+        assert!(s * s <= square * (1.0 + 1e-14), "{t:?}: {s}");
     }
 }

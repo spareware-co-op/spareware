@@ -153,6 +153,25 @@ impl Entries {
         &self.exact
     }
 
+    /// An upper bound s on how far the linear part M stretches a vector, |M·v| ≤ s·|v| for every
+    /// v: the Frobenius norm of M's exact entries, which is never below its spectral norm. A
+    /// distance stated before the transform, such as a cache's deviation from its kind, is at most
+    /// s times as long after it.
+    ///
+    /// # Errors
+    ///
+    /// [`CurveError::NotFinite`] if the norm overflows.
+    pub fn stretch(&self) -> Result<f64, CurveError> {
+        let mut m = [Interval::point(0.0)?; 9];
+        for (slot, x) in m
+            .iter_mut()
+            .zip(self.exact.iter().flat_map(|row| row.iter().take(3)))
+        {
+            *slot = *x;
+        }
+        Ok(crate::tight::norm(&m)?.hi())
+    }
+
     /// Whether the transform leaves z alone, so it applies to planar points.
     #[must_use]
     pub fn acts_in_plane(&self) -> bool {
