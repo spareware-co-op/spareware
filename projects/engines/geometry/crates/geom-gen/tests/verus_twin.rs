@@ -21,6 +21,9 @@
 //! - `every_predicate_has_a_twin_and_the_rest_is_refused`: every predicate of the kernel has a
 //!   twin, and a description with a step wider than `I384` is refused with the reason, never
 //!   emitted as a twin that models it wrongly.
+//! - `no_name_the_spec_binds_is_an_input_s`: the names a twin's `#[verus_spec]` binds, its result
+//!   and the integer inside `Some`, are never an input's, so a circle's radius `r` or a weight `v`
+//!   is not shadowed in its `ensures` (piece G188's circle twins).
 
 // Tests may use native arithmetic to walk their token lists.
 #![allow(
@@ -430,6 +433,62 @@ sign b
     .unwrap();
     let e = verus_twin(&wide, "test", "shipped.rs").unwrap_err().0;
     assert!(e.contains("up to I384"), "{e}");
+}
+
+/// The names a twin's `#[verus_spec]` binds in its `ensures`: the result before `=>`, and the
+/// integer inside each `Some( … )`.
+fn spec_binders(twin: &str) -> Vec<String> {
+    let at = twin.find("#[verus_spec(").expect("a verus_spec");
+    let spec = &twin[at..at + twin[at..].find(")]\n").expect("the spec's end")];
+    let mut names = vec![
+        spec["#[verus_spec(".len()..spec.find("=>").unwrap()]
+            .trim()
+            .to_owned(),
+    ];
+    for (k, _) in spec.match_indices("Some(") {
+        let rest = &spec[k + "Some(".len()..];
+        names.push(rest[..rest.find(')').unwrap()].trim().to_owned());
+    }
+    names
+}
+
+#[test]
+fn no_name_the_spec_binds_is_an_input_s() {
+    let check = |d: &geom_gen::predicate_derive::Derivation, what: &str| {
+        let twin = verus_twin(d, "test", "shipped.rs").unwrap();
+        let binders = spec_binders(&twin);
+        assert_eq!(binders.len(), 2, "{what}: {binders:?}");
+        for input in &d.description.inputs {
+            assert!(
+                !binders.contains(&input.name),
+                "{what}: the spec binds `{}`, an input's name",
+                input.name
+            );
+        }
+    };
+    for p in &PREDICATES {
+        check(&derivation(p).unwrap(), p.comparison.name);
+    }
+    // Inputs named as the spec's names once were (a circle's radius `r`, a weight `v`), and as
+    // anything a description may name: the spec's names end in `_`, which no description's may.
+    let named = derive(
+        "predicate shadowed
+input r v: rounded 40 in g
+let held = r * v
+sign held
+",
+    )
+    .unwrap();
+    check(&named, "shadowed");
+    let refused = derive(
+        "predicate trailing
+input r: rounded 40 in g
+let held_ = r * r
+sign held_
+",
+    )
+    .unwrap_err();
+    assert!(format!("{refused:?}").contains("held_"), "{refused:?}");
 }
 
 // ---------------------------------------------------------------------------------------------
