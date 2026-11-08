@@ -39,7 +39,7 @@
 
 use alloc::vec::Vec;
 
-use geom_run::{Budget, LogicalSize, Phase, Stop, Stopped, Usage, WorkMeter};
+use geom_run::{Budget, LogicalSize, Stop, Stopped, Usage, WorkMeter};
 
 use crate::context::OpContext;
 use crate::detail::{OpErrorDetail, RunDetail};

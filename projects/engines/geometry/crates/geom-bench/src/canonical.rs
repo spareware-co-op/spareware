@@ -740,7 +740,7 @@ impl Canonical for geom_topo::Builder {
     }
 }
 
-// `geom-op`'s error (decision 32.44's count benchmarks for piece G104).
+// `geom-op`'s error (decision 32.44's count benchmarks for pieces G104 and G101).
 
 impl<T: Canonical> Canonical for Result<T, geom_op::OpError> {
     fn encode(&self, h: &mut Sha256) {
@@ -989,21 +989,6 @@ impl Canonical for geom_op::OpOutput<geom_make::Made> {
             point.encode(h);
         }
         u32::from(self.exactness.rank()).encode(h);
-    }
-}
-
-impl<T: Canonical> Canonical for Result<T, geom_op::OpError> {
-    fn encode(&self, h: &mut Sha256) {
-        match self {
-            Ok(v) => {
-                h.update(&[0]);
-                v.encode(h);
-            }
-            Err(e) => {
-                h.update(&[1]);
-                debug_text(e, h);
-            }
-        }
     }
 }
 

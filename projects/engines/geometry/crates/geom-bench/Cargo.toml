@@ -57,6 +57,8 @@ geom-linalg = { path = "../geom-linalg" }
 # The arenas (piece G80), the attribute step (piece G90) and the batch driver (piece G104) of
 # phase 3 and the types they take, for the same count benchmarks.
 geom-name = { path = "../geom-name" }
+geom-op = { path = "../geom-op" }
+geom-topo = { path = "../geom-topo" }
 # The primitives and transforms of phase 3 (piece G101), and the context and output they take and
 # give, for the same count benchmarks.
 geom-make = { path = "../geom-make" }
