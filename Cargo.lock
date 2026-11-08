@@ -721,10 +721,14 @@ name = "engine-geometry"
 version = "0.0.0"
 dependencies = [
  "cargo_metadata",
+ "geom-check",
  "geom-curve",
+ "geom-make",
+ "geom-math",
  "geom-num",
  "geom-op",
  "geom-pool",
+ "geom-run",
  "geom-surface",
  "geom-topo",
  "kit-core",
@@ -892,6 +896,7 @@ dependencies = [
  "geom-curve",
  "geom-format",
  "geom-linalg",
+ "geom-make",
  "geom-math",
  "geom-name",
  "geom-num",
@@ -1134,10 +1139,12 @@ dependencies = [
  "dashu-ratio",
  "geom-bench",
  "geom-bvh",
+ "geom-check",
  "geom-curve",
  "geom-format",
  "geom-gen",
  "geom-linalg",
+ "geom-make",
  "geom-math",
  "geom-name",
  "geom-num",
@@ -1243,14 +1250,19 @@ dependencies = [
 name = "geom-make"
 version = "0.0.0"
 dependencies = [
+ "cap",
  "geom-check",
  "geom-curve",
  "geom-math",
+ "geom-name",
  "geom-num",
+ "geom-nurbs",
  "geom-op",
  "geom-run",
  "geom-surface",
+ "geom-test",
  "geom-topo",
+ "proptest",
 ]
 
 [[package]]

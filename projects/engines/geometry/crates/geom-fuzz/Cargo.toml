@@ -29,6 +29,12 @@ geom-bench = { path = "../geom-bench", default-features = false }
 # The variants target (G42) reads the predicates' descriptions with geom-gen's own parser (ours,
 # Apache-2.0; development only).
 geom-gen = { path = "../geom-gen" }
+# The make target (G101): geom-make's operations under test, and the kernel crates its inputs and
+# oracles come from (ours, Apache-2.0).
+geom-check = { path = "../geom-check", features = ["full"] }
+geom-make = { path = "../geom-make" }
+geom-op = { path = "../geom-op" }
+geom-topo = { path = "../geom-topo" }
 # The oracle of the wide-integer target (G26) and of the variants target (G42): exact
 # arbitrary-precision integers, the big-integer oracle chapter 29.3 names. MIT OR Apache-2.0.
 num-bigint = "0.4.8"
@@ -36,14 +42,11 @@ num-bigint = "0.4.8"
 # target's memo store (G105), and the operation types its entries hold (Apache-2.0, ours).
 geom-format = { path = "../geom-format" }
 # The attributes target (G90): geom-name's attribute step and geom-topo's definitions, under
-# test, with geom-op's history records (ours, Apache-2.0).
+# test, with geom-op's history records (ours, Apache-2.0; geom-op and geom-topo are listed above).
 geom-name = { path = "../geom-name" }
-geom-op = { path = "../geom-op" }
-# The arenas target (G80): geom-topo's arenas and builder, under test, and the kernel crates
-# whose values fill them (ours, Apache-2.0).
-geom-topo = { path = "../geom-topo" }
-# The batch target (G104) tests geom-op's batch driver (listed above, with the attributes target);
-# the curve and surface kinds, nurbs and run crates it also needs are listed above too.
+# The arenas target (G80) tests geom-topo's arenas and builder, and the batch target (G104)
+# geom-op's batch driver, both listed above with the make target; the curve and surface kinds,
+# nurbs and run crates they also need are listed above too.
 
 [dev-dependencies]
 # The harness front end: one `check!` runs a harness as a property test (on stable), under

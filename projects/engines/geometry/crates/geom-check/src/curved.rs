@@ -607,3 +607,57 @@ fn cross([ax, ay, az]: V3, [bx, by, bz]: V3) -> Option<V3> {
         minus(times(ax, by)?, times(ay, bx)?)?,
     ])
 }
+
+#[cfg(test)]
+#[allow(
+    clippy::unwrap_used,
+    reason = "points of finite doubles are intervals; the test builds them from literals"
+)]
+mod tests {
+    use super::*;
+
+    /// An exact point or vector.
+    fn v(x: f64, y: f64, z: f64) -> V3 {
+        [x, y, z].map(|c| Interval::point(c).unwrap())
+    }
+
+    fn flat_through(origin: V3, normal: V3) -> Carrier {
+        Carrier::Flat { origin, normal }
+    }
+
+    /// Two parallel planes that do not coincide cannot meet: the faces on them are apart.
+    #[test]
+    fn parallel_planes_apart_are_apart_and_coinciding_ones_are_not() {
+        let floor = flat_through(v(0.0, 0.0, 0.0), v(0.0, 0.0, 1.0));
+        let ceiling = flat_through(v(0.0, 0.0, 5.0), v(0.0, 0.0, 1.0));
+        assert!(matches!(pair(&floor, &ceiling), Pair::Apart));
+        assert!(matches!(pair(&ceiling, &floor), Pair::Apart));
+        // The same plane again: nothing is certified, the faces may meet anywhere.
+        let again = flat_through(v(3.0, 4.0, 0.0), v(0.0, 0.0, 2.0));
+        assert!(matches!(pair(&floor, &again), Pair::Unknown));
+    }
+
+    /// Two planes whose normals differ certainly cross along a line.
+    #[test]
+    fn planes_with_different_normals_cross() {
+        let floor = flat_through(v(0.0, 0.0, 0.0), v(0.0, 0.0, 1.0));
+        let wall = flat_through(v(2.0, 0.0, 0.0), v(1.0, 0.0, 0.0));
+        assert!(matches!(pair(&floor, &wall), Pair::Crossing));
+        assert!(matches!(pair(&wall, &floor), Pair::Crossing));
+        let slant = flat_through(v(0.0, 0.0, 0.0), v(0.0, 1.0, 1.0));
+        assert!(matches!(pair(&floor, &slant), Pair::Crossing));
+    }
+
+    /// A plane's normal that is not certain (an interval across zero) certifies nothing.
+    #[test]
+    fn planes_with_uncertain_normals_certify_nothing() {
+        let spread = Interval::new(-1.0, 1.0).unwrap();
+        let zero_i = Interval::point(0.0).unwrap();
+        let floor = flat_through(v(0.0, 0.0, 0.0), v(0.0, 0.0, 1.0));
+        let vague = flat_through(
+            v(0.0, 0.0, 1.0),
+            [spread, zero_i, Interval::point(1.0).unwrap()],
+        );
+        assert!(matches!(pair(&floor, &vague), Pair::Unknown));
+    }
+}

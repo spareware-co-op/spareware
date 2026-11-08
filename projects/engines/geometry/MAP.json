@@ -25,11 +25,12 @@
       "modules": [
         {
           "cost": "none at run time.",
-          "does": "[`OPERATIONS`] lists one [`Operation`] per operation, in name order: its schema and its tier. `geom-gen` writes the API documentation (`generated/api.md`) and the MCP tool descriptions (`generated/mcp-tools.json`) from this list, and CI fails if a committed file has not been regenerated after the list changed, so the interfaces never drift from the kernel and no AI tool is written by hand (22; EXTENDING.md, section 2.2).",
+          "does": "[`OPERATIONS`] lists one [`Operation`] per operation, in name order: its schema and its tier. `geom-gen` writes the API documentation (`generated/api.md`) and the MCP tool descriptions (`generated/mcp-tools.json`) from this list, and CI fails if a committed file has not been regenerated after the list changed, so the interfaces never drift from the kernel and no AI tool is written by hand (22; EXTENDING.md, section 2.2). The operations themselves are re-exported beside the list, so a program reaches them here and never from a `geom-*` crate.",
           "family": [],
           "file": "projects/engines/crates/engine-geometry/src/operations.rs",
           "guarantees": [
-            "**One entry per operation, in name order.** `tests/attack_g100.rs` checks the names are unique, ascending, and valid MCP tool names, that each schema's version is at least 1, and that every preview's date is a real date."
+            "**One entry per operation, in name order.** `tests/attack_g100.rs` checks the names are unique, ascending, and valid MCP tool names, that each schema's version is at least 1, and that every preview's date is a real date.",
+            "**The schemas tell the truth.** `tests/attack_g101.rs` runs each operation and fails on an error, a role, a class or a charge its schema does not list, and on a listed detail whose base kind is not the one the kernel gives it."
           ],
           "job": "Every operation the kernel offers, its schema held as data (chapter 22, \"Every operation is described as data\").",
           "method": {
@@ -60,7 +61,7 @@
         },
         {
           "cost": "none at run time.",
-          "does": "re-exports, grouped as chapter 25 lists the Stable tier's value types: grid points and steps ([`grid`]), exactness ([`Exactness`]), curves ([`curve`]), surfaces ([`surface`]), bodies ([`body`]), names and history ([`name`]), errors ([`error`]), and an operation's context and output ([`op`]). Anything not re-exported here is internal.",
+          "does": "re-exports, grouped as chapter 25 lists the Stable tier's value types: grid points and steps ([`grid`]), exactness ([`Exactness`]), curves ([`curve`]), surfaces ([`surface`]), bodies ([`body`]), transforms ([`transform`]), names and history ([`name`]), errors ([`error`]), and an operation's context and output ([`op`]). Anything not re-exported here is internal.",
           "family": [],
           "file": "projects/engines/crates/engine-geometry/src/value.rs",
           "guarantees": [
@@ -821,6 +822,26 @@
             "text": "the corpus shape of `geom-linalg`'s `tests/dense_determinism.rs` and `tests/spectral_determinism.rs` (random entries, the factorisation run whole under an unlimited budget), at one size. Each is measured as chapter 28.14 sets benchmarks out, `projects/engines/geometry/architecture/28-testing.md`."
           },
           "path": "geom_bench::inputs::linalg",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
+          "cost": "a few draws of [`SplitMix64`] per input and, for the transforms, one box built, once per batch, outside every measured run.",
+          "does": null,
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-bench/src/inputs/make.rs",
+          "guarantees": [
+            "every batch is full and the same on every target, and every result of a typical batch is `Ok` (`tests/inputs.rs`); every result is the operation's own, run directly (`tests/attack_g06.rs`)."
+          ],
+          "job": "Inputs for `geom-make`'s hot paths (piece G101, decision 32.44): a box and a cylinder built from their inputs, and a box moved and quarter-turned, each with its checker postcondition.",
+          "method": {
+            "links": [
+              "projects/engines/geometry/architecture/28-testing.md"
+            ],
+            "text": "the operations of `geom-make`'s attack tests (`tests/attack_g101.rs`), under an unlimited budget, in the build a program ships. Each is measured as chapter 28.14 sets benchmarks out, `projects/engines/geometry/architecture/28-testing.md`."
+          },
+          "path": "geom_bench::inputs::make",
           "provenance": [],
           "spdx": null,
           "target": "lib"
@@ -1709,7 +1730,7 @@
           "family": [],
           "file": "projects/engines/geometry/crates/geom-check/src/geometric.rs",
           "guarantees": [
-            "**Exact on flat faces.** A plane given by integer-valued doubles (its origin and two spanning vectors within ±(2^40 − 1)) becomes the integer plane through three grid points, and a vertex passes exactly when (n · p + d)^2 ≤ b^2 · |n|^2, compared in 320-bit integers; for b = 0 that is the orient test, n · p + d = 0. A plane not given by integers is unchecked in a body recorded Exact, and measured in certified intervals otherwise.",
+            "**Exact on flat faces.** A plane given by integer-valued doubles (its origin and two spanning vectors within ±(2^40 − 1)) becomes the integer plane through three grid points, and a vertex passes exactly when (n · p + d)^2 ≤ b^2 · |n|^2, compared in 320-bit integers; for b = 0 that is the orient test, n · p + d = 0. A line whose ends are grid points passes the same way, end by end: a segment is never farther from a plane than its farther end, and no double holds the squared normal of a long edge's plane, so an interval could not say 0. A plane not given by integers is unchecked in a body recorded Exact, and measured in certified intervals otherwise.",
             "**Certified on lines and curved carriers.** Every other distance is a certified upper bound (`crate::curved`, and a line's end points enclosed with `geom_curve::tight`, exact where the doubles are), so a vertex exactly on the bound passes where the data are exact and one a step beyond fails.",
             "**Fails closed.** Every comparison whose operands cannot be formed (a value out of its range, an overflow, a cone past its apex) is a fault, never a pass.",
             "**No sampling, nothing allocated.** Each check is an exact predicate or one interval evaluation of a closed form."
@@ -4522,6 +4543,28 @@
           "target": "lib"
         },
         {
+          "cost": "at most [`MAX_STEPS`] transforms, each of at most [`MAX_COPIES`] copies, on a body of at most [`MAX_CORNERS`] base corners, each run twice and checked in full; at most [`MAX_INPUT_BYTES`] bytes read.",
+          "does": "[`decode`] turns a fuzzer's bytes into a [`Case`]: a primitive, its inputs placed on the hard cases of chapter 28.5 (one-step sizes, coarse sub-grids, coordinates at the grid's edge), and a short list of transforms and patterns, each with the class the caller accepts and a work budget. [`check`] builds the primitive and runs the list, each step on the last result, and holds every outcome to the laws below. [`harness`] is `decode` then `check`.",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-fuzz/src/make.rs",
+          "guarantees": [
+            "**Any bytes are a case.** Every byte string, the empty one included, decodes to a case.",
+            "**A bounded input.** [`decode`] reads at most [`MAX_INPUT_BYTES`] bytes, derived below; a unit test builds the input that reaches it.",
+            "**A panic is a failure; a broken law is a [`Finding`]** naming the law and the case: a result the full checker rejects, a result without names, a history that breaks its laws, a transform that loses a name, a class that rises, a flat solid that turns inside out, a rerun that gives another answer, a budget that changes a result instead of stopping it, a defect on valid input, or an error of a kind no schema lists."
+          ],
+          "job": "Fuzz target: `geom-make`'s primitives and transforms, on any bytes, return only what the full checker passes, keep their laws, and refuse with a typed error, never a defect.",
+          "method": {
+            "links": [
+              "projects/engines/geometry/architecture/28-testing.md"
+            ],
+            "text": "chapter 28.5's oracle stack and its generators aimed at the hard cases (`projects/engines/geometry/architecture/28-testing.md`), with the volume of a flat solid computed from its loops as an oracle the checker does not share."
+          },
+          "path": "geom_fuzz::make",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
           "cost": "one function call and at most a dozen 400-bit Newton steps or series per input.",
           "does": "[`decode`] turns a fuzzer's bytes into a [`Case`]: a function (sinpi, cospi, exp, ln or atan2, piece G47) and its argument or arguments. [`check`] calls it in `geom_num::math` and holds it to its table's claim, \"correctly rounded\": the result is the double nearest the exact value. The exact value comes from `geom_test::fixed`'s 400-bit fixed point: cos and sin of πt and e^x by their series, ln x by Newton's method on e^y, and atan2 by Newton's method on x·sin θ − y·cos θ. Typed refusals (a NaN or infinite argument, an overflow, a logarithm of a non-positive number) are legal where the table says so.",
           "family": [],
@@ -4873,7 +4916,7 @@
         },
         {
           "cost": "linear in the schemas' fields.",
-          "does": "[`api`] writes Markdown, one section per operation of `engine_geometry::operations::OPERATIONS`: its name, version, family and tier, what it does, its inputs and outputs (each with its type, unit and whether it may be left out), the roles it names, the errors it can return (each detail with its base kind and its data), the warnings it can give, the exactness classes it can return, whether it has a batch entry, and its example. [`mcp`] writes JSON: the MCP protocol version the descriptions follow ([`MCP_VERSION`]) and one `Tool` per operation, as MCP's `tools/list` describes a tool: its `name`, `title` and `description`, an `inputSchema` and an `outputSchema` in JSON Schema 2020-12 (MCP's default dialect) built from its fields, `annotations` (a kernel operation is pure, 10.1: it reads nothing outside its inputs and changes nothing, so it is read-only, idempotent and closed-world to the program that calls it), and the kernel's own data under `_meta` (`org.spareware/kernel`: version, family, tier, exactness classes, errors with base kinds, warnings, batch entry, roles). The command layer that serves the tools adds the program's side (sign-in scopes, the program's units), as EXTENDING.md, section 2.2, sets out.",
+          "does": "[`api`] writes Markdown, one section per operation of `engine_geometry::operations::OPERATIONS`: its name, version, family and tier, what it does, its inputs and outputs (each with its type, unit and whether it may be left out), the roles it names, the errors it can return (each detail with its base kind and its data), the warnings it can give, the exactness classes it can return, its charge schedule, whether it has a batch entry, and its example. [`mcp`] writes JSON: the MCP protocol version the descriptions follow ([`MCP_VERSION`]) and one `Tool` per operation, as MCP's `tools/list` describes a tool: its `name`, `title` and `description`, an `inputSchema` and an `outputSchema` in JSON Schema 2020-12 (MCP's default dialect) built from its fields, `annotations` (a kernel operation is pure, 10.1: it reads nothing outside its inputs and changes nothing, so it is read-only, idempotent and closed-world to the program that calls it), and the kernel's own data under `_meta` (`org.spareware/kernel`: version, family, tier, exactness classes, errors with base kinds, warnings, charges, batch entry, roles). The command layer that serves the tools adds the program's side (sign-in scopes, the program's units), as EXTENDING.md, section 2.2, sets out.",
           "family": [],
           "file": "projects/engines/geometry/crates/geom-gen/src/facade.rs",
           "guarantees": [
@@ -5619,12 +5662,108 @@
       "job": "The Make and Transform families of 10.2: primitives, transforms and patterns.",
       "kind": "kernel",
       "layer": "9",
-      "modules": [],
+      "modules": [
+        {
+          "cost": "linear in the part's rows, plus publishing (a sort by name) and the checker's own cost. Recursion: none.",
+          "does": "a [`Part`] lists a solid's vertices, edges and faces, each with its geometry and the role it is named by (20.2), and each face's loops as edges and senses. [`assemble`] names every region, face, edge and vertex `Created { op, role, from }` (`geom_op::TopoName`), builds the rows (one solid region and the void outside it, one shell, a ring of fins round each edge), publishes them in name order (`geom_topo::Builder::publish_named`), runs the checker on the result as the operation's postcondition (8.3) and records each entity's origin. [`Made`] is what comes back: the body, its history and, from a transform, which one it was.",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-make/src/build.rs",
+          "guarantees": [
+            "**Names, not positions.** Every index of the body follows its entities' names, and every name comes from the operation's path, a role and the names it is relative to: never from the order the rows were written in (8.2, 20.2).",
+            "**Checked before returned.** A body that does not pass the checker at the build's level is never returned; the operation fails with [`MakeDetail::ResultInvalid`], a defect, instead.",
+            "**Charged by what it builds.** One meter unit per row built ([`PER_ROW`]), before it is built (23.10), and the publishing and the checker charge their own rows to the same meter.",
+            "**Transactional.** Nothing the caller holds is changed; a failure, or a stop the operation did not report, returns no body (`OpContext::run`)."
+          ],
+          "job": "Assembling what a Make or Transform operation returns: a body's rows, each entity named by its role, published in name order, checked, and the history that says where each entity came from.",
+          "method": {
+            "links": [
+              "projects/engines/geometry/architecture/08-topology.md",
+              "projects/engines/geometry/architecture/20-naming-history.md"
+            ],
+            "text": "chapter 8's arenas and name order (8.2), chapter 20's names by role and history records (20.2, 20.3), and the checker's postcondition (8.3) (`projects/engines/geometry/architecture/08-topology.md`, `projects/engines/geometry/architecture/20-naming-history.md`)."
+          },
+          "path": "geom_make::build",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
+          "cost": "one transform of the body per instance. Recursion: none.",
+          "does": "[`pattern`] runs one copy per [`Instance`], in key order: the body moved by the instance's transform as the Transform family moves it, each entity named `Created { op: the operation's path with the instance's key, role: copy(source), from: source }` and recorded as generated from its source with that role. It returns one [`Made`] per instance, keyed as given, and the least exact of their records.",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-make/src/pattern.rs",
+          "guarantees": [
+            "**One answer per key, whatever the order given.** Instances run in key order; two with one key are refused ([`MakeDetail::RepeatedKey`]), and so is an empty pattern.",
+            "**Copies, not the body.** Every copy's entities have names of their own, distinct across instances (each instance's path differs), and trace to the body's entities as copies.",
+            "**Each copy checked.** Every copy passes the checker before the pattern returns; one failure fails the whole pattern, which returns nothing.",
+            "**The transform states its own stretch.** Each copy's bound grows by what its transform can do to a length, read from the transform, never taken on the caller's word."
+          ],
+          "job": "Patterns: copies of one body, each by its own transform and keyed by the caller, each copy's entities named as copies of the body's (8.4's `Copied`, which a pattern's schema declares).",
+          "method": {
+            "links": [
+              "projects/engines/geometry/architecture/10-operations.md",
+              "projects/engines/geometry/architecture/08-topology.md"
+            ],
+            "text": "chapter 10.1's batch rule (an item's path is the operation's path and its key) and chapter 8.4's `Copied` event (`projects/engines/geometry/architecture/10-operations.md`, `projects/engines/geometry/architecture/08-topology.md`)."
+          },
+          "path": "geom_make::pattern",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
+          "cost": "constant per primitive; O(n log n) for a prism of n corners, whose edges are found through an ordered map. Recursion: none.",
+          "does": "each function checks its input, writes the solid as a [`Part`] and hands it to [`assemble`], which names, publishes, checks and records it. Lengths are whole grid steps of the frame (`geom_num::Steps`) and every vertex is a grid point; round shapes stand on the z axis through the point given, and other orientations come from the Transform family.",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-make/src/primitive.rs",
+          "guarantees": [
+            "**Outward and counter-clockwise.** Every face's surface normal, with its sense, points out of the solid, and every loop runs counter-clockwise seen from outside.",
+            "**Exact where it can be.** A box and a prism are recorded Exact: their planes are given by integers through grid corners. Round shapes are recorded Certified with a bound of one step of the step given, as 10.2 asks: their circles' points come from certified sines and cosines.",
+            "**Typed refusals.** A zero length, a base that is not strictly convex or not level, and a torus that would not be a ring are input errors that name the input and the nearest value that works; a corner past the grid's range is the numbers layer's `OutOfRange`."
+          ],
+          "job": "The primitives of chapter 10.2's Make family: box, prism, cylinder, cone, sphere and torus, each the shape 10.2's \"Primitive topology\" fixes, its faces, edges and vertices named by role.",
+          "method": {
+            "links": [
+              "projects/engines/geometry/architecture/10-operations.md"
+            ],
+            "text": "chapter 10.2's primitives and their topology, accepted with piece G85 (`projects/engines/geometry/architecture/10-operations.md`), on chapter 7's analytic surfaces (`geom_surface::analytic`)."
+          },
+          "path": "geom_make::primitive",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
+          "cost": "linear in the body's rows, one meter unit each, plus each curve's and surface's transform and the checker. Recursion: none.",
+          "does": "each function turns its input into a `geom_math::TypedTransform` and hands it to [`moved_copy`], which copies every row of the body with its points, curves, surfaces and face boxes moved, publishes the copy under the same names, checks it and records each entity as modified from itself (20.2: a one-to-one change keeps the name). [`Motion`], in the result, says which of the four it was, for the attribute event `Transformed` (8.4).",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-make/src/transform.rs",
+          "guarantees": [
+            "**Exact where the transform is.** A move by whole steps, quarter turns, mirrors across grid planes and whole-number uniform scales map grid points to grid points and keep planes given by integers: an Exact body stays Exact.",
+            "**Rounded once, and said so.** Any other rotation or scale rounds each vertex to the grid once (at most √3/2 of a step), and moves curves and surfaces by their own typed transforms, each with a certified deviation. The result's bound is the input's, stretched by the most the transform can stretch a length, plus one step if any vertex rounded, plus the largest deviation, rounded up.",
+            "**The class never rises.** The result keeps the input's class or a less exact one: an Approximate body stays Approximate whatever its bound does (principle 3).",
+            "**Accepted, or refused.** A result less exact than the input is returned only when the caller accepts it ([`Moved::accept`]): a class at least as loose and a ceiling at least the result's bound; otherwise [`MakeDetail::NotAccepted`] names the class the result would have.",
+            "**Kinds change only where the checker can follow.** A transform that does not keep circles turns them into ellipses and analytic surfaces into affine ones, which the checker cannot certify yet: on a body with curved geometry it is [`MakeDetail::KindNotCertified`] (G177).",
+            "**Mirrors keep the outside outside.** A mirror reverses orientation, so every face's sense and every loop's direction is reversed with it."
+          ],
+          "job": "The Transform family of chapter 10.2: move, rotate, mirror and scale a body, its entities keeping their names, its geometry changing kind only as chapter 7's typed transforms say.",
+          "method": {
+            "links": [
+              "projects/engines/geometry/architecture/07-geometry-types.md"
+            ],
+            "text": "chapter 7's typed transforms and their kind changes (`projects/engines/geometry/architecture/07-geometry-types.md`), applied as `geom-math`, `geom-curve` and `geom-surface` define them; chapter 20.2's naming rule for one-to-one changes."
+          },
+          "path": "geom_make::transform",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        }
+      ],
       "name": "geom-make",
       "provenance": [],
       "sections": "7, 8.4, 10.2 and 30.5, in the kernel architecture (`projects/engines/geometry/architecture/`).",
       "spdx": null,
-      "status": "scaffold only; built by pieces G101.",
+      "status": "built by piece G101: every primitive and transform of 10.2 with its schema in the facade; scales that are not uniform on curved bodies wait for G177's checker.",
       "summary": "Spare Kit geometry kernel: primitives and transforms."
     },
     {
@@ -9114,6 +9253,99 @@
           ],
           "module": "geom_op::detail",
           "name": "NumDetail",
+          "non_exhaustive": false
+        },
+        {
+          "doc": "A failure of the Make and Transform families (`geom-make`, piece G101): an input the shape cannot be made from, a transform the result could not keep exact or certified, or a defect found before anything was returned.",
+          "file": "projects/engines/geometry/crates/geom-op/src/detail.rs",
+          "kinds": [
+            {
+              "base_kind": "Degenerate",
+              "doc": "A length the shape needs to be positive is zero: an extent, a radius or a height, the input `input` names.",
+              "name": "ZeroLength",
+              "shape": "struct"
+            },
+            {
+              "base_kind": "InvalidInput",
+              "doc": "A prism's base has fewer than three corners.",
+              "name": "TooFewCorners",
+              "shape": "struct"
+            },
+            {
+              "base_kind": "InvalidInput",
+              "doc": "A prism's base corners do not all lie in one plane perpendicular to the z axis.",
+              "name": "BaseNotLevel",
+              "shape": "unit"
+            },
+            {
+              "base_kind": "InvalidInput",
+              "doc": "A prism's base is not a strictly convex polygon running counter-clockwise seen from above: three corners in a row on one line, a turn the other way, or corners repeated.",
+              "name": "BaseNotConvex",
+              "shape": "unit"
+            },
+            {
+              "base_kind": "InvalidInput",
+              "doc": "A torus's minor radius is not below its major radius: it would be a horn or spindle torus, not a primitive (chapter 10.2).",
+              "name": "MinorNotBelowMajor",
+              "shape": "struct"
+            },
+            {
+              "base_kind": "ExactnessNotAccepted",
+              "doc": "A transform would leave the body less exact than the class the caller accepted.",
+              "name": "NotAccepted",
+              "shape": "struct"
+            },
+            {
+              "base_kind": "Unsupported",
+              "doc": "A transform would turn a curved face or edge into a kind the checker cannot certify yet: a scale that is not uniform makes cylinders, cones, spheres and tori affine surfaces and circles ellipses.",
+              "name": "KindNotCertified",
+              "shape": "unit"
+            },
+            {
+              "base_kind": "Unsupported",
+              "doc": "A transform that rounds corners or moves curved geometry by a certified deviation gave a body the checker cannot certify yet: rounded corners leave their faces' planes, and a tilted curved face meets its caps where only exact data is followed today.",
+              "name": "NotCertifiedYet",
+              "shape": "struct"
+            },
+            {
+              "base_kind": "InvalidInput",
+              "doc": "The body given carries no names: it was not published in name order, so its entities cannot keep their names through the transform.",
+              "name": "BodyNotNamed",
+              "shape": "unit"
+            },
+            {
+              "base_kind": "InvalidInput",
+              "doc": "A pattern has no instance.",
+              "name": "EmptyPattern",
+              "shape": "unit"
+            },
+            {
+              "base_kind": "InvalidInput",
+              "doc": "Two instances of a pattern have one key.",
+              "name": "RepeatedKey",
+              "shape": "unit"
+            },
+            {
+              "base_kind": "InvalidInput",
+              "doc": "A pattern's transform has no inverse: it would collapse the body onto a plane, a line or a point.",
+              "name": "SingularTransform",
+              "shape": "unit"
+            },
+            {
+              "base_kind": "Internal",
+              "doc": "The result did not pass the checker. A defect: nothing was returned.",
+              "name": "ResultInvalid",
+              "shape": "unit"
+            },
+            {
+              "base_kind": "Internal",
+              "doc": "The body could not be assembled from its rows. A defect.",
+              "name": "BuildFailed",
+              "shape": "unit"
+            }
+          ],
+          "module": "geom_op::detail",
+          "name": "MakeDetail",
           "non_exhaustive": false
         },
         {
@@ -12888,7 +13120,10 @@
           ],
           "job": "Why an arena could not change, or arenas could not be published as a body.",
           "method": {
-            "none": "an error enum and its conversions, with `geom-run`'s stops (chapter 23.10)."
+            "links": [
+              "projects/engines/geometry/architecture/23-performance.md"
+            ],
+            "text": "an error enum and its conversions, with `geom-run`'s stops (`projects/engines/geometry/architecture/23-performance.md`, 23.10)."
           },
           "path": "geom_topo::error",
           "provenance": [],

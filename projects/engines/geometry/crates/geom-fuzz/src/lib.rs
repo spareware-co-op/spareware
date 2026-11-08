@@ -16,9 +16,11 @@
 //! bound, forgets the entry used longest ago first and answers only where the caller's budget
 //! covers the stored run; [`arenas`] (G80), `geom-topo` publishes exactly the arenas its rules
 //! allow, and a body's versions never see each other's edits; [`attributes`] (G90),
-//! `geom-name`'s attribute step gives each output exactly what section 8.4's table gives; and
+//! `geom-name`'s attribute step gives each output exactly what section 8.4's table gives;
 //! [`batch`] (G104), `geom-op`'s batch driver gives each item its own result, and the curve and
-//! surface kinds' many-point calls give the single calls' bits. Gate 2 (32.44) adds
+//! surface kinds' many-point calls give the single calls' bits; and [`make`] (G101), the
+//! primitives and transforms return only what the full checker passes, keep their laws, and
+//! refuse with a typed error. Gate 2 (32.44) adds
 //! [`curves`], every curve kind keeps the kind contract on any bytes (G60 to G64, G67, G68), and
 //! [`surfaces`], every surface kind likewise (G60, G65 to G68), and [`nurbs`], NURBS curves keep
 //! their stated bounds against exact rational evaluation (G56, G58, G59), and [`transforms`], the
@@ -134,6 +136,8 @@
 //! - `geom-topo`, `geom-curve`, `geom-surface` and `geom-math` (Apache-2.0, ours), the code under
 //!   test of the [`arenas`] target and the values that fill its arenas.
 //! - `geom-name` and `geom-op` (Apache-2.0, ours), the code under test of the [`attributes`] target.
+//! - `geom-make`, `geom-check` and `geom-op` (Apache-2.0, ours), with the crates above, the code
+//!   under test of the [`make`] target and the checker it judges them by.
 //! - `dashu-ratio` 0.6.1 (MIT OR Apache-2.0), without its default features: the exact rationals
 //!   of the [`nurbs`] target's oracle, `geom-test`'s NURBS reference.
 //! - `geom-op`, `geom-curve`, `geom-surface`, `geom-nurbs` and `geom-run` (Apache-2.0, ours), the
@@ -190,6 +194,7 @@ pub mod cache;
 pub mod cbor;
 pub mod curves;
 pub mod linalg;
+pub mod make;
 pub mod maths;
 pub mod nurbs;
 pub mod orient2d;

@@ -4,8 +4,8 @@
 //!
 //! What it does: re-exports, grouped as chapter 25 lists the Stable tier's value types: grid points
 //! and steps ([`grid`]), exactness ([`Exactness`]), curves ([`curve`]), surfaces ([`surface`]),
-//! bodies ([`body`]), names and history ([`name`]), errors ([`error`]), and an operation's context
-//! and output ([`op`]). Anything not re-exported here is internal.
+//! bodies ([`body`]), transforms ([`transform`]), names and history ([`name`]), errors ([`error`]),
+//! and an operation's context and output ([`op`]). Anything not re-exported here is internal.
 //!
 //! Guarantees:
 //!
@@ -47,10 +47,17 @@ pub mod body {
     pub use geom_topo::{Body, BodyKind};
 }
 
+/// Typed transforms: what a transform operation takes (chapter 7).
+pub mod transform {
+    pub use geom_math::{
+        Axis, GridTransform, RationalTransform, Rotation, Scale, Transform, TypedTransform,
+    };
+}
+
 /// Persistent names and the history that carries them (chapter 20).
 pub mod name {
     pub use geom_op::{
-        ChangeClass, History, NameId, Ordinal, PieceKey, Record, Role, Side, TopoName,
+        ChangeClass, History, NameId, Ordinal, Origin, PieceKey, Record, Role, Side, TopoName,
     };
 }
 
@@ -58,11 +65,13 @@ pub mod name {
 /// (chapter 22).
 pub mod error {
     pub use geom_op::{
-        ErrorKind, Evidence, NumDetail, OpError, OpErrorDetail, Remedy, RunDetail, Value,
+        ErrorKind, Evidence, MakeDetail, NumDetail, OpError, OpErrorDetail, Remedy, RunDetail,
+        Value,
     };
 }
 
 /// An operation's context and output (chapter 10.1).
 pub mod op {
     pub use geom_op::{Diagnostic, Label, OpContext, OpId, OpOutput, OpPath, Precision};
+    pub use geom_run::Budget;
 }

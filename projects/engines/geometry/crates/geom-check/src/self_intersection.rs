@@ -16,7 +16,8 @@
 //!   misses a meeting point). A segment and a circle, and two circles, are separated by certified
 //!   closed forms (`crate::curved`); a pair none of these separates is reported unchecked.
 //! - **Two faces meet only along shared edges and at shared vertices.** Every pair of faces is
-//!   tested. Parallel planes certainly apart cannot meet. Two crossing planes whose faces are
+//!   tested. Two integer planes are compared exactly, in 320-bit integers, and other planes by
+//!   certified intervals. Parallel planes certainly apart cannot meet. Two crossing planes whose faces are
 //!   strictly convex, exactly planar polygons of one loop are tested exactly: each edge of one face that is not an edge of
 //!   the other either stays strictly on one side of the other's plane, touches it at a vertex of
 //!   the other face or outside it, or pierces it outside the polygon (`orient3d` of the segment
@@ -89,7 +90,7 @@ pub(crate) fn check(
             sink.charge()?;
             let found = surface(a, f, exact).zip(surface(a, g, exact)).map_or(
                 Ok(Meet::Unknown),
-                |(p, q)| match curved::pair(&p.carrier, &q.carrier) {
+                |(p, q)| match p.lies_with(&q) {
                     Pair::Apart => Ok(Meet::Apart),
                     Pair::Crossing => polygons_meet(a, f, g, sink),
                     Pair::Circle => Ok(if shares_full_circle(a, f, g) {

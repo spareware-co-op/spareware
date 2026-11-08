@@ -26,9 +26,9 @@
 //! the simulation engine.
 //!
 //! Its direct dependencies are `kit-core`, `geom-pool` behind the `threads` feature, and every
-//! kernel crate it re-exports: `geom-num`, `geom-curve`, `geom-surface`, `geom-topo` and
-//! `geom-op`, checked by the scaffold test in `tests/scaffold`, which holds the kernel's crate
-//! table.
+//! kernel crate it re-exports: `geom-num`, `geom-math`, `geom-curve`, `geom-surface`, `geom-topo`,
+//! `geom-run`, `geom-op` and `geom-make`, checked by the scaffold test in `tests/scaffold`, which holds the
+//! kernel's crate table.
 //!
 //! Modules today (piece G100):
 //!
@@ -37,7 +37,8 @@
 //! - [`schema`]: chapter 22's schema types, the [`schema::Operation`] entry that gives a schema its
 //!   [`schema::Tier`], and nothing else.
 //! - [`operations`]: [`operations::OPERATIONS`], every operation's schema as data, from which
-//!   `geom-gen` writes the API documentation and the MCP tool descriptions (`generated/`).
+//!   `geom-gen` writes the API documentation and the MCP tool descriptions (`generated/`), and the
+//!   operations themselves, re-exported.
 //!
 //! Every operation piece adds its schema to [`operations::OPERATIONS`] (chapter 30.1, the standard
 //! bar). `kit-core`'s permanent IDs and units are converted here once `kit-core` has them: it holds

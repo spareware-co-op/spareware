@@ -20,8 +20,10 @@ every curve and surface kind built from any bytes keeps the kind contract kit
 (`geom_curve::contract`, `geom_surface::contract`) under any typed transform; `arenas` (`src/arenas.rs`,
 G80), `geom-topo` publishes exactly the arenas its rules allow, and a body's versions never see
 each other's edits; `attributes` (`src/attributes.rs`, G90), `geom-name`'s attribute step gives
-each output exactly what section 8.4's table gives; and `batch` (`src/batch.rs`, G104), `geom-op`'s
-batch driver gives each item its own result, and the many-point calls give the single calls' bits.
+each output exactly what section 8.4's table gives; `batch` (`src/batch.rs`, G104), `geom-op`'s
+batch driver gives each item its own result, and the many-point calls give the single calls' bits;
+and `make` (`src/make.rs`, G101), the primitives and transforms return only what the full checker
+passes, keep their laws, and refuse with a typed error.
 
 ## One law, four engines
 
