@@ -10638,6 +10638,31 @@
           "target": "lib"
         },
         {
+          "cost": "one full check of the body per injection, each linear in its rows but for group 3's pairs of faces. Recursion: none.",
+          "does": "[`CATALOGUE`] lists every [`Injection`]: a name from 28.4's list or chapter 8.3's groups, the [`FaultKind`]s that are the right answer, and a function that breaks a copy of a valid body. It breaks the rows, not the checker's view of them: each goes through `geom_topo::Builder::edit` and is published again, so only what the builder allows gets through, as with a body from a damaged file or a broken operation. An injection applies to the bodies that have what it breaks: a fin to flip, a line to move, a certified bound to lower. [`attack`] runs the catalogue on one valid body and says, per injection, whether it applied and whether the checker caught it, [`Outcome`]; [`missed`] reads the outcomes as a list of checker bugs.",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-test/src/faults.rs",
+          "guarantees": [
+            "**One fault at a time.** Each injection changes one thing a chapter 8.3 group promises to catch: the broken body differs from the valid one in that thing only, and an injection that finds nothing to break reports [`Applied::No`], never a pass.",
+            "**The right kind.** A fault is caught only by a report that names one of the injection's kinds. Any other fault is a miss: a checker that reports the wrong thing has not understood what is broken.",
+            "**Both ways.** [`attack`] first checks the body unbroken, so a body it is given that does not pass is an error, never a catalogue of false catches.",
+            "**Just past the bound.** A fault of distance moves by the smallest whole number of steps past the body's bound (28.4, \"by just more than its bound\"): a looser check would miss it.",
+            "**Deterministic.** Nothing here reads a clock or a random number; the same body gives the same outcomes on every target."
+          ],
+          "job": "Checker fault injection (chapter 28.4, the first catalogue): valid bodies broken on purpose, one fault at a time, and the checker must name each with the right kind; and it must pass every valid body, so a checker that rejects too much is caught too.",
+          "method": {
+            "links": [
+              "projects/engines/geometry/architecture/28-testing.md",
+              "projects/engines/geometry/architecture/08-topology.md"
+            ],
+            "text": "chapter 28.4's fault injection, both ways (`projects/engines/geometry/architecture/28-testing.md`), on chapter 8.3's checker groups (`projects/engines/geometry/architecture/08-topology.md`)."
+          },
+          "path": "geom_test::faults",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
           "cost": "a product or quotient of k-bit numbers is O(k²) at these sizes; [`cos_sin`] and [`exp`] about 150 terms each; no recursion.",
           "does": "an [`IBig`] n stands for n / 2^400. [`of`] reads a double exactly but for the bits below 2^−400, [`mul`] and [`div`] cut their results to a whole number of 2^−400, [`sqrt`] is the floor of the root, [`cos_sin`] and [`exp`] sum their Taylor series until a term vanishes, and π is read from its first 100 decimal places. [`cos_sin_pi`], [`tan_pi`] and [`tanh`] are built on them, for the half-turn angles and the tangent half-angle maps of the kinds. [`rational`] and [`of_rational`] pass values to and from the exact rationals of [`crate::nurbs_reference`], and [`within`] decides whether two points are at most a distance apart.",
           "family": [],
@@ -11546,6 +11571,28 @@
           "target": "lib"
         },
         {
+          "cost": "linear in the rows, with a quadratic search for each vertex's faces and each edge. No recursion.",
+          "does": "a [`Spec`] is a polyhedron by its corners and, for each solid region, its shells, faces and loops. [`meeting`] builds it with every vertex the meeting of its three faces' planes, each plane through three corners of its face moved by a [`Jog`], and [`grid`] with every vertex a grid point. [`CORPUS`] holds a box, an L, a wall with a window, two lumps, a cavity and a lump floating in a cavity; [`scaled_jog`] picks moves for a seed.",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-test/src/plane_bodies.rs",
+          "guarantees": [
+            "**Valid by construction.** A move of a step or so on shapes hundreds of steps across changes no shape, so every body of the corpus is a valid body, by geometry rather than by the checker.",
+            "**Deterministic.** A body is a function of its spec and its moves.",
+            "**Refuses what it cannot build.** A vertex without exactly three faces has no one meeting: [`meeting`] returns `None`."
+          ],
+          "job": "Plane-based bodies for the checkers to stand on (chapters 8.3 and 28.4; piece G135): polyhedra with three faces at every vertex, whose planes can be moved a step off their grid points, so that every vertex is the meeting of three planes at a place no grid point holds.",
+          "method": {
+            "links": [
+              "projects/engines/geometry/architecture/11-booleans.md"
+            ],
+            "text": "the bodies of chapter 11.3 and 19.2 (`projects/engines/geometry/architecture/11-booleans.md`): each vertex the meeting of three of the body's planes, each edge's line on two."
+          },
+          "path": "geom_test::plane_bodies",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
           "cost": "one run of the property per case, plus shrinking after a failure, at most about 41 property runs per coordinate (a binary search over at most 2^40 magnitudes). One read of proptest's process-wide configuration per [`run`] or [`first_value`].",
           "does": "[`run`] runs a proptest property from a [`Seed`] resolved and printed by [`crate::seed::resolve`], so a property test has the same seed rules as every other seeded test. [`config`] builds the proptest configuration it uses. [`first_value`] draws one case from a seed. [`coord`], [`p2`] and [`p3`] are proptest strategies for grid coordinates and points.",
           "family": [],
@@ -11961,6 +12008,31 @@
           "target": "lib"
         },
         {
+          "cost": "per edge, [`SAMPLES`] + 1 evaluations and a distance to each face's surface; per fin with a pcurve, as many surface evaluations; per pair of faces whose stored boxes meet, 2·[`ISO`] lines of [`ALONG`] + 1 points each way, an equation per point, and [`BISECT`] steps at each sign change. Sines and cosines are kept by their argument. No recursion.",
+          "does": "[`refute`] reads each curve, pcurve and surface of a body into its definition as its kind's documentation states it, from the doubles the kind stores, and evaluates it in [`crate::fixed`]'s fixed point, NURBS exactly by [`crate::nurbs_reference`]. Then it looks for what chapter 28.4 names, each against the bound the body is recorded with:",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-test/src/refute.rs",
+          "guarantees": [
+            "**Only ever \"found invalid\".** Each find is proven of the stored doubles. A distance is a lower bound, the surface's whole closed form, of which a face is a part, compared with the bound plus [`MARGIN_BITS`], which is far above the fixed point's error. A crossing is a sign change of a continuous function at two samples clear of [`LEVEL_BITS`], at a point shown inside both faces by the regions above. An empty list says nothing was found, never that the body is valid.",
+            "**Independent.** No call into `geom-intersect` or `geom-check`, and no kind's own evaluation: every definition is written from its kind's documentation and read from the doubles it stores, as the law catalogue's truths are (`tests/truth`); a face's inside is decided from its own loops.",
+            "**Deterministic.** Integer arithmetic, fixed samples, no clock and no random number."
+          ],
+          "job": "The refutation checker for curved bodies (chapter 28.4, the third check behind `geom-check`; piece G178): a body's curves, pcurves and surfaces sampled densely in 400-bit fixed point and exact rationals, looking for a fault, sharing no code with `geom-intersect` or `geom-check`.",
+          "method": {
+            "links": [
+              "projects/engines/geometry/architecture/28-testing.md",
+              "projects/engines/geometry/architecture/08-topology.md",
+              "https://geomalgorithms.com/a03-_inclusion.html",
+              "https://doi.org/10.1007/978-1-4612-6333-3"
+            ],
+            "text": "chapter 28.4's refutation checker (`projects/engines/geometry/architecture/28-testing.md`), on chapter 8.3's rules (`projects/engines/geometry/architecture/08-topology.md`) and the kinds' definitions of chapter 7 (`geom_curve::conic`, `geom_curve::line`, `geom_surface::analytic`); the winding number by Sunday's crossing rule (D. Sunday, \"Practical Geometry Algorithms\", 2021, chapter 5, <https://geomalgorithms.com/a03-_inclusion.html>); the chord error of linear interpolation, at most h²/8 · max|C''| (de Boor, *A Practical Guide to Splines*, 2001, chapter II, <https://doi.org/10.1007/978-1-4612-6333-3>); the distance to a surface of revolution in the meridian plane through the point."
+          },
+          "path": "geom_test::refute",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
           "cost": "a handful of integer operations per word. [`SplitMix64::below`] draws one word, and draws again with probability below `n / 2^64`, so fewer than two words on average.",
           "does": "[`SplitMix64`] turns a [`Seed`] into a stream of 64-bit words. [`ByteSource`] turns a fuzzer's bytes into the same kind of stream. Both implement [`Entropy`], so one builder (for example [`crate::grid::GridSampler`]) makes test data from a seed in a property test and from coverage-guided bytes in a fuzz target.",
           "family": [],
@@ -12095,6 +12167,30 @@
             "text": "the same walk as the map's ([`crate::map::repo`]): sorted listings, no recursion, links reported; the scope is the code chapter 29.20's rule 7 covers, every crate of the kernel (`projects/engines/geometry/architecture/29-sources-licences.md`)."
           },
           "path": "geom_test::scan::repo",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
+          "cost": "rationals grow with the depth of the sums, and each pair of faces costs the product of their edges. This checker accepts that, because it runs on tests only. No recursion.",
+          "does": "[`check`] reads a body's rows into rationals: each vertex a point, each face its rings of corners and the plane its surface gives. Then it tests the rules one by one, in the most direct way there is, and lists a [`Finding`] for each one broken.",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-test/src/second_check.rs",
+          "guarantees": [
+            "**Exact.** Every value is a rational and every comparison a comparison of rationals, with no width to overflow and no tolerance but the bound the body is recorded with.",
+            "**Independent.** A different method wherever one exists: points listed and located, where `geom-check` compares stretches of a line by the signs of planes; Cramer's rule, where it never leaves the planes; crossing numbers, where it counts by moved lines.",
+            "**Says what it cannot judge.** A curved face or edge, or a face whose corners leave one plane, is [`Finding::Unjudged`], never a pass (flat bodies and meshes are what 28.4 asks of it)."
+          ],
+          "job": "The second checker for flat bodies (chapter 28.4; piece G135): chapter 8.3's rules, written again from their definitions in exact rationals, sharing no code with `geom-check`, to stand behind it.",
+          "method": {
+            "links": [
+              "projects/engines/geometry/architecture/08-topology.md",
+              "doi:10.1016/B978-0-12-336156-1.50013-6",
+              "doi:10.1016/B978-0-08-050754-5.50043-8"
+            ],
+            "text": "chapter 8.3's rules (`projects/engines/geometry/architecture/08-topology.md`); the crossing number for a point in a polygon (Haines, \"Point in polygon strategies\", Graphics Gems IV, 1994, doi:10.1016/B978-0-12-336156-1.50013-6); Cramer's rule for three planes; the divergence theorem for a polyhedron's volume (Goldman, Graphics Gems II, 1991, doi:10.1016/B978-0-08-050754-5.50043-8)."
+          },
+          "path": "geom_test::second_check",
           "provenance": [],
           "spdx": null,
           "target": "lib"

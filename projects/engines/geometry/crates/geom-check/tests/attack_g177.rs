@@ -2,9 +2,12 @@
 //! pcurves on its fins passes; without pcurves its edges are reported unchecked, never passed; a
 //! vertex moved off such a face past the bound is caught, and one within it is not; a pcurve
 //! moved off its edge is caught; a pcurve on another span than its edge is unchecked; and an edge
-//! on a NURBS curve is held to it at both ends. For group 3: a cube of NURBS faces passes, each
-//! pair meeting along its edge proven to meet only there, and a curved floor that stays clear of
-//! the rest passes too, while one bulging through the top is reported, never passed.
+//! on a NURBS curve is held to it at both ends, and passes whole when its fins' pcurves prove it on
+//! its faces. What cannot be decided is reported unchecked, never passed: a NURBS edge and its
+//! faces at a vertex where three planes do not meet, a closed NURBS edge with no pcurve, and a seam
+//! on a NURBS face, once. For group 3: a cube of NURBS faces passes, each pair meeting along its
+//! edge proven to meet only there, and a curved floor that stays clear of the rest passes too,
+//! while one bulging through the top is reported, never passed.
 
 #![allow(
     clippy::unwrap_used,
@@ -343,4 +346,178 @@ fn a_floor_bulging_through_the_top_is_never_passed() {
             "{f:?}"
         );
     }
+}
+
+/// The straight NURBS curve from `a` to `b` over [0, 1], the span of the cube's pcurves.
+fn straight(a: [i64; 3], b: [i64; 3]) -> CurveKind<3> {
+    let basis = Basis::new(1, vec![0.0, 0.0, 1.0, 1.0]).unwrap();
+    let pts = [a.map(|x| x as f64), b.map(|x| x as f64)];
+    CurveKind::Nurbs(Curve::new(basis, &pts).unwrap())
+}
+
+/// [`nurbs_cube`] with its edge 0 on a straight NURBS curve between its vertices.
+fn nurbs_edge_cube() -> Rows {
+    let mut r = nurbs_cube(1, 0.0);
+    let (a, b) = (
+        place(&r, r.edges[0].start.unwrap().row()),
+        place(&r, r.edges[0].end.unwrap().row()),
+    );
+    r.curves[0] = straight(a, b);
+    r
+}
+
+#[test]
+fn a_nurbs_edge_its_pcurves_prove_on_its_faces_passes_whole() {
+    // Both its fins' pcurves hold it on their faces and its ends are its vertices: nothing is
+    // left unchecked.
+    assert_eq!(at(&nurbs_edge_cube(), 1), Vec::new());
+}
+
+#[test]
+fn a_vertex_where_planes_do_not_meet_leaves_its_nurbs_edge_and_faces_unchecked() {
+    let mut r = nurbs_edge_cube();
+    let start = r.edges[0].start.unwrap().row();
+    let row = r.vertices[start as usize].point.row();
+    // Two parallel planes and a third: they meet nowhere.
+    let p = r.plane_through([[0, 0, 0], [1, 0, 0], [0, 1, 0]]);
+    let q = r.plane_through([[0, 0, 1], [1, 0, 1], [0, 1, 1]]);
+    let s = r.plane_through([[0, 0, 0], [0, 1, 0], [0, 0, 1]]);
+    r.meets.push((row, [p, q, s]));
+    let faults = at(&r, 1);
+    let v = Entity::Vertex(ix(start));
+    assert!(
+        faults.contains(&Fault::at(FaultKind::MeetSingular, v)),
+        "{faults:?}"
+    );
+    // The edge's end there cannot be placed, so the edge is unchecked, never passed.
+    assert!(
+        faults.contains(
+            &Fault::at(FaultKind::Unchecked, Entity::Curve(ix(0))).with(Entity::Edge(ix(0)))
+        ),
+        "{faults:?}"
+    );
+    // So is the vertex on each NURBS face a fin starts there on.
+    assert!(
+        faults
+            .iter()
+            .any(|f| f.kind == FaultKind::Unchecked && f.at == v),
+        "{faults:?}"
+    );
+}
+
+/// A full circle of radius 1 about the origin in z = 0, as a rational quadratic NURBS curve.
+fn nurbs_circle() -> CurveKind<3> {
+    let knots = vec![
+        0.0, 0.0, 0.0, 0.25, 0.25, 0.5, 0.5, 0.75, 0.75, 1.0, 1.0, 1.0,
+    ];
+    let basis = Basis::new(2, knots).unwrap();
+    let corners = [
+        [1.0, 0.0],
+        [1.0, 1.0],
+        [0.0, 1.0],
+        [-1.0, 1.0],
+        [-1.0, 0.0],
+        [-1.0, -1.0],
+        [0.0, -1.0],
+        [1.0, -1.0],
+        [1.0, 0.0],
+    ];
+    let pts: Vec<[f64; 3]> = corners.iter().map(|[x, y]| [*x, *y, 0.0]).collect();
+    let s = core::f64::consts::FRAC_1_SQRT_2;
+    let weights = [1.0, s, 1.0, s, 1.0, s, 1.0, s, 1.0];
+    CurveKind::Nurbs(Curve::new_rational(basis, &pts, &weights).unwrap())
+}
+
+#[test]
+fn a_disc_bounded_by_a_closed_nurbs_curve_is_unchecked_where_nothing_proves_it() {
+    // One face on a bilinear patch over [−2, 2]² in z = 0, bounded by one closed edge with no
+    // vertices on a NURBS circle, and no pcurve: no vertex to hold to either, and the edge is
+    // unchecked on the face and as a curve, never passed.
+    let mut r = common::disc_sheet();
+    let basis = || Basis::new(1, vec![-2.0, -2.0, 2.0, 2.0]).unwrap();
+    let net = [
+        [-2.0, -2.0, 0.0],
+        [-2.0, 2.0, 0.0],
+        [2.0, -2.0, 0.0],
+        [2.0, 2.0, 0.0],
+    ];
+    r.surfaces[0] = SurfaceKind::Nurbs(Surface::new(basis(), basis(), &net).unwrap());
+    r.curves[0] = nurbs_circle();
+    let faults: Vec<Fault> = report(&r, BodyKind::Sheet, certified(1))
+        .faults()
+        .iter()
+        .filter(|f| f.kind.group() == Group::Geometric)
+        .copied()
+        .collect();
+    for want in [
+        Fault::at(FaultKind::Unchecked, Entity::Surface(ix(0))).with(Entity::Edge(ix(0))),
+        Fault::at(FaultKind::Unchecked, Entity::Curve(ix(0))).with(Entity::Edge(ix(0))),
+    ] {
+        assert!(faults.contains(&want), "{faults:?}");
+    }
+}
+
+#[test]
+fn a_seam_on_a_face_no_closed_form_covers_is_unchecked_once() {
+    // The cone's side on a NURBS patch instead, its seam used twice by the face and no fin with
+    // a pcurve: the seam is unchecked on the face once, not once per fin.
+    let mut r = common::cone();
+    let basis = || Basis::new(1, vec![0.0, 0.0, 12.0, 12.0]).unwrap();
+    let net = [
+        [0.0, 0.0, 0.0],
+        [0.0, 12.0, 0.0],
+        [12.0, 0.0, 0.0],
+        [12.0, 12.0, 0.0],
+    ];
+    r.surfaces[1] = SurfaceKind::Nurbs(Surface::new(basis(), basis(), &net).unwrap());
+    let seam = Fault::at(FaultKind::Unchecked, Entity::Surface(ix(1))).with(Entity::Edge(ix(1)));
+    let faults = at(&r, 1);
+    assert_eq!(
+        faults.iter().filter(|&&f| f == seam).count(),
+        1,
+        "{faults:?}"
+    );
+}
+
+#[test]
+fn a_seam_is_reported_at_its_first_fin_on_the_face() {
+    // The same side with its ring starting on the seam, so its two fins stand either side of the
+    // rim's: the seam is reported once, at its first fin, so before the rim, and the fault list
+    // keeps the order the fins come in.
+    use geom_topo::{RegionKind, Sense};
+    let mut r = Rows::empty();
+    let solid = r.region(RegionKind::Solid);
+    let (base, apex) = (r.vertex([6, 0, 0]), r.vertex([0, 0, 12]));
+    let rim = r.edge(Some((base, base)));
+    let seam = r.edge(Some((apex, base)));
+    let s = r.shell(solid);
+    r.face(s, &[&[(rim, Sense::Forward)]]);
+    r.face(
+        s,
+        &[&[
+            (seam, Sense::Forward),
+            (rim, Sense::Reversed),
+            (seam, Sense::Reversed),
+        ]],
+    );
+    r.curves[rim as usize] = common::parallel(0.0, 6.0);
+    r.surfaces[0] = common::level(0.0);
+    let basis = || Basis::new(1, vec![0.0, 0.0, 12.0, 12.0]).unwrap();
+    let net = [
+        [0.0, 0.0, 0.0],
+        [0.0, 12.0, 0.0],
+        [12.0, 0.0, 0.0],
+        [12.0, 12.0, 0.0],
+    ];
+    r.surfaces[1] = SurfaceKind::Nurbs(Surface::new(basis(), basis(), &net).unwrap());
+    let unchecked = |edge: u32| {
+        Fault::at(FaultKind::Unchecked, Entity::Surface(ix(1))).with(Entity::Edge(ix(edge)))
+    };
+    let faults = at(&r, 1);
+    let place = |want: Fault| {
+        let found = faults.iter().filter(|&&f| f == want).count();
+        assert_eq!(found, 1, "{want:?} in {faults:?}");
+        faults.iter().position(|&f| f == want).unwrap()
+    };
+    assert!(place(unchecked(seam)) < place(unchecked(rim)), "{faults:?}");
 }

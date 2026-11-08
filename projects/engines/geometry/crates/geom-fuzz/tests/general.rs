@@ -78,6 +78,32 @@ fn general_fuzz() {
         .for_each(|data: &[u8]| holds(harness(data)));
 }
 
+/// libFuzzer's find on the pull request of the SSI corpus (`4a 03 fd 0b`): a cone with its apex on
+/// its domain's edge against a plane patch. The cone and the plane's equation cross at (u, v) =
+/// (0.427, 3.667), which stands at 10.7 on the plane patch's second direction, past the patch's 9,
+/// so subdivision rightly leaves nothing for it. The law said every crossing of the equation lay in
+/// a settled or flagged pair, counting a plane patch's whole plane; it now counts only the patch.
+#[test]
+fn a_crossing_of_a_planes_equation_past_the_patch_is_not_a_crossing() {
+    holds(harness(&[0x4a, 0x03, 0xfd, 0x0b]));
+}
+
+/// The same law broken by `0a 33 23 32` on the line that came from the fuzzer's CI: a crossing at
+/// (0.427, 3.167) of a plane patch's equation, again past the patch, and again not a crossing.
+#[test]
+fn a_second_crossing_past_a_plane_patch_is_not_a_crossing() {
+    holds(harness(&[0x0a, 0x33, 0x23, 0x32]));
+}
+
+/// A third input past a plane patch, `0a 03 01 0a`, found by libFuzzer on the G178 line: a cone
+/// with its apex on its domain's edge, slope 2.5, against a plane patch through (0.5, -2, -2). The
+/// cone meets the plane's equation only for v above 3.2, where the meeting stands past 10.4 on the
+/// patch's second direction, beyond its 9, so subdivision rightly returns nothing.
+#[test]
+fn a_third_crossing_past_a_plane_patch_is_not_a_crossing() {
+    holds(harness(&[0x0a, 0x03, 0x01, 0x0a]));
+}
+
 #[test]
 fn general_seeded() -> Result<(), seeded::Failure> {
     seeded::run(
