@@ -15,6 +15,7 @@ use geom_num::plane::{Plane, Tpi};
 use geom_poly::convex::{ConvexError, Piece};
 use geom_poly::cut::{Clipped, clip, crosses, local_cuts};
 use geom_run::{Budget, WorkMeter};
+use geom_test::seed::Seed;
 use proptest::prelude::*;
 
 fn meter() -> WorkMeter<'static> {
@@ -336,29 +337,67 @@ fn a_small_budget_stops_the_cuts() {
     ));
 }
 
-fn any_rect() -> impl Strategy<Value = Piece> {
-    (0usize..3, -6i64..=6, -8i64..8, 1i64..8, -8i64..8, 1i64..8)
-        .prop_map(|(axis, at, u, du, v, dv)| rect(axis, at, (u, u + du), (v, v + dv)))
+fn any_rect() -> impl Strategy<Value = Piece> + Clone {
+    (0i64..3, -6i64..=6, -8i64..8, 1i64..8, -8i64..8, 1i64..8)
+        .prop_map(|(axis, at, u, du, v, dv)| rect(size(axis), at, (u, u + du), (v, v + dv)))
 }
 
-proptest! {
-    #![proptest_config(ProptestConfig::with_cases(200))]
-
-    #[test]
-    fn after_local_cuts_no_piece_crosses_another_and_every_area_stays(
-        list in prop::collection::vec(any_rect(), 1..6)
-    ) {
-        let cut = local_cuts(&list, &mut meter()).unwrap();
-        for (polygon, pieces) in list.iter().zip(&cut) {
-            let total: i128 = pieces.iter().map(doubled_area).sum();
-            prop_assert_eq!(total, doubled_area(polygon));
-            prop_assert!(pieces.iter().all(|p| doubled_area(p) > 0));
-        }
-        let all: Vec<&Piece> = cut.iter().flatten().collect();
-        for (i, a) in all.iter().enumerate() {
-            for b in &all[i + 1..] {
-                prop_assert!(!crosses(a, b).unwrap());
+#[test]
+fn after_local_cuts_no_piece_crosses_another_and_every_area_stays() {
+    let cases = some::<_, 5>(any_rect(), 1);
+    seeded(
+        "geom-poly cut: every set of rectangles",
+        0x6144_0002,
+        200,
+        &cases,
+        |list| {
+            let cut = local_cuts(&list, &mut meter()).unwrap();
+            for (polygon, pieces) in list.iter().zip(&cut) {
+                let total: i128 = pieces.iter().map(doubled_area).sum();
+                prop_assert_eq!(total, doubled_area(polygon));
+                prop_assert!(pieces.iter().all(|p| doubled_area(p) > 0));
             }
-        }
-    }
+            let all: Vec<&Piece> = cut.iter().flatten().collect();
+            for (i, a) in all.iter().enumerate() {
+                for b in &all[i + 1..] {
+                    prop_assert!(!crosses(a, b).unwrap());
+                }
+            }
+            Ok(())
+        },
+    );
+}
+
+/// Runs `test` on `cases` cases of `strategy`, drawn from `SPAREKIT_SEED` if it is set and from
+/// `default` otherwise; the seed is printed first, and a failure's report names the seed that
+/// replays it.
+fn seeded<S>(
+    label: &str,
+    default: u64,
+    cases: u32,
+    strategy: &S,
+    test: impl Fn(S::Value) -> Result<(), TestCaseError>,
+) where
+    S: Strategy,
+    S::Value: core::fmt::Debug,
+{
+    geom_test::prop::run(label, Seed(default), cases, strategy, test).unwrap();
+}
+
+/// `least` to `N` values of `item`. The count is an `i64` and the values a fixed array, so every
+/// target draws the same cases: proptest samples a `usize` range, a collection's size among them,
+/// as a `u64` on 64-bit targets and as a `u32` on wasm32 (`geom_test::prop`'s header).
+fn some<S, const N: usize>(item: S, least: i64) -> impl Strategy<Value = Vec<S::Value>> + Clone
+where
+    S: Strategy + Clone,
+    S::Value: Clone,
+{
+    let most = i64::try_from(N).unwrap();
+    (least..=most, proptest::array::uniform::<S, N>(item))
+        .prop_map(|(count, all)| all[..usize::try_from(count).unwrap()].to_vec())
+}
+
+/// A size drawn as an `i64`, for the same reason.
+fn size(v: i64) -> usize {
+    usize::try_from(v).unwrap()
 }

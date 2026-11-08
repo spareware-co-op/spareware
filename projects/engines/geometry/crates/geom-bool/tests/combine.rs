@@ -28,6 +28,7 @@ use geom_poly::convex::Piece;
 use geom_poly::merge::{Merge, Outward, Rules};
 use geom_poly::winding::Winding;
 use geom_run::{Budget, Exec, WorkMeter};
+use geom_test::seed::Seed;
 use geom_topo::query::volume;
 use geom_topo::{Body, BodyKind, Builder, FlatSurface, Sense, SurfaceKind};
 use proptest::prelude::*;
@@ -942,78 +943,156 @@ fn a_thousand_operands_unite_in_one_arrangement() {
     assert_eq!(sixfold(&out.result.body), 6 * 8 * 1000);
 }
 
-proptest! {
-    #![proptest_config(ProptestConfig::with_cases(32))]
+/// A box's low corner and size.
+type Cube = ([i64; 3], [u64; 3]);
 
-    #[test]
-    fn many_at_once_is_one_after_another_in_any_order(
-        boxes in prop::collection::vec(
+#[test]
+fn many_at_once_is_one_after_another_in_any_order() {
+    let cases = (
+        some::<_, 5>(
             ([-6i64..6, -6i64..6, -6i64..6], [1u64..6, 1u64..6, 1u64..6]),
-            2..6,
+            2,
         ),
-        turn in 0usize..6,
-    ) {
-        let bodies: Vec<Body> = boxes.iter().map(|(low, size)| cuboid(*low, *size)).collect();
-        let operands: Vec<Operand<'_>> = bodies
-            .iter()
-            .enumerate()
-            .map(|(i, b)| solid(i as u8, b))
-            .collect();
-        let mut shuffled = operands.clone();
-        let spin = turn % shuffled.len();
-        shuffled.rotate_left(spin);
-        let whole = unite(&ctx(), &SERIAL, &shuffled).unwrap().result.body;
-        prop_assert_eq!(&whole, &unite(&ctx(), &SERIAL, &operands).unwrap().result.body);
-        let mut held = bodies[0].clone();
-        for (i, body) in bodies.iter().enumerate().skip(1) {
-            let pair = [solid(0, &held), solid(i as u8, body)];
-            held = unite(&ctx(), &SERIAL, &pair).unwrap().result.body;
-        }
-        prop_assert_eq!(shape(&whole), shape(&held));
-        let cut = subtract(&ctx(), &SERIAL, key(0), &shuffled).unwrap().result.body;
-        let mut left = bodies[0].clone();
-        for (i, body) in bodies.iter().enumerate().skip(1) {
-            let pair = [solid(0, &left), solid(i as u8, body)];
-            left = subtract(&ctx(), &SERIAL, key(0), &pair).unwrap().result.body;
-        }
-        prop_assert_eq!(shape(&cut), shape(&left));
-    }
+        0i64..6,
+    );
+    seeded(
+        "geom-bool combine: many at once",
+        0x6144_0301,
+        32,
+        &cases,
+        |(boxes, turn)| at_once_is_one_after_another(&boxes, size(turn)),
+    );
 }
 
-proptest! {
-    #![proptest_config(ProptestConfig::with_cases(48))]
+/// The cases proptest's failure file kept for this file before the property tests were seeded.
+#[test]
+fn the_boxes_the_failure_file_kept_unite_as_they_should() {
+    at_once_is_one_after_another(&[([-1, -1, 1], [1, 1, 1]), ([-1, -1, 0], [1, 1, 2])], 0).unwrap();
+    keep_their_volumes(&[([-5, 1, -2], [1, 4, 1]), ([-5, 0, -1], [1, 2, 1])]).unwrap();
+}
 
-    #[test]
-    fn any_boxes_keep_their_volumes(
-        boxes in prop::collection::vec(
-            ([-6i64..6, -6i64..6, -6i64..6], [1u64..6, 1u64..6, 1u64..6]),
-            2..4,
-        )
-    ) {
-        let bodies: Vec<Body> = boxes.iter().map(|(low, size)| cuboid(*low, *size)).collect();
-        let operands: Vec<Operand<'_>> = bodies
-            .iter()
-            .enumerate()
-            .map(|(i, b)| solid(i as u8, b))
-            .collect();
-        let inside = |x: i64, y: i64, z: i64, k: &([i64; 3], [u64; 3])| {
-            let (l, s) = k;
-            x >= l[0] && x < l[0] + s[0] as i64
-                && y >= l[1] && y < l[1] + s[1] as i64
-                && z >= l[2] && z < l[2] + s[2] as i64
-        };
-        let mut count = 0i128;
-        for x in -7..12 {
-            for y in -7..12 {
-                for z in -7..12 {
-                    count += i128::from(boxes.iter().any(|k| inside(x, y, z, k)));
-                }
+/// United or less the first, all at once in `turn`'s order, is the same as one after another.
+fn at_once_is_one_after_another(boxes: &[Cube], turn: usize) -> Result<(), TestCaseError> {
+    let bodies: Vec<Body> = boxes
+        .iter()
+        .map(|(low, size)| cuboid(*low, *size))
+        .collect();
+    let operands: Vec<Operand<'_>> = bodies
+        .iter()
+        .enumerate()
+        .map(|(i, b)| solid(i as u8, b))
+        .collect();
+    let mut shuffled = operands.clone();
+    let spin = turn % shuffled.len();
+    shuffled.rotate_left(spin);
+    let whole = unite(&ctx(), &SERIAL, &shuffled).unwrap().result.body;
+    prop_assert_eq!(
+        &whole,
+        &unite(&ctx(), &SERIAL, &operands).unwrap().result.body
+    );
+    let mut held = bodies[0].clone();
+    for (i, body) in bodies.iter().enumerate().skip(1) {
+        let pair = [solid(0, &held), solid(i as u8, body)];
+        held = unite(&ctx(), &SERIAL, &pair).unwrap().result.body;
+    }
+    prop_assert_eq!(shape(&whole), shape(&held));
+    let cut = subtract(&ctx(), &SERIAL, key(0), &shuffled)
+        .unwrap()
+        .result
+        .body;
+    let mut left = bodies[0].clone();
+    for (i, body) in bodies.iter().enumerate().skip(1) {
+        let pair = [solid(0, &left), solid(i as u8, body)];
+        left = subtract(&ctx(), &SERIAL, key(0), &pair)
+            .unwrap()
+            .result
+            .body;
+    }
+    prop_assert_eq!(shape(&cut), shape(&left));
+    Ok(())
+}
+
+#[test]
+fn any_boxes_keep_their_volumes() {
+    let cases = some::<_, 3>(
+        ([-6i64..6, -6i64..6, -6i64..6], [1u64..6, 1u64..6, 1u64..6]),
+        2,
+    );
+    seeded(
+        "geom-bool combine: any boxes",
+        0x6144_0302,
+        48,
+        &cases,
+        |boxes| keep_their_volumes(&boxes),
+    );
+}
+
+/// A union of `boxes` holds exactly the unit cubes some box holds.
+fn keep_their_volumes(boxes: &[Cube]) -> Result<(), TestCaseError> {
+    let bodies: Vec<Body> = boxes
+        .iter()
+        .map(|(low, size)| cuboid(*low, *size))
+        .collect();
+    let operands: Vec<Operand<'_>> = bodies
+        .iter()
+        .enumerate()
+        .map(|(i, b)| solid(i as u8, b))
+        .collect();
+    let inside = |x: i64, y: i64, z: i64, k: &([i64; 3], [u64; 3])| {
+        let (l, s) = k;
+        x >= l[0]
+            && x < l[0] + s[0] as i64
+            && y >= l[1]
+            && y < l[1] + s[1] as i64
+            && z >= l[2]
+            && z < l[2] + s[2] as i64
+    };
+    let mut count = 0i128;
+    for x in -7..12 {
+        for y in -7..12 {
+            for z in -7..12 {
+                count += i128::from(boxes.iter().any(|k| inside(x, y, z, k)));
             }
         }
-        let out = unite(&ctx(), &SERIAL, &operands).unwrap();
-        if out.result.body.kind() == BodyKind::Solid {
-            prop_assert_eq!(sixfold(&out.result.body), 6 * count);
-            checked(&out.result.body);
-        }
     }
+    let out = unite(&ctx(), &SERIAL, &operands).unwrap();
+    if out.result.body.kind() == BodyKind::Solid {
+        prop_assert_eq!(sixfold(&out.result.body), 6 * count);
+        checked(&out.result.body);
+    }
+    Ok(())
+}
+
+/// Runs `test` on `cases` cases of `strategy`, drawn from `SPAREKIT_SEED` if it is set and from
+/// `default` otherwise; the seed is printed first, and a failure's report names the seed that
+/// replays it.
+fn seeded<S>(
+    label: &str,
+    default: u64,
+    cases: u32,
+    strategy: &S,
+    test: impl Fn(S::Value) -> Result<(), TestCaseError>,
+) where
+    S: Strategy,
+    S::Value: core::fmt::Debug,
+{
+    geom_test::prop::run(label, Seed(default), cases, strategy, test).unwrap();
+}
+
+/// `least` to `N` values of `item`. The count is an `i64` and the values a fixed array, so every
+/// target draws the same cases: proptest samples a `usize` range, a collection's size among them,
+/// as a `u64` on 64-bit targets and as a `u32` on wasm32 (`geom_test::prop`'s header).
+fn some<S, const N: usize>(item: S, least: i64) -> impl Strategy<Value = Vec<S::Value>> + Clone
+where
+    S: Strategy + Clone,
+    S::Value: Clone,
+{
+    let most = i64::try_from(N).unwrap();
+    (least..=most, proptest::array::uniform::<S, N>(item))
+        .prop_map(|(count, all)| all[..usize::try_from(count).unwrap()].to_vec())
+}
+
+/// A size drawn as an `i64`, for the same reason.
+fn size(v: i64) -> usize {
+    usize::try_from(v).unwrap()
 }
