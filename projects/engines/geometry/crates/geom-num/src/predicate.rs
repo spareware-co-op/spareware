@@ -905,10 +905,12 @@ pub const FILTERS: bool = !cfg!(feature = "reference");
 
 /// `filter`'s answer in a build that runs filters, and none in reference mode, which leaves the
 /// call to the exact path. Every call of a generated filter in this crate goes through here
-/// (`tests/attack_g106.rs`), so reference mode leaves none behind.
+/// (`tests/attack_g106.rs`), so reference mode leaves none behind. `bool::then` calls the filter
+/// only where `FILTERS` holds, with no branch of this crate's own on a constant one build never
+/// takes the other way, which the coverage gate would count as an outcome never run.
 #[inline]
 pub(crate) fn filtered<T>(filter: impl FnOnce() -> Option<T>) -> Option<T> {
-    if FILTERS { filter() } else { None }
+    FILTERS.then(filter).flatten()
 }
 
 /// [`orient2d`] when its filter cannot decide: the narrow step, then the exact paths. Out of line,

@@ -6872,7 +6872,7 @@
     },
     {
       "file": "projects/engines/geometry/crates/geom-num/src/predicate.rs",
-      "line_text": "match generated::orient2d::filter(a, b, c) {",
+      "line_text": "match filtered(|| generated::orient2d::filter(a, b, c)) {",
       "occurrences": 1,
       "piece": "G41",
       "reason": "magnitude_bits runs only at compile time, in constants, and the filtered orient2d path is off while ORIENT2D_FILTER_FIRST is false (G42's measurement keeps it off), so no test runs these lines. G41 proves or removes them."
