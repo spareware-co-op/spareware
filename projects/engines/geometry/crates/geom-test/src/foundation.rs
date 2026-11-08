@@ -20,18 +20,23 @@
 //!   build.
 //!
 //! A foundation module of a crate that is not wholly in the set is `src/<module>.rs` together with
-//! everything under `src/<module>/`. Those modules do not exist yet (both crates are scaffolds), so
-//! the coverage gate refuses a crate that has code but no file of its foundation module
-//! ([`missing_foundation_module`]): if the module is built under another path, the gate fails until
-//! [`FOUNDATION_MODULES`] names it, rather than silently treating it as ordinary code.
+//! everything under `src/<module>/`. A crate can gain other code before its foundation module is
+//! built (`geom-2d`'s COGO before its arrangement), so each entry of [`FOUNDATION_MODULES`] also
+//! classifies the crate's modules that the chapters put outside the foundation module. The coverage
+//! gate refuses a crate that has code but no file of its foundation module
+//! ([`missing_foundation_module`]) unless every module it has is classified outside and its root
+//! file defines no function: if the module is built under another path, or a new module arrives
+//! that no list classifies, the gate fails until [`FOUNDATION_MODULES`] names it, rather than
+//! silently treating it as ordinary code.
 //!
 //! Guarantees:
 //!
 //! - **One classification for both gates.** The mutation gate and the coverage gate place every
 //!   path with [`place`], so they cannot disagree about which code is in the foundation set.
 //! - **Nothing leaves the foundation bar silently.** A crate of [`FOUNDATION_MODULES`] with code
-//!   but no file of its module is reported ([`missing_foundation_module`]), and the bars are the
-//!   integers of 28.8, compared exactly by the gates.
+//!   but no file of its module is reported ([`missing_foundation_module`]), unless every module it
+//!   has is classified outside the foundation module by name; and the bars are the integers of
+//!   28.8, compared exactly by the gates.
 //! - **Development crates are never judged as kernel code**, and a path outside the kernel's
 //!   crates folder is [`Place::Outside`].
 //!
@@ -49,9 +54,39 @@ use crate::deps::{DEVELOPMENT_CRATES, KERNEL_CRATES_DIR};
 /// The crates wholly in the foundation set.
 pub const FOUNDATION_CRATES: [&str; 4] = ["geom-num", "geom-poly", "geom-check", "geom-name"];
 
-/// The foundation modules of crates not wholly in the set: (crate, module under `src/`).
-pub const FOUNDATION_MODULES: [(&str, &str); 2] =
-    [("geom-topo", "builder"), ("geom-2d", "arrangement")];
+/// A crate only part of which is in the foundation set: its foundation module, and the modules it
+/// may hold before that module exists, each classified outside the foundation set by the chapter
+/// that gives it its job.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct FoundationModule {
+    /// The crate (its folder's name).
+    pub krate: &'static str,
+    /// The foundation module: `src/<module>.rs` and everything under `src/<module>/`.
+    pub module: &'static str,
+    /// Modules under `src/`, by the same naming, that hold work outside the foundation module.
+    pub outside: &'static [&'static str],
+}
+
+/// The foundation modules of crates not wholly in the set (28.8: "the builder in `geom-topo` and
+/// the arrangement module of `geom-2d`"), each with the modules classified outside it.
+///
+/// - `geom-topo`: none yet.
+/// - `geom-2d`: the arrangement is built as `arrange` (piece G196 and those after it). Chapter 27's crate
+///   table gives the crate survey linework and COGO as jobs of their own beside the 2D arrangement,
+///   so `cogo` (G359, angle units, bearings and core COGO) and `survey` (G361, survey points and
+///   3D linework) are outside it.
+pub const FOUNDATION_MODULES: [FoundationModule; 2] = [
+    FoundationModule {
+        krate: "geom-topo",
+        module: "builder",
+        outside: &[],
+    },
+    FoundationModule {
+        krate: "geom-2d",
+        module: "arrange",
+        outside: &["cogo", "survey"],
+    },
+];
 
 /// Percent of lines the foundation set's own tests must run.
 pub const FOUNDATION_LINES: u64 = 100;
@@ -140,37 +175,57 @@ pub fn place(path: &str) -> Place {
     Place::Kernel { krate, set }
 }
 
+/// The module of `src` (the components after `src/`): `src/<module>.rs` or the first folder of
+/// `src/<module>/...`. `None` for an empty path.
+fn module_of<'a>(src: &[&'a str]) -> Option<&'a str> {
+    match src {
+        [file] => file.strip_suffix(".rs"),
+        [dir, _, ..] => Some(dir),
+        [] => None,
+    }
+}
+
 /// Whether `src` (the components after `src/`) is in `krate`'s foundation module.
 fn in_foundation_module(krate: &str, src: &[&str]) -> bool {
-    FOUNDATION_MODULES
-        .iter()
-        .filter(|(c, _)| *c == krate)
-        .any(|(_, module)| match src {
-            [file] => file.strip_suffix(".rs") == Some(*module),
-            [dir, _, ..] => dir == module,
-            [] => false,
-        })
+    foundation_entry(krate).is_some_and(|f| module_of(src) == Some(f.module))
+}
+
+/// The entry of [`FOUNDATION_MODULES`] for `krate`, if it has one.
+fn foundation_entry(krate: &str) -> Option<&'static FoundationModule> {
+    FOUNDATION_MODULES.iter().find(|f| f.krate == krate)
 }
 
 /// The foundation module `krate` must have, if any.
 #[must_use]
 pub fn foundation_module(krate: &str) -> Option<&'static str> {
-    FOUNDATION_MODULES
-        .iter()
-        .find(|(c, _)| *c == krate)
-        .map(|(_, m)| *m)
+    foundation_entry(krate).map(|f| f.module)
 }
 
-/// For a crate with a foundation module: the module's name if the crate has code (`has_code`) but
-/// none of `files` (paths relative to the repository root) is in that module.
+/// A crate with a foundation module that has code but no file of that module, and code that is not
+/// classified outside it.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct MissingModule {
+    /// The foundation module that has no file.
+    pub module: &'static str,
+    /// What is neither in it nor classified outside it, in path order: each unclassified module
+    /// (`src/<name>.rs` or `src/<name>/`), and `src/lib.rs` or `src/main.rs` when it defines
+    /// functions itself.
+    pub unclassified: Vec<String>,
+}
+
+/// For a crate with a foundation module and none of its `files` in that module: what is missing,
+/// unless every piece of the crate's code is classified outside the module. `files` holds paths
+/// relative to the repository root, each with whether it defines functions.
+///
+/// The crate passes without its foundation module only while it has no code at all, or every
+/// module it has is in the entry's `outside` list and its root file (`src/lib.rs` or `src/main.rs`)
+/// defines no function. A module no list names, or code in the root file, keeps the foundation
+/// module missing: the module may be the foundation module built under another name, so it is
+/// never treated as ordinary code until someone classifies it.
 #[must_use]
-pub fn missing_foundation_module(
-    krate: &str,
-    has_code: bool,
-    files: &[String],
-) -> Option<&'static str> {
-    let module = foundation_module(krate)?;
-    let found = files.iter().any(|f| {
+pub fn missing_foundation_module(krate: &str, files: &[(String, bool)]) -> Option<MissingModule> {
+    let entry = foundation_entry(krate)?;
+    let in_module = files.iter().any(|(f, _)| {
         matches!(
             place(f),
             Place::Kernel {
@@ -179,7 +234,42 @@ pub fn missing_foundation_module(
             }
         )
     });
-    (has_code && !found).then_some(module)
+    let has_code = files.iter().any(|(_, code)| *code);
+    if in_module || !has_code {
+        return None;
+    }
+    let mut unclassified = Vec::new();
+    for (file, code) in files {
+        let parts = components(file);
+        let Some(src) = parts
+            .strip_prefix(KERNEL_CRATES_DIR.as_slice())
+            .and_then(|rest| rest.strip_prefix([krate].as_slice()))
+            .and_then(|rest| rest.strip_prefix(["src"].as_slice()))
+        else {
+            continue;
+        };
+        let Some(module) = module_of(src) else {
+            continue;
+        };
+        let root = src.len() == 1 && (module == "lib" || module == "main");
+        let name = if root || src.len() == 1 {
+            format!("src/{}", src.join("/"))
+        } else {
+            format!("src/{module}/")
+        };
+        let classified = if root {
+            !code
+        } else {
+            entry.outside.contains(&module)
+        };
+        if !classified && !unclassified.contains(&name) {
+            unclassified.push(name);
+        }
+    }
+    (!unclassified.is_empty()).then_some(MissingModule {
+        module: entry.module,
+        unclassified,
+    })
 }
 
 /// The kernel crates in the kernel's folder under `repo`, in name order: every folder there with a
@@ -260,8 +350,20 @@ mod tests {
             kernel("geom-topo", Set::Elsewhere)
         );
         assert_eq!(
-            place(&format!("{K}/geom-2d/src/arrangement/mod.rs")),
+            place(&format!("{K}/geom-2d/src/arrange/mod.rs")),
             kernel("geom-2d", Set::Foundation)
+        );
+        assert_eq!(
+            place(&format!("{K}/geom-2d/src/arrange.rs")),
+            kernel("geom-2d", Set::Foundation)
+        );
+        assert_eq!(
+            place(&format!("{K}/geom-2d/src/arrangement.rs")),
+            kernel("geom-2d", Set::Elsewhere)
+        );
+        assert_eq!(
+            place(&format!("{K}/geom-2d/src/cogo.rs")),
+            kernel("geom-2d", Set::Elsewhere)
         );
         assert_eq!(
             place(&format!("{K}/geom-bool/src/lib.rs")),
@@ -290,16 +392,121 @@ mod tests {
         assert_eq!(place("Cargo.toml"), Place::Outside);
     }
 
+    /// `(path, defines functions)` for each of `files` under `krate`'s folder.
+    fn files(krate: &str, files: &[(&str, bool)]) -> Vec<(String, bool)> {
+        files
+            .iter()
+            .map(|(f, code)| (format!("{K}/{krate}/{f}"), *code))
+            .collect()
+    }
+
+    fn missing(module: &'static str, unclassified: &[&str]) -> MissingModule {
+        MissingModule {
+            module,
+            unclassified: unclassified.iter().map(|u| (*u).to_owned()).collect(),
+        }
+    }
+
     #[test]
     fn a_crate_with_code_but_no_foundation_module_is_reported() {
-        let lib = vec![format!("{K}/geom-topo/src/lib.rs")];
+        let lib = files("geom-topo", &[("src/lib.rs", true)]);
         assert_eq!(
-            missing_foundation_module("geom-topo", true, &lib),
-            Some("builder")
+            missing_foundation_module("geom-topo", &lib),
+            Some(missing("builder", &["src/lib.rs"]))
         );
-        assert_eq!(missing_foundation_module("geom-topo", false, &lib), None);
-        let with = vec![lib[0].clone(), format!("{K}/geom-topo/src/builder.rs")];
-        assert_eq!(missing_foundation_module("geom-topo", true, &with), None);
-        assert_eq!(missing_foundation_module("geom-bool", true, &lib), None);
+        let scaffold = files("geom-topo", &[("src/lib.rs", false)]);
+        assert_eq!(missing_foundation_module("geom-topo", &scaffold), None);
+        let with = files(
+            "geom-topo",
+            &[("src/lib.rs", true), ("src/builder.rs", true)],
+        );
+        assert_eq!(missing_foundation_module("geom-topo", &with), None);
+        let inside = files(
+            "geom-topo",
+            &[("src/lib.rs", false), ("src/builder/euler.rs", true)],
+        );
+        assert_eq!(missing_foundation_module("geom-topo", &inside), None);
+        assert_eq!(missing_foundation_module("geom-bool", &lib), None);
+    }
+
+    /// The classified modules carry code without the foundation module, and nothing else does:
+    /// a module no list names, code in the root file, or the module under its old name each keep
+    /// it missing, and a module classified for one crate is not classified for another.
+    #[test]
+    fn only_modules_classified_outside_pass_without_the_foundation_module() {
+        let classified = files(
+            "geom-2d",
+            &[
+                ("src/lib.rs", false),
+                ("src/cogo.rs", true),
+                ("src/survey.rs", true),
+                ("src/survey/linework.rs", true),
+            ],
+        );
+        assert_eq!(missing_foundation_module("geom-2d", &classified), None);
+
+        // A new module no list classifies: the foundation module is still missing, and the new
+        // module is named, whether or not it defines functions itself.
+        for code in [true, false] {
+            let mut new = classified.clone();
+            new.push((format!("{K}/geom-2d/src/regions.rs"), code));
+            assert_eq!(
+                missing_foundation_module("geom-2d", &new),
+                Some(missing("arrange", &["src/regions.rs"]))
+            );
+        }
+        let mut folder = classified.clone();
+        folder.push((format!("{K}/geom-2d/src/hatch/fill.rs"), true));
+        folder.push((format!("{K}/geom-2d/src/hatch/mod.rs"), true));
+        assert_eq!(
+            missing_foundation_module("geom-2d", &folder),
+            Some(missing("arrange", &["src/hatch/"]))
+        );
+
+        // The arrangement under the name the list used to give it is not the foundation module,
+        // so it is reported, not passed as ordinary code.
+        let mut old_name = classified.clone();
+        old_name.push((format!("{K}/geom-2d/src/arrangement.rs"), true));
+        assert_eq!(
+            missing_foundation_module("geom-2d", &old_name),
+            Some(missing("arrange", &["src/arrangement.rs"]))
+        );
+
+        // Code in the root file is not classified.
+        let mut root = classified.clone();
+        root[0].1 = true;
+        assert_eq!(
+            missing_foundation_module("geom-2d", &root),
+            Some(missing("arrange", &["src/lib.rs"]))
+        );
+
+        // With the foundation module present, the gate holds it to the foundation bar instead.
+        let mut built = old_name.clone();
+        built.push((format!("{K}/geom-2d/src/arrange.rs"), true));
+        assert_eq!(missing_foundation_module("geom-2d", &built), None);
+
+        // geom-2d's classification is geom-2d's alone.
+        let topo = files("geom-topo", &[("src/lib.rs", false), ("src/cogo.rs", true)]);
+        assert_eq!(
+            missing_foundation_module("geom-topo", &topo),
+            Some(missing("builder", &["src/cogo.rs"]))
+        );
+    }
+
+    /// Every entry names a module of its own, outside no list of its own, and every classified
+    /// module once.
+    #[test]
+    fn every_entry_is_consistent() {
+        for (i, f) in FOUNDATION_MODULES.iter().enumerate() {
+            assert!(!FOUNDATION_CRATES.contains(&f.krate), "{}", f.krate);
+            assert!(!f.outside.contains(&f.module), "{}", f.krate);
+            assert!(!f.outside.contains(&"lib") && !f.outside.contains(&"main"));
+            for (j, m) in f.outside.iter().enumerate() {
+                assert!(!f.outside[..j].contains(m), "{}: {m} twice", f.krate);
+            }
+            for g in &FOUNDATION_MODULES[..i] {
+                assert_ne!(g.krate, f.krate);
+            }
+        }
     }
 }
