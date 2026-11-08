@@ -381,14 +381,6 @@ fn half(t: (Sign, Sign)) -> u8 {
     u8::from(!(ty == Sign::Negative || (ty == Sign::Zero && tx == Sign::Negative)))
 }
 
-/// Whether `w` leaves `p` exactly in the negative x direction and does not bend left: before the
-/// wedge that points west and a hair south, which is where a component's outside lies at its
-/// lowest-leftmost vertex when the sweep line is tilted.
-pub(super) fn west_not_left(p: &At, w: &Way<'_>) -> Result<bool, ArrangeError> {
-    let bends_left = matches!(w, Way::Arc { ccw: true, .. });
-    Ok(!bends_left && tangent(p, w)? == (Sign::Negative, Sign::Zero))
-}
-
 /// An integer as a certified interval.
 fn interval(v: i128) -> Result<Interval, NumError> {
     enclose(&I512::from_i128(v))
