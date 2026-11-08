@@ -381,7 +381,19 @@ fn factor(
             .ok_or(SketchError::Internal)?
             .to_vec();
         *v.first_mut().ok_or(SketchError::Internal)? = alpha - beta;
-        let vv = dot(&v, &v);
+        let mut vv = dot(&v, &v);
+        let squared = vv > 1e-250 && vv < 1e250;
+        if !squared {
+            // Its square overflows or loses its low end, as `tail_norm`'s can: scale the vector
+            // by its largest entry, which leaves the reflection as it was.
+            let big = v.iter().fold(0.0f64, |acc, x| larger(acc, x.abs()));
+            if big > 0.0 {
+                for x in &mut v {
+                    *x /= big;
+                }
+                vv = dot(&v, &v);
+            }
+        }
         if vv > 0.0 {
             for j in k..m {
                 let column = a
@@ -419,10 +431,10 @@ fn factor(
         }
         *column.get_mut(k).ok_or(SketchError::Internal)? = beta;
     }
-    // Columns past the number of rows have nothing left to pivot on.
-    for j in steps..m {
-        let n = tail_norm(&a, j, rows.min(steps))?;
-        sizes.push(if n > 0.0 { 0.0 } else { n });
+    // Columns past the number of rows have nothing left to pivot on: no row is left below the
+    // last step, so each pivot is 0.
+    for _ in steps..m {
+        sizes.push(0.0);
         maxima.push(0.0);
     }
     Ok((a, order, sizes, maxima))
@@ -581,11 +593,8 @@ pub fn analyse_columns(
     let mut groups: Vec<DependencyGroup> = Vec::new();
     for k in first_dependent..m {
         let left_out = get(&order, k)?;
-        let z = if k < rows || r > 0 {
-            coefficients(&a, r, k)?
-        } else {
-            Vec::new()
-        };
+        // With no pivot chosen (r = 0) there is nothing to lean on, and the list is empty.
+        let z = coefficients(&a, r, k)?;
         let top = z.iter().fold(0.0f64, |acc, x| larger(acc, x.abs()));
         let mut members: Vec<usize> = Vec::new();
         let mut combined = 0.0f64;
@@ -614,15 +623,14 @@ pub fn analyse_columns(
         }
         constraints.sort_unstable_by_key(|&(o, _)| o);
         let left = get(equations, left_out)?;
+        // Another equation of the same constraint among the pivots before the first dependent
+        // one, which are all independent or near-singular.
         let partly = (0..m).any(|e| {
             e != left_out
                 && equations
                     .get(e)
                     .is_some_and(|q| q.constraint == left.constraint)
-                && pivots
-                    .iter()
-                    .take(first_dependent)
-                    .any(|p| p.equation == e && p.verdict != Verdict::Dependent)
+                && pivots.iter().take(first_dependent).any(|p| p.equation == e)
         });
         groups.push(DependencyGroup {
             left_out,
@@ -1317,4 +1325,40 @@ pub fn free_motions(
         out.push(Motion { moves });
     }
     Ok(out)
+}
+
+#[cfg(test)]
+#[allow(
+    clippy::arithmetic_side_effects,
+    clippy::float_cmp,
+    clippy::indexing_slicing,
+    clippy::unwrap_used,
+    reason = "a test of exact small values; the rules are for kernel code"
+)]
+mod tests {
+    use super::*;
+    use crate::text::parse;
+
+    /// The witness moves each variable up by its own amount, 1 to 61 of 2^-7 of a step, from its
+    /// owner, slot and key, and by nothing else.
+    #[test]
+    fn the_witness_moves_each_variable_up_by_its_own_small_amount() {
+        let sketch = parse(
+            "sketch v1\nplane lattice 0 0 0 1 0 0 0 1 0 q0\nentity 1.0 point 0 0\nentity 1.1 point 3 4\nentity 2.7 point 5 1\n",
+        )
+        .unwrap();
+        let assembly = Assembly::new(&sketch).unwrap();
+        let start = assembly.start().unwrap();
+        let moved = witness_point(&assembly).unwrap();
+        assert_eq!(moved.len(), start.len());
+        let mut amounts = Vec::new();
+        for (v, var) in assembly.variables().iter().enumerate() {
+            let h = var.owner.sequence * 31 + var.owner.key * 17 + u64::from(var.slot) * 7;
+            let amount = f64::from(u32::try_from(h % 61).unwrap() + 1) / 128.0;
+            assert_eq!(moved[v] - start[v], amount, "variable {v}");
+            amounts.push(amount);
+        }
+        amounts.dedup();
+        assert!(amounts.len() > 1, "{amounts:?}");
+    }
 }

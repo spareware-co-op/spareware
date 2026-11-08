@@ -18,7 +18,8 @@
 
 use geom_run::{Budget, WorkMeter};
 use geom_sketch::diagnose::{
-    Class, Equation, Outcome, Verdict, analyse_columns, diagnose, free_motions, solve_checked,
+    Class, Equation, Outcome, RANGE_HALVINGS, RANGE_RESOLUTION, SketchReport, Thresholds, Verdict,
+    analyse_columns, diagnose, free_motions, remedies, solve_checked,
 };
 use geom_sketch::model::{ItemId, Sketch, SketchError};
 use geom_sketch::text::parse;
@@ -480,4 +481,366 @@ fn a_dimension_restates_its_value_and_nothing_else_does() {
         assert_eq!(again.with_stated(1.0).unwrap().stated(), Some(1.0));
     }
     assert!(K::Coincident { a, b }.with_stated(7.5).is_none());
+}
+
+// ---- the numerics, case by case ----
+
+/// The independence threshold `σ_ind`, `2^-12`.
+const IND: f64 = 0.000_244_140_625;
+
+#[test]
+fn the_thresholds_follow_the_block_size_and_the_rounding_bound() {
+    let u = 2f64.powi(-53);
+    // A block of at most one step wants 1/64, held to σ_ind.
+    let t = Thresholds::for_block(0.5, 2, 2, 1.0);
+    assert_eq!(
+        (t.independent, t.dependent, t.limited_by_rounding),
+        (IND, IND, false)
+    );
+    // A block of 1000 steps: 1/(64 · 1000).
+    let t = Thresholds::for_block(1000.0, 2, 2, 1.0);
+    assert_eq!(
+        (t.dependent, t.limited_by_rounding),
+        (1.0 / 64_000.0, false)
+    );
+    // A rounding bound m·n·u·‖A‖ above 1/(64 S) raises σ_dep to it.
+    let t = Thresholds::for_block(1.0e6, 3, 4, 1.0e8);
+    assert_eq!(
+        (t.dependent, t.limited_by_rounding),
+        (12.0 * u * 1.0e8, true)
+    );
+    // A bound exactly equal to what is wanted does not: 2^-53 · 2^47 = 2^-6 = 1/64.
+    let t = Thresholds::for_block(1.0, 1, 1, 2f64.powi(47));
+    assert_eq!((t.dependent, t.limited_by_rounding), (IND, false));
+    // A block of one step whose bound passes 1/64 is limited, though σ_dep stays σ_ind.
+    let t = Thresholds::for_block(0.5, 1, 1, 2f64.powi(50));
+    assert_eq!((t.dependent, t.limited_by_rounding), (IND, true));
+}
+
+#[test]
+fn columns_too_large_or_too_small_to_square_are_measured_by_scaling() {
+    for scale in [1.0e200, 1.0e-200] {
+        let a = analyse_columns(
+            &[vec![scale, 3.0 * scale]],
+            &[eq(1, 0, 0)],
+            &[0.0],
+            2,
+            1000.0,
+            &mut meter(),
+        )
+        .unwrap();
+        let want = 10f64.sqrt() * scale;
+        assert!(
+            (a.pivots[0].size - want).abs() <= want * 1e-15,
+            "{scale:e}: {} against {want:e}",
+            a.pivots[0].size
+        );
+    }
+    // Two columns at right angles, each too large or too small to square: the reflector is scaled
+    // too, so the second keeps all of its length.
+    for scale in [1.0e200, 1.0e-200] {
+        let a = analyse_columns(
+            &[vec![scale, 0.0], vec![0.0, 3.0 * scale]],
+            &[eq(1, 0, 0), eq(2, 0, 1)],
+            &[0.0, 0.0],
+            2,
+            1000.0,
+            &mut meter(),
+        )
+        .unwrap();
+        assert_eq!(a.pivots[0].equation, 1, "{scale:e}");
+        for (k, want) in [(0, 3.0 * scale), (1, scale)] {
+            let got = a.pivots[k].size;
+            assert!((got - want).abs() <= want * 1e-15, "{scale:e}: {got:e}");
+        }
+    }
+}
+
+#[test]
+fn a_column_is_preferred_within_a_factor_of_two_and_by_priority_then_order() {
+    let pick = |columns: &[Vec<f64>], equations: &[Equation]| {
+        let zeros = vec![0.0; columns.len()];
+        analyse_columns(columns, equations, &zeros, 2, 1000.0, &mut meter())
+            .unwrap()
+            .pivots[0]
+            .equation
+    };
+    // A tenth of the largest is not within a factor of 2, whatever its priority.
+    let far = [vec![1.0, 0.0], vec![0.0, 0.1]];
+    assert_eq!(pick(&far, &[eq(1, 5, 0), eq(2, 0, 1)]), 0);
+    // Exactly half is within it, and the lower priority number wins.
+    let half = [vec![1.0, 0.0], vec![0.0, 0.5]];
+    assert_eq!(pick(&half, &[eq(1, 5, 0), eq(2, 0, 1)]), 1);
+    // Equal priority and order: the first stays.
+    let same = [vec![1.0, 0.0], vec![0.0, 1.0]];
+    assert_eq!(pick(&same, &[eq(1, 0, 0), eq(1, 0, 0)]), 0);
+}
+
+#[test]
+fn a_column_nearly_along_the_first_axis_is_reflected_without_cancelling() {
+    // The second pivot is what is left of (1, 1) off (1, 1e-9): 1 - 1e-9 to rounding.
+    let a = analyse_columns(
+        &[vec![1.0, 1.0e-9], vec![1.0, 1.0]],
+        &[eq(1, 0, 0), eq(2, 1, 1)],
+        &[0.0, 0.0],
+        2,
+        1000.0,
+        &mut meter(),
+    )
+    .unwrap();
+    assert_eq!(a.pivots[0].equation, 0);
+    assert!(
+        (a.pivots[1].size - (1.0 - 1.0e-9)).abs() < 1e-15,
+        "{}",
+        a.pivots[1].size
+    );
+}
+
+#[test]
+fn a_cancelled_downdate_is_recomputed() {
+    // Taking (1, 0) out of (1, 1e-9) leaves 1e-9, which the downdate 1·√(1 - 1²) loses entirely.
+    let a = analyse_columns(
+        &[vec![1.0, 0.0], vec![1.0, 1.0e-9]],
+        &[eq(1, 0, 0), eq(2, 1, 1)],
+        &[0.0, 0.0],
+        2,
+        1000.0,
+        &mut meter(),
+    )
+    .unwrap();
+    assert_eq!((a.pivots[0].size, a.pivots[1].size), (1.0, 1.0e-9));
+    assert_eq!(a.pivots[1].verdict, Verdict::Dependent);
+}
+
+#[test]
+fn a_group_leans_by_back_substitution_through_the_diagonal() {
+    // (4, 0) is twice (2, 0): with residuals 1 and 2 the group holds exactly.
+    let a = analyse_columns(
+        &[vec![2.0, 0.0], vec![4.0, 0.0]],
+        &[eq(1, 0, 0), eq(2, 1, 1)],
+        &[1.0, 2.0],
+        2,
+        1000.0,
+        &mut meter(),
+    )
+    .unwrap();
+    assert_eq!(a.groups.len(), 1);
+    let g = &a.groups[0];
+    assert_eq!((g.left_out, g.equations.clone()), (1, vec![0, 1]));
+    assert_eq!((g.class, g.defect), (Class::Redundant, 0.0));
+}
+
+#[test]
+fn an_equation_with_no_gradient_is_a_group_of_its_own() {
+    let a = analyse_columns(
+        &[vec![1.0, 0.0], vec![0.0, 0.0]],
+        &[eq(1, 0, 0), eq(2, 0, 1)],
+        &[0.0, 0.0],
+        2,
+        1000.0,
+        &mut meter(),
+    )
+    .unwrap();
+    assert_eq!(a.groups.len(), 1);
+    assert_eq!(a.groups[0].equations, vec![1]);
+    assert_eq!(a.groups[0].constraints, vec![id(2, 0)]);
+}
+
+#[test]
+fn a_group_is_partly_one_constraint_only_when_another_of_its_equations_was_chosen() {
+    // Constraint 1 has equations 0 and 2; 2 = 0 + 1 is left out while 0 was chosen: partly.
+    let x = |order| Equation {
+        constraint: id(1, 0),
+        priority: 1,
+        order,
+    };
+    let columns = [vec![1.0, 0.0], vec![0.0, 1.0], vec![1.0, 1.0]];
+    let a = analyse_columns(
+        &columns,
+        &[x(0), eq(2, 0, 1), x(0)],
+        &[0.0; 3],
+        2,
+        1000.0,
+        &mut meter(),
+    )
+    .unwrap();
+    assert_eq!(a.groups.len(), 1);
+    assert_eq!(a.groups[0].left_out, 2);
+    assert!(a.groups[0].partly);
+    let report = SketchReport {
+        dof_least: a.dof_least(),
+        dof_most: a.dof_most(),
+        redundant: a.groups.clone(),
+        conflicting: Vec::new(),
+        near_singular: Vec::new(),
+        special: Vec::new(),
+        analysis: a,
+    };
+    assert!(
+        report
+            .text()
+            .contains("redundant: 1.0, 2.0 (only some of one constraint's equations)"),
+        "{}",
+        report.text()
+    );
+    // Both of constraint 1's equations have no gradient: neither was chosen, so neither group is
+    // partly.
+    let a = analyse_columns(
+        &[vec![1.0, 0.0], vec![0.0, 0.0], vec![0.0, 0.0]],
+        &[eq(2, 0, 0), x(1), x(1)],
+        &[0.0; 3],
+        2,
+        1000.0,
+        &mut meter(),
+    )
+    .unwrap();
+    assert_eq!(a.groups.len(), 2);
+    assert!(a.groups.iter().all(|g| !g.partly));
+}
+
+#[test]
+fn a_pivot_just_above_sigma_dep_is_confirmed_dependent_by_its_pair() {
+    // σ_dep = 1/640000; the pivot δ = 1.2 σ_dep, but the pair's least singular value is δ/√2.
+    let dep = 1.0 / 640_000.0;
+    let delta = 1.2 * dep;
+    let a = analyse_columns(
+        &[vec![1.0, 0.0], vec![1.0, delta]],
+        &[eq(1, 0, 0), eq(2, 1, 1)],
+        &[0.0, 0.0],
+        2,
+        1.0e4,
+        &mut meter(),
+    )
+    .unwrap();
+    assert_eq!(a.thresholds.dependent, dep);
+    let p = a.pivots[1];
+    assert!((p.size - delta).abs() < 1e-18, "{}", p.size);
+    assert_eq!((p.verdict, p.confirmed), (Verdict::Dependent, true));
+    assert_eq!(a.groups.len(), 1);
+}
+
+#[test]
+fn a_pivot_called_dependent_whose_group_is_not_is_confirmed_near_singular() {
+    // (1, b, p) leans on (1, 0, 0) and, by b below σ_ind, not on (0, 1, 0): its group is the first
+    // and itself, whose least singular value is about b/√2, between the thresholds, while its pivot
+    // p is below σ_dep.
+    let (b, p) = (1.0e-4, 1.0e-6);
+    let a = analyse_columns(
+        &[vec![1.0, 0.0, 0.0], vec![0.0, 1.0, 0.0], vec![1.0, b, p]],
+        &[eq(1, 0, 0), eq(2, 0, 1), eq(3, 1, 2)],
+        &[0.0; 3],
+        3,
+        1.0e4,
+        &mut meter(),
+    )
+    .unwrap();
+    let last = a.pivots[2];
+    assert_eq!(last.equation, 2);
+    assert!((last.size - p).abs() < 1e-15, "{}", last.size);
+    assert_eq!(
+        (last.verdict, last.confirmed),
+        (Verdict::NearSingular, true)
+    );
+    assert_eq!((a.near_singular, a.groups.len()), (1, 0));
+}
+
+#[test]
+fn a_near_singular_pivot_after_a_dependent_one_is_confirmed_too() {
+    // Two pivots just above σ_dep, each against (1, 0, 0) alone: both are confirmed dependent.
+    let dep = 1.0 / 640_000.0;
+    let d = 1.2 * dep;
+    let a = analyse_columns(
+        &[vec![1.0, 0.0, 0.0], vec![1.0, d, 0.0], vec![1.0, 0.0, d]],
+        &[eq(1, 0, 0), eq(2, 1, 1), eq(3, 2, 2)],
+        &[0.0; 3],
+        3,
+        1.0e4,
+        &mut meter(),
+    )
+    .unwrap();
+    for k in [1, 2] {
+        let p = a.pivots[k];
+        assert_eq!(p.equation, k);
+        assert_eq!((p.verdict, p.confirmed), (Verdict::Dependent, true), "{k}");
+    }
+    assert_eq!(a.groups.len(), 2);
+}
+
+#[test]
+fn lists_of_other_lengths_are_refused() {
+    let one = [vec![1.0, 0.0]];
+    let refused = |columns: &[Vec<f64>], equations: &[Equation], residuals: &[f64]| {
+        matches!(
+            analyse_columns(columns, equations, residuals, 2, 1000.0, &mut meter()),
+            Err(SketchError::Internal)
+        )
+    };
+    assert!(refused(&one, &[eq(1, 0, 0)], &[]));
+    assert!(refused(&one, &[], &[0.0]));
+    assert!(refused(&[vec![1.0]], &[eq(1, 0, 0)], &[0.0]));
+    assert!(!refused(&one, &[eq(1, 0, 0)], &[0.0]));
+}
+
+#[test]
+fn the_removal_suggested_is_in_the_most_conflicting_groups_among_equal_priorities() {
+    // A, B and C each fix the one variable, at 0, 1 and 2: B and C each conflict with A.
+    let a = analyse_columns(
+        &[vec![1.0], vec![1.0], vec![1.0]],
+        &[eq(1, 1, 0), eq(2, 1, 1), eq(3, 1, 2)],
+        &[0.0, 1.0, 2.0],
+        1,
+        1000.0,
+        &mut meter(),
+    )
+    .unwrap();
+    assert_eq!(a.groups.len(), 2);
+    for g in &a.groups {
+        assert_eq!(g.class, Class::Conflicting);
+        assert_eq!(g.suggested_removal, Some(id(1, 0)), "{g:?}");
+    }
+}
+
+#[test]
+fn the_priorities_come_from_each_constraints_own_line() {
+    // The newer distance ranks first (priority 0), so the older one, priority 1, is to be removed.
+    let s = sketch(
+        "entity 1.0 point 0 0
+entity 1.1 point 3000 0
+entity 1.5 line 1.0 1.1 segment
+constraint 2.0 driving 0 fix 1.0 0 0
+constraint 2.1 driving 0 fix 1.0 1 0
+constraint 2.2 driving 0 horizontal 1.5
+constraint 2.3 driving 1 distance 1.0 1.1 3000
+constraint 2.4 driving 0 distance 1.0 1.1 3100
+",
+    );
+    let r = diagnose(&s, 10_000.0, &mut meter()).unwrap();
+    assert_eq!(r.conflicting.len(), 1, "{}", r.text());
+    assert_eq!(r.conflicting[0].suggested_removal, Some(id(2, 3)));
+}
+
+#[test]
+fn remedies_skip_what_is_not_a_driving_dimension() {
+    let s = sketch(
+        "entity 1.0 point 0 0
+entity 1.1 point 3000 0
+entity 1.5 line 1.0 1.1 segment
+constraint 2.0 driving 0 fix 1.0 0 0
+constraint 2.1 driving 0 fix 1.0 1 0
+constraint 2.2 driving 0 horizontal 1.5
+constraint 2.3 driving 0 distance 1.0 1.1 3000
+constraint 2.4 reference 0 distance 1.0 1.1 3000
+",
+    );
+    let found = remedies(&s, &[id(2, 2), id(2, 4), id(9, 9)], &mut meter()).unwrap();
+    assert!(found.is_empty(), "{found:?}");
+    assert_eq!(remedies(&s, &[id(2, 3)], &mut meter()).unwrap().len(), 1);
+}
+
+#[test]
+fn the_range_resolution_is_two_to_minus_the_halvings() {
+    assert_eq!(
+        RANGE_RESOLUTION.to_bits(),
+        2f64.powi(-i32::try_from(RANGE_HALVINGS).unwrap()).to_bits()
+    );
 }
