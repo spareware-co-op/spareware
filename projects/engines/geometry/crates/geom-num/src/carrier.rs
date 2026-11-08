@@ -272,11 +272,18 @@ impl Rational2 {
             return Err(NumError::Degenerate);
         }
         // Each is below 2^124, so turning it cannot overflow.
-        let turned = |v: i128| if w < 0 { v.checked_neg() } else { Some(v) };
-        match (turned(x), turned(y), turned(w)) {
-            (Some(x), Some(y), Some(w)) => Ok(Rational2 { x, y, w }),
-            _ => Err(NumError::BudgetExceeded),
-        }
+        let turned = |v: i128| -> Result<i128, NumError> {
+            if w < 0 {
+                v.checked_neg().ok_or(NumError::BudgetExceeded)
+            } else {
+                Ok(v)
+            }
+        };
+        Ok(Rational2 {
+            x: turned(x)?,
+            y: turned(y)?,
+            w: turned(w)?,
+        })
     }
 
     /// The homogeneous coordinates: `[X, Y]` and W, W positive.
