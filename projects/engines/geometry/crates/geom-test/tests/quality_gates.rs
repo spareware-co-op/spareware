@@ -1529,6 +1529,41 @@ fn a_crate_with_code_but_no_foundation_module_fails() {
     ignore = "reads and writes files in a temporary folder, which a WebAssembly test run cannot"
 )]
 #[test]
+fn only_classified_modules_pass_without_the_foundation_module() {
+    let repo = Repo::new("classified");
+    repo.write(&format!("{K}/geom-2d/Cargo.toml"), "[package]\n");
+    let lib = format!("{K}/geom-2d/src/lib.rs");
+    repo.write(&lib, "//! A crate root with no code.\npub mod cogo;\n");
+    let cogo = format!("{K}/geom-2d/src/cogo.rs");
+    repo.write(&cogo, &kernel_source(1, 0));
+    let lines = [(1, 1), (2, 1), (3, 1), (4, 1)];
+    let lcov = lcov_record(&repo, &cogo, &lines, &[], None);
+    // COGO is classified outside the arrangement (chapter 27's crate table), so geom-2d passes
+    // without its foundation module, at the 90% bar.
+    let f = judged(&repo, "geom-2d", &lcov);
+    assert!(f.is_empty(), "{f:?}");
+
+    // A module no list classifies keeps the foundation module missing, and is named.
+    let regions = format!("{K}/geom-2d/src/regions.rs");
+    repo.write(&regions, &kernel_source(1, 0));
+    let lcov = lcov + &lcov_record(&repo, &regions, &lines, &[], None);
+    let f = judged(&repo, "geom-2d", &lcov);
+    assert!(
+        f.iter()
+            .any(|x| x.contains("foundation module") && x.contains("src/regions.rs")),
+        "{f:?}"
+    );
+    assert!(
+        !f.iter().any(|x| x.contains("src/cogo.rs is")),
+        "the classified module is not named: {f:?}"
+    );
+}
+
+#[cfg_attr(
+    target_family = "wasm",
+    ignore = "reads and writes files in a temporary folder, which a WebAssembly test run cannot"
+)]
+#[test]
 fn folded_branches_are_left_out_only_when_they_can_be_placed() {
     let repo = Repo::new("folded");
     let rel = format!("{K}/geom-num/src/lib.rs");
