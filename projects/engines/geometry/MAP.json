@@ -72,6 +72,11 @@
               "shape": "struct"
             },
             {
+              "doc": "An edge is an arc, and the body's curves are stored in doubles, which hold no circle about a rational centre exactly: the first such edge. The exact [`Arrangement`] still holds it.",
+              "name": "Curved",
+              "shape": "struct"
+            },
+            {
               "doc": "More items than a 32-bit index names.",
               "name": "TooMany",
               "shape": "unit"
@@ -362,7 +367,7 @@
         },
         {
           "cost": "O((n + k) log n) comparisons for the sweep, n segments and k crossings, plus the cost of moving the entries of the status list on insertion, which is linear in the segments the sweep line crosses at once; the faces are linear in the edges, and finding the face around each hole is a second sweep over the finished edges.",
-          "does": "[`arrange`] takes segments between grid points and returns the [`Arrangement`] they divide the plane into: the vertices (every end point and every crossing, as exact rational points, in lexicographic order), the edges between consecutive vertices along each segment (two segments that share a stretch share its edges, and an edge names every segment that covers it), each vertex's edges in counter-clockwise order, and the faces: one unbounded face, and one bounded face for each outer boundary, with the boundaries of the components inside it as holes.",
+          "does": "[`arrange`] takes segments between grid points and returns the [`Arrangement`] they divide the plane into: the vertices (every end point and every crossing, as exact rational points, in lexicographic order), the edges between consecutive vertices along each segment (two segments that share a stretch share its edges, and an edge names every segment that covers it), what each edge lies on ([`Along`]: a line's smallest carrier), each vertex's edges in counter-clockwise order, and the faces: one unbounded face, and one bounded face for each outer boundary, with the boundaries of the components inside it as holes. A vertex is an [`At`]: a rational point, or a one-root point where arcs come in.",
           "family": [],
           "file": "projects/engines/geometry/crates/geom-2d/src/arrange.rs",
           "guarantees": [

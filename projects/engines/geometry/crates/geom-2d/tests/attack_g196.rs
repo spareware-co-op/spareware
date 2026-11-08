@@ -31,8 +31,7 @@
 
 use std::collections::BTreeSet;
 
-use geom_2d::arrange::{ArrangeError, Arrangement, arrange};
-use geom_num::carrier::Rational2;
+use geom_2d::arrange::{ArrangeError, Arrangement, At, arrange};
 use geom_num::grid::P2;
 use geom_run::{Budget, WorkMeter};
 
@@ -76,8 +75,8 @@ fn gcd(a: i128, b: i128) -> i128 {
 /// A rational point as a reduced (x numerator, x denominator, y numerator, y denominator).
 type Red = (i128, i128, i128, i128);
 
-fn reduced(r: &Rational2) -> Red {
-    let ([x, y], w) = r.coordinates();
+fn reduced(v: &At) -> Red {
+    let ([x, y], w) = v.rational().expect("a rational vertex").coordinates();
     let gx = gcd(x, w).max(1);
     let gy = gcd(y, w).max(1);
     (x / gx, w / gx, y / gy, w / gy)
@@ -269,6 +268,38 @@ fn a_dangling_edge_inside_a_face_makes_no_face() {
 }
 
 #[test]
+fn a_line_edge_lies_on_the_smallest_carrier_of_its_line_whatever_the_segments() {
+    use geom_2d::arrange::Along;
+    use geom_num::carrier::Carrier;
+    // Two overlapping segments on y = x / 2, one twice the other's length, given either way round.
+    for segs in [
+        [seg((0, 0), (4, 2)), seg((6, 3), (2, 1))],
+        [seg((2, 1), (6, 3)), seg((4, 2), (0, 0))],
+    ] {
+        let a = run(&segs);
+        assert_eq!(a.edges().len(), 3);
+        assert!(a.circles().is_empty());
+        for e in 0..3_u32 {
+            // -x + 2y = 0, running (2, 1): from the lower vertex to the higher.
+            assert_eq!(
+                a.along(e),
+                Some(Along::Line(Carrier::new(-1, 2, 0).unwrap()))
+            );
+        }
+        assert_eq!(a.along(3), None);
+        // Vertices compare exactly, whichever way they are stored.
+        let v = a.vertices();
+        assert_eq!(v[0].cmp_x(&v[1]).unwrap(), geom_num::Sign::Negative);
+        assert_eq!(v[3].cmp_y(&v[2]).unwrap(), geom_num::Sign::Positive);
+        assert!(v[1].same(&v[1]).unwrap() && !v[1].same(&v[2]).unwrap());
+        let root = At::Root(Box::new(v[2].crossing().unwrap()));
+        assert!(root.same(&v[2]).unwrap() && v[2].same(&root).unwrap());
+        assert!(root.rational().is_none());
+        assert_eq!(root.cmp_x(&v[3]).unwrap(), geom_num::Sign::Negative);
+    }
+}
+
+#[test]
 fn a_zero_length_segment_is_ignored_and_a_stopped_meter_stops() {
     let a = run(&[seg((3, 3), (3, 3)), seg((0, 0), (1, 1))]);
     assert_eq!((a.vertices().len(), a.edges().len()), (2, 1));
@@ -410,7 +441,7 @@ fn random_drawings_match_the_vertex_oracle_and_euler_s_formula() {
             .vertices()
             .iter()
             .map(|v| {
-                let ([x, y], w) = v.coordinates();
+                let ([x, y], w) = v.rational().unwrap().coordinates();
                 // Compare by cross-multiplied order below; here use floats only for monotone check.
                 (x * 1_000_000 / w, y * 1_000_000 / w)
             })

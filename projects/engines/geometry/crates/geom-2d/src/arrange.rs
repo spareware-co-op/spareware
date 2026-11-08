@@ -5,8 +5,10 @@
 //! they divide the plane into: the vertices (every end point and every crossing, as exact rational
 //! points, in lexicographic order), the edges between consecutive vertices along each segment (two
 //! segments that share a stretch share its edges, and an edge names every segment that covers it),
-//! each vertex's edges in counter-clockwise order, and the faces: one unbounded face, and one
-//! bounded face for each outer boundary, with the boundaries of the components inside it as holes.
+//! what each edge lies on ([`Along`]: a line's smallest carrier), each vertex's edges in
+//! counter-clockwise order, and the faces: one unbounded face, and one bounded face for each outer
+//! boundary, with the boundaries of the components inside it as holes. A vertex is an [`At`]: a
+//! rational point, or a one-root point where arcs come in.
 //!
 //! Guarantees:
 //!
@@ -41,14 +43,17 @@
     reason = "s, t, p, q, u, v, e, h are the geometry's own letters, and the sweep and the face walk are each one procedure of de Berg et al. that reads best whole"
 )]
 
+use alloc::boxed::Box;
 use alloc::vec::Vec;
 use core::cmp::Ordering;
 use core::fmt;
 
 use geom_curve::{CurveKind, Line};
 use geom_math::bbox::Box3;
+use geom_num::arc::Round;
 use geom_num::carrier::{Carrier, Rational2};
 use geom_num::grid::{P2, P3};
+use geom_num::one_root::Crossing2;
 use geom_num::{NumError, Sign};
 use geom_run::{Stopped, WorkMeter};
 use geom_surface::{Plane, SurfaceKind};
@@ -92,6 +97,105 @@ impl fmt::Display for ArrangeError {
 
 impl core::error::Error for ArrangeError {}
 
+/// Where a vertex is: a rational point, or a one-root point.
+///
+/// Where an arc meets a line or another arc, and where the sweep cuts an arc at the leftmost or
+/// rightmost point of its circle, is a one-root point ([`Crossing2`]); every other vertex is
+/// rational. A one-root point may happen to be rational as well, so two vertices are one place by
+/// [`At::same`], never by their variants.
+#[derive(Clone, Debug)]
+pub enum At {
+    /// A rational point.
+    Rational(Rational2),
+    /// A one-root point.
+    Root(Box<Crossing2>),
+}
+
+impl At {
+    /// The rational point, when the vertex is stored as one.
+    #[must_use]
+    pub const fn rational(&self) -> Option<&Rational2> {
+        match self {
+            At::Rational(r) => Some(r),
+            At::Root(_) => None,
+        }
+    }
+
+    /// The vertex as a one-root point, the form every vertex has.
+    ///
+    /// # Errors
+    ///
+    /// [`NumError::BudgetExceeded`] if a step did not fit, which no point in the budget can reach.
+    pub fn crossing(&self) -> Result<Crossing2, NumError> {
+        match self {
+            At::Rational(r) => Crossing2::of_point(r),
+            At::Root(c) => Ok(**c),
+        }
+    }
+
+    /// The sign of this point's x less `other`'s (`across`) or of its y (`!across`).
+    fn compare(&self, other: &At, across: bool) -> Result<Sign, NumError> {
+        let pick = |a: &Crossing2, b: &Crossing2| {
+            if across { a.cmp_x(b) } else { a.cmp_y(b) }
+        };
+        match (self, other) {
+            (At::Rational(a), At::Rational(b)) => {
+                if across {
+                    a.cmp_x(b)
+                } else {
+                    a.cmp_y(b)
+                }
+            }
+            (At::Root(a), At::Root(b)) => pick(a, b),
+            (At::Rational(a), At::Root(b)) => pick(&Crossing2::of_point(a)?, b),
+            (At::Root(a), At::Rational(b)) => pick(a, &Crossing2::of_point(b)?),
+        }
+    }
+
+    /// How this point's x compares with `other`'s: the sign of x less `other`'s x.
+    ///
+    /// # Errors
+    ///
+    /// As for [`At::crossing`].
+    pub fn cmp_x(&self, other: &At) -> Result<Sign, NumError> {
+        self.compare(other, true)
+    }
+
+    /// How this point's y compares with `other`'s, as [`At::cmp_x`] says of x.
+    ///
+    /// # Errors
+    ///
+    /// As for [`At::crossing`].
+    pub fn cmp_y(&self, other: &At) -> Result<Sign, NumError> {
+        self.compare(other, false)
+    }
+
+    /// Whether this point and `other` are one place, however each is stored.
+    ///
+    /// # Errors
+    ///
+    /// As for [`At::crossing`].
+    pub fn same(&self, other: &At) -> Result<bool, NumError> {
+        Ok(self.cmp_x(other)? == Sign::Zero && self.cmp_y(other)? == Sign::Zero)
+    }
+}
+
+/// What an edge lies on.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Along {
+    /// A line: its smallest carrier (a and b with no common factor), running from the edge's
+    /// `from` to its `to`, so that the same line always has the same carrier.
+    Line(Carrier),
+    /// An arc of the circle [`Arrangement::circles`] holds at `circle`: on its upper half, which
+    /// runs from the circle's leftmost point over the top to its rightmost, or on its lower half.
+    Arc {
+        /// The circle's place in [`Arrangement::circles`].
+        circle: u32,
+        /// Whether the edge is on the upper half.
+        upper: bool,
+    },
+}
+
 /// An edge between two vertices, lowest first, with the segments that cover it.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Edge {
@@ -116,8 +220,12 @@ pub struct Face {
 /// The arrangement of a set of segments.
 #[derive(Clone, Debug)]
 pub struct Arrangement {
-    vertices: Vec<Rational2>,
+    vertices: Vec<At>,
     edges: Vec<Edge>,
+    /// What each edge lies on, by edge.
+    along: Vec<Along>,
+    /// The circles the arcs lie on, each once.
+    circles: Vec<Round>,
     /// For each vertex, the half-edges that leave it, counter-clockwise from the negative-x
     /// direction. Half-edge `2 e` runs along edge `e` from `from` to `to`; `2 e + 1` runs back.
     around: Vec<Vec<u32>>,
@@ -128,14 +236,30 @@ pub struct Arrangement {
 impl Arrangement {
     /// The vertices, in lexicographic order of (x, y).
     #[must_use]
-    pub fn vertices(&self) -> &[Rational2] {
+    pub fn vertices(&self) -> &[At] {
         &self.vertices
     }
 
-    /// The edges, in order of (`from`, `to`).
+    /// The edges, in order of (`from`, `to`); edges between the same two vertices (a chord and its
+    /// arc, or two arcs) in the counter-clockwise order they leave `from`.
     #[must_use]
     pub fn edges(&self) -> &[Edge] {
         &self.edges
+    }
+
+    /// What the edge `edge` lies on.
+    #[must_use]
+    pub fn along(&self, edge: u32) -> Option<Along> {
+        usize::try_from(edge)
+            .ok()
+            .and_then(|i| self.along.get(i))
+            .copied()
+    }
+
+    /// The circles the arcs lie on, each once, in order of centre (x, then y), then of radius.
+    #[must_use]
+    pub fn circles(&self) -> &[Round] {
+        &self.circles
     }
 
     /// The half-edges leaving `vertex`, counter-clockwise. Half-edge `2 e` runs from edge `e`'s
@@ -265,6 +389,26 @@ fn index(i: usize) -> Result<u32, ArrangeError> {
     u32::try_from(i).map_err(|_| ArrangeError::TooMany)
 }
 
+/// The greatest common divisor, by Euclid's algorithm: two lines of arithmetic, which the kernel's
+/// crates take from no outside crate (their one vetted dependency is `libm`).
+fn gcd(mut a: u64, mut b: u64) -> u64 {
+    while let Some(r) = a.checked_rem(b) {
+        a = b;
+        b = r;
+    }
+    a
+}
+
+/// The carrier with a and b divided by their greatest common divisor, which divides c too (c is
+/// a · x + b · y at a grid point), so one line always has one carrier, and its direction unturned.
+fn smallest(line: Carrier) -> Result<Carrier, ArrangeError> {
+    let ([a, b], c) = line.coefficients();
+    let part = |v: i128| u64::try_from(v.unsigned_abs()).map_err(|_| ArrangeError::Range);
+    let g = i128::from(gcd(part(a)?, part(b)?));
+    let cut = |v: i128| v.checked_div(g).ok_or(ArrangeError::Range);
+    Ok(Carrier::new(cut(a)?, cut(b)?, cut(c)?)?)
+}
+
 fn seg_of(segs: &[Seg], id: u32) -> Result<&Seg, ArrangeError> {
     usize::try_from(id)
         .ok()
@@ -318,7 +462,7 @@ pub fn arrange(
             Ordering::Less => (ra, rb, *a, *b),
             Ordering::Greater => (rb, ra, *b, *a),
         };
-        let line = Carrier::through(p, q)?;
+        let line = smallest(Carrier::through(p, q)?)?;
         let [dx, dy] = line.direction();
         let id = index(segs.len())?;
         segs.push(Seg {
@@ -644,9 +788,15 @@ fn build(
         low.push(m);
     }
     let (faces, _) = faces_of(&edges, &vertices, segs, &rep, &cycles, &counter, &low)?;
+    let mut along: Vec<Along> = Vec::with_capacity(edges.len());
+    for &s in &rep {
+        along.push(Along::Line(seg_of(segs, s)?.line));
+    }
     Ok(Arrangement {
-        vertices,
+        vertices: vertices.into_iter().map(At::Rational).collect(),
         edges,
+        along,
+        circles: Vec::new(),
         around,
         cycles,
         faces,
@@ -824,7 +974,13 @@ pub enum BodyError {
         /// The vertex's rank.
         vertex: u32,
         /// Where it is.
-        at: Rational2,
+        at: At,
+    },
+    /// An edge is an arc, and the body's curves are stored in doubles, which hold no circle about
+    /// a rational centre exactly: the first such edge. The exact [`Arrangement`] still holds it.
+    Curved {
+        /// The edge's place in [`Arrangement::edges`].
+        edge: u32,
     },
     /// More items than a 32-bit index names.
     TooMany,
@@ -851,18 +1007,37 @@ impl Arrangement {
     /// first and the loops of the components inside it after, one fin for each side of an edge that
     /// a bounded face lies on (the unbounded face has none), and one shell in the outside region.
     ///
-    /// The body's points are grid points, so the arrangement must have no crossing off the grid
-    /// (the options for storing exact points are in the pull request that added this); the first
-    /// that is off the grid is the error.
+    /// The body's curves are stored in doubles, so the arrangement must have no arc (the first is
+    /// the error), and its points are grid points, so it must have no crossing off the grid (the
+    /// options for storing exact points are in the pull request that added this); the first that
+    /// is off the grid is the error. A one-root vertex lies on an arc, so it is refused as the arc.
     ///
     /// # Errors
     ///
-    /// [`BodyError::OffGrid`], [`BodyError::TooMany`], [`BodyError::Geometry`] and
-    /// [`BodyError::Topo`].
+    /// [`BodyError::Curved`], [`BodyError::OffGrid`], [`BodyError::TooMany`],
+    /// [`BodyError::Geometry`] and [`BodyError::Topo`].
     pub fn to_body(&self, meter: &mut WorkMeter<'_>) -> Result<Body, BodyError> {
+        if let Some(edge) = self
+            .along
+            .iter()
+            .position(|a| matches!(a, Along::Arc { .. }))
+        {
+            return Err(BodyError::Curved {
+                edge: index(edge).map_err(|_| BodyError::TooMany)?,
+            });
+        }
         // The vertices' points.
         let mut points: Vec<P3> = Vec::with_capacity(self.vertices.len());
         for (rank, v) in self.vertices.iter().enumerate() {
+            let off = || -> Result<BodyError, BodyError> {
+                Ok(BodyError::OffGrid {
+                    vertex: index(rank).map_err(|_| BodyError::TooMany)?,
+                    at: v.clone(),
+                })
+            };
+            let Some(v) = v.rational() else {
+                return Err(off()?);
+            };
             let ([x, y], w) = v.coordinates();
             let grid = x
                 .checked_rem(w)
@@ -874,12 +1049,7 @@ impl Arrangement {
             });
             match point {
                 Some(p) => points.push(p),
-                None => {
-                    return Err(BodyError::OffGrid {
-                        vertex: index(rank).map_err(|_| BodyError::TooMany)?,
-                        at: *v,
-                    });
-                }
+                None => return Err(off()?),
             }
         }
         // The cycle each half-edge is on.

@@ -248,13 +248,18 @@ fn as_f64(r: &Rational2) -> (f64, f64) {
     (x as f64 / w as f64, y as f64 / w as f64)
 }
 
+/// The rational vertex `v` of a line arrangement.
+fn vertex(a: &Arrangement, v: u32) -> Rational2 {
+    *a.vertices()[v as usize].rational().unwrap()
+}
+
 fn polygon(a: &Arrangement, cycle: &[u32]) -> Vec<(f64, f64)> {
     cycle
         .iter()
         .map(|&h| {
             let e = &a.edges()[(h / 2) as usize];
             let v = if h % 2 == 0 { e.from } else { e.to };
-            as_f64(&a.vertices()[v as usize])
+            as_f64(&vertex(a, v))
         })
         .collect()
 }
@@ -301,7 +306,7 @@ fn oracle_face(a: &Arrangement, at: (f64, f64)) -> Option<usize> {
 
 /// The face of the sweep's arrangement that has the half-edge `h` on its left.
 fn face_of_half(a: &Arrangement, h: &Half) -> usize {
-    let same = |r: &Rational2, v: u32| r.same(&a.vertices()[v as usize]).unwrap();
+    let same = |r: &Rational2, v: u32| r.same(&vertex(a, v)).unwrap();
     let e = a
         .edges()
         .iter()
@@ -346,7 +351,10 @@ fn location_agrees_with_point_in_polygon_over_the_sweeps_cycles() {
                 w,
             );
             let got = live.locate(&at, &mut unlimited()).unwrap();
-            let is_vertex = a.vertices().iter().any(|v| v.same(&at).unwrap());
+            let is_vertex = a
+                .vertices()
+                .iter()
+                .any(|v| v.rational().unwrap().same(&at).unwrap());
             match got {
                 Location::Vertex(v) => {
                     vertices += 1;
@@ -356,8 +364,7 @@ fn location_agrees_with_point_in_polygon_over_the_sweeps_cycles() {
                     edges += 1;
                     assert!(!is_vertex, "round {round}");
                     let found = a.edges().iter().any(|e| {
-                        lo.same(&a.vertices()[e.from as usize]).unwrap()
-                            && hi.same(&a.vertices()[e.to as usize]).unwrap()
+                        lo.same(&vertex(&a, e.from)).unwrap() && hi.same(&vertex(&a, e.to)).unwrap()
                     });
                     assert!(found, "round {round}: an edge of the sweep");
                 }

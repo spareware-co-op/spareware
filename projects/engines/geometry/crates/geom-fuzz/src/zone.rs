@@ -188,7 +188,11 @@ pub fn check(case: &Case) -> Result<(), Finding> {
         ) else {
             continue;
         };
-        let is_vertex = sweep.vertices().iter().any(|v| v.same(&at) == Ok(true));
+        let is_vertex = sweep
+            .vertices()
+            .iter()
+            .filter_map(geom_2d::arrange::At::rational)
+            .any(|v| v.same(&at) == Ok(true));
         match live.locate(&at, &mut meter) {
             Ok(Location::Vertex(v)) => {
                 if !is_vertex || v.same(&at) != Ok(true) {

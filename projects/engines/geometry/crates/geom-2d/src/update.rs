@@ -516,12 +516,15 @@ impl Live {
         let vertices = arrangement.vertices();
         let mut pieces: Vec<Piece> = Vec::with_capacity(arrangement.edges().len());
         for edge in arrangement.edges() {
-            let lo = *vertices
-                .get(usize::try_from(edge.from).map_err(|_| ArrangeError::TooMany)?)
-                .ok_or(ArrangeError::TooMany)?;
-            let hi = *vertices
-                .get(usize::try_from(edge.to).map_err(|_| ArrangeError::TooMany)?)
-                .ok_or(ArrangeError::TooMany)?;
+            // Segments only meet at rational points, so every vertex is one.
+            let end = |ix: u32| -> Result<Rational2, ArrangeError> {
+                vertices
+                    .get(usize::try_from(ix).map_err(|_| ArrangeError::TooMany)?)
+                    .and_then(|v| v.rational())
+                    .copied()
+                    .ok_or(ArrangeError::Range)
+            };
+            let (lo, hi) = (end(edge.from)?, end(edge.to)?);
             let first = edge.sources.first().copied().ok_or(ArrangeError::TooMany)?;
             let (a, b) = segments
                 .get(usize::try_from(first).map_err(|_| ArrangeError::TooMany)?)
