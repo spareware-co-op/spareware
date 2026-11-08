@@ -29,7 +29,7 @@ use crate::predicates;
 use crate::quadrature;
 
 /// Every generator, in the order they run.
-pub const GENERATORS: [Generator; 93] = [
+pub const GENERATORS: [Generator; 99] = [
     Generator {
         name: grid_steps::NAME,
         output: grid_steps::OUTPUT,
@@ -169,6 +169,18 @@ pub const GENERATORS: [Generator; 93] = [
         generate: Generate::Plain(predicates::generate_circle_gap),
     },
     Generator {
+        name: "predicate-ellipse-side",
+        output: "projects/engines/geometry/crates/geom-num/src/generated/ellipse_side.rs",
+        about: "a rational point against an ellipse: its f64 filter on rounded inputs, exact path and certificate",
+        generate: Generate::Plain(predicates::generate_ellipse_side),
+    },
+    Generator {
+        name: "predicate-ellipse-line",
+        output: "projects/engines/geometry/crates/geom-num/src/generated/ellipse_line.rs",
+        about: "a carrier against an ellipse: its f64 filter on rounded inputs, exact path and certificate",
+        generate: Generate::Plain(predicates::generate_ellipse_line),
+    },
+    Generator {
         name: predicates::PLAIN_GENERATOR,
         output: predicates::PLAIN_OUTPUT,
         about: "every predicate's exact path in plain i128, the baseline of chapter 23.3's variants",
@@ -275,6 +287,18 @@ pub const GENERATORS: [Generator; 93] = [
         output: "projects/engines/geometry/crates/geom-num/verus/generated/circle_gap.rs",
         about: "circle_gap's exact path as a Verus-annotated twin, which Verus verifies in CI",
         generate: Generate::Plain(predicates::generate_verus_circle_gap),
+    },
+    Generator {
+        name: "verus-ellipse-side",
+        output: "projects/engines/geometry/crates/geom-num/verus/generated/ellipse_side.rs",
+        about: "ellipse_side's exact path as a Verus-annotated twin, which Verus verifies in CI",
+        generate: Generate::Plain(predicates::generate_verus_ellipse_side),
+    },
+    Generator {
+        name: "verus-ellipse-line",
+        output: "projects/engines/geometry/crates/geom-num/verus/generated/ellipse_line.rs",
+        about: "ellipse_line's exact path as a Verus-annotated twin, which Verus verifies in CI",
+        generate: Generate::Plain(predicates::generate_verus_ellipse_line),
     },
     Generator {
         name: "verus-plane-side",
@@ -581,6 +605,18 @@ pub const GENERATORS: [Generator; 93] = [
         output: "projects/engines/geometry/crates/geom-gen/generated/fptaylor-circle-gap.fpt",
         about: "circle_gap's normalised f64 filter for FPTaylor, whose certificate HOL Light checks",
         generate: Generate::Plain(predicates::generate_fptaylor_circle_gap),
+    },
+    Generator {
+        name: "fptaylor-ellipse-side",
+        output: "projects/engines/geometry/crates/geom-gen/generated/fptaylor-ellipse-side.fpt",
+        about: "ellipse_side's normalised f64 filter for FPTaylor, whose certificate HOL Light checks",
+        generate: Generate::Plain(predicates::generate_fptaylor_ellipse_side),
+    },
+    Generator {
+        name: "fptaylor-ellipse-line",
+        output: "projects/engines/geometry/crates/geom-gen/generated/fptaylor-ellipse-line.fpt",
+        about: "ellipse_line's normalised f64 filter for FPTaylor, whose certificate HOL Light checks",
+        generate: Generate::Plain(predicates::generate_fptaylor_ellipse_line),
     },
     Generator {
         name: quadrature::NAME,

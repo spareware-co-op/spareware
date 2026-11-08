@@ -922,3 +922,111 @@ pub fn circle_gap_value(a: P2, b: P2, t: i128) -> Option<i128> {
     let s = s_3.checked_sub(s_4)?;
     Some(s)
 }
+
+/// `ellipse_side`'s exact value in plain `i128` (chapter 23.3): each step in `i128`, or in its
+/// certificate's wide type with both operands widened to it, with checked arithmetic; `None` only
+/// if a step overflowed, which the certificate rules out; `None` also for a rounded input outside
+/// its declared range.
+#[inline]
+#[must_use]
+#[allow(
+    clippy::many_single_char_names,
+    clippy::similar_names,
+    clippy::too_many_arguments,
+    reason = "names, parameters and lines follow the description: one per input and step"
+)]
+pub fn ellipse_side_value(
+    x: i128,
+    y: i128,
+    w: i128,
+    k: P2,
+    mx: i128,
+    my: i128,
+    p: i128,
+    q: i128,
+) -> Option<I384> {
+    let x = within(x, 124)?;
+    let w = within(w, 83)?;
+    let k_x = i128::from(k.x.get());
+    let ux_1 = w.checked_mul(k_x)?;
+    let ux = x.checked_sub(ux_1)?;
+    let y = within(y, 124)?;
+    let k_y = i128::from(k.y.get());
+    let uy_1 = w.checked_mul(k_y)?;
+    let uy = y.checked_sub(uy_1)?;
+    let mx = within(mx, 41)?;
+    let along_1 = I256::from_i128(ux).checked_mul(&I256::from_i128(mx))?;
+    let my = within(my, 41)?;
+    let along_2 = I256::from_i128(uy).checked_mul(&I256::from_i128(my))?;
+    let along = along_1.checked_add(&along_2)?;
+    let across_1 = I256::from_i128(uy).checked_mul(&I256::from_i128(mx))?;
+    let across_2 = I256::from_i128(ux).checked_mul(&I256::from_i128(my))?;
+    let across = across_1.checked_sub(&across_2)?;
+    let p = within(p, 22)?;
+    let pa = I256::from_i128(p).checked_mul(&along)?;
+    let q = within(q, 22)?;
+    let qa = I256::from_i128(q).checked_mul(&across)?;
+    let nn_1 = mx.checked_mul(mx)?;
+    let nn_2 = my.checked_mul(my)?;
+    let nn = nn_1.checked_add(nn_2)?;
+    let level_1 = p.checked_mul(nn)?;
+    let level = I256::from_i128(level_1).checked_mul(&I256::from_i128(w))?;
+    let s_1 = pa.resize::<6>()?.checked_mul(&pa.resize::<6>()?)?;
+    let s_2 = qa.resize::<6>()?.checked_mul(&qa.resize::<6>()?)?;
+    let s_3 = s_1.checked_add(&s_2)?;
+    let s_4 = level.resize::<6>()?.checked_mul(&level.resize::<6>()?)?;
+    let s = s_3.checked_sub(&s_4)?;
+    Some(s)
+}
+
+/// `ellipse_line`'s exact value in plain `i128` (chapter 23.3): each step in `i128`, or in its
+/// certificate's wide type with both operands widened to it, with checked arithmetic; `None` only
+/// if a step overflowed, which the certificate rules out; `None` also for a rounded input outside
+/// its declared range.
+#[inline]
+#[must_use]
+#[allow(
+    clippy::many_single_char_names,
+    clippy::similar_names,
+    clippy::too_many_arguments,
+    reason = "names, parameters and lines follow the description: one per input and step"
+)]
+pub fn ellipse_line_value(
+    a: i128,
+    b: i128,
+    d: i128,
+    k: P2,
+    mx: i128,
+    my: i128,
+    p: i128,
+    q: i128,
+) -> Option<I256> {
+    let b = within(b, 41)?;
+    let mx = within(mx, 41)?;
+    let along_1 = b.checked_mul(mx)?;
+    let a = within(a, 41)?;
+    let my = within(my, 41)?;
+    let along_2 = a.checked_mul(my)?;
+    let along = along_1.checked_sub(along_2)?;
+    let across_1 = a.checked_mul(mx)?;
+    let across_2 = b.checked_mul(my)?;
+    let across = across_1.checked_add(across_2)?;
+    let d = within(d, 82)?;
+    let k_x = i128::from(k.x.get());
+    let h_1 = a.checked_mul(k_x)?;
+    let h_2 = d.checked_sub(h_1)?;
+    let k_y = i128::from(k.y.get());
+    let h_3 = b.checked_mul(k_y)?;
+    let h = h_2.checked_sub(h_3)?;
+    let p = within(p, 22)?;
+    let pa = p.checked_mul(along)?;
+    let q = within(q, 22)?;
+    let qa = q.checked_mul(across)?;
+    let qh = q.checked_mul(h)?;
+    let s_1 = I256::from_i128(pa).checked_mul(&I256::from_i128(pa))?;
+    let s_2 = I256::from_i128(qa).checked_mul(&I256::from_i128(qa))?;
+    let s_3 = s_1.checked_add(&s_2)?;
+    let s_4 = I256::from_i128(qh).checked_mul(&I256::from_i128(qh))?;
+    let s = s_3.checked_sub(&s_4)?;
+    Some(s)
+}

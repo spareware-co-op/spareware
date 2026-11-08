@@ -1816,7 +1816,7 @@ const PLAIN: &str = include_str!("../../geom-num/src/generated/plain.rs");
 
 /// The committed modules, built into the test so it also runs on wasm32. A test ties this list to
 /// `PREDICATES`.
-const COMMITTED: [(&str, &str); 21] = [
+const COMMITTED: [(&str, &str); 23] = [
     (
         "orient2d",
         include_str!("../../geom-num/src/generated/orient2d.rs"),
@@ -1900,6 +1900,14 @@ const COMMITTED: [(&str, &str); 21] = [
     (
         "circle_gap",
         include_str!("../../geom-num/src/generated/circle_gap.rs"),
+    ),
+    (
+        "ellipse_side",
+        include_str!("../../geom-num/src/generated/ellipse_side.rs"),
+    ),
+    (
+        "ellipse_line",
+        include_str!("../../geom-num/src/generated/ellipse_line.rs"),
     ),
 ];
 
