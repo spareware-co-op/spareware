@@ -290,9 +290,15 @@
               "kind": "corpus",
               "piece": "G173",
               "why": "1 new count benchmark on geom-intersect's poles and seams (decision 32.44): a whole sphere through a plane holding both its poles, one loop joined through each. trace_patch's, march_plate's and trace_silhouette's digests move with it: their results' branches now say where they pass a seam, a knot line or a pole (Branch::passes, 12.10), which their Debug text writes, empty here."
+            },
+            {
+              "sha256": "60d4d161c7d9e90819b775275dc5dd71da8245c62a8941036bca5f516294e09d",
+              "kind": "improvement",
+              "piece": "G173",
+              "why": "The edge room: an edge's zeros on the end of a plane's, cylinder's or cone's domain are proven in a box that reaches past the end, so intersect/subdivide_patch, march_plate and march_poles return other valid enclosures of the same start points (same 11 settled pairs and 22 starts, the work differs); no other digest moved"
             }
           ],
-          "sha256": "60d4d161c7d9e90819b775275dc5dd71da8245c62a8941036bca5f516294e09d"
+          "sha256": "d1eaa2895ef875536c629d89713d1a428f6de6b656816b4389c845d42b2e4799"
         },
         {
           "id": "geom-nurbs/operations",
