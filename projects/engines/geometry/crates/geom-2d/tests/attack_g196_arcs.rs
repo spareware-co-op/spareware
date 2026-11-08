@@ -7,7 +7,7 @@
 //!
 //! - **Shapes**: a circle, a circle about a rational centre (cut at two one-root points), a circle
 //!   and a line, two crossing circles, circles touching outside and inside, a line touching a
-//!   circle, concentric circles, overlapping arcs, a chord and its arc.
+//!   circle, concentric circles, overlapping arcs, a chord and its arc, a segment of no length.
 //! - **Vertices are exact**: on random drawings of segments and arcs, the vertices are exactly an
 //!   independent oracle's (every end, every cut strictly inside an arc, every pairwise crossing on
 //!   both curves, found pair by pair with `holds_crossing` rather than by a sweep), compared by the
@@ -472,7 +472,8 @@ fn within(z: &Crossing2, a: P2, b: P2) -> bool {
 }
 
 /// The oracle's vertices, pair by pair: every end, every leftmost or rightmost point strictly
-/// inside an arc, and every crossing of two curves that lies on both.
+/// inside an arc, and every crossing of two curves that lies on both. A segment of no length is
+/// ignored, as `Curve::Segment` says, so its point is a vertex only if another curve makes it one.
 fn oracle(curves: &[Curve]) -> Vec<Crossing2> {
     let mut out: Vec<Crossing2> = Vec::new();
     let add = |z: Crossing2, out: &mut Vec<Crossing2>| {
@@ -484,8 +485,10 @@ fn oracle(curves: &[Curve]) -> Vec<Crossing2> {
     for c in curves {
         match c {
             Curve::Segment(a, b) => {
-                add(point(*a), &mut out);
-                add(point(*b), &mut out);
+                if a != b {
+                    add(point(*a), &mut out);
+                    add(point(*b), &mut out);
+                }
             }
             Curve::Arc(arc) => {
                 add(point(arc.start()), &mut out);
@@ -560,6 +563,36 @@ fn oracle(curves: &[Curve]) -> Vec<Crossing2> {
         }
     }
     out
+}
+
+/// Round 62 of the random drawings in a release build: a segment of no length at a point no other
+/// curve passes is no vertex, and leaves the arrangement as it is without it.
+#[test]
+fn a_segment_of_no_length_is_ignored() {
+    let centre = Rational2::new(9, 20, 4).unwrap();
+    let with = [
+        seg((7, 4), (0, 6)),
+        seg((1, 0), (1, 0)),
+        Curve::Arc(Arc2::new(p(0, 0), p(6, 1), centre).unwrap()),
+        seg((3, 6), (2, 4)),
+        seg((5, 3), (5, 2)),
+    ];
+    let without: Vec<Curve> = [0, 2, 3, 4].iter().map(|&i| with[i]).collect();
+    let (a, b) = (run(&with), run(&without));
+    laws(&a, "with the point");
+    assert_eq!(a.vertices().len(), oracle(&with).len());
+    assert!(
+        a.vertices().iter().all(|v| !v.same(&grid(1, 0)).unwrap()),
+        "the point is no vertex"
+    );
+    assert_eq!(a.vertices().len(), b.vertices().len());
+    for (u, v) in a.vertices().iter().zip(b.vertices()) {
+        assert!(u.same(v).unwrap());
+    }
+    let ends =
+        |x: &Arrangement| -> Vec<(u32, u32)> { x.edges().iter().map(|e| (e.from, e.to)).collect() };
+    assert_eq!(ends(&a), ends(&b));
+    assert_eq!(a.faces(), b.faces());
 }
 
 #[test]
