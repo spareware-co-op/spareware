@@ -501,6 +501,7 @@ fn oracle(curves: &[Curve]) -> Vec<Crossing2> {
                     }
                 }
             }
+            Curve::Ellipse(_) => panic!("these drawings hold no ellipse: attack_g196b_ellipses"),
         }
     }
     for (i, c) in curves.iter().enumerate() {
@@ -555,6 +556,9 @@ fn oracle(curves: &[Curve]) -> Vec<Crossing2> {
                         }
                     }
                     found
+                }
+                (Curve::Ellipse(_), _) | (_, Curve::Ellipse(_)) => {
+                    panic!("these drawings hold no ellipse: attack_g196b_ellipses")
                 }
             };
             for z in found {

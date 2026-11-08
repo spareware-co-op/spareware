@@ -1,5 +1,5 @@
-//! The pieces an arrangement sweeps: segments, and arcs cut where their circles turn back in x, with
-//! every exact question the sweep and the face walk ask of them.
+//! The pieces an arrangement sweeps: segments, and arcs and ellipses cut where they turn back in x,
+//! with every exact question the sweep and the face walk ask of them.
 //!
 //! What it does: a segment is one [`Piece`]. An arc is cut at the leftmost and the rightmost point
 //! of its circle wherever one lies inside it ([`cut`]), so that each piece runs one way in x and lies
@@ -11,18 +11,37 @@
 //! direction, then by the tangent's turn, then by curvature. The circles are listed once each
 //! ([`circles_of`]), so two arcs of one circle name the same circle.
 //!
+//! A whole ellipse is cut at its leftmost and rightmost points, the one-root points
+//! `Crossing2::of_ellipse_extreme` gives ([`cut_oval`]), into a lower and an upper half split by the
+//! diameter through them: with S its form about its centre K and u = p − K, that diameter is where
+//! s(p) = B u + 2C v is zero, the line through the middles of its vertical chords, and the upper
+//! half is where s(p) ≥ 0. Its tangent is the form's gradient turned a quarter, (−s(p), r(p)) with
+//! r(p) = 2A u + B v, so every side, tangent and turn against a line is the sign of a linear form in
+//! p. A line meets it at `Crossing2::of_ellipse`'s one-root points. An ellipse and a circle or
+//! another ellipse meet at roots of a quartic, conic-root points this sweep does not place, so
+//! [`meetings`] refuses two such pieces as `ArrangeError::Conic` unless their curves do not meet, or
+//! each root, narrowed [`NARROW`] levels and enclosed, certainly lies off one of the pieces. The
+//! ellipses are listed once each ([`ovals_of`]), one curve however its axis and ratio were written.
+//!
 //! Guarantees:
 //!
 //! - **Exact.** Every answer is a sign of `geom-num`'s exact questions: `Carrier::side`,
 //!   `Round::side`, `Crossing2::side`, `Crossing2::against_round`, `cmp_x` and `cmp_y`,
 //!   `Rational2::orient`, `Round::meets` and the crossings of `Crossing2`, or `sign_of_root` on the
-//!   whole numbers written out below. An interval filter on a crossing's certified enclosure answers
-//!   first, and only when its sign is certain.
+//!   whole numbers written out below; for ellipses `Ellipse2::side`, `Crossing2::against_ellipse`,
+//!   `Ellipse2::meets`, `Crossing2::of_ellipse` and `sign_of_root` on the linear forms below. An
+//!   interval filter on a crossing's certified enclosure answers first, and only when its sign is
+//!   certain.
+//! - **Refused, never guessed.** Where an ellipse may meet a circle or another ellipse on the pieces
+//!   the sweep holds, the answer is `ArrangeError::Conic`. A pair is let pass only on certified
+//!   enclosures of the quartic's roots, so a pair let pass never meets on its pieces.
 //! - **Ordered as the curves leave a point.** Two pieces leaving one point are ordered by their
 //!   tangents, and pieces with one tangent by signed curvature (a line's is zero, a counter-clockwise
-//!   arc's 1 / r and a clockwise one's −1 / r), so a tangency is a touching vertex and the curve that
-//!   bends left more lies above (chapter 14.4). Equal tangent and equal curvature at one point means
-//!   one curve: an overlap.
+//!   arc's 1 / r and a clockwise one's −1 / r; an ellipse's form is positive definite, so it bends
+//!   left exactly when it runs counter-clockwise), so a tangency is a touching vertex and the curve
+//!   that bends left more lies above (chapter 14.4). Equal tangent and equal curvature at one point
+//!   means one curve: an overlap. A line touches an ellipse only at a rational point, where the
+//!   discriminant of where they meet is zero.
 //! - **Nothing overflows silently.** Every step is a checked operation, at the width its derivation
 //!   below needs; a step that did not fit would be an error, never an answer. With a, b, k and w a
 //!   crossing's parts (below 2^628, 2^209, 2^837 and 2^585: `geom_num::one_root`'s widest column),
@@ -34,11 +53,15 @@
 //!   | The same, to a crossing | α + β√k, α = d · (A·W' − X'·w), β = W'(d · B) | α 755, β 335 bits, in 1,024 |
 //!   | The turn of a crossing and two centres | α + β√k, Uᵢ = Cᵢ·w − A·Wᵢ, Vᵢ = B·Wᵢ, α = U₁ × U₂, β = −(U₁ × V₂ + V₁ × U₂) | α 1,425, β 1,006 bits, in 1,536 |
 //!   | Two radii | rr · W'² against rr' · W² | 418 bits, in 512 |
+//!   | A linear form e · (p − K) of an ellipse's (s, r, or d · ∇S, e below 2^170), at a rational point | e · (X − W·K) | 296 bits, in 1,024 |
+//!   | The same, at a crossing | α + β√k, α = e · (A − w·K), β = e · B | α 800, β 380 bits, in 1,024 |
+//!   | Two ellipses as curves, by their forms' ratios to their levels | A · ℓ' against A' · ℓ | 334 bits, in 512 |
 //!
-//!   `sign_of_root` then squares α and β²k within its 80 limbs: below 2^2850 and 2^2851.
+//!   `sign_of_root` then squares α and β²k within its 80 limbs: below 2^2850 and 2^2851. An ellipse's
+//!   form is below 2^126 in each coefficient and its level below 2^208 (`Ellipse2::form`).
 //! - **Deterministic.** Integers, and certified intervals whose answers are exact signs; no platform
-//!   maths. The circles' order and each circle's stored form are chosen by exact comparison and then
-//!   by the integers of the input, never by the input's order.
+//!   maths. The circles' and ellipses' order and each one's stored form are chosen by exact
+//!   comparison and then by the integers of the input, never by the input's order.
 //!
 //! Method: Bentley and Ottmann's sweep generalised to x-monotone curves, as de Berg, Cheong, van
 //! Kreveld and Overmars, *Computational Geometry*, 3rd ed., section 2.1 (doi:10.1007/978-3-540-77974-2)
@@ -48,11 +71,15 @@
 //! (`projects/engines/geometry/architecture/14-2d-drafting.md`). The book only, as 14.2 says: CGAL's
 //! source not read (29.2). A tangent's turn is a cross product: for a counter-clockwise arc about C
 //! the tangent at p is p − C turned a quarter, so its cross with a direction d is d · (p − C) and
-//! with another arc's is the turn of p and the two centres.
+//! with another arc's is the turn of p and the two centres. An ellipse's halves are split by the
+//! diameter conjugate to the vertical, which halves every vertical chord, and its tangent is its
+//! form's gradient turned a quarter.
 //!
 //! Cost: constant time per question: a filter of a few interval operations, then at worst a few
-//! dozen products of at most 24 limbs and one `sign_of_root`. [`cut`] makes at most three pieces;
-//! [`circles_of`] sorts the arcs' circles, O(n log n) comparisons. No recursion.
+//! dozen products of at most 24 limbs and one `sign_of_root`. [`cut`] makes at most three pieces and
+//! [`cut_oval`] two; [`circles_of`] and [`ovals_of`] sort, O(n log n) comparisons. Telling whether an
+//! ellipse and a circle or another ellipse meet on two pieces costs one `Ellipse2::meeting` and
+//! [`NARROW`] levels of narrowing for each of at most four roots. No recursion.
 
 use alloc::boxed::Box;
 use alloc::vec::Vec;
@@ -60,8 +87,11 @@ use core::cmp::Ordering;
 
 use geom_num::arc::{Arc2, Contact, Disc, Round};
 use geom_num::carrier::{Carrier, Rational2};
+use geom_num::conic::{Conic, Ellipse2, Meeting};
+use geom_num::grid::P2;
 use geom_num::interval::Interval;
-use geom_num::one_root::{Crossing2, Root, enclose, sign_of_root};
+use geom_num::one_root::{Crossing2, Root, Stored, enclose, sign_of_root};
+use geom_num::quartic::RealRoot;
 use geom_num::wide::{I512, Wide};
 use geom_num::{NumError, Sign};
 
@@ -82,6 +112,11 @@ const _: () = assert!(1_425 < LONG_LIMBS * 64);
 
 /// Integers for the turn of a crossing and two centres.
 type Long = Wide<LONG_LIMBS>;
+
+/// Levels to which a root of an ellipse's quartic is narrowed before its place is read, when the
+/// sweep asks whether two curves meet on two pieces: 2^−64 of the parameter, a place within
+/// 2^−22 of a step for an ellipse within the budget, as `geom_2d::tangent` reads its joins.
+const NARROW: u32 = 64;
 
 /// The order a sign means.
 pub(super) const fn ordering(s: Sign) -> Ordering {
@@ -136,6 +171,111 @@ impl Circle {
     }
 }
 
+/// An ellipse the pieces lie on, with what its questions need.
+#[derive(Clone, Debug)]
+pub(super) struct Oval {
+    /// The ellipse, in the form its least-integer copy gives it.
+    pub(super) ellipse: Ellipse2,
+    /// A, B and C of its form, about its centre: below 2^126 each.
+    form: [I512; 3],
+    /// Its level, the form's value on it: below 2^208.
+    level: I512,
+}
+
+impl Oval {
+    /// The ellipse `ellipse`, with its form and level read out once.
+    fn of(ellipse: Ellipse2) -> Result<Oval, ArrangeError> {
+        let [a, b, c] = ellipse.form()?;
+        let narrow = |v: &Wide<64>| v.resize::<8>().ok_or(ArrangeError::Range);
+        Ok(Oval {
+            ellipse,
+            form: [narrow(&a)?, narrow(&b)?, narrow(&c)?],
+            level: narrow(&ellipse.level()?)?,
+        })
+    }
+
+    /// Its form's A, B and C at the width of the linear questions.
+    fn parts(&self) -> Result<[Mid; 3], NumError> {
+        let [a, b, c] = &self.form;
+        Ok([wide(a)?, wide(b)?, wide(c)?])
+    }
+
+    /// The sign of s(p) = B u + 2C v, with u = p − K, K the centre: zero on the diameter through
+    /// the leftmost and rightmost points, which halves every vertical chord (where the form, as a
+    /// quadratic in v, has its middle), and positive above it, as C is positive.
+    fn level_at(&self, p: &At) -> Result<Sign, NumError> {
+        let [_, b, c] = self.parts()?;
+        linear(p, &[b, add(&c, &c)?], self.ellipse.centre())
+    }
+
+    /// The sign of r(p) = 2A u + B v: the x part of the form's gradient at p, as
+    /// [`Oval::level_at`]'s s(p) is its y part.
+    fn across_at(&self, p: &At) -> Result<Sign, NumError> {
+        let [a, b, _] = self.parts()?;
+        linear(p, &[add(&a, &a)?, b], self.ellipse.centre())
+    }
+
+    /// The sign of d · ∇S(p), the direction `d` against the form's gradient at p:
+    /// (2A dx + B dy) u + (B dx + 2C dy) v, each coefficient below 2^170, d's parts below 2^42.
+    fn along_at(&self, p: &At, d: [i128; 2]) -> Result<Sign, NumError> {
+        let [a, b, c] = self.parts()?;
+        let [dx, dy] = d.map(Mid::from_i128);
+        let twice = |v: &Mid| add(v, v);
+        let e = [
+            add(&mul(&twice(&a)?, &dx)?, &mul(&b, &dy)?)?,
+            add(&mul(&b, &dx)?, &mul(&twice(&c)?, &dy)?)?,
+        ];
+        linear(p, &e, self.ellipse.centre())
+    }
+
+    /// Where `p` lies against it: [`Sign::Negative`] inside, [`Sign::Zero`] on it,
+    /// [`Sign::Positive`] outside.
+    fn against(&self, p: &At) -> Result<Sign, NumError> {
+        match p {
+            At::Rational(r) => self.ellipse.side(r),
+            At::Root(z) => z.against_ellipse(&self.ellipse),
+        }
+    }
+
+    /// Where the root `t` of a quartic along it lies, certainly: K + M cos θ + (p / q) M⊥ sin θ,
+    /// M⊥ = (−My, Mx), from the root's enclosure of cos θ and sin θ, t = tan(θ / 2).
+    fn place(&self, t: &RealRoot) -> Result<[Interval; 2], NumError> {
+        let [cos, sin] = t.angle()?;
+        let k = self.ellipse.centre();
+        let [mx, my] = self.ellipse.major();
+        let (mx, my) = (interval(i128::from(mx))?, interval(i128::from(my))?);
+        let (p, q) = self.ellipse.ratio();
+        let ratio = interval(i128::from(p))?.div(interval(i128::from(q))?)?;
+        let x = interval(i128::from(k.x.get()))?
+            .add(mx.mul(cos)?)?
+            .sub(ratio.mul(my)?.mul(sin)?)?;
+        let y = interval(i128::from(k.y.get()))?
+            .add(my.mul(cos)?)?
+            .add(ratio.mul(mx)?.mul(sin)?)?;
+        Ok([x, y])
+    }
+
+    /// The interval of s(p), [`Oval::level_at`]'s value, over the box `at`.
+    fn level_over(&self, at: &[Interval; 2]) -> Result<Interval, NumError> {
+        let [_, b, c] = &self.form;
+        let k = self.ellipse.centre();
+        let [x, y] = at;
+        let u = x.sub(interval(i128::from(k.x.get()))?)?;
+        let v = y.sub(interval(i128::from(k.y.get()))?)?;
+        let twice_c = enclose(c)?.mul(Interval::point(2.0)?)?;
+        enclose(b)?.mul(u)?.add(twice_c.mul(v)?)
+    }
+}
+
+/// The circles and ellipses the pieces lie on, each listed once.
+#[derive(Clone, Debug, Default)]
+pub(super) struct Shapes {
+    /// The circles, as [`circles_of`] lists them.
+    pub(super) circles: Vec<Circle>,
+    /// The ellipses, as [`ovals_of`] lists them.
+    pub(super) ovals: Vec<Oval>,
+}
+
 /// What a piece lies on.
 #[derive(Clone, Copy, Debug)]
 pub(super) enum On {
@@ -154,6 +294,14 @@ pub(super) enum On {
         /// Whether the piece is on the upper half.
         upper: bool,
     },
+    /// One half of a listed ellipse: the upper half, from its leftmost point over the top to its
+    /// rightmost, or the lower, split by the diameter through those two points.
+    Ellipse {
+        /// The ellipse's place in the list.
+        ellipse: u32,
+        /// Whether the piece is on the upper half.
+        upper: bool,
+    },
 }
 
 /// A piece of the sweep, from its lexicographically lower end to its higher.
@@ -167,9 +315,10 @@ pub(super) struct Piece {
     pub(super) on: On,
 }
 
-/// Which way a curve leaves a point: along a line, or along a circle, counter-clockwise or not. Its
-/// tangent at p is the line's direction, or p − C turned a quarter counter-clockwise (or the other
-/// way), and its curvature 0, 1 / r or −1 / r.
+/// Which way a curve leaves a point: along a line, or along a circle or an ellipse,
+/// counter-clockwise or not. Its tangent at p is the line's direction, p − C turned a quarter
+/// counter-clockwise (or the other way), or the ellipse's form's gradient at p turned so; and its
+/// curvature 0, 1 / r or −1 / r, or of an ellipse's sign.
 #[derive(Clone, Copy, Debug)]
 pub(super) enum Way<'a> {
     /// Along a line, this way.
@@ -178,6 +327,15 @@ pub(super) enum Way<'a> {
     Arc {
         /// The circle.
         circle: &'a Circle,
+        /// Whether it runs counter-clockwise.
+        ccw: bool,
+    },
+    /// Along an ellipse.
+    Ellipse {
+        /// The ellipse.
+        oval: &'a Oval,
+        /// Its place in the list, which names it.
+        index: u32,
         /// Whether it runs counter-clockwise.
         ccw: bool,
     },
@@ -191,10 +349,18 @@ pub(super) fn circle_of(circles: &[Circle], at: u32) -> Result<&Circle, ArrangeE
         .ok_or(ArrangeError::TooMany)
 }
 
+/// The ellipse at `at` in the list.
+pub(super) fn oval_of(ovals: &[Oval], at: u32) -> Result<&Oval, ArrangeError> {
+    usize::try_from(at)
+        .ok()
+        .and_then(|i| ovals.get(i))
+        .ok_or(ArrangeError::TooMany)
+}
+
 /// The way `piece` runs from its lower end, or from its higher end back when `back`.
 pub(super) fn way<'a>(
     piece: &Piece,
-    circles: &'a [Circle],
+    shapes: &'a Shapes,
     back: bool,
 ) -> Result<Way<'a>, ArrangeError> {
     Ok(match piece.on {
@@ -209,7 +375,13 @@ pub(super) fn way<'a>(
         // Along the lower half from its left end the way runs counter-clockwise; along the upper,
         // clockwise; back, the other way.
         On::Arc { circle, upper } => Way::Arc {
-            circle: circle_of(circles, circle)?,
+            circle: circle_of(&shapes.circles, circle)?,
+            ccw: upper == back,
+        },
+        // The same holds of an ellipse's halves.
+        On::Ellipse { ellipse, upper } => Way::Ellipse {
+            oval: oval_of(&shapes.ovals, ellipse)?,
+            index: ellipse,
             ccw: upper == back,
         },
     })
@@ -236,52 +408,70 @@ fn against(p: &At, c: &Circle) -> Result<Sign, NumError> {
 /// Where `p` lies against `piece`: [`Sign::Positive`] above it, [`Sign::Zero`] on it,
 /// [`Sign::Negative`] below, for a point whose x the piece spans. Above a line is its left side, as
 /// it runs from its lower end to its higher. Above the upper half is outside the circle and not below
-/// the centre; above the lower half is inside the circle, or above the centre.
+/// the centre; above the lower half is inside the circle, or above the centre. An ellipse's halves
+/// are the same with the diameter that halves its vertical chords in place of the centre's level.
 ///
 /// # Errors
 ///
 /// [`ArrangeError::Range`] if a step did not fit.
-pub(super) fn side(piece: &Piece, circles: &[Circle], p: &At) -> Result<Sign, ArrangeError> {
+pub(super) fn side(piece: &Piece, shapes: &Shapes, p: &At) -> Result<Sign, ArrangeError> {
     match piece.on {
         On::Line { line, .. } => Ok(match p {
             At::Rational(r) => line.side(r)?,
             At::Root(z) => z.side(&line)?,
         }),
         On::Arc { circle, upper } => {
-            let c = circle_of(circles, circle)?;
+            let c = circle_of(&shapes.circles, circle)?;
             let level = from_centre(p, c, false)?;
-            if upper {
-                if level == Sign::Negative {
-                    return Ok(Sign::Negative);
-                }
-                Ok(against(p, c)?)
-            } else {
-                if level == Sign::Positive {
-                    return Ok(Sign::Positive);
-                }
-                Ok(against(p, c)?.negate())
-            }
+            Ok(halves(upper, level, || against(p, c))?)
+        }
+        On::Ellipse { ellipse, upper } => {
+            let o = oval_of(&shapes.ovals, ellipse)?;
+            Ok(halves(upper, o.level_at(p)?, || o.against(p))?)
         }
     }
 }
 
-/// Whether `q`, a point of `piece`'s line or circle, lies on the piece: between its ends, and on its
-/// half of a circle.
-fn holds(piece: &Piece, circles: &[Circle], q: &At) -> Result<bool, ArrangeError> {
+/// Where a point lies against one half of a closed curve, from its level against the half's
+/// dividing line and, when that does not settle it, where it lies against the curve (`against`,
+/// negative inside).
+fn halves(
+    upper: bool,
+    level: Sign,
+    against: impl FnOnce() -> Result<Sign, NumError>,
+) -> Result<Sign, NumError> {
+    if upper {
+        if level == Sign::Negative {
+            return Ok(Sign::Negative);
+        }
+        against()
+    } else {
+        if level == Sign::Positive {
+            return Ok(Sign::Positive);
+        }
+        Ok(against()?.negate())
+    }
+}
+
+/// Whether `q`, a point of `piece`'s line, circle or ellipse, lies on the piece: between its ends,
+/// and on its half of a circle or an ellipse.
+fn holds(piece: &Piece, shapes: &Shapes, q: &At) -> Result<bool, ArrangeError> {
     if cmp_pt(q, &piece.lo)? == Ordering::Less || cmp_pt(q, &piece.hi)? == Ordering::Greater {
         return Ok(false);
     }
-    match piece.on {
-        On::Line { .. } => Ok(true),
-        On::Arc { circle, upper } => {
-            let level = from_centre(q, circle_of(circles, circle)?, false)?;
-            Ok(if upper {
-                level != Sign::Negative
-            } else {
-                level != Sign::Positive
-            })
-        }
-    }
+    let (level, upper) = match piece.on {
+        On::Line { .. } => return Ok(true),
+        On::Arc { circle, upper } => (
+            from_centre(q, circle_of(&shapes.circles, circle)?, false)?,
+            upper,
+        ),
+        On::Ellipse { ellipse, upper } => (oval_of(&shapes.ovals, ellipse)?.level_at(q)?, upper),
+    };
+    Ok(if upper {
+        level != Sign::Negative
+    } else {
+        level != Sign::Positive
+    })
 }
 
 /// A crossing, boxed as a vertex.
@@ -310,18 +500,97 @@ fn two_circles(c: &Circle, d: &Circle) -> Result<[Option<At>; 2], ArrangeError> 
     Ok([at(Root::First)?, at(Root::Second)?])
 }
 
+/// Where the line `l` meets the ellipse `o`: none, one point at a tangency, or two.
+fn line_and_oval(l: &Carrier, o: &Oval) -> Result<[Option<At>; 2], ArrangeError> {
+    let at = |r: Root| Crossing2::of_ellipse(l, &o.ellipse, r).map(|z| root(&z));
+    Ok(match o.ellipse.meets(l)? {
+        Contact::Apart => [None, None],
+        Contact::Tangent => [Some(at(Root::First)?), None],
+        Contact::Crossing => [Some(at(Root::First)?), Some(at(Root::Second)?)],
+    })
+}
+
+/// Where `p` lies, certainly.
+fn enclosure_of(p: &At) -> Result<[Interval; 2], NumError> {
+    Ok(match p {
+        At::Rational(r) => Crossing2::of_point(r)?.enclosure(),
+        At::Root(z) => z.enclosure(),
+    })
+}
+
+/// Whether no point of the box `at` lies on `piece`: the box is wholly left or right of the piece's
+/// ends, or wholly on the far side of its half's dividing line.
+fn certainly_off(piece: &Piece, shapes: &Shapes, at: &[Interval; 2]) -> Result<bool, ArrangeError> {
+    let [x, y] = at;
+    let ([lo, _], [hi, _]) = (enclosure_of(&piece.lo)?, enclosure_of(&piece.hi)?);
+    if x.hi() < lo.lo() || x.lo() > hi.hi() {
+        return Ok(true);
+    }
+    let (level, upper) = match piece.on {
+        On::Line { .. } => return Ok(false),
+        On::Arc { circle, upper } => {
+            let ([_, cy], cw) = circle_of(&shapes.circles, circle)?.centre.coordinates();
+            (y.sub(fraction(cy, cw)?)?, upper)
+        }
+        On::Ellipse { ellipse, upper } => (oval_of(&shapes.ovals, ellipse)?.level_over(at)?, upper),
+    };
+    let wrong = if upper {
+        Sign::Negative
+    } else {
+        Sign::Positive
+    };
+    Ok(level.certain_sign() == Some(wrong))
+}
+
+/// Refuses a piece of an ellipse and a piece of a circle or of another ellipse that may meet, as
+/// [`ArrangeError::Conic`]: they meet at roots of a quartic along the ellipse, which this sweep
+/// does not place. They are let pass when the curves do not meet at all, or when each root,
+/// narrowed [`NARROW`] levels and its place enclosed, certainly lies off one of the two pieces.
+fn apart(s: &Piece, t: &Piece, shapes: &Shapes) -> Result<(), ArrangeError> {
+    let (first, other) = if matches!(s.on, On::Ellipse { .. }) {
+        (s, t)
+    } else {
+        (t, s)
+    };
+    let On::Ellipse { ellipse, .. } = first.on else {
+        return Err(ArrangeError::Conic);
+    };
+    let o = oval_of(&shapes.ovals, ellipse)?;
+    let conic = match other.on {
+        On::Arc { circle, .. } => Conic::of_round(&circle_of(&shapes.circles, circle)?.round)?,
+        On::Ellipse { ellipse: j, .. } => Conic::of_ellipse(&oval_of(&shapes.ovals, j)?.ellipse)?,
+        On::Line { .. } => return Err(ArrangeError::Conic),
+    };
+    let Meeting::At { quartic, roots } = o.ellipse.meeting(&conic)? else {
+        return Err(ArrangeError::Conic);
+    };
+    if roots.count() == 0 {
+        return Ok(());
+    }
+    for r in roots.narrowed(&quartic, NARROW)?.iter() {
+        let at = o.place(r)?;
+        if !(certainly_off(first, shapes, &at)? || certainly_off(other, shapes, &at)?) {
+            return Err(ArrangeError::Conic);
+        }
+    }
+    Ok(())
+}
+
 /// The points after `after` where `s` and `t` meet, on both pieces: none, one or two. Two pieces of
-/// one circle meet only at their ends, which are events already, and two pieces of one line likewise.
+/// one circle or one ellipse meet only at their ends, which are events already, and two pieces of
+/// one line likewise.
 ///
 /// # Errors
 ///
-/// [`ArrangeError::Range`] if a step did not fit.
+/// [`ArrangeError::Range`] if a step did not fit, and [`ArrangeError::Conic`] for a piece of an
+/// ellipse and a piece of a circle or of another ellipse that may meet ([`apart`]).
 pub(super) fn meetings(
     s: &Piece,
     t: &Piece,
-    circles: &[Circle],
+    shapes: &Shapes,
     after: &At,
 ) -> Result<[Option<At>; 2], ArrangeError> {
+    let circles = &shapes.circles;
     let found = match (s.on, t.on) {
         (On::Line { line: l, dir: a }, On::Line { line: m, dir: b }) => {
             if cross_sign(a, b)? == Ordering::Equal {
@@ -341,13 +610,23 @@ pub(super) fn meetings(
                 two_circles(circle_of(circles, i)?, circle_of(circles, j)?)?
             }
         }
+        (On::Line { line, .. }, On::Ellipse { ellipse, .. })
+        | (On::Ellipse { ellipse, .. }, On::Line { line, .. }) => {
+            line_and_oval(&line, oval_of(&shapes.ovals, ellipse)?)?
+        }
+        (On::Ellipse { ellipse: i, .. }, On::Ellipse { ellipse: j, .. }) if i == j => [None, None],
+        (On::Arc { .. } | On::Ellipse { .. }, On::Ellipse { .. })
+        | (On::Ellipse { .. }, On::Arc { .. }) => {
+            apart(s, t, shapes)?;
+            [None, None]
+        }
     };
     let mut out = [None, None];
     for (slot, q) in out.iter_mut().zip(found) {
         if let Some(q) = q
             && cmp_pt(&q, after)? == Ordering::Greater
-            && holds(s, circles, &q)?
-            && holds(t, circles, &q)?
+            && holds(s, shapes, &q)?
+            && holds(t, shapes, &q)?
         {
             *slot = Some(q);
         }
@@ -356,19 +635,22 @@ pub(super) fn meetings(
 }
 
 /// The signs of the x and y parts of the tangent of `w` at `p`: for a circle, p − C turned a quarter
-/// counter-clockwise is (−(y − cy), x − cx), (cx, cy) the centre.
+/// counter-clockwise is (−(y − cy), x − cx), (cx, cy) the centre; for an ellipse, its form's
+/// gradient turned so, (−s(p), r(p)) as [`Oval::level_at`] and [`Oval::across_at`] say.
 fn tangent(p: &At, w: &Way<'_>) -> Result<(Sign, Sign), ArrangeError> {
-    Ok(match w {
-        Way::Line([dx, dy]) => (Sign::of_i128(*dx), Sign::of_i128(*dy)),
-        Way::Arc { circle, ccw } => {
-            let tx = from_centre(p, circle, false)?.negate();
-            let ty = from_centre(p, circle, true)?;
-            if *ccw {
-                (tx, ty)
-            } else {
-                (tx.negate(), ty.negate())
-            }
-        }
+    let (tx, ty, ccw) = match w {
+        Way::Line([dx, dy]) => return Ok((Sign::of_i128(*dx), Sign::of_i128(*dy))),
+        Way::Arc { circle, ccw } => (
+            from_centre(p, circle, false)?.negate(),
+            from_centre(p, circle, true)?,
+            *ccw,
+        ),
+        Way::Ellipse { oval, ccw, .. } => (oval.level_at(p)?.negate(), oval.across_at(p)?, *ccw),
+    };
+    Ok(if ccw {
+        (tx, ty)
+    } else {
+        (tx.negate(), ty.negate())
     })
 }
 
@@ -383,7 +665,10 @@ fn half(t: (Sign, Sign)) -> u8 {
 /// wedge that points west and a hair south, which is where a component's outside lies at its
 /// lowest-leftmost vertex when the sweep line is tilted.
 pub(super) fn west_not_left(p: &At, w: &Way<'_>) -> Result<bool, ArrangeError> {
-    let bends_left = matches!(w, Way::Arc { ccw: true, .. });
+    let bends_left = matches!(
+        w,
+        Way::Arc { ccw: true, .. } | Way::Ellipse { ccw: true, .. }
+    );
     Ok(!bends_left && tangent(p, w)? == (Sign::Negative, Sign::Zero))
 }
 
@@ -415,6 +700,41 @@ fn sub<const L: usize>(a: &Wide<L>, b: &Wide<L>) -> Result<Wide<L>, NumError> {
 /// A wide integer at width `M`.
 fn wide<const L: usize, const M: usize>(v: &Wide<L>) -> Result<Wide<M>, NumError> {
     v.resize().ok_or(NumError::BudgetExceeded)
+}
+
+/// The sign of e · (p − K), with K a grid point and e's parts below 2^170: a linear form in p. Over
+/// p's weight it is e · (X − W · K) at a rational point, below 2^296, and α + β√k at a one-root
+/// point, α = e · (A − w · K) below 2^800 and β = e · B below 2^380, as `geom_num::one_root`'s
+/// widest column bounds A at 2^628, w at 2^585 and B at 2^209.
+fn linear(p: &At, e: &[Mid; 2], k: P2) -> Result<Sign, NumError> {
+    let [ex, ey] = e;
+    let (kx, ky) = (k.x.get(), k.y.get());
+    match p {
+        At::Rational(r) => {
+            let ([x, y], w) = r.coordinates();
+            let n = Mid::from_i128;
+            let part = |v: i128, c: i64| sub(&n(v), &mul(&Mid::from_i64(c), &n(w))?);
+            Ok(add(&mul(ex, &part(x, kx)?)?, &mul(ey, &part(y, ky)?)?)?.signum())
+        }
+        At::Root(z) => {
+            let [ix, iy] = z.enclosure();
+            let from = |i: Interval, c: i64| -> Result<Interval, NumError> {
+                i.sub(interval(i128::from(c))?)
+            };
+            let value = enclose(ex)?
+                .mul(from(ix, kx)?)?
+                .add(enclose(ey)?.mul(from(iy, ky)?)?)?;
+            if let Some(sign @ (Sign::Positive | Sign::Negative)) = value.certain_sign() {
+                return Ok(sign);
+            }
+            let ([ax, ay], [bx, by], root, w) = z.parts();
+            let w: Mid = wide(&w)?;
+            let part = |a: &Stored, c: i64| sub(&wide(a)?, &mul(&Mid::from_i64(c), &w)?);
+            let alpha = add(&mul(ex, &part(&ax, kx)?)?, &mul(ey, &part(&ay, ky)?)?)?;
+            let beta = add(&mul(ex, &wide(&bx)?)?, &mul(ey, &wide(&by)?)?)?;
+            sign_of_root(&alpha, &beta, &wide::<14, MID_LIMBS>(&root)?)
+        }
+    }
 }
 
 /// The sign of d · (p − C), the direction `d` against the way from the centre of `c` to `p`.
@@ -505,7 +825,9 @@ fn turn(p: &At, c: &Circle, e: &Circle) -> Result<Sign, NumError> {
 /// The sign of the cross product of the tangents of `a` and `b` at `p`, positive when `b` turns
 /// counter-clockwise from `a`. For a circle the tangent is σ(p − C) turned a quarter, σ = 1
 /// counter-clockwise; a quarter turn keeps a cross product, and the cross of d with p − C turned is
-/// d · (p − C).
+/// d · (p − C). For an ellipse it is σ∇S(p) turned, so the cross of d with it is d · ∇S(p). An
+/// ellipse and a circle or another ellipse leave one point only where they meet, which
+/// [`meetings`] refuses: [`ArrangeError::Conic`].
 fn cross(p: &At, a: &Way<'_>, b: &Way<'_>) -> Result<Sign, ArrangeError> {
     let by = |ccw: bool, s: Sign| if ccw { s } else { s.negate() };
     Ok(match (a, b) {
@@ -528,6 +850,11 @@ fn cross(p: &At, a: &Way<'_>, b: &Way<'_>) -> Result<Sign, ArrangeError> {
                 ccw: second,
             },
         ) => by(first == second, turn(p, c, e)?),
+        (Way::Line(d), Way::Ellipse { oval, ccw, .. }) => by(*ccw, oval.along_at(p, *d)?),
+        (Way::Ellipse { oval, ccw, .. }, Way::Line(d)) => by(*ccw, oval.along_at(p, *d)?).negate(),
+        (Way::Ellipse { index: i, .. }, Way::Ellipse { index: j, .. }) if i == j => Sign::Zero,
+        (Way::Arc { .. } | Way::Ellipse { .. }, Way::Ellipse { .. })
+        | (Way::Ellipse { .. }, Way::Arc { .. }) => return Err(ArrangeError::Conic),
     })
 }
 
@@ -543,12 +870,14 @@ fn radius(c: &Circle, e: &Circle) -> Result<Ordering, ArrangeError> {
 }
 
 /// The order of the signed curvatures of `a` and `b`, ascending: a clockwise arc's −1 / r, a line's
-/// zero, a counter-clockwise arc's 1 / r.
+/// zero, a counter-clockwise arc's 1 / r. An ellipse's form is positive definite, so it bends left
+/// exactly when it runs counter-clockwise, as a circle does; two pieces of one ellipse leaving a point
+/// one way are one curve, and an ellipse beside a circle or another ellipse is [`cross`]'s refusal.
 fn bend(a: &Way<'_>, b: &Way<'_>) -> Result<Ordering, ArrangeError> {
     let turning = |w: &Way<'_>| match w {
         Way::Line(_) => 1_u8,
-        Way::Arc { ccw: false, .. } => 0,
-        Way::Arc { ccw: true, .. } => 2,
+        Way::Arc { ccw: false, .. } | Way::Ellipse { ccw: false, .. } => 0,
+        Way::Arc { ccw: true, .. } | Way::Ellipse { ccw: true, .. } => 2,
     };
     match turning(a).cmp(&turning(b)) {
         Ordering::Equal => {}
@@ -560,6 +889,9 @@ fn bend(a: &Way<'_>, b: &Way<'_>) -> Result<Ordering, ArrangeError> {
             let wider = radius(c, e)?;
             if *ccw { wider.reverse() } else { wider }
         }
+        (Way::Ellipse { index: i, .. }, Way::Ellipse { index: j, .. }) if i == j => Ordering::Equal,
+        (Way::Arc { .. } | Way::Ellipse { .. }, Way::Ellipse { .. })
+        | (Way::Ellipse { .. }, Way::Arc { .. }) => return Err(ArrangeError::Conic),
         _ => Ordering::Equal,
     })
 }
@@ -711,6 +1043,107 @@ pub(super) fn cut(
             Ordering::Equal => return Err(ArrangeError::Range),
         };
         out.push(piece);
+    }
+    Ok(())
+}
+
+/// How two ellipses compare as curves: by centre x, then y, then the ratios A / ℓ, B / ℓ and C / ℓ
+/// of their forms to their levels, cross-multiplied, each product below 2^334; equal exactly when
+/// they are one curve, whatever major-axis vector and ratio wrote them.
+fn same_oval(o: &Oval, e: &Oval) -> Result<Ordering, ArrangeError> {
+    let (k, m) = (o.ellipse.centre(), e.ellipse.centre());
+    let by_centre = (k.x.get(), k.y.get()).cmp(&(m.x.get(), m.y.get()));
+    if by_centre != Ordering::Equal {
+        return Ok(by_centre);
+    }
+    for (a, b) in o.form.iter().zip(&e.form) {
+        let here = mul(a, &e.level)?;
+        let there = mul(b, &o.level)?;
+        match here.cmp(&there) {
+            Ordering::Equal => {}
+            other => return Ok(other),
+        }
+    }
+    Ok(Ordering::Equal)
+}
+
+/// The ellipses of `ellipses`, each once, in [`same_oval`]'s order, and for each its place. Of the
+/// copies of one curve, the one whose major-axis vector, then ratio, has the least integers gives it
+/// its stored form, so the list does not depend on the input's order.
+///
+/// # Errors
+///
+/// [`ArrangeError::Range`] if a step did not fit, and [`ArrangeError::TooMany`] past 2^32 ellipses.
+pub(super) fn ovals_of(ellipses: &[Ellipse2]) -> Result<(Vec<Oval>, Vec<u32>), ArrangeError> {
+    let all: Vec<Oval> = ellipses
+        .iter()
+        .map(|e| Oval::of(*e))
+        .collect::<Result<_, _>>()?;
+    let get = |i: usize| all.get(i).ok_or(ArrangeError::TooMany);
+    let form = |o: &Oval| {
+        let [mx, my] = o.ellipse.major();
+        let (p, q) = o.ellipse.ratio();
+        (mx, my, p, q)
+    };
+    let mut order: Vec<usize> = (0..all.len()).collect();
+    let mut fail: Option<ArrangeError> = None;
+    order.sort_by(|&i, &j| {
+        let (Ok(o), Ok(e)) = (get(i), get(j)) else {
+            fail = Some(ArrangeError::TooMany);
+            return Ordering::Equal;
+        };
+        match same_oval(o, e) {
+            Ok(Ordering::Equal) => form(o).cmp(&form(e)).then(i.cmp(&j)),
+            Ok(other) => other,
+            Err(err) => {
+                fail = Some(err);
+                Ordering::Equal
+            }
+        }
+    });
+    if let Some(e) = fail {
+        return Err(e);
+    }
+    let mut ovals: Vec<Oval> = Vec::new();
+    let mut place: Vec<u32> = alloc::vec![0; all.len()];
+    for &i in &order {
+        let o = get(i)?;
+        let fresh = match ovals.last() {
+            Some(last) => same_oval(last, o)? != Ordering::Equal,
+            None => true,
+        };
+        if fresh {
+            ovals.push(o.clone());
+        }
+        let at = u32::try_from(ovals.len().saturating_sub(1)).map_err(|_| ArrangeError::TooMany)?;
+        if let Some(slot) = place.get_mut(i) {
+            *slot = at;
+        }
+    }
+    Ok((ovals, place))
+}
+
+/// The two pieces of the whole listed ellipse at `ellipse`, appended to `out`: its lower half and
+/// then its upper, each from its leftmost point to its rightmost, the one-root points
+/// `Crossing2::of_ellipse_extreme` gives.
+///
+/// # Errors
+///
+/// [`ArrangeError::Range`] if a step did not fit.
+pub(super) fn cut_oval(
+    ellipse: u32,
+    ovals: &[Oval],
+    out: &mut Vec<Piece>,
+) -> Result<(), ArrangeError> {
+    let o = oval_of(ovals, ellipse)?;
+    let left = root(&Crossing2::of_ellipse_extreme(&o.ellipse, Root::First)?);
+    let right = root(&Crossing2::of_ellipse_extreme(&o.ellipse, Root::Second)?);
+    for upper in [false, true] {
+        out.push(Piece {
+            lo: left.clone(),
+            hi: right.clone(),
+            on: On::Ellipse { ellipse, upper },
+        });
     }
     Ok(())
 }

@@ -736,6 +736,8 @@ pub static UNMEASURED: &[(&str, &str)] = &[
     ("Ellipse2::centre", "field accessor"),
     ("Ellipse2::major", "field accessor"),
     ("Ellipse2::ratio", "field accessor"),
+    ("Ellipse2::form", "six products and three sums, part of what Ellipse2::meeting is measured doing"),
+    ("Ellipse2::level", "three products and a sum, part of what Ellipse2::meeting is measured doing"),
     ("Ellipse2::quartic", "a few dozen products, the first step of Ellipse2::meeting, which is measured"),
     ("Conic::of_ellipse", "the form's products, part of what Ellipse2::meeting is measured doing"),
     ("Conic::of_circle", "one product"),

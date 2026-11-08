@@ -226,8 +226,14 @@ impl Ellipse2 {
             .ok_or(NumError::BudgetExceeded)
     }
 
-    /// The quadratic form of its equation: A, B and C of A x² + B x y + C y², about its centre.
-    pub(crate) fn form(&self) -> Result<[Big; 3], NumError> {
+    /// The quadratic form of its equation: A, B and C of A x² + B x y + C y², about its centre, so
+    /// that the ellipse is where the form equals [`Ellipse2::level`]. A and C are positive and below
+    /// 2^125, |B| below 2^126, and 4AC − B² is 4p²q²L², L = ‖M‖².
+    ///
+    /// # Errors
+    ///
+    /// As for [`Ellipse2::side`].
+    pub fn form(&self) -> Result<[Big; 3], NumError> {
         let [mx, my] = self.major.map(big);
         let (p2, q2) = (
             mul(&big(self.p), &big(self.p))?,
@@ -243,8 +249,12 @@ impl Ellipse2 {
         ])
     }
 
-    /// p² · L², of the equation's right side: L = ‖M‖².
-    pub(crate) fn level(&self) -> Result<Big, NumError> {
+    /// p² · L², of the equation's right side: L = ‖M‖², so the level is positive and below 2^208.
+    ///
+    /// # Errors
+    ///
+    /// As for [`Ellipse2::side`].
+    pub fn level(&self) -> Result<Big, NumError> {
         let [mx, my] = self.major.map(big);
         let length = add(&mul(&mx, &mx)?, &mul(&my, &my)?)?;
         let scaled = mul(&big(self.p), &length)?;
