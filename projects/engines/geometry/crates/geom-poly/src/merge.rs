@@ -399,16 +399,22 @@ struct Cell {
 
 impl Cell {
     /// v / `over` split, or `None` unless `over` is positive. Every v has its cell: the floor
-    /// and the Euclidean remainder of any `i128` by a positive divisor fit `i128`.
+    /// and the Euclidean remainder of any `i128` by a positive divisor fit `i128`. One division
+    /// gives both, in `i64` where v and `over` fit it, the machine's own division, else in `i128`.
     fn new(v: i128, over: i128) -> Option<Self> {
         if over <= 0 {
             return None;
         }
-        Some(Cell {
-            floor: v.checked_div_euclid(over)?,
-            rest: v.checked_rem_euclid(over)?,
-            over,
-        })
+        if let (Ok(a), Ok(b)) = (i64::try_from(v), i64::try_from(over)) {
+            let (floor, rest) = floor_and_rest_in_words(a, b)?;
+            return Some(Cell {
+                floor: i128::from(floor),
+                rest: i128::from(rest),
+                over,
+            });
+        }
+        let (floor, rest) = floor_and_rest(v, over)?;
+        Some(Cell { floor, rest, over })
     }
 
     /// The order of the two ratios, exactly.
@@ -435,6 +441,29 @@ impl Cell {
         }
         narrow_order(self.rest, self.over, other.rest, other.over)
     }
+}
+
+/// The Euclidean floor and remainder of a by b, b positive, from one division: the quotient
+/// rounded towards zero, and one less, with the remainder one b more, where the remainder it leaves
+/// is negative. The truncated remainder has a's sign and is smaller than b, so a less it, the
+/// quotient times b, fits, and so does each step after.
+fn floor_and_rest(a: i128, b: i128) -> Option<(i128, i128)> {
+    let quotient = a.checked_div(b)?;
+    let rest = a.checked_sub(quotient.checked_mul(b)?)?;
+    if rest < 0 {
+        return Some((quotient.checked_sub(1)?, rest.checked_add(b)?));
+    }
+    Some((quotient, rest))
+}
+
+/// [`floor_and_rest`] in `i64`, the machine's own division.
+fn floor_and_rest_in_words(a: i64, b: i64) -> Option<(i64, i64)> {
+    let quotient = a.checked_div(b)?;
+    let rest = a.checked_sub(quotient.checked_mul(b)?)?;
+    if rest < 0 {
+        return Some((quotient.checked_sub(1)?, rest.checked_add(b)?));
+    }
+    Some((quotient, rest))
 }
 
 /// Each `X_i` / w as a [`Cell`], w made positive, if every step fits.
@@ -493,7 +522,8 @@ fn lead(cell: &Cell) -> Lead {
         // rest · 2^32 < over · 2^32 fits, and the quotient is below 2^32.
         let scaled = rest.wrapping_shl(u32::BITS);
         let digits = scaled.checked_div(over).unwrap_or(0);
-        let more = scaled.checked_rem(over).unwrap_or(0) != 0;
+        // digits · over is at most scaled, so the product is exact.
+        let more = scaled != digits.wrapping_mul(over);
         return (cell.floor, u32::try_from(digits).unwrap_or(u32::MAX), more);
     }
     let mut rest = rest;
@@ -2270,6 +2300,8 @@ mod tests {
             (-1, 3),
             ((1 << 100) + 1, 1 << 101),
             (1 << 99, 1 << 100),
+            (1, 1 << 70),
+            (-5, 1 << 70),
             ((1 << 96) - 1, 1 << 97),
             (1 << 96, (1 << 96) + 1),
         ] {
@@ -2384,6 +2416,56 @@ mod tests {
             [mark(&third), mark(&near), u128::MAX, mark(&cell(7, 5))]
         );
         assert_eq!(key.marks[4], 0);
+    }
+
+    /// A cell's floor and remainder are the Euclidean ones, in machine words or not.
+    fn splits(v: i128, over: i128) {
+        let cell = Cell::new(v, over).unwrap();
+        assert_eq!(
+            (cell.floor, cell.rest, cell.over),
+            (v.div_euclid(over), v.rem_euclid(over), over),
+            "{v} / {over}"
+        );
+    }
+
+    proptest! {
+        #[test]
+        fn a_cell_is_the_euclidean_floor_and_remainder(v in any::<i128>(), over in 1i128..) {
+            splits(v, over);
+        }
+
+        #[test]
+        fn a_cell_in_words_is_the_euclidean_floor_and_remainder(
+            v in any::<i64>(), over in 1i64..,
+        ) {
+            splits(i128::from(v), i128::from(over));
+        }
+    }
+
+    #[test]
+    fn cells_at_the_ends_of_words() {
+        for v in [
+            i128::MIN,
+            i128::from(i64::MIN) - 1,
+            i128::from(i64::MIN),
+            -7,
+            -1,
+            0,
+            1,
+            7,
+        ] {
+            for over in [
+                1,
+                2,
+                3,
+                i128::from(i64::MAX),
+                i128::from(i64::MAX) + 1,
+                i128::MAX,
+            ] {
+                splits(v, over);
+                splits(-v.max(-i128::MAX), over);
+            }
+        }
     }
 
     #[test]
