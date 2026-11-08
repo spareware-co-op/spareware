@@ -95,7 +95,7 @@ use geom_num::conic::{Conic, Ellipse2, Meeting};
 use geom_num::grid::P2;
 use geom_num::interval::Interval;
 use geom_num::one_root::{Crossing2, Root, Stored, enclose, sign_of_root};
-use geom_num::quartic::RealRoot;
+use geom_num::quartic::{Quartic, RealRoot, Roots};
 use geom_num::wide::{I512, Wide};
 use geom_num::{NumError, Sign};
 
@@ -525,58 +525,89 @@ fn enclosure_of(p: &At) -> Result<[Interval; 2], NumError> {
     })
 }
 
-/// Whether no point of the box `at` lies on `piece`: the box is wholly left or right of the piece's
-/// ends, or wholly on the far side of its half's dividing line.
-fn certainly_off(piece: &Piece, shapes: &Shapes, at: &[Interval; 2]) -> Result<bool, ArrangeError> {
-    let [x, y] = at;
+/// Whether no point of the box `at` lies on `piece`, on its curve's upper half or lower: the box is
+/// wholly left or right of the piece's ends, or `level`, the level over the box of the line dividing
+/// the curve's halves, is wholly on the far side of it.
+fn certainly_off(
+    piece: &Piece,
+    upper: bool,
+    level: Interval,
+    at: &[Interval; 2],
+) -> Result<bool, ArrangeError> {
+    let [x, _] = at;
     let ([lo, _], [hi, _]) = (enclosure_of(&piece.lo)?, enclosure_of(&piece.hi)?);
-    if x.hi() < lo.lo() || x.lo() > hi.hi() {
-        return Ok(true);
-    }
-    let (level, upper) = match piece.on {
-        On::Line { .. } => return Ok(false),
-        On::Arc { circle, upper } => {
-            let ([_, cy], cw) = circle_of(&shapes.circles, circle)?.centre.coordinates();
-            (y.sub(fraction(cy, cw)?)?, upper)
-        }
-        On::Ellipse { ellipse, upper } => (oval_of(&shapes.ovals, ellipse)?.level_over(at)?, upper),
-    };
     let wrong = if upper {
         Sign::Negative
     } else {
         Sign::Positive
     };
-    Ok(level.certain_sign() == Some(wrong))
+    Ok(x.hi() < lo.lo() || x.lo() > hi.hi() || level.certain_sign() == Some(wrong))
+}
+
+/// The curve of a piece [`apart`] weighs: a circle or an ellipse.
+#[derive(Clone, Copy)]
+enum Rounded<'a> {
+    /// A circle.
+    Circle(&'a Circle),
+    /// An ellipse.
+    Oval(&'a Oval),
+}
+
+impl Rounded<'_> {
+    /// Its equation.
+    fn conic(self) -> Result<Conic, NumError> {
+        match self {
+            Rounded::Circle(c) => Conic::of_round(&c.round),
+            Rounded::Oval(o) => Conic::of_ellipse(&o.ellipse),
+        }
+    }
+
+    /// The level over the box `at` of the line dividing its halves, positive on the upper half's
+    /// side: for a circle the height above its centre, for an ellipse [`Oval::level_over`].
+    fn level_over(self, at: &[Interval; 2]) -> Result<Interval, NumError> {
+        match self {
+            Rounded::Circle(c) => {
+                let ([_, cy], cw) = c.centre.coordinates();
+                let [_, y] = at;
+                y.sub(fraction(cy, cw)?)
+            }
+            Rounded::Oval(o) => o.level_over(at),
+        }
+    }
+}
+
+/// The quartic and roots of a meeting, `None` when the two are one curve.
+fn quartic_of(meeting: &Meeting) -> Option<(&Quartic, &Roots)> {
+    match meeting {
+        Meeting::At { quartic, roots } => Some((quartic, roots)),
+        Meeting::Same => None,
+    }
 }
 
 /// Refuses a piece of an ellipse and a piece of a circle or of another ellipse that may meet, as
 /// [`ArrangeError::Conic`]: they meet at roots of a quartic along the ellipse, which this sweep
 /// does not place. They are let pass when the curves do not meet at all, or when each root,
 /// narrowed [`NARROW`] levels and its place enclosed, certainly lies off one of the two pieces.
-fn apart(s: &Piece, t: &Piece, shapes: &Shapes) -> Result<(), ArrangeError> {
-    let (first, other) = if matches!(s.on, On::Ellipse { .. }) {
-        (s, t)
-    } else {
-        (t, s)
-    };
-    let On::Ellipse { ellipse, .. } = first.on else {
-        return Err(ArrangeError::Conic);
-    };
-    let o = oval_of(&shapes.ovals, ellipse)?;
-    let conic = match other.on {
-        On::Arc { circle, .. } => Conic::of_round(&circle_of(&shapes.circles, circle)?.round)?,
-        On::Ellipse { ellipse: j, .. } => Conic::of_ellipse(&oval_of(&shapes.ovals, j)?.ellipse)?,
-        On::Line { .. } => return Err(ArrangeError::Conic),
-    };
-    let Meeting::At { quartic, roots } = o.ellipse.meeting(&conic)? else {
-        return Err(ArrangeError::Conic);
-    };
+///
+/// `first` is the piece of the ellipse `oval`, on its upper half or lower, and `other` the other
+/// piece, its half and its curve; [`meetings`] gives them so. Two curves that are one are deduplicated
+/// before the sweep, and an ellipse of ratio one is its circle, so a meeting is never one curve:
+/// were it, it would be refused.
+fn apart(
+    first: (&Piece, bool, &Oval),
+    other: (&Piece, bool, Rounded<'_>),
+) -> Result<(), ArrangeError> {
+    let (piece, upper, o) = first;
+    let (them, their_upper, curve) = other;
+    let meeting = o.ellipse.meeting(&curve.conic()?)?;
+    let (quartic, roots) = quartic_of(&meeting).ok_or(ArrangeError::Conic)?;
     if roots.count() == 0 {
         return Ok(());
     }
-    for r in roots.narrowed(&quartic, NARROW)?.iter() {
+    for r in roots.narrowed(quartic, NARROW)?.iter() {
         let at = o.place(r)?;
-        if !(certainly_off(first, shapes, &at)? || certainly_off(other, shapes, &at)?) {
+        let off_first = certainly_off(piece, upper, o.level_over(&at)?, &at)?;
+        if !(off_first || certainly_off(them, their_upper, curve.level_over(&at)?, &at)?) {
             return Err(ArrangeError::Conic);
         }
     }
@@ -621,10 +652,45 @@ pub(super) fn meetings(
         | (On::Ellipse { ellipse, .. }, On::Line { line, .. }) => {
             line_and_oval(&line, oval_of(&shapes.ovals, ellipse)?)?
         }
-        (On::Ellipse { ellipse: i, .. }, On::Ellipse { ellipse: j, .. }) if i == j => [None, None],
-        (On::Arc { .. } | On::Ellipse { .. }, On::Ellipse { .. })
-        | (On::Ellipse { .. }, On::Arc { .. }) => {
-            apart(s, t, shapes)?;
+        (
+            On::Ellipse { ellipse: i, upper },
+            On::Ellipse {
+                ellipse: j,
+                upper: also,
+            },
+        ) => {
+            if i != j {
+                let (o, e) = (oval_of(&shapes.ovals, i)?, oval_of(&shapes.ovals, j)?);
+                apart((s, upper, o), (t, also, Rounded::Oval(e)))?;
+            }
+            [None, None]
+        }
+        (
+            On::Ellipse { ellipse, upper },
+            On::Arc {
+                circle,
+                upper: also,
+            },
+        ) => {
+            let (o, c) = (
+                oval_of(&shapes.ovals, ellipse)?,
+                circle_of(circles, circle)?,
+            );
+            apart((s, upper, o), (t, also, Rounded::Circle(c)))?;
+            [None, None]
+        }
+        (
+            On::Arc {
+                circle,
+                upper: also,
+            },
+            On::Ellipse { ellipse, upper },
+        ) => {
+            let (o, c) = (
+                oval_of(&shapes.ovals, ellipse)?,
+                circle_of(circles, circle)?,
+            );
+            apart((t, upper, o), (s, also, Rounded::Circle(c)))?;
             [None, None]
         }
     };
@@ -901,9 +967,8 @@ fn bend(a: &Way<'_>, b: &Way<'_>) -> Result<Ordering, ArrangeError> {
             let wider = radius(c, e)?;
             if *ccw { wider.reverse() } else { wider }
         }
-        (Way::Ellipse { index: i, .. }, Way::Ellipse { index: j, .. }) if i == j => Ordering::Equal,
-        (Way::Arc { .. } | Way::Ellipse { .. }, Way::Ellipse { .. })
-        | (Way::Ellipse { .. }, Way::Arc { .. }) => return Err(ArrangeError::Conic),
+        // Two lines, or two pieces of one ellipse leaving one way, which are one curve: [`cross`]
+        // refuses an ellipse beside a circle or another ellipse before their curvatures are asked.
         _ => Ordering::Equal,
     })
 }
@@ -1166,8 +1231,14 @@ const fn falls(x: Sign) -> Option<bool> {
 
 #[cfg(test)]
 mod tests {
-    use super::falls;
+    use super::{falls, quartic_of};
     use geom_num::Sign;
+    use geom_num::conic::Meeting;
+
+    #[test]
+    fn one_curve_has_no_quartic() {
+        assert!(quartic_of(&Meeting::Same).is_none());
+    }
 
     #[test]
     fn x_falls_rises_or_stays() {

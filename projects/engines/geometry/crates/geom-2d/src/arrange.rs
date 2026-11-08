@@ -371,11 +371,8 @@ fn param_point(e: &Ellipse2, s: &Param) -> Result<Rational2, ArrangeError> {
     let fit = |v: Option<i128>| v.ok_or(ArrangeError::Range);
     let (n, d) = match s {
         Param::Far => {
-            return Ok(Rational2::new(
-                fit(kx.checked_sub(mx))?,
-                fit(ky.checked_sub(my))?,
-                1,
-            )?);
+            let far = Rational2::new(fit(kx.checked_sub(mx))?, fit(ky.checked_sub(my))?, 1);
+            return Ok(far?);
         }
         Param::At(f) => (i128::from(f.numerator()), i128::from(f.denominator())),
     };

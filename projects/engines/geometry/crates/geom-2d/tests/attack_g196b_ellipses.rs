@@ -384,6 +384,17 @@ fn an_ellipse_crossing_a_circle_or_another_ellipse_is_refused() {
     let mut touching = vec![Curve::Ellipse(e)];
     touching.extend(circle(0, 0, 6));
     assert!(matches!(try_run(&touching), Err(ArrangeError::Conic)));
+    // Two ellipses touching at both ends of their common major axis: their lower halves leave the
+    // leftmost point together, straight down, and are refused there, before any meeting is sought.
+    let wider = ellipse((0, 0), [6, 0], (2, 3));
+    assert!(matches!(
+        try_run(&[Curve::Ellipse(e), Curve::Ellipse(wider)]),
+        Err(ArrangeError::Conic)
+    ));
+    assert_eq!(
+        ArrangeError::Conic.to_string(),
+        "an ellipse may meet a circle or another ellipse, at a root of a quartic the sweep does not place"
+    );
 }
 
 #[test]
