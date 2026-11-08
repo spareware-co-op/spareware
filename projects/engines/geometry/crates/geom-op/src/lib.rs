@@ -112,5 +112,6 @@ pub use name::{
 };
 pub use output::{Diagnostic, OpOutput};
 pub use remedy::{Bound, Remedy};
+pub use run::Tally;
 pub use run::{Charge, RUN, reserve};
 pub use schema::{Class, DiagnosticSpec, ErrorSpec, Family, Field, OpSchema, RoleSpec, Unit};

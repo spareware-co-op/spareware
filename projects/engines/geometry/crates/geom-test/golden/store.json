@@ -642,6 +642,16 @@
             "function": "prune_golden_hash_is_the_same_on_every_target"
           },
           "sha256": "f04dd902446d1ee7162c648b8191dbdb359dd34ba7ab5e4bb4b8610e9354790c"
+        },
+        {
+          "id": "geom-test/replay-corpus",
+          "what": "The replay corpus (piece G98): every stored fixture and the seeded logs of the box, make, transform and budget families, each by its id, log hash, work units and logical bytes.",
+          "check": {
+            "crate": "geom-test",
+            "test": "determinism",
+            "function": "replay_corpus_golden"
+          },
+          "sha256": "742f10a75747ba3c3181572802a374545b6b27194162608d37bd8c5ccf240d30"
         }
       ]
     }

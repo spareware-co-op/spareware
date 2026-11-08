@@ -13,6 +13,8 @@
 //! cargo run -p geom-test --bin fixture -- improve <id> [--root <dir>]
 //! cargo run -p geom-test --bin fixture -- minimise <id> [--root <dir>]
 //! cargo run -p geom-test --bin fixture -- seeds <dir>
+//! cargo run -p geom-test --bin fixture -- record <id> --family <name> --index <n>
+//!     --derivation <words> [--root <dir>]
 //! ```
 //!
 //! - `list` prints every fixture compiled in: id, speed, status and source.
@@ -33,8 +35,11 @@
 //!   expectation to its file.
 //! - `minimise` prints the fixture with its log minimised, keeping its failure's class.
 //! - `seeds` writes every fixture's log into `<dir>`, named by its id, for the fuzz corpora.
+//! - `record` stores a log of the replay corpus as a fixture, holding what the kernel gives today:
+//!   for a case whose answer is known, which the words of `--derivation` state.
 //!
-//! Guarantees: only `improve` and `seeds` write a file, and `improve` only the fixture named. Exit
+//! Guarantees: only `improve`, `seeds` and `record` write files; `improve` and `record` only the
+//! fixture named. Exit
 //! codes: 0 when everything checked holds; 1 when a check fails; 2 for a usage error or a file
 //! or command that cannot be read or run.
 //!
@@ -54,9 +59,10 @@ use std::time::Duration;
 use clap::{Args, Parser, Subcommand, ValueEnum};
 use geom_test::fixture::kernel::Kernel;
 use geom_test::fixture::minimise::{minimise, same_failure};
+use geom_test::fixture::replay::seeded;
 use geom_test::fixture::repo::{self, File, must_fail_on_base, parse_all, read_dir};
 use geom_test::fixture::run::{Replayed, Verdict, replay, run};
-use geom_test::fixture::{Expect, Fixture, Hash, Speed, Status, diff};
+use geom_test::fixture::{Expect, Fixture, Hash, Source, Speed, Status, diff};
 use geom_test::golden::diff::approved;
 use geom_test::golden::store::Store;
 use geom_test::map::repo::workspace_root;
@@ -158,6 +164,22 @@ enum Tool {
     Seeds {
         /// The folder.
         dir: PathBuf,
+    },
+    /// Store a log of the replay corpus as a fixture.
+    Record {
+        /// Its id.
+        id: String,
+        /// The family of the corpus.
+        #[arg(long)]
+        family: String,
+        /// Which of the family's logs.
+        #[arg(long)]
+        index: usize,
+        /// Where its answer comes from.
+        #[arg(long)]
+        derivation: String,
+        #[command(flatten)]
+        root: Root,
     },
 }
 
@@ -465,7 +487,12 @@ fn improve(id: &str, root: &Root) -> Result<ExitCode, String> {
         .collect();
     for key in keys {
         let log = fixture.log.at_versions(&key.1);
-        let Replayed::Done { hash, measures } = replay(&mut Kernel::new(), &log) else {
+        let Replayed::Done {
+            hash,
+            measures,
+            work,
+        } = replay(&mut Kernel::new(), &log)
+        else {
             eprintln!("fixture improve: {id} did not succeed under {:?}", key.1);
             return Ok(ExitCode::from(1));
         };
@@ -473,6 +500,7 @@ fn improve(id: &str, root: &Root) -> Result<ExitCode, String> {
             key,
             Expect::Ok {
                 hash: Some(Hash(hash.0)),
+                work: Some(work),
                 measures,
             },
         );
@@ -518,6 +546,47 @@ fn seeds(dir: &Path) -> Result<ExitCode, String> {
     Ok(ExitCode::SUCCESS)
 }
 
+fn record(
+    id: &str,
+    family: &str,
+    index: usize,
+    derivation: &str,
+    root: &Root,
+) -> Result<ExitCode, String> {
+    let logs = seeded(family)?.ok_or_else(|| format!("no family {family}"))?;
+    let log = logs
+        .get(index)
+        .ok_or_else(|| format!("{family} has no log {index}"))?
+        .clone();
+    let Some(expect) = replay(&mut Kernel::new(), &log).expectation() else {
+        return Err(format!("{family} {index} is broken"));
+    };
+    let fixture = Fixture {
+        id: id.to_owned(),
+        source: Source::ClosedForm {
+            derivation: derivation.to_owned(),
+        },
+        fixed_by: None,
+        speed: Speed::Fast,
+        expect: BTreeMap::from([((edition()?, log.versions()), expect)]),
+        log,
+        status: Status::Pass,
+        history: Vec::new(),
+    };
+    fixture.check().map_err(|e| e.to_string())?;
+    let path = repo::DIR
+        .iter()
+        .fold(root_of(root)?, |p, part| p.join(part))
+        .join(format!("{id}.json"));
+    if let Some(folder) = path.parent() {
+        std::fs::create_dir_all(folder).map_err(|e| format!("{}: {e}", folder.display()))?;
+    }
+    let text = fixture.to_json().map_err(|e| e.to_string())?;
+    std::fs::write(&path, text).map_err(|e| format!("{}: {e}", path.display()))?;
+    println!("fixture record: {id}");
+    Ok(ExitCode::SUCCESS)
+}
+
 fn command(tool: Tool) -> Result<ExitCode, String> {
     match tool {
         Tool::List => list(),
@@ -550,5 +619,12 @@ fn command(tool: Tool) -> Result<ExitCode, String> {
         Tool::Improve { id, root } => improve(&id, &root),
         Tool::Minimise { id, root } => minimise_command(&id, &root),
         Tool::Seeds { dir } => seeds(&dir),
+        Tool::Record {
+            id,
+            family,
+            index,
+            derivation,
+            root,
+        } => record(&id, &family, index, &derivation, &root),
     }
 }
