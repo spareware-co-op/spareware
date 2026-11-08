@@ -236,17 +236,6 @@ fn shift(key: u8, x: i64) -> Instance {
     }
 }
 
-/// A pattern's copy squeezed to a third in x and a seventh in y: a rational scale that rounds every
-/// corner of `a_prism` off the grid.
-fn squeezed(key: u8) -> Instance {
-    Instance {
-        key: [key; 16],
-        transform: TypedTransform::from(
-            RationalTransform::new([[7, 0, 0], [0, 3, 0], [0, 0, 21]], [0; 3], 21).unwrap(),
-        ),
-    }
-}
-
 /// A pattern's transform from a matrix.
 fn matrix(m: [[i64; 3]; 3]) -> Instance {
     Instance {
@@ -574,7 +563,7 @@ fn drive_rotate() -> Driver {
         })
     };
     let bx = Held::new(a_box());
-    let flat = Held::new(prism(&ctx(), &a_prism()).unwrap());
+    let cyl = Held::new(cylinder(&ctx(), &round(5, 10)).unwrap());
     let shown = rotate(
         &ctx(),
         unit_box().moved(None),
@@ -619,7 +608,8 @@ fn drive_rotate() -> Driver {
                 }),
             ),
             trigger("NotAccepted", turned(&bx, None)),
-            trigger("NotCertifiedYet", turned(&flat, Some(certified(64)))),
+            // As the pattern's: a curved body turned, which waits on G177.
+            trigger("NotCertifiedYet", turned(&cyl, Some(certified(64)))),
         ],
         accept: Some(Box::new(move |class| turned(&accepting, class))),
         range: Some((quarter(&unit_box(), 0), quarter(&unit_box(), 1))),
@@ -643,7 +633,6 @@ fn drive_scale() -> Driver {
     let bx = Held::new(a_box());
     let ballish = Held::new(sphere(&ctx(), &ball(p(1, 2, 3), 5)).unwrap());
     let cyl = Held::new(cylinder(&ctx(), &round(5, 10)).unwrap());
-    let flat = Held::new(prism(&ctx(), &a_prism()).unwrap());
     let shown = scale(
         &ctx(),
         unit_box().moved(None),
@@ -671,9 +660,10 @@ fn drive_scale() -> Driver {
             ),
             trigger("NotAccepted", by(&ballish, [(2, 1); 3], None)),
             trigger("KindNotCertified", by(&cyl, wide(2), Some(certified(64)))),
+            // A curved body scaled by a third: a similarity whose rounding waits on G177.
             trigger(
                 "NotCertifiedYet",
-                by(&flat, [(1, 3), (1, 7), (1, 1)], Some(certified(64))),
+                by(&cyl, [(1, 3); 3], Some(certified(64))),
             ),
         ],
         accept: Some(Box::new(move |class| by(&accepting, [(2, 1); 3], class))),
@@ -697,7 +687,6 @@ fn drive_pattern() -> Driver {
     };
     let bx = Held::new(a_box());
     let cyl = Held::new(cylinder(&ctx(), &round(5, 10)).unwrap());
-    let flat = Held::new(prism(&ctx(), &a_prism()).unwrap());
     let two = || vec![shift(1, 20), shift(2, 40)];
     let shown = pattern(&ctx(), unit_box().moved(None), &two()).unwrap();
     let accepting = bx.clone();
@@ -724,12 +713,11 @@ fn drive_pattern() -> Driver {
                     vec![matrix([[2, 0, 0], [0, 1, 0], [0, 0, 1]])],
                 ),
             ),
-            // A copy the checker cannot certify once its corners round: squeezed, as the scale's
-            // trigger is. A turn by (4, 3) no longer serves, since the checker on this line certifies
-            // that copy.
+            // A turned copy of a curved body: on this line the checker certifies a flat body's
+            // rounded corners, and waits on G177 for a curved one's.
             trigger(
                 "NotCertifiedYet",
-                of(&flat, Some(certified(64)), vec![squeezed(1)]),
+                of(&cyl, Some(certified(64)), vec![tilted(1)]),
             ),
         ],
         accept: Some(Box::new(move |class| {
