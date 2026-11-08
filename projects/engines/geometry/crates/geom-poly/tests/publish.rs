@@ -712,6 +712,24 @@ fn solids_that_share_only_an_edge_make_a_general_body() {
 }
 
 #[test]
+fn a_union_whose_shell_pinches_at_a_corner_is_a_general_body() {
+    // Each pair of boxes shares part of a face, and around (-1, 4, 0) the empty space is two
+    // opposite octants: every edge has two fins, but the one shell goes round that vertex in two
+    // fans, so it is non-manifold there (11.6) and the body is a general one.
+    let m = merged(
+        &[
+            ([-1, 1, -1], [0, 4, 1]),
+            ([-2, 4, -1], [0, 5, 0]),
+            ([-2, 0, 0], [-1, 5, 1]),
+        ],
+        &WindingTest::unite(),
+    );
+    assert_eq!(m.shells.len(), 1);
+    assert!(m.edges.iter().all(|e| e.fins.len() == 2));
+    assert_eq!(body(&m, Sense::Forward).kind(), BodyKind::General);
+}
+
+#[test]
 fn a_carrier_missing_is_reported() {
     let m = merged(&[([0, 0, 0], [2, 2, 2])], &WindingTest::unite());
     assert_eq!(
