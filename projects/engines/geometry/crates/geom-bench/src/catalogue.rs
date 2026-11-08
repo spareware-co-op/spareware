@@ -412,6 +412,10 @@ pub static OPS: &[Op] = &[
     Op { group: "curve", name: "bulge_to_nurbs", measures: "geom_curve::CurveKind::to_nurbs", classes: T, prepare: |c| bind(inputs::curve::bulge_to_nurbs(c), kernels::curve::bulge_to_nurbs) },
     Op { group: "curve", name: "transition_point", measures: "geom_curve::Transition::point", classes: T, prepare: |c| bind(inputs::curve::transition_point(c), kernels::curve::transition_point) },
     Op { group: "curve", name: "transition_to_nurbs", measures: "geom_curve::Transition::to_nurbs", classes: T, prepare: |c| bind(inputs::curve::transition_to_nurbs(c), kernels::curve::transition_to_nurbs) },
+    // The cubic transitions of piece G371 (decision 32.33): a cubic spiral's point, by its
+    // heading's sine, and a cubic parabola made.
+    Op { group: "curve", name: "cubic_spiral_point", measures: "geom_curve::Transition::point", classes: T, prepare: |c| bind(inputs::curve::cubic_spiral_point(c), kernels::curve::cubic_spiral_point) },
+    Op { group: "curve", name: "cubic_parabola", measures: "geom_curve::Polynomial::cubic_parabola", classes: T, prepare: |c| bind(inputs::curve::cubic_parabola(c), kernels::curve::cubic_parabola) },
     // geom-surface's hot paths (pieces G65 to G68; decision 32.44), through the kind contract: a
     // torus's point and enclosure, and an offset cylinder's point.
     Op { group: "surface", name: "torus_point", measures: "geom_surface::SurfaceKind::point", classes: T, prepare: |c| bind(inputs::surface::torus_point(c), kernels::surface::torus_point) },

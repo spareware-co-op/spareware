@@ -190,6 +190,67 @@ impl<const D: usize> Polynomial<D> {
     }
 }
 
+impl Polynomial<2> {
+    /// The cubic parabola y = x³/(6RL), IFC 4.3's CUBIC in its parabola form (decision 32.33: a
+    /// polynomial curve, not a transition): from `start`, leaving along `direction`, turning left
+    /// for a positive `radius` R and right for a negative one, over x from 0 to `length` L measured
+    /// along the start tangent, x its parameter. Its coefficients are a₀ = `start`, a₁ = û and
+    /// a₃ = n̂/(6RL), û the unit direction rounded and n̂ its left normal, exactly; the deviation
+    /// bounds how far that lies from the exact curve, L·|Δû| + L³·(|Δc| + |c|·|Δû|) for c = 1/(6RL),
+    /// 0 when û and c are exact.
+    ///
+    /// # Errors
+    ///
+    /// [`CurveError::NotFinite`] for a value that is not finite; [`CurveError::Degenerate`] for a
+    /// zero direction, a zero radius or a length that is not positive.
+    pub fn cubic_parabola(
+        start: [f64; 2],
+        direction: [f64; 2],
+        radius: f64,
+        length: f64,
+    ) -> Result<Changed<Polynomial<2>>, CurveError> {
+        if !start
+            .iter()
+            .chain(&direction)
+            .chain([radius, length].iter())
+            .all(|v| v.is_finite())
+        {
+            return Err(CurveError::NotFinite);
+        }
+        if direction == [0.0, 0.0] || radius == 0.0 || length <= 0.0 {
+            return Err(CurveError::Degenerate);
+        }
+        let d = [point(direction[0])?, point(direction[1])?];
+        let norm = tight::norm(&d)?;
+        let exact_u = [tight::div(d[0], norm)?, tight::div(d[1], norm)?];
+        let u = exact_u.map(tight::middle);
+        let du = tight::distance_to(&u, &exact_u)?;
+        let l = point(length)?;
+        let exact_c = tight::div(
+            point(1.0)?,
+            tight::mul(point(6.0)?, tight::mul(point(radius)?, l)?)?,
+        )?;
+        let c = tight::middle(exact_c);
+        let dc = tight::distance_to(&[c], &[exact_c])?;
+        let [ux, uy] = u;
+        let curve = Polynomial::new(
+            Vec::from([start, u, [0.0, 0.0], [-uy * c, ux * c]]),
+            (0.0, length),
+        )?;
+        // |P(x) − P*(x)| ≤ x·|û − û*| + x³·|c·n̂ − c*·n̂*|, and |n̂ − n̂*| = |û − û*|, |n̂| ≤ 1 + |Δû|.
+        let cubed = tight::mul(tight::mul(l, l)?, l)?;
+        let normal = tight::add(
+            point(dc)?,
+            tight::mul(point(tight::magnitude(exact_c))?, point(du)?)?,
+        )?;
+        let deviation = tight::add(tight::mul(l, point(du)?)?, tight::mul(cubed, normal)?)?.hi();
+        Ok(Changed {
+            value: curve,
+            deviation,
+        })
+    }
+}
+
 impl<const D: usize> ParamCurve<D> for Polynomial<D> {
     fn domain(&self) -> (f64, f64) {
         self.domain

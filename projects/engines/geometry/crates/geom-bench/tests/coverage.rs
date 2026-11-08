@@ -534,6 +534,10 @@ const OTHER_CRATES: &[(&str, &[(&str, &str)])] = &[
             ("param", include_str!("../../geom-curve/src/param.rs")),
             ("linework", include_str!("../../geom-curve/src/linework.rs")),
             (
+                "polynomial",
+                include_str!("../../geom-curve/src/polynomial.rs"),
+            ),
+            (
                 "transition",
                 include_str!("../../geom-curve/src/transition.rs"),
             ),

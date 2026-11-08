@@ -291,6 +291,9 @@ fn reversed_law(law: CurvatureLaw, length: f64) -> Option<CurvatureLaw> {
                 from: back(from)?,
             }
         }
+        // Its heading's sine is measured from its start tangent, so run backwards it is no cubic
+        // spiral: there is no law to compare with.
+        CurvatureLaw::CubicSpiral { .. } => return None,
         // −(1/A₀ + cos(−πs/Lc)/A₁) = −1/A₀ − cos(πs/Lc)/A₁.
         CurvatureLaw::CosineSpiral {
             constant,

@@ -1,7 +1,8 @@
 //! Inputs for `geom-curve`'s hot paths (pieces G60 to G64 and G67, decision 32.44): parameters
 //! on an exact helix (its point, and its certified enclosure with two derivatives), bulge
 //! polylines for their conversion to NURBS, stations on a clothoid transition, and transition
-//! lengths for their conversion to NURBS.
+//! lengths for their conversion to NURBS; stations on a cubic spiral and lengths of cubic
+//! parabolas (piece G371).
 //!
 //! The helix and the transition are fixed per operation and built here, as `geom-curve`'s benchmarks build them. Class `typical` only:
 //!
@@ -9,6 +10,8 @@
 //! - Bulge polylines: four vertices within ±10 of the origin, each bulge in (−1, 1), closed.
 //! - Stations: in the transition's length [0, 120], at 2^−45 resolution.
 //! - Lengths: in [50, 200], each making its own clothoid from straight to radius 650.
+//! - Cubic spiral stations: in its length [0, 120], from straight to radius 650.
+//! - Cubic parabola lengths: in [50, 200], each from straight to radius 650.
 //!
 //! The kinds' refusals (a parameter outside the domain, a degenerate polyline, a transition too
 //! long for its panel cap) are tested in `geom-curve` itself.
@@ -26,7 +29,10 @@
 
 use super::{Class, batch_of, rng};
 use crate::rng::SplitMix64;
-use geom_curve::{CurvatureLaw, CurveError, CurveKind, Frame, Helix, HelixAxes, Transition};
+use geom_curve::{
+    CurvatureLaw, CurveError, CurveKind, Frame, Helix, HelixAxes, Polynomial, Transition,
+};
+use geom_nurbs::Changed;
 use geom_run::{Budget, WorkMeter};
 
 /// A value in [0, 1) at 2^−52 resolution.
@@ -86,6 +92,47 @@ pub fn transition_point(class: Class) -> Vec<f64> {
 #[must_use]
 pub fn transition_to_nurbs(class: Class) -> Vec<f64> {
     values("curve::transition_to_nurbs", class, 50.0, 200.0)
+}
+
+/// Stations for `Transition::point` on [`cubic_spiral`] (piece G371).
+#[must_use]
+pub fn cubic_spiral_point(class: Class) -> Vec<f64> {
+    values("curve::cubic_spiral_point", class, 0.0, 120.0)
+}
+
+/// Lengths for `Polynomial::cubic_parabola`, each its own cubic parabola (piece G371).
+#[must_use]
+pub fn cubic_parabola(class: Class) -> Vec<f64> {
+    values("curve::cubic_parabola", class, 50.0, 200.0)
+}
+
+/// The cubic spiral from straight to radius 650 of length 120, starting at (1000, 2000) towards
+/// (3, 4), as [`transition`] starts its clothoid.
+///
+/// # Errors
+///
+/// The transition's own refusals; none for this spiral, whose heading's sine reaches 120/1300.
+pub fn cubic_spiral() -> Result<Transition<2>, CurveError> {
+    let law = CurvatureLaw::CubicSpiral {
+        start: 0.0,
+        end: 1.0 / 650.0,
+    };
+    Transition::new(
+        [1000.0, 2000.0],
+        [3.0, 4.0],
+        120.0,
+        law,
+        &mut WorkMeter::new(Budget::UNLIMITED),
+    )
+}
+
+/// The cubic parabola to radius 650 of `length`, from (1000, 2000) towards (3, 4).
+///
+/// # Errors
+///
+/// The constructor's own refusals; none for a positive length.
+pub fn parabola(length: f64) -> Result<Changed<Polynomial<2>>, CurveError> {
+    Polynomial::cubic_parabola([1000.0, 2000.0], [3.0, 4.0], 650.0, length)
 }
 
 /// The helix `geom-curve`'s benchmark measures: four turns of radius 2 and pitch 0.5.

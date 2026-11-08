@@ -2665,9 +2665,23 @@ pub mod curve {
         run
     }
 
+    #[library_benchmark(teardown = verify)]
+    #[bench::typical(leak("curve/cubic_spiral_point/typical"))]
+    fn cubic_spiral_point(run: &'static mut Named) -> &'static mut Named {
+        run.bench.measure();
+        run
+    }
+
+    #[library_benchmark(teardown = verify)]
+    #[bench::typical(leak("curve/cubic_parabola/typical"))]
+    fn cubic_parabola(run: &'static mut Named) -> &'static mut Named {
+        run.bench.measure();
+        run
+    }
+
     library_benchmark_group!(
         name = curve;
-        benchmarks = helix_point, helix_enclose, bulge_to_nurbs, transition_point, transition_to_nurbs
+        benchmarks = helix_point, helix_enclose, bulge_to_nurbs, transition_point, transition_to_nurbs, cubic_spiral_point, cubic_parabola
     );
 }
 

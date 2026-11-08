@@ -248,9 +248,15 @@
               "kind": "corpus",
               "piece": "G361",
               "why": "3 new count benchmarks of piece G361 (decision 32.44, for geom-curve's linework and geom-2d's survey import): a figure of a line, an arc and a smooth figure joined into linework, a dataset of 16 points imported as a named Acorn body, and a first import's key; no existing digest moved"
+            },
+            {
+              "sha256": "20c07b63fe304b1021c83e87d0c9d38aa4a5282348db73ee228d52550bcbd70c",
+              "kind": "corpus",
+              "piece": "G371",
+              "why": "2 new count benchmarks of piece G371 (decision 32.44, geom-curve's cubic transitions): a cubic spiral's point by its heading's sine, and a cubic parabola made; no existing digest moved"
             }
           ],
-          "sha256": "20c07b63fe304b1021c83e87d0c9d38aa4a5282348db73ee228d52550bcbd70c"
+          "sha256": "fe899531684debddd61b7757015650c7c166781c45f8af32d0c3b391b0ffb945"
         },
         {
           "id": "geom-nurbs/operations",

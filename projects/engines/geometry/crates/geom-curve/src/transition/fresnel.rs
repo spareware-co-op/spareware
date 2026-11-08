@@ -240,6 +240,7 @@ fn integrand() -> Result<Heading, CurveError> {
         doubles,
         len: 3,
         wave: None,
+        sine: false,
     })
 }
 
