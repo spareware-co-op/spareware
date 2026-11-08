@@ -1890,6 +1890,10 @@ fn judged_run(dir: &Path, cases: &[Case], stand_in: StandIn, ceilings: &Ceilings
     .expect("judged")
 }
 
+#[cfg_attr(
+    target_family = "wasm",
+    ignore = "reads and writes files in a temporary folder, which a WebAssembly test run cannot"
+)]
 #[test]
 fn a_report_publishes_every_case() {
     let dir = scratch("report");
@@ -1938,6 +1942,10 @@ fn a_report_publishes_every_case() {
     fs::remove_dir_all(&dir).expect("removed");
 }
 
+#[cfg_attr(
+    target_family = "wasm",
+    ignore = "reads and writes files in a temporary folder, which a WebAssembly test run cannot"
+)]
 #[test]
 fn a_scorers_infinity_is_not_a_reason_to_stop() {
     let dir = scratch("infinity");
@@ -1973,6 +1981,10 @@ fn a_scorers_infinity_is_not_a_reason_to_stop() {
     fs::remove_dir_all(&dir).expect("removed");
 }
 
+#[cfg_attr(
+    target_family = "wasm",
+    ignore = "reads and writes files in a temporary folder, which a WebAssembly test run cannot"
+)]
 #[test]
 fn a_runner_that_wrote_nothing_is_a_failure_with_its_verdict() {
     let dir = scratch("crash");
@@ -2099,6 +2111,10 @@ fn the_catalogue_covers_the_lists_it_rebuilds() {
     }
 }
 
+#[cfg_attr(
+    target_family = "wasm",
+    ignore = "reads and writes files in a temporary folder, which a WebAssembly test run cannot"
+)]
 #[test]
 fn the_catalogue_writes_the_corpus_schema() {
     let dir = scratch("catalogue");
