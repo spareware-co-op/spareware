@@ -42,6 +42,7 @@ use alloc::vec::Vec;
 use core::cmp::{Ordering, Reverse};
 use core::fmt;
 
+use geom_num::grid::Coord;
 use geom_num::plane::{Plane, Tpi, normals_sign};
 use geom_num::{I256, I320, NumError, Sign, Wide};
 use geom_run::{ChunkPlan, Exec, Phase, RunError, Stopped, WorkMeter};
@@ -50,7 +51,7 @@ use crate::convex::{Piece, opposite};
 use crate::order::{Flap, Line, Meeting, Ray, about, around, plane_words, wide_product};
 use crate::plane::canonical;
 use crate::subdivide::around_on;
-use crate::trace::{Classified, Polygon, TraceError, classify};
+use crate::trace::{Cell as Box3, Classified, Polygon, TraceError, classify};
 use crate::winding::{Entry, Kept, Winding, WindingTest, kept};
 
 /// Making corners or sides, a few dozen pieces a task.
@@ -1666,13 +1667,37 @@ fn polygons_of(pieces: &[&Piece], entry: Option<Entry>) -> Vec<Polygon> {
         .collect()
 }
 
-/// The vectors in front of and behind the first of `polygons`, traced through all of them.
+/// The grid range of `corners` where each has [`Cell`]s and lies in the frame: their floors, and
+/// their floors rounded up, so each corner, and the grid point nearest it, lies within.
+fn grid_range(corners: &[Corner]) -> Option<GridRange> {
+    let mut low = [i64::MAX; 3];
+    let mut high = [i64::MIN; 3];
+    for corner in corners {
+        let cells = corner.cells.as_ref()?;
+        for ((l, h), cell) in low.iter_mut().zip(&mut high).zip(cells) {
+            let up = cell.floor.checked_add(i128::from(cell.rest != 0))?;
+            *l = (*l).min(Coord::from_i128(cell.floor).ok()?.get());
+            *h = (*h).max(Coord::from_i128(up).ok()?.get());
+        }
+    }
+    Some((low, high))
+}
+
+/// A grid range: its lowest and highest coordinates.
+type GridRange = ([i64; 3], [i64; 3]);
+
+/// The vectors in front of and behind the first of `polygons`, traced through all of them inside
+/// `cell`, or the box [`around_on`] finds for them where there is none.
 fn sides_of_first(
     polygons: &[Polygon],
+    cell: Option<Box3>,
     exec: &Exec<'_>,
     meter: &mut WorkMeter<'_>,
 ) -> Result<(Winding, Winding), MergeError> {
-    let cell = around_on(exec, polygons, meter).map_err(|e| phase_error(e, meter))?;
+    let cell = match cell {
+        Some(cell) => cell,
+        None => around_on(exec, polygons, meter).map_err(|e| phase_error(e, meter))?,
+    };
     let lists: Vec<Vec<Piece>> = polygons
         .iter()
         .take(1)
@@ -1697,7 +1722,7 @@ fn around_shell(
         let others = of_shell.get(*shell).ok_or(MergeError::Open)?;
         polygons.extend(polygons_of(others, Some(number(*shell))));
     }
-    let (_, back) = sides_of_first(&polygons, exec, meter)?;
+    let (_, back) = sides_of_first(&polygons, None, exec, meter)?;
     Ok(among
         .iter()
         .copied()
@@ -1707,27 +1732,42 @@ fn around_shell(
 
 /// Which shells face out, and the outer shell around each cavity. A shell faces out if the point in
 /// front of it is outside it, which takes only its own pieces, so this is linear in the pieces
-/// when there are no cavities. A cavity is held by the innermost outer shell around a point behind
-/// it: behind a cavity lies the material it is a cavity of, even where another cell fills it back
-/// to back.
+/// when there are no cavities. The box the point's path leaves by is a step and a half clear of
+/// the shell's corners' grid range, `ranges` holding each piece's, where every piece has one; any
+/// box clear of the shell gives the same count. A cavity is held by the innermost outer shell
+/// around a point behind it: behind a cavity lies the material it is a cavity of, even where
+/// another cell fills it back to back.
 fn nest(
     held: &[Held<'_>],
     (shell_of_piece, shells): (&[usize], usize),
+    ranges: &[Option<GridRange>],
     exec: &Exec<'_>,
     meter: &mut WorkMeter<'_>,
 ) -> Result<Vec<(bool, Option<usize>)>, MergeError> {
     let mut of_shell: Vec<Vec<&Piece>> = alloc::vec![Vec::new(); shells];
-    for (entry, shell) in held.iter().zip(shell_of_piece) {
+    let mut range_of_shell: Vec<Option<GridRange>> =
+        alloc::vec![Some(([i64::MAX; 3], [i64::MIN; 3])); shells];
+    for ((entry, shell), range) in held.iter().zip(shell_of_piece).zip(ranges) {
         of_shell
             .iter_mut()
             .skip(*shell)
             .take(1)
             .for_each(|list| list.push(entry.piece));
+        range_of_shell
+            .iter_mut()
+            .skip(*shell)
+            .take(1)
+            .for_each(|slot| *slot = slot.zip(*range).map(widest));
     }
+    let half = |v: i64, by: i64| v.saturating_mul(2).saturating_add(by);
     let mut outer = Vec::with_capacity(shells);
-    for list in &of_shell {
+    for (list, range) in of_shell.iter().zip(&range_of_shell) {
         meter.charge(1)?;
-        let (front, _) = sides_of_first(&polygons_of(list, Some(0)), exec, meter)?;
+        let cell = range.map(|(low, high)| Box3 {
+            low: low.map(|v| half(v, -3)),
+            high: high.map(|v| half(v, 3)),
+        });
+        let (front, _) = sides_of_first(&polygons_of(list, Some(0)), cell, exec, meter)?;
         outer.push(front.count(0) == 0);
     }
     let outers: Vec<usize> = (0..shells)
@@ -1753,6 +1793,20 @@ fn nest(
         out.push((false, Some(holder)));
     }
     Ok(out)
+}
+
+/// The grid range that holds both `a` and `b`.
+fn widest((a, b): (GridRange, GridRange)) -> GridRange {
+    let ((a_low, a_high), (b_low, b_high)) = (a, b);
+    let mut low = a_low;
+    let mut high = a_high;
+    for (l, v) in low.iter_mut().zip(b_low) {
+        *l = (*l).min(v);
+    }
+    for (h, v) in high.iter_mut().zip(b_high) {
+        *h = (*h).max(v);
+    }
+    (low, high)
 }
 
 /// Curves where pieces of different owners meet.
@@ -2073,7 +2127,8 @@ pub fn merge_on(
     } else if held.is_empty() {
         Vec::new()
     } else {
-        nest(&held, (&shell_of_piece, tops.len()), exec, meter)?
+        let ranges: Vec<Option<GridRange>> = corners.iter().map(|c| grid_range(c)).collect();
+        nest(&held, (&shell_of_piece, tops.len()), &ranges, exec, meter)?
     };
 
     // Faces and shells.
