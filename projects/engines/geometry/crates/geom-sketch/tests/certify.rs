@@ -488,3 +488,31 @@ fn a_rules_derivatives_are_kept_apart_by_residual_and_match_its_differences() {
     // The first line's four coordinates enter both residuals.
     assert_eq!(shared, 4);
 }
+
+#[test]
+fn a_commit_the_proof_cannot_reach_is_left_unproven_with_no_box() {
+    // The same two distances from (0, 0) and (7, 0), committed unsolved where the point is drawn,
+    // at (3, 3): 0.5707... steps from P in y. The interval Jacobian over a box that wide does not
+    // map it into itself, so the block is refused as NoInclusion and no box is given for P, never
+    // a box that might miss it.
+    let s = build(
+        vec![
+            reference(1, 0.0, 0.0),
+            reference(2, 7.0, 0.0),
+            point(3, 3.0, 3.0),
+        ],
+        vec![distance(1, 1, 3, 5.0), distance(2, 2, 3, 5.0)],
+    );
+    let committed = commit(&s, &mut meter()).unwrap();
+    let got = certify(&s, &committed, &mut meter()).unwrap();
+    assert_eq!(got.blocks.len(), 1, "{got:?}");
+    assert_eq!(
+        got.blocks[0].certificate,
+        Certificate::Unproven(Reason::NoInclusion),
+        "{got:?}"
+    );
+    assert!(
+        got.boxes.iter().all(|(owner, _, _)| *owner != pid(3)),
+        "{got:?}"
+    );
+}
