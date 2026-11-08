@@ -7,26 +7,37 @@
 //! items untouched, so an arena builder can both reorder its records and remap the indices that
 //! point at them.
 //!
-//! Each chunk is sorted on its own, in parallel; then adjacent sorted runs are merged in rounds,
-//! the merges of a round in parallel, until one run is left. A batch call with a total uses the
-//! same sort to put its items in key order (`crate::batch`).
+//! Each chunk is sorted on its own, in parallel; then adjacent sorted runs are merged in rounds
+//! until one run is left. Each round's output is cut into pieces of the chunk size and the pieces
+//! are merged in parallel, so the last rounds, with only a pair or two of runs to merge, keep the
+//! pool as busy as the first: where a pair's merge stands at the start of each piece is found by
+//! co-ranking, a binary search of the two runs, before the round. A batch call with a total uses
+//! the same sort to put its items in key order (`crate::batch`).
 //!
 //! Method: bottom-up two-way merge sort (Knuth, The Art of Computer Programming, volume 3, 2nd
 //! edition, 1998, section 5.2.4, "Sorting by merging", straight two-way merging; the book's page is
 //! <https://www-cs-faculty.stanford.edu/~knuth/taocp.html>), first within chunks, then across
-//! them. Written here rather than taken from `core`'s sorts so that nothing allocates infallibly
+//! them; each merge split into pieces of equal output by co-ranking (Siebert and Träff, "Perfectly
+//! load-balanced, optimal, stable, parallel merge", Parallel Processing Letters 23(1), 2013,
+//! <https://doi.org/10.1142/S0129626413500059>). Written here rather than taken from `core`'s sorts so that nothing allocates infallibly
 //! and no comparison, even of an `Ord` that breaks its contract, can make the helper panic.
 //!
-//! Cost: for n items in chunks of s, at most n · (⌈log₂ s⌉ + ⌈log₂ ⌈n / s⌉⌉) comparisons, so
-//! O(n log n), each calling `key` twice; two buffers of n (index, reference) pairs and the result
-//! of n indices; one read of the cancellation per chunk and per merge.
+//! Cost: for n items in chunks of s, at most n · (⌈log₂ s⌉ + ⌈log₂ ⌈n / s⌉⌉) comparisons for the
+//! merging, and ⌈n / s⌉ binary searches of at most ⌈log₂ n⌉ + 1 comparisons a round for the
+//! co-ranking, so O(n log n), each calling `key` twice; two buffers of n (index, reference) pairs,
+//! a list of ⌈n / s⌉ split points a round, and the result of n indices; one read of the
+//! cancellation per chunk and per piece of a round.
 //!
 //! Invariants:
 //!
 //! - Every merge writes each element of its two runs exactly once into a destination of exactly
-//!   their combined length, so the result is always a permutation of the indices.
+//!   their combined length, so the result is always a permutation of the indices. A round's split
+//!   points are kept in step (each piece takes from each run no less than nothing and no more than
+//!   it holds), so the pieces of a pair share out its runs exactly, even if `key`'s `Ord` breaks
+//!   its contract; with a true total order they are the split points of the one merge.
 //! - No recursion: every loop is bounded by the number of items.
 
+use alloc::collections::TryReserveError;
 use alloc::vec::Vec;
 use core::cmp::Ordering;
 use core::ops::ControlFlow;
@@ -41,6 +52,9 @@ use crate::pool::{Pool, drive};
 /// An item's index and the item: what is sorted.
 pub(crate) type Entry<'t, T> = (usize, &'t T);
 
+/// One piece of a merge round: where its output starts, the output, and its split points.
+type Piece<'o, 't, T> = (usize, &'o mut [Entry<'t, T>], (usize, usize));
+
 /// Merge the sorted runs `from[..width]` and `from[width..]` into `to`, which has the same length
 /// as `from`. On equal elements the left run's comes first, so the merge is stable.
 fn merge<X, B>(from: &[X], to: &mut [X], width: usize, before: &B)
@@ -50,6 +64,16 @@ where
 {
     // A pair shorter than `width` is a left run alone.
     let (left, right) = from.split_at_checked(width).unwrap_or((from, &[]));
+    merge_runs(left, right, to, before);
+}
+
+/// Merge the sorted runs `left` and `right` into `to`, which is as long as both. On equal
+/// elements the left run's comes first, so the merge is stable.
+fn merge_runs<X, B>(left: &[X], right: &[X], to: &mut [X], before: &B)
+where
+    X: Copy,
+    B: Fn(&X, &X) -> bool,
+{
     let mut left = left.iter().peekable();
     let mut right = right.iter().peekable();
     for slot in to.iter_mut() {
@@ -103,6 +127,69 @@ where
             *to = *from;
         }
     }
+}
+
+/// Co-ranking: how many of the first `t` elements of the stable merge of the sorted runs `left` and
+/// `right` come from `left`, found by a binary search. The merge takes `right`'s next element only
+/// when it is before `left`'s, so `left[i]` is among the first `t` when the `right` element it
+/// would otherwise follow, `right[t - i - 1]`, is not before it. Always at least
+/// `t - right.len()` and at most `left.len()` and `t`.
+fn co_rank<X, B>(t: usize, left: &[X], right: &[X], before: &B) -> usize
+where
+    B: Fn(&X, &X) -> bool,
+{
+    let mut low = t.saturating_sub(right.len());
+    let mut high = t.min(left.len());
+    while low < high {
+        let mid = low.saturating_add(high.saturating_sub(low) / 2);
+        // Inside the search both exist: mid < left.len(), and t - mid - 1 < right.len().
+        let after = t.saturating_sub(mid).saturating_sub(1);
+        let too_few = left
+            .get(mid)
+            .zip(right.get(after))
+            .is_some_and(|(l, r)| !before(r, l));
+        if too_few {
+            low = mid.saturating_add(1);
+        } else {
+            high = mid;
+        }
+    }
+    low
+}
+
+/// The split points of one merge round: for each piece of `size` of the round's output, in order,
+/// how many of its pair's `left` run come before it and how many by its end. Each piece's take
+/// from `left` is kept between nothing and its own length, so its take from `right` is too, and a
+/// pair's last piece ends at the end of both runs: the pieces share out every element of the pair
+/// exactly once whatever `before` answers.
+///
+/// # Errors
+///
+/// A refused allocation.
+fn split_points<X, B>(
+    from: &[X],
+    width: usize,
+    size: usize,
+    before: &B,
+) -> Result<Vec<(usize, usize)>, TryReserveError>
+where
+    B: Fn(&X, &X) -> bool,
+{
+    let mut points: Vec<(usize, usize)> = Vec::new();
+    points.try_reserve_exact(from.len().div_ceil(size))?;
+    for pair in from.chunks(width.saturating_mul(2)) {
+        let (left, right) = pair.split_at_checked(width).unwrap_or((pair, &[]));
+        let (mut taken, mut done) = (0usize, 0usize);
+        while done < pair.len() {
+            let end = done.saturating_add(size).min(pair.len());
+            let next = co_rank(end, left, right, before)
+                .max(taken)
+                .min(taken.saturating_add(end.saturating_sub(done)));
+            points.push((taken, next));
+            (taken, done) = (next, end);
+        }
+    }
+    Ok(points)
 }
 
 /// Stop `meter` because the sort was interrupted, and return the error that means.
@@ -205,19 +292,41 @@ where
         return Err(Interrupted::OutOfMemory);
     }
 
-    // Merge sorted runs of `width` in rounds until one is left.
+    // Merge sorted runs of `width` in rounds until one is left, each round in pieces of `size`.
     let mut width = size;
     while width < len && !cancelled {
         let span = width.saturating_mul(2);
-        let merge_pair = |pair: &mut (&[Entry<'t, T>], &mut [Entry<'t, T>])| {
+        let Ok(points) = split_points(&sorted, width, size, &before) else {
+            return Err(Interrupted::OutOfMemory);
+        };
+        let from: &[Entry<'t, T>] = &sorted;
+        let merge_piece = |piece: &mut Piece<'_, 't, T>| {
             if env.cancelled() {
                 return false;
             }
-            merge(pair.0, pair.1, width, &before);
+            let (start, (first, last)) = (piece.0, piece.2);
+            // The piece's pair, and where in it the piece starts and ends: a span is a whole
+            // number of pieces, so a piece lies in one pair.
+            let begin = start.saturating_sub(start.checked_rem(span).unwrap_or(0));
+            let pair = from
+                .get(begin..begin.saturating_add(span).min(len))
+                .unwrap_or(&[]);
+            let (left, right) = pair.split_at_checked(width).unwrap_or((pair, &[]));
+            let done = start.saturating_sub(begin);
+            let end = done.saturating_add(piece.1.len());
+            let lefts = left.get(first..last).unwrap_or(&[]);
+            let rights = right
+                .get(done.saturating_sub(first)..end.saturating_sub(last))
+                .unwrap_or(&[]);
+            merge_runs(lefts, rights, piece.1, &before);
             true
         };
-        let pairs = sorted.chunks(span).zip(spare.chunks_mut(span));
-        if drive(pool, pairs, &merge_pair, |done| {
+        let pieces = spare
+            .chunks_mut(size)
+            .zip(points)
+            .enumerate()
+            .map(|(k, (out, at))| (k.saturating_mul(size), out, at));
+        if drive(pool, pieces, &merge_piece, |done| {
             finished(done, &mut cancelled)
         })
         .is_err()
@@ -262,6 +371,102 @@ mod tests {
         let mut to = [(0, 9); 6];
         merge(&from, &mut to, 3, &|a: &(u8, u8), b: &(u8, u8)| a.0 < b.0);
         assert_eq!(to, [(1, 0), (2, 1), (3, 0), (3, 0), (3, 1), (4, 1)]);
+    }
+
+    /// Values tagged with their run, compared by value alone: ties show which run went first.
+    #[allow(
+        clippy::trivially_copy_pass_by_ref,
+        reason = "`merge_runs` and `co_rank` take their comparison as Fn(&X, &X) -> bool"
+    )]
+    fn by_value(a: &(u32, u8), b: &(u32, u8)) -> bool {
+        a.0 < b.0
+    }
+
+    #[test]
+    fn co_ranking_finds_where_the_merge_stands_after_each_element() {
+        let left: Vec<(u32, u8)> = [1, 3, 3, 8, 9].iter().map(|&v| (v, 0)).collect();
+        let right: Vec<(u32, u8)> = [0, 2, 3, 4, 10, 11].iter().map(|&v| (v, 1)).collect();
+        let mut whole = vec![(0, 9); left.len() + right.len()];
+        merge_runs(&left, &right, &mut whole, &by_value);
+        for t in 0..=whole.len() {
+            let i = co_rank(t, &left, &right, &by_value);
+            let mut first = vec![(0, 9); t];
+            merge_runs(&left[..i], &right[..t - i], &mut first, &by_value);
+            assert_eq!(first, whole[..t], "t {t}");
+        }
+        // One run empty: everything comes from the other.
+        assert_eq!(co_rank(3, &left, &[], &by_value), 3);
+        assert_eq!(co_rank(3, &[], &right, &by_value), 0);
+    }
+
+    #[test]
+    fn a_round_in_pieces_is_the_round_in_pairs() {
+        // Runs of four, sorted, merged in pairs whole and in pieces of one, two and four.
+        let from: Vec<(u32, u8)> = (0..23_u32)
+            .map(|i| ((i * 7 + 3) % 11, u8::from(i % 8 >= 4)))
+            .collect::<Vec<_>>()
+            .chunks(4)
+            .flat_map(|run| {
+                let mut run = run.to_vec();
+                run.sort_by_key(|x| x.0);
+                run
+            })
+            .collect();
+        let mut whole = vec![(0, 9); from.len()];
+        merge_round(&from, &mut whole, 4, &by_value);
+        for size in [1, 2, 4] {
+            let points = split_points(&from, 4, size, &by_value).unwrap();
+            assert_eq!(points.len(), from.len().div_ceil(size));
+            let mut pieces = vec![(0, 9); from.len()];
+            for (k, (out, (first, last))) in pieces.chunks_mut(size).zip(points).enumerate() {
+                let start = k * size;
+                let begin = start - start % 8;
+                let pair = &from[begin..(begin + 8).min(from.len())];
+                let (left, right) = pair.split_at(4.min(pair.len()));
+                let done = start - begin;
+                let end = done + out.len();
+                merge_runs(
+                    &left[first..last],
+                    &right[done - first..end - last],
+                    out,
+                    &by_value,
+                );
+            }
+            assert_eq!(pieces, whole, "pieces of {size}");
+        }
+    }
+
+    /// Each piece of `split_points(from, 6, size, before)` takes between nothing and its own length
+    /// from each run, and each pair of runs ends at both runs' ends.
+    #[allow(clippy::arithmetic_side_effects, reason = "a test's own counting")]
+    fn in_step<B: Fn(&u32, &u32) -> bool>(from: &[u32], size: usize, before: &B) {
+        let points = split_points(from, 6, size, before).unwrap();
+        let mut k = 0;
+        for pair in from.chunks(12) {
+            let left = pair.len().min(6);
+            let (mut taken, mut done) = (0, 0);
+            while done < pair.len() {
+                let end = (done + size).min(pair.len());
+                let (first, last) = points[k];
+                assert_eq!(first, taken);
+                assert!(last >= first && last - first <= end - done && last <= left);
+                assert!(end - last <= pair.len() - left);
+                (taken, done, k) = (last, end, k + 1);
+            }
+            assert_eq!(taken, left);
+        }
+        assert_eq!(k, points.len());
+    }
+
+    #[test]
+    fn split_points_stay_in_step_whatever_the_order_answers() {
+        // An order that says "before" every time, one that never does, and a true one.
+        let from: Vec<u32> = (0..19).map(|i| (i * 5) % 7).collect();
+        for size in [1, 2, 3] {
+            in_step(&from, size, &|_: &u32, _: &u32| true);
+            in_step(&from, size, &|_: &u32, _: &u32| false);
+            in_step(&from, size, &less);
+        }
     }
 
     #[test]
