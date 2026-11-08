@@ -1583,14 +1583,36 @@ fn folded_branches_are_left_out_only_when_they_can_be_placed() {
         f.iter().any(|x| x.contains("cannot be told apart")),
         "{f:?}"
     );
-    // More folded outcomes than branch records is not data the gate can use.
+    // BRF above the BRDA lines: llvm-cov counted a condition once per copy rustc compiled (a match
+    // guard after an or-pattern) and BRDA lists it once. With every outcome taken, the copies
+    // change nothing: each condition went both ways.
+    let taken = [(2, Some(1)), (2, Some(1)), (3, Some(1)), (3, Some(2))];
+    let copies = measure(
+        &repo.root,
+        "geom-num",
+        &lcov_record(&repo, &rel, &lines, &taken, Some(6)),
+    )
+    .unwrap();
+    assert_eq!(
+        (
+            copies.files[0].counts.branches_found,
+            copies.files[0].counts.branches_hit
+        ),
+        (4, 4)
+    );
+    assert_eq!(coverage::judge(&[copies]), Vec::<String>::new());
+    // With an outcome of 0 the folded ones cannot be counted, so the 0 is a miss and the note
+    // says why.
+    let f = judged(
+        &repo,
+        "geom-num",
+        &lcov_record(&repo, &rel, &lines, &one_zero, Some(9)),
+    );
     assert!(
-        measure(
-            &repo.root,
-            "geom-num",
-            &lcov_record(&repo, &rel, &lines, &one_zero, Some(9))
-        )
-        .is_err()
+        f.iter().any(|x| x.contains("compiled more than once"))
+            && f.iter()
+                .any(|x| x.contains("not taken both ways on lines: 3")),
+        "{f:?}"
     );
 }
 
