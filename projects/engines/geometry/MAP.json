@@ -9121,7 +9121,7 @@
       "provenance": [],
       "sections": "10.2, 19.9 to 19.12 and 23.9; open questions OQ-19.7 and OQ-19.17, in the kernel architecture (`projects/engines/geometry/architecture/`).",
       "spdx": null,
-      "status": "scaffold only; built by pieces G293, G294, G295, G296, G297.",
+      "status": "the instance tree (G295) built; G293, G294, G296 and G297 to come.",
       "summary": "Spare Kit geometry kernel: spatial queries, distance and clash."
     },
     {

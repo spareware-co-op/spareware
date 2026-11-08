@@ -1260,7 +1260,6 @@ mod repository {
             "geom-sketch",
             "G216 G217 G218 G219 G220 G221 G222 G223 G224 G225 G226 G227 G228 G230 G477 G478",
         ),
-        ("geom-spatial", "G293 G294 G295 G296 G297"),
         ("geom-step", "G427 G428 G429 G476"),
         ("geom-subd", "G315 G316 G319 G323 G325"),
         ("geom-sweep", "G255 G256 G257 G259 G260 G261 G280 G375"),
