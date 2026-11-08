@@ -379,7 +379,7 @@ fn shapes(rayon: &Rayon, step: &OpPath, only: &str, (small, one_thread): (bool, 
                 "{kind}, size class {size}{}",
                 if small { ", small" } else { "" }
             );
-            if !only.is_empty() && !label.contains(only) && !only.contains(kind) {
+            if !only.is_empty() && !label.contains(only) {
                 continue;
             }
             let (pa, pb) = shape_pair(kind, size, small);
