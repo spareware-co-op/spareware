@@ -31,8 +31,7 @@
 //!   <https://github.com/tangency-labs/solidcore/blob/7a593124c98e2bdfc7adc4fa94aeeb9b758cf450/crates/solidcore/src/nurbs/b_spline_surface/p1.rs>
 //!   Copyright (c) 2026 The solidcore contributors
 //!   Changed for Spare Kit: the ASCII readers alone, every size checked before it allocates, and
-//!   the values kept as read; a 3D curve read where a 2D one is wanted is refused rather than
-//!   projected, which no fixture needs.
+//!   the values kept as read.
 //! SPDX-License-Identifier: Apache-2.0
 //!
 //! Cost: linear in the control points and knots read.
@@ -47,7 +46,7 @@ pub const MAX_DEGREE: usize = 17;
 pub struct Curve {
     /// The degree.
     pub degree: usize,
-    /// The dimension written, 2 or 3.
+    /// The dimension, 2 or 3: a 3D curve read as a UV curve is made 2D, as `SMLib` makes it.
     pub dim: usize,
     /// The control points, each `dim` values: w·P for a rational curve.
     pub points: Vec<Vec<f64>>,
@@ -133,8 +132,8 @@ impl Curve {
     ///
     /// # Errors
     ///
-    /// [`SmbError::Shape`] for a header `SMLib` refuses, a value that does not read, a count past
-    /// the data, or a 3D curve where a 2D one is wanted.
+    /// [`SmbError::Shape`] for a header `SMLib` refuses, a value that does not read, or a count past
+    /// the data.
     pub(super) fn read(reader: &mut Reader, dim: usize) -> Result<Curve, SmbError> {
         let (mut last, mut deg, mut flag, mut written) = (-1_i64, 0_i16, -1_i16, 0_i16);
         reader.long(&mut last);
@@ -155,9 +154,6 @@ impl Curve {
             3 => 3,
             _ => return Err(SmbError::Shape("a curve dimension other than 2 or 3")),
         };
-        if written > dim {
-            return Err(SmbError::Shape("a 3D curve where a 2D one is wanted"));
-        }
         let knot_count = count
             .checked_add(degree)
             .and_then(|k| k.checked_add(1))
@@ -173,7 +169,8 @@ impl Curve {
             }
             reader.next_line();
             reader.check()?;
-            let point: Vec<f64> = values.iter().copied().take(written).collect();
+            // A 3D curve read where a 2D one is wanted loses its z, as `ConvertTo2D` drops it.
+            let point: Vec<f64> = values.iter().copied().take(written.min(dim)).collect();
             if rational {
                 weights.push(values.get(written).copied().unwrap_or(f64::NAN));
             }
@@ -182,7 +179,7 @@ impl Curve {
         let knots = knots(reader, knot_count)?;
         Ok(Curve {
             degree,
-            dim: written,
+            dim: written.min(dim),
             points,
             weights: rational.then_some(weights),
             knots,

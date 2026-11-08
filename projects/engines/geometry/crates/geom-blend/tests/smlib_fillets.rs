@@ -447,6 +447,31 @@ fn room(
     }
 }
 
+/// Why edge `e`'s sides do not read.
+fn why_unread(smb: &Smb, flats: &BTreeMap<usize, Option<Flat>>, e: usize) -> String {
+    if !straight(smb, e) {
+        return "its curve is not straight".to_owned();
+    }
+    let uses = smb.edges_of(e as u64);
+    if uses.len() != 2 {
+        return format!("it has {} edge uses in loops", uses.len());
+    }
+    for u in uses {
+        let Some(f) = smb.face_of_loop(smb.edgeuses[u].loop_index) else {
+            return "an edge use's loop has no face".to_owned();
+        };
+        if flats.get(&f).is_none_or(Option::is_none) {
+            let face = &smb.faces[f];
+            let s = &smb.surfaces[face.surface as usize];
+            return format!(
+                "face {f} is not a flat polygon of straight edges (surface degree {:?}, {} loops)",
+                s.degree, face.num_loops
+            );
+        }
+    }
+    "a face's boundary comes down to the edge, or both uses are on one face".to_owned()
+}
+
 /// What a case reads to.
 enum Judged {
     /// An edge could not be read; the reason.
@@ -466,7 +491,7 @@ fn judge(smb: &Smb, case: &Case) -> Judged {
     let mut per_edge: BTreeMap<usize, ([Side; 2], Interval)> = BTreeMap::new();
     for &e in &picked {
         let Some(sides) = sides(smb, &flats, e) else {
-            return Judged::Unread(format!("edge {e}: not straight between two flat faces"));
+            return Judged::Unread(format!("edge {e}: {}", why_unread(smb, &flats, e)));
         };
         // cot(θ/2) = (d1·d2 + |d1||d2|) / |d1 × d2|.
         let (d1, d2) = (enclose_v(&sides[0].into), enclose_v(&sides[1].into));
