@@ -362,3 +362,38 @@ fn the_cubic_parabola_is_the_polynomial_in_x() {
         );
     }
 }
+
+#[test]
+fn the_third_derivative_is_the_sine_forms() {
+    // With f = √(1 − q²) the tangent is (f, q) by the station, so the third derivative is
+    // (−(q′² + q·q″)/f − q²·q′²/f³, q″), q″ = (κ₂ − κ₁)/L throughout: it takes q's Taylor
+    // coefficients to the second, each its derivative over its factorial.
+    for (name, k1, k2, length) in cases() {
+        let t = spiral(k1, k2, length);
+        for frac in [0.0, 0.3, 0.7, 1.0] {
+            let l = length * frac;
+            let side = if frac == 1.0 {
+                Limit::FromLeft
+            } else {
+                Limit::FromRight
+            };
+            let q = k1 * l + (k2 - k1) * l * l / (2.0 * length);
+            let dq = k1 + (k2 - k1) * l / length;
+            let ddq = (k2 - k1) / length;
+            let f = (1.0 - q * q).sqrt();
+            let want = [
+                -(dq * dq + q * ddq) / f - q * q * dq * dq / (f * f * f),
+                ddq,
+            ];
+            let e = t.enclose(l, side, 3, &mut meter()).unwrap();
+            for (axis, w) in want.into_iter().enumerate() {
+                let i = e[3][axis];
+                let slack = 1e-9 * w.abs() + 1e-15;
+                assert!(
+                    i.lo() - slack <= w && w <= i.hi() + slack,
+                    "{name} at {l}, axis {axis}: {i:?} against {w}"
+                );
+            }
+        }
+    }
+}

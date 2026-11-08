@@ -113,9 +113,9 @@ use geom_math::TypedTransform;
 use geom_num::eft::two_prod;
 use geom_num::exact_sum::ExactSum;
 use geom_num::interval::Interval;
-use geom_num::math;
 use geom_num::quadrature::GaussRule;
 use geom_num::quadrature_rules::GAUSS_LEGENDRE;
+use geom_num::{Sign, math};
 use geom_nurbs::{Bounds, Changed, Limit};
 use geom_run::WorkMeter;
 
@@ -2026,7 +2026,10 @@ fn finish_sine(poly: [Interval; TERMS]) -> Result<Heading, CurveError> {
     let mut h = finish(poly, None)?;
     h.sine = true;
     let q = heading(&h, Interval::new(0.0, 1.0)?, 0)?;
-    if q.lo() > -1.0 && q.hi() < 1.0 {
+    // Inside (−1, 1): 1 − q and 1 + q both certainly positive.
+    let one = point(1.0)?;
+    let positive = |x: Interval| matches!(x.certain_sign(), Some(Sign::Positive));
+    if positive(one.sub(q)?) && positive(one.add(q)?) {
         Ok(h)
     } else {
         Err(CurveError::Degenerate)
