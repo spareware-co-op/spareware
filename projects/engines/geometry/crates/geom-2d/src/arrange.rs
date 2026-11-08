@@ -690,14 +690,16 @@ fn sweep(
         items: Vec::with_capacity(pieces.len().saturating_mul(2)),
     };
     for (i, piece) in pieces.iter().enumerate() {
-        heap.push(Event {
+        let first = Event {
             at: piece.lo.clone(),
             start: Some(index(i)?),
-        })?;
-        heap.push(Event {
+        };
+        heap.push(first)?;
+        let last = Event {
             at: piece.hi.clone(),
             start: None,
-        })?;
+        };
+        heap.push(last)?;
     }
     // The status: the pieces the sweep line crosses, lowest first.
     let mut status: Vec<u32> = Vec::new();
@@ -922,11 +924,8 @@ fn build(
     let mut place_in: Vec<usize> = alloc::vec![0; edges.len().saturating_mul(2)];
     for list in &around {
         for (i, &h) in list.iter().enumerate() {
-            set(
-                &mut place_in,
-                usize::try_from(h).map_err(|_| ArrangeError::TooMany)?,
-                i,
-            )?;
+            let k = usize::try_from(h).map_err(|_| ArrangeError::TooMany)?;
+            set(&mut place_in, k, i)?;
         }
     }
     // next(h): at the end of h, the half-edge clockwise from its twin.
@@ -975,11 +974,8 @@ fn build(
     let mut cycle_of_half: Vec<usize> = alloc::vec![0; total];
     for (c, cycle) in cycles.iter().enumerate() {
         for &h in cycle {
-            set(
-                &mut cycle_of_half,
-                usize::try_from(h).map_err(|_| ArrangeError::TooMany)?,
-                c,
-            )?;
+            let k = usize::try_from(h).map_err(|_| ArrangeError::TooMany)?;
+            set(&mut cycle_of_half, k, c)?;
         }
     }
     let mut counter: Vec<bool> = Vec::new();
@@ -1094,11 +1090,8 @@ fn faces_of(
     let mut cycle_of: Vec<u32> = alloc::vec![0; edges.len().saturating_mul(2)];
     for (c, cycle) in cycles.iter().enumerate() {
         for &h in cycle {
-            set(
-                &mut cycle_of,
-                usize::try_from(h).map_err(|_| ArrangeError::TooMany)?,
-                index(c)?,
-            )?;
+            let k = usize::try_from(h).map_err(|_| ArrangeError::TooMany)?;
+            set(&mut cycle_of, k, index(c)?)?;
         }
     }
     // The parent cycle of each clockwise cycle: the cycle of the edge nearest below its lowest-
@@ -1474,7 +1467,16 @@ impl Arrangement {
 mod tests {
     use super::{ArrangeError, BodyError, failed};
     use core::cmp::Ordering;
+    use geom_num::NumError;
     use geom_topo::{Arena, TopoError};
+
+    #[test]
+    fn an_arithmetic_refusal_is_out_of_range() {
+        assert_eq!(
+            ArrangeError::from(NumError::BudgetExceeded),
+            ArrangeError::Range
+        );
+    }
 
     #[test]
     fn a_sort_keeps_the_first_refusal_and_goes_on() {
