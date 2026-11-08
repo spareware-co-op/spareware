@@ -99,6 +99,15 @@ const RUNS: ChunkPlan = ChunkPlan::fixed::<64>();
 /// Sorting the sides by line.
 const SORT_SIDES: Phase = Phase::new("merge: sort sides");
 
+/// Telling where each line's sides start, in the sides' sorted order.
+const LINES: Phase = Phase::new("merge: lines");
+
+/// Sweeping the lines.
+const SWEEPS: Phase = Phase::new("merge: sweep lines");
+
+/// What sweeping one line gives: the pairs of pieces it joins, and its runs.
+type Swept = (Vec<(usize, usize)>, Vec<Run>);
+
 /// What merges (11.5).
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Merge {
@@ -779,12 +788,13 @@ fn stretches<'s>(sides: &[&'s Side]) -> Vec<(usize, usize, Vec<&'s Side>)> {
 }
 
 /// Sweeps the sides of one line: pieces of one sheet on both sides of a stretch join unless a cut
-/// lies along it, and the rest are runs.
+/// lies along it, and the rest are runs. The joins are listed in `joins`, in the order found, for
+/// the caller to make: a sweep reads no join, so lines can be swept apart and joined after.
 fn sweep(
     line: usize,
     sides: &[&Side],
     sheets: &[Sheet],
-    parents: &mut [usize],
+    joins: &mut Vec<(usize, usize)>,
     runs: &mut Vec<Run>,
 ) -> Result<(), MergeError> {
     // A line that only cuts lie on crosses no face.
@@ -819,7 +829,7 @@ fn sweep(
                     fins.push(fin(a, true));
                     fins.push(fin(b, false));
                 }
-                (0, Some(a), Some(b)) => join(parents, a.held, b.held),
+                (0, Some(a), Some(b)) => joins.push((a.held, b.held)),
                 (1, Some(side), None) => fins.push(fin(side, true)),
                 (-1, None, Some(side)) => fins.push(fin(side, false)),
                 _ => return Err(MergeError::Overlap),
@@ -1669,17 +1679,54 @@ pub fn merge_on(
     let sides = in_order(&each_side, &by_line)?;
     held.truncate(kept);
 
-    // Each line's runs, and which pieces join across them.
+    // Each line's runs, and which pieces join across them. Where each line's sides start is told
+    // on the pool, against the side before it in the order: [`line_order`] is exact and never fails,
+    // so a side on the line of the one before it is on its line's first's. The lines are swept on
+    // the pool, each into its own joins and runs, which are then taken in line order: the joins
+    // made and the runs listed are those of one sweep after another, and the first failure is the
+    // first line's.
+    let starts = exec.try_map(
+        meter,
+        LINES,
+        PLACES_PLAN,
+        &sides,
+        |k, side, _| -> Result<bool, MergeError> {
+            let Some(before) = k.checked_sub(1).and_then(|b| sides.get(b)) else {
+                return Ok(true);
+            };
+            Ok(line_order(&before.key, &side.key) != Some(Ordering::Equal))
+        },
+    );
+    let starts = starts.map_err(|e| phase_error(e, meter))?;
+    let mut lines: Vec<(usize, usize)> = Vec::new();
+    for (k, starts_a_line) in starts.into_iter().enumerate() {
+        if starts_a_line {
+            if let Some(last) = lines.last_mut() {
+                last.1 = k;
+            }
+            lines.push((k, sides.len()));
+        }
+    }
+    let swept = exec.try_map(
+        meter,
+        SWEEPS,
+        RUNS,
+        &lines,
+        |_, (start, end), _| -> Result<Swept, MergeError> {
+            let group = sides.get(*start..*end).ok_or(MergeError::Open)?;
+            let (mut joins, mut found) = (Vec::new(), Vec::new());
+            sweep(*start, group, &sheets, &mut joins, &mut found)?;
+            Ok((joins, found))
+        },
+    );
+    let swept = swept.map_err(|e| phase_error(e, meter))?;
     let mut same_piece: Vec<usize> = (0..held.len()).collect();
     let mut runs: Vec<Run> = Vec::new();
-    let mut start = 0usize;
-    for end in 1..=sides.len() {
-        let next = sides.get(end).zip(sides.get(start));
-        if next.is_none_or(|(b, a)| line_order(&a.key, &b.key) != Some(Ordering::Equal)) {
-            let group = sides.get(start..end).ok_or(MergeError::Open)?;
-            sweep(start, group, &sheets, &mut same_piece, &mut runs)?;
-            start = end;
+    for (joins, found) in swept {
+        for (a, b) in joins {
+            join(&mut same_piece, a, b);
         }
+        runs.extend(found);
     }
     let runs = without_slits(runs, &same_piece);
     let runs = cut_at_ends(&whole_runs(runs, &same_piece), &points, exec, meter)?;
