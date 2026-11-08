@@ -24,8 +24,9 @@
 )]
 
 use dashu_ratio::RBig;
+use geom_curve::tight;
 use geom_curve::{
-    Basis, Composite, HelixAxes, Linework, LineworkError, ParamCurve, Segment, linework,
+    Basis, Composite, CurveError, HelixAxes, Linework, LineworkError, ParamCurve, Segment, linework,
 };
 use geom_num::{Exactness, GridStep, P3, Steps};
 use geom_nurbs::{Limit, Parametrization};
@@ -514,4 +515,112 @@ fn an_arc_the_doubles_cannot_hold_within_the_fit_bound_is_refused() {
         Err(LineworkError::OverFit { bound }) => assert!(bound.get() > 64.0, "{}", bound.get()),
         other => panic!("{other:?}"),
     }
+}
+
+#[test]
+fn a_level_arc_with_unequal_chords_is_one_circle_and_off_level_two_pieces() {
+    let plan = [(0, 0), (3_000_000, 1_000_000), (4_000_000, 3_000_000)];
+    for (z, expected) in [
+        ([500; 3], vec!["level arc"]),
+        ([500, 700, 700], vec!["helix", "level arc"]),
+        ([500, 500, 700], vec!["level arc", "helix"]),
+    ] {
+        let pts: Vec<P3> = plan.iter().zip(z).map(|(&(x, y), z)| p(x, y, z)).collect();
+        let l = linework(&pts, &[Segment::Arc], &mut meter()).unwrap();
+        assert_eq!(kinds(&l), expected, "{z:?}");
+        check_through(&pts, &l);
+        check_certified(&pts, &l);
+    }
+}
+
+#[test]
+fn an_arc_after_a_line_places_its_middle_point_on_the_composite() {
+    // The arc's middle point lies inside its piece, which starts where the line ends: its
+    // parameter on the composite is the line's length on plus its own on the arc.
+    let pts = [
+        p(-2_000_000, 0, 0),
+        p(0, 0, 0),
+        p(3_000_000, 1_000_000, 0),
+        p(4_000_000, 3_000_000, 0),
+    ];
+    let l = linework(&pts, &[Segment::Line, Segment::Arc], &mut meter()).unwrap();
+    assert_eq!(kinds(&l), ["line", "level arc"]);
+    check_through(&pts, &l);
+    check_certified(&pts, &l);
+}
+
+#[test]
+fn a_sweep_too_small_for_doubles_is_refused_not_taken_as_a_whole_turn() {
+    // From (0, 0) to (1, 1) about a centre some 2^76 steps away along the other diagonal, the plan
+    // cross product of the two radii is below its own rounding: the sweep cannot be told from
+    // nothing, or from a whole turn, and the arc is refused.
+    let pts = [p(0, 0, 0), p(1, 1, 0), p(1_i64 << 39, (1_i64 << 39) + 1, 0)];
+    assert_eq!(
+        linework(&pts, &[Segment::Arc], &mut meter()).unwrap_err(),
+        LineworkError::Curve(CurveError::Degenerate)
+    );
+}
+
+#[test]
+fn a_nearly_straight_arc_off_one_grade_is_held_to_both_ends_at_its_joint() {
+    // The circle's centre is 2^(77 − k) steps away, so each piece's ends land a few steps from
+    // the points they start and end at, by different amounts at the middle point, where one piece
+    // ends and the next begins: the bound holds both, so every point lies within it from every
+    // side it is reached from.
+    let half = 1_i64 << 39;
+    for k in 22..=26 {
+        let pts = [p(-half, 0, 0), p(0, 1_i64 << k, 7), p(half, 0, 0)];
+        let l = linework(&pts, &[Segment::Arc], &mut meter()).unwrap();
+        assert_eq!(kinds(&l), ["helix", "helix"], "{k}");
+        check_through(&pts, &l);
+        check_certified(&pts, &l);
+    }
+}
+
+/// Every point lies within the bound of the curve's certified enclosure at its parameter, from
+/// every side the curve reaches it from: a joint from both, as the end of one piece and the start
+/// of the next.
+fn check_certified(points: &[P3], l: &Linework) {
+    let c: &Composite<3> = l.curve();
+    for (i, (&q, &s)) in points.iter().zip(l.parameters()).enumerate() {
+        let sides: &[Limit] = if i == 0 {
+            &[Limit::FromRight]
+        } else if i + 1 == points.len() {
+            &[Limit::FromLeft]
+        } else {
+            &[Limit::FromLeft, Limit::FromRight]
+        };
+        for &side in sides {
+            let e = c.enclose(s, side, 0, &mut meter()).unwrap();
+            let d = tight::distance_to(&xyz(q), &e[0]).unwrap();
+            assert!(
+                d <= l.bound(),
+                "point {i} at {s} from {side:?}: {d} past the bound {}",
+                l.bound()
+            );
+        }
+    }
+}
+
+#[test]
+fn a_bound_just_under_the_fit_bound_is_accepted_as_its_64_whole_steps() {
+    // A nearly straight arc off one grade whose certified bound comes to just under 64 steps (found
+    // by a seeded search over such arcs): it is within `ε_fit`, so taken, Certified within its 64
+    // whole steps.
+    let pts = [
+        p(-529_482_335_868, 0, 0),
+        p(432_191_455, 3_259_086, 100),
+        p(530_346_718_674, 0, 0),
+    ];
+    let l = linework(&pts, &[Segment::Arc], &mut meter()).unwrap();
+    assert!(l.bound() > 63.0 && l.bound() < 64.0, "{}", l.bound());
+    assert!(matches!(
+        l.exactness(GridStep::Q0),
+        Exactness::Certified {
+            bound: Steps(64),
+            ..
+        }
+    ));
+    check_through(&pts, &l);
+    check_certified(&pts, &l);
 }

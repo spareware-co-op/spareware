@@ -65,6 +65,7 @@
 //! recurses.
 
 use alloc::vec::Vec;
+use core::cmp::Ordering;
 use core::f64::consts::PI;
 use core::fmt;
 
@@ -381,11 +382,11 @@ struct Piece {
 /// The pieces of the arc `segment` from `a` through `m` to `b`.
 fn arc(a: P3, m: P3, b: P3, segment: usize) -> Result<Vec<Piece>, LineworkError> {
     let defect = LineworkError::Curve(CurveError::Defect);
-    let orientation = turn(a, m, b).ok_or(defect)?;
-    if orientation == 0 {
-        return Err(LineworkError::Collinear { segment });
-    }
-    let left = orientation > 0;
+    let left = match turn(a, m, b).ok_or(defect)?.cmp(&0) {
+        Ordering::Greater => true,
+        Ordering::Less => false,
+        Ordering::Equal => return Err(LineworkError::Collinear { segment }),
+    };
     let center = circumcenter(a, m, b)?;
     let first = sweep(center, a, m, left)?;
     let second = sweep(center, m, b, left)?;
@@ -467,10 +468,11 @@ fn pieces(
     Ok(out)
 }
 
-/// The surveyed points' parameters on `curve`, made of `pieces`, with the side each is checked
-/// from: a piece's start from the right, a point inside a piece from the right, and the last end
-/// from the left; a joint is also checked from the left, as the end of the piece before.
-fn placed(curve: &Composite<3>, pieces: &[Piece]) -> Result<Vec<(f64, bool)>, LineworkError> {
+/// The surveyed points' parameters on `curve`, made of `pieces`, with the sides each is checked
+/// from, (from the left, from the right): a piece's start and a point inside a piece from the
+/// right, the last end from the left, and a joint from both, as the end of the piece before and
+/// the start of the next.
+fn placed(curve: &Composite<3>, pieces: &[Piece]) -> Result<Vec<(f64, bool, bool)>, LineworkError> {
     let defect = LineworkError::Curve(CurveError::Defect);
     let starts = curve.starts();
     let mut out = Vec::new();
@@ -478,15 +480,15 @@ fn placed(curve: &Composite<3>, pieces: &[Piece]) -> Result<Vec<(f64, bool)>, Li
         let s0 = *starts.get(k).ok_or(defect)?;
         let s1 = *starts.get(k.checked_add(1).ok_or(defect)?).ok_or(defect)?;
         let (a, b) = piece.curve.interval();
-        // A joint after the first piece is checked from both sides.
-        out.push((s0, k > 0));
+        // A joint, the start of every piece but the first, is checked from both sides.
+        out.push((s0, k != 0, true));
         let ratio = (s1 - s0) / (b - a);
         for &t in &piece.inner {
-            out.push((s0 + (t - a) * ratio, false));
+            out.push((s0 + (t - a) * ratio, false, true));
         }
     }
     let end = *starts.last().ok_or(defect)?;
-    out.push((end, true));
+    out.push((end, true, false));
     Ok(out)
 }
 
@@ -535,48 +537,33 @@ pub fn linework(
     }
     let pieces = pieces(points, segments, meter)?;
     let joined: Vec<Trimmed<3>> = pieces.iter().map(|p| p.curve.clone()).collect();
-    // Each joint is two pieces' ends at one surveyed point, each within `ε_fit` of it when the
-    // linework passes the checks below, so within 2·`ε_fit` of each other; the composite records
-    // each joint's certified gap, and the checks below bound every end's distance from its point.
-    let allow = Real::new(2.0 * FIT_STEPS)?;
-    let curve = Composite::starting_within(joined, 0.0, allow.get()).map_err(|e| match e {
-        CurveError::Disjoint => LineworkError::OverFit { bound: allow },
-        other => LineworkError::Curve(other),
-    })?;
+    // Each joint is two pieces' ends at one surveyed point. The checks below bound every end's
+    // distance from its point, from each side of a joint, so they bound the joint's gap too: the
+    // composite needs no limit of its own, and records each joint's certified gap.
+    let curve = Composite::starting_within(joined, 0.0, f64::INFINITY)?;
     let placed = placed(&curve, &pieces)?;
-    let mut bound = 0.0_f64;
+    let mut bound = Real::ZERO;
     let mut parameters = Vec::with_capacity(points.len());
-    for (&p, &(s, both)) in points.iter().zip(&placed) {
+    for (&p, &(s, left, right)) in points.iter().zip(&placed) {
         let xyz = doubles(p);
-        let last = parameters.len().checked_add(1) == Some(points.len());
-        let side = if last {
-            Limit::FromLeft
-        } else {
-            Limit::FromRight
-        };
-        let mut d = distance(&curve, s, side, &xyz, meter)?;
-        if both && !last {
-            let left = distance(&curve, s, Limit::FromLeft, &xyz, meter)?;
-            if left > d {
-                d = left;
+        for (wanted, side) in [(left, Limit::FromLeft), (right, Limit::FromRight)] {
+            if wanted {
+                bound = bound.total_max(Real::new(distance(&curve, s, side, &xyz, meter)?)?);
             }
-        }
-        if d > bound {
-            bound = d;
         }
         parameters.push(s);
     }
     if parameters.len() != points.len() {
         return Err(LineworkError::Curve(CurveError::Defect));
     }
-    if bound > FIT_STEPS {
-        return Err(LineworkError::OverFit {
-            bound: Real::new(bound)?,
-        });
+    // Within `ε_fit`, compared in the whole steps [`Linework::exactness`] reports: the bound rounded
+    // up is at most 64 exactly when the bound is, 64 being whole.
+    if math::ceil(bound.get())?.get() > FIT_STEPS {
+        return Err(LineworkError::OverFit { bound });
     }
     Ok(Linework {
         curve,
         parameters,
-        bound,
+        bound: bound.get(),
     })
 }
