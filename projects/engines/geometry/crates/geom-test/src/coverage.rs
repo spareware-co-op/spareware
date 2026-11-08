@@ -88,8 +88,12 @@ pub struct FileData {
     /// Times taken per branch outcome (`BRDA`); `None` when its condition never ran (`-`).
     pub branches: BTreeMap<BranchId, Option<u64>>,
     /// The branch outcomes llvm-cov counts (`BRF`). It leaves out folded outcomes (a condition
-    /// that is a constant, such as `while false`), which `BRDA` still lists, always as 0, so
-    /// `branches.len() − found` is the number of folded outcomes.
+    /// that is a constant, such as `while false`), which `BRDA` still lists, always as 0. It also
+    /// counts a condition once for each copy rustc makes of it (a match guard after an or-pattern,
+    /// `A(k) | B(k) if ...`, is compiled once per alternative), which `BRDA` lists once, with the
+    /// copies' counts added. So `branches.len() − found` is the number of folded outcomes when
+    /// `found` is no more than `branches.len()`; when it is more, some condition has copies, and
+    /// how many outcomes are folded is not written.
     pub found: Option<u64>,
 }
 
@@ -385,15 +389,21 @@ fn to_u64(n: usize) -> u64 {
 /// count of 0 is folded, or all of them are outside test code, the outcomes outside test code are
 /// counted exactly. Otherwise the folded ones cannot be placed, so every outcome of 0 outside test
 /// code is counted as missed and the file is reported, which can only make the gate stricter.
+///
+/// `BRF` above the number of `BRDA` lines means a condition rustc compiled more than once:
+/// llvm-cov's summary counts every copy, while `BRDA` lists the condition once, each outcome taken
+/// when any copy took it. A match guard after an or-pattern is compiled once per alternative (in
+/// geom-bool's `batch.rs`, `Err(A(key) | B(key)) if ...` gave `BRF:16` over 12 `BRDA` lines,
+/// every one taken). The gate counts outcomes at the source, as `BRDA` lists them, just as it
+/// counts a generic function's instances once. How many outcomes are folded is then not written:
+/// with no outcome of 0 outside test code there is none to place and the count is exact;
+/// otherwise every outcome of 0 outside test code is counted as missed and the file is reported.
 fn branch_counts(rel: &str, d: &FileData, scanned: &Scan) -> Result<Branches, CoverageError> {
     let all = to_u64(d.branches.len());
+    // `None` when `BRF` counts copies that `BRDA` lists once, so the folded outcomes are unknown.
     let folded = match d.found {
-        Some(found) => all.checked_sub(found).ok_or_else(|| {
-            cov_err(format!(
-                "{rel}: BRF says {found} branch outcomes but BRDA lists {all}"
-            ))
-        })?,
-        None if all == 0 => 0,
+        Some(found) => all.checked_sub(found),
+        None if all == 0 => Some(0),
         None => return Err(cov_err(format!("{rel}: BRDA lines without a BRF line"))),
     };
     let zero = |t: &Option<u64>| !t.is_some_and(|t| t > 0);
@@ -411,22 +421,32 @@ fn branch_counts(rel: &str, d: &FileData, scanned: &Scan) -> Result<Branches, Co
         }
     }
     let all_zero = kernel_zero.saturating_add(test_zero);
-    let (found, problem) = if folded == 0 {
-        (to_u64(kernel.len()), None)
-    } else if all_zero == folded {
-        missed_lines.clear();
-        (to_u64(kernel.len()).saturating_sub(kernel_zero), None)
-    } else if test_zero == 0 {
-        (to_u64(kernel.len()).saturating_sub(folded), None)
-    } else {
-        (
+    let (found, problem) = match folded {
+        Some(0) => (to_u64(kernel.len()), None),
+        Some(folded) if all_zero == folded => {
+            missed_lines.clear();
+            (to_u64(kernel.len()).saturating_sub(kernel_zero), None)
+        }
+        Some(folded) if test_zero == 0 => (to_u64(kernel.len()).saturating_sub(folded), None),
+        None if kernel_zero == 0 => (to_u64(kernel.len()), None),
+        Some(folded) => (
             to_u64(kernel.len()),
             Some(format!(
                 "{rel}: {folded} folded branch outcome(s) among {all_zero} with a count of 0, in \
                  test and kernel code both, so they cannot be told apart; every one outside test \
                  code is counted as missed (llvm-cov show --show-branches=count marks the folded)"
             )),
-        )
+        ),
+        None => (
+            to_u64(kernel.len()),
+            Some(format!(
+                "{rel}: BRF counts {} branch outcomes, more than the {all} BRDA lists, so a \
+                 condition was compiled more than once and which of the {all_zero} outcome(s) \
+                 with a count of 0 are folded is not written; every one outside test code is \
+                 counted as missed (llvm-cov show --show-branches=count marks the folded)",
+                d.found.unwrap_or(all)
+            )),
+        ),
     };
     Ok(Branches {
         found,
