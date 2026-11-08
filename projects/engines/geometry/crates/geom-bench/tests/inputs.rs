@@ -2203,6 +2203,39 @@ fn isolate_and_ball_classes_are_what_they_claim() {
     );
 }
 
+/// Every typical batch of `geom-format`'s benchmarks is full and succeeds: every key is made, every
+/// lookup hits, and a new version writes the one chunk its edit touched.
+#[test]
+fn format_typical_batches_all_succeed() {
+    use geom_bench::inputs::format as m;
+    use geom_bench::kernels::format as k;
+    let keys = m::cache_key(Typical);
+    let mut out = Vec::with_capacity(BATCH);
+    k::cache_key(&keys, &mut out);
+    assert_eq!(out.len(), BATCH);
+    assert!(out.iter().all(Option::is_some));
+
+    let lookups = m::memo_get(Typical);
+    let mut out = Vec::with_capacity(BATCH);
+    k::memo_get(&lookups, &mut out);
+    assert_eq!(out.len(), BATCH);
+    assert!(out.iter().all(Option::is_some));
+
+    let versions = m::next_version(Typical);
+    let mut out = Vec::with_capacity(BATCH);
+    k::next_version(&versions, &mut out);
+    assert_eq!(out.len(), BATCH);
+    assert!(out.iter().all(Option::is_some));
+    let (first, body) = &versions[0];
+    let mut meter = geom_run::WorkMeter::new(geom_run::Budget::UNLIMITED);
+    assert_eq!(first.next(body, &mut meter).unwrap().written().len(), 1);
+    for class in [Degenerate, Extreme] {
+        assert!(m::cache_key(class).is_empty());
+        assert!(m::memo_get(class).is_empty());
+        assert!(m::next_version(class).is_empty());
+    }
+}
+
 /// Runs `kernel` on `batch` and requires a full batch of `Ok` results, naming the first error.
 fn all_ok<T, R, E: core::fmt::Debug>(
     name: &str,
