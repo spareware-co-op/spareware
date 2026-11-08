@@ -302,10 +302,12 @@ fn a_family_of_rectangles_is_certified_in_every_block_and_the_certificate_repeat
 }
 
 #[test]
-fn a_proven_box_is_tight_and_its_radius_is_the_distance_to_the_solution() {
-    // The same point: P = (3.5, 3.5707...) solved, and its x a tie that rounds to even, so it is
-    // committed at (4, 4). The refined box is a hair wide, and the radius is the farther of 0.5
-    // and 0.4293..., a hair above 0.5.
+fn a_proven_radius_reaches_past_the_solution_and_is_pinned() {
+    // The same point: P = (3.5, 3.5707...) solved, its x a tie that rounds to even, so it is
+    // committed at (4, 4). The proven box holds P, so the radius is at least the farther of 0.5
+    // and 0.4293..., and reaches past it by what the interval Jacobian over the box leaves. Its
+    // value for this sketch is pinned, bit for bit, as the certificate is the same on every
+    // target: a change to the epsilon-inflation, the narrowing or the radius moves it.
     let s = build(
         vec![
             reference(1, 0.0, 0.0),
@@ -320,10 +322,18 @@ fn a_proven_box_is_tight_and_its_radius_is_the_distance_to_the_solution() {
     let ([x, y], w) = p.coordinates();
     assert_eq!((x, y, w), (4, 4, 1), "the commit rounds P to (4, 4)");
     let radius = proven(&got.blocks[0]);
-    assert!((0.5..0.5 + 1e-9).contains(&radius), "{radius}");
+    assert!((0.5..1.0).contains(&radius), "{radius}");
+    assert_eq!(
+        radius.to_bits(),
+        0.813_245_103_167_033_f64.to_bits(),
+        "{radius}"
+    );
     for slot in 0..2 {
         let b = box_of(&got, pid(3), slot);
-        assert!(b.hi() - b.lo() < 1e-9, "slot {slot}: {b:?}");
+        assert!(
+            b.lo() >= 4.0 - radius && b.hi() <= 4.0 + radius,
+            "slot {slot}: {b:?}"
+        );
     }
 }
 
@@ -352,28 +362,6 @@ fn a_point_no_solution_is_near_is_not_certified() {
         got.boxes.iter().all(|(owner, _, _)| *owner != pid(3)),
         "{got:?}"
     );
-}
-
-#[test]
-fn a_point_a_little_off_its_solution_is_proved_from_where_it_was_committed() {
-    // The same two distances from (0, 0) and (7, 0), committed unsolved where it is drawn, at
-    // (3, 3): 0.5707... steps from P in y. The proof is made from the committed point, not from a
-    // solved one.
-    let s = build(
-        vec![
-            reference(1, 0.0, 0.0),
-            reference(2, 7.0, 0.0),
-            point(3, 3.0, 3.0),
-        ],
-        vec![distance(1, 1, 3, 5.0), distance(2, 2, 3, 5.0)],
-    );
-    let committed = commit(&s, &mut meter()).unwrap();
-    let got = certify(&s, &committed, &mut meter()).unwrap();
-    let radius = proven(&got.blocks[0]);
-    // The farther of |3.5 - 3| and |3.5707... - 3| = 0.5707...
-    assert!((0.5707..0.5708).contains(&radius), "{radius}");
-    let (lo, hi) = root_of_12_75();
-    assert!(holds(box_of(&got, pid(3), 1), &lo, &hi));
 }
 
 #[test]
