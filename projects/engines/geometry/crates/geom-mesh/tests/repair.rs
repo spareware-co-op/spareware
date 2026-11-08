@@ -15,6 +15,7 @@
 )]
 #![allow(clippy::unwrap_used, clippy::panic, clippy::indexing_slicing)]
 
+#[cfg(not(target_family = "wasm"))]
 use std::num::NonZeroUsize;
 
 use geom_mesh::exact::build::Source;
@@ -27,6 +28,7 @@ use geom_num::Exactness;
 use geom_num::grid::{GridStep, P3, Steps};
 use geom_num::wide::I256;
 use geom_op::{Bound, NameId, OpId, OpPath, Remedy, Value};
+#[cfg(not(target_family = "wasm"))]
 use geom_pool::native::Rayon;
 use geom_run::{Budget, Exec, WorkMeter};
 
@@ -733,6 +735,7 @@ fn the_order_of_vertices_faces_and_corners_does_not_show() {
     assert_eq!(a.log.weld.joined, b.log.weld.joined);
 }
 
+#[cfg(not(target_family = "wasm"))]
 #[test]
 fn the_threads_do_not_show() {
     let pool = Rayon::new(NonZeroUsize::new(4).unwrap()).unwrap();
