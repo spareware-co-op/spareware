@@ -27,6 +27,8 @@
 //! trait split chapter 7 decides ("Storage uses closed enums ... Behaviour uses traits").
 //!
 //! Cost: none here; each kind's implementation states its own.
+//!
+//! Tier: Preview since 2026-10-31.
 
 use alloc::vec::Vec;
 
