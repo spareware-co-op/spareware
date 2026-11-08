@@ -1771,6 +1771,24 @@ pub mod bvh {
     }
 }
 
+/// The triangulation's hot path (piece G153, decision 32.44).
+pub mod mesh {
+    use geom_mesh::{Cdt, CdtError, triangulate};
+    use geom_run::{Budget, WorkMeter};
+
+    use super::run;
+    use crate::inputs::mesh::Terrain;
+
+    /// `geom_mesh::triangulate` on each terrain, under an unlimited budget.
+    #[inline(never)]
+    pub fn cdt(batch: &[Terrain], out: &mut Vec<Result<Cdt<u32>, CdtError>>) {
+        run(batch, out, |t| {
+            let mut meter = WorkMeter::new(Budget::UNLIMITED);
+            triangulate(&t.sites, &t.constraints, None, &mut meter)
+        });
+    }
+}
+
 /// `geom-nurbs`'s hot paths (pieces G56, G58 and G59, decision 32.44): evaluating a clamped cubic,
 /// chord-length interpolation, and the bound of a cubic Bernstein piece, each under an unlimited
 /// budget where it takes one.

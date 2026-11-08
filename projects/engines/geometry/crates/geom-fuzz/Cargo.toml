@@ -8,6 +8,8 @@ license.workspace = true
 description = "Spare Kit geometry kernel, development only: fuzz harnesses and bounded proofs, run as tests on stable, under libFuzzer with cargo-bolero, in ClusterFuzzLite and under Kani."
 
 [dependencies]
+# The triangulation target (G153).
+geom-mesh = { path = "../geom-mesh" }
 geom-num = { path = "../geom-num" }
 # The exact rationals of the nurbs target's oracle (Gate 2, 32.44), as geom-test's NURBS reference
 # uses them. MIT OR Apache-2.0, the version geom-test pins.

@@ -26,7 +26,15 @@
 //! Its direct dependencies are its row of chapter 27's crate table, checked by the
 //! scaffold test in `engine-geometry` (`tests/scaffold`).
 //!
-//! Status: scaffold only; built by pieces G146, G147, G148, G149, G150, G151, G152, G153, G288,
-//! G289, G290, G291, G298, G299, G300, G301, G302, G303, G304, G305, G306, G319, G341, G350, G411.
+//! Modules today (piece G153): [`cdt`], the kernel's one exact constrained Delaunay triangulation.
+//!
+//! Status: built by pieces G146, G147, G148, G149, G150, G151, G152, G153, G288, G289, G290, G291,
+//! G298, G299, G300, G301, G302, G303, G304, G305, G306, G319, G341, G350, G411; G153 is in.
 #![cfg_attr(not(test), no_std)]
 #![forbid(unsafe_code)]
+
+extern crate alloc;
+
+pub mod cdt;
+
+pub use cdt::{Cdt, CdtError, Quality, Site, Vertex, triangulate};
