@@ -7,6 +7,8 @@
 //! [`Entries::image`] maps a homogeneous point w·P (weight w) to M·(w·P) + w·t, once in doubles in a
 //! fixed order and once in intervals, and returns the doubles with the distance between them, an
 //! upper bound on how far the double image lies from the exact image under the exact transform.
+//! [`Entries::stretch`] bounds how far the linear part stretches a vector, so a distance stated
+//! before the transform (a cache's deviation) can be stated after it.
 //!
 //! Guarantees:
 //!
@@ -16,6 +18,9 @@
 //! - **The image's error bounded.** The interval image holds the exact image of the exact point,
 //!   and the double image is computed from the doubles of the same entries, so the returned
 //!   distance bounds their difference.
+//! - **The stretch bounded.** The Frobenius norm of the exact entries, never below the spectral
+//!   norm, computed in intervals rounded outward after dividing by the largest entry, so the
+//!   squares never overflow and the bound stays tight however large or small the entries are.
 //! - **Exact images report 0.** When every entry is exactly its double (grid and certified
 //!   transforms), each coordinate is also summed exactly, as exact products in `geom-num`'s
 //!   superaccumulator, and an image equal to its double reports an error of 0: interval arithmetic
@@ -25,7 +30,8 @@
 //! NURBS Book, 2nd ed., properties P3.10 and P4.10, <https://doi.org/10.1007/978-3-642-59223-2>),
 //! with the weights unchanged, and interval arithmetic for the bound.
 //!
-//! Cost: twelve products and sums per point in doubles and in intervals; nothing allocates.
+//! Cost: twelve products and sums per point in doubles and in intervals; nine quotients, squares
+//! and sums and a square root for the stretch; nothing allocates.
 
 #![allow(
     clippy::many_single_char_names,
@@ -38,6 +44,7 @@ use geom_num::exact_sum::ExactSum;
 use geom_num::interval::Interval;
 
 use crate::error::CurveError;
+use crate::tight;
 
 /// The interval holding the integer `v` exactly: its double, widened by the double's rounding when
 /// that is not exact.
@@ -158,18 +165,25 @@ impl Entries {
     /// distance stated before the transform, such as a cache's deviation from its kind, is at most
     /// s times as long after it.
     ///
+    /// The norm is L·√Σ(m/L)², with L the largest entry's size, in interval arithmetic rounded
+    /// outward, so s is certified; the largest square is 1, so none overflows, and one that
+    /// underflows is still enclosed. s is 0 only when M is.
+    ///
     /// # Errors
     ///
-    /// [`CurveError::NotFinite`] if the norm overflows.
+    /// [`CurveError::NotFinite`] if the norm overflows (above `f64::MAX`).
     pub fn stretch(&self) -> Result<f64, CurveError> {
-        let mut m = [Interval::point(0.0)?; 9];
-        for (slot, x) in m
-            .iter_mut()
-            .zip(self.exact.iter().flat_map(|row| row.iter().take(3)))
-        {
-            *slot = *x;
+        let entries = || self.exact.iter().flat_map(|row| row.iter().take(3));
+        let largest = entries().fold(0.0, |l, &x| tight::larger(l, tight::magnitude(x)));
+        if largest == 0.0 {
+            return Ok(0.0);
         }
-        Ok(crate::tight::norm(&m)?.hi())
+        let l = Interval::point(largest)?;
+        let mut m = [Interval::point(0.0)?; 9];
+        for (slot, &x) in m.iter_mut().zip(entries()) {
+            *slot = tight::div(x, l)?;
+        }
+        Ok(tight::mul(tight::norm(&m)?, l)?.hi())
     }
 
     /// Whether the transform leaves z alone, so it applies to planar points.
