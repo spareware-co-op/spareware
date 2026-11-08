@@ -402,6 +402,7 @@ fn an_open_mesh_is_refused() {
     );
 }
 
+#[cfg(not(target_family = "wasm"))]
 #[test]
 fn the_points_come_back_in_order_on_any_pool() {
     use geom_pool::native::Rayon;
