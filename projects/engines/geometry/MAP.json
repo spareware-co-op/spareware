@@ -10768,12 +10768,13 @@
           "target": "lib"
         },
         {
-          "cost": "O(m·n·min(m, n)) multiply-adds for m equations and n variables, charged to the meter before the work, then the same for the confirming decompositions of small groups.",
+          "cost": "O(m·n·min(m, n)) multiply-adds for m equations and n variables, charged to the meter before the work, then the same for the confirming decompositions of small groups. A carried norm costs a few operations a step; a norm computed afresh costs a pass over its column, and is needed only after cancellation or at a choice the bounds leave open.",
           "does": "[`diagnose`] reads a sketch's Jacobian at its values and says how many ways the sketch can still move, which equations repeat others, and which of those repeats conflict. [`analyse_columns`] is the same on bare data, so the numerics are tested without a sketch. [`free_motions`] gives the directions the sketch can still move in, in the canonical echelon form, and [`SketchReport::text`] prints a report in words.",
           "family": [],
           "file": "projects/engines/geometry/crates/geom-sketch/src/diagnose.rs",
           "guarantees": [
             "**Deterministic.** Pivots tie-break on priority, then authoring order; reports list their constraints in authoring order; the report text is the same on every target.",
+            "**Every choice certified.** The pivot order, every pivot and every verdict are bit for bit those of computing every column's norm afresh at every step: a carried norm decides only what its bound proves.",
             "**Nothing hidden.** A pivot between the thresholds is a [`Verdict::NearSingular`], and the degrees of freedom are given as a least and a most when any are.",
             "**No panics, no recursion, no unsafe code.** Every index is checked."
           ],
@@ -10782,9 +10783,10 @@
             "links": [
               "projects/engines/geometry/architecture/15-sketches.md",
               "doi:10.1007/BF01436084",
+              "doi:10.1145/1377612.1377616",
               "doi:10.1137/1.9780898718027"
             ],
-            "text": "section 15.8 (`projects/engines/geometry/architecture/15-sketches.md`): P. Businger and G. H. Golub, \"Linear least squares solutions by Householder transformations\", Numer. Math. 7 (1965), doi:10.1007/BF01436084, for the pivoted QR; N. J. Higham, \"Accuracy and Stability of Numerical Algorithms\", 2nd ed. (2002), chapter 19, doi:10.1137/1.9780898718027, for the rounding bound on a pivot; and the dependency groups in our own words from the method G01 report 06, section 5, describes."
+            "text": "section 15.8 (`projects/engines/geometry/architecture/15-sketches.md`): P. Businger and G. H. Golub, \"Linear least squares solutions by Householder transformations\", Numer. Math. 7 (1965), doi:10.1007/BF01436084, for the pivoted QR and its norm downdate; Z. Drmač and Z. Bujanović, \"On the failure of rank-revealing QR factorization software: a case study\", ACM Trans. Math. Softw. 35(2) (2008), doi:10.1145/1377612.1377616, for how the downdate's rounding fails and for xGEQP3's drift test; N. J. Higham, \"Accuracy and Stability of Numerical Algorithms\", 2nd ed. (2002), chapters 3 and 19, doi:10.1137/1.9780898718027, for the rounding bounds on a sum of squares, on a reflection and on a pivot; and the dependency groups in our own words from the method G01 report 06, section 5, describes."
           },
           "path": "geom_sketch::diagnose",
           "provenance": [],

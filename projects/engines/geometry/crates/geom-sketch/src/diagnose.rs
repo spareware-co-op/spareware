@@ -13,6 +13,12 @@
 //!   why the factorisation is written here and not taken from `geom-linalg`'s [`PivotedQr`], which
 //!   pivots on the norm alone: the rule is chapter 15.8's, so the equations left over are the ones
 //!   a person would expect to question.
+//! - **Norms carried with a proven bound.** Each column's norm is downdated from step to step, as
+//!   Businger and Golub's method and LAPACK's xGEQP3 keep it, rather than computed again from the
+//!   column, and carries a bound on its error derived from the arithmetic ([`NormBound`]). A
+//!   choice the bounds settle is made on them; one they do not settle, a norm near the factor of 2
+//!   or the largest near `σ_dep`, is made on the norms computed afresh from the columns, as is
+//!   every norm the drift test of xGEQP3 finds too worn by cancellation to carry.
 //! - **Thresholds are derived** (15.8): a pivot of at least `σ_ind` = 2^-12 is independent; one at
 //!   most `σ_dep` = 1/(64 S) for a block of S grid steps, and never below the factorisation's own
 //!   rounding bound (Higham 2002, chapter 19), is dependent; between them is near-singular and is
@@ -30,19 +36,27 @@
 //!
 //! - **Deterministic.** Pivots tie-break on priority, then authoring order; reports list their
 //!   constraints in authoring order; the report text is the same on every target.
+//! - **Every choice certified.** The pivot order, every pivot and every verdict are bit for bit
+//!   those of computing every column's norm afresh at every step: a carried norm decides only what
+//!   its bound proves.
 //! - **Nothing hidden.** A pivot between the thresholds is a [`Verdict::NearSingular`], and the
 //!   degrees of freedom are given as a least and a most when any are.
 //! - **No panics, no recursion, no unsafe code.** Every index is checked.
 //!
 //! Method: section 15.8 (`projects/engines/geometry/architecture/15-sketches.md`): P. Businger and
 //! G. H. Golub, "Linear least squares solutions by Householder transformations", Numer. Math. 7
-//! (1965), doi:10.1007/BF01436084, for the pivoted QR; N. J. Higham, "Accuracy and Stability of
-//! Numerical Algorithms", 2nd ed. (2002), chapter 19, doi:10.1137/1.9780898718027, for the rounding
-//! bound on a pivot; and the dependency groups in our own words from the method G01 report 06,
-//! section 5, describes.
+//! (1965), doi:10.1007/BF01436084, for the pivoted QR and its norm downdate; Z. Drmač and Z.
+//! Bujanović, "On the failure of rank-revealing QR factorization software: a case study", ACM
+//! Trans. Math. Softw. 35(2) (2008), doi:10.1145/1377612.1377616, for how the downdate's rounding
+//! fails and for xGEQP3's drift test; N. J. Higham, "Accuracy and Stability of Numerical
+//! Algorithms", 2nd ed. (2002), chapters 3 and 19, doi:10.1137/1.9780898718027, for the rounding
+//! bounds on a sum of squares, on a reflection and on a pivot; and the dependency groups in our own
+//! words from the method G01 report 06, section 5, describes.
 //!
 //! Cost: O(m·n·min(m, n)) multiply-adds for m equations and n variables, charged to the meter
-//! before the work, then the same for the confirming decompositions of small groups.
+//! before the work, then the same for the confirming decompositions of small groups. A carried
+//! norm costs a few operations a step; a norm computed afresh costs a pass over its column, and is
+//! needed only after cancellation or at a choice the bounds leave open.
 
 #![allow(
     clippy::many_single_char_names,
@@ -76,6 +90,33 @@ const PREFERRED_WITHIN: f64 = 2.0;
 
 /// The unit roundoff of binary64.
 const UNIT_ROUNDOFF: f64 = 1.110_223_024_625_156_5e-16;
+
+/// The drift test of LAPACK's xGEQP3 (its `tol3z`, the square root of the machine epsilon 2^-52,
+/// here 2^-26): a downdated square at most this share of the square last computed from the column
+/// has lost about half its digits to cancellation, and the norm is computed from the column again.
+const RECOMPUTE: f64 = 1.490_116_119_384_765_6e-8;
+
+/// The longest tail whose norm is carried by downdating: 2^10 rows. [`NormBound`]'s proof needs
+/// the tail no longer than this; a longer one has its norm computed afresh at every step.
+pub const CARRY_ROWS: usize = 1024;
+
+/// The least square a norm is carried from, 2^-600, and the greatest, 2^600: inside them every
+/// square, sum and product the downdate makes stays a normal double far from overflow, which
+/// [`NormBound`]'s proof needs. A norm outside them is computed afresh at every step.
+const CARRY_LOW: f64 = 2.409_919_865_102_884e-181;
+
+/// See [`CARRY_LOW`]: 2^600.
+const CARRY_HIGH: f64 = 4.149_515_568_880_993e180;
+
+/// What each downdate adds to the bound for products that underflow, 2^-700 (see [`NormBound`]).
+const UNDERFLOW: f64 = 1.901_091_566_295_16e-211;
+
+/// 1 + 2^-40 and 1 − 2^-40: the factors that widen a carried square's root to bounds on the norm
+/// `tail_norm` computes (see [`NormBound::range`]).
+const WIDEN_UP: f64 = 1.000_000_000_000_909_5;
+
+/// See [`WIDEN_UP`]: 1 − 2^-40.
+const WIDEN_DOWN: f64 = 0.999_999_999_999_090_5;
 
 /// The verdict on one pivot (section 15.8's table).
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -300,75 +341,304 @@ fn tail_norm(columns: &[Vec<f64>], j: usize, from: usize) -> Result<f64, SketchE
     Ok(root(sum)? * step)
 }
 
+/// A column's trailing norm as the factorisation carries it from one step to the next: its square,
+/// downdated after each reflection, with a bound on the square's error derived from the arithmetic.
+///
+/// A reflection keeps a column's length, so the rows below the one a step removes keep the square
+/// of the old norm less the square of the entry the reflection left in that row (Businger and
+/// Golub's downdate). Its rounding can put a norm on the wrong side of a choice: of the factor of 2
+/// within which a lower priority number is preferred, or of `σ_dep`. So the factorisation makes a
+/// choice on these bounds only when they settle it, and otherwise computes the norms afresh.
+///
+/// Write u = 2^-53, `γ_n` = n·u/(1 − n·u) (Higham 2002, chapter 3), ν for the exact norm of a
+/// column's trailing rows as the factorisation holds them, T for the norm `tail_norm` computes from
+/// them, and L ≤ [`CARRY_ROWS`] for their number. The bound rests on three facts:
+///
+/// 1. **T is within `γ_{L+2}`·ν of ν.** `tail_norm` sums the squares of the entries divided by a
+///    power of two, which is exact; the largest quotient is at least 1, so with T between 2^-300
+///    and 2^300 an entry that underflows changes the sum by under L·2^-1074, below u of it. The sum
+///    is within `γ_L` of the exact one, its correctly rounded root within u more, and the scaling
+///    back exact.
+/// 2. **A reflection moves a column's length by at most ρ‖x‖ + τ**, with ρ = (4L + 6)u and
+///    τ = (3L + 5)·2^-1075. The reflection H = I − 2vvᵀ/(vᵀv) of the computed vector v is
+///    orthogonal, so only its application rounds. The vector is divided by a power of two to put
+///    its largest entry in [1, 2), so vᵀv ≥ 1; then vᵀv and vᵀx are within `γ_L`, the quotient
+///    within u, and each entry's product and difference within u (Higham 2002, lemma 19.2's
+///    argument, with its constants worked out for this code: Δσ·‖v‖ ≤ (4L + 2)u·‖x‖ to first
+///    order, plus 3u‖x‖ from the last two roundings). Products that underflow add at most τ.
+/// 3. **So the exact square after a downdate is near the computed one.** The exact square of the
+///    new tail is ‖y‖² − y₀² for the reflected column y and the entry y₀ in the removed row; the
+///    computed square is S − y₀² rounded. With |S − ν²| ≤ D before, the two differ by at most
+///    D + (S + D)(2ρ + ρ² + 3.01u) + 2^-751, which is at most D + (S + D)(8L + 16)u + 2^-751.
+///
+/// So a square computed from T starts with the bound S·(3L + 6)u (from fact 1, with
+/// (1 − `γ_{L+2}`)^-2 − 1 + u and the rounding of S and of the product inside it), and each
+/// downdate adds (S + D)(8L + 28)u + 2^-700. The 12u beyond fact 3's 16u, and 2^-700 over 2^-751,
+/// pay for rounding the bound's own arithmetic: computed in four rounded operations it falls short
+/// of the exact expression by under 4u of it, and 12u·(S + D) covers that because D ≤ S + D and
+/// S > 2^-626. A norm is carried only while S stays above the drift test's 2^-26 of the square it
+/// was last computed from and that square lies in [2^-600, 2^600]; then over at most 2^10 steps of
+/// at most 2^10 rows D stays below S/8, so ν > 2^-314, the pivot is a normal number (it is within
+/// a factor of 2 of the largest norm) and the reflection's vector scales as fact 2 needs.
+///
+/// Guarantees: while the conditions above hold, `|square − ν²| ≤ error`, and [`NormBound::range`]
+/// bounds the norm `tail_norm` would compute from the column at this step.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct NormBound {
+    /// The square of the norm: as computed from the column, less the square of each entry a
+    /// reflection has since left in a row it removed.
+    pub square: f64,
+    /// A bound on how far `square` is from the exact square of the trailing rows' norm.
+    pub error: f64,
+    /// The square when the norm was last computed from the column (xGEQP3's second norm, squared),
+    /// for the drift test.
+    pub fresh: f64,
+}
+
+impl NormBound {
+    /// The bound for a norm `tail_norm` computed from a tail of `len` rows: its square, with the
+    /// error (3·len + 6)u of it. `None` when the norm is not to be carried: a tail longer than
+    /// [`CARRY_ROWS`], or a square outside [2^-600, 2^600] (a zero norm among them).
+    #[must_use]
+    pub fn computed(norm: f64, len: usize) -> Option<NormBound> {
+        let square = norm * norm;
+        if len > CARRY_ROWS || !(CARRY_LOW..=CARRY_HIGH).contains(&square) {
+            return None;
+        }
+        let error = square * (3.0 * count_f64(len) + 6.0) * UNIT_ROUNDOFF;
+        Some(NormBound {
+            square,
+            error,
+            fresh: square,
+        })
+    }
+
+    /// The bound after a reflection left `entry` in the row a step removes from a tail of `len`
+    /// rows (at most [`CARRY_ROWS`]): the square less `entry` squared, the error grown by
+    /// (square + error)(8·len + 28)u + 2^-700. `None` when the drift test fires, the new square
+    /// being at most 2^-26 of `fresh`: the norm is then computed from the column again.
+    #[must_use]
+    pub fn downdate(self, entry: f64, len: usize) -> Option<NormBound> {
+        let square = self.square - entry * entry;
+        if square <= RECOMPUTE * self.fresh {
+            return None;
+        }
+        let growth = (8.0 * count_f64(len) + 28.0) * UNIT_ROUNDOFF;
+        Some(NormBound {
+            square,
+            error: self.error + (self.square + self.error) * growth + UNDERFLOW,
+            fresh: self.fresh,
+        })
+    }
+
+    /// The least and greatest the exact square can be, as computed: `square − error` (or 0 when
+    /// that is negative) and `square + error`.
+    #[must_use]
+    pub fn squares(self) -> (f64, f64) {
+        (
+            larger(0.0, self.square - self.error),
+            self.square + self.error,
+        )
+    }
+
+    /// Bounds on the norm `tail_norm` computes from the column at this step: the root of the
+    /// least square times 1 − 2^-40, and of the greatest times 1 + 2^-40.
+    ///
+    /// Why: T ≤ ν(1 + `γ_{L+2}`) ≤ √(S + D)(1 + `γ_{L+2}`), and the computed sum, root and product
+    /// lose at most 2.5u between them; with L ≤ 2^10, `γ_{L+2}` + 3.5u < 2^-40. Likewise below,
+    /// where the least square may be 0.
+    ///
+    /// # Errors
+    ///
+    /// [`SketchError::Numeric`] if a square is not finite.
+    pub fn range(self) -> Result<(f64, f64), SketchError> {
+        let (least, most) = self.squares();
+        square_range(least, most)
+    }
+}
+
+/// Bounds on a norm whose square, as [`NormBound::squares`] gives it, is at least `least` and at
+/// most `most`: [`NormBound::range`]'s widening, which is monotone, so it also bounds the largest
+/// of several norms from the largest of their squares.
+fn square_range(least: f64, most: f64) -> Result<(f64, f64), SketchError> {
+    Ok((root(least)? * WIDEN_DOWN, root(most)? * WIDEN_UP))
+}
+
+/// What the factorisation knows of a column's trailing norm at a step: the norm computed from the
+/// column at this step, if it was, and the bound carried to the next step, if the norm is carried.
+#[derive(Clone, Copy)]
+struct Column {
+    norm: Option<f64>,
+    carried: Option<NormBound>,
+}
+
+impl Column {
+    /// Column `j`'s norm computed from row `from` down, carried from there if it can be.
+    fn computed(
+        columns: &[Vec<f64>],
+        j: usize,
+        from: usize,
+        rows: usize,
+    ) -> Result<Column, SketchError> {
+        let norm = tail_norm(columns, j, from)?;
+        Ok(Column {
+            norm: Some(norm),
+            carried: NormBound::computed(norm, rows.saturating_sub(from)),
+        })
+    }
+
+    /// Bounds on the norm `tail_norm` computes from the column at this step.
+    fn range(self) -> Result<(f64, f64), SketchError> {
+        match (self.norm, self.carried) {
+            (Some(norm), _) => Ok((norm, norm)),
+            (None, Some(bound)) => bound.range(),
+            (None, None) => Err(SketchError::Internal),
+        }
+    }
+}
+
+/// Bounds on the largest norm of the columns from `k` on: the norms computed this step, and the
+/// widened root of the largest carried squares.
+fn largest_range(state: &[Column], k: usize) -> Result<(f64, f64), SketchError> {
+    let (mut low, mut high) = (0.0f64, 0.0f64);
+    let (mut least, mut most) = (0.0f64, 0.0f64);
+    for column in state.iter().skip(k) {
+        match (column.norm, column.carried) {
+            (Some(norm), _) => {
+                low = larger(low, norm);
+                high = larger(high, norm);
+            }
+            (None, Some(bound)) => {
+                let (l, m) = bound.squares();
+                least = larger(least, l);
+                most = larger(most, m);
+            }
+            (None, None) => return Err(SketchError::Internal),
+        }
+    }
+    let (l, h) = square_range(least, most)?;
+    Ok((larger(low, l), larger(high, h)))
+}
+
+/// Whether y is below the largest norm, for y from `y_low` to `y_high` and the largest from `low` to `high`;
+/// `None` when the bounds do not settle it.
+fn below(y_low: f64, y_high: f64, low: f64, high: f64) -> Option<bool> {
+    if y_high < low {
+        Some(true)
+    } else if y_low >= high {
+        Some(false)
+    } else {
+        None
+    }
+}
+
+/// Computes afresh every norm from `k` on not computed this step, and returns the largest.
+fn settle(state: &mut [Column], a: &[Vec<f64>], k: usize, rows: usize) -> Result<f64, SketchError> {
+    let mut largest = 0.0f64;
+    for j in k..state.len() {
+        let mut column = get(state, j)?;
+        if column.norm.is_none() {
+            column = Column::computed(a, j, k, rows)?;
+            *state.get_mut(j).ok_or(SketchError::Internal)? = column;
+        }
+        largest = larger(largest, column.norm.ok_or(SketchError::Internal)?);
+    }
+    Ok(largest)
+}
+
 /// Pivoted QR of the columns, by Householder reflections, choosing as 15.8 says. Returns the
 /// reduced columns (R above the diagonal in the permuted order), the order the columns were taken
-/// in, the pivot sizes, and the largest trailing norm at each step.
+/// in, the pivot sizes, and each pivot's verdict under `t`, from its size and the largest trailing
+/// norm at its step.
 #[allow(clippy::type_complexity, reason = "four lists that travel together")]
 fn factor(
     columns: &[Vec<f64>],
     equations: &[Equation],
     rows: usize,
-) -> Result<(Vec<Vec<f64>>, Vec<usize>, Vec<f64>, Vec<f64>), SketchError> {
+    t: &Thresholds,
+) -> Result<(Vec<Vec<f64>>, Vec<usize>, Vec<f64>, Vec<Verdict>), SketchError> {
     let m = columns.len();
     let mut a: Vec<Vec<f64>> = columns.to_vec();
     let mut order: Vec<usize> = (0..m).collect();
     let mut sizes = Vec::new();
-    let mut maxima = Vec::new();
+    let mut verdicts = Vec::new();
     let steps = rows.min(m);
-    // The trailing norms of the columns, computed afresh from the columns after each reflection.
-    // Businger and Golub's downdate (as LAPACK's xGEQP3 keeps it) saves that pass, but lets its
-    // rounding decide a choice at the edge of the factor of 2; here every choice rests on a
-    // correctly rounded norm.
-    let mut norms: Vec<f64> = Vec::new();
-    norms
+    // Each column's trailing norm: computed from the column, then carried by downdating with its
+    // bound (`NormBound`), and computed afresh when the drift test fires or a choice needs it.
+    let mut state: Vec<Column> = Vec::new();
+    state
         .try_reserve_exact(m)
         .map_err(|_| SketchError::OutOfMemory)?;
     for j in 0..m {
-        norms.push(tail_norm(&a, j, 0)?);
+        state.push(Column::computed(&a, j, 0, rows)?);
     }
     for k in 0..steps {
-        let mut largest = 0.0f64;
-        for &n in norms.iter().skip(k) {
-            largest = larger(largest, n);
-        }
-        if largest == 0.0 {
-            // Everything left is zero: each remaining column is dependent with pivot 0.
+        let (mut low, mut high) = largest_range(&state, k)?;
+        if high == 0.0 {
+            // Every norm left was computed and is zero (a carried norm never is): each remaining
+            // column is dependent with pivot 0, as σ_dep is never negative.
             for _ in k..m {
                 sizes.push(0.0);
-                maxima.push(0.0);
+                verdicts.push(Verdict::Dependent);
             }
-            return Ok((a, order, sizes, maxima));
+            return Ok((a, order, sizes, verdicts));
         }
         // The preferred column: within a factor of 2 of the largest, the lowest priority number,
-        // then the oldest.
+        // then the oldest. Whether a column is within the factor matters only when it would be
+        // preferred, so only then is it decided: on the bounds, or else on every norm computed
+        // afresh.
         let mut best: Option<usize> = None;
-        for (offset, &n) in norms.iter().skip(k).enumerate() {
-            if n * PREFERRED_WITHIN < largest {
-                continue;
-            }
-            let j = k.checked_add(offset).ok_or(SketchError::Internal)?;
+        for j in k..m {
             let eq = get(equations, get(&order, j)?)?;
-            let better = match best {
-                None => true,
-                Some(b) => {
-                    let other = get(equations, get(&order, b)?)?;
-                    (eq.priority, eq.order) < (other.priority, other.order)
+            if let Some(b) = best {
+                let other = get(equations, get(&order, b)?)?;
+                if (eq.priority, eq.order) >= (other.priority, other.order) {
+                    continue;
                 }
+            }
+            let (lo, hi) = get(&state, j)?.range()?;
+            let outside = if let Some(outside) =
+                below(lo * PREFERRED_WITHIN, hi * PREFERRED_WITHIN, low, high)
+            {
+                outside
+            } else {
+                let largest = settle(&mut state, &a, k, rows)?;
+                (low, high) = (largest, largest);
+                let norm = get(&state, j)?.norm.ok_or(SketchError::Internal)?;
+                norm * PREFERRED_WITHIN < largest
             };
-            if better {
+            if !outside {
                 best = Some(j);
             }
         }
         let p = best.ok_or(SketchError::Internal)?;
         a.swap(k, p);
         order.swap(k, p);
-        norms.swap(k, p);
-        sizes.push(tail_norm(&a, k, k)?);
-        maxima.push(largest);
+        state.swap(k, p);
+        let size = match get(&state, k)?.norm {
+            Some(norm) => norm,
+            None => tail_norm(&a, k, k)?,
+        };
+        sizes.push(size);
+        // The verdict: independent at σ_ind or more; otherwise dependent when the largest norm is
+        // at most σ_dep, on the bounds or else on every norm computed afresh.
+        let verdict = if size >= t.independent {
+            Verdict::Independent
+        } else {
+            let near = match below(t.dependent, t.dependent, low, high) {
+                Some(near) => near,
+                None => t.dependent < settle(&mut state, &a, k, rows)?,
+            };
+            if near {
+                Verdict::NearSingular
+            } else {
+                Verdict::Dependent
+            }
+        };
+        verdicts.push(verdict);
         // The reflector for column k from row k, applied to the columns after it.
         let alpha = entry(&a, k, k)?;
-        let norm = tail_norm(&a, k, k)?;
-        let beta = if alpha >= 0.0 { -norm } else { norm };
+        let beta = if alpha >= 0.0 { -size } else { size };
         // The reflector's vector from row k down: column k there, with alpha - beta on top.
         let mut v: Vec<f64> = a
             .get(k)
@@ -396,10 +666,22 @@ fn factor(
                 }
             }
         }
-        // The norms of the columns after k, below row k.
+        // The norms of the columns after k, below row k: carried by downdating, or computed
+        // afresh where the drift test fires or the norm is not carried.
+        let len = rows.saturating_sub(k);
         for j in k.saturating_add(1)..m {
-            *norms.get_mut(j).ok_or(SketchError::Internal)? =
-                tail_norm(&a, j, k.saturating_add(1))?;
+            let removed = entry(&a, j, k)?;
+            let next = match get(&state, j)?
+                .carried
+                .and_then(|b| b.downdate(removed, len))
+            {
+                Some(bound) => Column {
+                    norm: None,
+                    carried: Some(bound),
+                },
+                None => Column::computed(&a, j, k.saturating_add(1), rows)?,
+            };
+            *state.get_mut(j).ok_or(SketchError::Internal)? = next;
         }
         // Zero below the diagonal of column k exactly; the reflector put beta on it.
         let column = a.get_mut(k).ok_or(SketchError::Internal)?;
@@ -409,12 +691,12 @@ fn factor(
         *column.get_mut(k).ok_or(SketchError::Internal)? = beta;
     }
     // Columns past the number of rows have nothing left to pivot on: no row is left below the
-    // last step, so each pivot is 0.
+    // last step, so each pivot is 0, and dependent.
     for _ in steps..m {
         sizes.push(0.0);
-        maxima.push(0.0);
+        verdicts.push(Verdict::Dependent);
     }
-    Ok((a, order, sizes, maxima))
+    Ok((a, order, sizes, verdicts))
 }
 
 /// Solves R₁₁z = column `k`'s upper part by back substitution, for the first `r` pivots.
@@ -461,16 +743,6 @@ fn smallest_singular(
     Ok(least)
 }
 
-fn verdict_of(size: f64, maximum: f64, t: &Thresholds) -> Verdict {
-    if size >= t.independent {
-        Verdict::Independent
-    } else if maximum <= t.dependent {
-        Verdict::Dependent
-    } else {
-        Verdict::NearSingular
-    }
-}
-
 fn near(size: f64, threshold: f64) -> bool {
     size <= threshold * CONFIRM_WITHIN && size * CONFIRM_WITHIN >= threshold
 }
@@ -500,12 +772,12 @@ pub fn analyse_columns(
         .saturating_mul(rows.min(m) as u64)
         .saturating_mul(4);
     meter.charge(cost)?;
-    let (a, order, sizes, maxima) = factor(columns, equations, rows)?;
     let mut biggest = 0.0f64;
     for j in 0..m {
         biggest = larger(biggest, tail_norm(columns, j, 0)?);
     }
     let thresholds = Thresholds::for_block(size, rows, m, biggest);
+    let (a, order, sizes, verdicts) = factor(columns, equations, rows, &thresholds)?;
     let mut work = Work::new(u64::MAX);
     let mut pivots: Vec<Pivot> = Vec::new();
     pivots
@@ -515,8 +787,7 @@ pub fn analyse_columns(
     let mut first_dependent = m;
     for k in 0..m {
         let s = sizes.get(k).copied().unwrap_or(0.0);
-        let top = maxima.get(k).copied().unwrap_or(0.0);
-        let mut verdict = verdict_of(s, top, &thresholds);
+        let mut verdict = get(&verdicts, k)?;
         let mut confirmed = false;
         if k < rows
             && thresholds.confirms(s)

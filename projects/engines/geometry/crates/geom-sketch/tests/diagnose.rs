@@ -7,6 +7,7 @@
 #![allow(
     clippy::arithmetic_side_effects,
     clippy::cast_possible_truncation,
+    clippy::cast_precision_loss,
     clippy::cast_sign_loss,
     clippy::disallowed_methods,
     clippy::float_cmp,
@@ -18,13 +19,15 @@
 
 use geom_run::{Budget, WorkMeter};
 use geom_sketch::diagnose::{
-    Class, Equation, MOTION_CUTOFF, Motion, Outcome, RANGE_HALVINGS, RANGE_RESOLUTION,
-    SketchReport, Thresholds, Verdict, analyse_columns, diagnose, free_motions, remedies,
-    solve_checked, witness_point,
+    CARRY_ROWS, Class, Equation, MOTION_CUTOFF, Motion, NormBound, Outcome, RANGE_HALVINGS,
+    RANGE_RESOLUTION, SketchReport, Thresholds, Verdict, analyse_columns, diagnose, free_motions,
+    remedies, solve_checked, witness_point,
 };
 use geom_sketch::equation::Assembly;
-use geom_sketch::model::{ItemId, Sketch, SketchError, Variable};
+use geom_sketch::model::{ItemId, Sketch, SketchError, Variable, power_of_two};
 use geom_sketch::text::parse;
+use geom_test::seed::resolve;
+use geom_test::{Seed, SplitMix64};
 
 const HEAD: &str = "sketch v1\nplane lattice 0 0 0 1 0 0 0 1 0 q0\n";
 
@@ -961,4 +964,315 @@ fn a_motion_keeps_the_entries_above_the_cutoff_in_model_units() {
         vec![(id(1, 0), 2, 8.0 * MOTION_CUTOFF), (id(1, 0), 3, -0.25)]
     );
     assert_eq!(m.owners(), vec![id(1, 0)]);
+}
+
+/// The norm of `column` from row `from` down, as the factorisation computes it: the sum of squares
+/// of the entries divided by the power of two at or below the largest.
+fn fresh_norm(column: &[f64], from: usize) -> f64 {
+    let tail = &column[from..];
+    let big = tail
+        .iter()
+        .fold(0.0f64, |acc, x| if x.abs() > acc { x.abs() } else { acc });
+    let step = power_of_two(big);
+    let mut sum = 0.0;
+    for &x in tail {
+        let s = x / step;
+        sum += s * s;
+    }
+    sum.sqrt() * step
+}
+
+fn dot(a: &[f64], b: &[f64]) -> f64 {
+    let mut s = 0.0;
+    for (x, y) in a.iter().zip(b) {
+        s += x * y;
+    }
+    s
+}
+
+/// Reflects columns `k..` of `a` from row `k` down by the Householder reflection that takes
+/// column `k` there to a multiple of the first axis, as the factorisation does, and puts its pivot
+/// on the diagonal.
+fn reflect(a: &mut [Vec<f64>], k: usize, norm: f64) {
+    let alpha = a[k][k];
+    let beta = if alpha >= 0.0 { -norm } else { norm };
+    let mut v = a[k][k..].to_vec();
+    v[0] = alpha - beta;
+    let step = power_of_two(
+        v.iter()
+            .fold(0.0f64, |acc, x| if x.abs() > acc { x.abs() } else { acc }),
+    );
+    for x in &mut v {
+        *x /= step;
+    }
+    let vv = dot(&v, &v);
+    if vv > 0.0 {
+        for column in a.iter_mut().skip(k) {
+            let tail = &mut column[k..];
+            let scale = 2.0 * dot(&v, tail) / vv;
+            for (c, x) in tail.iter_mut().zip(&v) {
+                *c -= scale * x;
+            }
+        }
+    }
+    for x in a[k].iter_mut().skip(k + 1) {
+        *x = 0.0;
+    }
+    a[k][k] = beta;
+}
+
+/// The factorisation with every column's norm computed afresh at every step: the order the columns
+/// are taken in, the pivots, and the largest norm at each step. The choices it makes are the ones
+/// `analyse_columns` must make bit for bit, whatever it carries between steps.
+fn fresh_factor(
+    columns: &[Vec<f64>],
+    equations: &[Equation],
+    rows: usize,
+) -> (Vec<usize>, Vec<f64>, Vec<f64>) {
+    let m = columns.len();
+    let mut a = columns.to_vec();
+    let mut order: Vec<usize> = (0..m).collect();
+    let (mut sizes, mut maxima) = (Vec::new(), Vec::new());
+    for k in 0..rows.min(m) {
+        let norms: Vec<f64> = (k..m).map(|j| fresh_norm(&a[j], k)).collect();
+        let largest = norms
+            .iter()
+            .fold(0.0f64, |acc, &n| if n > acc { n } else { acc });
+        if largest == 0.0 {
+            break;
+        }
+        let key =
+            |order: &[usize], j: usize| (equations[order[j]].priority, equations[order[j]].order);
+        let mut best: Option<usize> = None;
+        for (offset, &n) in norms.iter().enumerate() {
+            let j = k + offset;
+            if n * 2.0 >= largest && best.is_none_or(|b| key(&order, j) < key(&order, b)) {
+                best = Some(j);
+            }
+        }
+        let p = best.unwrap();
+        a.swap(k, p);
+        order.swap(k, p);
+        let size = fresh_norm(&a[k], k);
+        sizes.push(size);
+        maxima.push(largest);
+        reflect(&mut a, k, size);
+    }
+    sizes.resize(m, 0.0);
+    maxima.resize(m, 0.0);
+    (order, sizes, maxima)
+}
+
+/// Checks that `analyse_columns` takes the columns in the order, with the pivots and the verdicts
+/// before confirmation, that computing every norm afresh gives, for a block of 1024 grid steps
+/// (`σ_dep` = 2^-16).
+fn assert_as_fresh(columns: &[Vec<f64>], equations: &[Equation], rows: usize, case: &str) {
+    let zeros = vec![0.0; columns.len()];
+    let got = analyse_columns(columns, equations, &zeros, rows, 1024.0, &mut meter()).unwrap();
+    let (order, sizes, maxima) = fresh_factor(columns, equations, rows);
+    let t = got.thresholds;
+    for (k, p) in got.pivots.iter().enumerate() {
+        let factored = if sizes[k] >= t.independent {
+            Verdict::Independent
+        } else if maxima[k] <= t.dependent {
+            Verdict::Dependent
+        } else {
+            Verdict::NearSingular
+        };
+        assert_eq!(p.equation, order[k], "{case}: pivot {k}");
+        assert_eq!(p.size.to_bits(), sizes[k].to_bits(), "{case}: size {k}");
+        // A confirmation changes the verdict the factorisation gave, and only a confirmation does.
+        assert_eq!(p.verdict == factored, !p.confirmed, "{case}: verdict {k}");
+    }
+}
+
+fn equations(keys: &[(u8, usize)]) -> Vec<Equation> {
+    keys.iter()
+        .enumerate()
+        .map(|(j, &(priority, order))| eq(j as u64, priority, order))
+        .collect()
+}
+
+#[test]
+fn a_norm_at_the_factor_of_two_is_decided_on_the_norm_computed_afresh() {
+    // (4, 4) goes first. What is left of (0, 1) is then exactly half of what is left of (-2, 0) in
+    // exact arithmetic, so (0, 1), of the lower priority number, is within the factor of 2 and
+    // goes next. Computed afresh, the two norms keep that ratio to the bit.
+    let columns = [vec![0.0, 1.0], vec![4.0, 4.0], vec![-2.0, 0.0]];
+    let keys = equations(&[(0, 0), (0, 1), (2, 2)]);
+    let a = analyse_columns(&columns, &keys, &[0.0; 3], 2, 1000.0, &mut meter()).unwrap();
+    let order: Vec<usize> = a.pivots.iter().map(|p| p.equation).collect();
+    assert_eq!(order, vec![1, 0, 2]);
+    let mut reflected = vec![columns[1].clone(), columns[0].clone(), columns[2].clone()];
+    reflect(&mut reflected, 0, fresh_norm(&columns[1], 0));
+    assert_eq!(a.pivots[1].size, fresh_norm(&reflected[1], 1));
+    assert_eq!(
+        fresh_norm(&reflected[1], 1) * 2.0,
+        fresh_norm(&reflected[2], 1)
+    );
+    // Businger and Golub's downdate, n·√(1 − (y/n)²) from the norm n before the step and the entry
+    // y the reflection leaves in row 0, rounds the other way: it puts (0, 1) outside the factor of
+    // 2, and would take (-2, 0) next.
+    let downdated = |n: f64, y: f64| n * (1.0 - (y / n) * (y / n)).max(0.0).sqrt();
+    let (zero, two) = (
+        downdated(1.0, reflected[1][0]),
+        downdated(2.0, reflected[2][0]),
+    );
+    assert!(zero * 2.0 < two, "{zero} {two}");
+    assert_as_fresh(&columns, &keys, 2, "factor of 2");
+}
+
+#[test]
+fn choices_the_carried_bounds_cannot_settle_are_made_on_norms_computed_afresh() {
+    // σ_dep is 2^-16 for 1024 steps. In each of the first two, a pivot below σ_ind leaves a
+    // largest norm within the carried bounds of σ_dep, so the verdict rests on the norms computed
+    // afresh: dependent in the first, near-singular in the second.
+    let s = 2f64.powi(-16);
+    assert_as_fresh(
+        &[vec![0.0, -0.5 * s], vec![-s, 1.5 * s], vec![0.0, -s]],
+        &equations(&[(2, 0), (2, 3), (1, 1)]),
+        2,
+        "dependent at sigma_dep",
+    );
+    assert_as_fresh(
+        &[
+            vec![-3.0 * s, 2.0 * s, 2.0 * s],
+            vec![-2.0 * s, 0.0, 2.0 * s],
+            vec![2.0 * s, 3.0 * s, -2.0 * s],
+        ],
+        &equations(&[(2, 0), (1, 0), (2, 3)]),
+        3,
+        "near-singular at sigma_dep",
+    );
+    // And at the factor of 2, inside it and outside it, on columns whose carried norms cannot tell.
+    assert_as_fresh(
+        &[vec![0.0, 3.0], vec![1.0, 3.0], vec![-1.0, 3.0]],
+        &equations(&[(1, 2), (2, 2), (1, 0)]),
+        2,
+        "inside the factor of 2",
+    );
+    assert_as_fresh(
+        &[vec![3.0, 0.0], vec![12.0, 6.0], vec![-12.0, -9.0]],
+        &equations(&[(1, 2), (0, 0), (1, 1)]),
+        2,
+        "outside the factor of 2",
+    );
+}
+
+#[test]
+fn every_choice_is_the_one_norms_computed_afresh_make() {
+    let seed = resolve(
+        "diagnose::every_choice_is_the_one_norms_computed_afresh_make",
+        Seed::DEFAULT,
+    )
+    .unwrap();
+    let mut rng = SplitMix64::new(seed);
+    let mut below = |n: u64| rng.next_u64() % n;
+    let scales = [1.0, 3.0, 2f64.powi(-15), 2f64.powi(-16), 2f64.powi(-17)];
+    let picks = [0.0, 1.0, -1.0, 2.0, 0.5, 3.0, 0.25];
+    for case in 0..4000 {
+        let rows = 1 + below(5) as usize;
+        let m = 1 + below(6) as usize;
+        let kind = below(3);
+        let scale = scales[below(scales.len() as u64) as usize];
+        let mut columns = Vec::new();
+        for _ in 0..m {
+            let column: Vec<f64> = (0..rows)
+                .map(|_| {
+                    let x = match kind {
+                        0 => below(9) as f64 - 4.0,
+                        1 => picks[below(picks.len() as u64) as usize],
+                        _ => (below(1 << 20) as f64 - 524_288.0) / 524_288.0,
+                    };
+                    x * scale
+                })
+                .collect();
+            columns.push(column);
+        }
+        let keys: Vec<(u8, usize)> = (0..m)
+            .map(|_| (below(3) as u8, below(m as u64 + 1) as usize))
+            .collect();
+        assert_as_fresh(&columns, &equations(&keys), rows, &format!("case {case}"));
+    }
+}
+
+#[test]
+fn a_norm_bound_starts_from_the_square_and_grows_by_the_derived_terms() {
+    let u = 2f64.powi(-53);
+    // Computed from a tail of 4 rows: the square, with (3 · 4 + 6)u of it.
+    let start = NormBound::computed(3.0, 4).unwrap();
+    assert_eq!(
+        start,
+        NormBound {
+            square: 9.0,
+            error: 162.0 * u,
+            fresh: 9.0
+        }
+    );
+    // Downdated by 2 over the same 4 rows: 4 less, and (9 + error)(8 · 4 + 28)u + 2^-700 more.
+    let next = start.downdate(2.0, 4).unwrap();
+    assert_eq!(
+        next,
+        NormBound {
+            square: 5.0,
+            error: 7.793_765_632_868_61e-14,
+            fresh: 9.0
+        }
+    );
+    // The allowance for underflow shows at the smallest square carried: 6u of it to start, then
+    // (square + error) · 28u and 2^-700 more.
+    let least = NormBound::computed(2f64.powi(-300), 0).unwrap();
+    assert_eq!(least.square, 2f64.powi(-600));
+    assert_eq!(least.error, 1.605_329_113_043_264e-196);
+    assert_eq!(
+        least.downdate(0.0, 0).unwrap().error,
+        9.096_864_973_911_835e-196
+    );
+}
+
+#[test]
+fn a_norm_is_carried_only_inside_its_window_and_above_the_drift_test() {
+    assert!(NormBound::computed(3.0, CARRY_ROWS).is_some());
+    assert_eq!(NormBound::computed(3.0, CARRY_ROWS + 1), None);
+    assert!(NormBound::computed(2f64.powi(-300), 1).is_some());
+    assert_eq!(NormBound::computed(2f64.powi(-300).next_down(), 1), None);
+    assert!(NormBound::computed(2f64.powi(300), 1).is_some());
+    assert_eq!(NormBound::computed(2f64.powi(300).next_up(), 1), None);
+    assert_eq!(NormBound::computed(0.0, 1), None);
+    // xGEQP3's drift test: a square at most 2^-26 of the one last computed is computed again.
+    let worn = |fresh: f64| NormBound {
+        square: 1.0,
+        error: 0.0,
+        fresh,
+    };
+    assert_eq!(worn(2f64.powi(26)).downdate(0.0, 1), None);
+    assert_eq!(
+        worn(2f64.powi(26).next_down()).downdate(0.0, 1),
+        Some(NormBound {
+            square: 1.0,
+            error: 36.0 * 2f64.powi(-53),
+            fresh: 2f64.powi(26).next_down()
+        })
+    );
+    assert_eq!(worn(1.0).downdate(1.0, 1), None);
+}
+
+#[test]
+fn a_norm_bound_widens_the_roots_of_its_least_and_greatest_squares() {
+    let b = |square: f64, error: f64| NormBound {
+        square,
+        error,
+        fresh: square,
+    };
+    assert_eq!(b(4.0, 1.0).squares(), (3.0, 5.0));
+    assert_eq!(b(1.0, 2.0).squares(), (0.0, 3.0));
+    assert_eq!(
+        b(4.0, 0.0).range().unwrap(),
+        (1.999_999_999_998_181, 2.000_000_000_001_819)
+    );
+    assert_eq!(
+        b(4.0, 1.0).range().unwrap(),
+        (1.732_050_807_567_302, 2.236_067_977_501_823_3)
+    );
+    assert_eq!(b(1.0, 2.0).range().unwrap().0, 0.0);
 }

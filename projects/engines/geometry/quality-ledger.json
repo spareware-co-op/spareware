@@ -6000,7 +6000,7 @@
       "line_text": "if b > a { b } else { a }",
       "occurrences": 1,
       "kind": "equivalent",
-      "reason": "With b equal to a both arms return the same number. The only equal numbers that differ are +0 and -0, and every call compares norms, absolute values or 1 - ratio^2 (never -0, since 1 - 1 is +0) with +0 or with each other."
+      "reason": "With b equal to a both arms return the same number. The only equal numbers that differ are +0 and -0, and every call compares norms, absolute values, squares and their bounds, or a square less its error (never -0, since x - x is +0 and no square is -0) with +0 or with each other."
     },
     {
       "file": "projects/engines/geometry/crates/geom-sketch/src/diagnose.rs",
@@ -6016,7 +6016,7 @@
       "line_text": "if vv > 0.0 {",
       "occurrences": 1,
       "kind": "equivalent",
-      "reason": "The reflector's vector is never zero: its first entry alpha - beta has magnitude |alpha| plus the chosen column's tail norm, and that column's norm, computed afresh from the column each step, is within a factor of 2 of the largest remaining norm, which is positive (a zero largest returns before any reflection). After the exact division by a power of two its largest entry is at least 1, so vv is at least 1 and never 0, where > and >= would differ."
+      "reason": "The reflector's vector is never zero: its first entry alpha - beta has magnitude |alpha| plus the chosen column's tail norm, and that norm is within a factor of 2 of the largest remaining norm (a choice the carried bounds prove, or else made on the norms computed afresh), which is positive (when every remaining norm is zero the factorisation returns before any reflection). After the exact division by a power of two its largest entry is at least 1, so vv is at least 1 and never 0, where > and >= would differ."
     },
     {
       "file": "projects/engines/geometry/crates/geom-sketch/src/diagnose.rs",
