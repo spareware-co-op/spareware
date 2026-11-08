@@ -111,7 +111,8 @@ pub fn expected(name: &str) -> Value {
 
 /// The `ok` answer of a recorded case; panics with the recorded error when the prototype threw (use [`case_error`] for those).
 pub fn case_ok<'a>(case: &'a Value) -> &'a Value {
-    case.get("ok").unwrap_or_else(|| panic!("case {} has no ok answer: {}", case["id"], case))
+    case.get("ok")
+        .unwrap_or_else(|| panic!("case {} has no ok answer: {}", case["id"], case))
 }
 
 /// The error text of a recorded case the prototype refused (None when it answered).

@@ -70,7 +70,11 @@ pub fn showers_for(g: f64) -> f64 {
 
 /// `accessibleFor(n)`: the accessible car parks NZS 4121:2001 Table 2 asks for with n car parks (1 up to 20, 2 for 21-50, then 1 more per 50 or part).
 pub fn accessible_for(n: f64) -> f64 {
-    let n = if crate::jsnum::truthy_number(n) { n } else { 0.0 };
+    let n = if crate::jsnum::truthy_number(n) {
+        n
+    } else {
+        0.0
+    };
     if n <= 0.0 {
         return 0.0;
     }
@@ -119,13 +123,26 @@ pub fn parking(p: &V) -> V {
     let std = xdata("STD.parking");
     let acc_std = xdata("STD.accessible");
     let park_act = xdata("PARK_ACT");
-    let (mut visitor, mut secure, mut visitor_p, mut secure_p, mut showers_p, mut loading, mut loading_p, mut non_res) = (0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0);
+    let (
+        mut visitor,
+        mut secure,
+        mut visitor_p,
+        mut secure_p,
+        mut showers_p,
+        mut loading,
+        mut loading_p,
+        mut non_res,
+    ) = (0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0);
     let mut unknown_cycle = false;
     let mut rows: Vec<V> = Vec::new();
     for r0 in data(p).g("parking").g("rows").items() {
         let mut r = merge(&blank_park(), r0);
         let key = r.g("activity").s();
-        let act = if park_act.has(&key) && park_act.g(&key).t() { park_act.g(&key) } else { park_act.g("other") };
+        let act = if park_act.has(&key) && park_act.g(&key).t() {
+            park_act.g(&key)
+        } else {
+            park_act.g("other")
+        };
         let q = n0(r.g("qty"));
         let cyc = cycle_rates(r.g("activity"), q, &r);
         let cars = n0(r.g("cars"));
@@ -134,10 +151,18 @@ pub fn parking(p: &V) -> V {
             Some(m) if cars > m => cars - m,
             _ => 0.0,
         };
-        let access4 = std.g("access4").items().iter().any(|x| x.strict_eq(r.g("activity")));
+        let access4 = std
+            .g("access4")
+            .items()
+            .iter()
+            .any(|x| x.strict_eq(r.g("activity")));
         // Accessible car parks: required where parking is provided (E27.6.3.2A(1)-(3)) or for a listed activity in a listed zone with none
         // (E27.6.3.2A(4)); the indicative number is NZS 4121:2001 Table 2, via NZBC D1/AS1 (verify)
-        let acc_n = if cars > 0.0 { accessible_for(cars) } else { 1.0 };
+        let acc_n = if cars > 0.0 {
+            accessible_for(cars)
+        } else {
+            1.0
+        };
         let acc_req = if cars > 0.0 {
             jobj! { "required" => true, "n" => acc_n, "why" => format!("Car parking is provided: accessible parking is required (E27.6.3.2A(1)-(3)); about {} for {} car parks ({}: {}; verify)", ns(acc_n), ns(cars), acc_std.g("name").s(), acc_std.g("basis").s()) }
         } else if access4 && r.g("listedZone").t() {
@@ -146,7 +171,11 @@ pub fn parking(p: &V) -> V {
             jobj! { "required" => false, "n" => 0, "why" => if access4 { "Not required unless the zone is on the E27.6.3.2A(4) list: check it" } else { "No car parking proposed" } }
         };
         let grp = act.g("grp").s();
-        let load_req = if grp == "res" { 0.0 } else { loading_for(&grp, q) };
+        let load_req = if grp == "res" {
+            0.0
+        } else {
+            loading_for(&grp, q)
+        };
         if grp != "res" {
             non_res += q;
         }
@@ -166,13 +195,21 @@ pub fn parking(p: &V) -> V {
         // Cycle parking is judged on the totals only (E27.6.2(9): sum the activities, then round 0.5 up); rows show it unrounded
         let mut why: Vec<String> = Vec::new();
         if over != 0.0 {
-            why.push(format!("{} car parks above the AUP maximum of {} (restricted discretionary)", ns(over), ns(max.unwrap_or(f64::NAN))));
+            why.push(format!(
+                "{} car parks above the AUP maximum of {} (restricted discretionary)",
+                ns(over),
+                ns(max.unwrap_or(f64::NAN))
+            ));
         }
         let accessible = r.g("accessible").n();
         if acc_req.g("required").t() && !(accessible > 0.0) {
             why.push("No accessible car park".to_string());
         } else if acc_req.g("required").t() && accessible < acc_req.g("n").n() {
-            why.push(format!("Fewer accessible car parks ({}) than the indicative {}", ns(accessible), acc_req.g("n").s()));
+            why.push(format!(
+                "Fewer accessible car parks ({}) than the indicative {}",
+                ns(accessible),
+                acc_req.g("n").s()
+            ));
         }
         if n0(r.g("loading")) < load_req {
             why.push("Too few loading spaces".to_string());
@@ -202,12 +239,43 @@ pub fn parking(p: &V) -> V {
     let showers = showers_for(non_res);
     let need = jobj! { "visitor" => round9(visitor), "secure" => round9(secure), "showers" => showers, "loading" => loading };
     let (need_visitor, need_secure) = (round9(visitor), round9(secure));
-    let totals_ok = visitor_p >= need_visitor && secure_p >= need_secure && showers_p >= showers && loading_p >= loading;
+    let totals_ok = visitor_p >= need_visitor
+        && secure_p >= need_secure
+        && showers_p >= showers
+        && loading_p >= loading;
     let totals_why: Vec<String> = [
-        if visitor_p < need_visitor { format!("Too few visitor cycle parks in total ({} of {})", ns(visitor_p), ns(need_visitor)) } else { String::new() },
-        if secure_p < need_secure { format!("Too few secure cycle parks in total ({} of {})", ns(secure_p), ns(need_secure)) } else { String::new() },
-        if showers_p < showers { format!("Too few showers ({} of {})", ns(showers_p), ns(showers)) } else { String::new() },
-        if loading_p < loading { format!("Too few loading spaces in total ({} of {})", ns(loading_p), ns(loading)) } else { String::new() },
+        if visitor_p < need_visitor {
+            format!(
+                "Too few visitor cycle parks in total ({} of {})",
+                ns(visitor_p),
+                ns(need_visitor)
+            )
+        } else {
+            String::new()
+        },
+        if secure_p < need_secure {
+            format!(
+                "Too few secure cycle parks in total ({} of {})",
+                ns(secure_p),
+                ns(need_secure)
+            )
+        } else {
+            String::new()
+        },
+        if showers_p < showers {
+            format!("Too few showers ({} of {})", ns(showers_p), ns(showers))
+        } else {
+            String::new()
+        },
+        if loading_p < loading {
+            format!(
+                "Too few loading spaces in total ({} of {})",
+                ns(loading_p),
+                ns(loading)
+            )
+        } else {
+            String::new()
+        },
     ]
     .into_iter()
     .filter(|s| !s.is_empty())
@@ -231,10 +299,26 @@ pub fn parking_csv(p: &V) -> String {
     let pk = parking(p);
     let s = |x: &str| V::String(x.to_string());
     let mut rows: Vec<Vec<V>> = vec![
-        vec![s("Table P1 \u{b7} Parking, cycle parking, end-of-trip and loading"), pk.g("label").clone()],
+        vec![
+            s("Table P1 \u{b7} Parking, cycle parking, end-of-trip and loading"),
+            pk.g("label").clone(),
+        ],
         [
-            "Activity", "Quantity", "Unit", "AUP maximum car parking", "Proposed car parking", "Accessible required (indicative number, verify)", "Accessible proposed", "Cycle visitor required (unrounded)",
-            "Cycle visitor proposed", "Cycle secure required (unrounded)", "Cycle secure proposed", "Loading required", "Loading proposed", "Complies", "Notes",
+            "Activity",
+            "Quantity",
+            "Unit",
+            "AUP maximum car parking",
+            "Proposed car parking",
+            "Accessible required (indicative number, verify)",
+            "Accessible proposed",
+            "Cycle visitor required (unrounded)",
+            "Cycle visitor proposed",
+            "Cycle secure required (unrounded)",
+            "Cycle secure proposed",
+            "Loading required",
+            "Loading proposed",
+            "Complies",
+            "Notes",
         ]
         .iter()
         .map(|h| s(h))
@@ -243,17 +327,33 @@ pub fn parking_csv(p: &V) -> String {
     for r in pk.g("rows").items() {
         let acc = r.g("accReq");
         let mut notes: Vec<String> = r.g("why").items().iter().map(|w| w.s()).collect();
-        notes.push(if r.g("induced").t() { r.g("induced").g("text").s() } else { String::new() });
-        let notes = notes.into_iter().filter(|x| !x.is_empty()).collect::<Vec<_>>().join("; ");
+        notes.push(if r.g("induced").t() {
+            r.g("induced").g("text").s()
+        } else {
+            String::new()
+        });
+        let notes = notes
+            .into_iter()
+            .filter(|x| !x.is_empty())
+            .collect::<Vec<_>>()
+            .join("; ");
         let cv = r.g("cyc").g("visitor");
         let cs = r.g("cyc").g("secure");
         rows.push(vec![
             r.g("label").clone(),
             r.g("qty").clone(),
             r.g("unit").clone(),
-            if r.g("max").nullish() { s("enter") } else { r.g("max").clone() },
+            if r.g("max").nullish() {
+                s("enter")
+            } else {
+                r.g("max").clone()
+            },
             r.g("cars").clone(),
-            if acc.g("required").t() { V::String(format!("Yes ({})", acc.g("n").s())) } else { s("No") },
+            if acc.g("required").t() {
+                V::String(format!("Yes ({})", acc.g("n").s()))
+            } else {
+                s("No")
+            },
             r.g("accessible").clone(),
             if !cv.nullish() { r1(cv) } else { s("enter") },
             r.g("cycleVisitor").clone(),
@@ -267,7 +367,11 @@ pub fn parking_csv(p: &V) -> String {
     }
     let need = pk.g("need");
     let have = pk.g("have");
-    let mut tot_notes = vec![format!("Showers: {} required, {} proposed", need.g("showers").s(), have.g("showers").s())];
+    let mut tot_notes = vec![format!(
+        "Showers: {} required, {} proposed",
+        need.g("showers").s(),
+        have.g("showers").s()
+    )];
     tot_notes.extend(pk.g("totalsWhy").items().iter().map(|w| w.s()));
     rows.push(vec![
         s("Total (summed, then rounded 0.5 up: E27.6.2(9))"),
@@ -316,9 +420,21 @@ pub fn report(id: &str, p: &V, ctx: Option<&dyn ReportCtx>) -> Option<String> {
                 format!("{} {}", num(r.g("qty"), 0), esc(r.g("unit"))),
                 num(r.g("max"), 0),
                 num(r.g("cars"), 0),
-                if acc.g("required").t() { format!("Yes ({})", num(acc.g("n"), 0)) } else { "No".to_string() },
-                format!("{}/{}", if !cv.nullish() { num(cv, 1) } else { dash() }, num(r.g("cycleVisitor"), 0)),
-                format!("{}/{}", if !cs.nullish() { num(cs, 1) } else { dash() }, num(r.g("cycleSecure"), 0)),
+                if acc.g("required").t() {
+                    format!("Yes ({})", num(acc.g("n"), 0))
+                } else {
+                    "No".to_string()
+                },
+                format!(
+                    "{}/{}",
+                    if !cv.nullish() { num(cv, 1) } else { dash() },
+                    num(r.g("cycleVisitor"), 0)
+                ),
+                format!(
+                    "{}/{}",
+                    if !cs.nullish() { num(cs, 1) } else { dash() },
+                    num(r.g("cycleSecure"), 0)
+                ),
                 format!("{}/{}", num(r.g("loadReq"), 0), num(r.g("loading"), 0)),
                 if r.g("complies").t() { "Yes" } else { "No" }.to_string(),
             ]
@@ -331,27 +447,63 @@ pub fn report(id: &str, p: &V, ctx: Option<&dyn ReportCtx>) -> Option<String> {
         String::new(),
         String::new(),
         String::new(),
-        format!("{}/{}", num(need.g("visitor"), 0), num(have.g("visitor"), 0)),
+        format!(
+            "{}/{}",
+            num(need.g("visitor"), 0),
+            num(have.g("visitor"), 0)
+        ),
         format!("{}/{}", num(need.g("secure"), 0), num(have.g("secure"), 0)),
-        format!("{}/{}", num(need.g("loading"), 0), num(have.g("loading"), 0)),
+        format!(
+            "{}/{}",
+            num(need.g("loading"), 0),
+            num(have.g("loading"), 0)
+        ),
         if pk.g("allComply").t() { "Yes" } else { "No" }.to_string(),
     ]);
     let tbl = t_table(
-        &["Activity", "Quantity", "AUP maximum", "Proposed", "Accessible required (indicative)", "Cycle visitor req/prop", "Cycle secure req/prop", "Loading req/prop", "Complies"],
+        &[
+            "Activity",
+            "Quantity",
+            "AUP maximum",
+            "Proposed",
+            "Accessible required (indicative)",
+            "Cycle visitor req/prop",
+            "Cycle secure req/prop",
+            "Loading req/prop",
+            "Complies",
+        ],
         rows,
         "",
     );
-    let induced: Vec<String> = pk.g("rows").items().iter().filter(|r| r.g("induced").t()).map(|r| esc(r.g("induced").g("text"))).collect();
+    let induced: Vec<String> = pk
+        .g("rows")
+        .items()
+        .iter()
+        .filter(|r| r.g("induced").t())
+        .map(|r| esc(r.g("induced").g("text")))
+        .collect();
     let note = format!(
         "{} Row cycle figures are unrounded; the totals are summed and rounded. Showers: {} required, {} proposed. {} {} Accessible numbers: {}; verify.",
         esc(pk.g("label")),
         num(need.g("showers"), 0),
         num(have.g("showers"), 0),
-        esc_s(&pk.g("totalsWhy").items().iter().map(|w| w.s()).collect::<Vec<_>>().join("; ")),
+        esc_s(
+            &pk.g("totalsWhy")
+                .items()
+                .iter()
+                .map(|w| w.s())
+                .collect::<Vec<_>>()
+                .join("; ")
+        ),
         induced.join(" "),
         esc(xdata("STD.accessible.name")),
     );
-    Some(rt(ctx, "Table P1 \u{b7} Parking, cycle parking, end-of-trip and loading", &tbl, &note))
+    Some(rt(
+        ctx,
+        "Table P1 \u{b7} Parking, cycle parking, end-of-trip and loading",
+        &tbl,
+        &note,
+    ))
 }
 
 /// The exports of this part (`EXPORTS`, ids as the prototype registers them: "compliance-extra-<id>").

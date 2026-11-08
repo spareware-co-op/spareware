@@ -231,22 +231,35 @@ fn mc_field(mc: &Value, k: &str) -> Option<f64> {
 
 /// `meStats(period)` for the project's record of the period: None when there is no record.
 pub fn me_stats(p: &Project, period: &str) -> Option<MeStats> {
-    let info = p
-        .me
-        .get()
-        .and_then(|m| m.info.get())
-        .and_then(|i| i.get(period))
-        .and_then(|i| i.get())?;
+    let info =
+        p.me.get()
+            .and_then(|m| m.info.get())
+            .and_then(|i| i.get(period))
+            .and_then(|i| i.get())?;
     let m1: Option<M1> = info
         .extra
         .get("m1")
         .filter(|v| !v.is_null())
         .and_then(|v| serde_json::from_value(v.clone()).ok());
     let empty = Value::Object(serde_json::Map::new());
-    let mc = info.extra.get("matrixChange").filter(|v| !v.is_null()).unwrap_or(&empty);
+    let mc = info
+        .extra
+        .get("matrixChange")
+        .filter(|v| !v.is_null())
+        .unwrap_or(&empty);
     let (cells_slope, cells_r2, cells_intercept, cells_flag) = match &m1 {
-        Some(m) => (m.cells.slope, m.cells.r2, m.cells.intercept, m.cells.intercept_flag),
-        None => (mc_field(mc, "cellSlope"), mc_field(mc, "cellR2"), None, false),
+        Some(m) => (
+            m.cells.slope,
+            m.cells.r2,
+            m.cells.intercept,
+            m.cells.intercept_flag,
+        ),
+        None => (
+            mc_field(mc, "cellSlope"),
+            mc_field(mc, "cellR2"),
+            None,
+            false,
+        ),
     };
     let (ends_slope, ends_r2) = match &m1 {
         Some(m) => (m.ends.all.slope, m.ends.all.r2),
@@ -256,7 +269,8 @@ pub fn me_stats(p: &Project, period: &str) -> Option<MeStats> {
         Some(m) => m.total_pct,
         None => mc_field(mc, "totalPct").unwrap_or(f64::NAN),
     };
-    let cells_ok = cells_slope.is_some_and(|s| s >= tag::CELLS_SLOPE[0] && s <= tag::CELLS_SLOPE[1])
+    let cells_ok = cells_slope
+        .is_some_and(|s| s >= tag::CELLS_SLOPE[0] && s <= tag::CELLS_SLOPE[1])
         && cells_r2.is_some_and(|r| r > tag::CELLS_R2)
         && !(m1.is_some() && cells_flag);
     let ends_ok = ends_slope.is_some_and(|s| s >= tag::ENDS_SLOPE[0] && s <= tag::ENDS_SLOPE[1])
@@ -279,7 +293,11 @@ pub fn me_stats(p: &Project, period: &str) -> Option<MeStats> {
                 "slope {}, R\u{b2} {}{}",
                 num(cells_slope, 3),
                 num(cells_r2, 3),
-                if m1.is_some() { format!(", intercept {}", num(cells_intercept, 2)) } else { String::new() }
+                if m1.is_some() {
+                    format!(", intercept {}", num(cells_intercept, 2))
+                } else {
+                    String::new()
+                }
             ),
         },
         ends: PairVal {

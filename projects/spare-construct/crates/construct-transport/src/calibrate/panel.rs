@@ -6,7 +6,9 @@ use super::common::calib_cfg;
 use super::criteria::{corridor, tag};
 use super::estimate::base_view;
 use super::fit::{FitOpts, FitResult, fit, lend};
-use super::m1::{M1, M1CellChange, M1Cells, M1Ends, M1EndsBoth, M1Sectors, M1Tld, M1Top, M1TripEndGeh, me_stats};
+use super::m1::{
+    M1, M1CellChange, M1Cells, M1Ends, M1EndsBoth, M1Sectors, M1Tld, M1Top, M1TripEndGeh, me_stats,
+};
 use super::roles::{Ctx, method_weight};
 use super::rows::{CalStats, count_rows, stats_of_count_rows};
 use super::screen::sl_rows;
@@ -37,7 +39,8 @@ pub fn kmeans(pts: &[[f64; 2]], k: usize) -> Vec<usize> {
     if pts.is_empty() {
         return Vec::new();
     }
-    let d2 = |p: &[f64; 2], c: &[f64; 2]| (p[0] - c[0]) * (p[0] - c[0]) + (p[1] - c[1]) * (p[1] - c[1]);
+    let d2 =
+        |p: &[f64; 2], c: &[f64; 2]| (p[0] - c[0]) * (p[0] - c[0]) + (p[1] - c[1]) * (p[1] - c[1]);
     let mut c: Vec<[f64; 2]> = vec![pts[0]];
     while c.len() < k.min(pts.len()) {
         let (mut bi, mut bd) = (0usize, -1.0f64);
@@ -67,10 +70,18 @@ pub fn kmeans(pts: &[[f64; 2]], k: usize) -> Vec<usize> {
             })
             .collect();
         for j in 0..c.len() {
-            let m: Vec<&[f64; 2]> = pts.iter().enumerate().filter(|(i, _)| lab[*i] == j).map(|(_, p)| p).collect();
+            let m: Vec<&[f64; 2]> = pts
+                .iter()
+                .enumerate()
+                .filter(|(i, _)| lab[*i] == j)
+                .map(|(_, p)| p)
+                .collect();
             if !m.is_empty() {
                 let n = m.len() as f64;
-                c[j] = [m.iter().fold(0.0f64, |s, p| s + p[0]) / n, m.iter().fold(0.0f64, |s, p| s + p[1]) / n];
+                c[j] = [
+                    m.iter().fold(0.0f64, |s, p| s + p[0]) / n,
+                    m.iter().fold(0.0f64, |s, p| s + p[1]) / n,
+                ];
             }
         }
     }
@@ -83,7 +94,10 @@ pub fn kmeans(pts: &[[f64; 2]], k: usize) -> Vec<usize> {
 ///
 /// Trip lengths use the free-flow shortest path; bins 0 to 2, 2 to 5, 5 to 10, 10 to 20, 20+ km. `date` is the time written into the report.
 pub fn me_report(p: &Project, sc: &Scenario, period: &str, date: &str) -> Option<M1> {
-    let has = p.me.get().and_then(|m| m.factors.get(period)).is_some_and(|f| f.is_set());
+    let has =
+        p.me.get()
+            .and_then(|m| m.factors.get(period))
+            .is_some_and(|f| f.is_set());
     if !has {
         return None;
     }
@@ -109,7 +123,12 @@ pub fn me_report(p: &Project, sc: &Scenario, period: &str, date: &str) -> Option
     let (mut tp, mut te) = (0.0f64, 0.0f64);
     let (mut cp, mut ce): (Vec<f64>, Vec<f64>) = (Vec::new(), Vec::new());
     let mut top: Vec<M1Top> = Vec::new();
-    let mut chg = M1CellChange { over50: 0, b40: 0, b30: 0, n: 0 };
+    let mut chg = M1CellChange {
+        over50: 0,
+        b40: 0,
+        b30: 0,
+        n: 0,
+    };
     let mut o = [vec![0.0f64; zn], vec![0.0f64; zn]];
     let mut dd = [vec![0.0f64; zn], vec![0.0f64; zn]];
     for i in 0..zn {
@@ -135,13 +154,24 @@ pub fn me_report(p: &Project, sc: &Scenario, period: &str, date: &str) -> Option
                     chg.b30 += 1;
                 }
                 if (e - pv).abs() > 0.05 {
-                    top.push(M1Top { from: name(i), to: name(j), prior: pv, est: e, d: e - pv, pct: e / pv - 1.0 });
+                    top.push(M1Top {
+                        from: name(i),
+                        to: name(j),
+                        prior: pv,
+                        est: e,
+                        d: e - pv,
+                        pct: e / pv - 1.0,
+                    });
                 }
             }
         }
     }
     let reg = regression(&cp, &ce);
-    let mean_cell = if !cp.is_empty() { tp / cp.len() as f64 } else { 0.0 };
+    let mean_cell = if !cp.is_empty() {
+        tp / cp.len() as f64
+    } else {
+        0.0
+    };
     let ends_of = |keep: &dyn Fn(usize) -> bool| -> M1Ends {
         let (mut x, mut y): (Vec<f64>, Vec<f64>) = (Vec::new(), Vec::new());
         for i in 0..zn {
@@ -153,7 +183,12 @@ pub fn me_report(p: &Project, sc: &Scenario, period: &str, date: &str) -> Option
             }
         }
         let r = regression(&x, &y);
-        M1Ends { slope: r.ols_b, intercept: r.ols_a, r2: r.r2_ols, n: x.len() as f64 / 2.0 }
+        M1Ends {
+            slope: r.ols_b,
+            intercept: r.ols_a,
+            r2: r.r2_ols,
+            n: x.len() as f64 / 2.0,
+        }
     };
     let gb = [2.5, 5.0, 7.5, 10.0, f64::INFINITY];
     let mut tg = vec![0usize; gb.len()];
@@ -209,8 +244,16 @@ pub fn me_report(p: &Project, sc: &Scenario, period: &str, date: &str) -> Option
     let t_e = fe.iter().fold(0.0f64, |a, b| a + b);
     let m_p = if t_p != 0.0 { sp / t_p } else { 0.0 };
     let m_e = if t_e != 0.0 { se / t_e } else { 0.0 };
-    let sd_p = if t_p != 0.0 { math_max(0.0, sp2 / t_p - m_p * m_p).sqrt() } else { 0.0 };
-    let sd_e = if t_e != 0.0 { math_max(0.0, se2 / t_e - m_e * m_e).sqrt() } else { 0.0 };
+    let sd_p = if t_p != 0.0 {
+        math_max(0.0, sp2 / t_p - m_p * m_p).sqrt()
+    } else {
+        0.0
+    };
+    let sd_e = if t_e != 0.0 {
+        math_max(0.0, se2 / t_e - m_e * m_e).sqrt()
+    } else {
+        0.0
+    };
     let (mut mn, mut mx) = (0.0f64, 0.0f64);
     for k in 0..bins.len() {
         let a = if t_p != 0.0 { fp[k] / t_p } else { 0.0 };
@@ -321,10 +364,12 @@ pub struct RunMeOpts<'a> {
 }
 
 fn stats_value(s: &CalStats) -> Value {
-    serde_json::to_value(s).map(|mut v| {
-        null_non_finite(&mut v);
-        v
-    }).expect("stats serialise")
+    serde_json::to_value(s)
+        .map(|mut v| {
+            null_non_finite(&mut v);
+            v
+        })
+        .expect("stats serialise")
 }
 
 fn null_non_finite(v: &mut Value) {
@@ -348,12 +393,22 @@ pub fn run_me(
     opts: &RunMeOpts,
     mut progress: Option<&mut dyn FnMut(f64, f64, &str)>,
 ) -> Result<RunMe, String> {
-    let idx = p.scenarios.iter().position(|s| s.id == sc_id).ok_or_else(|| format!("the project has no scenario {sc_id:?}"))?;
+    let idx = p
+        .scenarios
+        .iter()
+        .position(|s| s.id == sc_id)
+        .ok_or_else(|| format!("the project has no scenario {sc_id:?}"))?;
     let sc = p.scenarios[idx].clone();
     let cfg = calib_cfg(Some(&p.settings));
     let period: String = match opts.period {
         Some(x) if !x.is_empty() => x.to_string(),
-        _ => p.settings.period.as_str().filter(|x| !x.is_empty()).unwrap_or("AM").to_string(),
+        _ => p
+            .settings
+            .period
+            .as_str()
+            .filter(|x| !x.is_empty())
+            .unwrap_or("AM")
+            .to_string(),
     };
     let xamax = match opts.xamax {
         Some(x) if x != 0.0 && !x.is_nan() => x,
@@ -369,7 +424,9 @@ pub fn run_me(
         ctx.data
             .counts
             .iter()
-            .filter(|c| ctx.data.in_use(c) && !c.virtual_.truthy() && ctx.role_of(c, &period, true) == "me")
+            .filter(|c| {
+                ctx.data.in_use(c) && !c.virtual_.truthy() && ctx.role_of(c, &period, true) == "me"
+            })
             .map(|c| c.id.clone())
             .collect()
     };
@@ -384,7 +441,10 @@ pub fn run_me(
     let view: &Scenario = &bv.view;
     prog(0.0, 1.0, "Running the base year without matrix estimation");
     let s = p.settings.clone();
-    let ao = AssignOpts { period: Some(period.clone()), ..AssignOpts::default() };
+    let ao = AssignOpts {
+        period: Some(period.clone()),
+        ..AssignOpts::default()
+    };
     let res0 = {
         // me[period] is set aside for the run and put back
         let q = without_me(p, &period);
@@ -394,12 +454,18 @@ pub fn run_me(
         let ctx = Ctx::new(p);
         let vr = |r: &Res, role: &str| -> CalStats {
             let rows = count_rows(&ctx, view, &period, Some(r), true);
-            let sel: Vec<&super::rows::CountRow> = rows.iter().filter(|x| x.scored && x.role == role).collect();
+            let sel: Vec<&super::rows::CountRow> =
+                rows.iter().filter(|x| x.scored && x.role == role).collect();
             stats_of_count_rows(&sel)
         };
         let id_set: HashSet<&str> = ids.iter().map(String::as_str).collect();
         let mut groups: Vec<Group> = Vec::new();
-        for sl in ctx.store.screenlines.iter().filter(|x| !x.is_type("core") && !x.is_valid()) {
+        for sl in ctx
+            .store
+            .screenlines
+            .iter()
+            .filter(|x| !x.is_type("core") && !x.is_valid())
+        {
             let rows = sl_rows(&ctx, view, sl, &period, Some(&res0), true);
             for r in rows {
                 let mut g: Vec<String> = Vec::new();
@@ -433,33 +499,60 @@ pub fn run_me(
         ..FitOpts::default()
     };
     let out = fit(p, sc_id, &fo, lend(&mut progress))?;
-    let has_info = p.me.get().and_then(|m| m.info.get()).and_then(|i| i.get(&period)).is_some_and(|i| i.is_set());
+    let has_info =
+        p.me.get()
+            .and_then(|m| m.info.get())
+            .and_then(|i| i.get(&period))
+            .is_some_and(|i| i.is_set());
     let Some(res) = out.res.as_ref().filter(|_| has_info) else {
         let note = out.note.clone();
-        return Ok(RunMe { ok: false, out: Some(out), note });
+        return Ok(RunMe {
+            ok: false,
+            out: Some(out),
+            note,
+        });
     };
     let (valid_after, calib_after) = {
         let ctx = Ctx::new(p);
         let rows = count_rows(&ctx, view, &period, Some(res), true);
         let sel = |role: &str| -> CalStats {
-            let v: Vec<&super::rows::CountRow> = rows.iter().filter(|x| x.scored && x.role == role).collect();
+            let v: Vec<&super::rows::CountRow> =
+                rows.iter().filter(|x| x.scored && x.role == role).collect();
             stats_of_count_rows(&v)
         };
         (sel("valid"), sel("me"))
     };
-    let date = opts.date.map(str::to_string).unwrap_or_else(|| super::fit::iso_of_ms(crate::util::now_ms()));
+    let date = opts
+        .date
+        .map(str::to_string)
+        .unwrap_or_else(|| super::fit::iso_of_ms(crate::util::now_ms()));
     let m1 = me_report(p, &sc, &period, &date);
-    if let Some(info) = p.me.get_mut().and_then(|m| m.info.get_mut()).and_then(|i| i.get_mut(&period)).and_then(|i| i.get_mut()) {
-        info.extra.insert("countIds".into(), Value::Array(ids.iter().map(|i| Value::String(i.clone())).collect()));
-        info.extra.insert("xamax".into(), crate::jsnum::json_number(xamax));
+    if let Some(info) =
+        p.me.get_mut()
+            .and_then(|m| m.info.get_mut())
+            .and_then(|i| i.get_mut(&period))
+            .and_then(|i| i.get_mut())
+    {
+        info.extra.insert(
+            "countIds".into(),
+            Value::Array(ids.iter().map(|i| Value::String(i.clone())).collect()),
+        );
+        info.extra
+            .insert("xamax".into(), crate::jsnum::json_number(xamax));
         info.extra.insert("roleAware".into(), Value::Bool(true));
         info.extra.insert("weighted".into(), Value::Bool(true));
-        info.extra.insert("groups".into(), Value::from(groups.len() as u64));
-        info.extra.insert("freezeGG".into(), Value::Bool(cfg.freeze_gg_on()));
-        info.extra.insert("validBefore".into(), stats_value(&valid_before));
-        info.extra.insert("validAfter".into(), stats_value(&valid_after));
-        info.extra.insert("calibBefore".into(), stats_value(&calib_before));
-        info.extra.insert("calibAfter".into(), stats_value(&calib_after));
+        info.extra
+            .insert("groups".into(), Value::from(groups.len() as u64));
+        info.extra
+            .insert("freezeGG".into(), Value::Bool(cfg.freeze_gg_on()));
+        info.extra
+            .insert("validBefore".into(), stats_value(&valid_before));
+        info.extra
+            .insert("validAfter".into(), stats_value(&valid_after));
+        info.extra
+            .insert("calibBefore".into(), stats_value(&calib_before));
+        info.extra
+            .insert("calibAfter".into(), stats_value(&calib_after));
         info.extra.insert(
             "m1".into(),
             m1.as_ref().map_or(Value::Null, |m| {
@@ -470,7 +563,11 @@ pub fn run_me(
         );
     }
     let note = out.note.clone();
-    Ok(RunMe { ok: true, out: Some(out), note })
+    Ok(RunMe {
+        ok: true,
+        out: Some(out),
+        note,
+    })
 }
 
 /// One attempt of [`reduce_me`].
@@ -494,27 +591,50 @@ pub fn reduce_me(
 ) -> Result<(RunMe, Vec<Tried>), String> {
     let period: String = match opts.period {
         Some(x) if !x.is_empty() => x.to_string(),
-        _ => p.settings.period.as_str().filter(|x| !x.is_empty()).unwrap_or("AM").to_string(),
+        _ => p
+            .settings
+            .period
+            .as_str()
+            .filter(|x| !x.is_empty())
+            .unwrap_or("AM")
+            .to_string(),
     };
     let lim = match from {
         Some(x) if x != 0.0 && !x.is_nan() => x,
         _ => 2.0,
     };
-    let steps: Vec<f64> = [2.0, 1.5, 1.25, 1.1].into_iter().filter(|&x| x <= lim).collect();
+    let steps: Vec<f64> = [2.0, 1.5, 1.25, 1.1]
+        .into_iter()
+        .filter(|&x| x <= lim)
+        .collect();
     let mut tried = Vec::new();
     let mut last: Option<RunMe> = None;
     for x in steps {
-        let o = RunMeOpts { period: Some(&period), xamax: Some(x), date: opts.date };
+        let o = RunMeOpts {
+            period: Some(&period),
+            xamax: Some(x),
+            date: opts.date,
+        };
         let r = run_me(p, sc_id, &o, lend(&mut progress))?;
         let m = if r.ok { me_stats(p, &period) } else { None };
-        let ok = m.as_ref().is_some_and(|m| m.cells.ok && m.ends.ok && m.tld.as_ref().is_none_or(|t| t.ok));
-        tried.push(Tried { xamax: x, ok, note: r.note.clone() });
+        let ok = m
+            .as_ref()
+            .is_some_and(|m| m.cells.ok && m.ends.ok && m.tld.as_ref().is_none_or(|t| t.ok));
+        tried.push(Tried {
+            xamax: x,
+            ok,
+            note: r.note.clone(),
+        });
         let stop = ok || !r.ok;
         last = Some(r);
         if stop {
             break;
         }
     }
-    let last = last.unwrap_or(RunMe { ok: false, out: None, note: String::new() });
+    let last = last.unwrap_or(RunMe {
+        ok: false,
+        out: None,
+        note: String::new(),
+    });
     Ok((last, tried))
 }

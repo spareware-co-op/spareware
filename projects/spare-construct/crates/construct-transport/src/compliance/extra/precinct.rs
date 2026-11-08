@@ -13,7 +13,11 @@ use crate::util::fmt;
 
 /// `${o[k]}` of a loose object in a template string: "undefined" when the field is missing.
 fn tstr(o: &V, k: &str) -> String {
-    if o.has(k) { o.g(k).s() } else { "undefined".to_string() }
+    if o.has(k) {
+        o.g(k).s()
+    } else {
+        "undefined".to_string()
+    }
 }
 
 /// `+x || 0`: a number, NaN and zero read as 0.
@@ -24,12 +28,20 @@ fn n0(v: &V) -> f64 {
 
 /// `r1(v)` of the hand-over packs as text: one decimal, empty for null and values that are not finite.
 fn r1t(v: &V) -> String {
-    if v.nullish() || !v.n().is_finite() { String::new() } else { number_to_js_string(math_round(v.n() * 10.0) / 10.0) }
+    if v.nullish() || !v.n().is_finite() {
+        String::new()
+    } else {
+        number_to_js_string(math_round(v.n() * 10.0) / 10.0)
+    }
 }
 
 /// `r3(v)` of the hand-over packs as text: three decimals, empty for null and values that are not finite.
 fn r3t(v: &V) -> String {
-    if v.nullish() || !v.n().is_finite() { String::new() } else { number_to_js_string(math_round(v.n() * 1000.0) / 1000.0) }
+    if v.nullish() || !v.n().is_finite() {
+        String::new()
+    } else {
+        number_to_js_string(math_round(v.n() * 1000.0) / 1000.0)
+    }
 }
 
 /// `precinctList(P)`: the precincts the tracker knows: I450 and I451 as data, then the author's own (`precinct.custom`), keyed by id.
@@ -60,7 +72,11 @@ pub fn precinct_of(p: &V) -> Option<V> {
     let id_text = if named.t() { named.s() } else { String::new() };
     let k = list.keys().into_iter().find(|x| {
         let entry = list.g(x);
-        let name_text = if entry.has("name") { entry.g("name").s() } else { "undefined".to_string() };
+        let name_text = if entry.has("name") {
+            entry.g("name").s()
+        } else {
+            "undefined".to_string()
+        };
         id_text.contains(x) || name_text.is_empty()
     })?;
     Some(list.g(k).clone())
@@ -85,8 +101,23 @@ pub fn precinct_node(p: &V, sc: &V, pr: &V) -> V {
     let mut best: Option<(&str, usize)> = None;
     for id in sc.g("nodes").keys() {
         let links = crate::compliance::net::road_links(sc, id);
-        let names = links.iter().map(|l| if l.g("name").t() { l.g("name").s() } else { String::new() }).collect::<Vec<_>>().join(" | ");
-        if pr.g("node").items().iter().all(|n| names.contains(n.s().as_str())) {
+        let names = links
+            .iter()
+            .map(|l| {
+                if l.g("name").t() {
+                    l.g("name").s()
+                } else {
+                    String::new()
+                }
+            })
+            .collect::<Vec<_>>()
+            .join(" | ");
+        if pr
+            .g("node")
+            .items()
+            .iter()
+            .all(|n| names.contains(n.s().as_str()))
+        {
             // a stable sort by road count, most first: the first of the largest wins
             if best.is_none_or(|(_, c)| links.len() > c) {
                 best = Some((id, links.len()));
@@ -115,12 +146,20 @@ pub fn mix_trips(p: &V, mix: &V, sc: &V) -> V {
 /// (applicable), rowIndex, breach, why, status, statusText, headroom, ip, trips, banner, pc120Note, warnings, register, monitorText }`, or null when no
 /// precinct applies.
 pub fn precinct_check(p: &V, sc: Option<&V>) -> V {
-    let Some(pr) = precinct_of(p) else { return V::Null };
+    let Some(pr) = precinct_of(p) else {
+        return V::Null;
+    };
     let sc = sc.unwrap_or_else(|| ctx::active_sc(p));
     let cx = ctx::data(p);
     let pc = cx.g("precinct");
     let ups = pc.g("upgrades");
-    let reg: Vec<V> = pc.g("register").items().iter().filter(|r| r.t() && !r.g("excluded").strict_eq(&V::Bool(true))).cloned().collect();
+    let reg: Vec<V> = pc
+        .g("register")
+        .items()
+        .iter()
+        .filter(|r| r.t() && !r.g("excluded").strict_eq(&V::Bool(true)))
+        .cloned()
+        .collect();
     let measures = xdata("MEASURES").items();
     let (mut cumulative, mut proposal, mut total) = (V::object(), V::object(), V::object());
     let (mut cum_n, mut prop_n, mut tot_n) = (Vec::new(), Vec::new(), Vec::new());
@@ -175,16 +214,46 @@ pub fn precinct_check(p: &V, sc: Option<&V>) -> V {
     for (i, m) in measures.iter().enumerate() {
         let cap = row.g(&m.ix(0).s());
         if !cap.nullish() && tot_n[i] > cap.n() {
-            why.push(format!("{}: {} against the row ({}) cap of {}", m.ix(2).s(), fmt::int(tot_n[i]), tstr(&row, "row"), fmt::int(cap.n())));
+            why.push(format!(
+                "{}: {} against the row ({}) cap of {}",
+                m.ix(2).s(),
+                fmt::int(tot_n[i]),
+                tstr(&row, "row"),
+                fmt::int(cap.n())
+            ));
         }
     }
     let breach = !why.is_empty();
-    let unmet_a5 = row.g("up").items().iter().filter(|u| !u.g("met").t()).any(|u| u.g("status").eq_s("A5"));
-    let status: Option<&str> = if breach { Some(if pc.g("amendment").t() { "A9" } else if beyond { "A6" } else if unmet_a5 { "A5" } else { "A6" }) } else { None };
+    let unmet_a5 = row
+        .g("up")
+        .items()
+        .iter()
+        .filter(|u| !u.g("met").t())
+        .any(|u| u.g("status").eq_s("A5"));
+    let status: Option<&str> = if breach {
+        Some(if pc.g("amendment").t() {
+            "A9"
+        } else if beyond {
+            "A6"
+        } else if unmet_a5 {
+            "A5"
+        } else {
+            "A6"
+        })
+    } else {
+        None
+    };
     let mut headroom = V::object();
     for (i, m) in measures.iter().enumerate() {
         let cap = row.g(&m.ix(0).s());
-        headroom.set(m.ix(0).s(), if cap.nullish() { V::Null } else { V::Number(cap.n() - tot_n[i]) });
+        headroom.set(
+            m.ix(0).s(),
+            if cap.nullish() {
+                V::Null
+            } else {
+                V::Number(cap.n() - tot_n[i])
+            },
+        );
     }
     // inter-peak LoS at the named junction (I450.9(4)): an IP result if there is one, otherwise the LoS the author enters
     let node_id = precinct_node(p, sc, &pr);
@@ -193,10 +262,18 @@ pub fn precinct_check(p: &V, sc: Option<&V>) -> V {
         _ => &NULL,
     };
     let los: V = if nr.t() {
-        if nr.g("intersectionLos").t() { nr.g("intersectionLos").clone() } else { nr.g("los").clone() }
+        if nr.g("intersectionLos").t() {
+            nr.g("intersectionLos").clone()
+        } else {
+            nr.g("los").clone()
+        }
     } else {
         let t = pc.g("ipLos");
-        V::String(if t.t() { t.s().to_uppercase() } else { String::new() })
+        V::String(if t.t() {
+            t.s().to_uppercase()
+        } else {
+            String::new()
+        })
     };
     let test_los = xdata("STD.precinctTest.los");
     let mut ip = jobj! { "node" => if node_id.t() { node_id.clone() } else { V::Null } };
@@ -216,13 +293,35 @@ pub fn precinct_check(p: &V, sc: Option<&V>) -> V {
             "not available".to_string()
         }),
     );
-    ip.set("pass", if los.t() { V::Bool(!los.as_str().is_some_and(|l| ctx::los_worse(l, &test_los.s()))) } else { V::Null });
+    ip.set(
+        "pass",
+        if los.t() {
+            V::Bool(
+                !los.as_str()
+                    .is_some_and(|l| ctx::los_worse(l, &test_los.s())),
+            )
+        } else {
+            V::Null
+        },
+    );
     if pr.has("ita") {
         ip.set("rule", pr.g("ita").clone());
     }
-    ip.set("test", V::String(format!("inter-peak overall LoS generally no worse than {}", test_los.s())));
+    ip.set(
+        "test",
+        V::String(format!(
+            "inter-peak overall LoS generally no worse than {}",
+            test_los.s()
+        )),
+    );
     // trip equivalence: cumulative + proposed mix against the table mix at the same row
-    let or0 = |k: &str| if row.g(k).t() { row.g(k).clone() } else { V::Number(0.0) };
+    let or0 = |k: &str| {
+        if row.g(k).t() {
+            row.g(k).clone()
+        } else {
+            V::Number(0.0)
+        }
+    };
     let mix_row = jobj! { "dw" => row.g("dw"), "retail" => or0("retail"), "commercial" => or0("commercial"), "community" => or0("community") };
     let (a, b) = (mix_trips(p, &total, sc), mix_trips(p, &mix_row, sc));
     let similar = xdata("STD.precinctTest.similar").n();
@@ -239,22 +338,28 @@ pub fn precinct_check(p: &V, sc: Option<&V>) -> V {
         rr.push(jobj! { "period" => x.g("p"), "proposed" => xt, "table" => bt, "ratio" => ratio });
     }
     let trips = jobj! { "rows" => rr, "pass" => all_similar, "basis" => xdata("STD.precinctTest.similarBasis"),
-        "mapping" => format!("{}: community GFA uses the medical-centre rate and other commercial the office rate", ctx::assumption()) };
+    "mapping" => format!("{}: community GFA uses the medical-centre rate and other commercial the office rate", ctx::assumption()) };
     let mut warnings: Vec<V> = Vec::new();
-    if rows.iter().any(|r| r.g("up").items().iter().any(|u| u.g("needsAugier").t())) {
+    if rows
+        .iter()
+        .any(|r| r.g("up").items().iter().any(|u| u.g("needsAugier").t()))
+    {
         warnings.push(V::String(format!(
             "An upgrade under construction or delivered by the applicant counts only with express agreement under s108AA(1)(a), on an Augier basis, to conditions preventing occupation or s224(c) certification until it is operational ({}). Tick the agreement to rely on it.",
             tstr(&pr, "deemed")
         )));
     }
     if beyond && row.has("dw") && tot_n[0] > row.g("dw").n() {
-        warnings.push(V::String(format!("The total exceeds the final row of {}: the table does not provide for it.", tstr(&pr, "table"))));
+        warnings.push(V::String(format!(
+            "The total exceeds the final row of {}: the table does not provide for it.",
+            tstr(&pr, "table")
+        )));
     }
     if pr.g("note").t() {
         warnings.push(pr.g("note").clone());
     }
     let mut out = jobj! { "precinct" => &pr, "rows" => rows.clone(), "cumulative" => cumulative, "proposal" => proposal, "total" => total, "row" => &row, "rowIndex" => row_index,
-        "breach" => breach, "why" => why.iter().map(|w| V::String(w.clone())).collect::<Vec<V>>(), "status" => status };
+    "breach" => breach, "why" => why.iter().map(|w| V::String(w.clone())).collect::<Vec<V>>(), "status" => status };
     let status_text: Option<V> = match status {
         Some(s) => pr.g("status").get(s).cloned(),
         None => Some(V::String("Complies with the staging standard".into())),
@@ -265,11 +370,31 @@ pub fn precinct_check(p: &V, sc: Option<&V>) -> V {
     out.set("headroom", headroom);
     out.set("ip", ip);
     out.set("trips", trips);
-    out.set("banner", if pr.g("pc120").t() { xdata("STD.labels.pc120").clone() } else { V::String(String::new()) });
-    out.set("pc120Note", if pr.g("pc120").t() { xdata("STD.labels.pc120Withdrawal").clone() } else { V::String(String::new()) });
+    out.set(
+        "banner",
+        if pr.g("pc120").t() {
+            xdata("STD.labels.pc120").clone()
+        } else {
+            V::String(String::new())
+        },
+    );
+    out.set(
+        "pc120Note",
+        if pr.g("pc120").t() {
+            xdata("STD.labels.pc120Withdrawal").clone()
+        } else {
+            V::String(String::new())
+        },
+    );
     out.set("warnings", V::Array(warnings));
     out.set("register", V::Array(reg));
-    out.set("monitorText", V::String(format!("State the dwellings and GFA this application enables ({}).", tstr(&pr, "monitor"))));
+    out.set(
+        "monitorText",
+        V::String(format!(
+            "State the dwellings and GFA this application enables ({}).",
+            tstr(&pr, "monitor")
+        )),
+    );
     out
 }
 
@@ -283,14 +408,29 @@ pub fn precinct_csv(p: &V) -> String {
     let blank_if_null = |v: &V| if v.nullish() { s("") } else { v.clone() };
     let pr = c.g("precinct");
     let mut rows: Vec<Vec<V>> = vec![
-        vec![s(&format!("{} {}: {}", tstr(pr, "id"), tstr(pr, "name"), tstr(pr, "table")))],
+        vec![s(&format!(
+            "{} {}: {}",
+            tstr(pr, "id"),
+            tstr(pr, "name"),
+            tstr(pr, "table")
+        ))],
         vec![c.g("banner").clone()],
         vec![c.g("pc120Note").clone()],
         vec![],
-        ["Row", "Dwellings cap", "Retail GFA cap (m\u{b2})", "Other commercial GFA cap (m\u{b2})", "Community GFA cap (m\u{b2})", "Upgrade", "Status", "Deemed met", "Activity status on breach"]
-            .iter()
-            .map(|h| s(h))
-            .collect(),
+        [
+            "Row",
+            "Dwellings cap",
+            "Retail GFA cap (m\u{b2})",
+            "Other commercial GFA cap (m\u{b2})",
+            "Community GFA cap (m\u{b2})",
+            "Upgrade",
+            "Status",
+            "Deemed met",
+            "Activity status on breach",
+        ]
+        .iter()
+        .map(|h| s(h))
+        .collect(),
     ];
     for r in c.g("rows").items() {
         for u in r.g("up").items() {
@@ -308,7 +448,20 @@ pub fn precinct_csv(p: &V) -> String {
         }
     }
     rows.push(vec![]);
-    rows.push(["Register: consent ref", "Dwellings", "Retail GFA (m\u{b2})", "Other commercial GFA (m\u{b2})", "Community GFA (m\u{b2})", "Date", "Enabled yield"].iter().map(|h| s(h)).collect());
+    rows.push(
+        [
+            "Register: consent ref",
+            "Dwellings",
+            "Retail GFA (m\u{b2})",
+            "Other commercial GFA (m\u{b2})",
+            "Community GFA (m\u{b2})",
+            "Date",
+            "Enabled yield",
+        ]
+        .iter()
+        .map(|h| s(h))
+        .collect(),
+    );
     for r in c.g("register").items() {
         rows.push(vec![
             r.g("ref").clone(),
@@ -317,27 +470,78 @@ pub fn precinct_csv(p: &V) -> String {
             r.g("commercial").clone(),
             r.g("community").clone(),
             r.g("date").clone(),
-            if r.g("enabled").t() { r.g("enabled").clone() } else { s("") },
+            if r.g("enabled").t() {
+                r.g("enabled").clone()
+            } else {
+                s("")
+            },
         ]);
     }
     let (proposal, total) = (c.g("proposal"), c.g("total"));
-    rows.push(vec![s("Proposal"), proposal.g("dw").clone(), proposal.g("retail").clone(), proposal.g("commercial").clone(), proposal.g("community").clone()]);
-    rows.push(vec![s("Total"), total.g("dw").clone(), total.g("retail").clone(), total.g("commercial").clone(), total.g("community").clone()]);
+    rows.push(vec![
+        s("Proposal"),
+        proposal.g("dw").clone(),
+        proposal.g("retail").clone(),
+        proposal.g("commercial").clone(),
+        proposal.g("community").clone(),
+    ]);
+    rows.push(vec![
+        s("Total"),
+        total.g("dw").clone(),
+        total.g("retail").clone(),
+        total.g("commercial").clone(),
+        total.g("community").clone(),
+    ]);
     rows.push(vec![]);
     rows.push(vec![s("Applicable row"), c.g("row").g("row").clone()]);
-    let why = c.g("why").items().iter().map(|w| w.s()).collect::<Vec<_>>().join("; ");
-    rows.push(vec![s("Result"), s(&if c.g("breach").t() { format!("Breach: {why}") } else { "Within the caps".to_string() })]);
+    let why = c
+        .g("why")
+        .items()
+        .iter()
+        .map(|w| w.s())
+        .collect::<Vec<_>>()
+        .join("; ");
+    rows.push(vec![
+        s("Result"),
+        s(&if c.g("breach").t() {
+            format!("Breach: {why}")
+        } else {
+            "Within the caps".to_string()
+        }),
+    ]);
     rows.push(vec![s("Activity status"), c.g("statusText").clone()]);
     let ip = c.g("ip");
-    let pass = if ip.g("pass").nullish() { "" } else if ip.g("pass").t() { "passes" } else { "fails" };
+    let pass = if ip.g("pass").nullish() {
+        ""
+    } else if ip.g("pass").t() {
+        "passes"
+    } else {
+        "fails"
+    };
     rows.push(vec![
         s("Inter-peak LoS test"),
-        s(&format!("{}: {} ({}) {} {}", tstr(ip, "name"), if ip.g("los").t() { ip.g("los").s() } else { "not available".into() }, tstr(ip, "source"), pass, tstr(ip, "rule"))),
+        s(&format!(
+            "{}: {} ({}) {} {}",
+            tstr(ip, "name"),
+            if ip.g("los").t() {
+                ip.g("los").s()
+            } else {
+                "not available".into()
+            },
+            tstr(ip, "source"),
+            pass,
+            tstr(ip, "rule")
+        )),
     ]);
     for t in c.g("trips").g("rows").items() {
         rows.push(vec![
             s(&format!("Trip equivalence {}", tstr(t, "period"))),
-            s(&format!("{} veh/h proposed against {} veh/h table mix (ratio {})", r1t(t.g("proposed")), r1t(t.g("table")), r3t(t.g("ratio")))),
+            s(&format!(
+                "{} veh/h proposed against {} veh/h table mix (ratio {})",
+                r1t(t.g("proposed")),
+                r1t(t.g("table")),
+                r3t(t.g("ratio"))
+            )),
         ]);
     }
     stamped(&csv(&rows), p, None)
@@ -349,7 +553,12 @@ fn precinct_report(p: &V, rctx: Option<&dyn ReportCtx>) -> String {
     if x.nullish() {
         return String::new();
     }
-    let head = [th("Row"), th("Dwellings cap"), th("Prerequisite upgrades"), th("Status")];
+    let head = [
+        th("Row"),
+        th("Dwellings cap"),
+        th("Prerequisite upgrades"),
+        th("Status"),
+    ];
     let body: Vec<_> = x
         .g("rows")
         .items()
@@ -358,20 +567,44 @@ fn precinct_report(p: &V, rctx: Option<&dyn ReportCtx>) -> String {
             tr([
                 format!("({})", esc(r.g("row"))),
                 num(r.g("dw"), 0),
-                r.g("up").items().iter().map(|u| format!("{} ({})", esc(u.g("name")), esc(u.g("stateLabel")))).collect::<Vec<_>>().join("; "),
-                if r.g("met").t() { "Deemed met".to_string() } else { "Not met".to_string() },
+                r.g("up")
+                    .items()
+                    .iter()
+                    .map(|u| format!("{} ({})", esc(u.g("name")), esc(u.g("stateLabel"))))
+                    .collect::<Vec<_>>()
+                    .join("; "),
+                if r.g("met").t() {
+                    "Deemed met".to_string()
+                } else {
+                    "Not met".to_string()
+                },
             ])
         })
         .collect();
     let (total, cum, prop) = (x.g("total"), x.g("cumulative"), x.g("proposal"));
-    let why = x.g("why").items().iter().map(|w| w.s()).collect::<Vec<_>>().join("; ");
+    let why = x
+        .g("why")
+        .items()
+        .iter()
+        .map(|w| w.s())
+        .collect::<Vec<_>>()
+        .join("; ");
     let verdict = if x.g("breach").t() {
-        ctx::esc_s(&format!("Breach of row ({}): {}. {}.", tstr(x.g("row"), "row"), why, tstr(&x, "statusText")))
+        ctx::esc_s(&format!(
+            "Breach of row ({}): {}. {}.",
+            tstr(x.g("row"), "row"),
+            why,
+            tstr(&x, "statusText")
+        ))
     } else {
         "Within the applicable row.".to_string()
     };
     let ip = x.g("ip");
-    let los = if ip.g("los").t() { ip.g("los").clone() } else { V::String("not available".into()) };
+    let los = if ip.g("los").t() {
+        ip.g("los").clone()
+    } else {
+        V::String("not available".into())
+    };
     let note = format!(
         "Total {} dwellings ({} approved + {} proposed). {} Inter-peak LoS at {}: {} ({}).",
         fmt::int(total.g("dw").n()),
@@ -382,8 +615,16 @@ fn precinct_report(p: &V, rctx: Option<&dyn ReportCtx>) -> String {
         esc(&los),
         esc(ip.g("source"))
     );
-    let title = format!("{} staging against approved and proposed development", esc(x.g("precinct").g("table")));
-    format!("<p class=\"note\"><b>{}</b> {}.</p>{}", esc(x.g("banner")), esc(x.g("pc120Note")), rt(rctx, &title, &kit_table(&head, &body, true, "", ""), &note))
+    let title = format!(
+        "{} staging against approved and proposed development",
+        esc(x.g("precinct").g("table"))
+    );
+    format!(
+        "<p class=\"note\"><b>{}</b> {}.</p>{}",
+        esc(x.g("banner")),
+        esc(x.g("pc120Note")),
+        rt(rctx, &title, &kit_table(&head, &body, true, "", ""), &note)
+    )
 }
 
 /// The report sections of this part the report lane can ask for (see [`report`]).

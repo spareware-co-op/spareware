@@ -33,8 +33,8 @@ use crate::util::dist;
 use serde::{Deserialize, Serialize};
 use serde_json::{Map, Value};
 use std::cell::OnceCell;
-use std::rc::Rc;
 use std::collections::HashSet;
+use std::rc::Rc;
 
 /// One count source: its label, short name and map colour.
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -235,7 +235,11 @@ pub struct Count {
     #[serde(default, skip_serializing_if = "Maybe::is_missing")]
     pub kind: Num,
     /// An importer's own observation method.
-    #[serde(default, skip_serializing_if = "Maybe::is_missing", rename = "obs_method")]
+    #[serde(
+        default,
+        skip_serializing_if = "Maybe::is_missing",
+        rename = "obs_method"
+    )]
     pub obs_method: Num,
     /// NZTA TMS Tue to Thu term-time mean: { target: { mean, ok, ci95, n } }.
     #[serde(default, skip_serializing_if = "Maybe::is_missing")]
@@ -266,7 +270,8 @@ pub struct Count {
 impl Count {
     /// A count with only an id and a source; the rest unset (for building counts in code).
     pub fn new(id: &str, src: &str) -> Count {
-        let blank: Count = serde_json::from_value(Value::Object(Map::new())).expect("an empty count reads");
+        let blank: Count =
+            serde_json::from_value(Value::Object(Map::new())).expect("an empty count reads");
         Count {
             id: id.to_string(),
             src: Maybe::Set(JsNum::Text(src.to_string())),

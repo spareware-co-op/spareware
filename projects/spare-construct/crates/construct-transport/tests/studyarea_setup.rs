@@ -54,7 +54,16 @@ fn hook(p: &mut Project, name: &str) {
     match name {
         "dupUserZone" => {
             let sc = &mut p.scenarios[0];
-            let z0 = sc.zones.values().find(|z| z.existing.is_true() && z.src.get().and_then(Value::as_str) == Some("existing-lu") && z.kind.is("zone")).cloned().expect("a built zone");
+            let z0 = sc
+                .zones
+                .values()
+                .find(|z| {
+                    z.existing.is_true()
+                        && z.src.get().and_then(Value::as_str) == Some("existing-lu")
+                        && z.kind.is("zone")
+                })
+                .cloned()
+                .expect("a built zone");
             let (lat, lng) = (z0.lat.num(), z0.lng.num());
             let name0 = z0.name.as_str().unwrap().to_string();
             let mk = |v: Value| -> Zone { serde_json::from_value(v).expect("zone reads") };
@@ -68,7 +77,9 @@ fn hook(p: &mut Project, name: &str) {
             p.me = Maybe::Set(serde_json::from_value(Value::Object(me)).expect("factors read"));
         }
         "meUnrelated" => {
-            p.me = Maybe::Set(serde_json::from_value(json!({ "AM": { "zzz>yyy": 1.1 } })).expect("factors read"));
+            p.me = Maybe::Set(
+                serde_json::from_value(json!({ "AM": { "zzz>yyy": 1.1 } })).expect("factors read"),
+            );
         }
         other => panic!("unknown hook {other}"),
     }
@@ -130,7 +141,15 @@ fn setting_up_a_study_area_matches_the_prototype() {
             }
             let before = net.used();
             let smark = status.len();
-            let r = setup(&mut p, &mut ids, &mut net, &mut dl, &b, &opts_of(&st["opts"]), &mut |t, f| status.push(json!([t, f])));
+            let r = setup(
+                &mut p,
+                &mut ids,
+                &mut net,
+                &mut dl,
+                &b,
+                &opts_of(&st["opts"]),
+                &mut |t, f| status.push(json!([t, f])),
+            );
             match r {
                 Ok(out) => {
                     ck.same(&format!("{label}: no error"), &st["error"].is_null(), &true);
@@ -139,9 +158,23 @@ fn setting_up_a_study_area_matches_the_prototype() {
                 }
                 Err(e) => ck.same(&format!("{label}: error"), &json!(e), &st["error"]),
             }
-            ck.same(&format!("{label}: requests"), &vec![before, net.used()], &vec![st["requests"][0].as_u64().unwrap() as usize, st["requests"][1].as_u64().unwrap() as usize]);
-            let (s0, s1) = (st["status"][0].as_u64().unwrap() as usize, st["status"][1].as_u64().unwrap() as usize);
-            ck.check(&format!("{label}: progress"), &json!(status[smark..]), &json!(case["status"].as_array().unwrap()[s0..s1]));
+            ck.same(
+                &format!("{label}: requests"),
+                &vec![before, net.used()],
+                &vec![
+                    st["requests"][0].as_u64().unwrap() as usize,
+                    st["requests"][1].as_u64().unwrap() as usize,
+                ],
+            );
+            let (s0, s1) = (
+                st["status"][0].as_u64().unwrap() as usize,
+                st["status"][1].as_u64().unwrap() as usize,
+            );
+            ck.check(
+                &format!("{label}: progress"),
+                &json!(status[smark..]),
+                &json!(case["status"].as_array().unwrap()[s0..s1]),
+            );
             ck.check(&format!("{label}: results"), &res_summary(&p), &st["res"]);
         }
         ck.same(&format!("{name}: every request made"), &net.done(), &true);

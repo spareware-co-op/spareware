@@ -1,12 +1,14 @@
 //! ANOP indicative multimodal level of service and fit (compliance-extra.js section 10), with its CSV export and report section.
 
-use super::ctx::{active_sc, assumption, data, disc, esc, nn, pair, periods_of, res_of, stamped, today};
+use super::ctx::{
+    active_sc, assumption, data, disc, esc, nn, pair, periods_of, res_of, stamped, today,
+};
 use super::options::util::{label, or_s, or_v, tbl_th, unique, xs};
 use crate::compliance::data::x as xdata;
 use crate::compliance::html::{ReportCtx, rt, th};
 use crate::compliance::jv::{Jx, NULL, V, csv, jobj};
-use crate::compliance::rx::rx;
 use crate::compliance::net;
+use crate::compliance::rx::rx;
 use crate::graph::js_sort_by;
 use crate::jsnum::{math_max, math_min, math_round, number_to_js_string};
 use crate::util::{self, fmt};
@@ -17,13 +19,21 @@ pub const MODES: [&str; 5] = ["walk", "cycle", "pt", "freight", "gt"];
 /// `SCORE[letter]`: the number a level of service letter stands for (NaN for anything else).
 fn score(letter: &str) -> f64 {
     let t = xdata("STD.anop.score");
-    if t.has(letter) { t.g(letter).n() } else { f64::NAN }
+    if t.has(letter) {
+        t.g(letter).n()
+    } else {
+        f64::NAN
+    }
 }
 
 /// `fromScore(s)`: the level of service letter for a score (rounded and kept between 0 and 7; "F" when none matches).
 fn from_score(s: f64) -> String {
     let want = math_max(0.0, math_min(7.0, math_round(s)));
-    xdata("STD.anop.score").entries().into_iter().find(|(_, v)| v.n() == want).map_or_else(|| "F".to_string(), |(k, _)| k.to_string())
+    xdata("STD.anop.score")
+        .entries()
+        .into_iter()
+        .find(|(_, v)| v.n() == want)
+        .map_or_else(|| "F".to_string(), |(k, _)| k.to_string())
 }
 
 /// `colOf(lu)`: the column of the preferred level of service table for a land use.
@@ -84,7 +94,13 @@ pub fn hier_of(sc: &V, c: &V, mode: &str) -> V {
         let fc = l.g("fc");
         let mut h: Option<&str> = None;
         fc_len += w;
-        let text = |k: &str| if fc.g(k).t() { fc.g(k).s() } else { String::new() };
+        let text = |k: &str| {
+            if fc.g(k).t() {
+                fc.g(k).s()
+            } else {
+                String::new()
+            }
+        };
         if mode == "gt" {
             let v = text("gt");
             h = if rx("motorway", "i").test(&v) {
@@ -152,8 +168,19 @@ pub fn hier_of(sc: &V, c: &V, mode: &str) -> V {
         let share = if all > 0.0 { fc_len / all } else { 1.0 };
         let src = format!(
             "AT Future Connect{}{}",
-            if share < 0.995 { format!(" ({}% of the corridor length has Future Connect data; the rest is left out)", number_to_js_string(math_round(share * 100.0))) } else { String::new() },
-            if road_fill > 0.0 { "; road class where Future Connect gives no general traffic class" } else { "" }
+            if share < 0.995 {
+                format!(
+                    " ({}% of the corridor length has Future Connect data; the rest is left out)",
+                    number_to_js_string(math_round(share * 100.0))
+                )
+            } else {
+                String::new()
+            },
+            if road_fill > 0.0 {
+                "; road class where Future Connect gives no general traffic class"
+            } else {
+                ""
+            }
         );
         return jobj! { "h" => best, "src" => src };
     }
@@ -198,7 +225,10 @@ pub fn anop_pref(mode: &str, h: &str, lu: &str) -> V {
     if adj != 0.0 {
         pref = from_score(math_max(1.0, score(&pref) - adj));
     }
-    let acc = from_score(math_max(1.0, score(&pref) - if score(&pref) >= score("B") { 2.0 } else { 1.0 }));
+    let acc = from_score(math_max(
+        1.0,
+        score(&pref) - if score(&pref) >= score("B") { 2.0 } else { 1.0 },
+    ));
     jobj! { "pref" => pref, "acc" => acc, "adj" => adj }
 }
 
@@ -228,7 +258,11 @@ fn band_rel(r: &V) -> Option<String> {
 
 /// `worseOf(...ls)`: the worst (lowest scoring) of the levels of service that are set.
 fn worse_of(ls: &[Option<String>]) -> Option<String> {
-    let mut v: Vec<&String> = ls.iter().filter_map(|x| x.as_ref()).filter(|x| !x.is_empty()).collect();
+    let mut v: Vec<&String> = ls
+        .iter()
+        .filter_map(|x| x.as_ref())
+        .filter(|x| !x.is_empty())
+        .collect();
     js_sort_by(&mut v, |a, b| score(a) - score(b));
     v.first().map(|x| x.to_string())
 }
@@ -241,13 +275,25 @@ struct Posted {
 
 fn posted_of(l: &V) -> Posted {
     if l.g("speedLimit").n() > 0.0 {
-        Posted { v: l.g("speedLimit").n(), src: "legal limit" }
+        Posted {
+            v: l.g("speedLimit").n(),
+            src: "legal limit",
+        }
     } else if l.g("nslr").t() && l.g("nslr").g("v").n() > 0.0 {
-        Posted { v: l.g("nslr").g("v").n(), src: "NSLR" }
+        Posted {
+            v: l.g("nslr").g("v").n(),
+            src: "NSLR",
+        }
     } else if l.g("speed").n() > 0.0 {
-        Posted { v: l.g("speed").n(), src: "modelled link speed" }
+        Posted {
+            v: l.g("speed").n(),
+            src: "modelled link speed",
+        }
     } else {
-        Posted { v: super::ctx::class_of(l.g("cls")).g("speed").n(), src: "road-class default speed" }
+        Posted {
+            v: super::ctx::class_of(l.g("cls")).g("speed").n(),
+            src: "road-class default speed",
+        }
     }
 }
 
@@ -269,16 +315,30 @@ pub fn corridor_axis(sc: &V, ids: &[String]) -> Option<f64> {
     if pts.len() < 2 {
         return None;
     }
-    let far = |from: &util::LatLng| pts.iter().fold(pts[0], |b, p| if util::dist(from, p) > util::dist(from, &b) { *p } else { b });
+    let far = |from: &util::LatLng| {
+        pts.iter().fold(pts[0], |b, p| {
+            if util::dist(from, p) > util::dist(from, &b) {
+                *p
+            } else {
+                b
+            }
+        })
+    };
     let a = far(&pts[0]);
     let b = far(&a);
-    if util::dist(&a, &b) > 1.0 { Some(util::bearing(&a, &b)) } else { None }
+    if util::dist(&a, &b) > 1.0 {
+        Some(util::bearing(&a, &b))
+    } else {
+        None
+    }
 }
 
 /// `bound(b)`: the compass name of a heading ("Northbound").
 fn bound(b: f64) -> String {
     let i = math_round((((b % 360.0) + 360.0) % 360.0) / 90.0) % 4.0;
-    ["Northbound", "Eastbound", "Southbound", "Westbound"].get(i as usize).map_or_else(|| "undefined".to_string(), |s| s.to_string())
+    ["Northbound", "Eastbound", "Southbound", "Westbound"]
+        .get(i as usize)
+        .map_or_else(|| "undefined".to_string(), |s| s.to_string())
 }
 
 /// `corridorSpeed(sc, res, ids, pt)`: the speed as a share of the posted limit, per direction: `Σlength / Σ(link time incl. junction delay)` against the
@@ -301,10 +361,22 @@ pub fn corridor_speed(sc: &V, res: &V, ids: &[String], pt: bool) -> V {
             if !x.t() || !(x.g("len").n() > 0.0) {
                 continue;
             }
-            let b = if k == "ab" { b_ab } else { (b_ab + 180.0) % 360.0 };
-            let i = if axis.is_none_or(|a| util::ang_diff(b, a) <= 90.0) { 0 } else { 1 };
+            let b = if k == "ab" {
+                b_ab
+            } else {
+                (b_ab + 180.0) % 360.0
+            };
+            let i = if axis.is_none_or(|a| util::ang_diff(b, a) <= 90.0) {
+                0
+            } else {
+                1
+            };
             acc[i].0 += x.g("len").n();
-            acc[i].1 += if pt && l.g("busLane").t() { x.g("ff").n() } else { x.g("t").n() };
+            acc[i].1 += if pt && l.g("busLane").t() {
+                x.g("ff").n()
+            } else {
+                x.g("t").n()
+            };
             acc[i].2 += x.g("len").n() * ps.v;
             if !srcs.iter().any(|s| s == ps.src) {
                 srcs.push(ps.src.to_string());
@@ -346,7 +418,10 @@ fn dir_text(g: &V, suffix: &str) -> String {
         .map(|d| {
             format!(
                 "{} {}% ({} of {} km/h, {})",
-                d.g("name").s(), super::ctx::num(d.g("pct"), 0), super::ctx::num(d.g("spd"), 0), super::ctx::num(d.g("limit"), 0),
+                d.g("name").s(),
+                super::ctx::num(d.g("pct"), 0),
+                super::ctx::num(d.g("spd"), 0),
+                super::ctx::num(d.g("limit"), 0),
                 band_speed(Some(d.g("pct").n())).unwrap_or_else(|| "null".to_string())
             )
         })
@@ -354,9 +429,21 @@ fn dir_text(g: &V, suffix: &str) -> String {
     format!(
         "{}{}{}{}",
         dirs.join("; "),
-        if g.g("dirs").jlen() > 1 { "; worse direction used" } else { "" },
+        if g.g("dirs").jlen() > 1 {
+            "; worse direction used"
+        } else {
+            ""
+        },
         suffix,
-        if g.g("fallback").t() { format!("; posted limit from the {} where no NSLR limit is loaded ({})", g.g("limitSrc").s(), assumption()) } else { String::new() }
+        if g.g("fallback").t() {
+            format!(
+                "; posted limit from the {} where no NSLR limit is loaded ({})",
+                g.g("limitSrc").s(),
+                assumption()
+            )
+        } else {
+            String::new()
+        }
     )
 }
 
@@ -367,11 +454,27 @@ pub fn anop_los(sc: &V, res: &V, c: &V) -> V {
     let ids = ids_of(c);
     let g = corridor_speed(sc, res, &ids, false);
     let p = corridor_speed(sc, res, &ids, true);
-    let rel = if c.g("rel").t() { c.g("rel").clone() } else { V::object() };
+    let rel = if c.g("rel").t() {
+        c.g("rel").clone()
+    } else {
+        V::object()
+    };
     let gpct = if g.t() { Some(g.g("pct").n()) } else { None };
     let ppct = if p.t() { Some(p.g("pct").n()) } else { None };
-    let rel_text = |k: &str| if band_rel(rel.g(k)).is_some() { format!("85th/median {}", rel.g(k).s()) } else { "reliability N/A".to_string() };
-    let dirs_of = |x: &V| if x.t() { x.g("dirs").clone() } else { V::Array(vec![]) };
+    let rel_text = |k: &str| {
+        if band_rel(rel.g(k)).is_some() {
+            format!("85th/median {}", rel.g(k).s())
+        } else {
+            "reliability N/A".to_string()
+        }
+    };
+    let dirs_of = |x: &V| {
+        if x.t() {
+            x.g("dirs").clone()
+        } else {
+            V::Array(vec![])
+        }
+    };
     let gt = jobj! {
         "los" => worse_of(&[band_speed(gpct), band_rel(rel.g("gt"))]), "metric" => dir_text(&g, ""), "dirs" => dirs_of(&g), "rel" => rel_text("gt"),
     };
@@ -400,13 +503,24 @@ pub fn anop_los(sc: &V, res: &V, c: &V) -> V {
     let sig = unique(sig);
     let crossings = nn(c.g("crossings"));
     let nx = crossings.map_or(sig.len() as f64, |_| c.g("crossings").n());
-    let half = if c.g("centre").t() || c.g("school").t() { 0.5 } else { 1.0 };
+    let half = if c.g("centre").t() || c.g("school").t() {
+        0.5
+    } else {
+        1.0
+    };
     let spacing = len / math_max(1.0, nx + 1.0);
     let letters = xdata("LETTERS");
-    let sp = xdata("STD.anop.crossBands").items().iter().position(|b| spacing <= b.n() * half);
+    let sp = xdata("STD.anop.crossBands")
+        .items()
+        .iter()
+        .position(|b| spacing <= b.n() * half);
     let wl1 = letters.ix(sp.unwrap_or(5)).s();
     let dl: Option<String> = nn(c.g("crossDelay")).map(|d| {
-        let i = xdata("STD.anop.crossDelay").items().iter().position(|b| d < b.n()).unwrap_or(5);
+        let i = xdata("STD.anop.crossDelay")
+            .items()
+            .iter()
+            .position(|b| d < b.n())
+            .unwrap_or(5);
         letters.ix(i).s()
     });
     let walk = jobj! {
@@ -448,8 +562,17 @@ pub fn anop_los(sc: &V, res: &V, c: &V) -> V {
 /// none, or lowers the total deficit against the preferred level without raising any mode's; "Moderate" when it does either of those; otherwise "Low".
 /// None when no mode could be assessed.
 pub fn anop_fit(modes: &[V]) -> Option<String> {
-    let m: Vec<(f64, f64, f64)> =
-        modes.iter().filter(|x| x.g("base").t() && x.g("pref").t() && x.g("proj").t()).map(|x| (score(&x.g("base").s()), score(&x.g("pref").s()), score(&x.g("proj").s()))).collect();
+    let m: Vec<(f64, f64, f64)> = modes
+        .iter()
+        .filter(|x| x.g("base").t() && x.g("pref").t() && x.g("proj").t())
+        .map(|x| {
+            (
+                score(&x.g("base").s()),
+                score(&x.g("pref").s()),
+                score(&x.g("proj").s()),
+            )
+        })
+        .collect();
     if m.is_empty() {
         return None;
     }
@@ -478,7 +601,10 @@ pub fn anop_corridors(p: &V) -> V {
     let sc = active_sc(p);
     let mut by: Vec<(String, Vec<&V>)> = Vec::new();
     for l in sc.g("links").vals() {
-        if l.g("name").t() && !l.g("status").eq_s("closed") && (l.g("cls").eq_s("arterial") || l.g("cls").eq_s("collector")) {
+        if l.g("name").t()
+            && !l.g("status").eq_s("closed")
+            && (l.g("cls").eq_s("arterial") || l.g("cls").eq_s("collector"))
+        {
             let name = l.g("name").s();
             match by.iter_mut().find(|x| x.0 == name) {
                 Some(x) => x.1.push(l),
@@ -516,10 +642,17 @@ pub fn anop(p: &V) -> V {
     let labels = xdata("MODE_LABEL");
     let lu_labels = xdata("LU");
     for c in anop_corridors(p).items() {
-        for per in periods_of(pr.opt).into_iter().filter(|x| res_of(pr.base, x).is_some()) {
+        for per in periods_of(pr.opt)
+            .into_iter()
+            .filter(|x| res_of(pr.base, x).is_some())
+        {
             let lb = anop_los(pr.base, res_of(pr.base, per).unwrap_or(&NULL), c);
             let lj = anop_los(pr.opt, res_of(pr.opt, per).unwrap_or(&NULL), c);
-            let lu = if c.g("landUse").t() { c.g("landUse").s() } else { "other".to_string() };
+            let lu = if c.g("landUse").t() {
+                c.g("landUse").s()
+            } else {
+                "other".to_string()
+            };
             let mut modes: Vec<V> = Vec::new();
             for m in MODES {
                 let hs = hier_of(pr.opt, c, m);
@@ -527,15 +660,29 @@ pub fn anop(p: &V) -> V {
                 let pf = anop_pref(m, &h, &lu);
                 let (base, proj) = (lb.g(m).g("los"), lj.g(m).g("los"));
                 let pref = pf.g("pref");
-                let defs = |x: &V| if pref.t() && x.t() { V::Number(math_max(0.0, score(&pref.s()) - score(&x.s()))) } else { V::Null };
+                let defs = |x: &V| {
+                    if pref.t() && x.t() {
+                        V::Number(math_max(0.0, score(&pref.s()) - score(&x.s())))
+                    } else {
+                        V::Null
+                    }
+                };
                 let hl = hier_label(&h);
                 modes.push(jobj! {
                     "mode" => m, "label" => labels.g(m), "hier" => or_v(&hl, hs.g("h")), "hierKey" => hs.g("h"), "hierSrc" => hs.g("src"), "pref" => or_v(pref, &V::Null), "acc" => or_v(pf.g("acc"), &V::Null),
                     "base" => base, "proj" => proj, "defBase" => defs(base), "defProj" => defs(proj), "metric" => lj.g(m).g("metric"), "baseMetric" => lb.g(m).g("metric"),
                 });
             }
-            let fit = if same { V::Null } else { anop_fit(&modes).map_or(V::Null, V::String) };
-            let lu_key = if c.g("landUse").t() { c.g("landUse").s() } else { "other".to_string() };
+            let fit = if same {
+                V::Null
+            } else {
+                anop_fit(&modes).map_or(V::Null, V::String)
+            };
+            let lu_key = if c.g("landUse").t() {
+                c.g("landUse").s()
+            } else {
+                "other".to_string()
+            };
             let mut row = jobj! { "corridor" => c, "period" => per, "modes" => V::Array(modes), "fit" => fit, "fitText" => if same { no_fit() } else { String::new() } };
             // an unknown land use has no label: the field stays out, as an undefined one does
             if lu_labels.has(&lu_key) {
@@ -555,17 +702,47 @@ pub fn anop_csv(p: &V) -> String {
     let cxd = data(p);
     let cx = cxd.g("anop");
     let r = anop(p);
-    let mut head: Vec<V> = ["project", "location", "option", "period", "date", "assessor", "walk_net", "cycle_net", "pt_net", "freight_net", "gt_net", "land_use"].iter().map(|s| V::String(s.to_string())).collect();
+    let mut head: Vec<V> = [
+        "project",
+        "location",
+        "option",
+        "period",
+        "date",
+        "assessor",
+        "walk_net",
+        "cycle_net",
+        "pt_net",
+        "freight_net",
+        "gt_net",
+        "land_use",
+    ]
+    .iter()
+    .map(|s| V::String(s.to_string()))
+    .collect();
     for pre in ["base_los_", "manual_pref_", "project_los_", "notes_"] {
         head.extend(MODES.iter().map(|m| V::String(format!("{pre}{m}"))));
     }
     let mut rows: Vec<Vec<V>> = vec![head];
     for x in r.g("rows").items() {
-        let mode_of = |m: &str| x.g("modes").items().iter().find(|q| q.g("mode").eq_s(m)).unwrap_or(&NULL);
+        let mode_of = |m: &str| {
+            x.g("modes")
+                .items()
+                .iter()
+                .find(|q| q.g("mode").eq_s(m))
+                .unwrap_or(&NULL)
+        };
         let mut row: Vec<V> = vec![
-            if cx.g("project").t() { cx.g("project").clone() } else { or_s(p.g("name"), "") },
+            if cx.g("project").t() {
+                cx.g("project").clone()
+            } else {
+                or_s(p.g("name"), "")
+            },
             x.g("corridor").g("name").clone(),
-            if cx.g("option").t() { cx.g("option").clone() } else { r.g("opt").clone() },
+            if cx.g("option").t() {
+                cx.g("option").clone()
+            } else {
+                r.g("opt").clone()
+            },
             x.g("period").clone(),
             V::String(today()),
             or_s(cx.g("assessor"), ""),
@@ -575,7 +752,12 @@ pub fn anop_csv(p: &V) -> String {
         row.extend(MODES.iter().map(|m| or_s(mode_of(m).g("base"), "N/A")));
         row.extend(MODES.iter().map(|_| V::String("Use ANOP".into())));
         row.extend(MODES.iter().map(|m| or_s(mode_of(m).g("proj"), "N/A")));
-        row.extend(MODES.iter().map(|m| V::String(format!("{}; indicative Spare Construct estimate", mode_of(m).g("metric").s()))));
+        row.extend(MODES.iter().map(|m| {
+            V::String(format!(
+                "{}; indicative Spare Construct estimate",
+                mode_of(m).g("metric").s()
+            ))
+        }));
         rows.push(row);
     }
     csv(&rows)
@@ -583,30 +765,76 @@ pub fn anop_csv(p: &V) -> String {
 
 /// `anopTable(a)`: Table ANOP-1: the multimodal level of service and fit of each corridor.
 pub fn anop_table(a: &V) -> String {
-    let head = [th("Spare Construct"), th("Period"), th("Mode"), th("Future Connect"), th("Baseline LoS"), th("Preferred"), th("Acceptable"), th("With proposal"), th("\u{394} deficit"), th("Fit")];
+    let head = [
+        th("Spare Construct"),
+        th("Period"),
+        th("Mode"),
+        th("Future Connect"),
+        th("Baseline LoS"),
+        th("Preferred"),
+        th("Acceptable"),
+        th("With proposal"),
+        th("\u{394} deficit"),
+        th("Fit"),
+    ];
     let mut rows: Vec<Vec<String>> = Vec::new();
     for r in a.g("rows").items() {
         for (i, m) in r.g("modes").items().iter().enumerate() {
             let na = |v: &V, d: &str| esc(&or_s(v, d));
             rows.push(vec![
-                if i > 0 { String::new() } else { format!("{}<br><span class=\"note\">{}</span>", esc(r.g("corridor").g("name")), esc(r.g("landUse"))) },
-                if i > 0 { String::new() } else { esc(r.g("period")) },
-                esc(m.g("label")),
-                format!("{}<br><span class=\"note\">{}</span>", esc(m.g("hier")), esc(&or_s(m.g("hierSrc"), ""))),
-                na(m.g("base"), "N/A"),
-                na(m.g("pref"), fmt::DASH),
-                na(m.g("acc"), fmt::DASH),
-                format!("{} <span class=\"note\">{}</span>", na(m.g("proj"), "N/A"), esc(m.g("metric"))),
-                if !m.g("defBase").nullish() && !m.g("defProj").nullish() { fmt::signed(m.g("defProj").n() - m.g("defBase").n(), 0) } else { fmt::DASH.to_string() },
                 if i > 0 {
                     String::new()
                 } else {
-                    format!("<b>{}</b>", esc(&if r.g("fit").t() { r.g("fit").clone() } else { or_s(r.g("fitText"), fmt::DASH) }))
+                    format!(
+                        "{}<br><span class=\"note\">{}</span>",
+                        esc(r.g("corridor").g("name")),
+                        esc(r.g("landUse"))
+                    )
+                },
+                if i > 0 {
+                    String::new()
+                } else {
+                    esc(r.g("period"))
+                },
+                esc(m.g("label")),
+                format!(
+                    "{}<br><span class=\"note\">{}</span>",
+                    esc(m.g("hier")),
+                    esc(&or_s(m.g("hierSrc"), ""))
+                ),
+                na(m.g("base"), "N/A"),
+                na(m.g("pref"), fmt::DASH),
+                na(m.g("acc"), fmt::DASH),
+                format!(
+                    "{} <span class=\"note\">{}</span>",
+                    na(m.g("proj"), "N/A"),
+                    esc(m.g("metric"))
+                ),
+                if !m.g("defBase").nullish() && !m.g("defProj").nullish() {
+                    fmt::signed(m.g("defProj").n() - m.g("defBase").n(), 0)
+                } else {
+                    fmt::DASH.to_string()
+                },
+                if i > 0 {
+                    String::new()
+                } else {
+                    format!(
+                        "<b>{}</b>",
+                        esc(&if r.g("fit").t() {
+                            r.g("fit").clone()
+                        } else {
+                            or_s(r.g("fitText"), fmt::DASH)
+                        })
+                    )
                 },
             ]);
         }
     }
-    tbl_th(&head, rows, "Run the do-minimum and the option to assess ANOP.")
+    tbl_th(
+        &head,
+        rows,
+        "Run the do-minimum and the option to assess ANOP.",
+    )
 }
 
 fn report_anop(p: &V, ctx: Option<&dyn ReportCtx>) -> String {
@@ -617,9 +845,22 @@ fn report_anop(p: &V, ctx: Option<&dyn ReportCtx>) -> String {
     let note = format!(
         "{} Speeds per direction; the worse direction sets the LoS.{}",
         esc(a.g("label")),
-        if a.g("same").t() { format!(" {}.", esc(a.g("note"))) } else { String::new() }
+        if a.g("same").t() {
+            format!(" {}.", esc(a.g("note")))
+        } else {
+            String::new()
+        }
     );
-    format!("{}{}", rt(ctx, "Table ANOP-1 \u{b7} Multimodal level of service and fit", &anop_table(&a), &note), disc("D5", p, None))
+    format!(
+        "{}{}",
+        rt(
+            ctx,
+            "Table ANOP-1 \u{b7} Multimodal level of service and fit",
+            &anop_table(&a),
+            &note
+        ),
+        disc("D5", p, None)
+    )
 }
 
 /// The report sections of this part the report lane can ask for (see [`report`]).
@@ -628,7 +869,11 @@ pub const REPORT_IDS: &[&str] = &["compliance-extra-anop"];
 /// The HTML of a report section of this part (`REPORT[id].render(P, ctx)`); None when the id is not one of this part's. A section that has
 /// nothing to say gives an empty string, as the prototype's does.
 pub fn report(id: &str, p: &V, ctx: Option<&dyn ReportCtx>) -> Option<String> {
-    if id == "compliance-extra-anop" { Some(report_anop(p, ctx)) } else { None }
+    if id == "compliance-extra-anop" {
+        Some(report_anop(p, ctx))
+    } else {
+        None
+    }
 }
 
 /// The exports of this part (`EXPORTS`, ids as the prototype registers them: "compliance-extra-<id>").
@@ -637,10 +882,18 @@ pub const EXPORT_IDS: &[&str] = &["compliance-extra-anop"];
 /// The text of an export of this part (`build(P)`); None when the id is not one of this part's. The export is the ANOP inputs stamped as a hand-over
 /// file for the AT ANOP tool v10.2.
 pub fn export_build(id: &str, p: &V) -> Option<String> {
-    if id == "compliance-extra-anop" { Some(stamped(&anop_csv(p), p, Some("the AT ANOP tool v10.2"))) } else { None }
+    if id == "compliance-extra-anop" {
+        Some(stamped(&anop_csv(p), p, Some("the AT ANOP tool v10.2")))
+    } else {
+        None
+    }
 }
 
 /// Whether an export of this part is offered for the project (`enabled()`); None when the id is not one of this part's.
 pub fn export_enabled(id: &str, p: &V) -> Option<bool> {
-    if id == "compliance-extra-anop" { Some(anop(p).g("rows").jlen() > 0) } else { None }
+    if id == "compliance-extra-anop" {
+        Some(anop(p).g("rows").jlen() > 0)
+    } else {
+        None
+    }
 }

@@ -1,16 +1,17 @@
 //! Crash history (section 2.7), the sites it is worked out for, and the future receiving environment (2.8).
 
+use super::Rep;
 use super::calc::{collective_band, personal_band, personal_risk, pof, severity_index};
 use super::consts::{PERIODS, attrib, cec, hrig};
-use super::ctx::{Ctx, FigRequest, Row, Tbl, TableOpts, disc, h, hn, note, para};
+use super::ctx::{Ctx, FigRequest, Row, TableOpts, Tbl, disc, h, hn, note, para};
 use super::js;
 use super::rfmt;
 use super::sections_env::{CrashLeg, CrashSite, control_label, external_legs, study_bounds};
 use super::sections_front::int_f;
 use super::shared::{
-    assessed_sites, cnum, crash_years, ctext, cx, junction_groups, kit_junction_name, plural, speed_of,
+    assessed_sites, cnum, crash_years, ctext, cx, junction_groups, kit_junction_name, plural,
+    speed_of,
 };
-use super::Rep;
 use crate::edit::json::JsonValue;
 use crate::graph::{build_graph, js_sort_by, zone_class};
 use crate::jsnum::{JsNum, Maybe, math_max, number_to_js_string, value_truthy};
@@ -110,13 +111,23 @@ fn crash_sites0(c: &Ctx) -> Vec<CrashSite> {
     let groups = junction_groups(r, sc, scw, &ids);
     for g in groups.iter().take(30) {
         let id = &g.id;
-        let home = if scw_n.nodes.contains_key(id) { scw_n } else { sc_n };
+        let home = if scw_n.nodes.contains_key(id) {
+            scw_n
+        } else {
+            sc_n
+        };
         let Some(n) = home.nodes.get(id) else {
             continue;
         };
-        let members: Vec<String> = g.nodes.iter().filter(|x| home.nodes.contains_key(*x)).cloned().collect();
+        let members: Vec<String> = g
+            .nodes
+            .iter()
+            .filter(|x| home.nodes.contains_key(*x))
+            .cloned()
+            .collect();
         let pts: Vec<[f64; 2]> = members.iter().map(|x| home.nodes[x].ll()).collect();
-        let (mut f, mut s, mut m, mut nn, mut injury, mut p, mut cc, mut mc, mut dsi) = (0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0f64);
+        let (mut f, mut s, mut m, mut nn, mut injury, mut p, mut cc, mut mc, mut dsi) =
+            (0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0f64);
         let mut list: Vec<(usize, f64)> = Vec::new();
         for (ci, k) in cr.iter().enumerate() {
             let yr = js::num(js::idx(Some(k), 3));
@@ -124,7 +135,10 @@ fn crash_sites0(c: &Ctx) -> Vec<CrashSite> {
                 continue;
             }
             let at = [js::num(js::idx(Some(k), 0)), js::num(js::idx(Some(k), 1))];
-            let d = pts.iter().map(|q| util::dist(q, &at)).fold(f64::INFINITY, f64::min);
+            let d = pts
+                .iter()
+                .map(|q| util::dist(q, &at))
+                .fold(f64::INFINITY, f64::min);
             if d > hrig::RADIUS {
                 continue;
             }
@@ -153,7 +167,8 @@ fn crash_sites0(c: &Ctx) -> Vec<CrashSite> {
             }
         }
         let lg = external_legs(home, &members);
-        let links: Vec<&crate::project::Link> = lg.iter().flat_map(|x| x.links.iter().copied()).collect();
+        let links: Vec<&crate::project::Link> =
+            lg.iter().flat_map(|x| x.links.iter().copied()).collect();
         let mut legs: Vec<CrashLeg> = lg
             .iter()
             .map(|x| {
@@ -166,7 +181,11 @@ fn crash_sites0(c: &Ctx) -> Vec<CrashSite> {
                 CrashLeg {
                     id: x.links[0].id.clone(),
                     name: x.name.clone(),
-                    aadt: if sv.is_empty() { None } else { Some(sv.iter().fold(0.0, |a, b| a + b)) },
+                    aadt: if sv.is_empty() {
+                        None
+                    } else {
+                        Some(sv.iter().fold(0.0, |a, b| a + b))
+                    },
                     src: x
                         .links
                         .iter()
@@ -175,10 +194,17 @@ fn crash_sites0(c: &Ctx) -> Vec<CrashSite> {
                 }
             })
             .collect();
-        js_sort_by(&mut legs, |a, b| b.aadt.unwrap_or(0.0) - a.aadt.unwrap_or(0.0));
+        js_sort_by(&mut legs, |a, b| {
+            b.aadt.unwrap_or(0.0) - a.aadt.unwrap_or(0.0)
+        });
         let q: Vec<f64> = legs.iter().map(|l| l.aadt.unwrap_or(0.0)).collect();
         let pf = if legs.len() >= 3 && q[0] > 0.0 {
-            Some(pof(&[q[0], q[1], q[2], if legs.len() >= 4 { q[3] } else { 0.0 }]))
+            Some(pof(&[
+                q[0],
+                q[1],
+                q[2],
+                if legs.len() >= 4 { q[3] } else { 0.0 },
+            ]))
         } else {
             None
         };
@@ -201,7 +227,11 @@ fn crash_sites0(c: &Ctx) -> Vec<CrashSite> {
                 }
             }
         }
-        let base_name = if !g.name.is_empty() { g.name.clone() } else { kit_junction_name(home, id) };
+        let base_name = if !g.name.is_empty() {
+            g.name.clone()
+        } else {
+            kit_junction_name(home, id)
+        };
         out.push(CrashSite {
             id: id.clone(),
             ids: g.ids.clone(),
@@ -209,7 +239,11 @@ fn crash_sites0(c: &Ctx) -> Vec<CrashSite> {
             name: format!(
                 "{}{}",
                 base_name,
-                if zs.is_empty() { String::new() } else { format!(" (access to {})", zs.join(", ")) }
+                if zs.is_empty() {
+                    String::new()
+                } else {
+                    format!(" (access to {})", zs.join(", "))
+                }
             ),
             access: zs,
             control: n.control.as_str().map(str::to_string),
@@ -228,7 +262,9 @@ fn crash_sites0(c: &Ctx) -> Vec<CrashSite> {
             pr,
             pband: pb,
             collective: collective_band(dsi, f + s),
-            estimated: legs.iter().any(|l| l.src.as_deref().is_some_and(|s| s.contains("model"))),
+            estimated: legs
+                .iter()
+                .any(|l| l.src.as_deref().is_some_and(|s| s.contains("model"))),
             speed_flag: if speed != 0.0 && speed != cec::SPEED_REF {
                 if speed > 70.0 {
                     "urban indices used above 70 km/h; check CEC rural indices".to_string()
@@ -247,12 +283,20 @@ fn crash_sites0(c: &Ctx) -> Vec<CrashSite> {
         if names.iter().filter(|n| **n == s.name).count() > 1
             && let Some(nd) = scw_n.nodes.get(&s.id).or_else(|| sc_n.nodes.get(&s.id))
         {
-            s.name.push_str(&format!(" ({}, {})", rfmt::num(nd.lat.num(), 4), rfmt::num(nd.lng.num(), 4)));
+            s.name.push_str(&format!(
+                " ({}, {})",
+                rfmt::num(nd.lat.num(), 4),
+                rfmt::num(nd.lng.num(), 4)
+            ));
         }
     }
     js_sort_by(&mut out, |a, b| {
         let d = b.dsi_eq - a.dsi_eq;
-        if d != 0.0 && !d.is_nan() { d } else { b.injury - a.injury }
+        if d != 0.0 && !d.is_nan() {
+            d
+        } else {
+            b.injury - a.injury
+        }
     });
     out
 }
@@ -260,29 +304,47 @@ fn crash_sites0(c: &Ctx) -> Vec<CrashSite> {
 /// `accessLong(P, c)`: ten-year crash history at the development accesses, or a note saying how to load it.
 fn access_long(c: &mut Ctx) -> String {
     let r = c.r;
-    let acc: Vec<CrashSite> = crash_sites(c).into_iter().filter(|s| !s.access.is_empty()).collect();
+    let acc: Vec<CrashSite> = crash_sites(c)
+        .into_iter()
+        .filter(|s| !s.access.is_empty())
+        .collect();
     if acc.is_empty() {
         return String::new();
     }
     let long = js::get(r.data(), "crashesLong").filter(|v| v.is_array());
     let l = js::get(r.loaded(), "casLong").filter(|v| v.truthy());
     let (Some(long), Some(l)) = (long, l) else {
-        return note("For an access on a state highway, NZTA asks for ten years of crash history. Load it in the Traffic data tab (Crashes \u{203a} Ten years) to add it here; the five-year tables are not changed.", false);
+        return note(
+            "For an access on a state highway, NZTA asks for ten years of crash history. Load it in the Traffic data tab (Crashes \u{203a} Ten years) to add it here; the five-year tables are not changed.",
+            false,
+        );
     };
     let sc = c.sel.with.or(c.sel.base).unwrap_or(0);
     let sc0 = c.sel.existing.or(c.sel.base).unwrap_or(0);
     let rows: Vec<Row> = acc
         .iter()
         .map(|s| {
-            let home = if r.scenario(sc).nodes.contains_key(&s.id) { r.scenario(sc) } else { r.scenario(sc0) };
-            let pts: Vec<[f64; 2]> = s.nodes.iter().filter_map(|x| home.nodes.get(x)).map(|n| n.ll()).collect();
+            let home = if r.scenario(sc).nodes.contains_key(&s.id) {
+                r.scenario(sc)
+            } else {
+                r.scenario(sc0)
+            };
+            let pts: Vec<[f64; 2]> = s
+                .nodes
+                .iter()
+                .filter_map(|x| home.nodes.get(x))
+                .map(|n| n.ll())
+                .collect();
             let mut t = [0.0f64; 4];
             for k in js::items(Some(long)) {
                 if pts.is_empty() {
                     break;
                 }
                 let at = [js::num(js::idx(Some(k), 0)), js::num(js::idx(Some(k), 1))];
-                let d = pts.iter().map(|q| util::dist(q, &at)).fold(f64::INFINITY, f64::min);
+                let d = pts
+                    .iter()
+                    .map(|q| util::dist(q, &at))
+                    .fold(f64::INFINITY, f64::min);
                 if d <= hrig::RADIUS {
                     match js::text(js::idx(Some(k), 2)).as_str() {
                         "F" => t[0] += 1.0,
@@ -327,7 +389,10 @@ pub(crate) fn crashes(c: &mut Ctx) -> String {
     let Some(cy) = crash_years(r) else {
         return format!(
             "{}{}",
-            note("No crash data is loaded. Load NZTA CAS crashes in the Traffic data tab: AT ITA Guidelines s4.3.2 expect five full years.", true),
+            note(
+                "No crash data is loaded. Load NZTA CAS crashes in the Traffic data tab: AT ITA Guidelines s4.3.2 expect five full years.",
+                true
+            ),
             disc("D8")
         );
     };
@@ -340,8 +405,16 @@ pub(crate) fn crashes(c: &mut Ctx) -> String {
                 count_text(t.m),
                 count_text(t.nn),
                 count_text(t.n),
-                if cy.has.deaths { count_text(t.deaths) } else { fmt::DASH.to_string() },
-                if cy.has.si { count_text(t.si) } else { fmt::DASH.to_string() },
+                if cy.has.deaths {
+                    count_text(t.deaths)
+                } else {
+                    fmt::DASH.to_string()
+                },
+                if cy.has.si {
+                    count_text(t.si)
+                } else {
+                    fmt::DASH.to_string()
+                },
                 count_text(t.f + t.s),
             ],
             cls,
@@ -355,7 +428,11 @@ pub(crate) fn crashes(c: &mut Ctx) -> String {
                 format!(
                     "{}{}",
                     number_to_js_string(*y),
-                    if cy.lag_year == Some(*y) { " (may be incomplete)" } else { "" }
+                    if cy.lag_year == Some(*y) {
+                        " (may be incomplete)"
+                    } else {
+                        ""
+                    }
                 ),
                 t,
                 "",
@@ -363,11 +440,19 @@ pub(crate) fn crashes(c: &mut Ctx) -> String {
         })
         .collect();
     cr1.push(yr_row(
-        format!("<b>{}\u{2013}{} total</b>", number_to_js_string(cy.from), number_to_js_string(cy.to)),
+        format!(
+            "<b>{}\u{2013}{} total</b>",
+            number_to_js_string(cy.from),
+            number_to_js_string(cy.to)
+        ),
         &cy.total,
         "tot",
     ));
-    cr1.push(yr_row(format!("{} to date (YTD, incomplete)", number_to_js_string(cy.ytd)), &cy.y, "ytd"));
+    cr1.push(yr_row(
+        format!("{} to date (YTD, incomplete)", number_to_js_string(cy.ytd)),
+        &cy.y,
+        "ytd",
+    ));
     let sites = crash_sites(c);
     let cr2: Vec<Row> = sites
         .iter()
@@ -375,7 +460,11 @@ pub(crate) fn crashes(c: &mut Ctx) -> String {
             Row::new(vec![
                 esc(&s.name),
                 esc(&s.control.as_deref().map_or(String::new(), control_label)),
-                if s.speed != 0.0 { number_to_js_string(s.speed) } else { fmt::DASH.to_string() },
+                if s.speed != 0.0 {
+                    number_to_js_string(s.speed)
+                } else {
+                    fmt::DASH.to_string()
+                },
                 count_text(s.f),
                 count_text(s.s),
                 count_text(s.m),
@@ -390,7 +479,10 @@ pub(crate) fn crashes(c: &mut Ctx) -> String {
                     if s.speed_flag.is_empty() {
                         String::new()
                     } else {
-                        format!(" <span class=\"muted\" title=\"{}\">*</span>", esc(&s.speed_flag))
+                        format!(
+                            " <span class=\"muted\" title=\"{}\">*</span>",
+                            esc(&s.speed_flag)
+                        )
                     }
                 ),
                 esc(s.collective),
@@ -405,7 +497,11 @@ pub(crate) fn crashes(c: &mut Ctx) -> String {
                         })
                         .collect::<Vec<_>>()
                         .join(" / ")),
-                    if s.estimated { " <span class=\"muted\">(estimated)</span>" } else { "" }
+                    if s.estimated {
+                        " <span class=\"muted\">(estimated)</span>"
+                    } else {
+                        ""
+                    }
                 ),
                 match s.pof {
                     Some(p) if p != 0.0 => rfmt::num(p, 0),
@@ -413,11 +509,17 @@ pub(crate) fn crashes(c: &mut Ctx) -> String {
                 },
                 s.pr.map_or(fmt::DASH.to_string(), |p| rfmt::num(p, 1)),
                 esc(&s.pband.label),
-                if s.pband.reliable { "Yes".to_string() } else { "No (fewer than 4 injury crashes)".to_string() },
+                if s.pband.reliable {
+                    "Yes".to_string()
+                } else {
+                    "No (fewer than 4 injury crashes)".to_string()
+                },
             ])
         })
         .collect();
-    let on_roads = r.host.crashes_on_links(c.sel.existing.or(c.sel.base).unwrap_or(0));
+    let on_roads = r
+        .host
+        .crashes_on_links(c.sel.existing.or(c.sel.base).unwrap_or(0));
     let t1 = c.table(
         &format!(
             "Table CR1 \u{b7} Crashes by year and severity, {}\u{2013}{} plus YTD",
@@ -499,16 +601,24 @@ pub(crate) fn crashes(c: &mut Ctx) -> String {
         }),
     );
     let al = access_long(c);
-    let scid = r.scenario(c.sel.existing.or(c.sel.base).unwrap_or(0)).id.clone();
+    let scid = r
+        .scenario(c.sel.existing.or(c.sel.base).unwrap_or(0))
+        .id
+        .clone();
     let mut f = FigRequest {
         id: "crashes".to_string(),
-        title: "Reported crashes by severity, with the 50 m search areas of the assessed sites".to_string(),
+        title: "Reported crashes by severity, with the 50 m search areas of the assessed sites"
+            .to_string(),
         mode: "class".to_string(),
         scenario_id: scid,
         base_scenario_id: None,
         period: None,
         bounds: study_bounds(r, &c.sel),
-        show: vec![("crashes".to_string(), true), ("counts".to_string(), false), ("report-sites".to_string(), true)],
+        show: vec![
+            ("crashes".to_string(), true),
+            ("counts".to_string(), false),
+            ("report-sites".to_string(), true),
+        ],
         source: Some(attrib::CAS.to_string()),
     };
     f.source = Some(attrib::CAS.to_string());
@@ -544,7 +654,11 @@ pub(crate) fn receiving(c: &mut Ctx) -> String {
             };
             let or_dash = |k: &str| {
                 let t = s(k);
-                if t.is_empty() { fmt::DASH.to_string() } else { t }
+                if t.is_empty() {
+                    fmt::DASH.to_string()
+                } else {
+                    t
+                }
             };
             Row::new(vec![
                 esc(&s("name")),
@@ -553,11 +667,19 @@ pub(crate) fn receiving(c: &mut Ctx) -> String {
                 esc(&or_dash("funding")),
                 esc(&s("source")),
                 esc(&s("asAt")),
-                if g("included").and_then(|v| v.as_bool()) == Some(true) { "Yes".to_string() } else { "No".to_string() },
+                if g("included").and_then(|v| v.as_bool()) == Some(true) {
+                    "Yes".to_string()
+                } else {
+                    "No".to_string()
+                },
                 format!(
                     "{}{}",
                     esc(&s("reason")),
-                    if g("verify").and_then(|v| v.as_bool()) == Some(true) { " <span class=\"warn\">(verify)</span>" } else { "" }
+                    if g("verify").and_then(|v| v.as_bool()) == Some(true) {
+                        " <span class=\"warn\">(verify)</span>"
+                    } else {
+                        ""
+                    }
                 ),
             ])
         })
@@ -566,7 +688,10 @@ pub(crate) fn receiving(c: &mut Ctx) -> String {
         .filter(|i| r.scenario(*i).role.is("permitted"))
         .collect();
     let pb_text = if pb.is_empty() {
-        note("No permitted baseline scenario (RMA s104(2)) is set. If one is relied on, add a scenario with the role \"Permitted baseline\" so its effects are shown separately from the future receiving environment.", false)
+        note(
+            "No permitted baseline scenario (RMA s104(2)) is set. If one is relied on, add a scenario with the role \"Permitted baseline\" so its effects are shown separately from the future receiving environment.",
+            false,
+        )
     } else {
         para(&format!(
             "<b>Permitted baseline (RMA s104(2)):</b> {}. Under s104(2) the consent authority <i>may</i> disregard an adverse effect of the activity if a national environmental standard or the plan permits an activity with that effect; whether it does is a matter for the consent authority, not this model.",
@@ -574,7 +699,8 @@ pub(crate) fn receiving(c: &mut Ctx) -> String {
                 .map(|&i| format!(
                     "{} ({})",
                     esc(r.sc(i).name()),
-                    r.year_of(i).map_or(fmt::DASH.to_string(), number_to_js_string)
+                    r.year_of(i)
+                        .map_or(fmt::DASH.to_string(), number_to_js_string)
                 ))
                 .collect::<Vec<_>>()
                 .join(", ")

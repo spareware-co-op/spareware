@@ -12,7 +12,11 @@ use crate::compliance::{net, record};
 pub(super) fn control_label(control: &V) -> V {
     let controls = model("CONTROLS");
     let k = control.s();
-    if controls.has(&k) && controls.g(&k).t() { controls.g(&k).clone() } else { control.clone() }
+    if controls.has(&k) && controls.g(&k).t() {
+        controls.g(&k).clone()
+    } else {
+        control.clone()
+    }
 }
 
 /// `ssaPack(P)`: the Safe System Audit briefing pack (CSV): layout changes, volumes by turn, legal and operating speeds, crash history and
@@ -40,7 +44,11 @@ pub fn ssa_pack(p: &V) -> String {
         let n = sc.g("nodes").g(id);
         let legs = net::road_links(sc, id).len();
         let k = if n.g("control").eq_s("roundabout") {
-            if legs >= 4 { "roundabout4" } else { "roundabout3" }
+            if legs >= 4 {
+                "roundabout4"
+            } else {
+                "roundabout3"
+            }
         } else if legs >= 4 {
             "x4"
         } else {
@@ -49,21 +57,40 @@ pub fn ssa_pack(p: &V) -> String {
         cp.g(k).clone()
     };
     let diff = network_diff(pr.base, sc);
-    let mut layout: Vec<Vec<V>> = diff.items().iter().map(|d| vec![d.g("text").clone()]).collect();
+    let mut layout: Vec<Vec<V>> = diff
+        .items()
+        .iter()
+        .map(|d| vec![d.g("text").clone()])
+        .collect();
     for id in ch.iter().filter(|id| !pr.base.g("links").g(id).t()) {
-        layout.push(vec![V::String(format!("New road {}", link_name(sc.g("links").g(id))))]);
+        layout.push(vec![V::String(format!(
+            "New road {}",
+            link_name(sc.g("links").g(id))
+        ))]);
     }
     let volumes: Vec<Vec<V>> = match r {
         Some(r) => nodes
             .iter()
             .flat_map(|id| {
-                let turns = if r.g("turns").t() && r.g("turns").g(id).t() { r.g("turns").g(id) } else { &NULL };
+                let turns = if r.g("turns").t() && r.g("turns").g(id).t() {
+                    r.g("turns").g(id)
+                } else {
+                    &NULL
+                };
                 turns
                     .items()
                     .iter()
                     .map(|t| {
                         let ped = peds.g(id);
-                        vec![V::String(node_name(sc, id)), r.g("period").clone(), t.g("from").clone(), t.g("to").clone(), t.g("mv").clone(), r1(t.g("v")), if ped.nullish() { sv("") } else { ped.clone() }]
+                        vec![
+                            V::String(node_name(sc, id)),
+                            r.g("period").clone(),
+                            t.g("from").clone(),
+                            t.g("to").clone(),
+                            t.g("mv").clone(),
+                            r1(t.g("v")),
+                            if ped.nullish() { sv("") } else { ped.clone() },
+                        ]
                     })
                     .collect::<Vec<_>>()
             })
@@ -75,8 +102,20 @@ pub fn ssa_pack(p: &V) -> String {
         .map(|id| {
             let l = sc.g("links").g(id);
             let x = r.map_or(&NULL, |r| r.g("arcs").g(&format!("{id}:ab")));
-            let lim = |k: &str| if l.g("cx").t() && l.g("cx").g(k).t() { l.g("cx").g(k).clone() } else { sv("") };
-            vec![V::String(link_name(l)), V::Number(posted(l)), lim("limit"), lim("meanSpeed"), if x.t() { r1(x.g("spd")) } else { sv("") }]
+            let lim = |k: &str| {
+                if l.g("cx").t() && l.g("cx").g(k).t() {
+                    l.g("cx").g(k).clone()
+                } else {
+                    sv("")
+                }
+            };
+            vec![
+                V::String(link_name(l)),
+                V::Number(posted(l)),
+                lim("limit"),
+                lim("meanSpeed"),
+                if x.t() { r1(x.g("spd")) } else { sv("") },
+            ]
         })
         .collect();
     let crash_rows: Vec<Vec<V>> = match &risk {
@@ -85,7 +124,15 @@ pub fn ssa_pack(p: &V) -> String {
             .filter(|id| risk.g(id).t())
             .map(|id| {
                 let x = risk.g(id);
-                vec![V::String(link_name(sc.g("links").g(id))), x.g("crashes").clone(), x.g("F").clone(), x.g("S").clone(), x.g("M").clone(), x.g("N").clone(), x.g("dsi").clone()]
+                vec![
+                    V::String(link_name(sc.g("links").g(id))),
+                    x.g("crashes").clone(),
+                    x.g("F").clone(),
+                    x.g("S").clone(),
+                    x.g("M").clone(),
+                    x.g("N").clone(),
+                    x.g("dsi").clone(),
+                ]
             })
             .collect(),
         None => vec![],
@@ -94,7 +141,12 @@ pub fn ssa_pack(p: &V) -> String {
         .iter()
         .map(|id| {
             let n = sc.g("nodes").g(id);
-            vec![V::String(node_name(sc, id)), control_label(n.g("control")), V::Number(net::road_links(sc, id).len() as f64), conflicts(id)]
+            vec![
+                V::String(node_name(sc, id)),
+                control_label(n.g("control")),
+                V::Number(net::road_links(sc, id).len() as f64),
+                conflicts(id),
+            ]
         })
         .collect();
     pack_csv(

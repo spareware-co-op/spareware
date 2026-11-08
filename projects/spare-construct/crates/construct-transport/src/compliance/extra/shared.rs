@@ -10,13 +10,20 @@ use crate::util::fmt;
 pub fn route_time(sc: &V, ps: &[&str]) -> f64 {
     ps.iter().fold(0.0, |s, p| {
         let routes = res_of(sc, p).map_or(&crate::compliance::jv::NULL, |r| r.g("routes"));
-        s + routes.vals().iter().fold(0.0, |t, r| t + { let x = r.g("t").n(); if x.is_nan() { 0.0 } else { x } })
+        s + routes.vals().iter().fold(0.0, |t, r| {
+            t + {
+                let x = r.g("t").n();
+                if x.is_nan() { 0.0 } else { x }
+            }
+        })
     })
 }
 
 /// `kpiP(k)(sc, p)`: a network total of a scenario in a period (0 when missing).
 pub fn kpi_p(k: &str, sc: &V, p: &str) -> f64 {
-    let x = res_of(sc, p).map_or(&crate::compliance::jv::NULL, |r| r.g("kpi")).g(k);
+    let x = res_of(sc, p)
+        .map_or(&crate::compliance::jv::NULL, |r| r.g("kpi"))
+        .g(k);
     if x.t() { x.n() } else { 0.0 }
 }
 
@@ -27,7 +34,14 @@ pub fn route_p(sc: &V, p: &str) -> f64 {
 
 /// `perPeriod(base, opt, f, ps, d, unit)`: a difference (option minus base) for each modelled peak hour, kept per period (AM and PM are
 /// never added together): `{ by: { AM, PM }, mean, text }` where text reads "AM -720.7, PM -482.7 veh·h per peak hour".
-pub fn per_period(base: &V, opt: &V, f: &dyn Fn(&V, &str) -> f64, ps: &[&str], d: usize, unit: &str) -> V {
+pub fn per_period(
+    base: &V,
+    opt: &V,
+    f: &dyn Fn(&V, &str) -> f64,
+    ps: &[&str],
+    d: usize,
+    unit: &str,
+) -> V {
     let mut by = V::object();
     let mut vals: Vec<f64> = Vec::new();
     for p in ps {
@@ -37,13 +51,33 @@ pub fn per_period(base: &V, opt: &V, f: &dyn Fn(&V, &str) -> f64, ps: &[&str], d
             vals.push(x);
         }
     }
-    let mean = if vals.is_empty() { V::Null } else { V::Number(vals.iter().fold(0.0, |s, x| s + x) / vals.len() as f64) };
-    let text = if vals.is_empty() { fmt::DASH.to_string() } else { format!("{}{}", pp_entries(&by, d), if unit.is_empty() { String::new() } else { format!(" {unit}") }) };
+    let mean = if vals.is_empty() {
+        V::Null
+    } else {
+        V::Number(vals.iter().fold(0.0, |s, x| s + x) / vals.len() as f64)
+    };
+    let text = if vals.is_empty() {
+        fmt::DASH.to_string()
+    } else {
+        format!(
+            "{}{}",
+            pp_entries(&by, d),
+            if unit.is_empty() {
+                String::new()
+            } else {
+                format!(" {unit}")
+            }
+        )
+    };
     jobj! { "by" => by, "mean" => mean, "text" => text }
 }
 
 fn pp_entries(by: &V, d: usize) -> String {
-    by.entries().iter().map(|(p, x)| format!("{} {}", p, fmt::signed(x.n(), d))).collect::<Vec<_>>().join(", ")
+    by.entries()
+        .iter()
+        .map(|(p, x)| format!("{} {}", p, fmt::signed(x.n(), d)))
+        .collect::<Vec<_>>()
+        .join(", ")
 }
 
 /// `negPP(pp)`: a per-period difference with every value negated (`{ by, mean }`).
@@ -60,7 +94,15 @@ pub fn pp_text(pp: &V, d: usize, unit: &str) -> String {
     if pp.g("by").keys().is_empty() {
         fmt::DASH.to_string()
     } else {
-        format!("{}{}", pp_entries(pp.g("by"), d), if unit.is_empty() { String::new() } else { format!(" {unit}") })
+        format!(
+            "{}{}",
+            pp_entries(pp.g("by"), d),
+            if unit.is_empty() {
+                String::new()
+            } else {
+                format!(" {unit}")
+            }
+        )
     }
 }
 
@@ -89,7 +131,10 @@ pub fn changed_links(a: &V, b: &V) -> Vec<String> {
     }
     for n in b.g("nodes").vals() {
         let o = a.g("nodes").g(&n.g("id").s());
-        if o.t() && (!o.g("control").strict_eq(n.g("control")) || (n.g("upgrade").t() && !o.g("upgrade").t())) {
+        if o.t()
+            && (!o.g("control").strict_eq(n.g("control"))
+                || (n.g("upgrade").t() && !o.g("upgrade").t()))
+        {
             for l in net::road_links(b, &n.g("id").s()) {
                 add(l.g("id").s());
             }
@@ -108,18 +153,32 @@ pub fn network_diff(a: &V, b: &V) -> V {
     let controls = data::m("CONTROLS");
     let cname = |c: &V| -> String {
         let k = c.s();
-        if controls.has(&k) && controls.g(&k).t() { controls.g(&k).s() } else { k }
+        if controls.has(&k) && controls.g(&k).t() {
+            controls.g(&k).s()
+        } else {
+            k
+        }
     };
     for n in b.g("nodes").vals() {
         let o = a.g("nodes").g(&n.g("id").s());
-        if o.t() && (!o.g("control").strict_eq(n.g("control")) || (n.g("upgrade").t() && !o.g("upgrade").t())) {
-            let was = if !o.g("control").strict_eq(n.g("control")) { format!(" (was {})", cname(o.g("control")).to_lowercase()) } else { String::new() };
+        if o.t()
+            && (!o.g("control").strict_eq(n.g("control"))
+                || (n.g("upgrade").t() && !o.g("upgrade").t()))
+        {
+            let was = if !o.g("control").strict_eq(n.g("control")) {
+                format!(" (was {})", cname(o.g("control")).to_lowercase())
+            } else {
+                String::new()
+            };
             out.push(jobj! { "kind" => "node", "id" => n.g("id"), "text" => format!("{} at {}{}", cname(n.g("control")), node_name(b, &n.g("id").s()), was) });
         }
     }
     for l in b.g("links").vals() {
         let o = a.g("links").g(&l.g("id").s());
-        let lanes = |x: &V| (x.g("lanesAB").n() as i64 as i32 | 0) as f64 + (x.g("lanesBA").n() as i64 as i32 | 0) as f64;
+        let lanes = |x: &V| {
+            (x.g("lanesAB").n() as i64 as i32 | 0) as f64
+                + (x.g("lanesBA").n() as i64 as i32 | 0) as f64
+        };
         if !o.t() && !l.g("status").eq_s("closed") {
             out.push(jobj! { "kind" => "link", "id" => l.g("id"), "text" => format!("New road: {} ({})", link_name(l), fmt::len(net::len(b, l))) });
         } else if o.t() && lanes(l) > lanes(o) {
@@ -133,12 +192,18 @@ pub fn network_diff(a: &V, b: &V) -> V {
 
 /// `crashesOn(P, sc, ids)`: the crashes and DSI crashes recorded on roads (`{ crashes, dsi }`), or null when no crash analysis is loaded.
 pub fn crashes_on(p: &V, sc: &V, ids: &[String]) -> V {
-    let Some(risk) = engine::link_risk(p, sc) else { return V::Null };
+    let Some(risk) = engine::link_risk(p, sc) else {
+        return V::Null;
+    };
     let (mut c, mut d) = (0.0, 0.0);
     for id in ids {
         let r = risk.g(id);
         if r.t() {
-            c += if r.g("crashes").t() { r.g("crashes").n() } else { 0.0 };
+            c += if r.g("crashes").t() {
+                r.g("crashes").n()
+            } else {
+                0.0
+            };
             d += if r.g("dsi").t() { r.g("dsi").n() } else { 0.0 };
         }
     }
@@ -147,7 +212,10 @@ pub fn crashes_on(p: &V, sc: &V, ids: &[String]) -> V {
 
 /// `econOf(P, base, sc)`: the economics of an option against the do-minimum for the first period both were run in, or null.
 pub fn econ_of(p: &V, base: &V, sc: &V) -> V {
-    let per = periods_of(sc).into_iter().find(|x| res_of(base, x).is_some()).unwrap_or("AM");
+    let per = periods_of(sc)
+        .into_iter()
+        .find(|x| res_of(base, x).is_some())
+        .unwrap_or("AM");
     engine::econ(p, base, sc, per)
 }
 
@@ -155,7 +223,13 @@ pub fn econ_of(p: &V, base: &V, sc: &V) -> V {
 pub fn dev_mix(sc: &V) -> String {
     let mut rows: Vec<V> = super::ctx::dev_zones(sc)
         .iter()
-        .map(|z| V::Array(vec![z.g("id").clone(), z.g("lu").clone(), V::Number(super::ctx::stage_of(z, sc))]))
+        .map(|z| {
+            V::Array(vec![
+                z.g("id").clone(),
+                z.g("lu").clone(),
+                V::Number(super::ctx::stage_of(z, sc)),
+            ])
+        })
         .collect();
     // `.sort()` compares the rows as text
     rows.sort_by_key(|r| r.js_string());

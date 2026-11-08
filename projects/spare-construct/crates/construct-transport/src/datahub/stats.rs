@@ -88,7 +88,11 @@ pub fn regression(x: &[f64], y: &[f64]) -> Regression {
         }
         out.b0 = Some(b0);
         out.r2_origin_centred = if st > 0.0 { Some(1.0 - se / st) } else { None };
-        out.r2_origin_excel = if syy > 0.0 { Some(1.0 - se / syy) } else { None };
+        out.r2_origin_excel = if syy > 0.0 {
+            Some(1.0 - se / syy)
+        } else {
+            None
+        };
     }
     let (mut cxy, mut cxx, mut cyy) = (0.0f64, 0.0f64, 0.0f64);
     for i in 0..n {
@@ -112,7 +116,10 @@ pub fn regression(x: &[f64], y: &[f64]) -> Regression {
 /// `DataHub.REG_LABELS`: the names of the regression statistics.
 pub const REG_LABELS: [(&str, &str); 6] = [
     ("b0", "Slope through the origin"),
-    ("r2OriginCentred", "R\u{b2} through the origin (centred; TMDG test)"),
+    (
+        "r2OriginCentred",
+        "R\u{b2} through the origin (centred; TMDG test)",
+    ),
     ("r2OriginExcel", "R\u{b2} through the origin (Excel)"),
     ("r2Ols", "R\u{b2} (OLS)"),
     ("olsSlope", "OLS slope"),
@@ -198,8 +205,12 @@ pub fn calibration(
             continue;
         }
         let Some(mt) = m.get(&c.id) else { continue };
-        let Some(pv) = period_vol(c, period, s) else { continue };
-        let Some(model) = model_flow(res, mt) else { continue };
+        let Some(pv) = period_vol(c, period, s) else {
+            continue;
+        };
+        let Some(model) = model_flow(res, mt) else {
+            continue;
+        };
         let obs = pv.v;
         rows.push(CalibRow {
             c: c.clone(),

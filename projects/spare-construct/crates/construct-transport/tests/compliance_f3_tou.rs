@@ -37,11 +37,37 @@ fn time_of_use_matches_the_prototype() {
                 let sc = p.g("scenarios").ix(args.g("sci").n() as usize);
                 let per = args.g("per").s();
                 let g = engine::build_graph(&p, sc, None);
-                let zs: Vec<String> = sc.g("zones").keys().into_iter().map(|k| k.to_string()).collect();
-                let charged = if args.g("charged").t() { Some(tou::tou_charged(sc, &polygon_of(args.g("poly")), "cordon")) } else { None };
-                let applied: Option<HashMap<String, f64>> =
-                    if args.g("applied").t() { Some(args.g("applied").entries().into_iter().map(|(k, v)| (k.to_string(), v.n())).collect()) } else { None };
-                let got = tou::tou_skim(&p, &g, Some(sc.g("res").g(&per)), charged.as_deref(), applied.as_ref(), args.g("pen").n(), &zs);
+                let zs: Vec<String> = sc
+                    .g("zones")
+                    .keys()
+                    .into_iter()
+                    .map(|k| k.to_string())
+                    .collect();
+                let charged = if args.g("charged").t() {
+                    Some(tou::tou_charged(sc, &polygon_of(args.g("poly")), "cordon"))
+                } else {
+                    None
+                };
+                let applied: Option<HashMap<String, f64>> = if args.g("applied").t() {
+                    Some(
+                        args.g("applied")
+                            .entries()
+                            .into_iter()
+                            .map(|(k, v)| (k.to_string(), v.n()))
+                            .collect(),
+                    )
+                } else {
+                    None
+                };
+                let got = tou::tou_skim(
+                    &p,
+                    &g,
+                    Some(sc.g("res").g(&per)),
+                    charged.as_deref(),
+                    applied.as_ref(),
+                    args.g("pen").n(),
+                    &zs,
+                );
                 let mut o = V::object();
                 for (f, m) in &got {
                     let mut inner = V::object();
@@ -61,22 +87,38 @@ fn time_of_use_matches_the_prototype() {
                 let res = tou::tou_run(&mut p, case.g("opts"));
                 let mut o = V::object();
                 o.set("res", res);
-                o.set("saved", V::Bool(p.g("complianceExtra").g("tou").g("result").t()));
+                o.set(
+                    "saved",
+                    V::Bool(p.g("complianceExtra").g("tou").g("result").t()),
+                );
                 check_ok(case, &o);
             }
             "touCSV" => check_text(case, &tou::tou_csv(&project(case))),
             "report" => {
                 let p = project(case);
                 let rid = case.g("report").s();
-                let got = if case.g("ctx").t() { tou::report(&rid, &p, Some(&Mock)) } else { tou::report(&rid, &p, None) };
-                check_text(case, &got.unwrap_or_else(|| panic!("{id}: no report section {rid}")));
+                let got = if case.g("ctx").t() {
+                    tou::report(&rid, &p, Some(&Mock))
+                } else {
+                    tou::report(&rid, &p, None)
+                };
+                check_text(
+                    case,
+                    &got.unwrap_or_else(|| panic!("{id}: no report section {rid}")),
+                );
             }
             "export" => {
                 let p = project(case);
                 let eid = case.g("export").s();
                 let mut got = V::object();
-                got.set("build", V::String(tou::export_build(&eid, &p).expect("export")));
-                got.set("enabled", V::Bool(tou::export_enabled(&eid, &p).expect("export")));
+                got.set(
+                    "build",
+                    V::String(tou::export_build(&eid, &p).expect("export")),
+                );
+                got.set(
+                    "enabled",
+                    V::Bool(tou::export_enabled(&eid, &p).expect("export")),
+                );
                 got.set("label", case.g("ok").g("label").clone());
                 check_ok(case, &got);
             }

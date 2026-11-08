@@ -9,7 +9,10 @@
 use super::paths::{NewPath, PathSet, add_paths, merge_paths, scale_paths};
 use crate::demand::Demand;
 use crate::graph::{Graph, zc_idx};
-use crate::jsnum::{math_max, math_min, math_round, or_default, string_to_number, to_precision, truthy_number, value_truthy};
+use crate::jsnum::{
+    math_max, math_min, math_round, or_default, string_to_number, to_precision, truthy_number,
+    value_truthy,
+};
 use crate::junction::{PerfSet, arc_time, update_node_caps};
 use crate::project::{Route, Scenario, Settings};
 use crate::results::{AssignOpts, ConvRow};
@@ -189,7 +192,11 @@ impl<'a, 'p> Run<'a, 'p> {
             }
         }
         let nt = g.n_t;
-        let pc: Vec<f64> = g.tpen().iter().map(|&p| if p == f64::INFINITY { 0.0 } else { p }).collect();
+        let pc: Vec<f64> = g
+            .tpen()
+            .iter()
+            .map(|&p| if p == f64::INFINITY { 0.0 } else { p })
+            .collect();
         let zc: Vec<usize> = g.zones.iter().map(|z| zc_idx(Some(z))).collect();
         let is_gw: Vec<bool> = g.zones.iter().map(|z| z.kind.is("gateway")).collect();
         // Selection: a zone (OD pairs with either end there), an arc or a turn (paths that use it)
@@ -209,8 +216,14 @@ impl<'a, 'p> Run<'a, 'p> {
         };
         let mut sel_turn: i64 = -1;
         if let Some(Value::Array(t)) = req.as_ref().and_then(|r| r.get("turn")) {
-            let a = t.first().and_then(|v| v.as_str()).and_then(|k| g.key_idx.get(k));
-            let b = t.get(1).and_then(|v| v.as_str()).and_then(|k| g.key_idx.get(k));
+            let a = t
+                .first()
+                .and_then(|v| v.as_str())
+                .and_then(|k| g.key_idx.get(k));
+            let b = t
+                .get(1)
+                .and_then(|v| v.as_str())
+                .and_then(|k| g.key_idx.get(k));
             if let (Some(&a), Some(&b)) = (a, b) {
                 sel_turn = g.turn_idx(a, b) as i64;
             }
@@ -391,7 +404,8 @@ impl Run<'_, '_> {
 
     fn costs(&mut self) {
         for a in 0..self.m {
-            self.cost[a] = arc_time(&self.g.arcs[a], self.x[a] + self.pre[a], &self.perf) + self.apen[a];
+            self.cost[a] =
+                arc_time(&self.g.arcs[a], self.x[a] + self.pre[a], &self.perf) + self.apen[a];
         }
     }
 
@@ -405,7 +419,11 @@ impl Run<'_, '_> {
     // `caps()`: junction capacities from the current flows; MSA damping (1 / kCap) after the first update of a phase
     fn caps(&mut self) {
         self.k_cap += 1;
-        let w = if self.cv.msa && self.k_cap > 1 { 1.0 / self.k_cap as f64 } else { 1.0 };
+        let w = if self.cv.msa && self.k_cap > 1 {
+            1.0 / self.k_cap as f64
+        } else {
+            1.0
+        };
         self.sync_sm();
         update_node_caps(&mut self.g, &self.xt, w, Some(&self.x_t));
     }
@@ -427,7 +445,8 @@ impl Run<'_, '_> {
             if self.od_list[i].is_empty() {
                 continue;
             }
-            self.g.spt(&self.cost, self.g.zone_node[i], &mut self.w, -1, -1);
+            self.g
+                .spt(&self.cost, self.g.zone_node[i], &mut self.w, -1, -1);
             for k in 0..self.od_list[i].len() {
                 let Od { j, q, c, od } = self.od_list[i][k];
                 let dn = self.g.zone_node[j];
@@ -460,11 +479,16 @@ impl Run<'_, '_> {
                     }
                     if self.sm_on {
                         let sm = self.g.sm.as_ref().expect("site moves");
-                        let (xm, xd) = (self.ix.m.expect("traced flows"), self.ix.md.expect("traced flows"));
+                        let (xm, xd) = (
+                            self.ix.m.expect("traced flows"),
+                            self.ix.md.expect("traced flows"),
+                        );
                         let s = sm.ent_s[a];
                         if s >= 0 && self.pend[s as usize] >= 0 {
                             let st = &sm.list[s as usize];
-                            let kk = st.off + sm.ent_i[a] as usize * st.nx + self.pend[s as usize] as usize;
+                            let kk = st.off
+                                + sm.ent_i[a] as usize * st.nx
+                                + self.pend[s as usize] as usize;
                             self.trk[xm].y[kk] += q;
                             if c == 2 {
                                 self.trk[xd].y[kk] += q;
@@ -490,7 +514,9 @@ impl Run<'_, '_> {
                     if !hit {
                         let mut a2 = self.w.na[dn];
                         while a2 >= 0 {
-                            if a2 as i64 == sel_arc || (sel_turn >= 0 && self.w.pt[a2 as usize] as i64 == sel_turn) {
+                            if a2 as i64 == sel_arc
+                                || (sel_turn >= 0 && self.w.pt[a2 as usize] as i64 == sel_turn)
+                            {
                                 hit = true;
                                 break;
                             }
@@ -542,7 +568,9 @@ impl Run<'_, '_> {
                 }
                 let q = self.x[a] + self.pre[a];
                 let h = math_max(1.0, q * 0.01);
-                let hs = (arc_time(&self.g.arcs[a], q + h, &self.perf) + self.apen[a] - self.cost[a]) / h;
+                let hs = (arc_time(&self.g.arcs[a], q + h, &self.perf) + self.apen[a]
+                    - self.cost[a])
+                    / h;
                 num += ds * hs * (self.y[a] - self.x[a]);
                 den += ds * hs * (self.y[a] - self.s_dir[a]);
             }
@@ -584,7 +612,12 @@ impl Run<'_, '_> {
         for a in 0..self.m {
             let d = self.s_dir[a] - self.x[a];
             if d != 0.0 {
-                r += d * (arc_time(&self.g.arcs[a], self.x[a] + lam * d + self.pre[a], &self.perf) + self.apen[a]);
+                r += d
+                    * (arc_time(
+                        &self.g.arcs[a],
+                        self.x[a] + lam * d + self.pre[a],
+                        &self.perf,
+                    ) + self.apen[a]);
             }
         }
         for t in 0..self.nt {
@@ -653,7 +686,10 @@ impl Run<'_, '_> {
                 p: self.last_p.map(r3),
                 vht: r1(vh / self.pf / 3600.0),
             });
-            if self.gap < tol && k > 1.0 && (!self.cv.stable || !final_phase || self.consec_p >= self.cv.consec) {
+            if self.gap < tol
+                && k > 1.0
+                && (!self.cv.stable || !final_phase || self.consec_p >= self.cv.consec)
+            {
                 break;
             }
             if k == max_it - 1.0 {
@@ -683,9 +719,17 @@ impl Run<'_, '_> {
                     ok_p += 1;
                 }
             }
-            let last_p = if n_p > 0 { ok_p as f64 / n_p as f64 } else { 1.0 };
+            let last_p = if n_p > 0 {
+                ok_p as f64 / n_p as f64
+            } else {
+                1.0
+            };
             self.last_p = Some(last_p);
-            self.consec_p = if last_p > self.cv.share { self.consec_p + 1.0 } else { 0.0 };
+            self.consec_p = if last_p > self.cv.share {
+                self.consec_p + 1.0
+            } else {
+                0.0
+            };
             self.hist.push_back(self.x.clone());
             if self.hist.len() > 6 {
                 self.hist.pop_front();
@@ -754,13 +798,17 @@ impl Run<'_, '_> {
                     for &ai in &self.g.ctl[k].arcs {
                         let a = &self.g.arcs[ai];
                         let ph = a.phase.unwrap_or(0) as usize;
-                        yv[ph] = math_max(yv[ph], self.xt[ai] / (a.gl as f64 * self.s.sat_flow.num()));
+                        yv[ph] =
+                            math_max(yv[ph], self.xt[ai] / (a.gl as f64 * self.s.sat_flow.num()));
                     }
                     let yy = math_min(0.92, yv[0] + yv[1]);
                     let cycle = self.g.ctl[k].src.cycle.num();
                     let ctl = &mut self.g.ctl[k];
                     let timing = ctl.signal.as_mut().expect("signal timing");
-                    timing.c = or_default(cycle, math_round(clamp((1.5 * timing.lost + 5.0) / (1.0 - yy), 50.0, 140.0)));
+                    timing.c = or_default(
+                        cycle,
+                        math_round(clamp((1.5 * timing.lost + 5.0) / (1.0 - yy), 50.0, 140.0)),
+                    );
                     let s0 = clamp(yv[0] / (yv[0] + yv[1]), 0.2, 0.8);
                     timing.split = vec![s0, 1.0 - s0];
                     crate::graph::apply_signal(&self.g.ctl[k], &mut self.g.arcs);
@@ -772,7 +820,11 @@ impl Run<'_, '_> {
                 } else if round == 0 {
                     self.iterate(third, loose, false);
                 } else {
-                    self.iterate(math_max(third, cv.max_iter - self.it as f64 + 1.0), cv.gap_tol, true);
+                    self.iterate(
+                        math_max(third, cv.max_iter - self.it as f64 + 1.0),
+                        cv.gap_tol,
+                        true,
+                    );
                 }
             }
         }

@@ -42,7 +42,10 @@ impl Check {
                 m.insert(k, v);
             }
         }
-        m.insert("value".to_string(), self.value.map_or(Value::Null, plain_number));
+        m.insert(
+            "value".to_string(),
+            self.value.map_or(Value::Null, plain_number),
+        );
         m.insert("ok".to_string(), self.ok.map_or(Value::Null, Value::Bool));
         m.insert("required".to_string(), Value::Bool(self.required));
         m.insert("judged".to_string(), Value::Bool(self.judged));
@@ -163,12 +166,11 @@ fn strict_year(year: f64, base: &crate::jsnum::Num) -> bool {
 /// "not base year". The counts used to estimate the matrix and to validate it are the same, which the notes say.
 pub fn report(p: &Project, sc: &Scenario, period: &str, res: Option<&Res>) -> Report {
     let s = &p.settings;
-    let info = p
-        .me
-        .get()
-        .and_then(|m| m.info.get())
-        .and_then(|i| i.get(period))
-        .and_then(|i| i.get());
+    let info =
+        p.me.get()
+            .and_then(|m| m.info.get())
+            .and_then(|i| i.get(period))
+            .and_then(|i| i.get());
     let matrix = info.map(|i| serde_json::to_value(i).expect("a record serialises"));
     let mut out = Report {
         period: period.to_string(),
@@ -199,7 +201,8 @@ pub fn report(p: &Project, sc: &Scenario, period: &str, res: Option<&Res>) -> Re
         fit: None,
     };
     let Some(res) = res else {
-        out.notes.push(format!("Run the model for the {period} peak first."));
+        out.notes
+            .push(format!("Run the model for the {period} peak first."));
         return out;
     };
     let data = Data::read(p);
@@ -216,7 +219,11 @@ pub fn report(p: &Project, sc: &Scenario, period: &str, res: Option<&Res>) -> Re
     out.r2_ols = st.r2_ols;
     out.slope = st.slope;
     out.rmse = st.rmse;
-    out.ratio = if st.tot_obs > 0.0 { Some(st.tot_mod / st.tot_obs) } else { None };
+    out.ratio = if st.tot_obs > 0.0 {
+        Some(st.tot_mod / st.tot_obs)
+    } else {
+        None
+    };
     out.tot_obs = st.tot_obs;
     out.tot_mod = st.tot_mod;
     out.fit = Some(ReportFit {
@@ -225,7 +232,9 @@ pub fn report(p: &Project, sc: &Scenario, period: &str, res: Option<&Res>) -> Re
         geh_bands: st.geh_bands.clone(),
     });
     if st.n == 0 {
-        out.notes.push(format!("No counts match the network for the {period} peak. Load counts for this area first."));
+        out.notes.push(format!(
+            "No counts match the network for the {period} peak. Load counts for this area first."
+        ));
         return out;
     }
     let few = st.n < MIN_SITES;
@@ -280,20 +289,34 @@ pub fn report(p: &Project, sc: &Scenario, period: &str, res: Option<&Res>) -> Re
         );
         let c = out.checks.last_mut().expect("just pushed");
         if c.status == "Fail" {
-            c.status = format!("Fail ({} of {}; {} needed)", number_to_js_string(got), st_n, number_to_js_string(need));
+            c.status = format!(
+                "Fail ({} of {}; {} needed)",
+                number_to_js_string(got),
+                st_n,
+                number_to_js_string(need)
+            );
         }
     }
     share(&mut out, few, st.n, "geh5", st.pass);
     share(&mut out, few, st.n, "geh75", st.pass75);
     share(&mut out, few, st.n, "geh10", st.pass10);
-    chk(&mut out, few, "r2", st.r2, st.r2.is_some_and(|x| x > rule_of("r2").min.unwrap_or(f64::NAN)), vec![]);
+    chk(
+        &mut out,
+        few,
+        "r2",
+        st.r2,
+        st.r2
+            .is_some_and(|x| x > rule_of("r2").min.unwrap_or(f64::NAN)),
+        vec![],
+    );
     let sl = rule_of("slope");
     chk(
         &mut out,
         few,
         "slope",
         st.slope,
-        st.slope.is_some_and(|x| x >= sl.min.unwrap_or(f64::NAN) && x <= sl.max.unwrap_or(f64::NAN)),
+        st.slope
+            .is_some_and(|x| x >= sl.min.unwrap_or(f64::NAN) && x <= sl.max.unwrap_or(f64::NAN)),
         vec![],
     );
     share(&mut out, few, st.n, "band", st.band);
@@ -307,10 +330,9 @@ pub fn report(p: &Project, sc: &Scenario, period: &str, res: Option<&Res>) -> Re
         st.rmse.is_some_and(|x| x < rm.max.unwrap_or(f64::NAN)),
         vec![(
             "clarify",
-            Value::Bool(
-                st.rmse
-                    .is_some_and(|x| x >= rm.max.unwrap_or(f64::NAN) && x <= rm.clarify.unwrap_or(f64::NAN)),
-            ),
+            Value::Bool(st.rmse.is_some_and(|x| {
+                x >= rm.max.unwrap_or(f64::NAN) && x <= rm.clarify.unwrap_or(f64::NAN)
+            })),
         )],
     );
     let mc: Option<MatrixChange> = info
@@ -319,7 +341,14 @@ pub fn report(p: &Project, sc: &Scenario, period: &str, res: Option<&Res>) -> Re
         .and_then(|v| serde_json::from_value(v.clone()).ok());
     if let Some(mc) = mc {
         let mt = rule_of("matrixTotal");
-        chk(&mut out, few, "matrixTotal", Some(mc.total_pct), mc.total_pct.abs() <= mt.max.unwrap_or(f64::NAN), vec![]);
+        chk(
+            &mut out,
+            few,
+            "matrixTotal",
+            Some(mc.total_pct),
+            mc.total_pct.abs() <= mt.max.unwrap_or(f64::NAN),
+            vec![],
+        );
         let ce = rule_of("cells");
         let cs = ce.slope.expect("cells slope");
         let cells_ok = match mc.cell_r2 {
@@ -338,7 +367,10 @@ pub fn report(p: &Project, sc: &Scenario, period: &str, res: Option<&Res>) -> Re
             "cells",
             mc.cell_r2,
             cells_ok,
-            vec![("slopeValue", mc.cell_slope.map_or(Value::Null, plain_number))],
+            vec![(
+                "slopeValue",
+                mc.cell_slope.map_or(Value::Null, plain_number),
+            )],
         );
         let te = rule_of("tripEnds");
         chk(
@@ -346,7 +378,8 @@ pub fn report(p: &Project, sc: &Scenario, period: &str, res: Option<&Res>) -> Re
             few,
             "tripEnds",
             mc.trip_end_r2,
-            mc.trip_end_r2.is_none_or(|x| x > te.min.unwrap_or(f64::NAN)),
+            mc.trip_end_r2
+                .is_none_or(|x| x > te.min.unwrap_or(f64::NAN)),
             vec![("slopeValue", mc.row_slope.map_or(Value::Null, plain_number))],
         );
         if mc.total_pct.abs() > mt.max.unwrap_or(f64::NAN) {
@@ -366,7 +399,10 @@ pub fn report(p: &Project, sc: &Scenario, period: &str, res: Option<&Res>) -> Re
             ));
         }
         out.notes.push("The same counts were used to estimate the matrix and to validate it. TMDG and TAG M3.1 expect validation against independent counts, so hold some counts back for an independent check.".to_string());
-        out.notes.push("On NZTA projects matrix estimation needs the peer reviewer's agreement (TMDG).".to_string());
+        out.notes.push(
+            "On NZTA projects matrix estimation needs the peer reviewer's agreement (TMDG)."
+                .to_string(),
+        );
     }
     // Counts are base-year traffic: comparing them with a forecast is not validation
     let base_year = !(res.year > 0.0) || strict_year(res.year, &s.base_year);
@@ -384,10 +420,13 @@ pub fn report(p: &Project, sc: &Scenario, period: &str, res: Option<&Res>) -> Re
         } else {
             res.conv_note.as_str()
         };
-        out.warnings.push(format!("{note} Re-run the model to convergence before reporting these statistics."));
+        out.warnings.push(format!(
+            "{note} Re-run the model to convergence before reporting these statistics."
+        ));
     }
     if out.stale {
-        out.warnings.push("The results are out of date. Run the model again before reporting.".to_string());
+        out.warnings
+            .push("The results are out of date. Run the model again before reporting.".to_string());
     }
     if few {
         out.warnings.push(format!(
@@ -414,10 +453,19 @@ pub fn report(p: &Project, sc: &Scenario, period: &str, res: Option<&Res>) -> Re
         "fail" => Some(false),
         _ => None,
     };
-    let failed: Vec<&str> = req.iter().filter(|c| c.ok == Some(false)).map(|c| c.rule.label).collect();
+    let failed: Vec<&str> = req
+        .iter()
+        .filter(|c| c.ok == Some(false))
+        .map(|c| c.rule.label)
+        .collect();
     let pc = |x: Option<f64>| fmt::pct(x.unwrap_or(f64::NAN), 1);
     out.summary = if out.status == "indicative" {
-        format!("Indicative only: {} count sites ({} peak, {} with GEH < 5).", st.n, period, pc(st.pass))
+        format!(
+            "Indicative only: {} count sites ({} peak, {} with GEH < 5).",
+            st.n,
+            period,
+            pc(st.pass)
+        )
     } else if out.status == "not base year" {
         format!(
             "Not assessed: the {} results are compared with base-year counts ({} peak, {} with GEH < 5).",

@@ -487,8 +487,7 @@ pub struct Standards {
 
 const HCM_URL: &str = "https://www.txdot.gov/manuals/des/tsp/chapter-12-roundabout-analysis/12-2-motorized-vehicle-capacity-methodology/12-2-4-reporting-moes/12-2-4-4-level-of-service.html";
 const MBCM_URL: &str = "https://www.nzta.govt.nz/assets/resources/monetised-benefits-and-costs-manual/Monetised-benefits-and-costs-manual-volume-1-procedures.pdf";
-const TAG_URL: &str =
-    "https://assets.publishing.service.gov.uk/media/6a033d074fb0713aa63ea802/tag-m3-1-highway-assignment-modelling.pdf";
+const TAG_URL: &str = "https://assets.publishing.service.gov.uk/media/6a033d074fb0713aa63ea802/tag-m3-1-highway-assignment-modelling.pdf";
 const SIDRA_URL: &str = "https://docs.sidrasolutions.com/intersection/intersection/sidra-glossary/";
 const TRB_URL: &str = "https://www.trb.org/Main/Blurbs/175169.aspx";
 
@@ -509,16 +508,48 @@ const fn src(
 }
 
 const IPM_2024: [IpmBand; 4] = [
-    IpmBand { band: "VL", label: "Very low", below: 1.0 },
-    IpmBand { band: "L", label: "Low", below: 3.0 },
-    IpmBand { band: "M", label: "Medium", below: 6.0 },
-    IpmBand { band: "H", label: "High", below: f64::INFINITY },
+    IpmBand {
+        band: "VL",
+        label: "Very low",
+        below: 1.0,
+    },
+    IpmBand {
+        band: "L",
+        label: "Low",
+        below: 3.0,
+    },
+    IpmBand {
+        band: "M",
+        label: "Medium",
+        below: 6.0,
+    },
+    IpmBand {
+        band: "H",
+        label: "High",
+        below: f64::INFINITY,
+    },
 ];
 const IPM_2027: [IpmBand; 4] = [
-    IpmBand { band: "VL", label: "Very low", below: 1.0 },
-    IpmBand { band: "L", label: "Low", below: 1.5 },
-    IpmBand { band: "M", label: "Medium", below: 3.0 },
-    IpmBand { band: "H", label: "High", below: f64::INFINITY },
+    IpmBand {
+        band: "VL",
+        label: "Very low",
+        below: 1.0,
+    },
+    IpmBand {
+        band: "L",
+        label: "Low",
+        below: 1.5,
+    },
+    IpmBand {
+        band: "M",
+        label: "Medium",
+        below: 3.0,
+    },
+    IpmBand {
+        band: "H",
+        label: "High",
+        below: f64::INFINITY,
+    },
 ];
 const IPM: [IpmEdition; 2] = [
     IpmEdition {
@@ -538,7 +569,9 @@ const IPM: [IpmEdition; 2] = [
             "2027-30",
             "Investment Prioritisation Method 2027\u{2013}30 efficiency rating",
             "Initial draft, August 2026",
-            Some("https://www.nzta.govt.nz/assets/planning-and-investment/nltp/2027/docs/initial-draft-ipm-for-the-2027-30-nltp-august-2026.pdf"),
+            Some(
+                "https://www.nzta.govt.nz/assets/planning-and-investment/nltp/2027/docs/initial-draft-ipm-for-the-2027-30-nltp-august-2026.pdf",
+            ),
             false,
         ),
         draft: true,
@@ -547,8 +580,14 @@ const IPM: [IpmEdition; 2] = [
     },
 ];
 const MBCM_RATES: [DiscountStep; 3] = [
-    DiscountStep { to: Some(30.0), r: 2.0 },
-    DiscountStep { to: Some(100.0), r: 1.5 },
+    DiscountStep {
+        to: Some(30.0),
+        r: 2.0,
+    },
+    DiscountStep {
+        to: Some(100.0),
+        r: 1.5,
+    },
     DiscountStep { to: None, r: 1.0 },
 ];
 
@@ -556,7 +595,13 @@ const MBCM_RATES: [DiscountStep; 3] = [
 pub const STANDARDS: Standards = Standards {
     los: LosTable {
         hcm6: LosMethod {
-            src: src("hcm6", "HCM 6 control delay", "Highway Capacity Manual, 6th edition (2016)", Some(HCM_URL), true),
+            src: src(
+                "hcm6",
+                "HCM 6 control delay",
+                "Highway Capacity Manual, 6th edition (2016)",
+                Some(HCM_URL),
+                true,
+            ),
             signals: [10.0, 20.0, 35.0, 55.0, 80.0],
             roundabout: [10.0, 15.0, 25.0, 35.0, 50.0],
             sign: [10.0, 15.0, 25.0, 35.0, 50.0],
@@ -564,7 +609,13 @@ pub const STANDARDS: Standards = Standards {
             label: "Level of service: HCM 6 control delay (signals A \u{2264} 10, B \u{2264} 20, C \u{2264} 35, D \u{2264} 55, E \u{2264} 80 s; roundabouts and give-way/stop A \u{2264} 10, B \u{2264} 15, C \u{2264} 25, D \u{2264} 35, E \u{2264} 50 s). An approach over capacity (DoS > 1) is F.",
         },
         sidra: LosMethod {
-            src: src("sidra", "SIDRA Delay (roundabouts as signals)", "SIDRA Intersection LoS method \"Delay (SIDRA)\"", Some(SIDRA_URL), false),
+            src: src(
+                "sidra",
+                "SIDRA Delay (roundabouts as signals)",
+                "SIDRA Intersection LoS method \"Delay (SIDRA)\"",
+                Some(SIDRA_URL),
+                false,
+            ),
             signals: [10.0, 20.0, 35.0, 55.0, 80.0],
             roundabout: [10.0, 20.0, 35.0, 55.0, 80.0],
             sign: [10.0, 15.0, 25.0, 35.0, 50.0],
@@ -572,7 +623,13 @@ pub const STANDARDS: Standards = Standards {
             label: "Level of service: SIDRA Delay method (roundabouts on the signals scale A \u{2264} 10 \u{2026} E \u{2264} 80 s; give-way/stop A \u{2264} 10 \u{2026} E \u{2264} 50 s). An approach over capacity (DoS > 1) is F.",
         },
         rta: LosMethod {
-            src: src("rta", "RTA NSW delay bands (option only)", "RTA NSW Guide to Traffic Generating Developments (2002), Table 4.2", Some("https://standards.transport.nsw.gov.au/"), false),
+            src: src(
+                "rta",
+                "RTA NSW delay bands (option only)",
+                "RTA NSW Guide to Traffic Generating Developments (2002), Table 4.2",
+                Some("https://standards.transport.nsw.gov.au/"),
+                false,
+            ),
             signals: [14.0, 28.0, 42.0, 56.0, 70.0],
             roundabout: [14.0, 28.0, 42.0, 56.0, 70.0],
             sign: [14.0, 28.0, 42.0, 56.0, 70.0],
@@ -581,29 +638,63 @@ pub const STANDARDS: Standards = Standards {
         },
     },
     link_vc: LinkVc {
-        src: src("corridor-vc", "Link volume/capacity bands", "Spare Construct assumption", None, false),
+        src: src(
+            "corridor-vc",
+            "Link volume/capacity bands",
+            "Spare Construct assumption",
+            None,
+            false,
+        ),
         cuts: [0.35, 0.55, 0.75, 0.9, 1.0],
     },
     practical_dos: PracticalDos {
-        src: src("sidra-xp", "Practical degree of saturation", "SIDRA Intersection defaults", Some(SIDRA_URL), false),
+        src: src(
+            "sidra-xp",
+            "Practical degree of saturation",
+            "SIDRA Intersection defaults",
+            Some(SIDRA_URL),
+            false,
+        ),
         signals: 0.90,
         roundabout: 0.85,
         sign: 0.80,
     },
     pff: Pff {
-        src: src("ttoc06-pff", "Peak flow factor", "TTOC-06 Traffic Signals Modelling Guidelines; SIDRA default convention", Some("https://www.qldc.govt.nz/media/lekcx4iu/ttoc-06-traffic-signals-modelling-guidelines.pdf"), false),
+        src: src(
+            "ttoc06-pff",
+            "Peak flow factor",
+            "TTOC-06 Traffic Signals Modelling Guidelines; SIDRA default convention",
+            Some(
+                "https://www.qldc.govt.nz/media/lekcx4iu/ttoc-06-traffic-signals-modelling-guidelines.pdf",
+            ),
+            false,
+        ),
         value: 0.95,
         t: 0.5,
     },
     queue: Queue {
-        src: src("hcm2000-bq", "Back of queue", "HCM 2000 Appendix G (signals, Ak\u{e7}elik form); HCM 6 eq. 20-68 (unsignalised)", Some("https://www.txdot.gov/manuals/des/tsp/chapter-4-traffic-analysis-methodology--tools--and/4-5-moes/4-5-5-queue-length.html"), false),
+        src: src(
+            "hcm2000-bq",
+            "Back of queue",
+            "HCM 2000 Appendix G (signals, Ak\u{e7}elik form); HCM 6 eq. 20-68 (unsignalised)",
+            Some(
+                "https://www.txdot.gov/manuals/des/tsp/chapter-4-traffic-analysis-methodology--tools--and/4-5-moes/4-5-5-queue-length.html",
+            ),
+            false,
+        ),
         f95: 1.6,
         k_b: 0.12,
         space: 7.0,
         note: "The 95th-percentile factor of 1.6 is kept until it is checked against HCM 2000 Appendix G.",
     },
     conv: ConvStandard {
-        src: src("tag-m31-conv", "Assignment convergence", "UK TAG M3.1 (May 2026), Table 4", Some(TAG_URL), true),
+        src: src(
+            "tag-m31-conv",
+            "Assignment convergence",
+            "UK TAG M3.1 (May 2026), Table 4",
+            Some(TAG_URL),
+            true,
+        ),
         gap: 0.001,
         chg: 0.01,
         share: 0.98,
@@ -612,17 +703,35 @@ pub const STANDARDS: Standards = Standards {
         note: "TAG base models: %GAP under 0.1% and P (links changing flow by under 1%) above 98% for 4 consecutive iterations. NZTA TMDG 2019 asks for convergence to be shown but sets no number.",
     },
     noise: Noise {
-        src: src("tag-m31-snr", "Scenario signal to noise", "UK TAG M3.1 (May 2026)", Some(TAG_URL), false),
+        src: src(
+            "tag-m31-snr",
+            "Scenario signal to noise",
+            "UK TAG M3.1 (May 2026)",
+            Some(TAG_URL),
+            false,
+        ),
         min: 10.0,
         tighter_gap_tol: 1e-5,
         tighter_max_iter: 400.0,
     },
     sidra_gap: SidraGap {
-        src: src("corridor-sidra-gap", "Gap needed for turn volume exports", "Spare Construct assumption", None, false),
+        src: src(
+            "corridor-sidra-gap",
+            "Gap needed for turn volume exports",
+            "Spare Construct assumption",
+            None,
+            false,
+        ),
         max: 1e-4,
     },
     mbcm: Mbcm {
-        src: src("mbcm-1.7.5", "NZTA Monetised Benefits and Costs Manual", "v1.7.5", Some(MBCM_URL), false),
+        src: src(
+            "mbcm-1.7.5",
+            "NZTA Monetised Benefits and Costs Manual",
+            "v1.7.5",
+            Some(MBCM_URL),
+            false,
+        ),
         rates: &MBCM_RATES,
         sens_rate: 8.0,
         years: 40.0,
@@ -631,7 +740,13 @@ pub const STANDARDS: Standards = Standards {
         commercial_rate: 8.0,
         commercial_sens_rate: 2.0,
         discount: DocSource {
-            src: src("nzta-gc-25-01", "NZTA General Circular 25/01: updated discount rates", "Effective 6 January 2025", Some("https://www.nzta.govt.nz/resources/monetised-benefits-and-costs-manual"), true),
+            src: src(
+                "nzta-gc-25-01",
+                "NZTA General Circular 25/01: updated discount rates",
+                "Effective 6 January 2025",
+                Some("https://www.nzta.govt.nz/resources/monetised-benefits-and-costs-manual"),
+                true,
+            ),
             file: "docs/references/25-01.pdf",
         },
         label: "Indicative, IER-equivalent screening estimate; not a funding-approval BCR",
@@ -639,7 +754,15 @@ pub const STANDARDS: Standards = Standards {
         p95_from: 10.0,
     },
     mbcm_update: MbcmUpdate {
-        src: src("mbcm-update-2025", "MBCM update factors", "July 2025", Some("https://www.nzta.govt.nz/assets/resources/monetised-benefits-and-costs-manual/MBCM-update-factors.pdf"), false),
+        src: src(
+            "mbcm-update-2025",
+            "MBCM update factors",
+            "July 2025",
+            Some(
+                "https://www.nzta.govt.nz/assets/resources/monetised-benefits-and-costs-manual/MBCM-update-factors.pdf",
+            ),
+            false,
+        ),
         travel_time: 1.15,
         pt: 1.15,
         walk_cycle: 1.15,
@@ -649,15 +772,33 @@ pub const STANDARDS: Standards = Standards {
         behaviour_change: 1.02,
     },
     ipm: &IPM,
-    growth: src("mbcm-arithmetic", "Background traffic growth", "MBCM v1.7.5 arithmetic growth; NZ ITA practice", Some(MBCM_URL), false),
+    growth: src(
+        "mbcm-arithmetic",
+        "Background traffic growth",
+        "MBCM v1.7.5 arithmetic growth; NZ ITA practice",
+        Some(MBCM_URL),
+        false,
+    ),
     bus: Bus {
-        src: src("corridor-bus-pcu", "Passenger car units per bus", "docs/spec/gtfs-bus (Spare Construct research spec)", None, false),
+        src: src(
+            "corridor-bus-pcu",
+            "Passenger car units per bus",
+            "docs/spec/gtfs-bus (Spare Construct research spec)",
+            None,
+            false,
+        ),
         pcu: 2.0,
         msm: 2.5,
         legacy: 3.0,
     },
     gaps: Gaps {
-        src: src("hcm-twsc-gaps", "Critical gaps and follow-up headways", "HCM 6 ch. 20 (TWSC) base values, two-lane major road; mirrored for left-hand traffic", Some(TRB_URL), false),
+        src: src(
+            "hcm-twsc-gaps",
+            "Critical gaps and follow-up headways",
+            "HCM 6 ch. 20 (TWSC) base values, two-lane major road; mirrored for left-hand traffic",
+            Some(TRB_URL),
+            false,
+        ),
         major_r: Gap { tc: 4.1, tf: 2.2 },
         minor_l: Gap { tc: 6.2, tf: 3.3 },
         minor_t: Gap { tc: 6.5, tf: 4.0 },
@@ -667,16 +808,45 @@ pub const STANDARDS: Standards = Standards {
         label: "Movement capacities: HCM 6 two-way stop control method (rank impedance, shared and short lanes), mirrored for NZ left-hand traffic; indicative, not SIDRA output.",
     },
     rbt_lanes: RbtLanes {
-        src: src("hcm6-rbt", "Roundabout lane capacity", "HCM 6 ch. 22 lane-based entry capacity equations; NZ markings left lane L+T, right lane T+R", Some(TRB_URL), false),
-        one: LaneEq { a: 1380.0, b: 0.00102 },
-        one_of2: LaneEq { a: 1420.0, b: 0.00085 },
-        two_of1: LaneEq { a: 1420.0, b: 0.00091 },
-        left2: LaneEq { a: 1420.0, b: 0.00085 },
-        right2: LaneEq { a: 1350.0, b: 0.00092 },
+        src: src(
+            "hcm6-rbt",
+            "Roundabout lane capacity",
+            "HCM 6 ch. 22 lane-based entry capacity equations; NZ markings left lane L+T, right lane T+R",
+            Some(TRB_URL),
+            false,
+        ),
+        one: LaneEq {
+            a: 1380.0,
+            b: 0.00102,
+        },
+        one_of2: LaneEq {
+            a: 1420.0,
+            b: 0.00085,
+        },
+        two_of1: LaneEq {
+            a: 1420.0,
+            b: 0.00091,
+        },
+        left2: LaneEq {
+            a: 1420.0,
+            b: 0.00085,
+        },
+        right2: LaneEq {
+            a: 1350.0,
+            b: 0.00092,
+        },
         label: "HCM 6 roundabout (SIDRA Standard is geometry-sensitive and will differ)",
     },
     extent: Extent {
-        src: src("at-ita-4.2.1.1", "Extent of effects (5% / 10% test)", "AT ITA Guidelines 2025 v2, s4.2.1.1", Some("https://at.govt.nz/media/ezemv4cz/auckland-transport-integrated-transport-assessment-guidelines-2025-vestion-2.pdf"), false),
+        src: src(
+            "at-ita-4.2.1.1",
+            "Extent of effects (5% / 10% test)",
+            "AT ITA Guidelines 2025 v2, s4.2.1.1",
+            Some(
+                "https://at.govt.nz/media/ezemv4cz/auckland-transport-integrated-transport-assessment-guidelines-2025-vestion-2.pdf",
+            ),
+            false,
+        ),
         p5: 0.05,
         p10: 0.10,
         floor: 20.0,
@@ -687,12 +857,27 @@ pub const STANDARDS: Standards = Standards {
             source: r"^(motorway|strategic( arterial)?|primary arterial|secondary arterial|arterial \(from road class\))$",
             flags: "i",
         },
-        pt5: Pattern { source: r"rapid transit|frequent transit|\b(i?rtn|ftn)\b", flags: "i" },
-        freight5: Pattern { source: r"^level (1a|1b|2)$", flags: "i" },
-        gt10: Pattern { source: r"^collector", flags: "i" },
+        pt5: Pattern {
+            source: r"rapid transit|frequent transit|\b(i?rtn|ftn)\b",
+            flags: "i",
+        },
+        freight5: Pattern {
+            source: r"^level (1a|1b|2)$",
+            flags: "i",
+        },
+        gt10: Pattern {
+            source: r"^collector",
+            flags: "i",
+        },
     },
     diff: DiffPlot {
-        src: src("corridor-diff", "Difference plot thresholds", "Spare Construct assumption", None, false),
+        src: src(
+            "corridor-diff",
+            "Difference plot thresholds",
+            "Spare Construct assumption",
+            None,
+            false,
+        ),
         floor: 20.0,
         noise_k: 2.0,
         label: 10.0,
@@ -702,16 +887,36 @@ pub const STANDARDS: Standards = Standards {
         w_max: 14.0,
     },
     tmdg: Tmdg {
-        src: src("tmdg-2019", "NZTA Transport Model Development Guidelines", "2019", Some("https://www.nzta.govt.nz/assets/resources/transport-model-development-guidelines/docs/tmd.pdf"), false),
+        src: src(
+            "tmdg-2019",
+            "NZTA Transport Model Development Guidelines",
+            "2019",
+            Some(
+                "https://www.nzta.govt.nz/assets/resources/transport-model-development-guidelines/docs/tmd.pdf",
+            ),
+            false,
+        ),
         standing: "TMDG criteria are not a pass/fail checklist; meeting them does not by itself make a model fit for purpose (TMDG s5.8).",
     },
     msm: Msm {
-        src: src("corridor-msm", "MSM consistency threshold", "Spare Construct assumption", None, false),
+        src: src(
+            "corridor-msm",
+            "MSM consistency threshold",
+            "Spare Construct assumption",
+            None,
+            false,
+        ),
         pct: 20.0,
         not_checked: "MSM consistency not checked: AT ITA v2 s4.2.1.1 expects consistency with MSM forecasts where appropriate.",
     },
     design: Design {
-        src: src("rr422-design-year", "Design year", "NZTA RR 422 s5.5; AT ITA Guidelines 2025 v2 s3.6", Some("https://www.nzta.govt.nz/assets/resources/research/reports/422/docs/422.pdf"), false),
+        src: src(
+            "rr422-design-year",
+            "Design year",
+            "NZTA RR 422 s5.5; AT ITA Guidelines 2025 v2 s3.6",
+            Some("https://www.nzta.govt.nz/assets/resources/research/reports/422/docs/422.pdf"),
+            false,
+        ),
         consent: 5.0,
         planchange: 10.0,
         nor: 10.0,

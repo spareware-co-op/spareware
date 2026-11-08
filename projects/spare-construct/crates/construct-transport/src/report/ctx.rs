@@ -63,7 +63,11 @@ impl Row {
     pub fn cls(cells: Vec<String>, cls: &str) -> Row {
         Row {
             cells,
-            cls: if cls.is_empty() { None } else { Some(cls.to_string()) },
+            cls: if cls.is_empty() {
+                None
+            } else {
+                Some(cls.to_string())
+            },
             ..Row::default()
         }
     }
@@ -166,9 +170,14 @@ pub fn tbl(o: &Tbl) -> String {
                         .enumerate()
                         .map(|(i, c)| format!(
                             "<td{}{}>{}</td>",
-                            if o.head.get(i).is_some_and(|h| h.n) { " class=\"n\"" } else { "" },
+                            if o.head.get(i).is_some_and(|h| h.n) {
+                                " class=\"n\""
+                            } else {
+                                ""
+                            },
                             match r.span {
-                                Some(s) if s != 0 && i + 1 == r.cells.len() => format!(" colspan=\"{s}\""),
+                                Some(s) if s != 0 && i + 1 == r.cells.len() =>
+                                    format!(" colspan=\"{s}\""),
                                 _ => String::new(),
                             },
                             c
@@ -180,7 +189,11 @@ pub fn tbl(o: &Tbl) -> String {
     };
     format!(
         "<table class=\"rt{}\">{}<tbody>{}</tbody></table>",
-        if o.cls.is_empty() { String::new() } else { format!(" {}", esc(&o.cls)) },
+        if o.cls.is_empty() {
+            String::new()
+        } else {
+            format!(" {}", esc(&o.cls))
+        },
         th,
         body
     )
@@ -204,7 +217,11 @@ pub fn disc_with(id: &str, version: Option<&str>, tools: Option<&str>) -> String
 
 /// `note(t, warn)`: a small grey (or amber) note; `t` is HTML.
 pub fn note(t: &str, warn: bool) -> String {
-    format!("<p class=\"note{}\">{}</p>", if warn { " warn" } else { "" }, t)
+    format!(
+        "<p class=\"note{}\">{}</p>",
+        if warn { " warn" } else { "" },
+        t
+    )
 }
 
 /// `para(t)`: a paragraph; `t` is HTML.
@@ -277,7 +294,14 @@ pub fn author_html(text: &str) -> String {
                         .collect::<String>()
                 )
             } else {
-                format!("<p>{}</p>", lines.iter().map(|l| esc(l)).collect::<Vec<_>>().join("<br>"))
+                format!(
+                    "<p>{}</p>",
+                    lines
+                        .iter()
+                        .map(|l| esc(l))
+                        .collect::<Vec<_>>()
+                        .join("<br>")
+                )
             }
         })
         .collect()
@@ -367,7 +391,9 @@ pub fn fig_html(f: &FigRequest, img: Option<&MapImage>, tno: &str) -> String {
                 .any(|k| s.starts_with(&format!("data:image/{k};base64,")))
     });
     let (attribution, error) = match img {
-        Some(MapImage::Object { attribution, error, .. }) => (attribution.as_deref(), error.as_deref()),
+        Some(MapImage::Object {
+            attribution, error, ..
+        }) => (attribution.as_deref(), error.as_deref()),
         _ => (None, None),
     };
     let attr = [attribution, f.source.as_deref()]
@@ -377,7 +403,11 @@ pub fn fig_html(f: &FigRequest, img: Option<&MapImage>, tno: &str) -> String {
         .copied()
         .collect::<Vec<_>>()
         .join(" \u{b7} ");
-    let attr = if attr.is_empty() { attrib::OSM.to_string() } else { attr };
+    let attr = if attr.is_empty() {
+        attrib::OSM.to_string()
+    } else {
+        attr
+    };
     let body = match ok_src {
         Some(s) => format!("<img src=\"{}\" alt=\"{}\">", esc(s), esc(&f.title)),
         None => format!(
@@ -399,7 +429,11 @@ pub fn fig_html(f: &FigRequest, img: Option<&MapImage>, tno: &str) -> String {
 }
 
 /// `fillFigures(body, requests, images)`: puts drawn maps into a built report body (figures keep their numbers).
-pub fn fill_figures(body: &str, requests: &[FigRequest], images: &HashMap<String, MapImage>) -> String {
+pub fn fill_figures(
+    body: &str,
+    requests: &[FigRequest],
+    images: &HashMap<String, MapImage>,
+) -> String {
     let mut out = String::with_capacity(body.len());
     let mut rest = body;
     let open = "<figure class=\"fig\" id=\"";
@@ -618,14 +652,22 @@ impl<'a, 'r> Ctx<'a, 'r> {
         };
         format!(
             "<figure class=\"tbl\"{}{}><figcaption><span class=\"tno\">{}</span>{}<button class=\"noprint copy\" data-copy type=\"button\">Copy table</button></figcaption>{}{}",
-            if o.junction { " data-junction=\"1\"" } else { "" },
+            if o.junction {
+                " data-junction=\"1\""
+            } else {
+                ""
+            },
             match &o.id {
                 Some(i) if !i.is_empty() => format!(" id=\"{}\"", esc(i)),
                 _ => String::new(),
             },
             tno_token(title),
             tno_rest(title),
-            if sup.is_empty() { String::new() } else { format!("<p class=\"sup\">{} (AUP E27 tier 1).</p>", esc(&sup)) },
+            if sup.is_empty() {
+                String::new()
+            } else {
+                format!("<p class=\"sup\">{} (AUP E27 tier 1).</p>", esc(&sup))
+            },
             t
         ) + &format!(
             "<p class=\"src\">Source: {}</p>{}{}{}</figure>",
@@ -650,7 +692,10 @@ impl<'a, 'r> Ctx<'a, 'r> {
     pub fn author(&self, id: &str, prompt: &str) -> String {
         match self.r.rs.text_of(id) {
             Some(t) if t.truthy() && !crate::jsnum::js_trim(&t.js_string()).is_empty() => {
-                format!("<div class=\"author\">{}</div>", author_html(&t.js_string()))
+                format!(
+                    "<div class=\"author\">{}</div>",
+                    author_html(&t.js_string())
+                )
             }
             _ => format!("<div class=\"author empty\"><b>Author to complete.</b> {prompt}</div>"),
         }
@@ -677,7 +722,10 @@ impl<'a, 'r> Ctx<'a, 'r> {
                     if ts.is_empty() {
                         ", not run".to_string()
                     } else {
-                        format!(", run {}", esc(&iso_day_of_ms(math_max_of(&ts)).unwrap_or_default()))
+                        format!(
+                            ", run {}",
+                            esc(&iso_day_of_ms(math_max_of(&ts)).unwrap_or_default())
+                        )
                     }
                 )
             })
@@ -693,7 +741,11 @@ impl<'a, 'r> Ctx<'a, 'r> {
             let t = self.run_text(xs);
             format!(
                 "Spare Construct model, {}; estimated, not observed",
-                if t.is_empty() { "no scenario".to_string() } else { t }
+                if t.is_empty() {
+                    "no scenario".to_string()
+                } else {
+                    t
+                }
             )
         };
         let user = "Author entries in the Report tab (user)";
@@ -773,4 +825,3 @@ pub(crate) fn day_of(t: Option<&JsonValue>) -> String {
         Some(v) => crate::results::js_iso_day(&v.to_value()).unwrap_or_default(),
     }
 }
-

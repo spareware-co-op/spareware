@@ -18,12 +18,28 @@ fn flood_plain_labels_match() {
     assert_eq!(recs.len(), 24);
     for rec in recs {
         let attrs = rec.get("attrs").unwrap();
-        assert_eq!(flood_label(attrs), rec.get("label").unwrap().js_string(), "label for {}", attrs.stringify());
+        assert_eq!(
+            flood_label(attrs),
+            rec.get("label").unwrap().js_string(),
+            "label for {}",
+            attrs.stringify()
+        );
     }
 }
 
-fn run_load(rec: &Value, label: &str) -> (Hazards, HazardsLoaded, construct_transport::project::Project, Vec<String>) {
-    let mut p = reopen(&fixture_text(&format!("hazards-{}-project.json", rec["project"].as_str().unwrap())));
+fn run_load(
+    rec: &Value,
+    label: &str,
+) -> (
+    Hazards,
+    HazardsLoaded,
+    construct_transport::project::Project,
+    Vec<String>,
+) {
+    let mut p = reopen(&fixture_text(&format!(
+        "hazards-{}-project.json",
+        rec["project"].as_str().unwrap()
+    )));
     let mut load = HazardsLoad::new(bounds_of(&rec["bounds"]), 30_000.0, &MetaCache::new());
     let log = rec["requests"].as_array().unwrap();
     let (used, res) = replay(&mut load, log, 0, label);
@@ -43,9 +59,24 @@ fn downloads_match() {
         let label = format!("{} {}", rec["project"], rec["label"]);
         let (hz, loaded, p, statuses) = run_load(rec, &label);
         assert_eq!(json!(statuses), rec["statuses"], "{label}: status lines");
-        assert_close(&serde_json::to_value(&loaded).unwrap(), &rec["result"], &format!("{label} result"));
-        assert_close(&serde_json::to_value(&hz.layers).unwrap(), &rec["layers"], &format!("{label} layers"));
-        assert_close(&p.extra.get("feeds").cloned().unwrap_or_else(|| json!({ "vintage": {} })), &rec["feeds"], &format!("{label} feeds"));
+        assert_close(
+            &serde_json::to_value(&loaded).unwrap(),
+            &rec["result"],
+            &format!("{label} result"),
+        );
+        assert_close(
+            &serde_json::to_value(&hz.layers).unwrap(),
+            &rec["layers"],
+            &format!("{label} layers"),
+        );
+        assert_close(
+            &p.extra
+                .get("feeds")
+                .cloned()
+                .unwrap_or_else(|| json!({ "vintage": {} })),
+            &rec["feeds"],
+            &format!("{label} feeds"),
+        );
     }
 }
 
@@ -57,17 +88,33 @@ fn roads_inside_hazards_match() {
     for rec in recs {
         let name = rec["project"].as_str().unwrap();
         let label = format!("{name} order {}", rec["order"]);
-        let all = e["loads"].as_array().unwrap().iter().find(|l| l["project"] == name && l["label"] == "all").unwrap();
+        let all = e["loads"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|l| l["project"] == name && l["label"] == "all")
+            .unwrap();
         let (hz, ..) = run_load(all, &label);
         let p = reopen(rec["text"].as_str().unwrap());
-        let order: Vec<usize> = rec["order"].as_array().unwrap().iter().map(|x| x.as_u64().unwrap() as usize).collect();
+        let order: Vec<usize> = rec["order"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|x| x.as_u64().unwrap() as usize)
+            .collect();
         let mut got = Vec::new();
         for si in order {
-            let Some(sc) = p.scenarios.get(si) else { continue };
+            let Some(sc) = p.scenarios.get(si) else {
+                continue;
+            };
             got.push(json!({ "scenario": sc.id, "rows": hazard_links(sc, &hz, &p.settings) }));
         }
         assert_close(&Value::Array(got), &rec["rows"], &format!("{label} rows"));
         let empty = hazard_links(&p.scenarios[0], &Hazards::default(), &p.settings);
-        assert_close(&serde_json::to_value(&empty).unwrap(), &rec["empty"], &format!("{label} without data"));
+        assert_close(
+            &serde_json::to_value(&empty).unwrap(),
+            &rec["empty"],
+            &format!("{label} without data"),
+        );
     }
 }

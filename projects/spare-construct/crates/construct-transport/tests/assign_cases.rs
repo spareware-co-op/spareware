@@ -9,9 +9,9 @@ mod recorded;
 mod support;
 
 use construct_transport::assign::assign;
+use construct_transport::jsnum::plain_number;
 use construct_transport::project::{Project, Settings};
 use construct_transport::results::AssignOpts;
-use construct_transport::jsnum::plain_number;
 use recorded::json;
 use serde_json::{Value, json};
 
@@ -27,18 +27,33 @@ fn assignment_on_the_variants() {
         let name = case["name"].as_str().expect("name");
         let p = Project::from_json(case["projectText"].as_str().expect("project text"))
             .unwrap_or_else(|e| panic!("{name}: {e}"));
-        let sc = p.scenario(case["scenario"].as_str().expect("scenario")).expect("scenario");
+        let sc = p
+            .scenario(case["scenario"].as_str().expect("scenario"))
+            .expect("scenario");
         let s: Settings = match case["settingsText"].as_str() {
             Some(t) => serde_json::from_str(t).unwrap_or_else(|e| panic!("{name}: settings: {e}")),
             None => p.settings.clone(),
         };
-        let opts: AssignOpts = serde_json::from_value(case["opts"].clone()).unwrap_or_else(|e| panic!("{name}: opts: {e}"));
+        let opts: AssignOpts = serde_json::from_value(case["opts"].clone())
+            .unwrap_or_else(|e| panic!("{name}: opts: {e}"));
         let mut calls: Vec<Value> = Vec::new();
         let mut on_progress = |it: u32, gap: f64, msg: &str| {
-            calls.push(json!([it, plain_number(gap), if msg.is_empty() { Value::Null } else { json!(msg) }]));
+            calls.push(json!([
+                it,
+                plain_number(gap),
+                if msg.is_empty() {
+                    Value::Null
+                } else {
+                    json!(msg)
+                }
+            ]));
         };
         let mut got = json(&assign(&p, sc, &s, &opts, Some(&mut on_progress)));
-        let (calls_diffs, calls_total) = diff_json(&Value::Array(calls), &case["progress"], &format!("{name}.progress"));
+        let (calls_diffs, calls_total) = diff_json(
+            &Value::Array(calls),
+            &case["progress"],
+            &format!("{name}.progress"),
+        );
         if calls_total > 0 {
             failures.push(format!(
                 "{calls_total} difference(s) in {name}.progress, first: {} expected {} actual {}",
@@ -46,17 +61,27 @@ fn assignment_on_the_variants() {
             ));
         }
         for k in case["omit"].as_array().expect("omit") {
-            got.as_object_mut().expect("result").remove(k.as_str().expect("key"));
+            got.as_object_mut()
+                .expect("result")
+                .remove(k.as_str().expect("key"));
         }
         let path = format!("{name}.res");
         let (diffs, total) = diff_json(&got, &case["res"], &path);
         if total > 0 {
             let mut msg = format!("{total} difference(s) under {path}:");
             for d in diffs.iter().take(6) {
-                msg.push_str(&format!("\n  {}\n      expected {}\n      actual   {}", d.path, d.expected, d.actual));
+                msg.push_str(&format!(
+                    "\n  {}\n      expected {}\n      actual   {}",
+                    d.path, d.expected, d.actual
+                ));
             }
             failures.push(msg);
         }
     }
-    assert!(failures.is_empty(), "{} case(s) differ:\n{}", failures.len(), failures.join("\n"));
+    assert!(
+        failures.is_empty(),
+        "{} case(s) differ:\n{}",
+        failures.len(),
+        failures.join("\n")
+    );
 }

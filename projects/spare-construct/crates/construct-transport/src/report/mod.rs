@@ -37,16 +37,20 @@ mod zip;
 
 pub use author::Rs;
 pub use build::{BuildOpts, Built, TocEntry, chapter_of, fix_tables, number_foreign};
-pub use doc::{css_str, iso_minute};
-pub use sections_end::{Change, conclusion_text, network_diff};
 pub use calc::*;
 pub use consts::*;
 pub use ctx::{
-    ChapterState, Ctx, FigRequest, Head, MapImage, Row, SectionState, Tbl, TableBody, TableOpts, author_html,
-    cells, disc, disc_with, fill_figures, fig_html, h, hn, note, para, tbl, tno_rest, tno_token,
+    ChapterState, Ctx, FigRequest, Head, MapImage, Row, SectionState, TableBody, TableOpts, Tbl,
+    author_html, cells, disc, disc_with, fig_html, fill_figures, h, hn, note, para, tbl, tno_rest,
+    tno_token,
 };
-pub use host::{AboutEntry, ExportOutcome, ForeignSection, LinkRiskInfo, NoHost, NodeRiskInfo, Regime, ReportHost};
+pub use doc::{css_str, iso_minute};
+pub use host::{
+    AboutEntry, ExportOutcome, ForeignSection, LinkRiskInfo, NoHost, NodeRiskInfo, Regime,
+    ReportHost,
+};
 pub use pack::{PackFile, PackOutput, csv_file, iso_full};
+pub use sections_end::{Change, conclusion_text, network_diff};
 pub use sections_env::CrashSite;
 pub use texts::{COLS, CSP, CSS, DISCLAIMER_ITEMS, DISCLAIMERS_VERSION, DOC_SCRIPT, FILES};
 pub use zip::{crc32, zip};
@@ -123,7 +127,11 @@ pub fn pick(t: &Tools) -> Sel {
         })
         .or_else(|| {
             let (w, b) = (w?, base?);
-            if w != b && yr(b) == yr(w) { Some(b) } else { None }
+            if w != b && yr(b) == yr(w) {
+                Some(b)
+            } else {
+                None
+            }
         });
     let m = by_choice("mitigation").or_else(|| {
         let w = w?;
@@ -208,7 +216,11 @@ impl<'a> Rep<'a> {
     /// `yearOf(sc)`: `+Engine.yearOf(sc) || null`.
     pub fn year_of(&self, i: usize) -> Option<f64> {
         let y = year_of(Some(self.scenario(i)), self.st());
-        if y == 0.0 || y.is_nan() { None } else { Some(y) }
+        if y == 0.0 || y.is_nan() {
+            None
+        } else {
+            Some(y)
+        }
     }
 
     /// `P.data`.

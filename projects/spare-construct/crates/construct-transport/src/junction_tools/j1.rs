@@ -1,7 +1,7 @@
 //! J1: the SIDRA-style Movement Summary of a junction (`j1`, `j1Html`), the storage the queues are measured against and the
 //! results footer.
 
-use super::text::{d1, dos_cell, los_badge, n0, p1, per_name, rq_cell, sgn, ctl_name};
+use super::text::{ctl_name, d1, dos_cell, los_badge, n0, p1, per_name, rq_cell, sgn};
 use super::{
     Entry, LABEL, Nr, STORAGE_AMBER, STORAGE_BASIS, STORAGE_RED, Tools, entries, legs_of, moves_of,
 };
@@ -10,7 +10,7 @@ use crate::edit::sites;
 use crate::jsnum::{math_round, number_to_js_string, plain_number, to_fixed};
 use crate::project::{Link, Scenario};
 use crate::results::{Approach, Res};
-use crate::standards::{STANDARDS, LosMethod};
+use crate::standards::{LosMethod, STANDARDS};
 use crate::util::esc;
 use serde_json::{Map, Value, json};
 use std::collections::{HashMap, HashSet};
@@ -155,7 +155,8 @@ pub fn storage_of(ap: &Approach, mv: &str, l: Option<f64>) -> Storage {
         .filter(|x| !x.d.is_empty() && x.d.contains(mv))
         .collect();
     let bay = if !ls.is_empty() && ls.iter().all(|x| x.len > 0.0) {
-        ls.iter().fold(f64::NEG_INFINITY, |m, x| crate::jsnum::math_max(m, x.len))
+        ls.iter()
+            .fold(f64::NEG_INFINITY, |m, x| crate::jsnum::math_max(m, x.len))
     } else {
         0.0
     };
@@ -540,8 +541,16 @@ impl<'a> Tools<'a> {
                             Some(a) => a.leg_label.clone(),
                             None => format!(
                                 "{}: {}",
-                                if ap.approach.is_empty() { "Approach" } else { &ap.approach },
-                                if ap.name.is_empty() { "Unnamed road" } else { &ap.name }
+                                if ap.approach.is_empty() {
+                                    "Approach"
+                                } else {
+                                    &ap.approach
+                                },
+                                if ap.name.is_empty() {
+                                    "Unnamed road"
+                                } else {
+                                    &ap.name
+                                }
                             ),
                         },
                         road: match a {
@@ -602,7 +611,11 @@ impl<'a> Tools<'a> {
                         turns: vec![r.turn.to_string()],
                         mv: r.mv.clone(),
                         v: r.v,
-                        hv_pct: if r.v > 0.0 { r.hv / r.v * 100.0 } else { hv_pct },
+                        hv_pct: if r.v > 0.0 {
+                            r.hv / r.v * 100.0
+                        } else {
+                            hv_pct
+                        },
                         full: false,
                         to_road: Some(r.to_road.clone()),
                         ..J1Row::default()
@@ -618,12 +631,20 @@ impl<'a> Tools<'a> {
                     dos: ap.dos,
                     xp: ap.xp,
                     delay: ap.delay,
-                    los: if free { "\u{2013}".to_string() } else { ap.los.clone() },
+                    los: if free {
+                        "\u{2013}".to_string()
+                    } else {
+                        ap.los.clone()
+                    },
                     q95veh: ap.q95veh,
                     q95: ap.q95,
                     psc: ap.psc,
                     storage: l,
-                    rq: if l.is_some() && !free { l.map(|l| ap.q95 / l) } else { None },
+                    rq: if l.is_some() && !free {
+                        l.map(|l| ap.q95 / l)
+                    } else {
+                        None
+                    },
                     free,
                     key: ap.key.clone(),
                     name: ap.name.clone(),
@@ -779,7 +800,8 @@ struct Cell<'r> {
 }
 
 fn cells(r: &Cell, lab: &str, turn: &str, bold: bool) -> String {
-    let td = |x: &str, num: bool| format!("<td{}>{}</td>", if num { " class=\"n\"" } else { "" }, x);
+    let td =
+        |x: &str, num: bool| format!("<td{}>{}</td>", if num { " class=\"n\"" } else { "" }, x);
     let dash = "\u{2013}";
     let mut s = format!(
         "<tr{}>",
@@ -800,7 +822,10 @@ fn cells(r: &Cell, lab: &str, turn: &str, bold: bool) -> String {
         }),
         true,
     ));
-    s.push_str(&td(&r.delay.map_or(dash.to_string(), |d| d1(Some(d))), true));
+    s.push_str(&td(
+        &r.delay.map_or(dash.to_string(), |d| d1(Some(d))),
+        true,
+    ));
     s.push_str(&td(
         &r.los.map_or(dash.to_string(), |l| los_badge(Some(l))),
         false,
@@ -913,7 +938,10 @@ pub fn j1_html(t: &Tools, d: Option<&J1>, opts: J1HtmlOpts) -> String {
             }
             let s = &x.sub;
             let extra = if g.appr.len() > 1 {
-                format!(" ({})", esc(if s.name.is_empty() { "entry" } else { &s.name }))
+                format!(
+                    " ({})",
+                    esc(if s.name.is_empty() { "entry" } else { &s.name })
+                )
             } else {
                 String::new()
             };
@@ -981,8 +1009,16 @@ pub fn j1_html(t: &Tools, d: Option<&J1>, opts: J1HtmlOpts) -> String {
             esc(&d.e.name),
             esc(&ctl_name(&d.kind)),
             esc(&per_name(&d.period)),
-            esc(&if d.year != 0.0 && !d.year.is_nan() { number_to_js_string(d.year) } else { String::new() }),
-            if d.stale { " <span class=\"pill stale\">out of date</span>" } else { "" }
+            esc(&if d.year != 0.0 && !d.year.is_nan() {
+                number_to_js_string(d.year)
+            } else {
+                String::new()
+            }),
+            if d.stale {
+                " <span class=\"pill stale\">out of date</span>"
+            } else {
+                ""
+            }
         )
     } else {
         String::new()
@@ -1032,4 +1068,3 @@ pub fn j1_html(t: &Tools, d: Option<&J1>, opts: J1HtmlOpts) -> String {
         d.res_footer_html()
     )
 }
-

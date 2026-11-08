@@ -2,7 +2,9 @@
 //! movements through it traced along the assignment's paths, and for roundabout sites (one
 //! controller per entry) the entries reported together.
 
-use crate::graph::{Ctl, CtlSrc, Graph, Leg, js_sort_by, js_str_lt, site_control, site_legs, turn_type};
+use crate::graph::{
+    Ctl, CtlSrc, Graph, Leg, js_sort_by, js_str_lt, site_control, site_legs, turn_type,
+};
 use crate::jsnum::{Maybe, math_max, math_max_of, math_round};
 use crate::junction::site_exits;
 use crate::project::{OrderedMap, Scenario};
@@ -19,7 +21,13 @@ pub(super) struct SiteOut {
 }
 
 // siteMv(G, pseudo, a, b): "U" when the movement leaves on the leg it entered, else by the bearings
-fn site_mv(g: &Graph, li: &HashMap<usize, usize>, lo: &HashMap<usize, usize>, a: usize, b: usize) -> &'static str {
+fn site_mv(
+    g: &Graph,
+    li: &HashMap<usize, usize>,
+    lo: &HashMap<usize, usize>,
+    a: usize,
+    b: usize,
+) -> &'static str {
     let bb = &g.arcs[b];
     if !bb.conn && li.get(&a) == lo.get(&b) {
         return "U";
@@ -50,7 +58,10 @@ pub(super) fn site_results(
         let members = &gs.members;
         let st = &g.sm.as_ref().expect("site movement slots").list[s];
         let (inc, exits) = (&st.inc, &st.exits);
-        let ctl = g.ctl.iter().find(|c| c.site.as_ref().is_some_and(|x| x.site == site.id));
+        let ctl = g
+            .ctl
+            .iter()
+            .find(|c| c.site.as_ref().is_some_and(|x| x.site == site.id));
         let legs: Vec<Leg> = match ctl.and_then(|c| c.site.as_ref()) {
             Some(sc_ctl) => sc_ctl.legs.clone(),
             None => site_legs(g, inc, exits),
@@ -174,14 +185,21 @@ pub(super) fn site_results(
                     0.0
                 };
                 let first = members.iter().find_map(|&n| nodes_res.get(&g.ids[n]));
-                let typ = first.map(|nr| nr.r#type.clone()).filter(|t| !t.is_empty()).unwrap_or_else(|| "roundabout".to_string());
+                let typ = first
+                    .map(|nr| nr.r#type.clone())
+                    .filter(|t| !t.is_empty())
+                    .unwrap_or_else(|| "roundabout".to_string());
                 let los_m = j.los();
                 let th = match typ.as_str() {
                     "signals" => &los_m.signals,
                     "roundabout" => &los_m.roundabout,
                     _ => &los_m.sign,
                 };
-                let los = if j.method == "rta" { los_lt(avg, th) } else { los_of(avg, th) };
+                let los = if j.method == "rta" {
+                    los_lt(avg, th)
+                } else {
+                    los_of(avg, th)
+                };
                 let doses: Vec<f64> = ctl_a.iter().map(|a| a.dos).collect();
                 result = Some(SiteResult {
                     r#type: typ,
@@ -200,8 +218,17 @@ pub(super) fn site_results(
         let name = match site.name.as_str() {
             Some(n) if !n.is_empty() => n.to_string(),
             _ => {
-                let joined = names.iter().take(3).copied().collect::<Vec<_>>().join(" / ");
-                if joined.is_empty() { "Unnamed junction".to_string() } else { joined }
+                let joined = names
+                    .iter()
+                    .take(3)
+                    .copied()
+                    .collect::<Vec<_>>()
+                    .join(" / ");
+                if joined.is_empty() {
+                    "Unnamed junction".to_string()
+                } else {
+                    joined
+                }
             }
         };
         sites.insert(
@@ -215,7 +242,11 @@ pub(super) fn site_results(
                     Some(c) => c.kind.clone(),
                     None => site_control(sc, site).to_string(),
                 },
-                at_site_no: site.at_site_no.get().cloned().unwrap_or(serde_json::Value::Null),
+                at_site_no: site
+                    .at_site_no
+                    .get()
+                    .cloned()
+                    .unwrap_or(serde_json::Value::Null),
                 one: ctl.is_some(),
                 legs: legs
                     .iter()

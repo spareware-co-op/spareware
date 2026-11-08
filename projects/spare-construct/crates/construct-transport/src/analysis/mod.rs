@@ -464,7 +464,8 @@ pub fn extent_test(
     }
     let pad = STANDARDS.extent.buffer / 111320.0;
     let pad_l = if s.is_finite() {
-        STANDARDS.extent.buffer / (111320.0 * crate::jsmath::cos((s + n) / 2.0 * std::f64::consts::PI / 180.0))
+        STANDARDS.extent.buffer
+            / (111320.0 * crate::jsmath::cos((s + n) / 2.0 * std::f64::consts::PI / 180.0))
     } else {
         0.0
     };

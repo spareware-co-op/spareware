@@ -1,10 +1,10 @@
 //! The document around the body: the page shell, the footer text, the style sheet and script, and the file names.
 
+use super::Rep;
 use super::build::{BuildOpts, Built};
 use super::consts::{D1_SHORT, disclaimer_text};
 use super::shared::model_version;
 use super::texts::{CSP, CSS, DOC_SCRIPT};
-use super::Rep;
 use crate::results::iso_day_of_ms;
 use crate::util::esc;
 
@@ -26,8 +26,14 @@ pub fn css_str(s: &str) -> String {
         in_run = false;
         t.push(c);
     }
-    let t: String = t.chars().filter(|c| !(('\u{0}'..='\u{1f}').contains(c) || *c == '\u{7f}')).collect();
-    let t = t.replace('<', "\\3C ").replace('>', "\\3E ").replace('&', "\\26 ");
+    let t: String = t
+        .chars()
+        .filter(|c| !(('\u{0}'..='\u{1f}').contains(c) || *c == '\u{7f}'))
+        .collect();
+    let t = t
+        .replace('<', "\\3C ")
+        .replace('>', "\\3E ")
+        .replace('&', "\\26 ");
     format!("\"{t}\"")
 }
 
@@ -45,7 +51,10 @@ impl<'a> Rep<'a> {
     pub fn file_base(&self) -> String {
         let name = self.project.name.as_str().unwrap_or("");
         let name = if name.is_empty() { "project" } else { name };
-        let kept: String = name.chars().filter(|c| c.is_ascii_alphanumeric() || *c == '_' || *c == '-' || *c == ' ').collect();
+        let kept: String = name
+            .chars()
+            .filter(|c| c.is_ascii_alphanumeric() || *c == '_' || *c == '-' || *c == ' ')
+            .collect();
         let t = crate::jsnum::js_trim(&kept);
         let mut out = String::new();
         let mut in_ws = false;
@@ -60,12 +69,18 @@ impl<'a> Rep<'a> {
                 out.push(c.to_ascii_lowercase());
             }
         }
-        if out.is_empty() { "project".to_string() } else { out }
+        if out.is_empty() {
+            "project".to_string()
+        } else {
+            out
+        }
     }
 
     /// `ymd()`: today's date as YYYYMMDD.
     pub fn ymd(&self) -> String {
-        iso_day_of_ms(self.now_ms).unwrap_or_default().replace('-', "")
+        iso_day_of_ms(self.now_ms)
+            .unwrap_or_default()
+            .replace('-', "")
     }
 
     /// `reportName(P)`: the report's file name.
@@ -95,20 +110,37 @@ impl<'a> Rep<'a> {
             })
             .filter(|t| *t != 0.0 && !t.is_nan())
             .collect();
-        let ts = if runs.is_empty() { None } else { Some(crate::jsnum::math_max_of(&runs)) };
+        let ts = if runs.is_empty() {
+            None
+        } else {
+            Some(crate::jsnum::math_max_of(&runs))
+        };
         let version = model_version(self);
         let foot = format!(
             "{} \u{b7} {} \u{b7} run {} \u{b7} {}{}",
             D1_SHORT,
             version,
             ts.map_or("not run".to_string(), iso_minute),
-            b.sel.with.map_or(String::new(), |i| self.sc(i).name().to_string()),
+            b.sel
+                .with
+                .map_or(String::new(), |i| self.sc(i).name().to_string()),
             if draft { " \u{b7} DRAFT" } else { "" }
         );
         // the regulatory version stamp (pathway, regime and the editions relied on) goes in every page footer under D1
         let vs = self.host.stamp_footer(self.project);
-        let why = self.host.export_block(self.project).filter(|w| !w.is_empty());
-        let foot_css = format!("{}{}", css_str(&foot), if vs.is_empty() { String::new() } else { format!(" \"\\A\" {}", css_str(&vs)) });
+        let why = self
+            .host
+            .export_block(self.project)
+            .filter(|w| !w.is_empty());
+        let foot_css = format!(
+            "{}{}",
+            css_str(&foot),
+            if vs.is_empty() {
+                String::new()
+            } else {
+                format!(" \"\\A\" {}", css_str(&vs))
+            }
+        );
         let bar = match &why {
             Some(w) => format!(
                 "<button class=\"primary\" type=\"button\" disabled title=\"{0}\">Print or save as PDF</button><button type=\"button\" disabled title=\"{0}\">Download HTML</button><span class=\"warn\"><b>Printing and saving are blocked.</b> {0} Fix it in the Compliance+ tab (scope linter), then open the report again.</span>",
@@ -116,7 +148,11 @@ impl<'a> Rep<'a> {
             ),
             None => format!(
                 "<button class=\"primary\" data-print type=\"button\">Print or save as PDF</button><button data-save type=\"button\">Download HTML</button><span class=\"muted\">{}In the print dialog choose A4 and turn on background graphics. Print from Chrome or Edge 131 or later: other browsers leave out the page footer that carries Disclaimer D1, the version stamp and the page numbers (both are also printed at the end of the report).</span>",
-                if draft { "DRAFT: a reviewer has not signed this report off yet. " } else { "" }
+                if draft {
+                    "DRAFT: a reviewer has not signed this report off yet. "
+                } else {
+                    ""
+                }
             ),
         };
         let block_css = match &why {

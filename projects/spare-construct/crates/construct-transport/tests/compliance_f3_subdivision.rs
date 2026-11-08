@@ -23,8 +23,15 @@ fn subdivision_matches_the_prototype() {
             "report" => {
                 let p = project(case);
                 let rid = case.g("report").s();
-                let got = if case.g("ctx").t() { subdivision::report(&rid, &p, Some(&Mock)) } else { subdivision::report(&rid, &p, None) };
-                check_text(case, &got.unwrap_or_else(|| panic!("{id}: no report section {rid}")));
+                let got = if case.g("ctx").t() {
+                    subdivision::report(&rid, &p, Some(&Mock))
+                } else {
+                    subdivision::report(&rid, &p, None)
+                };
+                check_text(
+                    case,
+                    &got.unwrap_or_else(|| panic!("{id}: no report section {rid}")),
+                );
             }
             other => panic!("{id}: unknown call {other}"),
         }

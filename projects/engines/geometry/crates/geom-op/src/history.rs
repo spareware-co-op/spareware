@@ -43,8 +43,11 @@
 use alloc::vec::Vec;
 use core::fmt;
 
-use crate::id::NameId;
-use crate::name::{NameList, NameSet, PieceKey, Role};
+use crate::cbor::{EncodeError, Encoder, Item};
+use crate::id::{NameId, OpPath};
+use crate::name::{
+    NameError, NameList, NameSet, PieceKey, Role, items, op_path, role_item, side_number,
+};
 
 /// How one output relates to the operation's inputs (chapter 20.3).
 #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
@@ -374,6 +377,36 @@ impl History {
             .map(|r| &r.origin)
     }
 
+    /// The canonical encoding of this history as the operation at `op` made it: the payload of the
+    /// native format's history record (24.4; piece G95). An array of the operation's path, its
+    /// records in output-name order, each `[output, origin]`, its deleted inputs as a set, and its
+    /// topology changes in order. An origin is `[0]` unchanged, `[1, from]` modified, `[2, from,
+    /// role]` generated, `[3, of, [0, tools, side]]` split or `[4, of]` merged; a change is its
+    /// class's number (13.14's table order, from 0) followed by its fields in declared order, a
+    /// `Vanish` and a `LoopChange` by their order from 0. Names are 16-byte strings, sets and
+    /// sorted lists as 32.19 writes them.
+    ///
+    /// # Errors
+    ///
+    /// [`NameError::Encode`], which only a defect in this module can cause.
+    pub fn encode(&self, op: &OpPath) -> Result<Item, NameError> {
+        let mut e = Encoder::new();
+        e.array(4)?;
+        op_path(&mut e, op)?;
+        e.array(count(self.records.len())?)?;
+        for record in &self.records {
+            e.array(2)?;
+            e.bytes(&record.output.to_bytes())?;
+            origin_item(&mut e, &record.origin)?;
+        }
+        e.set(items(self.deleted.names())?)?;
+        e.array(count(self.changes.len())?)?;
+        for change in &self.changes {
+            change_item(&mut e, change)?;
+        }
+        Ok(e.finish()?)
+    }
+
     /// The history as relations between inputs and outputs.
     #[must_use]
     pub fn relations(&self) -> Relations {
@@ -456,6 +489,115 @@ impl History {
         }
         Ok(())
     }
+}
+
+/// A length as CBOR counts it.
+fn count(n: usize) -> Result<u64, NameError> {
+    u64::try_from(n).map_err(|_| NameError::Encode(EncodeError::TooLong))
+}
+
+/// Writes one origin (see [`History::encode`]).
+fn origin_item(e: &mut Encoder, origin: &Origin) -> Result<(), NameError> {
+    match origin {
+        Origin::Unchanged => {
+            e.array(1)?;
+            e.uint(0)?;
+        }
+        Origin::Modified { from } => {
+            e.array(2)?;
+            e.uint(1)?;
+            e.set(items(from.names())?)?;
+        }
+        Origin::Generated { from, role } => {
+            e.array(3)?;
+            e.uint(2)?;
+            e.set(items(from.names())?)?;
+            role_item(e, role)?;
+        }
+        Origin::Split { of, piece } => {
+            e.array(3)?;
+            e.uint(3)?;
+            e.bytes(&of.to_bytes())?;
+            match piece {
+                PieceKey::ByTools { tools, side } => {
+                    e.array(3)?;
+                    e.uint(0)?;
+                    e.set(items(tools.names())?)?;
+                    e.uint(side_number(*side))?;
+                }
+            }
+        }
+        Origin::Merged { of } => {
+            e.array(2)?;
+            e.uint(4)?;
+            e.set(items(of.names())?)?;
+        }
+    }
+    Ok(())
+}
+
+/// Writes one topology change (see [`History::encode`]).
+fn change_item(e: &mut Encoder, change: &TopologyChange) -> Result<(), NameError> {
+    match change {
+        TopologyChange::VertexSplit { vertex, edges } => {
+            e.array(3)?;
+            e.uint(0)?;
+            e.bytes(&vertex.to_bytes())?;
+            e.sorted(items(edges.names())?)?;
+        }
+        TopologyChange::FaceVanished { face, why } => {
+            e.array(3)?;
+            e.uint(1)?;
+            e.bytes(&face.to_bytes())?;
+            e.uint(match why {
+                Vanish::Collapsed => 0,
+                Vanish::InsideOut => 1,
+            })?;
+        }
+        TopologyChange::SelfOverlapCut { face, along } => {
+            e.array(3)?;
+            e.uint(2)?;
+            e.bytes(&face.to_bytes())?;
+            e.sorted(items(along.names())?)?;
+        }
+        TopologyChange::ClashTrimmed { faces } => {
+            e.array(2)?;
+            e.uint(3)?;
+            e.set(items(faces.names())?)?;
+        }
+        TopologyChange::OvershootRemoved { faces } => {
+            e.array(2)?;
+            e.uint(4)?;
+            e.set(items(faces.names())?)?;
+        }
+        TopologyChange::FacesMerged { faces, into } => {
+            e.array(3)?;
+            e.uint(5)?;
+            e.set(items(faces.names())?)?;
+            e.bytes(&into.to_bytes())?;
+        }
+        TopologyChange::FaceAdded { face, role } => {
+            e.array(3)?;
+            e.uint(6)?;
+            e.bytes(&face.to_bytes())?;
+            role_item(e, role)?;
+        }
+        TopologyChange::LoopChanged { face, change } => {
+            e.array(3)?;
+            e.uint(7)?;
+            e.bytes(&face.to_bytes())?;
+            e.uint(match change {
+                LoopChange::HoleClosed => 0,
+                LoopChange::FaceSplit => 1,
+            })?;
+        }
+        TopologyChange::BodySplit { lumps } => {
+            e.array(2)?;
+            e.uint(8)?;
+            e.sorted(items(lumps.names())?)?;
+        }
+    }
+    Ok(())
 }
 
 /// `values` sorted, each once.

@@ -50,7 +50,11 @@ pub fn date_utc(y: f64, m0: f64, d: f64) -> f64 {
         return f64::NAN;
     }
     let (y, m0, d) = (y.trunc(), m0.trunc(), d.trunc());
-    let y = if (0.0..=99.0).contains(&y) { 1900.0 + y } else { y };
+    let y = if (0.0..=99.0).contains(&y) {
+        1900.0 + y
+    } else {
+        y
+    };
     let ym = y + (m0 / 12.0).floor();
     let mm = m0.rem_euclid(12.0);
     let days = days_from_civil(ym as i64, mm as u32 + 1, 1) as f64 + d - 1.0;
@@ -65,7 +69,12 @@ pub fn weekday(t: f64) -> u32 {
 /// `isoUTC(t)`: "YYYY-MM-DD" of a moment (the year is not padded, as `getUTCFullYear` is not).
 pub fn iso_utc(t: f64) -> String {
     match parts(t) {
-        Some((y, m0, d, _)) => format!("{}-{}-{}", y, pad_start(&(m0 + 1).to_string(), 2, '0'), pad_start(&d.to_string(), 2, '0')),
+        Some((y, m0, d, _)) => format!(
+            "{}-{}-{}",
+            y,
+            pad_start(&(m0 + 1).to_string(), 2, '0'),
+            pad_start(&d.to_string(), 2, '0')
+        ),
         None => "NaN-NaN-NaN".to_string(),
     }
 }
@@ -93,10 +102,31 @@ pub fn valid_day_s(s: &str) -> bool {
 }
 
 /// The month names `longDate` prints.
-pub const MONTHS: [&str; 12] = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
+pub const MONTHS: [&str; 12] = [
+    "January",
+    "February",
+    "March",
+    "April",
+    "May",
+    "June",
+    "July",
+    "August",
+    "September",
+    "October",
+    "November",
+    "December",
+];
 
 /// The weekday names.
-pub const WEEKDAYS: [&str; 7] = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
+pub const WEEKDAYS: [&str; 7] = [
+    "Sunday",
+    "Monday",
+    "Tuesday",
+    "Wednesday",
+    "Thursday",
+    "Friday",
+    "Saturday",
+];
 
 /// `longDate(s)`: "21 October 2026", or an en dash for text that is not a day.
 pub fn long_date(s: &str) -> String {
@@ -108,7 +138,11 @@ pub fn long_date(s: &str) -> String {
 
 /// `longDate(s)` for a loose value.
 pub fn long_date_v(v: &V) -> String {
-    if v.t() { long_date(&v.s()) } else { "\u{2013}".to_string() }
+    if v.t() {
+        long_date(&v.s())
+    } else {
+        "\u{2013}".to_string()
+    }
 }
 
 /// `dayName(s)`: "Wednesday", or empty for text that is not a day.
@@ -128,12 +162,17 @@ fn nz_changes(y: i64) -> (f64, f64) {
         d + (7 - (d + 4).rem_euclid(7)) % 7
     };
     // 02:00 standard time and 03:00 daylight time are both 14:00 UTC the day before
-    ((last_sun_sep as f64) * DAY - 10.0 * 3600e3, (first_sun_apr as f64) * DAY - 10.0 * 3600e3)
+    (
+        (last_sun_sep as f64) * DAY - 10.0 * 3600e3,
+        (first_sun_apr as f64) * DAY - 10.0 * 3600e3,
+    )
 }
 
 /// The New Zealand calendar day of a moment, "YYYY-MM-DD" (`Intl.DateTimeFormat('en-NZ', { timeZone: 'Pacific/Auckland' })`).
 pub fn nz_day(t: f64) -> String {
-    let Some((y, _, _, _)) = parts(t) else { return "NaN-NaN-NaN".to_string() };
+    let Some((y, _, _, _)) = parts(t) else {
+        return "NaN-NaN-NaN".to_string();
+    };
     let (start, end) = nz_changes(y);
     let off = if t >= start || t < end { 13.0 } else { 12.0 };
     iso_utc(t + off * 3600e3)
@@ -152,17 +191,30 @@ pub fn to_ms(v: &V, clock_ms: f64) -> f64 {
 
 /// `Date.parse` for ISO text: "2026-10-05", "2026-10-05T01:02:03Z", with milliseconds or an offset.
 pub fn parse_date_text(s: &str) -> f64 {
-    let re = rx(r"^(\d{4})-(\d{2})-(\d{2})(?:[T ](\d{2}):(\d{2})(?::(\d{2})(?:\.(\d{1,9}))?)?)?\s*(Z|[+-]\d{2}:?\d{2})?$", "i");
-    let Some(c) = re.exec(s.trim()) else { return f64::NAN };
+    let re = rx(
+        r"^(\d{4})-(\d{2})-(\d{2})(?:[T ](\d{2}):(\d{2})(?::(\d{2})(?:\.(\d{1,9}))?)?)?\s*(Z|[+-]\d{2}:?\d{2})?$",
+        "i",
+    );
+    let Some(c) = re.exec(s.trim()) else {
+        return f64::NAN;
+    };
     let n = |i: usize| c.get(i).parse::<f64>().unwrap_or(0.0);
     let has_time = !c.get(4).is_empty();
-    let frac = if c.get(7).is_empty() { 0.0 } else { (format!("0.{}", c.get(7))).parse::<f64>().unwrap_or(0.0) * 1000.0 };
-    let mut t = date_utc(n(1), n(2) - 1.0, n(3)) + n(4) * 3600e3 + n(5) * 60e3 + n(6) * 1e3 + frac.floor();
+    let frac = if c.get(7).is_empty() {
+        0.0
+    } else {
+        (format!("0.{}", c.get(7))).parse::<f64>().unwrap_or(0.0) * 1000.0
+    };
+    let mut t =
+        date_utc(n(1), n(2) - 1.0, n(3)) + n(4) * 3600e3 + n(5) * 60e3 + n(6) * 1e3 + frac.floor();
     let z = c.get(8);
     if !z.is_empty() && !z.eq_ignore_ascii_case("z") {
         let sign = if z.starts_with('-') { -1.0 } else { 1.0 };
         let digits: String = z.chars().filter(|c| c.is_ascii_digit()).collect();
-        let (hh, mm) = (digits[..2].parse::<f64>().unwrap_or(0.0), digits[2..].parse::<f64>().unwrap_or(0.0));
+        let (hh, mm) = (
+            digits[..2].parse::<f64>().unwrap_or(0.0),
+            digits[2..].parse::<f64>().unwrap_or(0.0),
+        );
         t -= sign * (hh * 3600e3 + mm * 60e3);
     } else if has_time && z.is_empty() {
         // date and time without a zone is local time in the prototype's browser; the tests run on UTC
@@ -172,7 +224,9 @@ pub fn parse_date_text(s: &str) -> f64 {
 
 /// The system clock in milliseconds since 1970.
 pub fn system_ms() -> f64 {
-    std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map_or(0.0, |d| d.as_millis() as f64)
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map_or(0.0, |d| d.as_millis() as f64)
 }
 
 thread_local! {
@@ -224,10 +278,22 @@ mod tests {
         assert_eq!(day_name("2026-10-21"), "Wednesday");
         assert_eq!(nz_day(date_utc(2026.0, 9.0, 21.0)), "2026-10-21");
         // 11:30 UTC on 20 Oct is 00:30 on 21 Oct in New Zealand (daylight time)
-        assert_eq!(nz_day(date_utc(2026.0, 9.0, 20.0) + 11.5 * 3600e3), "2026-10-21");
+        assert_eq!(
+            nz_day(date_utc(2026.0, 9.0, 20.0) + 11.5 * 3600e3),
+            "2026-10-21"
+        );
         // in winter 11:30 UTC is 23:30 the same day
-        assert_eq!(nz_day(date_utc(2026.0, 6.0, 20.0) + 11.5 * 3600e3), "2026-07-20");
-        assert_eq!(today(&V::String("2026-05-01T10:00:00Z".into())), "2026-05-01");
-        assert_eq!(parse_date_text("2026-10-05T01:02:03Z"), date_utc(2026.0, 9.0, 5.0) + 3723e3);
+        assert_eq!(
+            nz_day(date_utc(2026.0, 6.0, 20.0) + 11.5 * 3600e3),
+            "2026-07-20"
+        );
+        assert_eq!(
+            today(&V::String("2026-05-01T10:00:00Z".into())),
+            "2026-05-01"
+        );
+        assert_eq!(
+            parse_date_text("2026-10-05T01:02:03Z"),
+            date_utc(2026.0, 9.0, 5.0) + 3723e3
+        );
     }
 }

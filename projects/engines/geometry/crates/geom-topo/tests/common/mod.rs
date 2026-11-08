@@ -275,6 +275,13 @@ pub fn wall() -> Body {
 /// own, a `next` chain through them all and no loops: arena-valid, as publishing checks, though
 /// not a closed solid. Two surfaces, so an edit can move a face to the other.
 pub fn many_faces(n: u32) -> Body {
+    many_faces_builder(n)
+        .publish(BodyKind::Sheet, ix(1), &mut meter())
+        .unwrap()
+}
+
+/// [`many_faces`]' arenas, not yet published.
+pub fn many_faces_builder(n: u32) -> Builder {
     let mut b = Builder::new();
     let a = &mut b.arenas;
     a.regions
@@ -313,7 +320,7 @@ pub fn many_faces(n: u32) -> Body {
         })
         .collect();
     a.faces.extend(&rows).unwrap();
-    b.publish(BodyKind::Sheet, ix(1), &mut meter()).unwrap()
+    b
 }
 
 /// The face at `row`.

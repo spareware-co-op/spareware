@@ -33,13 +33,15 @@
 
 use core::fmt;
 
-/// The licences a development crate may take from an outside package (MIT, Apache-2.0, BSD, ISC,
-/// Zlib, Unicode), by SPDX identifier.
-pub const PERMISSIVE: [&str; 8] = [
+/// The licences a development crate may take from an outside package (MIT, Apache-2.0, BSD, Boost,
+/// ISC, Zlib, Unicode), by SPDX identifier. Boost's is chapter 29.2's, for the oracles chapter 29
+/// lists under it (`clipper2-rust`).
+pub const PERMISSIVE: [&str; 9] = [
     "MIT",
     "Apache-2.0",
     "BSD-2-Clause",
     "BSD-3-Clause",
+    "BSL-1.0",
     "ISC",
     "Zlib",
     "Unicode-3.0",
@@ -415,6 +417,7 @@ mod tests {
             "Apache-2.0 WITH LLVM-exception OR Apache-2.0 OR MIT",
             "BSD-2-Clause OR Apache-2.0 OR MIT",
             "Apache-2.0 WITH LLVM-exception",
+            "BSL-1.0",
         ] {
             assert!(p(yes).permissive(), "{yes}");
         }

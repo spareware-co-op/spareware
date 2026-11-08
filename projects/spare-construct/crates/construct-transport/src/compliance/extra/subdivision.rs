@@ -1,6 +1,8 @@
 //! Urban subdivision mode, AUP E38 (compliance-extra.js section 12).
 
-use super::ctx::{assumptions, data, dev_zones, esc, link_name, nn, num, pair, periods_of, pct, res_of};
+use super::ctx::{
+    assumptions, data, dev_zones, esc, link_name, nn, num, pair, pct, periods_of, res_of,
+};
 use super::packs::{n0, t_table};
 use crate::compliance::data::{c as core_table, x as xdata};
 use crate::compliance::engine;
@@ -23,7 +25,11 @@ pub struct DistSkim {
 /// `distSkim(sc, fromIds)`: shortest road distances (arc lengths) from each start node (ids such as `z:zDev`) to every node of the scenario's graph.
 pub fn dist_skim(p: &V, sc: &V, from_ids: &[String]) -> DistSkim {
     let g = engine::build_graph(p, sc, None);
-    let cost: Vec<f64> = g.arcs.iter().map(|a| if truthy_number(a.len) { a.len } else { 0.0 }).collect();
+    let cost: Vec<f64> = g
+        .arcs
+        .iter()
+        .map(|a| if truthy_number(a.len) { a.len } else { 0.0 })
+        .collect();
     let mut w = g.workspace();
     let mut nd: HashMap<String, Vec<f64>> = HashMap::new();
     for id in from_ids {
@@ -44,19 +50,41 @@ pub fn rear_access(a: &V) -> V {
         flags.push(format!("{} rear sites share this access: no more than {} rear sites per access (Table E38.8.1.2.1)", ns(n), ns(max_sites)));
     }
     let rows = std.g("rows").items();
-    let row = rows.iter().find(|r| n <= r.g("max").n()).unwrap_or_else(|| rows.last().expect("e38 rows"));
+    let row = rows
+        .iter()
+        .find(|r| n <= r.g("max").n())
+        .unwrap_or_else(|| rows.last().expect("e38 rows"));
     let plural = if n == 1.0 { "" } else { "s" };
     if nn(a.g("formed")).is_some() && a.g("formed").n() < row.g("formed").n() {
-        flags.push(format!("Formed width {} m is below {} m for {} site{}", num(&V::Number(a.g("formed").n()), 1), num(row.g("formed"), 1), ns(n), plural));
+        flags.push(format!(
+            "Formed width {} m is below {} m for {} site{}",
+            num(&V::Number(a.g("formed").n()), 1),
+            num(row.g("formed"), 1),
+            ns(n),
+            plural
+        ));
     }
     if nn(a.g("legal")).is_some() && a.g("legal").n() < row.g("legal").n() {
-        flags.push(format!("Legal width {} m is below {} m for {} site{}", num(&V::Number(a.g("legal").n()), 1), num(row.g("legal"), 1), ns(n), plural));
+        flags.push(format!(
+            "Legal width {} m is below {} m for {} site{}",
+            num(&V::Number(a.g("legal").n()), 1),
+            num(row.g("legal"), 1),
+            ns(n),
+            plural
+        ));
     }
     if nn(a.g("len")).is_some() && a.g("len").n() > row.g("len").n() {
-        flags.push(format!("Length {} m is over the {} m maximum", fmt::int(a.g("len").n()), row.g("len").s()));
+        flags.push(format!(
+            "Length {} m is over the {} m maximum",
+            fmt::int(a.g("len").n()),
+            row.g("len").s()
+        ));
     }
     if row.g("ped").t() && n > 5.0 && !(nn(a.g("ped")).unwrap_or(0.0) >= row.g("ped").n()) {
-        flags.push(format!("Needs separated pedestrian access at least {} m wide", row.g("ped").s()));
+        flags.push(format!(
+            "Needs separated pedestrian access at least {} m wide",
+            row.g("ped").s()
+        ));
     }
     let ok = flags.is_empty();
     let mut out = if a.is_obj() { a.clone() } else { V::object() };
@@ -83,7 +111,10 @@ pub fn subdivision(p: &V) -> V {
         .collect();
     let affected_pct = a.g("affectedPct").n();
     let mut links: Vec<(f64, V)> = Vec::new();
-    for per in periods_of(sc).into_iter().filter(|x| res_of(pr.base, x).is_some() && !pr.same) {
+    for per in periods_of(sc)
+        .into_iter()
+        .filter(|x| res_of(pr.base, x).is_some() && !pr.same)
+    {
         let rb = res_of(pr.base, per).expect("base results");
         let ro = res_of(sc, per).expect("option results");
         for l in pr.base.g("links").vals() {
@@ -91,7 +122,14 @@ pub fn subdivision(p: &V) -> V {
             if !sc.g("links").g(&id).t() || l.g("status").eq_s("proposed") {
                 continue;
             }
-            let flow = |r: &V| ["ab", "ba"].iter().fold(0.0, |s, d| s + { let v = r.g("arcs").g(&format!("{id}:{d}")).g("v"); if v.t() { v.n() } else { 0.0 } });
+            let flow = |r: &V| {
+                ["ab", "ba"].iter().fold(0.0, |s, d| {
+                    s + {
+                        let v = r.g("arcs").g(&format!("{id}:{d}")).g("v");
+                        if v.t() { v.n() } else { 0.0 }
+                    }
+                })
+            };
             let (vb, vo) = (flow(rb), flow(ro));
             let d = vo - vb;
             if d < 1.0 {
@@ -107,17 +145,38 @@ pub fn subdivision(p: &V) -> V {
     let dz = dev_zones(sc);
     let mut con = jobj! { "zones" => dz.len() };
     if !dz.is_empty() {
-        let c = [dz.iter().fold(0.0, |s, z| s + z.g("lat").n()) / dz.len() as f64, dz.iter().fold(0.0, |s, z| s + z.g("lng").n()) / dz.len() as f64];
+        let c = [
+            dz.iter().fold(0.0, |s, z| s + z.g("lat").n()) / dz.len() as f64,
+            dz.iter().fold(0.0, |s, z| s + z.g("lng").n()) / dz.len() as f64,
+        ];
         let r = 800.0;
         let inter = sc
             .g("nodes")
             .keys()
             .into_iter()
-            .filter(|id| net::road_links(sc, id).len() >= 3 && util::dist(&[sc.g("nodes").g(id).g("lat").n(), sc.g("nodes").g(id).g("lng").n()], &c) <= r)
+            .filter(|id| {
+                net::road_links(sc, id).len() >= 3
+                    && util::dist(
+                        &[
+                            sc.g("nodes").g(id).g("lat").n(),
+                            sc.g("nodes").g(id).g("lng").n(),
+                        ],
+                        &c,
+                    ) <= r
+            })
             .count();
         let side = r / 1000.0;
-        con.set("density", V::Number(inter as f64 / (std::f64::consts::PI * (side * side))));
-        con.set("densityBasis", V::String(format!("junctions (3 or more roads) within {} m of the development centroid, per km\u{b2}", ns(r))));
+        con.set(
+            "density",
+            V::Number(inter as f64 / (std::f64::consts::PI * (side * side))),
+        );
+        con.set(
+            "densityBasis",
+            V::String(format!(
+                "junctions (3 or more roads) within {} m of the development centroid, per km\u{b2}",
+                ns(r)
+            )),
+        );
         let mut stops: Vec<String> = Vec::new();
         let mut add_stop = |id: String| {
             if !stops.contains(&id) {
@@ -136,26 +195,43 @@ pub fn subdivision(p: &V) -> V {
                 add_stop(n.g("id").s());
             }
         }
-        let schools: Vec<&V> = sc.g("zones").vals().into_iter().filter(|z| super::ctx::lu_of(z, "school") > 0.0 && !z.g("kind").eq_s("gateway")).collect();
+        let schools: Vec<&V> = sc
+            .g("zones")
+            .vals()
+            .into_iter()
+            .filter(|z| super::ctx::lu_of(z, "school") > 0.0 && !z.g("kind").eq_s("gateway"))
+            .collect();
         let from: Vec<String> = dz.iter().map(|z| format!("z:{}", z.g("id").s())).collect();
         let sk = dist_skim(p, sc, &from);
-        let (mut dirs, mut w_stop, mut w_school): (Vec<f64>, Vec<f64>, Vec<f64>) = (vec![], vec![], vec![]);
+        let (mut dirs, mut w_stop, mut w_school): (Vec<f64>, Vec<f64>, Vec<f64>) =
+            (vec![], vec![], vec![]);
         let walk_speed = a.g("walkSpeed").n();
         for z in &dz {
-            let Some(nd) = sk.nd.get(&format!("z:{}", z.g("id").s())) else { continue };
+            let Some(nd) = sk.nd.get(&format!("z:{}", z.g("id").s())) else {
+                continue;
+            };
             for o in sc.g("zones").vals() {
                 if std::ptr::eq(o, *z) || o.g("kind").eq_s("gateway") {
                     continue;
                 }
                 let i = sk.g.idx.get(&format!("z:{}", o.g("id").s()));
-                let cr = util::dist(&[z.g("lat").n(), z.g("lng").n()], &[o.g("lat").n(), o.g("lng").n()]);
+                let cr = util::dist(
+                    &[z.g("lat").n(), z.g("lng").n()],
+                    &[o.g("lat").n(), o.g("lng").n()],
+                );
                 if let Some(&i) = i {
                     if nd[i].is_finite() && cr > 200.0 && cr < 3000.0 {
                         dirs.push(nd[i] / cr);
                     }
                 }
             }
-            let near = |ids: &[String]| -> f64 { math_min_of(&ids.iter().map(|id| sk.g.idx.get(id).map_or(f64::INFINITY, |&i| nd[i])).collect::<Vec<_>>()) };
+            let near = |ids: &[String]| -> f64 {
+                math_min_of(
+                    &ids.iter()
+                        .map(|id| sk.g.idx.get(id).map_or(f64::INFINITY, |&i| nd[i]))
+                        .collect::<Vec<_>>(),
+                )
+            };
             if !stops.is_empty() {
                 let d = near(&stops);
                 if d.is_finite() {
@@ -171,19 +247,45 @@ pub fn subdivision(p: &V) -> V {
                 }
             }
         }
-        let avg = |x: &[f64]| -> V { if x.is_empty() { V::Null } else { V::Number(x.iter().fold(0.0, |s, v| s + v) / x.len() as f64) } };
+        let avg = |x: &[f64]| -> V {
+            if x.is_empty() {
+                V::Null
+            } else {
+                V::Number(x.iter().fold(0.0, |s, v| s + v) / x.len() as f64)
+            }
+        };
         con.set("directness", avg(&dirs));
         con.set("directnessBasis", V::String("road-network distance \u{f7} straight-line distance to other zones 200 m to 3 km away (1.0 is perfectly direct)".to_string()));
         con.set("walkStop", avg(&w_stop));
         con.set("walkSchool", avg(&w_school));
-        con.set("walkBasis", V::String(format!("road-network distance at {} m/s ({}); bus stops from modelled bus routes", a.g("walkSpeed").s(), xdata("ASSUMPTION").s())));
+        con.set(
+            "walkBasis",
+            V::String(format!(
+                "road-network distance at {} m/s ({}); bus stops from modelled bus routes",
+                a.g("walkSpeed").s(),
+                xdata("ASSUMPTION").s()
+            )),
+        );
     }
     // AUP Table E27.6.1.1 subdivision rows (T3A, T3B): from the Compliance lane's E27 data when loaded
-    let e27_data: Vec<&V> = core_table("E27.rows").items().iter().filter(|r| r.g("key").eq_s("subdivision")).collect();
+    let e27_data: Vec<&V> = core_table("E27.rows")
+        .items()
+        .iter()
+        .filter(|r| r.g("key").eq_s("subdivision"))
+        .collect();
     let (e27_rows, e27src): (Vec<V>, &str) = if !e27_data.is_empty() {
-        (e27_data.into_iter().cloned().collect(), "Compliance tab E27 data")
+        (
+            e27_data.into_iter().cloned().collect(),
+            "Compliance tab E27 data",
+        )
     } else {
-        (vec![jobj! { "id" => "T3A", "thr" => 40, "tier" => 1 }, jobj! { "id" => "T3B", "thr" => 100, "tier" => 2 }], "Compliance+ copy (verify)")
+        (
+            vec![
+                jobj! { "id" => "T3A", "thr" => 40, "tier" => 1 },
+                jobj! { "id" => "T3B", "thr" => 100, "tier" => 2 },
+            ],
+            "Compliance+ copy (verify)",
+        )
     };
     let e27: Vec<V> = e27_rows.iter().map(|r| jobj! { "id" => r.g("id"), "thr" => r.g("thr"), "tier" => r.g("tier"), "exceeded" => lots > r.g("thr").n() }).collect();
     let mut exceeded: Vec<&V> = e27.iter().filter(|r| r.g("exceeded").t()).collect();
@@ -202,14 +304,21 @@ pub fn subdivision(p: &V) -> V {
             None => format!(
                 "{} lots are within the Table E27.6.1.1 subdivision thresholds ({}; {})",
                 fmt::int(lots),
-                e27.iter().map(|r| format!("{} {}", r.g("id").s(), r.g("thr").s())).collect::<Vec<_>>().join(", "),
+                e27.iter()
+                    .map(|r| format!("{} {}", r.g("id").s(), r.g("thr").s()))
+                    .collect::<Vec<_>>()
+                    .join(", "),
                 e27src
             ),
         }
     } else {
         String::new()
     };
-    let accesses: Vec<V> = if cx.g("accesses").t() { cx.g("accesses").items().iter().map(rear_access).collect() } else { vec![] };
+    let accesses: Vec<V> = if cx.g("accesses").t() {
+        cx.g("accesses").items().iter().map(rear_access).collect()
+    } else {
+        vec![]
+    };
     jobj! {
         "lots" => lots,
         "trips" => arr(trips),
@@ -247,17 +356,44 @@ pub fn report(id: &str, p: &V, _ctx: Option<&dyn ReportCtx>) -> Option<String> {
             vec![
                 esc(if a.g("name").t() { a.g("name") } else { &dash }),
                 num(a.g("sites"), 0),
-                if a.g("ok").t() { "Complies".to_string() } else { super::ctx::esc_s(&a.g("flags").items().iter().map(|f| f.s()).collect::<Vec<_>>().join("; ")) },
+                if a.g("ok").t() {
+                    "Complies".to_string()
+                } else {
+                    super::ctx::esc_s(
+                        &a.g("flags")
+                            .items()
+                            .iter()
+                            .map(|f| f.s())
+                            .collect::<Vec<_>>()
+                            .join("; "),
+                    )
+                },
             ]
         })
         .collect();
     Some(format!(
         "<p class=\"note\">{}</p>{}{}<p class=\"note\">Connectivity: intersection density {}, route directness {}.</p>",
         esc(s.g("warning")),
-        if s.g("e27Text").t() { format!("<p class=\"note\">{}.</p>", esc(s.g("e27Text"))) } else { String::new() },
-        t_table(&["Rear access", "Sites", "Check"], rows, "No rear accesses."),
-        if !con.g("density").nullish() { format!("{} per km\u{b2}", num(con.g("density"), 0)) } else { "\u{2013}".to_string() },
-        if !con.g("directness").nullish() { num(con.g("directness"), 2) } else { "\u{2013}".to_string() },
+        if s.g("e27Text").t() {
+            format!("<p class=\"note\">{}.</p>", esc(s.g("e27Text")))
+        } else {
+            String::new()
+        },
+        t_table(
+            &["Rear access", "Sites", "Check"],
+            rows,
+            "No rear accesses."
+        ),
+        if !con.g("density").nullish() {
+            format!("{} per km\u{b2}", num(con.g("density"), 0))
+        } else {
+            "\u{2013}".to_string()
+        },
+        if !con.g("directness").nullish() {
+            num(con.g("directness"), 2)
+        } else {
+            "\u{2013}".to_string()
+        },
     ))
 }
 

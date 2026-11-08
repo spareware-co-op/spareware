@@ -25,10 +25,25 @@ fn policy_matches_the_prototype() {
             "skim" => {
                 let p = project(case);
                 let sc = p.g("scenarios").ix(args.g("sci").n() as usize);
-                let ids: Vec<String> = sc.g("zones").keys().into_iter().map(|k| k.to_string()).collect();
-                let list = |v: &V| -> Vec<String> { if v.is_arr() { v.items().iter().map(|x| x.s()).collect() } else { ids.clone() } };
+                let ids: Vec<String> = sc
+                    .g("zones")
+                    .keys()
+                    .into_iter()
+                    .map(|k| k.to_string())
+                    .collect();
+                let list = |v: &V| -> Vec<String> {
+                    if v.is_arr() {
+                        v.items().iter().map(|x| x.s()).collect()
+                    } else {
+                        ids.clone()
+                    }
+                };
                 let (from, to) = (list(args.g("from")), list(args.g("to")));
-                let res = if args.g("per").t() { Some(sc.g("res").g(&args.g("per").s())) } else { None };
+                let res = if args.g("per").t() {
+                    Some(sc.g("res").g(&args.g("per").s()))
+                } else {
+                    None
+                };
                 let got = policy::skim(&p, sc, res, &from, &to);
                 let mut o = V::object();
                 for (f, m) in &got {
@@ -46,7 +61,10 @@ fn policy_matches_the_prototype() {
                 Some(())
             }
             "placeOf" => {
-                check_ok(case, &policy::place_of(args.g("L")).map_or(V::Null, V::Number));
+                check_ok(
+                    case,
+                    &policy::place_of(args.g("L")).map_or(V::Null, V::Number),
+                );
                 Some(())
             }
             "affectedLinks" => {
@@ -67,15 +85,28 @@ fn policy_matches_the_prototype() {
             "report" => guard(|| {
                 let p = project(case);
                 let rid = case.g("report").s();
-                let got = if case.g("ctx").t() { policy::report(&rid, &p, Some(&Mock)) } else { policy::report(&rid, &p, None) };
-                check_text(case, &got.unwrap_or_else(|| panic!("{id}: no report section {rid}")));
+                let got = if case.g("ctx").t() {
+                    policy::report(&rid, &p, Some(&Mock))
+                } else {
+                    policy::report(&rid, &p, None)
+                };
+                check_text(
+                    case,
+                    &got.unwrap_or_else(|| panic!("{id}: no report section {rid}")),
+                );
             }),
             "export" => guard(|| {
                 let p = project(case);
                 let eid = case.g("export").s();
                 let mut got = V::object();
-                got.set("build", V::String(policy::export_build(&eid, &p).expect("export")));
-                got.set("enabled", V::Bool(policy::export_enabled(&eid, &p).expect("export")));
+                got.set(
+                    "build",
+                    V::String(policy::export_build(&eid, &p).expect("export")),
+                );
+                got.set(
+                    "enabled",
+                    V::Bool(policy::export_enabled(&eid, &p).expect("export")),
+                );
                 got.set("label", case.g("ok").g("label").clone());
                 check_ok(case, &got);
             }),
@@ -87,7 +118,9 @@ fn policy_matches_the_prototype() {
             skipped += 1;
         }
     }
-    println!("policy: {checked} cases checked, {skipped} skipped (a part this one calls is still a stub)");
+    println!(
+        "policy: {checked} cases checked, {skipped} skipped (a part this one calls is still a stub)"
+    );
     assert_eq!(checked + skipped, cases.len());
     assert!(checked > 200);
 }

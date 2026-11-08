@@ -8,7 +8,7 @@
 //! diverges, kept apart from junctions. One-way carriageways paired with the opposite carriageway of the same road
 //! count road kilometres once.
 
-use super::cas::{Crash, CAS_YEARS_DEFAULT};
+use super::cas::{CAS_YEARS_DEFAULT, Crash};
 use crate::datahub::norm;
 use crate::edit::collate::locale_compare_f64;
 use crate::edit::json::JsonValue;
@@ -113,13 +113,27 @@ pub struct CasLoad {
 impl CasLoad {
     /// Reads `loaded.cas` as saved (an object, or anything else for none).
     pub fn from_value(v: Option<&serde_json::Value>) -> CasLoad {
-        let Some(serde_json::Value::Object(o)) = v else { return CasLoad { at: None, from: f64::NAN, to: f64::NAN, ytd: f64::NAN, lag_year: f64::NAN } };
+        let Some(serde_json::Value::Object(o)) = v else {
+            return CasLoad {
+                at: None,
+                from: f64::NAN,
+                to: f64::NAN,
+                ytd: f64::NAN,
+                lag_year: f64::NAN,
+            };
+        };
         let num = |k: &str| o.get(k).map_or(f64::NAN, crate::jsnum::value_to_number);
         let at = match o.get("at") {
             Some(a) if crate::jsnum::value_truthy(a) => date_of(&JsonValue::from_value(a)),
             _ => None,
         };
-        CasLoad { at, from: num("from"), to: num("to"), ytd: num("ytd"), lag_year: num("lagYear") }
+        CasLoad {
+            at,
+            from: num("from"),
+            to: num("to"),
+            ytd: num("ytd"),
+            lag_year: num("lagYear"),
+        }
     }
 }
 
@@ -162,7 +176,11 @@ pub fn crash_years(cr: &[Crash], cas: &CasLoad) -> Years {
     }
     if let Some(at) = cas.at {
         let year = nz_parts(at).year as f64;
-        let from = if cas.from > 0.0 { cas.from } else { year - CAS_YEARS_DEFAULT };
+        let from = if cas.from > 0.0 {
+            cas.from
+        } else {
+            year - CAS_YEARS_DEFAULT
+        };
         let start = nz_midnight_ms(year, 0.0, 1.0);
         let next = nz_midnight_ms(year + 1.0, 0.0, 1.0);
         let frac = math_max(1.0 / 12.0, (at - start) / (next - start));
@@ -174,13 +192,35 @@ pub fn crash_years(cr: &[Crash], cas: &CasLoad) -> Years {
             window: true,
             full_to: Some(if cas.to > 0.0 { cas.to } else { year - 1.0 }),
             ytd: Some(if cas.ytd > 0.0 { cas.ytd } else { year }),
-            lag_year: Some(if cas.lag_year != 0.0 && !cas.lag_year.is_nan() { Some(cas.lag_year) } else { None }),
+            lag_year: Some(if cas.lag_year != 0.0 && !cas.lag_year.is_nan() {
+                Some(cas.lag_year)
+            } else {
+                None
+            }),
         };
     }
     if !y0.is_finite() {
-        return Years { from: None, to: None, span: None, partial: false, window: false, full_to: None, ytd: None, lag_year: None };
+        return Years {
+            from: None,
+            to: None,
+            span: None,
+            partial: false,
+            window: false,
+            full_to: None,
+            ytd: None,
+            lag_year: None,
+        };
     }
-    Years { from: Some(y0), to: Some(y1), span: Some(y1 - y0 + 1.0), partial: false, window: false, full_to: None, ytd: None, lag_year: None }
+    Years {
+        from: Some(y0),
+        to: Some(y1),
+        span: Some(y1 - y0 + 1.0),
+        partial: false,
+        window: false,
+        full_to: None,
+        ytd: None,
+        lag_year: None,
+    }
 }
 
 /// One existing link with its length and the crashes assigned to it.
@@ -269,7 +309,9 @@ pub fn assign_crashes<'a>(sc: &'a Scenario, cr: &[Crash], cas: &CasLoad) -> Assi
     let links: Vec<&Link> = sc
         .links
         .values()
-        .filter(|l| !l.status.is("proposed") && sc.nodes.contains_key(&l.a) && sc.nodes.contains_key(&l.b))
+        .filter(|l| {
+            !l.status.is("proposed") && sc.nodes.contains_key(&l.a) && sc.nodes.contains_key(&l.b)
+        })
         .collect();
     let node_ids: Vec<&str> = sc.nodes.keys().collect();
     let mut lat0 = 0.0;
@@ -289,7 +331,12 @@ pub fn assign_crashes<'a>(sc: &'a Scenario, cr: &[Crash], cas: &CasLoad) -> Assi
     let mut lgrid: HashMap<i64, Vec<usize>> = HashMap::new();
     let mut lk: Vec<LinkTally> = links
         .iter()
-        .map(|l| LinkTally { link: l, nm: norm(l.name.as_str().unwrap_or("")), km: util::poly_len(&sc.geom(l)) / 1000.0, t: Tally::default() })
+        .map(|l| LinkTally {
+            link: l,
+            nm: norm(l.name.as_str().unwrap_or("")),
+            km: util::poly_len(&sc.geom(l)) / 1000.0,
+            t: Tally::default(),
+        })
         .collect();
     let geoms: Vec<Vec<util::LatLng>> = links.iter().map(|l| sc.geom(l)).collect();
     for (li, g) in geoms.iter().enumerate() {
@@ -297,7 +344,15 @@ pub fn assign_crashes<'a>(sc: &'a Scenario, cr: &[Crash], cas: &CasLoad) -> Assi
             let (ax, ay, bx, by) = (f.x(&g[i]), f.y(&g[i]), f.x(&g[i + 1]), f.y(&g[i + 1]));
             let s = seg.len();
             seg.push([ax, ay, bx, by, li as f64]);
-            put(&mut lgrid, math_min(ax, bx), math_min(ay, by), math_max(ax, bx), math_max(ay, by), LINK_R, s);
+            put(
+                &mut lgrid,
+                math_min(ax, bx),
+                math_min(ay, by),
+                math_max(ax, bx),
+                math_max(ay, by),
+                LINK_R,
+                s,
+            );
         }
     }
     // Junction nodes: three or more existing links, and every node of a roundabout ring
@@ -313,7 +368,11 @@ pub fn assign_crashes<'a>(sc: &'a Scenario, cr: &[Crash], cas: &CasLoad) -> Assi
             }
         }
     }
-    let mut jids: Vec<&str> = deg.keys().copied().filter(|id| deg[id] >= 3 || on_ring.contains(id)).collect();
+    let mut jids: Vec<&str> = deg
+        .keys()
+        .copied()
+        .filter(|id| deg[id] >= 3 || on_ring.contains(id))
+        .collect();
     jids.sort_by(|a, b| utf16_cmp(a, b));
     let jidx: HashMap<&str, usize> = jids.iter().enumerate().map(|(i, id)| (*id, i)).collect();
     let mut par: Vec<usize> = (0..jids.len()).collect();
@@ -350,7 +409,12 @@ pub fn assign_crashes<'a>(sc: &'a Scenario, cr: &[Crash], cas: &CasLoad) -> Assi
     };
     let name_set = |id: &str| -> std::collections::HashSet<String> {
         inc.get(id)
-            .map(|v| v.iter().map(|&li| lk[li].nm.clone()).filter(|n| !n.is_empty()).collect())
+            .map(|v| {
+                v.iter()
+                    .map(|&li| lk[li].nm.clone())
+                    .filter(|n| !n.is_empty())
+                    .collect()
+            })
             .unwrap_or_default()
     };
     let mut pgrid: HashMap<i64, Vec<usize>> = HashMap::new();
@@ -378,7 +442,9 @@ pub fn assign_crashes<'a>(sc: &'a Scenario, cr: &[Crash], cas: &CasLoad) -> Assi
                         }
                         seen.insert(o);
                         let (ox, oy) = xy(jids[o]);
-                        if math_hypot(&[ox - x, oy - y]) <= NODE_R && name_set(jids[o]).iter().any(|n| mine.contains(n)) {
+                        if math_hypot(&[ox - x, oy - y]) <= NODE_R
+                            && name_set(jids[o]).iter().any(|n| mine.contains(n))
+                        {
                             join(&mut par, i, o);
                         }
                     }
@@ -435,10 +501,17 @@ pub fn assign_crashes<'a>(sc: &'a Scenario, cr: &[Crash], cas: &CasLoad) -> Assi
                 }
                 ext.push(li);
                 let g = &geoms[li];
-                let far = if inside.contains(l.a.as_str()) { g[math_min(g.len() as f64 - 1.0, 1.0) as usize] } else { g[math_max(0.0, g.len() as f64 - 2.0) as usize] };
+                let far = if inside.contains(l.a.as_str()) {
+                    g[math_min(g.len() as f64 - 1.0, 1.0) as usize]
+                } else {
+                    g[math_max(0.0, g.len() as f64 - 2.0) as usize]
+                };
                 let b = (f.x(&far) - cx).atan2(f.y(&far) - cy) * 180.0 / std::f64::consts::PI;
                 let nm = norm(l.name.as_str().unwrap_or(""));
-                if !legs.iter().any(|lg| !nm.is_empty() && lg.nm == nm && ang_diff(lg.b, b) < 45.0) {
+                if !legs
+                    .iter()
+                    .any(|lg| !nm.is_empty() && lg.nm == nm && ang_diff(lg.b, b) < 45.0)
+                {
                     legs.push(Leg { nm, b, li });
                 }
             }
@@ -449,14 +522,30 @@ pub fn assign_crashes<'a>(sc: &'a Scenario, cr: &[Crash], cas: &CasLoad) -> Assi
         let mut sorted: Vec<usize> = members.clone();
         js_sort_by(&mut sorted, |&a, &b| {
             let d = deg[jids[b]] as f64 - deg[jids[a]] as f64;
-            if d != 0.0 { d } else if utf16_cmp(jids[a], jids[b]) == std::cmp::Ordering::Less { -1.0 } else { 1.0 }
+            if d != 0.0 {
+                d
+            } else if utf16_cmp(jids[a], jids[b]) == std::cmp::Ordering::Less {
+                -1.0
+            } else {
+                1.0
+            }
         });
         let rep = jids[sorted[0]];
-        let interchange = ext.iter().all(|&li| links[li].cls.is("motorway") || links[li].cls.is("ramp"));
-        let mut named: Vec<&Link> = legs.iter().map(|l| links[l.li]).filter(|l| l.name.as_str().is_some_and(|n| !n.is_empty())).collect();
+        let interchange = ext
+            .iter()
+            .all(|&li| links[li].cls.is("motorway") || links[li].cls.is("ramp"));
+        let mut named: Vec<&Link> = legs
+            .iter()
+            .map(|l| links[l.li])
+            .filter(|l| l.name.as_str().is_some_and(|n| !n.is_empty()))
+            .collect();
         js_sort_by(&mut named, |p, q| {
             let d = road_class(q.cls.as_str()).rank - road_class(p.cls.as_str()).rank;
-            if d != 0.0 && !d.is_nan() { d } else { locale_compare_f64(p.name.as_str().unwrap_or(""), q.name.as_str().unwrap_or("")) }
+            if d != 0.0 && !d.is_nan() {
+                d
+            } else {
+                locale_compare_f64(p.name.as_str().unwrap_or(""), q.name.as_str().unwrap_or(""))
+            }
         });
         let mut names: Vec<&str> = Vec::new();
         for l in &named {
@@ -465,7 +554,12 @@ pub fn assign_crashes<'a>(sc: &'a Scenario, cr: &[Crash], cas: &CasLoad) -> Assi
                 names.push(n);
             }
         }
-        let joined = names.iter().take(3).copied().collect::<Vec<_>>().join(" / ");
+        let joined = names
+            .iter()
+            .take(3)
+            .copied()
+            .collect::<Vec<_>>()
+            .join(" / ");
         let name = if !joined.is_empty() {
             joined
         } else if interchange {
@@ -474,7 +568,16 @@ pub fn assign_crashes<'a>(sc: &'a Scenario, cr: &[Crash], cas: &CasLoad) -> Assi
             "Unnamed junction".to_string()
         };
         let node_names: Vec<String> = members.iter().map(|&i| jids[i].to_string()).collect();
-        let j = JunctionTally { id: rep.to_string(), nodes: node_names, x: cx, y: cy, legs: legs.len(), interchange, name, t: Tally::default() };
+        let j = JunctionTally {
+            id: rep.to_string(),
+            nodes: node_names,
+            x: cx,
+            y: cy,
+            legs: legs.len(),
+            interchange,
+            name,
+            t: Tally::default(),
+        };
         for &i in members {
             j_of_node.insert(jids[i].to_string(), jn.len());
             let (x, y) = xy(jids[i]);
@@ -524,7 +627,11 @@ pub fn assign_crashes<'a>(sc: &'a Scenario, cr: &[Crash], cas: &CasLoad) -> Assi
                     let mut nd = f64::INFINITY;
                     for &(li, dd) in &dl {
                         let nm = &lk[li].nm;
-                        if dd <= bd + NAME_SLACK && dd < nd && !nm.is_empty() && (*nm == loc || nm.contains(&loc) || loc.contains(nm.as_str())) {
+                        if dd <= bd + NAME_SLACK
+                            && dd < nd
+                            && !nm.is_empty()
+                            && (*nm == loc || nm.contains(&loc) || loc.contains(nm.as_str()))
+                        {
                             nd = dd;
                             nb = li as i64;
                         }
@@ -569,7 +676,11 @@ pub fn assign_crashes<'a>(sc: &'a Scenario, cr: &[Crash], cas: &CasLoad) -> Assi
     let dir_b = |li: usize| -> f64 {
         let g = &geoms[li];
         let b = bearing(&g[0], &g[g.len() - 1]);
-        if lk[li].link.lanes_ab.int32() > 0 { b } else { (b + 180.0) % 360.0 }
+        if lk[li].link.lanes_ab.int32() > 0 {
+            b
+        } else {
+            (b + 180.0) % 360.0
+        }
     };
     for (_, ids) in &by_name {
         for &li in ids {
@@ -588,5 +699,13 @@ pub fn assign_crashes<'a>(sc: &'a Scenario, cr: &[Crash], cas: &CasLoad) -> Assi
             }
         }
     }
-    Assignment { lk, jn, j_of_node, link_of, node_of, pair, years: crash_years(cr, cas) }
+    Assignment {
+        lk,
+        jn,
+        j_of_node,
+        link_of,
+        node_of,
+        pair,
+        years: crash_years(cr, cas),
+    }
 }

@@ -12,7 +12,8 @@ pub const MOE_URL: &str =
 /// The time limit of one download (ms).
 pub const TIMEOUT_MS: f64 = 30000.0;
 /// Where trip rates come from when a land use has no source of its own.
-pub const DEFAULT_RATE_SOURCE: &str = "Spare Construct indicative default (Settings \u{203a} Trip rates)";
+pub const DEFAULT_RATE_SOURCE: &str =
+    "Spare Construct indicative default (Settings \u{203a} Trip rates)";
 
 /// A data source with its licence (SRC entries).
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -131,7 +132,8 @@ pub mod rr422 {
     /// Report name.
     pub const NAME: &str = "NZTA Research Report 422, Trips and parking related to land use (2010)";
     /// Address of the report.
-    pub const URL: &str = "https://www.nzta.govt.nz/assets/resources/research/reports/422/docs/422.pdf";
+    pub const URL: &str =
+        "https://www.nzta.govt.nz/assets/resources/research/reports/422/docs/422.pdf";
     /// Not yet verified against the source.
     pub const VERIFIED: bool = false;
     /// Peak-hour vehicle trips per household in the report.
@@ -169,7 +171,8 @@ pub mod std {
     /// Students per car on education trips.
     pub const EDU_OCC: f64 = 1.3;
     /// What the education occupancy is.
-    pub const EDU_OCC_LABEL: &str = "Spare Construct assumption: 1.3 students per car on education trips";
+    pub const EDU_OCC_LABEL: &str =
+        "Spare Construct assumption: 1.3 students per car on education trips";
     /// Census dwellings this far (m) from any existing zone get a zone of their own.
     pub const CREATE_M: f64 = 1000.0;
     /// Employees over the Census workplace count must lie in this band.
@@ -214,29 +217,124 @@ pub struct YieldRow {
 }
 
 const fn y(code: u32) -> YieldRow {
-    YieldRow { code, dph: None, homes: None, far: None, mix: None, per: None, assumed: false, note: None }
+    YieldRow {
+        code,
+        dph: None,
+        homes: None,
+        far: None,
+        mix: None,
+        per: None,
+        assumed: false,
+        note: None,
+    }
 }
 
 /// YIELDS: default yields per AUP base zone code, in ascending code order (a JavaScript object lists whole-number keys that way).
 pub const YIELDS: [YieldRow; 18] = [
-    YieldRow { far: Some(0.6), mix: Some(&[("office", 1.0)]), ..y(1) },
-    YieldRow { dph: Some(25.0), homes: Some("residential"), assumed: true, note: Some("Future Urban Zone (AUP H18): no urban development is enabled until the land is rezoned, so this is a structure-plan density assumption, not zoned capacity"), ..y(4) },
-    YieldRow { far: Some(0.4), mix: Some(&[("industrial", 1.0)]), ..y(5) },
-    YieldRow { dph: Some(40.0), homes: Some("apartment"), far: Some(0.6), mix: Some(&[("retail", 0.8), ("office", 0.2)]), ..y(7) },
-    YieldRow { dph: Some(120.0), homes: Some("apartment"), ..y(8) },
-    YieldRow { dph: Some(120.0), homes: Some("apartment"), far: Some(1.5), mix: Some(&[("retail", 0.5), ("office", 0.5)]), ..y(10) },
-    YieldRow { dph: Some(60.0), homes: Some("apartment"), far: Some(0.6), mix: Some(&[("office", 0.5), ("retail", 0.5)]), ..y(12) },
-    YieldRow { far: Some(0.5), mix: Some(&[("industrial", 0.5), ("warehouse", 0.5)]), ..y(17) },
-    YieldRow { dph: Some(30.0), homes: Some("residential"), ..y(18) },
-    YieldRow { dph: Some(15.0), homes: Some("residential"), ..y(19) },
-    YieldRow { dph: Some(80.0), homes: Some("apartment"), far: Some(1.2), mix: Some(&[("retail", 0.6), ("office", 0.4)]), ..y(22) },
-    YieldRow { dph: Some(250.0), homes: Some("apartment"), far: Some(4.0), mix: Some(&[("office", 0.7), ("retail", 0.3)]), ..y(35) },
-    YieldRow { dph: Some(30.0), homes: Some("apartment"), far: Some(0.4), mix: Some(&[("retail", 1.0)]), ..y(44) },
-    YieldRow { far: Some(0.5), mix: Some(&[("retail", 0.5), ("warehouse", 0.5)]), ..y(49) },
-    YieldRow { far: Some(0.6), mix: Some(&[("medical", 1.0)]), ..y(55) },
-    YieldRow { dph: Some(60.0), homes: Some("mixed"), ..y(60) },
-    YieldRow { per: Some(&[("school", 120.0)]), ..y(63) },
-    YieldRow { per: Some(&[("tertiary", 200.0)]), ..y(64) },
+    YieldRow {
+        far: Some(0.6),
+        mix: Some(&[("office", 1.0)]),
+        ..y(1)
+    },
+    YieldRow {
+        dph: Some(25.0),
+        homes: Some("residential"),
+        assumed: true,
+        note: Some(
+            "Future Urban Zone (AUP H18): no urban development is enabled until the land is rezoned, so this is a structure-plan density assumption, not zoned capacity",
+        ),
+        ..y(4)
+    },
+    YieldRow {
+        far: Some(0.4),
+        mix: Some(&[("industrial", 1.0)]),
+        ..y(5)
+    },
+    YieldRow {
+        dph: Some(40.0),
+        homes: Some("apartment"),
+        far: Some(0.6),
+        mix: Some(&[("retail", 0.8), ("office", 0.2)]),
+        ..y(7)
+    },
+    YieldRow {
+        dph: Some(120.0),
+        homes: Some("apartment"),
+        ..y(8)
+    },
+    YieldRow {
+        dph: Some(120.0),
+        homes: Some("apartment"),
+        far: Some(1.5),
+        mix: Some(&[("retail", 0.5), ("office", 0.5)]),
+        ..y(10)
+    },
+    YieldRow {
+        dph: Some(60.0),
+        homes: Some("apartment"),
+        far: Some(0.6),
+        mix: Some(&[("office", 0.5), ("retail", 0.5)]),
+        ..y(12)
+    },
+    YieldRow {
+        far: Some(0.5),
+        mix: Some(&[("industrial", 0.5), ("warehouse", 0.5)]),
+        ..y(17)
+    },
+    YieldRow {
+        dph: Some(30.0),
+        homes: Some("residential"),
+        ..y(18)
+    },
+    YieldRow {
+        dph: Some(15.0),
+        homes: Some("residential"),
+        ..y(19)
+    },
+    YieldRow {
+        dph: Some(80.0),
+        homes: Some("apartment"),
+        far: Some(1.2),
+        mix: Some(&[("retail", 0.6), ("office", 0.4)]),
+        ..y(22)
+    },
+    YieldRow {
+        dph: Some(250.0),
+        homes: Some("apartment"),
+        far: Some(4.0),
+        mix: Some(&[("office", 0.7), ("retail", 0.3)]),
+        ..y(35)
+    },
+    YieldRow {
+        dph: Some(30.0),
+        homes: Some("apartment"),
+        far: Some(0.4),
+        mix: Some(&[("retail", 1.0)]),
+        ..y(44)
+    },
+    YieldRow {
+        far: Some(0.5),
+        mix: Some(&[("retail", 0.5), ("warehouse", 0.5)]),
+        ..y(49)
+    },
+    YieldRow {
+        far: Some(0.6),
+        mix: Some(&[("medical", 1.0)]),
+        ..y(55)
+    },
+    YieldRow {
+        dph: Some(60.0),
+        homes: Some("mixed"),
+        ..y(60)
+    },
+    YieldRow {
+        per: Some(&[("school", 120.0)]),
+        ..y(63)
+    },
+    YieldRow {
+        per: Some(&[("tertiary", 200.0)]),
+        ..y(64)
+    },
 ];
 
 /// The default yield row of a zone code (`YIELDS[code]`).
@@ -245,7 +343,9 @@ pub fn yield_row(code: f64) -> Option<&'static YieldRow> {
 }
 
 /// NO_YIELD: zoned land that takes no yield (roads, water, transport corridors, open space, cemeteries and coastal zones).
-pub const NO_YIELD: [u32; 17] = [25, 26, 27, 30, 31, 32, 33, 34, 37, 39, 40, 41, 45, 53, 59, 61, 62];
+pub const NO_YIELD: [u32; 17] = [
+    25, 26, 27, 30, 31, 32, 33, 34, 37, 39, 40, 41, 45, 53, 59, 61, 62,
+];
 /// GFA_USES: the land uses a GFA ratio can give.
 pub const GFA_USES: [&str; 5] = ["retail", "office", "industrial", "warehouse", "medical"];
 /// AUP_NAMES: the zone names the feature knows, by code.
@@ -272,7 +372,10 @@ pub const AUP_NAMES: [(u32, &str); 18] = [
 
 /// `AUP_NAMES[code]`.
 pub fn aup_name(code: f64) -> Option<&'static str> {
-    AUP_NAMES.iter().find(|(c, _)| f64::from(*c) == code).map(|(_, n)| *n)
+    AUP_NAMES
+        .iter()
+        .find(|(c, _)| f64::from(*c) == code)
+        .map(|(_, n)| *n)
 }
 
 /// PERIODS: the two peak periods.
@@ -307,7 +410,15 @@ pub fn mode_src(g: &str) -> &'static str {
     }
 }
 /// JOB_KEYS: the land uses employees are placed by.
-pub const JOB_KEYS: [&str; 7] = ["office", "retail", "industrial", "warehouse", "supermarket", "fastfood", "medical"];
+pub const JOB_KEYS: [&str; 7] = [
+    "office",
+    "retail",
+    "industrial",
+    "warehouse",
+    "supermarket",
+    "fastfood",
+    "medical",
+];
 /// NO_YIELD_GROUPS: land groups that take no yield, matched ignoring case.
 pub const NO_YIELD_GROUPS: [&str; 2] = ["public open space", "coastal"];
 /// Zone codes that are not land (road, water, strategic transport, coastal marine).
@@ -315,8 +426,32 @@ pub const NOT_LAND: [u32; 4] = [25, 26, 27, 30];
 
 /// The CSV header of the trip generation export.
 pub const CSV_HEAD: [&str; 26] = [
-    "zone_id", "activity", "quantity", "unit", "period", "rate", "rate_unit", "rate_source", "rate_year", "person_trips", "pct_car_driver", "pct_car_pass", "pct_pt", "pct_walk", "pct_cycle",
-    "occupancy", "veh_trips_gross", "less_existing", "less_internal", "less_passby", "less_tdm", "veh_trips_net", "pct_in", "veh_in", "veh_out", "hv_trips",
+    "zone_id",
+    "activity",
+    "quantity",
+    "unit",
+    "period",
+    "rate",
+    "rate_unit",
+    "rate_source",
+    "rate_year",
+    "person_trips",
+    "pct_car_driver",
+    "pct_car_pass",
+    "pct_pt",
+    "pct_walk",
+    "pct_cycle",
+    "occupancy",
+    "veh_trips_gross",
+    "less_existing",
+    "less_internal",
+    "less_passby",
+    "less_tdm",
+    "veh_trips_net",
+    "pct_in",
+    "veh_in",
+    "veh_out",
+    "hv_trips",
 ];
 
 /// A source choice: which source wins for an item, and why.
@@ -336,25 +471,84 @@ pub struct Choice {
 
 /// CHOICES: which source wins for each item and why.
 pub const CHOICES: [Choice; 7] = [
-    Choice { id: "dwellings", item: "Dwellings (houses, apartments)", used: "Census 2023", instead: "OpenStreetMap",
-        why: "The Census counts occupied private dwellings (random-rounded to base 3). Building outlines miss units in one building and include outbuildings, so they are used only to place the Census dwellings inside each SA1. Separate houses become houses and joined dwellings apartments." },
-    Choice { id: "people", item: "Population, households, vehicles, travel to work and education", used: "Census 2023", instead: "\u{2013}", why: "Only the Census has these. Mode shares feed the person-trip tables." },
-    Choice { id: "jobs", item: "Employees", used: "Stats NZ employees by SA2 (2025)", instead: "Census 2023 employed by workplace",
-        why: "Newer than the Census. Each SA2 total is kept as a hard control and placed in zones by commercial and industrial floor area; the Census workplace count is a cross-check." },
-    Choice { id: "schools", item: "School rolls", used: "Ministry of Education directory", instead: "OpenStreetMap", why: "The directory lists every registered school with its roll and roll date; OpenStreetMap rolls are tags or defaults (350 to 800)." },
-    Choice { id: "ece", item: "Early learning places", used: "Ministry of Education directory", instead: "OpenStreetMap", why: "Licensed places for each service, where OpenStreetMap only gives a default of 40 children. Home-based networks are left out (no site of their own)." },
-    Choice { id: "gfa", item: "Floor area (retail, office, industrial, warehouse, supermarket, medical, hotel, fast food)", used: "OpenStreetMap", instead: "\u{2013}", why: "No free official floor-area source: building footprint \u{d7} levels, indicative." },
-    Choice { id: "zoning", item: "Zoning", used: "Auckland Unitary Plan base zones", instead: "\u{2013}", why: "Operative base zones at each zone centre, for context and default yields." },
+    Choice {
+        id: "dwellings",
+        item: "Dwellings (houses, apartments)",
+        used: "Census 2023",
+        instead: "OpenStreetMap",
+        why: "The Census counts occupied private dwellings (random-rounded to base 3). Building outlines miss units in one building and include outbuildings, so they are used only to place the Census dwellings inside each SA1. Separate houses become houses and joined dwellings apartments.",
+    },
+    Choice {
+        id: "people",
+        item: "Population, households, vehicles, travel to work and education",
+        used: "Census 2023",
+        instead: "\u{2013}",
+        why: "Only the Census has these. Mode shares feed the person-trip tables.",
+    },
+    Choice {
+        id: "jobs",
+        item: "Employees",
+        used: "Stats NZ employees by SA2 (2025)",
+        instead: "Census 2023 employed by workplace",
+        why: "Newer than the Census. Each SA2 total is kept as a hard control and placed in zones by commercial and industrial floor area; the Census workplace count is a cross-check.",
+    },
+    Choice {
+        id: "schools",
+        item: "School rolls",
+        used: "Ministry of Education directory",
+        instead: "OpenStreetMap",
+        why: "The directory lists every registered school with its roll and roll date; OpenStreetMap rolls are tags or defaults (350 to 800).",
+    },
+    Choice {
+        id: "ece",
+        item: "Early learning places",
+        used: "Ministry of Education directory",
+        instead: "OpenStreetMap",
+        why: "Licensed places for each service, where OpenStreetMap only gives a default of 40 children. Home-based networks are left out (no site of their own).",
+    },
+    Choice {
+        id: "gfa",
+        item: "Floor area (retail, office, industrial, warehouse, supermarket, medical, hotel, fast food)",
+        used: "OpenStreetMap",
+        instead: "\u{2013}",
+        why: "No free official floor-area source: building footprint \u{d7} levels, indicative.",
+    },
+    Choice {
+        id: "zoning",
+        item: "Zoning",
+        used: "Auckland Unitary Plan base zones",
+        instead: "\u{2013}",
+        why: "Operative base zones at each zone centre, for context and default yields.",
+    },
 ];
 
 /// The Census VAR codes in the 2023 release: a topic prefix, the base VAR number and a category list.
 const WORK_CATS: [(&str, i32, &str); 12] = [
-    ("home", 0, "Work at home"), ("notToday", 1, "Did not go to work today"), ("drivePriv", 2, "Drive a private car, truck or van"), ("driveCo", 3, "Drive a company car, truck or van"),
-    ("pass", 4, "Passenger in a car, truck, van or company bus"), ("bus", 5, "Public bus"), ("train", 6, "Train"), ("bike", 7, "Bicycle"), ("walk", 8, "Walk or jog"), ("ferry", 9, "Ferry"), ("other", 10, "Other"), ("stated", 13, "Total stated"),
+    ("home", 0, "Work at home"),
+    ("notToday", 1, "Did not go to work today"),
+    ("drivePriv", 2, "Drive a private car, truck or van"),
+    ("driveCo", 3, "Drive a company car, truck or van"),
+    ("pass", 4, "Passenger in a car, truck, van or company bus"),
+    ("bus", 5, "Public bus"),
+    ("train", 6, "Train"),
+    ("bike", 7, "Bicycle"),
+    ("walk", 8, "Walk or jog"),
+    ("ferry", 9, "Ferry"),
+    ("other", 10, "Other"),
+    ("stated", 13, "Total stated"),
 ];
 const EDU_CATS: [(&str, i32, &str); 11] = [
-    ("home", 0, "Study at home"), ("drive", 1, "Drive a car, truck or van"), ("pass", 2, "Passenger in a car, truck or van"), ("bike", 3, "Bicycle"), ("walk", 4, "Walk or jog"),
-    ("schoolBus", 5, "School bus"), ("bus", 6, "Public bus"), ("train", 7, "Train"), ("ferry", 8, "Ferry"), ("other", 9, "Other"), ("stated", 12, "Total Stated"),
+    ("home", 0, "Study at home"),
+    ("drive", 1, "Drive a car, truck or van"),
+    ("pass", 2, "Passenger in a car, truck or van"),
+    ("bike", 3, "Bicycle"),
+    ("walk", 4, "Walk or jog"),
+    ("schoolBus", 5, "School bus"),
+    ("bus", 6, "Public bus"),
+    ("train", 7, "Train"),
+    ("ferry", 8, "Ferry"),
+    ("other", 9, "Other"),
+    ("stated", 12, "Total Stated"),
 ];
 
 /// One Census item: the key, the VAR code in the 2023 release and the alias text the layer's field is found by.
@@ -370,49 +564,126 @@ pub struct VarSpec {
 
 fn cats(pfx: &str, topic: &str, base: i32, list: &[(&str, i32, &str)]) -> Vec<VarSpec> {
     list.iter()
-        .map(|(k, o, c)| VarSpec { key: format!("{pfx}.{k}"), code: format!("VAR_2_{}", base + o), alias: format!("{topic} ({c})") })
+        .map(|(k, o, c)| VarSpec {
+            key: format!("{pfx}.{k}"),
+            code: format!("VAR_2_{}", base + o),
+            alias: format!("{topic} ({c})"),
+        })
         .collect()
 }
 
 fn var(key: &str, code: &str, alias: &str) -> VarSpec {
-    VarSpec { key: key.into(), code: code.into(), alias: alias.into() }
+    VarSpec {
+        key: key.into(),
+        code: code.into(),
+        alias: alias.into(),
+    }
 }
 
 /// CENSUS_VARS: the items of each Census layer (ind0, ind2, dw, hh), in the order the feature reads them.
 pub fn census_vars() -> Vec<(&'static str, Vec<VarSpec>)> {
-    let mut ind2 = vec![var("empWork", "VAR_2_677", "Industry, by workplace address (Total)")];
-    ind2.extend(cats("r", "Main means of travel to work, by usual residence address", 773, &WORK_CATS));
-    ind2.extend(cats("w", "Main means of travel to work, by workplace address", 815, &WORK_CATS));
-    ind2.extend(cats("e", "Main means of travel to education, by education address", 195, &EDU_CATS));
-    let mut hh = vec![var("hh", "VAR_4_3", "Count of households in occupied private dwellings (Total)")];
-    for (i, c) in ["No motor vehicle", "One motor vehicle", "Two motor vehicles", "Three motor vehicles", "Four motor vehicles", "Five or more motor vehicles"].iter().enumerate() {
-        hh.push(VarSpec { key: format!("veh.{i}"), code: format!("VAR_4_{}", 136 + i), alias: format!("Number of motor vehicles ({c})") });
+    let mut ind2 = vec![var(
+        "empWork",
+        "VAR_2_677",
+        "Industry, by workplace address (Total)",
+    )];
+    ind2.extend(cats(
+        "r",
+        "Main means of travel to work, by usual residence address",
+        773,
+        &WORK_CATS,
+    ));
+    ind2.extend(cats(
+        "w",
+        "Main means of travel to work, by workplace address",
+        815,
+        &WORK_CATS,
+    ));
+    ind2.extend(cats(
+        "e",
+        "Main means of travel to education, by education address",
+        195,
+        &EDU_CATS,
+    ));
+    let mut hh = vec![var(
+        "hh",
+        "VAR_4_3",
+        "Count of households in occupied private dwellings (Total)",
+    )];
+    for (i, c) in [
+        "No motor vehicle",
+        "One motor vehicle",
+        "Two motor vehicles",
+        "Three motor vehicles",
+        "Four motor vehicles",
+        "Five or more motor vehicles",
+    ]
+    .iter()
+    .enumerate()
+    {
+        hh.push(VarSpec {
+            key: format!("veh.{i}"),
+            code: format!("VAR_4_{}", 136 + i),
+            alias: format!("Number of motor vehicles ({c})"),
+        });
     }
-    hh.push(var("veh.stated", "VAR_4_144", "Number of motor vehicles (Total stated)"));
+    hh.push(var(
+        "veh.stated",
+        "VAR_4_144",
+        "Number of motor vehicles (Total stated)",
+    ));
     vec![
-        ("ind0", vec![var("pop", "VAR_1_3", "Var1: Census usually resident population count (Total)")]),
+        (
+            "ind0",
+            vec![var(
+                "pop",
+                "VAR_1_3",
+                "Var1: Census usually resident population count (Total)",
+            )],
+        ),
         ("ind2", ind2),
-        ("dw", vec![
-            var("occ", "VAR_3_54", "Dwelling occupancy status (Occupied Dwelling)"),
-            var("dwTot", "VAR_3_59", "Dwelling occupancy status (Total)"),
-            var("sep", "VAR_3_82", "Dwelling type (Separate house)"),
-            var("joined", "VAR_3_83", "Dwelling type (Joined dwelling)"),
-            var("otherPriv", "VAR_3_84", "Dwelling type (Other private dwelling)"),
-        ]),
+        (
+            "dw",
+            vec![
+                var(
+                    "occ",
+                    "VAR_3_54",
+                    "Dwelling occupancy status (Occupied Dwelling)",
+                ),
+                var("dwTot", "VAR_3_59", "Dwelling occupancy status (Total)"),
+                var("sep", "VAR_3_82", "Dwelling type (Separate house)"),
+                var("joined", "VAR_3_83", "Dwelling type (Joined dwelling)"),
+                var(
+                    "otherPriv",
+                    "VAR_3_84",
+                    "Dwelling type (Other private dwelling)",
+                ),
+            ],
+        ),
         ("hh", hh),
     ]
 }
 
 /// The specs of one Census layer (`CENSUS_VARS[lk]`).
 pub fn census_vars_of(lk: &str) -> Vec<VarSpec> {
-    census_vars().into_iter().find(|(k, _)| *k == lk).map(|(_, v)| v).unwrap_or_default()
+    census_vars()
+        .into_iter()
+        .find(|(k, _)| *k == lk)
+        .map(|(_, v)| v)
+        .unwrap_or_default()
 }
 
 fn source_json(s: &Source) -> Value {
     let mut o = serde_json::Map::new();
     o.insert("id".into(), json!(s.id));
     o.insert("name".into(), json!(s.name));
-    for (k, v) in [("vintage", s.vintage), ("licence", s.licence), ("url", s.url), ("rounding", s.rounding), ("resource", s.resource)] {
+    for (k, v) in [
+        ("vintage", s.vintage),
+        ("licence", s.licence),
+        ("url", s.url),
+        ("rounding", s.rounding),
+        ("resource", s.resource),
+    ] {
         if !v.is_empty() {
             o.insert(k.into(), json!(v));
         }
@@ -443,7 +714,10 @@ pub fn constants() -> Value {
             }
             for (key, list) in [("mix", r.mix), ("per", r.per)] {
                 if let Some(l) = list {
-                    o.insert(key.into(), Value::Object(l.iter().map(|(k, v)| (k.to_string(), json!(v))).collect()));
+                    o.insert(
+                        key.into(),
+                        Value::Object(l.iter().map(|(k, v)| (k.to_string(), json!(v))).collect()),
+                    );
                 }
             }
             if r.assumed {
@@ -458,7 +732,10 @@ pub fn constants() -> Value {
     let vars: serde_json::Map<String, Value> = census_vars()
         .into_iter()
         .map(|(lk, specs)| {
-            let items: serde_json::Map<String, Value> = specs.into_iter().map(|s| (s.key, json!({ "code": s.code, "alias": s.alias }))).collect();
+            let items: serde_json::Map<String, Value> = specs
+                .into_iter()
+                .map(|s| (s.key, json!({ "code": s.code, "alias": s.alias })))
+                .collect();
             (lk.to_string(), Value::Object(items))
         })
         .collect();
@@ -484,4 +761,11 @@ pub fn constants() -> Value {
 }
 
 /// CARD_USES: the land uses the zone card offers first.
-pub const LANDUSES_CARD_USES: [&str; 6] = ["residential", "apartment", "retail", "office", "industrial", "school"];
+pub const LANDUSES_CARD_USES: [&str; 6] = [
+    "residential",
+    "apartment",
+    "retail",
+    "office",
+    "industrial",
+    "school",
+];
