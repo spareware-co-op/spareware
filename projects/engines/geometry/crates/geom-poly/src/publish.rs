@@ -22,7 +22,7 @@
 //!
 //! Cost: linear in what the merge returns.
 
-use alloc::collections::BTreeMap;
+use alloc::collections::{BTreeMap, BTreeSet};
 use alloc::vec::Vec;
 use core::fmt;
 
@@ -429,12 +429,13 @@ pub fn publish_with(
     meter: &mut WorkMeter<'_>,
 ) -> Result<Body, PublishError> {
     let (builder, outside) = arenas(merged, carriers, open)?;
-    // A solid body has material, so a selection that keeps nothing is a general one.
     let kind = if open {
         BodyKind::Sheet
-    } else if merged.edges.is_empty() {
+    } else if merged.faces.is_empty() {
+        // Nothing kept bounds no volume, and a solid body holds a solid region (8.3): an empty
+        // result, A less A among them (11.17), is a general body, which may hold nothing.
         BodyKind::General
-    } else if merged.edges.iter().all(|e| e.fins.len() == 2) {
+    } else if merged.edges.iter().all(|e| e.fins.len() == 2) && !pinched(merged) {
         BodyKind::Solid
     } else {
         BodyKind::General
@@ -443,6 +444,48 @@ pub fn publish_with(
         Some(names) => builder.publish_named(names, kind, outside, meter)?,
         None => builder.publish(kind, outside, meter)?,
     })
+}
+
+/// Whether some vertex's fins in one shell go round it in more than one fan: the shell's surface
+/// pinches there. Each edge has two fins. A fan is walked from a fin leaving the vertex to the fin
+/// leaving it after the one before it in its ring, across their edge, until it comes back.
+///
+/// Cost: one step per fin.
+fn pinched(merged: &Merged) -> bool {
+    let fins = &merged.fins;
+    let mut before = alloc::vec![None; fins.len()];
+    for ring in merged.faces.iter().flat_map(|face| &face.rings) {
+        for (fin, next) in ring.iter().zip(ring.iter().cycle().skip(1)) {
+            before
+                .iter_mut()
+                .skip(*next)
+                .take(1)
+                .for_each(|slot| *slot = Some(*fin));
+        }
+    }
+    let across = |fin: usize| {
+        let edge = merged.edges.get(fins.get(fin)?.edge)?;
+        edge.fins.iter().copied().find(|other| *other != fin)
+    };
+    let mut seen = alloc::vec![false; fins.len()];
+    let mut walked = BTreeSet::new();
+    for (start, fin) in fins.iter().enumerate() {
+        if seen.get(start).copied().unwrap_or(true) {
+            continue;
+        }
+        let mut at = Some(start);
+        while let Some(slot) = at.and_then(|f| seen.get_mut(f)).filter(|done| !**done) {
+            *slot = true;
+            at = at
+                .and_then(|f| before.get(f).copied().flatten())
+                .and_then(across);
+        }
+        let shell = merged.faces.get(fin.face).map(|face| face.shell);
+        if !walked.insert((shell, fin.from)) {
+            return true;
+        }
+    }
+    false
 }
 
 /// The wire body of `curves`: edges with no fins, each vertex a grid point or its own meeting.
