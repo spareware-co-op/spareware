@@ -281,12 +281,10 @@ fn coefficient<const L: usize>(c: &Terms<L>, i: usize) -> Wide<L> {
 /// `c` with x replaced by x + 1.
 fn taylor_shift<const L: usize>(c: &Terms<L>) -> Result<Terms<L>, NumError> {
     let [c0, c1, c2, c3, c4] = c;
+    let linear = add(&add(c1, &times(c2, 2)?)?, &times(c3, 3)?)?;
     Ok([
         add(&add(&add(&add(c0, c1)?, c2)?, c3)?, c4)?,
-        add(
-            &add(&add(c1, &times(c2, 2)?)?, &times(c3, 3)?)?,
-            &times(c4, 4)?,
-        )?,
+        add(&linear, &times(c4, 4)?)?,
         add(&add(c2, &times(c3, 3)?)?, &times(c4, 6)?)?,
         add(c3, &times(c4, 4)?)?,
         *c4,
@@ -388,9 +386,7 @@ fn raised<const L: usize>(a: &Terms<L>, by: usize) -> Result<Terms<L>, NumError>
 
 /// The pseudo-remainder of `a` by `b`: lc(b)^(δ + 1) · a modulo b.
 fn pseudo_remainder<const L: usize>(a: &Terms<L>, b: &Terms<L>) -> Result<Terms<L>, NumError> {
-    let (Some(da), Some(db)) = (degree(a), degree(b)) else {
-        return Err(NumError::BudgetExceeded);
-    };
+    let (da, db) = (budget(degree(a))?, budget(degree(b))?);
     let lead = coefficient(b, db);
     let mut r = *a;
     let mut steps = budget(da.checked_add(1).and_then(|n| n.checked_sub(db)))?;
@@ -434,9 +430,7 @@ fn subresultant_gcd<const L: usize>(a: &Terms<L>, b: &Terms<L>) -> Result<Terms<
     let (mut p, mut q) = (*a, *b);
     let (mut g, mut h) = (Wide::from_i64(1), Wide::from_i64(1));
     loop {
-        let (Some(dp), Some(dq)) = (degree(&p), degree(&q)) else {
-            return Err(NumError::BudgetExceeded);
-        };
+        let (dp, dq) = (budget(degree(&p))?, budget(degree(&q))?);
         let delta = budget(dp.checked_sub(dq))?;
         let r = pseudo_remainder(&p, &q)?;
         match degree(&r) {
@@ -486,9 +480,7 @@ fn gcd<const L: usize>(a: &Terms<L>, b: &Terms<L>) -> Result<Terms<L>, NumError>
 
 /// a / b, b dividing a exactly but for a constant: primitive, its sign whatever it comes to.
 fn divided<const L: usize>(a: &Terms<L>, b: &Terms<L>) -> Result<Terms<L>, NumError> {
-    let (Some(da), Some(db)) = (degree(a), degree(b)) else {
-        return Err(NumError::BudgetExceeded);
-    };
+    let (da, db) = (budget(degree(a))?, budget(degree(b))?);
     let lead = coefficient(b, db);
     let mut r = *a;
     let mut quotient = [Wide::from_i64(0); 5];
@@ -503,9 +495,7 @@ fn divided<const L: usize>(a: &Terms<L>, b: &Terms<L>) -> Result<Terms<L>, NumEr
         for slot in &mut quotient {
             *slot = mul(slot, &lead)?;
         }
-        if let Some(slot) = quotient.get_mut(at) {
-            *slot = value;
-        }
+        *budget(quotient.get_mut(at))? = value;
     }
     if degree(&r).is_some() {
         return Err(NumError::BudgetExceeded);
@@ -553,10 +543,7 @@ fn factors(c: &Terms<LIMBS>) -> Result<[Option<Factor>; 4], NumError> {
         let y = gcd(&w, &g)?;
         let exactly = divided(&w, &y)?;
         if degree(&exactly).is_some_and(|d| d > 0) {
-            let Some(slot) = slots.next() else {
-                return Err(NumError::BudgetExceeded);
-            };
-            *slot = Some(Factor {
+            *budget(slots.next())? = Some(Factor {
                 terms: narrowed_terms(&exactly)?,
                 multiplicity,
             });
@@ -665,10 +652,7 @@ impl Roots {
     }
 
     fn push(&mut self, root: &RealRoot) -> Result<(), NumError> {
-        let Some(slot) = self.list.iter_mut().find(|s| s.is_none()) else {
-            return Err(NumError::BudgetExceeded);
-        };
-        *slot = Some(*root);
+        *budget(self.list.iter_mut().find(|s| s.is_none()))? = Some(*root);
         Ok(())
     }
 }
@@ -829,10 +813,7 @@ struct Isolated {
 
 impl Isolated {
     fn push(&mut self, found: &Found) -> Result<(), NumError> {
-        let Some(slot) = self.list.iter_mut().find(|s| s.is_none()) else {
-            return Err(NumError::BudgetExceeded);
-        };
-        *slot = Some(*found);
+        *budget(self.list.iter_mut().find(|s| s.is_none()))? = Some(*found);
         Ok(())
     }
 }
@@ -871,10 +852,7 @@ impl Job {
             0 => Ok(()),
             1 => found.push(&self.root(&node.a, node.s, false, 1)?),
             _ => {
-                let Some(slot) = live.iter_mut().find(|n| n.is_none()) else {
-                    return Err(NumError::BudgetExceeded);
-                };
-                *slot = Some(*node);
+                *budget(live.iter_mut().find(|n| n.is_none()))? = Some(*node);
                 Ok(())
             }
         }
@@ -920,9 +898,7 @@ fn sort_open(
     piece: Piece,
 ) -> Result<(), NumError> {
     let simple = |found: &Found| -> Result<Terms<WIDE_LIMBS>, NumError> {
-        let Some(Some(factor)) = list.get(found.factor) else {
-            return Err(NumError::BudgetExceeded);
-        };
+        let factor = budget(list.get(found.factor).copied().flatten())?;
         piece.open_on_unit(&widened(&factor.terms)?)
     };
     // Bubble, on at most four.
@@ -933,12 +909,8 @@ fn sort_open(
             else {
                 continue;
             };
-            let x = order(
-                Stretch::of(&p.root)?,
-                &simple(&p)?,
-                Stretch::of(&q.root)?,
-                &simple(&q)?,
-            )?;
+            let (pc, qc) = (simple(&p)?, simple(&q)?);
+            let x = order(Stretch::of(&p.root)?, &pc, Stretch::of(&q.root)?, &qc)?;
             let t = if piece.falling() { x.negate() } else { x };
             if t == Sign::Positive {
                 here.swap(k, next);
@@ -963,18 +935,15 @@ fn sort_open(
                 b = b.narrowed(&qc)?;
             }
         }
-        if let Some(slot) = here.get_mut(k) {
-            *slot = Some(Found {
-                root: a.applied(&p.root)?,
-                ..p
-            });
-        }
-        if let Some(slot) = here.get_mut(next) {
-            *slot = Some(Found {
-                root: b.applied(&q.root)?,
-                ..q
-            });
-        }
+        let (parted_p, parted_q) = (a.applied(&p.root)?, b.applied(&q.root)?);
+        *budget(here.get_mut(k))? = Some(Found {
+            root: parted_p,
+            ..p
+        });
+        *budget(here.get_mut(next))? = Some(Found {
+            root: parted_q,
+            ..q
+        });
     }
     Ok(())
 }
@@ -1140,11 +1109,103 @@ pub fn compare(
     }
     let simple =
         |quartic: &Quartic| piece.open_on_unit(&square_free(&primitive(&widened(&quartic.c)?)?)?);
-    let x = order(
-        Stretch::of(p)?,
-        &simple(first)?,
-        Stretch::of(q)?,
-        &simple(second)?,
-    )?;
+    let (pc, qc) = (simple(first)?, simple(second)?);
+    let x = order(Stretch::of(p)?, &pc, Stretch::of(q)?, &qc)?;
     Ok(if piece.falling() { x.negate() } else { x })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{
+        BITS, COMPARE_DEPTH, LIMBS, Stretch, Terms, WIDE_LIMBS, divided, exact_quotient, gcd,
+        primitive, pseudo_remainder, shifted, sign_above, sign_below, subresultant_gcd,
+    };
+    use crate::error::NumError;
+    use crate::sign::Sign;
+    use crate::wide::Wide;
+
+    fn w(v: i64) -> Wide<LIMBS> {
+        Wide::from_i64(v)
+    }
+
+    fn terms(c: [i64; 5]) -> Terms<LIMBS> {
+        c.map(w)
+    }
+
+    const ZERO: [i64; 5] = [0; 5];
+
+    #[test]
+    fn a_shift_past_the_width_is_refused() {
+        assert!(shifted(&w(1), BITS - 3).is_ok());
+        assert_eq!(
+            shifted(&w(1), BITS - 2).err(),
+            Some(NumError::BudgetExceeded)
+        );
+        assert_eq!(shifted(&w(0), BITS).ok(), Some(w(0)));
+    }
+
+    #[test]
+    fn a_quotient_that_is_not_whole_is_refused() {
+        assert_eq!(exact_quotient(&w(-6), &w(3)).ok(), Some(w(-2)));
+        assert_eq!(
+            exact_quotient(&w(6), &w(0)).err(),
+            Some(NumError::BudgetExceeded)
+        );
+        assert_eq!(
+            exact_quotient(&w(7), &w(2)).err(),
+            Some(NumError::BudgetExceeded)
+        );
+    }
+
+    #[test]
+    fn at_a_root_the_signs_beside_it_are_the_derivative_s() {
+        // 2x − 1 is zero at 1 / 2, rising through it.
+        let c = terms([-1, 2, 0, 0, 0]);
+        assert_eq!(sign_above(&c, &w(1), 1).unwrap(), Sign::Positive);
+        assert_eq!(sign_below(&c, &w(1), 1).unwrap(), Sign::Negative);
+        // Away from it, its own sign.
+        assert_eq!(sign_above(&c, &w(3), 2).unwrap(), Sign::Positive);
+        assert_eq!(sign_below(&c, &w(1), 2).unwrap(), Sign::Negative);
+    }
+
+    #[test]
+    fn the_zero_polynomial_is_no_divisor_and_its_own_primitive_part() {
+        let (zero, x) = (terms(ZERO), terms([0, 1, 0, 0, 0]));
+        let x2_plus_1 = terms([1, 0, 1, 0, 0]);
+        assert_eq!(
+            pseudo_remainder(&x, &zero).err(),
+            Some(NumError::BudgetExceeded)
+        );
+        assert_eq!(
+            subresultant_gcd(&x, &zero).err(),
+            Some(NumError::BudgetExceeded)
+        );
+        assert_eq!(divided(&x, &zero).err(), Some(NumError::BudgetExceeded));
+        // x² + 1 over x leaves a remainder: refused, never rounded.
+        assert_eq!(
+            divided(&x2_plus_1, &x).err(),
+            Some(NumError::BudgetExceeded)
+        );
+        assert_eq!(primitive(&zero).unwrap(), zero);
+        // A gcd with zero is the other, primitive.
+        let two_x = terms([0, 2, 0, 0, 0]);
+        assert_eq!(gcd(&zero, &two_x).unwrap(), x);
+        assert_eq!(gcd(&two_x, &zero).unwrap(), x);
+    }
+
+    #[test]
+    fn narrowing_past_the_depth_of_comparisons_is_refused() {
+        let c: Terms<WIDE_LIMBS> = [-1, 3, 0, 0, 0].map(Wide::from_i64);
+        let at = Stretch {
+            a: Wide::from_i64(0),
+            s: COMPARE_DEPTH - 1,
+            point: false,
+        };
+        assert!(at.narrowed(&c).is_ok());
+        let past = Stretch {
+            s: COMPARE_DEPTH,
+            ..at
+        };
+        assert_eq!(past.narrowed(&c).err(), Some(NumError::BudgetExceeded));
+    }
 }

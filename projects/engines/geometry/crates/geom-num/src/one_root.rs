@@ -651,10 +651,8 @@ impl Crossing2 {
         let [fa, fb, fc] = form_of(ellipse)?;
         let h = sub(&sub(&c, &mul(&a, &cx)?)?, &mul(&b, &cy)?)?;
         // S on d = (b, −a); B is the form's x y coefficient, twice the matrix's.
-        let e = add(
-            &sub(&mul(&fa, &mul(&b, &b)?)?, &mul(&fb, &mul(&a, &b)?)?)?,
-            &mul(&fc, &mul(&a, &a)?)?,
-        )?;
+        let ends = sub(&mul(&fa, &mul(&b, &b)?)?, &mul(&fb, &mul(&a, &b)?)?)?;
+        let e = add(&ends, &mul(&fc, &mul(&a, &a)?)?)?;
         let (p, q) = ellipse.ratio();
         let (p, q) = (Big::from_i64(p), Big::from_i64(q));
         let qh = mul(&q, &h)?;
@@ -720,10 +718,8 @@ impl Crossing2 {
         let level = level_of(ellipse)?;
         let twice_level = add(&level, &level)?;
         let w2 = mul(&x.w, &x.w)?;
-        let whole = sub(
-            &add(&shape(&u, &u)?, &mul(&shape(&b, &b)?, &x.k)?)?,
-            &mul(&twice_level, &w2)?,
-        )?;
+        let squares = add(&shape(&u, &u)?, &mul(&shape(&b, &b)?, &x.k)?)?;
+        let whole = sub(&squares, &mul(&twice_level, &w2)?)?;
         let half = shape(&u, &b)?;
         root_sign(&whole, &add(&half, &half)?, &x.k)
     }
