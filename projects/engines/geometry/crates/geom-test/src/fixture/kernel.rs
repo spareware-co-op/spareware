@@ -4,7 +4,8 @@
 //! What it does: [`Kernel`] finds an operation by its name and version ([`Call::read`]), takes the
 //! bodies it names from the results so far, runs it, and keeps each result under its content ID, so
 //! a later operation of the log can name it. Each piece that adds an operation adds its row to
-//! [`Call`].
+//! [`Call`]. A case an oracle raised on a function no operation holds yet replays through
+//! `oracle::geomdl`.
 //!
 //! Guarantees:
 //!
@@ -38,6 +39,7 @@ use geom_topo::Body;
 use super::calls::Call;
 use super::run::{Engine, Ran, Step};
 use super::{Class, Counts, Measures, Spend};
+use crate::oracle::geomdl;
 
 /// What an operation charged, as its context reports it.
 #[derive(Debug, Default)]
@@ -167,6 +169,9 @@ impl Engine for Kernel {
     }
 
     fn run(&mut self, operation: &Operation) -> Ran {
+        if let Some(ran) = geomdl::replay(operation) {
+            return ran;
+        }
         let call = match Call::read(&operation.name, operation.version, &operation.params) {
             Ok(call) => call,
             Err(why) => {
