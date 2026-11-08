@@ -22,8 +22,9 @@
 //!
 //! - **Each violation is real and small.** One line changes, and the change breaks exactly the
 //!   property the gate checks: a line rustfmt would format differently; a sign the Kani harness
-//!   for signs asserts; a carry the Verus twin's proof of addition asserts; a bound the limb proofs
-//!   assert; a set bit the canonical encoder's narrowing proofs keep; orient2d's exact path answering `Positive` whatever its points, which breaks the
+//!   for signs asserts; a binary16 narrowing that keeps a value one bit too fine for a half, which
+//!   the Kani harness of `geom-op`'s canonical CBOR asserts exact; a carry the Verus twin's proof of addition asserts; a bound the limb proofs
+//!   assert; orient2d's exact path answering `Positive` whatever its points, which breaks the
 //!   antisymmetry every orient2d harness checks (a sign flipped everywhere would not: the fuzz
 //!   target holds orient2d to its laws, not to an oracle); the carry the wide-integer fuzz target
 //!   compares with big integers under cargo-bolero's libFuzzer, and which `ClusterFuzzLite`'s own
@@ -101,7 +102,7 @@ pub const VIOLATIONS: [Violation; 12] = [
         gate: "kernel-fuzz.yml kani-op",
         file: "projects/engines/geometry/crates/geom-op/src/cbor.rs",
         anchor: "        if fraction.trailing_zeros() < format.dropped {",
-        planted: "        if fraction.trailing_zeros() + 1 < format.dropped {",
+        planted: "        if fraction.trailing_zeros() < format.dropped.saturating_sub(1) {",
         caught: &["VERIFICATION:- FAILED"],
     },
     Violation {
