@@ -433,12 +433,8 @@ fn legs(
         segments.push(Segment::new(edge, floor, wall, home)?);
     }
     if along.1 != 0 {
-        segments.push(Segment::new(
-            home,
-            floor,
-            edge,
-            face_at(faces, (along.0, 0))?,
-        )?);
+        let back = Segment::new(home, floor, edge, face_at(faces, (along.0, 0))?);
+        segments.push(back?);
     }
     Ok(segments)
 }
@@ -460,8 +456,6 @@ fn path(
 /// What a polygon's legs along the box's edges added, for the face, the side and the exits they
 /// were walked from, and how many legs there were.
 struct Walked {
-    plane: Plane,
-    by: Sign,
     exits: Exits,
     crossed: Winding,
     legs: u64,
@@ -506,10 +500,9 @@ fn vectors(
         return Err(NumError::Degenerate.into());
     };
     // A piece lies on its polygon's face, whose canonical form is held.
-    let own = match polygons.get(index) {
-        Some((polygon, held, _)) if polygon.piece.face == piece.face => *held,
-        _ => canonical(&piece.face)?,
-    };
+    let own = polygons
+        .get(index)
+        .map_or_else(|| canonical(&piece.face), |(_, held, _)| Ok(*held))?;
     let near = inward(&own, boxes);
     let face = Moved {
         plane: piece.face,
@@ -534,9 +527,9 @@ fn vectors(
             count_crossing(segment, (polygon, span.as_ref()), &mut near_side)?;
         }
     }
-    let seen = walked
-        .iter()
-        .position(|w| w.plane == face.plane && w.by == face.by && w.exits == exits);
+    // Every piece in `walked` lies on this one's polygon, so on its face, moved the same way: its
+    // exits alone say whether its path leaves the box as this one's does.
+    let seen = walked.iter().position(|w| w.exits == exits);
     let walk = if let Some(at) = seen {
         let held = walked.get(at).ok_or(NumError::Degenerate)?;
         let count = u64::try_from(polygons.len()).unwrap_or(u64::MAX);
@@ -552,8 +545,6 @@ fn vectors(
             }
         }
         walked.push(Walked {
-            plane: face.plane,
-            by: face.by,
             exits,
             crossed,
             legs: u64::try_from(segments.len()).unwrap_or(u64::MAX),
@@ -608,15 +599,12 @@ pub fn reference_above(
         axis.saturating_add(1).checked_rem(3).unwrap_or(0),
         axis.saturating_add(2).checked_rem(3).unwrap_or(0),
     );
-    let segment = Segment::new(
-        face_at(&faces, (next, 0))?,
-        face_at(&faces, (last, 0))?,
-        Moved {
-            plane: Plane::new(n, i128::from(at).saturating_neg())?,
-            ..low
-        },
-        low,
-    )?;
+    let up = Moved {
+        plane: Plane::new(n, i128::from(at).saturating_neg())?,
+        ..low
+    };
+    let (next, last) = (face_at(&faces, (next, 0))?, face_at(&faces, (last, 0))?);
+    let segment = Segment::new(next, last, up, low)?;
     let mut above = reference.clone();
     for polygon in polygons {
         meter.charge(1)?;

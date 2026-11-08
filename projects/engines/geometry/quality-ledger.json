@@ -5332,6 +5332,14 @@
     },
     {
       "file": "projects/engines/geometry/crates/geom-poly/src/subdivide.rs",
+      "mutant": "replace | with ^ in divide",
+      "line_text": "key: node.key | bit,",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "bit is the bit of this node's depth, and a node's key has only the bits of the depths above it, so the bit is clear and | and ^ give one value."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-poly/src/subdivide.rs",
       "mutant": "replace splits -> [(usize, Option<i64>); 3] with [(0, Some(0)); 3]",
       "line_text": "let at = |axis: usize| {",
       "occurrences": 1,
@@ -5348,27 +5356,11 @@
     },
     {
       "file": "projects/engines/geometry/crates/geom-poly/src/subdivide.rs",
-      "mutant": "replace | with ^ in splits",
-      "line_text": "let odd = middle | 1;",
-      "occurrences": 1,
-      "kind": "equivalent",
-      "reason": "The mutant moves an odd middle one half step down, onto a whole step, and leaves an even one as it was. The split is then on a plane of the grid, where a corner can lie. A polygon in that plane goes on as the in-plane test sends it, a path that meets the plane is settled by the moved planes of Simulation of Simplicity, and a box's vectors do not depend on where it was split (a_small_leaf_gives_the_vectors_a_large_one_does, and the body tests at every leaf size). Odd steps only keep those ties from arising, so no result changes."
-    },
-    {
-      "file": "projects/engines/geometry/crates/geom-poly/src/subdivide.rs",
       "mutant": "replace == with != in divide",
       "line_text": "corner.map(|v| if i.next() == Some(axis) { at } else { v })",
       "occurrences": 1,
       "kind": "hangs",
       "reason": "The children's corners move on the two axes the split is not on, so a child keeps the width along the axis it was split on and splits there for ever, and the tests stop it by their timeout. It hangs; it never returns a wrong arrangement."
-    },
-    {
-      "file": "projects/engines/geometry/crates/geom-poly/src/subdivide.rs",
-      "mutant": "replace | with ^ in divide",
-      "line_text": "key: node.key | bit,",
-      "occurrences": 1,
-      "kind": "equivalent",
-      "reason": "bit is the bit of this node's depth, and a node's key has only the bits of the depths above it, so the bit is clear and | and ^ give one value."
     },
     {
       "file": "projects/engines/geometry/crates/geom-poly/src/subdivide.rs",
@@ -7283,13 +7275,6 @@
       "occurrences": 2,
       "piece": "G41",
       "reason": "Wide32's extremes set their top limb through last_mut, which always finds one: L >= 2 is checked when the width is used (AT_LEAST_TWO_LIMBS), so the None arm and the end of the if let never run. As for Wide's same lines, G41's bounded proof of no panic in geom-num removes them."
-    },
-    {
-      "file": "projects/engines/geometry/crates/geom-poly/src/order.rs",
-      "line_text": "Err(e) => Err(e),",
-      "occurrences": 1,
-      "piece": "G41",
-      "reason": "Tpi::new's one error other than Degenerate is BudgetExceeded, the arm G41's proofs close in geom-num: planes within budget cannot reach it, and every Plane is within budget, so no test can run this line."
     }
   ]
 }

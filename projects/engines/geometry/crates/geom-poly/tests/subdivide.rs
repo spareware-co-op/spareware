@@ -659,3 +659,50 @@ proptest! {
         }
     }
 }
+
+#[test]
+fn a_box_over_the_subtree_size_splits_level_by_level() {
+    // 25 cubes of one solid, apart, and a cube of another far off: 156 polygons, more than one
+    // task solves at once, so the root is split level by level. The half that holds only the
+    // first solid is still too big; at the next level it is one solid's, a leaf at once, for a
+    // union, and settled, so dropped, for an intersection. Either way the pieces are those one
+    // leaf over the whole scene gives.
+    let mut blocks: Vec<Block> = (0..25)
+        .map(|i| {
+            let (x, y) = (4 * (i % 5), 4 * (i / 5));
+            Block {
+                low: [x, y, 0],
+                high: [x + 2, y + 2, 2],
+            }
+        })
+        .collect();
+    blocks.push(Block {
+        low: [40, 40, 40],
+        high: [42, 42, 42],
+    });
+    let mut list = polygons(&blocks);
+    for polygon in &mut list {
+        polygon.entry = Some(u32::from(polygon.entry == Some(25)));
+    }
+    for test in [WindingTest::unite(), WindingTest::intersect(2)] {
+        let tests = [test.clone()];
+        let at = |leaf: usize| {
+            let cell = around(&list).unwrap();
+            arrange_with(
+                &Exec::serial(),
+                (cell, Winding::new()),
+                &list,
+                (leaf, &tests),
+                &[0, 1],
+                &mut meter(),
+            )
+            .unwrap()
+        };
+        let (levels, one) = (at(LEAF_POLYGONS), at(1_000_000));
+        assert_eq!(volume(&test, &levels), volume(&test, &one), "{test:?}");
+    }
+    assert_eq!(
+        volume(&WindingTest::unite(), &run(&blocks, 1_000_000, &[])),
+        26 * 64
+    );
+}
