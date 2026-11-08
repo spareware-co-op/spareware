@@ -25,8 +25,12 @@
 //! Its direct dependencies are its row of chapter 27's crate table, checked by the
 //! scaffold test in `engine-geometry` (`tests/scaffold`).
 //!
-//! Status: scaffold only; built by pieces G192, G193, G194, G195, G196, G197, G198, G199, G200,
-//! G201, G202, G203, G204, G205, G206, G207, G208, G209, G210, G211, G212, G213, G359, G360, G361.
+//! Modules today: [`cogo`], angle-unit COGO on the grid: forward and inverse, the nearest whole
+//! distance and a traverse's certified misclosure (piece G359, 17.2).
+//!
+//! Status: core COGO built (G359); the rest to come in pieces G192, G193, G194, G195, G196, G197,
+//! G198, G199, G200, G201, G202, G203, G204, G205, G206, G207, G208, G209, G210, G211, G212, G213,
+//! G360 and G361.
 #![cfg_attr(not(test), no_std)]
 #![forbid(unsafe_code)]
 
