@@ -203,13 +203,13 @@ pub open spec fn bound_of_s() -> int {
     clippy::too_many_arguments,
     reason = "names, parameters and lines follow the description: one per input and step"
 )]
-#[verus_spec(r =>
+#[verus_spec(result_ =>
     requires
         k.x.on_grid(),
         k.y.on_grid(),
     ensures
-        match r {
-            Some(v) => in_range(a, 41) && in_range(b, 41) && in_range(d, 82) && in_range(mx, 41) && in_range(my, 41) && in_range(p, 22) && in_range(q, 22) && v.value() == spec_value(a, b, d, k, mx, my, p, q),
+        match result_ {
+            Some(held_) => in_range(a, 41) && in_range(b, 41) && in_range(d, 82) && in_range(mx, 41) && in_range(my, 41) && in_range(p, 22) && in_range(q, 22) && held_.value() == spec_value(a, b, d, k, mx, my, p, q),
             None => !(in_range(a, 41) && in_range(b, 41) && in_range(d, 82) && in_range(mx, 41) && in_range(my, 41) && in_range(p, 22) && in_range(q, 22)),
         },
 )]

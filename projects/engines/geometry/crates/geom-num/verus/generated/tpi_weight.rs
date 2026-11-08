@@ -183,10 +183,10 @@ pub open spec fn bound_of_w() -> int {
     clippy::too_many_arguments,
     reason = "names, parameters and lines follow the description: one per input and step"
 )]
-#[verus_spec(r =>
+#[verus_spec(result_ =>
     ensures
-        match r {
-            Some(v) => in_range(n1x, 83) && in_range(n1y, 83) && in_range(n1z, 83) && in_range(n2x, 83) && in_range(n2y, 83) && in_range(n2z, 83) && in_range(n3x, 83) && in_range(n3y, 83) && in_range(n3z, 83) && v.value() == spec_value(n1x, n1y, n1z, n2x, n2y, n2z, n3x, n3y, n3z),
+        match result_ {
+            Some(held_) => in_range(n1x, 83) && in_range(n1y, 83) && in_range(n1z, 83) && in_range(n2x, 83) && in_range(n2y, 83) && in_range(n2z, 83) && in_range(n3x, 83) && in_range(n3y, 83) && in_range(n3z, 83) && held_.value() == spec_value(n1x, n1y, n1z, n2x, n2y, n2z, n3x, n3y, n3z),
             None => !(in_range(n1x, 83) && in_range(n1y, 83) && in_range(n1z, 83) && in_range(n2x, 83) && in_range(n2y, 83) && in_range(n2z, 83) && in_range(n3x, 83) && in_range(n3y, 83) && in_range(n3z, 83)),
         },
 )]
