@@ -58,7 +58,6 @@
 //! at most 128 bits wide.
 
 use core::fmt;
-use core::num::NonZeroU128;
 
 use crate::angle::{
     AngleUnits, Bearing, FULL_TURN, HALF_TURN, PER_DEGREE, PER_GON, PER_MINUTE, PER_SECOND,
@@ -354,12 +353,13 @@ fn fixed_digits(f: &mut fmt::Formatter<'_>, value: u128, count: usize) -> fmt::R
     Ok(())
 }
 
-/// `n / d` rounded to nearest, ties to even, and whether it was exact.
-fn divided(n: u128, d: NonZeroU128) -> (u128, bool) {
-    let (quotient, rest) = (n / d, n % d);
+/// `n / d` rounded to nearest, ties to even, and whether it was exact; `d` is at least 1 (a power
+/// of ten, or a notation's last unit), so neither division falls back.
+fn divided(n: u128, d: u128) -> (u128, bool) {
+    let (quotient, rest) = (n.checked_div(d).unwrap_or(0), n.checked_rem(d).unwrap_or(n));
     // Twice the remainder cannot overflow: it is below d ≤ 10^30.
     let twice = rest.saturating_mul(2);
-    let up = twice > d.get() || (twice == d.get() && quotient % 2 == 1);
+    let up = twice > d || (twice == d && quotient % 2 == 1);
     let rounded = if up {
         quotient.saturating_add(1)
     } else {
@@ -377,8 +377,7 @@ fn units_of(n: &Number, per: i64) -> (u128, bool) {
     let scale = TEN
         .get(usize::try_from(n.places).unwrap_or(usize::MAX))
         .copied()
-        .and_then(NonZeroU128::new)
-        .unwrap_or(NonZeroU128::MIN);
+        .unwrap_or(1);
     // Below 10^30 · 9,000,000 < 2^123: MAX_PLACES's bound.
     let (part, exact) = divided(n.fraction.saturating_mul(u128::from(per)), scale);
     (whole.saturating_add(part), exact)
@@ -650,8 +649,7 @@ pub fn write(
         .ok_or(AngleTextError::TooManyPlaces)?;
     // |angle| ≤ 2^63 and scale ≤ 10^18, so the product is below 10^37.
     let scaled = u128::from(angle.0.unsigned_abs()).saturating_mul(scale);
-    let unit = NonZeroU128::new(u128::from(last_unit(notation).unsigned_abs()));
-    let (magnitude, exact) = divided(scaled, unit.unwrap_or(NonZeroU128::MIN));
+    let (magnitude, exact) = divided(scaled, u128::from(last_unit(notation).unsigned_abs()));
     let written = Written {
         negative: angle.0 < 0,
         magnitude,
@@ -797,7 +795,6 @@ mod tests {
 
     #[test]
     fn ties_round_to_even_and_report_exactness() {
-        let divided = |n: u128, d: u128| divided(n, NonZeroU128::new(d).unwrap());
         assert_eq!(divided(15, 10), (2, false));
         assert_eq!(divided(25, 10), (2, false));
         assert_eq!(divided(26, 10), (3, false));
