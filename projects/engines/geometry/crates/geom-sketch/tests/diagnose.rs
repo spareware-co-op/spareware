@@ -844,3 +844,26 @@ fn the_range_resolution_is_two_to_minus_the_halvings() {
         2f64.powi(-i32::try_from(RANGE_HALVINGS).unwrap()).to_bits()
     );
 }
+
+#[test]
+fn a_column_at_right_angles_to_those_chosen_is_confirmed_on_its_own() {
+    // (0, 0, p) leans on nothing chosen, so its group is itself alone: an independent pivot of
+    // p = 3e-4, near σ_ind, stays independent, though the pair before it is near-singular.
+    let (e, p) = (2.0e-4, 3.0e-4);
+    let a = analyse_columns(
+        &[vec![1.0, 0.0, 0.0], vec![1.0, e, 0.0], vec![0.0, 0.0, p]],
+        &[eq(1, 0, 0), eq(2, 1, 1), eq(3, 2, 2)],
+        &[0.0; 3],
+        3,
+        1.0e4,
+        &mut meter(),
+    )
+    .unwrap();
+    assert_eq!(a.pivots[1].verdict, Verdict::NearSingular);
+    let last = a.pivots[2];
+    assert_eq!(last.equation, 2);
+    assert_eq!(
+        (last.verdict, last.confirmed),
+        (Verdict::Independent, false)
+    );
+}
