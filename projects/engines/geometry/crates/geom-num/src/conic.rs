@@ -525,3 +525,17 @@ impl Conic {
         })
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::gcd;
+
+    #[test]
+    fn the_greatest_common_divisor_stops_where_a_remainder_does_not_fit() {
+        assert_eq!(gcd(12, 18), 6);
+        assert_eq!(gcd(7, 1), 1);
+        // The one remainder i64 cannot hold: no ratio reaches it, as Ellipse2::new asks only of
+        // two positive numbers.
+        assert_eq!(gcd(i64::MIN, -1), 0);
+    }
+}

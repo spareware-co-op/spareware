@@ -149,10 +149,10 @@ pub open spec fn bound_of_s() -> int {
     clippy::too_many_arguments,
     reason = "names, parameters and lines follow the description: one per input and step"
 )]
-#[verus_spec(r =>
+#[verus_spec(result_ =>
     ensures
-        match r {
-            Some(v) => in_range(a, 41) && in_range(b, 41) && in_range(xp, 124) && in_range(yp, 124) && in_range(xq, 124) && in_range(yq, 124) && in_range(wp, 83) && in_range(wq, 83) && v.value() == spec_value(a, b, xp, yp, xq, yq, wp, wq),
+        match result_ {
+            Some(held_) => in_range(a, 41) && in_range(b, 41) && in_range(xp, 124) && in_range(yp, 124) && in_range(xq, 124) && in_range(yq, 124) && in_range(wp, 83) && in_range(wq, 83) && held_.value() == spec_value(a, b, xp, yp, xq, yq, wp, wq),
             None => !(in_range(a, 41) && in_range(b, 41) && in_range(xp, 124) && in_range(yp, 124) && in_range(xq, 124) && in_range(yq, 124) && in_range(wp, 83) && in_range(wq, 83)),
         },
 )]

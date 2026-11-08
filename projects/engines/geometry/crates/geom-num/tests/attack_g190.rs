@@ -242,6 +242,44 @@ fn found(q: &Quartic) -> Vec<(Piece, u8)> {
         .collect()
 }
 
+/// A root found exactly at a bisection point, beside a root of a factor of another multiplicity
+/// whose stretch overlaps it: the two are parted, each side of the pair narrowed only when it is not
+/// a point already, and every root lands in order. The double root forces the square-free factors,
+/// one of which is bisected onto its dyadic root 1 / 2.
+#[test]
+fn a_dyadic_root_beside_another_factor_s_root_is_parted_from_it() {
+    // (2t − 1)(4t − 1)(3t − 2)²: 1 / 4 and 1 / 2 simple, 2 / 3 double; the point 1 / 2 comes first.
+    // (2t − 1)(4t − 3)(3t − 1)²: 1 / 3 double, 1 / 2 and 3 / 4 simple; the point comes second.
+    for (linear, want) in [
+        (
+            [(2, 1), (4, 1), (3, 2), (3, 2)],
+            [(1, 4, 1), (1, 2, 1), (2, 3, 2)],
+        ),
+        (
+            [(2, 1), (4, 3), (3, 1), (3, 1)],
+            [(1, 3, 2), (1, 2, 1), (3, 4, 1)],
+        ),
+    ] {
+        let q = quartic(&linear, &[]);
+        let roots: Vec<RealRoot> = q.roots().unwrap().iter().copied().collect();
+        assert_eq!(roots.len(), 3, "{linear:?}");
+        for (r, (p, d, m)) in roots.iter().zip(want) {
+            assert_eq!(r.piece(), Piece::Above, "{linear:?}");
+            assert_eq!(r.multiplicity(), m, "{linear:?}: {p}/{d}");
+            let (one, _) = single(d, p);
+            let at = *one.roots().unwrap().iter().next().unwrap();
+            assert_eq!(
+                compare(&q, r, &one, &at).unwrap(),
+                Sign::Zero,
+                "{linear:?}: {p}/{d}"
+            );
+        }
+        for pair in roots.windows(2) {
+            assert_eq!(compare(&q, &pair[0], &q, &pair[1]).unwrap(), Sign::Negative);
+        }
+    }
+}
+
 /// The only finite root of the quartic with this one rational root, and that quartic.
 fn single(q: i128, p: i128) -> (Quartic, RealRoot) {
     let quartic = quartic(&[(q, p), (0, -1), (0, -1), (0, -1)], &[]);
@@ -1148,6 +1186,10 @@ fn the_extreme_values_reach_every_width_and_every_step_fits() {
     // Past a budget is refused, never wrapped.
     assert_eq!(
         Ellipse2::new(p2(0, 0), [TOP + 1, 0], 1, 1).err(),
+        Some(NumError::BudgetExceeded)
+    );
+    assert_eq!(
+        Ellipse2::new(p2(0, 0), [0, -TOP - 1], 1, 1).err(),
         Some(NumError::BudgetExceeded)
     );
     assert_eq!(

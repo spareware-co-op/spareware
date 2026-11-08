@@ -558,7 +558,7 @@ pub open spec fn bound_of_det() -> int {
     clippy::similar_names,
     reason = "names, parameters and lines follow the description: one per input and step"
 )]
-#[verus_spec(r =>
+#[verus_spec(result_ =>
     requires
         a.x.on_grid(),
         a.y.on_grid(),
@@ -576,7 +576,7 @@ pub open spec fn bound_of_det() -> int {
         e.y.on_grid(),
         e.z.on_grid(),
     ensures
-        r matches Some(v) && v.value() == spec_value(a, b, c, d, e),
+        result_ matches Some(held_) && held_.value() == spec_value(a, b, c, d, e),
 )]
 pub fn value(a: P3, b: P3, c: P3, d: P3, e: P3) -> Option<I256> {
     let ae_x = a.x.get().checked_sub(e.x.get())?;
