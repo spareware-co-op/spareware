@@ -1266,11 +1266,12 @@ impl Arrangement {
                 .and_then(|c| usize::try_from(c).ok())
                 .ok_or(BodyError::TooMany)?;
             let cycle = self.cycles.get(outer).ok_or(BodyError::TooMany)?;
-            let corners = cycle.iter().filter_map(|&h| {
-                let e = self.edges.get(usize::try_from(h / 2).ok()?)?;
-                let v = if h % 2 == 0 { e.from } else { e.to };
-                points.get(usize::try_from(v).ok()?).copied()
-            });
+            // A cycle's vertices are the ends of its half-edges' edges, either end.
+            let corners = cycle
+                .iter()
+                .filter_map(|&h| self.edges.get(usize::try_from(h / 2).ok()?))
+                .flat_map(|e| [e.from, e.to])
+                .filter_map(|v| points.get(usize::try_from(v).ok()?).copied());
             let bound = Box3::from_points(corners).ok_or(BodyError::TooMany)?;
             let first_loop = loop_of_cycle.get(outer).copied().flatten();
             let topo = TopoFace {
