@@ -20,7 +20,9 @@
 //!   quartered, by de Casteljau's algorithm at dyadic parameters, which keeps every weight
 //!   positive. The deviation bounds only the rounding of the pieces' points and weights.
 //! - **Transforms change the kind explicitly.** A similarity keeps a bulge polyline (vertices
-//!   mapped, widths scaled, bulges negated by a mirror); any other transform makes its NURBS form.
+//!   mapped, widths scaled, bulges negated by a mirror); any other transform moves its NURBS form,
+//!   the form's deviation stretched by the transform (at most by its linear part's Frobenius
+//!   norm) plus the move's.
 //!   A grid transform that moves every vertex exactly is exact: deviation 0 (chapter 7; piece
 //!   G69).
 //! - **Splits are trimmed polylines.** A split leaves the polyline untouched and trims it
@@ -48,6 +50,7 @@ use geom_num::interval::Interval;
 use geom_nurbs::{Basis, Bounds, Changed, Curve, Limit};
 use geom_run::WorkMeter;
 
+use crate::affine::Entries;
 use crate::error::CurveError;
 use crate::form::{check_parameter, count};
 use crate::map::{NurbsForm, ParamMap};
@@ -563,12 +566,17 @@ impl<const D: usize> ParamCurve<D> for BulgePolyline<D> {
         let m = Motion::of::<D>(transform)?;
         meter.charge(u64::try_from(self.segments()).map_err(|_| CurveError::Defect)?)?;
         if !m.similar() {
-            // Arcs become elliptical arcs: the NURBS form, moved.
+            // Arcs become elliptical arcs: the NURBS form, moved. Its deviation is a distance
+            // before the move, which the transform stretches by at most its linear part's norm.
             let n = self.to_nurbs(meter)?;
             let moved = ParamCurve::transformed(&n.value.curve, transform, meter)?;
+            let form = tight::mul(
+                point(n.deviation)?,
+                point(Entries::of(transform)?.stretch()?)?,
+            )?;
             return Ok(Changed {
                 value: moved.value,
-                deviation: tight::add(point(n.deviation)?, point(moved.deviation)?)?.hi(),
+                deviation: tight::add(form, point(moved.deviation)?)?.hi(),
             });
         }
         let mut vertices = Vec::with_capacity(self.vertices.len());

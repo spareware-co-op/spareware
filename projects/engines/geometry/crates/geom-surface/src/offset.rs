@@ -31,8 +31,9 @@
 //!   reversal reverses the base and negates the distance (`S_u` × `S_v` turns over).
 //! - **Transforms keep the kind only when exact.** A grid transform (a signed permutation and a
 //!   whole-step translation, so lengths are kept) of an offset whose base moves exactly gives an
-//!   offset, a mirror negating the distance; any other transform gives the moved NURBS cache, with
-//!   both deviations.
+//!   offset, a mirror negating the distance; any other transform gives the moved NURBS cache, its
+//!   deviation the cache's stretched by the transform (at most by its linear part's Frobenius
+//!   norm) plus the move's.
 //!
 //! Method: the offset surface as ISO 10303-42 defines it (`offset_surface`, the base moved along
 //! its normal by a distance), its derivatives by automatic differentiation in interval arithmetic
@@ -97,6 +98,7 @@
 use alloc::boxed::Box;
 use alloc::vec::Vec;
 
+use geom_curve::affine::Entries;
 use geom_curve::tight::{self, point};
 use geom_curve::{CurveError, DerivativeBound};
 use geom_math::TypedTransform;
@@ -508,13 +510,20 @@ impl Offset {
     ) -> Result<Changed<SurfaceKind>, CurveError> {
         let n = self.to_nurbs(meter)?;
         let s = &n.value.surface;
-        let moved = match motion {
-            Some(t) => ParamSurface::transformed(s, t, meter)?,
-            None => ParamSurface::reversed(s, dir, meter)?,
+        // The cache's deviation is a distance before the move: a transform stretches it by at most
+        // its linear part's norm (a scale of 2^36 made it 2^36 times longer, which the fuzz
+        // campaign found); a reversal keeps it.
+        let (moved, stretch) = match motion {
+            Some(t) => (
+                ParamSurface::transformed(s, t, meter)?,
+                Entries::of(t)?.stretch()?,
+            ),
+            None => (ParamSurface::reversed(s, dir, meter)?, 1.0),
         };
+        let cache = tight::mul(point(n.deviation)?, point(stretch)?)?;
         Ok(Changed {
             value: moved.value,
-            deviation: tight::add(point(n.deviation)?, point(moved.deviation)?)?.hi(),
+            deviation: tight::add(cache, point(moved.deviation)?)?.hi(),
         })
     }
 }

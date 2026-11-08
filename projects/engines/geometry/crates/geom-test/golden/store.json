@@ -332,7 +332,7 @@
             "test": "compound_determinism",
             "function": "compound_golden_hash_is_the_same_on_every_target"
           },
-          "sha256": "da8e6e689c1157e9a9b81f1164620b70ddffb9be97fae2746e19fea2b2b49338",
+          "sha256": "73638c0b193a68eb859693f3563e6795b0bb36c8b73988c931b9d8ce5ec6cf1b",
           "history": [
             {
               "sha256": "3aadba80ffd582ba2a5f6ab55a12a59c7306e6eaa7dc2a884a5ecc6089d804b2",
@@ -345,6 +345,12 @@
               "kind": "improvement",
               "piece": "G69",
               "why": "A grid transform that moves a bulge polyline's vertices, or a circle's centre, exactly now states deviation 0 (chapter 7; piece G69's law catalogue), and so do the trimmed and composite curves built on them. The corpus's quarter turns of those curves moved; the result count (10506) and the refusals (6) are unchanged."
+            },
+            {
+              "sha256": "da8e6e689c1157e9a9b81f1164620b70ddffb9be97fae2746e19fea2b2b49338",
+              "kind": "bug",
+              "piece": "G70",
+              "why": "An offset that a transform does not keep, and a bulge polyline under a transform that is not a similarity, give their NURBS form moved, and stated that form's deviation unscaled, though the transform stretches it (Gate 2's fuzz campaign found the transform law broken under scales of 2^36 to 2^60). The deviation is now the form's times a certified bound on the transform's stretch, plus the move's, so the corpus's offsets under its rational and certified transforms, and its polylines under its non-uniform scales, moved. The result count (10506) and the refusals (6) are unchanged."
             }
           ]
         },
@@ -408,7 +414,7 @@
             "test": "offset_determinism",
             "function": "offset_golden_hash_is_the_same_on_every_target"
           },
-          "sha256": "400046692e8651b4708068b01fa6e4b86efc7af0632345e1ae6705813e16afde",
+          "sha256": "1b57e016cdcb9289e72b1acc128f572722e2c8d9cca9c57d33e516df3e22921e",
           "history": [
             {
               "sha256": "63b11a13ca70c0fef43c5e6e03a53dca5e7f7cc8b7792900f1853aabeaa71a00",
@@ -427,6 +433,12 @@
               "kind": "improvement",
               "piece": "G69",
               "why": "A grid mirror of an analytic base now states deviation 0 (piece G69), so a grid mirror of an offset of such a base is an offset again, its distance negated, by the offset kind's own rule (an exact move of the base keeps the kind), where before the base's stated rounding sent it to its moved NURBS cache. The result count (314) and the refusals (4) are unchanged."
+            },
+            {
+              "sha256": "400046692e8651b4708068b01fa6e4b86efc7af0632345e1ae6705813e16afde",
+              "kind": "bug",
+              "piece": "G70",
+              "why": "An offset that a transform does not keep gives its NURBS cache moved, and stated the cache's deviation unscaled, though the transform stretches it (Gate 2's fuzz campaign found the transform law broken under scales of 2^36 to 2^60). The deviation is now the cache's times a certified bound on the transform's stretch, plus the move's, so the corpus's transformed offsets moved. The result count (314) and the refusals (4) are unchanged."
             }
           ]
         },
