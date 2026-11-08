@@ -21,6 +21,7 @@ use geom_poly::cut::{Clipped, clip, local_cuts};
 use geom_poly::trace::{Cell, Classified, Polygon, TraceError, classify, winding_at};
 use geom_poly::winding::{Kept, Winding, WindingError, WindingTest, kept};
 use geom_run::{Budget, WorkMeter};
+use geom_test::seed::Seed;
 use proptest::prelude::*;
 
 fn meter() -> WorkMeter<'static> {
@@ -587,21 +588,54 @@ fn wedges_at(solids: &[[Plane; 4]], p: [f64; 3]) -> Winding {
     w
 }
 
-/// A point just off the middle of a piece, on the side `by` of it.
-fn off_middle(piece: &Piece, by: f64) -> [f64; 3] {
+/// A point just off a piece, on the side `by` of it: of the piece's middle and the points halfway
+/// from it to each corner, the one farthest from every plane of `solids` not parallel to the
+/// piece. A solid may touch a piece at one point, its middle included (one solid's corner at the
+/// middle of another's face), and a point just off it there lands inside that solid or not by
+/// rounding, whatever the piece holds.
+fn off_middle(piece: &Piece, by: f64, solids: &[[Plane; 4]]) -> [f64; 3] {
     let k = piece.bounds.len();
-    let mut middle = [0.0f64; 3];
-    for i in 0..k {
-        let t = Tpi::new(piece.face, piece.bounds[i], piece.bounds[(i + 1) % k]).unwrap();
-        let (x, w) = t.homogeneous().unwrap();
-        let w = w.to_i128().unwrap() as f64;
-        for axis in 0..3 {
-            middle[axis] += x[axis].to_i128().unwrap() as f64 / w / k as f64;
-        }
-    }
+    let corners: Vec<[f64; 3]> = (0..k)
+        .map(|i| {
+            let t = Tpi::new(piece.face, piece.bounds[i], piece.bounds[(i + 1) % k]).unwrap();
+            let (x, w) = t.homogeneous().unwrap();
+            let w = w.to_i128().unwrap() as f64;
+            [0, 1, 2].map(|axis| x[axis].to_i128().unwrap() as f64 / w)
+        })
+        .collect();
+    let middle = [0, 1, 2].map(|axis| corners.iter().map(|c| c[axis]).sum::<f64>() / k as f64);
+    let face = piece.face.n();
+    let crossing: Vec<&Plane> = solids
+        .iter()
+        .flatten()
+        .filter(|q| {
+            let n = q.n();
+            [1, 2, 0]
+                .iter()
+                .zip([2, 0, 1])
+                .any(|(&a, b)| n[a] * face[b] != n[b] * face[a])
+        })
+        .collect();
+    let gap = |p: &[f64; 3]| {
+        crossing
+            .iter()
+            .map(|q| {
+                let n = q.n().map(|v| v as f64);
+                let value = (0..3).map(|i| n[i] * p[i]).sum::<f64>() + q.d() as f64;
+                value.abs() / (n[0] * n[0] + n[1] * n[1] + n[2] * n[2]).sqrt()
+            })
+            .fold(f64::INFINITY, f64::min)
+    };
+    let halfway = corners
+        .iter()
+        .map(|c| [0, 1, 2].map(|axis| f64::midpoint(middle[axis], c[axis])));
+    let at = core::iter::once(middle)
+        .chain(halfway)
+        .max_by(|a, b| gap(a).total_cmp(&gap(b)))
+        .unwrap();
     let n = piece.face.n().map(|v| v as f64);
     let length = (n[0] * n[0] + n[1] * n[1] + n[2] * n[2]).sqrt();
-    [0, 1, 2].map(|axis| middle[axis] + by * n[axis] / length)
+    [0, 1, 2].map(|axis| at[axis] + by * n[axis] / length)
 }
 
 fn wedges_agree(solids: &[[Plane; 4]]) {
@@ -616,7 +650,10 @@ fn wedges_agree(solids: &[[Plane; 4]]) {
         high: [100; 3],
     };
     for c in classify(&cell, &Winding::new(), &polygons, &cuts, &mut meter()).unwrap() {
-        let (front, back) = (off_middle(&c.piece, 1e-7), off_middle(&c.piece, -1e-7));
+        let (front, back) = (
+            off_middle(&c.piece, 1e-7, solids),
+            off_middle(&c.piece, -1e-7, solids),
+        );
         assert_eq!(c.front, wedges_at(solids, front), "front of {:?}", c.piece);
         assert_eq!(c.back, wedges_at(solids, back), "back of {:?}", c.piece);
     }
@@ -639,7 +676,10 @@ fn wedges_in_cell(solids: &[[Plane; 4]], cell: &Cell) {
         high: cell.high.map(|v| v * 2),
     };
     for c in classify(&doubled, &reference, &polygons, &cuts, &mut meter()).unwrap() {
-        let (front, back) = (off_middle(&c.piece, 1e-9), off_middle(&c.piece, -1e-9));
+        let (front, back) = (
+            off_middle(&c.piece, 1e-9, solids),
+            off_middle(&c.piece, -1e-9, solids),
+        );
         assert_eq!(c.front, wedges_at(solids, front), "front of {:?}", c.piece);
         assert_eq!(c.back, wedges_at(solids, back), "back of {:?}", c.piece);
     }
@@ -667,64 +707,185 @@ fn tilted_faces_are_crossed_where_a_path_leaves_them_by_either_of_two_walls() {
     wedges_agree(&[b, a]);
 }
 
-fn any_wedge() -> impl Strategy<Value = [Plane; 4]> {
+#[test]
+fn a_corner_at_the_middle_of_another_s_face_is_no_reason_to_sample_there() {
+    // The first solid's corner (0, 6, -1) is the middle of the second's face opposite the origin.
+    let plane = |n: [i128; 3], d: i128| Plane::new(n, d).unwrap();
+    let a = [
+        plane([-7, 5, 30], 0),
+        plane([-1, 25, -20], -170),
+        plane([42, -30, -10], 0),
+        plane([-34, 0, 0], 0),
+    ];
+    let b = [
+        plane([8, -7, 20], 0),
+        plane([32, -28, -106], 0),
+        plane([-18, 39, 48], -186),
+        plane([-22, -4, 38], 0),
+    ];
+    wedges_agree(&[a, b]);
+    wedges_agree(&[b, a]);
+}
+
+#[test]
+fn a_corner_that_touches_a_face_from_behind_is_no_reason_to_sample_there() {
+    // The second solid's corner (1, 2, 2) is the middle of the first's face opposite the origin,
+    // and the second solid lies behind that face, inside the first. Just behind the middle is
+    // inside both, but the second solid only touches the face there: everywhere else just behind
+    // it is inside the first alone, as the trace says. An unseeded property run drew this.
+    let plane = |n: [i128; 3], d: i128| Plane::new(n, d).unwrap();
+    let a = [
+        plane([30, -38, 5], 0),
+        plane([-36, 60, 12], -108),
+        plane([-6, -14, -1], 0),
+        plane([12, -8, -16], 0),
+    ];
+    let b = [
+        plane([-6, 3, 0], 0),
+        plane([6, 4, 14], -42),
+        plane([0, -21, 0], 0),
+        plane([0, 14, -14], 0),
+    ];
+    wedges_agree(&[a, b]);
+    wedges_agree(&[b, a]);
+}
+
+/// The first case proptest's failure file kept for this file before the property tests were
+/// seeded: one block well along x, alone.
+#[test]
+fn a_block_away_from_the_origin_agrees_and_keeps_its_volume() {
+    blocks_agree(&[Block {
+        low: [5, 0, 0],
+        high: [10, 1, 1],
+    }])
+    .unwrap();
+}
+
+/// Each piece of the whole scene against the counting oracle, and the volume each selection keeps
+/// against the unit boxes it should.
+fn blocks_agree(blocks: &[Block]) -> Result<(), TestCaseError> {
+    let classified = scene(blocks);
+    agrees(blocks, &classified);
+    for test in [
+        WindingTest::unite(),
+        WindingTest::intersect(blocks.len() as u32),
+        WindingTest::subtract(0),
+    ] {
+        prop_assert_eq!(volume(&test, &classified), counted(&test, blocks));
+    }
+    Ok(())
+}
+
+/// Runs `test` on `cases` cases of `strategy`, drawn from `SPAREKIT_SEED` if it is set and from
+/// `default` otherwise; the seed is printed first, and a failure names the seed that replays it.
+fn seeded<S>(
+    label: &str,
+    default: u64,
+    cases: u32,
+    strategy: &S,
+    test: impl Fn(S::Value) -> Result<(), TestCaseError>,
+) where
+    S: Strategy,
+    S::Value: core::fmt::Debug,
+{
+    if let Err(failure) = geom_test::prop::run(label, Seed(default), cases, strategy, test) {
+        panic!("{failure}");
+    }
+}
+
+/// One to `N` values of `item`. The count is an `i64` and the values a fixed array, so every
+/// target draws the same cases: proptest samples a `usize` range, a `vec`'s length among them, as a
+/// `u64` on 64-bit targets and as a `u32` on wasm32, and so reads its stream at other offsets there
+/// (`geom_test::prop`'s header).
+fn one_to<S, const N: usize>(item: S) -> impl Strategy<Value = Vec<S::Value>>
+where
+    S: Strategy + Clone,
+    S::Value: Clone,
+{
+    let most = i64::try_from(N).unwrap();
+    (1..=most, proptest::array::uniform::<S, N>(item))
+        .prop_map(|(count, all)| all[..count as usize].to_vec())
+}
+
+fn any_wedge() -> impl Strategy<Value = [Plane; 4]> + Clone {
     let corner = || [-8i64..=8, -8i64..=8, -8i64..=8];
     [corner(), corner(), corner(), corner()].prop_filter_map("flat", outward)
 }
 
-fn any_block() -> impl Strategy<Value = Block> {
+fn any_block() -> impl Strategy<Value = Block> + Clone {
     ([-6i64..6, -6i64..6, -6i64..6], [1i64..6, 1i64..6, 1i64..6]).prop_map(|(low, size)| Block {
         low,
         high: [low[0] + size[0], low[1] + size[1], low[2] + size[2]],
     })
 }
 
-proptest! {
-    #![proptest_config(ProptestConfig::with_cases(160))]
+#[test]
+fn every_tilted_box_agrees_with_the_solids() {
+    let cases = (
+        one_to::<_, 3>(any_wedge()),
+        [-6i64..6, -6i64..6, -6i64..6],
+        [1i64..8, 1i64..8, 1i64..8],
+    );
+    seeded(
+        "geom-poly trace: every tilted box",
+        0x6127_0001,
+        160,
+        &cases,
+        |(solids, low, size)| {
+            let cell = Cell {
+                low,
+                high: [low[0] + size[0], low[1] + size[1], low[2] + size[2]],
+            };
+            wedges_in_cell(&solids, &cell);
+            Ok(())
+        },
+    );
+}
 
-    #[test]
-    fn every_tilted_box_agrees_with_the_solids(
-        solids in prop::collection::vec(any_wedge(), 1..4),
-        low in [-6i64..6, -6i64..6, -6i64..6],
-        size in [1i64..8, 1i64..8, 1i64..8],
-    ) {
-        let cell = Cell {
-            low,
-            high: [low[0] + size[0], low[1] + size[1], low[2] + size[2]],
-        };
-        wedges_in_cell(&solids, &cell);
-    }
+#[test]
+fn every_tilted_piece_agrees_with_the_solids() {
+    seeded(
+        "geom-poly trace: every tilted piece",
+        0x6127_0002,
+        160,
+        &one_to::<_, 3>(any_wedge()),
+        |solids| {
+            wedges_agree(&solids);
+            Ok(())
+        },
+    );
+}
 
-    #[test]
-    fn every_tilted_piece_agrees_with_the_solids(
-        solids in prop::collection::vec(any_wedge(), 1..4)
-    ) {
-        wedges_agree(&solids);
-    }
+#[test]
+fn every_piece_agrees_with_the_blocks() {
+    seeded(
+        "geom-poly trace: every piece of blocks",
+        0x6127_0003,
+        160,
+        &one_to::<_, 4>(any_block()),
+        |blocks| blocks_agree(&blocks),
+    );
+}
 
-    #[test]
-    fn every_piece_agrees_with_the_blocks(blocks in prop::collection::vec(any_block(), 1..5)) {
-        let classified = scene(&blocks);
-        agrees(&blocks, &classified);
-        for test in [
-            WindingTest::unite(),
-            WindingTest::intersect(blocks.len() as u32),
-            WindingTest::subtract(0),
-        ] {
-            prop_assert_eq!(volume(&test, &classified), counted(&test, &blocks));
-        }
-    }
-
-    #[test]
-    fn every_box_agrees_with_the_blocks(
-        blocks in prop::collection::vec(any_block(), 1..4),
-        low in [-6i64..6, -6i64..6, -6i64..6],
-        size in [1i64..7, 1i64..7, 1i64..7],
-    ) {
-        let cell = Cell {
-            low,
-            high: [low[0] + size[0], low[1] + size[1], low[2] + size[2]],
-        };
-        agrees(&blocks, &in_cell(&blocks, &cell));
-    }
+#[test]
+fn every_box_agrees_with_the_blocks() {
+    let cases = (
+        one_to::<_, 3>(any_block()),
+        [-6i64..6, -6i64..6, -6i64..6],
+        [1i64..7, 1i64..7, 1i64..7],
+    );
+    seeded(
+        "geom-poly trace: every box of blocks",
+        0x6127_0004,
+        160,
+        &cases,
+        |(blocks, low, size)| {
+            let cell = Cell {
+                low,
+                high: [low[0] + size[0], low[1] + size[1], low[2] + size[2]],
+            };
+            agrees(&blocks, &in_cell(&blocks, &cell));
+            Ok(())
+        },
+    );
 }

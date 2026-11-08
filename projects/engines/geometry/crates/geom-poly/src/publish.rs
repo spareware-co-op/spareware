@@ -92,16 +92,15 @@ fn row<K>(at: usize) -> Result<Ix<K>, PublishError> {
         .ok_or(PublishError::Num(NumError::BudgetExceeded))
 }
 
-/// The lowest three of `planes` that meet in one point, or the point's own.
+/// The lowest three of `planes` that meet in one point, or the point's own. The numbers index
+/// `pool`; one past its end has no plane and is passed over.
 fn lowest_triple(planes: &[usize], pool: &[Plane], own: &Tpi) -> Result<[Plane; 3], NumError> {
-    for (i, a) in planes.iter().enumerate() {
-        for (j, b) in planes.iter().enumerate().skip(i.saturating_add(1)) {
-            for c in planes.iter().skip(j.saturating_add(1)) {
-                let triple = [pool.get(*a), pool.get(*b), pool.get(*c)];
-                if let [Some(p), Some(q), Some(r)] = triple
-                    && normals_det(p, q, r)? != Sign::Zero
-                {
-                    return Ok([*p, *q, *r]);
+    let around: Vec<&Plane> = planes.iter().filter_map(|at| pool.get(*at)).collect();
+    for (i, p) in around.iter().enumerate() {
+        for (j, q) in around.iter().enumerate().skip(i.saturating_add(1)) {
+            for r in around.iter().skip(j.saturating_add(1)) {
+                if normals_det(p, q, r)? != Sign::Zero {
+                    return Ok([**p, **q, **r]);
                 }
             }
         }
@@ -209,28 +208,33 @@ fn arenas(
                 .unwrap_or(outers.len())
         })
         .collect();
+    // Each row is made before it is pushed, so every refusal is read on a line that runs. An arena
+    // refuses a push only when it is full or memory runs out, and a row number fails only past
+    // 2^32, none of which a test can bring about.
     for region in 0..outers.len() {
         let first = region_of.iter().position(|r| *r == region);
-        a.regions.push(Region {
+        let solid = Region {
             kind: RegionKind::Solid,
             first_shell: first.map(row).transpose()?,
-        })?;
+        };
+        a.regions.push(solid)?;
     }
-    let outside = a.regions.push(Region {
+    let holds_shells = open && !merged.shells.is_empty();
+    let void = Region {
         kind: RegionKind::Void,
-        first_shell: (open && !merged.shells.is_empty())
-            .then(|| row(0))
-            .transpose()?,
-    })?;
+        first_shell: holds_shells.then(|| row(0)).transpose()?,
+    };
+    let outside = a.regions.push(void)?;
     for (s, region) in region_of.iter().enumerate() {
         let next =
             (s.saturating_add(1)..region_of.len()).find(|t| region_of.get(*t) == Some(region));
         let first_face = merged.shells.get(s).and_then(|shell| shell.faces.first());
-        a.shells.push(Shell {
+        let shell = Shell {
             region: row(*region)?,
             next: next.map(row).transpose()?,
             first_face: first_face.copied().map(row).transpose()?,
-        })?;
+        };
+        a.shells.push(shell)?;
     }
 
     // Vertices, each a grid point or its lowest meeting.
@@ -316,7 +320,7 @@ fn arenas(
         let place = shell.faces.iter().position(|g| *g == f);
         let later = place.and_then(|p| shell.faces.get(p.saturating_add(1)));
         let turned = sheet.turned != (carrier.sense == Sense::Reversed);
-        a.faces.push(Face {
+        let made = Face {
             shell: row(face.shell)?,
             next: later.copied().map(row).transpose()?,
             surface: row(surface)?,
@@ -327,22 +331,18 @@ fn arenas(
             },
             first_loop: face.rings.first().map(|_| row(next_loop)).transpose()?,
             bound: bound_of(&corners)?,
-        })?;
+        };
+        a.faces.push(made)?;
         for (l, ring) in face.rings.iter().enumerate() {
             let at = next_loop.saturating_add(l);
-            a.loops.push(Loop {
+            let more = l.saturating_add(1) < face.rings.len();
+            let first_fin = ring.first().copied().map(row_of).transpose()?;
+            let held = Loop {
                 face: row(f)?,
-                next: (l.saturating_add(1) < face.rings.len())
-                    .then(|| row(at.saturating_add(1)))
-                    .transpose()?,
-                first_fin: ring
-                    .first()
-                    .copied()
-                    .map(row_of)
-                    .transpose()?
-                    .map(row)
-                    .transpose()?,
-            })?;
+                next: more.then(|| row(at.saturating_add(1))).transpose()?,
+                first_fin: first_fin.map(row).transpose()?,
+            };
+            a.loops.push(held)?;
         }
         next_loop = next_loop.saturating_add(face.rings.len());
     }
@@ -367,7 +367,7 @@ fn arenas(
             for ((at, after), before) in ring.iter().zip(next).zip(prev) {
                 let fin = merged.fins.get(*at).ok_or(PublishError::Broken)?;
                 let radial = radial_next.get(*at).ok_or(PublishError::Broken)?;
-                a.fins.push(Fin {
+                let made = Fin {
                     loop_: row(loop_row)?,
                     next: row(row_of(*after)?)?,
                     prev: row(row_of(*before)?)?,
@@ -379,7 +379,8 @@ fn arenas(
                     },
                     radial: row(row_of(*radial)?)?,
                     pcurve: None,
-                })?;
+                };
+                a.fins.push(made)?;
             }
             loop_row = loop_row.saturating_add(1);
         }
@@ -389,19 +390,14 @@ fn arenas(
     for edge in &merged.edges {
         let end = |at: usize| rounded.get(at).copied().ok_or(PublishError::Broken);
         let curve = a.curves.push(shadow(end(edge.low)?, end(edge.high)?)?)?;
-        a.edges.push(Edge {
-            first_fin: edge
-                .fins
-                .first()
-                .copied()
-                .map(row_of)
-                .transpose()?
-                .map(row)
-                .transpose()?,
+        let first_fin = edge.fins.first().copied().map(row_of).transpose()?;
+        let made = Edge {
+            first_fin: first_fin.map(row).transpose()?,
             start: Some(row(edge.low)?),
             end: Some(row(edge.high)?),
             curve,
-        })?;
+        };
+        a.edges.push(made)?;
     }
     Ok((builder, outside))
 }
@@ -461,10 +457,11 @@ pub fn wire(
 ) -> Result<Body, PublishError> {
     let mut builder = Builder::new();
     let a = &mut builder.arenas;
-    let outside = a.regions.push(Region {
+    let void = Region {
         kind: RegionKind::Void,
         first_shell: None,
-    })?;
+    };
+    let outside = a.regions.push(void)?;
     let mut rounded = Vec::with_capacity(curves.vertices.len());
     let mut stored: Vec<Plane> = Vec::new();
     for point in &curves.vertices {
@@ -493,15 +490,53 @@ pub fn wire(
     for (low, high) in &curves.edges {
         let end = |at: usize| rounded.get(at).copied().ok_or(PublishError::Broken);
         let curve = a.curves.push(shadow(end(*low)?, end(*high)?)?)?;
-        a.edges.push(Edge {
+        let made = Edge {
             first_fin: None,
             start: Some(row(*low)?),
             end: Some(row(*high)?),
             curve,
-        })?;
+        };
+        a.edges.push(made)?;
     }
     Ok(match names {
         Some(names) => builder.publish_named(names, BodyKind::Wire, outside, meter)?,
         None => builder.publish(BodyKind::Wire, outside, meter)?,
     })
+}
+
+#[cfg(test)]
+mod tests {
+    #![allow(clippy::unwrap_used, reason = "tests: a failure stops the test")]
+
+    use geom_num::plane::{Plane, Tpi};
+
+    use super::lowest_triple;
+
+    fn plane(n: [i128; 3]) -> Plane {
+        Plane::new(n, 0).unwrap()
+    }
+
+    #[test]
+    fn the_lowest_triple_passes_over_planes_through_one_line_and_else_keeps_the_points_own() {
+        // x = 0, y = 0 and x + y = 0 all hold the z axis, so the first three by number meet in a
+        // line, not a point: the lowest three that meet in one are x = 0, y = 0 and z = 0.
+        let (x, y, slant, z) = (
+            plane([1, 0, 0]),
+            plane([0, 1, 0]),
+            plane([1, 1, 0]),
+            plane([0, 0, 1]),
+        );
+        let pool = [x, y, slant, z];
+        let own = Tpi::new(slant, y, z).unwrap();
+        assert_eq!(
+            lowest_triple(&[0, 1, 2, 3], &pool, &own).unwrap(),
+            [x, y, z]
+        );
+        // Only the three through the axis, and a number past the pool: no three meet in a point,
+        // so the point keeps its own planes.
+        assert_eq!(
+            lowest_triple(&[0, 1, 2, 9], &pool, &own).unwrap(),
+            *own.planes()
+        );
+    }
 }
