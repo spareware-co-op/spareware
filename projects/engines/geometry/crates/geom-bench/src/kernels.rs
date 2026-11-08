@@ -2125,10 +2125,10 @@ pub mod survey {
     use geom_2d::survey::{IdError, Imported, PointKey, Record, SurveyError, import as imported};
     use geom_curve::{Linework, LineworkError, Segment, linework as joined};
     use geom_num::grid::P3;
-    use geom_op::{OpId, OpPath};
     use geom_run::{Budget, WorkMeter};
 
     use super::run;
+    use crate::inputs::survey::import_op;
 
     /// `linework` of each figure, on a meter of its own.
     #[inline(never)]
@@ -2139,12 +2139,6 @@ pub mod survey {
         run(batch, out, |(points, segments)| {
             joined(points, segments, &mut WorkMeter::new(Budget::UNLIMITED))
         });
-    }
-
-    /// The import operation every dataset is imported in.
-    #[must_use]
-    pub fn import_op() -> OpPath {
-        OpPath::new(OpId::from_bytes(*b"G361 survey imp."))
     }
 
     /// `survey::import` of each dataset, every point a first import, on a meter of its own.

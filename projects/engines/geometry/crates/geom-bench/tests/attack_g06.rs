@@ -1491,7 +1491,7 @@ fn survey_digest(name: &str, class: Class) -> Option<Digest> {
                 .map(|(points, segments)| geom_curve::linework(&points, &segments, &mut meter())),
         ),
         "import" => {
-            let op = geom_bench::kernels::survey::import_op();
+            let op = geom_bench::inputs::survey::import_op();
             fold(m::import(class).into_iter().map(|dataset| {
                 let records: Vec<Record<'_>> = dataset
                     .iter()

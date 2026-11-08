@@ -23,6 +23,7 @@ use geom_curve::Segment;
 use geom_num::grid::P3;
 use geom_num::math;
 use geom_nurbs::Parametrization;
+use geom_op::{OpId, OpPath};
 
 use super::{Class, TYPICAL_REACH, batch_of, rng};
 use crate::rng::SplitMix64;
@@ -173,6 +174,12 @@ pub fn import(class: Class) -> Vec<Vec<(String, P3)>> {
             })
             .collect()
     })
+}
+
+/// The import operation every dataset is imported in.
+#[must_use]
+pub fn import_op() -> OpPath {
+    OpPath::new(OpId::from_bytes(*b"G361 survey imp."))
 }
 
 /// IDs for `PointKey::first_import`.

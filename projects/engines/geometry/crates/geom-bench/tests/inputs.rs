@@ -2421,7 +2421,7 @@ fn g361_batches_all_succeed_and_are_what_they_claim() {
     }
     let datasets = m::import(Typical);
     assert_eq!(datasets.len(), BATCH);
-    let op = geom_bench::kernels::survey::import_op();
+    let op = geom_bench::inputs::survey::import_op();
     for dataset in &datasets {
         assert_eq!(dataset.len(), m::POINTS);
         let ids: BTreeSet<&str> = dataset.iter().map(|(id, _)| id.as_str()).collect();
