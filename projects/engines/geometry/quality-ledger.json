@@ -5169,6 +5169,38 @@
       "occurrences": 1,
       "kind": "equivalent",
       "reason": "full is a u32, so full >= 0 always holds. When the column needs no full chunk (fewer than CHUNK_ROWS rows), the mutant builds one full chunk anyway and then places it zero times: column.chunks.resize(0, chunk) leaves the list empty with the capacity reserved before, and the chunk is dropped. The column's rows, chunks, values and Memory report are the same as the original's for every rows and value. Only a temporary allocation of one chunk differs, which a machine out of memory could refuse (OutOfMemory, never stored or replayed, 23.10) where the original needs none."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-curve/src/linework.rs",
+      "mutant": "replace > with >= in sweep",
+      "line_text": "let turned = if half_turns > 0.0 {",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "They differ only for half_turns exactly 0, a sweep the plan cross product calls none: the original turns it into 2 half-turns and the mutant into 0, and the test just below refuses both as Degenerate, 2 not being below 2 nor 0 above 0. For every other value both take the same branch."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-curve/src/linework.rs",
+      "mutant": "replace > with >= in sweep",
+      "line_text": "if turned > 0.0 && turned < 2.0 {",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "turned is in (0, 2] for every input: it is half_turns when that is above 0, and otherwise half_turns + 2, at least 1 since atan2's angle is at least -pi. So turned > 0 and turned >= 0 are both true, and the test turns on turned < 2 alone either way."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-curve/src/linework.rs",
+      "mutant": "replace - with + in placed",
+      "line_text": "out.push((s0 + (t - a) * ratio, false, true));",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "a is the start of the piece's own domain, and every piece with surveyed points inside it starts at 0: a whole level arc or helix on (0, turn) (arc_piece), and a smooth figure's interpolating NURBS on [0, 1] (Curve::interpolate's parameters run from 0 to 1, as The NURBS Book's A9.1 sets them); a line has no point inside it. So t - a and t + a are both t."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-curve/src/linework.rs",
+      "mutant": "replace * with / in placed",
+      "line_text": "out.push((s0 + (t - a) * ratio, false, true));",
+      "occurrences": 1,
+      "kind": "harmless",
+      "reason": "ratio is (s1 - s0)/(b - a), where the composite builds s1 as s0 + (b - a): it is 1, or 1 within a rounding where that sum rounds. Dividing by it instead of multiplying moves an inner point's parameter by a few units in its last place at most. The linework checks the point's distance at the parameter it uses, returns that parameter and certifies its bound there, so the result stays within its stated bound, which the laws check from every side (check_certified, on arcs alone and on an arc after a line)."
     }
   ],
   "coverage_off": [
