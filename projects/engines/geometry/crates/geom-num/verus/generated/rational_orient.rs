@@ -184,10 +184,10 @@ pub open spec fn bound_of_det() -> int {
     clippy::too_many_arguments,
     reason = "names, parameters and lines follow the description: one per input and step"
 )]
-#[verus_spec(r =>
+#[verus_spec(result_ =>
     ensures
-        match r {
-            Some(v) => in_range(xa, 124) && in_range(ya, 124) && in_range(xb, 124) && in_range(yb, 124) && in_range(xc, 124) && in_range(yc, 124) && in_range(wa, 83) && in_range(wb, 83) && in_range(wc, 83) && v.value() == spec_value(xa, ya, xb, yb, xc, yc, wa, wb, wc),
+        match result_ {
+            Some(held_) => in_range(xa, 124) && in_range(ya, 124) && in_range(xb, 124) && in_range(yb, 124) && in_range(xc, 124) && in_range(yc, 124) && in_range(wa, 83) && in_range(wb, 83) && in_range(wc, 83) && held_.value() == spec_value(xa, ya, xb, yb, xc, yc, wa, wb, wc),
             None => !(in_range(xa, 124) && in_range(ya, 124) && in_range(xb, 124) && in_range(yb, 124) && in_range(xc, 124) && in_range(yc, 124) && in_range(wa, 83) && in_range(wb, 83) && in_range(wc, 83)),
         },
 )]

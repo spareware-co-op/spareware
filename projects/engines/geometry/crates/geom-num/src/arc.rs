@@ -341,11 +341,15 @@ impl Circle2 {
     ///
     /// As for [`Round::side_of_grid`].
     pub fn against(&self, other: &Circle2) -> Result<Pair, NumError> {
-        let sum = self.radius.checked_add(other.radius);
-        let difference = self.radius.checked_sub(other.radius);
-        let (Some(sum), Some(difference)) = (sum, difference) else {
-            return Err(NumError::BudgetExceeded);
-        };
+        // Each radius is below 2^41, so neither step can overflow.
+        let sum = self
+            .radius
+            .checked_add(other.radius)
+            .ok_or(NumError::BudgetExceeded)?;
+        let difference = self
+            .radius
+            .checked_sub(other.radius)
+            .ok_or(NumError::BudgetExceeded)?;
         Ok(
             match (self.gap(other, sum)?, self.gap(other, difference)?) {
                 (Sign::Positive, _) => Pair::Apart,
