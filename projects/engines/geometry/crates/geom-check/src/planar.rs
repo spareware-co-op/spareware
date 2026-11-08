@@ -56,11 +56,6 @@
 //! sorting of their crossings, a pair of faces on one plane the product of their sides. Each test
 //! allocates a short list, reserved fallibly with its logical bytes on the meter. Recursion: none.
 
-#![allow(
-    clippy::many_single_char_names,
-    reason = "the names are the method's: f and g faces, s and t sides or stretches, x, y and z the planes through a point, p, q and r points or planes"
-)]
-
 use alloc::vec::Vec;
 use core::cmp::Ordering;
 
@@ -190,10 +185,10 @@ const fn ordering(s: Sign) -> Ordering {
     }
 }
 
-/// The plane where coordinate `k` of a point equals `p`'s.
-fn axis(p: P3, k: usize) -> Option<Plane> {
-    let [x, y, z] = [p.x, p.y, p.z].map(|c| i128::from(c.get()));
-    let (normal, offset) = match k {
+/// The plane where coordinate `which` of a point equals `point`'s.
+fn axis(point: P3, which: usize) -> Option<Plane> {
+    let [x, y, z] = [point.x, point.y, point.z].map(|c| i128::from(c.get()));
+    let (normal, offset) = match which {
         0 => ([1, 0, 0], x),
         1 => ([0, 1, 0], y),
         _ => ([0, 0, 1], z),
@@ -347,29 +342,32 @@ fn stood_on(plane: &Plane, p: P3, q: P3) -> Option<Plane> {
     Plane::through(p, q, off).ok()
 }
 
-/// A plane that holds `start` and `end` and crosses `plane`, for the side of face `f` along edge
-/// `e`: another face's, then one of the ends' own, then one stood on two grid points.
+/// A plane that holds `start` and `end` and crosses `plane`, for the side of face `face` along
+/// edge `edge`: another face's, then one of the ends' own, then one stood on two grid points.
 fn across(
     a: &Arenas,
-    (f, e): (Ix<Face>, Ix<Edge>),
+    (face, edge): (Ix<Face>, Ix<Edge>),
     plane: &Plane,
     ends: [&Corner; 2],
     exact: bool,
 ) -> Option<Plane> {
     let [start, end] = ends;
-    let fits = |p: &Plane| {
-        planes_lie(plane, p) == Pair::Crossing && ends.iter().all(|c| c.side(p) == Ok(Sign::Zero))
+    let fits = |candidate: &Plane| {
+        planes_lie(plane, candidate) == Pair::Crossing
+            && ends
+                .iter()
+                .all(|corner| corner.side(candidate) == Ok(Sign::Zero))
     };
-    let beside = edge_fins(a, e)
-        .filter_map(|n| fin_face(a, n))
-        .filter(|&g| g != f)
-        .filter_map(|g| surface(a, g, exact)?.grid);
+    let beside = edge_fins(a, edge)
+        .filter_map(|fin| fin_face(a, fin))
+        .filter(|&other| other != face)
+        .filter_map(|other| surface(a, other, exact)?.grid);
     let own = meeting_planes(start)
         .iter()
         .chain(meeting_planes(end))
         .copied();
     beside.chain(own).find(fits).or_else(|| match (start, end) {
-        (Corner::Grid(p), Corner::Grid(q)) => stood_on(plane, *p, *q),
+        (Corner::Grid(from), Corner::Grid(to)) => stood_on(plane, *from, *to),
         _ => None,
     })
 }
@@ -396,30 +394,33 @@ fn corners_plane(a: &Arenas, f: Ix<Face>) -> Option<Plane> {
         .then_some(plane)
 }
 
-/// The side of face `f`, on `plane`, that fin `n` makes: `None` for a fin on anything but a line
-/// between two vertices, or one no plane crosses along.
+/// The side of face `face`, on `plane`, that fin `fin` makes: `None` for a fin on anything but a
+/// line between two vertices, or one no plane crosses along.
 fn side_of(
     a: &Arenas,
-    f: Ix<Face>,
-    n: Ix<geom_topo::entity::Fin>,
+    face: Ix<Face>,
+    fin: Ix<geom_topo::entity::Fin>,
     plane: &Plane,
     exact: bool,
 ) -> Option<Side> {
-    let edge = fin_edge(a, n)?;
+    let edge = fin_edge(a, fin)?;
     let curve = a.edges.curve.get(edge).and_then(|c| a.curves.get(*c));
     if !matches!(curve, Some(CurveKind::Line(_))) {
         return None;
     }
-    let (s, t) = fin_ends(a, n)?;
-    let (start, end) = (corner(a, s)?, corner(a, t)?);
+    let (first, last) = fin_ends(a, fin)?;
+    let (start, end) = (corner(a, first)?, corner(a, last)?);
     Some(Side {
         edge: Some(edge),
-        across: across(a, (f, edge), plane, [&start, &end], exact)?,
+        across: across(a, (face, edge), plane, [&start, &end], exact)?,
         start: End {
-            vertex: s,
+            vertex: first,
             at: start,
         },
-        end: End { vertex: t, at: end },
+        end: End {
+            vertex: last,
+            at: end,
+        },
     })
 }
 
