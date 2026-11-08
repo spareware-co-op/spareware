@@ -740,6 +740,23 @@ impl Canonical for geom_topo::Builder {
     }
 }
 
+// `geom-op`'s error (decision 32.44's count benchmarks for piece G104).
+
+impl<T: Canonical> Canonical for Result<T, geom_op::OpError> {
+    fn encode(&self, h: &mut Sha256) {
+        match self {
+            Ok(v) => {
+                h.update(&[0]);
+                v.encode(h);
+            }
+            Err(e) => {
+                h.update(&[1]);
+                debug_text(e, h);
+            }
+        }
+    }
+}
+
 impl<T: Canonical> Canonical for Result<T, geom_topo::TopoError> {
     fn encode(&self, h: &mut Sha256) {
         match self {

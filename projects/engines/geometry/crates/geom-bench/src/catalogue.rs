@@ -399,6 +399,10 @@ pub static OPS: &[Op] = &[
     // geom-topo's hot paths (piece G80; decision 32.44): a column's copy on write, and publishing.
     Op { group: "topo", name: "column_edit", measures: "geom_topo::Column::set", classes: T, prepare: |c| bind(inputs::topo::column_edit(c), kernels::topo::column_edit) },
     Op { group: "topo", name: "publish", measures: "geom_topo::Builder::publish", classes: T, prepare: |c| bind(inputs::topo::publish(c), kernels::topo::publish) },
+    // The batch runner's hot paths (piece G104; decision 32.44): the driver and the flat arrays.
+    Op { group: "batch", name: "run_items", measures: "geom_op::Batch::run", classes: T, prepare: |c| bind(inputs::batch::run_items(c), kernels::batch::run_items) },
+    Op { group: "batch", name: "curve_points", measures: "geom_curve::ParamCurve::points", classes: T, prepare: |c| bind(inputs::batch::curve_points(c), kernels::batch::curve_points) },
+    Op { group: "batch", name: "surface_points", measures: "geom_surface::ParamSurface::points", classes: T, prepare: |c| bind(inputs::batch::surface_points(c), kernels::batch::surface_points) },
     // geom-nurbs's hot paths (pieces G56, G58 and G59; decision 32.44): evaluation, interpolation
     // and the Bernstein bound.
     Op { group: "nurbs", name: "curve_point", measures: "geom_nurbs::Curve::point", classes: T, prepare: |c| bind(inputs::nurbs::curve_point(c), kernels::nurbs::curve_point) },
@@ -430,7 +434,7 @@ pub static OPS: &[Op] = &[
 ];
 
 /// The groups of [`OPS`], in order.
-pub const GROUPS: [&str; 32] = [
+pub const GROUPS: [&str; 33] = [
     "predicate",
     "sign",
     "wide",
@@ -456,6 +460,7 @@ pub const GROUPS: [&str; 32] = [
     "math_types",
     "bvh",
     "topo",
+    "batch",
     "nurbs",
     "curve",
     "surface",

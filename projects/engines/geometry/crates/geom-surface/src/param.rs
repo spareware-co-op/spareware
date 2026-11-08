@@ -152,6 +152,40 @@ pub trait ParamSurface {
     /// [`CurveError::ParameterOutside`]; [`CurveError::NotFinite`].
     fn point(&self, u: f64, v: f64, sides: (Limit, Limit)) -> Result<[f64; 3], CurveError>;
 
+    /// The points at n parameter pairs, from and into flat arrays (chapter 23.6): `uv` holds all
+    /// n u values, then all n v values; coordinate k of the point at (`uv[i]`, `uv[n + i]`) goes
+    /// to `out[k·n + i]` (all x values, then all y, then all z), and `results[i]` says whether it
+    /// succeeded, n = `results.len()`. Each point is [`ParamSurface::point`]'s at that pair and
+    /// `sides`, bit for bit; a pair that fails gets [`ParamSurface::point`]'s error in `results`
+    /// and zeros in `out`, and fails no other (`geom_curve::flat::fill`).
+    ///
+    /// # Errors
+    ///
+    /// [`CurveError::ArrayLength`] unless `uv` holds 2·n values and `out` 3·n; then nothing is
+    /// written.
+    fn points(
+        &self,
+        uv: &[f64],
+        sides: (Limit, Limit),
+        out: &mut [f64],
+        results: &mut [Result<(), CurveError>],
+    ) -> Result<(), CurveError> {
+        let n = results.len();
+        let pairs = n.saturating_mul(2);
+        if uv.len() != pairs {
+            return Err(CurveError::ArrayLength {
+                expected: pairs,
+                given: uv.len(),
+            });
+        }
+        let (us, vs) = uv.split_at(n);
+        geom_curve::flat::fill(
+            out,
+            results,
+            us.iter().zip(vs).map(|(&u, &v)| self.point(u, v, sides)),
+        )
+    }
+
     /// S, `S_u` and `S_v` at (u, v), in doubles.
     ///
     /// # Errors
