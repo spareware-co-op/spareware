@@ -1851,7 +1851,9 @@ mod tests {
     use geom_num::plane::Plane;
     use geom_num::wide::I256;
 
-    use super::{Cell, CellKey, line_in_words, wide_line_key};
+    use geom_num::Sign;
+
+    use super::{Cell, CellKey, corner, line_in_words, point_order, wide_line_key};
 
     /// a / b against c / d, b and d positive, by cross-multiplying big integers.
     fn exact(a: i128, b: i128, c: i128, d: i128) -> Ordering {
@@ -1930,6 +1932,29 @@ mod tests {
         }
         // Terms past i64 after reduction take the wide products.
         agrees((1 << 100) + 1, 1 << 101, (1 << 99) + 1, 1 << 100);
+    }
+
+    /// Corners too wide for machine words have no cells, and are ordered by their wide coordinates,
+    /// whichever way their planes turn the weight: three axis planes with coefficients of 2^64 meet
+    /// at (5, 7, 9), in two orders whose weights are ±2^192, beside a corner in words.
+    #[test]
+    fn corners_without_cells_order_by_wide_coordinates_with_either_weight() {
+        let big = 1i128 << 64;
+        let axis = |n: [i128; 3], at: i128| Plane::new(n.map(|v| v * big), -at * big).unwrap();
+        let (x, y, z) = (axis([1, 0, 0], 5), axis([0, 1, 0], 7), axis([0, 0, 1], 9));
+        let (up, down) = (corner(x, y, z).unwrap(), corner(x, z, y).unwrap());
+        assert!(up.cells.is_none() && down.cells.is_none());
+        assert_eq!(
+            (up.point.weight(), down.point.weight()),
+            (Sign::Positive, Sign::Negative)
+        );
+        assert_eq!(point_order(&up, &down), Some(Ordering::Equal));
+        let unit = |n: [i128; 3], at: i128| Plane::new(n, -at).unwrap();
+        let near = corner(unit([1, 0, 0], 6), unit([0, 0, 1], 9), unit([0, 1, 0], 7)).unwrap();
+        assert!(near.cells.is_some());
+        assert_eq!(point_order(&down, &near), Some(Ordering::Less));
+        assert_eq!(point_order(&near, &down), Some(Ordering::Greater));
+        assert_eq!(point_order(&near, &up), Some(Ordering::Greater));
     }
 
     #[test]
