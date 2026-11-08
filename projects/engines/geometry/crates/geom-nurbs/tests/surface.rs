@@ -258,27 +258,25 @@ fn errors_are_typed() {
 }
 
 /// The surface form of the `nurbs` fuzz finding (`curve.rs`,
-/// `weight_sums_past_the_doubles_still_give_the_point`): a bilinear patch of weight `f64::MAX`,
-/// whose weight sum passes the doubles at most parameters, gives every point and partial within
-/// its bound.
+/// `weight_sums_past_the_doubles_still_give_the_point`): a patch whose u basis is the campaign's
+/// curve's and whose every weight is `f64::MAX`. At the campaign's parameter, on the patch's
+/// edges v = 0 and v = 1, the weight sum passes the doubles exactly as the curve's did; there and
+/// at random parameters, every point and partial is within its bound and order (0, 0) is the
+/// point.
 #[test]
 fn weight_sums_past_the_doubles_still_give_the_point() {
     let max = f64::MAX;
     let unit = || Basis::new(1, vec![0.0, 0.0, 1.0, 1.0]).unwrap();
-    let s = Surface::from_homogeneous(
-        unit(),
-        unit(),
-        // Euclidean points in [−1/4, 1/2], so the homogeneous partials, differences of these,
-        // stay inside the doubles while the weight sum does not.
-        vec![
-            [0.5 * max, 0.25 * max, 0.125 * max],
-            [0.25 * max, 0.5 * max, -0.125 * max],
-            [-0.25 * max, 0.125 * max, 0.5 * max],
-            [0.375 * max, -0.25 * max, 0.25 * max],
-        ],
-        Some(vec![max; 4]),
-    )
-    .unwrap();
+    // Euclidean points in [−1/4, 1/2], so the homogeneous partials, differences of these,
+    // stay inside the doubles while the weight sum does not.
+    let campaign = Basis::new(1, vec![0.0, 0.0, 0.25, 0.75, 4.5, 5.25, 5.25]).unwrap();
+    let net: Vec<[f64; 3]> = (0..10)
+        .map(|i| {
+            let s = f64::from(i) / 16.0;
+            [(0.5 - s) * max, (s - 0.25) * max, 0.125 * max]
+        })
+        .collect();
+    let s = Surface::from_homogeneous(campaign, unit(), net, Some(vec![max; 10])).unwrap();
     // Without an overflow nothing is halved: an odd multiple of the smallest subnormal, which
     // halving would round, comes back exactly at the corner, from the point and the partials.
     let tiny = f64::from_bits(3);
@@ -296,8 +294,10 @@ fn weight_sums_past_the_doubles_still_give_the_point() {
     assert_eq!(out[0], [tiny, 1.0, 0.0]);
     let mut rng = Lcg(70);
     let (du, dv) = (1, 1);
-    let us: Vec<f64> = (0..24).map(|_| rng.unit()).collect();
-    let vs: Vec<f64> = (0..24).map(|_| rng.unit()).collect();
+    let mut us: Vec<f64> = (0..12).map(|_| 5.25 * rng.unit()).collect();
+    us.push(1.338_235_294_117_647);
+    let mut vs: Vec<f64> = (0..12).map(|_| rng.unit()).collect();
+    vs.extend([0.0, 1.0]);
     for &u in &us {
         for &v in &vs {
             for limits in LIMITS {

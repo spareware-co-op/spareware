@@ -542,6 +542,23 @@ fn weight_sums_past_the_doubles_still_give_the_point() {
             }
         }
     }
+    // The derivatives at the campaign's parameter, where the weight sum passes the doubles: order
+    // 0 is the point, bit for bit, and the first derivative is within its bound.
+    let u = 1.338_235_294_117_647;
+    let mut out = vec![[0.0; 3]; 2];
+    fuzz.derivs(u, Limit::FromRight, &mut out).unwrap();
+    assert_eq!(out[0], fuzz.point(u, Limit::FromRight).unwrap());
+    let (e, m) = exact(&fuzz, u, Limit::FromRight, 1);
+    for k in 0..=1 {
+        let factor = gamma((k + 1) * (14 + 8 + k));
+        for d in 0..3 {
+            assert!(
+                within(out[k][d], &e[k][d], &(&factor * &m[k][d])),
+                "derivative {k}, coordinate {d}: {:?}",
+                out[k]
+            );
+        }
+    }
     for u in parameters(&line, &mut rng, 200) {
         for limit in LIMITS {
             let mut out = vec![[0.0; 3]; 3];
