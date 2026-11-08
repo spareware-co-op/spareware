@@ -36,7 +36,7 @@
     clippy::indexing_slicing
 )]
 
-use geom_gen::predicate_derive::derive;
+use geom_gen::predicate_derive::{Width, derive};
 use geom_gen::predicate_emit::verus_twin;
 use geom_gen::predicates::{PREDICATES, derivation, generate_verus_orient2d};
 use proc_macro2::{Group, TokenStream, TokenTree};
@@ -259,7 +259,7 @@ fn the_twin_is_current() {
 const MODEL: &str = include_str!("../../geom-num/verus/model.rs");
 
 /// Every predicate twin of the Verus crate (pieces G36 and G38) and the module it shadows.
-const PREDICATE_TWINS: [(&str, &str, &str); 11] = [
+const PREDICATE_TWINS: [(&str, &str, &str); 13] = [
     (
         "orient2d",
         include_str!("../../geom-num/verus/generated/orient2d.rs"),
@@ -315,6 +315,16 @@ const PREDICATE_TWINS: [(&str, &str, &str); 11] = [
         include_str!("../../geom-num/verus/generated/lpi_side.rs"),
         include_str!("../../geom-num/src/generated/lpi_side.rs"),
     ),
+    (
+        "tpi_height",
+        include_str!("../../geom-num/verus/generated/tpi_height.rs"),
+        include_str!("../../geom-num/src/generated/tpi_height.rs"),
+    ),
+    (
+        "mitre_time",
+        include_str!("../../geom-num/verus/generated/mitre_time.rs"),
+        include_str!("../../geom-num/src/generated/mitre_time.rs"),
+    ),
 ];
 
 /// The Verus crate's root, which must hold every predicate twin as a module.
@@ -334,6 +344,8 @@ fn every_predicate_twin_is_its_shipped_value_token_for_token() {
         geom_gen::predicates::generate_verus_tpi_side,
         geom_gen::predicates::generate_verus_lpi_weight,
         geom_gen::predicates::generate_verus_lpi_side,
+        geom_gen::predicates::generate_verus_tpi_height,
+        geom_gen::predicates::generate_verus_mitre_time,
     ];
     for ((name, twin, shipped), generate) in PREDICATE_TWINS.iter().zip(shipped_generators) {
         let t = find_fn(&tokens(twin), "value").unwrap_or_else(|| panic!("{name}: no value"));
@@ -351,12 +363,34 @@ fn every_predicate_twin_is_its_shipped_value_token_for_token() {
     }
 }
 
+/// The only predicates allowed to compute in `I512`, the total path's width, without a Verus twin,
+/// each with the reason. Any other predicate must have a twin, so this list cannot grow without a
+/// reviewer seeing it.
+const I512_EXCEPTIONS: [(&str, &str); 2] = [
+    (
+        "mitre_at",
+        "piece G273: no eight-limb Verus twin yet (an owner decision, see the pull request)",
+    ),
+    ("mitre_side", "piece G273: the same reason as mitre_at"),
+];
+
 #[test]
 fn every_predicate_has_a_twin_and_the_rest_is_refused() {
     for p in &PREDICATES {
         let d = derivation(p).unwrap();
         let twin = verus_twin(&d, "test", "shipped.rs");
-        assert!(twin.is_ok(), "{}: {twin:?}", p.comparison.name);
+        let exception = I512_EXCEPTIONS
+            .iter()
+            .find(|(name, _)| *name == p.comparison.name);
+        if let Some((name, _reason)) = exception {
+            // A named exception is refused with the reason, and the list stays honest: a
+            // predicate that no longer computes in I512 must leave it.
+            assert!(d.certs.iter().any(|c| c.width == Width::I512), "{name}");
+            let e = twin.expect_err(name).0;
+            assert!(e.contains("not I512"), "{name}: {e}");
+        } else {
+            assert!(twin.is_ok(), "{}: {twin:?}", p.comparison.name);
+        }
     }
     // A step wider than I384, the widest budgeted width: refused with the reason.
     let wide = derive(
@@ -370,6 +404,7 @@ sign b
     .unwrap();
     let e = verus_twin(&wide, "test", "shipped.rs").unwrap_err().0;
     assert!(e.contains("up to I384"), "{e}");
+    assert!(e.contains("not I512"), "{e}");
 }
 
 // ---------------------------------------------------------------------------------------------

@@ -86,7 +86,14 @@ pub const PROBLEMS_DIR: &str = "projects/engines/geometry/crates/geom-gen/genera
 /// `n4x * mx_x`), so no hypothesis on the inputs, or on products of two, bounds it by the case's
 /// S; Gappa's `LIN` rules relate scales only through products of maxima, and the ratio of two
 /// such terms needs a division by a maximum that may be zero. The issue sets out the way through.
-pub const UNPROVEN: [(&str, u32); 2] = [("tpi_side", 292), ("lpi_side", 292)];
+pub const UNPROVEN: [(&str, u32); 6] = [
+    ("tpi_side", 292),
+    ("lpi_side", 292),
+    ("tpi_height", 292),
+    ("mitre_time", 292),
+    ("mitre_side", 292),
+    ("mitre_at", 292),
+];
 
 /// The filters whose `FPTaylor` problem bounds the sum of its error terms at once (`opt-exact`),
 /// by predicate name; every other bounds each error term on its own (`opt-approx`). HOL Light
@@ -97,8 +104,17 @@ pub const UNPROVEN: [(&str, u32); 2] = [("tpi_side", 292), ("lpi_side", 292)];
 /// `insphere` checked in 75 minutes (run 40603306636). For these, HOL Light proves the sum at
 /// most the largest double at most K, not `FPTaylor`'s own bound: every cell that proves the
 /// smaller bound proves the larger, so the larger never needs more cells, and it is the bound
-/// the filter needs.
-pub const EXACT_OPTIMISATION: [&str; 2] = ["insphere", "tpi_side"];
+/// the filter needs. `tpi_height` and `mitre_time` (piece G251) are wider than `tpi_side` in
+/// every term, so they take the sum from the start, and so do `mitre_side` and `mitre_at` (piece
+/// G273), as wide.
+pub const EXACT_OPTIMISATION: [&str; 6] = [
+    "insphere",
+    "tpi_side",
+    "tpi_height",
+    "mitre_time",
+    "mitre_side",
+    "mitre_at",
+];
 
 fn fail<T>(message: impl Into<String>) -> Result<T, EmitError> {
     Err(EmitError(message.into()))

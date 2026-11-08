@@ -872,10 +872,49 @@ pub mod plane {
         run
     }
 
+    #[library_benchmark(teardown = verify)]
+    #[bench::typical(leak("plane/cmp_height/typical"))]
+    #[bench::degenerate(leak("plane/cmp_height/degenerate"))]
+    #[bench::nearly_degenerate(leak("plane/cmp_height/nearly_degenerate"))]
+    #[bench::extreme(leak("plane/cmp_height/extreme"))]
+    fn cmp_height(run: &'static mut Named) -> &'static mut Named {
+        run.bench.measure();
+        run
+    }
+
+    #[library_benchmark(teardown = verify)]
+    #[bench::typical(leak("plane/cmp_meeting/typical"))]
+    #[bench::degenerate(leak("plane/cmp_meeting/degenerate"))]
+    #[bench::nearly_degenerate(leak("plane/cmp_meeting/nearly_degenerate"))]
+    #[bench::extreme(leak("plane/cmp_meeting/extreme"))]
+    fn cmp_meeting(run: &'static mut Named) -> &'static mut Named {
+        run.bench.measure();
+        run
+    }
+
+    #[library_benchmark(teardown = verify)]
+    #[bench::typical(leak("plane/cmp_meeting_time/typical"))]
+    #[bench::degenerate(leak("plane/cmp_meeting_time/degenerate"))]
+    #[bench::extreme(leak("plane/cmp_meeting_time/extreme"))]
+    fn cmp_meeting_time(run: &'static mut Named) -> &'static mut Named {
+        run.bench.measure();
+        run
+    }
+
+    #[library_benchmark(teardown = verify)]
+    #[bench::typical(leak("plane/side_at_meeting/typical"))]
+    #[bench::degenerate(leak("plane/side_at_meeting/degenerate"))]
+    #[bench::extreme(leak("plane/side_at_meeting/extreme"))]
+    fn side_at_meeting(run: &'static mut Named) -> &'static mut Named {
+        run.bench.measure();
+        run
+    }
+
     library_benchmark_group!(
         name = plane;
         benchmarks = through, side, tpi_new, tpi_homogeneous, side_of_tpi, to_grid, lpi_new,
-            lpi_homogeneous, side_of_lpi, lpi_to_grid
+            lpi_homogeneous, side_of_lpi, lpi_to_grid, cmp_height, cmp_meeting,
+            cmp_meeting_time, side_at_meeting
     );
 }
 
@@ -2246,12 +2285,93 @@ pub mod generated {
         run
     }
 
+    #[library_benchmark(teardown = verify)]
+    #[bench::typical(leak("generated/tpi_height_filter/typical"))]
+    #[bench::degenerate(leak("generated/tpi_height_filter/degenerate"))]
+    #[bench::nearly_degenerate(leak("generated/tpi_height_filter/nearly_degenerate"))]
+    #[bench::extreme(leak("generated/tpi_height_filter/extreme"))]
+    fn tpi_height_filter(run: &'static mut Named) -> &'static mut Named {
+        run.bench.measure();
+        run
+    }
+
+    #[library_benchmark(teardown = verify)]
+    #[bench::typical(leak("generated/tpi_height_value/typical"))]
+    #[bench::degenerate(leak("generated/tpi_height_value/degenerate"))]
+    #[bench::nearly_degenerate(leak("generated/tpi_height_value/nearly_degenerate"))]
+    #[bench::extreme(leak("generated/tpi_height_value/extreme"))]
+    fn tpi_height_value(run: &'static mut Named) -> &'static mut Named {
+        run.bench.measure();
+        run
+    }
+
+    #[library_benchmark(teardown = verify)]
+    #[bench::typical(leak("generated/mitre_time_filter/typical"))]
+    #[bench::degenerate(leak("generated/mitre_time_filter/degenerate"))]
+    #[bench::nearly_degenerate(leak("generated/mitre_time_filter/nearly_degenerate"))]
+    #[bench::extreme(leak("generated/mitre_time_filter/extreme"))]
+    fn mitre_time_filter(run: &'static mut Named) -> &'static mut Named {
+        run.bench.measure();
+        run
+    }
+
+    #[library_benchmark(teardown = verify)]
+    #[bench::typical(leak("generated/mitre_time_value/typical"))]
+    #[bench::degenerate(leak("generated/mitre_time_value/degenerate"))]
+    #[bench::nearly_degenerate(leak("generated/mitre_time_value/nearly_degenerate"))]
+    #[bench::extreme(leak("generated/mitre_time_value/extreme"))]
+    fn mitre_time_value(run: &'static mut Named) -> &'static mut Named {
+        run.bench.measure();
+        run
+    }
+
+    #[library_benchmark(teardown = verify)]
+    #[bench::typical(leak("generated/tpi_height_value_plain/typical"))]
+    #[bench::degenerate(leak("generated/tpi_height_value_plain/degenerate"))]
+    #[bench::nearly_degenerate(leak("generated/tpi_height_value_plain/nearly_degenerate"))]
+    #[bench::extreme(leak("generated/tpi_height_value_plain/extreme"))]
+    fn tpi_height_value_plain(run: &'static mut Named) -> &'static mut Named {
+        run.bench.measure();
+        run
+    }
+
+    #[library_benchmark(teardown = verify)]
+    #[bench::typical(leak("generated/mitre_time_value_plain/typical"))]
+    #[bench::degenerate(leak("generated/mitre_time_value_plain/degenerate"))]
+    #[bench::nearly_degenerate(leak("generated/mitre_time_value_plain/nearly_degenerate"))]
+    #[bench::extreme(leak("generated/mitre_time_value_plain/extreme"))]
+    fn mitre_time_value_plain(run: &'static mut Named) -> &'static mut Named {
+        run.bench.measure();
+        run
+    }
+
+    #[library_benchmark(teardown = verify)]
+    #[bench::typical(leak("generated/tpi_height_value_limbs/typical"))]
+    #[bench::degenerate(leak("generated/tpi_height_value_limbs/degenerate"))]
+    #[bench::nearly_degenerate(leak("generated/tpi_height_value_limbs/nearly_degenerate"))]
+    #[bench::extreme(leak("generated/tpi_height_value_limbs/extreme"))]
+    fn tpi_height_value_limbs(run: &'static mut Named) -> &'static mut Named {
+        run.bench.measure();
+        run
+    }
+
+    #[library_benchmark(teardown = verify)]
+    #[bench::typical(leak("generated/mitre_time_value_limbs/typical"))]
+    #[bench::degenerate(leak("generated/mitre_time_value_limbs/degenerate"))]
+    #[bench::nearly_degenerate(leak("generated/mitre_time_value_limbs/nearly_degenerate"))]
+    #[bench::extreme(leak("generated/mitre_time_value_limbs/extreme"))]
+    fn mitre_time_value_limbs(run: &'static mut Named) -> &'static mut Named {
+        run.bench.measure();
+        run
+    }
+
     library_benchmark_group!(
         name = generated;
         benchmarks = orient2d_filter, orient2d_value, orient3d_filter, orient3d_value, incircle_filter, incircle_value, insphere_filter, insphere_value, plane_side_filter, plane_side_value,
             tpi_weight_filter, tpi_weight_value, tpi_side_filter, tpi_side_value, lpi_weight_filter, lpi_weight_value, lpi_side_filter, lpi_side_value, ssi_weight_filter, ssi_weight_value, ssi_side_filter, ssi_side_value,
             orient2d_value_plain, orient3d_value_plain, incircle_value_plain, insphere_value_plain, plane_side_value_plain, tpi_weight_value_plain, tpi_side_value_plain, lpi_weight_value_plain, lpi_side_value_plain, ssi_weight_value_plain, ssi_side_value_plain,
-            orient2d_avnaim, orient3d_avnaim, orient2d_value_limbs, orient3d_value_limbs, incircle_value_limbs, insphere_value_limbs, plane_side_value_limbs, tpi_weight_value_limbs, tpi_side_value_limbs, lpi_weight_value_limbs, lpi_side_value_limbs, ssi_weight_value_limbs, ssi_side_value_limbs
+            orient2d_avnaim, orient3d_avnaim, orient2d_value_limbs, orient3d_value_limbs, incircle_value_limbs, insphere_value_limbs, plane_side_value_limbs, tpi_weight_value_limbs, tpi_side_value_limbs, lpi_weight_value_limbs, lpi_side_value_limbs, ssi_weight_value_limbs, ssi_side_value_limbs,
+            tpi_height_filter, tpi_height_value, mitre_time_filter, mitre_time_value, tpi_height_value_plain, mitre_time_value_plain, tpi_height_value_limbs, mitre_time_value_limbs
     );
 }
 

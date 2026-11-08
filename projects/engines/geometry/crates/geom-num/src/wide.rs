@@ -22,7 +22,7 @@
 //! `u64` with its bound written beside it.
 //!
 //! Proven (chapter 28.7; pieces G37 to G39): Verus proves, for every width `L` from 1 to 4096 limbs
-//! and so for [`I256`], [`I320`], [`I384`] and [`I512`], that `checked_add`, `checked_sub`,
+//! and so for [`I256`], [`I320`], [`I384`], [`I512`], [`I576`] and [`I768`], that `checked_add`, `checked_sub`,
 //! `checked_neg`, `checked_mul`, the width-aware products `product_i128` and `checked_mul_i128`,
 //! and `resize` return the exact two's-complement result whenever it fits and `None` exactly when
 //! it does not, that `from_i128` gives the value it is given, and that the order ([`Ord`]) is the
@@ -50,7 +50,7 @@
 //!
 //! Cost: for `L` limbs, addition, subtraction, negation, comparison and resizing are O(L) limb
 //! operations and multiplication O(L²), on the stack with no allocation; the kernel's widths are
-//! 4 to 8 limbs. Every limb loop runs over a fixed-length array (`[u64; L]`), never a slice, so its
+//! 4 to 12 limbs. Every limb loop runs over a fixed-length array (`[u64; L]`), never a slice, so its
 //! trip count is a constant for each width and the compiler unrolls it; a loop over a slice whose
 //! length is known only at run time can stop that unrolling on x86-64, which the count gates
 //! (chapter 28.14) show as a rise.
@@ -76,6 +76,14 @@ pub type I384 = Wide<6>;
 /// and `I384` as accepted kernel widths, each wider one needing an owner's acceptance; this one is
 /// raised for that list as a fallback that adds no budget of its own.
 pub type I512 = Wide<8>;
+/// 576-bit signed integer: two straight-skeleton events ordered by height, two three-plane points'
+/// heights compared (`generated::tpi_height`, 547 bits; chapter 13.15, decision 32.29). Only
+/// that order uses it.
+pub type I576 = Wide<9>;
+/// 768-bit signed integer: two mitre-offset events ordered in time, the times at which two sets of
+/// four moving planes meet compared (`generated::mitre_time`; chapter 13.11, decision 32.29). Only
+/// that order uses it.
+pub type I768 = Wide<12>;
 
 /// The top bit of a limb: the sign bit of the top limb.
 const TOP_BIT: u64 = 1 << 63;

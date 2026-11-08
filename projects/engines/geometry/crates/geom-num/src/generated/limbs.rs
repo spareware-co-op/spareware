@@ -31,7 +31,7 @@
 //! 64-bit limb multiplies, and the result's conversion back is linear in its limbs.
 
 use crate::grid::{P2, P3};
-use crate::wide::{I256, I384};
+use crate::wide::{I256, I384, I512, I576, I768};
 use crate::wide32::Wide32;
 
 use super::within;
@@ -569,6 +569,731 @@ pub fn ssi_side_value(a: P2, b: P2, c: P2, d: P2, p: P2, q: P2) -> Option<I256> 
     s.to_wide::<4>()
 }
 
+/// `tpi_height`'s exact value in width-aware limbs (chapter 23.3): each step in `i64`, or in a
+/// `Wide32` of as many 32-bit limbs as its operands' certified bits need, with checked arithmetic,
+/// and the result in the shipped path's type; `None` only if a step overflowed, which the
+/// certificate rules out; `None` also for a rounded input outside its declared range.
+#[inline]
+#[must_use]
+#[allow(
+    clippy::similar_names,
+    clippy::too_many_arguments,
+    reason = "names, parameters and lines follow the description: one per input and step"
+)]
+pub fn tpi_height_value(
+    n1x: i128,
+    n1y: i128,
+    n1z: i128,
+    d1: i128,
+    n2x: i128,
+    n2y: i128,
+    n2z: i128,
+    d2: i128,
+    n3x: i128,
+    n3y: i128,
+    n3z: i128,
+    d3: i128,
+    n4x: i128,
+    n4y: i128,
+    n4z: i128,
+    d4: i128,
+    n5x: i128,
+    n5y: i128,
+    n5z: i128,
+    d5: i128,
+    n6x: i128,
+    n6y: i128,
+    n6z: i128,
+    d6: i128,
+) -> Option<I576> {
+    let n2y = Wide32::<3>::from_i128(within(n2y, 83)?)?;
+    let n3z = Wide32::<3>::from_i128(within(n3z, 83)?)?;
+    let a23_x_1 = Wide32::<6>::product(&n2y, &n3z)?;
+    let n2z = Wide32::<3>::from_i128(within(n2z, 83)?)?;
+    let n3y = Wide32::<3>::from_i128(within(n3y, 83)?)?;
+    let a23_x_2 = Wide32::<6>::product(&n2z, &n3y)?;
+    let a23_x = a23_x_1.checked_sub(&a23_x_2)?;
+    let n3x = Wide32::<3>::from_i128(within(n3x, 83)?)?;
+    let a23_y_1 = Wide32::<6>::product(&n2z, &n3x)?;
+    let n2x = Wide32::<3>::from_i128(within(n2x, 83)?)?;
+    let a23_y_2 = Wide32::<6>::product(&n2x, &n3z)?;
+    let a23_y = a23_y_1.checked_sub(&a23_y_2)?;
+    let a23_z_1 = Wide32::<6>::product(&n2x, &n3y)?;
+    let a23_z_2 = Wide32::<6>::product(&n2y, &n3x)?;
+    let a23_z = a23_z_1.checked_sub(&a23_z_2)?;
+    let n1y = Wide32::<3>::from_i128(within(n1y, 83)?)?;
+    let a31_z_1 = Wide32::<6>::product(&n3x, &n1y)?;
+    let n1x = Wide32::<3>::from_i128(within(n1x, 83)?)?;
+    let a31_z_2 = Wide32::<6>::product(&n3y, &n1x)?;
+    let a31_z = a31_z_1.checked_sub(&a31_z_2)?;
+    let a12_z_1 = Wide32::<6>::product(&n1x, &n2y)?;
+    let a12_z_2 = Wide32::<6>::product(&n1y, &n2x)?;
+    let a12_z = a12_z_1.checked_sub(&a12_z_2)?;
+    let wa_1 = Wide32::<8>::product(&n1x, &a23_x)?;
+    let wa_2 = Wide32::<8>::product(&n1y, &a23_y)?;
+    let wa_3 = wa_1.checked_add(&wa_2)?;
+    let n1z = Wide32::<3>::from_i128(within(n1z, 83)?)?;
+    let wa_4 = Wide32::<8>::product(&n1z, &a23_z)?;
+    let wa = wa_3.checked_add(&wa_4)?;
+    let d1 = Wide32::<4>::from_i128(within(d1, 125)?)?;
+    let mza_1 = Wide32::<10>::product(&d1, &a23_z)?;
+    let d2 = Wide32::<4>::from_i128(within(d2, 125)?)?;
+    let mza_2 = Wide32::<10>::product(&d2, &a31_z)?;
+    let mza_3 = mza_1.checked_add(&mza_2)?;
+    let d3 = Wide32::<4>::from_i128(within(d3, 125)?)?;
+    let mza_4 = Wide32::<10>::product(&d3, &a12_z)?;
+    let mza = mza_3.checked_add(&mza_4)?;
+    let n5y = Wide32::<3>::from_i128(within(n5y, 83)?)?;
+    let n6z = Wide32::<3>::from_i128(within(n6z, 83)?)?;
+    let b56_x_1 = Wide32::<6>::product(&n5y, &n6z)?;
+    let n5z = Wide32::<3>::from_i128(within(n5z, 83)?)?;
+    let n6y = Wide32::<3>::from_i128(within(n6y, 83)?)?;
+    let b56_x_2 = Wide32::<6>::product(&n5z, &n6y)?;
+    let b56_x = b56_x_1.checked_sub(&b56_x_2)?;
+    let n6x = Wide32::<3>::from_i128(within(n6x, 83)?)?;
+    let b56_y_1 = Wide32::<6>::product(&n5z, &n6x)?;
+    let n5x = Wide32::<3>::from_i128(within(n5x, 83)?)?;
+    let b56_y_2 = Wide32::<6>::product(&n5x, &n6z)?;
+    let b56_y = b56_y_1.checked_sub(&b56_y_2)?;
+    let b56_z_1 = Wide32::<6>::product(&n5x, &n6y)?;
+    let b56_z_2 = Wide32::<6>::product(&n5y, &n6x)?;
+    let b56_z = b56_z_1.checked_sub(&b56_z_2)?;
+    let n4y = Wide32::<3>::from_i128(within(n4y, 83)?)?;
+    let b64_z_1 = Wide32::<6>::product(&n6x, &n4y)?;
+    let n4x = Wide32::<3>::from_i128(within(n4x, 83)?)?;
+    let b64_z_2 = Wide32::<6>::product(&n6y, &n4x)?;
+    let b64_z = b64_z_1.checked_sub(&b64_z_2)?;
+    let b45_z_1 = Wide32::<6>::product(&n4x, &n5y)?;
+    let b45_z_2 = Wide32::<6>::product(&n4y, &n5x)?;
+    let b45_z = b45_z_1.checked_sub(&b45_z_2)?;
+    let wb_1 = Wide32::<8>::product(&n4x, &b56_x)?;
+    let wb_2 = Wide32::<8>::product(&n4y, &b56_y)?;
+    let wb_3 = wb_1.checked_add(&wb_2)?;
+    let n4z = Wide32::<3>::from_i128(within(n4z, 83)?)?;
+    let wb_4 = Wide32::<8>::product(&n4z, &b56_z)?;
+    let wb = wb_3.checked_add(&wb_4)?;
+    let d4 = Wide32::<4>::from_i128(within(d4, 125)?)?;
+    let mzb_1 = Wide32::<10>::product(&d4, &b56_z)?;
+    let d5 = Wide32::<4>::from_i128(within(d5, 125)?)?;
+    let mzb_2 = Wide32::<10>::product(&d5, &b64_z)?;
+    let mzb_3 = mzb_1.checked_add(&mzb_2)?;
+    let d6 = Wide32::<4>::from_i128(within(d6, 125)?)?;
+    let mzb_4 = Wide32::<10>::product(&d6, &b45_z)?;
+    let mzb = mzb_3.checked_add(&mzb_4)?;
+    let h_1 = Wide32::<18>::product(&mzb, &wa)?;
+    let h_2 = Wide32::<18>::product(&mza, &wb)?;
+    let h = h_1.checked_sub(&h_2)?;
+    h.to_wide::<9>()
+}
+
+/// `mitre_time`'s exact value in width-aware limbs (chapter 23.3): each step in `i64`, or in a
+/// `Wide32` of as many 32-bit limbs as its operands' certified bits need, with checked arithmetic,
+/// and the result in the shipped path's type; `None` only if a step overflowed, which the
+/// certificate rules out; `None` also for a rounded input outside its declared range.
+#[inline]
+#[must_use]
+#[allow(
+    clippy::similar_names,
+    clippy::too_many_arguments,
+    clippy::too_many_lines,
+    reason = "names, parameters and lines follow the description: one per input and step"
+)]
+pub fn mitre_time_value(
+    n1x: i128,
+    n1y: i128,
+    n1z: i128,
+    d1: i128,
+    s1: i128,
+    n2x: i128,
+    n2y: i128,
+    n2z: i128,
+    d2: i128,
+    s2: i128,
+    n3x: i128,
+    n3y: i128,
+    n3z: i128,
+    d3: i128,
+    s3: i128,
+    n4x: i128,
+    n4y: i128,
+    n4z: i128,
+    d4: i128,
+    s4: i128,
+    n5x: i128,
+    n5y: i128,
+    n5z: i128,
+    d5: i128,
+    s5: i128,
+    n6x: i128,
+    n6y: i128,
+    n6z: i128,
+    d6: i128,
+    s6: i128,
+    n7x: i128,
+    n7y: i128,
+    n7z: i128,
+    d7: i128,
+    s7: i128,
+    n8x: i128,
+    n8y: i128,
+    n8z: i128,
+    d8: i128,
+    s8: i128,
+) -> Option<I768> {
+    let n2y = Wide32::<3>::from_i128(within(n2y, 83)?)?;
+    let n3z = Wide32::<3>::from_i128(within(n3z, 83)?)?;
+    let a_bc_x_1 = Wide32::<6>::product(&n2y, &n3z)?;
+    let n2z = Wide32::<3>::from_i128(within(n2z, 83)?)?;
+    let n3y = Wide32::<3>::from_i128(within(n3y, 83)?)?;
+    let a_bc_x_2 = Wide32::<6>::product(&n2z, &n3y)?;
+    let a_bc_x = a_bc_x_1.checked_sub(&a_bc_x_2)?;
+    let n3x = Wide32::<3>::from_i128(within(n3x, 83)?)?;
+    let a_bc_y_1 = Wide32::<6>::product(&n2z, &n3x)?;
+    let n2x = Wide32::<3>::from_i128(within(n2x, 83)?)?;
+    let a_bc_y_2 = Wide32::<6>::product(&n2x, &n3z)?;
+    let a_bc_y = a_bc_y_1.checked_sub(&a_bc_y_2)?;
+    let a_bc_z_1 = Wide32::<6>::product(&n2x, &n3y)?;
+    let a_bc_z_2 = Wide32::<6>::product(&n2y, &n3x)?;
+    let a_bc_z = a_bc_z_1.checked_sub(&a_bc_z_2)?;
+    let n1z = Wide32::<3>::from_i128(within(n1z, 83)?)?;
+    let a_ca_x_1 = Wide32::<6>::product(&n3y, &n1z)?;
+    let n1y = Wide32::<3>::from_i128(within(n1y, 83)?)?;
+    let a_ca_x_2 = Wide32::<6>::product(&n3z, &n1y)?;
+    let a_ca_x = a_ca_x_1.checked_sub(&a_ca_x_2)?;
+    let n1x = Wide32::<3>::from_i128(within(n1x, 83)?)?;
+    let a_ca_y_1 = Wide32::<6>::product(&n3z, &n1x)?;
+    let a_ca_y_2 = Wide32::<6>::product(&n3x, &n1z)?;
+    let a_ca_y = a_ca_y_1.checked_sub(&a_ca_y_2)?;
+    let a_ca_z_1 = Wide32::<6>::product(&n3x, &n1y)?;
+    let a_ca_z_2 = Wide32::<6>::product(&n3y, &n1x)?;
+    let a_ca_z = a_ca_z_1.checked_sub(&a_ca_z_2)?;
+    let a_ab_x_1 = Wide32::<6>::product(&n1y, &n2z)?;
+    let a_ab_x_2 = Wide32::<6>::product(&n1z, &n2y)?;
+    let a_ab_x = a_ab_x_1.checked_sub(&a_ab_x_2)?;
+    let a_ab_y_1 = Wide32::<6>::product(&n1z, &n2x)?;
+    let a_ab_y_2 = Wide32::<6>::product(&n1x, &n2z)?;
+    let a_ab_y = a_ab_y_1.checked_sub(&a_ab_y_2)?;
+    let a_ab_z_1 = Wide32::<6>::product(&n1x, &n2y)?;
+    let a_ab_z_2 = Wide32::<6>::product(&n1y, &n2x)?;
+    let a_ab_z = a_ab_z_1.checked_sub(&a_ab_z_2)?;
+    let a_w_1 = Wide32::<8>::product(&n1x, &a_bc_x)?;
+    let a_w_2 = Wide32::<8>::product(&n1y, &a_bc_y)?;
+    let a_w_3 = a_w_1.checked_add(&a_w_2)?;
+    let a_w_4 = Wide32::<8>::product(&n1z, &a_bc_z)?;
+    let a_w = a_w_3.checked_add(&a_w_4)?;
+    let d1 = Wide32::<4>::from_i128(within(d1, 125)?)?;
+    let a_mx_x_1 = Wide32::<10>::product(&d1, &a_bc_x)?;
+    let d2 = Wide32::<4>::from_i128(within(d2, 125)?)?;
+    let a_mx_x_2 = Wide32::<10>::product(&d2, &a_ca_x)?;
+    let a_mx_x_3 = a_mx_x_1.checked_add(&a_mx_x_2)?;
+    let d3 = Wide32::<4>::from_i128(within(d3, 125)?)?;
+    let a_mx_x_4 = Wide32::<10>::product(&d3, &a_ab_x)?;
+    let a_mx_x = a_mx_x_3.checked_add(&a_mx_x_4)?;
+    let a_mx_y_1 = Wide32::<10>::product(&d1, &a_bc_y)?;
+    let a_mx_y_2 = Wide32::<10>::product(&d2, &a_ca_y)?;
+    let a_mx_y_3 = a_mx_y_1.checked_add(&a_mx_y_2)?;
+    let a_mx_y_4 = Wide32::<10>::product(&d3, &a_ab_y)?;
+    let a_mx_y = a_mx_y_3.checked_add(&a_mx_y_4)?;
+    let a_mx_z_1 = Wide32::<10>::product(&d1, &a_bc_z)?;
+    let a_mx_z_2 = Wide32::<10>::product(&d2, &a_ca_z)?;
+    let a_mx_z_3 = a_mx_z_1.checked_add(&a_mx_z_2)?;
+    let a_mx_z_4 = Wide32::<10>::product(&d3, &a_ab_z)?;
+    let a_mx_z = a_mx_z_3.checked_add(&a_mx_z_4)?;
+    let s1 = Wide32::<4>::from_i128(within(s1, 125)?)?;
+    let a_ms_x_1 = Wide32::<10>::product(&s1, &a_bc_x)?;
+    let s2 = Wide32::<4>::from_i128(within(s2, 125)?)?;
+    let a_ms_x_2 = Wide32::<10>::product(&s2, &a_ca_x)?;
+    let a_ms_x_3 = a_ms_x_1.checked_add(&a_ms_x_2)?;
+    let s3 = Wide32::<4>::from_i128(within(s3, 125)?)?;
+    let a_ms_x_4 = Wide32::<10>::product(&s3, &a_ab_x)?;
+    let a_ms_x = a_ms_x_3.checked_add(&a_ms_x_4)?;
+    let a_ms_y_1 = Wide32::<10>::product(&s1, &a_bc_y)?;
+    let a_ms_y_2 = Wide32::<10>::product(&s2, &a_ca_y)?;
+    let a_ms_y_3 = a_ms_y_1.checked_add(&a_ms_y_2)?;
+    let a_ms_y_4 = Wide32::<10>::product(&s3, &a_ab_y)?;
+    let a_ms_y = a_ms_y_3.checked_add(&a_ms_y_4)?;
+    let a_ms_z_1 = Wide32::<10>::product(&s1, &a_bc_z)?;
+    let a_ms_z_2 = Wide32::<10>::product(&s2, &a_ca_z)?;
+    let a_ms_z_3 = a_ms_z_1.checked_add(&a_ms_z_2)?;
+    let a_ms_z_4 = Wide32::<10>::product(&s3, &a_ab_z)?;
+    let a_ms_z = a_ms_z_3.checked_add(&a_ms_z_4)?;
+    let d4 = Wide32::<4>::from_i128(within(d4, 125)?)?;
+    let a_nd_1 = Wide32::<12>::product(&d4, &a_w)?;
+    let n4x = Wide32::<3>::from_i128(within(n4x, 83)?)?;
+    let a_nd_2 = Wide32::<12>::product(&n4x, &a_mx_x)?;
+    let a_nd_3 = a_nd_1.checked_sub(&a_nd_2)?;
+    let n4y = Wide32::<3>::from_i128(within(n4y, 83)?)?;
+    let a_nd_4 = Wide32::<12>::product(&n4y, &a_mx_y)?;
+    let a_nd_5 = a_nd_3.checked_sub(&a_nd_4)?;
+    let n4z = Wide32::<3>::from_i128(within(n4z, 83)?)?;
+    let a_nd_6 = Wide32::<12>::product(&n4z, &a_mx_z)?;
+    let a_nd = a_nd_5.checked_sub(&a_nd_6)?;
+    let s4 = Wide32::<4>::from_i128(within(s4, 125)?)?;
+    let a_ns_1 = Wide32::<12>::product(&s4, &a_w)?;
+    let a_ns_2 = Wide32::<12>::product(&n4x, &a_ms_x)?;
+    let a_ns_3 = a_ns_1.checked_sub(&a_ns_2)?;
+    let a_ns_4 = Wide32::<12>::product(&n4y, &a_ms_y)?;
+    let a_ns_5 = a_ns_3.checked_sub(&a_ns_4)?;
+    let a_ns_6 = Wide32::<12>::product(&n4z, &a_ms_z)?;
+    let a_ns = a_ns_5.checked_sub(&a_ns_6)?;
+    let n6y = Wide32::<3>::from_i128(within(n6y, 83)?)?;
+    let n7z = Wide32::<3>::from_i128(within(n7z, 83)?)?;
+    let b_bc_x_1 = Wide32::<6>::product(&n6y, &n7z)?;
+    let n6z = Wide32::<3>::from_i128(within(n6z, 83)?)?;
+    let n7y = Wide32::<3>::from_i128(within(n7y, 83)?)?;
+    let b_bc_x_2 = Wide32::<6>::product(&n6z, &n7y)?;
+    let b_bc_x = b_bc_x_1.checked_sub(&b_bc_x_2)?;
+    let n7x = Wide32::<3>::from_i128(within(n7x, 83)?)?;
+    let b_bc_y_1 = Wide32::<6>::product(&n6z, &n7x)?;
+    let n6x = Wide32::<3>::from_i128(within(n6x, 83)?)?;
+    let b_bc_y_2 = Wide32::<6>::product(&n6x, &n7z)?;
+    let b_bc_y = b_bc_y_1.checked_sub(&b_bc_y_2)?;
+    let b_bc_z_1 = Wide32::<6>::product(&n6x, &n7y)?;
+    let b_bc_z_2 = Wide32::<6>::product(&n6y, &n7x)?;
+    let b_bc_z = b_bc_z_1.checked_sub(&b_bc_z_2)?;
+    let n5z = Wide32::<3>::from_i128(within(n5z, 83)?)?;
+    let b_ca_x_1 = Wide32::<6>::product(&n7y, &n5z)?;
+    let n5y = Wide32::<3>::from_i128(within(n5y, 83)?)?;
+    let b_ca_x_2 = Wide32::<6>::product(&n7z, &n5y)?;
+    let b_ca_x = b_ca_x_1.checked_sub(&b_ca_x_2)?;
+    let n5x = Wide32::<3>::from_i128(within(n5x, 83)?)?;
+    let b_ca_y_1 = Wide32::<6>::product(&n7z, &n5x)?;
+    let b_ca_y_2 = Wide32::<6>::product(&n7x, &n5z)?;
+    let b_ca_y = b_ca_y_1.checked_sub(&b_ca_y_2)?;
+    let b_ca_z_1 = Wide32::<6>::product(&n7x, &n5y)?;
+    let b_ca_z_2 = Wide32::<6>::product(&n7y, &n5x)?;
+    let b_ca_z = b_ca_z_1.checked_sub(&b_ca_z_2)?;
+    let b_ab_x_1 = Wide32::<6>::product(&n5y, &n6z)?;
+    let b_ab_x_2 = Wide32::<6>::product(&n5z, &n6y)?;
+    let b_ab_x = b_ab_x_1.checked_sub(&b_ab_x_2)?;
+    let b_ab_y_1 = Wide32::<6>::product(&n5z, &n6x)?;
+    let b_ab_y_2 = Wide32::<6>::product(&n5x, &n6z)?;
+    let b_ab_y = b_ab_y_1.checked_sub(&b_ab_y_2)?;
+    let b_ab_z_1 = Wide32::<6>::product(&n5x, &n6y)?;
+    let b_ab_z_2 = Wide32::<6>::product(&n5y, &n6x)?;
+    let b_ab_z = b_ab_z_1.checked_sub(&b_ab_z_2)?;
+    let b_w_1 = Wide32::<8>::product(&n5x, &b_bc_x)?;
+    let b_w_2 = Wide32::<8>::product(&n5y, &b_bc_y)?;
+    let b_w_3 = b_w_1.checked_add(&b_w_2)?;
+    let b_w_4 = Wide32::<8>::product(&n5z, &b_bc_z)?;
+    let b_w = b_w_3.checked_add(&b_w_4)?;
+    let d5 = Wide32::<4>::from_i128(within(d5, 125)?)?;
+    let b_mx_x_1 = Wide32::<10>::product(&d5, &b_bc_x)?;
+    let d6 = Wide32::<4>::from_i128(within(d6, 125)?)?;
+    let b_mx_x_2 = Wide32::<10>::product(&d6, &b_ca_x)?;
+    let b_mx_x_3 = b_mx_x_1.checked_add(&b_mx_x_2)?;
+    let d7 = Wide32::<4>::from_i128(within(d7, 125)?)?;
+    let b_mx_x_4 = Wide32::<10>::product(&d7, &b_ab_x)?;
+    let b_mx_x = b_mx_x_3.checked_add(&b_mx_x_4)?;
+    let b_mx_y_1 = Wide32::<10>::product(&d5, &b_bc_y)?;
+    let b_mx_y_2 = Wide32::<10>::product(&d6, &b_ca_y)?;
+    let b_mx_y_3 = b_mx_y_1.checked_add(&b_mx_y_2)?;
+    let b_mx_y_4 = Wide32::<10>::product(&d7, &b_ab_y)?;
+    let b_mx_y = b_mx_y_3.checked_add(&b_mx_y_4)?;
+    let b_mx_z_1 = Wide32::<10>::product(&d5, &b_bc_z)?;
+    let b_mx_z_2 = Wide32::<10>::product(&d6, &b_ca_z)?;
+    let b_mx_z_3 = b_mx_z_1.checked_add(&b_mx_z_2)?;
+    let b_mx_z_4 = Wide32::<10>::product(&d7, &b_ab_z)?;
+    let b_mx_z = b_mx_z_3.checked_add(&b_mx_z_4)?;
+    let s5 = Wide32::<4>::from_i128(within(s5, 125)?)?;
+    let b_ms_x_1 = Wide32::<10>::product(&s5, &b_bc_x)?;
+    let s6 = Wide32::<4>::from_i128(within(s6, 125)?)?;
+    let b_ms_x_2 = Wide32::<10>::product(&s6, &b_ca_x)?;
+    let b_ms_x_3 = b_ms_x_1.checked_add(&b_ms_x_2)?;
+    let s7 = Wide32::<4>::from_i128(within(s7, 125)?)?;
+    let b_ms_x_4 = Wide32::<10>::product(&s7, &b_ab_x)?;
+    let b_ms_x = b_ms_x_3.checked_add(&b_ms_x_4)?;
+    let b_ms_y_1 = Wide32::<10>::product(&s5, &b_bc_y)?;
+    let b_ms_y_2 = Wide32::<10>::product(&s6, &b_ca_y)?;
+    let b_ms_y_3 = b_ms_y_1.checked_add(&b_ms_y_2)?;
+    let b_ms_y_4 = Wide32::<10>::product(&s7, &b_ab_y)?;
+    let b_ms_y = b_ms_y_3.checked_add(&b_ms_y_4)?;
+    let b_ms_z_1 = Wide32::<10>::product(&s5, &b_bc_z)?;
+    let b_ms_z_2 = Wide32::<10>::product(&s6, &b_ca_z)?;
+    let b_ms_z_3 = b_ms_z_1.checked_add(&b_ms_z_2)?;
+    let b_ms_z_4 = Wide32::<10>::product(&s7, &b_ab_z)?;
+    let b_ms_z = b_ms_z_3.checked_add(&b_ms_z_4)?;
+    let d8 = Wide32::<4>::from_i128(within(d8, 125)?)?;
+    let b_nd_1 = Wide32::<12>::product(&d8, &b_w)?;
+    let n8x = Wide32::<3>::from_i128(within(n8x, 83)?)?;
+    let b_nd_2 = Wide32::<12>::product(&n8x, &b_mx_x)?;
+    let b_nd_3 = b_nd_1.checked_sub(&b_nd_2)?;
+    let n8y = Wide32::<3>::from_i128(within(n8y, 83)?)?;
+    let b_nd_4 = Wide32::<12>::product(&n8y, &b_mx_y)?;
+    let b_nd_5 = b_nd_3.checked_sub(&b_nd_4)?;
+    let n8z = Wide32::<3>::from_i128(within(n8z, 83)?)?;
+    let b_nd_6 = Wide32::<12>::product(&n8z, &b_mx_z)?;
+    let b_nd = b_nd_5.checked_sub(&b_nd_6)?;
+    let s8 = Wide32::<4>::from_i128(within(s8, 125)?)?;
+    let b_ns_1 = Wide32::<12>::product(&s8, &b_w)?;
+    let b_ns_2 = Wide32::<12>::product(&n8x, &b_ms_x)?;
+    let b_ns_3 = b_ns_1.checked_sub(&b_ns_2)?;
+    let b_ns_4 = Wide32::<12>::product(&n8y, &b_ms_y)?;
+    let b_ns_5 = b_ns_3.checked_sub(&b_ns_4)?;
+    let b_ns_6 = Wide32::<12>::product(&n8z, &b_ms_z)?;
+    let b_ns = b_ns_5.checked_sub(&b_ns_6)?;
+    let t_1 = Wide32::<24>::product(&b_nd, &a_ns)?;
+    let t_2 = Wide32::<24>::product(&a_nd, &b_ns)?;
+    let t = t_1.checked_sub(&t_2)?;
+    t.to_wide::<12>()
+}
+
+/// `mitre_side`'s exact value in width-aware limbs (chapter 23.3): each step in `i64`, or in a
+/// `Wide32` of as many 32-bit limbs as its operands' certified bits need, with checked arithmetic,
+/// and the result in the shipped path's type; `None` only if a step overflowed, which the
+/// certificate rules out; `None` also for a rounded input outside its declared range.
+#[inline]
+#[must_use]
+#[allow(
+    clippy::similar_names,
+    clippy::too_many_arguments,
+    clippy::too_many_lines,
+    reason = "names, parameters and lines follow the description: one per input and step"
+)]
+pub fn mitre_side_value(
+    n1x: i128,
+    n1y: i128,
+    n1z: i128,
+    d1: i128,
+    s1: i128,
+    n2x: i128,
+    n2y: i128,
+    n2z: i128,
+    d2: i128,
+    s2: i128,
+    n3x: i128,
+    n3y: i128,
+    n3z: i128,
+    d3: i128,
+    s3: i128,
+    n4x: i128,
+    n4y: i128,
+    n4z: i128,
+    d4: i128,
+    s4: i128,
+    n5x: i128,
+    n5y: i128,
+    n5z: i128,
+    d5: i128,
+    s5: i128,
+) -> Option<I512> {
+    let n2y = Wide32::<3>::from_i128(within(n2y, 83)?)?;
+    let n3z = Wide32::<3>::from_i128(within(n3z, 83)?)?;
+    let c23_x_1 = Wide32::<6>::product(&n2y, &n3z)?;
+    let n2z = Wide32::<3>::from_i128(within(n2z, 83)?)?;
+    let n3y = Wide32::<3>::from_i128(within(n3y, 83)?)?;
+    let c23_x_2 = Wide32::<6>::product(&n2z, &n3y)?;
+    let c23_x = c23_x_1.checked_sub(&c23_x_2)?;
+    let n3x = Wide32::<3>::from_i128(within(n3x, 83)?)?;
+    let c23_y_1 = Wide32::<6>::product(&n2z, &n3x)?;
+    let n2x = Wide32::<3>::from_i128(within(n2x, 83)?)?;
+    let c23_y_2 = Wide32::<6>::product(&n2x, &n3z)?;
+    let c23_y = c23_y_1.checked_sub(&c23_y_2)?;
+    let c23_z_1 = Wide32::<6>::product(&n2x, &n3y)?;
+    let c23_z_2 = Wide32::<6>::product(&n2y, &n3x)?;
+    let c23_z = c23_z_1.checked_sub(&c23_z_2)?;
+    let n4z = Wide32::<3>::from_i128(within(n4z, 83)?)?;
+    let c24_x_1 = Wide32::<6>::product(&n2y, &n4z)?;
+    let n4y = Wide32::<3>::from_i128(within(n4y, 83)?)?;
+    let c24_x_2 = Wide32::<6>::product(&n2z, &n4y)?;
+    let c24_x = c24_x_1.checked_sub(&c24_x_2)?;
+    let n4x = Wide32::<3>::from_i128(within(n4x, 83)?)?;
+    let c24_y_1 = Wide32::<6>::product(&n2z, &n4x)?;
+    let c24_y_2 = Wide32::<6>::product(&n2x, &n4z)?;
+    let c24_y = c24_y_1.checked_sub(&c24_y_2)?;
+    let c24_z_1 = Wide32::<6>::product(&n2x, &n4y)?;
+    let c24_z_2 = Wide32::<6>::product(&n2y, &n4x)?;
+    let c24_z = c24_z_1.checked_sub(&c24_z_2)?;
+    let n5z = Wide32::<3>::from_i128(within(n5z, 83)?)?;
+    let c25_x_1 = Wide32::<6>::product(&n2y, &n5z)?;
+    let n5y = Wide32::<3>::from_i128(within(n5y, 83)?)?;
+    let c25_x_2 = Wide32::<6>::product(&n2z, &n5y)?;
+    let c25_x = c25_x_1.checked_sub(&c25_x_2)?;
+    let n5x = Wide32::<3>::from_i128(within(n5x, 83)?)?;
+    let c25_y_1 = Wide32::<6>::product(&n2z, &n5x)?;
+    let c25_y_2 = Wide32::<6>::product(&n2x, &n5z)?;
+    let c25_y = c25_y_1.checked_sub(&c25_y_2)?;
+    let c25_z_1 = Wide32::<6>::product(&n2x, &n5y)?;
+    let c25_z_2 = Wide32::<6>::product(&n2y, &n5x)?;
+    let c25_z = c25_z_1.checked_sub(&c25_z_2)?;
+    let c34_x_1 = Wide32::<6>::product(&n3y, &n4z)?;
+    let c34_x_2 = Wide32::<6>::product(&n3z, &n4y)?;
+    let c34_x = c34_x_1.checked_sub(&c34_x_2)?;
+    let c34_y_1 = Wide32::<6>::product(&n3z, &n4x)?;
+    let c34_y_2 = Wide32::<6>::product(&n3x, &n4z)?;
+    let c34_y = c34_y_1.checked_sub(&c34_y_2)?;
+    let c34_z_1 = Wide32::<6>::product(&n3x, &n4y)?;
+    let c34_z_2 = Wide32::<6>::product(&n3y, &n4x)?;
+    let c34_z = c34_z_1.checked_sub(&c34_z_2)?;
+    let c35_x_1 = Wide32::<6>::product(&n3y, &n5z)?;
+    let c35_x_2 = Wide32::<6>::product(&n3z, &n5y)?;
+    let c35_x = c35_x_1.checked_sub(&c35_x_2)?;
+    let c35_y_1 = Wide32::<6>::product(&n3z, &n5x)?;
+    let c35_y_2 = Wide32::<6>::product(&n3x, &n5z)?;
+    let c35_y = c35_y_1.checked_sub(&c35_y_2)?;
+    let c35_z_1 = Wide32::<6>::product(&n3x, &n5y)?;
+    let c35_z_2 = Wide32::<6>::product(&n3y, &n5x)?;
+    let c35_z = c35_z_1.checked_sub(&c35_z_2)?;
+    let c45_x_1 = Wide32::<6>::product(&n4y, &n5z)?;
+    let c45_x_2 = Wide32::<6>::product(&n4z, &n5y)?;
+    let c45_x = c45_x_1.checked_sub(&c45_x_2)?;
+    let c45_y_1 = Wide32::<6>::product(&n4z, &n5x)?;
+    let c45_y_2 = Wide32::<6>::product(&n4x, &n5z)?;
+    let c45_y = c45_y_1.checked_sub(&c45_y_2)?;
+    let c45_z_1 = Wide32::<6>::product(&n4x, &n5y)?;
+    let c45_z_2 = Wide32::<6>::product(&n4y, &n5x)?;
+    let c45_z = c45_z_1.checked_sub(&c45_z_2)?;
+    let s1 = Wide32::<4>::from_i128(within(s1, 125)?)?;
+    let d2 = Wide32::<4>::from_i128(within(d2, 125)?)?;
+    let q12_1 = Wide32::<8>::product(&s1, &d2)?;
+    let s2 = Wide32::<4>::from_i128(within(s2, 125)?)?;
+    let d1 = Wide32::<4>::from_i128(within(d1, 125)?)?;
+    let q12_2 = Wide32::<8>::product(&s2, &d1)?;
+    let q12 = q12_1.checked_sub(&q12_2)?;
+    let d3 = Wide32::<4>::from_i128(within(d3, 125)?)?;
+    let q13_1 = Wide32::<8>::product(&s1, &d3)?;
+    let s3 = Wide32::<4>::from_i128(within(s3, 125)?)?;
+    let q13_2 = Wide32::<8>::product(&s3, &d1)?;
+    let q13 = q13_1.checked_sub(&q13_2)?;
+    let d4 = Wide32::<4>::from_i128(within(d4, 125)?)?;
+    let q14_1 = Wide32::<8>::product(&s1, &d4)?;
+    let s4 = Wide32::<4>::from_i128(within(s4, 125)?)?;
+    let q14_2 = Wide32::<8>::product(&s4, &d1)?;
+    let q14 = q14_1.checked_sub(&q14_2)?;
+    let d5 = Wide32::<4>::from_i128(within(d5, 125)?)?;
+    let q15_1 = Wide32::<8>::product(&s1, &d5)?;
+    let s5 = Wide32::<4>::from_i128(within(s5, 125)?)?;
+    let q15_2 = Wide32::<8>::product(&s5, &d1)?;
+    let q15 = q15_1.checked_sub(&q15_2)?;
+    let q23_1 = Wide32::<8>::product(&s2, &d3)?;
+    let q23_2 = Wide32::<8>::product(&s3, &d2)?;
+    let q23 = q23_1.checked_sub(&q23_2)?;
+    let q24_1 = Wide32::<8>::product(&s2, &d4)?;
+    let q24_2 = Wide32::<8>::product(&s4, &d2)?;
+    let q24 = q24_1.checked_sub(&q24_2)?;
+    let q25_1 = Wide32::<8>::product(&s2, &d5)?;
+    let q25_2 = Wide32::<8>::product(&s5, &d2)?;
+    let q25 = q25_1.checked_sub(&q25_2)?;
+    let q34_1 = Wide32::<8>::product(&s3, &d4)?;
+    let q34_2 = Wide32::<8>::product(&s4, &d3)?;
+    let q34 = q34_1.checked_sub(&q34_2)?;
+    let q35_1 = Wide32::<8>::product(&s3, &d5)?;
+    let q35_2 = Wide32::<8>::product(&s5, &d3)?;
+    let q35 = q35_1.checked_sub(&q35_2)?;
+    let q45_1 = Wide32::<8>::product(&s4, &d5)?;
+    let q45_2 = Wide32::<8>::product(&s5, &d4)?;
+    let q45 = q45_1.checked_sub(&q45_2)?;
+    let n1x = Wide32::<3>::from_i128(within(n1x, 83)?)?;
+    let m123_1 = Wide32::<8>::product(&n1x, &c23_x)?;
+    let n1y = Wide32::<3>::from_i128(within(n1y, 83)?)?;
+    let m123_2 = Wide32::<8>::product(&n1y, &c23_y)?;
+    let m123_3 = m123_1.checked_add(&m123_2)?;
+    let n1z = Wide32::<3>::from_i128(within(n1z, 83)?)?;
+    let m123_4 = Wide32::<8>::product(&n1z, &c23_z)?;
+    let m123 = m123_3.checked_add(&m123_4)?;
+    let p123 = Wide32::<16>::product(&m123, &q45)?;
+    let m124_1 = Wide32::<8>::product(&n1x, &c24_x)?;
+    let m124_2 = Wide32::<8>::product(&n1y, &c24_y)?;
+    let m124_3 = m124_1.checked_add(&m124_2)?;
+    let m124_4 = Wide32::<8>::product(&n1z, &c24_z)?;
+    let m124 = m124_3.checked_add(&m124_4)?;
+    let p124 = Wide32::<16>::product(&m124, &q35)?;
+    let m125_1 = Wide32::<8>::product(&n1x, &c25_x)?;
+    let m125_2 = Wide32::<8>::product(&n1y, &c25_y)?;
+    let m125_3 = m125_1.checked_add(&m125_2)?;
+    let m125_4 = Wide32::<8>::product(&n1z, &c25_z)?;
+    let m125 = m125_3.checked_add(&m125_4)?;
+    let p125 = Wide32::<16>::product(&m125, &q34)?;
+    let m134_1 = Wide32::<8>::product(&n1x, &c34_x)?;
+    let m134_2 = Wide32::<8>::product(&n1y, &c34_y)?;
+    let m134_3 = m134_1.checked_add(&m134_2)?;
+    let m134_4 = Wide32::<8>::product(&n1z, &c34_z)?;
+    let m134 = m134_3.checked_add(&m134_4)?;
+    let p134 = Wide32::<16>::product(&m134, &q25)?;
+    let m135_1 = Wide32::<8>::product(&n1x, &c35_x)?;
+    let m135_2 = Wide32::<8>::product(&n1y, &c35_y)?;
+    let m135_3 = m135_1.checked_add(&m135_2)?;
+    let m135_4 = Wide32::<8>::product(&n1z, &c35_z)?;
+    let m135 = m135_3.checked_add(&m135_4)?;
+    let p135 = Wide32::<16>::product(&m135, &q24)?;
+    let m145_1 = Wide32::<8>::product(&n1x, &c45_x)?;
+    let m145_2 = Wide32::<8>::product(&n1y, &c45_y)?;
+    let m145_3 = m145_1.checked_add(&m145_2)?;
+    let m145_4 = Wide32::<8>::product(&n1z, &c45_z)?;
+    let m145 = m145_3.checked_add(&m145_4)?;
+    let p145 = Wide32::<16>::product(&m145, &q23)?;
+    let m234_1 = Wide32::<8>::product(&n2x, &c34_x)?;
+    let m234_2 = Wide32::<8>::product(&n2y, &c34_y)?;
+    let m234_3 = m234_1.checked_add(&m234_2)?;
+    let m234_4 = Wide32::<8>::product(&n2z, &c34_z)?;
+    let m234 = m234_3.checked_add(&m234_4)?;
+    let p234 = Wide32::<16>::product(&m234, &q15)?;
+    let m235_1 = Wide32::<8>::product(&n2x, &c35_x)?;
+    let m235_2 = Wide32::<8>::product(&n2y, &c35_y)?;
+    let m235_3 = m235_1.checked_add(&m235_2)?;
+    let m235_4 = Wide32::<8>::product(&n2z, &c35_z)?;
+    let m235 = m235_3.checked_add(&m235_4)?;
+    let p235 = Wide32::<16>::product(&m235, &q14)?;
+    let m245_1 = Wide32::<8>::product(&n2x, &c45_x)?;
+    let m245_2 = Wide32::<8>::product(&n2y, &c45_y)?;
+    let m245_3 = m245_1.checked_add(&m245_2)?;
+    let m245_4 = Wide32::<8>::product(&n2z, &c45_z)?;
+    let m245 = m245_3.checked_add(&m245_4)?;
+    let p245 = Wide32::<16>::product(&m245, &q13)?;
+    let m345_1 = Wide32::<8>::product(&n3x, &c45_x)?;
+    let m345_2 = Wide32::<8>::product(&n3y, &c45_y)?;
+    let m345_3 = m345_1.checked_add(&m345_2)?;
+    let m345_4 = Wide32::<8>::product(&n3z, &c45_z)?;
+    let m345 = m345_3.checked_add(&m345_4)?;
+    let p345 = Wide32::<16>::product(&m345, &q12)?;
+    let v_1 = p123.checked_sub(&p124)?;
+    let v_2 = v_1.checked_add(&p125)?;
+    let v_3 = v_2.checked_add(&p134)?;
+    let v_4 = v_3.checked_sub(&p135)?;
+    let v_5 = v_4.checked_add(&p145)?;
+    let v_6 = v_5.checked_sub(&p234)?;
+    let v_7 = v_6.checked_add(&p235)?;
+    let v_8 = v_7.checked_sub(&p245)?;
+    let v = v_8.checked_add(&p345)?;
+    v.to_wide::<8>()
+}
+
+/// `mitre_at`'s exact value in width-aware limbs (chapter 23.3): each step in `i64`, or in a
+/// `Wide32` of as many 32-bit limbs as its operands' certified bits need, with checked arithmetic,
+/// and the result in the shipped path's type; `None` only if a step overflowed, which the
+/// certificate rules out; `None` also for a rounded input outside its declared range.
+#[inline]
+#[must_use]
+#[allow(
+    clippy::similar_names,
+    clippy::too_many_arguments,
+    reason = "names, parameters and lines follow the description: one per input and step"
+)]
+pub fn mitre_at_value(
+    n1x: i128,
+    n1y: i128,
+    n1z: i128,
+    d1: i128,
+    s1: i128,
+    n2x: i128,
+    n2y: i128,
+    n2z: i128,
+    d2: i128,
+    s2: i128,
+    n3x: i128,
+    n3y: i128,
+    n3z: i128,
+    d3: i128,
+    s3: i128,
+    n4x: i128,
+    n4y: i128,
+    n4z: i128,
+    d4: i128,
+    s4: i128,
+    t: i128,
+) -> Option<I512> {
+    let n2y = Wide32::<3>::from_i128(within(n2y, 83)?)?;
+    let n3z = Wide32::<3>::from_i128(within(n3z, 83)?)?;
+    let bc_x_1 = Wide32::<6>::product(&n2y, &n3z)?;
+    let n2z = Wide32::<3>::from_i128(within(n2z, 83)?)?;
+    let n3y = Wide32::<3>::from_i128(within(n3y, 83)?)?;
+    let bc_x_2 = Wide32::<6>::product(&n2z, &n3y)?;
+    let bc_x = bc_x_1.checked_sub(&bc_x_2)?;
+    let n3x = Wide32::<3>::from_i128(within(n3x, 83)?)?;
+    let bc_y_1 = Wide32::<6>::product(&n2z, &n3x)?;
+    let n2x = Wide32::<3>::from_i128(within(n2x, 83)?)?;
+    let bc_y_2 = Wide32::<6>::product(&n2x, &n3z)?;
+    let bc_y = bc_y_1.checked_sub(&bc_y_2)?;
+    let bc_z_1 = Wide32::<6>::product(&n2x, &n3y)?;
+    let bc_z_2 = Wide32::<6>::product(&n2y, &n3x)?;
+    let bc_z = bc_z_1.checked_sub(&bc_z_2)?;
+    let n1z = Wide32::<3>::from_i128(within(n1z, 83)?)?;
+    let ca_x_1 = Wide32::<6>::product(&n3y, &n1z)?;
+    let n1y = Wide32::<3>::from_i128(within(n1y, 83)?)?;
+    let ca_x_2 = Wide32::<6>::product(&n3z, &n1y)?;
+    let ca_x = ca_x_1.checked_sub(&ca_x_2)?;
+    let n1x = Wide32::<3>::from_i128(within(n1x, 83)?)?;
+    let ca_y_1 = Wide32::<6>::product(&n3z, &n1x)?;
+    let ca_y_2 = Wide32::<6>::product(&n3x, &n1z)?;
+    let ca_y = ca_y_1.checked_sub(&ca_y_2)?;
+    let ca_z_1 = Wide32::<6>::product(&n3x, &n1y)?;
+    let ca_z_2 = Wide32::<6>::product(&n3y, &n1x)?;
+    let ca_z = ca_z_1.checked_sub(&ca_z_2)?;
+    let ab_x_1 = Wide32::<6>::product(&n1y, &n2z)?;
+    let ab_x_2 = Wide32::<6>::product(&n1z, &n2y)?;
+    let ab_x = ab_x_1.checked_sub(&ab_x_2)?;
+    let ab_y_1 = Wide32::<6>::product(&n1z, &n2x)?;
+    let ab_y_2 = Wide32::<6>::product(&n1x, &n2z)?;
+    let ab_y = ab_y_1.checked_sub(&ab_y_2)?;
+    let ab_z_1 = Wide32::<6>::product(&n1x, &n2y)?;
+    let ab_z_2 = Wide32::<6>::product(&n1y, &n2x)?;
+    let ab_z = ab_z_1.checked_sub(&ab_z_2)?;
+    let w_1 = Wide32::<8>::product(&n1x, &bc_x)?;
+    let w_2 = Wide32::<8>::product(&n1y, &bc_y)?;
+    let w_3 = w_1.checked_add(&w_2)?;
+    let w_4 = Wide32::<8>::product(&n1z, &bc_z)?;
+    let w = w_3.checked_add(&w_4)?;
+    let d1 = Wide32::<4>::from_i128(within(d1, 125)?)?;
+    let mx_x_1 = Wide32::<10>::product(&d1, &bc_x)?;
+    let d2 = Wide32::<4>::from_i128(within(d2, 125)?)?;
+    let mx_x_2 = Wide32::<10>::product(&d2, &ca_x)?;
+    let mx_x_3 = mx_x_1.checked_add(&mx_x_2)?;
+    let d3 = Wide32::<4>::from_i128(within(d3, 125)?)?;
+    let mx_x_4 = Wide32::<10>::product(&d3, &ab_x)?;
+    let mx_x = mx_x_3.checked_add(&mx_x_4)?;
+    let mx_y_1 = Wide32::<10>::product(&d1, &bc_y)?;
+    let mx_y_2 = Wide32::<10>::product(&d2, &ca_y)?;
+    let mx_y_3 = mx_y_1.checked_add(&mx_y_2)?;
+    let mx_y_4 = Wide32::<10>::product(&d3, &ab_y)?;
+    let mx_y = mx_y_3.checked_add(&mx_y_4)?;
+    let mx_z_1 = Wide32::<10>::product(&d1, &bc_z)?;
+    let mx_z_2 = Wide32::<10>::product(&d2, &ca_z)?;
+    let mx_z_3 = mx_z_1.checked_add(&mx_z_2)?;
+    let mx_z_4 = Wide32::<10>::product(&d3, &ab_z)?;
+    let mx_z = mx_z_3.checked_add(&mx_z_4)?;
+    let s1 = Wide32::<4>::from_i128(within(s1, 125)?)?;
+    let ms_x_1 = Wide32::<10>::product(&s1, &bc_x)?;
+    let s2 = Wide32::<4>::from_i128(within(s2, 125)?)?;
+    let ms_x_2 = Wide32::<10>::product(&s2, &ca_x)?;
+    let ms_x_3 = ms_x_1.checked_add(&ms_x_2)?;
+    let s3 = Wide32::<4>::from_i128(within(s3, 125)?)?;
+    let ms_x_4 = Wide32::<10>::product(&s3, &ab_x)?;
+    let ms_x = ms_x_3.checked_add(&ms_x_4)?;
+    let ms_y_1 = Wide32::<10>::product(&s1, &bc_y)?;
+    let ms_y_2 = Wide32::<10>::product(&s2, &ca_y)?;
+    let ms_y_3 = ms_y_1.checked_add(&ms_y_2)?;
+    let ms_y_4 = Wide32::<10>::product(&s3, &ab_y)?;
+    let ms_y = ms_y_3.checked_add(&ms_y_4)?;
+    let ms_z_1 = Wide32::<10>::product(&s1, &bc_z)?;
+    let ms_z_2 = Wide32::<10>::product(&s2, &ca_z)?;
+    let ms_z_3 = ms_z_1.checked_add(&ms_z_2)?;
+    let ms_z_4 = Wide32::<10>::product(&s3, &ab_z)?;
+    let ms_z = ms_z_3.checked_add(&ms_z_4)?;
+    let d4 = Wide32::<4>::from_i128(within(d4, 125)?)?;
+    let nd_1 = Wide32::<12>::product(&d4, &w)?;
+    let n4x = Wide32::<3>::from_i128(within(n4x, 83)?)?;
+    let nd_2 = Wide32::<12>::product(&n4x, &mx_x)?;
+    let nd_3 = nd_1.checked_sub(&nd_2)?;
+    let n4y = Wide32::<3>::from_i128(within(n4y, 83)?)?;
+    let nd_4 = Wide32::<12>::product(&n4y, &mx_y)?;
+    let nd_5 = nd_3.checked_sub(&nd_4)?;
+    let n4z = Wide32::<3>::from_i128(within(n4z, 83)?)?;
+    let nd_6 = Wide32::<12>::product(&n4z, &mx_z)?;
+    let nd = nd_5.checked_sub(&nd_6)?;
+    let s4 = Wide32::<4>::from_i128(within(s4, 125)?)?;
+    let ns_1 = Wide32::<12>::product(&s4, &w)?;
+    let ns_2 = Wide32::<12>::product(&n4x, &ms_x)?;
+    let ns_3 = ns_1.checked_sub(&ns_2)?;
+    let ns_4 = Wide32::<12>::product(&n4y, &ms_y)?;
+    let ns_5 = ns_3.checked_sub(&ns_4)?;
+    let ns_6 = Wide32::<12>::product(&n4z, &ms_z)?;
+    let ns = ns_5.checked_sub(&ns_6)?;
+    let t = i64::try_from(within(t, 40)?).ok()?;
+    let f_1 = Wide32::<14>::product_by_i64(&ns, t)?;
+    let f = nd.resize::<14>()?.checked_add(&f_1)?;
+    f.to_wide::<8>()
+}
+
 /// Bounded proofs (chapter 23.3; piece G42): every kind of limb step the functions above perform,
 /// on every operand its certified bits allow, never returns `None`.
 #[cfg(kani)]
@@ -618,6 +1343,13 @@ mod proofs {
     fn rounded_125_in_4() {
         let v = wide_input(125);
         assert!(Wide32::<4>::from_i128(v).is_some());
+    }
+
+    #[kani::proof]
+    fn mul_i64x40_w12x379_in_14() {
+        let (l, r) = (small(40), big::<12>(379));
+        let step = || -> Option<Wide32<14>> { Some(Wide32::<14>::product_by_i64(&r, l)?) };
+        assert!(step().is_some());
     }
 
     #[kani::proof]
@@ -677,6 +1409,13 @@ mod proofs {
     }
 
     #[kani::proof]
+    fn mul_w4x125_w4x125_in_8() {
+        let (l, r) = (big::<4>(125), big::<4>(125));
+        let step = || -> Option<Wide32<8>> { Some(Wide32::<8>::product(&l, &r)?) };
+        assert!(step().is_some());
+    }
+
+    #[kani::proof]
     fn mul_w4x125_w6x167_in_10() {
         let (l, r) = (big::<4>(125), big::<6>(167));
         let step = || -> Option<Wide32<10>> { Some(Wide32::<10>::product(&l, &r)?) };
@@ -694,6 +1433,27 @@ mod proofs {
     fn mul_w4x126_w4x126_in_8() {
         let (l, r) = (big::<4>(126), big::<4>(126));
         let step = || -> Option<Wide32<8>> { Some(Wide32::<8>::product(&l, &r)?) };
+        assert!(step().is_some());
+    }
+
+    #[kani::proof]
+    fn mul_w8x252_w8x251_in_16() {
+        let (l, r) = (big::<8>(252), big::<8>(251));
+        let step = || -> Option<Wide32<16>> { Some(Wide32::<16>::product(&l, &r)?) };
+        assert!(step().is_some());
+    }
+
+    #[kani::proof]
+    fn mul_w10x294_w8x252_in_18() {
+        let (l, r) = (big::<10>(294), big::<8>(252));
+        let step = || -> Option<Wide32<18>> { Some(Wide32::<18>::product(&l, &r)?) };
+        assert!(step().is_some());
+    }
+
+    #[kani::proof]
+    fn mul_w12x379_w12x379_in_24() {
+        let (l, r) = (big::<12>(379), big::<12>(379));
+        let step = || -> Option<Wide32<24>> { Some(Wide32::<24>::product(&l, &r)?) };
         assert!(step().is_some());
     }
 
@@ -796,6 +1556,34 @@ mod proofs {
     }
 
     #[kani::proof]
+    fn add_w12x379_w14x419_in_14() {
+        let (l, r) = (big::<12>(379), big::<14>(419));
+        let step = || -> Option<Wide32<14>> { Some(l.resize::<14>()?.checked_add(&r)?) };
+        assert!(step().is_some());
+    }
+
+    #[kani::proof]
+    fn add_w16x504_w16x503_in_16() {
+        let (l, r) = (big::<16>(504), big::<16>(503));
+        let step = || -> Option<Wide32<16>> { Some(l.checked_add(&r)?) };
+        assert!(step().is_some());
+    }
+
+    #[kani::proof]
+    fn add_w16x505_w16x503_in_16() {
+        let (l, r) = (big::<16>(505), big::<16>(503));
+        let step = || -> Option<Wide32<16>> { Some(l.checked_add(&r)?) };
+        assert!(step().is_some());
+    }
+
+    #[kani::proof]
+    fn add_w16x506_w16x503_in_16() {
+        let (l, r) = (big::<16>(506), big::<16>(503));
+        let step = || -> Option<Wide32<16>> { Some(l.checked_add(&r)?) };
+        assert!(step().is_some());
+    }
+
+    #[kani::proof]
     fn sub_w3x82_w3x82_in_3() {
         let (l, r) = (big::<3>(82), big::<3>(82));
         let step = || -> Option<Wide32<3>> { Some(l.checked_sub(&r)?) };
@@ -824,6 +1612,13 @@ mod proofs {
     }
 
     #[kani::proof]
+    fn sub_w8x250_w8x250_in_8() {
+        let (l, r) = (big::<8>(250), big::<8>(250));
+        let step = || -> Option<Wide32<8>> { Some(l.checked_sub(&r)?) };
+        assert!(step().is_some());
+    }
+
+    #[kani::proof]
     fn sub_w8x252_w8x252_in_8() {
         let (l, r) = (big::<8>(252), big::<8>(252));
         let step = || -> Option<Wide32<8>> { Some(l.checked_sub(&r)?) };
@@ -848,6 +1643,41 @@ mod proofs {
     fn sub_w12x379_w12x377_in_12() {
         let (l, r) = (big::<12>(379), big::<12>(377));
         let step = || -> Option<Wide32<12>> { Some(l.checked_sub(&r)?) };
+        assert!(step().is_some());
+    }
+
+    #[kani::proof]
+    fn sub_w16x503_w16x503_in_16() {
+        let (l, r) = (big::<16>(503), big::<16>(503));
+        let step = || -> Option<Wide32<16>> { Some(l.checked_sub(&r)?) };
+        assert!(step().is_some());
+    }
+
+    #[kani::proof]
+    fn sub_w16x505_w16x503_in_16() {
+        let (l, r) = (big::<16>(505), big::<16>(503));
+        let step = || -> Option<Wide32<16>> { Some(l.checked_sub(&r)?) };
+        assert!(step().is_some());
+    }
+
+    #[kani::proof]
+    fn sub_w16x506_w16x503_in_16() {
+        let (l, r) = (big::<16>(506), big::<16>(503));
+        let step = || -> Option<Wide32<16>> { Some(l.checked_sub(&r)?) };
+        assert!(step().is_some());
+    }
+
+    #[kani::proof]
+    fn sub_w18x546_w18x546_in_18() {
+        let (l, r) = (big::<18>(546), big::<18>(546));
+        let step = || -> Option<Wide32<18>> { Some(l.checked_sub(&r)?) };
+        assert!(step().is_some());
+    }
+
+    #[kani::proof]
+    fn sub_w24x758_w24x758_in_24() {
+        let (l, r) = (big::<24>(758), big::<24>(758));
+        let step = || -> Option<Wide32<24>> { Some(l.checked_sub(&r)?) };
         assert!(step().is_some());
     }
 
@@ -897,5 +1727,29 @@ mod proofs {
     fn back_w12x379_to_6() {
         let v = big::<12>(379);
         assert!(v.to_wide::<6>().is_some());
+    }
+
+    #[kani::proof]
+    fn back_w14x419_to_8() {
+        let v = big::<14>(419);
+        assert!(v.to_wide::<8>().is_some());
+    }
+
+    #[kani::proof]
+    fn back_w16x506_to_8() {
+        let v = big::<16>(506);
+        assert!(v.to_wide::<8>().is_some());
+    }
+
+    #[kani::proof]
+    fn back_w18x547_to_9() {
+        let v = big::<18>(547);
+        assert!(v.to_wide::<9>().is_some());
+    }
+
+    #[kani::proof]
+    fn back_w24x759_to_12() {
+        let v = big::<24>(759);
+        assert!(v.to_wide::<12>().is_some());
     }
 }

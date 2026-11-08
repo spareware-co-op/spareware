@@ -251,8 +251,10 @@ pub mod wide32 {
 
 /// Plane-based geometry: `geom_num::plane`.
 pub mod plane {
-    use geom_num::grid::{P3, Rounded};
-    use geom_num::plane::{Lpi, Plane, Tpi};
+    use core::cmp::Ordering;
+    use geom_num::grid::{Coord, P3, Rounded};
+
+    use geom_num::plane::{Lpi, Moving, Plane, Tpi};
     use geom_num::wide::{I256, I320};
     use geom_num::{NumError, Sign};
 
@@ -316,6 +318,41 @@ pub mod plane {
     #[inline(never)]
     pub fn lpi_to_grid(batch: &[Lpi], out: &mut Vec<Result<Rounded<P3>, NumError>>) {
         run(batch, out, Lpi::to_grid);
+    }
+
+    /// `Tpi::cmp_height` on each pair of meeting points (piece G251).
+    #[inline(never)]
+    pub fn cmp_height(batch: &[(Tpi, Tpi)], out: &mut Vec<Result<Ordering, NumError>>) {
+        run(batch, out, |(a, b)| a.cmp_height(b));
+    }
+
+    /// `Moving::cmp_meeting` on each pair of meetings of four moving planes (piece G251).
+    #[inline(never)]
+    pub fn cmp_meeting(
+        batch: &[([Moving; 4], [Moving; 4])],
+        out: &mut Vec<Result<Ordering, NumError>>,
+    ) {
+        run(batch, out, |(a, b)| Moving::cmp_meeting(a, b));
+    }
+
+    /// `Moving::cmp_meeting_time` on each meeting of four moving planes and a time (piece G273).
+    #[inline(never)]
+    pub fn cmp_meeting_time(
+        batch: &[([Moving; 4], Coord)],
+        out: &mut Vec<Result<Ordering, NumError>>,
+    ) {
+        run(batch, out, |(four, time)| {
+            Moving::cmp_meeting_time(four, *time)
+        });
+    }
+
+    /// `Moving::side_at_meeting` on each meeting of four moving planes and a fifth plane (piece
+    /// G273).
+    #[inline(never)]
+    pub fn side_at_meeting(batch: &[([Moving; 4], Moving)], out: &mut Vec<Result<Sign, NumError>>) {
+        run(batch, out, |(four, other)| {
+            Moving::side_at_meeting(four, other)
+        });
     }
 }
 
@@ -964,11 +1001,11 @@ pub mod exact_sum {
 pub mod generated {
     use geom_num::Sign;
     use geom_num::generated::{
-        incircle, insphere, lpi_side, lpi_weight, orient2d, orient3d, plane_side, ssi_side,
-        ssi_weight, tpi_side, tpi_weight,
+        incircle, insphere, lpi_side, lpi_weight, mitre_time, orient2d, orient3d, plane_side,
+        ssi_side, ssi_weight, tpi_height, tpi_side, tpi_weight,
     };
     use geom_num::grid::{P2, P3};
-    use geom_num::wide::{I256, I384};
+    use geom_num::wide::{I256, I384, I576, I768};
 
     use super::run;
 
@@ -1169,6 +1206,103 @@ pub mod generated {
             ssi_side::value(a, b, c, d, p, q)
         });
     }
+
+    /// A moving plane's coefficients and speed (piece G251).
+    type Moving = (Coefficients, i128);
+
+    /// `generated::tpi_height::filter` on each six planes.
+    #[inline(never)]
+    pub fn tpi_height_filter(batch: &[[Coefficients; 6]], out: &mut Vec<Option<Sign>>) {
+        run(
+            batch,
+            out,
+            |&[
+                ([n1x, n1y, n1z], d1),
+                ([n2x, n2y, n2z], d2),
+                ([n3x, n3y, n3z], d3),
+                ([n4x, n4y, n4z], d4),
+                ([n5x, n5y, n5z], d5),
+                ([n6x, n6y, n6z], d6),
+            ]| {
+                tpi_height::filter(
+                    n1x, n1y, n1z, d1, n2x, n2y, n2z, d2, n3x, n3y, n3z, d3, n4x, n4y, n4z, d4,
+                    n5x, n5y, n5z, d5, n6x, n6y, n6z, d6,
+                )
+            },
+        );
+    }
+
+    /// `generated::tpi_height::value` on each six planes.
+    #[inline(never)]
+    pub fn tpi_height_value(batch: &[[Coefficients; 6]], out: &mut Vec<Option<I576>>) {
+        run(
+            batch,
+            out,
+            |&[
+                ([n1x, n1y, n1z], d1),
+                ([n2x, n2y, n2z], d2),
+                ([n3x, n3y, n3z], d3),
+                ([n4x, n4y, n4z], d4),
+                ([n5x, n5y, n5z], d5),
+                ([n6x, n6y, n6z], d6),
+            ]| {
+                tpi_height::value(
+                    n1x, n1y, n1z, d1, n2x, n2y, n2z, d2, n3x, n3y, n3z, d3, n4x, n4y, n4z, d4,
+                    n5x, n5y, n5z, d5, n6x, n6y, n6z, d6,
+                )
+            },
+        );
+    }
+
+    /// `generated::mitre_time::filter` on each eight moving planes.
+    #[inline(never)]
+    pub fn mitre_time_filter(batch: &[[Moving; 8]], out: &mut Vec<Option<Sign>>) {
+        run(
+            batch,
+            out,
+            |&[
+                (([n1x, n1y, n1z], d1), s1),
+                (([n2x, n2y, n2z], d2), s2),
+                (([n3x, n3y, n3z], d3), s3),
+                (([n4x, n4y, n4z], d4), s4),
+                (([n5x, n5y, n5z], d5), s5),
+                (([n6x, n6y, n6z], d6), s6),
+                (([n7x, n7y, n7z], d7), s7),
+                (([n8x, n8y, n8z], d8), s8),
+            ]| {
+                mitre_time::filter(
+                    n1x, n1y, n1z, d1, s1, n2x, n2y, n2z, d2, s2, n3x, n3y, n3z, d3, s3, n4x, n4y,
+                    n4z, d4, s4, n5x, n5y, n5z, d5, s5, n6x, n6y, n6z, d6, s6, n7x, n7y, n7z, d7,
+                    s7, n8x, n8y, n8z, d8, s8,
+                )
+            },
+        );
+    }
+
+    /// `generated::mitre_time::value` on each eight moving planes.
+    #[inline(never)]
+    pub fn mitre_time_value(batch: &[[Moving; 8]], out: &mut Vec<Option<I768>>) {
+        run(
+            batch,
+            out,
+            |&[
+                (([n1x, n1y, n1z], d1), s1),
+                (([n2x, n2y, n2z], d2), s2),
+                (([n3x, n3y, n3z], d3), s3),
+                (([n4x, n4y, n4z], d4), s4),
+                (([n5x, n5y, n5z], d5), s5),
+                (([n6x, n6y, n6z], d6), s6),
+                (([n7x, n7y, n7z], d7), s7),
+                (([n8x, n8y, n8z], d8), s8),
+            ]| {
+                mitre_time::value(
+                    n1x, n1y, n1z, d1, s1, n2x, n2y, n2z, d2, s2, n3x, n3y, n3z, d3, s3, n4x, n4y,
+                    n4z, d4, s4, n5x, n5y, n5z, d5, s5, n6x, n6y, n6z, d6, s6, n7x, n7y, n7z, d7,
+                    s7, n8x, n8y, n8z, d8, s8,
+                )
+            },
+        );
+    }
 }
 
 /// The plain-`i128` variant of the generated exact paths (chapter 23.3; piece G42), on the same
@@ -1176,7 +1310,7 @@ pub mod generated {
 pub mod plain {
     use geom_num::generated::plain;
     use geom_num::grid::{P2, P3};
-    use geom_num::wide::{I256, I384};
+    use geom_num::wide::{I256, I384, I576, I768};
 
     use super::run;
 
@@ -1286,6 +1420,56 @@ pub mod plain {
             plain::ssi_side_value(a, b, c, d, p, q)
         });
     }
+
+    /// A moving plane's coefficients and speed (piece G251).
+    type Moving = (Coefficients, i128);
+
+    /// `generated::plain::tpi_height_value` on each six planes.
+    #[inline(never)]
+    pub fn tpi_height_value(batch: &[[Coefficients; 6]], out: &mut Vec<Option<I576>>) {
+        run(
+            batch,
+            out,
+            |&[
+                ([n1x, n1y, n1z], d1),
+                ([n2x, n2y, n2z], d2),
+                ([n3x, n3y, n3z], d3),
+                ([n4x, n4y, n4z], d4),
+                ([n5x, n5y, n5z], d5),
+                ([n6x, n6y, n6z], d6),
+            ]| {
+                plain::tpi_height_value(
+                    n1x, n1y, n1z, d1, n2x, n2y, n2z, d2, n3x, n3y, n3z, d3, n4x, n4y, n4z, d4,
+                    n5x, n5y, n5z, d5, n6x, n6y, n6z, d6,
+                )
+            },
+        );
+    }
+
+    /// `generated::plain::mitre_time_value` on each eight moving planes.
+    #[inline(never)]
+    pub fn mitre_time_value(batch: &[[Moving; 8]], out: &mut Vec<Option<I768>>) {
+        run(
+            batch,
+            out,
+            |&[
+                (([n1x, n1y, n1z], d1), s1),
+                (([n2x, n2y, n2z], d2), s2),
+                (([n3x, n3y, n3z], d3), s3),
+                (([n4x, n4y, n4z], d4), s4),
+                (([n5x, n5y, n5z], d5), s5),
+                (([n6x, n6y, n6z], d6), s6),
+                (([n7x, n7y, n7z], d7), s7),
+                (([n8x, n8y, n8z], d8), s8),
+            ]| {
+                plain::mitre_time_value(
+                    n1x, n1y, n1z, d1, s1, n2x, n2y, n2z, d2, s2, n3x, n3y, n3z, d3, s3, n4x, n4y,
+                    n4z, d4, s4, n5x, n5y, n5z, d5, s5, n6x, n6y, n6z, d6, s6, n7x, n7y, n7z, d7,
+                    s7, n8x, n8y, n8z, d8, s8,
+                )
+            },
+        );
+    }
 }
 
 /// The width-aware limb variant of the generated exact paths (chapter 23.3; piece G42), on its own
@@ -1293,7 +1477,7 @@ pub mod plain {
 pub mod limbs {
     use geom_num::generated::limbs;
     use geom_num::grid::{P2, P3};
-    use geom_num::wide::{I256, I384};
+    use geom_num::wide::{I256, I384, I576, I768};
 
     use super::run;
 
@@ -1402,6 +1586,56 @@ pub mod limbs {
         run(batch, out, |&([a, b, c, d], p, q)| {
             limbs::ssi_side_value(a, b, c, d, p, q)
         });
+    }
+
+    /// A moving plane's coefficients and speed (piece G251).
+    type Moving = (Coefficients, i128);
+
+    /// `generated::limbs::tpi_height_value` on each six planes.
+    #[inline(never)]
+    pub fn tpi_height_value(batch: &[[Coefficients; 6]], out: &mut Vec<Option<I576>>) {
+        run(
+            batch,
+            out,
+            |&[
+                ([n1x, n1y, n1z], d1),
+                ([n2x, n2y, n2z], d2),
+                ([n3x, n3y, n3z], d3),
+                ([n4x, n4y, n4z], d4),
+                ([n5x, n5y, n5z], d5),
+                ([n6x, n6y, n6z], d6),
+            ]| {
+                limbs::tpi_height_value(
+                    n1x, n1y, n1z, d1, n2x, n2y, n2z, d2, n3x, n3y, n3z, d3, n4x, n4y, n4z, d4,
+                    n5x, n5y, n5z, d5, n6x, n6y, n6z, d6,
+                )
+            },
+        );
+    }
+
+    /// `generated::limbs::mitre_time_value` on each eight moving planes.
+    #[inline(never)]
+    pub fn mitre_time_value(batch: &[[Moving; 8]], out: &mut Vec<Option<I768>>) {
+        run(
+            batch,
+            out,
+            |&[
+                (([n1x, n1y, n1z], d1), s1),
+                (([n2x, n2y, n2z], d2), s2),
+                (([n3x, n3y, n3z], d3), s3),
+                (([n4x, n4y, n4z], d4), s4),
+                (([n5x, n5y, n5z], d5), s5),
+                (([n6x, n6y, n6z], d6), s6),
+                (([n7x, n7y, n7z], d7), s7),
+                (([n8x, n8y, n8z], d8), s8),
+            ]| {
+                limbs::mitre_time_value(
+                    n1x, n1y, n1z, d1, s1, n2x, n2y, n2z, d2, s2, n3x, n3y, n3z, d3, s3, n4x, n4y,
+                    n4z, d4, s4, n5x, n5y, n5z, d5, s5, n6x, n6y, n6z, d6, s6, n7x, n7y, n7z, d7,
+                    s7, n8x, n8y, n8z, d8, s8,
+                )
+            },
+        );
     }
 }
 
