@@ -474,8 +474,8 @@ fn over_patch(plane: &SurfaceKind, p: [f64; 3]) -> bool {
     let (Ok(o), Ok(pa), Ok(pb)) = (at(0.0, 0.0), at(1.0, 0.0), at(0.0, 1.0)) else {
         return true;
     };
-    let sub = |x: [f64; 3], y: [f64; 3]| [x[0] - y[0], x[1] - y[1], x[2] - y[2]];
-    let dot = |x: [f64; 3], y: [f64; 3]| x[0] * y[0] + x[1] * y[1] + x[2] * y[2];
+    let sub = |[x0, x1, x2]: [f64; 3], [y0, y1, y2]: [f64; 3]| [x0 - y0, x1 - y1, x2 - y2];
+    let dot = |[x0, x1, x2]: [f64; 3], [y0, y1, y2]: [f64; 3]| x0 * y0 + x1 * y1 + x2 * y2;
     let (a, b, d) = (sub(pa, o), sub(pb, o), sub(p, o));
     let (aa, bb, ab) = (dot(a, a), dot(b, b), dot(a, b));
     let (da, db) = (dot(d, a), dot(d, b));
