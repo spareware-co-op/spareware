@@ -12,7 +12,7 @@
     reason = "tests: native arithmetic and short names, and a failure stops the test"
 )]
 
-use geom_num::plane::Plane;
+use geom_num::plane::{Plane, Tpi};
 use geom_num::{NumError, P3, Sign};
 use geom_poly::convex::{Piece, convex_pieces};
 use geom_poly::merge::{
@@ -121,6 +121,17 @@ fn closed(m: &Merged, pieces: &[Outward]) {
         assert_eq!(fin.from.max(fin.to), edge.high);
         let plane = m.sheets[m.faces[fin.face].sheet].face;
         assert_eq!(pieces[fin.piece].piece.face, plane, "fin {at}: wrong piece");
+        // Both ends lie on the fin's line: its face's plane and its bound.
+        for end in [fin.from, fin.to] {
+            let point = &m.vertices[end];
+            for on in [plane, fin.bound] {
+                assert_eq!(
+                    on.side_of_tpi(point),
+                    Ok(Sign::Zero),
+                    "fin {at} leaves its line"
+                );
+            }
+        }
     }
     for (at, edge) in m.edges.iter().enumerate() {
         assert!(edge.low < edge.high, "edge {at} runs down");
@@ -762,6 +773,10 @@ fn errors_say_what_was_wrong() {
         "a shell faces inward with no shell around it"
     );
     assert_eq!(
+        MergeError::Defect.to_string(),
+        "the merge's parallel helper broke a rule"
+    );
+    assert_eq!(
         MergeError::from(stopped).to_string(),
         "the meter stopped the merge"
     );
@@ -769,6 +784,58 @@ fn errors_say_what_was_wrong() {
     assert!(num.to_string().starts_with("pieces that cannot be merged"));
     let trace = TraceError::Num(NumError::Degenerate);
     assert_eq!(MergeError::from(trace).to_string(), trace.to_string());
+}
+
+#[test]
+fn a_corner_that_is_no_point_is_reported_from_its_phase() {
+    // A side parallel to the piece's face meets it nowhere: the corner there is no point, and the
+    // merge says so with the arithmetic's own error, read from the phase that made the corners.
+    let z = |at: i128| Plane::new([0, 0, 1], -at).unwrap();
+    let piece = Piece {
+        face: z(0),
+        bounds: vec![
+            Plane::new([1, 0, 0], 0).unwrap(),
+            z(1),
+            Plane::new([0, 1, 0], 0).unwrap(),
+        ],
+    };
+    let outward = Outward {
+        piece,
+        polygon: 0,
+        turned: false,
+        source: 0,
+        front: Winding::new(),
+        back: Winding::new(),
+    };
+    assert!(matches!(
+        merge(&[outward], Merge::RemoveRedundant, &mut meter()),
+        Err(MergeError::Num(_))
+    ));
+}
+
+#[test]
+fn every_budget_stops_a_nested_merge_in_some_step_or_gives_the_same_answer() {
+    // A box with a box-shaped cavity: two shells, so the merge also nests them. Every budget up
+    // to the whole merge's, one unit apart, so each parallel step is stopped in turn.
+    let tool = block([1, 1, 1], [3, 3, 3]);
+    let pieces = kept(&scene(&[A, tool]), &WindingTest::subtract(0), LEAF_POLYGONS);
+    let mut counted = meter();
+    let whole = merge(&pieces, Merge::RemoveRedundant, &mut counted).unwrap();
+    assert_eq!(whole.shells.len(), 2);
+    let used = u64::try_from(counted.used().work).unwrap();
+    for budget in 0..=used {
+        let mut small = WorkMeter::new(Budget::new(budget, u64::MAX));
+        match merge(&pieces, Merge::RemoveRedundant, &mut small) {
+            Ok(m) => assert_eq!(m, whole, "budget {budget}"),
+            Err(e) => assert!(
+                matches!(
+                    e,
+                    MergeError::Stopped(_) | MergeError::Trace(TraceError::Stopped(_))
+                ),
+                "budget {budget}: {e:?}"
+            ),
+        }
+    }
 }
 
 #[test]
@@ -882,6 +949,166 @@ fn two_faces_that_meet_at_their_lowest_corner_keep_their_numbers() {
     assert_eq!(once.faces, again.faces);
     assert_eq!(once.edges, again.edges);
     assert_eq!(once.shells, again.shells);
+}
+
+/// Whether a point's X or w leaves `i128`: the merge then has no cells for it and compares it in
+/// wide integers.
+fn wide(point: &Tpi) -> bool {
+    let (x, w) = point.homogeneous().unwrap();
+    w.to_i128().is_none() || x.iter().any(|c| c.to_i128().is_none())
+}
+
+#[test]
+fn far_tilted_solids_merge_in_wide_integers_and_the_boxes_do_not_show() {
+    // The corners of two tilted solids at 2^32 times their size, each moved a few steps off that
+    // grid: the planes through them then have coprime coefficients near 2^70, and the points where
+    // three of them meet have coordinates past `i128`, so every comparison of them is wide.
+    let s = 1i64 << 32;
+    let far = |c: [[i64; 3]; 4], nudge: i64| {
+        let mut k = 0;
+        c.map(|p| {
+            p.map(|v| {
+                k += 1;
+                v * s + nudge * k
+            })
+        })
+    };
+    let a = far([[0, 0, 0], [90, 10, 0], [10, 80, 10], [20, 10, 70]], 3);
+    let b = far([[10, 10, 10], [80, 30, 20], [30, 90, 40], [40, 20, 90]], -5);
+    // And the same mirrored in x, which turns the sign of every three planes' determinant.
+    let mirror = |c: [[i64; 3]; 4]| c.map(|[x, y, z]| [-x, y, z]);
+    // A union keeps every piece as it faces; a difference turns the second solid's round.
+    for test in [WindingTest::unite(), WindingTest::subtract(0)] {
+        for (a, b) in [(a, b), (mirror(a), mirror(b))] {
+            let whole = tilted(&[a, b], &test, 1000).unwrap();
+            assert!(whole.vertices.iter().any(wide));
+            // Where faces cross, the points are off the grid, and named as such.
+            assert!(
+                whole
+                    .vertices
+                    .iter()
+                    .any(|v| !v.to_grid().unwrap().is_exact())
+            );
+            for leaf in [1, 4, 16] {
+                let m = tilted(&[a, b], &test, leaf).unwrap();
+                assert_eq!(m.vertices, whole.vertices, "leaf {leaf}");
+                assert_eq!(m.edges, whole.edges, "leaf {leaf}");
+            }
+            sorted_on_the_grid(&whole);
+        }
+    }
+}
+
+/// The points come in lexicographic order, as the wide comparison decides it.
+fn sorted_on_the_grid(whole: &Merged) {
+    for pair in whole.vertices.windows(2) {
+        let (p, q) = (
+            pair[0].to_grid().unwrap().value(),
+            pair[1].to_grid().unwrap().value(),
+        );
+        assert!((p.x.get(), p.y.get(), p.z.get()) <= (q.x.get(), q.y.get(), q.z.get()));
+    }
+}
+
+#[test]
+fn two_tilted_solids_moved_to_the_frame_s_far_corner_merge_the_same() {
+    // Small tilted solids, their edges a few thousand steps, so their normals are near 2^24; moved
+    // by a grid vector to within 10^4 steps of the frame's corner, their planes' offsets pass
+    // `i64` while their normals and meeting points still fit `i128`. Moving every input by a grid
+    // vector moves every vertex by it and changes nothing else.
+    let a = [
+        [0, 0, 0],
+        [4999, 701, 3],
+        [607, 4801, 903],
+        [1301, 599, 4703],
+    ];
+    let b = [
+        [701, 803, 599],
+        [5303, 2101, 1409],
+        [2003, 5897, 2609],
+        [2707, 1301, 5801],
+    ];
+    let t = (1i64 << 40) - 7001;
+    let moved = |c: [[i64; 3]; 4]| c.map(|p| p.map(|v| v + t));
+    let test = WindingTest::unite();
+    let near = tilted(&[a, b], &test, LEAF_POLYGONS).unwrap();
+    let far = tilted(&[moved(a), moved(b)], &test, LEAF_POLYGONS).unwrap();
+    assert!(
+        far.sheets
+            .iter()
+            .any(|s| i64::try_from(s.face.d()).is_err())
+    );
+    assert_eq!(near.vertices.len(), far.vertices.len());
+    for (p, q) in near.vertices.iter().zip(&far.vertices) {
+        let (p, q) = (p.to_grid().unwrap(), q.to_grid().unwrap());
+        assert_eq!(p.is_exact(), q.is_exact());
+        let (p, q) = (p.value(), q.value());
+        assert_eq!(
+            [p.x.get() + t, p.y.get() + t, p.z.get() + t],
+            [q.x.get(), q.y.get(), q.z.get()]
+        );
+    }
+    let ends = |m: &Merged| m.edges.iter().map(|e| (e.low, e.high)).collect::<Vec<_>>();
+    assert_eq!(ends(&near), ends(&far));
+    assert_eq!(near.faces.len(), far.faces.len());
+}
+
+#[test]
+fn a_point_off_the_grid_is_named_by_the_first_three_planes_through_it() {
+    // A box on odd steps crossed by a tilted solid: points off the grid on the box's faces and
+    // the solid's. Each is named by three planes in plane order, never a corner's own three.
+    let mut polygons = scene(&[block([1, 1, 1], [5, 5, 5])]);
+    tetrahedron(
+        [[-2, 0, 2], [7, 1, 3], [2, 8, 2], [3, 2, 9]],
+        1,
+        &mut polygons,
+    )
+    .unwrap();
+    let key = |p: &Plane| (p.n(), p.d());
+    for leaf in [1, 4, LEAF_POLYGONS] {
+        let pieces = kept(&polygons, &WindingTest::unite(), leaf);
+        let m = merge(&pieces, Merge::RemoveRedundant, &mut meter()).unwrap();
+        closed(&m, &pieces);
+        let mut seen = false;
+        for v in m
+            .vertices
+            .iter()
+            .filter(|v| !v.to_grid().unwrap().is_exact())
+        {
+            seen = true;
+            let [p, q, r] = v.planes();
+            assert!(key(p) < key(q) && key(q) < key(r), "leaf {leaf}: {v:?}");
+        }
+        assert!(seen, "leaf {leaf}: no point off the grid");
+    }
+}
+
+#[test]
+fn a_line_read_in_words_and_in_wide_integers_is_one_line() {
+    // A box at the frame's far corner and a wedge whose face holds one of the box's edges. The
+    // box's own faces fit machine words, so that edge's line is read in words from them; the
+    // wedge's face has an offset past `i64`, so the same line is read in wide integers from it.
+    // Both readings must be one line, or the edge's fins would not meet.
+    let t = (1i64 << 40) - (1 << 27);
+    let at = |p: [i64; 3]| p.map(|v| v + t);
+    let mut polygons = scene(&[block(at([0, 0, 0]), at([4, 4, 4]))]);
+    let wedge = [
+        at([0, 0, 0]),
+        at([0, 0, 4]),
+        at([-33_554_393, 16_777_259, 1]),
+        at([16_777_213, -33_554_467, 3]),
+    ];
+    tetrahedron(wedge, 1, &mut polygons).unwrap();
+    for leaf in [1, LEAF_POLYGONS] {
+        let pieces = kept(&polygons, &WindingTest::unite(), leaf);
+        assert!(
+            pieces
+                .iter()
+                .any(|o| i64::try_from(o.piece.face.d()).is_err())
+        );
+        let m = merge(&pieces, Merge::RemoveRedundant, &mut meter()).unwrap();
+        closed(&m, &pieces);
+    }
 }
 
 #[test]

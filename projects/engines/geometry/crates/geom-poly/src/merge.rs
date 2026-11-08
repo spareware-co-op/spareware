@@ -492,20 +492,9 @@ impl<const N: usize> Ord for CellKey<'_, N> {
     }
 }
 
-/// A parallel phase's error as the merge's: the item's own, or the meter's stop, which the helper
-/// latches; a stop it did not latch is the helper's defect.
-fn phase_error(error: RunError<MergeError>, meter: &mut WorkMeter<'_>) -> MergeError {
-    match error {
-        RunError::Failed(e) => e,
-        _ => meter
-            .poll()
-            .err()
-            .map_or(MergeError::Defect, MergeError::Stopped),
-    }
-}
-
-/// A parallel arrangement step's error as the merge's, as [`phase_error`] reads the merge's own.
-fn traced(error: RunError<TraceError>, meter: &mut WorkMeter<'_>) -> MergeError {
+/// A parallel phase's error as the merge's: the item's own, the merge's or the arrangement's, or
+/// the meter's stop, which the helper latches; a stop it did not latch is the helper's defect.
+fn phase_error<E: Into<MergeError>>(error: RunError<E>, meter: &mut WorkMeter<'_>) -> MergeError {
     match error {
         RunError::Failed(e) => e.into(),
         _ => meter
@@ -579,6 +568,13 @@ fn line_key(p: &Plane, q: &Plane) -> Result<LineKey, NumError> {
     }
 }
 
+/// Whether a line's coordinates are turned round, so that the first non-zero component of its
+/// direction is positive: one rule for keys in machine words and in [`I256`], which compare with
+/// each other.
+fn turned(first: Sign) -> bool {
+    first == Sign::Negative
+}
+
 /// [`line_key`] in [`I256`], for any two planes: each product below 2^250.
 fn wide_line_key(p: &Plane, q: &Plane) -> Result<LineKey, NumError> {
     let wide = I256::from_i128;
@@ -604,7 +600,7 @@ fn wide_line_key(p: &Plane, q: &Plane) -> Result<LineKey, NumError> {
         .take(3)
         .position(|v| !v.is_zero())
         .ok_or(NumError::Degenerate)?;
-    if coordinates.get(first).is_some_and(I256::is_negative) {
+    if coordinates.get(first).is_some_and(|v| turned(v.signum())) {
         for slot in &mut coordinates {
             *slot = slot.checked_neg().ok_or(NumError::BudgetExceeded)?;
         }
@@ -632,7 +628,10 @@ fn line_in_words(p: &Plane, q: &Plane) -> Option<([i128; 6], usize)> {
         minor(pd, qz, qd, pz)?,
     ];
     let first = coordinates.iter().take(3).position(|v| *v != 0)?;
-    if coordinates.get(first).is_some_and(|v| *v < 0) {
+    if coordinates
+        .get(first)
+        .is_some_and(|v| turned(Sign::of_i128(*v)))
+    {
         for slot in &mut coordinates {
             *slot = slot.checked_neg()?;
         }
@@ -916,9 +915,13 @@ fn sheets_of<'p>(
         .zip(pieces)
         .map(|(key, piece)| (key, (piece.turned, piece.polygon)))
         .collect();
-    let sorted = exec.sort_stable(meter, SORT_SHEETS, SORT_PLAN, &keyed, |(key, source)| {
-        (*key, *source)
-    });
+    let sorted = exec.sort_stable::<_, _, MergeError, _>(
+        meter,
+        SORT_SHEETS,
+        SORT_PLAN,
+        &keyed,
+        |(key, source)| (*key, *source),
+    );
     let order = sorted.map_err(|e| phase_error(e, meter))?;
     let mut sheets: Vec<Sheet> = Vec::new();
     let mut held = Vec::with_capacity(order.len());
@@ -964,7 +967,10 @@ fn numbered(
     let keys: Option<Vec<&[Cell; 3]>> = corners.iter().map(|c| c.cells.as_ref()).collect();
     let order = if let Some(keys) = keys {
         // Equal points keep their order, as the serial stable sort keeps it.
-        let sorted = exec.sort_stable(meter, SORT_CORNERS, SORT_PLAN, &keys, |k| CellKey(k));
+        let sorted =
+            exec.sort_stable::<_, _, MergeError, _>(meter, SORT_CORNERS, SORT_PLAN, &keys, |k| {
+                CellKey(k)
+            });
         sorted.map_err(|e| phase_error(e, meter))?
     } else {
         let mut order: Vec<usize> = (0..corners.len()).collect();
@@ -1029,17 +1035,19 @@ fn named(corner: &Corner, meter: &mut WorkMeter<'_>) -> Result<Tpi, MergeError> 
         .collect();
     list.sort_unstable_by_key(|plane| (plane.n(), plane.d()));
     list.dedup();
-    for (i, a) in list.iter().enumerate() {
+    let mut found = None;
+    'search: for (i, a) in list.iter().enumerate() {
         for (j, b) in list.iter().enumerate().skip(i.saturating_add(1)) {
             for c in list.iter().skip(j.saturating_add(1)) {
                 meter.charge(1)?;
                 if normals_sign(a, b, c)? != Sign::Zero {
-                    return Ok(Tpi::meeting(*a, *b, *c)?);
+                    found = Some(Tpi::meeting(*a, *b, *c)?);
+                    break 'search;
                 }
             }
         }
     }
-    Ok(corner.point)
+    Ok(found.unwrap_or(corner.point))
 }
 
 /// Every side of `held`, sorted by line: made on `exec`'s pool, and sorted there where every side
@@ -1087,9 +1095,13 @@ fn sides_of(
         .collect();
     if let Some(keys) = keys {
         // Sides on one line keep their order, as the serial stable sort keeps it.
-        let sorted = exec.sort_stable(meter, SORT_SIDES, SORT_PLAN, &keys, |(first, cells)| {
-            (*first, CellKey(cells))
-        });
+        let sorted = exec.sort_stable::<_, _, MergeError, _>(
+            meter,
+            SORT_SIDES,
+            SORT_PLAN,
+            &keys,
+            |(first, cells)| (*first, CellKey(cells)),
+        );
         let order = sorted.map_err(|e| phase_error(e, meter))?;
         return Ok((sides, order));
     }
@@ -1359,7 +1371,7 @@ fn sides_of_first(
     exec: &Exec<'_>,
     meter: &mut WorkMeter<'_>,
 ) -> Result<(Winding, Winding), MergeError> {
-    let cell = around_on(exec, polygons, meter).map_err(|e| traced(e, meter))?;
+    let cell = around_on(exec, polygons, meter).map_err(|e| phase_error(e, meter))?;
     let lists: Vec<Vec<Piece>> = polygons
         .iter()
         .take(1)
@@ -1803,7 +1815,9 @@ mod tests {
     use geom_num::plane::Plane;
     use geom_num::wide::I256;
 
-    use super::{Cell, line_in_words, wide_line_key};
+    use geom_num::Sign;
+
+    use super::{Cell, CellKey, corner, line_in_words, point_order, wide_line_key};
 
     /// a / b against c / d, b and d positive, by cross-multiplying big integers.
     fn exact(a: i128, b: i128, c: i128, d: i128) -> Ordering {
@@ -1817,6 +1831,23 @@ mod tests {
             Some(exact(a, b, c, d)),
             "{a} / {b} against {c} / {d}"
         );
+    }
+
+    #[test]
+    fn a_cell_key_is_equal_and_ordered_as_its_order_says() {
+        let cells = |a: i128| {
+            [
+                Cell::new(a, 3).unwrap(),
+                Cell::new(1, 2).unwrap(),
+                Cell::new(-a, 5).unwrap(),
+            ]
+        };
+        for (a, b) in [(1, 1), (1, 2), (4, -2)] {
+            let (p, q) = (cells(a), cells(b));
+            let (one, other) = (CellKey(&p), CellKey(&q));
+            assert_eq!(one == other, one.cmp(&other) == Ordering::Equal);
+            assert_eq!(one.partial_cmp(&other), Some(one.cmp(&other)));
+        }
     }
 
     proptest! {
@@ -1865,6 +1896,29 @@ mod tests {
         }
         // Terms past i64 after reduction take the wide products.
         agrees((1 << 100) + 1, 1 << 101, (1 << 99) + 1, 1 << 100);
+    }
+
+    /// Corners too wide for machine words have no cells, and are ordered by their wide coordinates,
+    /// whichever way their planes turn the weight: three axis planes with coefficients of 2^64 meet
+    /// at (5, 7, 9), in two orders whose weights are ±2^192, beside a corner in words.
+    #[test]
+    fn corners_without_cells_order_by_wide_coordinates_with_either_weight() {
+        let big = 1i128 << 64;
+        let axis = |n: [i128; 3], at: i128| Plane::new(n.map(|v| v * big), -at * big).unwrap();
+        let (x, y, z) = (axis([1, 0, 0], 5), axis([0, 1, 0], 7), axis([0, 0, 1], 9));
+        let (up, down) = (corner(x, y, z).unwrap(), corner(x, z, y).unwrap());
+        assert!(up.cells.is_none() && down.cells.is_none());
+        assert_eq!(
+            (up.point.weight(), down.point.weight()),
+            (Sign::Positive, Sign::Negative)
+        );
+        assert_eq!(point_order(&up, &down), Some(Ordering::Equal));
+        let unit = |n: [i128; 3], at: i128| Plane::new(n, -at).unwrap();
+        let near = corner(unit([1, 0, 0], 6), unit([0, 0, 1], 9), unit([0, 1, 0], 7)).unwrap();
+        assert!(near.cells.is_some());
+        assert_eq!(point_order(&down, &near), Some(Ordering::Less));
+        assert_eq!(point_order(&near, &down), Some(Ordering::Greater));
+        assert_eq!(point_order(&near, &up), Some(Ordering::Greater));
     }
 
     #[test]
