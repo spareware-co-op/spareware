@@ -187,10 +187,10 @@ impl<'c> Ends<'c> {
     /// a step more for a vertex where three planes meet, which the curve only shadows.
     fn holds_vertex(&self, a: &Arenas, v: Ix<Vertex>, t: f64, b: u64, limit: f64) -> bool {
         match corner(a, v) {
-            Some(Corner::Grid(p)) => self.holds(t, p, b, limit),
-            Some(Corner::Tpi(m)) => m.to_grid().is_ok_and(|rounded| {
-                self.holds(t, rounded.value(), b.saturating_add(1), limit + 1.0)
-            }),
+            Some(Corner::Grid(place)) => self.holds(t, place, b, limit),
+            Some(Corner::Tpi(meeting)) => meeting
+                .to_grid()
+                .is_ok_and(|rounded| self.holds(t, rounded.value(), b.saturating_add(1), limit)),
             _ => false,
         }
     }
@@ -218,10 +218,10 @@ impl Surface {
     fn holds_vertex(&self, a: &Arenas, v: Ix<Vertex>, b: u64, limit: f64) -> bool {
         match corner(a, v) {
             Some(Corner::Grid(p)) => self.holds_point(p, b, limit),
-            Some(Corner::Tpi(m)) => self
+            Some(Corner::Tpi(meeting)) => self
                 .grid
                 .as_ref()
-                .is_some_and(|plane| plane.side_of_tpi(&m) == Ok(Sign::Zero)),
+                .is_some_and(|plane| plane.side_of_tpi(&meeting) == Ok(Sign::Zero)),
             _ => false,
         }
     }
@@ -239,13 +239,9 @@ impl Surface {
         }
     }
 
-    /// How this surface and `other` lie: exactly when both are integer planes, as far as group 3
-    /// can certify otherwise.
+    /// How this surface and `other` lie, as far as group 3 can certify.
     pub(crate) fn lies_with(&self, other: &Surface) -> Pair {
-        match (&self.grid, &other.grid) {
-            (Some(p), Some(q)) => planes_lie(p, q),
-            _ => curved::pair(&self.carrier, &other.carrier),
-        }
+        curved::pair(&self.carrier, &other.carrier)
     }
 }
 
@@ -332,8 +328,8 @@ pub(crate) fn corner(a: &Arenas, v: Ix<Vertex>) -> Option<Corner> {
     match a.vertices.point.get(v).and_then(|p| a.points.get(*p))? {
         PointKind::Grid(p) => Some(Corner::Grid(*p)),
         PointKind::Meet(planes) => {
-            let [p, q, r] = planes.map(|ix| a.planes.get(ix).copied());
-            Tpi::new(p?, q?, r?).ok().map(Corner::Tpi)
+            let [first, second, third] = planes.map(|ix| a.planes.get(ix).copied());
+            Tpi::new(first?, second?, third?).ok().map(Corner::Tpi)
         }
     }
 }
