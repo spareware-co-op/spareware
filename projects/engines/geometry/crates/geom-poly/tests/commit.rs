@@ -27,6 +27,7 @@ use geom_op::{
 use geom_poly::commit::{
     CommitError, Committed, Ideal, PlaneClass, check_flip, moved_along, through_edge, vertex_slide,
 };
+use geom_test::seed::Seed;
 use num_bigint::BigInt;
 use proptest::prelude::*;
 
@@ -199,38 +200,85 @@ fn an_ideal_plane_reads_a_signed_distance() {
     assert!(up.lo() > 2.9 && up.hi() < 3.1, "{up:?}");
 }
 
-proptest! {
-    #![proptest_config(ProptestConfig::with_cases(256))]
-
-    #[test]
-    fn every_hinge_stays_on_its_edge(
-        a in [-(1i64 << 39)..(1 << 39), -(1i64 << 39)..(1 << 39), -(1i64 << 39)..(1 << 39)],
-        d in [-(1i64 << 38)..(1 << 38), -(1i64 << 38)..(1 << 38), -(1i64 << 38)..(1 << 38)],
-        tilt in [-1.0f64..1.0, -1.0f64..1.0, -1.0f64..1.0],
-    ) {
-        let (start, end) = (p(a[0], a[1], a[2]), p(a[0] + d[0], a[1] + d[1], a[2] + d[2]));
-        match through_edge(start, end, tilt, &[start, end]) {
-            Ok(got) => {
-                prop_assert_eq!(got.plane.side(start), Ok(Sign::Zero));
-                prop_assert_eq!(got.plane.side(end), Ok(Sign::Zero));
-                prop_assert!(got.deviation.is_finite());
+#[test]
+fn every_hinge_stays_on_its_edge() {
+    let cases = (
+        [
+            -(1i64 << 39)..(1 << 39),
+            -(1i64 << 39)..(1 << 39),
+            -(1i64 << 39)..(1 << 39),
+        ],
+        [
+            -(1i64 << 38)..(1 << 38),
+            -(1i64 << 38)..(1 << 38),
+            -(1i64 << 38)..(1 << 38),
+        ],
+        [-1.0f64..1.0, -1.0f64..1.0, -1.0f64..1.0],
+    );
+    seeded(
+        "geom-poly commit: every hinge",
+        0x6142_0001,
+        256,
+        &cases,
+        |(a, d, tilt)| {
+            let (start, end) = (
+                p(a[0], a[1], a[2]),
+                p(a[0] + d[0], a[1] + d[1], a[2] + d[2]),
+            );
+            match through_edge(start, end, tilt, &[start, end]) {
+                Ok(got) => {
+                    prop_assert_eq!(got.plane.side(start), Ok(Sign::Zero));
+                    prop_assert_eq!(got.plane.side(end), Ok(Sign::Zero));
+                    prop_assert!(got.deviation.is_finite());
+                }
+                Err(e) => prop_assert_eq!(e, CommitError::Num(NumError::Degenerate)),
             }
-            Err(e) => prop_assert_eq!(e, CommitError::Num(NumError::Degenerate)),
-        }
-    }
+            Ok(())
+        },
+    );
+}
 
-    #[test]
-    fn every_free_plane_lands_within_its_claim(
-        direction in [-1.0f64..1.0, -1.0f64..1.0, -1.0f64..1.0],
-        point in [-(1i64 << 30)..(1 << 30), -(1i64 << 30)..(1 << 30), -(1i64 << 30)..(1 << 30)],
-        distance in -(1i64 << 30)..(1 << 30),
-    ) {
-        let at = p(point[0], point[1], point[2]);
-        let ideal = Ideal::moved(direction, at, distance);
-        prop_assume!(ideal.is_ok());
-        let got = moved_along(direction, at, distance, &[at]).unwrap();
-        prop_assert!(got.deviation < 1.0, "{}", got.deviation);
-    }
+#[test]
+fn every_free_plane_lands_within_its_claim() {
+    let cases = (
+        [-1.0f64..1.0, -1.0f64..1.0, -1.0f64..1.0],
+        [
+            -(1i64 << 30)..(1 << 30),
+            -(1i64 << 30)..(1 << 30),
+            -(1i64 << 30)..(1 << 30),
+        ],
+        -(1i64 << 30)..(1 << 30),
+    );
+    seeded(
+        "geom-poly commit: every free plane",
+        0x6142_0002,
+        256,
+        &cases,
+        |(direction, point, distance)| {
+            let at = p(point[0], point[1], point[2]);
+            let ideal = Ideal::moved(direction, at, distance);
+            prop_assume!(ideal.is_ok());
+            let got = moved_along(direction, at, distance, &[at]).unwrap();
+            prop_assert!(got.deviation < 1.0, "{}", got.deviation);
+            Ok(())
+        },
+    );
+}
+
+/// Runs `test` on `cases` cases of `strategy`, drawn from `SPAREKIT_SEED` if it is set and from
+/// `default` otherwise; the seed is printed first, and a failure's report names the seed that
+/// replays it.
+fn seeded<S>(
+    label: &str,
+    default: u64,
+    cases: u32,
+    strategy: &S,
+    test: impl Fn(S::Value) -> Result<(), TestCaseError>,
+) where
+    S: Strategy,
+    S::Value: core::fmt::Debug,
+{
+    geom_test::prop::run(label, Seed(default), cases, strategy, test).unwrap();
 }
 
 /// Whether `a` is the nearest whole number to √`square`.

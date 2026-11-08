@@ -20,6 +20,7 @@ use geom_poly::order::{
     Flap, Line, Ray, about, along, around, normals_det, same_point, turn, turn_about,
 };
 use geom_poly::plane::{PlaneTable, TableError, canonical};
+use geom_test::seed::Seed;
 use num_bigint::BigInt;
 use proptest::prelude::*;
 
@@ -525,72 +526,159 @@ fn opposite(s: Sign) -> Sign {
     }
 }
 
-proptest! {
-    #![proptest_config(ProptestConfig::with_cases(256))]
+#[test]
+fn canonical_keeps_the_plane() {
+    let cases = (any_plane(), point(), point());
+    seeded(
+        "geom-poly planes: canonical",
+        0x6142_0003,
+        256,
+        &cases,
+        |(q, a, b)| canonical_holds(&q, a, b),
+    );
+}
 
-    #[test]
-    fn canonical_keeps_the_plane(q in any_plane(), a in point(), b in point()) {
-        let c = canonical(&q).unwrap();
-        let again = canonical(&c.plane).unwrap();
-        prop_assert_eq!(again.plane, c.plane);
-        prop_assert!(!again.flipped);
-        for r in [a, b] {
-            let side = q.side(r).unwrap();
-            let want = if c.flipped { opposite(side) } else { side };
-            prop_assert_eq!(c.plane.side(r).unwrap(), want);
-        }
-    }
+/// The first case proptest's failure file kept for this file before the property tests were
+/// seeded: a normal of (2^40 - 1)^2 along one axis, through the origin.
+#[test]
+fn canonical_keeps_a_plane_whose_normal_is_one_huge_axis() {
+    let q = Plane::new([-1_208_925_819_612_430_151_450_625, 0, 0], 0).unwrap();
+    let origin = p(0, 0, 0);
+    canonical_holds(&q, origin, origin).unwrap();
+}
 
-    #[test]
-    fn along_agrees_with_big_integers(
-        a in any_plane(), b in any_plane(), c in any_plane(), d in any_plane()
-    ) {
-        prop_assume!(Line::new(a, b).is_ok());
-        prop_assume!(normals_det(&a, &b, &c).unwrap() != Sign::Zero);
-        prop_assume!(normals_det(&a, &b, &d).unwrap() != Sign::Zero);
-        let line = Line::new(a, b).unwrap();
-        prop_assert_eq!(along(&line, &c, &d).unwrap(), oracle_along((&a, &b), &c, &d));
-        prop_assert_eq!(
-            along(&line, &c, &d).unwrap(),
-            along(&line, &d, &c).unwrap().reverse()
-        );
+/// `canonical` gives a plane that is its own canonical form, and the same side of it as `q` at
+/// `a` and `b`, turned where it says it flipped.
+fn canonical_holds(q: &Plane, a: P3, b: P3) -> Result<(), TestCaseError> {
+    let c = canonical(q).unwrap();
+    let again = canonical(&c.plane).unwrap();
+    prop_assert_eq!(again.plane, c.plane);
+    prop_assert!(!again.flipped);
+    for r in [a, b] {
+        let side = q.side(r).unwrap();
+        let want = if c.flipped { opposite(side) } else { side };
+        prop_assert_eq!(c.plane.side(r).unwrap(), want);
     }
+    Ok(())
+}
 
-    #[test]
-    fn determinants_agree_with_big_integers(
-        a in any_plane(), b in any_plane(), c in any_plane()
-    ) {
-        let want = sign(&det(&normal(&a), &normal(&b), &normal(&c)));
-        prop_assert_eq!(normals_det(&a, &b, &c).unwrap(), want);
-    }
+#[test]
+fn along_agrees_with_big_integers() {
+    let cases = (any_plane(), any_plane(), any_plane(), any_plane());
+    seeded(
+        "geom-poly planes: along",
+        0x6142_0004,
+        256,
+        &cases,
+        |(a, b, c, d)| {
+            prop_assume!(Line::new(a, b).is_ok());
+            prop_assume!(normals_det(&a, &b, &c).unwrap() != Sign::Zero);
+            prop_assume!(normals_det(&a, &b, &d).unwrap() != Sign::Zero);
+            let line = Line::new(a, b).unwrap();
+            prop_assert_eq!(
+                along(&line, &c, &d).unwrap(),
+                oracle_along((&a, &b), &c, &d)
+            );
+            prop_assert_eq!(
+                along(&line, &c, &d).unwrap(),
+                along(&line, &d, &c).unwrap().reverse()
+            );
+            Ok(())
+        },
+    );
+}
 
-    #[test]
-    fn turns_agree_with_big_integers(
-        f in any_plane(), g in any_plane(), h in any_plane(), x: bool, y: bool
-    ) {
-        let (nf, ng, nh) = (normal(&f), normal(&g), normal(&h));
-        let scale = |v: [BigInt; 3], reversed: bool| {
-            if reversed { v.map(|c| -c) } else { v }
-        };
-        let (dg, dh) = (scale(cross(&nf, &ng), x), scale(cross(&nf, &nh), y));
-        let want = sign(&dot(&cross(&dg, &dh), &nf));
-        let got = turn(
-            &f,
-            &Ray { with: g, reversed: x },
-            &Ray { with: h, reversed: y },
-        );
-        prop_assert_eq!(got.unwrap(), want);
-    }
+#[test]
+fn determinants_agree_with_big_integers() {
+    let cases = (any_plane(), any_plane(), any_plane());
+    seeded(
+        "geom-poly planes: determinants",
+        0x6142_0005,
+        256,
+        &cases,
+        |(a, b, c)| {
+            let want = sign(&det(&normal(&a), &normal(&b), &normal(&c)));
+            prop_assert_eq!(normals_det(&a, &b, &c).unwrap(), want);
+            Ok(())
+        },
+    );
+}
 
-    #[test]
-    fn a_table_gives_one_entry_to_one_plane(q in any_plane(), r in any_plane()) {
-        let mut table = PlaneTable::new();
-        let (a, b) = (table.insert(&q).unwrap(), table.insert(&flipped(&q)).unwrap());
-        prop_assert_eq!(a.plane, b.plane);
-        prop_assert_ne!(a.flipped, b.flipped);
-        let c = table.insert(&r).unwrap();
-        let same = canonical(&q).unwrap().plane == canonical(&r).unwrap().plane;
-        prop_assert_eq!(a.plane == c.plane, same);
-        prop_assert_eq!(table.plane(c.plane), Some(canonical(&r).unwrap().plane));
-    }
+#[test]
+fn turns_agree_with_big_integers() {
+    let cases = (
+        any_plane(),
+        any_plane(),
+        any_plane(),
+        any::<bool>(),
+        any::<bool>(),
+    );
+    seeded(
+        "geom-poly planes: turns",
+        0x6142_0006,
+        256,
+        &cases,
+        |(f, g, h, x, y)| {
+            let (nf, ng, nh) = (normal(&f), normal(&g), normal(&h));
+            let scale = |v: [BigInt; 3], reversed: bool| {
+                if reversed { v.map(|c| -c) } else { v }
+            };
+            let (dg, dh) = (scale(cross(&nf, &ng), x), scale(cross(&nf, &nh), y));
+            let want = sign(&dot(&cross(&dg, &dh), &nf));
+            let got = turn(
+                &f,
+                &Ray {
+                    with: g,
+                    reversed: x,
+                },
+                &Ray {
+                    with: h,
+                    reversed: y,
+                },
+            );
+            prop_assert_eq!(got.unwrap(), want);
+            Ok(())
+        },
+    );
+}
+
+#[test]
+fn a_table_gives_one_entry_to_one_plane() {
+    let cases = (any_plane(), any_plane());
+    seeded(
+        "geom-poly planes: table",
+        0x6142_0007,
+        256,
+        &cases,
+        |(q, r)| {
+            let mut table = PlaneTable::new();
+            let (a, b) = (
+                table.insert(&q).unwrap(),
+                table.insert(&flipped(&q)).unwrap(),
+            );
+            prop_assert_eq!(a.plane, b.plane);
+            prop_assert_ne!(a.flipped, b.flipped);
+            let c = table.insert(&r).unwrap();
+            let same = canonical(&q).unwrap().plane == canonical(&r).unwrap().plane;
+            prop_assert_eq!(a.plane == c.plane, same);
+            prop_assert_eq!(table.plane(c.plane), Some(canonical(&r).unwrap().plane));
+            Ok(())
+        },
+    );
+}
+
+/// Runs `test` on `cases` cases of `strategy`, drawn from `SPAREKIT_SEED` if it is set and from
+/// `default` otherwise; the seed is printed first, and a failure's report names the seed that
+/// replays it.
+fn seeded<S>(
+    label: &str,
+    default: u64,
+    cases: u32,
+    strategy: &S,
+    test: impl Fn(S::Value) -> Result<(), TestCaseError>,
+) where
+    S: Strategy,
+    S::Value: core::fmt::Debug,
+{
+    geom_test::prop::run(label, Seed(default), cases, strategy, test).unwrap();
 }
