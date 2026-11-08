@@ -933,6 +933,82 @@ impl<T: Canonical> Canonical for Result<T, geom_num::quadrature::QuadError> {
     }
 }
 
+// Chapter 17.2's survey points and linework (decision 32.44's count benchmarks for piece G361).
+
+impl Canonical for geom_curve::Segment {
+    // The segment's kind, its point count and its parametrization rule, all in its `Debug` text.
+    fn encode(&self, h: &mut Sha256) {
+        debug_text(self, h);
+    }
+}
+
+impl Canonical for geom_curve::Linework {
+    // Its composite curve, every point's parameter and its bound, all in its `Debug` text, which
+    // prints each double in the shortest form that reads back to the same bits.
+    fn encode(&self, h: &mut Sha256) {
+        debug_text(self, h);
+    }
+}
+
+impl<T: Canonical> Canonical for Result<T, geom_curve::LineworkError> {
+    fn encode(&self, h: &mut Sha256) {
+        match self {
+            Ok(v) => {
+                h.update(&[0]);
+                v.encode(h);
+            }
+            Err(e) => {
+                h.update(&[1]);
+                debug_text(e, h);
+            }
+        }
+    }
+}
+
+impl Canonical for geom_2d::survey::Imported {
+    // The body's arenas and names, the names made, each point's name and the attributes, all in
+    // its `Debug` text.
+    fn encode(&self, h: &mut Sha256) {
+        debug_text(self, h);
+    }
+}
+
+impl<T: Canonical> Canonical for Result<T, geom_2d::survey::SurveyError> {
+    fn encode(&self, h: &mut Sha256) {
+        match self {
+            Ok(v) => {
+                h.update(&[0]);
+                v.encode(h);
+            }
+            Err(e) => {
+                h.update(&[1]);
+                debug_text(e, h);
+            }
+        }
+    }
+}
+
+impl Canonical for geom_2d::survey::PointKey {
+    fn encode(&self, h: &mut Sha256) {
+        h.update(&self.to_bytes());
+    }
+}
+
+impl<T: Canonical> Canonical for Result<T, geom_2d::survey::IdError> {
+    fn encode(&self, h: &mut Sha256) {
+        match self {
+            Ok(v) => {
+                h.update(&[0]);
+                v.encode(h);
+            }
+            Err(e) => {
+                h.update(&[1]);
+                debug_text(e, h);
+            }
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

@@ -2773,3 +2773,33 @@ pub mod helper {
         benchmarks = lone_serial, lone_pool
     );
 }
+
+pub mod survey {
+    use super::*;
+
+    #[library_benchmark(teardown = verify)]
+    #[bench::typical(leak("survey/linework/typical"))]
+    fn linework(run: &'static mut Named) -> &'static mut Named {
+        run.bench.measure();
+        run
+    }
+
+    #[library_benchmark(teardown = verify)]
+    #[bench::typical(leak("survey/import/typical"))]
+    fn import(run: &'static mut Named) -> &'static mut Named {
+        run.bench.measure();
+        run
+    }
+
+    #[library_benchmark(teardown = verify)]
+    #[bench::typical(leak("survey/first_import/typical"))]
+    fn first_import(run: &'static mut Named) -> &'static mut Named {
+        run.bench.measure();
+        run
+    }
+
+    library_benchmark_group!(
+        name = survey;
+        benchmarks = linework, import, first_import
+    );
+}

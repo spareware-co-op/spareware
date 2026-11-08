@@ -1251,6 +1251,7 @@ fn direct_digest(group: &str, name: &str, class: Class) -> Option<Digest> {
         ("generated", _) => generated_digest(name, class)?,
         ("math_types", _) => math_types_digest(name, class)?,
         ("curve", _) => curve_digest(name, class)?,
+        ("survey", _) => survey_digest(name, class)?,
         ("brent", "zero") => {
             let tol = Real::new(1e-12).unwrap();
             fold(
@@ -1471,6 +1472,38 @@ fn curve_digest(name: &str, class: Class) -> Option<Digest> {
             m::transition_to_nurbs(class)
                 .into_iter()
                 .map(|l| inputs::curve::transition(l)?.to_nurbs(&mut meter())),
+        ),
+        _ => return None,
+    })
+}
+
+/// The digest of piece G361's benchmark `name` on `class` (decision 32.44), from direct calls on
+/// its inputs: each figure joined, each dataset imported with every point a first import, and each
+/// ID's key.
+fn survey_digest(name: &str, class: Class) -> Option<Digest> {
+    use geom_2d::survey::{self, PointKey, Record};
+    use geom_bench::inputs::survey as m;
+    let meter = || geom_run::WorkMeter::new(geom_run::Budget::UNLIMITED);
+    Some(match name {
+        "linework" => fold(
+            m::linework(class)
+                .into_iter()
+                .map(|(points, segments)| geom_curve::linework(&points, &segments, &mut meter())),
+        ),
+        "import" => {
+            let op = geom_bench::inputs::survey::import_op();
+            fold(m::import(class).into_iter().map(|dataset| {
+                let records: Vec<Record<'_>> = dataset
+                    .iter()
+                    .map(|(id, at)| Record::first(id, *at).unwrap())
+                    .collect();
+                survey::import(&op, &records, &mut meter())
+            }))
+        }
+        "first_import" => fold(
+            m::first_import(class)
+                .into_iter()
+                .map(|id| PointKey::first_import(&id)),
         ),
         _ => return None,
     })

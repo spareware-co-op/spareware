@@ -1202,11 +1202,6 @@ mod repository {
 
     /// Every piece of `30-build-order.json` whose crate field names the crate.
     const STATUS_PIECES: &[(&str, &str)] = &[
-        (
-            "geom-2d",
-            "G192 G193 G194 G195 G196 G197 G198 G199 G200 G201 G202 G203 G204 G205 G206 G207 \
-             G208 G209 G210 G211 G212 G213 G359 G360 G361",
-        ),
         ("geom-3dm", "G438"),
         ("geom-align", "G373 G374 G376"),
         ("geom-analysis", "G346 G347 G348 G349"),

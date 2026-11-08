@@ -3,6 +3,8 @@ name: Sign-off
 # Every commit in a pull request must carry a Developer Certificate of Origin sign-off
 # ("Signed-off-by:", added by `git commit -s`). Contributors keep their copyright; there is no
 # contributor licence agreement, and Spareware stays Apache-2.0, never a closed, paid or subscription licence (README, Licence).
+# A sign-off line may end in CRLF: a commit message written on Windows keeps its "\r", and `$`
+# matches only before "\n", so the pattern allows an optional "\r" before the end of the line.
 
 on:
   pull_request:
@@ -24,7 +26,7 @@ jobs:
           PR: ${{ github.event.pull_request.number }}
         run: |
           missing=$(gh api "repos/$REPO/pulls/$PR/commits?per_page=100" --paginate \
-            --jq '.[] | select(.commit.message | test("(?m)^Signed-off-by: .+ <.+>$") | not) | .sha[0:7] + " " + (.commit.message | split("\n")[0])')
+            --jq '.[] | select(.commit.message | test("(?m)^Signed-off-by: .+ <.+>\\r?$") | not) | .sha[0:7] + " " + (.commit.message | split("\n")[0])')
           if [ -n "$missing" ]; then
             echo "::error::These commits have no sign-off. Add one with: git commit --amend -s (or git rebase --signoff), then push again."
             echo "$missing"

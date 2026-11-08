@@ -806,12 +806,14 @@ name = "geom-bench"
 version = "0.0.0"
 dependencies = [
  "divan",
+ "geom-2d",
  "geom-bvh",
  "geom-curve",
  "geom-linalg",
  "geom-math",
  "geom-num",
  "geom-nurbs",
+ "geom-op",
  "geom-run",
  "geom-surface",
  "geom-test",

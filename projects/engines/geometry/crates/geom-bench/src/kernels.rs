@@ -2118,3 +2118,46 @@ pub mod helper {
         });
     }
 }
+
+/// Chapter 17.2's survey points and linework (piece G361, decision 32.44): a figure joined into
+/// one curve, a dataset imported as a named Acorn body, and a first import's key.
+pub mod survey {
+    use geom_2d::survey::{IdError, Imported, PointKey, Record, SurveyError, import as imported};
+    use geom_curve::{Linework, LineworkError, Segment, linework as joined};
+    use geom_num::grid::P3;
+    use geom_run::{Budget, WorkMeter};
+
+    use super::run;
+    use crate::inputs::survey::import_op;
+
+    /// `linework` of each figure, on a meter of its own.
+    #[inline(never)]
+    pub fn linework(
+        batch: &[(Vec<P3>, Vec<Segment>)],
+        out: &mut Vec<Result<Linework, LineworkError>>,
+    ) {
+        run(batch, out, |(points, segments)| {
+            joined(points, segments, &mut WorkMeter::new(Budget::UNLIMITED))
+        });
+    }
+
+    /// `survey::import` of each dataset, every point a first import, on a meter of its own.
+    #[inline(never)]
+    pub fn import(batch: &[Vec<(String, P3)>], out: &mut Vec<Result<Imported, SurveyError>>) {
+        let op = import_op();
+        run(batch, out, |dataset| {
+            let records: Vec<Record<'_>> = dataset
+                .iter()
+                .map(|(id, at)| Record::first(id, *at))
+                .collect::<Result<_, IdError>>()
+                .map_err(|reason| SurveyError::Id { index: 0, reason })?;
+            imported(&op, &records, &mut WorkMeter::new(Budget::UNLIMITED))
+        });
+    }
+
+    /// `PointKey::first_import` of each ID.
+    #[inline(never)]
+    pub fn first_import(batch: &[String], out: &mut Vec<Result<PointKey, IdError>>) {
+        run(batch, out, |id| PointKey::first_import(id));
+    }
+}

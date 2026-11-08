@@ -37,7 +37,66 @@
         17
       ],
       "depends": [],
-      "errors": [],
+      "errors": [
+        {
+          "doc": "Why an ID cannot name a point.",
+          "file": "projects/engines/geometry/crates/geom-2d/src/survey.rs",
+          "kinds": [
+            {
+              "doc": "The ID is empty.",
+              "name": "Empty",
+              "shape": "unit"
+            },
+            {
+              "doc": "The ID is not in Unicode Normalization Form C (32.19).",
+              "name": "NotNfc",
+              "shape": "unit"
+            },
+            {
+              "doc": "The encoder refused the ID; only a defect can cause it.",
+              "name": "Encode",
+              "shape": "unit"
+            }
+          ],
+          "module": "geom_2d::survey",
+          "name": "IdError",
+          "non_exhaustive": false
+        },
+        {
+          "doc": "Why a dataset could not be imported.",
+          "file": "projects/engines/geometry/crates/geom-2d/src/survey.rs",
+          "kinds": [
+            {
+              "doc": "Two records carry the ID `id`: records `first` and `second`, counting from 0, the lower first.",
+              "name": "DuplicateId",
+              "shape": "struct"
+            },
+            {
+              "doc": "Two records carry the key `key`, which would give two points one name: records `first` and `second`, the lower first.",
+              "name": "DuplicateKey",
+              "shape": "struct"
+            },
+            {
+              "doc": "Record `index` has an ID that cannot name a point.",
+              "name": "Id",
+              "shape": "struct"
+            },
+            {
+              "doc": "The body could not be built: the work meter stopped ([`TopoError::Stopped`]) or memory was refused.",
+              "name": "Body",
+              "shape": "tuple"
+            },
+            {
+              "doc": "A step its own bounds rule out failed: a defect in this module, reported, never a panic.",
+              "name": "Defect",
+              "shape": "unit"
+            }
+          ],
+          "module": "geom_2d::survey",
+          "name": "SurveyError",
+          "non_exhaustive": false
+        }
+      ],
       "family": [
         "2D"
       ],
@@ -53,12 +112,40 @@
       "job": "Drafting entities, the 2D arrangement, regions, hatches, 2D booleans and offsets, edits, snaps and references, 2D distance and clearance, survey linework and COGO.",
       "kind": "kernel",
       "layer": "6",
-      "modules": [],
+      "modules": [
+        {
+          "cost": "O(n log n) in the records, for the two sorts that find repeated IDs and keys, the hashing of n + 1 names, and the builder's sort by name. Nothing recurses.",
+          "does": "[`import`] takes the path of the dataset's import operation and its [`Record`]s, each a point's ID, its stable [`PointKey`] and its grid position, and returns [`Imported`]: an Acorn (points) body whose vertices are the points, published in name order; the names it made, the outside region `Created { op, role: region.outside }` and each point `Created { op, role: survey.point(key) }`; and each point's ID as the attribute [`survey_id`], keyed by the point's name. [`PointKey::first_import`] makes a point's key from its ID at its first import: the first 16 bytes of SHA-256 over [`KEY_PREFIX`] and the ID as a CBOR text string. The key is frozen from then on; the ID may change, as an attribute does.",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-2d/src/survey.rs",
+          "guarantees": [
+            "**Names hold across imports.** A point's name is a function of the import's path and its key alone, never of its ID, its position or the order of the records. Run again with the same path and keys, an updated dataset gives every point it still holds the same name, a renamed point (a new ID under its old key) included (17.2).",
+            "**Two points with one ID are an error naming both** ([`SurveyError::DuplicateId`]: the ID and both records), never a silent suffix; so are two records with one key ([`SurveyError::DuplicateKey`]), which would make one name twice. Of several, the pair reported is the first in byte order of the ID (or key), and within it the two lowest records.",
+            "**IDs are text a name can rest on.** An ID is non-empty and in Normalization Form C under Unicode 18.0.0, decision 32.19's rule for text hashed into a name, checked by the same check `geom-op` applies to role names ([`Role::new`]); an ID that is not is refused, never normalised behind the caller's back.",
+            "**Arenas follow names.** The body is published by `geom_topo::Builder::publish_named`, so its vertices are in name order and the body is the same whatever order the records come in.",
+            "**Inputs unchanged, failures whole.** Nothing the caller holds is changed, and a failure returns no body.",
+            "**Metered.** One work unit per record, before anything is built, beside what publishing charges."
+          ],
+          "job": "Survey points (chapter 17.2): a dataset's points imported as one Acorn body, each point a vertex named by the import and its record key, its ID an attribute.",
+          "method": {
+            "links": [
+              "projects/engines/geometry/architecture/17-survey-terrain-civil.md",
+              "projects/engines/geometry/architecture/20-naming-history.md",
+              "projects/engines/geometry/architecture/08-topology.md"
+            ],
+            "text": "chapter 17.2's survey points (`projects/engines/geometry/architecture/17-survey-terrain-civil.md`), named as chapter 20.2 names what an operation creates (`projects/engines/geometry/architecture/20-naming-history.md`) under `NameScheme v1` (32.19), with the record key in a keyed role's argument as `geom-op`'s keyed roles hold an operand's key; the ID an attribute as chapter 8.4 asks (`projects/engines/geometry/architecture/08-topology.md`), its value the ID's CBOR text, 24.3's canonical encoding."
+          },
+          "path": "geom_2d::survey",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        }
+      ],
       "name": "geom-2d",
       "provenance": [],
       "sections": "14 and 17.2; open questions OQ-12.1 and OQ-14.9, in the kernel architecture (`projects/engines/geometry/architecture/`).",
       "spdx": null,
-      "status": "scaffold only; built by pieces G192, G193, G194, G195, G196, G197, G198, G199, G200, G201, G202, G203, G204, G205, G206, G207, G208, G209, G210, G211, G212, G213, G359, G360, G361.",
+      "status": "survey points built (G361); the rest to come in pieces G192, G193, G194, G195, G196, G197, G198, G199, G200, G201, G202, G203, G204, G205, G206, G207, G208, G209, G210, G211, G212, G213, G359 and G360.",
       "summary": "Spare Kit geometry kernel: 2D drafting."
     },
     {
@@ -981,6 +1068,26 @@
           "target": "lib"
         },
         {
+          "cost": "a few dozen draws of [`SplitMix64`] per figure or dataset, once per batch, outside every measured run.",
+          "does": null,
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-bench/src/inputs/survey.rs",
+          "guarantees": [
+            "every batch is full and the same on every target, and every result of a batch is `Ok` (`tests/inputs.rs`); every result is the operation's own, run directly (`tests/attack_g06.rs`)."
+          ],
+          "job": "Inputs for chapter 17.2's survey points and linework (piece G361, decision 32.44): figures for `geom-curve`'s linework, datasets for `geom-2d`'s survey import, and IDs for a first import's keys.",
+          "method": {
+            "links": [
+              "projects/engines/geometry/architecture/28-testing.md"
+            ],
+            "text": "one class per operation, as chapter 28.14 sets benchmarks out (`projects/engines/geometry/architecture/28-testing.md`)."
+          },
+          "path": "geom_bench::inputs::survey",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
           "cost": "[`ROWS`] draws of [`SplitMix64`] per column input, a few dozen rows per builder, once per batch, outside every measured run.",
           "does": null,
           "family": [],
@@ -1665,6 +1772,45 @@
           "module": "geom_curve::error",
           "name": "CurveError",
           "non_exhaustive": false
+        },
+        {
+          "doc": "Why no linework was made.",
+          "file": "projects/engines/geometry/crates/geom-curve/src/linework.rs",
+          "kinds": [
+            {
+              "doc": "No segments, or segments that do not use exactly the points given: `needed` points for the segments (saturating), `points` given.",
+              "name": "Count",
+              "shape": "struct"
+            },
+            {
+              "doc": "The smooth figure of segment `segment` passes through fewer than three points; a line or an arc says what two or three points need.",
+              "name": "Short",
+              "shape": "struct"
+            },
+            {
+              "doc": "Point `index` is the point before it again.",
+              "name": "Repeated",
+              "shape": "struct"
+            },
+            {
+              "doc": "The arc of segment `segment` has its three points on one line in plan, or two of them at one plan position, so no circle in plan passes through them.",
+              "name": "Collinear",
+              "shape": "struct"
+            },
+            {
+              "doc": "The curve could not be shown within `ε_fit` of every point: the certified bound found, in steps.",
+              "name": "OverFit",
+              "shape": "struct"
+            },
+            {
+              "doc": "A curve kind refused its data, or the meter stopped.",
+              "name": "Curve",
+              "shape": "tuple"
+            }
+          ],
+          "module": "geom_curve::linework",
+          "name": "LineworkError",
+          "non_exhaustive": false
         }
       ],
       "family": [],
@@ -2015,6 +2161,44 @@
           "target": "lib"
         },
         {
+          "cost": "linear in the points: an arc is a few dozen double-double operations and two `atan2`s; a figure of n points is `geom-nurbs`'s O(n) banded solve and certification; every point is checked with one or two enclosures of the composite curve, each a binary search over its pieces. One work unit is charged per segment, beside what the interpolation and enclosures charge. Nothing recurses.",
+          "does": "[`linework`] takes one figure's points, in order, and the [`Segment`]s that join them. [`Segment::Line`] runs straight to the next point. [`Segment::Arc`] is the circular arc in plan through the next point to the one after, rising on a steady grade: a circular helix ([`Helix`]), or a level arc ([`Circle`]) where its heights are equal, since a helix of no pitch is a circle. An arc whose three heights are not on one grade becomes two pieces meeting at the middle point, so all three heights are kept. [`Segment::Smooth`] is the NURBS curve interpolating the next points (The NURBS Book, A9.1, through `geom-nurbs`), of degree three, or two through three points. The pieces are joined end to end into one [`Composite`], and [`Linework`] holds it with every point's parameter on it and a certified bound on how far the curve at that parameter lies from the point.",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-curve/src/linework.rs",
+          "guarantees": [
+            "**Through every point, within `ε_fit`, certified.** [`Linework::bound`] is an upper bound, from interval enclosures of the composite curve as returned, on the distance of each surveyed point from the curve at its parameter, from both sides where pieces join; it is at most the fit bound `ε_fit` ([`FIT`], 64 steps). A figure that cannot be shown within it fails with [`LineworkError::OverFit`], never returns a curve that misses a point.",
+            "**Exact where it can be.** A line between grid points is exact, so linework of lines alone is [`Exactness::Exact`]; anything with an arc or a figure is Certified with the bound ([`Linework::exactness`]).",
+            "**Decided in integers.** Whether an arc turns left or right, has its points collinear in plan, and lies on one grade is decided exactly on the grid coordinates. One grade means three equal heights (a level arc), or equal plan chords with equal rises (one helix): then the two halves turn through equal angles, so the grades are equal exactly. Any other arc is two pieces, which keeps every height whatever the grades are, so no tolerance decides it.",
+            "**Deterministic.** The curves' doubles come from double-double arithmetic and the kernel's `atan2` and `sqrt` (`geom_num::math`), in a fixed order, so every target gets the same bits.",
+            "**Refused, never bent.** A repeated point, an arc collinear in plan, a smooth figure through fewer than three points, and segments that do not use exactly the points given are typed errors that name the point or segment; nothing is moved to make a figure fit."
+          ],
+          "job": "Surveyed 3D linework (chapter 17.2): the polyline coded field points become, with lines, arcs in plan on a steady grade and smooth figures, joined into one curve that passes within the fit bound of every surveyed point, certified.",
+          "method": {
+            "links": [
+              "projects/engines/geometry/architecture/17-survey-terrain-civil.md",
+              "https://doi.org/10.1007/978-3-642-59223-2"
+            ],
+            "text": "chapter 17.2's linework (`projects/engines/geometry/architecture/17-survey-terrain-civil.md`), with the arc through three points as `SMLib` makes it: the center where the perpendicular bisectors of the chords meet, by Cramer's rule, the reference axis toward the start point, and the turn from it to the end. Here each piece's frame has its reference vector toward the piece's first point and its normal up for an arc turning left (down for one turning right), so the parameter runs from 0 over the piece's turn in half-turns, from the kernel's `atan2`; its pitch is twice its rise over that turn. Smooth figures follow The NURBS Book's global interpolation (L. Piegl and W. Tiller, 2nd ed., algorithm A9.1, <https://doi.org/10.1007/978-3-642-59223-2>) as `geom-nurbs` ports it. Pieces join as chapter 14's composite curves, each joint keeping its certified gap (`crate::composite`)."
+          },
+          "path": "geom_curve::linework",
+          "provenance": [
+            {
+              "licence": "Apache-2.0",
+              "link": "https://github.com/NVIDIA-Omniverse/usd-brep/blob/c9c5979f04cea8c38213004d4f04df0dcfb40d05/source/SMLib/src/SmGeomUtility.cpp",
+              "method_note": null,
+              "name": "NVIDIA USD `BRep` `SMLib`",
+              "notice": [
+                "SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved."
+              ],
+              "pinned": true,
+              "purpose": "translated to safe `no_std` Rust from `smgu_CircleCenterFrom3Points` and `smgu_CircleFrom3Points`; collinear points decided exactly on the grid integers, where `SMLib` compares a distance with `SM_EFF_ZERO`; the bisectors' equations written relative to the first point and solved in double-double arithmetic, where `SMLib` squares absolute coordinates in doubles and loses their low bits far from the origin; the turn in half-turns by the kernel's `atan2`, clockwise as well as anticlockwise; and every point checked by certified enclosures, where `SMLib` asserts its circle in debug builds only.",
+              "take": "port"
+            }
+          ],
+          "spdx": "Apache-2.0",
+          "target": "lib"
+        },
+        {
           "cost": "a binary search over the breaks and a few interval operations.",
           "does": "[`NurbsForm`] is what [`crate::ParamCurve::to_nurbs`] returns: the NURBS curve and the [`ParamMap`] taking a parameter t of the kind to the parameter u of the NURBS curve at the same point. Most kinds convert with the same parameter. The conics cannot: a circle traced uniformly in angle is not a rational curve in its angle, so its exact NURBS form, the rational quadratic, runs on the tangent half-angle substitution instead. [`ParamMap::enclose`] encloses u for any t, so a caller (and the kind contract) can compare the kind and its NURBS form at the same point.",
           "family": [],
@@ -2324,7 +2508,7 @@
       "provenance": [],
       "sections": "7, 12.1, 12.4, 17.8, 19.3 and 26.1, in the kernel architecture (`projects/engines/geometry/architecture/`).",
       "spdx": null,
-      "status": "the traits, the enum, the NURBS kind and the contract (G60), the analytic kinds (G61), the bulge, trimmed, composite, offset and curve-on-surface kinds (G62), the transition kind, its evaluation (G63) and its conversion, split, reversal and transforms (G64), the analytic and transcendental enclosures (G67), and rational curves' higher derivative bounds started from their control points (G68) built; the other kinds to come in G175, G361 and G371.",
+      "status": "the traits, the enum, the NURBS kind and the contract (G60), the analytic kinds (G61), the bulge, trimmed, composite, offset and curve-on-surface kinds (G62), the transition kind, its evaluation (G63) and its conversion, split, reversal and transforms (G64), the analytic and transcendental enclosures (G67), and rational curves' higher derivative bounds started from their control points (G68) built, and surveyed linework (G361); the other kinds to come in G175 and G371.",
       "summary": "Spare Kit geometry kernel: every curve kind."
     },
     {
@@ -7690,24 +7874,46 @@
       "layer": "13",
       "modules": [
         {
-          "cost": "one scope and one spawned job per task, each a small heap allocation inside rayon, and the pool's threads, started once when it is built and stopped when it is dropped.",
-          "does": "[`Rayon`] owns a `rayon::ThreadPool` of a fixed number of threads and implements [`Pool`]: [`Pool::run_all`] spawns every task into one scope of that pool and returns when all of them have finished. The helper (`geom_run::Exec::with_pool`) decides everything else: the fixed chunks, the order results are read in, the lowest-numbered failure, so every answer is the serial executor's, bit for bit, whatever the pool does (23.4).",
+          "cost": "`n - 1` calls of `Join::join` for `n` tasks, no allocation, and `ceil(log2 n) + 1` frames of stack at the deepest.",
+          "does": "[`run_halves`] runs every task of a slice by splitting the slice in two and handing the two halves to a [`Join`], which runs both and returns when both are done; each half is split again until one task is left. [`native::Rayon`](crate::native::Rayon) gives it rayon's `join` on a pool. [`Inline`] runs the two halves one after the other on the calling thread, so the same halving runs with no threads, on WebAssembly too, and its depth is tested there.",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-pool/src/halves.rs",
+          "guarantees": [
+            "**Every task runs exactly once**: a slice of no tasks does nothing, a slice of one runs it, and any other slice is split into two non-empty halves that between them hold every task.",
+            "**The caller's `Join` decides where tasks run and in what order**; this code only decides the split, which depends on the number of tasks and on nothing else.",
+            "**No panic of its own.** A task's panic passes through [`Join::join`], whose contract it is to finish both halves before passing it on."
+          ],
+          "job": "Running a wave of tasks by halving it, over any fork-join, for every target.",
+          "method": {
+            "links": [
+              "doi:10.1145/324133.324234"
+            ],
+            "text": "divide and conquer over a fork-join (Blumofe and Leiserson, \"Scheduling Multithreaded Computations by Work Stealing\", Journal of the ACM 46(5), 1999, `doi:10.1145/324133.324234`), the shape of rayon's own `join`-based parallel iterators, with the halves cut at the midpoint so that the depth is the logarithm of the number of tasks."
+          },
+          "path": "geom_pool::halves",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
+          "cost": "`n - 1` calls of `join` for `n` tasks, each pushing one job on the worker's own deque without a heap allocation, and the pool's threads, started once when it is built and stopped when it is dropped.",
+          "does": "[`Rayon`] owns a `rayon::ThreadPool` of a fixed number of threads and implements [`Pool`]: [`Pool::run_all`] splits the tasks in halves and runs the halves with rayon's `join`, on that pool, and returns when all of them have finished. The helper (`geom_run::Exec::with_pool`) decides everything else: the fixed chunks, the order results are read in, the lowest-numbered failure, so every answer is the serial executor's, bit for bit, whatever the pool does (23.4).",
           "family": [],
           "file": "projects/engines/geometry/crates/geom-pool/src/native.rs",
           "guarantees": [
-            "**Every task runs exactly once**, on some thread of the pool, in any order: each is spawned once into the scope, and the scope returns only after every spawned job has finished.",
-            "**Re-entrant.** A task may call the helper again with the same pool. The nested scope runs on the worker thread that opened it, and while it waits that thread runs other jobs of the pool, rayon's work stealing, instead of blocking; so a nested call makes progress on any number of threads, one included.",
-            "**No panic of its own.** `run_all` panics only to pass on a task's panic, after every task has finished: rayon's scope catches a job's panic and resumes it when the scope ends. Building a pool reports a failure to start its threads as [`PoolError`], never a panic.",
+            "**Every task runs exactly once**, on some thread of the pool, in any order: the slice is split in two until one task is left, and `join` returns only after both of its halves have run. (A lone task, which the helper never hands over, runs on the calling thread.)",
+            "**Re-entrant.** A task may call the helper again with the same pool. The nested call runs on the worker thread that made it, and while it waits for a half that another thread took, that thread runs other jobs of the pool, rayon's work stealing, instead of blocking; so a nested call makes progress on any number of threads, one included.",
+            "**No panic of its own.** `run_all` panics only to pass on a task's panic, after every task has finished: `join` waits for its other half when one panics and then resumes the panic. Building a pool reports a failure to start its threads as [`PoolError`], never a panic.",
             "**The thread count is the caller's.** It is fixed when the pool is built and never read by the helper, whose chunks do not depend on it (23.4); rayon's own environment variable (`RAYON_NUM_THREADS`) is not consulted, because the count is set explicitly."
           ],
           "job": "rayon's work-stealing pool behind `geom-run`'s `Pool` trait, for native targets.",
           "method": {
             "links": [
-              "https://docs.rs/rayon/1.12.0/rayon/struct.ThreadPool.html#method.in_place_scope",
+              "https://docs.rs/rayon/1.12.0/rayon/struct.ThreadPool.html#method.join",
               "doi:10.1145/324133.324234",
               "projects/kit/notes/G33-rayon-audit.md"
             ],
-            "text": "rayon's scoped spawning, `ThreadPool::in_place_scope` and `Scope::spawn`, whose documented contract is that the scope returns when every job spawned into it, and every job those spawned, has completed, and that a panic in a job is propagated when the scope ends (<https://docs.rs/rayon/1.12.0/rayon/struct.ThreadPool.html#method.in_place_scope>), over its work-stealing scheduler, after Blumofe and Leiserson, \"Scheduling Multithreaded Computations by Work Stealing\", Journal of the ACM 46(5), 1999 (`doi:10.1145/324133.324234`). rayon's audit is `projects/kit/notes/G33-rayon-audit.md`."
+            "text": "rayon's fork-join, `ThreadPool::join`, whose documented contract is that both closures have run when it returns, that it runs them on the pool (on a worker already, it runs in place), and that a panic in either is propagated after the other has finished (<https://docs.rs/rayon/1.12.0/rayon/struct.ThreadPool.html#method.join>), over its work-stealing scheduler, after Blumofe and Leiserson, \"Scheduling Multithreaded Computations by Work Stealing\", Journal of the ACM 46(5), 1999 (`doi:10.1145/324133.324234`). rayon's audit is `projects/kit/notes/G33-rayon-audit.md`."
           },
           "path": "geom_pool::native",
           "provenance": [],
@@ -8851,7 +9057,7 @@
             "**A line with no code is not counted.** llvm-cov can give a line holding only a comment or an attribute (`#[must_use]` above a `const fn`) a count of 0 though the function runs ([`no_code_lines`]); such a line has nothing to run, so it is left out of both counts.",
             "**Nothing is skipped silently.** A source file that defines a function but has no coverage data was never compiled into the measured tests, and fails; so does a crate with no LCOV file at all, and a foundation crate whose code has `if` or `while` but whose data holds no branch record (the run was made without `--branch`).",
             "**A branch outcome the LCOV lines cannot place counts as missed.** `BRF` can count outcomes that no `BRDA` line lists, where llvm-cov writes branch regions that start at one place as one pair (rustc's copies of a match guard, one for each alternative of an or-pattern). They are in the file's own code, so they are counted as found and never as hit, and they fail the foundation bar, since no ledger entry can name their line.",
-            "**A missing foundation module fails.** A crate of [`crate::foundation::FOUNDATION_MODULES`] with code but no file of its foundation module fails, so moving the module cannot drop it from the foundation bar.",
+            "**A missing foundation module fails.** A crate of [`crate::foundation::FOUNDATION_MODULES`] with code but no file of its foundation module fails, unless every module it has is classified outside that module by name, so neither moving the module nor adding an unclassified one can drop code from the foundation bar.",
             "**Every mark cites a checked proof.** A `coverage(off)` mark must have a comment right above it citing `proof: <path>::<name>`, the same proof as its ledger entry, and the cited file must define that function as a Kani harness (`#[kani::proof]`) or a Verus `proof fn`. A ledger entry with no mark is stale and fails.",
             "**Waiting lines are named, and can only go.** A foundation line the tests do not run passes only while the ledger's `awaiting_proof` names it, with the piece that proves it unreachable or tests it ([`excuse_awaiting`]); an entry that matches more or fewer missed lines than it says fails. When every kernel branch outcome of a file with a count of 0 waits so, which of them llvm-cov folded no longer matters, and the file's folding note is not a failure.",
             "**Exact arithmetic.** Percentages are compared as integers: hit × 100 ≥ found × bar."
@@ -8946,7 +9152,7 @@
           "file": "projects/engines/geometry/crates/geom-test/src/foundation.rs",
           "guarantees": [
             "**One classification for both gates.** The mutation gate and the coverage gate place every path with [`place`], so they cannot disagree about which code is in the foundation set.",
-            "**Nothing leaves the foundation bar silently.** A crate of [`FOUNDATION_MODULES`] with code but no file of its module is reported ([`missing_foundation_module`]), and the bars are the integers of 28.8, compared exactly by the gates.",
+            "**Nothing leaves the foundation bar silently.** A crate of [`FOUNDATION_MODULES`] with code but no file of its module is reported ([`missing_foundation_module`]), unless every module it has is classified outside the foundation module by name; and the bars are the integers of 28.8, compared exactly by the gates.",
             "**Development crates are never judged as kernel code**, and a path outside the kernel's crates folder is [`Place::Outside`]."
           ],
           "job": "The foundation set of section 28.8, the kernel crates the quality gates cover, and their bars.",
@@ -10139,7 +10345,7 @@
         },
         {
           "cost": "three more crates for the loader to parse, about 5 000 lines; their instances are checked only when kernel code calls them.",
-          "does": "the kernel's crates call `core`, `alloc` (and `std` in tests) and `libm` constantly, and the standard library calls kernel code back through what it is handed: closures (`Option::map`, `Iterator::fold`, `sort_by`) and trait implementations of kernel types (`sort` runs `Ord::cmp`, `Vec::clone` runs `Clone::clone`, formatting runs `Display::fmt`). Their real source is not read; instead [`CORE`], [`LIBM`] and [`RAYON`] are Rust written from their documented signatures, which [`sources`] gives the loader as crates of role [`Role::Model`]: `core` (also answering to `alloc` and `std`, [`crate::recursion::resolve::MODEL_ALIASES`]), `libm`, `rayon` (`geom-pool`, the one kernel crate that depends on it, runs its tasks on a rayon pool: `in_place_scope` runs its closure and `Scope::spawn` its body), and the parts of `sha2` (`geom-op`'s hash), `unicode-normalization` (`geom-op`'s names) and `crc` (`geom-format`'s checksum) the kernel calls. A function of the model that calls back has a body that makes exactly those calls (`Option::map` calls `f`; `Map`'s `next` calls its closure; `[T]::sort` calls `T::cmp`); one that calls nothing back has the body `loop {}`. The type checker reads the model's bodies as it reads the kernel's, instance by instance, so a callback reaches exactly the closure or implementation the call was handed.",
+          "does": "the kernel's crates call `core`, `alloc` (and `std` in tests) and `libm` constantly, and the standard library calls kernel code back through what it is handed: closures (`Option::map`, `Iterator::fold`, `sort_by`) and trait implementations of kernel types (`sort` runs `Ord::cmp`, `Vec::clone` runs `Clone::clone`, formatting runs `Display::fmt`). Their real source is not read; instead [`CORE`], [`LIBM`] and [`RAYON`] are Rust written from their documented signatures, which [`sources`] gives the loader as crates of role [`Role::Model`]: `core` (also answering to `alloc` and `std`, [`crate::recursion::resolve::MODEL_ALIASES`]), `libm`, `rayon` (`geom-pool`, the one kernel crate that depends on it, runs its tasks on a rayon pool: `ThreadPool::join` runs both its closures), and the parts of `sha2` (`geom-op`'s hash), `unicode-normalization` (`geom-op`'s names) and `crc` (`geom-format`'s checksum) the kernel calls. A function of the model that calls back has a body that makes exactly those calls (`Option::map` calls `f`; `Map`'s `next` calls its closure; `[T]::sort` calls `T::cmp`); one that calls nothing back has the body `loop {}`. The type checker reads the model's bodies as it reads the kernel's, instance by instance, so a callback reaches exactly the closure or implementation the call was handed.",
           "family": [],
           "file": "projects/engines/geometry/crates/geom-test/src/recursion/stdlib.rs",
           "guarantees": [
@@ -10928,6 +11134,17 @@
       "take": "port",
       "used_by": [
         "projects/engines/geometry/crates/geom-nurbs/src/net.rs"
+      ]
+    },
+    {
+      "licence": "Apache-2.0",
+      "link": "https://github.com/NVIDIA-Omniverse/usd-brep/blob/c9c5979f04cea8c38213004d4f04df0dcfb40d05/source/SMLib/src/SmGeomUtility.cpp",
+      "method_note": null,
+      "name": "NVIDIA USD `BRep` `SMLib`",
+      "pinned": true,
+      "take": "port",
+      "used_by": [
+        "projects/engines/geometry/crates/geom-curve/src/linework.rs"
       ]
     },
     {

@@ -3,7 +3,9 @@ name = "geom-curve"
 version = "0.0.0"
 edition.workspace = true
 publish.workspace = true
-license.workspace = true
+# It ports a file under Apache-2.0 (src/linework.rs, from SMLib), so its licence is named here, as
+# chapter 29.20, rule 4 asks.
+license = "Apache-2.0"
 description = "Spare Kit geometry kernel: every curve kind in 2D and 3D."
 
 [dependencies]

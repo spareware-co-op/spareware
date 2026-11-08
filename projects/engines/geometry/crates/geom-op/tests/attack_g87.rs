@@ -287,7 +287,7 @@ fn every_field_changes_the_name() {
 }
 
 /// A keyed role is one of `KEYED_ROLES` by its name alone, whatever its arguments: `operand`,
-/// `seed` and `tool` are, and no other role is (chapter 11.9).
+/// `seed` and `tool` are (chapter 11.9), and `survey.point` (chapter 17.2), and no other role is.
 #[test]
 fn only_the_roles_of_keyed_roles_are_keyed() {
     for name in geom_op::name::KEYED_ROLES {
@@ -303,6 +303,9 @@ fn only_the_roles_of_keyed_roles_are_keyed() {
         "Operand",
         "seed ",
         "tools",
+        "survey",
+        "survey.points",
+        "survey.id",
     ] {
         assert!(!Role::new(name, []).unwrap().is_keyed(), "{name}");
     }

@@ -2397,3 +2397,49 @@ fn roots_typical_batches_all_succeed() {
         &m::gauss_legendre(Typical),
     );
 }
+
+/// Every batch of piece G361's benchmarks succeeds, and each is what its builder says: figures of
+/// a line, an arc (one helix, or two pieces, or a level arc where heights allow) and a smooth
+/// figure within the fit bound; datasets of unique IDs imported as Acorn bodies; and keys, one per
+/// ID, distinct for distinct IDs.
+#[test]
+fn g361_batches_all_succeed_and_are_what_they_claim() {
+    use geom_2d::survey::{self, PointKey, Record};
+    use geom_bench::inputs::survey as m;
+    let meter = || geom_run::WorkMeter::new(geom_run::Budget::UNLIMITED);
+    let figures = m::linework(Typical);
+    assert_eq!(figures.len(), BATCH);
+    for (points, segments) in &figures {
+        assert_eq!(points.len(), 8);
+        let l = geom_curve::linework(points, segments, &mut meter()).unwrap();
+        assert!(l.bound() > 0.0 && l.bound() <= 64.0, "{}", l.bound());
+        assert!(points.iter().all(|p| {
+            [p.x.get(), p.y.get()]
+                .iter()
+                .all(|c| c.abs() <= TYPICAL_REACH + (1 << 26))
+        }));
+    }
+    let datasets = m::import(Typical);
+    assert_eq!(datasets.len(), BATCH);
+    let op = geom_bench::inputs::survey::import_op();
+    for dataset in &datasets {
+        assert_eq!(dataset.len(), m::POINTS);
+        let ids: BTreeSet<&str> = dataset.iter().map(|(id, _)| id.as_str()).collect();
+        assert_eq!(ids.len(), m::POINTS);
+        let records: Vec<Record<'_>> = dataset
+            .iter()
+            .map(|(id, at)| Record::first(id, *at).unwrap())
+            .collect();
+        let imported = survey::import(&op, &records, &mut meter()).unwrap();
+        assert_eq!(imported.body.arenas().vertices.len(), m::POINTS as u32);
+    }
+    let ids = m::first_import(Typical);
+    assert_eq!(ids.len(), BATCH);
+    let distinct: BTreeSet<&String> = ids.iter().collect();
+    let keys: BTreeSet<PointKey> = ids
+        .iter()
+        .map(|id| PointKey::first_import(id).unwrap())
+        .collect();
+    assert_eq!(keys.len(), distinct.len());
+    assert!(ids.iter().all(|id| (1..=40).contains(&id.len())));
+}

@@ -26,8 +26,9 @@
 //!   the file's own code, so they are counted as found and never as hit, and they fail the
 //!   foundation bar, since no ledger entry can name their line.
 //! - **A missing foundation module fails.** A crate of [`crate::foundation::FOUNDATION_MODULES`]
-//!   with code but no file of its foundation module fails, so moving the module cannot drop it from
-//!   the foundation bar.
+//!   with code but no file of its foundation module fails, unless every module it has is classified
+//!   outside that module by name, so neither moving the module nor adding an unclassified one can
+//!   drop code from the foundation bar.
 //! - **Every mark cites a checked proof.** A `coverage(off)` mark must have a comment right above it
 //!   citing `proof: <path>::<name>`, the same proof as its ledger entry, and the cited file must
 //!   define that function as a Kani harness (`#[kani::proof]`) or a Verus `proof fn`. A ledger
@@ -531,10 +532,8 @@ pub fn measure(repo: &Path, krate: &str, lcov: &str) -> Result<CrateReport, Cove
         problems: Vec::new(),
     };
     let mut rels = Vec::new();
-    let mut any_code = false;
     for (rel, scanned) in crate_sources(repo, krate)? {
-        any_code |= scanned.has_functions;
-        rels.push(rel.clone());
+        rels.push((rel.clone(), scanned.has_functions));
         let Place::Kernel { set, .. } = place(&rel) else {
             continue;
         };
@@ -582,10 +581,14 @@ pub fn measure(repo: &Path, krate: &str, lcov: &str) -> Result<CrateReport, Cove
             branch_note: branches.problem,
         });
     }
-    if let Some(module) = missing_foundation_module(krate, any_code, &rels) {
+    if let Some(missing) = missing_foundation_module(krate, &rels) {
+        let module = missing.module;
         report.problems.push(format!(
-            "{krate} has code but no file src/{module}.rs or src/{module}/: its foundation module \
-             (28.8) is missing, so update foundation::FOUNDATION_MODULES to where it now lives"
+            "{krate} has code but no file src/{module}.rs or src/{module}/, and {} is not \
+             classified outside it: its foundation module (28.8) is missing, so update \
+             foundation::FOUNDATION_MODULES to where it now lives, or classify each module outside \
+             it by the chapter that gives it its job",
+            missing.unclassified.join(", ")
         ));
     }
     Ok(report)
