@@ -10,7 +10,8 @@
 //! equation is set aside and the block is still certified; a second point placed from the first is
 //! certified in its own block on the first's proven box; a double root (two circles touching) is not
 //! certified, and says why; the 200-constraint family of the solver's benchmark is certified in every
-//! block; and a certificate is the same every time.
+//! block; a certificate is the same every time; and a block of more than `BLOCK_LIMIT` unknowns is
+//! refused as too large, charged only for reading it, while one of exactly the limit is attempted.
 
 #![allow(
     clippy::arithmetic_side_effects,
@@ -28,11 +29,14 @@ use dashu_ratio::RBig;
 use geom_num::interval::Interval;
 use geom_num::{GridStep, P3};
 use geom_run::{Budget, WorkMeter};
-use geom_sketch::certify::{Block, Certificate, Certified, Reason, certify};
+use geom_sketch::certify::{
+    BLOCK_LIMIT, Block, Certificate, Certified, Certifier, Reason, certify,
+};
 use geom_sketch::commit::commit;
 use geom_sketch::equation::Assembly;
 use geom_sketch::model::{
-    Amount, Constraint, ConstraintKind, Entity, EntityKind, Extent, ItemId, Sketch, Standing,
+    Amount, Constraint, ConstraintKind, Entity, EntityKind, Extent, ItemId, Sketch, SketchError,
+    Standing,
 };
 use geom_sketch::plane::{Lattice, PlaneFrame, SketchPlane};
 use geom_sketch::solve::solve;
@@ -515,4 +519,74 @@ fn a_commit_the_proof_cannot_reach_is_left_unproven_with_no_box() {
         got.boxes.iter().all(|(owner, _, _)| *owner != pid(3)),
         "{got:?}"
     );
+}
+
+/// A ring of `n` points on a circle of radius 1000 about a fixed point: each point 1000 from the
+/// centre and the next point a chord away, the last joined to the first. Its `2n` equations in `2n`
+/// unknowns are one square block (each point's place leans on its neighbours' all the way round).
+fn ring(n: u64) -> Sketch {
+    let mut entities = vec![reference(1000, 0.0, 0.0)];
+    let mut constraints = Vec::new();
+    #[allow(clippy::cast_precision_loss, reason = "a small count")]
+    let step = core::f64::consts::TAU / n as f64;
+    let chord = 2000.0 * (step / 2.0).sin();
+    for k in 1..=n {
+        #[allow(clippy::cast_precision_loss, reason = "a small count")]
+        let at = step * k as f64;
+        entities.push(point(k, 1000.0 * at.cos(), 1000.0 * at.sin()));
+        constraints.push(distance(k, 1000, k, 1000.0));
+        constraints.push(distance(2000 + k, k, k % n + 1, chord));
+    }
+    build(entities, constraints)
+}
+
+#[test]
+fn a_block_past_the_limit_is_not_attempted_and_is_charged_only_for_reading_it() {
+    // 101 points: a square block of 202 equations in 202 unknowns, past BLOCK_LIMIT. It is left
+    // Unproven(TooLarge) with no box, and the meter is charged for its equations and unknowns
+    // only, 202 + 202, with no factorisation: a budget of 404 covers the certificate and one of
+    // 403 stops it.
+    let s = ring(101);
+    let committed = commit(&s, &mut meter()).unwrap();
+    let certifier = Certifier::new(&s, &mut meter()).unwrap();
+    let got = certifier
+        .certify(&s, &committed, &mut WorkMeter::new(Budget::of_work(404)))
+        .unwrap();
+    assert_eq!(got.blocks.len(), 1, "{got:?}");
+    assert_eq!(got.blocks[0].unknowns, 202);
+    assert_eq!(got.blocks[0].rules.len(), 202);
+    assert_eq!(
+        got.blocks[0].certificate,
+        Certificate::Unproven(Reason::TooLarge)
+    );
+    assert_eq!(got.boxes, Vec::new());
+    assert_eq!(
+        certifier.certify(&s, &committed, &mut WorkMeter::new(Budget::of_work(403))),
+        Err(SketchError::Stopped)
+    );
+}
+
+#[test]
+fn a_block_of_exactly_the_limit_is_attempted() {
+    // 201 points in a row, 10 apart, each 10 from the next: 200 equations in 402 unknowns, one
+    // under-determined part. Its independent subsystem is the 200 equations and 200 of the
+    // points' x coordinates, exactly BLOCK_LIMIT unknowns, so it is certified, not refused.
+    let n = 201_u64;
+    let mut entities = Vec::new();
+    let mut constraints = Vec::new();
+    for k in 0..n {
+        #[allow(clippy::cast_precision_loss, reason = "a small count")]
+        let x = 10.0 * k as f64;
+        entities.push(point(k + 1, x, 0.0));
+        if k + 1 < n {
+            constraints.push(distance(k + 1, k + 1, k + 2, 10.0));
+        }
+    }
+    let s = build(entities, constraints);
+    let committed = commit(&s, &mut meter()).unwrap();
+    let got = certify(&s, &committed, &mut meter()).unwrap();
+    assert_eq!(got.blocks.len(), 1, "{got:?}");
+    assert_eq!(got.blocks[0].unknowns, BLOCK_LIMIT);
+    let radius = proven(&got.blocks[0]);
+    assert!(radius < 1.0, "{radius}");
 }
