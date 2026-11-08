@@ -503,6 +503,20 @@ fn weight_sums_past_the_doubles_still_give_the_point() {
         Some(vec![max, max]),
     )
     .unwrap();
+    // Without an overflow nothing is halved: an odd multiple of the smallest subnormal, which
+    // halving would round, comes back exactly at the clamped end, from the point and the
+    // derivatives alike.
+    let tiny = f64::from_bits(3);
+    let end = Curve::from_homogeneous(
+        Basis::new(1, vec![0.0, 0.0, 1.0, 1.0]).unwrap(),
+        vec![[tiny, 1.0, 0.0], [1.0, 1.0, 1.0]],
+        Some(vec![1.0, 1.0]),
+    )
+    .unwrap();
+    let mut out = vec![[0.0; 3]; 2];
+    end.derivs(0.0, Limit::FromRight, &mut out).unwrap();
+    assert_eq!(end.point(0.0, Limit::FromRight).unwrap(), [tiny, 1.0, 0.0]);
+    assert_eq!(out[0], [tiny, 1.0, 0.0]);
     let mut rng = Lcg(70);
     let factor = gamma(14 + 3);
     let mut us = parameters(&fuzz, &mut rng, 200);

@@ -277,6 +277,21 @@ fn weight_sums_past_the_doubles_still_give_the_point() {
         Some(vec![max; 4]),
     )
     .unwrap();
+    // Without an overflow nothing is halved: an odd multiple of the smallest subnormal, which
+    // halving would round, comes back exactly at the corner, from the point and the partials.
+    let tiny = f64::from_bits(3);
+    let corner = Surface::from_homogeneous(
+        unit(),
+        unit(),
+        vec![[tiny, 1.0, 0.0], [1.0; 3], [1.0; 3], [1.0; 3]],
+        Some(vec![1.0; 4]),
+    )
+    .unwrap();
+    let mut out = vec![[0.0; 3]; 4];
+    let at = (Limit::FromRight, Limit::FromRight);
+    corner.derivs(0.0, 0.0, at, (1, 1), &mut out).unwrap();
+    assert_eq!(corner.point(0.0, 0.0, at).unwrap(), [tiny, 1.0, 0.0]);
+    assert_eq!(out[0], [tiny, 1.0, 0.0]);
     let mut rng = Lcg(70);
     let (du, dv) = (1, 1);
     let us: Vec<f64> = (0..24).map(|_| rng.unit()).collect();
