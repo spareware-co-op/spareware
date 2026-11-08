@@ -6060,14 +6060,6 @@
     },
     {
       "file": "projects/engines/geometry/crates/geom-sketch/src/certify.rs",
-      "mutant": "replace > with >= in select",
-      "line_text": ".is_some_and(|d| d.abs() > INDEPENDENT)",
-      "occurrences": 1,
-      "kind": "harmless",
-      "reason": "The forms differ only for a pivot of exactly 2^-12 in size. That threshold is chapter 15.8's independent pivot, a cut between dependent and independent equations, and the crate promises nothing about a pivot at the cut itself: an equation kept there is certified with the others or its block is refused with a reason, and one set aside keeps its residual bound, so either way the result is a proof or a reason."
-    },
-    {
-      "file": "projects/engines/geometry/crates/geom-sketch/src/certify.rs",
       "mutant": "replace > with >= in krawczyk",
       "line_text": "if m > spread {",
       "occurrences": 1,
@@ -6078,14 +6070,6 @@
       "file": "projects/engines/geometry/crates/geom-sketch/src/certify.rs",
       "mutant": "replace > with >= in krawczyk",
       "line_text": "if x.abs() > largest {",
-      "occurrences": 1,
-      "kind": "equivalent",
-      "reason": "The two differ only when the values are equal, and then both keep the same value: the largest is the same number either way."
-    },
-    {
-      "file": "projects/engines/geometry/crates/geom-sketch/src/certify.rs",
-      "mutant": "replace > with >= in krawczyk",
-      "line_text": "if away > reach {",
       "occurrences": 1,
       "kind": "equivalent",
       "reason": "The two differ only when the values are equal, and then both keep the same value: the largest is the same number either way."
@@ -6129,30 +6113,6 @@
       "occurrences": 1,
       "kind": "equivalent",
       "reason": "The guard is never taken by the original or the mutant. Inside the inclusion branch the block's unique zero lies in the image, and every image end is an outward-rounded bound one step past its rounded corner, so the zero lies strictly inside each image and strictly inside each narrowed box by induction: lo < hi always, so lo > hi and lo >= hi are both false."
-    },
-    {
-      "file": "projects/engines/geometry/crates/geom-sketch/src/certify.rs",
-      "mutant": "replace > with >= in krawczyk",
-      "line_text": "if !(k.lo() > x_box.lo() && k.hi() < x_box.hi()) {",
-      "occurrences": 1,
-      "kind": "harmless",
-      "reason": "The forms differ only when the lower end of the operator's image equals the box's lower end to the bit. Each image end is an outward-rounded bound one step past a rounded corner and each box end is the centre moved out by a radius, or an image end moved out by a slack of at least 1e-12 of its size, so a tie needs two independently rounded doubles to agree exactly. Then the image still lies in the box, which proves a zero in it (Krawczyk; Moore, 1977); only uniqueness rests on the strict inclusion the original asks for."
-    },
-    {
-      "file": "projects/engines/geometry/crates/geom-sketch/src/certify.rs",
-      "mutant": "replace < with <= in krawczyk",
-      "line_text": "if !(k.lo() > x_box.lo() && k.hi() < x_box.hi()) {",
-      "occurrences": 1,
-      "kind": "harmless",
-      "reason": "The forms differ only when the upper end of the operator's image equals the box's upper end to the bit. Each image end is an outward-rounded bound one step past a rounded corner and each box end is the centre moved out by a radius, or an image end moved out by a slack of at least 1e-12 of its size, so a tie needs two independently rounded doubles to agree exactly. Then the image still lies in the box, which proves a zero in it (Krawczyk; Moore, 1977); only uniqueness rests on the strict inclusion the original asks for."
-    },
-    {
-      "file": "projects/engines/geometry/crates/geom-sketch/src/certify.rs",
-      "mutant": "replace > with >= in krawczyk",
-      "line_text": "if reach > HUGE {",
-      "occurrences": 1,
-      "kind": "harmless",
-      "reason": "The forms differ only when the image reaches exactly 1e12 steps from the committed point. HUGE is a convenience cut that stops a hopeless inflation early, and the crate promises nothing at the cut itself: the mutant stops one inflation sooner with Unproven(NoInclusion), the original tries the next box, and either result is a proof or a reason."
     },
     {
       "file": "projects/engines/geometry/crates/geom-sketch/src/certify.rs",

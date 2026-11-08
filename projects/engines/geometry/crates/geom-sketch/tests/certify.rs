@@ -30,7 +30,7 @@ use geom_num::interval::Interval;
 use geom_num::{GridStep, P3};
 use geom_run::{Budget, WorkMeter};
 use geom_sketch::certify::{
-    BLOCK_LIMIT, Block, Certificate, Certified, Certifier, Reason, certify,
+    BLOCK_LIMIT, Block, Certificate, Certified, Certifier, Reason, certify, strictly_inside,
 };
 use geom_sketch::commit::commit;
 use geom_sketch::equation::Assembly;
@@ -631,4 +631,116 @@ fn a_block_of_exactly_the_limit_is_attempted() {
     assert_eq!(got.blocks[0].unknowns, BLOCK_LIMIT);
     let radius = proven(&got.blocks[0]);
     assert!(radius < 1.0, "{radius}");
+}
+
+#[test]
+fn an_equation_whose_scaled_gradient_is_exactly_the_independence_pivot_is_set_aside() {
+    // P at (0, 0) is to be 4096 from the fixed point Q = (1, 0): one equation in P's two unknowns,
+    // an under-determined part, whose independent equations pivoted QR chooses. Its gradient,
+    // (P - Q)/4096 = (-2^-12, 0), has length exactly 2^-12, chapter 15.8's independent pivot. A
+    // pivot must pass that cut, not reach it, so the equation counts as dependent and the part has
+    // nothing to certify. Stated 4095 apart, the gradient is longer than the cut and the part is
+    // attempted with one unknown.
+    let at = |d: f64| {
+        let s = build(
+            vec![reference(1, 1.0, 0.0), point(2, 0.0, 0.0)],
+            vec![distance(1, 1, 2, d)],
+        );
+        let committed = commit(&s, &mut meter()).unwrap();
+        certify(&s, &committed, &mut meter()).unwrap()
+    };
+    let cut = at(4096.0);
+    assert_eq!(cut.blocks.len(), 1, "{cut:?}");
+    assert_eq!(
+        cut.blocks[0].certificate,
+        Certificate::Unproven(Reason::Empty),
+        "{cut:?}"
+    );
+    assert_eq!(cut.blocks[0].unknowns, 0);
+    let past = at(4095.0);
+    assert_eq!(past.blocks.len(), 1, "{past:?}");
+    assert_eq!(past.blocks[0].unknowns, 1, "{past:?}");
+    assert_ne!(
+        past.blocks[0].certificate,
+        Certificate::Unproven(Reason::Empty),
+        "{past:?}"
+    );
+}
+
+fn interval(lo: f64, hi: f64) -> Interval {
+    Interval::new(lo, hi).unwrap()
+}
+
+#[test]
+fn strictly_inside_refuses_a_touching_end() {
+    // Krawczyk's operator image must lie strictly inside its box: touching either end proves a
+    // zero but not that it is the only one.
+    let outer = interval(-1.0, 1.0);
+    assert!(strictly_inside(interval(-0.5, 0.5), outer));
+    assert!(strictly_inside(
+        interval((-1.0_f64).next_up(), 1.0_f64.next_down()),
+        outer
+    ));
+    assert!(!strictly_inside(interval(-1.0, 0.5), outer));
+    assert!(!strictly_inside(interval(-0.5, 1.0), outer));
+    assert!(!strictly_inside(outer, outer));
+    assert!(!strictly_inside(interval(-2.0, 0.5), outer));
+    assert!(!strictly_inside(interval(-0.5, 2.0), outer));
+    assert!(!strictly_inside(interval(-2.0, 2.0), outer));
+    assert!(!strictly_inside(interval(2.0, 3.0), outer));
+    assert!(!strictly_inside(interval(-3.0, -2.0), outer));
+}
+
+/// Two circles of radius 1 about fixed points, the second's radius to be `d` more than the first's:
+/// one linear equation in the two radii, which the commit leaves as drawn (an offset is not one of
+/// the constraints it makes exact), so the solution is about `d` from the committed radii and
+/// Krawczyk proves it at once with a box about `d` wide.
+fn far(d: f64) -> Certified {
+    let circle = |key: u64, centre: u64| Entity {
+        id: ItemId::new(4, key),
+        kind: EntityKind::Circle {
+            centre: pid(centre),
+            radius: 1.0,
+        },
+        construction: false,
+    };
+    let s = build(
+        vec![
+            reference(1, 0.0, 0.0),
+            reference(2, 10.0, 0.0),
+            circle(1, 1),
+            circle(2, 2),
+        ],
+        vec![Constraint {
+            id: cid(1),
+            kind: ConstraintKind::Offset {
+                from: ItemId::new(4, 1),
+                to: ItemId::new(4, 2),
+                by: Amount::Value(d),
+                grows: true,
+            },
+            standing: Standing::Driving,
+            priority: 0,
+        }],
+    );
+    let committed = commit(&s, &mut meter()).unwrap();
+    certify(&s, &committed, &mut meter()).unwrap()
+}
+
+#[test]
+fn a_proof_that_reaches_huge_steps_from_the_commit_is_refused() {
+    // 0.95e12 steps of radius apart: proven, its radius about the distance.
+    let near = far(0.95e12);
+    assert_eq!(near.blocks.len(), 1, "{near:?}");
+    let radius = proven(&near.blocks[0]);
+    assert!((0.94e12..0.96e12).contains(&radius), "{radius}");
+    // 1.05e12 apart, within the grid's 2^40 but past HUGE (1e12): refused, with no box.
+    let away = far(1.05e12);
+    assert_eq!(away.blocks.len(), 1, "{away:?}");
+    assert_eq!(
+        away.blocks[0].certificate,
+        Certificate::Unproven(Reason::NoInclusion),
+        "{away:?}"
+    );
+    assert_eq!(away.boxes, Vec::new());
 }

@@ -16,9 +16,10 @@
 //! Guarantees:
 //!
 //! - **A proof or a reason.** A block is [`Certificate::Proven`] with a radius only when Krawczyk's
-//!   strict inclusion held in outward-rounded interval arithmetic; otherwise it is
-//!   [`Certificate::Unproven`] with the reason, and its constraints keep their residual bounds
-//!   (`check`). Nothing is rounded into a proof.
+//!   strict inclusion held in outward-rounded interval arithmetic ([`strictly_inside`]: an image
+//!   touching its box's boundary is not inside) and its box lies within [`HUGE`] steps of the
+//!   committed point; otherwise it is [`Certificate::Unproven`] with the reason, and its
+//!   constraints keep their residual bounds (`check`). Nothing is rounded into a proof.
 //! - **Chained.** A block's equations are evaluated with every earlier block's proven box as the
 //!   interval for its unknowns, never the committed point, so an upstream uncertainty widens a
 //!   downstream radius instead of being forgotten.
@@ -36,8 +37,8 @@
 //! selection of independent equations is chapter 15.8's pivot thresholds.
 //!
 //! Cost: for a block of r unknowns, O(r^3) for the preconditioner and one interval Jacobian per
-//! inflation step (at most ten, usually one or two); linear in the sketch for blocks of bounded size.
-//! A block of more than [`BLOCK_LIMIT`] unknowns is not attempted. No recursion.
+//! inflation step (at most twenty, usually one or two); linear in the sketch for blocks of bounded
+//! size. A block of more than [`BLOCK_LIMIT`] unknowns is not attempted. No recursion.
 
 extern crate alloc;
 
@@ -70,8 +71,10 @@ const INFLATIONS: usize = 20;
 /// How many times a proven box is narrowed by applying the operator to it again.
 const REFINEMENTS: usize = 4;
 
-/// A box this far from the committed point is no proof of anything near it: give up.
-const HUGE: f64 = 1.0e12;
+/// A box reaching this many steps from the committed point is no proof of anything near it: a
+/// proof that reaches it is refused, and inflation stops at an image that reaches it (a grid holds
+/// 2^40, about 1.1·10^12, steps each way).
+pub const HUGE: f64 = 1.0e12;
 
 /// Why a block could not be proven.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -82,8 +85,8 @@ pub enum Reason {
     /// so for its pivots to be told from zero.
     Singular,
     /// No box around the committed point was mapped strictly into itself by Krawczyk's operator in
-    /// the inflations allowed: the block is too nearly singular over its box, or the committed point
-    /// is too far from a solution.
+    /// the inflations allowed, or the box proved reaches [`HUGE`] steps from it: the block is too
+    /// nearly singular over its box, or the committed point is too far from a solution.
     NoInclusion,
     /// The interval arithmetic refused (a range reaching a singular set, an overflow).
     Refused,
@@ -176,6 +179,15 @@ impl Dense {
 
 fn mid(x: Interval) -> f64 {
     x.lo() * 0.5 + x.hi() * 0.5
+}
+
+/// Whether `inner` lies strictly inside `outer`: each end of `inner` beyond the matching end of
+/// `outer`, neither touching it. Krawczyk's test needs the strict form: an operator image that only
+/// reaches the box's boundary proves a zero in the box but not that it is the only one (Rump 1983,
+/// in this module's method), so a touching end is never inside.
+#[must_use]
+pub fn strictly_inside(inner: Interval, outer: Interval) -> bool {
+    inner.lo() > outer.lo() && inner.hi() < outer.hi()
 }
 
 fn magnitude(x: Interval) -> f64 {
@@ -437,17 +449,10 @@ fn krawczyk(
     for _ in 0..INFLATIONS {
         let m = step.contraction(&mut local, &boxes)?;
         let image = step.apply(&m, &boxes)?;
-        let mut inside = true;
-        let mut reach = 0.0_f64;
-        for ((k, x_box), x) in image.iter().zip(&boxes).zip(&centre) {
-            if !(k.lo() > x_box.lo() && k.hi() < x_box.hi()) {
-                inside = false;
-            }
-            let away = magnitude(k.sub(Interval::point(*x)?)?);
-            if away > reach {
-                reach = away;
-            }
-        }
+        let inside = image
+            .iter()
+            .zip(&boxes)
+            .all(|(k, x_box)| strictly_inside(*k, *x_box));
         if inside {
             // The image holds the unique zero. Applying the operator to it again narrows it, with the
             // same contraction matrix (the Jacobian over the larger box encloses it over the
@@ -466,6 +471,12 @@ fn krawczyk(
                 }
                 tight = narrowed;
             }
+            // A proof reaching HUGE from the committed point says nothing near it: refused.
+            for (k, x) in tight.iter().zip(&centre) {
+                if !strictly_inside(*k, Interval::new(x - HUGE, x + HUGE)?) {
+                    return Ok(Err(Reason::NoInclusion));
+                }
+            }
             let mut radius = 0.0_f64;
             for (k, x) in tight.iter().zip(&centre) {
                 let away = magnitude(k.sub(Interval::point(*x)?)?);
@@ -475,8 +486,12 @@ fn krawczyk(
             }
             return Ok(Ok((tight, radius)));
         }
-        if reach > HUGE {
-            break;
+        // An image reaching HUGE from the committed point holds no proof of anything near it, and
+        // inflating it further only runs the arithmetic out of range: stop.
+        for (k, x) in image.iter().zip(&centre) {
+            if !strictly_inside(*k, Interval::new(x - HUGE, x + HUGE)?) {
+                return Ok(Err(Reason::NoInclusion));
+            }
         }
         let mut next = Vec::new();
         for k in &image {
