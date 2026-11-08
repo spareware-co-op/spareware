@@ -1,0 +1,77 @@
+name: Cache prune
+
+# Keeps the repository's build cache (10 GB, GitHub's limit) holding what a pull request can use.
+# Only main saves build caches (every Swatinem/rust-cache step has `save-if` for main) and a pull
+# request restores main's, but caches saved before that, and the old copies main leaves behind each
+# time its lock file changes, still fill the limit, and GitHub evicts the least recently used
+# first, which can be the cache a run is about to restore. This workflow deletes:
+#
+# - every cache of a pull request that is no longer open (on each pull request that closes, and
+#   daily);
+# - on main, every copy of a cache but the newest (the key without its trailing hashes names one
+#   cache: `v0-rust-suite-debug-Linux-x64`).
+#
+# It touches nothing else (other branches' and tags' caches stay) and runs no repository code.
+
+on:
+  schedule:
+    - cron: "17 3 * * *"
+  workflow_dispatch:
+  pull_request:
+    types: [closed]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: cache-prune
+  cancel-in-progress: false
+
+jobs:
+  prune:
+    name: Delete the caches nothing will restore
+    # A pull request from a fork has a read-only token, which cannot delete; the daily run does it.
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      actions: write
+      contents: read
+      pull-requests: read
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - name: Delete the caches of closed pull requests and the old copies on main
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          open=$(gh pr list --repo "$REPO" --state open --limit 1000 --json number --jq '.[].number')
+          caches=$(gh api "repos/$REPO/actions/caches?per_page=100" --paginate \
+            --jq '.actions_caches[] | [.id, .ref, .key, .created_at, .size_in_bytes] | @tsv')
+          total=$(printf '%s\n' "$caches" | awk -F'\t' 'NF { s += $5 } END { printf "%.2f", s / 1073741824 }')
+          echo "Before: $(printf '%s\n' "$caches" | awk 'NF' | wc -l) caches, $total GB"
+          delete() {
+            echo "Deleting cache $1 ($2, $3)"
+            gh api -X DELETE "repos/$REPO/actions/caches/$1" --silent
+          }
+          # Pull requests that are no longer open.
+          while IFS=$'\t' read -r id ref key created size; do
+            [ -n "$id" ] || continue
+            case "$ref" in
+              refs/pull/*/merge | refs/pull/*/head)
+                number=${ref#refs/pull/}
+                number=${number%%/*}
+                if ! printf '%s\n' "$open" | grep -qx "$number"; then delete "$id" "$ref" "$key"; fi
+                ;;
+            esac
+          done <<< "$caches"
+          # Main: the newest copy of each cache stays.
+          printf '%s\n' "$caches" | awk -F'\t' '$2 == "refs/heads/main"' |
+            while IFS=$'\t' read -r id ref key created size; do
+              printf '%s\t%s\t%s\t%s\n' "$(printf '%s' "$key" | sed -E 's/(-[0-9a-f]{8,}){1,2}$//')" "$created" "$id" "$key"
+            done | sort -t$'\t' -k1,1 -k2,2r |
+            awk -F'\t' 'seen[$1]++ { print $3 "\t" $4 }' |
+            while IFS=$'\t' read -r id key; do delete "$id" "refs/heads/main" "$key"; done

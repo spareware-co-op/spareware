@@ -124,7 +124,12 @@ fn certified_as_grid(t: &Transform) -> Option<GridTransform> {
                 return None;
             };
         }
-        if s != math::round_ties_even(s).ok()?.get() || s > TWO_POW_84 || s < -TWO_POW_84 {
+        // Two tests, so the mutation gate (which keys a mutant by its line's text) tells their
+        // mutants apart: the whole-step test decides the answer, the range test only ends early.
+        if s != math::round_ties_even(s).ok()?.get() {
+            return None;
+        }
+        if s > TWO_POW_84 || s < -TWO_POW_84 {
             return None;
         }
         #[allow(

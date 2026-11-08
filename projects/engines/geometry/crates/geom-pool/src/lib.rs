@@ -38,5 +38,7 @@
 //! `projects/engines/crates/`.
 #![forbid(unsafe_code)]
 
+pub mod halves;
+
 #[cfg(not(target_family = "wasm"))]
 pub mod native;

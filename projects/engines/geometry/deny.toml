@@ -64,7 +64,7 @@ allow = [
     "CC0-1.0",
     "Unicode-3.0",
     "Unicode-DFS-2016",
-    # Copyleft per file: Spare Kit's own licence.
+    # Copyleft per file: allowed for dependencies and as a licence we may port from.
     "MPL-2.0",
 ]
 # Every crate in the graph, "whether a normal, build or dev-dependency, must pass the licence
@@ -79,7 +79,7 @@ confidence-threshold = 0.93
 # they are ours, under the repository's licence. cargo-deny skips every crate whose manifest says
 # publish = false, which would let a crate that is not ours through too, so the gate's rules
 # refuse any such crate outside this workspace, and read our own crates' licence fields: 29.2's
-# identifiers only, and MPL-2.0 for a crate of the kernel's family.
+# identifiers only, and Apache-2.0 for a crate of the kernel's family.
 private = { ignore = true }
 # The allow-list is the ledger's, not this graph's: a licence no crate uses today is not an error.
 unused-allowed-license = "allow"

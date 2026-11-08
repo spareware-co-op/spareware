@@ -45,7 +45,7 @@
 //!   weighted, which constraints are allowed), solved by `geom-linalg`'s QR instead of `NLib`'s
 //!   banded normal equations; constraints of any derivative order at any parameter; rank checked;
 //!   every fit returns its certified error.
-//! SPDX-License-Identifier: MPL-2.0 AND Apache-2.0
+//! SPDX-License-Identifier: Apache-2.0
 //!
 //! Cost: a fit with m + 1 data points and n + 1 control points takes O(m·n²) for the
 //! decomposition and O(m·n) per coordinate, charged to the meter first; a surface takes one
