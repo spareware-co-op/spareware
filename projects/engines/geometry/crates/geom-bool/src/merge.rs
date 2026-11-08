@@ -191,6 +191,31 @@ pub fn merge_stage(
     remaining: Bound,
     meter: &mut WorkMeter<'_>,
 ) -> Result<Vec<PointGeom>, ContactError> {
+    let (reps, of) = merge_clusters(carriers, points, pairs, remaining, meter)?;
+    let mut out = Vec::with_capacity(points.len());
+    for &cluster in &of {
+        out.push(
+            reps.get(cluster)
+                .cloned()
+                .ok_or(ContactError::Num(geom_num::NumError::Degenerate))?,
+        );
+    }
+    Ok(out)
+}
+
+/// As [`merge_stage`], giving the clusters themselves: one representative per cluster, in the
+/// order of each cluster's lowest member, and for each input point the index of its cluster.
+///
+/// # Errors
+///
+/// As [`merge_stage`].
+pub fn merge_clusters(
+    carriers: &Carriers,
+    points: &[PointGeom],
+    pairs: &[(usize, usize)],
+    remaining: Bound,
+    meter: &mut WorkMeter<'_>,
+) -> Result<(Vec<PointGeom>, Vec<usize>), ContactError> {
     let mut clusters = Clusters::new(points.len());
     for &(i, j) in pairs {
         let (Some(a), Some(b)) = (points.get(i), points.get(j)) else {
@@ -207,11 +232,13 @@ pub fn merge_stage(
     for i in 0..points.len() {
         roots.push(clusters.find(i));
     }
-    let mut made: Vec<(usize, PointGeom)> = Vec::new();
-    let mut out = Vec::with_capacity(points.len());
-    for (i, &root) in roots.iter().enumerate() {
-        if let Some((_, rep)) = made.iter().find(|(r, _)| *r == root) {
-            out.push(rep.clone());
+    // Clusters are numbered by their lowest member, which is their root.
+    let mut numbered: Vec<usize> = Vec::new();
+    let mut reps: Vec<PointGeom> = Vec::new();
+    let mut of = Vec::with_capacity(points.len());
+    for &root in &roots {
+        if let Some(k) = numbered.iter().position(|r| *r == root) {
+            of.push(k);
             continue;
         }
         let members: Vec<PointGeom> = roots
@@ -220,12 +247,11 @@ pub fn merge_stage(
             .filter(|(r, _)| **r == root)
             .map(|(_, p)| p.clone())
             .collect();
-        let rep = merge_cluster(carriers, &members, remaining, meter)?;
-        made.push((root, rep.clone()));
-        out.push(rep);
-        let _ = i;
+        reps.push(merge_cluster(carriers, &members, remaining, meter)?);
+        of.push(numbered.len());
+        numbered.push(root);
     }
-    Ok(out)
+    Ok((reps, of))
 }
 
 /// The remaining bound a merge is held to when the caller asked for none: `ε_fit`.

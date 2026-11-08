@@ -686,6 +686,13 @@ shuffling-allocator
     projects/engines/geometry/crates/geom-test/src/golden/perturb.rs
       for its size classes and shuffling layer and to judge whether it could be used; not taken, for the reasons above. No code copied.
 
+solidcore
+  Licence:      Apache-2.0
+  Link:         https://github.com/tangency-labs/solidcore/blob/45d6111b909487e94edaec309a7673a3b73d4ae5/crates/solidcore/src/boolean/topology_intersector/p1.rs
+  Consulted by:
+    projects/engines/geometry/crates/geom-bool/src/interfere.rs
+      for the order of the vertex, edge and face intersections and the lowest-dimension solution; its tolerance growth on relating entities is not taken. No code copied.
+
 SPDX License List 3.29.0
   Licence:      CC-BY-3.0
   Link:         https://github.com/spdx/license-list-data/blob/31ba1a50e5397e00a304dbadc76531740e89ee48/json/licenses.json

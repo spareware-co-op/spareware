@@ -137,6 +137,18 @@ impl Carriers {
         self.planes.plane(ix)
     }
 
+    /// A curve of the pool.
+    #[must_use]
+    pub fn curve(&self, ix: CurveIx) -> Option<&CurveKind<3>> {
+        self.curves.get(usize::try_from(ix.row()).ok()?)
+    }
+
+    /// A surface of the pool.
+    #[must_use]
+    pub fn surface(&self, ix: SurfaceIx) -> Option<&SurfaceKind> {
+        self.surfaces.get(usize::try_from(ix.row()).ok()?)
+    }
+
     /// The signed distance of a grid point from a plane, as an enclosure: (n · p + d) / |n|.
     fn plane_distance(plane: &Plane, p: P3) -> Result<Interval, NumError> {
         let [n0, n1, n2] = plane.n();
