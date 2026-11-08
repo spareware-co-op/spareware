@@ -17,8 +17,8 @@
 use geom_num::plane::{Plane, Tpi};
 use geom_num::{NumError, P3, Sign};
 use geom_poly::convex::{Piece, convex_pieces};
-use geom_poly::merge::{Merge, Merged, Outward, merge, select};
-use geom_poly::publish::{Carrier, PublishError, publish};
+use geom_poly::merge::{Curves, Merge, Merged, Outward, merge, select};
+use geom_poly::publish::{Carrier, PublishError, publish, publish_with, wire};
 use geom_poly::subdivide::{LEAF_POLYGONS, around, arrange};
 use geom_poly::trace::Polygon;
 use geom_poly::winding::{Winding, WindingTest};
@@ -155,20 +155,24 @@ fn surface(polygon: usize) -> SurfaceKind {
     )
 }
 
-fn body(m: &Merged, sense: Sense) -> Body {
+/// A carrier for each polygon of `m`'s sheets, each with `sense`.
+fn carriers(m: &Merged, sense: Sense) -> Vec<Carrier> {
     let polygons = m
         .sheets
         .iter()
         .map(|s| s.polygon)
         .max()
         .map_or(0, |p| p + 1);
-    let carriers: Vec<Carrier> = (0..polygons)
+    (0..polygons)
         .map(|polygon| Carrier {
             surface: surface(polygon),
             sense,
         })
-        .collect();
-    publish(m, &carriers, &mut meter()).unwrap()
+        .collect()
+}
+
+fn body(m: &Merged, sense: Sense) -> Body {
+    publish(m, &carriers(m, sense), &mut meter()).unwrap()
 }
 
 fn list<K, V: Copy>(column: &Column<K, V>) -> Vec<V> {
@@ -240,6 +244,31 @@ fn each_outer_shell_is_a_solid_of_its_own() {
     assert_eq!(rows(&a.shells.next), [NONE, NONE]);
     assert_eq!(b.outside().row(), 2);
     assert_eq!(b.kind(), BodyKind::Solid);
+}
+
+#[test]
+fn an_open_merge_keeps_its_shells_in_the_outside() {
+    let m = merged(&[([0, 0, 0], [2, 2, 2])], &WindingTest::unite());
+    let open = publish_with(&m, &carriers(&m, Sense::Forward), true, None, &mut meter()).unwrap();
+    let a = open.arenas();
+    assert_eq!(list(&a.regions.kind), [RegionKind::Void]);
+    assert_eq!(rows(&a.regions.first_shell), [0]);
+    assert_eq!(rows(&a.shells.region), vec![0; m.shells.len()]);
+    assert_eq!(open.outside().row(), 0);
+    assert_eq!(open.kind(), BodyKind::Sheet);
+    // Nothing kept: the outside has no shell.
+    let none = Merged {
+        sheets: Vec::new(),
+        vertices: Vec::new(),
+        edges: Vec::new(),
+        fins: Vec::new(),
+        faces: Vec::new(),
+        shells: Vec::new(),
+        piece_face: Vec::new(),
+    };
+    let empty = publish_with(&none, &[], true, None, &mut meter()).unwrap();
+    assert_eq!(rows(&empty.arenas().regions.first_shell), [NONE]);
+    assert_eq!(empty.kind(), BodyKind::Sheet);
 }
 
 #[test]
@@ -542,6 +571,36 @@ fn a_point_off_the_grid_stays_on_the_lowest_planes_around_it() {
         }
     }
     assert!(off > 0);
+}
+
+#[test]
+fn a_wires_points_off_the_grid_keep_their_own_planes_each_stored_once() {
+    let third = Plane::new([3, 0, 0], -1).unwrap();
+    let (flat, low, high) = (up(1, 0), up(2, 0), up(2, 5));
+    let curves = Curves {
+        vertices: vec![
+            Tpi::new(third, flat, low).unwrap(),
+            Tpi::new(third, flat, high).unwrap(),
+        ],
+        edges: vec![(0, 1)],
+        meets: vec![vec![0, 1]],
+    };
+    let b = wire(&curves, None, &mut meter()).unwrap();
+    let a = b.arenas();
+    assert_eq!(b.kind(), BodyKind::Wire);
+    assert_eq!(list(&a.planes), [third, flat, low, high]);
+    let points = list(&a.points);
+    let met: Vec<[u32; 3]> = rows(&a.vertices.point)
+        .iter()
+        .map(|v| match points[*v as usize] {
+            PointKind::Meet(planes) => planes.map(geom_topo::Ix::row),
+            PointKind::Grid(p) => panic!("{p:?} is a grid point"),
+        })
+        .collect();
+    assert_eq!(met, [[0, 1, 2], [0, 1, 3]]);
+    assert_eq!(rows(&a.edges.start), [0]);
+    assert_eq!(rows(&a.edges.end), [1]);
+    assert_eq!(rows(&a.edges.first_fin), [NONE]);
 }
 
 /// The first three of `list`, by number, that meet in a point.
