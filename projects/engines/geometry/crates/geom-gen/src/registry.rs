@@ -22,6 +22,7 @@
 
 use std::path::{Path, PathBuf};
 
+use crate::facade;
 use crate::files::{Folder, Registry};
 use crate::generator::{GenError, Generate, Generator};
 use crate::grid_steps;
@@ -29,7 +30,7 @@ use crate::predicates;
 use crate::quadrature;
 
 /// Every generator, in the order they run.
-pub const GENERATORS: [Generator; 55] = [
+pub const GENERATORS: [Generator; 69] = [
     Generator {
         name: grid_steps::NAME,
         output: grid_steps::OUTPUT,
@@ -83,6 +84,42 @@ pub const GENERATORS: [Generator; 55] = [
         output: "projects/engines/geometry/crates/geom-num/src/generated/tpi_side.rs",
         about: "a three-plane point against a plane: its f64 filter on rounded inputs, exact path and certificate",
         generate: Generate::Plain(predicates::generate_tpi_side),
+    },
+    Generator {
+        name: "predicate-line-sphere",
+        output: "projects/engines/geometry/crates/geom-num/src/generated/line_sphere.rs",
+        about: "line_sphere: its f64 filter, exact path and certificate",
+        generate: Generate::Plain(predicates::generate_line_sphere),
+    },
+    Generator {
+        name: "predicate-line-cylinder",
+        output: "projects/engines/geometry/crates/geom-num/src/generated/line_cylinder.rs",
+        about: "line_cylinder: its f64 filter, exact path and certificate",
+        generate: Generate::Plain(predicates::generate_line_cylinder),
+    },
+    Generator {
+        name: "predicate-line-cone",
+        output: "projects/engines/geometry/crates/geom-num/src/generated/line_cone.rs",
+        about: "line_cone: its f64 filter, exact path and certificate",
+        generate: Generate::Plain(predicates::generate_line_cone),
+    },
+    Generator {
+        name: "predicate-line-cone-lead",
+        output: "projects/engines/geometry/crates/geom-num/src/generated/line_cone_lead.rs",
+        about: "line_cone_lead: its f64 filter, exact path and certificate",
+        generate: Generate::Plain(predicates::generate_line_cone_lead),
+    },
+    Generator {
+        name: "predicate-cross-norm",
+        output: "projects/engines/geometry/crates/geom-num/src/generated/cross_norm.rs",
+        about: "cross_norm: its f64 filter, exact path and certificate",
+        generate: Generate::Plain(predicates::generate_cross_norm),
+    },
+    Generator {
+        name: "predicate-axis-gap",
+        output: "projects/engines/geometry/crates/geom-num/src/generated/axis_gap.rs",
+        about: "axis_gap: its f64 filter, exact path and certificate",
+        generate: Generate::Plain(predicates::generate_axis_gap),
     },
     Generator {
         name: "predicate-lpi-weight",
@@ -331,6 +368,42 @@ pub const GENERATORS: [Generator; 55] = [
         generate: Generate::Plain(predicates::generate_fptaylor_tpi_side),
     },
     Generator {
+        name: "fptaylor-line-sphere",
+        output: "projects/engines/geometry/crates/geom-gen/generated/fptaylor-line-sphere.fpt",
+        about: "line_sphere's normalised f64 filter for FPTaylor, whose certificate HOL Light checks",
+        generate: Generate::Plain(predicates::generate_fptaylor_line_sphere),
+    },
+    Generator {
+        name: "fptaylor-line-cylinder",
+        output: "projects/engines/geometry/crates/geom-gen/generated/fptaylor-line-cylinder.fpt",
+        about: "line_cylinder's normalised f64 filter for FPTaylor, whose certificate HOL Light checks",
+        generate: Generate::Plain(predicates::generate_fptaylor_line_cylinder),
+    },
+    Generator {
+        name: "fptaylor-line-cone",
+        output: "projects/engines/geometry/crates/geom-gen/generated/fptaylor-line-cone.fpt",
+        about: "line_cone's normalised f64 filter for FPTaylor, whose certificate HOL Light checks",
+        generate: Generate::Plain(predicates::generate_fptaylor_line_cone),
+    },
+    Generator {
+        name: "fptaylor-line-cone-lead",
+        output: "projects/engines/geometry/crates/geom-gen/generated/fptaylor-line-cone-lead.fpt",
+        about: "line_cone_lead's normalised f64 filter for FPTaylor, whose certificate HOL Light checks",
+        generate: Generate::Plain(predicates::generate_fptaylor_line_cone_lead),
+    },
+    Generator {
+        name: "fptaylor-cross-norm",
+        output: "projects/engines/geometry/crates/geom-gen/generated/fptaylor-cross-norm.fpt",
+        about: "cross_norm's normalised f64 filter for FPTaylor, whose certificate HOL Light checks",
+        generate: Generate::Plain(predicates::generate_fptaylor_cross_norm),
+    },
+    Generator {
+        name: "fptaylor-axis-gap",
+        output: "projects/engines/geometry/crates/geom-gen/generated/fptaylor-axis-gap.fpt",
+        about: "axis_gap's normalised f64 filter for FPTaylor, whose certificate HOL Light checks",
+        generate: Generate::Plain(predicates::generate_fptaylor_axis_gap),
+    },
+    Generator {
         name: "fptaylor-lpi-weight",
         output: "projects/engines/geometry/crates/geom-gen/generated/fptaylor-lpi-weight.fpt",
         about: "lpi_weight's normalised f64 filter for FPTaylor, whose certificate HOL Light checks",
@@ -360,11 +433,23 @@ pub const GENERATORS: [Generator; 55] = [
         about: "the Gauss-Legendre and Gauss-Kronrod rules on [-1, 1], every node and weight correctly rounded from an exact enclosure",
         generate: Generate::Plain(quadrature::generate),
     },
+    Generator {
+        name: facade::API_NAME,
+        output: facade::API_OUTPUT,
+        about: "the facade's API documentation, from every operation's schema in engine-geometry",
+        generate: Generate::Plain(facade::generate_api),
+    },
+    Generator {
+        name: facade::MCP_NAME,
+        output: facade::MCP_OUTPUT,
+        about: "the facade's MCP tool descriptions, from every operation's schema in engine-geometry",
+        generate: Generate::Plain(facade::generate_mcp),
+    },
 ];
 
 /// Every folder only generators write into. A folder stays listed while any file in it remains,
 /// so an orphan left by a removed generator is reported, not forgotten.
-pub const FOLDERS: [Folder; 4] = [
+pub const FOLDERS: [Folder; 5] = [
     Folder {
         path: "projects/engines/geometry/crates/geom-gen/generated",
         // Turns off git's line-ending conversion for the outputs, which `check` compares byte for
@@ -384,6 +469,11 @@ pub const FOLDERS: [Folder; 4] = [
     Folder {
         path: quadrature::OUTPUT_DIR,
         // The same, for geom-num's quadrature rules.
+        keep: &[".gitattributes"],
+    },
+    Folder {
+        path: facade::OUTPUT_DIR,
+        // The same, for the facade's API documentation and MCP tool descriptions.
         keep: &[".gitattributes"],
     },
 ];
