@@ -321,6 +321,7 @@ pub const LICENCE_CHOICES: [(&str, &str, &str); 124] = [
     ),
     ("unicode-segmentation", "MIT OR Apache-2.0", "MIT"),
     ("unty-next", "MIT OR Apache-2.0", "MIT"),
+    ("wait-timeout", "MIT/Apache-2.0", "MIT"),
     (
         "wasip2",
         "Apache-2.0 WITH LLVM-exception OR Apache-2.0 OR MIT",
