@@ -38,7 +38,8 @@
 //!
 //! Cost: one interval evaluation of every rule, and one exact predicate for every root choice;
 //! linear in the sketch, no recursion. A 1,000-entity sketch is checked in about 2 ms
-//! (`benches/check.rs`).
+//! (`benches/check.rs`). The meter is charged eight units of work for each constraint, before
+//! anything is read.
 
 extern crate alloc;
 
