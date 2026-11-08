@@ -32,7 +32,7 @@ use geom_sketch::certify::{Block, Certificate, Certified, Reason, certify};
 use geom_sketch::commit::commit;
 use geom_sketch::equation::Assembly;
 use geom_sketch::model::{
-    Amount, Constraint, ConstraintKind, Entity, EntityKind, ItemId, Sketch, Standing,
+    Amount, Constraint, ConstraintKind, Entity, EntityKind, Extent, ItemId, Sketch, Standing,
 };
 use geom_sketch::plane::{Lattice, PlaneFrame, SketchPlane};
 use geom_sketch::solve::solve;
@@ -391,4 +391,111 @@ fn the_assembly_counts_its_rules() {
         vec![distance(1, 1, 3, 5.0)],
     );
     assert_eq!(Assembly::new(&one).unwrap().rule_count(), 1);
+}
+
+/// A line from (0, 0) to (10, 1), and a second line from (3, 2) to (7, -1) both of whose ends are to
+/// be on the first: one rule of two residuals, each of which depends on the first line's ends.
+fn collinear_pair() -> Sketch {
+    let line = |key: u64, a: u64, b: u64| Entity {
+        id: ItemId::new(2, key),
+        kind: EntityKind::Line {
+            start: pid(a),
+            end: pid(b),
+            extent: Extent::Segment,
+        },
+        construction: false,
+    };
+    build(
+        vec![
+            point(1, 0.0, 0.0),
+            point(2, 10.0, 1.0),
+            point(3, 3.0, 2.0),
+            point(4, 7.0, -1.0),
+            line(1, 1, 2),
+            line(2, 3, 4),
+        ],
+        vec![Constraint {
+            id: cid(1),
+            kind: ConstraintKind::Collinear {
+                a: ItemId::new(2, 1),
+                b: ItemId::new(2, 2),
+            },
+            standing: Standing::Driving,
+            priority: 0,
+        }],
+    )
+}
+
+#[test]
+fn a_rules_derivatives_are_kept_apart_by_residual_and_match_its_differences() {
+    // Central differences of the rule's own residuals, which are quadratic in the coordinates, so
+    // the difference is the derivative to rounding. Each (variable, residual) comes once, in the
+    // doubles the solver uses and in the enclosures the certificate uses, and the residual a slope
+    // belongs to is the one whose difference it matches.
+    let s = collinear_pair();
+    let a = Assembly::new(&s).unwrap();
+    let x = a.start().unwrap();
+    let point_box =
+        |x: &[f64]| -> Vec<Interval> { x.iter().map(|v| Interval::point(*v).unwrap()).collect() };
+    let values = |x: &[f64]| -> Vec<f64> {
+        a.rule_values(0, &point_box(x))
+            .unwrap()
+            .iter()
+            .map(|r| (r.lo() + r.hi()) / 2.0)
+            .collect()
+    };
+    let n = x.len();
+    let slopes = a.slopes(0, &x).unwrap();
+    let all: Vec<usize> = (0..n).collect();
+    let jet = a.jet(0, &point_box(&x), &all).unwrap();
+    assert_eq!(jet.residuals.len(), 2);
+    let mut shared = 0;
+    for i in 0..n {
+        let h = 1.0e-3;
+        let (mut up, mut down) = (x.clone(), x.clone());
+        up[i] += h;
+        down[i] -= h;
+        let (vu, vd) = (values(&up), values(&down));
+        let mut both = 0;
+        for e in 0..2 {
+            let want = (vu[e] - vd[e]) / (2.0 * h);
+            let found: Vec<f64> = slopes
+                .iter()
+                .filter(|(v, f, _)| *v == i && *f == e)
+                .map(|(_, _, d)| *d)
+                .collect();
+            assert!(found.len() <= 1, "variable {i}, residual {e}: {found:?}");
+            let got = found.first().copied().unwrap_or(0.0);
+            assert!(
+                (got - want).abs() < 1e-6,
+                "variable {i}, residual {e}: {got} against {want}"
+            );
+            let enclosed: Vec<Interval> = jet
+                .partials
+                .iter()
+                .filter(|(v, f, _)| *v == i && *f == e)
+                .map(|(_, _, d)| *d)
+                .collect();
+            assert!(
+                enclosed.len() <= 1,
+                "variable {i}, residual {e}: {enclosed:?}"
+            );
+            let got = enclosed
+                .first()
+                .copied()
+                .unwrap_or_else(|| Interval::point(0.0).unwrap());
+            assert!(
+                got.lo() - 1e-6 <= want && want <= got.hi() + 1e-6,
+                "variable {i}, residual {e}: {got:?} against {want}"
+            );
+            if want.abs() > 1e-9 {
+                both += 1;
+            }
+        }
+        if both == 2 {
+            shared += 1;
+        }
+    }
+    // The first line's four coordinates enter both residuals.
+    assert_eq!(shared, 4);
 }
