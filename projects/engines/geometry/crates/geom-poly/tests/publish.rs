@@ -24,6 +24,7 @@ use geom_poly::trace::Polygon;
 use geom_poly::winding::{Winding, WindingTest};
 use geom_run::{Budget, Exec, WorkMeter};
 use geom_surface::Plane as Flat;
+use geom_topo::order::{NameKey, Names};
 use geom_topo::{
     Arena, Body, BodyKind, Box3, Column, CurveKind, Line, PointKind, RegionKind, Sense,
     SurfaceKind, TopoError,
@@ -603,6 +604,89 @@ fn a_wires_points_off_the_grid_keep_their_own_planes_each_stored_once() {
     assert_eq!(rows(&a.edges.first_fin), [NONE]);
 }
 
+#[test]
+fn a_closed_merge_that_keeps_nothing_is_a_general_body() {
+    // A solid body holds a solid region, so a selection that keeps nothing is a general one.
+    let none = Merged {
+        sheets: Vec::new(),
+        vertices: Vec::new(),
+        edges: Vec::new(),
+        fins: Vec::new(),
+        faces: Vec::new(),
+        shells: Vec::new(),
+        piece_face: Vec::new(),
+    };
+    let empty = publish_with(&none, &[], false, None, &mut meter()).unwrap();
+    assert_eq!(empty.kind(), BodyKind::General);
+    assert_eq!(list(&empty.arenas().regions.kind), [RegionKind::Void]);
+    assert_eq!(rows(&empty.arenas().regions.first_shell), [NONE]);
+}
+
+/// `count` names, the first row's the highest, so publishing in name order turns each arena round.
+fn backwards(count: usize) -> Vec<NameKey> {
+    (0..count)
+        .map(|i| NameKey([(count - 1 - i) as u8; 16]))
+        .collect()
+}
+
+#[test]
+fn names_put_a_published_body_in_their_order() {
+    let m = merged(&[([0, 0, 0], [2, 2, 2])], &WindingTest::unite());
+    let carriers = carriers(&m, Sense::Forward);
+    let plain = publish_with(&m, &carriers, false, None, &mut meter()).unwrap();
+    let keys = Names {
+        regions: backwards(plain.arenas().regions.kind.iter().count()),
+        faces: backwards(m.faces.len()),
+        edges: backwards(m.edges.len()),
+        vertices: backwards(m.vertices.len()),
+    };
+    let named = publish_with(&m, &carriers, false, Some(&keys), &mut meter()).unwrap();
+    assert_eq!(named.kind(), BodyKind::Solid);
+    let mut bounds = list(&plain.arenas().faces.bound);
+    bounds.reverse();
+    assert_eq!(list(&named.arenas().faces.bound), bounds);
+    let held = named.names().unwrap();
+    assert!(held.faces.windows(2).all(|pair| pair[0] < pair[1]));
+    assert_eq!(held.vertices.len(), m.vertices.len());
+}
+
+#[test]
+fn a_wire_edge_shorter_than_the_grid_stands_a_step_from_its_grid_end_and_names_order_it() {
+    // The origin, on the grid, and the point a quarter step along x, which rounds to it: the edge
+    // between them stands a step long from the origin.
+    let (x, y, z) = (up(0, 0), up(1, 0), up(2, 0));
+    let quarter = Plane::new([4, 0, 0], -1).unwrap();
+    let curves = Curves {
+        vertices: vec![Tpi::new(x, y, z).unwrap(), Tpi::new(quarter, y, z).unwrap()],
+        edges: vec![(0, 1)],
+        meets: vec![vec![0, 1]],
+    };
+    let b = wire(&curves, None, &mut meter()).unwrap();
+    let a = b.arenas();
+    let origin = P3::new(0, 0, 0).unwrap();
+    let points = list(&a.points);
+    assert_eq!(points[0], PointKind::Grid(origin));
+    assert!(matches!(points[1], PointKind::Meet(_)));
+    assert_eq!(list(&a.planes), [quarter, y, z]);
+    let line = Line::new([0.0; 3], [1.0, 0.0, 0.0], (0.0, 1.0)).unwrap();
+    let curves_held: Vec<&CurveKind<3>> = a.curves.iter().collect();
+    assert_eq!(*curves_held[0], CurveKind::Line(line));
+    // Named the other way round, the two vertices change rows and the edge runs between them.
+    let keys = Names {
+        regions: backwards(1),
+        faces: Vec::new(),
+        edges: backwards(1),
+        vertices: backwards(2),
+    };
+    let named = wire(&curves, Some(&keys), &mut meter()).unwrap();
+    assert_eq!(named.kind(), BodyKind::Wire);
+    let a = named.arenas();
+    assert_eq!(rows(&a.edges.start), [1]);
+    assert_eq!(rows(&a.edges.end), [0]);
+    let held = named.names().unwrap();
+    assert!(held.vertices.windows(2).all(|pair| pair[0] < pair[1]));
+}
+
 /// The first three of `list`, by number, that meet in a point.
 fn lowest_of(list: &[usize], planes: &[Plane]) -> [Plane; 3] {
     for (i, a) in list.iter().enumerate() {
@@ -624,6 +708,24 @@ fn solids_that_share_only_an_edge_make_a_general_body() {
         &WindingTest::unite(),
     );
     assert!(m.edges.iter().any(|e| e.fins.len() == 4));
+    assert_eq!(body(&m, Sense::Forward).kind(), BodyKind::General);
+}
+
+#[test]
+fn a_union_whose_shell_pinches_at_a_corner_is_a_general_body() {
+    // Each pair of boxes shares part of a face, and around (-1, 4, 0) the empty space is two
+    // opposite octants: every edge has two fins, but the one shell goes round that vertex in two
+    // fans, so it is non-manifold there (11.6) and the body is a general one.
+    let m = merged(
+        &[
+            ([-1, 1, -1], [0, 4, 1]),
+            ([-2, 4, -1], [0, 5, 0]),
+            ([-2, 0, 0], [-1, 5, 1]),
+        ],
+        &WindingTest::unite(),
+    );
+    assert_eq!(m.shells.len(), 1);
+    assert!(m.edges.iter().all(|e| e.fins.len() == 2));
     assert_eq!(body(&m, Sense::Forward).kind(), BodyKind::General);
 }
 
