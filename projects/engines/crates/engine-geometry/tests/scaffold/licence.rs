@@ -198,6 +198,7 @@ pub const LICENCE_CHOICES: [(&str, &str, &str); 113] = [
     ("block-buffer", "MIT OR Apache-2.0", "MIT"),
     ("borsh", "MIT OR Apache-2.0", "MIT"),
     ("camino", "MIT OR Apache-2.0", "MIT"),
+    ("cap", "MIT OR Apache-2.0", "MIT"),
     ("cargo-platform", "MIT OR Apache-2.0", "MIT"),
     ("cc", "MIT OR Apache-2.0", "MIT"),
     ("cfg-if", "MIT OR Apache-2.0", "MIT"),
