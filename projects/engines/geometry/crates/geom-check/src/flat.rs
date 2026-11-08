@@ -8,8 +8,11 @@
 //! with such a vertex its certified one (`geom_topo::query::certified_loop_area`), against the
 //! plane's normal turned by the face's sense. Exactly
 //! one loop must run counter-clockwise seen from outside the material, the face's outer loop;
-//! every other must run clockwise, a hole; none may enclose no area. The sense of a loop means
-//! something only for a loop that does not cross itself, so it runs after group 3's own tests,
+//! every other must run clockwise, a hole; none may enclose no area. And a holed face's whole area,
+//! its loops' added, must be positive: turn a face with one hole and its hole runs counter-clockwise
+//! and its outer loop clockwise, which the count alone cannot tell from a right one. The sense of a
+//! loop means something only for a loop that does not cross itself, so it runs after group 3's own
+//! tests,
 //! on a body they passed. A face on another surface, and a flat face with a curved edge in a loop,
 //! is left for G177 and counted in the report ([`crate::Report::deferred`]); a flat face's box is
 //! still tested against the vertices it has.
@@ -40,7 +43,7 @@ use geom_run::Stopped;
 use geom_topo::entity::{Face, LoopIx};
 use geom_topo::ix::Arena;
 use geom_topo::mass::Corner;
-use geom_topo::query::{QueryError, certified_loop_area, loop_area};
+use geom_topo::query::{QueryError, certified_loop_area, face_area, loop_area};
 use geom_topo::{Arenas, Body, Ix, Sense, SurfaceKind};
 
 use crate::combinatorial::{face_fins, face_loops, fin_ends, rows};
@@ -94,8 +97,8 @@ impl Normal {
         let along_y = tight::mul(ay?, ny).ok()?;
         let along_z = tight::mul(az?, nz).ok()?;
         tight::add(tight::add(along_x, along_y).ok()?, along_z)
-            .ok()?
-            .certain_sign()
+            .ok()
+            .and_then(Interval::certain_sign)
     }
 }
 
@@ -120,12 +123,56 @@ fn minor(p: f64, q: f64, r: f64, s: f64) -> Option<Interval> {
 struct Loops {
     /// How many run counter-clockwise.
     outer: i64,
-    /// The first loop that is wrong: a second counter-clockwise one, or one enclosing no area.
+    /// The first loop that is wrong: a second counter-clockwise one, or one enclosing no area, or
+    /// the counter-clockwise one of a holed face whose whole area is not positive.
     wrong: Option<LoopIx>,
+    /// The first counter-clockwise loop.
+    first: Option<LoopIx>,
+    /// Whether a loop runs clockwise.
+    holed: bool,
     /// Whether a loop has a curved edge.
     curved: bool,
     /// Whether a sign could not be decided.
     undecided: bool,
+}
+
+/// `found` seen with the face's `sense`.
+fn turned(found: Option<Sign>, sense: Sense) -> Option<Sign> {
+    found.map(|s| match sense {
+        Sense::Forward => s,
+        Sense::Reversed => s.negate(),
+    })
+}
+
+/// `sum` with `area` added; `None` once a sum has no enclosure.
+fn plus(sum: [Option<Interval>; 3], area: [Interval; 3]) -> [Option<Interval>; 3] {
+    let [sx, sy, sz] = sum;
+    let [ax, ay, az] = area;
+    let add = |s: Option<Interval>, a: Interval| tight::add(s?, a).ok();
+    [add(sx, ax), add(sy, ay), add(sz, az)]
+}
+
+/// The sign of `f`'s whole area along `normal`: exact on the grid and certified off it, a sum it
+/// cannot decide `None`.
+fn whole(
+    body: &Body,
+    f: Ix<Face>,
+    normal: &Normal,
+    sink: &mut Sink<'_, '_>,
+) -> Result<Option<Sign>, Stopped> {
+    match face_area(body, f, sink.meter()) {
+        Ok(area) => return Ok(normal.dot(area)),
+        Err(QueryError::Stopped(stop)) => return Err(stop),
+        Err(_) => {}
+    }
+    let mut sum = [around(0); 3];
+    for l in face_loops(body.arenas(), f) {
+        match certified_loop_area(body, l, sink.meter()) {
+            Err(QueryError::Stopped(stop)) => return Err(stop),
+            found => sum = found.map_or([None; 3], |area| plus(sum, area)),
+        }
+    }
+    Ok(normal.dot_enclosed(sum))
 }
 
 /// Each loop of `f` against `normal`, with the face's `sense`.
@@ -142,27 +189,33 @@ fn loops(
             Ok(area) => normal.dot(area),
             Err(QueryError::Stopped(stop)) => return Err(stop),
             Err(QueryError::Implicit(_)) => match certified_loop_area(body, l, sink.meter()) {
-                Ok(area) => normal.dot_enclosed(area.map(Some)),
                 Err(QueryError::Stopped(stop)) => return Err(stop),
-                Err(_) => None,
+                found => found
+                    .ok()
+                    .and_then(|area| normal.dot_enclosed(area.map(Some))),
             },
             Err(_) => {
                 found.curved = true;
                 continue;
             }
         };
-        match dot.map(|s| match sense {
-            Sense::Forward => s,
-            Sense::Reversed => s.negate(),
-        }) {
+        match turned(dot, sense) {
             Some(Sign::Positive) => {
                 found.outer = found.outer.saturating_add(1);
+                found.first = found.first.or(Some(l));
                 if found.outer > 1 {
                     found.wrong = found.wrong.or(Some(l));
                 }
             }
-            Some(Sign::Negative) => {}
+            Some(Sign::Negative) => found.holed = true,
             Some(Sign::Zero) => found.wrong = found.wrong.or(Some(l)),
+            None => found.undecided = true,
+        }
+    }
+    if found.holed && found.outer == 1 {
+        match turned(whole(body, f, normal, sink)?, sense) {
+            Some(Sign::Positive) => {}
+            Some(_) => found.wrong = found.wrong.or(found.first),
             None => found.undecided = true,
         }
     }
