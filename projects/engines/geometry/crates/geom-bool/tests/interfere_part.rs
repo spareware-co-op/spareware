@@ -19,6 +19,8 @@
     clippy::print_stdout,
     clippy::cast_precision_loss,
     clippy::cast_possible_wrap,
+    clippy::cast_possible_truncation,
+    clippy::cast_sign_loss,
     reason = "test code: a failure should stop loudly, and the timing is printed"
 )]
 
