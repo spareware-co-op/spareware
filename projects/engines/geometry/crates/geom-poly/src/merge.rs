@@ -1661,20 +1661,21 @@ fn radial(edge: &[usize], fins: &[Fin], planes: &[Plane]) -> Result<Vec<usize>, 
     let turned =
         |at: usize| -> Result<bool, MergeError> { Ok(rising(&plane_of(at)?.0) != rising(&start)) };
     // Two faces back to back lie at one angle. Past a fin that runs against the line lies the
-    // fin's material, so the other comes first, and the first fin's partner comes last of all.
+    // fin's material, so the other comes first, and the first fin's partner comes last of all. A
+    // fin that runs the first's way is never last, so its angle is not read for that.
     let last = |at: usize| -> Result<bool, MergeError> {
-        let there = about(&line, &reference, &reference, &flap(at)?)?;
-        Ok(turned(at)? && there == Ordering::Equal)
+        if !turned(at)? {
+            return Ok(false);
+        }
+        Ok(about(&line, &reference, &reference, &flap(at)?)? == Ordering::Equal)
     };
     let mut order = alloc::vec![first];
     for at in edge.iter().skip(1) {
         let this = flap(*at)?;
         let mut place = order.len();
-        for (k, held) in order
-            .iter()
-            .enumerate()
-            .filter(|_| matches!(last(*at), Ok(false)))
-        {
+        // Whether this fin comes last of all is the same against each fin placed before it.
+        let placed = matches!(last(*at), Ok(false));
+        for (k, held) in order.iter().enumerate().filter(|_| placed) {
             let by = about(&line, &reference, &this, &flap(*held)?)?;
             if by == Ordering::Less || (by == Ordering::Equal && turned(*at)?) || last(*held)? {
                 place = k;
