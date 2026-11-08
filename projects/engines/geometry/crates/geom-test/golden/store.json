@@ -302,9 +302,15 @@
               "kind": "corpus",
               "piece": "G176",
               "why": "1 new count benchmark on geom-intersect's self-intersection (decision 32.44): swept loops crossing themselves along a line; no existing digest moved"
+            },
+            {
+              "sha256": "ba6838fc287e7348432cc3b433385c12e7acdd4c1431ce418f053b627d6fdc4d",
+              "kind": "improvement",
+              "piece": "G173",
+              "why": "The edge room: an edge's zeros on the end of a plane's, cylinder's or cone's domain are proven in a box that reaches past the end, so intersect/subdivide_patch, march_plate and march_poles return other valid enclosures of the same start points (same 11 settled pairs and 22 starts, the work differs); no other digest moved"
             }
           ],
-          "sha256": "ba6838fc287e7348432cc3b433385c12e7acdd4c1431ce418f053b627d6fdc4d"
+          "sha256": "0df516dbd7824e7d490a34f3f9a4e1df5f0b61c712592947c4dc622262951f99"
         },
         {
           "id": "geom-nurbs/operations",
