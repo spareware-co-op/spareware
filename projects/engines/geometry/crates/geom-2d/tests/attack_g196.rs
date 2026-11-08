@@ -12,7 +12,8 @@
 //! - **Shapes**: crossings, a square, a square with diagonals, a T-junction, collinear overlaps,
 //!   vertical segments, nested squares, and a dangling edge inside a face.
 //! - **Permutation-invariant**: shuffling the input changes only the source labels.
-//! - **Refusals**: a stopped meter stops the sweep; a zero-length segment is ignored.
+//! - **Refusals**: a stopped meter stops the sweep; a zero-length segment is ignored; each refusal
+//!   says what it is.
 
 #![allow(
     clippy::arithmetic_side_effects,
@@ -297,6 +298,25 @@ fn a_line_edge_lies_on_the_smallest_carrier_of_its_line_whatever_the_segments() 
         assert!(root.rational().is_none());
         assert_eq!(root.cmp_x(&v[3]).unwrap(), geom_num::Sign::Negative);
     }
+}
+
+#[test]
+fn each_refusal_says_what_it_is() {
+    let stopped = WorkMeter::new(Budget::UNLIMITED).out_of_memory();
+    let said = [
+        ArrangeError::Range,
+        ArrangeError::TooMany,
+        ArrangeError::Stopped(stopped),
+    ]
+    .map(|e| e.to_string());
+    assert_eq!(
+        said,
+        [
+            "a step of the exact arithmetic did not fit",
+            "more items than a 32-bit index names",
+            "stopped: Stopped { reason: OutOfMemory }",
+        ]
+    );
 }
 
 #[test]
