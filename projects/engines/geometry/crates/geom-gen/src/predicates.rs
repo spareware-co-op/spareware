@@ -61,7 +61,7 @@
 //!   <https://github.com/BrunoLevy/geogram/blob/16843b4804de35f14ef54667950ab4c8acdd0062/src/lib/geogram/numerics/predicates/orient3d.pck>,
 //!   for its one description per predicate. No code copied.
 //!
-//! Cost: each generator derives one predicate, or all thirteen for the parent module and each
+//! Cost: each generator derives one predicate, or all fifteen for the parent module and each
 //! variant: a few hundred exact operations each.
 
 use crate::generator::GenError;
