@@ -195,7 +195,7 @@ pub fn check(case: &Case) -> Result<(), Finding> {
             .any(|v| v.same(&at) == Ok(true));
         match live.locate(&at, &mut meter) {
             Ok(Location::Vertex(v)) => {
-                if !is_vertex || v.same(&at) != Ok(true) {
+                if !is_vertex || v.same(&geom_2d::arrange::At::Rational(at)) != Ok(true) {
                     return Err(fail(case, "a located vertex is a vertex of the sweep"));
                 }
             }
