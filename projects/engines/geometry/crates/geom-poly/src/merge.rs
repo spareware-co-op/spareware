@@ -566,14 +566,20 @@ fn mark(cell: &Cell) -> u128 {
     shifted.wrapping_shl(64) | u128::from(digits).wrapping_shl(32) | u128::from(more)
 }
 
-/// A corner's or a line's key in its sort, where it has [`Cell`]s: the [`mark`] of each cell that
-/// can differ, and the cells, read only where two marks agree and run on. The marks of one point,
-/// or one line, are its cells' own, so the key is a total order, the exact one of
-/// [`point_order`] or [`line_order`], and a sort and the runs of equal keys after it read the
-/// copied marks, nearly never the cells.
+/// A corner's or a line's key in its sort, where it has [`Cell`]s: the [`mark`]s of the first `M`
+/// cells that can differ, and the cells, read only where two marks agree and run on, or where
+/// every mark agrees and cells past them are left. The marks of one point, or one line, are its
+/// cells' own, so the key is a total order, the exact one of [`point_order`] or [`line_order`],
+/// and a sort and the runs of equal keys after it read the copied marks first. A corner marks all
+/// three of its cells, as nearly every corner of a mesh is a grid point, whose marks stop, so that
+/// equal points are told by their marks alone; a line marks two, which tell most lines apart, as
+/// the cells of a line over its direction mostly run on, and a key holding all five would be twice
+/// as long.
 #[derive(Clone, Copy, Debug)]
 struct MarkKey<'a, const N: usize, const M: usize> {
     marks: [u128; M],
+    /// Whether cells past the marked ones are left to compare.
+    past: bool,
     cells: &'a [Cell; N],
 }
 
@@ -584,7 +590,8 @@ impl<'a, const N: usize, const M: usize> MarkKey<'a, N, M> {
         for (slot, cell) in marks.iter_mut().zip(cells.iter().skip(from)) {
             *slot = mark(cell);
         }
-        MarkKey { marks, cells }
+        let past = from.saturating_add(M) < N;
+        MarkKey { marks, past, cells }
     }
 }
 
@@ -611,6 +618,9 @@ impl<const N: usize, const M: usize> Ord for MarkKey<'_, N, M> {
             if a & 1 != 0 {
                 return CellKey(self.cells).cmp(&CellKey(other.cells));
             }
+        }
+        if self.past || other.past {
+            return CellKey(self.cells).cmp(&CellKey(other.cells));
         }
         Ordering::Equal
     }
@@ -1372,7 +1382,7 @@ fn sides_of(
 }
 
 /// A line's key in the sort of sides: its `first`, then the [`MarkKey`] of its cells after it.
-type LineSortKey<'a> = (usize, MarkKey<'a, 6, 5>);
+type LineSortKey<'a> = (usize, MarkKey<'a, 6, 2>);
 
 /// Sides in line order, as places in the sides given, and each line's stretch of that order.
 type ByLine = (Vec<usize>, Vec<(usize, usize)>);
@@ -1385,9 +1395,9 @@ fn by_line(
     meter: &mut WorkMeter<'_>,
 ) -> Result<ByLine, MergeError> {
     // A line's cells up to its `first` are fixed by `first`: 0 for each component of the
-    // direction before it, and 1 at it. So after `first`, the [`mark`]s of the five cells after it
-    // order lines as their cells do, and the sort reads the cells only where two marks agree and
-    // run on.
+    // direction before it, and 1 at it. So after `first`, the [`mark`]s of the two cells after it
+    // order lines as their cells do where they differ, and the sort reads the cells only where two
+    // marks agree and run on, or both agree.
     let keys: Option<Vec<LineSortKey<'_>>> = sides
         .iter()
         .map(|s| {
@@ -2525,6 +2535,23 @@ mod tests {
             [mark(&third), mark(&near), u128::MAX, mark(&cell(7, 5))]
         );
         assert_eq!(key.marks[4], 0);
+        assert!(!key.past);
+        // Two marks of a line leave its cells past them to compare, where both agree and stop.
+        let (one, two) = (cell(1, 2), cell(3, 4));
+        let lines = [
+            [cell(1, 1), one, two, one, two, cell(0, 1)],
+            [cell(1, 1), one, two, one, two, cell(1, 1)],
+            [cell(1, 1), one, two, two, one, cell(0, 1)],
+        ];
+        let keys = lines.each_ref().map(|line| MarkKey::<6, 2>::new(line, 1));
+        assert!(keys.iter().all(|key| key.past));
+        assert_eq!(keys[0].marks, keys[1].marks);
+        for (a, b) in [(0, 1), (1, 2), (0, 2), (2, 2)] {
+            let (p, q) = (&lines[a], &lines[b]);
+            assert_eq!(keys[a].cmp(&keys[b]), CellKey(p).cmp(&CellKey(q)));
+            assert_eq!(keys[b].cmp(&keys[a]), CellKey(q).cmp(&CellKey(p)));
+        }
+        assert!(!MarkKey::<6, 2>::new(&lines[0], 4).past);
     }
 
     /// A cell's floor and remainder are the Euclidean ones, in machine words or not.
