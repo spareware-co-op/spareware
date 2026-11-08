@@ -725,7 +725,12 @@ fn build(
     if let Some(e) = fail {
         return Err(e);
     }
-    let (edges, rep): (Vec<Edge>, Vec<u32>) = grouped.into_iter().unzip();
+    let mut edges: Vec<Edge> = Vec::with_capacity(grouped.len());
+    let mut rep: Vec<u32> = Vec::with_capacity(grouped.len());
+    for (e, s) in grouped {
+        edges.push(e);
+        rep.push(s);
+    }
     let rep_of = |e: usize| -> Result<&Piece, ArrangeError> {
         piece_of(pieces, rep.get(e).copied().ok_or(ArrangeError::TooMany)?)
     };
