@@ -1718,16 +1718,16 @@ fn polygons_of(
     pieces: &[(&Piece, Canonical)],
     entry: Option<Entry>,
 ) -> (Vec<Polygon>, Vec<Canonical>) {
-    pieces
-        .iter()
-        .map(|(piece, face)| {
-            let polygon = Polygon {
-                piece: (*piece).clone(),
-                entry,
-            };
-            (polygon, *face)
-        })
-        .unzip()
+    let mut polygons = Vec::with_capacity(pieces.len());
+    let mut faces = Vec::with_capacity(pieces.len());
+    for (piece, face) in pieces {
+        polygons.push(Polygon {
+            piece: (*piece).clone(),
+            entry,
+        });
+        faces.push(*face);
+    }
+    (polygons, faces)
 }
 
 /// The grid range of `corners` where each has [`Cell`]s and lies in the frame: their floors, and
