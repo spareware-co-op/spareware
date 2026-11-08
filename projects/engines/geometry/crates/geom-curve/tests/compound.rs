@@ -18,9 +18,9 @@
 
 use geom_curve::contract::check;
 use geom_curve::{
-    Basis, BulgePolyline, Circle, Composite, CurveError, CurveKind, Frame, Helix, HelixAxes,
-    IntersectionCurve, Line, Marched, Offset, OffsetLaw, OnSurface, ParamCurve, ParamMap, Span,
-    Station, SurfaceRef, Trimmed,
+    Axes, Basis, BulgePolyline, Circle, Composite, CurveError, CurveKind, Ellipse, Frame, Helix,
+    HelixAxes, IntersectionCurve, Line, Marched, Offset, OffsetLaw, OnSurface, ParamCurve,
+    ParamMap, Span, Station, SurfaceRef, Trimmed,
 };
 use geom_math::{Axis, GridTransform, RationalTransform, Rotation, Transform, TypedTransform};
 use geom_num::interval::Interval;
@@ -520,4 +520,60 @@ fn an_intersection_curve_carries_its_caches() {
     ] {
         assert_eq!(make(spans, marched).err(), Some(why));
     }
+}
+
+/// 2^60, the scale of the fuzz campaign's finding below.
+const HUGE: f64 = 1_152_921_504_606_846_976.0;
+
+/// A fuzz finding (Gate 2's `curves` target, the nightly campaign of 6 November 2026, and every
+/// night from 2 to 7 November on other inputs): an offset moved by a certified scale gives its
+/// NURBS cache, moved, and reported the cache's deviation unscaled. The scale stretches that
+/// distance too, here 2^60 times, so the moved curve missed the image of the offset by far more
+/// than its stated deviation, and the transform law failed. The deviation is now the cache's
+/// times the transform's stretch, plus the move's.
+#[test]
+fn an_offset_moved_by_a_huge_scale_stretches_its_cache_deviation() {
+    let m = &mut meter();
+    let ellipse = Ellipse::new(
+        [0.0, -1.0],
+        Axes::Vectors {
+            u: [0.0, -1.0],
+            v: [-1.0, 2.0],
+        },
+        (-1.0, 1.0),
+    )
+    .unwrap();
+    let o = Offset::new(
+        Trimmed::new(Basis::Ellipse(ellipse), (-0.5, 0.5)).unwrap(),
+        OffsetLaw::Planar { distance: 2.0 },
+    )
+    .unwrap();
+    let scale = TypedTransform::from(Transform::scale(HUGE, HUGE, 1.0).unwrap());
+    let at = [0.194_117_647_058_823_5, -0.374_509_803_921_568_63, -0.5];
+    check(&o, &at, &scale, m).unwrap_or_else(|e| panic!("{e}"));
+    // The stated deviation covers the cache's, stretched.
+    let cache = o.to_nurbs(m).unwrap().deviation;
+    let moved = o.transformed(&scale, m).unwrap().deviation;
+    assert!(cache > 0.0, "{cache}");
+    assert!(moved >= cache * HUGE, "{moved} against {cache}");
+}
+
+/// The same for a bulge polyline under a scale that is not a similarity, which moves its NURBS
+/// form: the form's deviation (its rounding) is stretched with it.
+#[test]
+fn a_bulge_polyline_moved_by_a_huge_scale_stretches_its_form_deviation() {
+    let m = &mut meter();
+    let p = BulgePolyline::new(
+        vec![[0.0, 0.0], [10.0, 0.0], [10.0, 10.0]],
+        vec![0.3, -0.7],
+        None,
+        false,
+    )
+    .unwrap();
+    let scale = TypedTransform::from(Transform::scale(HUGE, 0.5 * HUGE, 1.0).unwrap());
+    check(&p, &params(p.domain()), &scale, m).unwrap_or_else(|e| panic!("{e}"));
+    let form = p.to_nurbs(m).unwrap().deviation;
+    let moved = p.transformed(&scale, m).unwrap().deviation;
+    assert!(form > 0.0, "{form}");
+    assert!(moved >= form * HUGE, "{moved} against {form}");
 }

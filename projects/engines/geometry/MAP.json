@@ -2588,13 +2588,14 @@
       "layer": "2",
       "modules": [
         {
-          "cost": "twelve products and sums per point in doubles and in intervals; nothing allocates.",
-          "does": "[`Entries::of`] reads a [`TypedTransform`]: an exact grid transform and a rational one through their exact integer entries (m / d), a certified one through its own doubles. [`Entries::image`] maps a homogeneous point w·P (weight w) to M·(w·P) + w·t, once in doubles in a fixed order and once in intervals, and returns the doubles with the distance between them, an upper bound on how far the double image lies from the exact image under the exact transform.",
+          "cost": "twelve products and sums per point in doubles and in intervals; nine quotients, squares and sums and a square root for the stretch; nothing allocates.",
+          "does": "[`Entries::of`] reads a [`TypedTransform`]: an exact grid transform and a rational one through their exact integer entries (m / d), a certified one through its own doubles. [`Entries::image`] maps a homogeneous point w·P (weight w) to M·(w·P) + w·t, once in doubles in a fixed order and once in intervals, and returns the doubles with the distance between them, an upper bound on how far the double image lies from the exact image under the exact transform. [`Entries::stretch`] bounds how far the linear part stretches a vector, so a distance stated before the transform (a cache's deviation) can be stated after it.",
           "family": [],
           "file": "projects/engines/geometry/crates/geom-curve/src/affine.rs",
           "guarantees": [
             "**Exact entries enclosed.** An integer entry whose double is not exact (beyond 2^53) is widened by its rounding; each quotient m / d is an outward-rounded interval division; a certified transform is exact in its own doubles (`geom-math`'s `transform` header).",
             "**The image's error bounded.** The interval image holds the exact image of the exact point, and the double image is computed from the doubles of the same entries, so the returned distance bounds their difference.",
+            "**The stretch bounded.** The Frobenius norm of the exact entries, never below the spectral norm, computed in intervals rounded outward after dividing by the largest entry, so the squares never overflow and the bound stays tight however large or small the entries are.",
             "**Exact images report 0.** When every entry is exactly its double (grid and certified transforms), each coordinate is also summed exactly, as exact products in `geom-num`'s superaccumulator, and an image equal to its double reports an error of 0: interval arithmetic widens every result and could never say so."
           ],
           "job": "Typed transforms applied to control points, with a certified bound on the rounding: the entries of each `geom-math` transform variant as doubles and as interval enclosures of their exact values, and the image of a homogeneous point in both.",
@@ -2661,7 +2662,7 @@
           "guarantees": [
             "**Exact definition, certified evaluation.** Points, derivatives of every order (Leibniz's rule on W·C = A) and bounds over spans are interval evaluations of those rational functions.",
             "**An exact NURBS form.** The segments are rational quadratic Bezier pieces on the same parameter; an arc whose middle weight is low (a semicircle or more) is first halved, or quartered, by de Casteljau's algorithm at dyadic parameters, which keeps every weight positive. The deviation bounds only the rounding of the pieces' points and weights.",
-            "**Transforms change the kind explicitly.** A similarity keeps a bulge polyline (vertices mapped, widths scaled, bulges negated by a mirror); any other transform makes its NURBS form. A grid transform that moves every vertex exactly is exact: deviation 0 (chapter 7; piece G69).",
+            "**Transforms change the kind explicitly.** A similarity keeps a bulge polyline (vertices mapped, widths scaled, bulges negated by a mirror); any other transform moves its NURBS form, the form's deviation stretched by the transform (at most by its linear part's Frobenius norm) plus the move's. A grid transform that moves every vertex exactly is exact: deviation 0 (chapter 7; piece G69).",
             "**Splits are trimmed polylines.** A split leaves the polyline untouched and trims it (`crate::trimmed`); a reversal reverses the vertices and negates the bulges, exactly."
           ],
           "job": "The bulge polyline kind: lines and arcs through vertices, each arc given by its bulge, with optional widths, as DXF's LWPOLYLINE stores them.",
@@ -3017,7 +3018,7 @@
             "**Certified, or refused.** Where the normal may vanish (a cusp of the basis, or a span too wide to separate it from zero) a derivative bound is `Unbounded` and an enclosure is refused, never guessed; a bound on the points still holds there, from the basis's bound widened by the offset's largest size.",
             "**Converted wherever it is defined.** Where the normal vanishes, or cannot be told from zero even over the narrowest piece the conversion cuts (the domain's width times 2^−52, or two neighbouring doubles where those are farther apart), the offset is undefined (a cusp of the basis, or a tangent parallel to the reference direction), and the NURBS form is refused as `Degenerate`, never as `Unbounded`, which names an infinite domain. A normal that only comes near zero, as on a nearly flat helix offset along its axis, is cut finer there until its pieces are bounded (issue #526); only a remainder that overflows the doubles even on the narrowest pieces is refused, as `NotFinite`.",
             "**Exact split and reversal.** A split trims the basis; a reversal reverses the basis and negates the distances (the left normal of the reversed curve is the right normal).",
-            "**Transforms keep the kind only when exact.** A grid transform of an offset whose basis moves exactly gives an offset (a mirror negating the side); any other transform gives the moved NURBS cache, with both deviations."
+            "**Transforms keep the kind only when exact.** A grid transform of an offset whose basis moves exactly gives an offset (a mirror negating the side); any other transform gives the moved NURBS cache, its deviation the cache's stretched by the transform (at most by its linear part's Frobenius norm) plus the move's."
           ],
           "job": "The offset curve kind: a basis curve moved along its normal, in 2D, in 3D against a reference direction, or by distances that vary along it, with a certified NURBS cache.",
           "method": {
@@ -11085,7 +11086,7 @@
             "**Certified, or refused.** Every enclosure holds the exact offset of the stored base. Where the base's normal may vanish (a pole, a cusp, or a box too wide to separate it from zero) an enclosure is refused and a derivative bound is `Unbounded`; a bound on the points still holds there, from the base's bound widened by |d|, and the normal bound is then the whole space, which decides no sign. Elsewhere the normal bound is the base's, turned over where the offset folds, wherever the sign of 1 − 2Hd + Kd² is certified (Maekawa's identity below), and the cross product of the enclosed partials where it is not.",
             "**Offset by d, then by −d, is the base.** Where the offset is regular (d·κ < 1 for both principal curvatures κ on the side it moves to), the offset's normal is the base's, so the offset by −d of the offset by d is the base itself, and its enclosures hold the base's points.",
             "**Exact split and reversal.** A split narrows the domain on the same base (deviation 0); a reversal reverses the base and negates the distance (`S_u` × `S_v` turns over).",
-            "**Transforms keep the kind only when exact.** A grid transform (a signed permutation and a whole-step translation, so lengths are kept) of an offset whose base moves exactly gives an offset, a mirror negating the distance; any other transform gives the moved NURBS cache, with both deviations."
+            "**Transforms keep the kind only when exact.** A grid transform (a signed permutation and a whole-step translation, so lengths are kept) of an offset whose base moves exactly gives an offset, a mirror negating the distance; any other transform gives the moved NURBS cache, its deviation the cache's stretched by the transform (at most by its linear part's Frobenius norm) plus the move's."
           ],
           "job": "The offset surface kind: a base kind moved along its unit normal, O = S + d·n with n = (`S_u` × `S_v`)/|`S_u` × `S_v`|, with symbolic higher derivatives and a certified NURBS cache.",
           "method": {
