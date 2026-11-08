@@ -6057,6 +6057,158 @@
       "occurrences": 1,
       "kind": "equivalent",
       "reason": "The two differ only when a residual's magnitude equals the bound found so far, and then both keep the same value: the largest is the same number either way."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-sketch/src/certify.rs",
+      "mutant": "replace > with >= in select",
+      "line_text": ".is_some_and(|d| d.abs() > INDEPENDENT)",
+      "occurrences": 1,
+      "kind": "harmless",
+      "reason": "The forms differ only for a pivot of exactly 2^-12 in size. That threshold is chapter 15.8's independent pivot, a cut between dependent and independent equations, and the crate promises nothing about a pivot at the cut itself: an equation kept there is certified with the others or its block is refused with a reason, and one set aside keeps its residual bound, so either way the result is a proof or a reason."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-sketch/src/certify.rs",
+      "mutant": "replace > with >= in krawczyk",
+      "line_text": "if m > spread {",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "The two differ only when the values are equal, and then both keep the same value: the largest is the same number either way."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-sketch/src/certify.rs",
+      "mutant": "replace > with >= in krawczyk",
+      "line_text": "if x.abs() > largest {",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "The two differ only when the values are equal, and then both keep the same value: the largest is the same number either way."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-sketch/src/certify.rs",
+      "mutant": "replace > with >= in krawczyk",
+      "line_text": "if away > reach {",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "The two differ only when the values are equal, and then both keep the same value: the largest is the same number either way."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-sketch/src/certify.rs",
+      "mutant": "replace > with >= in krawczyk",
+      "line_text": "if away > radius {",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "The two differ only when the values are equal, and then both keep the same value: the largest is the same number either way."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-sketch/src/certify.rs",
+      "mutant": "replace > with >= in krawczyk",
+      "line_text": "let lo = if a.lo() > t.lo() { a.lo() } else { t.lo() };",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "The two differ only when the two lower ends are equal, and then both take the same value."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-sketch/src/certify.rs",
+      "mutant": "replace < with <= in krawczyk",
+      "line_text": "let hi = if a.hi() < t.hi() { a.hi() } else { t.hi() };",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "The two differ only when the two upper ends are equal, and then both take the same value."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-sketch/src/certify.rs",
+      "mutant": "replace > with == in krawczyk",
+      "line_text": "if lo > hi {",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "The guard is never taken by the original or the mutant. Inside the inclusion branch the block's unique zero lies in the image, and every image end is an outward-rounded bound one step past its rounded corner, so the zero lies strictly inside each image and strictly inside each narrowed box by induction: lo < hi always, so lo > hi and lo == hi are both false."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-sketch/src/certify.rs",
+      "mutant": "replace > with >= in krawczyk",
+      "line_text": "if lo > hi {",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "The guard is never taken by the original or the mutant. Inside the inclusion branch the block's unique zero lies in the image, and every image end is an outward-rounded bound one step past its rounded corner, so the zero lies strictly inside each image and strictly inside each narrowed box by induction: lo < hi always, so lo > hi and lo >= hi are both false."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-sketch/src/certify.rs",
+      "mutant": "replace > with >= in krawczyk",
+      "line_text": "if !(k.lo() > x_box.lo() && k.hi() < x_box.hi()) {",
+      "occurrences": 1,
+      "kind": "harmless",
+      "reason": "The forms differ only when the lower end of the operator's image equals the box's lower end to the bit. Each image end is an outward-rounded bound one step past a rounded corner and each box end is the centre moved out by a radius, or an image end moved out by a slack of at least 1e-12 of its size, so a tie needs two independently rounded doubles to agree exactly. Then the image still lies in the box, which proves a zero in it (Krawczyk; Moore, 1977); only uniqueness rests on the strict inclusion the original asks for."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-sketch/src/certify.rs",
+      "mutant": "replace < with <= in krawczyk",
+      "line_text": "if !(k.lo() > x_box.lo() && k.hi() < x_box.hi()) {",
+      "occurrences": 1,
+      "kind": "harmless",
+      "reason": "The forms differ only when the upper end of the operator's image equals the box's upper end to the bit. Each image end is an outward-rounded bound one step past a rounded corner and each box end is the centre moved out by a radius, or an image end moved out by a slack of at least 1e-12 of its size, so a tie needs two independently rounded doubles to agree exactly. Then the image still lies in the box, which proves a zero in it (Krawczyk; Moore, 1977); only uniqueness rests on the strict inclusion the original asks for."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-sketch/src/certify.rs",
+      "mutant": "replace > with >= in krawczyk",
+      "line_text": "if reach > HUGE {",
+      "occurrences": 1,
+      "kind": "harmless",
+      "reason": "The forms differ only when the image reaches exactly 1e12 steps from the committed point. HUGE is a convenience cut that stops a hopeless inflation early, and the crate promises nothing at the cut itself: the mutant stops one inflation sooner with Unproven(NoInclusion), the original tries the next box, and either result is a proof or a reason."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-sketch/src/certify.rs",
+      "mutant": "replace < with <= in Step<'_>::contraction",
+      "line_text": "let lo = if *x < x_box.lo() { *x } else { x_box.lo() };",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "The two differ only when the centre equals the box's lower end, and then both take the same value."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-sketch/src/certify.rs",
+      "mutant": "replace > with >= in Step<'_>::contraction",
+      "line_text": "let hi = if *x > x_box.hi() { *x } else { x_box.hi() };",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "The two differ only when the centre equals the box's upper end, and then both take the same value."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-sketch/src/equation.rs",
+      "mutant": "delete match arm 0 in <impl Visit for Jetter<'_>>::go",
+      "line_text": "0 => self.lanes::<R, N, E, 0>(kind, row, list),",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "The narrow arms are only for speed. Without this arm a rule with 0 unknown inputs goes to the last arm, which takes its jet in as many lanes as the rule has inputs: the first 0 lanes are seeded as before, the rest stay zero and are never read (the partials are taken up to the lane count), so every value and derivative is the same. The unit test a_jet_in_few_lanes_is_the_jet_in_full_width_lanes compares the two widths for none to five unknowns."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-sketch/src/equation.rs",
+      "mutant": "delete match arm 1 in <impl Visit for Jetter<'_>>::go",
+      "line_text": "1 => self.lanes::<R, N, E, 1>(kind, row, list),",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "The narrow arms are only for speed. Without this arm a rule with 1 unknown inputs goes to the last arm, which takes its jet in as many lanes as the rule has inputs: the first 1 lanes are seeded as before, the rest stay zero and are never read (the partials are taken up to the lane count), so every value and derivative is the same. The unit test a_jet_in_few_lanes_is_the_jet_in_full_width_lanes compares the two widths for none to five unknowns."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-sketch/src/equation.rs",
+      "mutant": "delete match arm 2 in <impl Visit for Jetter<'_>>::go",
+      "line_text": "2 => self.lanes::<R, N, E, 2>(kind, row, list),",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "The narrow arms are only for speed. Without this arm a rule with 2 unknown inputs goes to the last arm, which takes its jet in as many lanes as the rule has inputs: the first 2 lanes are seeded as before, the rest stay zero and are never read (the partials are taken up to the lane count), so every value and derivative is the same. The unit test a_jet_in_few_lanes_is_the_jet_in_full_width_lanes compares the two widths for none to five unknowns."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-sketch/src/equation.rs",
+      "mutant": "delete match arm 3 in <impl Visit for Jetter<'_>>::go",
+      "line_text": "3 => self.lanes::<R, N, E, 3>(kind, row, list),",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "The narrow arms are only for speed. Without this arm a rule with 3 unknown inputs goes to the last arm, which takes its jet in as many lanes as the rule has inputs: the first 3 lanes are seeded as before, the rest stay zero and are never read (the partials are taken up to the lane count), so every value and derivative is the same. The unit test a_jet_in_few_lanes_is_the_jet_in_full_width_lanes compares the two widths for none to five unknowns."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-sketch/src/equation.rs",
+      "mutant": "delete match arm 4 in <impl Visit for Jetter<'_>>::go",
+      "line_text": "4 => self.lanes::<R, N, E, 4>(kind, row, list),",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "The narrow arms are only for speed. Without this arm a rule with 4 unknown inputs goes to the last arm, which takes its jet in as many lanes as the rule has inputs: the first 4 lanes are seeded as before, the rest stay zero and are never read (the partials are taken up to the lane count), so every value and derivative is the same. The unit test a_jet_in_few_lanes_is_the_jet_in_full_width_lanes compares the two widths for none to five unknowns."
     }
   ],
   "coverage_off": [
