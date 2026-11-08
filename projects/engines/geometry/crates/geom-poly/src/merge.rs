@@ -1015,11 +1015,16 @@ fn splits_boxes(plane: &Plane) -> bool {
         && plane.d() & 1 != 0
 }
 
-/// `corner`'s point under a name the boxes cannot change: the first three planes through it, in
-/// plane order and leaving out the boxes' own, that meet in one point. Which corners a point has
-/// depends on how the boxes fell, but which faces pass through it does not. A point with no such
-/// three, which only a seam has, keeps its corner's.
+/// `corner`'s point under a name the boxes cannot change. A grid point is named by its three axis
+/// planes: which corners it has, and so which planes reach it, depends on how far each box's
+/// cuts run (a face that only touches a corner of another solid is cut there in one box and not
+/// in a smaller one). A point off the grid takes the first three planes through it, in plane
+/// order and leaving out the boxes' own, that meet in one point; one with no such three, which
+/// only a seam has, keeps its corner's.
 fn named(corner: &Corner, meter: &mut WorkMeter<'_>) -> Result<Tpi, MergeError> {
+    if let Some(at) = grid_point(corner)? {
+        return Ok(at);
+    }
     let mut list: Vec<Plane> = corner
         .through
         .iter()
@@ -1041,6 +1046,33 @@ fn named(corner: &Corner, meter: &mut WorkMeter<'_>) -> Result<Tpi, MergeError> 
         }
     }
     Ok(found.unwrap_or(corner.point))
+}
+
+/// A corner's point named by its three axis planes, when it is a grid point: read from its cells,
+/// or from its coordinates when it has none.
+fn grid_point(corner: &Corner) -> Result<Option<Tpi>, NumError> {
+    let at = if let Some(cells) = corner.cells {
+        if cells.iter().any(|c| c.rest != 0) {
+            return Ok(None);
+        }
+        cells.map(|c| c.floor)
+    } else {
+        let near = corner.point.to_grid()?;
+        if !near.is_exact() {
+            return Ok(None);
+        }
+        let p = near.value();
+        [p.x.get(), p.y.get(), p.z.get()].map(i128::from)
+    };
+    let [x, y, z] = at;
+    // A grid point's coordinates are within 2^40, so negating one cannot saturate.
+    let axis = |n: [i128; 3], v: i128| Plane::new(n, v.saturating_neg());
+    let (on_x, on_y, on_z) = (
+        axis([1, 0, 0], x)?,
+        axis([0, 1, 0], y)?,
+        axis([0, 0, 1], z)?,
+    );
+    Ok(Some(Tpi::meeting(on_x, on_y, on_z)?))
 }
 
 /// Every side of `held`, sorted by line: made on `exec`'s pool, and sorted there where every side
