@@ -236,6 +236,17 @@ fn shift(key: u8, x: i64) -> Instance {
     }
 }
 
+/// A pattern's copy squeezed to a third in x and a seventh in y: a rational scale that rounds every
+/// corner of `a_prism` off the grid.
+fn squeezed(key: u8) -> Instance {
+    Instance {
+        key: [key; 16],
+        transform: TypedTransform::from(
+            RationalTransform::new([[7, 0, 0], [0, 3, 0], [0, 0, 21]], [0; 3], 21).unwrap(),
+        ),
+    }
+}
+
 /// A pattern's transform from a matrix.
 fn matrix(m: [[i64; 3]; 3]) -> Instance {
     Instance {
@@ -713,9 +724,12 @@ fn drive_pattern() -> Driver {
                     vec![matrix([[2, 0, 0], [0, 1, 0], [0, 0, 1]])],
                 ),
             ),
+            // A copy the checker cannot certify once its corners round: squeezed, as the scale's
+            // trigger is. A turn by (4, 3) no longer serves, since the checker on this line certifies
+            // that copy.
             trigger(
                 "NotCertifiedYet",
-                of(&flat, Some(certified(64)), vec![tilted(1)]),
+                of(&flat, Some(certified(64)), vec![squeezed(1)]),
             ),
         ],
         accept: Some(Box::new(move |class| {

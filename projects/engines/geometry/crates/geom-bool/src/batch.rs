@@ -19,13 +19,18 @@
 //!
 //! Recursion:
 //!
-//! - Cycle: `<geom_pool::native::Rayon as Pool>::run_all`, `geom_bool::batch::cut`, `geom_bool::batch::one_cut`, `geom_bool::combine::Scene::cells`, `geom_bool::combine::Scene::fused`, `geom_bool::combine::Scene::keep`, `geom_bool::combine::Scene::kept`, `geom_bool::combine::Scene::partition`, `geom_bool::combine::Scene::section`, `geom_bool::combine::Scene::sheet`, `geom_bool::combine::Scene::split`, `geom_bool::combine::Scene::trim`, `geom_bool::combine::Scene::walled`, `geom_bool::combine::arranged_input`, `geom_bool::combine::selected`, `geom_poly::merge::around_shell`, `geom_poly::merge::cut_at_ends`, `geom_poly::merge::merge_on`, `geom_poly::merge::merge_with`, `geom_poly::merge::nest`, `geom_poly::merge::numbered`, `geom_poly::merge::section`, `geom_poly::merge::sheets_of`, `geom_poly::merge::sides_of`, `geom_poly::merge::sides_of_first`, `geom_poly::subdivide::around_on`, `geom_poly::subdivide::arrange`, `geom_poly::subdivide::arrange_with`, `geom_run::exec::Exec::sort_stable`, `geom_run::exec::Exec::try_map`, `geom_run::phase::run_items`, `geom_run::phase::run_phase`, `geom_run::pool::drive`, `geom_run::pool::run_wave`, `geom_run::sort::key_order`, `geom_run::sort::sort_stable`.
-//!   Bound: 2.
+//! - Cycle: `<geom_pool::halves::Inline as Join>::join`, `<geom_pool::native::Rayon as Join>::join`, `<geom_pool::native::Rayon as Pool>::run_all`, `geom_bool::batch::cut`, `geom_bool::batch::one_cut`, `geom_bool::combine::Scene::cells`, `geom_bool::combine::Scene::fused`, `geom_bool::combine::Scene::keep`, `geom_bool::combine::Scene::kept`, `geom_bool::combine::Scene::partition`, `geom_bool::combine::Scene::section`, `geom_bool::combine::Scene::sheet`, `geom_bool::combine::Scene::split`, `geom_bool::combine::Scene::trim`, `geom_bool::combine::Scene::walled`, `geom_bool::combine::arranged_input`, `geom_bool::combine::selected`, `geom_poly::merge::around_shell`, `geom_poly::merge::cut_at_ends`, `geom_poly::merge::merge_on`, `geom_poly::merge::merge_with`, `geom_poly::merge::nest`, `geom_poly::merge::numbered`, `geom_poly::merge::section`, `geom_poly::merge::sheets_of`, `geom_poly::merge::sides_of`, `geom_poly::merge::sides_of_first`, `geom_poly::subdivide::around_on`, `geom_poly::subdivide::arrange`, `geom_poly::subdivide::arrange_with`, `geom_pool::halves::run_halves`, `geom_run::exec::Exec::sort_stable`, `geom_run::exec::Exec::try_map`, `geom_run::phase::run_items`, `geom_run::phase::run_phase`, `geom_run::pool::drive`, `geom_run::pool::run_wave`, `geom_run::sort::key_order`, `geom_run::sort::sort_stable`.
+//!   Bound: 330.
 //!   Why: the checker sees the pool's tasks call back into every function that runs a parallel
 //!   phase, but a phase runs inside another only here: with several hosts `cut` spreads them
 //!   over the pool and runs each host's cut on `Exec::serial()`, whose phases run inline on the
 //!   caller and never reach the pool; with one host `cut` keeps the pool for that host's
-//!   arrangement. So at most two parallel phases are ever open at once, the hosts' and one inside it.
+//!   arrangement. So at most two parallel phases are ever open at once, the hosts' and one inside
+//!   it. Rayon's `run_all` halves each phase's wave with `run_halves`, each level one `run_halves`
+//!   and one `join`, at most 64 levels (`geom_pool::native`: a slice is under 2^63 tasks), so a
+//!   phase holds at most 128 frames of halving; and since a call path returns to one of the
+//!   cycle's other 35 functions only through a phase, each of them is on the stack at most once
+//!   for each open phase. With `cut` on top, at most 1 + 2 · (128 + 35) = 327 frames, under 330.
 //!   Test: `parallel_phases_nest_at_most_twice`.
 //!
 //! Cost: one arrangement per host, linear in its faces plus local work around each tool.
