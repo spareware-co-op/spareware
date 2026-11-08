@@ -472,17 +472,31 @@ fn wide_of(corner: &Corner) -> Option<([I320; 3], I256)> {
     ))
 }
 
-/// A cell's [`lead`]: its floor, and the first 32 binary digits of its fraction.
-type Lead = (i128, u32);
+/// A cell's [`lead`]: its floor, the first 32 binary digits of its fraction, and whether the
+/// fraction runs on past them.
+type Lead = (i128, u32, bool);
 
-/// A cell's floor and the first 32 binary digits of its fraction, rest / over, exactly: a key
-/// that never decreases as the cell grows, so where two cells' leads differ they order as their
-/// leads do, and a sort that compares leads first reads the cells themselves only for the pairs
-/// whose leads tie. Long division, a digit at a time: the remainder stays below over, itself
-/// below 2^127, so doubling it fits a `u128`.
+/// A cell's floor, the first 32 binary digits of its fraction, rest / over, and whether the
+/// fraction runs on past them, exactly: a key that never decreases as the cell grows (where floor
+/// and digits agree, a fraction that stops there is the smaller), so where two cells' leads differ
+/// they order as their leads do, two leads that agree and stop are equal cells, and only two that
+/// agree and run on leave the cells themselves to decide. A remainder below 2^96 takes one
+/// division of it times 2^32 by over, which fits a `u128`; a wider one long division, a digit at
+/// a time: the remainder stays below over, itself below 2^127, so doubling it fits a `u128`.
 fn lead(cell: &Cell) -> Lead {
     let over = cell.over.unsigned_abs();
-    let mut rest = cell.rest.unsigned_abs();
+    let rest = cell.rest.unsigned_abs();
+    if rest == 0 {
+        return (cell.floor, 0, false);
+    }
+    if rest.leading_zeros() >= u32::BITS {
+        // rest · 2^32 < over · 2^32 fits, and the quotient is below 2^32.
+        let scaled = rest.wrapping_shl(u32::BITS);
+        let digits = scaled.checked_div(over).unwrap_or(0);
+        let more = scaled.checked_rem(over).unwrap_or(0) != 0;
+        return (cell.floor, u32::try_from(digits).unwrap_or(u32::MAX), more);
+    }
+    let mut rest = rest;
     let mut digits = 0u32;
     for _ in 0..u32::BITS {
         rest = rest.wrapping_shl(1);
@@ -490,13 +504,83 @@ fn lead(cell: &Cell) -> Lead {
         digits = digits.wrapping_shl(1) | u32::from(one);
         rest = rest.wrapping_sub(over.wrapping_mul(u128::from(one)));
     }
-    (cell.floor, digits)
+    (cell.floor, digits, rest != 0)
+}
+
+/// How far a floor reaches and still has its own [`mark`]: 2^62, so a floor in reach plus 2^63
+/// lies in [2^62, 3 · 2^62), below 2^64, and its mark above 1 and below `u128::MAX`.
+const REACH: i128 = 1 << 62;
+
+/// A cell's [`lead`] in one `u128` that orders as the lead does: the floor plus 2^63 in the high
+/// 64 bits, the digits in the next 32, and the lowest bit set where the fraction runs on. A floor
+/// past `REACH` marks 1 below, or `u128::MAX` above, every mark in reach, each with its lowest bit
+/// set, so two cells past it on one side leave the cells to decide.
+fn mark(cell: &Cell) -> u128 {
+    let (floor, digits, more) = lead(cell);
+    if floor < REACH.wrapping_neg() {
+        return 1;
+    }
+    if floor >= REACH {
+        return u128::MAX;
+    }
+    // In reach, floor + 2^63 lies in [2^62, 3 · 2^62), a `u64`.
+    let shifted = u64::try_from(floor.wrapping_add(1 << 63)).map_or(0, u128::from);
+    shifted.wrapping_shl(64) | u128::from(digits).wrapping_shl(32) | u128::from(more)
+}
+
+/// A corner's or a line's key in its sort, where it has [`Cell`]s: the [`mark`] of each cell that
+/// can differ, and the cells, read only where two marks agree and run on. The marks of one point,
+/// or one line, are its cells' own, so the key is a total order, the exact one of
+/// [`point_order`] or [`line_order`], and a sort and the runs of equal keys after it read the
+/// copied marks, nearly never the cells.
+#[derive(Clone, Copy, Debug)]
+struct MarkKey<'a, const N: usize, const M: usize> {
+    marks: [u128; M],
+    cells: &'a [Cell; N],
+}
+
+impl<'a, const N: usize, const M: usize> MarkKey<'a, N, M> {
+    /// The key of `cells`, marking `M` of them from `from` on; any past the end mark 0.
+    fn new(cells: &'a [Cell; N], from: usize) -> Self {
+        let mut marks = [0u128; M];
+        for (slot, cell) in marks.iter_mut().zip(cells.iter().skip(from)) {
+            *slot = mark(cell);
+        }
+        MarkKey { marks, cells }
+    }
+}
+
+impl<const N: usize, const M: usize> PartialEq for MarkKey<'_, N, M> {
+    fn eq(&self, other: &Self) -> bool {
+        self.cmp(other) == Ordering::Equal
+    }
+}
+
+impl<const N: usize, const M: usize> Eq for MarkKey<'_, N, M> {}
+
+impl<const N: usize, const M: usize> PartialOrd for MarkKey<'_, N, M> {
+    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+        Some(self.cmp(other))
+    }
+}
+
+impl<const N: usize, const M: usize> Ord for MarkKey<'_, N, M> {
+    fn cmp(&self, other: &Self) -> Ordering {
+        for (a, b) in self.marks.iter().zip(&other.marks) {
+            if a != b {
+                return a.cmp(b);
+            }
+            if a & 1 != 0 {
+                return CellKey(self.cells).cmp(&CellKey(other.cells));
+            }
+        }
+        Ordering::Equal
+    }
 }
 
 /// A corner's place in [`point_order`], or a line's after its `first` in [`line_order`], where it
-/// has [`Cell`]s, for a sort on the pool: comparing cells cannot fail, as each product they need
-/// is of two `i128`s, below 2^254 in [`I256`]. It borrows the cells, as the sort makes a key for
-/// every comparison.
+/// has [`Cell`]s: comparing cells cannot fail, as each product they need is of two `i128`s, below
+/// 2^254 in [`I256`]. It borrows the cells.
 #[derive(Clone, Copy, Debug)]
 struct CellKey<'a, const N: usize>(&'a [Cell; N]);
 
@@ -1014,26 +1098,18 @@ fn numbered(
     // Every corner by reference, in piece order: each stays in the list its piece's task made,
     // rather than being moved into one list, a copy of every corner.
     let corners: Vec<&Corner> = made.iter().flatten().collect();
-    // Each key leads with its first coordinate's [`lead`], which orders as that coordinate does
-    // wherever two leads differ, so the order is the cells' own; the sort reads the cells only
-    // where the leads tie.
-    let keys: Option<Vec<(Lead, &[Cell; 3])>> = corners
+    // Each key holds every coordinate's [`mark`], so the sort and the runs of equal points after it
+    // read the cells only where two marks agree and run on.
+    let keys: Option<Vec<MarkKey<'_, 3, 3>>> = corners
         .iter()
-        .map(|c| {
-            c.cells
-                .as_ref()
-                .map(|cells| (cells.first().map_or((0, 0), lead), cells))
-        })
+        .map(|c| c.cells.as_ref().map(|cells| MarkKey::new(cells, 0)))
         .collect();
-    let order = if let Some(keys) = keys {
+    let order = if let Some(keys) = &keys {
         // Equal points keep their order, as the serial stable sort keeps it.
-        let sorted = exec.sort_stable::<_, _, MergeError, _>(
-            meter,
-            SORT_CORNERS,
-            SORT_PLAN,
-            &keys,
-            |(first, cells)| (*first, CellKey(cells)),
-        );
+        let sorted =
+            exec.sort_stable::<_, _, MergeError, _>(meter, SORT_CORNERS, SORT_PLAN, keys, |key| {
+                *key
+            });
         sorted.map_err(|e| phase_error(e, meter))?
     } else {
         let mut order: Vec<usize> = (0..corners.len()).collect();
@@ -1048,10 +1124,15 @@ fn numbered(
     };
     // Each run of equal points in that order is one place: the first corner's point and cells, and
     // every corner's planes in turn, gathered once. Whether a corner starts a run is told on the
-    // pool, against the corner before it in the order: [`point_order`] compares points exactly and
-    // never fails on corners (a wide coordinate fails only if a budget were wrong), so a corner equal
-    // to the one before it is equal to its run's first. The runs are then walked once, in order,
-    // each place made at its full length and every corner's planes copied into it.
+    // pool, against the corner before it in the order, by the keys the sort read where there are
+    // any: they and [`point_order`] compare points exactly and never fail on corners (a wide
+    // coordinate fails only if a budget were wrong), so a corner equal to the one before it is
+    // equal to its run's first. The runs are then walked once, in order, each place made at its
+    // full length and every corner's planes copied into it.
+    let order_of = |before: usize, at: usize| match &keys {
+        Some(keys) => Some(keys.get(before)?.cmp(keys.get(at)?)),
+        None => point_order(corners.get(before)?, corners.get(at)?),
+    };
     let starts = exec.try_map(
         meter,
         PLACES,
@@ -1061,9 +1142,7 @@ fn numbered(
             let Some(before) = k.checked_sub(1).and_then(|b| order.get(b)) else {
                 return Ok(true);
             };
-            let found = corners.get(*before).zip(corners.get(*at));
-            let (p, q) = found.ok_or(MergeError::Open)?;
-            Ok(point_order(p, q) != Some(Ordering::Equal))
+            Ok(order_of(*before, *at) != Some(Ordering::Equal))
         },
     );
     let starts = starts.map_err(|e| phase_error(e, meter))?;
@@ -1207,45 +1286,79 @@ fn sides_of(
     made.map_err(|e| phase_error(e, meter))
 }
 
-/// The order of `sides` by line: sorted on `exec`'s pool where every side has its [`Cell`]s.
+/// A line's key in the sort of sides: its `first`, then the [`MarkKey`] of its cells after it.
+type LineSortKey<'a> = (usize, MarkKey<'a, 6, 5>);
+
+/// Sides in line order, as places in the sides given, and each line's stretch of that order.
+type ByLine = (Vec<usize>, Vec<(usize, usize)>);
+
+/// The order of `sides` by line, sorted on `exec`'s pool where every side has its [`Cell`]s, and
+/// each line's stretch of that order, from its first side to the next line's.
 fn by_line(
     sides: &[&Side],
     exec: &Exec<'_>,
     meter: &mut WorkMeter<'_>,
-) -> Result<Vec<usize>, MergeError> {
-    // A line's cells before the one after its `first` are fixed by `first`: 0 for each component
-    // of the direction before it, and 1 at it. So after `first`, the [`lead`] of the cell after it
-    // orders lines as their cells do wherever two leads differ, and the sort reads the cells only
-    // where the leads tie.
-    let keys: Option<Vec<(usize, Lead, &[Cell; 6])>> = sides
+) -> Result<ByLine, MergeError> {
+    // A line's cells up to its `first` are fixed by `first`: 0 for each component of the
+    // direction before it, and 1 at it. So after `first`, the [`mark`]s of the five cells after it
+    // order lines as their cells do, and the sort reads the cells only where two marks agree and
+    // run on.
+    let keys: Option<Vec<LineSortKey<'_>>> = sides
         .iter()
         .map(|s| {
-            s.key.cells.as_ref().map(|cells| {
-                let after = cells.get(s.key.first.saturating_add(1));
-                (s.key.first, after.map_or((0, 0), lead), cells)
-            })
+            let from = s.key.first.saturating_add(1);
+            s.key
+                .cells
+                .as_ref()
+                .map(|cells| (s.key.first, MarkKey::new(cells, from)))
         })
         .collect();
-    if let Some(keys) = keys {
+    let order = if let Some(keys) = &keys {
         // Sides on one line keep their order, as the serial stable sort keeps it.
-        let sorted = exec.sort_stable::<_, _, MergeError, _>(
-            meter,
-            SORT_SIDES,
-            SORT_PLAN,
-            &keys,
-            |(first, lead, cells)| (*first, *lead, CellKey(cells)),
-        );
-        return sorted.map_err(|e| phase_error(e, meter));
+        let sorted =
+            exec.sort_stable::<_, _, MergeError, _>(meter, SORT_SIDES, SORT_PLAN, keys, |key| *key);
+        sorted.map_err(|e| phase_error(e, meter))?
+    } else {
+        let mut order: Vec<usize> = (0..sides.len()).collect();
+        let mut failed = false;
+        let key = |i: &usize| sides.get(*i).map(|side| &side.key);
+        order.sort_by(|a, b| {
+            let found = key(a).zip(key(b)).and_then(|(p, q)| line_order(p, q));
+            noted(found, &mut failed)
+        });
+        (!failed).then_some(()).ok_or(NumError::BudgetExceeded)?;
+        order
+    };
+    // Where each line's sides start is told on the pool, against the side before it in the order,
+    // by the keys the sort read where there are any: they and [`line_order`] are exact and never
+    // fail, so a side on the line of the one before it is on its line's first's.
+    let order_of = |before: usize, at: usize| match &keys {
+        Some(keys) => Some(keys.get(before)?.cmp(keys.get(at)?)),
+        None => line_order(&sides.get(before)?.key, &sides.get(at)?.key),
+    };
+    let starts = exec.try_map(
+        meter,
+        LINES,
+        PLACES_PLAN,
+        &order,
+        |k, at, _| -> Result<bool, MergeError> {
+            let Some(before) = k.checked_sub(1).and_then(|b| order.get(b)) else {
+                return Ok(true);
+            };
+            Ok(order_of(*before, *at) != Some(Ordering::Equal))
+        },
+    );
+    let starts = starts.map_err(|e| phase_error(e, meter))?;
+    let mut lines: Vec<(usize, usize)> = Vec::new();
+    for (k, starts_a_line) in starts.into_iter().enumerate() {
+        if starts_a_line {
+            if let Some(last) = lines.last_mut() {
+                last.1 = k;
+            }
+            lines.push((k, order.len()));
+        }
     }
-    let mut order: Vec<usize> = (0..sides.len()).collect();
-    let mut failed = false;
-    let key = |i: &usize| sides.get(*i).map(|side| &side.key);
-    order.sort_by(|a, b| {
-        let found = key(a).zip(key(b)).and_then(|(p, q)| line_order(p, q));
-        noted(found, &mut failed)
-    });
-    (!failed).then_some(()).ok_or(NumError::BudgetExceeded)?;
-    Ok(order)
+    Ok((order, lines))
 }
 
 /// The sides in `order`, as references, so that sorting them moves none.
@@ -1672,16 +1785,12 @@ pub fn section(pieces: &[(Piece, usize)], meter: &mut WorkMeter<'_>) -> Result<C
     let (number, points) = numbered(&held, &Exec::serial(), meter)?;
     let by_piece = sides_of(&held, &number, &Exec::serial(), meter)?;
     let each_side: Vec<&Side> = by_piece.iter().flatten().collect();
-    let sides = in_order(&each_side, &by_line(&each_side, &Exec::serial(), meter)?)?;
+    let (order, lines) = by_line(&each_side, &Exec::serial(), meter)?;
+    let sides = in_order(&each_side, &order)?;
     let mut runs: Vec<Run> = Vec::new();
-    let mut start = 0usize;
-    for end in 1..=sides.len() {
-        let next = sides.get(end).zip(sides.get(start));
-        if next.is_none_or(|(b, a)| line_order(&a.key, &b.key) != Some(Ordering::Equal)) {
-            let group = sides.get(start..end).ok_or(MergeError::Open)?;
-            meetings(start, group, &held, &mut runs)?;
-            start = end;
-        }
+    for (start, end) in lines {
+        let group = sides.get(start..end).ok_or(MergeError::Open)?;
+        meetings(start, group, &held, &mut runs)?;
     }
     let runs = cut_at_ends(runs, &points, &Exec::serial(), meter)?;
     let mut used: Vec<usize> = runs.iter().flat_map(|e| [e.low, e.high]).collect();
@@ -1764,37 +1873,13 @@ pub fn merge_on(
     // order, rather than moved into one list.
     let by_piece = sides_of(&held, &number, exec, meter)?;
     let each_side: Vec<&Side> = by_piece.iter().flatten().collect();
-    let sides = in_order(&each_side, &by_line(&each_side, exec, meter)?)?;
+    let (order, lines) = by_line(&each_side, exec, meter)?;
+    let sides = in_order(&each_side, &order)?;
     held.truncate(kept);
 
-    // Each line's runs, and which pieces join across them. Where each line's sides start is told
-    // on the pool, against the side before it in the order: [`line_order`] is exact and never fails,
-    // so a side on the line of the one before it is on its line's first's. The lines are swept on
-    // the pool, each into its own joins and runs, which are then taken in line order: the joins
-    // made and the runs listed are those of one sweep after another, and the first failure is the
-    // first line's.
-    let starts = exec.try_map(
-        meter,
-        LINES,
-        PLACES_PLAN,
-        &sides,
-        |k, side, _| -> Result<bool, MergeError> {
-            let Some(before) = k.checked_sub(1).and_then(|b| sides.get(b)) else {
-                return Ok(true);
-            };
-            Ok(line_order(&before.key, &side.key) != Some(Ordering::Equal))
-        },
-    );
-    let starts = starts.map_err(|e| phase_error(e, meter))?;
-    let mut lines: Vec<(usize, usize)> = Vec::new();
-    for (k, starts_a_line) in starts.into_iter().enumerate() {
-        if starts_a_line {
-            if let Some(last) = lines.last_mut() {
-                last.1 = k;
-            }
-            lines.push((k, sides.len()));
-        }
-    }
+    // Each line's runs, and which pieces join across them. The lines are swept on the pool, each
+    // into its own joins and runs, which are then taken in line order: the joins made and the runs
+    // listed are those of one sweep after another, and the first failure is the first line's.
     let swept = exec.try_map(
         meter,
         SWEEPS,
@@ -1809,7 +1894,10 @@ pub fn merge_on(
     );
     let swept = swept.map_err(|e| phase_error(e, meter))?;
     let mut same_piece: Vec<usize> = (0..held.len()).collect();
-    let mut runs: Vec<Run> = Vec::new();
+    let found = swept
+        .iter()
+        .fold(0usize, |n, (_, found)| n.saturating_add(found.len()));
+    let mut runs: Vec<Run> = Vec::with_capacity(found);
     for (joins, found) in swept {
         for (a, b) in joins {
             join(&mut same_piece, a, b);
@@ -1860,7 +1948,10 @@ pub fn merge_on(
     used.sort_unstable();
     used.dedup();
     let vertex = |id: usize| used.binary_search(&id).map_err(|_| MergeError::Open);
-    let mut fins: Vec<Fin> = Vec::new();
+    let mut fins: Vec<Fin> = Vec::with_capacity(
+        runs.iter()
+            .fold(0usize, |n, run| n.saturating_add(run.fins.len())),
+    );
     let mut around_edge: Vec<Vec<usize>> = Vec::with_capacity(runs.len());
     for (e, run) in runs.iter().enumerate() {
         let mut here = Vec::with_capacity(run.fins.len());
@@ -2015,7 +2106,10 @@ mod tests {
 
     use geom_num::Sign;
 
-    use super::{Cell, CellKey, corner, lead, line_in_words, point_order, wide_line_key};
+    use super::{
+        Cell, CellKey, MarkKey, REACH, corner, lead, line_in_words, mark, point_order,
+        wide_line_key,
+    };
 
     /// a / b against c / d, b and d positive, by cross-multiplying big integers.
     fn exact(a: i128, b: i128, c: i128, d: i128) -> Ordering {
@@ -2119,10 +2213,11 @@ mod tests {
         assert_eq!(point_order(&near, &up), Some(Ordering::Greater));
     }
 
-    /// A cell's lead against big integers: its floor, and the floor of its fraction times 2^32.
+    /// A cell's lead against big integers: its floor, the floor of its fraction times 2^32, and
+    /// whether that leaves a remainder.
     fn leads(v: i128, over: i128) {
         let cell = Cell::new(v, over).unwrap();
-        let (floor, digits) = lead(&cell);
+        let (floor, digits, more) = lead(&cell);
         let (v, over) = (BigInt::from(v), BigInt::from(over));
         // Floor division by a positive divisor: the quotient rounded towards zero, one less when
         // that leaves a negative remainder.
@@ -2135,9 +2230,11 @@ mod tests {
             }
         };
         let whole = floor_by(&v);
-        let fraction = floor_by(&((&v - &whole * &over) << 32u32));
+        let scaled = (&v - &whole * &over) << 32u32;
+        let fraction = floor_by(&scaled);
         assert_eq!(BigInt::from(floor), whole, "{v} / {over}");
         assert_eq!(BigInt::from(digits), fraction, "{v} / {over}");
+        assert_eq!(more, scaled != fraction * &over, "{v} / {over}");
     }
 
     proptest! {
@@ -2172,9 +2269,121 @@ mod tests {
             (3, 4),
             (-1, 3),
             ((1 << 100) + 1, 1 << 101),
+            (1 << 99, 1 << 100),
+            ((1 << 96) - 1, 1 << 97),
+            (1 << 96, (1 << 96) + 1),
         ] {
             leads(v, over);
         }
+    }
+
+    /// Two cells' marks order as the cells do where they differ, and say the cells are equal
+    /// where they agree and stop.
+    fn marks_agree(p: Cell, q: Cell) {
+        let (a, b) = (mark(&p), mark(&q));
+        let exact = p.order(&q).unwrap();
+        if a != b {
+            assert_eq!(a.cmp(&b), exact, "{p:?} against {q:?}");
+        } else if a & 1 == 0 {
+            assert_eq!(exact, Ordering::Equal, "{p:?} against {q:?}");
+        }
+    }
+
+    proptest! {
+        #[test]
+        fn marks_order_as_their_cells(
+            a in any::<i128>(), b in 1i128.., c in any::<i128>(), d in 1i128..,
+        ) {
+            marks_agree(Cell::new(a, b).unwrap(), Cell::new(c, d).unwrap());
+        }
+
+        #[test]
+        fn marks_order_as_their_cells_when_ties_are_common(
+            a in -40i128..40, b in 1i128..9, c in -40i128..40, d in 1i128..9,
+        ) {
+            marks_agree(Cell::new(a, b).unwrap(), Cell::new(c, d).unwrap());
+        }
+    }
+
+    #[test]
+    fn floors_past_reach_mark_below_or_above_every_other() {
+        let cell = |v: i128, over: i128| Cell::new(v, over).unwrap();
+        let low = REACH.wrapping_neg();
+        for (v, over, want) in [
+            (low - 1, 1, 1),
+            (low * 3 - 1, 2, 1),
+            (i128::MIN, 1, 1),
+            (REACH, 1, u128::MAX),
+            (i128::MAX, 3, u128::MAX),
+        ] {
+            assert_eq!(mark(&cell(v, over)), want, "{v} / {over}");
+        }
+        // The edges of reach have marks of their own.
+        let (bottom, top) = (mark(&cell(low, 1)), mark(&cell(REACH - 1, 1)));
+        assert_eq!((bottom & 1, top & 1), (0, 0));
+        assert!(1 < bottom && bottom < top && top < u128::MAX);
+        for (p, q) in [
+            (cell(low - 1, 1), cell(low, 1)),
+            (cell(REACH - 1, 1), cell(REACH, 1)),
+            (cell(i128::MIN, 1), cell(low - 7, 1)),
+            (cell(i128::MAX, 1), cell(REACH, 1)),
+            (cell(REACH * 2 + 1, 2), cell(REACH * 2, 2)),
+        ] {
+            marks_agree(p, q);
+            marks_agree(q, p);
+        }
+    }
+
+    /// A key of marks orders as the cells it holds, from `from` on.
+    fn keys_agree(p: &[Cell; 3], q: &[Cell; 3]) {
+        let (one, other) = (MarkKey::<3, 3>::new(p, 0), MarkKey::<3, 3>::new(q, 0));
+        let exact = CellKey(p).cmp(&CellKey(q));
+        assert_eq!(one.cmp(&other), exact, "{p:?} against {q:?}");
+        assert_eq!(one == other, exact == Ordering::Equal);
+        assert_eq!(one.partial_cmp(&other), Some(exact));
+    }
+
+    proptest! {
+        #[test]
+        fn a_key_of_marks_orders_as_its_cells(
+            p in [(-6i128..6, 1i128..4), (-6i128..6, 1i128..4), (-6i128..6, 1i128..4)],
+            q in [(-6i128..6, 1i128..4), (-6i128..6, 1i128..4), (-6i128..6, 1i128..4)],
+        ) {
+            let cells = |c: [(i128, i128); 3]| c.map(|(v, over)| Cell::new(v, over).unwrap());
+            keys_agree(&cells(p), &cells(q));
+        }
+    }
+
+    #[test]
+    fn a_key_reads_its_cells_where_marks_agree_and_run_on() {
+        let cell = |v: i128, over: i128| Cell::new(v, over).unwrap();
+        // 1 / 3 and (2^33 + 1) / (3 · 2^33 + 2) agree on 32 digits and both run on; so do two
+        // floors past reach.
+        let third = cell(1, 3);
+        let near = cell((1 << 33) + 1, 3 * (1 << 33) + 2);
+        assert_eq!(mark(&third), mark(&near));
+        assert_eq!(mark(&third) & 1, 1);
+        let far = cell(i128::MAX, 1);
+        for (p, q) in [
+            ([third, third, cell(1, 1)], [near, third, cell(0, 1)]),
+            ([cell(0, 1), third, third], [cell(0, 1), near, far]),
+            (
+                [far, cell(0, 1), cell(0, 1)],
+                [cell(i128::MAX - 1, 1), cell(0, 1), cell(0, 1)],
+            ),
+            ([cell(2, 4), third, far], [cell(1, 2), third, far]),
+        ] {
+            keys_agree(&p, &q);
+            keys_agree(&q, &p);
+        }
+        // Marks from past the first cell, and past the end, which mark 0.
+        let line = [cell(0, 5), cell(5, 5), third, near, far, cell(7, 5)];
+        let key = MarkKey::<6, 5>::new(&line, 2);
+        assert_eq!(
+            key.marks[..4],
+            [mark(&third), mark(&near), u128::MAX, mark(&cell(7, 5))]
+        );
+        assert_eq!(key.marks[4], 0);
     }
 
     #[test]
