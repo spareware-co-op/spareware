@@ -719,6 +719,7 @@ pub static UNMEASURED: &[(&str, &str)] = &[
     ("Crossing2::of_rounds", "the same steps as Crossing2::of_round, on the radical line"),
     ("Crossing2::of_round_and_circle", "the same steps as Crossing2::of_round, on the radical line"),
     ("Crossing2::of_point", "the enclosures of three integers, as Crossing2::of_circle's"),
+    ("Crossing2::of_extreme", "the enclosures of four integers and one root, as Crossing2::of_circle's"),
     ("Crossing2::parts", "field accessor"),
     ("Crossing2::enclosure", "field accessor"),
     ("Crossing2::cmp_x_filter", "two interval subtractions, the first step of Crossing2::cmp_x"),

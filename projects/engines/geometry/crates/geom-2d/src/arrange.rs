@@ -1,40 +1,46 @@
-//! The arrangement of line segments (chapter 14.4): an exact plane sweep, overlap merging, the
-//! order of edges at each vertex, the faces and the unbounded face, and where each edge came from.
+//! The arrangement of line segments and circular arcs (chapter 14.4): an exact plane sweep, overlap
+//! merging, the order of edges at each vertex, the faces and the unbounded face, and where each edge
+//! came from.
 //!
-//! What it does: [`arrange`] takes segments between grid points and returns the [`Arrangement`]
-//! they divide the plane into: the vertices (every end point and every crossing, as exact rational
-//! points, in lexicographic order), the edges between consecutive vertices along each segment (two
-//! segments that share a stretch share its edges, and an edge names every segment that covers it),
-//! what each edge lies on ([`Along`]: a line's smallest carrier), each vertex's edges in
-//! counter-clockwise order, and the faces: one unbounded face, and one bounded face for each outer
-//! boundary, with the boundaries of the components inside it as holes. A vertex is an [`At`]: a
-//! rational point, or a one-root point where arcs come in.
+//! What it does: [`arrange`] takes segments between grid points, and [`arrange_curves`] segments
+//! and arcs ([`Curve`]), and each returns the [`Arrangement`] they divide the plane into: the
+//! vertices (every end point, every crossing, and where an arc's circle is leftmost or rightmost,
+//! in lexicographic order), the edges between consecutive vertices along each curve (curves that
+//! share a stretch share its edges, and an edge names every curve that covers it), what each edge
+//! lies on ([`Along`]: a line's smallest carrier, or one half of a listed circle), each vertex's
+//! edges in counter-clockwise order, and the faces: one unbounded face, and one bounded face for
+//! each outer boundary, with the boundaries of the components inside it as holes. A vertex is an
+//! [`At`]: a rational point, or a one-root point where arcs come in.
 //!
 //! Guarantees:
 //!
-//! - **Exact.** Every decision is a sign of one of `geom-num`'s exact predicates on carriers and
-//!   rational points ([`Carrier::side`], [`Carrier::order`], [`Carrier::meet`],
-//!   [`Rational2::cmp_x`]); no coordinate is ever rounded, and a crossing is the exact rational
-//!   point where two carriers meet. A step past the exact budget is [`ArrangeError::Range`],
-//!   never a wrong answer.
+//! - **Exact.** Every decision is a sign of one of `geom-num`'s exact predicates on carriers,
+//!   circles, rational points and one-root points ([`Carrier::side`], [`Carrier::meet`],
+//!   [`Rational2::cmp_x`], `Crossing2`'s comparisons and crossings, and the tangent and curvature
+//!   orders of the `piece` module); no coordinate is ever rounded, and a crossing is the exact
+//!   point where two carriers meet. A step past the exact budget is [`ArrangeError::Range`], never
+//!   a wrong answer.
 //! - **Permutation-invariant.** Vertices are named by their rank in lexicographic order, edges by
-//!   their end vertices, faces by the rank of their lowest-leftmost vertex; the only thing that
-//!   depends on the input order is the label of each source, which is the segment's place in the
-//!   input. Permuting the input gives the same arrangement with the labels permuted.
-//! - **Overlaps merge, touching splits.** A segment through another's end point is split there; two
-//!   segments on one line share the edges of their common stretch.
+//!   their end vertices and the order they leave the lower one, faces by the rank of their
+//!   lowest-leftmost vertex, circles by centre and radius; the only thing that depends on the input
+//!   order is the label of each source, which is the curve's place in the input. Permuting the input
+//!   gives the same arrangement with the labels permuted.
+//! - **Overlaps merge, touching splits.** A curve through another's end point is split there; two
+//!   segments on one line, or two arcs of one circle, share the edges of their common stretch; a
+//!   tangency is one vertex where the curves touch.
 //! - **Cancellable.** The sweep charges its [`WorkMeter`] once for each event point.
 //!
 //! Method: Bentley and Ottmann's sweep ([DOI](https://doi.org/10.1109/TC.1979.1675432)) in the form
 //! of de Berg, Cheong, van Kreveld and Overmars, *Computational Geometry*, 3rd ed., Springer 2008,
 //! section 2.1 (doi:10.1007/978-3-540-77974-2), with the sweep line tilted so that a vertical segment
-//! is the steepest upward one, and with every comparison an exact sign; the doubly-connected edge
-//! list and the placing of holes by a leftward ray after the same book, section 2.2.
+//! is the steepest upward one, with every comparison an exact sign, and generalised to arcs cut into
+//! x-monotone pieces as the `piece` module says; the doubly-connected edge list and the placing of
+//! holes by a leftward ray after the same book, section 2.2.
 //!
-//! Cost: O((n + k) log n) comparisons for the sweep, n segments and k crossings, plus the cost of
-//! moving the entries of the status list on insertion, which is linear in the segments the sweep
+//! Cost: O((n + k) log n) comparisons for the sweep, n curves and k crossings, plus the cost of
+//! moving the entries of the status list on insertion, which is linear in the pieces the sweep
 //! line crosses at once; the faces are linear in the edges, and finding the face around each hole
-//! is a second sweep over the finished edges.
+//! is a second sweep over the finished edges. An arc is at most three pieces.
 
 #![allow(
     clippy::many_single_char_names,
@@ -50,7 +56,7 @@ use core::fmt;
 
 use geom_curve::{CurveKind, Line};
 use geom_math::bbox::Box3;
-use geom_num::arc::Round;
+use geom_num::arc::{Arc2, Round};
 use geom_num::carrier::{Carrier, Rational2};
 use geom_num::grid::{P2, P3};
 use geom_num::one_root::Crossing2;
@@ -62,12 +68,19 @@ use geom_topo::{
     Sense, Shell, TopoError, Vertex,
 };
 
+mod piece;
+
+use piece::{
+    Circle, On, Piece, Way, circles_of, cmp_pt, cut, meetings, order_at, ordering, side, way,
+    west_not_left,
+};
+
 /// Why an arrangement was refused.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum ArrangeError {
     /// A step of the exact arithmetic did not fit its budget.
     Range,
-    /// More segments, vertices or edges than a 32-bit index names.
+    /// More curves, vertices or edges than a 32-bit index names.
     TooMany,
     /// The work meter stopped the sweep.
     Stopped(Stopped),
@@ -196,14 +209,14 @@ pub enum Along {
     },
 }
 
-/// An edge between two vertices, lowest first, with the segments that cover it.
+/// An edge between two vertices, lowest first, with the curves that cover it.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Edge {
     /// The vertex of the lexicographically lower end.
     pub from: u32,
     /// The vertex of the higher end.
     pub to: u32,
-    /// The input places of the segments that cover the edge, ascending.
+    /// The input places of the curves that cover the edge, ascending.
     pub sources: Vec<u32>,
 }
 
@@ -286,42 +299,19 @@ impl Arrangement {
     }
 }
 
-/// A segment as the sweep sees it: lower end, higher end, and the line through them.
-#[derive(Clone, Copy)]
-struct Seg {
-    lo: Rational2,
-    hi: Rational2,
-    line: Carrier,
-    /// hi − lo, the direction of the carrier.
-    dir: [i128; 2],
+/// A piece of linework to arrange.
+#[derive(Clone, Copy, Debug)]
+pub enum Curve {
+    /// A segment between two grid points; one of no length is ignored.
+    Segment(P2, P2),
+    /// An arc: grid ends and a rational centre on their bisector, running counter-clockwise from its
+    /// start to its end.
+    Arc(Arc2),
 }
 
-fn sign_order(s: Sign) -> Ordering {
-    match s {
-        Sign::Negative => Ordering::Less,
-        Sign::Zero => Ordering::Equal,
-        Sign::Positive => Ordering::Greater,
-    }
-}
-
-/// Lexicographic order of (x, y).
-fn cmp_pt(a: &Rational2, b: &Rational2) -> Result<Ordering, ArrangeError> {
-    match sign_order(a.cmp_x(b)?) {
-        Ordering::Equal => Ok(sign_order(a.cmp_y(b)?)),
-        other => Ok(other),
-    }
-}
-
-/// The cross product of two direction vectors, as a sign.
-fn cross_sign(a: [i128; 2], b: [i128; 2]) -> Result<Ordering, ArrangeError> {
-    let l = a[0].checked_mul(b[1]).ok_or(ArrangeError::Range)?;
-    let r = a[1].checked_mul(b[0]).ok_or(ArrangeError::Range)?;
-    Ok(l.cmp(&r))
-}
-
-/// One event: a point, and the segment that starts there if it is a start.
+/// One event: a point, and the piece that starts there if it is a start.
 struct Event {
-    at: Rational2,
+    at: At,
     start: Option<u32>,
 }
 
@@ -409,36 +399,46 @@ fn smallest(line: Carrier) -> Result<Carrier, ArrangeError> {
     Ok(Carrier::new(cut(a)?, cut(b)?, cut(c)?)?)
 }
 
-fn seg_of(segs: &[Seg], id: u32) -> Result<&Seg, ArrangeError> {
+/// The piece of the segment from `a` to `b`, lower end first, or none for a segment of no length.
+fn segment(a: P2, b: P2) -> Result<Option<Piece>, ArrangeError> {
+    let (ra, rb) = (Rational2::from(a), Rational2::from(b));
+    let (lo, hi, p, q) = match ordering(ra.cmp_x(&rb)?).then(ordering(ra.cmp_y(&rb)?)) {
+        Ordering::Equal => return Ok(None),
+        Ordering::Less => (ra, rb, a, b),
+        Ordering::Greater => (rb, ra, b, a),
+    };
+    let line = smallest(Carrier::through(p, q)?)?;
+    Ok(Some(Piece {
+        lo: At::Rational(lo),
+        hi: At::Rational(hi),
+        on: On::Line {
+            line,
+            dir: line.direction(),
+        },
+    }))
+}
+
+fn piece_of(pieces: &[Piece], id: u32) -> Result<&Piece, ArrangeError> {
     usize::try_from(id)
         .ok()
-        .and_then(|i| segs.get(i))
+        .and_then(|i| pieces.get(i))
         .ok_or(ArrangeError::TooMany)
 }
 
-/// Whether the crossing of `s` and `t`, if they cross at one point, is a point after `p`: pushes
-/// that point as an event.
-fn new_event(
+/// Pushes as events the points after `p` where pieces `s` and `t` meet.
+fn new_events(
     heap: &mut Heap,
-    segs: &[Seg],
+    pieces: &[Piece],
+    circles: &[Circle],
     s: u32,
     t: u32,
-    p: &Rational2,
+    p: &At,
 ) -> Result<(), ArrangeError> {
-    let (a, b) = (seg_of(segs, s)?, seg_of(segs, t)?);
-    if cross_sign(a.dir, b.dir)? == Ordering::Equal {
-        return Ok(());
+    let (a, b) = (piece_of(pieces, s)?, piece_of(pieces, t)?);
+    for q in meetings(a, b, circles, p)?.into_iter().flatten() {
+        heap.push(Event { at: q, start: None })?;
     }
-    let q = a.line.meet(&b.line)?;
-    if cmp_pt(&q, p)? != Ordering::Greater {
-        return Ok(());
-    }
-    for z in [a, b] {
-        if cmp_pt(&q, &z.lo)? == Ordering::Less || cmp_pt(&q, &z.hi)? == Ordering::Greater {
-            return Ok(());
-        }
-    }
-    heap.push(Event { at: q, start: None })
+    Ok(())
 }
 
 /// The arrangement of `segments`, each between two grid points; segments of no length are ignored.
@@ -451,93 +451,143 @@ pub fn arrange(
     segments: &[(P2, P2)],
     meter: &mut WorkMeter<'_>,
 ) -> Result<Arrangement, ArrangeError> {
-    // The segments, lower end first.
-    let mut segs: Vec<Seg> = Vec::with_capacity(segments.len());
-    let mut heap = Heap { items: Vec::new() };
-    let mut ids: Vec<u32> = Vec::new();
+    let mut pieces: Vec<Piece> = Vec::with_capacity(segments.len());
+    let mut ids: Vec<u32> = Vec::with_capacity(segments.len());
     for (place, (a, b)) in segments.iter().enumerate() {
-        let (ra, rb) = (Rational2::from(*a), Rational2::from(*b));
-        let (lo, hi, p, q) = match cmp_pt(&ra, &rb)? {
-            Ordering::Equal => continue,
-            Ordering::Less => (ra, rb, *a, *b),
-            Ordering::Greater => (rb, ra, *b, *a),
-        };
-        let line = smallest(Carrier::through(p, q)?)?;
-        let [dx, dy] = line.direction();
-        let id = index(segs.len())?;
-        segs.push(Seg {
-            lo,
-            hi,
-            line,
-            dir: [dx, dy],
-        });
-        ids.push(index(place)?);
+        if let Some(piece) = segment(*a, *b)? {
+            pieces.push(piece);
+            ids.push(index(place)?);
+        }
+    }
+    sweep(&pieces, &ids, Vec::new(), meter)
+}
+
+/// The arrangement of `curves`: segments between grid points and arcs. Each arc is cut where its
+/// circle is leftmost or rightmost, so its pieces run one way in x, and those cuts are vertices; an
+/// edge on an arc names the arc's place as its source, as a segment's edges name the segment's.
+///
+/// # Errors
+///
+/// As for [`arrange`].
+pub fn arrange_curves(
+    curves: &[Curve],
+    meter: &mut WorkMeter<'_>,
+) -> Result<Arrangement, ArrangeError> {
+    let arcs: Vec<Arc2> = curves
+        .iter()
+        .filter_map(|c| match c {
+            Curve::Arc(a) => Some(*a),
+            Curve::Segment(..) => None,
+        })
+        .collect();
+    let (circles, circle_of_arc) = circles_of(&arcs)?;
+    let mut pieces: Vec<Piece> = Vec::with_capacity(curves.len());
+    let mut ids: Vec<u32> = Vec::with_capacity(curves.len());
+    let mut nth_arc = 0_usize;
+    for (place, curve) in curves.iter().enumerate() {
+        let before = pieces.len();
+        match curve {
+            Curve::Segment(a, b) => {
+                if let Some(piece) = segment(*a, *b)? {
+                    pieces.push(piece);
+                }
+            }
+            Curve::Arc(arc) => {
+                let circle = circle_of_arc
+                    .get(nth_arc)
+                    .copied()
+                    .ok_or(ArrangeError::TooMany)?;
+                nth_arc = nth_arc.saturating_add(1);
+                cut(arc, circle, &circles, &mut pieces)?;
+            }
+        }
+        let place = index(place)?;
+        ids.extend(core::iter::repeat_n(
+            place,
+            pieces.len().saturating_sub(before),
+        ));
+    }
+    sweep(&pieces, &ids, circles, meter)
+}
+
+/// The plane sweep over `pieces`, the input place of each in `ids`.
+fn sweep(
+    pieces: &[Piece],
+    ids: &[u32],
+    circles: Vec<Circle>,
+    meter: &mut WorkMeter<'_>,
+) -> Result<Arrangement, ArrangeError> {
+    let mut heap = Heap {
+        items: Vec::with_capacity(pieces.len().saturating_mul(2)),
+    };
+    for (i, piece) in pieces.iter().enumerate() {
         heap.push(Event {
-            at: lo,
-            start: Some(id),
+            at: piece.lo.clone(),
+            start: Some(index(i)?),
         })?;
         heap.push(Event {
-            at: hi,
+            at: piece.hi.clone(),
             start: None,
         })?;
     }
-    // The status: the segments the sweep line crosses, lowest first.
+    // The status: the pieces the sweep line crosses, lowest first.
     let mut status: Vec<u32> = Vec::new();
-    // The vertices, and for each segment the vertices on it, in order.
-    let mut vertices: Vec<Rational2> = Vec::new();
-    let mut on: Vec<Vec<u32>> = alloc::vec![Vec::new(); segs.len()];
+    // The vertices, and for each piece the vertices on it, in order.
+    let mut vertices: Vec<At> = Vec::new();
+    let mut on: Vec<Vec<u32>> = alloc::vec![Vec::new(); pieces.len()];
     while let Some(first) = heap.pop()? {
         meter.charge(1)?;
-        let p = first.at;
+        let mut p = first.at;
         let mut starting: Vec<u32> = first.start.into_iter().collect();
         while let Some(next) = heap.peek() {
             if cmp_pt(&next.at, &p)? != Ordering::Equal {
                 break;
             }
-            if let Some(e) = heap.pop()?
-                && let Some(s) = e.start
-            {
-                starting.push(s);
+            if let Some(e) = heap.pop()? {
+                if let Some(s) = e.start {
+                    starting.push(s);
+                }
+                // One place may come as a crossing and as a rational point: keep the rational.
+                if p.rational().is_none() && e.at.rational().is_some() {
+                    p = e.at;
+                }
             }
         }
-        // The status segments through p are contiguous: those with p above them come first.
-        let mut lo = 0_usize;
-        let mut hi = status.len();
+        // The status pieces through p are contiguous: those with p above them come first.
         // lo: first entry with p not above; hi: first entry with p below.
         let (mut a, mut b) = (0_usize, status.len());
         while a < b {
             let mid = a.saturating_add(b.saturating_sub(a) / 2);
             let s = status.get(mid).copied().ok_or(ArrangeError::TooMany)?;
-            if seg_of(&segs, s)?.line.side(&p)? == Sign::Positive {
+            if side(piece_of(pieces, s)?, &circles, &p)? == Sign::Positive {
                 a = mid.saturating_add(1);
             } else {
                 b = mid;
             }
         }
-        lo = lo.max(a);
+        let lo = a;
         let (mut a, mut b) = (lo, status.len());
         while a < b {
             let mid = a.saturating_add(b.saturating_sub(a) / 2);
             let s = status.get(mid).copied().ok_or(ArrangeError::TooMany)?;
-            if seg_of(&segs, s)?.line.side(&p)? == Sign::Zero {
+            if side(piece_of(pieces, s)?, &circles, &p)? == Sign::Zero {
                 a = mid.saturating_add(1);
             } else {
                 b = mid;
             }
         }
-        hi = hi.min(a);
+        let hi = a;
         let through: Vec<u32> = status.get(lo..hi).map(<[u32]>::to_vec).unwrap_or_default();
         if through.is_empty() && starting.is_empty() {
             continue;
         }
         let v = index(vertices.len())?;
-        vertices.push(p);
         let mut keep: Vec<u32> = Vec::new();
         for &s in &through {
             if let Some(list) = usize::try_from(s).ok().and_then(|i| on.get_mut(i)) {
                 list.push(v);
             }
-            if cmp_pt(&seg_of(&segs, s)?.hi, &p)? != Ordering::Equal {
+            if cmp_pt(&piece_of(pieces, s)?.hi, &p)? != Ordering::Equal {
                 keep.push(s);
             }
         }
@@ -546,15 +596,18 @@ pub fn arrange(
                 list.push(v);
             }
         }
-        // Those that go on, in the order just after p: by direction, lowest first.
+        // Those that go on, in the order just after p: by tangent, then curvature, lowest first.
         keep.extend(starting.iter().copied());
         let mut fail: Option<ArrangeError> = None;
         keep.sort_by(|&x, &y| {
-            let (Ok(sx), Ok(sy)) = (seg_of(&segs, x), seg_of(&segs, y)) else {
-                fail = Some(ArrangeError::TooMany);
-                return Ordering::Equal;
-            };
-            match cross_sign(sy.dir, sx.dir) {
+            let ways = piece_of(pieces, x)
+                .and_then(|px| way(px, &circles, false))
+                .and_then(|wx| {
+                    piece_of(pieces, y)
+                        .and_then(|py| way(py, &circles, false))
+                        .map(|wy| (wx, wy))
+                });
+            match ways.and_then(|(wx, wy)| order_at(&p, &wx, &wy)) {
                 Ok(Ordering::Equal) => x.cmp(&y),
                 Ok(o) => o,
                 Err(e) => {
@@ -571,81 +624,114 @@ pub fn arrange(
         status.truncate(lo);
         status.extend(keep);
         status.extend(tail);
+        // The new neighbours: each side of the pieces that go on, and, unlike segments, which
+        // meet once, each two of those pieces next to each other, which an arc can meet again.
         let end = lo.saturating_add(count);
-        if count == 0 {
+        for at in lo..=end {
             if let (Some(l), Some(r)) = (
-                lo.checked_sub(1).and_then(|i| status.get(i)).copied(),
-                status.get(lo).copied(),
+                at.checked_sub(1).and_then(|i| status.get(i)).copied(),
+                status.get(at).copied(),
             ) {
-                new_event(&mut heap, &segs, l, r, &p)?;
-            }
-        } else {
-            if let (Some(l), Some(r)) = (
-                lo.checked_sub(1).and_then(|i| status.get(i)).copied(),
-                status.get(lo).copied(),
-            ) {
-                new_event(&mut heap, &segs, l, r, &p)?;
-            }
-            if let (Some(l), Some(r)) = (
-                end.checked_sub(1).and_then(|i| status.get(i)).copied(),
-                status.get(end).copied(),
-            ) {
-                new_event(&mut heap, &segs, l, r, &p)?;
+                let inside = at > lo && at < end;
+                let lines = matches!(piece_of(pieces, l)?.on, On::Line { .. })
+                    && matches!(piece_of(pieces, r)?.on, On::Line { .. });
+                if !(inside && lines) {
+                    new_events(&mut heap, pieces, &circles, l, r, &p)?;
+                }
             }
         }
+        vertices.push(p);
     }
-    build(&segs, &ids, vertices, &on)
+    build(pieces, ids, circles, vertices, &on)
 }
 
-/// The edges, the order around each vertex and the faces, from the vertices on each segment.
+/// What a piece's edges lie on, as a key: lines first, then each half of each circle.
+fn class(piece: &Piece) -> u64 {
+    match piece.on {
+        On::Line { .. } => 0,
+        On::Arc { circle, upper } => u64::from(circle)
+            .saturating_mul(2)
+            .saturating_add(u64::from(upper))
+            .saturating_add(1),
+    }
+}
+
+/// The edges, the order around each vertex and the faces, from the vertices on each piece.
 fn build(
-    segs: &[Seg],
+    pieces: &[Piece],
     ids: &[u32],
-    vertices: Vec<Rational2>,
+    circles: Vec<Circle>,
+    vertices: Vec<At>,
     on: &[Vec<u32>],
 ) -> Result<Arrangement, ArrangeError> {
-    // Edges: consecutive vertices along each segment, with the segment as a source.
-    let mut raw: Vec<(u32, u32, u32, u32)> = Vec::new();
+    let vertex = |v: u32| -> Result<&At, ArrangeError> {
+        usize::try_from(v)
+            .ok()
+            .and_then(|i| vertices.get(i))
+            .ok_or(ArrangeError::TooMany)
+    };
+    // Edges: consecutive vertices along each piece, with the piece's input as a source. Two pieces
+    // between the same two vertices share an edge when they lie on one line, or on one half of one
+    // circle.
+    let mut raw: Vec<(u32, u32, u64, u32, u32)> = Vec::new();
     for (si, list) in on.iter().enumerate() {
         let place = ids.get(si).copied().ok_or(ArrangeError::TooMany)?;
         let id = index(si)?;
+        let kind = class(piece_of(pieces, id)?);
         for pair in list.windows(2) {
             if let [u, v] = *pair
                 && u != v
             {
-                raw.push((u, v, place, id));
+                raw.push((u, v, kind, place, id));
             }
         }
     }
     raw.sort_unstable();
-    let mut edges: Vec<Edge> = Vec::new();
-    // The segment that stands for each edge's direction.
-    let mut rep: Vec<u32> = Vec::new();
-    for &(u, v, place, id) in &raw {
-        match edges.last_mut() {
-            Some(e) if e.from == u && e.to == v => e.sources.push(place),
+    let mut grouped: Vec<(Edge, u32)> = Vec::new();
+    let mut last: Option<(u32, u32, u64)> = None;
+    for &(u, v, kind, place, id) in &raw {
+        match grouped.last_mut() {
+            Some((e, _)) if last == Some((u, v, kind)) => e.sources.push(place),
             _ => {
-                edges.push(Edge {
-                    from: u,
-                    to: v,
-                    sources: alloc::vec![place],
-                });
-                rep.push(id);
+                grouped.push((
+                    Edge {
+                        from: u,
+                        to: v,
+                        sources: alloc::vec![place],
+                    },
+                    id,
+                ));
+                last = Some((u, v, kind));
             }
         }
     }
-    let dir_of = |h: u32| -> Result<[i128; 2], ArrangeError> {
-        let e = usize::try_from(h / 2).map_err(|_| ArrangeError::TooMany)?;
-        let s = rep.get(e).copied().ok_or(ArrangeError::TooMany)?;
-        let [dx, dy] = seg_of(segs, s)?.dir;
-        if h.is_multiple_of(2) {
-            Ok([dx, dy])
-        } else {
-            Ok([
-                dx.checked_neg().ok_or(ArrangeError::Range)?,
-                dy.checked_neg().ok_or(ArrangeError::Range)?,
-            ])
+    // Edges between the same two vertices go in the order they leave the lower one.
+    let mut fail: Option<ArrangeError> = None;
+    grouped.sort_by(|(e, s), (f, t)| {
+        match (e.from, e.to).cmp(&(f.from, f.to)) {
+            Ordering::Equal => {}
+            other => return other,
         }
+        let order = vertex(e.from).and_then(|at| {
+            let ws = way(piece_of(pieces, *s)?, &circles, false)?;
+            let wt = way(piece_of(pieces, *t)?, &circles, false)?;
+            order_at(at, &ws, &wt)
+        });
+        order.unwrap_or_else(|err| {
+            fail = Some(err);
+            Ordering::Equal
+        })
+    });
+    if let Some(e) = fail {
+        return Err(e);
+    }
+    let (edges, rep): (Vec<Edge>, Vec<u32>) = grouped.into_iter().unzip();
+    let rep_of = |e: usize| -> Result<&Piece, ArrangeError> {
+        piece_of(pieces, rep.get(e).copied().ok_or(ArrangeError::TooMany)?)
+    };
+    let way_of = |h: u32| -> Result<Way<'_>, ArrangeError> {
+        let e = usize::try_from(h / 2).map_err(|_| ArrangeError::TooMany)?;
+        way(rep_of(e)?, &circles, !h.is_multiple_of(2))
     };
     // Around each vertex: the half-edges that leave it, counter-clockwise from the negative x axis.
     let mut around: Vec<Vec<u32>> = alloc::vec![Vec::new(); vertices.len()];
@@ -659,24 +745,17 @@ fn build(
         }
     }
     let mut fail: Option<ArrangeError> = None;
-    for list in &mut around {
+    for (v, list) in around.iter_mut().enumerate() {
+        let Some(at) = vertices.get(v) else {
+            continue;
+        };
         list.sort_by(|&x, &y| {
-            let (Ok(dx), Ok(dy)) = (dir_of(x), dir_of(y)) else {
-                fail = Some(ArrangeError::Range);
-                return Ordering::Equal;
-            };
-            // Upper half-plane (y > 0, or y = 0 and x < 0) first would start at the negative x
-            // axis; the half is the first key, the cross product the second.
-            let half = |d: [i128; 2]| u8::from(d[1] > 0 || (d[1] == 0 && d[0] > 0));
-            match half(dx).cmp(&half(dy)) {
-                Ordering::Equal => match cross_sign(dy, dx) {
-                    Ok(o) => o,
-                    Err(e) => {
-                        fail = Some(e);
-                        Ordering::Equal
-                    }
-                },
-                other => other,
+            match way_of(x).and_then(|wx| way_of(y).and_then(|wy| order_at(at, &wx, &wy))) {
+                Ok(o) => o,
+                Err(e) => {
+                    fail = Some(e);
+                    Ordering::Equal
+                }
             }
         });
     }
@@ -742,7 +821,8 @@ fn build(
     }
     // Orientation. A component's outside boundary is the cycle that has the wedge toward the
     // negative x direction at the component's lowest-leftmost vertex; with the sweep line tilted,
-    // that direction lies just after an edge that runs exactly west. Every other cycle of the
+    // that direction points west and a hair south, so it lies just after the half-edges that leave
+    // exactly west without bending left, which come first in the list. Every other cycle of the
     // component bounds a face from inside. At a cycle's own lowest-leftmost vertex, the cycle is the
     // outside kind exactly when it holds the half-edge that leaves that vertex just before the
     // wedge, going counter-clockwise.
@@ -769,9 +849,14 @@ fn build(
         }
         let m = best.ok_or(ArrangeError::TooMany)?;
         let list = around.get(m).ok_or(ArrangeError::TooMany)?;
-        let first = list.first().copied().ok_or(ArrangeError::TooMany)?;
-        let [fx, fy] = dir_of(first)?;
-        let skip = usize::from(fy == 0 && fx < 0);
+        let at = vertices.get(m).ok_or(ArrangeError::TooMany)?;
+        let mut skip = 0_usize;
+        for &h in list {
+            if !west_not_left(at, &way_of(h)?)? {
+                break;
+            }
+            skip = skip.saturating_add(1);
+        }
         let n = list.len();
         let before = skip
             .checked_add(n)
@@ -787,36 +872,57 @@ fn build(
         counter.push(!outside);
         low.push(m);
     }
-    let (faces, _) = faces_of(&edges, &vertices, segs, &rep, &cycles, &counter, &low)?;
+    let found = Found {
+        edges: &edges,
+        vertices: &vertices,
+        pieces,
+        circles: &circles,
+        rep: &rep,
+    };
+    let (faces, _) = faces_of(&found, &cycles, &counter, &low)?;
     let mut along: Vec<Along> = Vec::with_capacity(edges.len());
-    for &s in &rep {
-        along.push(Along::Line(seg_of(segs, s)?.line));
+    for e in 0..edges.len() {
+        along.push(match rep_of(e)?.on {
+            On::Line { line, .. } => Along::Line(line),
+            On::Arc { circle, upper } => Along::Arc { circle, upper },
+        });
     }
+    let circles = circles.into_iter().map(|c| c.round).collect();
     Ok(Arrangement {
-        vertices: vertices.into_iter().map(At::Rational).collect(),
+        vertices,
         edges,
         along,
-        circles: Vec::new(),
+        circles,
         around,
         cycles,
         faces,
     })
 }
 
+/// The finished parts of an arrangement the face placing reads.
+struct Found<'a> {
+    edges: &'a [Edge],
+    vertices: &'a [At],
+    pieces: &'a [Piece],
+    circles: &'a [Circle],
+    /// The piece that stands for each edge.
+    rep: &'a [u32],
+}
+
 /// The faces: the unbounded one, then one for each counter-clockwise cycle, with the holes placed.
-#[allow(
-    clippy::too_many_arguments,
-    reason = "the pieces of one arrangement, passed as they are built"
-)]
 fn faces_of(
-    edges: &[Edge],
-    vertices: &[Rational2],
-    segs: &[Seg],
-    rep: &[u32],
+    found: &Found<'_>,
     cycles: &[Vec<u32>],
     counter: &[bool],
     low: &[usize],
 ) -> Result<(Vec<Face>, Vec<u32>), ArrangeError> {
+    let Found {
+        edges,
+        vertices,
+        pieces,
+        circles,
+        rep,
+    } = *found;
     // Face numbers: by the rank of the lowest vertex of each counter-clockwise cycle.
     let mut order: Vec<usize> = (0..cycles.len())
         .filter(|&c| counter.get(c).copied().unwrap_or(false))
@@ -851,10 +957,10 @@ fn faces_of(
     // lexicographic order already, the status holds the edges the sweep line crosses, lowest first,
     // and no two cross, so a vertex is placed among them by exact side tests. At a hole's vertex
     // the edge just below it in the status is the edge below the hole; the face above that edge
-    // is on the left of its half-edge that runs rightwards.
-    let seg_of_edge = |e: usize| -> Result<&Seg, ArrangeError> {
-        let s = rep.get(e).copied().ok_or(ArrangeError::TooMany)?;
-        seg_of(segs, s)
+    // is on the left of its half-edge that runs rightwards, along a line or round either half of a
+    // circle.
+    let piece_of_edge = |e: usize| -> Result<&Piece, ArrangeError> {
+        piece_of(pieces, rep.get(e).copied().ok_or(ArrangeError::TooMany)?)
     };
     let mut hole_at: Vec<Option<usize>> = alloc::vec![None; vertices.len()];
     for (c, m) in low.iter().enumerate() {
@@ -873,7 +979,7 @@ fn faces_of(
         while a < b {
             let mid = a.saturating_add(b.saturating_sub(a) / 2);
             let e = status.get(mid).copied().ok_or(ArrangeError::TooMany)?;
-            if seg_of_edge(e)?.line.side(at)? == Sign::Positive {
+            if side(piece_of_edge(e)?, circles, at)? == Sign::Positive {
                 a = mid.saturating_add(1);
             } else {
                 b = mid;
@@ -884,7 +990,7 @@ fn faces_of(
         while a < b {
             let mid = a.saturating_add(b.saturating_sub(a) / 2);
             let e = status.get(mid).copied().ok_or(ArrangeError::TooMany)?;
-            if seg_of_edge(e)?.line.side(at)? == Sign::Zero {
+            if side(piece_of_edge(e)?, circles, at)? == Sign::Zero {
                 a = mid.saturating_add(1);
             } else {
                 b = mid;
@@ -906,7 +1012,8 @@ fn faces_of(
                 *slot = Some(on_cycle);
             }
         }
-        // The edges that start here, in the order just after the vertex: by direction.
+        // The edges that start here, in the order just after the vertex: by tangent, then
+        // curvature.
         let mut starting: Vec<usize> = Vec::new();
         while let Some(e) = edges.get(next_edge) {
             if usize::try_from(e.from).ok() != Some(v) {
@@ -917,11 +1024,14 @@ fn faces_of(
         }
         let mut fail: Option<ArrangeError> = None;
         starting.sort_by(|&x, &y| {
-            let (Ok(sx), Ok(sy)) = (seg_of_edge(x), seg_of_edge(y)) else {
-                fail = Some(ArrangeError::TooMany);
-                return Ordering::Equal;
-            };
-            match cross_sign(sy.dir, sx.dir) {
+            let ways = piece_of_edge(x)
+                .and_then(|px| way(px, circles, false))
+                .and_then(|wx| {
+                    piece_of_edge(y)
+                        .and_then(|py| way(py, circles, false))
+                        .map(|wy| (wx, wy))
+                });
+            match ways.and_then(|(wx, wy)| order_at(at, &wx, &wy)) {
                 Ok(o) => o,
                 Err(e) => {
                     fail = Some(e);
