@@ -66,6 +66,12 @@ const CORNERS: Phase = Phase::new("merge: corners");
 /// Sorting the corners.
 const SORT_CORNERS: Phase = Phase::new("merge: sort corners");
 
+/// Telling where each run of equal points starts, in the corners' sorted order.
+const PLACES: Phase = Phase::new("merge: places");
+
+/// The chunk of the places phase: one comparison of two points per item.
+const PLACES_PLAN: ChunkPlan = ChunkPlan::fixed::<1024>();
+
 /// Each piece's sheet key.
 const SHEETS: Phase = Phase::new("merge: sheet keys");
 
@@ -92,6 +98,15 @@ const RUNS: ChunkPlan = ChunkPlan::fixed::<64>();
 
 /// Sorting the sides by line.
 const SORT_SIDES: Phase = Phase::new("merge: sort sides");
+
+/// Telling where each line's sides start, in the sides' sorted order.
+const LINES: Phase = Phase::new("merge: lines");
+
+/// Sweeping the lines.
+const SWEEPS: Phase = Phase::new("merge: sweep lines");
+
+/// What sweeping one line gives: the pairs of pieces it joins, and its runs.
+type Swept = (Vec<(usize, usize)>, Vec<Run>);
 
 /// What merges (11.5).
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -736,6 +751,21 @@ fn root(parents: &[usize], mut at: usize) -> usize {
     }
 }
 
+/// Points every element of a forest [`join`] made straight at its root, so that [`root`] takes at
+/// most one step. [`join`] puts the lower root on top, so each element's parent comes before it,
+/// and in index order that parent already points at its root.
+fn flatten(parents: &mut [usize]) {
+    for at in 0..parents.len() {
+        let up = parents.get(at).copied().unwrap_or(at);
+        let top = parents.get(up).copied().unwrap_or(up);
+        parents
+            .iter_mut()
+            .skip(at)
+            .take(1)
+            .for_each(|slot| *slot = top);
+    }
+}
+
 /// Joins the sets of `a` and `b`, the lower root on top.
 fn join(parents: &mut [usize], a: usize, b: usize) {
     let (a, b) = (root(parents, a), root(parents, b));
@@ -773,12 +803,13 @@ fn stretches<'s>(sides: &[&'s Side]) -> Vec<(usize, usize, Vec<&'s Side>)> {
 }
 
 /// Sweeps the sides of one line: pieces of one sheet on both sides of a stretch join unless a cut
-/// lies along it, and the rest are runs.
+/// lies along it, and the rest are runs. The joins are listed in `joins`, in the order found, for
+/// the caller to make: a sweep reads no join, so lines can be swept apart and joined after.
 fn sweep(
     line: usize,
     sides: &[&Side],
     sheets: &[Sheet],
-    parents: &mut [usize],
+    joins: &mut Vec<(usize, usize)>,
     runs: &mut Vec<Run>,
 ) -> Result<(), MergeError> {
     // A line that only cuts lie on crosses no face.
@@ -813,7 +844,7 @@ fn sweep(
                     fins.push(fin(a, true));
                     fins.push(fin(b, false));
                 }
-                (0, Some(a), Some(b)) => join(parents, a.held, b.held),
+                (0, Some(a), Some(b)) => joins.push((a.held, b.held)),
                 (1, Some(side), None) => fins.push(fin(side, true)),
                 (-1, None, Some(side)) => fins.push(fin(side, false)),
                 _ => return Err(MergeError::Overlap),
@@ -956,7 +987,15 @@ fn numbered(
         },
     );
     let made = made.map_err(|e| phase_error(e, meter))?;
-    let corners: Vec<Corner> = made.into_iter().flatten().collect();
+    // One list of every corner, made at its full length once rather than grown as it is filled.
+    let count = made
+        .iter()
+        .map(Vec::len)
+        .fold(0usize, usize::saturating_add);
+    let mut corners: Vec<Corner> = Vec::with_capacity(count);
+    for piece in made {
+        corners.extend(piece);
+    }
     let keys: Option<Vec<&[Cell; 3]>> = corners.iter().map(|c| c.cells.as_ref()).collect();
     let order = if let Some(keys) = keys {
         // Equal points keep their order, as the serial stable sort keeps it.
@@ -977,32 +1016,45 @@ fn numbered(
         order
     };
     // Each run of equal points in that order is one place: the first corner's point and cells, and
-    // every corner's planes in turn, gathered once.
+    // every corner's planes in turn, gathered once. Whether a corner starts a run is told on the
+    // pool, against the corner before it in the order: [`point_order`] compares points exactly and
+    // never fails on corners (a wide coordinate fails only if a budget were wrong), so a corner equal
+    // to the one before it is equal to its run's first. The runs are then walked once, in order,
+    // each corner's planes moved into its place.
+    let starts = exec.try_map(
+        meter,
+        PLACES,
+        PLACES_PLAN,
+        &order,
+        |k, at, _| -> Result<bool, MergeError> {
+            let Some(before) = k.checked_sub(1).and_then(|b| order.get(b)) else {
+                return Ok(true);
+            };
+            let found = corners.get(*before).zip(corners.get(*at));
+            let (p, q) = found.ok_or(MergeError::Open)?;
+            Ok(point_order(p, q) != Some(Ordering::Equal))
+        },
+    );
+    let starts = starts.map_err(|e| phase_error(e, meter))?;
     let mut number = alloc::vec![0usize; corners.len()];
     let mut places: Vec<Corner> = Vec::new();
-    let mut start = 0usize;
-    while let Some(first) = order.get(start) {
-        let leader = corners.get(*first).ok_or(MergeError::Open)?;
-        let mut end = start.saturating_add(1);
-        while let Some(next) = order.get(end) {
-            let other = corners.get(*next).ok_or(MergeError::Open)?;
-            if point_order(leader, other) != Some(Ordering::Equal) {
-                break;
-            }
-            end = end.saturating_add(1);
+    for (at, starts_a_place) in order.iter().zip(starts) {
+        let corner = corners.get_mut(*at).ok_or(MergeError::Open)?;
+        let through = core::mem::take(&mut corner.through);
+        if starts_a_place {
+            places.push(Corner {
+                point: corner.point,
+                cells: corner.cells,
+                through,
+            });
+        } else {
+            places
+                .last_mut()
+                .ok_or(MergeError::Open)?
+                .through
+                .extend(through);
         }
-        let group = order.get(start..end).ok_or(MergeError::Open)?;
-        let mut through = Vec::with_capacity(group.len().saturating_mul(3));
-        for at in group {
-            through.extend_from_slice(&corners.get(*at).ok_or(MergeError::Open)?.through);
-            *number.get_mut(*at).ok_or(MergeError::Open)? = places.len();
-        }
-        places.push(Corner {
-            point: leader.point,
-            cells: leader.cells,
-            through,
-        });
-        start = end;
+        *number.get_mut(*at).ok_or(MergeError::Open)? = places.len().saturating_sub(1);
     }
     Ok((number, places))
 }
@@ -1119,7 +1171,11 @@ fn sides_of(
         },
     );
     let made = made.map_err(|e| phase_error(e, meter))?;
-    let sides: Vec<Side> = made.into_iter().flatten().collect();
+    // One list of every side, made at its full length (`base`, every piece's bounds) once.
+    let mut sides: Vec<Side> = Vec::with_capacity(base);
+    for piece in made {
+        sides.extend(piece);
+    }
     let keys: Option<Vec<(usize, &[Cell; 6])>> = sides
         .iter()
         .map(|s| s.key.cells.as_ref().map(|cells| (s.key.first, cells)))
@@ -1650,43 +1706,87 @@ pub fn merge_on(
     let sides = in_order(&each_side, &by_line)?;
     held.truncate(kept);
 
-    // Each line's runs, and which pieces join across them.
-    let mut same_piece: Vec<usize> = (0..held.len()).collect();
-    let mut runs: Vec<Run> = Vec::new();
-    let mut start = 0usize;
-    for end in 1..=sides.len() {
-        let next = sides.get(end).zip(sides.get(start));
-        if next.is_none_or(|(b, a)| line_order(&a.key, &b.key) != Some(Ordering::Equal)) {
-            let group = sides.get(start..end).ok_or(MergeError::Open)?;
-            sweep(start, group, &sheets, &mut same_piece, &mut runs)?;
-            start = end;
+    // Each line's runs, and which pieces join across them. Where each line's sides start is told
+    // on the pool, against the side before it in the order: [`line_order`] is exact and never fails,
+    // so a side on the line of the one before it is on its line's first's. The lines are swept on
+    // the pool, each into its own joins and runs, which are then taken in line order: the joins
+    // made and the runs listed are those of one sweep after another, and the first failure is the
+    // first line's.
+    let starts = exec.try_map(
+        meter,
+        LINES,
+        PLACES_PLAN,
+        &sides,
+        |k, side, _| -> Result<bool, MergeError> {
+            let Some(before) = k.checked_sub(1).and_then(|b| sides.get(b)) else {
+                return Ok(true);
+            };
+            Ok(line_order(&before.key, &side.key) != Some(Ordering::Equal))
+        },
+    );
+    let starts = starts.map_err(|e| phase_error(e, meter))?;
+    let mut lines: Vec<(usize, usize)> = Vec::new();
+    for (k, starts_a_line) in starts.into_iter().enumerate() {
+        if starts_a_line {
+            if let Some(last) = lines.last_mut() {
+                last.1 = k;
+            }
+            lines.push((k, sides.len()));
         }
     }
+    let swept = exec.try_map(
+        meter,
+        SWEEPS,
+        RUNS,
+        &lines,
+        |_, (start, end), _| -> Result<Swept, MergeError> {
+            let group = sides.get(*start..*end).ok_or(MergeError::Open)?;
+            let (mut joins, mut found) = (Vec::new(), Vec::new());
+            sweep(*start, group, &sheets, &mut joins, &mut found)?;
+            Ok((joins, found))
+        },
+    );
+    let swept = swept.map_err(|e| phase_error(e, meter))?;
+    let mut same_piece: Vec<usize> = (0..held.len()).collect();
+    let mut runs: Vec<Run> = Vec::new();
+    for (joins, found) in swept {
+        for (a, b) in joins {
+            join(&mut same_piece, a, b);
+        }
+        runs.extend(found);
+    }
+    flatten(&mut same_piece);
     let runs = without_slits(runs, &same_piece);
     let runs = cut_at_ends(&whole_runs(runs, &same_piece), &points, exec, meter)?;
 
     // Faces: the connected pieces of a sheet, numbered by the sheet and their lowest fin, which
-    // only one face of a sheet can hold.
-    let mut lowest: BTreeMap<usize, FaceKey> = BTreeMap::new();
+    // only one face of a sheet can hold. Each piece's set is listed at its root, a piece's index,
+    // so the faces are found in the order of their roots, as a map by root would list them.
+    let mut lowest: Vec<Option<FaceKey>> = alloc::vec![None; held.len()];
     for run in &runs {
         for fin in &run.fins {
             let key = (fin.sheet, run.low, run.high, fin.rising);
-            let slot = lowest.entry(root(&same_piece, fin.held)).or_insert(key);
-            *slot = key.min(*slot);
+            let slot = lowest
+                .get_mut(root(&same_piece, fin.held))
+                .ok_or(MergeError::Open)?;
+            *slot = Some(slot.map_or(key, |held_key| held_key.min(key)));
         }
     }
-    let mut face_list: Vec<(FaceKey, usize)> =
-        lowest.iter().map(|(top, key)| (*key, *top)).collect();
-    face_list.sort_unstable();
-    let numbered_faces: BTreeMap<usize, usize> = face_list
+    let mut face_list: Vec<(FaceKey, usize)> = lowest
         .iter()
         .enumerate()
-        .map(|(at, (_, top))| (*top, at))
+        .filter_map(|(top, key)| key.map(|key| (key, top)))
         .collect();
+    face_list.sort_unstable();
+    let mut numbered_faces: Vec<Option<usize>> = alloc::vec![None; held.len()];
+    for (at, (_, top)) in face_list.iter().enumerate() {
+        *numbered_faces.get_mut(*top).ok_or(MergeError::Open)? = Some(at);
+    }
     let face_of = |at: usize| {
         numbered_faces
-            .get(&root(&same_piece, at))
+            .get(root(&same_piece, at))
             .copied()
+            .flatten()
             .ok_or(MergeError::Open)
     };
     let mut planes: Vec<Plane> = Vec::with_capacity(face_list.len());
@@ -1747,6 +1847,7 @@ pub fn merge_on(
             fins: order,
         });
     }
+    flatten(&mut same_shell);
     let mut tops: Vec<usize> = (0..face_list.len()).map(|f| root(&same_shell, f)).collect();
     tops.sort_unstable();
     tops.dedup();
@@ -1851,7 +1952,9 @@ mod tests {
     use geom_num::plane::Plane;
     use geom_num::wide::I256;
 
-    use super::{Cell, CellKey, line_in_words, wide_line_key};
+    use geom_num::Sign;
+
+    use super::{Cell, CellKey, corner, line_in_words, point_order, wide_line_key};
 
     /// a / b against c / d, b and d positive, by cross-multiplying big integers.
     fn exact(a: i128, b: i128, c: i128, d: i128) -> Ordering {
@@ -1930,6 +2033,29 @@ mod tests {
         }
         // Terms past i64 after reduction take the wide products.
         agrees((1 << 100) + 1, 1 << 101, (1 << 99) + 1, 1 << 100);
+    }
+
+    /// Corners too wide for machine words have no cells, and are ordered by their wide coordinates,
+    /// whichever way their planes turn the weight: three axis planes with coefficients of 2^64 meet
+    /// at (5, 7, 9), in two orders whose weights are ±2^192, beside a corner in words.
+    #[test]
+    fn corners_without_cells_order_by_wide_coordinates_with_either_weight() {
+        let big = 1i128 << 64;
+        let axis = |n: [i128; 3], at: i128| Plane::new(n.map(|v| v * big), -at * big).unwrap();
+        let (x, y, z) = (axis([1, 0, 0], 5), axis([0, 1, 0], 7), axis([0, 0, 1], 9));
+        let (up, down) = (corner(x, y, z).unwrap(), corner(x, z, y).unwrap());
+        assert!(up.cells.is_none() && down.cells.is_none());
+        assert_eq!(
+            (up.point.weight(), down.point.weight()),
+            (Sign::Positive, Sign::Negative)
+        );
+        assert_eq!(point_order(&up, &down), Some(Ordering::Equal));
+        let unit = |n: [i128; 3], at: i128| Plane::new(n, -at).unwrap();
+        let near = corner(unit([1, 0, 0], 6), unit([0, 0, 1], 9), unit([0, 1, 0], 7)).unwrap();
+        assert!(near.cells.is_some());
+        assert_eq!(point_order(&down, &near), Some(Ordering::Less));
+        assert_eq!(point_order(&near, &down), Some(Ordering::Greater));
+        assert_eq!(point_order(&near, &up), Some(Ordering::Greater));
     }
 
     #[test]
