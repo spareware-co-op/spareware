@@ -328,7 +328,7 @@ const ROWS: &[Row<'static>] = &[
     // 12. Format and exchange. geom-format's "everything stored" is section 24.4's list; the
     // format crates' "kinds they map" are section 24.11's; p21, exchange and heal carry chapter
     // 30.5's amendments.
-    kernel("geom-format",   12, Accepted,   Here,
+    kernel("geom-format",   12, Accepted,   Elsewhere("G91"),
         "base math curve surface topo poly name mesh subd field 2d cloud draw sketch"),
     kernel("geom-exchange", 12, Amended27, Here,
         "base math curve surface topo format p21 intersect check"),
