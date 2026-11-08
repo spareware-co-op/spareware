@@ -1217,14 +1217,22 @@ fn in_order<'s>(sides: &[&'s Side], order: &[usize]) -> Result<Vec<&'s Side>, Me
 /// whole. Only a seam can hold two fins of one sheet, so those two are the seam.
 fn without_slits(mut runs: Vec<Run>, parents: &[usize]) -> Vec<Run> {
     for run in &mut runs {
-        let fins = run.fins.clone();
-        run.fins.retain(|fin| {
-            !fins.iter().any(|other| {
-                other.sheet == fin.sheet
-                    && other.rising != fin.rising
-                    && root(parents, other.held) == root(parents, fin.held)
+        // Which fins are a seam's, told against every fin of the run before any goes: a flag for
+        // each, rather than a copy of the fins.
+        let seam: Vec<bool> = run
+            .fins
+            .iter()
+            .map(|fin| {
+                run.fins.iter().any(|other| {
+                    other.sheet == fin.sheet
+                        && other.rising != fin.rising
+                        && root(parents, other.held) == root(parents, fin.held)
+                })
             })
-        });
+            .collect();
+        let mut flags = seam.iter();
+        run.fins
+            .retain(|_| flags.next().is_some_and(|in_seam| !*in_seam));
     }
     runs.retain(|run| !run.fins.is_empty());
     runs
@@ -1247,7 +1255,7 @@ fn beyond(at: &[i128; 3], (a, b): (&[i128; 3], &[i128; 3])) -> bool {
 /// `runs`, each cut wherever another run ends on its line. A run's line holds only points between
 /// its ends' cells, so a point outside them is not read.
 fn cut_at_ends(
-    runs: &[Run],
+    runs: Vec<Run>,
     places: &[Place],
     exec: &Exec<'_>,
     meter: &mut WorkMeter<'_>,
@@ -1260,34 +1268,44 @@ fn cut_at_ends(
         meter,
         ENDS,
         RUNS,
-        runs,
-        |_, run, _| -> Result<Result<Vec<Run>, MergeError>, MergeError> {
-            Ok(cut_run(run, (&ends, &cells), places))
+        &runs,
+        |_, run, _| -> Result<Result<Vec<usize>, MergeError>, MergeError> {
+            Ok(cuts_of(run, (&ends, &cells), places))
         },
     );
     let made = made.map_err(|e| phase_error(e, meter))?;
-    // Each run's parts, in run order, and the first run's failure as a serial walk meets it.
+    // Each run's parts, in run order, and the first run's failure as a serial walk meets it. A
+    // run is moved into its last part, so one with no cut is not copied.
     let mut edges: Vec<Run> = Vec::with_capacity(runs.len());
-    for parts in made {
-        edges.extend(parts?);
+    for (run, marks) in runs.into_iter().zip(made) {
+        let mut low = run.low;
+        for mark in marks? {
+            edges.push(Run {
+                low,
+                high: mark,
+                ..run.clone()
+            });
+            low = mark;
+        }
+        edges.push(Run { low, ..run });
     }
     Ok(edges)
 }
 
-/// `run`, cut wherever one of the sorted `ends` lies on its line between its own: those numbered
-/// between its ends, found by binary search, whose `cells` fall within its ends' cells.
-fn cut_run(
+/// Where `run` is cut, in order: each of the sorted `ends` that lies on its line between its own,
+/// those numbered between its ends, found by binary search, whose `cells` fall within its ends'
+/// cells.
+fn cuts_of(
     run: &Run,
     (ends, cells): (&[usize], &[Option<[i128; 3]>]),
     places: &[Place],
-) -> Result<Vec<Run>, MergeError> {
+) -> Result<Vec<usize>, MergeError> {
     let [p, q] = run.on;
-    let mut low = run.low;
     let span = cells.get(run.low).zip(cells.get(run.high));
     let span = span.and_then(|(a, b)| a.as_ref().zip(b.as_ref()));
     let from = ends.partition_point(|e| *e <= run.low);
     let to = ends.partition_point(|e| *e < run.high);
-    let mut parts = Vec::new();
+    let mut marks = Vec::new();
     for mark in ends.get(from..to).unwrap_or_default() {
         let outside = span
             .zip(cells.get(*mark).and_then(Option::as_ref))
@@ -1298,16 +1316,10 @@ fn cut_run(
         let place = places.get(*mark).ok_or(MergeError::Open)?;
         let side = |plane: &Plane| plane.side_of_tpi(&place.point);
         if side(&p)? == Sign::Zero && side(&q)? == Sign::Zero {
-            parts.push(Run {
-                low,
-                high: *mark,
-                ..run.clone()
-            });
-            low = *mark;
+            marks.push(*mark);
         }
     }
-    parts.push(Run { low, ..run.clone() });
-    Ok(parts)
+    Ok(marks)
 }
 
 /// The face's rings, each a ring of fin numbers, in turn, starting at its lowest fin.
@@ -1628,7 +1640,7 @@ pub fn section(pieces: &[(Piece, usize)], meter: &mut WorkMeter<'_>) -> Result<C
             start = end;
         }
     }
-    let runs = cut_at_ends(&runs, &points, &Exec::serial(), meter)?;
+    let runs = cut_at_ends(runs, &points, &Exec::serial(), meter)?;
     let mut used: Vec<usize> = runs.iter().flat_map(|e| [e.low, e.high]).collect();
     used.sort_unstable();
     used.dedup();
@@ -1763,7 +1775,7 @@ pub fn merge_on(
     }
     flatten(&mut same_piece);
     let runs = without_slits(runs, &same_piece);
-    let runs = cut_at_ends(&whole_runs(runs, &same_piece), &points, exec, meter)?;
+    let runs = cut_at_ends(whole_runs(runs, &same_piece), &points, exec, meter)?;
 
     // Faces: the connected pieces of a sheet, numbered by the sheet and their lowest fin, which
     // only one face of a sheet can hold. Each piece's set is listed at its root, a piece's index,
