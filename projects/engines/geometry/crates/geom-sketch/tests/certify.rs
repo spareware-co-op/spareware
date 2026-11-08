@@ -339,6 +339,50 @@ fn a_proven_radius_reaches_past_the_solution_and_is_pinned() {
             "slot {slot}: {b:?}"
         );
     }
+    // The boxes' ends are pinned too: each refinement narrows both ends of every box, so a box
+    // not narrowed from above (or below) moves them even where the radius, set by the farther
+    // end, stays.
+    let ends = [
+        (0x4009_9d6f_b33f_c113_u64, 0x400e_6290_4cc0_3eed_u64),
+        (0x4009_7e79_59f2_1fa3_u64, 0x400d_aaf5_e042_8dc3_u64),
+    ];
+    for (slot, (lo, hi)) in (0_u8..).zip(ends) {
+        let b = box_of(&got, pid(3), slot);
+        assert_eq!(
+            (b.lo().to_bits(), b.hi().to_bits()),
+            (lo, hi),
+            "slot {slot}: {b:?}"
+        );
+    }
+}
+
+#[test]
+fn a_box_that_leaves_the_committed_point_behind_is_still_judged_over_the_segment_to_it() {
+    // P is 35.8 from (-42, 46) and 27.6 from (-44, -17), drawn at (-46.2, 10.5) and committed at
+    // (-46, 10), about half a step from the solution near (-46.24, 10.49). The first box is not
+    // mapped into itself; the image the operator gives moves far enough in one coordinate that
+    // the next box no longer holds the committed point there. The Jacobian is then enclosed over
+    // the box and the committed point together (the mean value theorem takes it on the segment
+    // between them), so the box proved on a later inflation, and its radius, are those of that
+    // hull; a Jacobian over the box alone would prove a narrower box with no theorem behind it.
+    let s = build(
+        vec![
+            reference(1, -42.0, 46.0),
+            reference(2, -44.0, -17.0),
+            point(3, -46.2, 10.5),
+        ],
+        vec![distance(1, 1, 3, 35.8), distance(2, 2, 3, 27.6)],
+    );
+    let committed = commit(&s, &mut meter()).unwrap();
+    let got = certify(&s, &committed, &mut meter()).unwrap();
+    assert_eq!(got.blocks.len(), 1, "{got:?}");
+    let radius = proven(&got.blocks[0]);
+    assert_eq!(radius.to_bits(), 0x3feb_13d1_d688_9c81_u64, "{radius}");
+    // The exact solution, to within a double's rounding, lies in the box.
+    for (slot, want) in [(0_u8, -46.511_900_596_575_2), (1, 10.485_457_161_796_04)] {
+        let b = box_of(&got, pid(3), slot);
+        assert!(b.lo() < want && want < b.hi(), "slot {slot}: {b:?}");
+    }
 }
 
 #[test]
