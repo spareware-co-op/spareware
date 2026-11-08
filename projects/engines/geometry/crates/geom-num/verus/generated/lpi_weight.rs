@@ -109,7 +109,7 @@ pub open spec fn bound_of_w() -> int {
     clippy::similar_names,
     reason = "each name is a step of the description, named by the language's rule"
 )]
-#[verus_spec(r =>
+#[verus_spec(result_ =>
     requires
         p.x.on_grid(),
         p.y.on_grid(),
@@ -118,8 +118,8 @@ pub open spec fn bound_of_w() -> int {
         q.y.on_grid(),
         q.z.on_grid(),
     ensures
-        match r {
-            Some(v) => in_range(nx, 83) && in_range(ny, 83) && in_range(nz, 83) && v as int == spec_value(nx, ny, nz, p, q),
+        match result_ {
+            Some(held_) => in_range(nx, 83) && in_range(ny, 83) && in_range(nz, 83) && held_ as int == spec_value(nx, ny, nz, p, q),
             None => !(in_range(nx, 83) && in_range(ny, 83) && in_range(nz, 83)),
         },
 )]
