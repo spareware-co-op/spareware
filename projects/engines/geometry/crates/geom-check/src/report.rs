@@ -76,11 +76,14 @@ impl Group {
         matches!(self, Group::Combinatorial | Group::Exactness)
     }
 
-    /// Whether this checker has the group yet: groups 1 and 4 (piece G84); 2 and 3 come with
-    /// pieces G85 and on.
+    /// Whether this checker has the group yet: groups 1 and 4 (piece G84) and 2 (G85); 3 comes
+    /// with G85 and the pieces after it.
     #[must_use]
     pub const fn built(self) -> bool {
-        matches!(self, Group::Combinatorial | Group::Exactness)
+        matches!(
+            self,
+            Group::Combinatorial | Group::Geometric | Group::SelfIntersection | Group::Exactness
+        )
     }
 }
 
@@ -236,6 +239,30 @@ pub enum FaultKind {
     NotStraight,
     /// The body is recorded Exact, but a fin's pcurve is not a line. `at` is the fin.
     CurvedPcurve,
+    /// A vertex does not lie on a face's surface within the body's bound. `at` is the vertex,
+    /// `with` the face.
+    VertexOffSurface,
+    /// A vertex does not lie at its edge's curve end within the body's bound. `at` is the vertex,
+    /// `with` the edge.
+    VertexOffCurve,
+    /// An edge's curve does not lie on a face's surface within the body's bound. `at` is the
+    /// edge, `with` the face.
+    EdgeOffSurface,
+    /// A carrier group 2 has no certified check for yet: a surface or curve of another kind, a
+    /// plane not given by integers in a body recorded Exact, or a fin's pcurve. Reported, never
+    /// passed. `at` is the surface, curve or pcurve, `with` the face, edge or fin that uses it.
+    Unchecked,
+    /// Two edges of one face meet other than at a vertex they share. `at` is one edge, `with` the
+    /// other.
+    EdgesCross,
+    /// Two faces meet other than along an edge or at a vertex they share. `at` is one face,
+    /// `with` the other.
+    FacesCross,
+    /// A pair group 3 has no certified test for: two edges of one face or two faces whose
+    /// carriers no closed form here separates (a face with holes or not convex against a crossing
+    /// plane, two curved faces, a circle crossing a plane's line). Reported, never passed. `at`
+    /// and `with` are the two edges or the two faces.
+    PairUnchecked,
 }
 
 impl FaultKind {
@@ -245,6 +272,13 @@ impl FaultKind {
         match self {
             FaultKind::NotFlat | FaultKind::NotStraight | FaultKind::CurvedPcurve => {
                 Group::Exactness
+            }
+            FaultKind::VertexOffSurface
+            | FaultKind::VertexOffCurve
+            | FaultKind::EdgeOffSurface
+            | FaultKind::Unchecked => Group::Geometric,
+            FaultKind::EdgesCross | FaultKind::FacesCross | FaultKind::PairUnchecked => {
+                Group::SelfIntersection
             }
             _ => Group::Combinatorial,
         }
@@ -285,6 +319,17 @@ impl FaultKind {
             FaultKind::NotFlat => "the body is recorded Exact, but the face is curved",
             FaultKind::NotStraight => "the body is recorded Exact, but the edge is not straight",
             FaultKind::CurvedPcurve => "the body is recorded Exact, but the fin's pcurve is curved",
+            FaultKind::VertexOffSurface => {
+                "the vertex is not on the face's surface within the bound"
+            }
+            FaultKind::VertexOffCurve => {
+                "the vertex is not at the edge's curve end within the bound"
+            }
+            FaultKind::EdgeOffSurface => "the edge is not on the face's surface within the bound",
+            FaultKind::Unchecked => "no certified check of this carrier exists yet",
+            FaultKind::EdgesCross => "two edges of the face meet other than at a shared vertex",
+            FaultKind::FacesCross => "the two faces meet other than along a shared edge or vertex",
+            FaultKind::PairUnchecked => "no certified test of this pair exists yet",
         }
     }
 }
@@ -336,13 +381,8 @@ impl Fault {
 
 impl fmt::Display for Fault {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(
-            f,
-            "group {}, {}: {}",
-            self.kind.group().number(),
-            self.at,
-            self.kind.what()
-        )?;
+        let (group, what) = (self.kind.group().number(), self.kind.what());
+        write!(f, "group {group}, {}: {what}", self.at)?;
         if let Some(with) = self.with {
             write!(f, " ({with})")?;
         }

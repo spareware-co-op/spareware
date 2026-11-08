@@ -24,7 +24,7 @@ use geom_curve::{Circle, CurveKind, Frame, Line};
 use geom_math::Box3;
 use geom_num::{Exactness, GridStep, P3, Steps};
 use geom_run::{Budget, WorkMeter};
-use geom_surface::{Plane, Sphere, SurfaceKind};
+use geom_surface::{Cone, Cylinder, Plane, Sphere, SurfaceKind, Torus};
 use geom_topo::{
     Body, BodyKind, Builder, Edge, Face, Fin, Ix, Loop, Region, RegionKind, Sense, Shell, Vertex,
 };
@@ -187,6 +187,56 @@ impl Rows {
         e
     }
 
+    /// The plane a face with `loops` lies on, and the box of its vertices: the plane through the
+    /// first three of its vertices that are not on one line, spanned by their differences, so
+    /// every vertex of a flat polygon lies on it exactly; `plane()`, z = 0, for loops of closed
+    /// edges without vertices (the circles all lie in z = 0).
+    fn carrier(&self, loops: &[&[(u32, Sense)]]) -> (SurfaceKind, Box3) {
+        let mut points: Vec<P3> = Vec::new();
+        for ring in loops {
+            for &(e, _) in *ring {
+                let edge = self.edges[e as usize];
+                for v in [edge.start, edge.end].into_iter().flatten() {
+                    let p = self.points[self.vertices[v.row() as usize].point.row() as usize];
+                    if !points.contains(&p) {
+                        points.push(p);
+                    }
+                }
+            }
+        }
+        let xyz = |p: P3| [p.x.get(), p.y.get(), p.z.get()];
+        let corner = |pick: fn(i64, i64) -> i64| {
+            let first = points.first().map_or([0; 3], |&p| xyz(p));
+            let c = points
+                .iter()
+                .fold(first, |acc, &p| [0, 1, 2].map(|k| pick(acc[k], xyz(p)[k])));
+            P3::new(c[0], c[1], c[2]).unwrap()
+        };
+        let bound = Box3::new(corner(i64::min), corner(i64::max)).unwrap();
+        for i in 0..points.len() {
+            for j in i + 1..points.len() {
+                for k in j + 1..points.len() {
+                    let (o, a, b) = (xyz(points[i]), xyz(points[j]), xyz(points[k]));
+                    let u = [a[0] - o[0], a[1] - o[1], a[2] - o[2]];
+                    let v = [b[0] - o[0], b[1] - o[1], b[2] - o[2]];
+                    let cross = [
+                        u[1] * v[2] - u[2] * v[1],
+                        u[2] * v[0] - u[0] * v[2],
+                        u[0] * v[1] - u[1] * v[0],
+                    ];
+                    if cross != [0; 3] {
+                        let f = |w: [i64; 3]| w.map(|x| x as f64);
+                        let surface = SurfaceKind::Plane(
+                            Plane::new(f(o), f(u), f(v), ((0.0, 1.0), (0.0, 1.0))).unwrap(),
+                        );
+                        return (surface, bound);
+                    }
+                }
+            }
+        }
+        (plane(), bound)
+    }
+
     /// Adds a shell to region `r`, at the end of the region's list, with no faces yet; its row.
     pub fn shell(&mut self, r: u32) -> u32 {
         let s = self.shells.len() as u32;
@@ -213,15 +263,15 @@ impl Rows {
     /// added.
     pub fn face(&mut self, s: u32, loops: &[&[(u32, Sense)]]) -> u32 {
         let f = self.faces.len() as u32;
-        self.surfaces.push(plane());
-        let origin = P3::new(0, 0, 0).unwrap();
+        let (surface, bound) = self.carrier(loops);
+        self.surfaces.push(surface);
         self.faces.push(Face {
             shell: ix(s),
             next: None,
             surface: ix(self.surfaces.len() as u32 - 1),
             sense: Sense::Forward,
             first_loop: None,
-            bound: Box3::new(origin, origin).unwrap(),
+            bound,
         });
         match self.shells[s as usize].first_face {
             None => self.shells[s as usize].first_face = Some(ix(f)),
@@ -436,6 +486,230 @@ pub fn acorn() -> Rows {
     let mut r = Rows::empty();
     r.vertex([0, 0, 0]);
     r
+}
+
+/// The plane z = `z`.
+pub fn level(z: f64) -> SurfaceKind {
+    SurfaceKind::Plane(
+        Plane::new(
+            [0.0, 0.0, z],
+            [1.0, 0.0, 0.0],
+            [0.0, 1.0, 0.0],
+            ((0.0, 1.0), (0.0, 1.0)),
+        )
+        .unwrap(),
+    )
+}
+
+/// The full circle about `center` of `radius` with `normal`, starting along `x`.
+pub fn round(center: [f64; 3], radius: f64, x: [f64; 3], normal: [f64; 3]) -> CurveKind<3> {
+    CurveKind::Circle(Circle::full(center, radius, Frame::new(x, normal).unwrap()).unwrap())
+}
+
+/// The full circle in the plane z = `z` about the z axis, of `radius`, starting on the x axis.
+pub fn parallel(z: f64, radius: f64) -> CurveKind<3> {
+    round([0.0, 0.0, z], radius, [1.0, 0.0, 0.0], [0.0, 0.0, 1.0])
+}
+
+/// The cylinder of radius 5 about the z axis, for heights 0 to 10.
+pub fn cylinder_surface() -> SurfaceKind {
+    SurfaceKind::Cylinder(
+        Cylinder::new(
+            [0.0; 3],
+            5.0,
+            Frame::standard().unwrap(),
+            ((0.0, 2.0), (0.0, 10.0)),
+        )
+        .unwrap(),
+    )
+}
+
+/// A solid cylinder of radius 5 and height 10 about the z axis, as G84's `cylinder` joins it: caps
+/// on the planes z = 10 and z = 0, a cylindrical side, two closed circles without vertices.
+pub fn round_cylinder() -> Rows {
+    let mut r = cylinder();
+    r.curves[0] = parallel(10.0, 5.0);
+    r.curves[1] = parallel(0.0, 5.0);
+    r.surfaces[0] = level(10.0);
+    r.surfaces[1] = level(0.0);
+    r.surfaces[2] = cylinder_surface();
+    r
+}
+
+/// The same cylinder with a seam: its circles start and end at vertices 0, (5, 0, 0), and 1,
+/// (5, 0, 10), joined by a line on the side.
+pub fn seamed_cylinder() -> Rows {
+    let mut r = Rows::empty();
+    let solid = r.region(RegionKind::Solid);
+    let (low, high) = (r.vertex([5, 0, 0]), r.vertex([5, 0, 10]));
+    let bottom = r.edge(Some((low, low)));
+    let top = r.edge(Some((high, high)));
+    let seam = r.edge(Some((low, high)));
+    let s = r.shell(solid);
+    r.face(s, &[&[(top, Sense::Forward)]]);
+    r.face(s, &[&[(bottom, Sense::Forward)]]);
+    r.face(
+        s,
+        &[&[
+            (bottom, Sense::Reversed),
+            (seam, Sense::Forward),
+            (top, Sense::Reversed),
+            (seam, Sense::Reversed),
+        ]],
+    );
+    r.curves[bottom as usize] = parallel(0.0, 5.0);
+    r.curves[top as usize] = parallel(10.0, 5.0);
+    r.surfaces[0] = level(10.0);
+    r.surfaces[1] = level(0.0);
+    r.surfaces[2] = cylinder_surface();
+    r
+}
+
+/// A solid cone about the z axis, radius 6 at z = 0 narrowing to its apex at z = 12: a base disc,
+/// its base circle starting and ending at vertex 0, (6, 0, 0), and a seam line from the apex,
+/// vertex 1, down to it.
+pub fn cone() -> Rows {
+    let mut r = Rows::empty();
+    let solid = r.region(RegionKind::Solid);
+    let (base, apex) = (r.vertex([6, 0, 0]), r.vertex([0, 0, 12]));
+    let rim = r.edge(Some((base, base)));
+    let seam = r.edge(Some((apex, base)));
+    let s = r.shell(solid);
+    r.face(s, &[&[(rim, Sense::Forward)]]);
+    r.face(
+        s,
+        &[&[
+            (rim, Sense::Reversed),
+            (seam, Sense::Reversed),
+            (seam, Sense::Forward),
+        ]],
+    );
+    r.curves[rim as usize] = parallel(0.0, 6.0);
+    r.surfaces[0] = level(0.0);
+    r.surfaces[1] = SurfaceKind::Cone(
+        Cone::new(
+            [0.0; 3],
+            6.0,
+            -0.5,
+            Frame::standard().unwrap(),
+            ((0.0, 2.0), (0.0, 12.0)),
+        )
+        .unwrap(),
+    );
+    r
+}
+
+/// The same cone without its apex vertex and seam: a base disc and a side joined by the rim, a
+/// full circle without vertices.
+pub fn bare_cone() -> Rows {
+    let mut r = Rows::empty();
+    let solid = r.region(RegionKind::Solid);
+    let rim = r.edge(None);
+    let s = r.shell(solid);
+    r.face(s, &[&[(rim, Sense::Forward)]]);
+    r.face(s, &[&[(rim, Sense::Reversed)]]);
+    r.curves[rim as usize] = parallel(0.0, 6.0);
+    let side = cone().surfaces[1].clone();
+    r.surfaces[0] = level(0.0);
+    r.surfaces[1] = side;
+    r
+}
+
+/// The sphere of radius 5 about the origin, its northern half.
+pub fn dome_surface() -> SurfaceKind {
+    SurfaceKind::Sphere(
+        Sphere::new(
+            [0.0; 3],
+            5.0,
+            Frame::standard().unwrap(),
+            ((0.0, 2.0), (0.0, 0.5)),
+        )
+        .unwrap(),
+    )
+}
+
+/// A solid hemisphere of radius 5 on the plane z = 0: a base disc and a dome, joined by the
+/// equator, which starts and ends at vertex 0, (5, 0, 0).
+pub fn hemisphere() -> Rows {
+    let mut r = Rows::empty();
+    let solid = r.region(RegionKind::Solid);
+    let v = r.vertex([5, 0, 0]);
+    let equator = r.edge(Some((v, v)));
+    let s = r.shell(solid);
+    r.face(s, &[&[(equator, Sense::Forward)]]);
+    r.face(s, &[&[(equator, Sense::Reversed)]]);
+    r.curves[equator as usize] = parallel(0.0, 5.0);
+    r.surfaces[0] = level(0.0);
+    r.surfaces[1] = dome_surface();
+    r
+}
+
+/// A solid ball of radius 5: one spherical face with no loops.
+pub fn ball() -> Rows {
+    let mut r = Rows::empty();
+    let solid = r.region(RegionKind::Solid);
+    let s = r.shell(solid);
+    r.face(s, &[]);
+    r.surfaces[0] = SurfaceKind::Sphere(
+        Sphere::new(
+            [0.0; 3],
+            5.0,
+            Frame::standard().unwrap(),
+            ((0.0, 2.0), (-0.5, 0.5)),
+        )
+        .unwrap(),
+    );
+    r
+}
+
+/// The torus of radii 10 and 3 about the z axis.
+pub fn torus_surface() -> SurfaceKind {
+    SurfaceKind::Torus(
+        Torus::new(
+            [0.0; 3],
+            10.0,
+            3.0,
+            Frame::standard().unwrap(),
+            ((0.0, 2.0), (0.0, 2.0)),
+        )
+        .unwrap(),
+    )
+}
+
+/// A solid ring torus of radii 10 and 3 about the z axis, as G84's `torus` joins it: its one
+/// vertex at (13, 0, 0), a parallel seam (the outer equator, edge 0) and a meridian seam (in the
+/// plane y = 0, edge 1) through it.
+pub fn ring_torus() -> Rows {
+    let mut r = torus();
+    r.points[0] = P3::new(13, 0, 0).unwrap();
+    r.curves[0] = parallel(0.0, 13.0);
+    r.curves[1] = round([10.0, 0.0, 0.0], 3.0, [1.0, 0.0, 0.0], [0.0, -1.0, 0.0]);
+    r.surfaces[0] = torus_surface();
+    r
+}
+
+/// A square sheet of side 10 with a round hole of radius 2 at its centre: G84's annulus with its
+/// hole moved inside.
+pub fn holed_sheet() -> Rows {
+    let mut r = annulus_sheet();
+    r.curves[4] = round([5.0, 5.0, 0.0], 2.0, [1.0, 0.0, 0.0], [0.0, 0.0, 1.0]);
+    r
+}
+
+/// Adds to shell `s` a face with one loop for each ring of vertex numbers in `rings`, an edge for
+/// each step round a ring, from the vertex before to the vertex after; its row.
+pub fn face_of(r: &mut Rows, s: u32, rings: &[&[u32]]) -> u32 {
+    let mut loops: Vec<Vec<(u32, Sense)>> = Vec::new();
+    for ring in rings {
+        let mut fins = Vec::new();
+        for k in 0..ring.len() {
+            let e = r.edge(Some((ring[k], ring[(k + 1) % ring.len()])));
+            fins.push((e, Sense::Forward));
+        }
+        loops.push(fins);
+    }
+    let refs: Vec<&[(u32, Sense)]> = loops.iter().map(Vec::as_slice).collect();
+    r.face(s, &refs)
 }
 
 /// The report of a full check of `rows` as a body of `kind`, recorded `exactness`.
