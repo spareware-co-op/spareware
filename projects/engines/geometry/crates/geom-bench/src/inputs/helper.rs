@@ -1,4 +1,4 @@
-//! Inputs for `geom-run`'s parallel helper (decision 32.44): lists of [`LIST`] words, each one call
+//! Inputs for `geom-run`'s parallel helper (decision 32.46): lists of [`LIST`] words, each one call
 //! of `Exec::map` whose items fit a single chunk, so its one wave is a lone task.
 //!
 //! Class `typical` only: every word is a draw of [`SplitMix64`], and every list has the same
