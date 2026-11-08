@@ -652,6 +652,16 @@
             "function": "replay_corpus_golden"
           },
           "sha256": "742f10a75747ba3c3181572802a374545b6b27194162608d37bd8c5ccf240d30"
+        },
+        {
+          "id": "geom-test/museum",
+          "what": "The format museum (piece G99): every exhibit of geom-test/museum held to its record on this target, each file read whole and written back byte for byte and each log replayed to its hash, the digest of every exhibit's id, bytes and hash.",
+          "check": {
+            "crate": "geom-test",
+            "test": "museum",
+            "function": "every_exhibit_opens_and_replays_on_this_target"
+          },
+          "sha256": "327cc8119248efc09f90bab421c65b0125f0c897b1abcd3ed6f69a05ac3777cd"
         }
       ]
     }

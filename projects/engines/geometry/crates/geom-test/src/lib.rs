@@ -62,6 +62,9 @@
 //!   exact-input writer, exact and bounded comparisons, signatures and the four-outcome triage, and
 //!   the first oracle, geomdl, on NURBS. The binary `oracle` writes the jobs and judges the answers;
 //!   every harness lives in the oracle repository.
+//! - [`museum`]: the format museum (28.13, 24.6; G99): sample files and operation logs of every
+//!   released format version and edition, compiled in and held to their recorded hashes on every
+//!   target.
 //! - [`guard`]: the proof that the toolchain and dependency guard of 28.13 trips: `libm`'s `sin`
 //!   changed by one bit must fail the golden `geom-num/determinism`. The binary `guard` patches
 //!   that change in and runs the golden (`-- prove`); `kernel.yml` runs it.
@@ -247,6 +250,7 @@ pub mod ledger;
 pub mod licence;
 pub mod map;
 pub mod miri;
+pub mod museum;
 pub mod mutants;
 pub mod nurbs_reference;
 pub mod oracle;
