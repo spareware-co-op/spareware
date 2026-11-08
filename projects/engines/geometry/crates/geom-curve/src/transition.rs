@@ -11,7 +11,9 @@
 //! it. The laws are decision 32.33's closed set. From a start curvature κ₁ to an end curvature κ₂,
 //! with ξ = σ/L: the clothoid, Helmert, Bloss, cosine and sine transitions and the cant-coupled
 //! transition, IFC 4.3's CLOTHOID, HELMERTCURVE, BLOSSCURVE, COSINECURVE, SINECURVE and the curve
-//! IFC calls VIENNESEBEND. And IFC's parent spirals, read from a station along them:
+//! IFC calls VIENNESEBEND; and the cubic spiral, the variant of IFC's CUBIC it calls "Cubic Spiral",
+//! by the kernel's definition (y = l³/(6RL) along the arc length from a straight; 32.33), since IFC
+//! gives it no formula. And IFC's parent spirals, read from a station along them:
 //! `IfcClothoid` and the second-, third- and seventh-order polynomial spirals, `IfcCosineSpiral`
 //! and `IfcSineSpiral`. It is a curve kind of chapter 7 ([`ParamCurve`], `CurveKind::Transition`):
 //! points and derivatives in doubles and certified enclosures of them, bounds on the point and on
@@ -23,7 +25,11 @@
 //!
 //! - **Exact heading.** The heading is the closed-form integral of the law's curvature: in
 //!   half-turns, a polynomial of degree at most 8 in ξ plus at most one sine or cosine of an affine
-//!   argument, its coefficients enclosed from the stored doubles. No quadrature touches it.
+//!   argument, its coefficients enclosed from the stored doubles. No quadrature touches it. The
+//!   cubic spiral's heading is held by its sine, a quadratic q in ξ, so its unit tangent is
+//!   (√(1 − q²), q) exactly, its turn asin(q)/π by the certified `atan2`, and its derivatives by
+//!   the Taylor recurrence of a square root; q stays inside (−1, 1) over the length, or the law is
+//!   refused.
 //! - **Certified positions.** The position is the start plus the integrals of the cosine and sine
 //!   of the heading, each by the [`NODES`]-point Gauss–Legendre rule on panels of equal width in ξ.
 //!   Each panel's remainder is bounded by Trefethen's theorem for integrands analytic in a
@@ -67,7 +73,8 @@
 //! L. N. Trefethen, "Is Gauss quadrature better than Clenshaw–Curtis?", SIAM Review 50 (2008),
 //! <https://doi.org/10.1137/060659831>, Theorem 4.5: on [−1, 1], |I − Iₙ| ≤ (64/15)·M·ρ⁻²ⁿ/(ρ² − 1)
 //! for f analytic in the open ellipse Eρ with |f| ≤ M there; for f = cos πh or sin πh,
-//! M ≤ cosh(π·sup |Im h|). The ellipse of a part of a panel lies inside the panel's, so the
+//! M ≤ cosh(π·sup |Im h|); for the cubic spiral's √(1 − q²) and q, with |q| ≤ m < 1 on the ellipse,
+//! M ≤ √(1 + m²), and 1 − q² keeps a positive real part there, so the root is analytic. The ellipse of a part of a panel lies inside the panel's, so the
 //! panel's bound holds for every station in it. No code from the Clothoids library's `Fresnel.cc`:
 //! the clothoid uses this same evaluator. A part of the parent is `IfcCurveSegment`'s trimming;
 //! the NURBS form is `crate::taylor`'s Taylor pieces with the Lagrange remainder. A rigid motion
@@ -86,7 +93,9 @@
 //!   <https://github.com/buildingSMART/IFC4.3.x-development/tree/7256780bd95fcc5b3653e07b3e8ec2f8389c9f3d/docs/schemas>,
 //!   for the curvature and heading formulas of `IfcAlignmentHorizontalSegmentTypeEnum`'s
 //!   transitions, `IfcClothoid`, the second-, third- and seventh-order polynomial spirals,
-//!   `IfcCosineSpiral` and `IfcSineSpiral`, which the laws implement, and for `IfcCurveSegment`'s
+//!   `IfcCosineSpiral` and `IfcSineSpiral`, which the laws implement, for its CUBIC entry's two
+//!   variants, the cubic parabola and the cubic spiral, the second defined here (decision 32.33)
+//!   as the first term of the clothoid's series along the arc length, and for `IfcCurveSegment`'s
 //!   trimming of a parent curve by a start and a signed length, which windows and senses follow.
 //!   No text adapted.
 
@@ -145,7 +154,7 @@ const TOLERANCE: f64 = 1.0 / 72_057_594_037_927_936.0;
 /// How the curvature of a [`Transition`] changes along it (decision 32.33): one closed set, every
 /// law evaluated by the one method of the module documentation.
 ///
-/// The first six run from a start curvature κ₁ (`start`) to an end curvature κ₂ (`end`), in
+/// The first seven run from a start curvature κ₁ (`start`) to an end curvature κ₂ (`end`), in
 /// reciprocal length units, over the transition's length L, with ξ = t/L and Δκ = κ₂ − κ₁. The
 /// last three are IFC's parent spirals, read from arc length `from` along them, so the transition's
 /// station t is the spiral's s = `from` + t; their terms are IFC's attributes.
@@ -202,6 +211,20 @@ pub enum CurvatureLaw {
         /// Δψ, the change of the cant angle over the transition, in radians.
         cant: f64,
     },
+    /// The cubic spiral, the variant IFC 4.3 calls "Cubic Spiral" among its CUBIC transitions, by
+    /// the kernel's definition, since IFC gives no formula for it (decision 32.33): the curve, by
+    /// arc length l, whose offset from its start tangent is y = κ₁·l²/2 + Δκ·l³/(6L), so the sine
+    /// of its heading is the clothoid's heading, sin θ = κ₁·l + Δκ·l²/(2L). From a straight to a
+    /// radius R (κ₁ = 0, κ₂ = 1/R) that is the textbook y = l³/(6RL), the clothoid's series cut
+    /// after its first term with l measured along the curve. Its curvature is
+    /// (κ₁ + ξ·Δκ)/cos θ, so it ends at κ₂/cos θ(L) rather than at κ₂; the sine of its heading
+    /// must stay below 1 over the whole length (L < 2R from a straight), or it is refused.
+    CubicSpiral {
+        /// κ₁, the clothoid curvature its heading's sine starts from.
+        start: f64,
+        /// κ₂, the clothoid curvature its heading's sine ends at.
+        end: f64,
+    },
     /// IFC's `IfcClothoid` and polynomial spirals: κ(s) = Σₖ sign(Aₖ)·sᵏ/|Aₖ|ᵏ⁺¹ over the terms
     /// present, so the heading is Σₖ sign(Aₖ)·sᵏ⁺¹/((k + 1)·|Aₖ|ᵏ⁺¹). `terms[k]` is Aₖ: A₀
     /// IFC's `ConstantTerm`, A₁ its `LinearTerm`, up to A₇ its `SepticTerm`. An `IfcClothoid` is A₁
@@ -253,7 +276,8 @@ struct Wave {
     doubles: [f64; 3],
 }
 
-/// The heading's turn from the start, in half-turns, as a function of ξ: Σ cₖ·ξᵏ plus the wave.
+/// The heading's turn from the start, in half-turns, as a function of ξ: Σ cₖ·ξᵏ plus the wave;
+/// or, in its sine form (the cubic spiral), the sine of the heading, Σ cₖ·ξᵏ with no wave.
 #[derive(Clone, Debug, PartialEq)]
 struct Heading {
     poly: [Interval; TERMS],
@@ -262,6 +286,9 @@ struct Heading {
     /// One more than the degree.
     len: usize,
     wave: Option<Wave>,
+    /// Whether the polynomial is the heading's sine q, so the unit tangent is (√(1 − q²), q),
+    /// rather than its turn h in half-turns, with the unit tangent (cos πh, sin πh).
+    sine: bool,
 }
 
 /// One panel of the quadrature.
@@ -303,6 +330,10 @@ impl CurvatureLaw {
                 end: -end,
             },
             CurvatureLaw::Sine { start, end } => CurvatureLaw::Sine {
+                start: -start,
+                end: -end,
+            },
+            CurvatureLaw::CubicSpiral { start, end } => CurvatureLaw::CubicSpiral {
                 start: -start,
                 end: -end,
             },
@@ -505,7 +536,7 @@ impl<const D: usize> Transition<D> {
         form::check_parameter((0.0, self.parent.length), s)?;
         let (index, xi) = self.parent.locate(s, false)?;
         let panel = self.parent.panels.get(index).ok_or(CurveError::Defect)?;
-        heading(self.parent.heading_of(panel), xi, 0)
+        turn_of(self.parent.heading_of(panel), xi)
     }
 
     /// The parent's curvature at station `s`, enclosed: π·h′(ξ)/L for the heading h in
@@ -518,7 +549,14 @@ impl<const D: usize> Transition<D> {
         form::check_parameter((0.0, self.parent.length), s)?;
         let (index, xi) = self.parent.locate(s, false)?;
         let panel = self.parent.panels.get(index).ok_or(CurveError::Defect)?;
-        let slope = heading(self.parent.heading_of(panel), xi, 1)?;
+        let h = self.parent.heading_of(panel);
+        let slope = heading(h, xi, 1)?;
+        if h.sine {
+            // θ′ = q′/(L·cos θ), cos θ = √(1 − q²).
+            let q = heading(h, xi, 0)?;
+            let cosine = Num::sqrt(point(1.0)?.sub(q.mul(q)?)?)?;
+            return Ok(slope.div(point(self.parent.length)?.mul(cosine)?)?);
+        }
         Ok(form::pi()?.mul(slope)?.div(point(self.parent.length)?)?)
     }
 
@@ -800,7 +838,7 @@ impl Parent {
         h: &Heading,
         xi: Interval,
     ) -> Result<Vec<Piece>, CurveError> {
-        let turn = heading(h, xi, 0)?;
+        let turn = turn_of(h, xi)?;
         let n = math::ceil((turn.hi() - turn.lo()) * PER_HALF_TURN)?.get();
         let count = if n >= f64::from(MAX_PIECES) {
             MAX_PIECES
@@ -919,6 +957,9 @@ impl Parent {
     fn units<N: Num>(&self, h: &Heading, xi: N, order: usize) -> Result<Vec<[N; 2]>, CurveError> {
         if order == 0 {
             return Ok(Vec::new());
+        }
+        if h.sine {
+            return sine_units(h, xi, order, self.length);
         }
         // θ⁽ʲ⁾(t) = π·h⁽ʲ⁾(ξ)/Lʲ.
         let over = N::exact(1.0)?.div(N::exact(self.length)?)?;
@@ -1281,6 +1322,8 @@ trait Num: Copy {
     fn div(self, b: Self) -> Result<Self, CurveError>;
     fn sinpi(self) -> Result<Self, CurveError>;
     fn cospi(self) -> Result<Self, CurveError>;
+    /// The square root, of a value that must not be negative.
+    fn sqrt(self) -> Result<Self, CurveError>;
     /// The heading's polynomial coefficients.
     fn poly(h: &Heading) -> &[Self; TERMS];
     /// A wave's amplitude, phase and rate.
@@ -1318,6 +1361,9 @@ impl Num for f64 {
     }
     fn cospi(self) -> Result<f64, CurveError> {
         Ok(math::cospi(self)?.get())
+    }
+    fn sqrt(self) -> Result<f64, CurveError> {
+        Ok(math::sqrt(self)?.get())
     }
     fn poly(h: &Heading) -> &[f64; TERMS] {
         &h.doubles
@@ -1360,6 +1406,9 @@ impl Num for Interval {
     }
     fn cospi(self) -> Result<Interval, CurveError> {
         Ok(Interval::cospi(self)?)
+    }
+    fn sqrt(self) -> Result<Interval, CurveError> {
+        Ok(Interval::sqrt(self)?)
     }
     fn poly(h: &Heading) -> &[Interval; TERMS] {
         &h.poly
@@ -1445,10 +1494,83 @@ fn integral<N: Num>(h: &Heading, a: N, half: N) -> Result<[N; 2], CurveError> {
         let xi = a.add(half.mul(one.add(N::near(node)?)?)?)?;
         let turn = heading(h, xi, 0)?;
         let w = N::near(weight)?;
-        x = x.add(w.mul(turn.cospi()?)?)?;
-        y = y.add(w.mul(turn.sinpi()?)?)?;
+        let (c, s) = if h.sine {
+            (one.sub(turn.mul(turn)?)?.sqrt()?, turn)
+        } else {
+            (turn.cospi()?, turn.sinpi()?)
+        };
+        x = x.add(w.mul(c)?)?;
+        y = y.add(w.mul(s)?)?;
     }
     Ok([x.mul(half)?, y.mul(half)?])
+}
+
+/// The heading's turn from the start over ξ in `xi`, in half-turns, enclosed: the closed form h,
+/// or, in the sine form, asin(q)/π as the angle of (√(1 − q²), q), by the certified `atan2`.
+fn turn_of(h: &Heading, xi: Interval) -> Result<Interval, CurveError> {
+    let turn = heading(h, xi, 0)?;
+    if !h.sine {
+        return Ok(turn);
+    }
+    let cosine = Num::sqrt(point(1.0)?.sub(turn.mul(turn)?)?)?;
+    Ok(turn.atan2(cosine)?.div(form::pi()?)?)
+}
+
+/// The unit tangent T = (√(1 − q²), q) of a heading in its sine form and its derivatives with
+/// respect to the station to order `order` − 1, at ξ: Taylor coefficients in ξ, q's from its
+/// derivatives, w = 1 − q² by the Cauchy product, and f = √w by the recurrence of f² = w,
+/// f₀ = √w₀ and fₖ = (wₖ − Σ₀<ᵢ<ₖ fᵢ·fₖ₋ᵢ)/(2f₀); the k-th derivative by the station is
+/// k!·cₖ/Lᵏ for each coefficient cₖ.
+fn sine_units<N: Num>(
+    h: &Heading,
+    xi: N,
+    order: usize,
+    length: f64,
+) -> Result<Vec<[N; 2]>, CurveError> {
+    let zero = N::exact(0.0)?;
+    let mut q = Vec::with_capacity(order);
+    let mut factorial = 1.0;
+    for j in 0..order {
+        if j > 0 {
+            factorial *= form::count(j)?;
+        }
+        q.push(heading(h, xi, j)?.div(N::exact(factorial)?)?);
+    }
+    let mut w = Vec::with_capacity(order);
+    for k in 0..order {
+        let mut sum = if k == 0 { N::exact(1.0)? } else { zero };
+        for i in 0..=k {
+            let a = *q.get(i).ok_or(CurveError::Defect)?;
+            let rest = k.checked_sub(i).ok_or(CurveError::Defect)?;
+            let b = *q.get(rest).ok_or(CurveError::Defect)?;
+            sum = sum.sub(a.mul(b)?)?;
+        }
+        w.push(sum);
+    }
+    let f0 = w.first().copied().ok_or(CurveError::Defect)?.sqrt()?;
+    let twice = f0.add(f0)?;
+    let mut f = Vec::with_capacity(order);
+    f.push(f0);
+    for k in 1..order {
+        let mut sum = *w.get(k).ok_or(CurveError::Defect)?;
+        for i in 1..k {
+            let a = *f.get(i).ok_or(CurveError::Defect)?;
+            let rest = k.checked_sub(i).ok_or(CurveError::Defect)?;
+            let b = *f.get(rest).ok_or(CurveError::Defect)?;
+            sum = sum.sub(a.mul(b)?)?;
+        }
+        f.push(sum.div(twice)?);
+    }
+    let over = N::exact(1.0)?.div(N::exact(length)?)?;
+    let mut scale = N::exact(1.0)?;
+    let mut out = Vec::with_capacity(order);
+    for (k, (&fk, &qk)) in f.iter().zip(&q).enumerate() {
+        if k > 0 {
+            scale = scale.mul(N::exact(form::count(k)?)?)?.mul(over)?;
+        }
+        out.push([scale.mul(fk)?, scale.mul(qk)?]);
+    }
+    Ok(out)
 }
 
 /// The derivatives of g = e^{iθ} from g = (cos πh, sin πh) at h = `turn` and θ′, θ″, … in
@@ -1614,6 +1736,18 @@ fn ellipse_size(h: &Heading, re: Interval, height: f64) -> Result<f64, CurveErro
         ai = ar.mul(im)?.add(ai.mul(re)?)?;
         ar = r;
     }
+    if h.sine {
+        // The integrands are √(1 − q²) and q. With |q| ≤ m < 1 on the rectangle, 1 − q² has a
+        // positive real part, so the principal root is analytic there, and both integrands are at
+        // most √(1 + m²), since |1 − q²| ≤ 1 + |q|². An ellipse where |q| may reach 1 is refused,
+        // so a smaller one, or a narrower panel, is tried.
+        let (r, i) = (point(tight::magnitude(ar))?, point(tight::magnitude(ai))?);
+        let m2 = r.mul(r)?.add(i.mul(i)?)?;
+        if m2.hi() >= 1.0 {
+            return Err(CurveError::NotFinite);
+        }
+        return Ok(point(1.0)?.add(m2)?.sqrt()?.hi());
+    }
     let pi = form::pi()?;
     let mut imaginary = point(tight::magnitude(ai))?;
     if let Some(w) = &h.wave {
@@ -1702,6 +1836,14 @@ fn headings(law: &CurvatureLaw, length: f64) -> Result<(Heading, Option<Heading>
             poly[6] = tight::add(scaled(dk, -14.0)?, scaled(g, 140.0)?)?;
             poly[7] = scaled(dk, 10.0)?;
             poly[8] = scaled(dk, -2.5)?;
+        }
+        CurvatureLaw::CubicSpiral { start, end } => {
+            // sin θ = κ₁·Lξ + Δκ·Lξ²/2: the clothoid's heading in radians, so no 1/π.
+            let (k1, k2) = (point(start)?, point(end)?);
+            let mut sine = [point(0.0)?; TERMS];
+            sine[1] = tight::mul(k1, l)?;
+            sine[2] = scaled(tight::mul(tight::sub(k2, k1)?, l)?, 0.5)?;
+            return Ok((finish_sine(sine)?, None));
         }
         CurvatureLaw::Polynomial { terms, from } => {
             let f = point(from)?;
@@ -1873,7 +2015,22 @@ fn finish(poly: [Interval; TERMS], wave: Option<Wave>) -> Result<Heading, CurveE
         doubles: poly.map(tight::middle),
         len,
         wave,
+        sine: false,
     })
+}
+
+/// The sine form of a heading: `poly` is the heading's sine q(ξ), which must stay inside (−1, 1)
+/// over ξ in [0, 1], decided on its interval enclosure there, or the curve is refused as
+/// [`CurveError::Degenerate`]: its offset would outrun its length.
+fn finish_sine(poly: [Interval; TERMS]) -> Result<Heading, CurveError> {
+    let mut h = finish(poly, None)?;
+    h.sine = true;
+    let q = heading(&h, Interval::new(0.0, 1.0)?, 0)?;
+    if q.lo() > -1.0 && q.hi() < 1.0 {
+        Ok(h)
+    } else {
+        Err(CurveError::Degenerate)
+    }
 }
 
 #[cfg(test)]

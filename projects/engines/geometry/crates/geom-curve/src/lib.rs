@@ -45,7 +45,9 @@
 //! The transition curves of road and rail alignments (pieces G63 and G64): [`Transition`] in
 //! [`transition`], one kind with the closed set of [`CurvatureLaw`]s, its heading exact and its
 //! positions by certified Gauss–Legendre quadrature, a part of its parent run either way, with a
-//! certified NURBS form and typed transforms.
+//! certified NURBS form and typed transforms. The cubic spiral (piece G371) is one more law, its
+//! heading held by its sine; the cubic parabola is a [`Polynomial`]
+//! ([`Polynomial::cubic_parabola`]).
 //!
 //! Surveyed 3D linework (piece G361): [`linework()`] in [`linework`](mod@linework), a figure's
 //! points joined by lines, arcs in plan on a steady grade (helices and level arcs) and smooth
@@ -62,8 +64,8 @@
 //! the bulge, trimmed, composite, offset and curve-on-surface kinds (G62), the transition kind,
 //! its evaluation (G63) and its conversion, split, reversal and transforms (G64), the analytic
 //! and transcendental enclosures (G67), and rational curves' higher derivative bounds started from
-//! their control points (G68) built, and surveyed linework (G361); the other kinds to come in G175
-//! and G371.
+//! their control points (G68) built, surveyed linework (G361), and the cubic spiral law and the
+//! cubic parabola (G371); the other kinds to come in G175.
 #![cfg_attr(not(test), no_std)]
 #![forbid(unsafe_code)]
 

@@ -2340,6 +2340,16 @@ fn curve_typical_batches_all_succeed() {
         k::transition_to_nurbs,
         &m::transition_to_nurbs(Typical),
     );
+    all_ok(
+        "cubic_spiral_point",
+        k::cubic_spiral_point,
+        &m::cubic_spiral_point(Typical),
+    );
+    all_ok(
+        "cubic_parabola",
+        k::cubic_parabola,
+        &m::cubic_parabola(Typical),
+    );
 }
 
 /// Every typical batch of `geom-surface`'s benchmarks (decision 32.44) evaluates and encloses

@@ -202,7 +202,7 @@ An alignment is a road, rail or pipe centreline: a horizontal path, a vertical p
 | Horizontal | Line | Directly; a point at a station needs one square root | Exact shape, Certified points |
 | | Circular arc | Closed form | Certified |
 | | Clothoid (curvature changes steadily with length), and the other transitions: Helmert (two quadratic halves), Bloss, cosine, sine, the Viennese bend, and IFC's second-, third- and seventh-order polynomial spirals | Heading is the exact integral of curvature: a polynomial, or polynomial plus `sinpi` and `cospi` terms. Position integrates the cosine and sine of heading by certified Gauss–Legendre quadrature | Certified |
-| | Cubic (IFC's CUBIC: the cubic parabola y = x³/6RL, and a cubic spiral variant) | The cubic parabola is a polynomial curve, exact in its own parameter, with its length by certified quadrature. The spiral variant is one of the transition kind's laws (owner action G357, 32.33) | Exact shape, Certified length |
+| | Cubic (IFC's CUBIC: the cubic parabola y = x³/6RL, and a cubic spiral variant) | The cubic parabola is a polynomial curve, exact in its own parameter, with its length by certified quadrature. The spiral variant is one of the transition kind's laws (owner action G357, 32.33), by the kernel's definition y = l³/(6RL) along the arc length (as built, G371) | Exact shape, Certified length |
 | Vertical | Constant grade; parabolic curve | Polynomials in station: rational grades give exact rational heights | Exact |
 | | Circular arc; clothoid | As above | Certified |
 | Cant | Constant, linear, and the transition shapes above | Functions of station | Exact or Certified |

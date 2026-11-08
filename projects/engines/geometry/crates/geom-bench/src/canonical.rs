@@ -878,6 +878,14 @@ impl<const D: usize> Canonical for geom_nurbs::Changed<geom_curve::NurbsForm<D>>
     }
 }
 
+impl Canonical for geom_nurbs::Changed<geom_curve::Polynomial<2>> {
+    // The polynomial's coefficients and domain and the deviation, all in its `Debug` text, which
+    // prints each double in the shortest form that reads back to the same bits.
+    fn encode(&self, h: &mut Sha256) {
+        debug_text(self, h);
+    }
+}
+
 impl<T: Canonical> Canonical for Result<T, geom_curve::CurveError> {
     fn encode(&self, h: &mut Sha256) {
         match self {

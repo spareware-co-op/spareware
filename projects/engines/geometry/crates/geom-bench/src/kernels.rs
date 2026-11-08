@@ -1941,6 +1941,25 @@ pub mod curve {
                 .to_nurbs(&mut WorkMeter::new(Budget::UNLIMITED))
         });
     }
+
+    /// `Transition::point` on the cubic spiral of length 120 at each station (piece G371).
+    #[inline(never)]
+    pub fn cubic_spiral_point(batch: &[f64], out: &mut Vec<Result<[f64; 2], CurveError>>) {
+        let Ok(t) = crate::inputs::curve::cubic_spiral() else {
+            out.clear();
+            return;
+        };
+        run(batch, out, |&s| t.point(s, Limit::FromRight));
+    }
+
+    /// `Polynomial::cubic_parabola` of each length (piece G371).
+    #[inline(never)]
+    pub fn cubic_parabola(
+        batch: &[f64],
+        out: &mut Vec<Result<Changed<geom_curve::Polynomial<2>>, CurveError>>,
+    ) {
+        run(batch, out, |&length| crate::inputs::curve::parabola(length));
+    }
 }
 
 /// `geom-surface`'s hot paths (pieces G65 to G67, decision 32.44), through the kind contract

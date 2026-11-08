@@ -1468,6 +1468,19 @@ fn curve_digest(name: &str, class: Class) -> Option<Digest> {
                     .map(|s| t.point(s, Limit::FromRight)),
             )
         }
+        "cubic_spiral_point" => {
+            let t = inputs::curve::cubic_spiral().unwrap();
+            fold(
+                m::cubic_spiral_point(class)
+                    .into_iter()
+                    .map(|s| t.point(s, Limit::FromRight)),
+            )
+        }
+        "cubic_parabola" => fold(
+            m::cubic_parabola(class)
+                .into_iter()
+                .map(inputs::curve::parabola),
+        ),
         "transition_to_nurbs" => fold(
             m::transition_to_nurbs(class)
                 .into_iter()

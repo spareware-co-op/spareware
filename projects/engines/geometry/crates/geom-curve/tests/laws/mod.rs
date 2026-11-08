@@ -107,6 +107,9 @@ pub fn truth(law: &CurvatureLaw, length: f64, start: [f64; 2], unit: [(i64, i64)
             p[0] = IBig::ZERO;
             (vec![(zero, p)], None)
         }
+        // Its heading is not a closed form these truths integrate (its sine is the polynomial):
+        // `tests/cubic_spiral.rs` holds its truth, and the cases below hold none of it.
+        CurvatureLaw::CubicSpiral { .. } => panic!("the cubic spiral's truth is its own test's"),
         CurvatureLaw::CosineSpiral {
             constant,
             cosine,
