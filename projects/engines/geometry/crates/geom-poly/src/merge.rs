@@ -987,7 +987,15 @@ fn numbered(
         },
     );
     let made = made.map_err(|e| phase_error(e, meter))?;
-    let mut corners: Vec<Corner> = made.into_iter().flatten().collect();
+    // One list of every corner, made at its full length once rather than grown as it is filled.
+    let count = made
+        .iter()
+        .map(Vec::len)
+        .fold(0usize, usize::saturating_add);
+    let mut corners: Vec<Corner> = Vec::with_capacity(count);
+    for piece in made {
+        corners.extend(piece);
+    }
     let keys: Option<Vec<&[Cell; 3]>> = corners.iter().map(|c| c.cells.as_ref()).collect();
     let order = if let Some(keys) = keys {
         // Equal points keep their order, as the serial stable sort keeps it.
@@ -1163,7 +1171,11 @@ fn sides_of(
         },
     );
     let made = made.map_err(|e| phase_error(e, meter))?;
-    let sides: Vec<Side> = made.into_iter().flatten().collect();
+    // One list of every side, made at its full length (`base`, every piece's bounds) once.
+    let mut sides: Vec<Side> = Vec::with_capacity(base);
+    for piece in made {
+        sides.extend(piece);
+    }
     let keys: Option<Vec<(usize, &[Cell; 6])>> = sides
         .iter()
         .map(|s| s.key.cells.as_ref().map(|cells| (s.key.first, cells)))
