@@ -321,20 +321,27 @@ struct Heap {
 }
 
 impl Heap {
+    /// Whether the event at place `a` comes before the one at place `b`.
+    fn before(&self, a: usize, b: usize) -> Result<bool, ArrangeError> {
+        let at = |k: usize| {
+            self.items
+                .get(k)
+                .map(|e| &e.at)
+                .ok_or(ArrangeError::TooMany)
+        };
+        Ok(cmp_pt(at(a)?, at(b)?)? == Ordering::Less)
+    }
+
     fn push(&mut self, e: Event) -> Result<(), ArrangeError> {
         self.items.push(e);
         let mut i = self.items.len().saturating_sub(1);
         while i > 0 {
             let parent = i.saturating_sub(1) / 2;
-            let (Some(a), Some(b)) = (self.items.get(i), self.items.get(parent)) else {
-                break;
-            };
-            if cmp_pt(&a.at, &b.at)? == Ordering::Less {
-                self.items.swap(i, parent);
-                i = parent;
-            } else {
+            if !self.before(i, parent)? {
                 break;
             }
+            self.items.swap(i, parent);
+            i = parent;
         }
         Ok(())
     }
@@ -356,13 +363,8 @@ impl Heap {
             let r = l.saturating_add(1);
             let mut least = i;
             for c in [l, r] {
-                if c < n {
-                    let (Some(a), Some(b)) = (self.items.get(c), self.items.get(least)) else {
-                        continue;
-                    };
-                    if cmp_pt(&a.at, &b.at)? == Ordering::Less {
-                        least = c;
-                    }
+                if c < n && self.before(c, least)? {
+                    least = c;
                 }
             }
             if least == i {
@@ -377,6 +379,28 @@ impl Heap {
 
 fn index(i: usize) -> Result<u32, ArrangeError> {
     u32::try_from(i).map_err(|_| ArrangeError::TooMany)
+}
+
+/// Keeps the first refusal of a comparison made inside a sort, which cannot return one, and lets
+/// the sort go on as if the two were equal; the caller returns the refusal once the sort ends.
+fn failed(slot: &mut Result<(), ArrangeError>, e: ArrangeError) -> Ordering {
+    if slot.is_ok() {
+        *slot = Err(e);
+    }
+    Ordering::Equal
+}
+
+/// Puts `v` on the list at `at` of `lists`.
+fn mark(lists: &mut [Vec<u32>], at: u32, v: u32) -> Result<(), ArrangeError> {
+    let i = usize::try_from(at).map_err(|_| ArrangeError::TooMany)?;
+    lists.get_mut(i).ok_or(ArrangeError::TooMany)?.push(v);
+    Ok(())
+}
+
+/// Sets the entry at `at` of `slots` to `value`.
+fn set<T>(slots: &mut [T], at: usize, value: T) -> Result<(), ArrangeError> {
+    *slots.get_mut(at).ok_or(ArrangeError::TooMany)? = value;
+    Ok(())
 }
 
 /// The greatest common divisor, by Euclid's algorithm: two lines of arithmetic, which the kernel's
@@ -543,14 +567,11 @@ fn sweep(
             if cmp_pt(&next.at, &p)? != Ordering::Equal {
                 break;
             }
-            if let Some(e) = heap.pop()? {
-                if let Some(s) = e.start {
-                    starting.push(s);
-                }
-                // One place may come as a crossing and as a rational point: keep the rational.
-                if p.rational().is_none() && e.at.rational().is_some() {
-                    p = e.at;
-                }
+            let e = heap.pop()?.ok_or(ArrangeError::TooMany)?;
+            starting.extend(e.start);
+            // One place may come as a crossing and as a rational point: keep the rational.
+            if p.rational().is_none() && e.at.rational().is_some() {
+                p = e.at;
             }
         }
         // The status pieces through p are contiguous: those with p above them come first.
@@ -577,48 +598,29 @@ fn sweep(
             }
         }
         let hi = a;
+        // Every event lies on a piece the status holds or one that starts there: a piece's own
+        // ends, and where two pieces of the status meet, which is on both. So every event is a
+        // vertex.
         let through: Vec<u32> = status.get(lo..hi).map(<[u32]>::to_vec).unwrap_or_default();
-        if through.is_empty() && starting.is_empty() {
-            continue;
-        }
         let v = index(vertices.len())?;
         let mut keep: Vec<u32> = Vec::new();
         for &s in &through {
-            if let Some(list) = usize::try_from(s).ok().and_then(|i| on.get_mut(i)) {
-                list.push(v);
-            }
+            mark(&mut on, s, v)?;
             if cmp_pt(&piece_of(pieces, s)?.hi, &p)? != Ordering::Equal {
                 keep.push(s);
             }
         }
         for &s in &starting {
-            if let Some(list) = usize::try_from(s).ok().and_then(|i| on.get_mut(i)) {
-                list.push(v);
-            }
+            mark(&mut on, s, v)?;
         }
         // Those that go on, in the order just after p: by tangent, then curvature, lowest first.
         keep.extend(starting.iter().copied());
-        let mut fail: Option<ArrangeError> = None;
+        let mut fail = Ok(());
         keep.sort_by(|&x, &y| {
-            let ways = piece_of(pieces, x)
-                .and_then(|px| way(px, &circles, false))
-                .and_then(|wx| {
-                    piece_of(pieces, y)
-                        .and_then(|py| way(py, &circles, false))
-                        .map(|wy| (wx, wy))
-                });
-            match ways.and_then(|(wx, wy)| order_at(&p, &wx, &wy)) {
-                Ok(Ordering::Equal) => x.cmp(&y),
-                Ok(o) => o,
-                Err(e) => {
-                    fail = Some(e);
-                    Ordering::Equal
-                }
-            }
+            let order = leaving(pieces, &circles, &p, x, y).map(|o| o.then(x.cmp(&y)));
+            order.unwrap_or_else(|e| failed(&mut fail, e))
         });
-        if let Some(e) = fail {
-            return Err(e);
-        }
+        fail?;
         let count = keep.len();
         let tail = status.split_off(hi);
         status.truncate(lo);
@@ -643,6 +645,19 @@ fn sweep(
         vertices.push(p);
     }
     build(pieces, ids, circles, vertices, &on)
+}
+
+/// The order in which pieces `x` and `y` leave `p`: by tangent, then curvature, lowest first.
+fn leaving(
+    pieces: &[Piece],
+    circles: &[Circle],
+    p: &At,
+    x: u32,
+    y: u32,
+) -> Result<Ordering, ArrangeError> {
+    let wx = way(piece_of(pieces, x)?, circles, false)?;
+    let wy = way(piece_of(pieces, y)?, circles, false)?;
+    order_at(p, &wx, &wy)
 }
 
 /// What a piece's edges lie on, as a key: lines first, then each half of each circle.
@@ -678,12 +693,9 @@ fn build(
         let place = ids.get(si).copied().ok_or(ArrangeError::TooMany)?;
         let id = index(si)?;
         let kind = class(piece_of(pieces, id)?);
-        for pair in list.windows(2) {
-            if let [u, v] = *pair
-                && u != v
-            {
-                raw.push((u, v, kind, place, id));
-            }
+        // A piece gets each vertex once, in order along it, so neighbours on its list differ.
+        for (&u, &v) in list.iter().zip(list.iter().skip(1)) {
+            raw.push((u, v, kind, place, id));
         }
     }
     raw.sort_unstable();
@@ -706,25 +718,14 @@ fn build(
         }
     }
     // Edges between the same two vertices go in the order they leave the lower one.
-    let mut fail: Option<ArrangeError> = None;
+    let mut fail = Ok(());
     grouped.sort_by(|(e, s), (f, t)| {
-        match (e.from, e.to).cmp(&(f.from, f.to)) {
-            Ordering::Equal => {}
-            other => return other,
-        }
-        let order = vertex(e.from).and_then(|at| {
-            let ws = way(piece_of(pieces, *s)?, &circles, false)?;
-            let wt = way(piece_of(pieces, *t)?, &circles, false)?;
-            order_at(at, &ws, &wt)
-        });
-        order.unwrap_or_else(|err| {
-            fail = Some(err);
-            Ordering::Equal
+        (e.from, e.to).cmp(&(f.from, f.to)).then_with(|| {
+            let order = vertex(e.from).and_then(|at| leaving(pieces, &circles, at, *s, *t));
+            order.unwrap_or_else(|err| failed(&mut fail, err))
         })
     });
-    if let Some(e) = fail {
-        return Err(e);
-    }
+    fail?;
     let mut edges: Vec<Edge> = Vec::with_capacity(grouped.len());
     let mut rep: Vec<u32> = Vec::with_capacity(grouped.len());
     for (e, s) in grouped {
@@ -742,31 +743,17 @@ fn build(
     let mut around: Vec<Vec<u32>> = alloc::vec![Vec::new(); vertices.len()];
     for (ei, e) in edges.iter().enumerate() {
         let h = index(ei.checked_mul(2).ok_or(ArrangeError::TooMany)?)?;
-        if let Some(list) = usize::try_from(e.from).ok().and_then(|i| around.get_mut(i)) {
-            list.push(h);
-        }
-        if let Some(list) = usize::try_from(e.to).ok().and_then(|i| around.get_mut(i)) {
-            list.push(h.saturating_add(1));
-        }
+        mark(&mut around, e.from, h)?;
+        mark(&mut around, e.to, h.saturating_add(1))?;
     }
-    let mut fail: Option<ArrangeError> = None;
-    for (v, list) in around.iter_mut().enumerate() {
-        let Some(at) = vertices.get(v) else {
-            continue;
-        };
+    let mut fail = Ok(());
+    for (list, at) in around.iter_mut().zip(&vertices) {
         list.sort_by(|&x, &y| {
-            match way_of(x).and_then(|wx| way_of(y).and_then(|wy| order_at(at, &wx, &wy))) {
-                Ok(o) => o,
-                Err(e) => {
-                    fail = Some(e);
-                    Ordering::Equal
-                }
-            }
+            let order = way_of(x).and_then(|wx| way_of(y).and_then(|wy| order_at(at, &wx, &wy)));
+            order.unwrap_or_else(|e| failed(&mut fail, e))
         });
     }
-    if let Some(e) = fail {
-        return Err(e);
-    }
+    fail?;
     // The place of each half-edge in the list around its origin.
     let origin = |h: u32| -> Result<usize, ArrangeError> {
         let e = usize::try_from(h / 2).map_err(|_| ArrangeError::TooMany)?;
@@ -781,9 +768,11 @@ fn build(
     let mut place_in: Vec<usize> = alloc::vec![0; edges.len().saturating_mul(2)];
     for list in &around {
         for (i, &h) in list.iter().enumerate() {
-            if let Some(slot) = usize::try_from(h).ok().and_then(|k| place_in.get_mut(k)) {
-                *slot = i;
-            }
+            set(
+                &mut place_in,
+                usize::try_from(h).map_err(|_| ArrangeError::TooMany)?,
+                i,
+            )?;
         }
     }
     // next(h): at the end of h, the half-edge clockwise from its twin.
@@ -816,9 +805,7 @@ fn build(
             if seen.get(k).copied().unwrap_or(true) {
                 break;
             }
-            if let Some(s) = seen.get_mut(k) {
-                *s = true;
-            }
+            set(&mut seen, k, true)?;
             cycle.push(h);
             h = next(h)?;
         }
@@ -834,12 +821,11 @@ fn build(
     let mut cycle_of_half: Vec<usize> = alloc::vec![0; total];
     for (c, cycle) in cycles.iter().enumerate() {
         for &h in cycle {
-            if let Some(slot) = usize::try_from(h)
-                .ok()
-                .and_then(|k| cycle_of_half.get_mut(k))
-            {
-                *slot = c;
-            }
+            set(
+                &mut cycle_of_half,
+                usize::try_from(h).map_err(|_| ArrangeError::TooMany)?,
+                c,
+            )?;
         }
     }
     let mut counter: Vec<bool> = Vec::new();
@@ -944,17 +930,17 @@ fn faces_of(
             outer: Some(index(c)?),
             holes: Vec::new(),
         });
-        if let Some(slot) = face_of_cycle.get_mut(c) {
-            *slot = Some(fi);
-        }
+        set(&mut face_of_cycle, c, Some(fi))?;
     }
     // The cycle each half-edge is on.
     let mut cycle_of: Vec<u32> = alloc::vec![0; edges.len().saturating_mul(2)];
     for (c, cycle) in cycles.iter().enumerate() {
         for &h in cycle {
-            if let Some(slot) = usize::try_from(h).ok().and_then(|k| cycle_of.get_mut(k)) {
-                *slot = index(c)?;
-            }
+            set(
+                &mut cycle_of,
+                usize::try_from(h).map_err(|_| ArrangeError::TooMany)?,
+                index(c)?,
+            )?;
         }
     }
     // The parent cycle of each clockwise cycle: the cycle of the edge nearest below its lowest-
@@ -969,10 +955,8 @@ fn faces_of(
     };
     let mut hole_at: Vec<Option<usize>> = alloc::vec![None; vertices.len()];
     for (c, m) in low.iter().enumerate() {
-        if !counter.get(c).copied().unwrap_or(true)
-            && let Some(slot) = hole_at.get_mut(*m)
-        {
-            *slot = Some(c);
+        if !counter.get(c).copied().unwrap_or(true) {
+            set(&mut hole_at, *m, Some(c))?;
         }
     }
     let mut parent: Vec<Option<u32>> = alloc::vec![None; cycles.len()];
@@ -1013,9 +997,7 @@ fn faces_of(
                 .get(usize::try_from(h).map_err(|_| ArrangeError::TooMany)?)
                 .copied()
                 .ok_or(ArrangeError::TooMany)?;
-            if let Some(slot) = parent.get_mut(c) {
-                *slot = Some(on_cycle);
-            }
+            set(&mut parent, c, Some(on_cycle))?;
         }
         // The edges that start here, in the order just after the vertex: by tangent, then
         // curvature.
@@ -1027,54 +1009,45 @@ fn faces_of(
             starting.push(next_edge);
             next_edge = next_edge.saturating_add(1);
         }
-        let mut fail: Option<ArrangeError> = None;
+        let mut fail = Ok(());
         starting.sort_by(|&x, &y| {
-            let ways = piece_of_edge(x)
-                .and_then(|px| way(px, circles, false))
-                .and_then(|wx| {
-                    piece_of_edge(y)
-                        .and_then(|py| way(py, circles, false))
-                        .map(|wy| (wx, wy))
-                });
-            match ways.and_then(|(wx, wy)| order_at(at, &wx, &wy)) {
-                Ok(o) => o,
-                Err(e) => {
-                    fail = Some(e);
-                    Ordering::Equal
-                }
-            }
+            let order = piece_of_edge(x).and_then(|px| {
+                let wx = way(px, circles, false)?;
+                order_at(at, &wx, &way(piece_of_edge(y)?, circles, false)?)
+            });
+            order.unwrap_or_else(|e| failed(&mut fail, e))
         });
-        if let Some(e) = fail {
-            return Err(e);
-        }
+        fail?;
         let tail = status.split_off(lo);
         status.extend(starting);
         status.extend(tail);
     }
     // Resolve each cycle to a face: a counter-clockwise cycle is its own; a clockwise one is in the
     // face of its parent, or the unbounded face.
-    let resolve = |start: usize| -> Result<u32, ArrangeError> {
-        let mut c = start;
-        for _ in 0..=cycles.len() {
-            if let Some(Some(f)) = face_of_cycle.get(c) {
-                return Ok(*f);
-            }
-            match parent.get(c).copied().flatten() {
-                Some(p) => c = usize::try_from(p).map_err(|_| ArrangeError::TooMany)?,
-                None => return Ok(0),
-            }
-        }
-        Ok(0)
+    // Parents lead outwards, each to a cycle round the one before, so a chain ends within as many
+    // steps as there are cycles: at a counter-clockwise cycle, or with no parent, in the unbounded
+    // face.
+    let resolve = |start: usize| -> u32 {
+        let up = |c: &usize| {
+            let p = parent.get(*c).copied().flatten()?;
+            usize::try_from(p).ok()
+        };
+        core::iter::successors(Some(start), up)
+            .take(cycles.len().saturating_add(1))
+            .find_map(|c| face_of_cycle.get(c).copied().flatten())
+            .unwrap_or(0)
     };
     for c in 0..cycles.len() {
         if counter.get(c).copied().unwrap_or(true) {
             continue;
         }
-        let f = resolve(c)?;
+        let f = usize::try_from(resolve(c)).map_err(|_| ArrangeError::TooMany)?;
         let hole = index(c)?;
-        if let Some(face) = usize::try_from(f).ok().and_then(|i| faces.get_mut(i)) {
-            face.holes.push(hole);
-        }
+        faces
+            .get_mut(f)
+            .ok_or(ArrangeError::TooMany)?
+            .holes
+            .push(hole);
     }
     Ok((faces, cycle_of))
 }
@@ -1150,17 +1123,13 @@ impl Arrangement {
                     at: v.clone(),
                 })
             };
-            let Some(v) = v.rational() else {
-                return Err(off()?);
-            };
-            let ([x, y], w) = v.coordinates();
-            let grid = x
-                .checked_rem(w)
-                .zip(y.checked_rem(w))
-                .is_some_and(|(a, b)| a == 0 && b == 0);
-            let at = x.checked_div(w).zip(y.checked_div(w));
-            let point = at.filter(|_| grid).and_then(|(gx, gy)| {
-                P3::new(i64::try_from(gx).ok()?, i64::try_from(gy).ok()?, 0).ok()
+            // A grid point is rational with X and Y whole multiples of W; a one-root vertex is none.
+            let point = v.rational().and_then(|r| {
+                let ([x, y], w) = r.coordinates();
+                let whole = x.checked_rem(w)? == 0 && y.checked_rem(w)? == 0;
+                let (gx, gy) = (x.checked_div(w)?, y.checked_div(w)?);
+                let p = P3::new(i64::try_from(gx).ok()?, i64::try_from(gy).ok()?, 0).ok()?;
+                whole.then_some(p)
             });
             match point {
                 Some(p) => points.push(p),
@@ -1172,12 +1141,8 @@ impl Arrangement {
         let mut cycle_of_half: Vec<usize> = alloc::vec![usize::MAX; total];
         for (c, cycle) in self.cycles.iter().enumerate() {
             for &h in cycle {
-                if let Some(slot) = usize::try_from(h)
-                    .ok()
-                    .and_then(|k| cycle_of_half.get_mut(k))
-                {
-                    *slot = c;
-                }
+                let k = usize::try_from(h).map_err(|_| BodyError::TooMany)?;
+                *cycle_of_half.get_mut(k).ok_or(BodyError::TooMany)? = c;
             }
         }
         // Which bounded face (numbered from 0, the unbounded face left out) each cycle lies in, and
@@ -1188,12 +1153,8 @@ impl Arrangement {
         for (fi, face) in self.faces.iter().enumerate().skip(1) {
             for c in face.outer.iter().chain(face.holes.iter()) {
                 let k = usize::try_from(*c).map_err(|_| BodyError::TooMany)?;
-                if let Some(slot) = face_of_cycle.get_mut(k) {
-                    *slot = Some(fi.saturating_sub(1));
-                }
-                if let Some(slot) = loop_of_cycle.get_mut(k) {
-                    *slot = Some(loops.len());
-                }
+                *face_of_cycle.get_mut(k).ok_or(BodyError::TooMany)? = Some(fi.saturating_sub(1));
+                *loop_of_cycle.get_mut(k).ok_or(BodyError::TooMany)? = Some(loops.len());
                 loops.push((fi.saturating_sub(1), k));
             }
         }
@@ -1210,21 +1171,15 @@ impl Arrangement {
         let mut b = Builder::new();
         let a = &mut b.arenas;
         // The outside region, holding the one shell.
-        a.regions.push(Region {
+        let outside = Region {
             kind: RegionKind::Void,
             first_shell: Some(row(0)?),
-        })?;
+        };
+        a.regions.push(outside)?;
         // The plane z = 0.
-        let plane = Plane::new(
-            [0.0, 0.0, 0.0],
-            [1.0, 0.0, 0.0],
-            [0.0, 1.0, 0.0],
-            (
-                (f64::NEG_INFINITY, f64::INFINITY),
-                (f64::NEG_INFINITY, f64::INFINITY),
-            ),
-        )
-        .map_err(|_| BodyError::Geometry)?;
+        let whole = (f64::NEG_INFINITY, f64::INFINITY);
+        let plane = Plane::new([0.0; 3], [1.0, 0.0, 0.0], [0.0, 1.0, 0.0], (whole, whole));
+        let plane = plane.map_err(|_| BodyError::Geometry)?;
         let surface = a.surfaces.push(SurfaceKind::Plane(plane))?;
         // Vertices.
         for p in &points {
@@ -1244,24 +1199,25 @@ impl Arrangement {
             Ok([p.x.get() as f64, p.y.get() as f64, 0.0])
         };
         for (e, edge) in self.edges.iter().enumerate() {
-            let line = Line::<3>::segment(flat(edge.from)?, flat(edge.to)?)
-                .map_err(|_| BodyError::Geometry)?
-                .value;
+            let line = Line::<3>::segment(flat(edge.from)?, flat(edge.to)?);
+            let line = line.map_err(|_| BodyError::Geometry)?.value;
             let curve = a.curves.push(CurveKind::Line(line))?;
             let own = e.checked_mul(2).ok_or(BodyError::TooMany)?;
             let first_fin = [own, own.saturating_add(1)]
                 .iter()
                 .find_map(|h| fin_of_half.get(*h).copied().flatten());
-            a.edges.push(TopoEdge {
+            let end = |v: u32| {
+                usize::try_from(v)
+                    .map_err(|_| BodyError::TooMany)
+                    .and_then(row)
+            };
+            let topo = TopoEdge {
                 first_fin: first_fin.map(row).transpose()?,
-                start: Some(row(
-                    usize::try_from(edge.from).map_err(|_| BodyError::TooMany)?
-                )?),
-                end: Some(row(
-                    usize::try_from(edge.to).map_err(|_| BodyError::TooMany)?
-                )?),
+                start: Some(end(edge.from)?),
+                end: Some(end(edge.to)?),
                 curve,
-            })?;
+            };
+            a.edges.push(topo)?;
         }
         // Fins, each linked to the next and previous of its cycle and to the other side.
         for &h in &fins {
@@ -1286,18 +1242,13 @@ impl Arrangement {
             };
             let next = neighbour(at.saturating_add(1).checked_rem(n).unwrap_or(0))?;
             let prev = neighbour(at.checked_sub(1).unwrap_or(n.saturating_sub(1)))?;
-            let own = row(fin_of_half
-                .get(h)
-                .copied()
-                .flatten()
-                .ok_or(BodyError::TooMany)?)?;
+            let mine = fin_of_half.get(h).copied().flatten();
+            let own = row(mine.ok_or(BodyError::TooMany)?)?;
             let twin = fin_of_half.get(h ^ 1).copied().flatten();
-            a.fins.push(Fin {
-                loop_: row(loop_of_cycle
-                    .get(c)
-                    .copied()
-                    .flatten()
-                    .ok_or(BodyError::TooMany)?)?,
+            let on_loop = loop_of_cycle.get(c).copied().flatten();
+            let radial = twin.map(row).transpose()?.unwrap_or(own);
+            let fin = Fin {
+                loop_: row(on_loop.ok_or(BodyError::TooMany)?)?,
                 next,
                 prev,
                 edge: row(h / 2)?,
@@ -1306,9 +1257,10 @@ impl Arrangement {
                 } else {
                     Sense::Reversed
                 },
-                radial: twin.map(row).transpose()?.unwrap_or(own),
+                radial,
                 pcurve: None,
-            })?;
+            };
+            a.fins.push(fin)?;
         }
         // Loops, in the order of their faces.
         for (k, &(face, c)) in loops.iter().enumerate() {
@@ -1319,16 +1271,14 @@ impl Arrangement {
                 .and_then(|h| fin_of_half.get(h).copied().flatten())
                 .ok_or(BodyError::TooMany)?;
             let following = k.saturating_add(1);
-            let next = loops
-                .get(following)
-                .filter(|(f, _)| *f == face)
-                .map(|_| row(following))
-                .transpose()?;
-            a.loops.push(Loop {
+            let same_face = loops.get(following).filter(|(f, _)| *f == face);
+            let next = same_face.map(|_| row(following)).transpose()?;
+            let one = Loop {
                 face: row(face)?,
                 next,
                 first_fin: Some(row(first)?),
-            })?;
+            };
+            a.loops.push(one)?;
         }
         // Faces: on the plane, bounded by the box of their outer cycle's vertices.
         let bounded = self.faces.len().saturating_sub(1);
@@ -1345,20 +1295,43 @@ impl Arrangement {
             });
             let bound = Box3::from_points(corners).ok_or(BodyError::TooMany)?;
             let first_loop = loop_of_cycle.get(outer).copied().flatten();
-            a.faces.push(TopoFace {
+            let topo = TopoFace {
                 shell: row(0)?,
                 next: if fi < bounded { Some(row(fi)?) } else { None },
                 surface,
                 sense: Sense::Forward,
                 first_loop: first_loop.map(row).transpose()?,
                 bound,
-            })?;
+            };
+            a.faces.push(topo)?;
         }
-        a.shells.push(Shell {
+        let shell = Shell {
             region: row(0)?,
             next: None,
             first_face: if bounded > 0 { Some(row(0)?) } else { None },
-        })?;
+        };
+        a.shells.push(shell)?;
         Ok(b.publish(BodyKind::General, row(0)?, meter)?)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{ArrangeError, BodyError, failed};
+    use core::cmp::Ordering;
+    use geom_topo::{Arena, TopoError};
+
+    #[test]
+    fn a_sort_keeps_the_first_refusal_and_goes_on() {
+        let mut slot = Ok(());
+        assert_eq!(failed(&mut slot, ArrangeError::Range), Ordering::Equal);
+        assert_eq!(failed(&mut slot, ArrangeError::TooMany), Ordering::Equal);
+        assert_eq!(slot, Err(ArrangeError::Range));
+    }
+
+    #[test]
+    fn a_topology_refusal_is_a_body_error() {
+        let e = BodyError::from(TopoError::Full(Arena::Face));
+        assert!(matches!(e, BodyError::Topo(TopoError::Full(Arena::Face))));
     }
 }
