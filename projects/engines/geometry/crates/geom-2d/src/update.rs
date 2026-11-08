@@ -937,7 +937,7 @@ mod tests {
             (0, y, x + y)
         } else if x <= 0 && y > 0 {
             (1, -x, -x + y)
-        } else if x < 0 && y <= 0 {
+        } else if x < 0 {
             (2, -y, -x - y)
         } else {
             (3, x, x - y)
