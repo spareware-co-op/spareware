@@ -9,6 +9,9 @@
 //!   second right of it.
 //! - **Extreme**: every point where a random carrier crosses the circle lies between the two in x;
 //!   and the widest circle the budget allows still gives both, exactly on it.
+//! - **Ellipses** (piece G196b, `Crossing2::of_ellipse_extreme`): a circle written as an ellipse has
+//!   the circle's ends; a rotated ellipse's ends are on it, either side of its centre, beyond every
+//!   crossing of a random carrier in x, and the widest ellipse the budget allows still has both.
 //!
 //! Seeds: the random test prints `seed: <hex>` and runs from a fixed default; `SPAREKIT_SEED=<hex>`
 //! replays another (chapter 28.17). Case counts are a twentieth in debug builds.
@@ -33,6 +36,7 @@
 
 use geom_num::arc::{Circle2, Contact, Disc, Round};
 use geom_num::carrier::{Carrier, Rational2};
+use geom_num::conic::Ellipse2;
 use geom_num::grid::{COORD_MAX, P2};
 use geom_num::one_root::{Crossing2, Root};
 use geom_num::{I256, Sign};
@@ -181,4 +185,92 @@ fn the_widest_circle_in_the_budget_still_has_both_ends_exactly() {
     }
     assert_eq!(left.cmp_x(&right).unwrap(), Sign::Negative);
     assert_eq!(left.cmp_y(&right).unwrap(), Sign::Zero);
+}
+
+fn ellipse_ends(e: &Ellipse2) -> (Crossing2, Crossing2) {
+    (
+        Crossing2::of_ellipse_extreme(e, Root::First).unwrap(),
+        Crossing2::of_ellipse_extreme(e, Root::Second).unwrap(),
+    )
+}
+
+#[test]
+fn a_circle_written_as_an_ellipse_has_the_circle_s_ends() {
+    for (cx, cy, r) in [(0, 0, 5), (-7, 3, 1), (100, -40, 13)] {
+        let c = Circle2::new(P2::new(cx, cy).unwrap(), i128::from(r)).unwrap();
+        let (left, right) = ellipse_ends(&Ellipse2::of_circle(&c).unwrap());
+        let (want_left, want_right) = ends(&Disc::of_circle(&c).unwrap());
+        assert!(left.same(&want_left).unwrap() && right.same(&want_right).unwrap());
+    }
+}
+
+#[test]
+fn an_ellipse_s_ends_are_on_it_either_side_of_its_centre_and_beyond_every_crossing() {
+    let mut rng = Rng::new();
+    let cases = if cfg!(debug_assertions) { 100 } else { 2_000 };
+    let mut checked = 0;
+    for case in 0..cases {
+        let centre = rng.grid();
+        let major = [
+            (rng.signed(41) as i64).clamp(-(1 << 40), 1 << 40),
+            (rng.signed(41) as i64).clamp(-(1 << 40), 1 << 40),
+        ];
+        let q = 1 + (rng.next() % (1 << 21)) as i64;
+        let p = 1 + (rng.next() % q as u64) as i64;
+        let Ok(e) = Ellipse2::new(centre, major, p, q) else {
+            continue;
+        };
+        let (left, right) = ellipse_ends(&e);
+        let middle = point(i128::from(centre.x.get()), i128::from(centre.y.get()), 1);
+        for (end, side) in [(&left, Sign::Negative), (&right, Sign::Positive)] {
+            assert_eq!(
+                end.against_ellipse(&e).unwrap(),
+                Sign::Zero,
+                "case {case}: on it"
+            );
+            assert_eq!(end.cmp_x(&middle).unwrap(), side, "case {case}: which side");
+        }
+        let Ok(l) = Carrier::through(rng.grid(), centre) else {
+            continue;
+        };
+        if e.meets(&l).unwrap() == Contact::Apart {
+            continue;
+        }
+        for r in [Root::First, Root::Second] {
+            let z = Crossing2::of_ellipse(&l, &e, r).unwrap();
+            assert_ne!(z.cmp_x(&left).unwrap(), Sign::Negative, "case {case}");
+            assert_ne!(z.cmp_x(&right).unwrap(), Sign::Positive, "case {case}");
+        }
+        checked += 1;
+    }
+    assert!(checked > cases / 4, "{checked} of {cases} cases checked");
+    // One worked by hand: M = (3, 4), p / q = 1 / 2, so the half-width is the square root of 13.
+    let e = Ellipse2::new(P2::new(0, 0).unwrap(), [3, 4], 1, 2).unwrap();
+    let (left, right) = ellipse_ends(&e);
+    let [x, _] = right.enclosure();
+    // The square root of 13 is 3.605551275...
+    assert!(x.lo() <= 3.605_551_3 && 3.605_551_2 <= x.hi());
+    assert_eq!(
+        left.cmp_y(&right).unwrap(),
+        Sign::Negative,
+        "the tilt puts the left end lower"
+    );
+}
+
+#[test]
+fn the_widest_ellipse_in_the_budget_still_has_both_ends_exactly() {
+    let m = (1_i64 << 41) - 1;
+    let corner = P2::new(-COORD_MAX, COORD_MAX).unwrap();
+    for (major, p, q) in [
+        ([m, m], 1, 1 << 21),
+        ([m, -m], (1 << 21) - 1, 1 << 21),
+        ([m, 0], 1, 3),
+    ] {
+        let e = Ellipse2::new(corner, major, p, q).unwrap();
+        let (left, right) = ellipse_ends(&e);
+        for end in [&left, &right] {
+            assert_eq!(end.against_ellipse(&e).unwrap(), Sign::Zero);
+        }
+        assert_eq!(left.cmp_x(&right).unwrap(), Sign::Negative);
+    }
 }
