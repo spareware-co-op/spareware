@@ -305,6 +305,26 @@ fn circles_touching_outside_meet_at_one_vertex() {
     assert_eq!(a.around(rank(&a, 5, 0)).len(), 4);
 }
 
+/// Two circles of radius near 2^39 about centres one apart cross a hair's breadth off the line of
+/// their centres. The first is about the origin through (r, 0); the second about (1, 0) through
+/// (r, ±2), so its radius squared is (r − 1)² + 4 and it meets the first at x = r − 2,
+/// y = ±2√(r − 1): about 2^20.5 off the line, where the turn of the crossing and the two centres is
+/// some 2^20.5 against certified intervals about 2^28 wide. The order the arcs leave each crossing
+/// is the exact sign's: the four faces and Euler's formula hold.
+#[test]
+fn circles_crossing_beside_the_line_of_their_centres_are_ordered_exactly() {
+    let r = 1_i64 << 39;
+    let mut curves = circle(0, 0, r).to_vec();
+    curves.push(arc((r, -2), (r, 2), (1, 0)));
+    curves.push(arc((r, 2), (r, -2), (1, 0)));
+    let a = run(&curves);
+    laws(&a, "crossing beside the centres' line");
+    assert_eq!(
+        (a.vertices().len(), a.edges().len(), a.faces().len()),
+        (8, 10, 4)
+    );
+}
+
 #[test]
 fn circles_touching_inside_are_ordered_round_the_touch_by_curvature() {
     let mut curves = circle(0, 0, 5).to_vec();

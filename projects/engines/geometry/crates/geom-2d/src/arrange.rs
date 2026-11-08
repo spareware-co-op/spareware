@@ -1318,8 +1318,38 @@ impl Arrangement {
 #[cfg(test)]
 mod tests {
     use super::{ArrangeError, BodyError, failed};
+    use alloc::string::ToString;
     use core::cmp::Ordering;
+    use geom_num::NumError;
+    use geom_run::{Budget, WorkMeter};
     use geom_topo::{Arena, TopoError};
+
+    #[test]
+    fn each_refusal_says_what_it_is() {
+        let stopped = WorkMeter::new(Budget::UNLIMITED).out_of_memory();
+        let said = [
+            ArrangeError::Range,
+            ArrangeError::TooMany,
+            ArrangeError::Stopped(stopped),
+        ]
+        .map(|e| e.to_string());
+        assert_eq!(
+            said,
+            [
+                "a step of the exact arithmetic did not fit",
+                "more items than a 32-bit index names",
+                "stopped: Stopped { reason: OutOfMemory }",
+            ]
+        );
+    }
+
+    #[test]
+    fn an_arithmetic_refusal_is_out_of_range() {
+        assert_eq!(
+            ArrangeError::from(NumError::BudgetExceeded),
+            ArrangeError::Range
+        );
+    }
 
     #[test]
     fn a_sort_keeps_the_first_refusal_and_goes_on() {

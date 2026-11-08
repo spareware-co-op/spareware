@@ -65,7 +65,7 @@ use geom_num::one_root::{Crossing2, Root, enclose, sign_of_root};
 use geom_num::wide::{I512, Wide};
 use geom_num::{NumError, Sign};
 
-use super::{ArrangeError, At};
+use super::{ArrangeError, At, failed, set};
 
 /// Limbs for the way from a centre to a crossing: α, the widest, is 755 bits.
 const MID_LIMBS: usize = 16;
@@ -265,10 +265,11 @@ pub(super) fn side(piece: &Piece, circles: &[Circle], p: &At) -> Result<Sign, Ar
     }
 }
 
-/// Whether `q`, a point of `piece`'s line or circle, lies on the piece: between its ends, and on its
-/// half of a circle.
+/// Whether `q`, a point of `piece`'s line or circle past a point the piece has begun at, lies on the
+/// piece: not past its higher end, and on its half of a circle. [`meetings`] asks only of points past
+/// the sweep's point, which every piece in the status has begun at, so `q` is past the lower end.
 fn holds(piece: &Piece, circles: &[Circle], q: &At) -> Result<bool, ArrangeError> {
-    if cmp_pt(q, &piece.lo)? == Ordering::Less || cmp_pt(q, &piece.hi)? == Ordering::Greater {
+    if cmp_pt(q, &piece.hi)? == Ordering::Greater {
         return Ok(false);
     }
     match piece.on {
@@ -302,10 +303,11 @@ fn line_and_circle(l: &Carrier, c: &Circle) -> Result<[Option<At>; 2], ArrangeEr
 /// Where two different circles meet: none (apart, nested or about one centre), or the two roots,
 /// one point twice at a tangency.
 fn two_circles(c: &Circle, d: &Circle) -> Result<[Option<At>; 2], ArrangeError> {
-    let at = |r: Root| match Crossing2::of_rounds(&c.round, &d.round, r) {
-        Ok(z) => Ok(Some(root(&z))),
-        Err(NumError::Degenerate) => Ok(None),
-        Err(_) => Err(ArrangeError::Range),
+    let at = |r: Root| -> Result<Option<At>, ArrangeError> {
+        match Crossing2::of_rounds(&c.round, &d.round, r) {
+            Err(NumError::Degenerate) => Ok(None),
+            z => Ok(Some(root(&z?))),
+        }
     };
     Ok([at(Root::First)?, at(Root::Second)?])
 }
@@ -443,10 +445,9 @@ fn dot_from(p: &At, d: [i128; 2], c: &Circle) -> Result<Sign, NumError> {
             let n = Mid::from_i128;
             let (w, cw) = (wide::<14, MID_LIMBS>(&w)?, n(cw));
             let part = |a: &Mid, cv: i128| sub(&mul(a, &cw)?, &mul(&n(cv), &w)?);
-            let alpha = add(
-                &mul(&n(dx), &part(&wide(&ax)?, cx)?)?,
-                &mul(&n(dy), &part(&wide(&ay)?, cy)?)?,
-            )?;
+            let x_term = mul(&n(dx), &part(&wide(&ax)?, cx)?)?;
+            let y_term = mul(&n(dy), &part(&wide(&ay)?, cy)?)?;
+            let alpha = add(&x_term, &y_term)?;
             let along = add(&mul(&n(dx), &wide(&bx)?)?, &mul(&n(dy), &wide(&by)?)?)?;
             let beta = mul(&cw, &along)?;
             sign_of_root(&alpha, &beta, &wide::<14, MID_LIMBS>(&k)?)
@@ -592,10 +593,8 @@ pub(super) fn order_at(p: &At, a: &Way<'_>, b: &Way<'_>) -> Result<Ordering, Arr
 ///
 /// [`ArrangeError::Range`] if a step did not fit, and [`ArrangeError::TooMany`] past 2^32 circles.
 pub(super) fn circles_of(arcs: &[Arc2]) -> Result<(Vec<Circle>, Vec<u32>), ArrangeError> {
-    let all: Vec<Circle> = arcs
-        .iter()
-        .map(|a| Circle::of(a.round()))
-        .collect::<Result<_, _>>()?;
+    let all: Result<Vec<Circle>, _> = arcs.iter().map(|a| Circle::of(a.round())).collect();
+    let all = all?;
     let get = |i: usize| all.get(i).ok_or(ArrangeError::TooMany);
     let same_circle = |c: &Circle, e: &Circle| -> Result<Ordering, ArrangeError> {
         match ordering(c.centre.cmp_x(&e.centre)?) {
@@ -614,24 +613,16 @@ pub(super) fn circles_of(arcs: &[Arc2]) -> Result<(Vec<Circle>, Vec<u32>), Arran
         (on.x.get(), on.y.get(), w, x, y)
     };
     let mut order: Vec<usize> = (0..all.len()).collect();
-    let mut fail: Option<ArrangeError> = None;
+    let mut fail = Ok(());
     order.sort_by(|&i, &j| {
-        let (Ok(c), Ok(e)) = (get(i), get(j)) else {
-            fail = Some(ArrangeError::TooMany);
-            return Ordering::Equal;
-        };
-        match same_circle(c, e) {
-            Ok(Ordering::Equal) => form(c).cmp(&form(e)).then(i.cmp(&j)),
-            Ok(other) => other,
-            Err(err) => {
-                fail = Some(err);
-                Ordering::Equal
-            }
-        }
+        let order = get(i).and_then(|c| {
+            let e = get(j)?;
+            let by_form = || form(c).cmp(&form(e)).then(i.cmp(&j));
+            Ok(same_circle(c, e)?.then_with(by_form))
+        });
+        order.unwrap_or_else(|err| failed(&mut fail, err))
     });
-    if let Some(e) = fail {
-        return Err(e);
-    }
+    fail?;
     let mut circles: Vec<Circle> = Vec::new();
     let mut place: Vec<u32> = alloc::vec![0; all.len()];
     for &i in &order {
@@ -643,11 +634,8 @@ pub(super) fn circles_of(arcs: &[Arc2]) -> Result<(Vec<Circle>, Vec<u32>), Arran
         if fresh {
             circles.push(c.clone());
         }
-        let at =
-            u32::try_from(circles.len().saturating_sub(1)).map_err(|_| ArrangeError::TooMany)?;
-        if let Some(slot) = place.get_mut(i) {
-            *slot = at;
-        }
+        let at = u32::try_from(circles.len().saturating_sub(1));
+        set(&mut place, i, at.map_err(|_| ArrangeError::TooMany)?)?;
     }
     Ok((circles, place))
 }
@@ -685,32 +673,38 @@ pub(super) fn cut(
     let mut along: Vec<At> = alloc::vec![start];
     along.extend(cuts.iter().map(root));
     along.push(end);
-    for pair in along.windows(2) {
-        let [p, q] = pair else {
-            continue;
-        };
-        let piece = match ordering(q.cmp_x(p)?) {
-            Ordering::Less => Piece {
-                lo: q.clone(),
-                hi: p.clone(),
-                on: On::Arc {
-                    circle,
-                    upper: true,
-                },
-            },
-            Ordering::Greater => Piece {
-                lo: p.clone(),
-                hi: q.clone(),
-                on: On::Arc {
-                    circle,
-                    upper: false,
-                },
-            },
-            // Two points of one x on a circle are a vertical chord's ends, and the arc between them
-            // passes the leftmost or the rightmost point, which was cut: so this is never reached.
-            Ordering::Equal => return Err(ArrangeError::Range),
-        };
-        out.push(piece);
+    for (p, q) in along.iter().zip(along.iter().skip(1)) {
+        // Two points of one x on a circle are a vertical chord's ends, and the arc between them
+        // passes the leftmost or the rightmost point, which was cut: so x never stays.
+        let upper = falls(q.cmp_x(p)?).ok_or(ArrangeError::Range)?;
+        let (lo, hi) = if upper { (q, p) } else { (p, q) };
+        out.push(Piece {
+            lo: lo.clone(),
+            hi: hi.clone(),
+            on: On::Arc { circle, upper },
+        });
     }
     Ok(())
+}
+
+/// Whether a way x goes falls: `None` if x stays.
+const fn falls(x: Sign) -> Option<bool> {
+    match x {
+        Sign::Negative => Some(true),
+        Sign::Positive => Some(false),
+        Sign::Zero => None,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::falls;
+    use geom_num::Sign;
+
+    #[test]
+    fn x_falls_rises_or_stays() {
+        assert_eq!(falls(Sign::Negative), Some(true));
+        assert_eq!(falls(Sign::Positive), Some(false));
+        assert_eq!(falls(Sign::Zero), None);
+    }
 }
