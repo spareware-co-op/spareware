@@ -351,12 +351,19 @@ struct Corner {
     cells: Option<[Cell; 3]>,
 }
 
-/// One point of the merge: the first of its corners in the sorted order, and the planes of every
-/// corner there, which [`numbered`] gathers.
-struct Place {
-    point: Tpi,
-    cells: Option<[Cell; 3]>,
-    through: Vec<Plane>,
+/// One point of the merge: the first of its corners in the sorted order, and where the run of its
+/// corners lies in that order, whose planes [`named`] reads where it is off the grid.
+struct Place<'c> {
+    corner: &'c Corner,
+    run: (usize, usize),
+}
+
+/// The merge's points: every corner by reference, in piece order, each staying in the list its
+/// piece's task made; their sorted order; and the distinct points, each a run of that order.
+struct Points<'c> {
+    corners: Vec<&'c Corner>,
+    order: Vec<usize>,
+    places: Vec<Place<'c>>,
 }
 
 /// The sign of a / b − c / d for b and d positive, in `Wide<M>`.
@@ -1102,13 +1109,12 @@ fn sheets_of<'p>(
     Ok((sheets, held))
 }
 
-/// Every corner of `held`, with each corner's number, in piece order, and the list of the distinct
-/// points in order.
-fn numbered(
+/// Every corner of `held`, each piece's in a list of its own, made on `exec`'s pool.
+fn corners_of(
     held: &[Held<'_>],
     exec: &Exec<'_>,
     meter: &mut WorkMeter<'_>,
-) -> Result<(Vec<usize>, Vec<Place>), MergeError> {
+) -> Result<Vec<Vec<Corner>>, MergeError> {
     let made = exec.try_map(
         meter,
         CORNERS,
@@ -1124,7 +1130,16 @@ fn numbered(
             Ok(out)
         },
     );
-    let made = made.map_err(|e| phase_error(e, meter))?;
+    made.map_err(|e| phase_error(e, meter))
+}
+
+/// The corners `made` gives each piece, with each corner's number, in piece order, and the
+/// distinct points in order.
+fn numbered<'c>(
+    made: &'c [Vec<Corner>],
+    exec: &Exec<'_>,
+    meter: &mut WorkMeter<'_>,
+) -> Result<(Vec<usize>, Points<'c>), MergeError> {
     // Every corner by reference, in piece order: each stays in the list its piece's task made,
     // rather than being moved into one list, a copy of every corner.
     let corners: Vec<&Corner> = made.iter().flatten().collect();
@@ -1152,13 +1167,12 @@ fn numbered(
         (!failed).then_some(()).ok_or(NumError::BudgetExceeded)?;
         order
     };
-    // Each run of equal points in that order is one place: the first corner's point and cells, and
-    // every corner's planes in turn, gathered once. Whether a corner starts a run is told on the
-    // pool, against the corner before it in the order, by the keys the sort read where there are
-    // any: they and [`point_order`] compare points exactly and never fail on corners (a wide
-    // coordinate fails only if a budget were wrong), so a corner equal to the one before it is
-    // equal to its run's first. The runs are then walked once, in order, each place made at its
-    // full length and every corner's planes copied into it.
+    // Each run of equal points in that order is one place: its first corner, and where the run
+    // lies, so no corner's planes are copied. Whether a corner starts a run is told on the pool,
+    // against the corner before it in the order, by the keys the sort read where there are any:
+    // they and [`point_order`] compare points exactly and never fail on corners (a wide coordinate
+    // fails only if a budget were wrong), so a corner equal to the one before it is equal to its
+    // run's first. The runs are then walked once, in order.
     let order_of = |before: usize, at: usize| match &keys {
         Some(keys) => Some(keys.get(before)?.cmp(keys.get(at)?)),
         None => point_order(corners.get(before)?, corners.get(at)?),
@@ -1177,7 +1191,7 @@ fn numbered(
     );
     let starts = starts.map_err(|e| phase_error(e, meter))?;
     let mut number = alloc::vec![0usize; corners.len()];
-    let mut places: Vec<Place> = Vec::with_capacity(starts.iter().filter(|s| **s).count());
+    let mut places: Vec<Place<'c>> = Vec::with_capacity(starts.iter().filter(|s| **s).count());
     let mut start = 0usize;
     while let Some(first) = order.get(start) {
         let leader = corners.get(*first).ok_or(MergeError::Open)?;
@@ -1187,20 +1201,21 @@ fn numbered(
             .skip(after)
             .position(|starts_a_place| *starts_a_place)
             .map_or(order.len(), |k| after.saturating_add(k));
-        let group = order.get(start..end).ok_or(MergeError::Open)?;
-        let mut through = Vec::with_capacity(group.len().saturating_mul(3));
-        for at in group {
-            through.extend_from_slice(corners.get(*at).ok_or(MergeError::Open)?.point.planes());
+        for at in order.get(start..end).ok_or(MergeError::Open)? {
             *number.get_mut(*at).ok_or(MergeError::Open)? = places.len();
         }
         places.push(Place {
-            point: leader.point,
-            cells: leader.cells,
-            through,
+            corner: leader,
+            run: (start, end),
         });
         start = end;
     }
-    Ok((number, places))
+    let points = Points {
+        corners,
+        order,
+        places,
+    };
+    Ok((number, points))
 }
 
 /// Whether `plane` is a split of [`crate::subdivide`]'s, on an odd half step.
@@ -1211,22 +1226,25 @@ fn splits_boxes(plane: &Plane) -> bool {
         && plane.d() & 1 != 0
 }
 
-/// `corner`'s point under a name the boxes cannot change. A grid point is named by its three axis
-/// planes: which corners it has, and so which planes reach it, depends on how far each box's
+/// Place `id`'s point under a name the boxes cannot change. A grid point is named by its three
+/// axis planes: which corners it has, and so which planes reach it, depends on how far each box's
 /// cuts run (a face that only touches a corner of another solid is cut there in one box and not
-/// in a smaller one). A point off the grid takes the first three planes through it, in plane
-/// order and leaving out the boxes' own, that meet in one point; one with no such three, which
-/// only a seam has, keeps its corner's.
-fn named(corner: &Place, meter: &mut WorkMeter<'_>) -> Result<Tpi, MergeError> {
-    if let Some(at) = grid_point(corner)? {
+/// in a smaller one). A point off the grid takes the first three planes through its corners, in
+/// plane order and leaving out the boxes' own, that meet in one point; one with no such three,
+/// which only a seam has, keeps its first corner's.
+fn named(points: &Points<'_>, id: usize, meter: &mut WorkMeter<'_>) -> Result<Tpi, MergeError> {
+    let place = points.places.get(id).ok_or(MergeError::Open)?;
+    if let Some(at) = grid_point(place.corner)? {
         return Ok(at);
     }
-    let mut list: Vec<Plane> = corner
-        .through
-        .iter()
-        .filter(|plane| !splits_boxes(plane))
-        .copied()
-        .collect();
+    let (start, end) = place.run;
+    let run = points.order.get(start..end).ok_or(MergeError::Open)?;
+    let mut list: Vec<Plane> = Vec::with_capacity(run.len().saturating_mul(3));
+    for at in run {
+        let corner = points.corners.get(*at).ok_or(MergeError::Open)?;
+        let planes = corner.point.planes().iter();
+        list.extend(planes.filter(|plane| !splits_boxes(plane)));
+    }
     list.sort_unstable_by_key(|plane| (plane.n(), plane.d()));
     list.dedup();
     let mut found = None;
@@ -1241,12 +1259,12 @@ fn named(corner: &Place, meter: &mut WorkMeter<'_>) -> Result<Tpi, MergeError> {
             }
         }
     }
-    Ok(found.unwrap_or(corner.point))
+    Ok(found.unwrap_or(place.corner.point))
 }
 
 /// A corner's point named by its three axis planes, when it is a grid point: read from its cells,
 /// or from its coordinates when it has none.
-fn grid_point(corner: &Place) -> Result<Option<Tpi>, NumError> {
+fn grid_point(corner: &Corner) -> Result<Option<Tpi>, NumError> {
     let at = if let Some(cells) = corner.cells {
         if cells.iter().any(|c| c.rest != 0) {
             return Ok(None);
@@ -1426,7 +1444,7 @@ fn without_slits(mut runs: Vec<Run>, parents: &[usize]) -> Vec<Run> {
 
 /// The whole parts of a corner's coordinates, where it has [`Cell`]s: it lies in the unit cell from
 /// them.
-fn floors(corner: &Place) -> Option<[i128; 3]> {
+fn floors(corner: &Corner) -> Option<[i128; 3]> {
     corner.cells.map(|[x, y, z]| [x.floor, y.floor, z.floor])
 }
 
@@ -1442,14 +1460,14 @@ fn beyond(at: &[i128; 3], (a, b): (&[i128; 3], &[i128; 3])) -> bool {
 /// its ends' cells, so a point outside them is not read.
 fn cut_at_ends(
     runs: Vec<Run>,
-    places: &[Place],
+    places: &[Place<'_>],
     exec: &Exec<'_>,
     meter: &mut WorkMeter<'_>,
 ) -> Result<Vec<Run>, MergeError> {
     let mut ends: Vec<usize> = runs.iter().flat_map(|r| [r.low, r.high]).collect();
     ends.sort_unstable();
     ends.dedup();
-    let cells: Vec<Option<[i128; 3]>> = places.iter().map(floors).collect();
+    let cells: Vec<Option<[i128; 3]>> = places.iter().map(|p| floors(p.corner)).collect();
     let made = exec.try_map(
         meter,
         ENDS,
@@ -1484,7 +1502,7 @@ fn cut_at_ends(
 fn cuts_of(
     run: &Run,
     (ends, cells): (&[usize], &[Option<[i128; 3]>]),
-    places: &[Place],
+    places: &[Place<'_>],
 ) -> Result<Vec<usize>, MergeError> {
     let [p, q] = run.on;
     let span = cells.get(run.low).zip(cells.get(run.high));
@@ -1500,7 +1518,7 @@ fn cuts_of(
             continue;
         }
         let place = places.get(*mark).ok_or(MergeError::Open)?;
-        let side = |plane: &Plane| plane.side_of_tpi(&place.point);
+        let side = |plane: &Plane| plane.side_of_tpi(&place.corner.point);
         if side(&p)? == Sign::Zero && side(&q)? == Sign::Zero {
             marks.push(*mark);
         }
@@ -1812,7 +1830,8 @@ pub fn section(pieces: &[(Piece, usize)], meter: &mut WorkMeter<'_>) -> Result<C
             given,
         })
         .collect();
-    let (number, points) = numbered(&held, &Exec::serial(), meter)?;
+    let made = corners_of(&held, &Exec::serial(), meter)?;
+    let (number, points) = numbered(&made, &Exec::serial(), meter)?;
     let by_piece = sides_of(&held, &number, &Exec::serial(), meter)?;
     let each_side: Vec<&Side> = by_piece.iter().flatten().collect();
     let (order, lines) = by_line(&each_side, &Exec::serial(), meter)?;
@@ -1822,7 +1841,7 @@ pub fn section(pieces: &[(Piece, usize)], meter: &mut WorkMeter<'_>) -> Result<C
         let group = sides.get(start..end).ok_or(MergeError::Open)?;
         meetings(start, group, &held, &mut runs)?;
     }
-    let runs = cut_at_ends(runs, &points, &Exec::serial(), meter)?;
+    let runs = cut_at_ends(runs, &points.places, &Exec::serial(), meter)?;
     let mut used: Vec<usize> = runs.iter().flat_map(|e| [e.low, e.high]).collect();
     used.sort_unstable();
     used.dedup();
@@ -1835,7 +1854,7 @@ pub fn section(pieces: &[(Piece, usize)], meter: &mut WorkMeter<'_>) -> Result<C
     }
     let mut vertices = Vec::with_capacity(used.len());
     for id in &used {
-        vertices.push(named(points.get(*id).ok_or(MergeError::Open)?, meter)?);
+        vertices.push(named(&points, *id, meter)?);
     }
     Ok(Curves {
         vertices,
@@ -1898,7 +1917,8 @@ pub fn merge_on(
         piece,
         given: CUT,
     }));
-    let (number, points) = numbered(&held, exec, meter)?;
+    let corners = corners_of(&held, exec, meter)?;
+    let (number, points) = numbered(&corners, exec, meter)?;
     // Each piece's sides stay in the list its task made, and are reached by reference, in piece
     // order, rather than moved into one list.
     let by_piece = sides_of(&held, &number, exec, meter)?;
@@ -1936,7 +1956,7 @@ pub fn merge_on(
     }
     flatten(&mut same_piece);
     let runs = without_slits(runs, &same_piece);
-    let runs = cut_at_ends(whole_runs(runs, &same_piece), &points, exec, meter)?;
+    let runs = cut_at_ends(whole_runs(runs, &same_piece), &points.places, exec, meter)?;
 
     // Faces: the connected pieces of a sheet, numbered by the sheet and their lowest fin, which
     // only one face of a sheet can hold. Each piece's set is listed at its root, a piece's index,
@@ -2102,9 +2122,7 @@ pub fn merge_on(
             .take(1)
             .for_each(|s| s.faces.push(at));
     }
-    let vertices = exec.try_map(meter, NAMES, RUNS, &used, |_, id, m| {
-        named(points.get(*id).ok_or(MergeError::Open)?, m)
-    });
+    let vertices = exec.try_map(meter, NAMES, RUNS, &used, |_, id, m| named(&points, *id, m));
     let vertices = vertices.map_err(|e| phase_error(e, meter))?;
     Ok(Merged {
         sheets,
