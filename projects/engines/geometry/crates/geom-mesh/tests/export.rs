@@ -16,6 +16,7 @@
 )]
 #![allow(clippy::unwrap_used, clippy::panic, clippy::indexing_slicing)]
 
+#[cfg(not(target_family = "wasm"))]
 use std::num::NonZeroUsize;
 
 use geom_mesh::exact::ExactMesh;
@@ -23,6 +24,7 @@ use geom_mesh::exact::build::{Polygons, build};
 use geom_mesh::export::{Export, ExportError, Flaw, Format, decimal, export, triangles};
 use geom_num::Exactness;
 use geom_num::grid::{GridStep, Steps};
+#[cfg(not(target_family = "wasm"))]
 use geom_pool::native::Rayon;
 use geom_run::{Budget, Exec, WorkMeter};
 
@@ -435,6 +437,7 @@ fn plates_that_come_to_touch_are_named() {
     );
 }
 
+#[cfg(not(target_family = "wasm"))]
 #[test]
 fn the_same_mesh_gives_the_same_bytes_on_any_pool() {
     let m = mesh(&frustum());
