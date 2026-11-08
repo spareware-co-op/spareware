@@ -77,7 +77,12 @@ pub(crate) fn check(
     exactness: Exactness,
     sink: &mut Sink<'_, '_>,
 ) -> Result<(), Stopped> {
-    let a = body.arenas();
+    check_rows(body.arenas(), exactness, sink)
+}
+
+/// Group 2 on the rows `a`, recorded `exactness`: a published body's, whose links all hold, or a
+/// test's, whose links need not, so every lookup that can find nothing is reached.
+fn check_rows(a: &Arenas, exactness: Exactness, sink: &mut Sink<'_, '_>) -> Result<(), Stopped> {
     let b = bound(exactness);
     #[allow(
         clippy::cast_precision_loss,
@@ -195,8 +200,14 @@ fn any_kind(a: &Arenas, f: Ix<Face>, exact: bool) -> Option<&SurfaceKind> {
 /// Where vertex `v` lies, exactly, and the step more a vertex where three planes meet takes when
 /// it is rounded to the grid; `None` for three planes that do not meet.
 fn placed(a: &Arenas, v: Ix<Vertex>) -> Option<([Interval; 3], f64)> {
-    match corner(a, v)? {
-        Corner::Grid(p) => curved::grid(p).map(|x| (x, 0.0)),
+    place_of(&corner(a, v)?)
+}
+
+/// Where a corner lies, as [`placed`] gives it; `None` for a point where a line meets a plane,
+/// which no vertex is.
+fn place_of(corner: &Corner) -> Option<([Interval; 3], f64)> {
+    match corner {
+        Corner::Grid(p) => curved::grid(*p).map(|x| (x, 0.0)),
         Corner::Tpi(meeting) => {
             let rounded = meeting.to_grid().ok()?;
             curved::grid(rounded.value()).map(|x| (x, 1.0))
@@ -254,18 +265,24 @@ fn general_fin(
             Verdict::Holds => {}
         }
     }
-    // Once per edge and face: an edge a face uses twice, as a seam, is one edge on it.
-    if mapped != Verdict::Holds
-        && let Some(edge) = fin_edge(a, n)
-        && !edge_fins(a, edge).any(|m| m.to_usize() < n.to_usize() && fin_face(a, m) == Some(face))
-    {
+    // Once per edge and face: an edge a face uses twice, as a seam, is one edge on it. Every fin
+    // row names its edge: the filter decides, not the lookup.
+    if mapped != Verdict::Holds {
         let at = a
             .faces
             .surface
             .get(face)
             .copied()
             .map_or(Entity::Face(face), Entity::Surface);
-        sink.push(Fault::at(FaultKind::Unchecked, at).with(Entity::Edge(edge)));
+        fin_edge(a, n)
+            .filter(|&edge| {
+                !edge_fins(a, edge)
+                    .any(|m| m.to_usize() < n.to_usize() && fin_face(a, m) == Some(face))
+            })
+            .into_iter()
+            .for_each(|edge| {
+                sink.push(Fault::at(FaultKind::Unchecked, at).with(Entity::Edge(edge)));
+            });
     }
     Ok(())
 }
@@ -605,4 +622,105 @@ fn on_line(
     squared
         .zip(allowed)
         .is_some_and(|(have, room)| have.hi() <= room.lo())
+}
+
+#[cfg(test)]
+mod tests {
+    #![allow(
+        clippy::unwrap_used,
+        clippy::float_cmp,
+        reason = "test code: a failure should stop loudly, and the places compared are exact"
+    )]
+
+    use geom_num::plane::Lpi;
+    use geom_num::{GridStep, Steps};
+    use geom_run::{Budget, WorkMeter};
+    use geom_topo::{Builder, Sense};
+
+    use super::*;
+
+    fn ix<K>(row: u32) -> Ix<K> {
+        Ix::new(row).unwrap()
+    }
+
+    /// One fin and its edge, never published: the fin's loop, its pcurve and the edge's curve each
+    /// past the end of their table, which no published body's are.
+    fn unlinked() -> Builder {
+        let mut b = Builder::new();
+        let a = &mut b.arenas;
+        a.fins
+            .extend(&[Fin {
+                loop_: ix(5),
+                next: ix(0),
+                prev: ix(0),
+                edge: ix(0),
+                sense: Sense::Forward,
+                radial: ix(0),
+                pcurve: Some(ix(5)),
+            }])
+            .unwrap();
+        a.edges
+            .extend(&[Edge {
+                first_fin: Some(ix(0)),
+                start: None,
+                end: None,
+                curve: ix(5),
+            }])
+            .unwrap();
+        b
+    }
+
+    #[test]
+    fn a_lookup_that_finds_nothing_is_unchecked_never_passed() {
+        let b = unlinked();
+        let mut meter = WorkMeter::new(Budget::UNLIMITED);
+        let mut sink = Sink::new(&mut meter).unwrap();
+        let one = Exactness::Certified {
+            bound: Steps(1),
+            step: GridStep::Q0,
+        };
+        check_rows(&b.arenas, one, &mut sink).unwrap();
+        // The pcurve, read through no face and no curve, and the edge on no curve: each unchecked.
+        // The fin on no face is not held to one.
+        assert_eq!(
+            sink.faults,
+            alloc::vec![
+                Fault::at(FaultKind::Unchecked, Entity::Pcurve(ix(5))).with(Entity::Fin(ix(0))),
+                Fault::at(FaultKind::Unchecked, Entity::Edge(ix(0))).with(Entity::Edge(ix(0))),
+            ]
+        );
+    }
+
+    /// The plane through the origin with normal `n`.
+    fn through_origin(n: [i128; 3]) -> GridPlane {
+        GridPlane::new(n, 0).unwrap()
+    }
+
+    #[test]
+    fn a_corner_is_placed_where_it_lies_and_a_crossing_point_nowhere() {
+        let p = P3::new(3, -4, 5).unwrap();
+        let (at, more) = place_of(&Corner::Grid(p)).unwrap();
+        assert_eq!(more, 0.0);
+        assert!(
+            at.iter()
+                .zip([3.0, -4.0, 5.0])
+                .all(|(x, c)| x.lo() == c && x.hi() == c)
+        );
+        // Three planes meeting at the origin: rounded to the grid, a step more.
+        let meeting = Tpi::new(
+            through_origin([1, 0, 0]),
+            through_origin([0, 1, 0]),
+            through_origin([0, 0, 1]),
+        )
+        .unwrap();
+        let (at, more) = place_of(&Corner::Tpi(meeting)).unwrap();
+        assert_eq!(more, 1.0);
+        assert!(at.iter().all(|x| x.lo() == 0.0 && x.hi() == 0.0));
+        let line = (P3::new(0, 0, 0).unwrap(), P3::new(10, 0, 0).unwrap());
+        let wall = GridPlane::new([1, 0, 0], -5).unwrap();
+        assert_eq!(
+            place_of(&Corner::Lpi(Lpi::new(line.0, line.1, wall).unwrap())),
+            None
+        );
+    }
 }

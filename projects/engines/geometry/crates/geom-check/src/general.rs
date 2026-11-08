@@ -32,7 +32,7 @@ use alloc::vec::Vec;
 
 use geom_curve::ParamCurve;
 use geom_curve::tight::larger;
-use geom_intersect::{Projection, gap, project_surface};
+use geom_intersect::{Nearest, Projection, gap, project_surface};
 use geom_num::interval::Interval;
 use geom_run::{Stopped, WorkMeter};
 use geom_topo::{CurveKind, SurfaceKind};
@@ -85,24 +85,29 @@ pub(crate) fn vertex_on_surface(
     // never below an eighth of a step, finer than the grid's points can be told apart.
     let floor = larger(b, 1.0) / 8.0;
     match project_surface(surface, &p.map(mid), floor, meter) {
-        Ok(Projection::Points(feet)) => {
-            if feet.is_empty() {
-                return Ok(Verdict::Unknown);
-            }
-            let mut verdict = Verdict::Fails;
-            for foot in &feet {
-                match against(foot.distance, b) {
-                    Verdict::Holds => return Ok(Verdict::Holds),
-                    Verdict::Unknown => verdict = Verdict::Unknown,
-                    Verdict::Fails => {}
-                }
-            }
-            Ok(verdict)
-        }
+        Ok(Projection::Points(feet)) => Ok(nearest(&feet, b)),
         Ok(Projection::Set { distance, .. }) => Ok(against(distance, b)),
         Ok(Projection::NonIsolated { .. }) => Ok(Verdict::Unknown),
         Err(_) => undecided(meter),
     }
+}
+
+/// The verdict on a point whose nearest points on a surface are `feet`, against the bound `b`: it
+/// holds when one is within the bound, fails when every one is proven beyond it, and is undecided
+/// otherwise, no foot at all included.
+fn nearest(feet: &[Nearest<2, 3>], b: f64) -> Verdict {
+    if feet.is_empty() {
+        return Verdict::Unknown;
+    }
+    let mut verdict = Verdict::Fails;
+    for foot in feet {
+        match against(foot.distance, b) {
+            Verdict::Holds => return Verdict::Holds,
+            Verdict::Unknown => verdict = Verdict::Unknown,
+            Verdict::Fails => {}
+        }
+    }
+    verdict
 }
 
 /// Whether the point `p` (exact) lies within `b` of `curve` at `t`.
@@ -159,4 +164,173 @@ pub(crate) fn pcurve_on(
         }
     }
     Ok(verdict)
+}
+
+#[cfg(test)]
+mod tests {
+    #![allow(
+        clippy::unwrap_used,
+        clippy::indexing_slicing,
+        reason = "test code: a failure should stop loudly"
+    )]
+
+    use geom_curve::{Frame, Line};
+    use geom_intersect::Place;
+    use geom_nurbs::{Basis, Surface};
+    use geom_run::Budget;
+    use geom_surface::Sphere;
+
+    use super::*;
+
+    fn meter() -> WorkMeter<'static> {
+        WorkMeter::new(Budget::UNLIMITED)
+    }
+
+    fn exact(p: [f64; 3]) -> [Interval; 3] {
+        p.map(|x| Interval::point(x).unwrap())
+    }
+
+    /// S(u, v) = (u, v, 0) over [0, 10]², a bilinear NURBS patch.
+    fn floor() -> SurfaceKind {
+        let basis = || Basis::new(1, alloc::vec![0.0, 0.0, 10.0, 10.0]).unwrap();
+        let net = [
+            [0.0, 0.0, 0.0],
+            [0.0, 10.0, 0.0],
+            [10.0, 0.0, 0.0],
+            [10.0, 10.0, 0.0],
+        ];
+        SurfaceKind::Nurbs(Surface::new(basis(), basis(), &net).unwrap())
+    }
+
+    /// A pcurve on [`floor`] from `(x, y)` along `(dx, 0)` over `span`, and its edge's curve, the
+    /// same line in space.
+    fn on_floor((x, y): (f64, f64), dx: f64, span: (f64, f64)) -> (CurveKind<2>, CurveKind<3>) {
+        (
+            CurveKind::Line(Line::new([x, y], [dx, 0.0], span).unwrap()),
+            CurveKind::Line(Line::new([x, y, 0.0], [dx, 0.0, 0.0], span).unwrap()),
+        )
+    }
+
+    /// A nearest point at `distance`.
+    fn foot(distance: Interval) -> Nearest<2, 3> {
+        Nearest {
+            at: [Interval::point(0.0).unwrap(); 2],
+            point: exact([0.0; 3]),
+            distance,
+            place: Place::Foot,
+        }
+    }
+
+    #[test]
+    fn no_foot_is_undecided_and_one_within_the_bound_is_enough() {
+        let near = foot(Interval::point(0.5).unwrap());
+        let far = foot(Interval::point(5.0).unwrap());
+        let straddling = foot(Interval::new(0.5, 5.0).unwrap());
+        assert_eq!(nearest(&[], 1.0), Verdict::Unknown);
+        assert_eq!(nearest(&[far, near], 1.0), Verdict::Holds);
+        assert_eq!(nearest(&[far, far], 1.0), Verdict::Fails);
+        assert_eq!(nearest(&[far, straddling], 1.0), Verdict::Unknown);
+    }
+
+    #[test]
+    fn a_vertex_read_past_its_curves_domain_is_undecided_never_passed() {
+        let (_, segment) = on_floor((0.0, 0.0), 10.0, (0.0, 1.0));
+        let end = exact([10.0, 0.0, 0.0]);
+        assert_eq!(
+            vertex_at(&segment, 1.0, &end, 1.0, &mut meter()).unwrap(),
+            Verdict::Holds
+        );
+        assert_eq!(
+            vertex_at(&segment, 2.0, &end, 1.0, &mut meter()).unwrap(),
+            Verdict::Unknown
+        );
+    }
+
+    #[test]
+    fn a_sphere_seen_from_its_centre_is_judged_by_its_radius() {
+        let ball = SurfaceKind::Sphere(
+            Sphere::new(
+                [0.0; 3],
+                4.0,
+                Frame::standard().unwrap(),
+                ((0.0, 2.0), (-0.5, 0.5)),
+            )
+            .unwrap(),
+        );
+        let centre = exact([0.0; 3]);
+        assert_eq!(
+            vertex_on_surface(&ball, &centre, 5.0, &mut meter()).unwrap(),
+            Verdict::Holds
+        );
+        assert_eq!(
+            vertex_on_surface(&ball, &centre, 3.0, &mut meter()).unwrap(),
+            Verdict::Fails
+        );
+    }
+
+    /// A rational quarter cylinder of radius 5 is a NURBS, so no closed form sees its axis: from a
+    /// point on the axis every point of the arc is nearest, and the search says so instead of
+    /// naming a foot.
+    #[test]
+    fn a_continuum_no_kind_names_is_undecided() {
+        let line = Basis::new(1, alloc::vec![0.0, 0.0, 1.0, 1.0]).unwrap();
+        let arc = Basis::new(2, alloc::vec![0.0, 0.0, 0.0, 1.0, 1.0, 1.0]).unwrap();
+        let mut net = Vec::new();
+        let mut weights = Vec::new();
+        for z in [-2.5, 2.5] {
+            net.extend([[5.0, 0.0, z], [5.0, 5.0, z], [0.0, 5.0, z]]);
+            weights.extend([1.0, core::f64::consts::FRAC_1_SQRT_2, 1.0]);
+        }
+        let quarter = SurfaceKind::Nurbs(Surface::new_rational(line, arc, &net, &weights).unwrap());
+        assert!(matches!(
+            project_surface(&quarter, &[0.0; 3], 1.0 / 8.0, &mut meter()),
+            Ok(Projection::NonIsolated { .. })
+        ));
+        assert_eq!(
+            vertex_on_surface(&quarter, &exact([0.0; 3]), 1.0, &mut meter()).unwrap(),
+            Verdict::Unknown
+        );
+    }
+
+    #[test]
+    fn a_bound_that_is_not_a_number_decides_nothing() {
+        // The nearest-point search refuses the floor it gives.
+        assert_eq!(
+            vertex_on_surface(&floor(), &exact([1.0, 1.0, 0.0]), f64::NAN, &mut meter()).unwrap(),
+            Verdict::Unknown
+        );
+        // No piece is within it or beyond it, and a piece whose middle is one of its ends, at
+        // either end, cannot be halved: each is left undecided.
+        for span in [(1.0, 1.0_f64.next_up()), (1.0_f64.next_down(), 1.0)] {
+            let (pcurve, curve) = on_floor((1.0, 1.0), 1.0, span);
+            assert_eq!(
+                pcurve_on(&floor(), &pcurve, &curve, f64::NAN, &mut meter()).unwrap(),
+                Verdict::Unknown,
+                "{span:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn a_pcurve_that_leaves_its_surfaces_domain_is_undecided() {
+        // From (5, 5) to (25, 5): past the patch's u = 10.
+        let (pcurve, curve) = on_floor((5.0, 5.0), 20.0, (0.0, 1.0));
+        assert_eq!(
+            pcurve_on(&floor(), &pcurve, &curve, 1.0, &mut meter()).unwrap(),
+            Verdict::Unknown
+        );
+        // Inside it, the same line holds.
+        let (pcurve, curve) = on_floor((1.0, 5.0), 8.0, (0.0, 1.0));
+        assert_eq!(
+            pcurve_on(&floor(), &pcurve, &curve, 1.0, &mut meter()).unwrap(),
+            Verdict::Holds
+        );
+    }
+
+    #[test]
+    fn a_meter_that_stops_inside_a_piece_stops_the_check() {
+        let (pcurve, curve) = on_floor((1.0, 5.0), 8.0, (0.0, 1.0));
+        let mut short = WorkMeter::new(Budget::new(1, u64::MAX));
+        assert!(pcurve_on(&floor(), &pcurve, &curve, 1.0, &mut short).is_err());
+    }
 }

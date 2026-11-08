@@ -95,6 +95,15 @@ fn a_second_crossing_past_a_plane_patch_is_not_a_crossing() {
     holds(harness(&[0x0a, 0x33, 0x23, 0x32]));
 }
 
+/// A third input past a plane patch, `0a 03 01 0a`, found by libFuzzer on the G178 line: a cone
+/// with its apex on its domain's edge, slope 2.5, against a plane patch through (0.5, -2, -2). The
+/// cone meets the plane's equation only for v above 3.2, where the meeting stands past 10.4 on the
+/// patch's second direction, beyond its 9, so subdivision rightly returns nothing.
+#[test]
+fn a_third_crossing_past_a_plane_patch_is_not_a_crossing() {
+    holds(harness(&[0x0a, 0x03, 0x01, 0x0a]));
+}
+
 #[test]
 fn general_seeded() -> Result<(), seeded::Failure> {
     seeded::run(
