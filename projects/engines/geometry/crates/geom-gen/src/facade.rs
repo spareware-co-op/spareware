@@ -306,6 +306,18 @@ fn type_schema(ty: &str) -> Result<Value, GenError> {
             json!({ "type": "integer", "minimum": 0 })
         }
         "i8" | "i16" | "i32" | "i64" | "Coord" => json!({ "type": "integer" }),
+        "i128" | "I256" => json!({
+            "type": "string",
+            "pattern": "^-?[0-9]+$",
+            "description": "an exact integer, past a JSON number's range, in decimal"
+        }),
+        "AreaVector" => json!({
+            "type": "array",
+            "items": { "type": "string", "pattern": "^-?[0-9]+$" },
+            "minItems": 3,
+            "maxItems": 3,
+            "description": "x, y and z, exact integers in decimal"
+        }),
         "f64" => json!({ "type": "number" }),
         "&str" | "String" | "Label" => json!({ "type": "string" }),
         "P2" => json!({
@@ -325,7 +337,7 @@ fn type_schema(ty: &str) -> Result<Value, GenError> {
         "Axis" => json!({ "type": "string", "enum": ["x", "y", "z"] }),
         "Body" | "CurveKind" | "SurfaceKind" | "NameId" | "TopoName" | "Role" | "PieceKey"
         | "Exactness" | "GridStep" | "History" | "Motion" | "Copies" | "Instance" | "Rotation"
-        | "Scale" => json!({
+        | "Scale" | "Level" | "BoundingBox" | "NamedFace" | "Report" | "ExactnessReport" => json!({
             "type": "object",
             "title": ty,
             "description": format!(

@@ -27,8 +27,8 @@
 //!
 //! Its direct dependencies are `kit-core`, `geom-pool` behind the `threads` feature, and every
 //! kernel crate it re-exports: `geom-num`, `geom-math`, `geom-curve`, `geom-surface`, `geom-topo`,
-//! `geom-run`, `geom-op` and `geom-make`, checked by the scaffold test in `tests/scaffold`, which holds the
-//! kernel's crate table.
+//! `geom-run`, `geom-op`, `geom-make`, `geom-check` and `geom-name`, checked by the scaffold test in
+//! `tests/scaffold`, which holds the kernel's crate table.
 //!
 //! Modules today (piece G100):
 //!
