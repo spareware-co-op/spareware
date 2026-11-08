@@ -66,6 +66,12 @@ const CORNERS: Phase = Phase::new("merge: corners");
 /// Sorting the corners.
 const SORT_CORNERS: Phase = Phase::new("merge: sort corners");
 
+/// Telling where each run of equal points starts, in the corners' sorted order.
+const PLACES: Phase = Phase::new("merge: places");
+
+/// The chunk of the places phase: one comparison of two points per item.
+const PLACES_PLAN: ChunkPlan = ChunkPlan::fixed::<1024>();
+
 /// Each piece's sheet key.
 const SHEETS: Phase = Phase::new("merge: sheet keys");
 
@@ -956,7 +962,7 @@ fn numbered(
         },
     );
     let made = made.map_err(|e| phase_error(e, meter))?;
-    let corners: Vec<Corner> = made.into_iter().flatten().collect();
+    let mut corners: Vec<Corner> = made.into_iter().flatten().collect();
     let keys: Option<Vec<&[Cell; 3]>> = corners.iter().map(|c| c.cells.as_ref()).collect();
     let order = if let Some(keys) = keys {
         // Equal points keep their order, as the serial stable sort keeps it.
@@ -977,32 +983,45 @@ fn numbered(
         order
     };
     // Each run of equal points in that order is one place: the first corner's point and cells, and
-    // every corner's planes in turn, gathered once.
+    // every corner's planes in turn, gathered once. Whether a corner starts a run is told on the
+    // pool, against the corner before it in the order: [`point_order`] compares points exactly and
+    // never fails on corners (a wide coordinate fails only if a budget were wrong), so a corner equal
+    // to the one before it is equal to its run's first. The runs are then walked once, in order,
+    // each corner's planes moved into its place.
+    let starts = exec.try_map(
+        meter,
+        PLACES,
+        PLACES_PLAN,
+        &order,
+        |k, at, _| -> Result<bool, MergeError> {
+            let Some(before) = k.checked_sub(1).and_then(|b| order.get(b)) else {
+                return Ok(true);
+            };
+            let found = corners.get(*before).zip(corners.get(*at));
+            let (p, q) = found.ok_or(MergeError::Open)?;
+            Ok(point_order(p, q) != Some(Ordering::Equal))
+        },
+    );
+    let starts = starts.map_err(|e| phase_error(e, meter))?;
     let mut number = alloc::vec![0usize; corners.len()];
     let mut places: Vec<Corner> = Vec::new();
-    let mut start = 0usize;
-    while let Some(first) = order.get(start) {
-        let leader = corners.get(*first).ok_or(MergeError::Open)?;
-        let mut end = start.saturating_add(1);
-        while let Some(next) = order.get(end) {
-            let other = corners.get(*next).ok_or(MergeError::Open)?;
-            if point_order(leader, other) != Some(Ordering::Equal) {
-                break;
-            }
-            end = end.saturating_add(1);
+    for (at, starts_a_place) in order.iter().zip(starts) {
+        let corner = corners.get_mut(*at).ok_or(MergeError::Open)?;
+        let through = core::mem::take(&mut corner.through);
+        if starts_a_place {
+            places.push(Corner {
+                point: corner.point,
+                cells: corner.cells,
+                through,
+            });
+        } else {
+            places
+                .last_mut()
+                .ok_or(MergeError::Open)?
+                .through
+                .extend(through);
         }
-        let group = order.get(start..end).ok_or(MergeError::Open)?;
-        let mut through = Vec::with_capacity(group.len().saturating_mul(3));
-        for at in group {
-            through.extend_from_slice(&corners.get(*at).ok_or(MergeError::Open)?.through);
-            *number.get_mut(*at).ok_or(MergeError::Open)? = places.len();
-        }
-        places.push(Corner {
-            point: leader.point,
-            cells: leader.cells,
-            through,
-        });
-        start = end;
+        *number.get_mut(*at).ok_or(MergeError::Open)? = places.len().saturating_sub(1);
     }
     Ok((number, places))
 }
