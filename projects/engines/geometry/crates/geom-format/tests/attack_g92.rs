@@ -19,8 +19,10 @@ use geom_format::source::{ByteSource, RangeSource, SliceSource, SourceError, rea
 use geom_op::cbor::Encoder;
 use geom_run::{Budget, WorkMeter};
 
+/// A budget far above what any test here spends, so a decoder that stops advancing ends in a
+/// failed test, not a hang.
 fn meter() -> WorkMeter<'static> {
-    WorkMeter::new(Budget::UNLIMITED)
+    WorkMeter::new(Budget::of_work(1_000_000))
 }
 
 fn header() -> Record {

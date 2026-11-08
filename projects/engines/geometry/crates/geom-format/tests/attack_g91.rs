@@ -56,8 +56,10 @@ enum V {
 /// Depth enough for every value the generator makes.
 const DEPTH: usize = 64;
 
+/// A budget far above what any test here spends, so a decoder that stops advancing ends in a
+/// failed test, not a hang.
 fn meter() -> WorkMeter<'static> {
-    WorkMeter::new(Budget::UNLIMITED)
+    WorkMeter::new(Budget::of_work(1_000_000))
 }
 
 /// 2^k exactly, for −1074 ≤ k ≤ 1023, from its bits.
@@ -962,7 +964,9 @@ fn the_layout_is_fixed() {
             V::Big(true, vec![1, 0, 0, 0, 0, 0, 0, 0, 0]),
         ),
     ]);
-    let text = to_text(&bytes_of(&v), 3, &mut meter()).unwrap();
+    // A small budget: a writer that stops advancing indents without end, far past `meter()`.
+    let mut small = WorkMeter::new(Budget::of_work(1_000));
+    let text = to_text(&bytes_of(&v), 3, &mut small).unwrap();
     assert_eq!(
         text,
         "{\n  1: [\n    0x1.8p+0,\n    {\n      \"k\": null\n    }\n  ],\n  \"a\\\"\\\\\\n\\u007f\": 3(h'010000000000000000')\n}"
@@ -976,7 +980,12 @@ fn every_byte_string_of_up_to_three_bytes_is_refused_or_round_trips() {
     for length in 0..=3 {
         for n in 0..(1_u32 << (8 * length)) {
             let bytes = &n.to_be_bytes()[4 - length..];
-            if check(bytes, 2, &mut meter()).is_ok() {
+            let verdict = check(bytes, 2, &mut meter());
+            assert!(
+                !matches!(&verdict, Err(e) if matches!(e.kind, CborErrorKind::Stopped(_))),
+                "three bytes never use up the budget: {bytes:02x?}"
+            );
+            if verdict.is_ok() {
                 accepted += 1;
                 let text = to_text(bytes, 2, &mut meter()).unwrap();
                 assert_eq!(
