@@ -159,9 +159,8 @@ fn shape(item: Item) -> Result<Option<Shape>, Finding> {
 }
 
 fn name(n: u8) -> NameId {
-    let mut b = [0_u8; 16];
-    b[15] = n;
-    NameId::from_bytes(b)
+    // The sixteen bytes, most significant first, of the number n: n in the last.
+    NameId::from_bytes(u128::from(n).to_be_bytes())
 }
 
 /// What an answer is, without its carriers.
@@ -169,16 +168,14 @@ type Key = Option<(SnapKind, NameId, Option<NameId>, Option<u32>, u8, [u64; 2])>
 
 fn key(f: Option<&Found>) -> Key {
     f.map(|f| {
+        let [low, high] = f.distance_squared;
         (
             f.kind,
             f.name,
             f.with,
             f.sub,
             f.pick,
-            [
-                f.distance_squared[0].to_bits(),
-                f.distance_squared[1].to_bits(),
-            ],
+            [low.to_bits(), high.to_bits()],
         )
     })
 }
@@ -236,7 +233,8 @@ pub fn check(case: &Case) -> Result<(), Finding> {
     }
     if let Some(found) = &tree {
         let limit = f64::from(case.aperture) * f64::from(case.aperture);
-        if found.distance_squared[0] > limit {
+        let [low, _] = found.distance_squared;
+        if low > limit {
             return Err(broken(
                 "the answer is within the aperture",
                 format!("{:?}", found.distance_squared),
