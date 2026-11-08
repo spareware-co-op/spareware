@@ -18,7 +18,7 @@
 //! Bytes per wall body, measured (23.9) by `tests/attack_g80.rs`: a plain wall, the solid and
 //! the outside region, one shell, six planar faces each with one loop of four fins, twelve line
 //! edges and eight vertices, built with exact reservations, holds 16,740 heap bytes in 29 chunks
-//! on 64-bit targets and 15,024 on wasm32, beside the body's own 968 bytes (488 on wasm32). The
+//! on 64-bit targets and 15,024 on wasm32, beside the body's own 976 bytes (492 on wasm32). The
 //! geometry pools are most of it: six planes at 1,008 bytes a row and twelve lines at 592 (536 on
 //! wasm32), each row the size of its kind's largest variant. The topology's own rows take 1,308
 //! bytes and the eight points 192; each of the 29 chunks adds 72 bytes of header and chunk
@@ -33,9 +33,12 @@
 //! Cost: every accessor is constant time; cloning is linear in the number of chunks;
 //! [`Body::memory`] is linear in the number of chunks.
 
+use alloc::sync::Arc;
+
 use crate::arenas::Arenas;
 use crate::column::Memory;
 use crate::entity::RegionIx;
+use crate::order::Names;
 
 /// What a body is made of (8.1).
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
@@ -58,6 +61,9 @@ pub struct Body {
     kind: BodyKind,
     outside: RegionIx,
     arenas: Arenas,
+    /// The names of its named entities, in name order, when it was published by name (G81);
+    /// shared, so cloning a body copies one pointer for them.
+    names: Option<Arc<Names>>,
 }
 
 impl Body {
@@ -67,7 +73,23 @@ impl Body {
             kind,
             outside,
             arenas,
+            names: None,
         }
+    }
+
+    /// The same body, carrying `names`; only the builder calls this, with names in name order.
+    pub(crate) fn named(self, names: Names) -> Body {
+        Body {
+            names: Some(Arc::new(names)),
+            ..self
+        }
+    }
+
+    /// The names of its named entities, each list in its arena's order, which is name order; `None`
+    /// for a body published without names.
+    #[must_use]
+    pub fn names(&self) -> Option<&Names> {
+        self.names.as_deref()
     }
 
     /// What the body is made of.
