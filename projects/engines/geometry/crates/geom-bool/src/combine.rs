@@ -318,6 +318,7 @@ fn rebuilt(ctx: &OpContext<'_>, error: RebuildError, meter: &mut WorkMeter<'_>) 
             MergeError::Stopped(stopped) | MergeError::Trace(TraceError::Stopped(stopped)),
         ) => ctx.stopped(meter, stopped, REBUILD),
         RebuildError::Merge(MergeError::Inside) => fail(ctx, CombineDetail::UnboundedResult),
+        RebuildError::Merge(MergeError::Slit) => fail(ctx, CombineDetail::ContactInsideFace),
         RebuildError::Merge(MergeError::Num(e)) | RebuildError::Num(e) => numbers(ctx, e),
         RebuildError::Topo(e) => match e.stop(meter) {
             Some(stopped) => ctx.stopped(meter, stopped, REBUILD),

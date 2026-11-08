@@ -766,6 +766,10 @@ fn errors_say_what_was_wrong() {
     );
     assert_eq!(MergeError::Open.to_string(), "kept pieces do not close");
     assert_eq!(
+        MergeError::Slit.to_string(),
+        "an edge ends inside a face, which it would slit"
+    );
+    assert_eq!(
         MergeError::Inside.to_string(),
         "a shell faces inward with no shell around it"
     );
@@ -1208,6 +1212,53 @@ fn the_tilted_unions_the_failure_file_kept_close() {
             Ok(()) | Err(TestCaseError::Reject(_)) => {}
             Err(e) => panic!("{e}"),
         }
+    }
+}
+
+/// A box 20 by 10 by 10 and tetrahedra above its top face (y = 10), merged as a union.
+fn box_with_tetrahedra(tetrahedra: &[[[i64; 3]; 4]]) -> Result<Merged, MergeError> {
+    let mut polygons = scene(&[block([0, 0, 0], [20, 10, 10])]);
+    for (at, corners) in tetrahedra.iter().enumerate() {
+        tetrahedron(*corners, at as u32 + 1, &mut polygons).unwrap();
+    }
+    let pieces = kept(&polygons, &WindingTest::unite(), LEAF_POLYGONS);
+    let m = merge(&pieces, Merge::RemoveRedundant, &mut meter())?;
+    closed(&m, &pieces);
+    Ok(m)
+}
+
+/// Two corners on the box's top face and two above it, so the tetrahedron touches the face along
+/// the edge between the first two, `x` along and from depth `z0` to `z1`.
+fn leaning(x: i64, (z0, z1): (i64, i64)) -> [[i64; 3]; 4] {
+    [[x, 10, z0], [x, 10, z1], [x + 4, 20, 5], [x - 4, 20, 5]]
+}
+
+#[test]
+fn an_edge_across_the_whole_face_splits_it_and_has_four_fins() {
+    let m = box_with_tetrahedra(&[leaning(5, (0, 10))]).unwrap();
+    // The box's six faces and the top's second half, the tetrahedron's four.
+    assert_eq!(m.faces.len(), 11);
+    assert_eq!(m.edges.iter().filter(|e| e.fins.len() == 4).count(), 1);
+    let m = box_with_tetrahedra(&[leaning(5, (0, 10)), leaning(15, (0, 10))]).unwrap();
+    assert_eq!(m.faces.len(), 16);
+    assert_eq!(m.edges.iter().filter(|e| e.fins.len() == 4).count(), 2);
+}
+
+#[test]
+fn an_edge_that_ends_inside_the_face_is_refused_whatever_else_touches_it() {
+    assert_eq!(
+        box_with_tetrahedra(&[leaning(5, (2, 8))]).unwrap_err(),
+        MergeError::Slit
+    );
+    // One edge across the whole face, one ending inside it, in either order.
+    for tetrahedra in [
+        [leaning(5, (0, 10)), leaning(15, (2, 8))],
+        [leaning(5, (2, 8)), leaning(15, (0, 10))],
+    ] {
+        assert_eq!(
+            box_with_tetrahedra(&tetrahedra).unwrap_err(),
+            MergeError::Slit
+        );
     }
 }
 

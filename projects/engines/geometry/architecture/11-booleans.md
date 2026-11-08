@@ -377,6 +377,7 @@ On valid input the polyhedral path fails only for reasons the caller controls: a
 | `NonManifoldResult` | Only with `ManifoldRule::Require` | Accept a General body; split it |
 | `FrameRange` | The operands do not fit one frame at the finest grid step involved | Work in a frame placed at the overlap |
 | `BudgetExceeded` | A stage's deterministic work count or logical memory passes the budget (11.12) | Raise it; split the call; ask for a preview |
+| `ContactInsideFace` | An edge of one operand lies in the interior of a face of another and ends there (a contact along only part of the face's depth), so the face would need a slit with no area. An edge that crosses the whole face splits it and is kept | Move an operand so the edge crosses the whole face, or clear of it |
 | `SeedOnBoundary`, `SeedOutside` | A seed lies on a face, or in no cell | Move the seed |
 
 `Cancelled` and `OutOfMemory` need no remedy and are never logged (11.12). Successful results carry diagnostics instead of failing: `EmptyResult`, `TouchingOnly`, `ToolMissesHost`, `CutterDoesNotSeparate`, `Sliver`, `ShortEdge`, `SeedsShareCell`, `NamesQualified`, `WeakName`. A broken internal invariant is a bug. It returns `Internal` with what is needed to reproduce it, never a panic.
