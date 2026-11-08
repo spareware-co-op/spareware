@@ -478,3 +478,46 @@ fn a_seam_on_a_face_no_closed_form_covers_is_unchecked_once() {
         "{faults:?}"
     );
 }
+
+#[test]
+fn a_seam_is_reported_at_its_first_fin_on_the_face() {
+    // The same side with its ring starting on the seam, so its two fins stand either side of the
+    // rim's: the seam is reported once, at its first fin, so before the rim, and the fault list
+    // keeps the order the fins come in.
+    use geom_topo::{RegionKind, Sense};
+    let mut r = Rows::empty();
+    let solid = r.region(RegionKind::Solid);
+    let (base, apex) = (r.vertex([6, 0, 0]), r.vertex([0, 0, 12]));
+    let rim = r.edge(Some((base, base)));
+    let seam = r.edge(Some((apex, base)));
+    let s = r.shell(solid);
+    r.face(s, &[&[(rim, Sense::Forward)]]);
+    r.face(
+        s,
+        &[&[
+            (seam, Sense::Forward),
+            (rim, Sense::Reversed),
+            (seam, Sense::Reversed),
+        ]],
+    );
+    r.curves[rim as usize] = common::parallel(0.0, 6.0);
+    r.surfaces[0] = common::level(0.0);
+    let basis = || Basis::new(1, vec![0.0, 0.0, 12.0, 12.0]).unwrap();
+    let net = [
+        [0.0, 0.0, 0.0],
+        [0.0, 12.0, 0.0],
+        [12.0, 0.0, 0.0],
+        [12.0, 12.0, 0.0],
+    ];
+    r.surfaces[1] = SurfaceKind::Nurbs(Surface::new(basis(), basis(), &net).unwrap());
+    let unchecked = |edge: u32| {
+        Fault::at(FaultKind::Unchecked, Entity::Surface(ix(1))).with(Entity::Edge(ix(edge)))
+    };
+    let faults = at(&r, 1);
+    let place = |want: Fault| {
+        let found = faults.iter().filter(|&&f| f == want).count();
+        assert_eq!(found, 1, "{want:?} in {faults:?}");
+        faults.iter().position(|&f| f == want).unwrap()
+    };
+    assert!(place(unchecked(seam)) < place(unchecked(rim)), "{faults:?}");
+}
