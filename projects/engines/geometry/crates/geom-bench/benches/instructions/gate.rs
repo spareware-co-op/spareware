@@ -2571,6 +2571,23 @@ pub mod bvh {
     );
 }
 
+/// The attribute step's hot path (piece G90; decision 32.44).
+pub mod attributes {
+    use super::*;
+
+    #[library_benchmark(teardown = verify)]
+    #[bench::typical(leak("attributes/apply/typical"))]
+    fn apply(run: &'static mut Named) -> &'static mut Named {
+        run.bench.measure();
+        run
+    }
+
+    library_benchmark_group!(
+        name = attributes;
+        benchmarks = apply
+    );
+}
+
 /// geom-topo's hot paths (piece G80; decision 32.44).
 pub mod topo {
     use super::*;

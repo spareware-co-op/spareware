@@ -17,8 +17,9 @@ a target per phase-2 code piece), `curves` (`src/curves.rs`) and `surfaces` (`sr
 every curve and surface kind built from any bytes keeps the kind contract kit
 (`geom_curve::contract`, `geom_surface::contract`) under any typed transform; `arenas` (`src/arenas.rs`,
 G80), `geom-topo` publishes exactly the arenas its rules allow, and a body's versions never see
-each other's edits; and `batch` (`src/batch.rs`, G104), `geom-op`'s batch driver gives each item
-its own result, and the many-point calls give the single calls' bits.
+each other's edits; `attributes` (`src/attributes.rs`, G90), `geom-name`'s attribute step gives
+each output exactly what section 8.4's table gives; and `batch` (`src/batch.rs`, G104), `geom-op`'s
+batch driver gives each item its own result, and the many-point calls give the single calls' bits.
 
 ## One law, four engines
 

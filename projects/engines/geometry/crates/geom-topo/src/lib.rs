@@ -41,6 +41,9 @@
 //!   an arena's rows into name order that the builder applies before publishing (8.2, 32.17).
 //! - [`attributes`]: [`attributes::Attributes`], values keyed by persistent name, and the split and
 //!   merge classes that say what they do when their entity is split or merged (8.4).
+//! - [`definition`]: [`definition::Definition`], an attribute's owner, the entities that may carry
+//!   it, its value schema and its behaviour at every event of section 8.4, and
+//!   [`definition::Definitions`], a model's definitions, none ever changed (G90).
 //!
 //! Status: the arenas, their typed indices and the publishing builder (G80) built; the Euler
 //! operators, name order, attributes, regions and cells, queries, proofs and instances to come in
@@ -55,6 +58,7 @@ pub mod attributes;
 pub mod body;
 pub mod builder;
 pub mod column;
+pub mod definition;
 pub mod entity;
 pub mod error;
 pub mod ix;

@@ -29,7 +29,7 @@ name: Kernel fuzzing and proofs
 #
 # Path filters: the workflow runs when the code a target fuzzes or proves changes: geom-fuzz and
 # every crate of the workspace it depends on (geom-bench, geom-curve, geom-format, geom-gen,
-# geom-linalg, geom-math, geom-num, geom-nurbs, geom-op, geom-run, geom-surface, geom-test and
+# geom-linalg, geom-math, geom-name, geom-num, geom-nurbs, geom-op, geom-run, geom-surface, geom-test and
 # geom-topo today; geom-fuzz's tests/attack_g14.rs fails until a new target's crates are listed
 # here), geom-op for its job kani-op, geom-format for kani-format, the workspace
 # files that change any build (Cargo.toml, Cargo.lock, .cargo/, the toolchain file), the
@@ -153,7 +153,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        target: [arenas_fuzz, batch_fuzz, boxtree_fuzz, cbor_fuzz, curves_fuzz, linalg_fuzz, maths_fuzz, nurbs_fuzz, orient2d_fuzz, predicates_fuzz, roots_fuzz, surfaces_fuzz, transforms_fuzz, variants_fuzz, wide_fuzz]
+        target: [arenas_fuzz, attributes_fuzz, batch_fuzz, boxtree_fuzz, cbor_fuzz, curves_fuzz, linalg_fuzz, maths_fuzz, nurbs_fuzz, orient2d_fuzz, predicates_fuzz, roots_fuzz, surfaces_fuzz, transforms_fuzz, variants_fuzz, wide_fuzz]
     defaults:
       run:
         shell: bash
