@@ -566,6 +566,15 @@ macro_rules! round_kind {
                 self.round.sign
             }
 
+            /// The same surface on `domain`: its definition on a wider or narrower domain, as
+            /// [`crate::extend`] widens it (piece G253).
+            pub(crate) fn with_domain(&self, domain: ParamBox) -> Result<$kind, CurveError> {
+                $kind::build(Round {
+                    domain,
+                    ..self.round.clone()
+                })
+            }
+
             fn build(round: Round) -> Result<$kind, CurveError> {
                 round.check($which)?;
                 let terms = round_terms($which, &round)?;
@@ -579,6 +588,27 @@ round_kind!(Cylinder, Which::Cylinder);
 round_kind!(Cone, Which::Cone);
 round_kind!(Sphere, Which::Sphere);
 round_kind!(Torus, Which::Torus);
+
+/// The radius sign of a cone or torus over a range of v (piece G253).
+macro_rules! radius_sign_over {
+    ($kind:ident, $which:expr) => {
+        impl $kind {
+            /// The sign of the radius r₀ + k·v (a cone) or R + r·cos πv (a torus) over `v`,
+            /// certified: `Some(true)` if certainly positive, `Some(false)` if certainly negative,
+            /// `None` if it may be either.
+            pub(crate) fn radius_sign_over(
+                &self,
+                v: (f64, f64),
+            ) -> Result<Option<bool>, CurveError> {
+                let (lo, hi) = v;
+                self.round.radius_sign($which, Interval::new(lo, hi)?)
+            }
+        }
+    };
+}
+
+radius_sign_over!(Cone, Which::Cone);
+radius_sign_over!(Torus, Which::Torus);
 
 impl Cylinder {
     /// The cylinder about `center` with `radius` on `frame` (axis n̂), u in half-turns (at most
@@ -963,6 +993,11 @@ impl Plane {
         })
     }
 
+    /// The same plane on `domain` (piece G253).
+    pub(crate) fn with_domain(&self, domain: ParamBox) -> Result<Plane, CurveError> {
+        Plane::new(self.origin, self.a, self.b, domain)
+    }
+
     /// The origin c and the vectors a and b.
     #[must_use]
     pub fn vectors(&self) -> ([f64; 3], [f64; 3], [f64; 3]) {
@@ -1212,6 +1247,24 @@ fn affine_image(
         }),
         deviation,
     })
+}
+
+impl AffineSurface {
+    /// The same surface on `domain`, each angular direction at most one turn (piece G253).
+    pub(crate) fn with_domain(&self, domain: ParamBox) -> Result<AffineSurface, CurveError> {
+        let (du, dv) = domain;
+        for (side, angular) in [(du, self.angular.0), (dv, self.angular.1)] {
+            if angular {
+                check_turn(side)?;
+            } else {
+                check_finite(side)?;
+            }
+        }
+        Ok(AffineSurface {
+            domain,
+            ..self.clone()
+        })
+    }
 }
 
 impl ParamSurface for AffineSurface {

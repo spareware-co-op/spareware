@@ -50,6 +50,7 @@ pub mod analytic;
 mod cache;
 pub mod contract;
 pub mod derivative;
+pub mod extend;
 mod extent;
 pub mod implicit;
 mod jet;
@@ -61,6 +62,7 @@ mod terms;
 
 pub use analytic::{AffineSurface, Cone, Cylinder, Plane, Sphere, Torus, TorusForm};
 pub use derivative::{SecondDerivativeBound, SecondPartials};
+pub use extend::{ExtendError, Extended, Reach, Side};
 pub use implicit::{ImplicitBound, ImplicitEnclosure};
 pub use offset::Offset;
 pub use param::{ParamBox, ParamSurface, SurfaceForm, SurfaceKind, partial_index};

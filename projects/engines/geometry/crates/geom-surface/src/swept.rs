@@ -46,12 +46,13 @@ use alloc::vec::Vec;
 use geom_curve::moved::Motion;
 use geom_curve::tight::{self, point};
 use geom_curve::{
-    CurveError, CurveKind, DerivativeBound, Frame, NurbsForm, ParamCurve, ParamMap, Trimmed,
+    Basis as CurveBasis, CurveError, CurveKind, DerivativeBound, Frame, Line, NurbsForm,
+    ParamCurve, ParamMap, Trimmed,
 };
 use geom_math::TypedTransform;
 
 use geom_num::interval::Interval;
-use geom_nurbs::{Basis, Bounds, Changed, Curve, Direction, Limit, Surface};
+use geom_nurbs::{Basis, Bounds, Changed, Curve, Direction, End, Limit, Surface};
 use geom_run::WorkMeter;
 
 use crate::analytic::{check_finite, check_turn, cuts};
@@ -251,6 +252,61 @@ struct Swept {
     domain: ParamBox,
 }
 
+/// The larger of two bounds, neither NaN.
+fn larger(a: f64, b: f64) -> f64 {
+    if b > a { b } else { a }
+}
+
+/// `p` trimmed `by` further past `end` of its interval (piece G253): by definition inside its
+/// basis's domain; past the end of a NURBS basis, that basis continued by its end span
+/// (`geom_nurbs::Curve::extend`), whose certified deviation is returned; past a line's, the
+/// line on a wider domain. Any other basis ends with its domain: [`CurveError::SpanOutside`].
+fn widened(
+    p: &Trimmed<3>,
+    end: End,
+    by: f64,
+    meter: &mut WorkMeter<'_>,
+) -> Result<(Trimmed<3>, f64), CurveError> {
+    let (a, b) = p.interval();
+    let want = match end {
+        End::Low => (a - by, b),
+        End::High => (a, b + by),
+    };
+    let basis = p.basis();
+    let (da, db) = basis.domain();
+    if da <= want.0 && want.1 <= db {
+        return Ok((Trimmed::new(basis.clone(), want)?, 0.0));
+    }
+    let (wider, deviation) = match (basis, end) {
+        (CurveBasis::Nurbs(c), End::Low) => {
+            let grown = c.extend(End::Low, da - want.0, meter)?;
+            (CurveBasis::Nurbs(grown.value), grown.deviation)
+        }
+        (CurveBasis::Nurbs(c), End::High) => {
+            let grown = c.extend(End::High, want.1 - db, meter)?;
+            (CurveBasis::Nurbs(grown.value), grown.deviation)
+        }
+        (CurveBasis::Line(l), _) => {
+            let domain = (smaller(da, want.0), larger(db, want.1));
+            (
+                CurveBasis::Line(Line::new(l.origin(), l.direction(), domain)?),
+                0.0,
+            )
+        }
+        _ => return Err(CurveError::SpanOutside),
+    };
+    // The continued basis's end, rounded once, may fall an ulp short of the ask: the trim then
+    // stops at it.
+    let (na, nb) = wider.domain();
+    let trim = (larger(na, want.0), smaller(nb, want.1));
+    Ok((Trimmed::new(wider, trim)?, deviation))
+}
+
+/// The smaller of two bounds, neither NaN.
+fn smaller(a: f64, b: f64) -> f64 {
+    if b < a { b } else { a }
+}
+
 /// The trimmed curve inside a kind that a trimmed curve's operation returned.
 fn trimmed(k: CurveKind<3>) -> Result<Trimmed<3>, CurveError> {
     match k {
@@ -283,6 +339,106 @@ fn check_box(((u0, u1), (v0, v1)): ParamBox, ((a, b), (c, d)): ParamBox) -> Resu
 }
 
 impl Swept {
+    /// The swept surface continued `by` past `end` of its domain in `dir`, by its definition
+    /// (piece G253): a linear direction or a revolution's angle widened (a turn at most, as
+    /// [`Swept::check`] holds), a profile direction by widening each profile ([`widened`]). The
+    /// deviation bounds how far a continued profile moves the surface: through the placement's
+    /// matrix, and for a ruled surface through its weights 1 − σ·v and σ·v.
+    pub(crate) fn extended(
+        &self,
+        dir: Direction,
+        end: End,
+        by: f64,
+        meter: &mut WorkMeter<'_>,
+    ) -> Result<(Swept, f64), CurveError> {
+        let ((u0, u1), (v0, v1)) = self.domain;
+        let grow = |(lo, hi): (f64, f64)| match end {
+            End::Low => (lo - by, hi),
+            End::High => (lo, hi + by),
+        };
+        let (shape, domain, moved) = match (&self.shape, dir) {
+            (Shape::Revolution { .. }, Direction::U) => {
+                (self.shape.clone(), (grow((u0, u1)), (v0, v1)), 0.0)
+            }
+            (Shape::Extrusion { .. } | Shape::Ruled { .. }, Direction::V) => {
+                (self.shape.clone(), ((u0, u1), grow((v0, v1))), 0.0)
+            }
+            (
+                Shape::Revolution {
+                    profile,
+                    axis,
+                    frame,
+                },
+                Direction::V,
+            ) => {
+                // X turns w = P − a about the axis: a profile moved by d moves X by d.
+                let (p, d) = widened(profile, end, by, meter)?;
+                let side = p.interval();
+                let shape = Shape::Revolution {
+                    profile: p,
+                    axis: *axis,
+                    frame: *frame,
+                };
+                (shape, ((u0, u1), side), d)
+            }
+            (Shape::Extrusion { profile, direction }, Direction::U) => {
+                let (p, d) = widened(profile, end, by, meter)?;
+                let side = p.interval();
+                let shape = Shape::Extrusion {
+                    profile: p,
+                    direction: *direction,
+                };
+                (shape, (side, (v0, v1)), d)
+            }
+            (
+                Shape::Ruled {
+                    first,
+                    second,
+                    sigma,
+                },
+                Direction::U,
+            ) => {
+                let (p1, d1) = widened(first, end, by, meter)?;
+                let (p2, d2) = widened(second, end, by, meter)?;
+                // X = (1 − σv)·P₁ + σv·P₂: moved by at most (|1 − σv| + |σv|)·max(d₁, d₂), largest
+                // at an end of the v range, where the weights are largest.
+                let weight = |v: f64| -> Result<f64, CurveError> {
+                    let sv = tight::mul(point(*sigma)?, point(v)?)?;
+                    let rest = tight::sub(point(1.0)?, sv)?;
+                    let mag = |i: Interval| larger(i.lo().abs(), i.hi().abs());
+                    Ok(tight::add(point(mag(rest))?, point(mag(sv))?)?.hi())
+                };
+                let w = larger(weight(v0)?, weight(v1)?);
+                let d = tight::mul(point(w)?, point(larger(d1, d2))?)?.hi();
+                let side = p1.interval();
+                let shape = Shape::Ruled {
+                    first: p1,
+                    second: p2,
+                    sigma: *sigma,
+                };
+                (shape, (side, (v0, v1)), d)
+            }
+        };
+        let deviation = if moved > 0.0 {
+            // Through c + L·X: at most ‖L‖_F times X's move.
+            let mut entries = [point(0.0)?; 9];
+            for (e, x) in entries.iter_mut().zip(self.place.l.iter().flatten()) {
+                *e = point(*x)?;
+            }
+            let norm = tight::norm(&entries)?;
+            tight::mul(norm, point(moved)?)?.hi()
+        } else {
+            0.0
+        };
+        let out = Swept {
+            shape,
+            place: self.place,
+            domain,
+        };
+        out.check()?;
+        Ok((out, deviation))
+    }
+
     fn check(&self) -> Result<(), CurveError> {
         let ((u0, u1), (v0, v1)) = self.domain;
         check_finite((u0, u1))?;
@@ -1041,6 +1197,24 @@ fn compatible_pair(
 /// The `ParamSurface` implementation of a swept kind, written once for the three.
 macro_rules! swept_surface {
     ($kind:ident, $variant:ident) => {
+        impl $kind {
+            /// The surface continued `by` past `end` of its domain in `dir` by its definition
+            /// (piece G253; [`crate::extend`]), with the certified move of a continued profile.
+            pub(crate) fn extended(
+                &self,
+                dir: Direction,
+                end: End,
+                by: f64,
+                meter: &mut WorkMeter<'_>,
+            ) -> Result<Changed<SurfaceKind>, CurveError> {
+                let (inner, deviation) = self.inner.extended(dir, end, by, meter)?;
+                Ok(Changed {
+                    value: SurfaceKind::$variant($kind { inner }),
+                    deviation,
+                })
+            }
+        }
+
         impl ParamSurface for $kind {
             fn domain(&self) -> ParamBox {
                 self.inner.domain
