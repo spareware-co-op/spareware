@@ -468,7 +468,126 @@ entity 2.4 arc 1.0 1 1.0 1.0
     assert_eq!(held, values);
 }
 
+/// The ezpz problem files, in byte order of their names, built into the test so it runs where the
+/// test cannot read the repository (WebAssembly has no preopened folder). `the_ezpz_list_is_the_folder`
+/// checks it against `data/ezpz` wherever the folder can be read.
+const EZPZ: [(&str, &str); 28] = [
+    (
+        "angle_parallel.sketch",
+        include_str!("data/ezpz/angle_parallel.sketch"),
+    ),
+    (
+        "angle_parallel_manual.sketch",
+        include_str!("data/ezpz/angle_parallel_manual.sketch"),
+    ),
+    (
+        "arc_center_point_coincident.sketch",
+        include_str!("data/ezpz/arc_center_point_coincident.sketch"),
+    ),
+    (
+        "arc_equidistant.sketch",
+        include_str!("data/ezpz/arc_equidistant.sketch"),
+    ),
+    (
+        "arc_length.sketch",
+        include_str!("data/ezpz/arc_length.sketch"),
+    ),
+    (
+        "arc_line_coincident_bug.sketch",
+        include_str!("data/ezpz/arc_line_coincident_bug.sketch"),
+    ),
+    (
+        "arc_radius.sketch",
+        include_str!("data/ezpz/arc_radius.sketch"),
+    ),
+    (
+        "chamfer_square.sketch",
+        include_str!("data/ezpz/chamfer_square.sketch"),
+    ),
+    ("circle.sketch", include_str!("data/ezpz/circle.sketch")),
+    (
+        "circle_center.sketch",
+        include_str!("data/ezpz/circle_center.sketch"),
+    ),
+    (
+        "circle_tangent.sketch",
+        include_str!("data/ezpz/circle_tangent.sketch"),
+    ),
+    (
+        "circle_tangent_other_dir.sketch",
+        include_str!("data/ezpz/circle_tangent_other_dir.sketch"),
+    ),
+    (
+        "coincident.sketch",
+        include_str!("data/ezpz/coincident.sketch"),
+    ),
+    (
+        "inconsistent.sketch",
+        include_str!("data/ezpz/inconsistent.sketch"),
+    ),
+    (
+        "massive_parallel_system.sketch",
+        include_str!("data/ezpz/massive_parallel_system.sketch"),
+    ),
+    ("midpoint.sketch", include_str!("data/ezpz/midpoint.sketch")),
+    (
+        "nonsquare.sketch",
+        include_str!("data/ezpz/nonsquare.sketch"),
+    ),
+    (
+        "parallelogram.sketch",
+        include_str!("data/ezpz/parallelogram.sketch"),
+    ),
+    (
+        "parc_coincident.sketch",
+        include_str!("data/ezpz/parc_coincident.sketch"),
+    ),
+    ("perpdist.sketch", include_str!("data/ezpz/perpdist.sketch")),
+    (
+        "perpdist_negative.sketch",
+        include_str!("data/ezpz/perpdist_negative.sketch"),
+    ),
+    (
+        "perpendicular.sketch",
+        include_str!("data/ezpz/perpendicular.sketch"),
+    ),
+    ("square.sketch", include_str!("data/ezpz/square.sketch")),
+    (
+        "symmetric.sketch",
+        include_str!("data/ezpz/symmetric.sketch"),
+    ),
+    ("tiny.sketch", include_str!("data/ezpz/tiny.sketch")),
+    (
+        "two_rectangles.sketch",
+        include_str!("data/ezpz/two_rectangles.sketch"),
+    ),
+    (
+        "underconstrained.sketch",
+        include_str!("data/ezpz/underconstrained.sketch"),
+    ),
+    (
+        "underdetermined_lines.sketch",
+        include_str!("data/ezpz/underdetermined_lines.sketch"),
+    ),
+];
+
+/// The ezpz problems, parsed. A Windows checkout may give the files `\r\n` line ends, read as
+/// `\n`.
 fn cases() -> Vec<(String, Sketch)> {
+    EZPZ.iter()
+        .map(|(name, text)| {
+            let text = text.replace("\r\n", "\n");
+            ((*name).to_owned(), parse(&text).unwrap())
+        })
+        .collect()
+}
+
+#[cfg_attr(
+    target_family = "wasm",
+    ignore = "reads the repository's files, which WASI cannot without a preopened folder"
+)]
+#[test]
+fn the_ezpz_list_is_the_folder() {
     let folder = Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/data/ezpz");
     let mut names: Vec<String> = fs::read_dir(&folder)
         .unwrap()
@@ -476,13 +595,8 @@ fn cases() -> Vec<(String, Sketch)> {
         .filter(|name| name.ends_with(".sketch"))
         .collect();
     names.sort();
-    names
-        .into_iter()
-        .map(|name| {
-            let text = fs::read_to_string(folder.join(&name)).unwrap();
-            (name, parse(&text).unwrap())
-        })
-        .collect()
+    let listed: Vec<&str> = EZPZ.iter().map(|(name, _)| *name).collect();
+    assert_eq!(names, listed);
 }
 
 #[test]

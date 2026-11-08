@@ -71,9 +71,11 @@ fn walk(dir: &Path, prefix: &str, out: &mut Vec<File>) -> Result<(), String> {
             walk(&path, &format!("{prefix}{name}/"), out)?;
         } else if path.extension().is_some_and(|e| e == "json") {
             let text = fs::read_to_string(&path).map_err(|e| format!("{}: {e}", path.display()))?;
+            // A Windows checkout with Git's `core.autocrlf` gives the files `\r\n` line ends; a
+            // fixture's one spelling has `\n`, so they are read as `\n`.
             out.push(File {
                 path: format!("{prefix}{name}"),
-                text,
+                text: text.replace("\r\n", "\n"),
             });
         }
     }
