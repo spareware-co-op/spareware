@@ -484,6 +484,9 @@ fn judge(smb: &Smb, case: &Case) -> Judged {
             .unwrap();
         let bottom = Interval::norm(&enclose_v(&c)).unwrap();
         let k = top.div(bottom).unwrap();
+        if k.lo() <= 0.0 {
+            return Judged::Unread(format!("edge {e}: its faces are too near tangent to bound"));
+        }
         let edge = &smb.edges[e];
         rows.push(EdgeRow {
             id: EdgeId(e as u32),
