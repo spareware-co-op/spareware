@@ -838,6 +838,26 @@
           "target": "lib"
         },
         {
+          "cost": "a batch of up to 64 inputs, built once per benchmark run.",
+          "does": null,
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-bench/src/inputs/one_root.rs",
+          "guarantees": [
+            "each class's batch is deterministic (its seed is the operation and class name) and its inputs take the path its class names, which `tests/inputs.rs` checks."
+          ],
+          "job": "Inputs for one-root numbers (G189): [`of_circle`] (`Crossing2::of_circle`), [`of_round`] (`Crossing2::of_round`), [`cmp_x`] (`Crossing2::cmp_x`), [`side`] (`Crossing2::side`), [`against_circle`] (`Crossing2::against_circle`) and [`order_crossings`] (`Arc2::order_crossings`).",
+          "method": {
+            "links": [
+              "https://doi.org/10.1007/PL00009321"
+            ],
+            "text": "Shewchuk's input classes (<https://doi.org/10.1007/PL00009321>, section 6), built from the shared draws of `inputs` as the crossing inputs are."
+          },
+          "path": "geom_bench::inputs::one_root",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
           "cost": "the exact predicates' inputs and N keys per input, once per batch.",
           "does": null,
           "family": [],
@@ -5493,6 +5513,30 @@
             "text": "the Krawczyk operator (R. Krawczyk, \"Newton-Algorithmen zur Bestimmung von Nullstellen mit Fehlerschranken\", *Computing* 4, 1969, doi:10.1007/BF02234767), as a test of existence (R. E. Moore, \"A test for existence of solutions to nonlinear systems\", *SIAM J. Numer. Anal.* 14, 1977, doi:10.1137/0714044) and of uniqueness (S. M. Rump, \"Solving algebraic problems with high accuracy\", in *A New Approach to Scientific Computation*, Academic Press, 1983, doi:10.1016/B978-0-12-428660-3.50010-0; P. Breiding, K. Rose and S. Timme, \"Certifying zeros of polynomial systems using interval arithmetic\", *ACM Trans. Math. Softw.* 49, 2023, theorem 3.6, <https://arxiv.org/abs/2011.05000>). The Hansen-Sengupta operator (E. Hansen and S. Sengupta, \"Bounding solutions of systems of equations using interval analysis\", *BIT* 21, 1981, doi:10.1007/BF01933165), in the form of A. Neumaier, *Interval Methods for Systems of Equations*, Cambridge University Press, 1990, chapter 5, doi:10.1017/CBO9780511526473, as A. Goldsztejn states it (\"Sensitivity analysis using a fixed point interval iteration\", 2008, section 1, <https://arxiv.org/abs/0811.2984>). The preconditioner's inverse by Gaussian elimination with partial pivoting and the triangular solves of G. H. Golub and C. F. Van Loan, *Matrix Computations*, 4th ed., Johns Hopkins University Press, 2013, algorithm 3.4.1 and section 3.1, <https://jhupbooks.press.jhu.edu/title/matrix-computations>, as chapter 12.4 asks. Written for this kernel: the operators must run on its own interval type and maths functions (chapter 21), which no published interval library offers without changing the rounding mode."
           },
           "path": "geom_num::newton",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
+          "cost": "constant time and no allocation: a square root and a few dozen interval operations to make a crossing, two subtractions for a filtered comparison, and at worst about thirty products of 80 limbs on the exact path.",
+          "does": null,
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-num/src/one_root.rs",
+          "guarantees": [
+            "Every result is exact, or an error. [`sign_of_root`] and [`sign_of_two_roots`] square only when the terms' signs differ, and read off what squaring leaves in integers; nothing rounds.",
+            "Filter first, certified. Each crossing keeps its coordinates as [`Interval`]s, rounded outward from its integers and an outward-rounded root, so a comparison whose intervals are apart costs two subtractions; the filter's answer is the exact sign or no answer.",
+            "Nothing overflows silently. Every step is a checked operation in [`Wide`], and a step that did not fit would be [`NumError::BudgetExceeded`], never an answer. The widths below follow from [`crate::carrier`]'s budgets and are asserted when the crate compiles; every width is reached at the extreme values in `tests/attack_g189.rs`. | Quantity | Carrier and circle | Two circles | Where | | --- | --- | --- | --- | | a, of a crossing | 209 | 628 | cx · N + a · h; 2D · x₁ · w₂ + h · Aₓ | | b, of a crossing | 42 | 209 | the carrier's own coefficients; A, turned | | k, of a crossing | 336 | 837 | rr · N − h²; 4D · ρ₁ · w₂² − h² | | w, of a crossing | 166 | 585 | cw · N; 2D · w₁ · w₂ | | Side of a carrier | 505 | 1,343 | E² − F²k, E = a · x + b · y − c · w | | Against a circle | 1,010 | 2,689 | E² − F²k, E and F from (Z − P) · (Z + P − 2C) | | Two crossings' coordinates | 1,506 | 4,857 | A² − B²k₁, A and B from the first squaring | | The turn of a grid point and two crossings | 1,688 | 5,041 | the same, with the fourth term | The last sets [`BIG_LIMBS`]. Rendering these by the description language of `geom-gen` would take inputs wider than its `i128`, and a filter of `f64`s past 2^1023, which is why this one module's exact paths are written out, each step named by its derivation, as `plane.rs`'s are.",
+            "Deterministic: integers only, except the certified filter, whose answers are exact; no platform maths and no allocation."
+          ],
+          "job": "One-root numbers in 2D, exact: where a line meets a circle or two circles meet, and every question about such points.",
+          "method": {
+            "links": [
+              "projects/engines/geometry/architecture/14-2d-drafting.md",
+              "https://doi.org/10.1007/978-3-642-17283-0"
+            ],
+            "text": "sign of a real algebraic number of degree two or four by repeated squaring, as chapter 14.2 sets out (`projects/engines/geometry/architecture/14-2d-drafting.md`); the one-root numbers are those of the circle-segment traits Fogel, Halperin and Wein describe (2012, <https://doi.org/10.1007/978-3-642-17283-0>), from their book; CGAL's source not read (29.2)."
+          },
+          "path": "geom_num::one_root",
           "provenance": [],
           "spdx": null,
           "target": "lib"

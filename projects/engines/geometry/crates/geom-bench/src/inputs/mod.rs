@@ -51,6 +51,7 @@ pub mod math;
 pub mod math_types;
 pub mod newton;
 pub mod nurbs;
+pub mod one_root;
 pub mod perturb;
 pub mod plane;
 pub mod predicate;

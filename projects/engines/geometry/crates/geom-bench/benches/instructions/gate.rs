@@ -1019,11 +1019,65 @@ pub mod crossing {
         run
     }
 
+    #[library_benchmark(teardown = verify)]
+    #[bench::typical(leak("crossing/crossing_of_circle/typical"))]
+    #[bench::degenerate(leak("crossing/crossing_of_circle/degenerate"))]
+    #[bench::extreme(leak("crossing/crossing_of_circle/extreme"))]
+    fn crossing_of_circle(run: &'static mut Named) -> &'static mut Named {
+        run.bench.measure();
+        run
+    }
+
+    #[library_benchmark(teardown = verify)]
+    #[bench::typical(leak("crossing/crossing_of_round/typical"))]
+    #[bench::degenerate(leak("crossing/crossing_of_round/degenerate"))]
+    fn crossing_of_round(run: &'static mut Named) -> &'static mut Named {
+        run.bench.measure();
+        run
+    }
+
+    #[library_benchmark(teardown = verify)]
+    #[bench::typical(leak("crossing/crossing_cmp_x/typical"))]
+    #[bench::degenerate(leak("crossing/crossing_cmp_x/degenerate"))]
+    #[bench::nearly_degenerate(leak("crossing/crossing_cmp_x/nearly_degenerate"))]
+    #[bench::extreme(leak("crossing/crossing_cmp_x/extreme"))]
+    fn crossing_cmp_x(run: &'static mut Named) -> &'static mut Named {
+        run.bench.measure();
+        run
+    }
+
+    #[library_benchmark(teardown = verify)]
+    #[bench::typical(leak("crossing/crossing_side/typical"))]
+    #[bench::degenerate(leak("crossing/crossing_side/degenerate"))]
+    #[bench::nearly_degenerate(leak("crossing/crossing_side/nearly_degenerate"))]
+    #[bench::extreme(leak("crossing/crossing_side/extreme"))]
+    fn crossing_side(run: &'static mut Named) -> &'static mut Named {
+        run.bench.measure();
+        run
+    }
+
+    #[library_benchmark(teardown = verify)]
+    #[bench::typical(leak("crossing/crossing_against_circle/typical"))]
+    #[bench::degenerate(leak("crossing/crossing_against_circle/degenerate"))]
+    #[bench::extreme(leak("crossing/crossing_against_circle/extreme"))]
+    fn crossing_against_circle(run: &'static mut Named) -> &'static mut Named {
+        run.bench.measure();
+        run
+    }
+
+    #[library_benchmark(teardown = verify)]
+    #[bench::typical(leak("crossing/arc_order_crossings/typical"))]
+    fn arc_order_crossings(run: &'static mut Named) -> &'static mut Named {
+        run.bench.measure();
+        run
+    }
+
     library_benchmark_group!(
         name = crossing;
         benchmarks = ssi_new, ssi_homogeneous, ssi_orient2d, ssi_to_grid, carrier_side,
             carrier_order, carrier_meet, rational_cmp_x, rational_orient,
-            round_side_of_grid, round_side, round_meets, circle_side, circle_meets
+            round_side_of_grid, round_side, round_meets, circle_side, circle_meets,
+            crossing_of_circle, crossing_of_round, crossing_cmp_x, crossing_side, crossing_against_circle, arc_order_crossings
     );
 }
 
