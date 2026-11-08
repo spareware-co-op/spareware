@@ -600,8 +600,8 @@ fn a_whole_radius_enters_the_bound_as_the_point_itself() {
         vec![radius(1, 50.4)],
     );
     let exact = 50.4_f64 - 50.0;
-    let step = 2.0_f64.powi(-47);
-    let widened = exact + 2.0 * step + 2.0_f64.powi(-54);
+    let step = 1.0 / 140_737_488_355_328.0; // 2^-47
+    let widened = exact + 2.0 * step + 1.0 / 18_014_398_509_481_984.0; // and 2^-54
     let r = bound_of(&s);
     assert_eq!(r.to_bits(), widened.to_bits(), "{r} against {widened}");
 }
