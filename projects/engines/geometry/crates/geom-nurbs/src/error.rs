@@ -115,8 +115,9 @@ pub enum NurbsError {
     /// The operation needs a clamped knot vector (each end knot repeated degree + 1 times), as
     /// Bezier extraction and degree change do.
     NotClamped,
-    /// A knot to insert, refine with or remove is outside the domain, or a refinement's new knots
-    /// are not in non-decreasing order.
+    /// A knot to insert, refine with or remove is outside the domain, a refinement's new knots are
+    /// not in non-decreasing order, or an extension's length is not positive and finite or does not
+    /// move the end knot.
     KnotOutside,
     /// Inserting the knot would raise its multiplicity above the degree (or above degree + 1 at an
     /// end of the domain).
