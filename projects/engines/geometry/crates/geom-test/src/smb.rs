@@ -192,7 +192,10 @@ impl Reader {
         let _ = self.stream.word(MAX_LINE);
         let dim = self.stream.ulong();
         self.stream.ignore(MAX_LINE, b'\n');
-        Ok((code, dim.ok_or(SmbError::Shape("a dimension line that does not read"))?))
+        Ok((
+            code,
+            dim.ok_or(SmbError::Shape("a dimension line that does not read"))?,
+        ))
     }
 
     /// Skips `n` lines.
@@ -392,28 +395,7 @@ pub fn read(bytes: &[u8]) -> Result<Smb, SmbError> {
         curves: Vec::new(),
         surfaces: Vec::new(),
     };
-    // The properties: "Brep Starts", the colour, the tolerance, the manifold and composites flags,
-    // a blank line, "Region Data", the regions' count and the first region, a column comment.
-    r.next_line();
-    let [cx, cy, cz] = &mut smb.color;
-    r.double(cx);
-    r.double(cy);
-    r.double(cz);
-    r.next_line();
-    if r.version <= 43 {
-        r.double(&mut smb.tolerance);
-    }
-    r.next_line();
-    r.int(&mut smb.manifold);
-    r.next_line();
-    let mut composites = 0;
-    r.int(&mut composites);
-    r.lines(3);
-    r.ulong(&mut smb.num_regions);
-    r.next_line();
-    r.ulong(&mut smb.start_region);
-    r.lines(2);
-    r.check()?;
+    properties(&mut r, &mut smb)?;
     let n = usize::try_from(smb.num_regions).map_err(|_| SmbError::Shape("a count past usize"))?;
     r.room(n)?;
     smb.regions = r.records(n, Region::read)?;
@@ -457,6 +439,31 @@ pub fn read(bytes: &[u8]) -> Result<Smb, SmbError> {
     Ok(smb)
 }
 
+/// The B-rep's properties: "Brep Starts", the colour, the tolerance, the manifold and composites
+/// flags, a blank line, "Region Data", the regions' count and the first region, a column comment.
+fn properties(r: &mut Reader, smb: &mut Smb) -> Result<(), SmbError> {
+    r.next_line();
+    let [cx, cy, cz] = &mut smb.color;
+    r.double(cx);
+    r.double(cy);
+    r.double(cz);
+    r.next_line();
+    if r.version <= 43 {
+        r.double(&mut smb.tolerance);
+    }
+    r.next_line();
+    r.int(&mut smb.manifold);
+    r.next_line();
+    let mut composites = 0;
+    r.int(&mut composites);
+    r.lines(3);
+    r.ulong(&mut smb.num_regions);
+    r.next_line();
+    r.ulong(&mut smb.start_region);
+    r.lines(2);
+    r.check()
+}
+
 impl Smb {
     /// The edge uses of edge `edge` that lie in loops, by index.
     #[must_use]
@@ -474,7 +481,10 @@ impl Smb {
     #[must_use]
     pub fn face_of_loop(&self, index: u64) -> Option<usize> {
         self.faces.iter().position(|f| {
-            index >= f.start_loop && index.checked_sub(f.start_loop).is_some_and(|k| k < f.num_loops)
+            index >= f.start_loop
+                && index
+                    .checked_sub(f.start_loop)
+                    .is_some_and(|k| k < f.num_loops)
         })
     }
 
@@ -634,7 +644,10 @@ Surface Type 15002
     #[test]
     fn crlf_lines_read_as_lf_lines() {
         let crlf = SQUARE.replace('\n', "\r\n");
-        assert_eq!(read(crlf.as_bytes()).unwrap(), read(SQUARE.as_bytes()).unwrap());
+        assert_eq!(
+            read(crlf.as_bytes()).unwrap(),
+            read(SQUARE.as_bytes()).unwrap()
+        );
     }
 
     #[test]

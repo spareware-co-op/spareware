@@ -925,6 +925,7 @@ dependencies = [
 name = "geom-blend"
 version = "0.0.0"
 dependencies = [
+ "dashu-ratio",
  "geom-bool",
  "geom-check",
  "geom-intersect",
@@ -932,7 +933,10 @@ dependencies = [
  "geom-op",
  "geom-run",
  "geom-surface",
+ "geom-test",
  "geom-topo",
+ "serde",
+ "serde_json",
 ]
 
 [[package]]

@@ -249,7 +249,9 @@ impl Stream {
             if scan.negative { i64::MIN } else { i64::MAX }
         } else if scan.negative {
             // At most 2^63, which -i64::MIN is.
-            0_i64.checked_sub_unsigned(scan.magnitude).unwrap_or(i64::MIN)
+            0_i64
+                .checked_sub_unsigned(scan.magnitude)
+                .unwrap_or(i64::MIN)
         } else {
             i64::try_from(scan.magnitude).unwrap_or(i64::MAX)
         };

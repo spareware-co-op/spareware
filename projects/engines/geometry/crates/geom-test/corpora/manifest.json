@@ -343,6 +343,29 @@
       "credit": null,
       "fetch": null,
       "decision": null
+    },
+    {
+      "id": "smlib-fillet-fixtures",
+      "what": "SMLib's fillet test fixtures: the B-rep files its fillet driver reads (TestFiles/pt_TestFiles/Fillet, and the box and pyramid of TestFiles/pt_TestFiles/Solids), fetched unmodified",
+      "used_for": "G262a: the blend plan judged against SMLib's own fillets (geom-blend's tests/smlib_fillets.rs)",
+      "source": "https://github.com/NVIDIA-Omniverse/usd-brep",
+      "version": "c9c5979f04cea8c38213004d4f04df0dcfb40d05",
+      "licence": "Apache-2.0",
+      "storage": "fetched",
+      "sha256": "8f6c118727193b15259f66280c592d12578c8d7dbb894cd8e9d9d565f889c864",
+      "credit": "NVIDIA CORPORATION & AFFILIATES, USD BRep, Apache-2.0; used from the pinned source in test runs and never copied here (decision 32.44)",
+      "fetch": {
+        "git": {
+          "url": "https://github.com/NVIDIA-Omniverse/usd-brep.git",
+          "commit": "c9c5979f04cea8c38213004d4f04df0dcfb40d05",
+          "paths": [
+            "TestFiles/pt_TestFiles/Fillet",
+            "TestFiles/pt_TestFiles/Solids/box.smb",
+            "TestFiles/pt_TestFiles/Solids/pyramid.smb"
+          ]
+        }
+      },
+      "decision": null
     }
   ]
 }

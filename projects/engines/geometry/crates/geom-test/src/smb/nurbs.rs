@@ -133,20 +133,20 @@ impl Curve {
     ///
     /// [`SmbError::Shape`] for a header `SMLib` refuses, a value that does not read, a count past
     /// the data, or a 3D curve where a 2D one is wanted.
-    pub(super) fn read(r: &mut Reader, dim: usize) -> Result<Curve, SmbError> {
-        let (mut n, mut p, mut flag, mut written) = (-1_i64, 0_i16, -1_i16, 0_i16);
-        r.long(&mut n);
-        r.next_line();
-        r.short(&mut p);
-        r.next_line();
-        r.short(&mut flag);
-        r.next_line();
-        r.short(&mut written);
-        r.next_line();
-        let kind = kind(r);
-        r.check()?;
-        let degree = degree(p)?;
-        let count = count(n, degree)?;
+    pub(super) fn read(reader: &mut Reader, dim: usize) -> Result<Curve, SmbError> {
+        let (mut last, mut deg, mut flag, mut written) = (-1_i64, 0_i16, -1_i16, 0_i16);
+        reader.long(&mut last);
+        reader.next_line();
+        reader.short(&mut deg);
+        reader.next_line();
+        reader.short(&mut flag);
+        reader.next_line();
+        reader.short(&mut written);
+        reader.next_line();
+        let kind = kind(reader);
+        reader.check()?;
+        let degree = degree(deg)?;
+        let count = count(last, degree)?;
         let rational = rational(flag)?;
         let written = match written {
             2 => 2,
@@ -161,23 +161,23 @@ impl Curve {
             .and_then(|k| k.checked_add(1))
             .ok_or(SmbError::Shape("a curve too large to size"))?;
         let per = written.saturating_add(usize::from(rational));
-        r.room(count.saturating_mul(per).saturating_add(knot_count))?;
+        reader.room(count.saturating_mul(per).saturating_add(knot_count))?;
         let mut points = Vec::with_capacity(count);
         let mut weights = Vec::with_capacity(if rational { count } else { 0 });
         let mut values = [f64::NAN; 4];
         for _ in 0..count {
-            for v in values.iter_mut().take(per) {
-                r.double(v);
+            for value in values.iter_mut().take(per) {
+                reader.double(value);
             }
-            r.next_line();
-            r.check()?;
+            reader.next_line();
+            reader.check()?;
             let point: Vec<f64> = values.iter().copied().take(written).collect();
             if rational {
                 weights.push(values.get(written).copied().unwrap_or(f64::NAN));
             }
             points.push(point);
         }
-        let knots = knots(r, knot_count)?;
+        let knots = knots(reader, knot_count)?;
         Ok(Curve {
             degree,
             dim: written,
@@ -196,22 +196,22 @@ impl Surface {
     ///
     /// [`SmbError::Shape`] for a header `SMLib` refuses, a value that does not read, or a count
     /// past the data.
-    pub(super) fn read(r: &mut Reader) -> Result<Surface, SmbError> {
-        let (mut n, mut m) = (-1_i64, -1_i64);
-        let (mut p, mut q, mut flag) = (0_i16, 0_i16, -1_i16);
-        r.long(&mut n);
-        r.long(&mut m);
-        r.next_line();
-        r.short(&mut p);
-        r.short(&mut q);
-        r.next_line();
-        r.short(&mut flag);
-        r.next_line();
-        let kind = kind(r);
-        r.check()?;
-        let degree = [degree(p)?, degree(q)?];
+    pub(super) fn read(reader: &mut Reader) -> Result<Surface, SmbError> {
+        let (mut last_u, mut last_v) = (-1_i64, -1_i64);
+        let (mut deg_u, mut deg_v, mut flag) = (0_i16, 0_i16, -1_i16);
+        reader.long(&mut last_u);
+        reader.long(&mut last_v);
+        reader.next_line();
+        reader.short(&mut deg_u);
+        reader.short(&mut deg_v);
+        reader.next_line();
+        reader.short(&mut flag);
+        reader.next_line();
+        let kind = kind(reader);
+        reader.check()?;
+        let degree = [degree(deg_u)?, degree(deg_v)?];
         let [du, dv] = degree;
-        let count = [count(n, du)?, count(m, dv)?];
+        let count = [count(last_u, du)?, count(last_v, dv)?];
         let [cu, cv] = count;
         let rational = rational(flag)?;
         let too_big = SmbError::Shape("a surface too large to size");
@@ -225,7 +225,7 @@ impl Surface {
                 .ok_or(too_big)?,
         ];
         let [ku, kv] = knot_counts;
-        r.room(
+        reader.room(
             points_count
                 .saturating_mul(3)
                 .saturating_add(ku)
@@ -235,19 +235,19 @@ impl Surface {
         let mut weights = Vec::with_capacity(if rational { points_count } else { 0 });
         for _ in 0..points_count {
             let mut point = [f64::NAN; 3];
-            for v in &mut point {
-                r.double(v);
+            for value in &mut point {
+                reader.double(value);
             }
-            let mut w = f64::NAN;
+            let mut weight = f64::NAN;
             if rational {
-                r.double(&mut w);
-                weights.push(w);
+                reader.double(&mut weight);
+                weights.push(weight);
             }
-            r.next_line();
-            r.check()?;
+            reader.next_line();
+            reader.check()?;
             points.push(point);
         }
-        let knots = [knots(r, ku)?, knots(r, kv)?];
+        let knots = [knots(reader, ku)?, knots(reader, kv)?];
         Ok(Surface {
             degree,
             count,
