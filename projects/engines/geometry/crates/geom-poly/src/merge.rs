@@ -472,6 +472,27 @@ fn wide_of(corner: &Corner) -> Option<([I320; 3], I256)> {
     ))
 }
 
+/// A cell's [`lead`]: its floor, and the first 32 binary digits of its fraction.
+type Lead = (i128, u32);
+
+/// A cell's floor and the first 32 binary digits of its fraction, rest / over, exactly: a key
+/// that never decreases as the cell grows, so where two cells' leads differ they order as their
+/// leads do, and a sort that compares leads first reads the cells themselves only for the pairs
+/// whose leads tie. Long division, a digit at a time: the remainder stays below over, itself
+/// below 2^127, so doubling it fits a `u128`.
+fn lead(cell: &Cell) -> Lead {
+    let over = cell.over.unsigned_abs();
+    let mut rest = cell.rest.unsigned_abs();
+    let mut digits = 0u32;
+    for _ in 0..u32::BITS {
+        rest = rest.wrapping_shl(1);
+        let one = rest >= over;
+        digits = digits.wrapping_shl(1) | u32::from(one);
+        rest = rest.wrapping_sub(over.wrapping_mul(u128::from(one)));
+    }
+    (cell.floor, digits)
+}
+
 /// A corner's place in [`point_order`], or a line's after its `first` in [`line_order`], where it
 /// has [`Cell`]s, for a sort on the pool: comparing cells cannot fail, as each product they need
 /// is of two `i128`s, below 2^254 in [`I256`]. It borrows the cells, as the sort makes a key for
@@ -993,13 +1014,26 @@ fn numbered(
     // Every corner by reference, in piece order: each stays in the list its piece's task made,
     // rather than being moved into one list, a copy of every corner.
     let corners: Vec<&Corner> = made.iter().flatten().collect();
-    let keys: Option<Vec<&[Cell; 3]>> = corners.iter().map(|c| c.cells.as_ref()).collect();
+    // Each key leads with its first coordinate's [`lead`], which orders as that coordinate does
+    // wherever two leads differ, so the order is the cells' own; the sort reads the cells only
+    // where the leads tie.
+    let keys: Option<Vec<(Lead, &[Cell; 3])>> = corners
+        .iter()
+        .map(|c| {
+            c.cells
+                .as_ref()
+                .map(|cells| (cells.first().map_or((0, 0), lead), cells))
+        })
+        .collect();
     let order = if let Some(keys) = keys {
         // Equal points keep their order, as the serial stable sort keeps it.
-        let sorted =
-            exec.sort_stable::<_, _, MergeError, _>(meter, SORT_CORNERS, SORT_PLAN, &keys, |k| {
-                CellKey(k)
-            });
+        let sorted = exec.sort_stable::<_, _, MergeError, _>(
+            meter,
+            SORT_CORNERS,
+            SORT_PLAN,
+            &keys,
+            |(first, cells)| (*first, CellKey(cells)),
+        );
         sorted.map_err(|e| phase_error(e, meter))?
     } else {
         let mut order: Vec<usize> = (0..corners.len()).collect();
@@ -1179,9 +1213,18 @@ fn by_line(
     exec: &Exec<'_>,
     meter: &mut WorkMeter<'_>,
 ) -> Result<Vec<usize>, MergeError> {
-    let keys: Option<Vec<(usize, &[Cell; 6])>> = sides
+    // A line's cells before the one after its `first` are fixed by `first`: 0 for each component
+    // of the direction before it, and 1 at it. So after `first`, the [`lead`] of the cell after it
+    // orders lines as their cells do wherever two leads differ, and the sort reads the cells only
+    // where the leads tie.
+    let keys: Option<Vec<(usize, Lead, &[Cell; 6])>> = sides
         .iter()
-        .map(|s| s.key.cells.as_ref().map(|cells| (s.key.first, cells)))
+        .map(|s| {
+            s.key.cells.as_ref().map(|cells| {
+                let after = cells.get(s.key.first.saturating_add(1));
+                (s.key.first, after.map_or((0, 0), lead), cells)
+            })
+        })
         .collect();
     if let Some(keys) = keys {
         // Sides on one line keep their order, as the serial stable sort keeps it.
@@ -1190,7 +1233,7 @@ fn by_line(
             SORT_SIDES,
             SORT_PLAN,
             &keys,
-            |(first, cells)| (*first, CellKey(cells)),
+            |(first, lead, cells)| (*first, *lead, CellKey(cells)),
         );
         return sorted.map_err(|e| phase_error(e, meter));
     }
@@ -1970,7 +2013,7 @@ mod tests {
     use geom_num::plane::Plane;
     use geom_num::wide::I256;
 
-    use super::{Cell, CellKey, line_in_words, wide_line_key};
+    use super::{Cell, CellKey, lead, line_in_words, wide_line_key};
 
     /// a / b against c / d, b and d positive, by cross-multiplying big integers.
     fn exact(a: i128, b: i128, c: i128, d: i128) -> Ordering {
@@ -2049,6 +2092,64 @@ mod tests {
         }
         // Terms past i64 take the wide products.
         agrees((1 << 100) + 1, 1 << 101, (1 << 99) + 1, 1 << 100);
+    }
+
+    /// A cell's lead against big integers: its floor, and the floor of its fraction times 2^32.
+    fn leads(v: i128, over: i128) {
+        let cell = Cell::new(v, over).unwrap();
+        let (floor, digits) = lead(&cell);
+        let (v, over) = (BigInt::from(v), BigInt::from(over));
+        // Floor division by a positive divisor: the quotient rounded towards zero, one less when
+        // that leaves a negative remainder.
+        let floor_by = |n: &BigInt| {
+            let q = n / &over;
+            if n - &q * &over < BigInt::from(0) {
+                q - 1
+            } else {
+                q
+            }
+        };
+        let whole = floor_by(&v);
+        let fraction = floor_by(&((&v - &whole * &over) << 32u32));
+        assert_eq!(BigInt::from(floor), whole, "{v} / {over}");
+        assert_eq!(BigInt::from(digits), fraction, "{v} / {over}");
+    }
+
+    proptest! {
+        #[test]
+        fn a_lead_is_the_floor_and_the_fractions_first_32_binary_digits(
+            v in any::<i128>(), over in 1i128..,
+        ) {
+            leads(v, over);
+        }
+
+        #[test]
+        fn cells_whose_leads_differ_order_as_their_leads(
+            a in any::<i128>(), b in 1i128.., c in any::<i128>(), d in 1i128..,
+        ) {
+            let (p, q) = (Cell::new(a, b).unwrap(), Cell::new(c, d).unwrap());
+            if lead(&p) != lead(&q) {
+                prop_assert_eq!(p.order(&q), Some(lead(&p).cmp(&lead(&q))));
+            }
+        }
+    }
+
+    #[test]
+    fn leads_at_the_ends_and_on_exact_halves() {
+        for (v, over) in [
+            (i128::MIN, 1),
+            (i128::MAX, 1),
+            (i128::MIN, i128::MAX),
+            (i128::MAX, i128::MAX),
+            (-1, i128::MAX),
+            (i128::MAX - 1, i128::MAX),
+            (1, 2),
+            (3, 4),
+            (-1, 3),
+            ((1 << 100) + 1, 1 << 101),
+        ] {
+            leads(v, over);
+        }
     }
 
     #[test]
