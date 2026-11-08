@@ -1381,6 +1381,8 @@ dependencies = [
  "geom-op",
  "geom-poly",
  "geom-run",
+ "geom-test",
+ "geom-topo",
 ]
 
 [[package]]

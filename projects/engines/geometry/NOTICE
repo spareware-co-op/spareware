@@ -585,6 +585,13 @@ NURBS-Python (geomdl)
     projects/engines/geometry/crates/geom-nurbs/src/fit.rs
       for the book's equation numbers of the parameter rules and the least-squares knot placement.
 
+NVIDIA USD `BRep` `SMLib`
+  Licence:      Apache-2.0
+  Link:         https://github.com/NVIDIA-Omniverse/usd-brep/blob/c9c5979f04cea8c38213004d4f04df0dcfb40d05/source/SMLib/inc/SmAssemblyInstance.h
+  Consulted by:
+    projects/engines/geometry/crates/geom-spatial/src/instance/assembly.rs
+      for its model of assemblies and instances (a placement, a scale, a mirror flag and a component per instance); it has no spatial index of instances, and its per-instance scale is what 19.12 makes a new definition instead. No code copied.
+
 PROJ (its copy of the EPSG dataset, whose own terms of use cover the data)
   Licence:      MIT
   Link:         https://github.com/OSGeo/PROJ/blob/5fa31c29f0a806568ed7bc76c1a557604db4a804/data/sql/projected_crs.sql
@@ -671,6 +678,13 @@ shuffling-allocator
   Consulted by:
     projects/engines/geometry/crates/geom-test/src/golden/perturb.rs
       for its size classes and shuffling layer and to judge whether it could be used; not taken, for the reasons above. No code copied.
+
+solidcore
+  Licence:      Apache-2.0
+  Link:         https://github.com/tangency-labs/solidcore/blob/78d1eb12d222652219313c12787b65389c4d9db8/crates/solidcore/src/topology/proto_topology/p1/assembly.rs
+  Consulted by:
+    projects/engines/geometry/crates/geom-spatial/src/instance/assembly.rs
+      the Rust port of the same model; no spatial index of instances there either. No code copied.
 
 SPDX License List 3.29.0
   Licence:      CC-BY-3.0

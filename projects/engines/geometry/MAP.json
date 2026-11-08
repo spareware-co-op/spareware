@@ -8818,7 +8818,92 @@
         23
       ],
       "depends": [],
-      "errors": [],
+      "errors": [
+        {
+          "doc": "Why the instance tree could not cache a definition, build an assembly or answer a query.",
+          "file": "projects/engines/geometry/crates/geom-spatial/src/instance/error.rs",
+          "kinds": [
+            {
+              "doc": "The meter stopped: its budget ran out, the caller cancelled, or memory was refused.",
+              "name": "Stopped",
+              "shape": "tuple"
+            },
+            {
+              "doc": "The box tree refused: a box beyond its limit, too many entries, or the tree's own stop.",
+              "name": "Tree",
+              "shape": "tuple"
+            },
+            {
+              "doc": "A record, or a nested assembly, names this handle, which the table of definitions does not hold.",
+              "name": "NoDefinition",
+              "shape": "tuple"
+            },
+            {
+              "doc": "A general placement names this entry, which the side table of transforms does not hold.",
+              "name": "NoTransform",
+              "shape": "tuple"
+            },
+            {
+              "doc": "A record's placement is not one: a packed permutation past 47.",
+              "name": "Placement",
+              "shape": "unit"
+            },
+            {
+              "doc": "The record at this index has a box that does not hold its definition as placed.",
+              "name": "Unbounded",
+              "shape": "tuple"
+            },
+            {
+              "doc": "A definition with no geometry: a tree with no parts, or an assembly with no records.",
+              "name": "Empty",
+              "shape": "unit"
+            },
+            {
+              "doc": "Assemblies nested deeper than [`super::MAX_NESTING`].",
+              "name": "TooDeep",
+              "shape": "unit"
+            },
+            {
+              "doc": "The frames of a definition and of the assembly placing it have no exact shift between them: other coordinate reference systems, units, epochs, rotations or scales, or off a shared lattice (chapter 17.1).",
+              "name": "Frame",
+              "shape": "tuple"
+            },
+            {
+              "doc": "A general placement's transform has no inverse a query can enter by.",
+              "name": "Transform",
+              "shape": "tuple"
+            },
+            {
+              "doc": "A coordinate a placement or a frame shift sends out of the grid's range.",
+              "name": "Num",
+              "shape": "tuple"
+            },
+            {
+              "doc": "More records than an assembly indexes (`u32::MAX`).",
+              "name": "TooManyRecords",
+              "shape": "unit"
+            },
+            {
+              "doc": "An assembly was given a table of definitions other than the one it was built with: a handle it holds now names another definition.",
+              "name": "Stale",
+              "shape": "tuple"
+            },
+            {
+              "doc": "An allocation was refused.",
+              "name": "OutOfMemory",
+              "shape": "unit"
+            },
+            {
+              "doc": "A step the tree's own construction rules out failed: a defect, reported, never answered.",
+              "name": "Defect",
+              "shape": "unit"
+            }
+          ],
+          "module": "geom_spatial::instance::error",
+          "name": "InstanceError",
+          "non_exhaustive": false
+        }
+      ],
       "family": [
         "Query"
       ],
@@ -8834,7 +8919,204 @@
       "job": "Spatial queries on the box tree, distance, clearance, clash, contact over time, the instance tree.",
       "kind": "kernel",
       "layer": "7",
-      "modules": [],
+      "modules": [
+        {
+          "cost": "building: one check per record (a transform of two corners, or an interval enclosure for a general placement), one frame shift per distinct definition, and the instance tree's build. Memory kept: the records, the tree, and one entry per distinct definition placed. A query: the tree walks, plus a constant per instance entered (an interval enclosure, about 100 operations, through a general placement). Recursion: none.",
+          "does": "[`Assembly::build`] takes a frame and the records placed in it, checks every record against the table of definitions (its definition exists, the two frames have an exact shift, its box holds its definition as placed), and builds the [`InstanceTree`] over the records' boxes. [`Assembly::overlapping`] answers one level: the records whose boxes meet a region. [`Assembly::query`] answers every level: for each record whose box meets the region it enters the definition, moving the region into the definition's frame (an exact placement's inverse; a general placement's enclosure; the frames' shift, [`super::enter`]), then queries the definition's parts tree, or, for a nested assembly, goes on in it. Nested levels wait on an explicit stack, never a recursive call, and no path is longer than [`MAX_NESTING`].",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-spatial/src/instance/assembly.rs",
+          "guarantees": [
+            "**The answer of brute force, through every level.** A [`Hit`] is reported for exactly each part whose box meets the region moved into its definition's frame along its path, as testing every part of every instance would find; through an exact placement and a frame that fits, that is exactly where the materialised part meets the region (23.9). Hits are sorted by path, record index by record index, then by part key, so no tree's shape, pool or thread count changes an answer.",
+            "**Never a miss.** Through a general placement, or a frame shift that falls back to the coarse frame, the hit set holds every part a materialisation could put in the region, and each such hit says it is not exact ([`Hit::exact`]): its comparison is Certified (19.12).",
+            "**Checked where it is made.** Every record's box holds its definition's box as its placement moves it (outward through a general transform), so the instance tree cannot miss an instance; a record that fails is refused with its index, and nothing is built.",
+            "**Bounded.** Paths are at most [`MAX_NESTING`] records long; the pending levels are a vector; the meter is charged one unit per tree node visited and per instance entered, and polls the caller's cancellation. A stopped query returns no hits."
+          ],
+          "job": "An assembly: the caller's instance records, their instance tree, and queries that descend through nested assemblies into each definition's own tree in its own frame (19.12; piece G295).",
+          "method": {
+            "links": [
+              "projects/engines/geometry/architecture/19-meshes-spatial-clash.md",
+              "projects/kit/notes/G01-evidence/08-standards-coverage-testing.md"
+            ],
+            "text": "the two-level tree of chapter 19.12 (instance boxes above, each definition's tree in its own frame below, the query moved into the definition's frame), as evidence report 08 section C proposes after IFC's mapped items (`projects/engines/geometry/architecture/19-meshes-spatial-clash.md`, `projects/kit/notes/G01-evidence/08-standards-coverage-testing.md`)."
+          },
+          "path": "geom_spatial::instance::assembly",
+          "provenance": [
+            {
+              "licence": "Apache-2.0",
+              "link": "https://github.com/NVIDIA-Omniverse/usd-brep/blob/c9c5979f04cea8c38213004d4f04df0dcfb40d05/source/SMLib/inc/SmAssemblyInstance.h",
+              "method_note": null,
+              "name": "NVIDIA USD `BRep` `SMLib`",
+              "notice": [],
+              "pinned": true,
+              "purpose": "for its model of assemblies and instances (a placement, a scale, a mirror flag and a component per instance); it has no spatial index of instances, and its per-instance scale is what 19.12 makes a new definition instead. No code copied.",
+              "take": "port-method"
+            },
+            {
+              "licence": "Apache-2.0",
+              "link": "https://github.com/tangency-labs/solidcore/blob/78d1eb12d222652219313c12787b65389c4d9db8/crates/solidcore/src/topology/proto_topology/p1/assembly.rs",
+              "method_note": null,
+              "name": "solidcore",
+              "notice": [],
+              "pinned": true,
+              "purpose": "the Rust port of the same model; no spatial index of instances there either. No code copied.",
+              "take": "port-method"
+            }
+          ],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
+          "cost": "a lookup is O(log definitions) in an ordered map; an insertion adds the content's own cost, and checks a nested assembly's definitions once each. Recursion: none.",
+          "does": "a [`Definitions`] table belongs to the caller (23.9). Each entry is a [`Definition`]: its [`DefinitionKey`], its frame, its box in that frame and its [`Content`], either the parts of a body or mesh with their own box tree (`geom-bvh`), or a nested [`Assembly`] with its own records and instance tree. [`Definitions::get_or_insert_with`] looks the key up and makes the content only when the key is not cached, so a door placed 2,000 times is built and stored once. Handles are positions in the table, in the order definitions were made, and a record names its definition by handle.",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-spatial/src/instance/definitions.rs",
+          "guarantees": [
+            "**Built once.** A key already in the table returns its handle and never runs `make`; two keys differ in content hash or in edition, so a definition made by an older kernel edition is never reused after an upgrade (23.8).",
+            "**Nesting is acyclic and bounded.** An assembly can only name definitions made before it, so no assembly contains itself, however indirectly; and an assembly nested more than [`MAX_NESTING`] deep is refused where it is cached, so every walk stops within that depth.",
+            "**All or nothing.** A refused insertion leaves the table as it was."
+          ],
+          "job": "The table of definitions: each shape stored once, in its own frame, with its own tree, cached by its content hash and the kernel edition that made it (19.12, 23.8; piece G295).",
+          "method": {
+            "links": [
+              "projects/engines/geometry/architecture/19-meshes-spatial-clash.md",
+              "projects/engines/geometry/architecture/23-performance.md"
+            ],
+            "text": "chapter 19.12's definitions cached by content hash and kernel edition, and chapter 23.8's content-addressed keys (`projects/engines/geometry/architecture/19-meshes-spatial-clash.md`, `projects/engines/geometry/architecture/23-performance.md`)."
+          },
+          "path": "geom_spatial::instance::definitions",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
+          "cost": "a frame shift: a few `i128` operations per axis. A general placement: one 3×3 inverse in doubles and about 90 interval operations. Nothing allocates; no recursion.",
+          "does": "",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-spatial/src/instance/enter.rs",
+          "guarantees": [
+            "**Exact where the frames allow.** Moving a region into a finer frame multiplies by the refinement and adds the offset, exactly (chapter 6.1): no grid point is gained or lost. When that region does not fit the finer frame's range of ±(2^40 − 1) steps, the comparison falls back to the coarse frame (19.12): the region is grown by `refine − 1` fine steps, which is exactly what comparing each fine box rounded outward to coarse steps would find, and kept within the range, past which no geometry of the definition lies; the result is then marked not exact. Moving a region into a coarser frame divides by the refinement, which the region's denominator keeps exactly ([`Region`]): a part box between two coarse grid points still meets it exactly when its image does.",
+            "**Never misses through a general placement.** [`backward`] holds every point `p` of the given box with `T·p` within one step of the region, for the exact transform `T` the side table holds: its rows are enclosed in intervals one unit in the last place wide either side of their doubles (a rational transform's doubles are its entries rounded to nearest, a certified one's are its entries), and the region is reached by the set form of Krawczyk's operator, `p ∈ M·(y − t) + (I − M·L)·p`, true for every matrix `M`, evaluated in outward-rounded interval arithmetic over the box, with `M` the doubles' inverse. A materialised vertex is `T·p` rounded once to the nearest step, so it lies in the region only if `T·p` lies within half a step of it. [`forward`] holds every point's image, and so every rounding of it."
+          ],
+          "job": "Entering a definition: a query region moved from the frame of the assembly that places an instance into its definition's own frame, through the frames' exact shift and the placement (19.12; piece G295).",
+          "method": {
+            "links": [
+              "projects/engines/geometry/architecture/19-meshes-spatial-clash.md",
+              "https://doi.org/10.1007/BF02234767",
+              "https://doi.org/10.1017/CBO9780511526473"
+            ],
+            "text": "frames and their exact shifts, chapter 6.1 and 17.1, and 19.12's frames (`projects/engines/geometry/architecture/19-meshes-spatial-clash.md`); the inclusion property of interval arithmetic and Krawczyk's operator as a set enclosure, R. Krawczyk, \"Newton-Algorithmen zur Bestimmung von Nullstellen mit Fehlerschranken\", *Computing* 4 (1969), <https://doi.org/10.1007/BF02234767>, applied to a linear system as in A. Neumaier, *Interval Methods for Systems of Equations*, Cambridge University Press (1990), <https://doi.org/10.1017/CBO9780511526473>."
+          },
+          "path": "geom_spatial::instance::enter",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
+          "cost": "a few machine words; nothing allocates.",
+          "does": "[`InstanceError`] names every refusal of [`crate::instance`], each with what the caller needs to find its cause: the record, the definition or the side-table entry.",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-spatial/src/instance/error.rs",
+          "guarantees": [
+            "**One kind per cause.** A refusal for a bad input never shares a kind with a defect ([`InstanceError::Defect`]) or with the meter stopping ([`InstanceError::Stopped`])."
+          ],
+          "job": "Why the instance tree could not cache a definition, build an assembly or answer a query.",
+          "method": {
+            "none": "an error enum and its `Display` and `Error` implementations, as chapter 22 asks of every crate (`projects/engines/geometry/architecture/22-errors-queries-ai.md`)."
+          },
+          "path": "geom_spatial::instance::error",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
+          "cost": "as each module states; about 140 bytes an instance with its record, measured by `benches/instance.rs`. Recursion: none.",
+          "does": "a building with 2,000 identical doors, a tower of repeated floors or a car of 30,000 parts stores each shape once, as a definition in the caller's [`Definitions`], cached by content hash and kernel edition. An [`Assembly`] holds the caller's instance records (chapter 19.12's one record, `Placed`, read through [`Record`]) and an [`InstanceTree`] over their boxes whose leaves are record indices. A query finds the instances whose boxes meet a region, moves the region into each one's definition frame, and queries that definition's own tree, or goes on into a nested assembly. The modules:",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-spatial/src/instance/mod.rs",
+          "guarantees": [
+            "**Every answer is brute force's, sorted.** Queries return record indices, or paths of them with part keys, ascending; the tree's shape never shows.",
+            "**One record, one tree.** No second instance record (19.12), and the kernel's one box tree (19.9)."
+          ],
+          "job": "The instance tree for huge assemblies: each shape stored once and placed many times, found by a two-level tree, through nested assemblies, in fine and coarse frames (19.12; piece G295).",
+          "method": {
+            "links": [
+              "projects/engines/geometry/architecture/19-meshes-spatial-clash.md"
+            ],
+            "text": "the two-level instance tree of chapter 19.12 (`projects/engines/geometry/architecture/19-meshes-spatial-clash.md`); each module names its own method."
+          },
+          "path": "geom_spatial::instance",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
+          "cost": "none here; each read is the caller's record's.",
+          "does": "[`Record`] is what the instance tree needs of chapter 19.12's one instance record, `geom_topo::placed::Placed` (piece G145), which this crate's row of chapter 27's crate table does not let it name: the handle of its definition, its [`Place`] and its box. The caller implements the trait on its record (a wrapper of `Placed` in a crate that sees both), so this crate holds no second record: the tree's leaves are record indices, and every box, placement and definition is read from the caller's records when the tree is built and when it answers.",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-spatial/src/instance/record.rs",
+          "guarantees": [
+            "**No second record.** Nothing in [`crate::instance`] stores an instance's definition, placement or box beside the caller's record."
+          ],
+          "job": "The instance record as the instance tree reads it: the definition it places, its placement and its integer box, through a trait the caller's record implements (19.12; piece G295).",
+          "method": {
+            "links": [
+              "projects/engines/geometry/architecture/19-meshes-spatial-clash.md",
+              "projects/kit/notes/G01-evidence/08-standards-coverage-testing.md"
+            ],
+            "text": "chapter 19.12's definitions and instances, as IFC's mapped items place a shared representation (`projects/engines/geometry/architecture/19-meshes-spatial-clash.md`; evidence report 08, section C: `projects/kit/notes/G01-evidence/08-standards-coverage-testing.md`)."
+          },
+          "path": "geom_spatial::instance::record",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
+          "cost": "a few `i128` operations per axis for each step; the reduction at most 8 divisions by 5. Nothing allocates; no recursion.",
+          "does": "a [`Region`] is the box of reals from `lo / den` to `hi / den` on each axis, in some frame's steps. A region given in grid steps has `den = 1`. Moved into a frame `refine` times coarser, its corners divide by `refine`, which the denominator keeps exactly instead of rounding; moved into a finer frame, they multiply, and the denominator reduces again. So a region is never rounded on its way down an assembly, and [`Region::meets`] decides exactly whether an integer box shares a point with it.",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-spatial/src/instance/region.rs",
+          "guarantees": [
+            "**Exact.** Every operation here is integer arithmetic on the numerators and the denominator; [`Region::meets`], [`Region::clip`] and [`Region::unplace`] give exactly what the real box gives.",
+            "**Small denominators.** Frames' refinements are 1, 25 and 625, so the denominator is a power of 5. After each step the region is reduced by every factor 5 that divides the denominator and all six numerators, so the denominator is 25 to the power of how many rungs the frame is coarser than the frame the region was given in: at most 625 (chapter 6.1's three steps). Numerators then stay below 2^62 in magnitude, since every region is kept within a definition's box (below 2^43 steps) before it moves on; a step that would leave `i128` anyway is refused, never wrapped."
+          ],
+          "job": "A query region as it moves through frames and placements: a box whose corners are rationals over one denominator, so a region moved into a coarser frame stays exact (19.12; piece G295).",
+          "method": {
+            "links": [
+              "projects/engines/geometry/architecture/06-numbers.md"
+            ],
+            "text": "exact rational arithmetic with one common denominator, as chapter 6.1 converts between frames (`projects/engines/geometry/architecture/06-numbers.md`): a finer step divides every coarser one exactly, so a region converts into a coarser frame by a division the denominator records, and back by a multiplication."
+          },
+          "path": "geom_spatial::instance::region",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
+          "cost": "building as `geom-bvh`'s build over n entries, plus O(n) to copy the nodes and the leaf order out; while it builds, the entries and `geom-bvh`'s working copies (about 56 bytes a record each). Kept: one `u32` a record and the nodes. A query: O(nodes visited + answers·log answers). Recursion: none.",
+          "does": "[`InstanceTree::build`] gives `geom-bvh`'s [`BoxTree`] one entry per record, its key the record's index and its box the record's, builds the tree, and keeps only what a query walks: the tree's nodes, as `geom-bvh` built them, and the record indices in leaf order. The boxes the entries carried are dropped, since every record holds its own (19.12: \"its integer box, held once\"). [`InstanceTree::overlapping`] walks the nodes with an explicit stack and tests each leaf's records by their own boxes.",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-spatial/src/instance/tree.rs",
+          "guarantees": [
+            "**The answer of brute force.** [`InstanceTree::overlapping`] returns exactly the indices of the records whose boxes meet the region, ascending, as testing every record would: never the tree's shape, a pool's thread count or the records' order decides it.",
+            "**The kernel's one tree.** The nodes are `geom-bvh`'s, built by its binned surface-area heuristic (19.9), so a tree is a function of its records' boxes alone: the same nodes for any pool, thread count and chunking.",
+            "**Four bytes a record.** Beside the nodes, a record costs the tree one `u32`; the 1,000,000 instance benchmark (`benches/instance.rs`) measures the total.",
+            "**No recursion.** A walk holds at most `MAX_DEPTH + 1` nodes on its stack, as `geom-bvh`'s walks do; the meter is charged one unit a node and polls the caller's cancellation."
+          ],
+          "job": "The instance tree of one assembly: the kernel's one box tree over its records' boxes, whose leaves hold only record indices (19.12; piece G295).",
+          "method": {
+            "links": [
+              "projects/engines/geometry/architecture/19-meshes-spatial-clash.md",
+              "https://doi.org/10.1109/RT.2007.4342588",
+              "https://doi.org/10.1080/10867651.1997.10487480"
+            ],
+            "text": "the two-level tree of chapter 19.12, its top level here (`projects/engines/geometry/architecture/19-meshes-spatial-clash.md`), on the box tree of section 19.9, built by the binned surface-area heuristic of I. Wald, \"On fast construction of SAH-based bounding volume hierarchies\", IEEE Symposium on Interactive Ray Tracing (2007), <https://doi.org/10.1109/RT.2007.4342588>, and walked depth first as in G. van den Bergen, \"Efficient collision detection of complex deformable models using AABB trees\", *Journal of Graphics Tools* 2(4) (1997), <https://doi.org/10.1080/10867651.1997.10487480>."
+          },
+          "path": "geom_spatial::instance::tree",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        }
+      ],
       "name": "geom-spatial",
       "provenance": [],
       "sections": "10.2, 19.9 to 19.12 and 23.9; open questions OQ-19.7 and OQ-19.17, in the kernel architecture (`projects/engines/geometry/architecture/`).",
@@ -11813,6 +12095,17 @@
       ]
     },
     {
+      "licence": "Apache-2.0",
+      "link": "https://github.com/NVIDIA-Omniverse/usd-brep/blob/c9c5979f04cea8c38213004d4f04df0dcfb40d05/source/SMLib/inc/SmAssemblyInstance.h",
+      "method_note": null,
+      "name": "NVIDIA USD `BRep` `SMLib`",
+      "pinned": true,
+      "take": "port-method",
+      "used_by": [
+        "projects/engines/geometry/crates/geom-spatial/src/instance/assembly.rs"
+      ]
+    },
+    {
       "licence": "MIT",
       "link": "https://github.com/OSGeo/PROJ/blob/5fa31c29f0a806568ed7bc76c1a557604db4a804/data/sql/projected_crs.sql",
       "method_note": null,
@@ -12104,6 +12397,17 @@
       "take": "port-method",
       "used_by": [
         "projects/engines/geometry/crates/geom-test/src/map/classes.rs"
+      ]
+    },
+    {
+      "licence": "Apache-2.0",
+      "link": "https://github.com/tangency-labs/solidcore/blob/78d1eb12d222652219313c12787b65389c4d9db8/crates/solidcore/src/topology/proto_topology/p1/assembly.rs",
+      "method_note": null,
+      "name": "solidcore",
+      "pinned": true,
+      "take": "port-method",
+      "used_by": [
+        "projects/engines/geometry/crates/geom-spatial/src/instance/assembly.rs"
       ]
     },
     {
