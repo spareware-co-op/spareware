@@ -87,6 +87,10 @@ fn one(tier: &str, evidence: Value, missing: Value) -> (Value, Value) {
     (map, tools)
 }
 
+#[cfg_attr(
+    target_family = "wasm",
+    ignore = "reads the repository's files, which a WebAssembly test run cannot"
+)]
 #[test]
 fn the_real_tree_passes_and_lists_everything() {
     let (map, tools) = (map(), tools());
@@ -115,12 +119,18 @@ fn the_real_tree_passes_and_lists_everything() {
     assert_eq!(map["kinds"].as_array().unwrap().len(), 26);
 }
 
+#[cfg_attr(
+    target_family = "wasm",
+    ignore = "reads the repository's files, which a WebAssembly test run cannot"
+)]
 #[test]
 fn every_real_entry_carries_its_contract() {
     for entry in map()["operations"].as_array().unwrap() {
         // A Preview operation may lack the contract evidence if its entry says so (the gate's own
         // rule; the queries of piece G102 have no driver in `contract_laws.rs` yet).
-        let says_so = entry["tier"].as_str().is_some_and(|t| t.starts_with("Preview"))
+        let says_so = entry["tier"]
+            .as_str()
+            .is_some_and(|t| t.starts_with("Preview"))
             && entry["missing"]
                 .as_array()
                 .is_some_and(|m| m.iter().any(|p| p == "contract"));
