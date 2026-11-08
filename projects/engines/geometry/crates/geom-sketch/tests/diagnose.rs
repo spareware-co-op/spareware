@@ -18,11 +18,12 @@
 
 use geom_run::{Budget, WorkMeter};
 use geom_sketch::diagnose::{
-    Class, Equation, Outcome, RANGE_HALVINGS, RANGE_RESOLUTION, SketchReport, Thresholds, Verdict,
-    analyse_columns, diagnose, free_motions, remedies, solve_checked, witness_point,
+    Class, Equation, MOTION_CUTOFF, Motion, Outcome, RANGE_HALVINGS, RANGE_RESOLUTION,
+    SketchReport, Thresholds, Verdict, analyse_columns, diagnose, free_motions, remedies,
+    solve_checked, witness_point,
 };
 use geom_sketch::equation::Assembly;
-use geom_sketch::model::{ItemId, Sketch, SketchError};
+use geom_sketch::model::{ItemId, Sketch, SketchError, Variable};
 use geom_sketch::text::parse;
 
 const HEAD: &str = "sketch v1\nplane lattice 0 0 0 1 0 0 0 1 0 q0\n";
@@ -911,4 +912,53 @@ fn a_pivot_is_confirmed_within_a_factor_of_sixteen_of_either_threshold() {
     ] {
         assert_eq!(t.confirms(size), want, "{size:e}");
     }
+}
+
+#[test]
+fn a_subnormal_column_is_measured_exactly() {
+    // Its entries are divided by the smallest normal power of two, which is exact.
+    for x in [1.0e-310, 5.0e-324] {
+        let a =
+            analyse_columns(&[vec![x]], &[eq(1, 0, 0)], &[0.0], 1, 1000.0, &mut meter()).unwrap();
+        assert_eq!(a.pivots[0].size, x);
+    }
+}
+
+#[test]
+fn among_constraints_ranked_alike_the_greater_id_is_suggested() {
+    // Two constraints of one priority, given the same authoring order on bare data: neither is
+    // newer, so the greater id is the one to remove.
+    let a = analyse_columns(
+        &[vec![1.0], vec![1.0]],
+        &[eq(1, 1, 0), eq(2, 1, 0)],
+        &[0.0, 1.0],
+        1,
+        1000.0,
+        &mut meter(),
+    )
+    .unwrap();
+    assert_eq!(a.groups.len(), 1);
+    assert_eq!(a.groups[0].class, Class::Conflicting);
+    assert_eq!(a.groups[0].constraints, vec![id(1, 0), id(2, 0)]);
+    assert_eq!(a.groups[0].suggested_removal, Some(id(2, 0)));
+}
+
+#[test]
+fn a_motion_keeps_the_entries_above_the_cutoff_in_model_units() {
+    let var = |slot, scale| Variable {
+        owner: id(1, 0),
+        slot,
+        value: 0.0,
+        scale,
+    };
+    let variables = [var(0, 2.0), var(1, 2.0), var(2, 4.0), var(3, 0.5)];
+    let m = Motion::of_row(
+        &[MOTION_CUTOFF, -MOTION_CUTOFF, 2.0 * MOTION_CUTOFF, -0.5],
+        &variables,
+    );
+    assert_eq!(
+        m.moves,
+        vec![(id(1, 0), 2, 8.0 * MOTION_CUTOFF), (id(1, 0), 3, -0.25)]
+    );
+    assert_eq!(m.owners(), vec![id(1, 0)]);
 }

@@ -64,7 +64,7 @@ use geom_num::scalar::Scalar;
 use geom_run::WorkMeter;
 
 use crate::equation::{Assembly, measure, rules_of};
-use crate::model::{Constraint, ItemId, Sketch, SketchError, Standing, Variable};
+use crate::model::{Constraint, ItemId, Sketch, SketchError, Standing, Variable, power_of_two};
 use crate::solve::{INDEPENDENT, Solved, TOLERANCE, continue_to, solve};
 
 /// How near a threshold a pivot must be, by this factor either way, to be confirmed by a singular
@@ -73,10 +73,6 @@ pub const CONFIRM_WITHIN: f64 = 16.0;
 
 /// A pivot within this factor of the largest column's may be passed over for a lower priority number.
 const PREFERRED_WITHIN: f64 = 2.0;
-
-/// The downdated norm of a column is recomputed when its share of the norm it was computed from falls
-/// below this: the square root of the unit roundoff.
-const RECOMPUTE: f64 = 1.490_116_119_384_765_6e-8;
 
 /// The unit roundoff of binary64.
 const UNIT_ROUNDOFF: f64 = 1.110_223_024_625_156_5e-16;
@@ -280,44 +276,28 @@ fn entry(list: &[Vec<f64>], j: usize, i: usize) -> Result<f64, SketchError> {
         .ok_or(SketchError::Internal)
 }
 
-/// How much a downdated column norm still rests on the norm it was last computed from: the share
-/// `kept` of the norm the last step left, times the square of the norm `old` against the computed
-/// `fresh` (LAPACK xGEQP3's test, as Businger and Golub's method keeps it). At most `RECOMPUTE`, the
-/// norm is computed again from the column.
-fn drift(kept: f64, old: f64, fresh: f64) -> f64 {
-    let ratio = old / fresh;
-    kept * ratio * ratio
-}
-
 fn root(x: f64) -> Result<f64, SketchError> {
     Ok(Real::new(x)?.sqrt()?.get())
 }
 
-/// The norm of column `j` from row `from` down. A plain sum of squares when it neither overflows
-/// nor loses its low end (the common case, and the fast one); otherwise scaled by the largest entry.
+/// The norm of column `j` from row `from` down: the sum of squares, in index order, of the entries
+/// divided by the power of two at or below the largest. Dividing by a power of two is exact, so
+/// wherever the plain sum of squares neither overflows nor loses its low end this is its root to the
+/// bit, and where the plain sum would, it is still the norm.
 fn tail_norm(columns: &[Vec<f64>], j: usize, from: usize) -> Result<f64, SketchError> {
     let column = columns.get(j).ok_or(SketchError::Internal)?;
     let tail = column.get(from..).ok_or(SketchError::Internal)?;
-    let mut plain = 0.0f64;
-    for &x in tail {
-        plain += x * x;
-    }
-    if plain > 1e-250 && plain < 1e250 {
-        return root(plain);
-    }
     let mut big = 0.0f64;
     for &x in tail {
         big = larger(big, x.abs());
     }
-    if big == 0.0 {
-        return Ok(0.0);
-    }
+    let step = power_of_two(big);
     let mut sum = 0.0f64;
     for &x in tail {
-        let s = x / big;
+        let s = x / step;
         sum += s * s;
     }
-    Ok(root(sum)? * big)
+    Ok(root(sum)? * step)
 }
 
 /// Pivoted QR of the columns, by Householder reflections, choosing as 15.8 says. Returns the
@@ -335,9 +315,10 @@ fn factor(
     let mut sizes = Vec::new();
     let mut maxima = Vec::new();
     let steps = rows.min(m);
-    // The trailing norms of the columns, downdated after each reflection and recomputed when the
-    // downdate would lose too much (Businger and Golub's method, as LAPACK's xGEQP3 keeps it);
-    // `fresh` holds the norm each was last computed from.
+    // The trailing norms of the columns, computed afresh from the columns after each reflection.
+    // Businger and Golub's downdate (as LAPACK's xGEQP3 keeps it) saves that pass, but lets its
+    // rounding decide a choice at the edge of the factor of 2; here every choice rests on a
+    // correctly rounded norm.
     let mut norms: Vec<f64> = Vec::new();
     norms
         .try_reserve_exact(m)
@@ -345,7 +326,6 @@ fn factor(
     for j in 0..m {
         norms.push(tail_norm(&a, j, 0)?);
     }
-    let mut fresh = norms.clone();
     for k in 0..steps {
         let mut largest = 0.0f64;
         for &n in norms.iter().skip(k) {
@@ -383,7 +363,6 @@ fn factor(
         a.swap(k, p);
         order.swap(k, p);
         norms.swap(k, p);
-        fresh.swap(k, p);
         sizes.push(tail_norm(&a, k, k)?);
         maxima.push(largest);
         // The reflector for column k from row k, applied to the columns after it.
@@ -397,19 +376,14 @@ fn factor(
             .ok_or(SketchError::Internal)?
             .to_vec();
         *v.first_mut().ok_or(SketchError::Internal)? = alpha - beta;
-        let mut vv = dot(&v, &v);
-        let squared = vv > 1e-250 && vv < 1e250;
-        if !squared {
-            // Its square overflows or loses its low end, as `tail_norm`'s can: scale the vector
-            // by its largest entry, which leaves the reflection as it was.
-            let big = v.iter().fold(0.0f64, |acc, x| larger(acc, x.abs()));
-            if big > 0.0 {
-                for x in &mut v {
-                    *x /= big;
-                }
-                vv = dot(&v, &v);
-            }
+        // Divided by the power of two at or below its largest entry, so that its square neither
+        // overflows nor loses its low end. The division is exact and the reflection does not depend
+        // on the vector's length, so every column is reflected to the bit as without it.
+        let step = power_of_two(v.iter().fold(0.0f64, |acc, x| larger(acc, x.abs())));
+        for x in &mut v {
+            *x /= step;
         }
+        let vv = dot(&v, &v);
         if vv > 0.0 {
             for j in k..m {
                 let column = a
@@ -422,23 +396,10 @@ fn factor(
                 }
             }
         }
-        // Downdate the norms of the columns after k; recompute any the downdate would spoil.
+        // The norms of the columns after k, below row k.
         for j in k.saturating_add(1)..m {
-            let old = get(&norms, j)?;
-            if old == 0.0 {
-                continue;
-            }
-            let ratio = entry(&a, j, k)?.abs() / old;
-            let kept = larger(1.0 - ratio * ratio, 0.0);
-            let drift = drift(kept, old, get(&fresh, j)?);
-            let value = if drift <= RECOMPUTE {
-                let exact = tail_norm(&a, j, k.saturating_add(1))?;
-                *fresh.get_mut(j).ok_or(SketchError::Internal)? = exact;
-                exact
-            } else {
-                old * root(kept)?
-            };
-            *norms.get_mut(j).ok_or(SketchError::Internal)? = value;
+            *norms.get_mut(j).ok_or(SketchError::Internal)? =
+                tail_norm(&a, j, k.saturating_add(1))?;
         }
         // Zero below the diagonal of column k exactly; the reflector put beta on it.
         let column = a.get_mut(k).ok_or(SketchError::Internal)?;
@@ -637,7 +598,7 @@ pub fn analyse_columns(
                 constraints.push((q.order, q.constraint));
             }
         }
-        constraints.sort_unstable_by_key(|&(o, _)| o);
+        constraints.sort_unstable();
         let left = get(equations, left_out)?;
         // Another equation of the same constraint among the pivots before the first dependent
         // one, which are all independent or near-singular.
@@ -679,7 +640,8 @@ pub fn analyse_columns(
 }
 
 /// Chooses, for each conflicting group, the constraint to suggest removing: the highest priority
-/// number first (the one the author ranked least), then the one in the most groups, then the newest.
+/// number first (the one the author ranked least), then the one in the most groups, then the newest,
+/// then, among constraints given the same authoring order, the greater id.
 fn suggest_removals(groups: &mut [DependencyGroup], equations: &[Equation]) {
     let mut count: Vec<(ItemId, usize)> = Vec::new();
     for g in groups.iter() {
@@ -703,7 +665,7 @@ fn suggest_removals(groups: &mut [DependencyGroup], equations: &[Equation]) {
             let key = (q.priority, groups_in, q.order, c);
             let better = match best {
                 None => true,
-                Some(b) => (key.0, key.1, key.2) > (b.0, b.1, b.2),
+                Some(b) => key > b,
             };
             if better {
                 best = Some(key);
@@ -1300,7 +1262,25 @@ pub struct Motion {
     pub moves: Vec<(ItemId, u8, f64)>,
 }
 
+/// Entries of a null-space row at most this in magnitude are left out of a motion: they are the
+/// factorisation's rounding, not a move.
+pub const MOTION_CUTOFF: f64 = 1e-12;
+
 impl Motion {
+    /// The motion one row of the null space gives, over `variables` in the same order: each
+    /// variable whose entry is above [`MOTION_CUTOFF`] in magnitude, in model units (the solver
+    /// sees value / scale, so a unit of its variable is `scale` model units).
+    #[must_use]
+    pub fn of_row(row: &[f64], variables: &[Variable]) -> Motion {
+        let mut moves = Vec::new();
+        for (&x, var) in row.iter().zip(variables) {
+            if x.abs() > MOTION_CUTOFF {
+                moves.push((var.owner, var.slot, x * var.scale));
+            }
+        }
+        Motion { moves }
+    }
+
     /// The owners of the variables this motion moves, each once, in order.
     #[must_use]
     pub fn owners(&self) -> Vec<ItemId> {
@@ -1334,33 +1314,11 @@ pub fn free_motions(
     meter.charge(u64::MAX.saturating_sub(work.left()))?;
     let mut out = Vec::new();
     for c in 0..basis.rows() {
-        let mut moves = Vec::new();
-        for (v, var) in variables.iter().enumerate() {
-            let x = basis.get(c, v)?;
-            if x.abs() > 1e-12 {
-                // The solver sees value / scale: a unit of its variable is `scale` model units.
-                moves.push((var.owner, var.slot, x * var.scale));
-            }
+        let mut row = Vec::new();
+        for v in 0..variables.len() {
+            row.push(basis.get(c, v)?);
         }
-        out.push(Motion { moves });
+        out.push(Motion::of_row(&row, &variables));
     }
     Ok(out)
-}
-
-#[cfg(test)]
-#[allow(
-    clippy::float_cmp,
-    reason = "a test of exact small values; the rules are for kernel code"
-)]
-mod tests {
-    use super::*;
-
-    /// The drift is the share kept times the square of the norm against the one computed.
-    #[test]
-    fn the_drift_is_the_share_kept_times_the_square_of_the_norm_against_the_computed_one() {
-        assert_eq!(drift(0.5, 1.0, 1.0), 0.5);
-        assert_eq!(drift(0.5, 1.0, 4.0), 0.5 / 16.0);
-        assert_eq!(drift(0.25, 3.0, 2.0), 0.25 * 1.5 * 1.5);
-        assert_eq!(drift(0.0, 3.0, 2.0), 0.0);
-    }
 }
