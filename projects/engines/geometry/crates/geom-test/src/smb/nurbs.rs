@@ -149,7 +149,7 @@ impl Curve {
         let degree = degree(deg)?;
         let count = count(last, degree)?;
         let rational = rational(flag)?;
-        let written = match written {
+        let written: usize = match written {
             2 => 2,
             3 => 3,
             _ => return Err(SmbError::Shape("a curve dimension other than 2 or 3")),
