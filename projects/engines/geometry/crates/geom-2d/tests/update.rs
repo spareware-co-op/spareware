@@ -11,7 +11,11 @@
 //!   not touch.
 //! - **Location is exact**: a probe point is a vertex, on an edge, or in the face that an
 //!   independent point-in-polygon test over the sweep's cycles names.
-//! - **Refusals**: a stopped meter stops an insert and a location.
+//! - **Refusals**: a stopped meter stops an insert and a location, and a walk round a face of a
+//!   drawing that was said to be noded but was not stops at its limit.
+//! - **Pieces and costs**: every piece runs from its lower end to its higher along its own line,
+//!   whichever way its segment was given; an insert opens, examines, splits, writes and copies
+//!   exactly what its zone needs; a chunk is halved past twice its size, and not before.
 
 #![allow(
     clippy::arithmetic_side_effects,
@@ -30,7 +34,8 @@
 )]
 
 use geom_2d::arrange::{ArrangeError, Arrangement, arrange};
-use geom_2d::update::{Half, Live, Location};
+use geom_2d::update::{Cost, Half, Live, Location};
+use geom_num::Sign;
 use geom_num::carrier::Rational2;
 use geom_num::grid::P2;
 use geom_run::{Budget, WorkMeter};
@@ -448,4 +453,278 @@ fn a_face_cycle_runs_round_the_boundary() {
         panic!("a face");
     };
     assert_eq!(live.face_cycle(&h, &mut m).unwrap().len(), 3);
+}
+
+/// The vertices of `cycle` as whole-step pairs, for comparing with a list.
+fn steps(cycle: &[Rational2]) -> Vec<(i128, i128)> {
+    cycle
+        .iter()
+        .map(|v| {
+            let ([x, y], w) = v.coordinates();
+            assert_eq!((x % w, y % w), (0, 0), "{v:?} is a whole step");
+            (x / w, y / w)
+        })
+        .collect()
+}
+
+#[test]
+fn a_face_cycle_turns_back_at_a_loose_end_and_passes_its_start_vertex_again() {
+    let mut m = unlimited();
+    // One segment: the face round it runs out along it and back.
+    let one = built(&[(p(0, 0), p(4, 0))], &[0]);
+    let Location::Face(Some(h)) = one.locate(&rat(2, 1, 1), &mut m).unwrap() else {
+        panic!("a face");
+    };
+    assert_eq!(
+        steps(&one.face_cycle(&h, &mut m).unwrap()),
+        [(0, 0), (4, 0)]
+    );
+    // An L: the walk comes back to its first vertex along the other arm before it closes.
+    let l = built(&[(p(0, 0), p(4, 0)), (p(0, 4), p(0, 0))], &[0, 1]);
+    let Location::Face(Some(h)) = l.locate(&rat(2, 1, 1), &mut m).unwrap() else {
+        panic!("a face");
+    };
+    assert_eq!(
+        steps(&l.face_cycle(&h, &mut m).unwrap()),
+        [(0, 0), (4, 0), (0, 0), (0, 4)]
+    );
+}
+
+#[test]
+fn a_walk_round_a_drawing_that_was_not_noded_stops_at_its_limit() {
+    // Two segments overlap along the x axis from the origin, so they were not noded: walking back
+    // into the origin, each turns onto the other, and the walk never comes back to the y axis.
+    let live = Live::from_noded(&[
+        (p(0, 0), p(4, 0), 0),
+        (p(0, 0), p(2, 0), 1),
+        (p(0, 0), p(0, 3), 2),
+    ])
+    .unwrap();
+    let half = Half {
+        from: rat(0, 0, 1),
+        to: rat(0, 3, 1),
+    };
+    assert!(matches!(
+        live.face_cycle(&half, &mut unlimited()),
+        Err(ArrangeError::TooMany)
+    ));
+    // A half-edge that is not an edge of the drawing is refused too.
+    let stray = Half {
+        from: rat(0, 0, 1),
+        to: rat(1, 1, 1),
+    };
+    assert!(matches!(
+        live.face_cycle(&stray, &mut unlimited()),
+        Err(ArrangeError::TooMany)
+    ));
+}
+
+/// Every piece of `live` lies on its line and runs from its lower end to its higher, as the line
+/// runs.
+fn assert_pieces_run_low_to_high(drawing: &Live, what: &str) {
+    for piece in drawing.pieces() {
+        let (lo, hi, line) = (piece.lo(), piece.hi(), piece.line());
+        assert_eq!(line.side(lo).unwrap(), Sign::Zero, "{what}: {piece:?}");
+        assert_eq!(line.side(hi).unwrap(), Sign::Zero, "{what}: {piece:?}");
+        let d = line.direction();
+        match lo.cmp_x(hi).unwrap() {
+            Sign::Negative => assert!(d[0] > 0, "{what}: {piece:?}"),
+            Sign::Zero => {
+                assert_eq!(lo.cmp_y(hi).unwrap(), Sign::Negative, "{what}: {piece:?}");
+                assert!(d[0] == 0 && d[1] > 0, "{what}: {piece:?}");
+            }
+            Sign::Positive => panic!("{what}: the lower end is right of the higher: {piece:?}"),
+        }
+    }
+}
+
+#[test]
+fn every_piece_runs_from_its_lower_end_to_its_higher_however_it_was_made() {
+    let mut rng = SplitMix64(0x0D1E);
+    for round in 0..60 {
+        let n = 2 + rng.below(8) as usize;
+        let segs = random_segments(&mut rng, n, 7);
+        let batch = Live::batch(&segs, &mut unlimited()).unwrap();
+        assert_pieces_run_low_to_high(&batch, &format!("batch, round {round}"));
+        let order = shuffled(&mut rng, n);
+        let live = built(&segs, &order);
+        assert_pieces_run_low_to_high(&live, &format!("insert, round {round}"));
+        let half = n / 2;
+        let (left, right) = (built(&segs, &order[..half]), built(&segs, &order[half..]));
+        let both = left.overlay(&right, &mut unlimited()).unwrap();
+        assert_pieces_run_low_to_high(&both, &format!("overlay, round {round}"));
+    }
+}
+
+#[test]
+fn from_noded_takes_segments_either_way_round_and_skips_those_of_no_length() {
+    let forward = Live::from_noded(&[(p(0, 0), p(3, 0), 0), (p(3, 0), p(3, 2), 1)]).unwrap();
+    let given = Live::from_noded(&[
+        (p(3, 0), p(0, 0), 0),
+        (p(5, 5), p(5, 5), 9),
+        (p(3, 2), p(3, 0), 1),
+    ])
+    .unwrap();
+    assert_eq!(given.len(), 2);
+    assert!(given.same_as(&forward).unwrap());
+    assert_pieces_run_low_to_high(&given, "from_noded");
+    let batch = Live::batch(&[(p(3, 0), p(0, 0)), (p(3, 2), p(3, 0))], &mut unlimited()).unwrap();
+    assert!(given.same_as(&batch).unwrap());
+}
+
+#[test]
+fn same_as_tells_every_difference() {
+    let one = |a: P2, b: P2, label: u32| Live::new().insert(a, b, label, &mut unlimited()).unwrap();
+    let base = one(p(0, 0), p(4, 0), 7);
+    assert!(base.same_as(&one(p(4, 0), p(0, 0), 7)).unwrap());
+    // Another number of pieces, another lower end, another higher end, other sources.
+    let two = base.insert(p(9, 9), p(9, 12), 8, &mut unlimited()).unwrap();
+    assert!(!base.same_as(&two).unwrap());
+    assert!(!two.same_as(&base).unwrap());
+    assert!(!base.same_as(&one(p(1, 0), p(4, 0), 7)).unwrap());
+    assert!(!base.same_as(&one(p(0, 0), p(3, 0), 7)).unwrap());
+    assert!(!base.same_as(&one(p(0, 0), p(4, 0), 8)).unwrap());
+}
+
+#[test]
+fn an_empty_drawing_is_empty_and_a_drawn_one_is_not() {
+    let empty = Live::new();
+    assert!(empty.is_empty());
+    assert_eq!((empty.len(), empty.chunk_count()), (0, 0));
+    assert_eq!(empty.pieces().count(), 0);
+    let none = Live::batch(&[], &mut unlimited()).unwrap();
+    assert!(none.is_empty() && none.same_as(&empty).unwrap());
+    let drawn = empty.insert(p(0, 0), p(1, 0), 0, &mut unlimited()).unwrap();
+    assert!(!drawn.is_empty());
+    assert!(empty.is_empty());
+    assert_eq!((drawn.len(), drawn.chunk_count()), (1, 1));
+    assert!(matches!(
+        empty.locate(&rat(0, 0, 1), &mut unlimited()).unwrap(),
+        Location::Face(None)
+    ));
+}
+
+#[test]
+fn an_insert_costs_exactly_what_its_zone_needs() {
+    let segs = lattice(40);
+    let live = Live::from_noded(&segs).unwrap();
+    let label = segs.len() as u32;
+    // Far from everything: no chunk opened, nothing examined, one piece written into the last
+    // chunk, which is copied.
+    let (far, cost) = live
+        .insert_costed(p(100, 100), p(101, 101), label, &mut unlimited())
+        .unwrap();
+    assert_eq!(
+        cost,
+        Cost {
+            chunks_opened: 0,
+            examined: 0,
+            split: 0,
+            written: 1,
+            chunks_copied: 1,
+        }
+    );
+    assert_eq!(far.len(), live.len() + 1);
+    assert_eq!(far.shared_chunks(&live), live.chunk_count() - 1);
+    // A cell's diagonal: it touches the twelve unit segments round the cell's corners, but only at
+    // their ends, so nothing is split. The lattice is sorted by lower end, 81 pieces to a column
+    // and 256 to a chunk, so columns 9 to 12 are in chunks 2 and 3, the two whose boxes meet the
+    // cell's.
+    let (diagonal, cost) = live
+        .insert_costed(p(10, 10), p(11, 11), label, &mut unlimited())
+        .unwrap();
+    assert_eq!(
+        cost,
+        Cost {
+            chunks_opened: 2,
+            examined: 12,
+            split: 0,
+            written: 1,
+            chunks_copied: 1,
+        }
+    );
+    let mut all: Vec<(P2, P2)> = segs.iter().map(|&(a, b, _)| (a, b)).collect();
+    all.push((p(10, 10), p(11, 11)));
+    assert!(
+        diagonal
+            .same_as(&Live::batch(&all, &mut unlimited()).unwrap())
+            .unwrap()
+    );
+    // Along a lattice line from one corner to the next: the piece is there, and takes the label.
+    let (along, cost) = live
+        .insert_costed(p(10, 10), p(11, 10), label, &mut unlimited())
+        .unwrap();
+    assert_eq!((cost.split, cost.written, cost.chunks_copied), (0, 1, 1));
+    assert_eq!(along.len(), live.len());
+    let piece = along
+        .pieces()
+        .find(|e| e.lo().same(&rat(10, 10, 1)).unwrap() && e.hi().same(&rat(11, 10, 1)).unwrap())
+        .unwrap();
+    assert_eq!(piece.sources().len(), 2);
+    assert_eq!(piece.sources()[1], label);
+}
+
+#[test]
+fn a_chunk_is_halved_past_twice_its_size_and_not_before() {
+    // Unit segments side by side, each after the last in key order, all in the first chunk.
+    let segs: Vec<(P2, P2)> = (0..600).map(|i| (p(i, 0), p(i, 1))).collect();
+    let mut live = Live::new();
+    for (i, &(a, b)) in segs.iter().enumerate().take(512) {
+        live = live.insert(a, b, i as u32, &mut unlimited()).unwrap();
+    }
+    assert_eq!((live.len(), live.chunk_count()), (512, 1));
+    let (next, cost) = live
+        .insert_costed(segs[512].0, segs[512].1, 512, &mut unlimited())
+        .unwrap();
+    assert_eq!((next.len(), next.chunk_count()), (513, 2));
+    // The chunk copied, and the half split off it.
+    assert_eq!(cost.chunks_copied, 2);
+    assert_eq!(next.shared_chunks(&live), 0);
+    let mut live = next;
+    for (i, &(a, b)) in segs.iter().enumerate().skip(513) {
+        live = live.insert(a, b, i as u32, &mut unlimited()).unwrap();
+    }
+    assert_eq!((live.len(), live.chunk_count()), (600, 2));
+    assert!(
+        live.same_as(&Live::batch(&segs, &mut unlimited()).unwrap())
+            .unwrap()
+    );
+    // A change in the first half leaves the second half shared.
+    let (changed, cost) = live
+        .insert_costed(p(0, 0), p(1, 1), 600, &mut unlimited())
+        .unwrap();
+    assert_eq!(cost.chunks_copied, 1);
+    assert_eq!(changed.shared_chunks(&live), 1);
+}
+
+#[test]
+fn location_and_face_walks_cross_chunks() {
+    let live = Live::from_noded(&lattice(40)).unwrap();
+    assert!(live.chunk_count() > 10);
+    let mut m = unlimited();
+    // Inside a cell: the face is the cell, four corners round.
+    let Location::Face(Some(h)) = live.locate(&rat(21, 21, 2), &mut m).unwrap() else {
+        panic!("a face");
+    };
+    assert_eq!(
+        steps(&live.face_cycle(&h, &mut m).unwrap()),
+        [(10, 10), (11, 10), (11, 11), (10, 11)]
+    );
+    // Above the lattice: the ray meets the top of a column at a corner, and the face is the
+    // unbounded one, whose boundary is the lattice's outline, 160 corners round.
+    let Location::Face(Some(h)) = live.locate(&rat(10, 45, 1), &mut m).unwrap() else {
+        panic!("a face");
+    };
+    assert_eq!(steps(&[h.from, h.to]), [(10, 40), (11, 40)]);
+    let outline = live.face_cycle(&h, &mut m).unwrap();
+    assert_eq!(outline.len(), 160);
+    // A corner and a point on a unit segment.
+    assert!(matches!(
+        live.locate(&rat(20, 30, 1), &mut m).unwrap(),
+        Location::Vertex(_)
+    ));
+    assert!(matches!(
+        live.locate(&rat(41, 60, 2), &mut m).unwrap(),
+        Location::Edge(..)
+    ));
 }

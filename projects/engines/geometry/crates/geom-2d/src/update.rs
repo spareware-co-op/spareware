@@ -65,7 +65,9 @@ use crate::arrange::{ArrangeError, arrange};
 /// Pieces a chunk is split into halves at twice this many.
 const CHUNK: usize = 256;
 
-/// An outward-rounded box in whole steps: `[min x, min y, max x, max y]`.
+/// A box in whole steps, `[min x, min y, max x, max y]`, each the floor of the exact coordinate.
+/// The floor never decreases, so two boxes whose exact ranges overlap still meet once floored: a
+/// box skips only what cannot meet.
 type Box4 = [i128; 4];
 
 fn sign_order(s: Sign) -> Ordering {
@@ -106,29 +108,17 @@ fn between(lo: &Rational2, t: &Rational2, hi: &Rational2) -> Result<bool, Arrang
     Ok(cmp_pt(lo, t)? != Ordering::Greater && cmp_pt(t, hi)? != Ordering::Greater)
 }
 
-/// The floor and the ceiling of `v / w`, `w` positive.
-fn floor_ceil(v: i128, w: i128) -> (i128, i128) {
-    let floor = v.checked_div_euclid(w).unwrap_or(0);
-    let exact = v.checked_rem_euclid(w).unwrap_or(0) == 0;
-    (
-        floor,
-        if exact {
-            floor
-        } else {
-            floor.saturating_add(1)
-        },
-    )
+/// The floor of `v / w`; `w` is a weight, so positive, and the division cannot fail.
+fn floor(v: i128, w: i128) -> i128 {
+    v.checked_div_euclid(w).unwrap_or(0)
 }
 
-/// The box of the segment `lo`..`hi`, rounded outward to whole steps.
+/// The box of the segment `lo`..`hi` in whole steps (see [`Box4`]).
 fn box_of(lo: &Rational2, hi: &Rational2) -> Box4 {
     let ([lx, ly], lw) = lo.coordinates();
     let ([hx, hy], hw) = hi.coordinates();
-    let (lx0, lx1) = floor_ceil(lx, lw);
-    let (ly0, ly1) = floor_ceil(ly, lw);
-    let (hx0, hx1) = floor_ceil(hx, hw);
-    let (hy0, hy1) = floor_ceil(hy, hw);
-    [lx0.min(hx0), ly0.min(hy0), lx1.max(hx1), ly1.max(hy1)]
+    let (x0, y0, x1, y1) = (floor(lx, lw), floor(ly, lw), floor(hx, hw), floor(hy, hw));
+    [x0.min(x1), y0.min(y1), x0.max(x1), y0.max(y1)]
 }
 
 fn meets(a: &Box4, b: &Box4) -> bool {
@@ -185,7 +175,8 @@ impl Piece {
     }
 }
 
-/// A run of pieces in key order, with a box round them all.
+/// A run of pieces in key order, with a box round them all. A chunk is never empty: one that
+/// loses its last piece is dropped.
 #[derive(Clone, Debug)]
 struct Chunk {
     pieces: Vec<Piece>,
@@ -214,7 +205,8 @@ pub struct Cost {
     pub split: u64,
     /// The pieces the segment added or whose sources it extended.
     pub written: u64,
-    /// The chunks copied because the new version changed them.
+    /// The chunks copied because the new version changed them, and the halves it split off chunks
+    /// that grew past twice their size.
     pub chunks_copied: u64,
 }
 
@@ -246,11 +238,10 @@ pub struct Live {
     len: usize,
 }
 
-/// A version being edited: the chunks, unique once touched.
+/// A version being edited: the chunks, each copied the first time the edit changes it.
 struct Edit {
     chunks: Vec<Arc<Chunk>>,
     len: usize,
-    copied: Vec<usize>,
     cost: Cost,
 }
 
@@ -303,49 +294,37 @@ impl Edit {
         Edit {
             chunks: live.chunks.clone(),
             len: live.len,
-            copied: Vec::new(),
             cost: Cost::default(),
         }
     }
 
-    /// The chunk at `c`, made this edit's own.
-    fn own(&mut self, c: usize) -> Option<&mut Chunk> {
-        if !self.copied.contains(&c) {
-            self.copied.push(c);
+    /// The chunk at `c`, made this edit's own: copied if an older version still shares it.
+    fn own(&mut self, c: usize) -> Result<&mut Chunk, ArrangeError> {
+        let chunk = self.chunks.get_mut(c).ok_or(ArrangeError::TooMany)?;
+        if Arc::get_mut(chunk).is_none() {
             self.cost.chunks_copied = self.cost.chunks_copied.saturating_add(1);
         }
-        self.chunks.get_mut(c).map(Arc::make_mut)
+        Ok(Arc::make_mut(chunk))
     }
 
-    fn get(&self, lo: &Rational2, hi: &Rational2) -> Result<Option<Piece>, ArrangeError> {
-        let (c, i, found) = find(&self.chunks, lo, hi)?;
-        if !found {
-            return Ok(None);
-        }
-        Ok(self.chunks.get(c).and_then(|ch| ch.pieces.get(i)).cloned())
-    }
-
+    /// Takes out the piece whose key is `lo`..`hi`, if there is one.
     fn remove(&mut self, lo: &Rational2, hi: &Rational2) -> Result<(), ArrangeError> {
         let (c, i, found) = find(&self.chunks, lo, hi)?;
         if !found {
             return Ok(());
         }
-        let empty = {
-            let Some(chunk) = self.own(c) else {
-                return Ok(());
-            };
-            chunk.pieces.remove(i);
-            *chunk = Chunk::of(core::mem::take(&mut chunk.pieces));
-            chunk.pieces.is_empty()
-        };
-        if empty {
+        let chunk = self.own(c)?;
+        // `find` found the key at slot i, so the slot is there.
+        chunk.pieces.remove(i);
+        *chunk = Chunk::of(core::mem::take(&mut chunk.pieces));
+        if chunk.pieces.is_empty() {
             self.chunks.remove(c);
-            self.copied.clear();
         }
         self.len = self.len.saturating_sub(1);
         Ok(())
     }
 
+    /// Puts `piece` in at its key; if a piece is there already, it takes `piece`'s sources too.
     fn put(&mut self, piece: Piece) -> Result<(), ArrangeError> {
         let (c, i, found) = find(&self.chunks, &piece.lo, &piece.hi)?;
         if self.chunks.is_empty() {
@@ -353,41 +332,27 @@ impl Edit {
             self.len = 1;
             return Ok(());
         }
-        let grown = {
-            let Some(chunk) = self.own(c) else {
+        let half = {
+            let chunk = self.own(c)?;
+            if let (true, Some(there)) = (found, chunk.pieces.get_mut(i)) {
+                there.sources = merge(&there.sources, &piece.sources);
                 return Ok(());
-            };
-            if found {
-                if let Some(slot) = chunk.pieces.get_mut(i) {
-                    *slot = piece;
-                }
-            } else {
-                let at = if chunk.pieces.get(i).is_some() || i == chunk.pieces.len() {
-                    i
-                } else {
-                    chunk.pieces.len()
-                };
-                chunk.bounds = if chunk.pieces.is_empty() {
-                    piece.bounds()
-                } else {
-                    join(&chunk.bounds, &piece.bounds())
-                };
-                chunk.pieces.insert(at, piece);
             }
-            chunk.pieces.len() > CHUNK.saturating_mul(2)
+            // The chunk is not empty, so its box is a box of pieces, and joins the new one's.
+            chunk.bounds = join(&chunk.bounds, &piece.bounds());
+            chunk.pieces.insert(i.min(chunk.pieces.len()), piece);
+            if chunk.pieces.len() > CHUNK.saturating_mul(2) {
+                let tail = chunk.pieces.split_off(CHUNK);
+                *chunk = Chunk::of(core::mem::take(&mut chunk.pieces));
+                Some(Chunk::of(tail))
+            } else {
+                None
+            }
         };
-        if !found {
-            self.len = self.len.saturating_add(1);
-        }
-        if grown {
-            let Some(chunk) = self.own(c) else {
-                return Ok(());
-            };
-            let tail = chunk.pieces.split_off(CHUNK);
-            *chunk = Chunk::of(core::mem::take(&mut chunk.pieces));
-            self.chunks
-                .insert(c.saturating_add(1), Arc::new(Chunk::of(tail)));
-            self.copied.clear();
+        self.len = self.len.saturating_add(1);
+        if let Some(half) = half {
+            // A chunk past twice its size is halved; its upper half is a chunk this edit made.
+            self.chunks.insert(c.saturating_add(1), Arc::new(half));
             self.cost.chunks_copied = self.cost.chunks_copied.saturating_add(1);
         }
         Ok(())
@@ -424,19 +389,26 @@ fn contacts(s: &Piece, e: &Piece) -> Result<Vec<Rational2>, ArrangeError> {
     Ok(out)
 }
 
-/// `points`, ascending and without repeats.
-fn sorted(mut points: Vec<Rational2>) -> Result<Vec<Rational2>, ArrangeError> {
+/// Sorts `items` by `order`, an order that can fail: the first failure is then the answer, and
+/// the items are left in no promised order.
+fn try_sort<T>(
+    items: &mut [T],
+    mut order: impl FnMut(&T, &T) -> Result<Ordering, ArrangeError>,
+) -> Result<(), ArrangeError> {
     let mut fail: Option<ArrangeError> = None;
-    points.sort_by(|a, b| match cmp_pt(a, b) {
+    items.sort_by(|a, b| match order(a, b) {
         Ok(o) => o,
         Err(e) => {
             fail = Some(e);
             Ordering::Equal
         }
     });
-    if let Some(e) = fail {
-        return Err(e);
-    }
+    fail.map_or(Ok(()), Err)
+}
+
+/// `points`, ascending and without repeats.
+fn sorted(mut points: Vec<Rational2>) -> Result<Vec<Rational2>, ArrangeError> {
+    try_sort(&mut points, cmp_pt)?;
     let mut out: Vec<Rational2> = Vec::with_capacity(points.len());
     for p in points {
         match out.last() {
@@ -547,17 +519,7 @@ impl Live {
 
     /// The pieces `pieces` as a `Live`; they are sorted here.
     fn from_pieces(mut pieces: Vec<Piece>) -> Result<Live, ArrangeError> {
-        let mut fail: Option<ArrangeError> = None;
-        pieces.sort_by(|a, b| match cmp_key(a, &b.lo, &b.hi) {
-            Ok(o) => o,
-            Err(e) => {
-                fail = Some(e);
-                Ordering::Equal
-            }
-        });
-        if let Some(e) = fail {
-            return Err(e);
-        }
+        try_sort(&mut pieces, |a, b| cmp_key(a, &b.lo, &b.hi))?;
         let len = pieces.len();
         // Each chunk is collected into a vector of its own size. (Splitting the front off a long
         // vector keeps the long vector's buffer in the chunk, and copies the rest each time: a
@@ -706,31 +668,25 @@ impl Live {
             let mut chain: Vec<Rational2> = alloc::vec![e.lo, e.hi];
             chain.extend(inside);
             let chain = sorted(chain)?;
-            for w in chain.windows(2) {
-                if let [u, v] = *w {
-                    edit.put(Piece {
-                        lo: u,
-                        hi: v,
-                        line: e.line,
-                        sources: e.sources.clone(),
-                    })?;
-                }
+            for (u, v) in chain.iter().zip(chain.iter().skip(1)) {
+                edit.put(Piece {
+                    lo: *u,
+                    hi: *v,
+                    line: e.line,
+                    sources: e.sources.clone(),
+                })?;
             }
         }
-        // The segment itself, piece by piece between its cuts.
+        // The segment itself, piece by piece between its cuts; a piece already along a stretch
+        // takes the segment's sources.
         let cuts = sorted(cuts)?;
-        for w in cuts.windows(2) {
-            let [u, v] = *w else { continue };
+        for (u, v) in cuts.iter().zip(cuts.iter().skip(1)) {
             edit.cost.written = edit.cost.written.saturating_add(1);
-            let sources = match edit.get(&u, &v)? {
-                Some(old) => merge(&old.sources, &s.sources),
-                None => s.sources.clone(),
-            };
             edit.put(Piece {
-                lo: u,
-                hi: v,
+                lo: *u,
+                hi: *v,
                 line: s.line,
-                sources,
+                sources: s.sources.clone(),
             })?;
         }
         Ok(edit.done())
@@ -791,12 +747,13 @@ impl Live {
         meter: &mut WorkMeter<'_>,
     ) -> Result<Location, ArrangeError> {
         let ([px, py], pw) = p.coordinates();
-        let (x0, x1) = floor_ceil(px, pw);
-        let (_, y1) = floor_ceil(py, pw);
-        let column: Box4 = [x0, i128::MIN, x1, y1];
+        let x = floor(px, pw);
+        let column: Box4 = [x, i128::MIN, x, floor(py, pw)];
         let vertical = Carrier::new(pw, 0, px)?;
-        // The closest hit below p: its point, and the pieces that reach it.
-        let mut best: Option<(Rational2, Vec<Piece>)> = None;
+        // The closest hit below p: its point, the first piece found that reaches it, and whether
+        // that piece ends there. Pieces meet only at their ends, so a point that is the end of one
+        // piece reaching it is the end of every piece reaching it, and any one piece decides.
+        let mut best: Option<(Rational2, Half, bool)> = None;
         let mut looked = 0_u64;
         for chunk in &self.chunks {
             if !meets(&chunk.bounds, &column) {
@@ -827,37 +784,27 @@ impl Live {
                 if sign_order(h.cmp_y(p)?) != Ordering::Less {
                     continue;
                 }
-                match &mut best {
-                    Some((at, list)) => match sign_order(h.cmp_y(at)?) {
-                        Ordering::Greater => {
-                            *at = h;
-                            list.clear();
-                            list.push(e.clone());
-                        }
-                        Ordering::Equal => list.push(e.clone()),
-                        Ordering::Less => {}
-                    },
-                    None => best = Some((h, alloc::vec![e.clone()])),
+                let higher = match &best {
+                    Some((at, _, _)) => sign_order(h.cmp_y(at)?) == Ordering::Greater,
+                    None => true,
+                };
+                if higher {
+                    let ends = e.lo.same(&h)? || e.hi.same(&h)?;
+                    let under = Half {
+                        from: e.lo,
+                        to: e.hi,
+                    };
+                    best = Some((h, under, ends));
                 }
             }
         }
         meter.charge(looked.saturating_add(1))?;
-        let Some((h, hit)) = best else {
+        let Some((h, under, at_end)) = best else {
             return Ok(Location::Face(None));
         };
-        let mut at_end = false;
-        for e in &hit {
-            at_end = at_end || e.lo.same(&h)? || e.hi.same(&h)?;
-        }
         if !at_end {
             // Under an edge's inside: the face above it is on the left of the edge as it runs.
-            return Ok(match hit.first() {
-                Some(e) => Location::Face(Some(Half {
-                    from: e.lo,
-                    to: e.hi,
-                })),
-                None => Location::Face(None),
-            });
+            return Ok(Location::Face(Some(under)));
         }
         // At a vertex: the face is the one the first edge clockwise from straight up bounds.
         let ring = self.at(&h)?;
@@ -883,7 +830,9 @@ impl Live {
     /// # Errors
     ///
     /// [`ArrangeError::Range`] past the exact budget, [`ArrangeError::Stopped`] if the meter stops,
-    /// and [`ArrangeError::TooMany`] if `half` is not an edge of the drawing.
+    /// and [`ArrangeError::TooMany`] if `half` is not an edge of the drawing, or if the walk does
+    /// not come back to `half` within twice as many steps as there are pieces (which only a drawing
+    /// from [`Live::from_noded`] whose segments were not noded can do).
     pub fn face_cycle(
         &self,
         half: &Half,
@@ -952,21 +901,17 @@ fn merge(a: &[u32], b: &[u32]) -> Arc<[u32]> {
 mod tests {
     use super::*;
 
+    fn p(x: i64, y: i64) -> P2 {
+        P2::new(x, y).unwrap()
+    }
+
     /// A lattice of unit segments, noded by construction.
     fn lattice(side: i64) -> Vec<(P2, P2, u32)> {
         let mut out = Vec::new();
-        let mut label = 0_u32;
         for y in 0..=side {
-            for x in 0..=side {
-                for (dx, dy) in [(1, 0), (0, 1)] {
-                    if x + dx <= side
-                        && y + dy <= side
-                        && let (Ok(a), Ok(b)) = (P2::new(x, y), P2::new(x + dx, y + dy))
-                    {
-                        out.push((a, b, label));
-                        label += 1;
-                    }
-                }
+            for x in 0..side {
+                out.push((p(x, y), p(x + 1, y), u32::try_from(out.len()).unwrap()));
+                out.push((p(y, x), p(y, x + 1), u32::try_from(out.len()).unwrap()));
             }
         }
         out
@@ -981,5 +926,117 @@ mod tests {
             assert!(chunk.pieces.len() <= CHUNK);
             assert!(chunk.pieces.capacity() <= CHUNK.saturating_mul(2));
         }
+    }
+
+    /// The angle of `v` from the positive x axis, as a "diamond angle": a quarter turn number and a
+    /// fraction (numerator, denominator) along that quarter. It grows with the true angle, and is
+    /// worked out here without the half planes and cross products `angle_cmp` uses.
+    fn diamond(v: [i128; 2]) -> (i128, i128, i128) {
+        let [x, y] = v;
+        if x > 0 && y >= 0 {
+            (0, y, x + y)
+        } else if x <= 0 && y > 0 {
+            (1, -x, -x + y)
+        } else if x < 0 && y <= 0 {
+            (2, -y, -x - y)
+        } else {
+            (3, x, x - y)
+        }
+    }
+
+    fn diamond_cmp(a: [i128; 2], b: [i128; 2]) -> Ordering {
+        let ((qa, na, da), (qb, nb, db)) = (diamond(a), diamond(b));
+        qa.cmp(&qb).then((na * db).cmp(&(nb * da)))
+    }
+
+    /// Every pair of directions with small coordinates is ordered by angle as the diamond angle
+    /// orders them, including the axes and directions that are multiples of each other.
+    #[test]
+    fn angles_are_ordered_from_the_positive_x_axis_round() {
+        let mut all = Vec::new();
+        for x in -3..=3_i128 {
+            for y in -3..=3_i128 {
+                if (x, y) != (0, 0) {
+                    all.push([x, y]);
+                }
+            }
+        }
+        for &a in &all {
+            for &b in &all {
+                assert_eq!(angle_cmp(a, b).unwrap(), diamond_cmp(a, b), "{a:?} {b:?}");
+            }
+        }
+        // And a turn is measured clockwise from the reference: from straight up, the positive x axis
+        // is a quarter turn, straight down a half and the negative x axis three quarters.
+        let quarter = |d: [i128; 2]| diamond(turn(d, [0, 1]).unwrap());
+        assert_eq!(
+            [
+                quarter([0, 1]),
+                quarter([1, 0]),
+                quarter([0, -1]),
+                quarter([-1, 0])
+            ],
+            [(0, 0, 1), (1, 0, 1), (2, 0, 1), (3, 0, 1)]
+        );
+    }
+
+    /// A step past i128 is refused, never wrapped.
+    #[test]
+    fn a_turn_past_the_integers_is_refused() {
+        let big = [i128::MAX, 1];
+        assert!(matches!(turn(big, big), Err(ArrangeError::Range)));
+        assert!(matches!(
+            turn([1, i128::MAX], [1, i128::MAX]),
+            Err(ArrangeError::Range)
+        ));
+        assert!(matches!(
+            turn([1, 2], [i128::MAX, 1]),
+            Err(ArrangeError::Range)
+        ));
+        assert!(matches!(
+            turn([1, -1], [1, i128::MAX]),
+            Err(ArrangeError::Range)
+        ));
+        assert!(matches!(
+            angle_cmp(big, [1, i128::MAX]),
+            Err(ArrangeError::Range)
+        ));
+    }
+
+    /// An order that fails makes the sort fail, with the order's own error.
+    #[test]
+    fn a_sort_whose_order_fails_fails() {
+        let mut items = [3, 1, 2];
+        assert!(matches!(
+            try_sort(&mut items, |_, _| Err(ArrangeError::TooMany)),
+            Err(ArrangeError::TooMany)
+        ));
+        try_sort(&mut items, |a, b| Ok(a.cmp(b))).unwrap();
+        assert_eq!(items, [1, 2, 3]);
+    }
+
+    /// Taking out a key that is not there changes nothing, in an empty drawing or not.
+    #[test]
+    fn removing_a_key_that_is_not_there_changes_nothing() {
+        let (a, b) = (Rational2::from(p(0, 0)), Rational2::from(p(1, 0)));
+        let mut empty = Edit::of(&Live::new());
+        empty.remove(&a, &b).unwrap();
+        let (live, cost) = empty.done();
+        assert!(live.is_empty());
+        assert_eq!(cost, Cost::default());
+        let drawing = Live::from_noded(&lattice(3)).unwrap();
+        let mut edit = Edit::of(&drawing);
+        edit.remove(&a, &Rational2::from(p(2, 0))).unwrap();
+        let (after, cost) = edit.done();
+        assert!(after.same_as(&drawing).unwrap());
+        assert_eq!(cost, Cost::default());
+        assert_eq!(after.shared_chunks(&drawing), drawing.chunk_count());
+    }
+
+    /// A chunk index that is not there is refused.
+    #[test]
+    fn owning_a_chunk_that_is_not_there_is_refused() {
+        let mut edit = Edit::of(&Live::new());
+        assert!(matches!(edit.own(0), Err(ArrangeError::TooMany)));
     }
 }
