@@ -2004,7 +2004,7 @@ mod tests {
                 .lanes::<R, N, E, N>(kind, row, list)?;
                 assert!(narrow.is_some());
                 assert_eq!(narrow, wide, "{k} unknowns");
-                self.compared += 1;
+                self.compared = self.compared.saturating_add(1);
             }
             Ok(())
         }
