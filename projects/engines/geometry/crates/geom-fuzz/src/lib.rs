@@ -18,9 +18,11 @@
 //! allow, and a body's versions never see each other's edits; [`attributes`] (G90),
 //! `geom-name`'s attribute step gives each output exactly what section 8.4's table gives;
 //! [`batch`] (G104), `geom-op`'s batch driver gives each item its own result, and the curve and
-//! surface kinds' many-point calls give the single calls' bits; and [`make`] (G101), the
-//! primitives and transforms return only what the full checker passes, keep their laws, and
-//! refuse with a typed error. Gate 2 (32.44) adds
+//! surface kinds' many-point calls give the single calls' bits; [`make`] (G101), the primitives
+//! and transforms return only what the full checker passes, keep their laws, and refuse with a
+//! typed error; and [`sequence`] (G116), whole operation logs replay to the same hash and keep
+//! every law at every step. [`adversarial`] holds the generators aimed at chapter 28.5's hard
+//! cases, and [`robustness`] counts how many plain designs succeed. Gate 2 (32.44) adds
 //! [`curves`], every curve kind keeps the kind contract on any bytes (G60 to G64, G67, G68), and
 //! [`surfaces`], every surface kind likewise (G60, G65 to G68), and [`nurbs`], NURBS curves keep
 //! their stated bounds against exact rational evaluation (G56, G58, G59), and [`transforms`], the
@@ -186,6 +188,7 @@
 
 use core::fmt;
 
+pub mod adversarial;
 pub mod arenas;
 pub mod attributes;
 pub mod batch;
@@ -199,8 +202,10 @@ pub mod maths;
 pub mod nurbs;
 pub mod orient2d;
 pub mod predicates;
+pub mod robustness;
 pub mod roots;
 pub mod seeded;
+pub mod sequence;
 pub mod surfaces;
 pub mod transforms;
 pub mod variants;

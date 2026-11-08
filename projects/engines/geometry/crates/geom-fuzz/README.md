@@ -22,8 +22,11 @@ G80), `geom-topo` publishes exactly the arenas its rules allow, and a body's ver
 each other's edits; `attributes` (`src/attributes.rs`, G90), `geom-name`'s attribute step gives
 each output exactly what section 8.4's table gives; `batch` (`src/batch.rs`, G104), `geom-op`'s
 batch driver gives each item its own result, and the many-point calls give the single calls' bits;
-and `make` (`src/make.rs`, G101), the primitives and transforms return only what the full checker
-passes, keep their laws, and refuse with a typed error.
+`make` (`src/make.rs`, G101), the primitives and transforms return only what the full checker
+passes, keep their laws, and refuse with a typed error; and `sequence` (`src/sequence.rs`, G116),
+whole operation logs replay to the same hash and keep every law at every step. `src/adversarial.rs`
+holds the generators aimed at the hard cases, and `src/robustness.rs` counts how many plain designs
+succeed per family: `src/robustness.txt` records it, and a count may not fall.
 
 ## One law, four engines
 
