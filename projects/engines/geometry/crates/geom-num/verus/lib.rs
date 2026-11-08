@@ -60,6 +60,10 @@ pub mod circle_side;
 pub mod circle_line;
 #[path = "generated/circle_gap.rs"]
 pub mod circle_gap;
+#[path = "generated/ellipse_side.rs"]
+pub mod ellipse_side;
+#[path = "generated/ellipse_line.rs"]
+pub mod ellipse_line;
 #[path = "generated/plane_side.rs"]
 pub mod plane_side;
 #[path = "generated/tpi_weight.rs"]

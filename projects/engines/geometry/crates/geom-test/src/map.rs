@@ -150,6 +150,9 @@ pub enum Rule {
     ErrorEnum,
     /// An error enum or error kind without a doc comment.
     ErrorDoc,
+    /// A detail whose base kind the map cannot read from its enum's `kind` function, or a base kind
+    /// that is not a variant of `ErrorKind`.
+    ErrorBase,
     /// The committed map is missing or differs from the generated one.
     Stale,
     /// A known gap that no longer occurs.
@@ -158,7 +161,7 @@ pub enum Rule {
 
 impl Rule {
     /// Every rule, in the order `HEADERS.md` lists them.
-    pub const ALL: [Rule; 22] = [
+    pub const ALL: [Rule; 23] = [
         Rule::Manifest,
         Rule::Root,
         Rule::Unreadable,
@@ -179,6 +182,7 @@ impl Rule {
         Rule::Uncredited,
         Rule::ErrorEnum,
         Rule::ErrorDoc,
+        Rule::ErrorBase,
         Rule::Stale,
         Rule::GapStale,
     ];
@@ -207,6 +211,7 @@ impl Rule {
             Rule::Uncredited => "Uncredited",
             Rule::ErrorEnum => "Error enum",
             Rule::ErrorDoc => "Error doc",
+            Rule::ErrorBase => "Error base",
             Rule::Stale => "Stale map",
             Rule::GapStale => "Stale gap",
         }
@@ -747,11 +752,15 @@ fn error_values(
                 .variants
                 .into_iter()
                 .map(|v| {
-                    object([
+                    let mut kind = object([
                         ("doc", Value::from(v.doc)),
                         ("name", Value::from(v.name)),
                         ("shape", Value::from(v.shape.name())),
-                    ])
+                    ]);
+                    if let (Value::Object(fields), Some(base)) = (&mut kind, &v.base) {
+                        fields.insert("base_kind".to_owned(), Value::from(base.name()));
+                    }
+                    kind
                 })
                 .collect();
             object([
@@ -900,7 +909,7 @@ fn depend_values(
         .collect()
 }
 
-/// The crate's `license` field names every ported file's licence beside MPL-2.0 (29.20, rule 4).
+/// The crate's `license` field names every ported file's licence beside Apache-2.0 (29.20, rule 4).
 fn check_crate_licence(
     krate: &CrateInput,
     manifest: &Manifest,
@@ -921,7 +930,7 @@ fn check_crate_licence(
         }
         _ => Vec::new(),
     };
-    let mut wanted: Vec<String> = vec!["MPL-2.0".to_owned()];
+    let mut wanted: Vec<String> = vec!["Apache-2.0".to_owned()];
     wanted.extend(
         ports
             .iter()
@@ -936,7 +945,7 @@ fn check_crate_licence(
             Rule::Spdx,
             format!(
                 "the crate ports files under {}, so its own `license` field names each beside \
-                 MPL-2.0 (29.20, rule 4): license = \"{}\"",
+                 Apache-2.0 (29.20, rule 4): license = \"{}\"",
                 ports.join(", "),
                 wanted.join(" AND ")
             ),
@@ -1107,6 +1116,36 @@ fn merge(merged: &mut BTreeMap<(String, String), Merging>, file: &str, records: 
 
 /// The sources of every record in the map, merged by take and source ([`links::source_key`]), and
 /// a problem in each file of a source that two headers give different licences.
+/// Every base kind a detail names that is not a kind of an `ErrorKind` enum in the map: chapter
+/// 22's base kinds are the variants of `geom-op`'s `ErrorKind`, and a detail maps to one of them.
+fn base_kind_problems(crates: &[Value]) -> Vec<Problem> {
+    let enums: Vec<&Value> = crates.iter().flat_map(|c| c.list("errors")).collect();
+    let kinds: BTreeSet<&str> = enums
+        .iter()
+        .filter(|e| e.text("name") == "ErrorKind")
+        .flat_map(|e| e.list("kinds"))
+        .map(|k| k.text("name"))
+        .collect();
+    let mut problems = Vec::new();
+    for e in &enums {
+        for k in e.list("kinds") {
+            let base = k.text("base_kind");
+            if !base.is_empty() && base != errors::HELD && !kinds.contains(base) {
+                problems.push(Problem {
+                    file: e.text("file").to_owned(),
+                    rule: Rule::ErrorBase,
+                    message: format!(
+                        "`{}::{}` maps to `ErrorKind::{base}`, which is not one of the base kinds                          (the variants of `ErrorKind`)",
+                        e.text("name"),
+                        k.text("name")
+                    ),
+                });
+            }
+        }
+    }
+    problems
+}
+
 fn merged_sources(crates: &[Value]) -> (Vec<Value>, Vec<Problem>) {
     let mut merged: BTreeMap<(String, String), Merging> = BTreeMap::new();
     let mut visit = |file: &str, records: &[Value]| merge(&mut merged, file, records);
@@ -1195,6 +1234,7 @@ pub fn build(input: &Input, gaps: &[Gap]) -> Generated {
         .collect();
     let (sources, source_problems) = merged_sources(&crate_values);
     collected.problems.extend(source_problems);
+    collected.problems.extend(base_kind_problems(&crate_values));
 
     let mut problems = Vec::new();
     let mut used = vec![false; gaps.len()];
@@ -1342,7 +1382,7 @@ mod tests {
             name: "geom-x".into(),
             folder: format!("{CRATES_DIR}/geom-x"),
             manifest: Some(
-                "[package]\nname = \"geom-x\"\nlicense = \"MPL-2.0 AND BSD-3-Clause\"\n\n\
+                "[package]\nname = \"geom-x\"\nlicense = \"Apache-2.0 AND BSD-3-Clause\"\n\n\
                  [dependencies]\n# A comment = no\ngeom-num = { path = \"../geom-num\" }\n\
                  libm = \"0.2.16\"\nfoo = { version = \"1.2.3\", default-features = false }\n\
                  bar.workspace = true\n\n[dev-dependencies]\nproptest = \"1\"\n\n\
@@ -1356,7 +1396,7 @@ mod tests {
         assert_eq!(problems, []);
         assert_eq!(
             manifest.licence.as_deref(),
-            Some("MPL-2.0 AND BSD-3-Clause")
+            Some("Apache-2.0 AND BSD-3-Clause")
         );
         let names: Vec<(&str, Option<&str>)> = manifest
             .dependencies
@@ -1390,12 +1430,12 @@ mod tests {
         // Single quotes, an inline table across lines, a renamed package and a comment holding
         // `=` are TOML, read as cargo reads them.
         let (manifest, problems) = read(
-            "[package]\nname = 'geom-x' # the folder's name\nlicense = 'MPL-2.0'\n\
+            "[package]\nname = 'geom-x' # the folder's name\nlicense = 'Apache-2.0'\n\
              [dependencies]\nm = { package = \"libm\", version = \"0.2.16\" }\n\
              # x = \"1\"\n[lib]\ndoctest = false\n",
         );
         assert_eq!(problems, []);
-        assert_eq!(manifest.licence.as_deref(), Some("MPL-2.0"));
+        assert_eq!(manifest.licence.as_deref(), Some("Apache-2.0"));
         assert_eq!(
             manifest.dependencies,
             [Dependency {

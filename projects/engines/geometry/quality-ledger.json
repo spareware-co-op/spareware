@@ -3,6 +3,22 @@
   "about": "The geometry kernel's quality ledger (kernel architecture 28.8). survivors: every mutant cargo-mutants makes that the kernel's tests do not catch and the kernel keeps, keyed by file, cargo-mutants' description and the trimmed text of the mutated line, with why; in the foundation set only equivalent mutants (no input through the crate's public interface can tell them from the original) may be kept. coverage_off: every coverage(off) mark in a kernel crate, with the Kani or Verus proof that the code it hides cannot run. awaiting_proof: every foundation line the tests do not run yet, by its file, its trimmed text and how many missed lines have it, with the piece that proves it unreachable or tests it (the coverage gate landed before those proofs: owner decision of 2026-10-27); the list can only shrink. geom-test's kernel-quality binary checks both in .github/workflows/kernel-quality.yml; geom_test::quality_ledger documents the format.",
   "survivors": [
     {
+      "file": "projects/engines/geometry/crates/geom-linalg/src/rotation.rs",
+      "mutant": "replace < with <= in givens",
+      "line_text": "if y.abs() < TINY && z.abs() < TINY {",
+      "occurrences": 2,
+      "kind": "equivalent",
+      "reason": "Either < becomes <=: the forms differ only when that input is exactly 2^-1021. The pair is then scaled by 2^100 and r scaled back, both exact there since r is at least 2^-1021, a normal number, and y/r and z/r are unchanged by a common power of two: the same c, s and r either way."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-linalg/src/svd.rs",
+      "mutant": "replace < with <= in Svd::jacobi",
+      "line_text": "let (up, length) = if sigma < TINY {",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "The forms differ only when sigma is exactly 2^-1021, a normal number. UP is a power of two and x*UP is exact, so norm takes the same ratios, the same sum and the same root, and its product rounds to 53 bits on both paths: length is exactly sigma*UP, and x*UP/length rounds the same quotient as x/sigma. The column comes out the same to the bit."
+    },
+    {
       "file": "projects/engines/geometry/crates/geom-linalg/src/matrix.rs",
       "mutant": "replace || with && in Matrix::row_pair",
       "line_text": "if i == j || i >= self.rows || j >= self.rows {",
@@ -547,14 +563,6 @@
       "reason": "The two differ only at t0 == t1. Every range end is an outward-rounded interval end strictly beyond the exact one, or the exact 0 or 1 of a clamp or a constant, so a tie is a lower end of one side's range meeting an upper end of the other's: then the exact ranges are disjoint, the piece misses the slab, and the mutant's None is right where the original keeps a range of zero width; 3,120 probe clips against thin and zero-width slabs never met one."
     },
     {
-      "file": "projects/engines/geometry/crates/geom-surface/src/contract.rs",
-      "mutant": "replace + with * in check",
-      "line_text": "let outside = beyond + 1.0;",
-      "occurrences": 1,
-      "kind": "harmless",
-      "reason": "The probe moves from b + (b - a) + 1 to b + (b - a), still past the end since b > a. A kind keeping the contract refuses every parameter outside its domain, so both probes see the same refusal; a kind that refuses some parameters past its end and not others may slip past either."
-    },
-    {
       "file": "projects/engines/geometry/crates/geom-curve/src/contract.rs",
       "mutant": "replace <= with > in check",
       "line_text": "let side = if t <= mid {",
@@ -641,30 +649,6 @@
       "occurrences": 1,
       "kind": "equivalent",
       "reason": "The search keeps a piece only if it also holds t (`inside && a <= t && t <= b`), so the side test only chooses among pieces holding t: inside a piece there is one, and at a break the piece ending at t comes first in the search and passes the original test from the left (a < t, t <= b), as it passes the mutant's."
-    },
-    {
-      "file": "projects/engines/geometry/crates/geom-curve/src/contract.rs",
-      "mutant": "replace + with * in check",
-      "line_text": "past_end + 1.0",
-      "occurrences": 1,
-      "kind": "harmless",
-      "reason": "The probe moves by one unit, still past the end: the domain's stand-in length is positive, so the point lies outside the domain either way. A kind keeping the contract refuses every parameter outside its domain, so both probes see the same refusal; a kind refusing some parameters past its end and not others may slip past either."
-    },
-    {
-      "file": "projects/engines/geometry/crates/geom-curve/src/contract.rs",
-      "mutant": "replace - with + in check",
-      "line_text": "before_start - 1.0",
-      "occurrences": 1,
-      "kind": "harmless",
-      "reason": "The probe moves by one unit, still past the end: the domain's stand-in length is positive, so the point lies outside the domain either way. A kind keeping the contract refuses every parameter outside its domain, so both probes see the same refusal; a kind refusing some parameters past its end and not others may slip past either."
-    },
-    {
-      "file": "projects/engines/geometry/crates/geom-curve/src/contract.rs",
-      "mutant": "replace - with / in check",
-      "line_text": "before_start - 1.0",
-      "occurrences": 1,
-      "kind": "harmless",
-      "reason": "The probe moves by one unit, still past the end: the domain's stand-in length is positive, so the point lies outside the domain either way. A kind keeping the contract refuses every parameter outside its domain, so both probes see the same refusal; a kind refusing some parameters past its end and not others may slip past either."
     },
     {
       "file": "projects/engines/geometry/crates/geom-curve/src/polynomial.rs",
@@ -4747,6 +4731,14 @@
       "reason": "The two differ only when the panels' remainder bounds sum to exactly L·2⁻⁵⁶, the tolerance: > keeps that panel count, >= doubles it. Both counts are certified, every enclosure carries its remainders either way, and the choice is the same on every target, so a tie changes how many panels a transition gets, never whether its results hold."
     },
     {
+      "file": "projects/engines/geometry/crates/geom-curve/src/offset.rs",
+      "mutant": "replace > with >= in Offset<D>::refined",
+      "line_text": "Ok(r) if r.is_some_and(|r| r.hi() > target) => Verdict::Finer,",
+      "occurrences": 1,
+      "kind": "harmless",
+      "reason": "The two differ only when a piece's Taylor remainder bound is exactly the cache's aim, 10⁻¹⁰ times the offset's size: > keeps that piece, >= halves it once more. Either way taylor::from_cuts then states the deviation of every piece it makes, from that piece's own certified remainder, and the choice is the same on every target, so a tie changes how many pieces the offset's NURBS cache has, never whether its stated deviation holds."
+    },
+    {
       "file": "projects/engines/geometry/crates/geom-curve/src/transition.rs",
       "mutant": "replace < with <= in <impl ParamCurve<D> for Transition<D>>::to_nurbs",
       "line_text": "return Ok(if n.deviation < b.deviation { n } else { b });",
@@ -5075,12 +5067,108 @@
       "reason": "Only the scan's start moves, and it still meets the same member. last_within is private; members, its one caller, passes it only periodic families from Scalar::critical, whose lower ends c lie in [−1.5, 2.5] up to a rounding (φ = atan2/π in [−1, 1], plus ψ in [−½, ½], 1 − ψ or 1, or the involute's ½ and 3/2), and extent sends spans past 2⁵⁰ to the pieces' route first. With X = (t₁ − c)/2, the answer is ⌊X⌋, or ⌊X⌋ + 1 when rounding a member down lets it meet t₁ (only for X within ¼ below a whole number). The mutant starts at ⌊(t₁ + c)/2⌋ + 2 = ⌊X + c + e⌋ + 2 with |e| ≤ 1/16 (the roundings of t₁ + c, below 2⁵¹, and of its half), which lies at or above the answer and at most ⌊X⌋ + 5: inside the scan's six steps down. The scan returns the first m from the top whose member's lower end is at most t₁, so both return the same m."
     },
     {
+      "file": "projects/engines/geometry/crates/geom-name/src/graph.rs",
+      "mutant": "replace match guard node.bytes == bytes with true in NameGraph::insert",
+      "line_text": "Some(node) if node.bytes == bytes => Ok(id),",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "The guard decides only when the graph already holds the NameId being interned. Through the public interface that NameId is the 128-bit cut of SHA-256 over the prefix and the name's canonical bytes, so a node held under it with different bytes needs two encodings whose truncated hashes agree: no such pair is known, and finding one costs about 2^64 hashes (32.19). So no input through the public interface tells the mutant from the original; the unit test graph::tests::a_second_encoding_under_a_held_name_id_is_refused forges the collision directly."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-name/src/ordinal.rs",
+      "mutant": "replace < with <= in sorted",
+      "line_text": "while width < from.len() {",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "With <=, the loop makes one more pass when width equals the number of entities. That pass has one chunk, split at its full length, so the right run is empty and the merge copies the left run unchanged. The order, and every comparison's outcome, is the same."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-name/src/ordinal.rs",
+      "mutant": "replace < with > in sorted",
+      "line_text": "while width < from.len() {",
+      "occurrences": 1,
+      "kind": "hangs",
+      "reason": "With >, for no entity or one the condition 1 > 0 or 1 > 1 holds and stays true as width doubles and saturates at usize::MAX, so the loop never ends and the tests stop it by their timeout. For two or more entities the loop does not run and the unsorted order fails the tests. It hangs or is caught; it never returns a wrong order unnoticed."
+    },
+    {
       "file": "projects/engines/geometry/crates/geom-num/src/ball.rs",
       "mutant": "replace > with >= in <impl Scalar for Ball>::sqrt",
       "line_text": "let spread = if root_floor > 0.0 {",
       "occurrences": 1,
       "kind": "equivalent",
       "reason": "root_floor is next_down of the correctly rounded square root of floor, and floor is at least +0 (the sqrt above refuses floor < radius, and the radius is never negative). For floor = +0 or -0 the root is a zero and its next_down is -2^-1074; for floor > 0 the root is at least 2^-537 and its next_down is positive. So root_floor is never 0.0, and > and >= against 0.0 choose the same arm for every ball."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-op/src/cbor.rs",
+      "mutant": "replace | with ^ in head",
+      "line_text": "out.push(major | b7);",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "head writes the first byte of a head as the major type, one of 0x00, 0x20, ... 0xe0, so only its top three bits can be set, joined with the additional information, which is below 24 or one of 0x18 to 0x1b, so only its low five bits can be set. The two never share a bit, so | and ^ give the same byte for every argument of every head. Here the argument is below 24, so b7 is the whole argument."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-op/src/cbor.rs",
+      "mutant": "replace | with ^ in head",
+      "line_text": "out.extend_from_slice(&[major | 0x18, b7]);",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "head writes the first byte of a head as the major type, one of 0x00, 0x20, ... 0xe0, so only its top three bits can be set, joined with the additional information, which is below 24 or one of 0x18 to 0x1b, so only its low five bits can be set. The two never share a bit, so | and ^ give the same byte for every argument of every head."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-op/src/cbor.rs",
+      "mutant": "replace | with ^ in head",
+      "line_text": "out.extend_from_slice(&[major | 0x19, b6, b7]);",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "head writes the first byte of a head as the major type, one of 0x00, 0x20, ... 0xe0, so only its top three bits can be set, joined with the additional information, which is below 24 or one of 0x18 to 0x1b, so only its low five bits can be set. The two never share a bit, so | and ^ give the same byte for every argument of every head."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-op/src/cbor.rs",
+      "mutant": "replace | with ^ in head",
+      "line_text": "out.extend_from_slice(&[major | 0x1a, b4, b5, b6, b7]);",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "head writes the first byte of a head as the major type, one of 0x00, 0x20, ... 0xe0, so only its top three bits can be set, joined with the additional information, which is below 24 or one of 0x18 to 0x1b, so only its low five bits can be set. The two never share a bit, so | and ^ give the same byte for every argument of every head."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-op/src/cbor.rs",
+      "mutant": "replace | with ^ in head",
+      "line_text": "out.extend_from_slice(&[major | 0x1b, b0, b1, b2, b3, b4, b5, b6, b7]);",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "head writes the first byte of a head as the major type, one of 0x00, 0x20, ... 0xe0, so only its top three bits can be set, joined with the additional information, which is below 24 or one of 0x18 to 0x1b, so only its low five bits can be set. The two never share a bit, so | and ^ give the same byte for every argument of every head."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-op/src/cbor.rs",
+      "mutant": "replace | with ^ in narrow",
+      "line_text": "(exponent.checked_sub(format.rebias)? << format.fraction) | (fraction >> format.dropped)",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "The narrow exponent field is shifted left by the narrow format's fraction width M, so its low M bits are zero, and the narrow fraction is the binary64 fraction shifted right by 52 - M, so it is below 2^M. The two never share a bit, so | and ^ give the same bits for every double."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-op/src/cbor.rs",
+      "mutant": "replace | with ^ in narrow",
+      "line_text": "let q = (1 << 52) | fraction;",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "fraction is the binary64's low 52 bits (bits & (2^52 - 1)), so it is below 2^52 and never has bit 52, the implicit leading bit set here; | and ^ give the same q for every double."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-op/src/cbor.rs",
+      "mutant": "replace | with ^ in narrow",
+      "line_text": "Some(sign | magnitude)",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "sign is zero or the narrow format's sign bit alone (bit 15 of a binary16, bit 31 of a binary32), and magnitude is a narrow exponent field of at most 30 (binary16) or 254 (binary32) above an M-bit fraction, so it is below 0x7c00 or 0x7f800000 and never has the sign bit. The two never share a bit, so | and ^ give the same bits."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-topo/src/column.rs",
+      "mutant": "replace > with >= in Column<K, V>::filled",
+      "line_text": "if full > 0 {",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "full is a u32, so full >= 0 always holds. When the column needs no full chunk (fewer than CHUNK_ROWS rows), the mutant builds one full chunk anyway and then places it zero times: column.chunks.resize(0, chunk) leaves the list empty with the capacity reserved before, and the chunk is dropped. The column's rows, chunks, values and Memory report are the same as the original's for every rows and value. Only a temporary allocation of one chunk differs, which a machine out of memory could refuse (OutOfMemory, never stored or replayed, 23.10) where the original needs none."
     },
     {
       "file": "projects/engines/geometry/crates/geom-num/src/carrier.rs",
@@ -5105,6 +5193,102 @@
       "occurrences": 1,
       "kind": "hangs",
       "reason": "Every carrier and point is then refused, and the tests' generators, each a loop that draws until a constructor accepts, never end: the timeout is what catches the mutant."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-num/src/quartic.rs",
+      "mutant": "replace | with ^ in shifted",
+      "line_text": "up | below.checked_shr(64_u32.saturating_sub(spare)).unwrap_or(0)",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "The two parts come from opposite ends of the limb and share no set bit."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-num/src/quartic.rs",
+      "mutant": "replace | with ^ in half",
+      "line_text": "*slot = (low >> 1) | (above << 63);",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "low >> 1 has its top bit clear and above << 63 only that bit, so they share none."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-num/src/quartic.rs",
+      "mutant": "replace != with == in exact_quotient",
+      "line_text": "let negative = a.is_negative() != b.is_negative();",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "Every polynomial here matters only up to its sign, for Descartes counts changes of sign and an order compares a polynomial with itself at two ends; the mutant turns every quotient of a division, so a whole polynomial, or the h of the sequence, which only turns the next."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-num/src/quartic.rs",
+      "mutant": "replace || with && in primitive",
+      "line_text": "if content.is_zero() || content == Wide::from_i64(1) {",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "A content of 1 divides nothing away, so going on gives the same polynomial, and the content is 0 only for the zero polynomial, which no caller passes."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-num/src/quartic.rs",
+      "mutant": "delete match arm (None, _) in gcd",
+      "line_text": "(None, _) => primitive(b),",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "No caller passes a zero polynomial: c, its derivative of a nonconstant c, and the square-free factors are each nonzero."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-num/src/quartic.rs",
+      "mutant": "delete match arm (_, None) in gcd",
+      "line_text": "(_, None) => primitive(a),",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "No caller passes a zero polynomial: c, its derivative of a nonconstant c, and the square-free factors are each nonzero."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-num/src/quartic.rs",
+      "mutant": "delete match arm (Some(0), _) |(_, Some(0)) in gcd",
+      "line_text": "(Some(0), _) | (_, Some(0)) => Ok(one()),",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "The arms below then take a constant, whose remainder sequence ends at once in a constant, which primitive makes 1: the same result by a longer way."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-num/src/quartic.rs",
+      "mutant": "replace > with >= in factors",
+      "line_text": "if degree(&exactly).is_some_and(|d| d > 0) {",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "A constant factor has no roots, so isolating it finds none, and a degree of at most 4 makes at most 4 steps, so the slots do not run out."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-num/src/quartic.rs",
+      "mutant": "replace > with == in Stretch::narrowed",
+      "line_text": "if s > COMPARE_DEPTH {",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "Two roots that differ are parted within the resultant bound, below COMPARE_DEPTH, and the module asserts it when it compiles, so s never reaches it."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-num/src/quartic.rs",
+      "mutant": "replace > with >= in Stretch::narrowed",
+      "line_text": "if s > COMPARE_DEPTH {",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "Two roots that differ are parted within the resultant bound, below COMPARE_DEPTH, and the module asserts it when it compiles, so s never reaches it."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-num/src/quartic.rs",
+      "mutant": "replace > with >= in order",
+      "line_text": "let shared = degree(&common).is_some_and(|d| d > 0);",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "With a constant gcd the test for a common root in the overlap finds none, so shared only costs a sign."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-num/src/quartic.rs",
+      "mutant": "replace < with <= in compare",
+      "line_text": "return Ok(if p.piece < q.piece {",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "The pieces differ here, the equal case having been passed over."
     },
     {
       "file": "projects/engines/geometry/crates/geom-num/src/generated/circle_gap.rs",
@@ -5145,6 +5329,126 @@
       "occurrences": 2,
       "kind": "equivalent",
       "reason": "A mean term of two others, so never the largest while each of its groups is at least 1; the mutant only makes it smaller, the group n of a carrier being at least 1. With n at 0 the quotient is NaN, in the place where larger ignores it, and the true term is 0."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-num/src/one_root.rs",
+      "mutant": "replace > with >= in Crossing2::order",
+      "line_text": "return Ok(if dy > 0 { sy } else { sy.negate() });",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "Here dx is 0, so dy is not: a carrier has a direction, and 0 never reaches this test."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-num/src/one_root.rs",
+      "mutant": "replace > with >= in Crossing2::order",
+      "line_text": "Ok(if dx > 0 { sx } else { sx.negate() })",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "The case dx = 0 has returned above, so 0 never reaches this test."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-2d/src/commit.rs",
+      "mutant": "replace < with <= in nearest",
+      "line_text": "while low < high {",
+      "occurrences": 1,
+      "kind": "hangs",
+      "reason": "The bisection ends when low meets high, at the grid point whose half-past is at or above the coordinate. With <= the loop runs once more there: middle is low, its half-past is not below the coordinate, so high = middle again and nothing changes, for ever. The run's timeout catches it."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-num/src/quartic.rs",
+      "mutant": "replace | with & in half",
+      "line_text": "*slot = (low >> 1) | (above << 63);",
+      "occurrences": 1,
+      "kind": "hangs",
+      "reason": "whole_gcd, Stein's binary gcd, halves while a number is even and subtracts while y is not zero; with & half keeps only the bits both halves share, so an even x falls to zero within a few steps, and even(0) is true for ever: `while even(&x) { x = half(&x) }` never ends, and every quartic's gcd hangs past cargo-mutants' timeout, which is how the tests catch it."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-num/src/quartic.rs",
+      "mutant": "replace >> with << in half",
+      "line_text": "*slot = (low >> 1) | (above << 63);",
+      "occurrences": 1,
+      "kind": "hangs",
+      "reason": "whole_gcd, Stein's binary gcd, halves while a number is even and subtracts while y is not zero; with << half doubles instead, so an even x stays even until its bits shift out to zero, and even(0) is true for ever: the halving loop never ends, and every quartic's gcd hangs past cargo-mutants' timeout."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-num/src/quartic.rs",
+      "mutant": "replace << with >> in half",
+      "line_text": "*slot = (low >> 1) | (above << 63);",
+      "occurrences": 1,
+      "kind": "hangs",
+      "reason": "whole_gcd, Stein's binary gcd, halves while a number is even and subtracts while y is not zero; with >> each limb takes the next limb's top bit into its lowest place instead of its own top, so a halved number of two limbs or more is wrong and can stay even or never fall to zero: the gcd of a wide quartic's coefficients loops past cargo-mutants' timeout."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-num/src/quartic.rs",
+      "mutant": "replace even -> bool with true",
+      "line_text": "v.to_le_limbs().first().is_none_or(|l| l & 1 == 0)",
+      "occurrences": 1,
+      "kind": "hangs",
+      "reason": "whole_gcd, Stein's binary gcd, halves while a number is even and subtracts while y is not zero; with even always true the first loop halves x and y for ever (half of zero is zero), its counter stopped only by the budget after 2^32 steps: the tests run past cargo-mutants' timeout."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-num/src/quartic.rs",
+      "mutant": "replace even -> bool with false",
+      "line_text": "v.to_le_limbs().first().is_none_or(|l| l & 1 == 0)",
+      "occurrences": 1,
+      "kind": "hangs",
+      "reason": "whole_gcd, Stein's binary gcd, halves while a number is even and subtracts while y is not zero; with even always false no factor of two is ever taken out, and the loop is Euclid's by subtraction alone, one difference a step: on the coefficients of a quartic of whole numbers that is up to their size in steps, each a wide subtraction, and the tests run past cargo-mutants' timeout."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-num/src/quartic.rs",
+      "mutant": "replace == with != in even",
+      "line_text": "v.to_le_limbs().first().is_none_or(|l| l & 1 == 0)",
+      "occurrences": 1,
+      "kind": "hangs",
+      "reason": "whole_gcd, Stein's binary gcd, halves while a number is even and subtracts while y is not zero; with != the test reads odd numbers as even and even ones as odd: the first loop halves two odd numbers, flooring, until one is zero, which then reads as odd while the other halves on, and the later loops never reach y = 0: the tests run past cargo-mutants' timeout."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-num/src/quartic.rs",
+      "mutant": "replace & with | in even",
+      "line_text": "v.to_le_limbs().first().is_none_or(|l| l & 1 == 0)",
+      "occurrences": 1,
+      "kind": "hangs",
+      "reason": "whole_gcd, Stein's binary gcd, halves while a number is even and subtracts while y is not zero; with | the low limb or one is never zero, so even is false for every number and no factor of two is taken out: Euclid by subtraction alone, one wide difference a step, runs past cargo-mutants' timeout on the quartics' coefficients."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-num/src/quartic.rs",
+      "mutant": "replace & with ^ in even",
+      "line_text": "v.to_le_limbs().first().is_none_or(|l| l & 1 == 0)",
+      "occurrences": 1,
+      "kind": "hangs",
+      "reason": "whole_gcd, Stein's binary gcd, halves while a number is even and subtracts while y is not zero; with ^ a number reads as even only when its low limb is exactly one: odd ones like 3 are halved to the wrong value and even ones are never halved, so x and y need not shrink to a common divisor and the loops run past cargo-mutants' timeout on the quartics' coefficients."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-num/src/quartic.rs",
+      "mutant": "replace && with || in whole_gcd",
+      "line_text": "while even(&x) && even(&y) {",
+      "occurrences": 1,
+      "kind": "hangs",
+      "reason": "whole_gcd, Stein's binary gcd, halves while a number is even and subtracts while y is not zero; with || the first loop goes on while either is even, so once one falls to zero (half of an odd number floors) even(0) holds for ever and the loop never ends: the tests run past cargo-mutants' timeout."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-num/src/quartic.rs",
+      "mutant": "replace == with != in whole_gcd",
+      "line_text": "if sub(&x, &y)?.signum() == Sign::Positive {",
+      "occurrences": 1,
+      "kind": "hangs",
+      "reason": "whole_gcd, Stein's binary gcd, halves while a number is even and subtracts while y is not zero; with != it swaps when x is not larger, so y - x is then negative or zero and the subtraction loop no longer shrinks y towards zero: on the quartics' coefficients it runs past cargo-mutants' timeout."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-num/src/quartic.rs",
+      "mutant": "replace >= with < in pseudo_remainder",
+      "line_text": "while let Some(dr) = degree(&r).filter(|d| *d >= db) {",
+      "occurrences": 1,
+      "kind": "hangs",
+      "reason": "With < the reduction loop runs only while the remainder's degree is below the divisor's, so a remainder of degree at least the divisor's comes back unreduced: the Sturm chain and gcd built from pseudo-remainders never drop in degree, and the loops that build them run past cargo-mutants' timeout."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-num/src/quartic.rs",
+      "mutant": "replace apart -> Result<Option<Sign>, NumError> with Ok(None)",
+      "line_text": "let top = p.s.max(q.s);",
+      "occurrences": 1,
+      "kind": "hangs",
+      "reason": "With apart never telling, order narrows two roots' stretches for ever: no narrowing is ever enough to part them, so every comparison of two distinct roots loops until its budget, and the tests run past cargo-mutants' timeout."
     }
   ],
   "coverage_off": [

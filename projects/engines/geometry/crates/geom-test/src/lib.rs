@@ -142,7 +142,7 @@
 //!
 //! Dependencies, every one permissive (29.1):
 //!
-//! - `geom-num` (MPL-2.0, ours), the numbers layer under test.
+//! - `geom-num` (Apache-2.0, ours), the numbers layer under test.
 //! - `proptest` 1.12, without its default `fork` and `timeout` features, as in `geom-num`. [`prop`]
 //!   always runs it from a fixed seed, so its operating-system random path is never taken.
 //! - `serde_json` 1.0, to read the golden store, cargo-mutants' output and the quality ledger, and
@@ -160,7 +160,7 @@
 //!   recursion check's token printing.
 //! - `petgraph` 0.8, without default features: the recursion check's strongly connected
 //!   components (Tarjan's algorithm).
-//! - `pulldown-cmark` 0.13.5, a development dependency without its default features (the HTML
+//! - `pulldown-cmark` 0.13.6, a development dependency without its default features (the HTML
 //!   writer and the command line), so `tests/attack_g17.rs` reads the kernel's README.md,
 //!   AGENTS.md and GLOSSARY.md as Markdown.
 //! - `unicode-normalization` 0.1.26, a development dependency, so the same test sorts the
@@ -177,9 +177,9 @@
 //!   `.github/workflows/kernel-quality.yml` as YAML.
 //! - `dashu-int` 0.6 and `dashu-ratio` 0.6 (G57), without their default features: the exact
 //!   rationals of [`nurbs_reference`] and the fixed point of [`fixed`] (G69).
-//! - `geom-nurbs` and `geom-run` (MPL-2.0, ours), development dependencies (G57): the curves
+//! - `geom-nurbs` and `geom-run` (Apache-2.0, ours), development dependencies (G57): the curves
 //!   `tests/nurbs_reference.rs` compares with the reference, and the work meter they take.
-//! - `geom-curve`, `geom-surface` and `geom-math` (MPL-2.0, ours), development dependencies (G69):
+//! - `geom-curve`, `geom-surface` and `geom-math` (Apache-2.0, ours), development dependencies (G69):
 //!   the kinds and transforms the law catalogue checks.
 //!
 //! Licences of every outside package this crate brings into a build, its own and its dependencies'

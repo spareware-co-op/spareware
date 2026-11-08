@@ -18,8 +18,8 @@
 # cargo-deny's checks only, not the gate's own rules below.
 #
 # Beside this file: deny-no-std.toml holds the rule for the no_std kernel crates alone (inside
-# them the only published crate is libm, chapter 29.1), and deny-ships.toml the rayon bans on what
-# the crates that ship build with (29.4).
+# them the only published crates are libm, chapter 29.1, and sha2 with the crates it brings, 32.20),
+# and deny-ships.toml the rayon bans on what the crates that ship build with (29.4).
 #
 # The gate's own rules (tests/scaffold/deny.rs, module `rules`) run on the same graph as every run
 # and close three gaps cargo-deny 0.20.2 leaves, read from its source: `private.ignore` below skips
@@ -64,7 +64,7 @@ allow = [
     "CC0-1.0",
     "Unicode-3.0",
     "Unicode-DFS-2016",
-    # Copyleft per file: Spare Kit's own licence.
+    # Copyleft per file: allowed for dependencies and as a licence we may port from.
     "MPL-2.0",
 ]
 # Every crate in the graph, "whether a normal, build or dev-dependency, must pass the licence
@@ -79,7 +79,7 @@ confidence-threshold = 0.93
 # they are ours, under the repository's licence. cargo-deny skips every crate whose manifest says
 # publish = false, which would let a crate that is not ours through too, so the gate's rules
 # refuse any such crate outside this workspace, and read our own crates' licence fields: 29.2's
-# identifiers only, and MPL-2.0 for a crate of the kernel's family.
+# identifiers only, and Apache-2.0 for a crate of the kernel's family.
 private = { ignore = true }
 # The allow-list is the ledger's, not this graph's: a licence no crate uses today is not an error.
 unused-allowed-license = "allow"
