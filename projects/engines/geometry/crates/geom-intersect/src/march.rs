@@ -648,7 +648,8 @@ fn along_an_edge(
             let (lo, hi) = if fixed_u { us } else { vs };
             for end in [lo, hi] {
                 let on = |s: &[Interval; 4]| {
-                    s.get(fixed).is_some_and(|x| x.lo() <= end && end <= x.hi())
+                    s.get(fixed)
+                        .is_some_and(|x: &Interval| x.lo() <= end && end <= x.hi())
                 };
                 if !on(a) {
                     continue;

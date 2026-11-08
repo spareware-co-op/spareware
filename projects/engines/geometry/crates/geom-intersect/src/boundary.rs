@@ -237,7 +237,11 @@ fn piece(
         };
         let reach = Interval::new(-rho, rho)?;
         // K = m - Y.F(m; t) + (I - Y.J(x)).(x - m), one unknown at a time.
-        let image = |y: [f64; 2], diagonal: usize, held: f64, yf: Interval| {
+        let image = |y: [f64; 2],
+                     diagonal: usize,
+                     held: f64,
+                     yf: Interval|
+         -> Result<Interval, IntersectError> {
             let [ya, yb] = y;
             let mut out = point(held)?.sub(yf)?;
             for (col, at) in [1_usize, 2].into_iter().enumerate() {
@@ -247,7 +251,7 @@ fn piece(
                 let eye = point(if diagonal == col { 1.0 } else { 0.0 })?;
                 out = out.add(eye.sub(yj)?.mul(reach)?)?;
             }
-            Ok::<Interval, IntersectError>(out)
+            Ok(out)
         };
         let k0 = image([y00, y01], 0, m0, yf0)?;
         let k1 = image([y10, y11], 1, m1, yf1)?;
@@ -284,15 +288,18 @@ fn bowed(
     let (Some(du), Some(dv)) = (found.get(1), found.get(2)) else {
         return Err(IntersectError::Internal);
     };
-    let velocity = if edge.fixed_u { dv } else { du };
+    let velocity: &[Interval; 3] = if edge.fixed_u { dv } else { du };
     // An edge that stands still, as one on a pole line does, is a point and no curve: it lies in
     // whatever contains the point, and is no branch.
-    if !velocity.iter().any(|x| x.lo() > 0.0 || x.hi() < 0.0) {
+    if !velocity
+        .iter()
+        .any(|x: &Interval| x.lo() > 0.0 || x.hi() < 0.0)
+    {
         return Ok(None);
     }
     let wide = velocity
         .iter()
-        .fold(0.0, |most, x| larger(most, x.hi() - x.lo()));
+        .fold(0.0, |most: f64, x: &Interval| larger(most, x.hi() - x.lo()));
     Ok(Some((b - a) * wide))
 }
 
