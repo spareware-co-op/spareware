@@ -10518,20 +10518,21 @@
           "target": "lib"
         },
         {
-          "cost": "for n items in chunks of s, at most n · (⌈log₂ s⌉ + ⌈log₂ ⌈n / s⌉⌉) comparisons, so O(n log n), each calling `key` twice; two buffers of n (index, reference) pairs and the result of n indices; one read of the cancellation per chunk and per merge.",
+          "cost": "for n items in chunks of s, at most n · (⌈log₂ s⌉ + ⌈log₂ ⌈n / s⌉⌉) comparisons for the merging, and 2 · ⌈n / s⌉ binary searches of at most ⌈log₂ n⌉ + 1 comparisons a round for the co-ranking, so O(n log n), each calling `key` twice (a round is merged a second time, by pairs, only if a broken `Ord` put its pieces out of step); two buffers of n (index, reference) pairs and the result of n indices; one read of the cancellation per chunk and per piece of a round.",
           "does": null,
           "family": [],
           "file": "projects/engines/geometry/crates/geom-run/src/sort.rs",
           "guarantees": [
-            "Every merge writes each element of its two runs exactly once into a destination of exactly their combined length, so the result is always a permutation of the indices.",
+            "Every merge writes each element of its two runs exactly once into a destination of exactly their combined length, so the result is always a permutation of the indices. A piece's two split points are the co-ranks of its start and end, so neighbouring pieces share theirs and the pieces of a pair share out its runs exactly whenever each piece's own take is in step (no less than nothing from each run); a piece that finds its take out of step, which only an `Ord` that breaks its contract can cause, has the whole round merged again by pairs.",
             "No recursion: every loop is bounded by the number of items."
           ],
           "job": "`sort_stable`: the stable sorted order of items by a total key, the same whatever the chunks.",
           "method": {
             "links": [
-              "https://www-cs-faculty.stanford.edu/~knuth/taocp.html"
+              "https://www-cs-faculty.stanford.edu/~knuth/taocp.html",
+              "https://doi.org/10.1142/S0129626413500059"
             ],
-            "text": "bottom-up two-way merge sort (Knuth, The Art of Computer Programming, volume 3, 2nd edition, 1998, section 5.2.4, \"Sorting by merging\", straight two-way merging; the book's page is <https://www-cs-faculty.stanford.edu/~knuth/taocp.html>), first within chunks, then across them. Written here rather than taken from `core`'s sorts so that nothing allocates infallibly and no comparison, even of an `Ord` that breaks its contract, can make the helper panic."
+            "text": "bottom-up two-way merge sort (Knuth, The Art of Computer Programming, volume 3, 2nd edition, 1998, section 5.2.4, \"Sorting by merging\", straight two-way merging; the book's page is <https://www-cs-faculty.stanford.edu/~knuth/taocp.html>), first within chunks, then across them; each merge split into pieces of equal output by co-ranking (Siebert and Träff, \"Perfectly load-balanced, optimal, stable, parallel merge\", Parallel Processing Letters 23(1), 2013, <https://doi.org/10.1142/S0129626413500059>). Written here rather than taken from `core`'s sorts so that nothing allocates infallibly and no comparison, even of an `Ord` that breaks its contract, can make the helper panic."
           },
           "path": "geom_run::sort",
           "provenance": [],
