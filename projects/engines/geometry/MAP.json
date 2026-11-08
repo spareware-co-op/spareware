@@ -4928,7 +4928,7 @@
         },
         {
           "cost": "linear in a kind's values, plus, for an offset stored with its cache, the cost of fitting it again.",
-          "does": "[`write_curve`] and [`write_surface`] append one kind to an encoder; [`read_curve`] and [`read_surface`] read one back from a decoder, rebuilding it through the kind's own constructor, so a stored kind is checked as a built one is. The codes are in [`curve`] and [`surface`]; the fields of each are the values its constructor takes, in the order `format/cddl/kinds.cddl` gives them. Doubles are written in their shortest exact width, lists of doubles as RFC 8746 `f64` columns (tag 86), an absent value as `[]`, a present one as `[value]`, and a flag as 0 or 1.",
+          "does": "[`write_curve`] and [`write_surface`] append one kind to an encoder; [`read_curve`] and [`read_surface`] read one back from a decoder, rebuilding it through the kind's own constructor, so a stored kind is checked as a built one is. The codes are in [`curve`] and [`surface`]; the fields of each are the values its constructor takes, in the order `format/cddl/body.cddl` gives them. Doubles are written in their shortest exact width, lists of doubles as RFC 8746 `f64` columns (tag 86), an absent value as `[]`, a present one as `[value]`, and a flag as 0 or 1.",
           "family": [],
           "file": "projects/engines/geometry/crates/geom-format/src/kinds.rs",
           "guarantees": [
