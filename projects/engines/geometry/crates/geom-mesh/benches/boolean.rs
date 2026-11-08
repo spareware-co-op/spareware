@@ -27,6 +27,7 @@
 #![allow(
     clippy::arithmetic_side_effects,
     clippy::cast_possible_truncation,
+    clippy::cast_precision_loss,
     clippy::cast_possible_wrap,
     clippy::cast_sign_loss,
     clippy::disallowed_methods,
@@ -374,7 +375,10 @@ fn shapes(rayon: &Rayon, step: &OpPath, only: &str, (small, one_thread): (bool, 
         "a cube and a turned cube",
     ] {
         for size in 0..3 {
-            let label = format!("{kind}, size class {size}{}", if small { ", small" } else { "" });
+            let label = format!(
+                "{kind}, size class {size}{}",
+                if small { ", small" } else { "" }
+            );
             if !only.is_empty() && !label.contains(only) && !only.contains(kind) {
                 continue;
             }
