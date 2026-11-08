@@ -16897,7 +16897,7 @@
                 "Copyright (c) 2026 The solidcore contributors"
               ],
               "pinned": true,
-              "purpose": "the ASCII readers alone, every size checked before it allocates, and the values kept as read; a 3D curve read where a 2D one is wanted is refused rather than projected, which no fixture needs.",
+              "purpose": "the ASCII readers alone, every size checked before it allocates, and the values kept as read.",
               "take": "port"
             }
           ],
