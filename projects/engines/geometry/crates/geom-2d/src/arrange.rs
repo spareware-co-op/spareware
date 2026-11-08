@@ -274,8 +274,9 @@ impl Arrangement {
         &self.circles
     }
 
-    /// The half-edges leaving `vertex`, counter-clockwise. Half-edge `2 e` runs from edge `e`'s
-    /// `from` to its `to`, and `2 e + 1` back.
+    /// The half-edges leaving `vertex`, counter-clockwise from the negative x direction: one that
+    /// leaves exactly westwards first, one that leaves exactly eastwards after those that leave
+    /// below it. Half-edge `2 e` runs from edge `e`'s `from` to its `to`, and `2 e + 1` back.
     #[must_use]
     pub fn around(&self, vertex: u32) -> &[u32] {
         usize::try_from(vertex)

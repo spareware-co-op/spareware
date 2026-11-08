@@ -205,8 +205,9 @@ fn the_edges_around_a_vertex_run_counter_clockwise() {
         .iter()
         .position(|v| reduced(v) == grid(0, 0))
         .unwrap() as u32;
-    // From the negative x axis counter-clockwise: west is first, then south, east, northeast,
-    // north, northwest... the list starts after the half-plane split, so check the cyclic order.
+    // From the negative x direction counter-clockwise, which the list starts at: west first, then
+    // south, east, northeast, north and northwest. The start is part of the published order, so
+    // it is checked, not only the cyclic order.
     let ends: Vec<Red> = a
         .around(o)
         .iter()
@@ -224,9 +225,7 @@ fn the_edges_around_a_vertex_run_counter_clockwise() {
         grid(0, 4),
         grid(-4, 4),
     ];
-    let start = ends.iter().position(|e| *e == want[0]).unwrap();
-    let rotated: Vec<Red> = (0..6).map(|i| ends[(start + i) % 6]).collect();
-    assert_eq!(rotated, want);
+    assert_eq!(ends, want);
 }
 
 #[test]
