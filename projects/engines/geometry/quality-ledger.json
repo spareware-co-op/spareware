@@ -883,6 +883,30 @@
       "reason": "A defect guard: the plane comes from a sweep that skips planes with an empty side, and the partition puts each entry on the side of its bin, so both sides hold at least one entry and neither condition, alone or together, is ever true."
     },
     {
+      "file": "projects/engines/geometry/crates/geom-bvh/src/build.rs",
+      "mutant": "replace index -> Result<u32, BvhError> with Ok(0)",
+      "line_text": "u32::try_from(i).map_err(|_| BvhError::TooManyEntries)",
+      "occurrences": 1,
+      "kind": "hangs",
+      "reason": "Every child index becomes 0, the root, so each split node's children point back at the root and every walk of the tree (queries, the checker, the debug walk) goes round that cycle for ever; the bounded walk in build.rs's own test fails at once, but the other tests in the binary loop, so the run ends by its timeout. It hangs; no query returns an answer from the cyclic tree."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-bvh/src/build.rs",
+      "mutant": "replace index -> Result<u32, BvhError> with Ok(1)",
+      "line_text": "u32::try_from(i).map_err(|_| BvhError::TooManyEntries)",
+      "occurrences": 1,
+      "kind": "hangs",
+      "reason": "Every child index becomes 1, so node 1's children are node 1 itself and every walk that reaches it goes round for ever; the bounded walk in build.rs's own test fails at once, but the other tests in the binary loop, so the run ends by its timeout. It hangs; no query returns an answer from the cyclic tree."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-bvh/src/build.rs",
+      "mutant": "replace == with != in splice",
+      "line_text": "if j == 0 {",
+      "occurrences": 1,
+      "kind": "hangs",
+      "reason": "Every spliced child other than the subtree's root is mapped to the placeholder `node`, so the subtree's inner nodes point back at the node that holds them and every walk through a spliced subtree (trees past the grain) loops for ever; the bounded walk in build.rs's own test fails at once, but the other tests in the binary loop, so the run ends by its timeout. It hangs; no query returns an answer from the cyclic tree."
+    },
+    {
       "file": "projects/engines/geometry/crates/geom-bvh/src/cells.rs",
       "mutant": "replace | with ^ in spread21",
       "line_text": "x = (x | (x << 32)) & 0x001f_0000_0000_ffff;",

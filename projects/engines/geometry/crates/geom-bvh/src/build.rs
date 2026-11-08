@@ -549,3 +549,102 @@ fn split<const D: usize>(
     }
     Ok((kept, left, right))
 }
+
+#[cfg(test)]
+#[allow(
+    clippy::arithmetic_side_effects,
+    clippy::cast_possible_truncation,
+    clippy::cast_possible_wrap,
+    clippy::cast_sign_loss,
+    clippy::indexing_slicing,
+    clippy::unwrap_used,
+    reason = "tests: native arithmetic on small numbers, and a failure stops the test"
+)]
+mod tests {
+    use core::num::NonZeroU64;
+
+    use geom_run::{Budget, Exec, WorkMeter};
+    use geom_test::SplitMix64;
+
+    use super::GRAIN;
+    use crate::bound::Aabb;
+    use crate::tree::{BoxTree, Entry, Node, NodeKind};
+
+    /// `n` entries with distinct keys and small boxes in a cube of side 2 · 2^20.
+    fn entries<const D: usize>(n: usize) -> Vec<Entry<D>> {
+        let mut rng = SplitMix64::new(geom_test::Seed(0x6732_0000_b0a7));
+        let mut below = |m: u64| rng.below(NonZeroU64::new(m).unwrap()) as i64;
+        (0..n)
+            .map(|i| {
+                let mut lo = [0_i64; D];
+                let mut hi = [0_i64; D];
+                for a in 0..D {
+                    lo[a] = below(1 << 21) - (1 << 20);
+                    hi[a] = lo[a] + below(1 << 12);
+                }
+                Entry {
+                    key: (i as u64)
+                        .wrapping_mul(0x9E37_79B9_7F4A_7C15)
+                        .rotate_left(17),
+                    bbox: Aabb::new(lo, hi).unwrap(),
+                }
+            })
+            .collect()
+    }
+
+    /// The nodes make one tree: the walk from the root meets each node once, ends, and leaves no
+    /// node and no entry out. A walk that kept going would mean a child index points back up, the
+    /// way a wrong renumbering of a spliced subtree makes it; the loop is bounded so that such a
+    /// tree fails here and does not hang the walk.
+    fn assert_one_tree<const D: usize>(nodes: &[Node<D>], entries: usize, what: &str) {
+        let mut seen = vec![false; nodes.len()];
+        let mut held = vec![false; entries];
+        let mut stack = vec![0_u32];
+        for _ in 0..=nodes.len() {
+            let Some(i) = stack.pop() else { break };
+            let i = i as usize;
+            assert!(i < nodes.len(), "{what}: child {i} is no node");
+            assert!(!seen[i], "{what}: node {i} is reached twice");
+            seen[i] = true;
+            match nodes[i].kind() {
+                NodeKind::Inner { left, right } => {
+                    stack.push(right);
+                    stack.push(left);
+                }
+                NodeKind::Leaf { start, len } => {
+                    for p in start..start + len {
+                        let p = p as usize;
+                        assert!(!held[p], "{what}: entry {p} is in two leaves");
+                        held[p] = true;
+                    }
+                }
+            }
+        }
+        assert!(
+            stack.is_empty(),
+            "{what}: the walk from the root does not end"
+        );
+        assert!(seen.iter().all(|&s| s), "{what}: a node is out of the tree");
+        assert!(held.iter().all(|&s| s), "{what}: an entry is in no leaf");
+    }
+
+    /// Past the grain the subtrees are built apart and spliced into the placeholders the top left
+    /// (the parallel phase), with the nodes renumbered; the result must be one tree, built within
+    /// a budget a correct build is far under, so a build that never ends is stopped by the meter.
+    fn built<const D: usize>(n: usize, what: &str) {
+        let es = entries::<D>(n);
+        let mut meter = WorkMeter::new(Budget::of_work(50_000_000));
+        let tree = BoxTree::build(&es, &Exec::serial(), &mut meter).unwrap();
+        assert_one_tree(tree.nodes(), n, what);
+        assert_eq!(tree.len(), n, "{what}");
+    }
+
+    #[test]
+    fn a_tree_built_past_the_grain_is_one_tree() {
+        const { assert!(GRAIN < 9_000) };
+        built::<2>(9_000, "2D, 9000 boxes");
+        built::<3>(9_000, "3D, 9000 boxes");
+        built::<3>(3 * GRAIN, "3D, three grains");
+        built::<2>(GRAIN - 1, "2D, under the grain");
+    }
+}
