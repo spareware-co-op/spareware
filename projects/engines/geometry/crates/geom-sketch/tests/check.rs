@@ -8,7 +8,9 @@
 //! can only bound gets a bound that contains the exact residual, computed in `dashu` rationals,
 //! and no more than a hair above it; a stored side that rounding carries onto the line fails with
 //! `CommitFlip` naming the constraint, and one that survives passes; a residual past the ceiling
-//! fails with `ExactnessNotAccepted`; and a check changes nothing.
+//! fails with `ExactnessNotAccepted`; a check changes nothing and is charged eight units of work for
+//! each constraint; and a whole radius enters its bound as the point itself, widened only by the
+//! arithmetic.
 
 #![allow(
     clippy::arithmetic_side_effects,
@@ -248,6 +250,42 @@ fn checking_changes_nothing_and_a_small_budget_refuses() {
     let mut none = WorkMeter::new(Budget::of_work(1));
     assert_eq!(
         checker.check(&s, &c, Checker::fit(), &mut none),
+        Err(SketchError::Stopped)
+    );
+}
+
+#[test]
+fn a_check_is_charged_eight_units_of_work_for_each_constraint() {
+    // Two constraints, a length and a distance across: the check is charged 16 units before it
+    // reads anything, so a budget of 16 covers it and one of 15 stops it.
+    let s = build(
+        vec![point(1, 0.3, 0.2), point(2, 30.2, 39.8), line(1, 1, 2)],
+        vec![
+            rule(
+                1,
+                ConstraintKind::Length {
+                    line: lid(1),
+                    length: Amount::Value(50.0),
+                },
+            ),
+            rule(
+                2,
+                ConstraintKind::Across {
+                    a: pid(1),
+                    b: pid(2),
+                    distance: Amount::Value(30.0),
+                },
+            ),
+        ],
+    );
+    let c = commit(&s, &mut meter()).unwrap();
+    let checker = Checker::new(&s).unwrap();
+    let mut enough = WorkMeter::new(Budget::of_work(16));
+    let got = checker.check(&s, &c, Checker::fit(), &mut enough).unwrap();
+    assert_eq!(got.get(cid(2)), Some(Holds::Exact));
+    let mut short = WorkMeter::new(Budget::of_work(15));
+    assert_eq!(
+        checker.check(&s, &c, Checker::fit(), &mut short),
         Err(SketchError::Stopped)
     );
 }
@@ -547,6 +585,25 @@ fn a_radius_is_bounded_on_the_committed_circle_not_the_solved_one() {
     assert_eq!(c.rounds.len(), 1, "{c:?}");
     let r = bound_of(&round);
     assert!((0.39..0.41).contains(&r), "{r}");
+}
+
+#[test]
+fn a_whole_radius_enters_the_bound_as_the_point_itself() {
+    // The circle drawn at 50.4 and stated so is stored at the whole radius 50. The rule's residual
+    // is r - 0 - 1 * 50.4, and on what was stored it is exactly 50.4 - 50, a double (the two are
+    // within a factor of two, so their difference is exact). A whole number a double holds is held
+    // as the point itself, so the bound is that value widened by the arithmetic alone: one step of
+    // 50 (2^-47) for r - 0, one for 1 * 50.4, and one step of the result (2^-54) for the last
+    // subtraction, each exact here. A radius held a step wide each way would add a third step of 50.
+    let s = build(
+        vec![point(1, 200.0, 200.0), circle(1, 1, 50.4)],
+        vec![radius(1, 50.4)],
+    );
+    let exact = 50.4_f64 - 50.0;
+    let step = 1.0 / 140_737_488_355_328.0; // 2^-47
+    let widened = exact + 2.0 * step + 1.0 / 18_014_398_509_481_984.0; // and 2^-54
+    let r = bound_of(&s);
+    assert_eq!(r.to_bits(), widened.to_bits(), "{r} against {widened}");
 }
 
 #[test]
