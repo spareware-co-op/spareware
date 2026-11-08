@@ -398,3 +398,40 @@ fn radius_of(r: &Round) -> Result<Interval, SketchError> {
         .sqrt()
         .map_err(|e: NumError| SketchError::Numeric(e))
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// The meter is charged for what was asked: a count, or all of it when it cannot be told.
+    #[test]
+    fn the_cost_is_the_count() {
+        assert_eq!(cost(0), 0);
+        assert_eq!(cost(7), 7);
+        assert_eq!(cost(1_000), 1_000);
+    }
+
+    /// A whole number a double holds is the point itself; past 2^53 the interval widens by an
+    /// ulp each way and still holds it.
+    #[test]
+    fn a_whole_number_is_held_tightly_where_a_double_holds_it() {
+        for v in [0, 3, -3, EXACT, -9_007_199_254_740_992] {
+            let i = whole(v).unwrap();
+            assert_eq!(i.lo().to_bits(), i.hi().to_bits(), "{v}");
+        }
+        for v in [
+            9_007_199_254_740_993,
+            -9_007_199_254_740_993,
+            27_021_597_764_222_977,
+        ] {
+            let i = whole(v).unwrap();
+            assert!(i.lo() < i.hi(), "{v}");
+            #[allow(
+                clippy::cast_precision_loss,
+                reason = "the test reads the widened ends"
+            )]
+            let f = v as f64;
+            assert!(i.lo() <= f && f <= i.hi(), "{v}");
+        }
+    }
+}
