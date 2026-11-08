@@ -42,6 +42,8 @@
 //!   The binary `golden` lists the
 //!   store, checks it against the repository (`-- check`), runs every golden in one CI leg's
 //!   configuration (`-- run`) and holds a pull request's edits to the approval rule (`-- diff`).
+//! - [`faults`]: checker fault injection (chapter 28.4; G110): valid bodies broken one fault at a
+//!   time, each caught with the right kind, and every valid body passed.
 //! - [`history`]: chapter 20.3's history laws as a kit every operation's tests run (G88):
 //!   one history and a chain checked through `geom-op`'s checker, composition from both ends, and
 //!   proptest generators of valid histories and chains.
@@ -223,6 +225,7 @@
 pub mod canonical;
 pub mod coverage;
 pub mod deps;
+pub mod faults;
 pub mod fixed;
 pub mod fixture;
 pub mod foundation;
