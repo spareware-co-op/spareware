@@ -14,6 +14,10 @@
 //! - **Permutation-invariant**: shuffling the input changes only the source labels.
 //! - **Refusals**: a stopped meter stops the sweep; a zero-length segment is ignored; each refusal
 //!   says what it is.
+//! - **Bodies**: every link of a body's fins, loops, faces and shell, against the arrangement it
+//!   came from; a crossing whole in x only is off the grid.
+//! - **Holes**: a component above another's top is a hole of the face around both, not of the
+//!   face below that top.
 
 #![allow(
     clippy::arithmetic_side_effects,
@@ -565,6 +569,240 @@ fn nested_squares_give_the_ring_a_second_loop() {
     // Two faces; the ring has its outer loop and the hole (3 loops), 4 fins on each of the three
     // cycles; 8 edges; 8 vertices.
     assert_eq!(rows(&body), [1, 1, 2, 3, 12, 8, 8]);
+}
+
+/// The grid point of the vertex of rank `v`.
+fn grid_point(a: &Arrangement, v: u32) -> (i64, i64) {
+    let ([x, y], w) = a.vertices()[v as usize].rational().unwrap().coordinates();
+    assert!(x % w == 0 && y % w == 0, "vertex {v} is a grid point");
+    ((x / w) as i64, (y / w) as i64)
+}
+
+/// The index of row `n`.
+fn ix<K: geom_topo::Kind>(n: usize) -> geom_topo::Ix<K> {
+    geom_topo::Ix::new(u32::try_from(n).unwrap()).unwrap()
+}
+
+/// Where a body's vertex lies.
+fn point_of(body: &geom_topo::Body, v: geom_topo::VertexIx) -> (i64, i64) {
+    let ar = body.arenas();
+    let q = ar.points.get(ar.vertices.get(v).unwrap().point).unwrap();
+    (q.x.get(), q.y.get())
+}
+
+/// Where a body's fin begins and ends, by its edge's ends and its sense.
+fn fin_ends(body: &geom_topo::Body, f: geom_topo::FinIx) -> ((i64, i64), (i64, i64)) {
+    let ar = body.arenas();
+    let x = ar.fins.get(f).unwrap();
+    let e = ar.edges.get(x.edge).unwrap();
+    let (s, t) = (
+        point_of(body, e.start.unwrap()),
+        point_of(body, e.end.unwrap()),
+    );
+    if x.sense == geom_topo::Sense::Forward {
+        (s, t)
+    } else {
+        (t, s)
+    }
+}
+
+/// The edges and fins `to_body` sets, against the arrangement it came from: each edge between its
+/// edge's vertices; each fin ending where its next begins, its next's previous, and on its next's
+/// loop; a fin and its radial on one edge, opposite ways, each the other's radial, `paired` fins in
+/// all.
+fn edge_and_fin_laws(a: &Arrangement, body: &geom_topo::Body, paired: usize, what: &str) {
+    let ar = body.arenas();
+    for (k, e) in a.edges().iter().enumerate() {
+        let t = ar.edges.get(ix(k)).unwrap();
+        let ends = (
+            point_of(body, t.start.unwrap()),
+            point_of(body, t.end.unwrap()),
+        );
+        assert_eq!(
+            ends,
+            (grid_point(a, e.from), grid_point(a, e.to)),
+            "{what}: edge {k}"
+        );
+    }
+    let fin = |f: geom_topo::FinIx| ar.fins.get(f).unwrap();
+    let mut radial = 0;
+    for k in 0..ar.rows(geom_topo::Arena::Fin) as usize {
+        let (f, x) = (ix(k), fin(ix(k)));
+        let joined = fin_ends(body, f).1 == fin_ends(body, x.next).0;
+        assert!(joined, "{what}: fin {k} ends where its next begins");
+        assert_eq!(
+            fin(x.next).prev,
+            f,
+            "{what}: fin {k} is its next's previous"
+        );
+        assert_eq!(
+            fin(x.next).loop_,
+            x.loop_,
+            "{what}: fin {k}'s next is on its loop"
+        );
+        if x.radial != f {
+            let r = fin(x.radial);
+            assert_eq!((r.edge, r.radial), (x.edge, f), "{what}: fin {k}'s radial");
+            assert_ne!(
+                r.sense, x.sense,
+                "{what}: fin {k} and its radial run opposite ways"
+            );
+            radial += 1;
+        }
+    }
+    assert_eq!(radial, paired, "{what}: fins with a radial");
+}
+
+/// A loop's corners, from its first fin round to it again, each fin on the loop, and twice the area
+/// they enclose.
+fn loop_walk(body: &geom_topo::Body, l: geom_topo::LoopIx, what: &str) -> (Vec<(i64, i64)>, i64) {
+    let ar = body.arenas();
+    let first = ar.loops.get(l).unwrap().first_fin.unwrap();
+    let (mut f, mut corners) = (first, Vec::new());
+    loop {
+        let x = ar.fins.get(f).unwrap();
+        assert_eq!(x.loop_, l, "{what}: a loop's fins are on it");
+        corners.push(fin_ends(body, f).0);
+        f = x.next;
+        if f == first {
+            break;
+        }
+    }
+    let twice = (0..corners.len()).fold(0_i64, |sum, i| {
+        let ((x0, y0), (x1, y1)) = (corners[i], corners[(i + 1) % corners.len()]);
+        sum + x0 * y1 - x1 * y0
+    });
+    (corners, twice)
+}
+
+/// The loops, faces and shell `to_body` sets: each face's loops its own and chained, the outer
+/// counter-clockwise and the others clockwise, every fin on one; the faces chained in order, the
+/// last to none; each face's box its outer loop's corners; and the shell's first face the first,
+/// when there is one.
+fn loop_and_face_laws(body: &geom_topo::Body, what: &str) {
+    let ar = body.arenas();
+    let faces = ar.rows(geom_topo::Arena::Face) as usize;
+    let mut fins_on_loops = 0;
+    for k in 0..faces {
+        let face = ar.faces.get(ix(k)).unwrap();
+        assert_eq!(
+            face.next,
+            (k + 1 < faces).then(|| ix(k + 1)),
+            "{what}: face {k}'s next"
+        );
+        let mut l = face.first_loop;
+        let mut outer = true;
+        while let Some(at) = l {
+            let one = ar.loops.get(at).unwrap();
+            assert_eq!(one.face, ix(k), "{what}: face {k}'s loops are its own");
+            let (corners, twice) = loop_walk(body, at, what);
+            fins_on_loops += corners.len();
+            if outer {
+                assert!(
+                    twice > 0,
+                    "{what}: face {k}'s outer loop runs counter-clockwise"
+                );
+                let (xs, ys) = (corners.iter().map(|c| c.0), corners.iter().map(|c| c.1));
+                let low = (xs.clone().min().unwrap(), ys.clone().min().unwrap());
+                let high = (xs.max().unwrap(), ys.max().unwrap());
+                let (lo, hi) = (face.bound.min(), face.bound.max());
+                let bound = ((lo.x.get(), lo.y.get()), (hi.x.get(), hi.y.get()));
+                assert_eq!(bound, (low, high), "{what}: face {k}'s box");
+            } else {
+                assert!(twice < 0, "{what}: face {k}'s holes run clockwise");
+            }
+            outer = false;
+            l = one.next;
+        }
+    }
+    let fins = ar.rows(geom_topo::Arena::Fin) as usize;
+    assert_eq!(fins_on_loops, fins, "{what}: every fin is on a face's loop");
+    let shell = ar.shells.get(ix(0)).unwrap();
+    assert_eq!(
+        shell.first_face,
+        (faces > 0).then(|| ix(0)),
+        "{what}: the shell's first face"
+    );
+}
+
+#[test]
+fn a_body_s_fins_loops_faces_and_shell_keep_every_link() {
+    let square = |lo: i64, hi: i64| {
+        vec![
+            seg((lo, lo), (hi, lo)),
+            seg((hi, lo), (hi, hi)),
+            seg((hi, hi), (lo, hi)),
+            seg((lo, hi), (lo, lo)),
+        ]
+    };
+    let mut crossed = square(0, 10);
+    crossed.extend([seg((0, 0), (10, 10)), seg((0, 10), (10, 0))]);
+    let mut ring = square(0, 20);
+    ring.extend(square(5, 15));
+    let mut spiked = square(0, 10);
+    spiked.push(seg((0, 0), (5, 5)));
+    let mut apart = square(0, 10);
+    apart.extend(square(30, 40));
+    let open = vec![seg((0, 0), (5, 0)), seg((5, 0), (5, 5))];
+    // The fins with a radial: those of edges with a bounded face on each side.
+    for (segs, paired, what) in [
+        (square(0, 10), 0, "a square"),
+        (crossed, 8, "a square with its diagonals"),
+        (ring, 8, "a square in a square"),
+        (spiked, 2, "a square with a spike"),
+        (apart, 0, "two squares apart"),
+        (open, 0, "two segments"),
+    ] {
+        let a = run(&segs);
+        let body = a.to_body(&mut meter()).unwrap();
+        edge_and_fin_laws(&a, &body, paired, what);
+        loop_and_face_laws(&body, what);
+    }
+}
+
+#[test]
+fn a_crossing_whole_in_x_only_is_off_the_grid() {
+    // (0, 0)-(2, 1) and (0, 1)-(2, 0) cross at (1, 1/2).
+    let a = run(&[seg((0, 0), (2, 1)), seg((0, 1), (2, 0))]);
+    let err = a.to_body(&mut meter()).unwrap_err();
+    assert!(
+        matches!(err, geom_2d::arrange::BodyError::OffGrid { vertex: 2, .. }),
+        "{err:?}"
+    );
+}
+
+#[test]
+fn a_component_above_another_s_top_is_a_hole_of_the_face_round_both() {
+    // A square, a bar inside it, and a small square above it: when the bar's left end is placed,
+    // the square's top passes above it, and stays in the status for the small square, whose
+    // nearest edge below is that top, so it is a hole of the unbounded face, beside the square.
+    let square = |x0: i64, y0: i64, x1: i64, y1: i64| {
+        vec![
+            seg((x0, y0), (x1, y0)),
+            seg((x1, y0), (x1, y1)),
+            seg((x1, y1), (x0, y1)),
+            seg((x0, y1), (x0, y0)),
+        ]
+    };
+    let mut segs = square(0, 0, 100, 100);
+    segs.push(seg((5, 60), (95, 60)));
+    segs.extend(square(50, 150, 55, 155));
+    let a = run(&segs);
+    let (v, e) = (a.vertices().len(), a.edges().len());
+    assert_eq!(
+        v + a.faces().len(),
+        e + 1 + components(&a),
+        "Euler's formula"
+    );
+    // The unbounded face, the big square's and the small square's.
+    assert_eq!(a.faces().len(), 3);
+    assert_eq!(
+        a.faces()[0].holes.len(),
+        2,
+        "both squares lie in the unbounded face"
+    );
+    let big = a.faces().iter().position(|f| f.holes.len() == 1).unwrap();
+    assert_ne!(big, 0);
 }
 
 #[test]
