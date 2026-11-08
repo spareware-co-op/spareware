@@ -254,9 +254,15 @@
               "kind": "corpus",
               "piece": "G196a",
               "why": "one arrangement benchmark added (entity/arrange)"
+            },
+            {
+              "sha256": "f880750c743004ffb4328da69f71dc1f0a416fecb5f52c69db99ea72d7937801",
+              "kind": "corpus",
+              "piece": "G199",
+              "why": "one zone-insert benchmark added (entity/zone_insert)"
             }
           ],
-          "sha256": "f880750c743004ffb4328da69f71dc1f0a416fecb5f52c69db99ea72d7937801"
+          "sha256": "8202d650dba3b3d7aaf55cd5e38672fa73d0a149b0578cb5b54000e3b4f7f877"
         },
         {
           "id": "geom-nurbs/operations",

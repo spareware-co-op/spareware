@@ -605,6 +605,30 @@
           "provenance": [],
           "spdx": null,
           "target": "lib"
+        },
+        {
+          "cost": "an insert opens the chunks whose boxes meet the segment's box (all chunk boxes are compared, one comparison per chunk, c pieces per chunk) and splits the pieces the segment meets; the new version copies only the chunks it changes and the list of chunk pointers. A location opens the chunks over the point's column. The face cycle is linear in the face's boundary. Batch building is the sweep's cost, O((n + k) log n).",
+          "does": "a [`Live`] is an arrangement of segments that can be changed. [`Live::insert`] adds one segment and returns a new version, touching only the pieces the segment meets (its zone); every chunk of pieces the segment does not touch is shared, by reference, with the version before, which stays valid. [`Live::overlay`] puts one `Live` over another. [`Live::locate`] says whether a point is a vertex, on an edge, or in a face, and names the face by a half-edge of its boundary; [`Live::face_cycle`] walks that boundary. [`Live::batch`] builds the same thing from a list at once, by [`crate::arrange::arrange`], and is the reference every update is held to.",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-2d/src/update.rs",
+          "guarantees": [
+            "**Incremental equals batch.** Inserting segments one by one, in any order, gives the pieces, with the same sources, that [`crate::arrange::arrange`] gives for the same segments; an overlay gives those of the union. Vertices are the end points and the exact crossings, touching splits, and pieces on one line share the edges of their common stretch. [`Live::same_as`] is the comparison.",
+            "**Exact.** Every decision is a sign of one of `geom-num`'s exact predicates on carriers and rational points. A piece keeps the carrier of the segments along it, so a split never moves its line, and a crossing is the point where two original lines meet. A step past the exact budget is [`ArrangeError::Range`], never a wrong answer.",
+            "**Old versions stay.** An insert does not change `self`; the chunks it does not touch are the same chunks, which [`Live::shared_chunks`] counts.",
+            "**Located exactly.** A point on a vertex or an edge is reported as that vertex or edge; a point in a face is reported by the half-edge of the boundary under it, with the point on its left, found by shooting a ray straight down and, at a vertex, by the exact order of the edges around it. A point with nothing below it is in the unbounded face.",
+            "**Cancellable.** Every insert and every location charges its [`WorkMeter`] for the pieces it examines."
+          ],
+          "job": "Arrangement updates and point location (chapter 14.4): zone insertion into a drawing kept in shared chunks, overlay, and the exact question \"where is this point\".",
+          "method": {
+            "links": [
+              "doi:10.1007/BF02187681"
+            ],
+            "text": "the zone of a curve in an arrangement (Edelsbrunner, Guibas and Sharir 1990, doi:10.1007/BF02187681) is the set of faces it meets; inserting walks it, splits what it crosses and merges what it overlaps, as Fogel, Halperin and Wein, *CGAL Arrangements and Their Applications*, Springer 2012, chapter 1 describe the operation, with the chunked version-sharing of a persistent sorted sequence. Here the walk finds the zone by chunk boxes and not by walking face to face: a chunk whose box misses the segment's box is not opened. The ray shot down is the vertical ray shooting of de Berg, Cheong, van Kreveld and Overmars, *Computational Geometry*, 3rd ed., chapter 6, done by the chunk boxes rather than a slab search tree."
+          },
+          "path": "geom_2d::update",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
         }
       ],
       "name": "geom-2d",
@@ -3560,6 +3584,28 @@
             "text": "differential testing against an independent arbitrary-precision implementation, the big-integer oracle chapter 29.3 names for the wide integers (`projects/engines/geometry/architecture/29-sources-licences.md`), here `num-bigint` 0.4.8 (<https://docs.rs/num-bigint/0.4.8/num_bigint/struct.BigInt.html>). Two's complement in `L` limbs holds exactly −2^(64L−1) ..= 2^(64L−1) − 1 (the module header of `geom_num::wide`); the oracle reads a `Wide`'s limbs with `BigInt::from_signed_bytes_le`, the same two's-complement reading, computes exactly, and writes a result that fits back with `to_signed_bytes_le`."
           },
           "path": "geom_fuzz::wide",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
+          "cost": "constant per case, at most [`MAX_SEGMENTS`] segments and [`MAX_PROBES`] probes; at most [`MAX_INPUT_BYTES`] bytes read.",
+          "does": "[`decode`] turns a fuzzer's bytes into a [`Case`]: a count of segments and, for each, four bytes (the lattice coordinates of its two ends), then a byte for how to order the insertions and bytes for probe points. [`check`] builds the drawing by inserting the segments one by one in that order, and holds it to the sweep's arrangement of the same segments (`geom_2d::arrange`, an independent method): the same pieces with the same sources ([`Live::same_as`]), the same again in the opposite order, and the same when the drawing is two halves put one over the other; a probe point that is a vertex of the sweep's arrangement is located as a vertex, and one in a face is located as a face whose boundary cycle closes. [`harness`] is `decode` then `check`.",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-fuzz/src/zone.rs",
+          "guarantees": [
+            "**Any bytes are a case.** Every byte string, the empty one included, decodes to a case.",
+            "**A bounded input.** [`decode`] reads at most [`MAX_INPUT_BYTES`] bytes.",
+            "**A panic is a failure; a disagreement is a [`Finding`]** naming the law and the case."
+          ],
+          "job": "Fuzz target: `geom-2d`'s arrangement updates keep their laws on any input (piece G199).",
+          "method": {
+            "links": [
+              "projects/engines/geometry/architecture/14-2d-drafting.md"
+            ],
+            "text": "differential testing of the incremental arrangement against the sweep, the law of chapter 14.4 of the kernel architecture (`projects/engines/geometry/architecture/14-2d-drafting.md`): incremental equals batch for any insertion order."
+          },
+          "path": "geom_fuzz::zone",
           "provenance": [],
           "spdx": null,
           "target": "lib"
