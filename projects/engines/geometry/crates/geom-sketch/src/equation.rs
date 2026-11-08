@@ -1946,3 +1946,122 @@ pub fn measure(sketch: &Sketch, constraint: &Constraint) -> Result<f64, SketchEr
         _ => Err(SketchError::NotADimension(id)),
     }
 }
+
+#[cfg(test)]
+#[allow(
+    clippy::float_arithmetic,
+    reason = "the test widens each start value into a box"
+)]
+mod tests {
+    use super::*;
+    use crate::model::{Constraint, ConstraintKind, Entity, EntityKind, Extent, ItemId, Standing};
+    use crate::plane::{Lattice, PlaneFrame, SketchPlane};
+    use geom_num::{GridStep, P3};
+
+    /// For each rule, the jet [`Jetter`] takes in as few lanes as the rule has unknowns, and the
+    /// jet in as many lanes as it has inputs, for every count of unknowns up to five.
+    struct Lanes<'a> {
+        assembly: &'a Assembly,
+        held: &'a [Interval],
+        compared: usize,
+    }
+
+    impl Visit for Lanes<'_> {
+        fn go<R: Residual<N, E>, const N: usize, const E: usize>(
+            &mut self,
+            kind: &R,
+            row: &Row,
+        ) -> Result<(), SketchError> {
+            let list: &[Slot; N] = self.assembly.list_of(row)?;
+            let mut vars: Vec<usize> = list
+                .iter()
+                .filter_map(|s| {
+                    if let Slot::Variable(i) = *s {
+                        Some(i)
+                    } else {
+                        None
+                    }
+                })
+                .collect();
+            vars.sort_unstable();
+            vars.dedup();
+            for k in 0..=vars.len().min(5) {
+                let unknown = &vars[..k];
+                let (mut narrow, mut wide) = (None, None);
+                Jetter {
+                    assembly: self.assembly,
+                    held: self.held,
+                    unknown,
+                    out: &mut narrow,
+                }
+                .go(kind, row)?;
+                Jetter {
+                    assembly: self.assembly,
+                    held: self.held,
+                    unknown,
+                    out: &mut wide,
+                }
+                .lanes::<R, N, E, N>(kind, row, list)?;
+                assert!(narrow.is_some());
+                assert_eq!(narrow, wide, "{k} unknowns");
+                self.compared += 1;
+            }
+            Ok(())
+        }
+    }
+
+    /// The narrow lanes are only for speed: a rule's jet in as few lanes as it has unknowns is the
+    /// jet in as many lanes as it has inputs, value for value, for none to five unknowns.
+    #[test]
+    fn a_jet_in_few_lanes_is_the_jet_in_full_width_lanes() {
+        let lattice = Lattice::new(P3::new(0, 0, 0).unwrap(), [1, 0, 0], [0, 1, 0]).unwrap();
+        let mut s = Sketch::new(SketchPlane::new(PlaneFrame::Lattice(lattice), GridStep::Q0));
+        for (key, x, y) in [(1, 0.0, 0.0), (2, 10.0, 1.0), (3, 3.0, 2.0), (4, 7.0, -1.0)] {
+            s.add_entity(Entity {
+                id: ItemId::new(1, key),
+                kind: EntityKind::Point { x, y },
+                construction: false,
+            })
+            .unwrap();
+        }
+        for (key, a, b) in [(1, 1, 2), (2, 3, 4)] {
+            s.add_entity(Entity {
+                id: ItemId::new(2, key),
+                kind: EntityKind::Line {
+                    start: ItemId::new(1, a),
+                    end: ItemId::new(1, b),
+                    extent: Extent::Segment,
+                },
+                construction: false,
+            })
+            .unwrap();
+        }
+        s.add_constraint(Constraint {
+            id: ItemId::new(3, 1),
+            kind: ConstraintKind::Collinear {
+                a: ItemId::new(2, 1),
+                b: ItemId::new(2, 2),
+            },
+            standing: Standing::Driving,
+            priority: 0,
+        })
+        .unwrap();
+        let assembly = Assembly::new(&s).unwrap();
+        let held: Vec<Interval> = assembly
+            .start()
+            .unwrap()
+            .iter()
+            .map(|v| Interval::new(v - 0.25, v + 0.5).unwrap())
+            .collect();
+        let mut lanes = Lanes {
+            assembly: &assembly,
+            held: &held,
+            compared: 0,
+        };
+        for row in &assembly.rows {
+            dispatch(row, &mut lanes).unwrap();
+        }
+        // The two lines' eight coordinates: none to five of them unknown.
+        assert_eq!(lanes.compared, 6);
+    }
+}
