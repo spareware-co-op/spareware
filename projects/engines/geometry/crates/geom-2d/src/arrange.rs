@@ -76,9 +76,11 @@ use geom_topo::{
 mod piece;
 
 use piece::{
-    On, Piece, Shapes, Way, circles_of, cmp_pt, cut, cut_oval, meetings, order_at, ordering,
-    ovals_of, side, way, west_not_left,
+    On, Piece, Shapes, Way, circles_of, cmp_pt, cut, cut_oval, cut_oval_arc, meetings, order_at,
+    ordering, ovals_of, side, way, west_not_left,
 };
+
+use crate::entity::Param;
 
 /// Why an arrangement was refused.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -340,6 +342,61 @@ pub enum Curve {
     /// A whole ellipse. One of ratio 1 is a circle through its centre plus its major-axis vector,
     /// and is arranged as one, so that it shares the edges of any arc of that circle.
     Ellipse(Ellipse2),
+    /// An arc of an ellipse, counter-clockwise from the point at parameter `start` to the point at
+    /// `end` (`entity::Param`: x = a(1 − s²) / (1 + s²), y = b · 2s / (1 + s²) along its axes), the
+    /// whole ellipse when they are equal. Its ends are the rational points those parameters give;
+    /// one past the budget of a rational point is refused. It is arranged as an ellipse whatever its
+    /// ratio, so an arc of ratio 1 beside a circle of the same curve is refused as one that may meet
+    /// it ([`ArrangeError::Conic`]).
+    EllipticArc {
+        /// The ellipse.
+        ellipse: Ellipse2,
+        /// Where it starts.
+        start: Param,
+        /// Where it ends.
+        end: Param,
+    },
+}
+
+/// The point of `e` at the parameter `s`: for s = n / d, K + (M(d² − n²) + (p / q) M⊥ · 2nd) /
+/// (d² + n²), M⊥ = (−My, Mx), over q(d² + n²); K − M at the far end of the major axis.
+///
+/// # Errors
+///
+/// [`ArrangeError::Range`] if a step did not fit, or the point is past a rational point's budget.
+fn param_point(e: &Ellipse2, s: &Param) -> Result<Rational2, ArrangeError> {
+    let k = e.centre();
+    let [mx, my] = e.major().map(i128::from);
+    let (kx, ky) = (i128::from(k.x.get()), i128::from(k.y.get()));
+    let fit = |v: Option<i128>| v.ok_or(ArrangeError::Range);
+    let (n, d) = match s {
+        Param::Far => {
+            return Ok(Rational2::new(
+                fit(kx.checked_sub(mx))?,
+                fit(ky.checked_sub(my))?,
+                1,
+            )?);
+        }
+        Param::At(f) => (i128::from(f.numerator()), i128::from(f.denominator())),
+    };
+    let (p, q) = e.ratio();
+    let (p, q) = (i128::from(p), i128::from(q));
+    let (dd, nn) = (fit(d.checked_mul(d))?, fit(n.checked_mul(n))?);
+    let (sum, difference) = (fit(dd.checked_add(nn))?, fit(dd.checked_sub(nn))?);
+    let twice = fit(n.checked_mul(d).and_then(|v| v.checked_mul(2)))?;
+    let w = fit(q.checked_mul(sum))?;
+    let coordinate = |c: i128, along: i128, across: i128| -> Result<i128, ArrangeError> {
+        let centre = fit(c.checked_mul(w))?;
+        let on = fit(q.checked_mul(along).and_then(|v| v.checked_mul(difference)))?;
+        let turned = fit(p.checked_mul(across).and_then(|v| v.checked_mul(twice)))?;
+        fit(centre.checked_add(on).and_then(|v| v.checked_add(turned)))
+    };
+    let neg = fit(my.checked_neg())?;
+    Ok(Rational2::new(
+        coordinate(kx, mx, neg)?,
+        coordinate(ky, my, mx)?,
+        w,
+    )?)
 }
 
 /// One event: a point, and the piece that starts there if it is a start.
@@ -513,10 +570,10 @@ fn as_circle(e: &Ellipse2) -> Option<[Arc2; 2]> {
     ])
 }
 
-/// The arrangement of `curves`: segments between grid points, arcs and whole ellipses. Each arc or
-/// ellipse is cut where its circle or ellipse is leftmost or rightmost, so its pieces run one way in
-/// x, and those cuts are vertices; an edge on an arc or an ellipse names its place as its source, as
-/// a segment's edges name the segment's.
+/// The arrangement of `curves`: segments between grid points, arcs, whole ellipses and elliptic
+/// arcs. Each arc or ellipse is cut where its circle or ellipse is leftmost or rightmost, so its
+/// pieces run one way in x, and those cuts are vertices; an edge on an arc or an ellipse names its
+/// place as its source, as a segment's edges name the segment's.
 ///
 /// # Errors
 ///
@@ -535,6 +592,7 @@ pub fn arrange_curves(
                 Some(halves) => arcs.extend(halves),
                 None => ellipses.push(*e),
             },
+            Curve::EllipticArc { ellipse, .. } => ellipses.push(*ellipse),
             Curve::Segment(..) => {}
         }
     }
@@ -573,6 +631,19 @@ pub fn arrange_curves(
                     nth_ellipse = nth_ellipse.saturating_add(1);
                     cut_oval(ellipse, &ovals, &mut pieces)?;
                 }
+            }
+            Curve::EllipticArc {
+                ellipse: e,
+                start,
+                end,
+            } => {
+                let ellipse = oval_of_ellipse
+                    .get(nth_ellipse)
+                    .copied()
+                    .ok_or(ArrangeError::TooMany)?;
+                nth_ellipse = nth_ellipse.saturating_add(1);
+                let (from, to) = (param_point(e, start)?, param_point(e, end)?);
+                cut_oval_arc(ellipse, &ovals, &from, &to, &mut pieces)?;
             }
         }
         let place = index(place)?;

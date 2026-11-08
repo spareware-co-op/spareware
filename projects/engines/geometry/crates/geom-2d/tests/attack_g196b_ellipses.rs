@@ -20,6 +20,10 @@
 //!   circles about the heaviest centres whose crossings lie over it.
 //! - **Refusals**: an ellipse crossing a circle, or another ellipse, is `ArrangeError::Conic`; an
 //!   arc whose circle meets an ellipse only away from the arc is arranged.
+//! - **Elliptic arcs**: cut only where an extreme lies inside the arc; their ends exactly the points
+//!   of their parameters, and an end past the budget refused; an arc's halves and its whole ellipse
+//!   one curve; random drawings of segments and elliptic arcs against an oracle that places a point
+//!   on an arc by the angle of its parameter, and an end by exact comparison.
 //!
 //! Seeds: the random tests print `seed: <hex>` and run from a fixed default; `SPAREKIT_SEED=<hex>`
 //! replays another (chapter 28.17).
@@ -29,6 +33,7 @@
     clippy::cast_possible_truncation,
     clippy::cast_possible_wrap,
     clippy::cast_sign_loss,
+    clippy::cast_precision_loss,
     reason = "oracles and generators; the rules are for kernel code"
 )]
 #![allow(
@@ -40,6 +45,7 @@
 )]
 
 use geom_2d::arrange::{Along, ArrangeError, Arrangement, At, BodyError, Curve, arrange_curves};
+use geom_2d::entity::{Frac, Param};
 use geom_num::arc::{Arc2, Contact, Disc};
 use geom_num::carrier::{Carrier, Rational2};
 use geom_num::conic::{Conic, Ellipse2, Meeting};
@@ -506,6 +512,7 @@ fn oracle(curves: &[Curve]) -> Vec<Crossing2> {
                     }
                 }
             }
+            Curve::EllipticArc { .. } => panic!("these drawings hold no elliptic arc"),
         }
     }
     for (i, c) in curves.iter().enumerate() {
@@ -587,6 +594,9 @@ fn crossings(c: &Curve, d: &Curve) -> Vec<Crossing2> {
             found
         }
         (Curve::Ellipse(_), _) | (_, Curve::Ellipse(_)) => vec![],
+        (Curve::EllipticArc { .. }, _) | (_, Curve::EllipticArc { .. }) => {
+            panic!("these drawings hold no elliptic arc")
+        }
     }
 }
 
@@ -601,7 +611,7 @@ fn random_drawings_of_segments_and_ellipses_match_the_pairwise_oracle_and_keep_e
         let ellipses: Vec<Ellipse2> = curves
             .iter()
             .filter_map(|c| match c {
-                Curve::Ellipse(e) => Some(*e),
+                Curve::Ellipse(e) | Curve::EllipticArc { ellipse: e, .. } => Some(*e),
                 _ => None,
             })
             .collect();
@@ -740,4 +750,352 @@ fn an_ellipse_as_wide_as_the_frame_under_crossings_of_the_heaviest_circles_stays
         let z = Crossing2::of_rounds(&x.round(), &y.round(), r).unwrap();
         rank_of(&a, &z);
     }
+}
+
+// ------------------------------------------------------------------------------------------------
+// Elliptic arcs.
+// ------------------------------------------------------------------------------------------------
+
+fn at(n: i64, d: i64) -> Param {
+    Param::At(Frac::new(n, d).unwrap())
+}
+
+fn elliptic(e: Ellipse2, start: Param, end: Param) -> Curve {
+    Curve::EllipticArc {
+        ellipse: e,
+        start,
+        end,
+    }
+}
+
+/// The point of `e` at `s`, worked here from x = a(1 − s²) / (1 + s²), y = b · 2s / (1 + s²) along
+/// its axes, in whole numbers over q(1 + s²)'s.
+fn point_at(e: &Ellipse2, s: Param) -> Rational2 {
+    let k = e.centre();
+    let [mx, my] = e.major().map(i128::from);
+    let (kx, ky) = (i128::from(k.x.get()), i128::from(k.y.get()));
+    let Param::At(f) = s else {
+        return Rational2::new(kx - mx, ky - my, 1).unwrap();
+    };
+    let (n, d) = (i128::from(f.numerator()), i128::from(f.denominator()));
+    let (p, q) = e.ratio();
+    let (p, q) = (i128::from(p), i128::from(q));
+    let w = q * (d * d + n * n);
+    let cos = q * (d * d - n * n);
+    let sin = p * 2 * n * d;
+    Rational2::new(
+        kx * w + mx * cos - my * sin,
+        ky * w + my * cos + mx * sin,
+        w,
+    )
+    .unwrap()
+}
+
+/// The parameter angle θ of a point of `e` from where it lies, cos θ = u · M / L and
+/// sin θ = q (u · M⊥) / (p L), L = ‖M‖², u the point less the centre.
+fn angle_of(e: &Ellipse2, z: &Crossing2) -> f64 {
+    let [ix, iy] = z.enclosure();
+    let (x, y) = (
+        f64::midpoint(ix.lo(), ix.hi()),
+        f64::midpoint(iy.lo(), iy.hi()),
+    );
+    let k = e.centre();
+    let (ux, uy) = (x - k.x.get() as f64, y - k.y.get() as f64);
+    let [mx, my] = e.major().map(|v| v as f64);
+    let (p, q) = e.ratio();
+    let l = mx * mx + my * my;
+    let cos = (ux * mx + uy * my) / l;
+    let sin = (q as f64) * (ux * -my + uy * mx) / ((p as f64) * l);
+    geom_num::math::atan2(sin, cos).unwrap().get()
+}
+
+fn angle_of_param(s: Param) -> f64 {
+    match s {
+        // The denominator is positive, so atan(n / d) is atan2(n, d).
+        Param::At(f) => {
+            2.0 * geom_num::math::atan2(f.numerator() as f64, f.denominator() as f64)
+                .unwrap()
+                .get()
+        }
+        Param::Far => std::f64::consts::PI,
+    }
+}
+
+/// Whether the point at angle `t` lies on the arc counter-clockwise from `from` to `to`: `None`
+/// when it is too near an end for doubles to say.
+fn on_arc(t: f64, from: f64, to: f64) -> Option<bool> {
+    let turn = std::f64::consts::TAU;
+    let span = (to - from).rem_euclid(turn);
+    let span = if span == 0.0 { turn } else { span };
+    let along = (t - from).rem_euclid(turn);
+    if along < 1e-9 || (along - span).abs() < 1e-9 || (turn - along) < 1e-9 {
+        return None;
+    }
+    Some(along < span)
+}
+
+#[test]
+fn an_elliptic_arc_is_cut_only_where_its_extremes_lie_inside_it() {
+    // x²/16 + y²/4 = 1: s = 0 is (4, 0), s = 1 is (0, 2), s = −1 is (0, −2), far is (−4, 0).
+    let e = ellipse((0, 0), [4, 0], (1, 2));
+    let lies = |a: &Arrangement| -> Vec<Along> {
+        (0..a.edges().len() as u32)
+            .map(|i| a.along(i).unwrap())
+            .collect()
+    };
+    // A quarter from the rightmost point up to the top: one piece on the upper half.
+    let a = run(&[elliptic(e, at(0, 1), at(1, 1))]);
+    laws(&a, "quarter");
+    assert_eq!((a.vertices().len(), a.edges().len()), (2, 1));
+    assert!(a.vertices()[1].same(&grid(4, 0)).unwrap());
+    assert_eq!(
+        lies(&a),
+        [Along::Ellipse {
+            ellipse: 0,
+            upper: true
+        }]
+    );
+    // From the top over the leftmost point to the bottom: cut there.
+    let b = run(&[elliptic(e, at(1, 1), at(-1, 1))]);
+    laws(&b, "left half");
+    assert_eq!((b.vertices().len(), b.edges().len()), (3, 2));
+    assert!(b.vertices()[0].same(&grid(-4, 0)).unwrap());
+    // From the bottom over the rightmost point to the top: cut there.
+    let c = run(&[elliptic(e, at(-1, 1), at(1, 1))]);
+    laws(&c, "right half");
+    assert_eq!((c.vertices().len(), c.edges().len()), (3, 2));
+    assert!(c.vertices()[2].same(&grid(4, 0)).unwrap());
+    // From the leftmost point under to the rightmost: the lower half, between two extremes.
+    let d = run(&[elliptic(e, Param::Far, at(0, 1))]);
+    laws(&d, "lower half");
+    assert_eq!(
+        lies(&d),
+        [Along::Ellipse {
+            ellipse: 0,
+            upper: false
+        }]
+    );
+    // Equal ends: the whole ellipse.
+    let whole = run(&[elliptic(e, at(1, 2), at(1, 2))]);
+    laws(&whole, "whole");
+    assert_eq!(
+        (
+            whole.vertices().len(),
+            whole.edges().len(),
+            whole.faces().len()
+        ),
+        (2, 2, 2)
+    );
+    // Its two halves as arcs, and the whole ellipse: one curve, sharing both edges.
+    let both = run(&[
+        elliptic(e, at(1, 1), at(-1, 1)),
+        elliptic(e, at(-1, 1), at(1, 1)),
+        Curve::Ellipse(e),
+    ]);
+    laws(&both, "halves and whole");
+    assert_eq!(both.ellipses().len(), 1);
+    assert!(both.edges().iter().all(|edge| edge.sources.contains(&2)));
+    assert_eq!(both.faces().len(), 2);
+}
+
+#[test]
+fn an_elliptic_arc_s_ends_are_the_points_of_its_parameters() {
+    let e = ellipse((3, -2), [5, 2], (2, 3));
+    for (n, d) in [(0, 1), (1, 3), (-2, 7), (5, 4), (-1, 1)] {
+        let s = at(n, d);
+        let a = run(&[elliptic(e, s, Param::Far)]);
+        laws(&a, "ends");
+        let want = Crossing2::of_point(&point_at(&e, s)).unwrap();
+        // The point is exactly on the ellipse, and is a vertex.
+        assert_eq!(e.side(&point_at(&e, s)).unwrap(), Sign::Zero);
+        assert!(
+            a.vertices()
+                .iter()
+                .any(|v| v.crossing().unwrap().same(&want).unwrap())
+        );
+    }
+    // An end past a rational point's budget is refused.
+    let wide = ellipse((COORD_MAX, 0), [1 << 40, 0], (1, 1 << 20));
+    let far = Param::At(Frac::new(4_294_967_295, 4_294_967_291).unwrap());
+    assert!(matches!(
+        try_run(&[elliptic(wide, far, at(0, 1))]),
+        Err(ArrangeError::Range)
+    ));
+}
+
+/// A random arc of a random ellipse, its ends at small parameters or the far end.
+fn random_elliptic(rng: &mut SplitMix64, span: u64) -> Curve {
+    let e = random_ellipse(rng, span);
+    let param = |rng: &mut SplitMix64| {
+        if rng.below(6) == 0 {
+            Param::Far
+        } else {
+            at(rng.below(9) - 4, 1 + rng.below(4))
+        }
+    };
+    let (start, end) = (param(rng), param(rng));
+    elliptic(e, start, end)
+}
+
+/// The oracle's vertices for segments and elliptic arcs: every end, every extreme of an arc's
+/// ellipse strictly inside it, and every crossing of two curves on both, each arc tested by the
+/// angle of its parameter; `None` if some point is too near an arc's end for doubles to say.
+fn arcs_oracle(curves: &[Curve]) -> Option<Vec<Crossing2>> {
+    let mut out: Vec<Crossing2> = Vec::new();
+    let add = |z: Crossing2, out: &mut Vec<Crossing2>| {
+        if !out.iter().any(|o| o.same(&z).unwrap()) {
+            out.push(z);
+        }
+    };
+    let point = |q: P2| Crossing2::of_point(&q.into()).unwrap();
+    // Whether `z`, a point of the arc's ellipse, is on the arc: an end exactly, or strictly inside.
+    let holds = |c: &Curve, z: &Crossing2| -> Option<bool> {
+        let Curve::EllipticArc {
+            ellipse,
+            start,
+            end,
+        } = c
+        else {
+            panic!("an elliptic arc")
+        };
+        for s in [*start, *end] {
+            if Crossing2::of_point(&point_at(ellipse, s))
+                .unwrap()
+                .same(z)
+                .unwrap()
+            {
+                return Some(true);
+            }
+        }
+        if angle_of_param(*start) == angle_of_param(*end) {
+            return Some(true);
+        }
+        on_arc(
+            angle_of(ellipse, z),
+            angle_of_param(*start),
+            angle_of_param(*end),
+        )
+    };
+    for c in curves {
+        match c {
+            Curve::Segment(a, b) => {
+                if a != b {
+                    add(point(*a), &mut out);
+                    add(point(*b), &mut out);
+                }
+            }
+            Curve::EllipticArc {
+                ellipse,
+                start,
+                end,
+            } => {
+                let whole = start == end;
+                if !whole {
+                    add(
+                        Crossing2::of_point(&point_at(ellipse, *start)).unwrap(),
+                        &mut out,
+                    );
+                    add(
+                        Crossing2::of_point(&point_at(ellipse, *end)).unwrap(),
+                        &mut out,
+                    );
+                }
+                for r in [Root::First, Root::Second] {
+                    let z = extreme(ellipse, r);
+                    if whole || holds(c, &z)? {
+                        add(z, &mut out);
+                    }
+                }
+            }
+            _ => panic!("segments and elliptic arcs only"),
+        }
+    }
+    for (i, c) in curves.iter().enumerate() {
+        for d in &curves[i + 1..] {
+            let found: Vec<Crossing2> = match (c, d) {
+                (Curve::Segment(..), Curve::Segment(..)) => crossings(c, d),
+                (Curve::Segment(a, b), Curve::EllipticArc { ellipse, .. })
+                | (Curve::EllipticArc { ellipse, .. }, Curve::Segment(a, b)) => {
+                    let arc = if matches!(c, Curve::EllipticArc { .. }) {
+                        c
+                    } else {
+                        d
+                    };
+                    let mut on = vec![];
+                    for z in crossings(&Curve::Segment(*a, *b), &Curve::Ellipse(*ellipse)) {
+                        if holds(arc, &z)? {
+                            on.push(z);
+                        }
+                    }
+                    on
+                }
+                _ => vec![],
+            };
+            for z in found {
+                add(z, &mut out);
+            }
+        }
+    }
+    Some(out)
+}
+
+#[test]
+fn random_drawings_of_segments_and_elliptic_arcs_match_the_oracle_and_keep_every_law() {
+    let mut rng = SplitMix64(seed() ^ 2);
+    let rounds = if cfg!(debug_assertions) { 60 } else { 400 };
+    let (mut checked, mut refused) = (0, 0);
+    for round in 0..rounds {
+        let n = 2 + rng.below(7) as usize;
+        let curves: Vec<Curve> = (0..n)
+            .map(|_| {
+                if rng.below(3) == 0 {
+                    random_elliptic(&mut rng, 12)
+                } else {
+                    seg(
+                        (rng.below(12), rng.below(12)),
+                        (rng.below(12), rng.below(12)),
+                    )
+                }
+            })
+            .collect();
+        let ellipses: Vec<Ellipse2> = curves
+            .iter()
+            .filter_map(|c| match c {
+                Curve::EllipticArc { ellipse, .. } => Some(*ellipse),
+                _ => None,
+            })
+            .collect();
+        let meet = ellipses.iter().enumerate().any(|(i, e)| {
+            ellipses[i + 1..]
+                .iter()
+                .any(|f| e != f && ellipses_meet(e, f))
+        });
+        let what = format!("round {round}: {curves:?}");
+        let a = match try_run(&curves) {
+            Ok(a) => a,
+            Err(ArrangeError::Conic) => {
+                assert!(meet, "{what}: refused, but no two ellipses meet");
+                refused += 1;
+                continue;
+            }
+            Err(e) => panic!("{what}: {e:?}"),
+        };
+        laws(&a, &what);
+        if meet {
+            continue;
+        }
+        let Some(want) = arcs_oracle(&curves) else {
+            continue;
+        };
+        checked += 1;
+        assert_eq!(a.vertices().len(), want.len(), "{what}: the vertex count");
+        for v in a.vertices() {
+            let z = v.crossing().unwrap();
+            assert!(
+                want.iter().any(|w| w.same(&z).unwrap()),
+                "{what}: {v:?} is the oracle's"
+            );
+        }
+    }
+    assert!(checked > rounds / 3, "{checked} checked, {refused} refused");
 }

@@ -22,6 +22,10 @@
 //! [`meetings`] refuses two such pieces as `ArrangeError::Conic` unless their curves do not meet, or
 //! each root, narrowed [`NARROW`] levels and enclosed, certainly lies off one of the pieces. The
 //! ellipses are listed once each ([`ovals_of`]), one curve however its axis and ratio were written.
+//! An arc of an ellipse from one rational point of it counter-clockwise to another is cut at the
+//! extremes that lie strictly inside it, on the right of its chord, as every point of a
+//! counter-clockwise arc of a convex curve is ([`cut_oval_arc`]); the side of the chord is the turn
+//! of the point and the two ends, as for two circles' centres.
 //!
 //! Guarantees:
 //!
@@ -776,12 +780,18 @@ fn dot_from(p: &At, d: [i128; 2], c: &Circle) -> Result<Sign, NumError> {
 
 /// The turn of `p` and the centres of `c` and `e`: the sign of (C − p) × (E − p).
 fn turn(p: &At, c: &Circle, e: &Circle) -> Result<Sign, NumError> {
+    orient(p, &c.centre, &e.centre)
+}
+
+/// The turn of `p` and the rational points `c` and `e`, each within a circle's centre's budget: the
+/// sign of (C − p) × (E − p), positive when p, C and E run counter-clockwise.
+fn orient(p: &At, c: &Rational2, e: &Rational2) -> Result<Sign, NumError> {
     match p {
-        At::Rational(r) => Rational2::orient(r, &c.centre, &e.centre),
+        At::Rational(r) => Rational2::orient(r, c, e),
         At::Root(z) => {
             let [ix, iy] = z.enclosure();
-            let towards = |q: &Circle| -> Result<[Interval; 2], NumError> {
-                let ([x, y], w) = q.centre.coordinates();
+            let towards = |q: &Rational2| -> Result<[Interval; 2], NumError> {
+                let ([x, y], w) = q.coordinates();
                 Ok([fraction(x, w)?.sub(ix)?, fraction(y, w)?.sub(iy)?])
             };
             let ([ux, uy], [vx, vy]) = (towards(c)?, towards(e)?);
@@ -799,8 +809,8 @@ fn turn(p: &At, c: &Circle, e: &Circle) -> Result<Sign, NumError> {
                 wide::<14, LONG_LIMBS>(&by)?,
                 wide::<14, LONG_LIMBS>(&w)?,
             );
-            let parts = |q: &Circle| -> Result<([Long; 2], [Long; 2]), NumError> {
-                let ([x, y], qw) = q.centre.coordinates();
+            let parts = |q: &Rational2| -> Result<([Long; 2], [Long; 2]), NumError> {
+                let ([x, y], qw) = q.coordinates();
                 let n = Long::from_i128;
                 let u = [
                     sub(&mul(&n(x), &w)?, &mul(&ax, &n(qw))?)?,
@@ -1121,6 +1131,61 @@ pub(super) fn ovals_of(ellipses: &[Ellipse2]) -> Result<(Vec<Oval>, Vec<u32>), A
         }
     }
     Ok((ovals, place))
+}
+
+/// The pieces of the arc of the listed ellipse at `ellipse` that runs counter-clockwise from the
+/// rational point `start` of it to `end`, appended to `out`, cut at its leftmost and rightmost points
+/// where they lie strictly inside the arc: on the right of the chord from `start` to `end`, as every
+/// point of a counter-clockwise arc of a convex curve is. Going counter-clockwise the rightmost
+/// point comes before the upper half and the leftmost after it, so from a start on the upper half
+/// the leftmost cut comes first. Each piece is the half its ends' order in x says. `start` equal to
+/// `end` is the whole ellipse.
+///
+/// # Errors
+///
+/// [`ArrangeError::Range`] if a step did not fit.
+pub(super) fn cut_oval_arc(
+    ellipse: u32,
+    ovals: &[Oval],
+    start: &Rational2,
+    end: &Rational2,
+    out: &mut Vec<Piece>,
+) -> Result<(), ArrangeError> {
+    if start.same(end)? {
+        return cut_oval(ellipse, ovals, out);
+    }
+    let o = oval_of(ovals, ellipse)?;
+    let (from, to) = (At::Rational(*start), At::Rational(*end));
+    let first = if o.level_at(&from)? == Sign::Negative {
+        [Root::Second, Root::First]
+    } else {
+        [Root::First, Root::Second]
+    };
+    let mut along: Vec<At> = alloc::vec![from];
+    for r in first {
+        let z = root(&Crossing2::of_ellipse_extreme(&o.ellipse, r)?);
+        if orient(&z, start, end)? == Sign::Negative {
+            along.push(z);
+        }
+    }
+    along.push(to);
+    for pair in along.windows(2) {
+        let [p, q] = pair else {
+            continue;
+        };
+        let (lo, hi, upper) = match ordering(q.cmp_x(p)?) {
+            Ordering::Less => (q, p, true),
+            Ordering::Greater => (p, q, false),
+            // A cut lies between any two points of one x, so two neighbours never share one.
+            Ordering::Equal => return Err(ArrangeError::Range),
+        };
+        out.push(Piece {
+            lo: lo.clone(),
+            hi: hi.clone(),
+            on: On::Ellipse { ellipse, upper },
+        });
+    }
+    Ok(())
 }
 
 /// The two pieces of the whole listed ellipse at `ellipse`, appended to `out`: its lower half and
