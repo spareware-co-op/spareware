@@ -261,8 +261,8 @@ fn errors_are_typed() {
 /// `weight_sums_past_the_doubles_still_give_the_point`): a patch whose u basis is the campaign's
 /// curve's and whose every weight is `f64::MAX`. At the campaign's parameter, on the patch's
 /// edges v = 0 and v = 1, the weight sum passes the doubles exactly as the curve's did; there and
-/// at random parameters, every point and partial is within its bound and order (0, 0) is the
-/// point.
+/// at random parameters of that span, every point and partial is within its bound and order (0, 0)
+/// is the point.
 #[test]
 fn weight_sums_past_the_doubles_still_give_the_point() {
     let max = f64::MAX;
@@ -294,7 +294,10 @@ fn weight_sums_past_the_doubles_still_give_the_point() {
     assert_eq!(out[0], [tiny, 1.0, 0.0]);
     let mut rng = Lcg(70);
     let (du, dv) = (1, 1);
-    let mut us: Vec<f64> = (0..12).map(|_| 5.25 * rng.unit()).collect();
+    // Inside the span [0.75, 4.5], whose basis derivatives are ±1/3.75. On the narrower spans
+    // a basis derivative times a weight of f64::MAX passes the doubles itself (4·f64::MAX on
+    // [0, 0.25]), and the partials are refused as `NotFinite`.
+    let mut us: Vec<f64> = (0..12).map(|_| 0.75 + 3.75 * rng.unit()).collect();
     us.push(1.338_235_294_117_647);
     let mut vs: Vec<f64> = (0..12).map(|_| rng.unit()).collect();
     vs.extend([0.0, 1.0]);
