@@ -308,9 +308,15 @@
               "kind": "improvement",
               "piece": "G173",
               "why": "The edge room: an edge's zeros on the end of a plane's, cylinder's or cone's domain are proven in a box that reaches past the end, so intersect/subdivide_patch, march_plate and march_poles return other valid enclosures of the same start points (same 11 settled pairs and 22 starts, the work differs); no other digest moved"
+            },
+            {
+              "sha256": "0df516dbd7824e7d490a34f3f9a4e1df5f0b61c712592947c4dc622262951f99",
+              "kind": "improvement",
+              "piece": "G173a",
+              "why": "intersect/selfcross_sweep/typical's results changed (its inputs did not; no other digest moved): the edge room, merged in through piece/G173a, proves the looped sweep's crossing's ends on the domain's edges, so its two branches end Boundary instead of Flagged and no box is left flagged"
             }
           ],
-          "sha256": "0df516dbd7824e7d490a34f3f9a4e1df5f0b61c712592947c4dc622262951f99"
+          "sha256": "5422d41ddeb77181c57d6447acb294d499bba9fa2f8f212f482e5e746901f39e"
         },
         {
           "id": "geom-nurbs/operations",
