@@ -944,6 +944,11 @@ fn merge(a: &[u32], b: &[u32]) -> Arc<[u32]> {
 }
 
 #[cfg(test)]
+#[allow(
+    clippy::arithmetic_side_effects,
+    clippy::unwrap_used,
+    reason = "a test generator; the rules are for kernel code"
+)]
 mod tests {
     use super::*;
 
