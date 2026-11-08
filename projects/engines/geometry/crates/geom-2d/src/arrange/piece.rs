@@ -937,8 +937,6 @@ pub(super) fn order_at(p: &At, a: &Way<'_>, b: &Way<'_>) -> Result<Ordering, Arr
 /// [`ArrangeError::Range`] if a step did not fit, and [`ArrangeError::TooMany`] past 2^32 circles.
 pub(super) fn circles_of(arcs: &[Arc2]) -> Result<(Vec<Circle>, Vec<u32>), ArrangeError> {
     let all: Result<Vec<Circle>, _> = arcs.iter().map(|a| Circle::of(a.round())).collect();
-    let all = all?;
-    let get = |i: usize| all.get(i).ok_or(ArrangeError::TooMany);
     let same_circle = |c: &Circle, e: &Circle| -> Result<Ordering, ArrangeError> {
         match ordering(c.centre.cmp_x(&e.centre)?) {
             Ordering::Equal => {}
@@ -955,32 +953,48 @@ pub(super) fn circles_of(arcs: &[Arc2]) -> Result<(Vec<Circle>, Vec<u32>), Arran
         let ([x, y], w) = c.centre.coordinates();
         (on.x.get(), on.y.get(), w, x, y)
     };
+    listed(&all?, same_circle, form)
+}
+
+/// The curves of `all`, each once, in `same`'s order, and for each item of `all` its curve's place.
+/// Of the items `same` finds one curve, the one whose `form`, then place in `all`, is least gives
+/// the curve its stored form, so the list does not depend on the input's order.
+///
+/// # Errors
+///
+/// The first refusal of `same`, and [`ArrangeError::TooMany`] past 2^32 curves.
+fn listed<T: Clone, K: Ord>(
+    all: &[T],
+    same: impl Fn(&T, &T) -> Result<Ordering, ArrangeError>,
+    form: impl Fn(&T) -> K,
+) -> Result<(Vec<T>, Vec<u32>), ArrangeError> {
+    let get = |i: usize| all.get(i).ok_or(ArrangeError::TooMany);
     let mut order: Vec<usize> = (0..all.len()).collect();
     let mut fail = Ok(());
     order.sort_by(|&i, &j| {
         let order = get(i).and_then(|c| {
             let e = get(j)?;
             let by_form = || form(c).cmp(&form(e)).then(i.cmp(&j));
-            Ok(same_circle(c, e)?.then_with(by_form))
+            Ok(same(c, e)?.then_with(by_form))
         });
         order.unwrap_or_else(|err| failed(&mut fail, err))
     });
     fail?;
-    let mut circles: Vec<Circle> = Vec::new();
+    let mut once: Vec<T> = Vec::new();
     let mut place: Vec<u32> = alloc::vec![0; all.len()];
     for &i in &order {
         let c = get(i)?;
-        let fresh = match circles.last() {
-            Some(last) => same_circle(last, c)? != Ordering::Equal,
+        let fresh = match once.last() {
+            Some(last) => same(last, c)? != Ordering::Equal,
             None => true,
         };
         if fresh {
-            circles.push(c.clone());
+            once.push(c.clone());
         }
-        let at = u32::try_from(circles.len().saturating_sub(1));
+        let at = u32::try_from(once.len().saturating_sub(1));
         set(&mut place, i, at.map_err(|_| ArrangeError::TooMany)?)?;
     }
-    Ok((circles, place))
+    Ok((once, place))
 }
 
 /// The pieces of `arc`, on the listed circle `circle`, appended to `out`: cut at the circle's
@@ -1058,52 +1072,13 @@ fn same_oval(o: &Oval, e: &Oval) -> Result<Ordering, ArrangeError> {
 ///
 /// [`ArrangeError::Range`] if a step did not fit, and [`ArrangeError::TooMany`] past 2^32 ellipses.
 pub(super) fn ovals_of(ellipses: &[Ellipse2]) -> Result<(Vec<Oval>, Vec<u32>), ArrangeError> {
-    let all: Vec<Oval> = ellipses
-        .iter()
-        .map(|e| Oval::of(*e))
-        .collect::<Result<_, _>>()?;
-    let get = |i: usize| all.get(i).ok_or(ArrangeError::TooMany);
+    let all: Result<Vec<Oval>, _> = ellipses.iter().map(|e| Oval::of(*e)).collect();
     let form = |o: &Oval| {
         let [mx, my] = o.ellipse.major();
         let (p, q) = o.ellipse.ratio();
         (mx, my, p, q)
     };
-    let mut order: Vec<usize> = (0..all.len()).collect();
-    let mut fail: Option<ArrangeError> = None;
-    order.sort_by(|&i, &j| {
-        let (Ok(o), Ok(e)) = (get(i), get(j)) else {
-            fail = Some(ArrangeError::TooMany);
-            return Ordering::Equal;
-        };
-        match same_oval(o, e) {
-            Ok(Ordering::Equal) => form(o).cmp(&form(e)).then(i.cmp(&j)),
-            Ok(other) => other,
-            Err(err) => {
-                fail = Some(err);
-                Ordering::Equal
-            }
-        }
-    });
-    if let Some(e) = fail {
-        return Err(e);
-    }
-    let mut ovals: Vec<Oval> = Vec::new();
-    let mut place: Vec<u32> = alloc::vec![0; all.len()];
-    for &i in &order {
-        let o = get(i)?;
-        let fresh = match ovals.last() {
-            Some(last) => same_oval(last, o)? != Ordering::Equal,
-            None => true,
-        };
-        if fresh {
-            ovals.push(o.clone());
-        }
-        let at = u32::try_from(ovals.len().saturating_sub(1)).map_err(|_| ArrangeError::TooMany)?;
-        if let Some(slot) = place.get_mut(i) {
-            *slot = at;
-        }
-    }
-    Ok((ovals, place))
+    listed(&all?, same_oval, form)
 }
 
 /// The pieces of the arc of the listed ellipse at `ellipse` that runs counter-clockwise from the
@@ -1142,16 +1117,10 @@ pub(super) fn cut_oval_arc(
         }
     }
     along.push(to);
-    for pair in along.windows(2) {
-        let [p, q] = pair else {
-            continue;
-        };
-        let (lo, hi, upper) = match ordering(q.cmp_x(p)?) {
-            Ordering::Less => (q, p, true),
-            Ordering::Greater => (p, q, false),
-            // A cut lies between any two points of one x, so two neighbours never share one.
-            Ordering::Equal => return Err(ArrangeError::Range),
-        };
+    for (p, q) in along.iter().zip(along.iter().skip(1)) {
+        // A cut lies between any two points of one x, so two neighbours never share one.
+        let upper = falls(q.cmp_x(p)?).ok_or(ArrangeError::Range)?;
+        let (lo, hi) = if upper { (q, p) } else { (p, q) };
         out.push(Piece {
             lo: lo.clone(),
             hi: hi.clone(),
