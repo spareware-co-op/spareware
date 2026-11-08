@@ -48,6 +48,7 @@
 use alloc::collections::{BTreeMap, BTreeSet};
 use alloc::vec::Vec;
 
+use geom_num::grid::P3;
 use geom_num::plane::{Plane, Tpi};
 use geom_num::{Exactness, NumError, Sign};
 use geom_op::{
@@ -71,8 +72,11 @@ const FACES: Phase = Phase::new("boolean: faces into convex polygons");
 /// Faces, a few dozen a task: most are triangles, which split at once.
 const FACE_PLAN: ChunkPlan = ChunkPlan::fixed::<64>();
 
-/// The result's corners: each vertex's grid point or lowest three planes.
+/// The result's corners: each vertex's grid point, where it is one.
 const CORNERS: Phase = Phase::new("boolean: the result's corners");
+
+/// Naming the result's corners off the grid by their lowest three planes.
+const NAMED: Phase = Phase::new("boolean: the result's corners off the grid");
 
 /// One result.
 #[derive(Clone, Debug, PartialEq)]
@@ -459,10 +463,10 @@ fn account(
 }
 
 /// The lowest three of the planes through a point that meet only there, or `own`'s.
-fn lowest_triple(mut planes: Vec<Plane>, own: &Tpi) -> Result<[Plane; 3], MeshError> {
+fn lowest_triple(planes: &[Plane], own: &Tpi) -> Result<[Plane; 3], MeshError> {
     let mut reduced = Vec::with_capacity(planes.len());
-    for plane in planes.drain(..) {
-        let c = canonical(&plane)?;
+    for plane in planes {
+        let c = canonical(plane)?;
         reduced.push((c.plane.n(), c.plane.d()));
     }
     reduced.sort_unstable();
@@ -483,31 +487,68 @@ fn lowest_triple(mut planes: Vec<Plane>, own: &Tpi) -> Result<[Plane; 3], MeshEr
     Ok(*own.planes())
 }
 
+/// The grid point of a vertex the merge named by its three axis planes, x, y and z in turn, as
+/// `geom_poly::merge` names every grid point: read from the planes, where rounding the meeting
+/// would give the same point at many times the cost. `None` for any other vertex, or one outside
+/// the frame, which rounding then reads or refuses.
+fn axis_point(t: &Tpi) -> Option<P3> {
+    let [x, y, z] = t.planes();
+    let at = |plane: &Plane, n: [i128; 3]| {
+        (plane.n() == n)
+            .then(|| plane.d().checked_neg())
+            .flatten()
+            .and_then(|v| i64::try_from(v).ok())
+    };
+    P3::new(at(x, [1, 0, 0])?, at(y, [0, 1, 0])?, at(z, [0, 0, 1])?).ok()
+}
+
 /// The corners of `merged`: a grid point where a vertex is one, its lowest three planes where not,
-/// each vertex on `exec`'s pool, in vertex order.
+/// each vertex on `exec`'s pool, in vertex order. The planes near each vertex are gathered only
+/// for the vertices off the grid.
 fn corners_of(
     merged: &Merged,
     exec: &Exec<'_>,
     meter: &mut WorkMeter<'_>,
 ) -> Result<Vec<Corner>, MeshError> {
+    let grid = exec.try_map(meter, CORNERS, FACE_PLAN, &merged.vertices, |_, t, _| {
+        if let Some(at) = axis_point(t) {
+            return Ok(Some(at));
+        }
+        let rounded = t.to_grid()?;
+        Ok(rounded.is_exact().then(|| rounded.value()))
+    });
+    let grid: Vec<Option<P3>> = grid?;
     let mut near: Vec<Vec<Plane>> = alloc::vec![Vec::new(); merged.vertices.len()];
     for fin in &merged.fins {
         let face = merged.faces.get(fin.face).ok_or(MeshFault::Shape)?;
         let sheet = merged.sheets.get(face.sheet).ok_or(MeshFault::Shape)?;
         for v in [fin.from, fin.to] {
+            if grid.get(v).ok_or(MeshFault::Shape)?.is_some() {
+                continue;
+            }
             let list = near.get_mut(v).ok_or(MeshFault::Shape)?;
             list.push(sheet.face);
             list.push(fin.bound);
         }
     }
-    let made = exec.try_map(meter, CORNERS, FACE_PLAN, &merged.vertices, |v, t, _| {
-        let rounded = t.to_grid()?;
-        if rounded.is_exact() {
-            return Ok(Corner::Grid(rounded.value()));
-        }
-        let planes = near.get(v).cloned().ok_or(MeshFault::Shape)?;
-        Ok(Corner::Planes(lowest_triple(planes, t)?))
-    });
+    let pending: Vec<(Option<P3>, &Tpi, Vec<Plane>)> = grid
+        .into_iter()
+        .zip(&merged.vertices)
+        .zip(near)
+        .map(|((at, t), planes)| (at, t, planes))
+        .collect();
+    let made = exec.try_map(
+        meter,
+        NAMED,
+        FACE_PLAN,
+        &pending,
+        |_, (at, t, planes), _| {
+            Ok(match at {
+                Some(at) => Corner::Grid(*at),
+                None => Corner::Planes(lowest_triple(planes, t)?),
+            })
+        },
+    );
     Ok(made?)
 }
 
