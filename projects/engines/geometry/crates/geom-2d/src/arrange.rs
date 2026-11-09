@@ -68,7 +68,7 @@ use geom_topo::{
     Sense, Shell, TopoError, Vertex,
 };
 
-mod piece;
+pub(crate) mod piece;
 
 use piece::{
     Circle, On, Piece, Way, circles_of, cmp_pt, cut, meetings, order_at, ordering, side, way,
