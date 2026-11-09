@@ -5756,11 +5756,11 @@
     },
     {
       "file": "projects/engines/geometry/crates/geom-poly/src/merge.rs",
-      "mutant": "delete ! in rings",
-      "line_text": ".filter(|o| !used.contains_key(o))",
+      "mutant": "replace == with != in rings",
+      "line_text": ".filter(|option| used.get(*option) == Some(&false));",
       "occurrences": 1,
       "kind": "hangs",
-      "reason": "Without the not, a ring's walk is offered only fins it has used, so it never runs out of a way on and the tests stop it by their timeout. It hangs; it never returns a wrong ring."
+      "reason": "With the test turned, a ring's walk is offered only fins it has used, so it never runs out of a way on and the tests stop it by their timeout. It hangs; it never returns a wrong ring."
     },
     {
       "file": "projects/engines/geometry/crates/geom-poly/src/convex.rs",
@@ -5917,7 +5917,7 @@
     {
       "file": "projects/engines/geometry/crates/geom-poly/src/merge.rs",
       "mutant": "replace || with && in beyond",
-      "line_text": ".any(|(v, (p, q))| v < &(*p).min(*q) || v > &(*p).max(*q))",
+      "line_text": ".any(|(v, (l, h))| v < l || v > h)",
       "occurrences": 1,
       "kind": "equivalent",
       "reason": "beyond only lets cut_run skip a place outside a run's cells: never skipping, or skipping fewer, cuts each run at the same places."
