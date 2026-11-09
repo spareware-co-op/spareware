@@ -15,7 +15,7 @@
     reason = "test code: native arithmetic and indexing, and a failure stops the test"
 )]
 
-use geom_format::checksum::crc32c;
+use geom_format::checksum::{crc32, crc32c};
 use geom_format::chunk::{CHUNK_ROWS, chunk, chunk_count};
 use geom_format::content::{ContentId, SHA256};
 use geom_format::file::{END_TAG, FileError, HEADER_TAG, LABEL, RangeCursor, read, salvage, write};
@@ -112,6 +112,17 @@ fn crc32c_matches_its_published_values() {
     assert_eq!(crc32c(&up), 0x46dd_794e);
     let down: Vec<u8> = (0..32).rev().collect();
     assert_eq!(crc32c(&down), 0x113f_db5c);
+}
+
+#[test]
+fn zip_crc32_matches_its_published_values() {
+    // The catalogue's check value of CRC-32/ISO-HDLC, the CRC-32 of zip (APPNOTE 4.4.7).
+    assert_eq!(crc32(b"123456789"), 0xcbf4_3926);
+    assert_eq!(crc32(b""), 0);
+    assert_eq!(
+        crc32(b"The quick brown fox jumps over the lazy dog"),
+        0x414f_a339
+    );
 }
 
 #[test]

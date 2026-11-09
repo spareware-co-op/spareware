@@ -23,7 +23,9 @@
 //! zero brackets its sign change (G51, G52, G53), and [`maths`], the proven maths functions are
 //! correctly rounded (G47), and [`inflate`], `geom-exchange`'s DEFLATE reader never panics, keeps
 //! its budget, reads the same however its bytes are split and agrees with `miniz_oxide` byte for
-//! byte (G414b). The layout every target follows, and how each engine runs it locally and in CI,
+//! byte (G414b), and [`zip`], `geom-exchange`'s zip reader never panics, refuses inside its input,
+//! keeps its budgets, reads the same however its bytes are split and hands back each entry as its
+//! headers declare it (G414c). The layout every target follows, and how each engine runs it locally and in CI,
 //! is in this crate's `README.md`.
 //!
 //! Layer: Development, in chapter 27's crate table: a development crate, outside the
@@ -127,7 +129,7 @@
 //!   target reads the predicates with.
 //! - `geom-format` and `geom-run` (Apache-2.0, ours), the code under test of the [`cbor`] target and
 //!   the work meter it reads with; `geom-exchange` (Apache-2.0 AND MIT, ours), the code under test
-//!   of the [`inflate`] target.
+//!   of the [`inflate`] and [`zip`] targets.
 //! - `miniz_oxide` 0.9.1 (MIT OR Zlib OR Apache-2.0), the oracle of the [`inflate`] target: the
 //!   crate `geom-exchange`'s DEFLATE decoder is ported from.
 //! - `dashu-ratio` 0.6.1 (MIT OR Apache-2.0), without its default features: the exact rationals
@@ -193,6 +195,7 @@ pub mod surfaces;
 pub mod transforms;
 pub mod variants;
 pub mod wide;
+pub mod zip;
 
 /// A law a harness found broken, with the input that broke it.
 #[derive(Clone, Debug, PartialEq, Eq)]

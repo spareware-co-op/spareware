@@ -373,7 +373,8 @@ impl ZipArchive {
             .try_reserve_exact(entries.len())
             .map_err(|_| refused(ZipErrorKind::OutOfMemory, directory))?;
         order.extend(entries.iter());
-        order.sort_unstable_by(|a, b| a.name.cmp(&b.name));
+        // By name, then by header, so a repeated name is reported at its later header.
+        order.sort_unstable_by(|a, b| a.name.cmp(&b.name).then(a.header.cmp(&b.header)));
         for pair in order.windows(2) {
             if let [a, b] = pair
                 && a.name == b.name
