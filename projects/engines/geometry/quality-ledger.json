@@ -6285,18 +6285,18 @@
     {
       "file": "projects/engines/geometry/crates/geom-poly/src/subdivide.rs",
       "mutant": "replace || with && in divide",
-      "line_text": "if in_plane || below.0.len().saturating_add(above.0.len()) >= enough {",
+      "line_text": "if in_plane || places.len().saturating_add(parts) >= enough {",
       "occurrences": 1,
       "kind": "hangs",
       "reason": "With && a split that separates too few polygons is taken anyway: the polygons that span it go to both halves, so each child holds about as many as the box and is split again, down to boxes a step wide, and the work grows until the tests stop it by their timeout. It hangs; it never returns a wrong arrangement."
     },
     {
       "file": "projects/engines/geometry/crates/geom-poly/src/subdivide.rs",
-      "mutant": "replace | with ^ in divide",
-      "line_text": "key: node.key | bit,",
+      "mutant": "replace | with ^ in halves",
+      "line_text": "key: key | bit,",
       "occurrences": 1,
       "kind": "equivalent",
-      "reason": "bit is the bit of this node's depth, and a node's key has only the bits of the depths above it, so the bit is clear and | and ^ give one value."
+      "reason": "bit is the bit of the split box's depth, and a box's key has only the bits of the depths above it, so the bit is clear and | and ^ give one value."
     },
     {
       "file": "projects/engines/geometry/crates/geom-bool/src/batch.rs",
