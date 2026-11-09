@@ -14,7 +14,9 @@
 )]
 #![allow(clippy::unwrap_used, clippy::panic, clippy::indexing_slicing)]
 
-use std::num::{NonZeroU64, NonZeroUsize};
+use std::num::NonZeroU64;
+#[cfg(not(target_family = "wasm"))]
+use std::num::NonZeroUsize;
 
 use geom_mesh::boolean::{Outcome, boolean, soup as kept_pieces};
 use geom_mesh::exact::build::{Corner, Polygons, build};
@@ -24,6 +26,7 @@ use geom_num::wide::I256;
 use geom_op::{NameId, NameSet, OpId, OpPath, Origin, PieceKey, Side, TopoName};
 use geom_poly::merge::{Merge, Rules, merge_on};
 use geom_poly::winding::{Term, WindingTest};
+#[cfg(not(target_family = "wasm"))]
 use geom_pool::native::Rayon;
 use geom_run::{Budget, Exec, WorkMeter};
 use geom_test::seed::resolve;
@@ -284,13 +287,19 @@ fn solids_give_what_their_arrays_give() {
         made
     };
     let (pa, pb, pc) = (plain(&a), plain(&b), plain(&c));
+    // One thread everywhere, and a pool of four too on a native target: WebAssembly has no threads.
+    #[cfg(not(target_family = "wasm"))]
     let pool = Rayon::new(NonZeroUsize::new(4).unwrap()).unwrap();
     for test in [
         WindingTest::unite(),
         WindingTest::intersect(2),
         WindingTest::subtract(0),
     ] {
-        for exec in [Exec::serial(), Exec::with_pool(&pool)] {
+        #[cfg_attr(target_family = "wasm", allow(unused_mut))]
+        let mut executors = vec![Exec::serial()];
+        #[cfg(not(target_family = "wasm"))]
+        executors.push(Exec::with_pool(&pool));
+        for exec in executors {
             let run = |operands: &[&ExactMesh]| {
                 boolean(
                     operands,
@@ -340,13 +349,19 @@ fn solids_of_many_faces_give_what_their_arrays_give() {
     assert!(sa.is_solid() && sb.is_solid());
     let plain = |m: &ExactMesh| ExactMesh::new(m.parts().clone(), &Exec::serial(), &mut meter());
     let (pa, pb) = (plain(&sa).unwrap(), plain(&sb).unwrap());
+    // One thread everywhere, and a pool of four too on a native target: WebAssembly has no threads.
+    #[cfg(not(target_family = "wasm"))]
     let pool = Rayon::new(NonZeroUsize::new(4).unwrap()).unwrap();
     for test in [
         WindingTest::unite(),
         WindingTest::intersect(2),
         WindingTest::subtract(0),
     ] {
-        for exec in [Exec::serial(), Exec::with_pool(&pool)] {
+        #[cfg_attr(target_family = "wasm", allow(unused_mut))]
+        let mut executors = vec![Exec::serial()];
+        #[cfg(not(target_family = "wasm"))]
+        executors.push(Exec::with_pool(&pool));
+        for exec in executors {
             let run = |operands: &[&ExactMesh]| {
                 boolean(
                     operands,
@@ -593,6 +608,7 @@ fn coplanar_runs_merge() {
 }
 
 #[test]
+#[cfg(not(target_family = "wasm"))]
 fn the_threads_and_the_order_do_not_show() {
     let a = solid([0, 0, 0], [40, 40, 40], 1);
     let b = solid([20, 20, 20], [60, 60, 60], 2);

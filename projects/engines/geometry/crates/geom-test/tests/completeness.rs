@@ -87,6 +87,10 @@ fn one(tier: &str, evidence: Value, missing: Value) -> (Value, Value) {
     (map, tools)
 }
 
+#[cfg_attr(
+    target_family = "wasm",
+    ignore = "reads the repository's files, which a WebAssembly test run cannot"
+)]
 #[test]
 fn the_real_tree_passes_and_lists_everything() {
     let (map, tools) = (map(), tools());
@@ -115,6 +119,10 @@ fn the_real_tree_passes_and_lists_everything() {
     assert_eq!(map["kinds"].as_array().unwrap().len(), 26);
 }
 
+#[cfg_attr(
+    target_family = "wasm",
+    ignore = "reads the repository's files, which a WebAssembly test run cannot"
+)]
 #[test]
 fn every_real_entry_carries_its_contract() {
     for entry in map()["operations"].as_array().unwrap() {
