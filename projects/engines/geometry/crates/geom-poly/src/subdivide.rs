@@ -59,8 +59,11 @@ use geom_run::{ChunkPlan, Exec, Phase, RunError, WorkMeter};
 
 use crate::convex::Piece;
 use crate::cut::{Clipped, clip_at, local_cuts_at, meetings};
-use crate::order::Meeting;
-use crate::trace::{Cell, Classified, Polygon, TraceError, classify, reference_above};
+use crate::order::{Meeting, Span};
+use crate::plane::canonical;
+#[cfg(doc)]
+use crate::trace::classify;
+use crate::trace::{Cell, Classified, Polygon, TraceError, classify_with, reference_above};
 use crate::winding::{Entry, Winding, WindingTest};
 
 /// How many polygons a leaf holds at most, unless a split no longer separates them: the size at
@@ -360,7 +363,15 @@ fn solve(
     }
     let pieces: Vec<Piece> = node.polygons.iter().map(|p| p.piece.clone()).collect();
     let cuts = local_cuts_at(&pieces, &node.points, meter)?;
-    let mut classified = classify(&node.cell, &node.reference, &node.polygons, &cuts, meter)?;
+    // Each polygon's span from its corners' points, which the node holds, as classify would make
+    // it from points found again: the node's are made once and kept down the tree.
+    let mut held = Vec::with_capacity(node.polygons.len());
+    for (at, polygon) in node.polygons.iter().enumerate() {
+        let points = node.points.get(at);
+        let span = points.and_then(|points| Span::of(points.iter().copied()));
+        held.push((polygon, canonical(&polygon.piece.face)?, span));
+    }
+    let mut classified = classify_with(&node.cell, &node.reference, &held, &cuts, meter)?;
     for piece in &mut classified {
         piece.polygon = node
             .sources
