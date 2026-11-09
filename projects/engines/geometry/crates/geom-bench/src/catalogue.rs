@@ -91,9 +91,9 @@ impl fmt::Display for Case {
     }
 }
 
-/// Classes of the predicates, `Plane::side` and `Plane::side_of_tpi`.
+/// Classes of the predicates, `Plane::side`, `Plane::side_of_tpi` and `plane::determinant_sign`.
 const TDNE: &[Class] = &[Typical, Degenerate, NearlyDegenerate, Extreme];
-/// Classes of `Plane::through` and `Tpi::new`.
+/// Classes of `Plane::through`, `Tpi::new`, `Tpi::meeting` and `plane::normals_sign`.
 const TDE: &[Class] = &[Typical, Degenerate, Extreme];
 /// Classes of checked wide-integer arithmetic, of the random draws and of cutting stream ranges.
 const TEO: &[Class] = &[Typical, Extreme, Overflow];
@@ -104,6 +104,8 @@ const TE: &[Class] = &[Typical, Extreme];
 /// out of range.
 const TO: &[Class] = &[Typical, Overflow];
 /// Classes of the perturbed predicates: the exact path, and an exact tie the perturbation decides.
+/// Also of the face planes of `plane::determinant_sign` and `plane::normals_sign`: a nonzero sign
+/// and a zero, both decided by the machine-word rung.
 const TD: &[Class] = &[Typical, Degenerate];
 /// The class of operations with a single path, or whose paths one batch covers in rotation.
 const T: &[Class] = &[Typical];
@@ -198,8 +200,13 @@ pub static OPS: &[Op] = &[
     Op { group: "plane", name: "through", measures: "Plane::through", classes: TDE, prepare: |c| bind(inputs::plane::through(c), kernels::plane::through) },
     Op { group: "plane", name: "side", measures: "Plane::side", classes: TDNE, prepare: |c| bind(inputs::plane::side(c), kernels::plane::side) },
     Op { group: "plane", name: "tpi_new", measures: "Tpi::new", classes: TDE, prepare: |c| bind(inputs::plane::tpi_new(c), kernels::plane::tpi_new) },
+    Op { group: "plane", name: "tpi_meeting", measures: "Tpi::meeting", classes: TDE, prepare: |c| bind(inputs::plane::tpi_meeting(c), kernels::plane::tpi_meeting) },
+    Op { group: "plane", name: "normals_sign", measures: "plane::normals_sign", classes: TDE, prepare: |c| bind(inputs::plane::normals_sign(c), kernels::plane::normals_sign) },
+    Op { group: "plane", name: "normals_sign_faces", measures: "plane::normals_sign", classes: TD, prepare: |c| bind(inputs::plane::normals_sign_faces(c), kernels::plane::normals_sign_faces) },
     Op { group: "plane", name: "tpi_homogeneous", measures: "Tpi::homogeneous", classes: TE, prepare: |c| bind(inputs::plane::tpi_homogeneous(c), kernels::plane::tpi_homogeneous) },
     Op { group: "plane", name: "side_of_tpi", measures: "Plane::side_of_tpi", classes: TDNE, prepare: |c| bind(inputs::plane::side_of_tpi(c), kernels::plane::side_of_tpi) },
+    Op { group: "plane", name: "determinant_sign", measures: "plane::determinant_sign", classes: TDNE, prepare: |c| bind(inputs::plane::determinant_sign(c), kernels::plane::determinant_sign) },
+    Op { group: "plane", name: "determinant_sign_faces", measures: "plane::determinant_sign", classes: TD, prepare: |c| bind(inputs::plane::determinant_sign_faces(c), kernels::plane::determinant_sign_faces) },
     Op { group: "plane", name: "to_grid", measures: "Tpi::to_grid", classes: &[Typical, OnGrid, Extreme, Overflow], prepare: |c| bind(inputs::plane::to_grid(c), kernels::plane::to_grid) },
     Op { group: "plane", name: "lpi_new", measures: "Lpi::new", classes: TDE, prepare: |c| bind(inputs::plane::lpi_new(c), kernels::plane::lpi_new) },
     Op { group: "plane", name: "lpi_homogeneous", measures: "Lpi::homogeneous", classes: TE, prepare: |c| bind(inputs::plane::lpi_homogeneous(c), kernels::plane::lpi_homogeneous) },
@@ -396,6 +403,11 @@ pub static OPS: &[Op] = &[
     // each built for a scene and queried.
     Op { group: "bvh", name: "tree_build_query", measures: "geom_bvh::BoxTree::build", classes: T, prepare: |c| bind(inputs::bvh::tree_build_query(c), kernels::bvh::tree_build_query) },
     Op { group: "bvh", name: "cells_within", measures: "geom_bvh::CellIndex::build", classes: T, prepare: |c| bind(inputs::bvh::cells_within(c), kernels::bvh::cells_within) },
+    // The attribute step's hot path (piece G90; decision 32.44).
+    Op { group: "attributes", name: "apply", measures: "geom_name::classes::apply", classes: T, prepare: |c| bind(inputs::attributes::apply(c), kernels::attributes::apply) },
+    // geom-topo's hot paths (piece G80; decision 32.44): a column's copy on write, and publishing.
+    Op { group: "topo", name: "column_edit", measures: "geom_topo::Column::set", classes: T, prepare: |c| bind(inputs::topo::column_edit(c), kernels::topo::column_edit) },
+    Op { group: "topo", name: "publish", measures: "geom_topo::Builder::publish", classes: T, prepare: |c| bind(inputs::topo::publish(c), kernels::topo::publish) },
     // geom-nurbs's hot paths (pieces G56, G58 and G59; decision 32.44): evaluation, interpolation
     // and the Bernstein bound.
     Op { group: "nurbs", name: "curve_point", measures: "geom_nurbs::Curve::point", classes: T, prepare: |c| bind(inputs::nurbs::curve_point(c), kernels::nurbs::curve_point) },
@@ -416,6 +428,12 @@ pub static OPS: &[Op] = &[
     Op { group: "surface", name: "offset_point", measures: "geom_surface::SurfaceKind::point", classes: T, prepare: |c| bind(inputs::surface::offset_point(c), kernels::surface::offset_point) },
     Op { group: "surface", name: "torus_second_bound", measures: "geom_surface::ParamSurface::second_derivative_bound", classes: T, prepare: |c| bind(inputs::surface::torus_second_bound(c), kernels::surface::torus_second_bound) },
     Op { group: "surface", name: "torus_normal_bound", measures: "geom_surface::ParamSurface::normal_derivative_bound", classes: T, prepare: |c| bind(inputs::surface::torus_normal_bound(c), kernels::surface::torus_normal_bound) },
+    // geom-make's hot paths (piece G101; decision 32.44): a primitive built and a body moved, named,
+    // published and checked.
+    Op { group: "make", name: "build_box", measures: "geom_make::primitive::make_box", classes: T, prepare: |c| bind(inputs::make::boxes(c), kernels::make::boxes) },
+    Op { group: "make", name: "cylinder", measures: "geom_make::primitive::cylinder", classes: T, prepare: |c| bind(inputs::make::cylinders(c), kernels::make::cylinders) },
+    Op { group: "make", name: "move_box", measures: "geom_make::transform::move_by", classes: T, prepare: |c| bind(inputs::make::moved_boxes(c), kernels::make::moved_boxes) },
+    Op { group: "make", name: "turn_box", measures: "geom_make::transform::rotate", classes: T, prepare: |c| bind(inputs::make::turned_boxes(c), kernels::make::turned_boxes) },
     // Root finding and quadrature (piece G51; decision 32.44).
     Op { group: "brent", name: "zero", measures: "brent::zero", classes: T, prepare: |c| bind(inputs::roots::zero(c), kernels::roots::zero) },
     Op { group: "quadrature", name: "gauss_legendre", measures: "quadrature::gauss_legendre", classes: T, prepare: |c| bind(inputs::roots::gauss_legendre(c), kernels::roots::gauss_legendre) },
@@ -424,10 +442,78 @@ pub static OPS: &[Op] = &[
     // pool, so its lone wave is counted both ways (decision 32.44).
     Op { group: "helper", name: "lone_serial", measures: "geom_run::Exec::map", classes: T, prepare: |c| bind(inputs::helper::lone_serial(c), kernels::helper::lone_serial) },
     Op { group: "helper", name: "lone_pool", measures: "geom_run::Exec::map", classes: T, prepare: |c| bind(inputs::helper::lone_pool(c), kernels::helper::lone_pool) },
+    // The flat boolean's scenarios (piece G140; 23.13's scenarios at reduced scale): each batch is
+    // one whole job at about a tenth of its full size (inputs::scenario).
+    Op { group: "scenario", name: "openings", measures: "geom_bool::batch::cut", classes: T, prepare: |c| scenario("openings", c, inputs::scenario::reduced()) },
+    Op { group: "scenario", name: "moved_door", measures: "geom_bool::batch::cut", classes: T, prepare: |c| scenario("moved_door", c, inputs::scenario::reduced()) },
+    Op { group: "scenario", name: "slab_holes", measures: "geom_bool::batch::cut", classes: T, prepare: |c| scenario("slab_holes", c, inputs::scenario::reduced()) },
+    Op { group: "scenario", name: "union", measures: "geom_bool::combine::unite", classes: T, prepare: |c| scenario("union", c, inputs::scenario::reduced()) },
+    Op { group: "scenario", name: "one_selection", measures: "geom_bool::combine::combine", classes: T, prepare: |c| scenario("one_selection", c, inputs::scenario::reduced()) },
+    Op { group: "scenario", name: "three_selections", measures: "geom_bool::combine::combine", classes: T, prepare: |c| scenario("three_selections", c, inputs::scenario::reduced()) },
+    Op { group: "scenario", name: "storey", measures: "geom_bool::combine::combine", classes: T, prepare: |c| scenario("storey", c, inputs::scenario::reduced()) },
 ];
 
+/// The scenarios' names, as the operations of the scenario group name them.
+pub const SCENARIOS: [&str; 7] = [
+    "openings",
+    "moved_door",
+    "slab_holes",
+    "union",
+    "one_selection",
+    "three_selections",
+    "storey",
+];
+
+/// The scenario named `op` of class `class` at `sizes`, bound to its kernel. An unknown name gives
+/// an empty batch, which no catalogued benchmark has.
+fn scenario(op: &str, class: Class, sizes: inputs::scenario::Sizes) -> Prepared {
+    use inputs::scenario as s;
+    use kernels::scenario as k;
+    match op {
+        "openings" => bind(s::wall(class, sizes), k::openings),
+        "moved_door" => bind(s::moved_door(class, sizes), k::moved_door),
+        "slab_holes" => bind(s::slab(class, sizes), k::openings),
+        "union" => bind(s::boxes(class, sizes), k::union),
+        "one_selection" => bind(s::picks(class, sizes, 1), k::selections_of),
+        "three_selections" => bind(s::picks(class, sizes, 3), k::selections_of),
+        "storey" => bind(s::storey(class, sizes), k::storey),
+        _ => bind(s::wall(Class::Degenerate, sizes), k::openings),
+    }
+}
+
+/// `batch` bound to `kernel` if one run of it succeeds on every input.
+fn succeeding<T: Canonical + 'static>(
+    batch: Vec<T>,
+    kernel: Kernel<T, Result<[u32; 4], geom_op::OpError>>,
+) -> Option<Prepared> {
+    let mut out = Vec::with_capacity(batch.len());
+    kernel(&batch, &mut out);
+    (!out.is_empty() && out.iter().all(Result::is_ok)).then(|| bind(batch, kernel))
+}
+
+/// The scenario named `op` at full size, for the wall-clock harness (28.14: nightly, against Spare
+/// Construct's targets), once one run of it has succeeded; `None` for a name [`SCENARIOS`] does
+/// not hold or a run that failed. Full-size results have no golden digests, as the count gates
+/// never run them: the harness checks the reduced batch's digests before timing the full one.
+#[must_use]
+pub fn full_scenario(op: &str) -> Option<Prepared> {
+    use inputs::scenario as s;
+    use kernels::scenario as k;
+    let (class, sizes) = (Class::Typical, s::full());
+    match op {
+        "openings" => succeeding(s::wall(class, sizes), k::openings),
+        "moved_door" => succeeding(s::moved_door(class, sizes), k::moved_door),
+        "slab_holes" => succeeding(s::slab(class, sizes), k::openings),
+        "union" => succeeding(s::boxes(class, sizes), k::union),
+        "one_selection" => succeeding(s::picks(class, sizes, 1), k::selections_of),
+        "three_selections" => succeeding(s::picks(class, sizes, 3), k::selections_of),
+        "storey" => succeeding(s::storey(class, sizes), k::storey),
+        _ => None,
+    }
+}
+
 /// The groups of [`OPS`], in order.
-pub const GROUPS: [&str; 31] = [
+pub const GROUPS: [&str; 35] = [
     "predicate",
     "sign",
     "wide",
@@ -452,6 +538,8 @@ pub const GROUPS: [&str; 31] = [
     "ball",
     "math_types",
     "bvh",
+    "attributes",
+    "topo",
     "nurbs",
     "curve",
     "surface",
@@ -459,6 +547,8 @@ pub const GROUPS: [&str; 31] = [
     "quadrature",
     "linalg",
     "helper",
+    "make",
+    "scenario",
 ];
 
 /// The group of the growth checks.
@@ -617,7 +707,9 @@ pub static UNMEASURED: &[(&str, &str)] = &[
     ("Interval::hi", "field accessor"),
     ("Plane::n", "field accessor"),
     ("Plane::d", "field accessor"),
+    ("Plane::new", "two comparisons of the coefficients with their budgets"),
     ("Tpi::planes", "field accessor"),
+    ("Tpi::weight", "field accessor"),
     ("Lpi::points", "field accessor"),
     ("Lpi::plane", "field accessor"),
     ("Ssi::points", "field accessor"),

@@ -732,6 +732,52 @@ impl<T: Canonical> Canonical for Result<T, geom_linalg::LinalgError> {
     }
 }
 
+// `geom-topo`'s types (decision 32.44's count benchmarks for piece G80).
+
+impl Canonical for geom_topo::Builder {
+    fn encode(&self, h: &mut Sha256) {
+        debug_text(self, h);
+    }
+}
+
+impl<T: Canonical> Canonical for Result<T, geom_topo::TopoError> {
+    fn encode(&self, h: &mut Sha256) {
+        match self {
+            Ok(v) => {
+                h.update(&[0]);
+                v.encode(h);
+            }
+            Err(e) => {
+                h.update(&[1]);
+                debug_text(e, h);
+            }
+        }
+    }
+}
+
+// The attribute step's types (decision 32.44's count benchmarks for piece G90).
+
+impl Canonical for crate::inputs::attributes::Scene {
+    fn encode(&self, h: &mut Sha256) {
+        debug_text(self, h);
+    }
+}
+
+impl<T: Canonical> Canonical for Result<T, geom_name::AttrError> {
+    fn encode(&self, h: &mut Sha256) {
+        match self {
+            Ok(v) => {
+                h.update(&[0]);
+                v.encode(h);
+            }
+            Err(e) => {
+                h.update(&[1]);
+                debug_text(e, h);
+            }
+        }
+    }
+}
+
 // `geom-bvh`'s types (decision 32.44's count benchmarks for pieces G54 and G55).
 
 impl<const D: usize> Canonical for geom_bvh::Aabb<D> {
@@ -870,6 +916,51 @@ impl<T: Canonical> Canonical for Result<T, geom_curve::CurveError> {
     }
 }
 
+// `geom-make`'s operations (decision 32.44's count benchmarks for piece G101).
+
+impl Canonical for geom_make::BoxInput {
+    fn encode(&self, h: &mut Sha256) {
+        self.min.encode(h);
+        self.size.map(geom_num::Steps::get).encode(h);
+    }
+}
+
+impl Canonical for geom_make::RoundInput {
+    fn encode(&self, h: &mut Sha256) {
+        self.base.encode(h);
+        self.radius.get().encode(h);
+        self.height.get().encode(h);
+        self.step.rung().encode(h);
+    }
+}
+
+impl Canonical for geom_op::OpOutput<geom_make::Made> {
+    // A built body, as a transform's input: its corners, then its class's rank.
+    fn encode(&self, h: &mut Sha256) {
+        for point in self.result.body.arenas().points.iter() {
+            if let Some(p) = point.grid() {
+                p.encode(h);
+            }
+        }
+        u32::from(self.exactness.rank()).encode(h);
+    }
+}
+
+impl<T: Canonical> Canonical for Result<T, geom_op::OpError> {
+    fn encode(&self, h: &mut Sha256) {
+        match self {
+            Ok(v) => {
+                h.update(&[0]);
+                v.encode(h);
+            }
+            Err(e) => {
+                h.update(&[1]);
+                debug_text(e, h);
+            }
+        }
+    }
+}
+
 // Root finding and quadrature (decision 32.44's count benchmark for piece G51).
 
 impl Canonical for geom_num::brent::Zero {
@@ -907,6 +998,73 @@ impl<T: Canonical> Canonical for Result<T, geom_num::quadrature::QuadError> {
                 debug_text(e, h);
             }
         }
+    }
+}
+
+// The flat boolean's scenarios (piece G140).
+
+/// A body, as a scenario's input: its faces, edges and vertices counted, then its corners on the
+/// grid, in row order.
+fn body(b: &geom_topo::Body, h: &mut Sha256) {
+    let a = b.arenas();
+    for arena in [
+        geom_topo::Arena::Face,
+        geom_topo::Arena::Edge,
+        geom_topo::Arena::Vertex,
+    ] {
+        a.rows(arena).encode(h);
+    }
+    for point in a.points.iter() {
+        if let Some(p) = point.grid() {
+            p.encode(h);
+        }
+    }
+}
+
+/// Bodies, as a scenario's input: how many, then each.
+fn bodies(list: &[geom_topo::Body], h: &mut Sha256) {
+    u64::try_from(list.len()).unwrap_or(u64::MAX).encode(h);
+    for b in list {
+        body(b, h);
+    }
+}
+
+impl Canonical for crate::inputs::scenario::Host {
+    fn encode(&self, h: &mut Sha256) {
+        body(&self.host, h);
+        bodies(&self.tools, h);
+    }
+}
+
+impl Canonical for crate::inputs::scenario::Recut {
+    // The host and its tools after the move: the cache follows from the first cut of the same
+    // wall, which the tools before the move would give.
+    fn encode(&self, h: &mut Sha256) {
+        self.host.encode(h);
+        u64::try_from(self.cache.boxes().len())
+            .unwrap_or(u64::MAX)
+            .encode(h);
+    }
+}
+
+impl Canonical for crate::inputs::scenario::Picks {
+    fn encode(&self, h: &mut Sha256) {
+        self.host.encode(h);
+        u64::try_from(self.count).unwrap_or(u64::MAX).encode(h);
+    }
+}
+
+impl Canonical for crate::inputs::scenario::Many {
+    fn encode(&self, h: &mut Sha256) {
+        bodies(&self.bodies, h);
+    }
+}
+
+impl Canonical for crate::inputs::scenario::Storey {
+    fn encode(&self, h: &mut Sha256) {
+        body(&self.envelope, h);
+        bodies(&self.walls, h);
+        self.seeds.encode(h);
     }
 }
 

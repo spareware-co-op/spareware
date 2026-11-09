@@ -276,6 +276,28 @@ pub mod plane {
         run(batch, out, |&[p, q, r]| Tpi::new(p, q, r));
     }
 
+    /// `Tpi::meeting` on each plane triple.
+    #[inline(never)]
+    pub fn tpi_meeting(batch: &[[Plane; 3]], out: &mut Vec<Result<Tpi, NumError>>) {
+        run(batch, out, |&[p, q, r]| Tpi::meeting(p, q, r));
+    }
+
+    /// `plane::normals_sign` on each plane triple.
+    #[inline(never)]
+    pub fn normals_sign(batch: &[[Plane; 3]], out: &mut Vec<Result<Sign, NumError>>) {
+        run(batch, out, |[p, q, r]| {
+            geom_num::plane::normals_sign(p, q, r)
+        });
+    }
+
+    /// `plane::normals_sign` on each face triple.
+    #[inline(never)]
+    pub fn normals_sign_faces(batch: &[[Plane; 3]], out: &mut Vec<Result<Sign, NumError>>) {
+        run(batch, out, |[p, q, r]| {
+            geom_num::plane::normals_sign(p, q, r)
+        });
+    }
+
     /// `Tpi::homogeneous` on each meeting point.
     #[inline(never)]
     pub fn tpi_homogeneous(batch: &[Tpi], out: &mut Vec<Result<([I320; 3], I256), NumError>>) {
@@ -286,6 +308,22 @@ pub mod plane {
     #[inline(never)]
     pub fn side_of_tpi(batch: &[(Plane, Tpi)], out: &mut Vec<Result<Sign, NumError>>) {
         run(batch, out, |(p, t)| p.side_of_tpi(t));
+    }
+
+    /// `plane::determinant_sign` on each four planes.
+    #[inline(never)]
+    pub fn determinant_sign(batch: &[[Plane; 4]], out: &mut Vec<Result<Sign, NumError>>) {
+        run(batch, out, |[p, q, r, s]| {
+            geom_num::plane::determinant_sign(p, q, r, s)
+        });
+    }
+
+    /// `plane::determinant_sign` on each four face planes.
+    #[inline(never)]
+    pub fn determinant_sign_faces(batch: &[[Plane; 4]], out: &mut Vec<Result<Sign, NumError>>) {
+        run(batch, out, |[p, q, r, s]| {
+            geom_num::plane::determinant_sign(p, q, r, s)
+        });
     }
 
     /// `Tpi::to_grid` on each meeting point.
@@ -1771,6 +1809,68 @@ pub mod bvh {
     }
 }
 
+/// `geom-topo`'s hot paths (piece G80, decision 32.44): a column filled, copied and written, and
+/// a builder's arenas published.
+pub mod topo {
+    use geom_run::{Budget, WorkMeter};
+    use geom_topo::{Arena, BodyKind, Builder, Column, Face, Ix, TopoError};
+
+    use super::run;
+
+    /// Fills a column with [`Column::extend`], copies it, writes one row of the copy with
+    /// [`Column::set`], and sums what [`Column::get`] reads from both.
+    #[inline(never)]
+    pub fn column_edit(batch: &[(Vec<u64>, u32, u64)], out: &mut Vec<Result<u64, TopoError>>) {
+        run(batch, out, |(values, row, value)| {
+            let mut column: Column<Face, u64> = Column::new();
+            column.extend(values.iter().copied())?;
+            let mut copy = column.clone();
+            let missing = TopoError::Full(Arena::Face);
+            copy.set(Ix::new(*row).ok_or(missing)?, *value)?;
+            let mut sum = 0_u64;
+            for r in 0..column.len() {
+                let ix = Ix::new(r).ok_or(missing)?;
+                let (a, b) = (column.get(ix).ok_or(missing)?, copy.get(ix).ok_or(missing)?);
+                sum = sum.wrapping_add(*a).wrapping_add(*b);
+            }
+            Ok(sum)
+        });
+    }
+
+    /// [`Builder::publish`] on a copy of each builder, with its void region outside; the fins of
+    /// the body it gives.
+    #[inline(never)]
+    pub fn publish(batch: &[Builder], out: &mut Vec<Result<u32, TopoError>>) {
+        run(batch, out, |builder| {
+            let mut meter = WorkMeter::new(Budget::UNLIMITED);
+            let outside = Ix::new(1).ok_or(TopoError::Full(Arena::Region))?;
+            let body = builder
+                .clone()
+                .publish(BodyKind::Solid, outside, &mut meter)?;
+            Ok(body.arenas().fins.len())
+        });
+    }
+}
+
+/// The attribute step's hot path (piece G90, decision 32.44).
+pub mod attributes {
+    use geom_name::{AttrError, Step, apply as step};
+
+    use super::run;
+    use crate::inputs::attributes::Scene;
+
+    /// `geom_name::apply` on each scene; how many values come out.
+    #[inline(never)]
+    pub fn apply(batch: &[Scene], out: &mut Vec<Result<u64, AttrError>>) {
+        run(batch, out, |scene| {
+            let (after, notes) =
+                step(&scene.defs, &scene.before, &scene.history, &Step::default())?;
+            let values = after.iter().count().saturating_add(notes.len());
+            Ok(u64::try_from(values).unwrap_or(u64::MAX))
+        });
+    }
+}
+
 /// `geom-nurbs`'s hot paths (pieces G56, G58 and G59, decision 32.44): evaluating a clamped cubic,
 /// chord-length interpolation, and the bound of a cubic Bernstein piece, each under an unlimited
 /// budget where it takes one.
@@ -2026,6 +2126,82 @@ pub mod roots {
     }
 }
 
+/// `geom-make`'s hot paths (piece G101, decision 32.44): a primitive built and a body moved, named,
+/// published and checked as the operation does it, under an unlimited budget.
+pub mod make {
+    use geom_make::{BoxInput, Made, Moved, RoundInput, cylinder, make_box, move_by, rotate};
+    use geom_math::{Axis, Rotation};
+    use geom_num::grid::P3;
+    use geom_op::{OpContext, OpError, OpId, OpOutput, OpPath};
+    use geom_run::Budget;
+    use geom_topo::Arena;
+
+    use super::run;
+
+    /// A context of one operation, under no limit.
+    fn context() -> OpContext<'static> {
+        OpContext::new(OpPath::new(OpId::from_bytes([2; 16])), Budget::UNLIMITED)
+    }
+
+    /// What a result is read by: its faces, edges and vertices, and its class's rank.
+    fn counts(made: Result<OpOutput<Made>, OpError>) -> Result<[u32; 4], OpError> {
+        made.map(|out| {
+            let a = out.result.body.arenas();
+            [
+                a.rows(Arena::Face),
+                a.rows(Arena::Edge),
+                a.rows(Arena::Vertex),
+                u32::from(out.exactness.rank()),
+            ]
+        })
+    }
+
+    /// A body to move, recorded as it was built, accepting no less.
+    fn moved(out: &OpOutput<Made>) -> Moved<'_> {
+        Moved {
+            body: &out.result.body,
+            exactness: out.exactness,
+            accept: None,
+        }
+    }
+
+    /// `make_box` on each input.
+    #[inline(never)]
+    pub fn boxes(batch: &[BoxInput], out: &mut Vec<Result<[u32; 4], OpError>>) {
+        let ctx = context();
+        run(batch, out, |input| counts(make_box(&ctx, input)));
+    }
+
+    /// `cylinder` on each input.
+    #[inline(never)]
+    pub fn cylinders(batch: &[RoundInput], out: &mut Vec<Result<[u32; 4], OpError>>) {
+        let ctx = context();
+        run(batch, out, |input| counts(cylinder(&ctx, input)));
+    }
+
+    /// `move_by` on each body.
+    #[inline(never)]
+    pub fn moved_boxes(
+        batch: &[(OpOutput<Made>, [i64; 3])],
+        out: &mut Vec<Result<[u32; 4], OpError>>,
+    ) {
+        let ctx = context();
+        run(batch, out, |(body, offset)| {
+            counts(move_by(&ctx, moved(body), *offset))
+        });
+    }
+
+    /// A quarter turn about z by `rotate` on each body.
+    #[inline(never)]
+    pub fn turned_boxes(batch: &[(OpOutput<Made>, P3)], out: &mut Vec<Result<[u32; 4], OpError>>) {
+        let ctx = context();
+        let turn = Rotation::quarter_turns(1);
+        run(batch, out, |(body, center)| {
+            counts(rotate(&ctx, moved(body), Axis::Z, turn, *center))
+        });
+    }
+}
+
 /// `geom-run`'s parallel helper (decision 32.44): `Exec::map` over a list that fits one chunk, on
 /// the serial executor and on a pool, under an unlimited budget. The pool runs its tasks on the
 /// calling thread, in order, so the two counts differ by the helper's own dispatch only, never by
@@ -2072,6 +2248,149 @@ pub mod helper {
         run(batch, out, |items| {
             let mut meter = WorkMeter::new(Budget::UNLIMITED);
             Exec::with_pool(&InOrder).map(&mut meter, PHASE, PLAN, items, item)
+        });
+    }
+}
+
+/// The flat boolean's scenarios (piece G140; 23.13's scenarios at reduced scale): whole jobs a
+/// building model gives `geom-bool`, each run as a program runs it, under an unlimited budget, on
+/// one thread so the counts do not depend on scheduling.
+pub mod scenario {
+    use geom_bool::batch::{BatchRule, CutResult, cut};
+    use geom_bool::combine::{Combined, combine, unite};
+    use geom_bool::operand::{BooleanInput, Selection, Term};
+    use geom_op::{OpContext, OpError, OpId, OpOutput, OpPath};
+    use geom_poly::merge::Merge;
+    use geom_run::{Budget, Exec};
+    use geom_topo::{Arena, Body};
+
+    use super::run;
+    use crate::inputs::scenario::{
+        Host, Many, Picks, Recut, Storey, cut_of, seeds, selections, solid,
+    };
+
+    /// A context of one operation, under no limit.
+    fn context() -> OpContext<'static> {
+        OpContext::new(OpPath::new(OpId::from_bytes([4; 16])), Budget::UNLIMITED)
+    }
+
+    /// What results are read by: the faces, edges and vertices of every body, and how many bodies.
+    fn counts<'b>(bodies: impl IntoIterator<Item = &'b Body>) -> [u32; 4] {
+        let mut sum = [0u32; 4];
+        for body in bodies {
+            let a = body.arenas();
+            let [faces, edges, vertices, many] = &mut sum;
+            *faces = faces.saturating_add(a.rows(Arena::Face));
+            *edges = edges.saturating_add(a.rows(Arena::Edge));
+            *vertices = vertices.saturating_add(a.rows(Arena::Vertex));
+            *many = many.saturating_add(1);
+        }
+        sum
+    }
+
+    /// A cut's bodies' counts.
+    fn cut_counts(out: Result<OpOutput<Vec<CutResult>>, OpError>) -> Result<[u32; 4], OpError> {
+        out.map(|done| counts(done.result.iter().map(|one| &one.result.body)))
+    }
+
+    /// The selections' bodies' counts.
+    fn picked_counts(
+        out: Result<OpOutput<Vec<Vec<Combined>>>, OpError>,
+    ) -> Result<[u32; 4], OpError> {
+        out.map(|done| counts(done.result.iter().flatten().map(|one| &one.body)))
+    }
+
+    /// Each host cut by all its tools in one call.
+    #[inline(never)]
+    pub fn openings(batch: &[Host], out: &mut Vec<Result<[u32; 4], OpError>>) {
+        let ctx = context();
+        run(batch, out, |host| {
+            cut_counts(cut(
+                &ctx,
+                &Exec::serial(),
+                &[cut_of(host, None)],
+                BatchRule::Atomic,
+            ))
+        });
+    }
+
+    /// Each host cut again, after a tool moved, from the first cut's cache.
+    #[inline(never)]
+    pub fn moved_door(batch: &[Recut], out: &mut Vec<Result<[u32; 4], OpError>>) {
+        let ctx = context();
+        run(batch, out, |recut| {
+            cut_counts(cut(
+                &ctx,
+                &Exec::serial(),
+                &[cut_of(&recut.host, Some(&recut.cache))],
+                BatchRule::Atomic,
+            ))
+        });
+    }
+
+    /// Each set of solids united in one call.
+    #[inline(never)]
+    pub fn union(batch: &[Many], out: &mut Vec<Result<[u32; 4], OpError>>) {
+        let ctx = context();
+        run(batch, out, |many| {
+            let operands: Vec<_> = many
+                .bodies
+                .iter()
+                .enumerate()
+                .map(|(k, body)| solid(k, body))
+                .collect();
+            unite(&ctx, &Exec::serial(), &operands).map(|done| counts([&done.result.body]))
+        });
+    }
+
+    /// A host and its tools as one boolean's input, keyed as [`cut_of`] keys them, choosing
+    /// `select`.
+    fn input(host: &Host, select: Vec<Selection>) -> BooleanInput<'_> {
+        let cut = cut_of(host, None);
+        let mut operands = vec![cut.host];
+        operands.extend(cut.tools);
+        BooleanInput {
+            operands,
+            select,
+            merge: Merge::RemoveRedundant,
+            accept: None,
+        }
+    }
+
+    /// Each host and its tools read for its selections from one arrangement (11.17).
+    #[inline(never)]
+    pub fn selections_of(batch: &[Picks], out: &mut Vec<Result<[u32; 4], OpError>>) {
+        let ctx = context();
+        run(batch, out, |picks| {
+            let input = input(&picks.host, selections(picks));
+            picked_counts(combine(&ctx, &Exec::serial(), &input))
+        });
+    }
+
+    /// Each storey's rooms: the cells inside its envelope and outside every wall, one per seed.
+    #[inline(never)]
+    pub fn storey(batch: &[Storey], out: &mut Vec<Result<[u32; 4], OpError>>) {
+        let ctx = context();
+        run(batch, out, |storey| {
+            let envelope = solid(0, &storey.envelope);
+            let mut test = vec![Term::Inside(envelope.key)];
+            let mut operands = vec![envelope];
+            for (k, wall) in storey.walls.iter().enumerate() {
+                let one = solid(k + 1, wall);
+                test.extend([Term::Inside(one.key), Term::Not, Term::And]);
+                operands.push(one);
+            }
+            let select = vec![Selection::Cells {
+                test,
+                seeds: seeds(storey),
+            }];
+            let input = BooleanInput {
+                operands,
+                select,
+                merge: Merge::RemoveRedundant,
+                accept: None,
+            };
+            picked_counts(combine(&ctx, &Exec::serial(), &input))
         });
     }
 }

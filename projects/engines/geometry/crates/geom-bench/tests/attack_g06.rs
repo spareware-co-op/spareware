@@ -69,7 +69,7 @@ use geom_num::dd::{self as dd, DD};
 use geom_num::exact_sum::ExactSum;
 use geom_num::grid::{self, COORD_MAX, Coord, GridStep, P2, P3, Rounded, Steps};
 use geom_num::interval::Interval;
-use geom_num::plane::{Lpi, Plane, Tpi};
+use geom_num::plane::{Lpi, Plane, Tpi, determinant_sign, normals_sign};
 use geom_num::real::Real;
 use geom_num::rng::{self as rng, Philox, RngError, Seed, Stream, StreamId, StreamRange};
 use geom_num::wide::Wide;
@@ -760,6 +760,46 @@ fn fold<R: Canonical>(results: impl IntoIterator<Item = R>) -> Digest {
     canonical::digest(&results)
 }
 
+/// A context of one `geom-make` operation, as the benchmarks run it.
+fn make_context() -> geom_op::OpContext<'static> {
+    geom_op::OpContext::new(
+        geom_op::OpPath::new(geom_op::OpId::from_bytes([2; 16])),
+        geom_run::Budget::UNLIMITED,
+    )
+}
+
+/// What a `geom-make` result is read by.
+fn make_counts(out: &geom_op::OpOutput<geom_make::Made>) -> [u32; 4] {
+    let a = out.result.body.arenas();
+    [
+        a.rows(geom_topo::Arena::Face),
+        a.rows(geom_topo::Arena::Edge),
+        a.rows(geom_topo::Arena::Vertex),
+        u32::from(out.exactness.rank()),
+    ]
+}
+
+/// A context of one `geom-bool` scenario, as the benchmarks run it.
+fn scenario_context() -> geom_op::OpContext<'static> {
+    geom_op::OpContext::new(
+        geom_op::OpPath::new(geom_op::OpId::from_bytes([4; 16])),
+        geom_run::Budget::UNLIMITED,
+    )
+}
+
+/// What a scenario's bodies are read by: their faces, edges and vertices, and how many.
+fn scenario_counts<'b>(bodies: impl IntoIterator<Item = &'b geom_topo::Body>) -> [u32; 4] {
+    let mut sum = [0u32; 4];
+    for body in bodies {
+        let a = body.arenas();
+        sum[0] += a.rows(geom_topo::Arena::Face);
+        sum[1] += a.rows(geom_topo::Arena::Edge);
+        sum[2] += a.rows(geom_topo::Arena::Vertex);
+        sum[3] += 1;
+    }
+    sum
+}
+
 /// The output digest of one run of `kernel` over `batch`, as a benchmark computes it.
 fn kernel_digest<T, R: Canonical>(kernel: fn(&[T], &mut Vec<R>), batch: &[T]) -> Digest {
     let mut out = Vec::with_capacity(batch.len());
@@ -1015,12 +1055,37 @@ fn direct_digest(group: &str, name: &str, class: Class) -> Option<Digest> {
                 .into_iter()
                 .map(|[p, q, r]| Tpi::new(p, q, r)),
         ),
+        ("plane", "tpi_meeting") => fold(
+            ip::tpi_meeting(class)
+                .into_iter()
+                .map(|[p, q, r]| Tpi::meeting(p, q, r)),
+        ),
+        ("plane", "normals_sign") => fold(
+            ip::normals_sign(class)
+                .iter()
+                .map(|[p, q, r]| normals_sign(p, q, r)),
+        ),
+        ("plane", "normals_sign_faces") => fold(
+            ip::normals_sign_faces(class)
+                .iter()
+                .map(|[p, q, r]| normals_sign(p, q, r)),
+        ),
         ("plane", "tpi_homogeneous") => {
             fold(ip::tpi_homogeneous(class).iter().map(Tpi::homogeneous))
         }
         ("plane", "side_of_tpi") => {
             fold(ip::side_of_tpi(class).iter().map(|(p, t)| p.side_of_tpi(t)))
         }
+        ("plane", "determinant_sign") => fold(
+            ip::determinant_sign(class)
+                .iter()
+                .map(|[p, q, r, s]| determinant_sign(p, q, r, s)),
+        ),
+        ("plane", "determinant_sign_faces") => fold(
+            ip::determinant_sign_faces(class)
+                .iter()
+                .map(|[p, q, r, s]| determinant_sign(p, q, r, s)),
+        ),
         ("plane", "to_grid") => fold(ip::to_grid(class).iter().map(Tpi::to_grid)),
         ("plane", "lpi_new") => fold(
             ip::lpi_new(class)
@@ -1355,6 +1420,199 @@ fn direct_digest(group: &str, name: &str, class: Class) -> Option<Digest> {
                 .map(|points| {
                     geom_nurbs::BernsteinCurve::new((0.0, 1.0), points, None)?
                         .bound(&mut geom_run::WorkMeter::new(geom_run::Budget::UNLIMITED))
+                }),
+        ),
+        ("make", "build_box") => {
+            let ctx = make_context();
+            fold(
+                inputs::make::boxes(class)
+                    .iter()
+                    .map(|input| geom_make::make_box(&ctx, input).map(|out| make_counts(&out))),
+            )
+        }
+        ("make", "cylinder") => {
+            let ctx = make_context();
+            fold(
+                inputs::make::cylinders(class)
+                    .iter()
+                    .map(|input| geom_make::cylinder(&ctx, input).map(|out| make_counts(&out))),
+            )
+        }
+        ("make", "move_box") => {
+            let ctx = make_context();
+            fold(
+                inputs::make::moved_boxes(class)
+                    .iter()
+                    .map(|(body, offset)| {
+                        let moved = geom_make::Moved {
+                            body: &body.result.body,
+                            exactness: body.exactness,
+                            accept: None,
+                        };
+                        geom_make::move_by(&ctx, moved, *offset).map(|out| make_counts(&out))
+                    }),
+            )
+        }
+        ("make", "turn_box") => {
+            let ctx = make_context();
+            fold(
+                inputs::make::turned_boxes(class)
+                    .iter()
+                    .map(|(body, center)| {
+                        let moved = geom_make::Moved {
+                            body: &body.result.body,
+                            exactness: body.exactness,
+                            accept: None,
+                        };
+                        let turn = geom_math::Rotation::quarter_turns(1);
+                        geom_make::rotate(&ctx, moved, geom_math::Axis::Z, turn, *center)
+                            .map(|out| make_counts(&out))
+                    }),
+            )
+        }
+        ("attributes", "apply") => fold(inputs::attributes::apply(class).iter().map(
+            |scene| -> Result<u64, geom_name::AttrError> {
+                let (after, notes) = geom_name::apply(
+                    &scene.defs,
+                    &scene.before,
+                    &scene.history,
+                    &geom_name::Step::default(),
+                )?;
+                Ok(after.iter().count() as u64 + notes.len() as u64)
+            },
+        )),
+        ("topo", "column_edit") => fold(inputs::topo::column_edit(class).iter().map(
+            |(values, row, value)| -> Result<u64, geom_topo::TopoError> {
+                let mut column: geom_topo::Column<geom_topo::Face, u64> = geom_topo::Column::new();
+                for &v in values {
+                    column.push(v)?;
+                }
+                let original = column.clone();
+                column.set(geom_topo::Ix::new(*row).unwrap(), *value)?;
+                let a: u64 = original.iter().fold(0, |s, v| s.wrapping_add(*v));
+                let b: u64 = column.iter().fold(0, |s, v| s.wrapping_add(*v));
+                Ok(a.wrapping_add(b))
+            },
+        )),
+        ("topo", "publish") => fold(inputs::topo::publish(class).iter().map(
+            |builder| -> Result<u32, geom_topo::TopoError> {
+                let mut meter = geom_run::WorkMeter::new(geom_run::Budget::UNLIMITED);
+                let body = builder.clone().publish(
+                    geom_topo::BodyKind::Solid,
+                    geom_topo::Ix::new(1).unwrap(),
+                    &mut meter,
+                )?;
+                Ok(body.arenas().fins.len())
+            },
+        )),
+        ("scenario", "openings" | "slab_holes" | "moved_door") => {
+            let size = inputs::scenario::reduced();
+            let hosts = match name {
+                "openings" => inputs::scenario::wall(class, size),
+                "slab_holes" => inputs::scenario::slab(class, size),
+                _ => Vec::new(),
+            };
+            let recuts = if name == "moved_door" {
+                inputs::scenario::moved_door(class, size)
+            } else {
+                Vec::new()
+            };
+            let cuts: Vec<geom_bool::batch::Cut<'_>> = hosts
+                .iter()
+                .map(|host| inputs::scenario::cut_of(host, None))
+                .chain(
+                    recuts
+                        .iter()
+                        .map(|r| inputs::scenario::cut_of(&r.host, Some(&r.cache))),
+                )
+                .collect();
+            fold(cuts.iter().map(|one| {
+                geom_bool::batch::cut(
+                    &scenario_context(),
+                    &geom_run::Exec::serial(),
+                    std::slice::from_ref(one),
+                    geom_bool::batch::BatchRule::Atomic,
+                )
+                .map(|out| scenario_counts(out.result.iter().map(|r| &r.result.body)))
+            }))
+        }
+        ("scenario", "union") => fold(
+            inputs::scenario::boxes(class, inputs::scenario::reduced())
+                .iter()
+                .map(|many| {
+                    let operands: Vec<_> = many
+                        .bodies
+                        .iter()
+                        .enumerate()
+                        .map(|(k, b)| inputs::scenario::solid(k, b))
+                        .collect();
+                    geom_bool::combine::unite(
+                        &scenario_context(),
+                        &geom_run::Exec::serial(),
+                        &operands,
+                    )
+                    .map(|out| scenario_counts([&out.result.body]))
+                }),
+        ),
+        ("scenario", "one_selection" | "three_selections") => fold(
+            inputs::scenario::wall(class, inputs::scenario::reduced())
+                .iter()
+                .map(|host| {
+                    use geom_bool::operand::Selection;
+                    let target = inputs::scenario::solid(0, &host.host).key;
+                    let mut select = vec![Selection::Subtract { target }];
+                    if name == "three_selections" {
+                        select.extend([Selection::Unite, Selection::Intersect]);
+                    }
+                    let mut operands = vec![inputs::scenario::solid(0, &host.host)];
+                    operands.extend(
+                        host.tools
+                            .iter()
+                            .enumerate()
+                            .map(|(k, t)| inputs::scenario::solid(k + 1, t)),
+                    );
+                    let input = geom_bool::operand::BooleanInput {
+                        operands,
+                        select,
+                        merge: geom_poly::merge::Merge::RemoveRedundant,
+                        accept: None,
+                    };
+                    geom_bool::combine::combine(
+                        &scenario_context(),
+                        &geom_run::Exec::serial(),
+                        &input,
+                    )
+                    .map(|out| scenario_counts(out.result.iter().flatten().map(|c| &c.body)))
+                }),
+        ),
+        ("scenario", "storey") => fold(
+            inputs::scenario::storey(class, inputs::scenario::reduced())
+                .iter()
+                .map(|storey| {
+                    use geom_bool::operand::{Selection, Term};
+                    let envelope = inputs::scenario::solid(0, &storey.envelope);
+                    let mut test = vec![Term::Inside(envelope.key)];
+                    let mut operands = vec![envelope];
+                    for (k, wall) in storey.walls.iter().enumerate() {
+                        let one = inputs::scenario::solid(k + 1, wall);
+                        test.extend([Term::Inside(one.key), Term::Not, Term::And]);
+                        operands.push(one);
+                    }
+                    let input = geom_bool::operand::BooleanInput {
+                        operands,
+                        select: vec![Selection::Cells {
+                            test,
+                            seeds: inputs::scenario::seeds(storey),
+                        }],
+                        merge: geom_poly::merge::Merge::RemoveRedundant,
+                        accept: None,
+                    };
+                    geom_bool::combine::combine(
+                        &scenario_context(),
+                        &geom_run::Exec::serial(),
+                        &input,
+                    )
+                    .map(|out| scenario_counts(out.result.iter().flatten().map(|c| &c.body)))
                 }),
         ),
         ("bvh", "tree_build_query") => fold(inputs::bvh::tree_build_query(class).iter().map(
@@ -2198,6 +2456,76 @@ fn three_plane_points_agree_with_cramers_rule_on_every_input() {
             panic!("an overflow input is inside the frame");
         };
         assert!(value.unsigned_abs() < 1 << 60, "{value}");
+    }
+}
+
+/// The 4 × 4 determinant of four planes' coefficients, rows in order and the offset last, as
+/// `plane::determinant_sign` defines it.
+fn coefficients_det(planes: &[Plane; 4]) -> Big {
+    det(&planes.map(|p| {
+        let ([x, y, z], d) = coefficients(&p);
+        vec![x, y, z, d]
+    }))
+}
+
+/// The determinant of three planes' normals: the weight of the point where they meet.
+fn normals_det(planes: [&Plane; 3]) -> Big {
+    det(&planes.map(|p| coefficients(p).0.to_vec()))
+}
+
+#[test]
+fn plane_determinants_agree_with_exact_determinants_on_every_input() {
+    // Piece G138's functions against Laplace determinants: plane::determinant_sign and
+    // plane::normals_sign give the exact signs, and Tpi::meeting is Tpi::new, with the exact
+    // weight, or Degenerate exactly when the normals are dependent.
+    use inputs::plane as p;
+    for class in [Typical, Degenerate, NearlyDegenerate, Extreme] {
+        for planes @ [a, b, c, s] in p::determinant_sign(class) {
+            let exact = coefficients_det(&planes);
+            assert_eq!(
+                determinant_sign(&a, &b, &c, &s),
+                Ok(exact.sign()),
+                "{class}"
+            );
+            // The determinant is n · X + d · w for the fourth plane at the point where the first
+            // three meet, as the function documents: the value side_of_tpi takes the sign of.
+            let t = Tpi::new(a, b, c).unwrap();
+            assert_eq!(exact, side_of_tpi_value(&s, &t).0, "{class}");
+        }
+    }
+    for class in [Typical, Degenerate] {
+        for planes @ [a, b, c, s] in p::determinant_sign_faces(class) {
+            let exact = coefficients_det(&planes).sign();
+            assert_eq!(determinant_sign(&a, &b, &c, &s), Ok(exact), "{class}");
+        }
+        for [a, b, c] in p::normals_sign_faces(class) {
+            let exact = normals_det([&a, &b, &c]).sign();
+            assert_eq!(normals_sign(&a, &b, &c), Ok(exact), "{class}");
+        }
+    }
+    for class in [Typical, Degenerate, Extreme] {
+        for [a, b, c] in p::normals_sign(class) {
+            let exact = normals_det([&a, &b, &c]).sign();
+            assert_eq!(normals_sign(&a, &b, &c), Ok(exact), "{class}");
+        }
+        for planes @ [a, b, c] in p::tpi_meeting(class) {
+            let weight = normals_det([&a, &b, &c]).sign();
+            let made = Tpi::meeting(a, b, c);
+            assert_eq!(
+                made,
+                Tpi::new(a, b, c),
+                "{class}: not the point Tpi::new makes"
+            );
+            match made {
+                Ok(t) => {
+                    assert_ne!(weight, Sign::Zero, "{class}: dependent normals accepted");
+                    assert_eq!((t.weight(), *t.planes()), (weight, planes), "{class}");
+                }
+                Err(e) => {
+                    assert_eq!((e, weight), (NumError::Degenerate, Sign::Zero), "{class}");
+                }
+            }
+        }
     }
 }
 

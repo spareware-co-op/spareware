@@ -71,8 +71,14 @@ fn exponent(x: f64) -> i64 {
 
 #[test]
 fn every_benchmark_has_a_full_batch() {
+    // A scenario's batch is one whole job (inputs::scenario).
     for name in names() {
-        assert_eq!(prepare_named(&name).unwrap().len(), BATCH, "{name}");
+        let full = if name.starts_with("scenario/") {
+            1
+        } else {
+            BATCH
+        };
+        assert_eq!(prepare_named(&name).unwrap().len(), full, "{name}");
     }
     assert_eq!(names().len(), cases().count() + growth_cases().count());
 }
@@ -707,6 +713,181 @@ fn plane_classes() {
         .filter(|t| t.to_grid().is_ok_and(|r| !r.is_exact()))
         .count();
     assert!(rounded > BATCH / 2);
+}
+
+/// Whether a plane has a coefficient past a machine word, which the machine-word rung of
+/// `plane::determinant_sign` and `plane::normals_sign` refuses at once.
+fn past_words(p: &Plane) -> bool {
+    p.n()
+        .iter()
+        .chain([&p.d()])
+        .any(|v| i64::try_from(*v).is_err())
+}
+
+/// Whether an exact value fits a machine word.
+fn fits_word(v: &W) -> bool {
+    w(i128::from(i64::MIN)) <= *v && *v <= w(i128::from(i64::MAX))
+}
+
+/// The exact determinant of three planes' normals.
+fn normals_det(planes: [&Plane; 3]) -> W {
+    det_and_largest_term(&planes.map(|p| p.n().to_vec())).0
+}
+
+/// The exact 4 × 4 determinant of four planes' coefficients, rows in order and the offset last.
+fn coefficients_det(planes: &[Plane; 4]) -> W {
+    let rows = planes.map(|p| {
+        let [x, y, z] = p.n();
+        vec![x, y, z, p.d()]
+    });
+    det_and_largest_term(&rows).0
+}
+
+/// Whether the machine-word rung of `plane::determinant_sign` must refuse four planes, whatever
+/// the order it evaluates in: a coefficient past a machine word, or, in the expansion along the
+/// offsets that `plane::determinant_sign` documents (−`d_p` m(q, r, s) + `d_q` m(p, r, s) − ...),
+/// a determinant m of three normals, or one of the four terms d · m, past one. The rung computes
+/// each term as a checked product of its offset and its m.
+fn words_refuse(planes: &[Plane; 4]) -> bool {
+    if planes.iter().any(past_words) {
+        return true;
+    }
+    (0..4).any(|k| {
+        let others: Vec<&Plane> = (0..4).filter(|&i| i != k).map(|i| &planes[i]).collect();
+        let m = normals_det([others[0], others[1], others[2]]);
+        let term = w(planes[k].d()).checked_mul(&m).unwrap();
+        !fits_word(&m) || !fits_word(&term)
+    })
+}
+
+/// Whether a plane is a face plane short enough that every step of the machine-word rungs fits a
+/// machine word: |`n_i`| ≤ 2^4 and |d| < 2^36. Then a minor of two normals is at most 2 · 2^8, a
+/// determinant of three normals at most 3 · 2^4 · 2^9 < 2^15, each term d · m below 2^51 and their
+/// sum below 2^53, far inside 2^63, in whatever order the rung adds them.
+fn short_face(p: &Plane) -> bool {
+    p.n().iter().all(|n| n.unsigned_abs() <= 1 << 4) && p.d().unsigned_abs() < 1 << 36
+}
+
+/// The four coefficients of four planes for the generated `tpi_side` filter, which
+/// `plane::determinant_sign` takes after its machine-word rung.
+fn tpi_side_filter(planes: &[Plane; 4]) -> Option<Sign> {
+    let [p, q, r, s] = planes.map(|p| (p.n(), p.d()));
+    let (([ax, ay, az], ad), ([bx, by, bz], bd)) = (p, q);
+    let (([cx, cy, cz], cd), ([sx, sy, sz], sd)) = (r, s);
+    geom_num::generated::tpi_side::filter(
+        ax, ay, az, ad, bx, by, bz, bd, cx, cy, cz, cd, sx, sy, sz, sd,
+    )
+}
+
+/// The classes of piece G138's determinants and of `Tpi::meeting` (inputs/plane.rs): each is what
+/// it claims, and each takes the rung its documentation names.
+#[test]
+fn determinant_classes_take_their_rungs() {
+    use inputs::plane as p;
+    // determinant_sign: side_of_tpi's planes, past the machine-word rung in every class; the
+    // filter decides every typical input and most extreme ones, and cannot decide degenerate
+    // (zero) and nearly degenerate (±w) ones, which the exact path decides.
+    let mut extreme_decided = 0;
+    for class in [Typical, Degenerate, NearlyDegenerate, Extreme] {
+        for planes in p::determinant_sign(class) {
+            assert!(words_refuse(&planes), "{class}: the word rung decides");
+            let det = coefficients_det(&planes);
+            let [a, b, c, _] = &planes;
+            match class {
+                Typical => {
+                    assert!(!det.is_zero());
+                    assert!(tpi_side_filter(&planes).is_some(), "typical: undecided");
+                }
+                Degenerate => {
+                    assert!(det.is_zero());
+                    assert!(tpi_side_filter(&planes).is_none());
+                }
+                NearlyDegenerate => {
+                    // The meeting point is a grid point one unit of n · p + d off the fourth
+                    // plane, so the determinant n · X + d · w is ±w.
+                    let w3 = normals_det([a, b, c]);
+                    assert!(!w3.is_zero());
+                    assert!(det == w3 || det == w3.checked_neg().unwrap());
+                    assert!(tpi_side_filter(&planes).is_none(), "a filter decided it");
+                }
+                _ => {
+                    assert!(planes.iter().all(spans));
+                    extreme_decided += usize::from(tpi_side_filter(&planes).is_some());
+                }
+            }
+        }
+    }
+    assert!(extreme_decided > BATCH / 2, "{extreme_decided}");
+    // determinant_sign on faces: short normals, so the machine-word rung decides every input.
+    for class in [Typical, Degenerate] {
+        for planes in p::determinant_sign_faces(class) {
+            assert!(planes.iter().all(short_face), "{class}: not short");
+            let face = u128::from(p::FACE.unsigned_abs());
+            assert!(
+                planes
+                    .iter()
+                    .all(|f| f.n().iter().all(|n| n.unsigned_abs() <= face))
+            );
+            assert_eq!(
+                coefficients_det(&planes).is_zero(),
+                class == Degenerate,
+                "{class}"
+            );
+        }
+    }
+    // normals_sign: tpi_new's planes, with an offset past a machine word, so the exact cross and
+    // dot product decides; zero exactly on the degenerate class.
+    for class in [Typical, Degenerate, Extreme] {
+        for planes @ [a, b, c] in p::normals_sign(class) {
+            assert!(
+                planes.iter().any(past_words),
+                "{class}: the word rung decides"
+            );
+            assert_eq!(
+                normals_det([&a, &b, &c]).is_zero(),
+                class == Degenerate,
+                "{class}"
+            );
+            if class == Extreme {
+                assert!(planes.iter().all(spans));
+            }
+        }
+    }
+    // normals_sign on faces: the machine-word rung decides; zero exactly on the degenerate class,
+    // whose third normal is the sum or the difference of the first two.
+    for class in [Typical, Degenerate] {
+        for planes @ [a, b, c] in p::normals_sign_faces(class) {
+            assert!(planes.iter().all(short_face), "{class}: not short");
+            assert_eq!(
+                normals_det([&a, &b, &c]).is_zero(),
+                class == Degenerate,
+                "{class}"
+            );
+            if class == Degenerate {
+                let ([ax, ay, az], [bx, by, bz]) = (a.n(), b.n());
+                let sum = [ax + bx, ay + by, az + bz];
+                let difference = [ax - bx, ay - by, az - bz];
+                assert!(c.n() == sum || c.n() == difference);
+            }
+        }
+    }
+    // Tpi::meeting: tpi_new's classes, past the machine-word rung.
+    let meet = |[a, b, c]: [Plane; 3]| Tpi::new(a, b, c);
+    for class in [Typical, Degenerate, Extreme] {
+        for planes in p::tpi_meeting(class) {
+            assert!(
+                planes.iter().any(past_words),
+                "{class}: the word rung decides"
+            );
+            match class {
+                Degenerate => assert_eq!(meet(planes), Err(NumError::Degenerate)),
+                _ => assert!(meet(planes).is_ok(), "{class}"),
+            }
+            if class == Extreme {
+                assert!(planes.iter().all(spans));
+            }
+        }
+    }
 }
 
 /// The paths of the error-free transformations, as `geom_num::eft` documents them.
@@ -2262,6 +2443,17 @@ fn linalg_typical_batches_all_succeed() {
     all_ok("svd_jacobi", k::svd_jacobi, &m::svd_jacobi(Typical));
 }
 
+/// Every typical batch of `geom-make`'s benchmarks (decision 32.44) builds or moves every body.
+#[test]
+fn make_typical_batches_all_succeed() {
+    use geom_bench::inputs::make as m;
+    use geom_bench::kernels::make as k;
+    all_ok("build_box", k::boxes, &m::boxes(Typical));
+    all_ok("cylinder", k::cylinders, &m::cylinders(Typical));
+    all_ok("move_box", k::moved_boxes, &m::moved_boxes(Typical));
+    all_ok("turn_box", k::turned_boxes, &m::turned_boxes(Typical));
+}
+
 /// Every typical batch of `geom-bvh`'s benchmarks (decision 32.44) builds every scene and answers
 /// every query.
 #[test]
@@ -2276,6 +2468,19 @@ fn bvh_typical_batches_all_succeed() {
     all_ok("cells_within", k::cells_within, &m::cells_within(Typical));
 }
 
+/// Every typical batch of `geom-topo`'s benchmarks (decision 32.44) edits every column and
+/// publishes every builder, and a column's write lands in its rows.
+#[test]
+fn topo_typical_batches_all_succeed() {
+    use geom_bench::inputs::topo as m;
+    use geom_bench::kernels::topo as k;
+    let columns = m::column_edit(Typical);
+    assert!(columns.iter().all(|(_, row, _)| (*row as usize) < m::ROWS));
+    assert!(columns.iter().all(|(values, _, _)| values.len() == m::ROWS));
+    all_ok("column_edit", k::column_edit, &columns);
+    all_ok("publish", k::publish, &m::publish(Typical));
+}
+
 /// Every typical batch of `geom-run`'s helper benchmarks (decision 32.44) maps every list.
 #[test]
 fn helper_typical_batches_all_succeed() {
@@ -2283,6 +2488,19 @@ fn helper_typical_batches_all_succeed() {
     use geom_bench::kernels::helper as k;
     all_ok("lone_serial", k::lone_serial, &m::lone_serial(Typical));
     all_ok("lone_pool", k::lone_pool, &m::lone_pool(Typical));
+}
+
+/// Every typical batch of the attribute step's benchmark (decision 32.44) carries every value it
+/// should: two of every three entities live on.
+#[test]
+fn attributes_typical_batches_all_succeed() {
+    use geom_bench::inputs::attributes as m;
+    use geom_bench::kernels::attributes as k;
+    let batch = m::apply(Typical);
+    all_ok("apply", k::apply, &batch);
+    let mut out = Vec::new();
+    k::apply(&batch, &mut out);
+    assert!(out.iter().all(|r| *r == Ok(16)));
 }
 
 /// Every typical batch of `geom-nurbs`'s benchmarks (decision 32.44) evaluates, interpolates and

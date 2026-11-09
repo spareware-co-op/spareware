@@ -1,0 +1,1766 @@
+//! The maximal-face merge: the pieces a selection keeps, as faces, edges, rings and shells (11.3,
+//! step 5), shared by `geom-bool` and `geom-mesh` (19.5, 27).
+//!
+//! What it does: [`select`] reads a test over classified pieces and turns each kept piece to face
+//! out of the result. [`merge`] merges those pieces into maximal faces, finds the edges between the
+//! faces as maximal runs on one line, makes rings, orders the fins around each edge, joins faces
+//! into shells, and says which shells are cavities of which.
+//!
+//! How it runs: every corner of every piece is sorted by its exact coordinates, so one point has
+//! one number and numbers rise along any line that runs up the sort. Every side of every piece is
+//! sorted by its line's Plücker coordinates, so one line is one group. Along a line, pieces of one
+//! sheet on both sides of a stretch cancel, and what is left are the stretches of boundary: runs
+//! with the same fins merge, so the cuts of the subdivision and of the convex split disappear.
+//!
+//! Guarantees:
+//!
+//! - **The same numbers however the boxes fell.** Faces, edges and vertices are numbered by exact
+//!   keys that depend on the shape alone: not on the boxes, the leaf size, the threads, or the order
+//!   the pieces came in (11.3; tested).
+//! - **Exact.** Points are compared by cross-multiplying their homogeneous coordinates, lines by
+//!   their Plücker coordinates, in at most 576 bits, and nothing is rounded.
+//! - **Refused, never guessed.** Pieces that overlap on one sheet, and a stretch with a fin that has
+//!   no partner across it, mean the pieces are no closed boundary: [`MergeError`].
+//! - **Each fin knows its piece.** [`Fin::piece`] is an index into the pieces given, whose
+//!   [`Outward::polygon`] names where it came from, for a caller's history.
+//! - **Told where to keep a seam.** [`merge_with`] takes pieces it does not keep, whose sides hold a
+//!   seam open where they lie along a face: an imprint's outline, and the walls of a split. A cut
+//!   that ends inside a face leaves it whole, with no slit.
+//! - **No recursion.** Disjoint sets and rings are walked in loops (principle 13).
+//!
+//! Method: chapter 11.3's rebuild (`projects/engines/geometry/architecture/11-booleans.md`), which
+//! goes further than EMBER's section 6, whose output keeps T-junctions (Trettner, Nehring-Wirxel and
+//! Kobbelt 2022, <https://doi.org/10.1145/3528223.3530181>); a line's coordinates are Plücker's,
+//! <https://doi.org/10.1098/rstl.1865.0017>; radial order at an edge is Weiler's radial edge
+//! structure, 1985, <https://doi.org/10.1109/MCG.1985.276271>.
+//!
+//! Cost: O(n log n) exact comparisons for n sides of pieces, and a sweep of each line. Charges the
+//! meter one unit per side of a piece, per fin and per shell.
+
+use alloc::collections::{BTreeMap, BTreeSet};
+use alloc::sync::Arc;
+use alloc::vec::Vec;
+use core::cmp::{Ordering, Reverse};
+use core::fmt;
+
+use geom_num::plane::{Plane, Tpi, normals_sign};
+use geom_num::{I256, I320, NumError, Sign, Wide};
+use geom_run::{Stopped, WorkMeter};
+
+use crate::convex::{Piece, opposite};
+use crate::order::{Flap, Line, Ray, about, around};
+use crate::plane::canonical;
+use crate::trace::{Cell, Classified, Polygon, TraceError, classify};
+use crate::winding::{Entry, Kept, Winding, WindingTest, kept};
+
+/// What merges (11.5).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Merge {
+    /// Everything on one plane facing one way, whatever it came from.
+    RemoveRedundant,
+    /// Only pieces of one face of one operand with the same vectors on each side.
+    KeepSeams,
+}
+
+/// A kept piece on its way to a face.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct Outward {
+    /// The piece, its normal pointing out of the result.
+    pub piece: Piece,
+    /// The input polygon it came from, by index.
+    pub polygon: usize,
+    /// Whether it faces the other way from that polygon.
+    pub turned: bool,
+    /// The input face it came from, which [`Merge::KeepSeams`] keeps apart. [`select`] gives each
+    /// polygon its own; a caller whose polygons are parts of faces says which.
+    pub source: usize,
+    /// The vector in front of it, out of the result.
+    pub front: Winding,
+    /// The vector behind it, in the result.
+    pub back: Winding,
+}
+
+/// What a merge is told beyond its pieces.
+#[derive(Clone, Copy, Debug, Default)]
+pub struct Rules<'p> {
+    /// Pieces not kept, whose sides hold a seam open wherever one lies along a stretch of a face.
+    pub cuts: &'p [Piece],
+    /// Whether the pieces are a sheet, whose edges may have one fin and whose shells bound nothing.
+    pub open: bool,
+}
+
+/// Why pieces could not be merged.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum MergeError {
+    /// The numbers layer refused.
+    Num(NumError),
+    /// A trace failed.
+    Trace(TraceError),
+    /// The meter stopped the run.
+    Stopped(Stopped),
+    /// Two pieces of one sheet overlap.
+    Overlap,
+    /// A stretch of boundary has no partner across it: the pieces do not close.
+    Open,
+    /// A shell faces inward with no shell around it.
+    Inside,
+}
+
+impl fmt::Display for MergeError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            MergeError::Num(e) => write!(f, "pieces that cannot be merged: {e:?}"),
+            MergeError::Trace(e) => write!(f, "{e}"),
+            MergeError::Stopped(_) => f.write_str("the meter stopped the merge"),
+            MergeError::Overlap => f.write_str("two pieces of one face overlap"),
+            MergeError::Open => f.write_str("kept pieces do not close"),
+            MergeError::Inside => f.write_str("a shell faces inward with no shell around it"),
+        }
+    }
+}
+
+impl core::error::Error for MergeError {}
+
+impl From<NumError> for MergeError {
+    fn from(e: NumError) -> Self {
+        MergeError::Num(e)
+    }
+}
+
+impl From<TraceError> for MergeError {
+    fn from(e: TraceError) -> Self {
+        MergeError::Trace(e)
+    }
+}
+
+impl From<Stopped> for MergeError {
+    fn from(e: Stopped) -> Self {
+        MergeError::Stopped(e)
+    }
+}
+
+/// `c`, as it faces.
+#[must_use]
+pub fn as_kept(c: &Classified) -> Outward {
+    Outward {
+        piece: c.piece.clone(),
+        polygon: c.polygon,
+        turned: false,
+        source: c.polygon,
+        front: c.front.clone(),
+        back: c.back.clone(),
+    }
+}
+
+/// `c`, facing the other way.
+fn as_turned(c: &Classified) -> Result<Outward, NumError> {
+    let mut bounds = c.piece.bounds.clone();
+    bounds.reverse();
+    Ok(Outward {
+        piece: Piece {
+            face: opposite(&c.piece.face)?,
+            bounds,
+        },
+        polygon: c.polygon,
+        turned: true,
+        source: c.polygon,
+        front: c.back.clone(),
+        back: c.front.clone(),
+    })
+}
+
+/// `c` facing each way, back to back: a wall between two cells.
+///
+/// # Errors
+///
+/// What turning a plane gives, which a plane within budget cannot reach.
+pub fn both_ways(c: &Classified) -> Result<[Outward; 2], NumError> {
+    Ok([as_kept(c), as_turned(c)?])
+}
+
+/// The pieces `test` keeps of `classified`, each facing out of the result, an overlap once.
+///
+/// # Errors
+///
+/// What turning a plane gives, which a plane within budget cannot reach.
+pub fn select(test: &WindingTest, classified: &[Classified]) -> Result<Vec<Outward>, NumError> {
+    let mut out = Vec::new();
+    for c in classified.iter().filter(|c| c.first) {
+        match kept(test, &c.front, &c.back) {
+            Kept::No => {}
+            Kept::AsIs => out.push(as_kept(c)),
+            Kept::Flipped => out.push(as_turned(c)?),
+        }
+    }
+    Ok(out)
+}
+
+/// Pieces that merge: one oriented plane, and under [`Merge::KeepSeams`] one source and one pair of
+/// vectors.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct Sheet {
+    /// The plane, facing out.
+    pub face: Plane,
+    /// The lowest polygon among its pieces.
+    pub polygon: usize,
+    /// Whether that polygon faces the other way.
+    pub turned: bool,
+}
+
+/// An edge: a maximal run on one line between the same faces.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct Edge {
+    /// Its lower vertex.
+    pub low: usize,
+    /// Its higher vertex.
+    pub high: usize,
+    /// Its fins, in radial order about the line.
+    pub fins: Vec<usize>,
+}
+
+/// A side of a face along an edge.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct Fin {
+    /// The edge.
+    pub edge: usize,
+    /// The face.
+    pub face: usize,
+    /// The vertex it runs from.
+    pub from: usize,
+    /// The vertex it runs to.
+    pub to: usize,
+    /// A plane through the edge, positive on the face's side of it.
+    pub bound: Plane,
+    /// The piece that holds it, an index into the pieces given to [`merge`].
+    pub piece: usize,
+}
+
+/// A maximal face.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct Face {
+    /// Its sheet.
+    pub sheet: usize,
+    /// Its shell.
+    pub shell: usize,
+    /// Its rings of fins, each in turn with the face on its left.
+    pub rings: Vec<Vec<usize>>,
+}
+
+/// A connected set of faces.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct Shell {
+    /// Whether it faces outward; if not it is a cavity.
+    pub outer: bool,
+    /// For a cavity, the outer shell around it.
+    pub holder: Option<usize>,
+    /// Its faces.
+    pub faces: Vec<usize>,
+}
+
+/// Merged pieces, every number in the shape's own order.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct Merged {
+    /// The sheets.
+    pub sheets: Vec<Sheet>,
+    /// The points, lexicographically.
+    pub vertices: Vec<Tpi>,
+    /// The edges.
+    pub edges: Vec<Edge>,
+    /// The fins.
+    pub fins: Vec<Fin>,
+    /// The faces.
+    pub faces: Vec<Face>,
+    /// The shells.
+    pub shells: Vec<Shell>,
+    /// Each piece given, its face.
+    pub piece_face: Vec<usize>,
+}
+
+/// A piece on a sheet.
+struct Held<'p> {
+    sheet: usize,
+    piece: &'p Piece,
+    /// Its index in the pieces given.
+    given: usize,
+}
+
+/// A corner of a piece, its coordinates X / w with w positive.
+#[derive(Clone, Debug, PartialEq)]
+struct Corner {
+    point: Tpi,
+    x: [I320; 3],
+    w: I256,
+    /// X and w in machine words, when all four fit: taken once, for the comparisons and tests that
+    /// try machine words first.
+    words: Option<([i128; 3], i128)>,
+    /// The planes of every corner at this point: its own, until [`numbered`] joins them.
+    through: Vec<Plane>,
+}
+
+/// `v` in machine words, when every one fits.
+fn in_words<const L: usize, const N: usize>(v: &[Wide<L>; N]) -> Option<[i128; N]> {
+    let mut out = [0i128; N];
+    for (slot, one) in out.iter_mut().zip(v) {
+        *slot = one.to_i128()?;
+    }
+    Some(out)
+}
+
+/// The sign of a / b − c / d for b and d positive, in checked machine words: `None`, to step aside
+/// to the wide path, when a product does not fit.
+fn words_ratio(a: i128, b: i128, c: i128, d: i128) -> Option<Ordering> {
+    Some(a.checked_mul(d)?.cmp(&c.checked_mul(b)?))
+}
+
+/// [`point_order`] in machine words, over each corner's [`Corner::words`].
+fn point_words(a: &Corner, b: &Corner) -> Option<Ordering> {
+    let ((ax, aw), (bx, bw)) = (a.words?, b.words?);
+    for (p, q) in ax.iter().zip(&bx) {
+        let order = words_ratio(*p, aw, *q, bw)?;
+        if order != Ordering::Equal {
+            return Some(order);
+        }
+    }
+    Some(Ordering::Equal)
+}
+
+/// Corners `a` and `b` along `axis`.
+fn axis_order(a: &Corner, b: &Corner, axis: usize) -> Option<Ordering> {
+    let words = a
+        .words
+        .zip(b.words)
+        .and_then(|((ax, aw), (bx, bw))| words_ratio(*ax.get(axis)?, aw, *bx.get(axis)?, bw));
+    match words {
+        Some(order) => Some(order),
+        None => ratio_order::<5, 4, 9>(a.x.get(axis)?, &a.w, b.x.get(axis)?, &b.w),
+    }
+}
+
+/// Whether `corner` lies on `plane`: n · X + d · w = 0 in machine words when they hold it, else
+/// [`Plane::side_of_tpi`].
+fn lies_on(corner: &Corner, plane: &Plane) -> Result<bool, NumError> {
+    let in_words = corner.words.and_then(|(x, w)| {
+        let [nx, ny, nz] = plane.n();
+        let terms = [
+            nx.checked_mul(*x.first()?)?,
+            ny.checked_mul(*x.get(1)?)?,
+            nz.checked_mul(*x.get(2)?)?,
+            plane.d().checked_mul(w)?,
+        ];
+        terms
+            .iter()
+            .try_fold(0i128, |sum, term| sum.checked_add(*term))
+    });
+    match in_words {
+        Some(sum) => Ok(sum == 0),
+        None => Ok(plane.side_of_tpi(&corner.point)? == Sign::Zero),
+    }
+}
+
+/// The sign of a / b − c / d for b and d positive: in machine words when they hold it, else in
+/// `Wide<M>`.
+fn ratio_order<const A: usize, const B: usize, const M: usize>(
+    a: &Wide<A>,
+    b: &Wide<B>,
+    c: &Wide<A>,
+    d: &Wide<B>,
+) -> Option<Ordering> {
+    if let Some(order) = ratio_in_words(a, b, c, d) {
+        return Some(order);
+    }
+    let left = a.resize::<M>()?.checked_mul(&d.resize::<M>()?)?;
+    let right = c.resize::<M>()?.checked_mul(&b.resize::<M>()?)?;
+    Some(left.checked_sub(&right)?.signum().as_i8().cmp(&0))
+}
+
+/// [`ratio_order`] in checked `i128` arithmetic: the same exact sign when a, b, c and d and both
+/// products a · d and c · b fit, and `None`, to step aside to the wide path, when one does not.
+/// Points and lines near the grid's smaller coordinates take it, as most of a building's do.
+fn ratio_in_words<const A: usize, const B: usize>(
+    a: &Wide<A>,
+    b: &Wide<B>,
+    c: &Wide<A>,
+    d: &Wide<B>,
+) -> Option<Ordering> {
+    let left = a.to_i128()?.checked_mul(d.to_i128()?)?;
+    let right = c.to_i128()?.checked_mul(b.to_i128()?)?;
+    Some(left.cmp(&right))
+}
+
+/// Points lexicographically: at most 2^294 · 2^252, in 576 bits. A coordinate is compared only
+/// while those before it are equal.
+fn point_order(a: &Corner, b: &Corner) -> Option<Ordering> {
+    if let Some(order) = point_words(a, b) {
+        return Some(order);
+    }
+    for (p, q) in a.x.iter().zip(&b.x) {
+        let order = ratio_order::<5, 4, 9>(p, &a.w, q, &b.w)?;
+        if order != Ordering::Equal {
+            return Some(order);
+        }
+    }
+    Some(Ordering::Equal)
+}
+
+/// A corner of `face` where `p` and `q` meet.
+#[allow(
+    clippy::many_single_char_names,
+    reason = "p and q are planes, and x and w the point, as in Tpi::homogeneous"
+)]
+fn corner(face: Plane, p: Plane, q: Plane) -> Result<Corner, NumError> {
+    let point = Tpi::meeting(face, p, q)?;
+    let (x, w) = point.homogeneous()?;
+    let turn = |v: &I320| v.checked_neg().ok_or(NumError::BudgetExceeded);
+    let [a, b, c] = &x;
+    let through = alloc::vec![face, p, q];
+    let (x, w) = match point.weight() {
+        Sign::Negative => (
+            [turn(a)?, turn(b)?, turn(c)?],
+            w.checked_neg().ok_or(NumError::BudgetExceeded)?,
+        ),
+        Sign::Positive | Sign::Zero => (x, w),
+    };
+    let words = in_words(&x).zip(w.to_i128());
+    Ok(Corner {
+        point,
+        x,
+        w,
+        words,
+        through,
+    })
+}
+
+/// The Plücker coordinates of a line: its direction, then its moment, the direction's first
+/// non-zero component positive. Below 2^209, in [`I256`].
+#[derive(Clone, Copy, Debug, PartialEq)]
+struct LineKey {
+    coordinates: [I256; 6],
+    first: usize,
+    /// The coordinates in machine words, when all six fit.
+    words: Option<[i128; 6]>,
+}
+
+/// The line where `p` and `q` meet: direction `n_p` × `n_q`, moment `d_p` `n_q` − `d_q` `n_p`, which
+/// is the same up to scale for any two planes through the line.
+fn line_key(p: &Plane, q: &Plane) -> Result<LineKey, NumError> {
+    let wide = I256::from_i128;
+    let product = |a: i128, b: i128| wide(a).checked_mul(&wide(b));
+    let minor = |a: i128, b: i128, c: i128, d: i128| {
+        product(a, b)
+            .zip(product(c, d))
+            .and_then(|(l, r)| l.checked_sub(&r))
+            .ok_or(NumError::BudgetExceeded)
+    };
+    let ([px, py, pz], pd) = (p.n(), p.d());
+    let ([qx, qy, qz], qd) = (q.n(), q.d());
+    let mut coordinates = [
+        minor(py, qz, pz, qy)?,
+        minor(pz, qx, px, qz)?,
+        minor(px, qy, py, qx)?,
+        minor(pd, qx, qd, px)?,
+        minor(pd, qy, qd, py)?,
+        minor(pd, qz, qd, pz)?,
+    ];
+    let first = coordinates
+        .iter()
+        .take(3)
+        .position(|v| !v.is_zero())
+        .ok_or(NumError::Degenerate)?;
+    if coordinates.get(first).is_some_and(I256::is_negative) {
+        for slot in &mut coordinates {
+            *slot = slot.checked_neg().ok_or(NumError::BudgetExceeded)?;
+        }
+    }
+    Ok(LineKey {
+        coordinates,
+        first,
+        words: in_words(&coordinates),
+    })
+}
+
+/// The order of two lines, equal when they are one line: by which component of the direction comes
+/// first, then every coordinate over that component, below 2^418 in 512 bits, each compared only
+/// while those before it are equal.
+fn line_order(a: &LineKey, b: &LineKey) -> Option<Ordering> {
+    let (over_a, over_b) = (a.coordinates.get(a.first)?, b.coordinates.get(b.first)?);
+    let first = a.first.cmp(&b.first);
+    if first != Ordering::Equal {
+        return Some(first);
+    }
+    if let Some(order) = line_words(a, b) {
+        return Some(order);
+    }
+    for (p, q) in a.coordinates.iter().zip(&b.coordinates) {
+        let order = ratio_order::<4, 4, 8>(p, over_a, q, over_b)?;
+        if order != Ordering::Equal {
+            return Some(order);
+        }
+    }
+    Some(Ordering::Equal)
+}
+
+/// [`line_order`] for lines whose first components agree, in machine words, over each line's
+/// [`LineKey::words`].
+fn line_words(a: &LineKey, b: &LineKey) -> Option<Ordering> {
+    let (aw, bw) = (a.words?, b.words?);
+    let (over_a, over_b) = (*aw.get(a.first)?, *bw.get(b.first)?);
+    for (p, q) in aw.iter().zip(&bw) {
+        let order = words_ratio(*p, over_a, *q, over_b)?;
+        if order != Ordering::Equal {
+            return Some(order);
+        }
+    }
+    Some(Ordering::Equal)
+}
+
+/// `order`, with a failure written down: a sort's comparison cannot return one.
+fn noted(order: Option<Ordering>, failed: &mut bool) -> Ordering {
+    *failed = (*failed).max(order.is_none());
+    order.unwrap_or(Ordering::Equal)
+}
+
+/// A side of a piece.
+struct Side {
+    key: LineKey,
+    /// Its ends' numbers, the lower first.
+    low: usize,
+    high: usize,
+    /// Whether the piece's turn runs from `low` to `high`.
+    rising: bool,
+    sheet: usize,
+    /// The piece, an index into the held pieces.
+    held: usize,
+    /// The bound the side lies on, positive inside the piece.
+    bound: Plane,
+}
+
+/// One fin of a run: a sheet's boundary, the piece that holds it, and its bound.
+#[derive(Clone, Copy)]
+struct RunFin {
+    sheet: usize,
+    rising: bool,
+    held: usize,
+    bound: Plane,
+}
+
+/// A stretch of one line with the same fins all along.
+#[derive(Clone)]
+struct Run {
+    /// Which line it is on: the place of the line's first side.
+    line: usize,
+    low: usize,
+    high: usize,
+    fins: Vec<RunFin>,
+    /// Two planes through the line.
+    on: [Plane; 2],
+}
+
+/// The root of `at` in a disjoint-set forest.
+fn root(parents: &[usize], mut at: usize) -> usize {
+    loop {
+        let up = parents.get(at).copied().unwrap_or(at);
+        if up == at {
+            return at;
+        }
+        at = up;
+    }
+}
+
+/// Joins the sets of `a` and `b`, the lower root on top.
+fn join(parents: &mut [usize], a: usize, b: usize) {
+    let (a, b) = (root(parents, a), root(parents, b));
+    let (low, high) = (a.min(b), a.max(b));
+    parents
+        .iter_mut()
+        .skip(high)
+        .take(1)
+        .for_each(|slot| *slot = low);
+}
+
+/// The sheet of a side no face owns: a cut's, which only holds seams open.
+const CUT: usize = usize::MAX;
+
+/// What one stretch of a line holds of one sheet: the net of its sides, and a side each way.
+type Holding<'s> = (i32, Option<&'s Side>, Option<&'s Side>);
+
+/// The stretches of one line between the ends of `sides`, each with the sides along all of it.
+fn stretches(sides: &[Side]) -> Vec<(usize, usize, Vec<&Side>)> {
+    let mut marks: Vec<usize> = sides.iter().flat_map(|s| [s.low, s.high]).collect();
+    marks.sort_unstable();
+    marks.dedup();
+    let mut waiting: Vec<&Side> = sides.iter().collect();
+    waiting.sort_by_key(|s| Reverse(s.low));
+    let mut active: Vec<&Side> = Vec::new();
+    let mut out = Vec::with_capacity(marks.len());
+    for (low, high) in marks.iter().copied().zip(marks.iter().copied().skip(1)) {
+        while waiting.last().is_some_and(|s| s.low <= low) {
+            active.extend(waiting.pop());
+        }
+        active.retain(|s| s.high >= high);
+        out.push((low, high, active.clone()));
+    }
+    out
+}
+
+/// Sweeps the sides of one line: pieces of one sheet on both sides of a stretch join unless a cut
+/// lies along it, and the rest are runs.
+fn sweep(
+    line: usize,
+    sides: &[Side],
+    sheets: &[Sheet],
+    parents: &mut [usize],
+    runs: &mut Vec<Run>,
+) -> Result<(), MergeError> {
+    // A line that only cuts lie on crosses no face.
+    let Some(first) = sides.iter().find(|side| side.sheet != CUT) else {
+        return Ok(());
+    };
+    let on = [
+        sheets.get(first.sheet).ok_or(MergeError::Open)?.face,
+        first.bound,
+    ];
+    for (low, high, active) in stretches(sides) {
+        let cut = active.iter().any(|side| side.sheet == CUT);
+        let mut held: BTreeMap<usize, Holding<'_>> = BTreeMap::new();
+        for side in active.iter().filter(|side| side.sheet != CUT) {
+            let slot = held.entry(side.sheet).or_insert((0, None, None));
+            if side.rising {
+                *slot = (slot.0.saturating_add(1), Some(*side), slot.2);
+            } else {
+                *slot = (slot.0.saturating_sub(1), slot.1, Some(*side));
+            }
+        }
+        let mut fins = Vec::new();
+        for (sheet, (net, up, down)) in held {
+            let fin = |side: &Side, rising: bool| RunFin {
+                sheet,
+                rising,
+                held: side.held,
+                bound: side.bound,
+            };
+            match (net, up, down) {
+                (0, Some(a), Some(b)) if cut => {
+                    fins.push(fin(a, true));
+                    fins.push(fin(b, false));
+                }
+                (0, Some(a), Some(b)) => join(parents, a.held, b.held),
+                (1, Some(side), None) => fins.push(fin(side, true)),
+                (-1, None, Some(side)) => fins.push(fin(side, false)),
+                _ => return Err(MergeError::Overlap),
+            }
+        }
+        if !fins.is_empty() {
+            runs.push(Run {
+                line,
+                low,
+                high,
+                fins,
+                on,
+            });
+        }
+    }
+    Ok(())
+}
+
+/// `runs` with stretches joined where the same faces run on along one line. Faces are known only
+/// once every line is swept: two of one sheet can lie in a line and touch at a vertex.
+fn whole_runs(runs: Vec<Run>, parents: &[usize]) -> Vec<Run> {
+    let key = |fin: &RunFin| (fin.sheet, fin.rising, root(parents, fin.held));
+    let mut whole: Vec<Run> = Vec::with_capacity(runs.len());
+    for run in runs {
+        match whole.last_mut() {
+            Some(last)
+                if last.line == run.line
+                    && last.high == run.low
+                    && last.fins.iter().map(key).eq(run.fins.iter().map(key)) =>
+            {
+                last.high = run.high;
+            }
+            _ => whole.push(run),
+        }
+    }
+    whole
+}
+
+/// The sheets of `pieces`, sorted by exact keys so the input's order counts for nothing, and each
+/// piece on its sheet.
+fn sheets_of(pieces: &[Outward], merge: Merge) -> Result<(Vec<Sheet>, Vec<Held<'_>>), NumError> {
+    type Key = (
+        (i128, [i128; 3]),
+        bool,
+        usize,
+        Vec<(u32, i32)>,
+        Vec<(u32, i32)>,
+    );
+    let seams = merge == Merge::KeepSeams;
+    let mut keyed: Vec<(Key, usize)> = Vec::with_capacity(pieces.len());
+    for (at, piece) in pieces.iter().enumerate() {
+        let face = canonical(&piece.piece.face)?;
+        let pairs = |w: &Winding| {
+            if seams {
+                w.pairs().to_vec()
+            } else {
+                Vec::new()
+            }
+        };
+        let key = (
+            (face.plane.d(), face.plane.n()),
+            face.flipped,
+            if seams { piece.source } else { 0 },
+            pairs(&piece.front),
+            pairs(&piece.back),
+        );
+        keyed.push((key, at));
+    }
+    // The sheet's source faces as the result does where one can, the lowest first (11.5).
+    let source = |at: usize| pieces.get(at).map(|p| (p.turned, p.polygon));
+    keyed.sort_by(|a, b| a.0.cmp(&b.0).then(source(a.1).cmp(&source(b.1))));
+    let mut sheets: Vec<Sheet> = Vec::new();
+    let mut held = Vec::with_capacity(keyed.len());
+    let mut last: Option<&Key> = None;
+    for (key, at) in &keyed {
+        let outward = pieces.get(*at).ok_or(NumError::Degenerate)?;
+        if last != Some(key) {
+            sheets.push(Sheet {
+                face: outward.piece.face,
+                polygon: outward.polygon,
+                turned: outward.turned,
+            });
+            last = Some(key);
+        }
+        held.push(Held {
+            sheet: sheets.len().saturating_sub(1),
+            piece: &outward.piece,
+            given: *at,
+        });
+    }
+    Ok((sheets, held))
+}
+
+/// Each corner's number, in piece order, the distinct points in order, and the order the corners
+/// sorted into.
+type Numbered = (Vec<usize>, Vec<Corner>, Vec<usize>);
+
+/// Every corner of `parts`, with each corner's number, in piece order, and the list of the distinct
+/// points in order, the sort starting from `start` where given.
+fn numbered(
+    parts: &[Arc<Parts>],
+    start: Option<Vec<usize>>,
+    meter: &mut WorkMeter<'_>,
+) -> Result<Numbered, MergeError> {
+    let mut corners: Vec<&Corner> = Vec::new();
+    for one in parts {
+        for corner in &one.corners {
+            meter.charge(1)?;
+            corners.push(corner);
+        }
+    }
+    // One total order, a point's place among the corners breaking ties as a stable sort of them in
+    // their own order would: whatever order the sort starts from, it ends in this one.
+    let mut order: Vec<usize> = start.unwrap_or_else(|| (0..corners.len()).collect());
+    let mut failed = false;
+    let at = |i: &usize| corners.get(*i).copied();
+    order.sort_by(|a, b| {
+        let found = at(a).zip(at(b)).and_then(|(p, q)| point_order(p, q));
+        noted(found, &mut failed).then(a.cmp(b))
+    });
+    (!failed).then_some(()).ok_or(NumError::BudgetExceeded)?;
+    let mut number = alloc::vec![0usize; corners.len()];
+    let mut places: Vec<Corner> = Vec::new();
+    for i in &order {
+        let held = corners.get(*i).copied().ok_or(MergeError::Open)?;
+        match places.last_mut() {
+            Some(last) if point_order(last, held) == Some(Ordering::Equal) => {
+                last.through.extend(held.through.iter().copied());
+            }
+            _ => places.push(held.clone()),
+        }
+        number
+            .iter_mut()
+            .skip(*i)
+            .take(1)
+            .for_each(|slot| *slot = places.len().saturating_sub(1));
+    }
+    Ok((number, places, order))
+}
+
+/// One piece's corners and its sides' lines, in its bounds' order: what [`numbered`] and
+/// [`sides_of`] read of it, kept for a later merge (G139).
+#[derive(Clone, Debug, PartialEq)]
+struct Parts {
+    corners: Vec<Corner>,
+    lines: Vec<LineKey>,
+}
+
+/// A piece, by its planes' coefficients.
+type PieceKey = (([i128; 3], i128), Vec<([i128; 3], i128)>);
+
+/// `piece`'s key.
+fn key_of_piece(piece: &Piece) -> PieceKey {
+    (
+        (piece.face.n(), piece.face.d()),
+        piece.bounds.iter().map(|b| (b.n(), b.d())).collect(),
+    )
+}
+
+/// What a merge keeps for the next merge of mostly the same pieces (G139): each piece's corners and
+/// its sides' lines, by the piece's planes, and the orders the merge's two sorts found, by piece
+/// and place. A later merge takes the parts of a piece it holds again, and starts its sorts from
+/// those orders, so they find the old pieces in order and sort only the new ones in; as the sorts
+/// end in one total order whatever order they start from, the merge is the one it would be without.
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct Memo {
+    pieces: Vec<(PieceKey, Arc<Parts>)>,
+    corners: Vec<(usize, usize)>,
+    sides: Vec<(usize, usize)>,
+}
+
+impl Memo {
+    /// How many pieces it holds.
+    #[must_use]
+    pub fn len(&self) -> usize {
+        self.pieces.len()
+    }
+
+    /// Whether it holds none.
+    #[must_use]
+    pub fn is_empty(&self) -> bool {
+        self.pieces.is_empty()
+    }
+
+    /// How many of its pieces' parts it shares with `other`, the very parts and not a copy: the
+    /// pieces a merge took from the other's memo.
+    #[must_use]
+    pub fn shared_with(&self, other: &Memo) -> usize {
+        let theirs: BTreeMap<&PieceKey, &Arc<Parts>> = other
+            .pieces
+            .iter()
+            .map(|(key, parts)| (key, parts))
+            .collect();
+        self.pieces
+            .iter()
+            .filter(|(key, parts)| {
+                theirs
+                    .get(key)
+                    .is_some_and(|their| Arc::ptr_eq(parts, their))
+            })
+            .count()
+    }
+}
+
+/// Each held piece's parts, `kept` where it holds them and computed where not: all the corners
+/// first and then all the lines, as the merge has always met their errors.
+fn parts_of(held: &[Held<'_>], kept: Vec<Option<Arc<Parts>>>) -> Result<Vec<Arc<Parts>>, NumError> {
+    let mut corners: Vec<Option<Vec<Corner>>> = Vec::with_capacity(held.len());
+    for (entry, was) in held.iter().zip(&kept) {
+        if was.is_some() {
+            corners.push(None);
+            continue;
+        }
+        let piece = entry.piece;
+        let after = piece.bounds.iter().cycle().skip(1);
+        let mut list = Vec::with_capacity(piece.bounds.len());
+        for (bound, next) in piece.bounds.iter().zip(after) {
+            list.push(corner(piece.face, *bound, *next)?);
+        }
+        corners.push(Some(list));
+    }
+    let mut parts = Vec::with_capacity(held.len());
+    for ((entry, was), list) in held.iter().zip(kept).zip(corners) {
+        let one = if let Some(one) = was {
+            one
+        } else {
+            let piece = entry.piece;
+            let mut lines = Vec::with_capacity(piece.bounds.len());
+            for bound in &piece.bounds {
+                lines.push(line_key(&piece.face, bound)?);
+            }
+            Arc::new(Parts {
+                corners: list.unwrap_or_default(),
+                lines,
+            })
+        };
+        parts.push(one);
+    }
+    Ok(parts)
+}
+
+/// Each held piece's parts, from `reuse` where it holds the same piece, and the orders to start the
+/// sorts from, the old pieces' in their old order and then the new ones', as places among the
+/// corners and among the sides. Pieces held twice here start the sorts from no order.
+#[allow(
+    clippy::type_complexity,
+    reason = "the parts and the two starting orders, used once, by merge_with_reusing"
+)]
+fn reused(
+    held: &[Held<'_>],
+    keys: &[PieceKey],
+    reuse: Option<&Memo>,
+) -> Result<(Vec<Arc<Parts>>, Option<(Vec<usize>, Vec<usize>)>), NumError> {
+    let olds = reuse.map_or(&[][..], |r| r.pieces.as_slice());
+    // A piece the memo holds twice has the same parts both times; either will do.
+    let old: BTreeMap<&PieceKey, usize> = olds
+        .iter()
+        .enumerate()
+        .map(|(at, (key, _))| (key, at))
+        .collect();
+    let from: Vec<Option<usize>> = keys.iter().map(|key| old.get(key).copied()).collect();
+    // A piece held twice here takes its parts twice, but would take one place in the old orders
+    // for two.
+    let mut seen = BTreeSet::new();
+    let whole = keys.iter().all(|key| seen.insert(key));
+    let kept: Vec<Option<Arc<Parts>>> = from
+        .iter()
+        .map(|was| {
+            let one = was.and_then(|at| olds.get(at));
+            one.map(|(_, parts)| Arc::clone(parts))
+        })
+        .collect();
+    let parts = parts_of(held, kept)?;
+    let Some(reuse) = reuse.filter(|_| whole) else {
+        return Ok((parts, None));
+    };
+    // Where each old piece is held now, and where each held piece's corners and sides begin.
+    let mut now = alloc::vec![None; reuse.pieces.len()];
+    for (at, was) in from.iter().enumerate() {
+        if let Some(slot) = was.and_then(|w| now.get_mut(w)) {
+            *slot = Some(at);
+        }
+    }
+    let mut base = Vec::with_capacity(parts.len());
+    let mut total = 0usize;
+    for one in &parts {
+        base.push(total);
+        total = total.saturating_add(one.corners.len());
+    }
+    let start = |list: &[(usize, usize)]| -> Vec<usize> {
+        let mut order: Vec<usize> = list
+            .iter()
+            .filter_map(|(piece, place)| {
+                let at = now.get(*piece).copied().flatten()?;
+                Some(base.get(at)?.saturating_add(*place))
+            })
+            .collect();
+        for (at, was) in from.iter().enumerate() {
+            if was.is_none() {
+                let (first, count) = (
+                    base.get(at).copied().unwrap_or(0),
+                    parts.get(at).map_or(0, |one| one.corners.len()),
+                );
+                order.extend(first..first.saturating_add(count));
+            }
+        }
+        order
+    };
+    let orders = (start(&reuse.corners), start(&reuse.sides));
+    Ok((parts, Some(orders)))
+}
+
+/// Whether `plane` is a split of [`crate::subdivide`]'s, on an odd half step.
+fn splits_boxes(plane: &Plane) -> bool {
+    let n = plane.n();
+    n.iter().filter(|v| **v != 0).count() == 1
+        && n.iter().any(|v| v.unsigned_abs() == 2)
+        && plane.d() & 1 != 0
+}
+
+/// `corner`'s point under a name the boxes cannot change. A grid point is named by its three axis
+/// planes: which corners it has, and so which planes reach it, depends on how far each box's
+/// cuts run (a face that only touches a corner of another solid is cut there in one box and not
+/// in a smaller one). A point off the grid takes the first three planes through it, in plane
+/// order and leaving out the boxes' own, that meet in one point; one with no such three, which
+/// only a seam has, keeps its corner's.
+fn named(corner: &Corner, meter: &mut WorkMeter<'_>) -> Result<Tpi, MergeError> {
+    let near = corner.point.to_grid()?;
+    if near.is_exact() {
+        let at = near.value();
+        // A grid point's coordinates are within 2^40, so negating one cannot saturate.
+        let axis = |n: [i128; 3], v: i64| Plane::new(n, i128::from(v).saturating_neg());
+        return Ok(Tpi::meeting(
+            axis([1, 0, 0], at.x.get())?,
+            axis([0, 1, 0], at.y.get())?,
+            axis([0, 0, 1], at.z.get())?,
+        )?);
+    }
+    let mut list: Vec<Plane> = corner
+        .through
+        .iter()
+        .filter(|plane| !splits_boxes(plane))
+        .copied()
+        .collect();
+    list.sort_unstable_by_key(|plane| (plane.n(), plane.d()));
+    list.dedup();
+    for (i, a) in list.iter().enumerate() {
+        for (j, b) in list.iter().enumerate().skip(i.saturating_add(1)) {
+            for c in list.iter().skip(j.saturating_add(1)) {
+                meter.charge(1)?;
+                if normals_sign(a, b, c)? != Sign::Zero {
+                    return Ok(Tpi::meeting(*a, *b, *c)?);
+                }
+            }
+        }
+    }
+    Ok(corner.point)
+}
+
+/// Every side of `held`, sorted by line.
+fn sides_of(
+    held: &[Held<'_>],
+    parts: &[Arc<Parts>],
+    number: &[usize],
+    start: Option<Vec<usize>>,
+    meter: &mut WorkMeter<'_>,
+) -> Result<(Vec<Side>, Vec<usize>), MergeError> {
+    let mut sides: Vec<Side> = Vec::new();
+    let mut base = 0usize;
+    for (at, (entry, one)) in held.iter().zip(parts).enumerate() {
+        let k = entry.piece.bounds.len();
+        for (i, (bound, key)) in entry.piece.bounds.iter().zip(&one.lines).enumerate() {
+            meter.charge(1)?;
+            // Bound i runs from corner i − 1 to corner i.
+            let before = base.saturating_add(i.checked_sub(1).unwrap_or(k.saturating_sub(1)));
+            let from = number.get(before).copied().unwrap_or(0);
+            let to = number.get(base.saturating_add(i)).copied().unwrap_or(0);
+            sides.push(Side {
+                key: *key,
+                low: from.min(to),
+                high: from.max(to),
+                rising: from < to,
+                sheet: entry.sheet,
+                held: at,
+                bound: *bound,
+            });
+        }
+        base = base.saturating_add(k);
+    }
+    // One total order, a side's place breaking ties as a stable sort of the sides in their own
+    // order would.
+    let mut order: Vec<usize> = start.unwrap_or_else(|| (0..sides.len()).collect());
+    let mut failed = false;
+    let at = |i: &usize| sides.get(*i).map(|side| &side.key);
+    order.sort_by(|a, b| {
+        let found = at(a).zip(at(b)).and_then(|(p, q)| line_order(p, q));
+        noted(found, &mut failed).then(a.cmp(b))
+    });
+    (!failed).then_some(()).ok_or(NumError::BudgetExceeded)?;
+    let mut slots: Vec<Option<Side>> = sides.into_iter().map(Some).collect();
+    let mut sorted = Vec::with_capacity(slots.len());
+    for i in &order {
+        sorted.push(
+            slots
+                .get_mut(*i)
+                .and_then(Option::take)
+                .ok_or(MergeError::Open)?,
+        );
+    }
+    Ok((sorted, order))
+}
+
+/// `runs` without seams that have one face on both sides: a cut that ends inside a face leaves it
+/// whole. Only a seam can hold two fins of one sheet, so those two are the seam.
+fn without_slits(mut runs: Vec<Run>, parents: &[usize]) -> Vec<Run> {
+    for run in &mut runs {
+        let fins = run.fins.clone();
+        run.fins.retain(|fin| {
+            !fins.iter().any(|other| {
+                other.sheet == fin.sheet
+                    && other.rising != fin.rising
+                    && root(parents, other.held) == root(parents, fin.held)
+            })
+        });
+    }
+    runs.retain(|run| !run.fins.is_empty());
+    runs
+}
+
+/// `runs`, each cut wherever another run ends on its line.
+fn cut_at_ends(runs: Vec<Run>, places: &[Corner]) -> Result<Vec<Run>, MergeError> {
+    let mut ends: Vec<usize> = runs.iter().flat_map(|r| [r.low, r.high]).collect();
+    ends.sort_unstable();
+    ends.dedup();
+    let mut edges: Vec<Run> = Vec::with_capacity(runs.len());
+    for run in runs {
+        let [p, q] = run.on;
+        let mut low = run.low;
+        for mark in ends.iter().filter(|e| **e > run.low && **e < run.high) {
+            let place = places.get(*mark).ok_or(MergeError::Open)?;
+            if lies_on(place, &p)? && lies_on(place, &q)? {
+                edges.push(Run {
+                    low,
+                    high: *mark,
+                    ..run.clone()
+                });
+                low = *mark;
+            }
+        }
+        edges.push(Run { low, ..run });
+    }
+    Ok(edges)
+}
+
+/// The face's rings, each a ring of fin numbers, in turn, starting at its lowest fin.
+fn rings(fins: &[Fin], of_face: &[usize], plane: &Plane) -> Result<Vec<Vec<usize>>, MergeError> {
+    let mut leaving: BTreeMap<usize, Vec<usize>> = BTreeMap::new();
+    for at in of_face {
+        let fin = fins.get(*at).ok_or(MergeError::Open)?;
+        leaving.entry(fin.from).or_default().push(*at);
+    }
+    let mut used: BTreeMap<usize, bool> = BTreeMap::new();
+    let mut out = Vec::new();
+    for start in of_face {
+        if used.contains_key(start) {
+            continue;
+        }
+        let mut ring = Vec::new();
+        let mut at = *start;
+        loop {
+            used.insert(at, true);
+            ring.push(at);
+            let fin = fins.get(at).ok_or(MergeError::Open)?;
+            let options: Vec<usize> = leaving
+                .get(&fin.to)
+                .ok_or(MergeError::Open)?
+                .iter()
+                .copied()
+                .filter(|o| !used.contains_key(o))
+                .collect();
+            let Some((&first, rest)) = options.split_first() else {
+                break;
+            };
+            let mut best = first;
+            // Past a vertex where the boundary touches itself, keep the inside on the left: the
+            // first way out clockwise from the way in.
+            let back = Ray {
+                with: fin.bound,
+                reversed: false,
+            };
+            let ray = |o: usize| -> Result<Ray, MergeError> {
+                Ok(Ray {
+                    with: fins.get(o).ok_or(MergeError::Open)?.bound,
+                    reversed: true,
+                })
+            };
+            for option in rest {
+                if around(plane, &back, &ray(*option)?, &ray(best)?)? == Ordering::Greater {
+                    best = *option;
+                }
+            }
+            at = best;
+        }
+        out.push(ring);
+    }
+    Ok(out)
+}
+
+/// The fins of an edge in radial order, the faces each solid wedge joins put in one set; on a sheet
+/// every face at an edge is in one set.
+fn radial(
+    edge: &[usize],
+    fins: &[Fin],
+    planes: &[Plane],
+    open: bool,
+    parents: &mut [usize],
+) -> Result<Vec<usize>, MergeError> {
+    let plane_of = |at: usize| -> Result<(Fin, Plane), MergeError> {
+        let fin = *fins.get(at).ok_or(MergeError::Open)?;
+        Ok((fin, *planes.get(fin.face).ok_or(MergeError::Open)?))
+    };
+    let first = *edge.first().ok_or(MergeError::Open)?;
+    let (start, start_plane) = plane_of(first)?;
+    let line = Line::new(start_plane, start.bound)?;
+    let rising = |fin: &Fin| fin.from < fin.to;
+    // A fin runs along −`n` × `n_bound`, so the first fin runs against the line's direction, and a
+    // fin that runs its way lies on the far side of `n` × v.
+    let flap = |at: usize| -> Result<Flap, MergeError> {
+        let (fin, plane) = plane_of(at)?;
+        Ok(Flap {
+            plane,
+            reversed: rising(&fin) == rising(&start),
+        })
+    };
+    let reference = flap(first)?;
+    let turned =
+        |at: usize| -> Result<bool, MergeError> { Ok(rising(&plane_of(at)?.0) != rising(&start)) };
+    // Two faces back to back lie at one angle. Past a fin that runs against the line lies the
+    // fin's material, so the other comes first, and the first fin's partner comes last of all.
+    let last = |at: usize| -> Result<bool, MergeError> {
+        let there = about(&line, &reference, &reference, &flap(at)?)?;
+        Ok(turned(at)? && there == Ordering::Equal)
+    };
+    let mut order = alloc::vec![first];
+    for at in edge.iter().skip(1) {
+        let this = flap(*at)?;
+        let mut place = order.len();
+        for (k, held) in order
+            .iter()
+            .enumerate()
+            .filter(|_| matches!(last(*at), Ok(false)))
+        {
+            let by = about(&line, &reference, &this, &flap(*held)?)?;
+            if by == Ordering::Less || (by == Ordering::Equal && turned(*at)?) || last(*held)? {
+                place = k;
+                break;
+            }
+        }
+        order.insert(place, *at);
+    }
+    // Turning about the line, past a fin that runs against it lies the fin's material.
+    let next = order.iter().cycle().skip(1);
+    for (at, after) in order.iter().zip(next) {
+        let (this, other) = (plane_of(*at)?.0, plane_of(*after)?.0);
+        if open {
+            join(parents, this.face, other.face);
+        } else if rising(&this) == rising(&start) {
+            if rising(&other) == rising(&this) {
+                return Err(MergeError::Open);
+            }
+            join(parents, this.face, other.face);
+        }
+    }
+    Ok(order)
+}
+
+/// `pieces` as polygons of one shell, each with `entry`.
+fn polygons_of(pieces: &[&Piece], entry: Option<Entry>) -> Vec<Polygon> {
+    pieces
+        .iter()
+        .map(|piece| Polygon {
+            piece: (*piece).clone(),
+            entry,
+        })
+        .collect()
+}
+
+/// Each shell's box, as [`crate::subdivide::around`] gives it for the shell's pieces. The merged points are those
+/// pieces' corners, exactly, and rounding to the grid keeps their order, so a shell's least and
+/// greatest point on each axis, rounded, are the least and greatest of its corners rounded: six
+/// roundings a shell where [`crate::subdivide::around`] takes one a corner.
+fn shell_cells(
+    held: &[Held<'_>],
+    shell_of_piece: &[usize],
+    number: &[usize],
+    points: &[Corner],
+    shells: usize,
+) -> Result<Vec<Cell>, MergeError> {
+    // The least and greatest point of each shell on each axis, as places in `points`.
+    let mut extremes: Vec<Option<[[usize; 2]; 3]>> = alloc::vec![None; shells];
+    let mut base = 0usize;
+    for (entry, shell) in held.iter().zip(shell_of_piece) {
+        let k = entry.piece.bounds.len();
+        let slot = extremes.get_mut(*shell).ok_or(MergeError::Open)?;
+        for id in number.iter().skip(base).take(k) {
+            let at = points.get(*id).ok_or(MergeError::Open)?;
+            let mut ends = slot.unwrap_or([[*id; 2]; 3]);
+            for (axis, [low, high]) in ends.iter_mut().enumerate() {
+                let along = |place: usize| -> Result<Ordering, MergeError> {
+                    let other = points.get(place).ok_or(MergeError::Open)?;
+                    Ok(axis_order(at, other, axis).ok_or(NumError::BudgetExceeded)?)
+                };
+                if along(*low)? == Ordering::Less {
+                    *low = *id;
+                }
+                if along(*high)? == Ordering::Greater {
+                    *high = *id;
+                }
+            }
+            *slot = Some(ends);
+        }
+        base = base.saturating_add(k);
+    }
+    let rounded = |place: usize, axis: usize| -> Result<i64, MergeError> {
+        let point = points
+            .get(place)
+            .ok_or(MergeError::Open)?
+            .point
+            .to_grid()?
+            .value();
+        let v = [point.x, point.y, point.z].get(axis).map(|c| c.get());
+        v.ok_or(MergeError::Open)
+    };
+    let half = |v: i64, by: i64| v.saturating_mul(2).saturating_add(by);
+    let mut cells = Vec::with_capacity(shells);
+    for ends in &extremes {
+        let ends = ends.ok_or(MergeError::Open)?;
+        let mut cell = Cell {
+            low: [0; 3],
+            high: [0; 3],
+        };
+        for (axis, (([low, high], l), h)) in ends
+            .iter()
+            .zip(&mut cell.low)
+            .zip(&mut cell.high)
+            .enumerate()
+        {
+            *l = half(rounded(*low, axis)?, -3);
+            *h = half(rounded(*high, axis)?, 3);
+        }
+        cells.push(cell);
+    }
+    Ok(cells)
+}
+
+/// The box around the shells `among`: the least and greatest of their boxes.
+fn cell_of(cells: &[Cell], among: impl IntoIterator<Item = usize>) -> Result<Cell, MergeError> {
+    let mut whole: Option<Cell> = None;
+    for shell in among {
+        let one = *cells.get(shell).ok_or(MergeError::Open)?;
+        whole = Some(match whole {
+            None => one,
+            Some(mut both) => {
+                for (low, v) in both.low.iter_mut().zip(one.low) {
+                    *low = (*low).min(v);
+                }
+                for (high, v) in both.high.iter_mut().zip(one.high) {
+                    *high = (*high).max(v);
+                }
+                both
+            }
+        });
+    }
+    whole.ok_or(MergeError::Open)
+}
+
+/// The vectors in front of and behind the first of `polygons`, traced through all of them from
+/// `cell`, a box around them all.
+fn sides_of_first(
+    polygons: &[Polygon],
+    cell: Cell,
+    meter: &mut WorkMeter<'_>,
+) -> Result<(Winding, Winding), MergeError> {
+    let lists: Vec<Vec<Piece>> = polygons
+        .iter()
+        .take(1)
+        .map(|polygon| alloc::vec![polygon.piece.clone()])
+        .collect();
+    let found = classify(&cell, &Winding::new(), polygons, &lists, meter)?;
+    let first = found.into_iter().next();
+    Ok(first.map_or_else(|| (Winding::new(), Winding::new()), |c| (c.front, c.back)))
+}
+
+/// Which of the shells `among` lie around a point behind shell `at`.
+fn around_shell(
+    of_shell: &[Vec<&Piece>],
+    cells: &[Cell],
+    at: usize,
+    among: &[usize],
+    meter: &mut WorkMeter<'_>,
+) -> Result<Vec<usize>, MergeError> {
+    let number = |shell: usize| u32::try_from(shell).unwrap_or(u32::MAX);
+    let list = of_shell.get(at).ok_or(MergeError::Open)?;
+    let mut polygons = polygons_of(list, None);
+    for shell in among.iter().filter(|shell| **shell != at) {
+        let others = of_shell.get(*shell).ok_or(MergeError::Open)?;
+        polygons.extend(polygons_of(others, Some(number(*shell))));
+    }
+    let cell = cell_of(cells, core::iter::once(at).chain(among.iter().copied()))?;
+    let (_, back) = sides_of_first(&polygons, cell, meter)?;
+    Ok(among
+        .iter()
+        .copied()
+        .filter(|shell| *shell != at && back.count(number(*shell)) > 0)
+        .collect())
+}
+
+/// Which shells face out, and the outer shell around each cavity. A shell faces out if the point in
+/// front of it is outside it, which takes only its own pieces, so this is linear in the pieces
+/// when there are no cavities. A cavity is held by the innermost outer shell around a point behind
+/// it: behind a cavity lies the material it is a cavity of, even where another cell fills it back
+/// to back.
+fn nest(
+    held: &[Held<'_>],
+    shell_of_piece: &[usize],
+    shells: usize,
+    (number, points): (&[usize], &[Corner]),
+    meter: &mut WorkMeter<'_>,
+) -> Result<Vec<(bool, Option<usize>)>, MergeError> {
+    let cells = shell_cells(held, shell_of_piece, number, points, shells)?;
+    let mut of_shell: Vec<Vec<&Piece>> = alloc::vec![Vec::new(); shells];
+    for (entry, shell) in held.iter().zip(shell_of_piece) {
+        of_shell
+            .iter_mut()
+            .skip(*shell)
+            .take(1)
+            .for_each(|list| list.push(entry.piece));
+    }
+    let mut outer = Vec::with_capacity(shells);
+    for (at, list) in of_shell.iter().enumerate() {
+        meter.charge(1)?;
+        let cell = cell_of(&cells, core::iter::once(at))?;
+        let (front, _) = sides_of_first(&polygons_of(list, Some(0)), cell, meter)?;
+        outer.push(front.count(0) == 0);
+    }
+    let outers: Vec<usize> = (0..shells)
+        .filter(|at| outer.get(*at) == Some(&true))
+        .collect();
+    let mut out = Vec::with_capacity(shells);
+    for (at, is_outer) in outer.iter().enumerate() {
+        if *is_outer {
+            out.push((true, None));
+            continue;
+        }
+        meter.charge(1)?;
+        let candidates = around_shell(&of_shell, &cells, at, &outers, meter)?;
+        // The innermost of those around it lies inside all the others.
+        let mut best = None;
+        for shell in &candidates {
+            let depth = around_shell(&of_shell, &cells, *shell, &candidates, meter)?.len();
+            if best.is_none_or(|(most, _)| depth >= most) {
+                best = Some((depth, *shell));
+            }
+        }
+        let (_, holder) = best.ok_or(MergeError::Inside)?;
+        out.push((false, Some(holder)));
+    }
+    Ok(out)
+}
+
+/// Curves where pieces of different owners meet.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct Curves {
+    /// The points, lexicographically.
+    pub vertices: Vec<Tpi>,
+    /// The straight edges, each from its lower vertex to its higher.
+    pub edges: Vec<(usize, usize)>,
+    /// Each edge's pieces, as places in the list given.
+    pub meets: Vec<Vec<usize>>,
+}
+
+/// The stretches of one line where pieces of two owners on different planes both have a side.
+fn meetings(
+    line: usize,
+    sides: &[Side],
+    held: &[Held<'_>],
+    runs: &mut Vec<Run>,
+) -> Result<(), MergeError> {
+    let opening = runs.len();
+    let plane_of = |side: &Side| -> Result<Plane, MergeError> {
+        Ok(held.get(side.held).ok_or(MergeError::Open)?.piece.face)
+    };
+    for (low, high, active) in stretches(sides) {
+        let mut meeting = None;
+        for (at, one) in active.iter().enumerate() {
+            let p = canonical(&plane_of(one)?)?.plane;
+            for other in active.iter().skip(at.saturating_add(1)) {
+                if other.sheet != one.sheet && canonical(&plane_of(other)?)?.plane != p {
+                    meeting = meeting.or(Some([p, one.bound]));
+                }
+            }
+        }
+        let Some(on) = meeting else {
+            continue;
+        };
+        let fins = active.iter().map(|side| RunFin {
+            sheet: side.sheet,
+            rising: side.rising,
+            held: side.held,
+            bound: side.bound,
+        });
+        match runs.get_mut(opening..).and_then(<[Run]>::last_mut) {
+            Some(run) if run.high == low => {
+                run.high = high;
+                run.fins.extend(fins);
+            }
+            _ => runs.push(Run {
+                line,
+                low,
+                high,
+                fins: fins.collect(),
+                on,
+            }),
+        }
+    }
+    Ok(())
+}
+
+/// The curves where the pieces of different owners meet: `pieces` holds each piece with its owner.
+/// A side of a piece on a line that another polygon's plane cut it along lies in that polygon too
+/// only where the two meet, so a stretch both have a side on is a stretch of the curve.
+///
+/// # Errors
+///
+/// A [`MergeError`]: a stopped meter, or what the numbers layer refuses.
+pub fn section(pieces: &[(Piece, usize)], meter: &mut WorkMeter<'_>) -> Result<Curves, MergeError> {
+    let held: Vec<Held<'_>> = pieces
+        .iter()
+        .enumerate()
+        .map(|(given, (piece, owner))| Held {
+            sheet: *owner,
+            piece,
+            given,
+        })
+        .collect();
+    let parts = parts_of(&held, alloc::vec![None; held.len()])?;
+    let (number, points, _) = numbered(&parts, None, meter)?;
+    let (sides, _) = sides_of(&held, &parts, &number, None, meter)?;
+    let mut runs: Vec<Run> = Vec::new();
+    let mut start = 0usize;
+    for end in 1..=sides.len() {
+        let next = sides.get(end).zip(sides.get(start));
+        if next.is_none_or(|(b, a)| line_order(&a.key, &b.key) != Some(Ordering::Equal)) {
+            let group = sides.get(start..end).ok_or(MergeError::Open)?;
+            meetings(start, group, &held, &mut runs)?;
+            start = end;
+        }
+    }
+    let runs = cut_at_ends(runs, &points)?;
+    let mut used: Vec<usize> = runs.iter().flat_map(|e| [e.low, e.high]).collect();
+    used.sort_unstable();
+    used.dedup();
+    let vertex = |id: usize| used.binary_search(&id).map_err(|_| MergeError::Open);
+    let mut edges = Vec::with_capacity(runs.len());
+    let mut meets = Vec::with_capacity(runs.len());
+    for run in &runs {
+        edges.push((vertex(run.low)?, vertex(run.high)?));
+        meets.push(run.fins.iter().map(|fin| fin.held).collect());
+    }
+    let mut vertices = Vec::with_capacity(used.len());
+    for id in &used {
+        vertices.push(named(points.get(*id).ok_or(MergeError::Open)?, meter)?);
+    }
+    Ok(Curves {
+        vertices,
+        edges,
+        meets,
+    })
+}
+
+/// What numbers a face: its sheet, then its lowest fin's edge and way.
+type FaceKey = (usize, usize, usize, bool);
+
+/// Merges `pieces` into the faces, edges and shells of a body, every number the shape's own.
+///
+/// # Errors
+///
+/// A [`MergeError`]: pieces that overlap on one sheet or do not close, a shell facing inward with
+/// nothing around it, or a stopped meter.
+pub fn merge(
+    pieces: &[Outward],
+    mode: Merge,
+    meter: &mut WorkMeter<'_>,
+) -> Result<Merged, MergeError> {
+    merge_with(pieces, mode, Rules::default(), meter)
+}
+
+/// [`merge`], under `rules`.
+///
+/// # Errors
+///
+/// As [`merge`]; open pieces need not close.
+pub fn merge_with(
+    pieces: &[Outward],
+    mode: Merge,
+    rules: Rules<'_>,
+    meter: &mut WorkMeter<'_>,
+) -> Result<Merged, MergeError> {
+    merge_with_reusing(pieces, mode, rules, None, meter).map(|(merged, _)| merged)
+}
+
+/// [`merge_with`], taking what it can from `reuse`, a merge of mostly the same pieces, and giving
+/// back what the next merge can take from this one (G139). The merge is the one [`merge_with`]
+/// gives, bit for bit, whatever `reuse` holds; it charges `meter` as [`merge_with`] does.
+///
+/// # Errors
+///
+/// As [`merge_with`].
+#[allow(
+    clippy::too_many_lines,
+    reason = "the steps of one merge in their order, each short, sharing the numbers they fill"
+)]
+pub fn merge_with_reusing(
+    pieces: &[Outward],
+    mode: Merge,
+    rules: Rules<'_>,
+    reuse: Option<&Memo>,
+    meter: &mut WorkMeter<'_>,
+) -> Result<(Merged, Memo), MergeError> {
+    let (sheets, mut held) = sheets_of(pieces, mode)?;
+    let kept = held.len();
+    held.extend(rules.cuts.iter().map(|piece| Held {
+        sheet: CUT,
+        piece,
+        given: CUT,
+    }));
+    let keys: Vec<PieceKey> = held.iter().map(|entry| key_of_piece(entry.piece)).collect();
+    let (parts, start) = reused(&held, &keys, reuse)?;
+    let (corner_start, side_start) = start.map_or((None, None), |(c, s)| (Some(c), Some(s)));
+    let (number, points, corner_order) = numbered(&parts, corner_start, meter)?;
+    let (sides, side_order) = sides_of(&held, &parts, &number, side_start, meter)?;
+    let by_piece = |order: &[usize]| -> Vec<(usize, usize)> {
+        let mut at_piece = Vec::with_capacity(order.len());
+        for (piece, one) in parts.iter().enumerate() {
+            at_piece.extend((0..one.corners.len()).map(|place| (piece, place)));
+        }
+        order
+            .iter()
+            .filter_map(|i| at_piece.get(*i).copied())
+            .collect()
+    };
+    let state = Memo {
+        corners: by_piece(&corner_order),
+        sides: by_piece(&side_order),
+        pieces: keys.into_iter().zip(parts).collect(),
+    };
+    held.truncate(kept);
+
+    // Each line's runs, and which pieces join across them.
+    let mut same_piece: Vec<usize> = (0..held.len()).collect();
+    let mut runs: Vec<Run> = Vec::new();
+    let mut start = 0usize;
+    for end in 1..=sides.len() {
+        let next = sides.get(end).zip(sides.get(start));
+        if next.is_none_or(|(b, a)| line_order(&a.key, &b.key) != Some(Ordering::Equal)) {
+            let group = sides.get(start..end).ok_or(MergeError::Open)?;
+            sweep(start, group, &sheets, &mut same_piece, &mut runs)?;
+            start = end;
+        }
+    }
+    let runs = without_slits(runs, &same_piece);
+    let runs = cut_at_ends(whole_runs(runs, &same_piece), &points)?;
+
+    // Faces: the connected pieces of a sheet, numbered by the sheet and their lowest fin, which
+    // only one face of a sheet can hold.
+    let mut lowest: BTreeMap<usize, FaceKey> = BTreeMap::new();
+    for run in &runs {
+        for fin in &run.fins {
+            let key = (fin.sheet, run.low, run.high, fin.rising);
+            let slot = lowest.entry(root(&same_piece, fin.held)).or_insert(key);
+            *slot = key.min(*slot);
+        }
+    }
+    let mut face_list: Vec<(FaceKey, usize)> =
+        lowest.iter().map(|(top, key)| (*key, *top)).collect();
+    face_list.sort_unstable();
+    let numbered_faces: BTreeMap<usize, usize> = face_list
+        .iter()
+        .enumerate()
+        .map(|(at, (_, top))| (*top, at))
+        .collect();
+    let face_of = |at: usize| {
+        numbered_faces
+            .get(&root(&same_piece, at))
+            .copied()
+            .ok_or(MergeError::Open)
+    };
+    let mut planes: Vec<Plane> = Vec::with_capacity(face_list.len());
+    for ((sheet, ..), _) in &face_list {
+        planes.push(sheets.get(*sheet).ok_or(MergeError::Open)?.face);
+    }
+
+    // The vertices edges end at, and the fins, numbered by edge.
+    let mut used: Vec<usize> = runs.iter().flat_map(|e| [e.low, e.high]).collect();
+    used.sort_unstable();
+    used.dedup();
+    let vertex = |id: usize| used.binary_search(&id).map_err(|_| MergeError::Open);
+    let mut fins: Vec<Fin> = Vec::new();
+    let mut around_edge: Vec<Vec<usize>> = Vec::with_capacity(runs.len());
+    for (e, run) in runs.iter().enumerate() {
+        let mut here = Vec::with_capacity(run.fins.len());
+        let (low, high) = (vertex(run.low)?, vertex(run.high)?);
+        for fin in &run.fins {
+            meter.charge(1)?;
+            here.push(fins.len());
+            let (from, to) = if fin.rising { (low, high) } else { (high, low) };
+            fins.push(Fin {
+                edge: e,
+                face: face_of(fin.held)?,
+                from,
+                to,
+                bound: fin.bound,
+                piece: held.get(fin.held).ok_or(MergeError::Open)?.given,
+            });
+        }
+        if !rules.open && here.len().checked_rem(2) != Some(0) {
+            return Err(MergeError::Open);
+        }
+        around_edge.push(here);
+    }
+
+    // Radial order, which joins faces into shells, numbered by their lowest face.
+    let mut same_shell: Vec<usize> = (0..face_list.len()).collect();
+    let mut edges = Vec::with_capacity(runs.len());
+    for (run, here) in runs.iter().zip(&around_edge) {
+        edges.push(Edge {
+            low: vertex(run.low)?,
+            high: vertex(run.high)?,
+            fins: radial(here, &fins, &planes, rules.open, &mut same_shell)?,
+        });
+    }
+    let mut tops: Vec<usize> = (0..face_list.len()).map(|f| root(&same_shell, f)).collect();
+    tops.sort_unstable();
+    tops.dedup();
+    let shell_of = |face: usize| {
+        tops.binary_search(&root(&same_shell, face))
+            .map_err(|_| MergeError::Open)
+    };
+    let mut shell_of_piece = Vec::with_capacity(held.len());
+    let mut piece_face = alloc::vec![0usize; held.len()];
+    for (at, entry) in held.iter().enumerate() {
+        let face = face_of(at)?;
+        shell_of_piece.push(shell_of(face)?);
+        piece_face
+            .iter_mut()
+            .skip(entry.given)
+            .take(1)
+            .for_each(|slot| *slot = face);
+    }
+    let nested = if rules.open {
+        alloc::vec![(true, None); tops.len()]
+    } else if held.is_empty() {
+        Vec::new()
+    } else {
+        nest(
+            &held,
+            &shell_of_piece,
+            tops.len(),
+            (&number, &points),
+            meter,
+        )?
+    };
+
+    // Faces and shells.
+    let mut own_fins: Vec<Vec<usize>> = alloc::vec![Vec::new(); face_list.len()];
+    for (at, fin) in fins.iter().enumerate() {
+        own_fins
+            .iter_mut()
+            .skip(fin.face)
+            .take(1)
+            .for_each(|list| list.push(at));
+    }
+    let mut faces = Vec::with_capacity(face_list.len());
+    let mut shells: Vec<Shell> = nested
+        .iter()
+        .map(|(outer, holder)| Shell {
+            outer: *outer,
+            holder: *holder,
+            faces: Vec::new(),
+        })
+        .collect();
+    for (at, (((sheet, ..), _), list)) in face_list.iter().zip(&own_fins).enumerate() {
+        let plane = planes.get(at).ok_or(MergeError::Open)?;
+        let shell = shell_of(at)?;
+        faces.push(Face {
+            sheet: *sheet,
+            shell,
+            rings: rings(&fins, list, plane)?,
+        });
+        shells
+            .iter_mut()
+            .skip(shell)
+            .take(1)
+            .for_each(|s| s.faces.push(at));
+    }
+    let mut vertices = Vec::with_capacity(used.len());
+    for id in &used {
+        vertices.push(named(points.get(*id).ok_or(MergeError::Open)?, meter)?);
+    }
+    let merged = Merged {
+        sheets,
+        vertices,
+        edges,
+        fins,
+        faces,
+        shells,
+        piece_face,
+    };
+    Ok((merged, state))
+}

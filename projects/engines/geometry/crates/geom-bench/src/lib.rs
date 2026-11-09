@@ -26,7 +26,14 @@
 //! reader, `geom-linalg`'s pivoted QR and SVD, `geom-bvh`'s box tree and cell index,
 //! `geom-nurbs`'s evaluation, interpolation and Bernstein bound, and the curve and surface kinds'
 //! evaluation, certified enclosures and conversion to NURBS in `geom-curve` and `geom-surface`,
-//! each named in the catalogue with its crate's path and checked to be a public function there.
+//! with, from phase 3, `geom-make`'s primitives and transforms,
+//! each named in the catalogue with its crate's path and checked to be a public function there;
+//! and, from phase 3, `geom-topo`'s columns and publishing and `geom-name`'s attribute step.
+//! From piece G140 it also runs the flat boolean's scenarios (23.13's scenarios at reduced scale):
+//! a wall's openings cut in one call, a door moved and cut again from the arrangement cache, a
+//! slab's holes, a union of many boxes, one and three selections from one arrangement, and a
+//! storey's rooms, each batch one whole job ([`inputs::scenario`]), and times them at full size
+//! for the nightly run.
 //!
 //! Map: chapter 23.13 (benchmarks and regression gates) and 28.14 (benchmarks in the test suite)
 //! of the kernel architecture, `projects/engines/geometry/architecture/`; board entry G18, which
