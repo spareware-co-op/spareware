@@ -58,9 +58,12 @@ use geom_num::{NumError, Sign};
 use geom_run::{ChunkPlan, Exec, Phase, RunError, WorkMeter};
 
 use crate::convex::Piece;
-use crate::cut::{Clipped, clip_at, local_cuts_at, meetings};
-use crate::order::Meeting;
-use crate::trace::{Cell, Classified, Polygon, TraceError, classify, reference_above};
+use crate::cut::{Clipped, clip_at, local_cuts_with, meetings};
+use crate::order::{Meeting, Span};
+use crate::plane::canonical;
+#[cfg(doc)]
+use crate::trace::classify;
+use crate::trace::{Cell, Classified, Polygon, TraceError, classify_with, reference_above};
 use crate::winding::{Entry, Winding, WindingTest};
 
 /// How many polygons a leaf holds at most, unless a split no longer separates them: the size at
@@ -359,8 +362,22 @@ fn solve(
         return solid_leaf(node, entry, meter);
     }
     let pieces: Vec<Piece> = node.polygons.iter().map(|p| p.piece.clone()).collect();
-    let cuts = local_cuts_at(&pieces, &node.points, meter)?;
-    let mut classified = classify(&node.cell, &node.reference, &node.polygons, &cuts, meter)?;
+    // Each polygon's face in canonical form, and its span from its corners' points, which the
+    // node holds, made once for the local cuts and the classifier both: the points are made once
+    // and kept down the tree, and neither finds them again.
+    let mut held = Vec::with_capacity(node.polygons.len());
+    let mut planes = Vec::with_capacity(node.polygons.len());
+    let mut spans = Vec::with_capacity(node.polygons.len());
+    for (at, polygon) in node.polygons.iter().enumerate() {
+        let points = node.points.get(at);
+        let span = points.and_then(|points| Span::of(points.iter().copied()));
+        let face = canonical(&polygon.piece.face)?;
+        planes.push(face.plane);
+        spans.push(span);
+        held.push((polygon, face, span));
+    }
+    let cuts = local_cuts_with(&pieces, &node.points, (&planes, &spans), meter)?;
+    let mut classified = classify_with(&node.cell, &node.reference, &held, &cuts, meter)?;
     for piece in &mut classified {
         piece.polygon = node
             .sources
