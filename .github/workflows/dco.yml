@@ -5,6 +5,12 @@ name: Sign-off
 # contributor licence agreement, and Spareware stays Apache-2.0, never a closed, paid or subscription licence (README, Licence).
 # A sign-off line may end in CRLF: a commit message written on Windows keeps its "\r", and `$`
 # matches only before "\n", so the pattern allows an optional "\r" before the end of the line.
+# A commit that is already on the default branch is not checked again: it passed this check when it
+# landed, or it is GitHub's own merge commit for a pull request that did. A pull request whose base
+# is another pull request's branch lists such commits once a branch below it merges the default
+# branch in, and their sign-off is not its author's to give. The compare API says whether a commit
+# is on the default branch: "ahead" or "identical" from the commit to the branch means the branch
+# holds it. A failed call fails the check, so a commit is skipped only when GitHub says so.
 
 on:
   pull_request:
@@ -24,12 +30,23 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           REPO: ${{ github.repository }}
           PR: ${{ github.event.pull_request.number }}
+          DEFAULT: ${{ github.event.repository.default_branch }}
         run: |
-          missing=$(gh api "repos/$REPO/pulls/$PR/commits?per_page=100" --paginate \
-            --jq '.[] | select(.commit.message | test("(?m)^Signed-off-by: .+ <.+>\\r?$") | not) | .sha[0:7] + " " + (.commit.message | split("\n")[0])')
+          unsigned=$(gh api "repos/$REPO/pulls/$PR/commits?per_page=100" --paginate \
+            --jq '.[] | select(.commit.message | test("(?m)^Signed-off-by: .+ <.+>\\r?$") | not) | .sha + " " + (.commit.message | split("\n")[0])')
+          missing=""
+          while IFS= read -r line; do
+            [ -n "$line" ] || continue
+            sha=${line%% *}
+            status=$(gh api "repos/$REPO/compare/$sha...$DEFAULT" --jq .status)
+            case "$status" in
+              ahead | identical) echo "Already on $DEFAULT, not checked again: ${line:0:7}${line#"$sha"}" ;;
+              *) missing+="${line:0:7}${line#"$sha"}"$'\n' ;;
+            esac
+          done <<< "$unsigned"
           if [ -n "$missing" ]; then
             echo "::error::These commits have no sign-off. Add one with: git commit --amend -s (or git rebase --signoff), then push again."
-            echo "$missing"
+            printf '%s' "$missing"
             exit 1
           fi
           echo "Every commit is signed off."
