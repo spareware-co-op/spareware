@@ -80,7 +80,7 @@ pub enum SketchError {
     /// No side can be read from the drawing: the point is exactly on the line, or off the grid. The
     /// author must state the choice.
     RootChoiceUndetermined(ItemId),
-    /// The start is on this constraint's singular set.
+    /// The start is on this constraint's singular set, or the answer within a tolerance of it.
     Degenerate(ItemId),
     /// A block would not converge: this is its worst rule.
     Unsolved(ItemId),
@@ -158,7 +158,7 @@ impl core::fmt::Display for SketchError {
             SketchError::NotPositive => "a value that must be positive is not",
             SketchError::NotADimension(_) => "only a dimension can be a reference",
             SketchError::RootChoiceUndetermined(_) => "the drawing does not decide the root",
-            SketchError::Degenerate(_) => "the start is on a singular set",
+            SketchError::Degenerate(_) => "the start or the answer is on a singular set",
             SketchError::Unsolved(_) => "a block would not converge",
             SketchError::BranchLost { .. } => "the path could not be followed",
             SketchError::CommitFlip(_) => "committing moved geometry across a stored root choice",

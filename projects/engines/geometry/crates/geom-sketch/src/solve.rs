@@ -23,6 +23,9 @@
 //!   any size, and no further division by the block's size would change a step.
 //! - **Never a partial answer.** A block that does not converge is [`SketchError::Unsolved`], naming
 //!   its worst rule, and running out of budget is [`SketchError::Stopped`]; neither returns a sketch.
+//! - **Never an answer on a singular set.** A stage's answer that leaves one of its rules within
+//!   [`TOLERANCE`] of the rule's singular set is [`SketchError::Degenerate`]: there the residual is
+//!   met without the rule meaning anything, as a parallel to a line folded to a point.
 //! - **A singular start is nudged once.** A rule on its singular set has its points moved by small
 //!   amounts derived from its id alone, which the report records; a rule still on it is
 //!   [`SketchError::Degenerate`] (chapter 15.4). A block whose Jacobian is singular at its start,
@@ -436,8 +439,9 @@ impl Stage {
             push(&mut from, *x.get(column).ok_or(SketchError::Internal)?)?;
         }
         let failed = match self.iterate(assembly, x, report, meter) {
+            Ok(()) => return self.clear_of_singular(assembly, x),
             Err(SketchError::Unsolved(id)) => id,
-            other => return other,
+            Err(e) => return Err(e),
         };
         for (&column, &value) in self.columns.iter().zip(&from) {
             *x.get_mut(column).ok_or(SketchError::Internal)? = value;
@@ -456,7 +460,20 @@ impl Stage {
             assembly.nudge(id, x, &self.columns)?;
             push(&mut report.nudged, id)?;
         }
-        self.iterate(assembly, x, report, meter)
+        self.iterate(assembly, x, report, meter)?;
+        self.clear_of_singular(assembly, x)
+    }
+
+    /// Refuses an answer that leaves one of this stage's rules within [`TOLERANCE`] of its singular
+    /// set, on each coordinate the set fixes, as [`SketchError::Degenerate`] naming the rule
+    /// (chapter 15.4). There a residual met says nothing: a line shorter than that has no
+    /// direction to be parallel or at right angles to. A least-change step can land there, as a
+    /// point folded back onto the one it must be a length from, past the one between.
+    fn clear_of_singular(&self, assembly: &mut Assembly, x: &[f64]) -> Result<(), SketchError> {
+        for &rule in &self.rules {
+            assembly.evaluate_rule_within(rule, x, TOLERANCE)?;
+        }
+        Ok(())
     }
 
     /// Gauss–Newton with Moré's damping from `x`, after [`Stage::start`]'s one nudge.
@@ -699,8 +716,8 @@ const fn empty_report() -> Report {
 /// # Errors
 ///
 /// [`SketchError::Unsolved`] for a block that does not converge; [`SketchError::Degenerate`] for a
-/// rule still on its singular set after a nudge; [`SketchError::Stopped`] when the budget runs out;
-/// what its analysis and pattern refuse.
+/// rule still on its singular set after a nudge, or within [`TOLERANCE`] of it at the answer;
+/// [`SketchError::Stopped`] when the budget runs out; what its analysis and pattern refuse.
 pub fn solve(sketch: &Sketch, meter: &mut WorkMeter<'_>) -> Result<Solved, SketchError> {
     let mut plan = Plan::new(sketch, meter)?;
     let mut x = plan.assembly.start()?;
