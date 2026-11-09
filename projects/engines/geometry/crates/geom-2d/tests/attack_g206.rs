@@ -584,3 +584,128 @@ fn halving_a_segment_gives_its_midpoint() {
     let ([x, y], w) = pts[0].coordinates();
     assert_eq!((x, y), (5 * w, 2 * w));
 }
+
+/// The eight maps that take a unit square centred on `c` to itself: four quarter turns about `c`,
+/// each with and without the mirror in the row through `c`.
+fn units(c: P2) -> Vec<Similarity> {
+    let row = Similarity::mirror_in_row(c.y.get()).unwrap();
+    let mut maps = Vec::new();
+    for t in 0..4 {
+        let turn = Similarity::quarter_turns(t, c).unwrap();
+        maps.push(turn);
+        maps.push(turn.after(&row).unwrap());
+    }
+    maps
+}
+
+#[test]
+fn every_unit_map_at_every_unit_scale_is_undone_to_the_identity() {
+    let scale = |k, c| Similarity::scaling(k, c).unwrap();
+    for c in [p(0, 0), p(7, -3), p(-1000, 41)] {
+        for u in units(c) {
+            for k in [1_i64, -1] {
+                for (dx, dy) in [(0, 0), (5, -9)] {
+                    let q = Similarity::translation(dx, dy)
+                        .after(&scale(k, c).after(&u).unwrap())
+                        .unwrap();
+                    let back = q.inverse().unwrap();
+                    assert_eq!(q.after(&back).unwrap(), Similarity::IDENTITY);
+                    assert_eq!(back.after(&q).unwrap(), Similarity::IDENTITY);
+                    for x in [p(0, 0), p(1, 0), p(0, 1), p(-13, 88)] {
+                        assert_eq!(xy(back.point(q.point(x).unwrap()).unwrap()), xy(x));
+                    }
+                }
+            }
+            // Past a unit scale there is no inverse on the grid, but undoing the unit part, on
+            // either side, leaves the scale alone, a negative one included.
+            let undo = u.inverse().unwrap();
+            for k in [2_i64, -2, 3, -7, 1000, -1000] {
+                let q = scale(k, c).after(&u).unwrap();
+                assert_eq!(q.inverse().unwrap_err(), EditError::NotExact);
+                assert_eq!(q.after(&undo).unwrap(), scale(k, c));
+                assert_eq!(undo.after(&q).unwrap(), scale(k, c));
+            }
+        }
+    }
+}
+
+#[test]
+fn two_constructions_of_one_map_compare_equal() {
+    let scale = |k, c| Similarity::scaling(k, c).unwrap();
+    let turn = |t, c| Similarity::quarter_turns(t, c).unwrap();
+    for c in [p(0, 0), p(3, 8), p(-50, 2)] {
+        assert_eq!(scale(-1, c), turn(2, c));
+        assert_eq!(turn(1, c).after(&scale(-1, c)).unwrap(), turn(3, c));
+        for k in [2_i64, 5, 1 << 20] {
+            assert_eq!(scale(-k, c), scale(k, c).after(&turn(2, c)).unwrap());
+            assert_eq!(scale(-k, c), turn(2, c).after(&scale(k, c)).unwrap());
+            assert_eq!(scale(k, c), scale(-k, c).after(&scale(-1, c)).unwrap());
+        }
+        let four = (0..4).fold(Similarity::IDENTITY, |m, _| m.after(&turn(1, c)).unwrap());
+        assert_eq!(four, Similarity::IDENTITY);
+        // A mirror in a row takes a quarter turn about a point on it into the opposite turn.
+        let row = Similarity::mirror_in_row(c.y.get()).unwrap();
+        assert_eq!(
+            row.after(&turn(1, c)).unwrap(),
+            turn(3, c).after(&row).unwrap()
+        );
+        // The mirror in a column is a mirror in a row, then a half turn about where they cross.
+        let column = Similarity::mirror_in_column(c.x.get()).unwrap();
+        assert_eq!(column, turn(2, c).after(&row).unwrap());
+        assert_eq!(column, scale(-1, c).after(&row).unwrap());
+    }
+    assert_eq!(
+        Similarity::translation(3, -4)
+            .after(&Similarity::translation(-1, 9))
+            .unwrap(),
+        Similarity::translation(2, 5)
+    );
+    // The most negative scale has no size in i64 and is refused; the one above it is a half turn.
+    let o = p(0, 0);
+    assert_eq!(
+        Similarity::scaling(i64::MIN, o).unwrap_err(),
+        EditError::Range
+    );
+    assert_eq!(
+        scale(-i64::MAX, o),
+        turn(2, o).after(&scale(i64::MAX, o)).unwrap()
+    );
+}
+
+#[test]
+fn maps_are_equal_exactly_when_they_move_three_points_alike() {
+    // Each map is built twice over (scale after the unit part and before it), and a scale of -k
+    // is a half turn at scale k, so the 128 builds are 32 maps of four builds each.
+    let o = p(0, 0);
+    let mut maps = Vec::new();
+    for u in units(o) {
+        for k in [1_i64, -1, 2, -2] {
+            for (dx, dy) in [(0, 0), (3, -1)] {
+                let t = Similarity::translation(dx, dy);
+                let s = Similarity::scaling(k, o).unwrap();
+                maps.push(t.after(&s.after(&u).unwrap()).unwrap());
+                maps.push(t.after(&u.after(&s).unwrap()).unwrap());
+            }
+        }
+    }
+    // An affine map is fixed by where it takes three points not on one line.
+    let frame = [p(0, 0), p(1, 0), p(0, 1)];
+    let mut twins = 0;
+    for (i, a) in maps.iter().enumerate() {
+        for (j, b) in maps.iter().enumerate() {
+            let alike = frame
+                .iter()
+                .all(|&x| xy(a.point(x).unwrap()) == xy(b.point(x).unwrap()));
+            assert_eq!(a == b, alike, "builds {i} and {j}");
+            if alike {
+                for x in [p(5, -7), p(-100, 33), p(12, 12)] {
+                    assert_eq!(xy(a.point(x).unwrap()), xy(b.point(x).unwrap()));
+                }
+                if i != j {
+                    twins += 1;
+                }
+            }
+        }
+    }
+    assert_eq!(twins, 32 * 4 * 3);
+}

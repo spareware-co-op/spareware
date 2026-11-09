@@ -25,6 +25,13 @@
 //!   square root of its exact squared length, and each arc by c (1 + b²) atan |b| / |b|, which is
 //!   the arc of chord c and bulge b, in outward-rounded interval arithmetic; the true length lies
 //!   in the interval returned.
+//! - **One form per map.** A [`Similarity`] is stored canonically: its turns below four and its
+//!   scale positive, a negative whole scale folded into two more turns (a half turn commutes with
+//!   every quarter turn and with the mirror). So two similarities are equal, by the derived `==`,
+//!   exactly when they move every point alike. The form is made canonical at construction rather
+//!   than compared by a hand-written equality over a looser one: every constructor and
+//!   [`Similarity::after`] already keep the turns below four, so the scale's sign is the one
+//!   ambiguity, and folding it once costs nothing where comparing maps would cost a probe each time.
 //! - **Deterministic.** Pure functions of their arguments; the same bits on every target.
 //!
 //! Method: the edit table of chapter 14.7
@@ -115,7 +122,8 @@ impl core::error::Error for EditError {}
 
 /// A map of the plane that takes the grid to itself: first `turns` quarter turns counter-clockwise
 /// about the origin, then a mirror in the x axis if `mirror`, then the whole-number `scale`, then
-/// the shift. A negative `scale` is a half turn as well; a mirror reverses the sense of every arc.
+/// the shift; a mirror reverses the sense of every arc. The form is canonical: `turns` below four
+/// and `scale` positive, a negative scale held as a half turn more, so equal maps compare equal.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct Similarity {
     turns: u8,
@@ -157,18 +165,26 @@ impl Similarity {
         )
     }
 
-    /// The whole scale `k` about `about`; a negative `k` also turns by a half turn.
+    /// The whole scale `k` about `about`; a negative `k` also turns by a half turn, and is held as
+    /// that half turn and the scale |`k`|.
     ///
     /// # Errors
     ///
-    /// [`EditError::Degenerate`] for `k` = 0; [`EditError::Range`] if the shift does not fit.
+    /// [`EditError::Degenerate`] for `k` = 0; [`EditError::Range`] if the shift does not fit, or for
+    /// `k` = `i64::MIN`, whose size has no `i64`.
     pub fn scaling(k: i64, about: P2) -> Result<Similarity, EditError> {
         if k == 0 {
             return Err(EditError::Degenerate);
         }
+        let (turns, scale) = if k.is_negative() {
+            (2, k.checked_neg().ok_or(EditError::Range)?)
+        } else {
+            (0, k)
+        };
         Similarity::fixing(
             Similarity {
-                scale: k,
+                turns,
+                scale,
                 ..Similarity::IDENTITY
             },
             about,
@@ -305,41 +321,40 @@ impl Similarity {
         .map_err(|_| EditError::Range)
     }
 
-    /// The map that undoes `self`, if it is one on the grid: a scale of one or minus one.
+    /// The map that undoes `self`, if it is one on the grid: a scale of one (a scale of minus one is
+    /// held as a half turn with a scale of one).
     ///
     /// # Errors
     ///
     /// [`EditError::NotExact`] for any other scale (the inverse would be a division).
     pub fn inverse(&self) -> Result<Similarity, EditError> {
-        if self.scale.unsigned_abs() != 1 {
+        if self.scale != 1 {
             return Err(EditError::NotExact);
         }
-        // Undo the shift, then the linear part: the linear part of a quarter turn, mirror and unit
-        // scale has the inverse found by trying the sixteen candidates, which are all there are.
+        // Undo the shift, then the linear part: the linear part of a quarter turn, a mirror and a
+        // unit scale has the inverse found by trying the eight candidates, which are all there are.
         let probe = [i128::from(1_i8), i128::from(2_i8)];
         let image = self.linear(probe).ok_or(EditError::Range)?;
         for turns in 0..4_u8 {
             for mirror in [false, true] {
-                for scale in [1_i64, -1] {
-                    let back = Similarity {
-                        turns,
-                        mirror,
-                        scale,
-                        shift: [0, 0],
-                    };
-                    if back.linear(image) == Some(probe) {
-                        let moved = back
-                            .linear([i128::from(self.shift[0]), i128::from(self.shift[1])])
-                            .ok_or(EditError::Range)?;
-                        let sx = i64::try_from(moved[0].checked_neg().ok_or(EditError::Range)?)
-                            .map_err(|_| EditError::Range)?;
-                        let sy = i64::try_from(moved[1].checked_neg().ok_or(EditError::Range)?)
-                            .map_err(|_| EditError::Range)?;
-                        return Ok(Similarity {
-                            shift: [sx, sy],
-                            ..back
-                        });
-                    }
+                let back = Similarity {
+                    turns,
+                    mirror,
+                    scale: 1,
+                    shift: [0, 0],
+                };
+                if back.linear(image) == Some(probe) {
+                    let moved = back
+                        .linear([i128::from(self.shift[0]), i128::from(self.shift[1])])
+                        .ok_or(EditError::Range)?;
+                    let sx = i64::try_from(moved[0].checked_neg().ok_or(EditError::Range)?)
+                        .map_err(|_| EditError::Range)?;
+                    let sy = i64::try_from(moved[1].checked_neg().ok_or(EditError::Range)?)
+                        .map_err(|_| EditError::Range)?;
+                    return Ok(Similarity {
+                        shift: [sx, sy],
+                        ..back
+                    });
                 }
             }
         }
