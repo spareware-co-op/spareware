@@ -6060,14 +6060,6 @@
     },
     {
       "file": "projects/engines/geometry/crates/geom-sketch/src/drag.rs",
-      "mutant": "replace > with >= in Dragger::release_to",
-      "line_text": "if r.abs() > TOLERANCE {",
-      "occurrences": 1,
-      "kind": "harmless",
-      "reason": "The forms differ only for a residual of exactly the solver's tolerance. A row at the tolerance is one the solver itself counts as met (solve's convergence test, `most <= TOLERANCE`, accepts it), so naming it among the constraints the cursor broke or not is a choice at the cut-off, and the crate promises nothing about a residual at the cut-off itself."
-    },
-    {
-      "file": "projects/engines/geometry/crates/geom-sketch/src/drag.rs",
       "mutant": "replace > with >= in Dragger::release",
       "line_text": "let d = if dx > dy { dx } else { dy };",
       "occurrences": 1,
@@ -6081,14 +6073,6 @@
       "occurrences": 1,
       "kind": "equivalent",
       "reason": "The forms differ only when d equals the largest so far, and then the assignment stores the same number: the largest is the same either way."
-    },
-    {
-      "file": "projects/engines/geometry/crates/geom-sketch/src/drag.rs",
-      "mutant": "replace > with >= in Dragger::release",
-      "line_text": "if d > fit {",
-      "occurrences": 1,
-      "kind": "harmless",
-      "reason": "The forms differ only for a drift of exactly the fit ceiling, 64 steps. The release promises to name a point that moved more than the ceiling; a drift of exactly the ceiling is the cut-off itself, about which nothing is promised, and a point moved exactly 64 steps by a replay is a boundary no drift reaches except by construction."
     },
     {
       "file": "projects/engines/geometry/crates/geom-sketch/src/drag.rs",

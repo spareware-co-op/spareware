@@ -374,4 +374,57 @@ fn a_release_reports_a_point_that_trails_differently_on_a_thinned_replay() {
     assert_eq!(released.moved, moved);
     assert_eq!(released.largest, largest);
     assert!(largest > Checker::fit(), "{largest}");
+    // The ceiling is a cut-off, met at the ceiling itself: the same release within exactly the
+    // drift names nothing, and within the next smaller double names P.
+    for (fit, named) in [(largest, false), (largest.next_down(), true)] {
+        let mut drag = Dragger::begin(&s, &[ItemId::new(10, 1)], &mut meter()).unwrap();
+        for i in 1..=600 {
+            let k = f64::from(i) * (1.0e6 / 600.0);
+            drag.frame(&[[1.0e6 - k, k]], &mut meter()).unwrap();
+        }
+        let again = drag.release_within(fit, &mut meter()).unwrap();
+        assert_eq!(again.largest, largest);
+        let want = if named {
+            vec![(ItemId::new(10, 0), largest)]
+        } else {
+            Vec::new()
+        };
+        assert_eq!(again.moved, want, "within {fit}");
+    }
+}
+
+#[test]
+fn a_residual_of_exactly_the_tolerance_is_not_a_broken_constraint() {
+    // A point both coordinates of which are fixed: every frame is AtLimit, naming the fixes the
+    // cursor breaks. A cursor 2^-6 (the solver's tolerance) off in x breaks only the y fix; a
+    // hair further, both.
+    let mut text = HEAD.to_owned();
+    text.push_str(
+        "entity 10.0 point 0 0
+",
+    );
+    text.push_str(
+        "constraint 12.0 driving 0 fix 10.0 0 0
+",
+    );
+    text.push_str(
+        "constraint 12.1 driving 0 fix 10.0 1 0
+",
+    );
+    let s = parse(&text).unwrap();
+    let tolerance = 0.015_625;
+    for (x, blocking) in [
+        (tolerance, vec![ItemId::new(12, 1)]),
+        (
+            tolerance + f64::EPSILON,
+            vec![ItemId::new(12, 0), ItemId::new(12, 1)],
+        ),
+    ] {
+        let mut drag = Dragger::begin(&s, &[ItemId::new(10, 0)], &mut meter()).unwrap();
+        let frame = drag.frame(&[[x, 1.0]], &mut meter()).unwrap();
+        assert_eq!(frame.status, Status::AtLimit { blocking }, "x = {x}");
+        // Projected from the cursor, the x fix is met where it is at the tolerance itself.
+        let x_after = if x == tolerance { tolerance } else { 0.0 };
+        assert_eq!(point(&frame.sketch, 0), [x_after, 0.0]);
+    }
 }

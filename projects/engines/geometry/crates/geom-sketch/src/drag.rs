@@ -17,7 +17,9 @@
 //! - **`AtLimit`.** If the constraints cannot hold with the dragged coordinates held (the step and
 //!   its half both fail to converge), the drag is released for that frame and the whole sketch is
 //!   projected from the cursor: the dragged geometry stops at the nearest position the constraints
-//!   allow, and the frame names the constraints the cursor broke ([`Status::AtLimit`]).
+//!   allow, and the frame names the constraints the cursor broke ([`Status::AtLimit`]): those whose
+//!   residual at the cursor is more than the solver's tolerance. A residual of exactly the tolerance
+//!   counts as met, as the solver's own convergence test counts it.
 //! - **`DragLimit`.** After a frame the stored root choices (the senses of section 15.7) are checked
 //!   with interval arithmetic. A step that would flip one is halved; if it still flips, the frame is
 //!   the last good one and the status names the rule ([`Status::DragLimit`]). Both are preview
@@ -32,7 +34,8 @@
 //!   anything but the stored data and the cursor path.
 //! - **Release reports its drift.** If a committed point is more than the fit ceiling
 //!   ([`crate::check::Checker::fit`], 64 steps) from the last preview, [`Released::moved`] names it
-//!   and says by how much.
+//!   and says by how much; a point exactly at the ceiling has not drifted, as a residual exactly at
+//!   the solver's tolerance is met. [`Dragger::release_within`] takes another ceiling.
 //! - **No recursion, no unsafe code.**
 //!
 //! Only points are dragged: a line or a circle is dragged by its points. A dragged point whose
@@ -115,8 +118,9 @@ pub struct Released {
     pub sketch: Sketch,
     /// Its commit (section 15.10).
     pub committed: Committed,
-    /// The points that moved more than the fit ceiling between the last preview and the commit, and
-    /// by how much (the larger coordinate difference, in steps).
+    /// The points that moved more than the ceiling (the fit ceiling, unless
+    /// [`Dragger::release_within`] gave another) between the last preview and the commit, and by how
+    /// much (the larger coordinate difference, in steps). A point exactly at the ceiling is not one.
     pub moved: Vec<(ItemId, f64)>,
     /// The largest such difference over every point, in steps.
     pub largest: f64,
@@ -486,19 +490,33 @@ impl Dragger {
         })
     }
 
-    /// Releases the drag: replays the log from the stored sketch and commits the result.
+    /// Releases the drag: replays the log from the stored sketch and commits the result, naming the
+    /// points that drifted more than the fit ceiling ([`Checker::fit`]).
     ///
     /// # Errors
     ///
     /// What [`replay`] and [`commit`] refuse.
-    pub fn release(mut self, meter: &mut WorkMeter<'_>) -> Result<Released, SketchError> {
+    pub fn release(self, meter: &mut WorkMeter<'_>) -> Result<Released, SketchError> {
+        self.release_within(Checker::fit(), meter)
+    }
+
+    /// As [`Dragger::release`], naming the points that drifted more than `fit` steps; one that
+    /// drifted exactly `fit` has not.
+    ///
+    /// # Errors
+    ///
+    /// What [`replay`] and [`commit`] refuse.
+    pub fn release_within(
+        mut self,
+        fit: f64,
+        meter: &mut WorkMeter<'_>,
+    ) -> Result<Released, SketchError> {
         let log = self.log_of()?;
         let preview = self.current(Status::Held, empty_report())?.sketch;
         let sketch = replay(&log, meter)?;
         let committed = commit(&sketch, meter)?;
         let mut moved = Vec::new();
         let mut largest = 0.0_f64;
-        let fit = Checker::fit();
         for (id, stored) in &committed.points {
             let Ok(shown) = preview.point(*id) else {
                 continue;
