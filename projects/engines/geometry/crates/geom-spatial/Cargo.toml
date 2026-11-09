@@ -19,6 +19,11 @@ geom-num = { path = "../geom-num" }
 geom-op = { path = "../geom-op" }
 geom-poly = { path = "../geom-poly" }
 
+[dev-dependencies]
+# Seeds and the test generator (piece G19): the kernel's development crate, a development
+# dependency only (chapter 28.1).
+geom-test = { path = "../geom-test" }
+
 [lints.rust]
 unsafe_code = "forbid"
 missing_docs = "warn"

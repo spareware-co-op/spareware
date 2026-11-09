@@ -9,7 +9,7 @@ This is the record of what the geometry kernel's code takes from outside sources
 | Class (29.1) | Sources | Files that take them |
 | --- | --- | --- |
 | PORT | 11 | 18 |
-| PORT METHOD | 42 | 39 |
+| PORT METHOD | 43 | 40 |
 | DEPEND | 4 | 3 |
 
 3 method note(s) under the method-only procedure (29.20, rule 6).
@@ -71,6 +71,7 @@ Each kernel file implements a published method in its own code and copied nothin
 | Manifold | Apache-2.0 | allowed | <https://github.com/elalish/manifold/blob/d056b8fb70de8c8e6d6bee2e639b71c20aa08d01/src/shared.h> | none | `projects/engines/geometry/crates/geom-mesh/src/exact/mod.rs`: for half-edges as parallel arrays, and <https://github.com/elalish/manifold/blob/d056b8fb70de8c8e6d6bee2e639b71c20aa08d01/include/manifold/mesh.h>, for property vertices and runs; its data model, not its code. |
 | npm `hosted-git-info` 10.1.1 | ISC | allowed | <https://github.com/npm/hosted-git-info/blob/8c3bebb5e42142b7bce06b085b4c1bd1adba7371/lib/hosts.js> | none | `projects/engines/geometry/crates/geom-test/src/map/links.rs`: for the address layouts of GitHub, Bitbucket, GitLab, gists and sourcehut and where each puts its revision. No code copied. |
 | NURBS-Python (geomdl) | MIT | allowed | <https://github.com/orbingol/NURBS-Python/blob/9d2555ae8217b5480ee83afb526a835ac3cc3c27/geomdl/fitting.py> | none | `projects/engines/geometry/crates/geom-nurbs/src/fit.rs`: for the book's equation numbers of the parameter rules and the least-squares knot placement. |
+| parry | Apache-2.0 | allowed | <https://github.com/dimforge/parry/blob/b3c3584ce9be9bf6edb821fd7548b817087131ff/src/query/gjk/gjk.rs> | none | `projects/engines/geometry/crates/geom-spatial/src/gjk.rs`: for GJK's loop: the origin's projection on the simplex, the support point along its negation, and the stop when the upper and lower bounds meet. No code copied. |
 | PROJ (its copy of the EPSG dataset, whose own terms of use cover the data) | MIT | allowed | <https://github.com/OSGeo/PROJ/blob/5fa31c29f0a806568ed7bc76c1a557604db4a804/data/sql/projected_crs.sql> | none | `projects/engines/geometry/crates/geom-math/src/frame.rs`: for the defining parameters of EPSG:2193, NZTM2000. No code copied. |
 | PROJ (its copy of the EPSG dataset, whose own terms of use cover the data) | MIT | allowed | <https://github.com/OSGeo/PROJ/blob/5fa31c29f0a806568ed7bc76c1a557604db4a804/data/sql/unit_of_measure.sql> | none | `projects/engines/geometry/crates/geom-math/src/unit.rs`: for the factors of the US survey foot (EPSG:9003), the international foot (EPSG:9002) and Clarke's foot (EPSG:9005). No code copied. |
 | rand | MIT OR Apache-2.0 | allowed | <https://github.com/rust-random/rand/blob/9e7d328f60d6372ae22927f37d1a816fc980f25e/src/seq/slice.rs> | none | `projects/engines/geometry/crates/geom-test/src/golden/shuffle.rs`: to confirm that its shuffle draws 32-bit indices below 2^32 elements, which makes it portable. No code copied. |
