@@ -2349,6 +2349,7 @@ pub mod bvh {
 /// `geom-2d`'s entity model (piece G194, decision 32.44): a polyline built and checked, and a
 /// shape's change under a transform's classification.
 pub mod entity {
+    use geom_2d::arrange::Curve;
     use geom_2d::entity::{Becomes, Frac, Polyline, Shape};
     use geom_math::Classification;
     use geom_num::NumError;
@@ -2386,6 +2387,22 @@ pub mod entity {
         run(batch, out, |segments| {
             let mut meter = WorkMeter::new(Budget::UNLIMITED);
             let a = geom_2d::arrange::arrange(segments, &mut meter)
+                .map_err(|_| NumError::Degenerate)?;
+            let count = |n: usize| u64::try_from(n).unwrap_or(0);
+            Ok(count(a.vertices().len())
+                .wrapping_mul(1_000_003)
+                .wrapping_add(count(a.edges().len()).wrapping_mul(1_009))
+                .wrapping_add(count(a.faces().len())))
+        });
+    }
+
+    /// `arrange_curves` on each drawing of segments, arcs and ellipses: its vertices, edges and
+    /// faces counted into one number, as for `arrange`.
+    #[inline(never)]
+    pub fn arrange_curves(batch: &[Vec<Curve>], out: &mut Vec<Result<u64, NumError>>) {
+        run(batch, out, |curves| {
+            let mut meter = WorkMeter::new(Budget::UNLIMITED);
+            let a = geom_2d::arrange::arrange_curves(curves, &mut meter)
                 .map_err(|_| NumError::Degenerate)?;
             let count = |n: usize| u64::try_from(n).unwrap_or(0);
             Ok(count(a.vertices().len())

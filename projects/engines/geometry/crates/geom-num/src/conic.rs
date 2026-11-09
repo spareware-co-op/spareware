@@ -52,6 +52,15 @@ pub const RATIO_BITS: u32 = 21;
 // three sums; against a round, below that, as its w is below 2^84 and its x and y below 2^126;
 // against a disc about a grid point beside its centre, w² below 2^166 by the same product, with its
 // x and y below 2^168 by a numerator and a q, and its constant below 2^252 by q² twice.
+// A conic of [`Conic::new`]'s stated widths: a second-degree coefficient below 2^126 by two
+// numerators' product below 3 · 2^126, a first-degree one below 2^168 by a numerator and a q below
+// 3 · 2^84, and a constant below 2^210 by q² below 3 · 2^42, six terms in all.
+const _: () = {
+    assert!(126 + 128 + 3 < COEFFICIENT_BITS);
+    assert!(168 + 86 + 3 < COEFFICIENT_BITS);
+    assert!(210 + 44 + 3 < COEFFICIENT_BITS);
+};
+
 const _: () = {
     assert!(125 + 128 + 2 < COEFFICIENT_BITS);
     assert!(166 + 128 + 2 < COEFFICIENT_BITS);
@@ -226,8 +235,14 @@ impl Ellipse2 {
             .ok_or(NumError::BudgetExceeded)
     }
 
-    /// The quadratic form of its equation: A, B and C of A x² + B x y + C y², about its centre.
-    pub(crate) fn form(&self) -> Result<[Big; 3], NumError> {
+    /// The quadratic form of its equation: A, B and C of A x² + B x y + C y², about its centre, so
+    /// that the ellipse is where the form equals [`Ellipse2::level`]. A and C are positive and below
+    /// 2^125, |B| below 2^126, and 4AC − B² is 4p²q²L², L = ‖M‖².
+    ///
+    /// # Errors
+    ///
+    /// As for [`Ellipse2::side`].
+    pub fn form(&self) -> Result<[Big; 3], NumError> {
         let [mx, my] = self.major.map(big);
         let (p2, q2) = (
             mul(&big(self.p), &big(self.p))?,
@@ -243,8 +258,12 @@ impl Ellipse2 {
         ])
     }
 
-    /// p² · L², of the equation's right side: L = ‖M‖².
-    pub(crate) fn level(&self) -> Result<Big, NumError> {
+    /// p² · L², of the equation's right side: L = ‖M‖², so the level is positive and below 2^208.
+    ///
+    /// # Errors
+    ///
+    /// As for [`Ellipse2::side`].
+    pub fn level(&self) -> Result<Big, NumError> {
         let [mx, my] = self.major.map(big);
         let length = add(&mul(&mx, &mx)?, &mul(&my, &my)?)?;
         let scaled = mul(&big(self.p), &length)?;
@@ -347,6 +366,27 @@ pub struct Conic {
 }
 
 impl Conic {
+    /// The conic xx · x² + xy · x y + yy · y² + x · x + y · y + constant = 0 about the grid point
+    /// `origin`, from its six coefficients in that order: a line, a pair of lines or any other
+    /// conic a caller builds, such as the vertical line through a rational point that
+    /// `crate::conic_root` places a point against. Along an ellipse ([`Ellipse2::quartic`]) its
+    /// quartic is within [`COEFFICIENT_BITS`] when its second-degree coefficients are below
+    /// 2^126, its first-degree ones below 2^168 and its constant below 2^210, as every conic here
+    /// is (by the module's asserts).
+    #[must_use]
+    pub const fn new(origin: P2, coefficients: [Big; 6]) -> Conic {
+        let [xx, xy, yy, x, y, constant] = coefficients;
+        Conic {
+            origin,
+            xx,
+            xy,
+            yy,
+            x,
+            y,
+            constant,
+        }
+    }
+
     /// An ellipse's equation, about its centre.
     ///
     /// # Errors

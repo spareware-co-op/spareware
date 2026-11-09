@@ -56,6 +56,11 @@
               "doc": "The work meter stopped the sweep.",
               "name": "Stopped",
               "shape": "tuple"
+            },
+            {
+              "doc": "An ellipse may meet a circle or another ellipse on the pieces the sweep holds: they meet at roots of a quartic, which the sweep does not yet place as vertices.",
+              "name": "Conic",
+              "shape": "unit"
             }
           ],
           "module": "geom_2d::arrange",
@@ -72,7 +77,7 @@
               "shape": "struct"
             },
             {
-              "doc": "An edge is an arc, and the body's curves are stored in doubles, which hold no circle about a rational centre exactly: the first such edge. The exact [`Arrangement`] still holds it.",
+              "doc": "An edge is an arc or a piece of an ellipse, and the body's curves are stored in doubles, which hold no circle about a rational centre exactly: the first such edge. The exact [`Arrangement`] still holds it.",
               "name": "Curved",
               "shape": "struct"
             },
@@ -278,23 +283,23 @@
           "target": "lib"
         },
         {
-          "cost": "O((n + k) log n) comparisons for the sweep, n curves and k crossings, plus the cost of moving the entries of the status list on insertion, which is linear in the pieces the sweep line crosses at once; the faces are linear in the edges, and finding the face around each hole is a second sweep over the finished edges. An arc is at most three pieces.",
-          "does": "[`arrange`] takes segments between grid points, and [`arrange_curves`] segments and arcs ([`Curve`]), and each returns the [`Arrangement`] they divide the plane into: the vertices (every end point, every crossing, and where an arc's circle is leftmost or rightmost, in lexicographic order), the edges between consecutive vertices along each curve (curves that share a stretch share its edges, and an edge names every curve that covers it), what each edge lies on ([`Along`]: a line's smallest carrier, or one half of a listed circle), each vertex's edges in counter-clockwise order, and the faces: one unbounded face, and one bounded face for each outer boundary, with the boundaries of the components inside it as holes. A vertex is an [`At`]: a rational point, or a one-root point where arcs come in.",
+          "cost": "O((n + k) log n) comparisons for the sweep, n curves and k crossings, plus the cost of moving the entries of the status list on insertion, which is linear in the pieces the sweep line crosses at once; the faces are linear in the edges, and finding the face around each hole is a second sweep over the finished edges. An arc is at most three pieces and an ellipse two.",
+          "does": "[`arrange`] takes segments between grid points, and [`arrange_curves`] segments, arcs and whole ellipses ([`Curve`]), and each returns the [`Arrangement`] they divide the plane into: the vertices (every end point, every crossing, and where an arc's circle or an ellipse is leftmost or rightmost, in lexicographic order), the edges between consecutive vertices along each curve (curves that share a stretch share its edges, and an edge names every curve that covers it), what each edge lies on ([`Along`]: a line's smallest carrier, or one half of a listed circle or ellipse), each vertex's edges in counter-clockwise order, and the faces: one unbounded face, and one bounded face for each outer boundary, with the boundaries of the components inside it as holes. A vertex is an [`At`]: a rational point, or a one-root point where arcs or ellipses come in. An ellipse meets a line at one-root points; where it may meet a circle or another ellipse, at a root of a quartic, the sweep refuses ([`ArrangeError::Conic`]).",
           "family": [],
           "file": "projects/engines/geometry/crates/geom-2d/src/arrange.rs",
           "guarantees": [
-            "**Exact.** Every decision is a sign of one of `geom-num`'s exact predicates on carriers, circles, rational points and one-root points ([`Carrier::side`], [`Carrier::meet`], [`Rational2::cmp_x`], `Crossing2`'s comparisons and crossings, and the tangent and curvature orders of the `piece` module); no coordinate is ever rounded, and a crossing is the exact point where two carriers meet. A step past the exact budget is [`ArrangeError::Range`], never a wrong answer.",
-            "**Permutation-invariant.** Vertices are named by their rank in lexicographic order, edges by their end vertices and the order they leave the lower one, faces by the rank of their lowest-leftmost vertex, circles by centre and radius; the only thing that depends on the input order is the label of each source, which is the curve's place in the input. Permuting the input gives the same arrangement with the labels permuted.",
+            "**Exact.** Every decision is a sign of one of `geom-num`'s exact predicates on carriers, circles, ellipses, rational points and one-root points ([`Carrier::side`], [`Carrier::meet`], [`Rational2::cmp_x`], `Crossing2`'s comparisons and crossings, `Ellipse2`'s sides and meetings, and the tangent and curvature orders of the `piece` module); no coordinate is ever rounded, and a crossing is the exact point where two carriers meet. A step past the exact budget is [`ArrangeError::Range`], never a wrong answer, and a meeting of an ellipse with a circle or another ellipse that the pieces may hold is [`ArrangeError::Conic`], never a missing vertex.",
+            "**Permutation-invariant.** Vertices are named by their rank in lexicographic order, edges by their end vertices and the order they leave the lower one, faces by the rank of their lowest-leftmost vertex, circles by centre and radius, ellipses by centre and form; the only thing that depends on the input order is the label of each source, which is the curve's place in the input. Permuting the input gives the same arrangement with the labels permuted.",
             "**Overlaps merge, touching splits.** A curve through another's end point is split there; two segments on one line, or two arcs of one circle, share the edges of their common stretch; a tangency is one vertex where the curves touch.",
             "**Cancellable.** The sweep charges its [`WorkMeter`] once for each event point."
           ],
-          "job": "The arrangement of line segments and circular arcs (chapter 14.4): an exact plane sweep, overlap merging, the order of edges at each vertex, the faces and the unbounded face, and where each edge came from.",
+          "job": "The arrangement of line segments, circular arcs and ellipses (chapter 14.4): an exact plane sweep, overlap merging, the order of edges at each vertex, the faces and the unbounded face, and where each edge came from.",
           "method": {
             "links": [
               "https://doi.org/10.1109/TC.1979.1675432",
               "doi:10.1007/978-3-540-77974-2"
             ],
-            "text": "Bentley and Ottmann's sweep ([DOI](https://doi.org/10.1109/TC.1979.1675432)) in the form of de Berg, Cheong, van Kreveld and Overmars, *Computational Geometry*, 3rd ed., Springer 2008, section 2.1 (doi:10.1007/978-3-540-77974-2), with the sweep line tilted so that a vertical segment is the steepest upward one, with every comparison an exact sign, and generalised to arcs cut into x-monotone pieces as the `piece` module says; the doubly-connected edge list and the placing of holes by a leftward ray after the same book, section 2.2."
+            "text": "Bentley and Ottmann's sweep ([DOI](https://doi.org/10.1109/TC.1979.1675432)) in the form of de Berg, Cheong, van Kreveld and Overmars, *Computational Geometry*, 3rd ed., Springer 2008, section 2.1 (doi:10.1007/978-3-540-77974-2), with the sweep line tilted so that a vertical segment is the steepest upward one, with every comparison an exact sign, and generalised to arcs and ellipses cut into x-monotone pieces as the `piece` module says; the doubly-connected edge list and the placing of holes by a leftward ray after the same book, section 2.2."
           },
           "path": "geom_2d::arrange",
           "provenance": [],
@@ -302,24 +307,25 @@
           "target": "lib"
         },
         {
-          "cost": "constant time per question: a filter of a few interval operations, then at worst a few dozen products of at most 24 limbs and one `sign_of_root`. [`cut`] makes at most three pieces; [`circles_of`] sorts the arcs' circles, O(n log n) comparisons. No recursion.",
+          "cost": "constant time per question: a filter of a few interval operations, then at worst a few dozen products of at most 24 limbs and one `sign_of_root`. [`cut`] makes at most three pieces and [`cut_oval`] two; [`circles_of`] and [`ovals_of`] sort, O(n log n) comparisons. Telling whether an ellipse and a circle or another ellipse meet on two pieces costs one `Ellipse2::meeting` and [`NARROW`] levels of narrowing for each of at most four roots. No recursion.",
           "does": "a segment is one [`Piece`]. An arc is cut at the leftmost and the rightmost point of its circle wherever one lies inside it ([`cut`]), so that each piece runs one way in x and lies on one half of its circle, the upper (from the leftmost point over the top to the rightmost) or the lower. Its ends are [`At`]s: an arc's own ends are grid points, and a cut is the one-root point `Crossing2::of_extreme` gives. The sweep asks which side of a piece a point lies on ([`side`]), where two pieces meet ([`meetings`]), and in what order pieces leave a point ([`order_at`]): by the half-plane their tangent points into, counter-clockwise from the negative x direction, then by the tangent's turn, then by curvature. The circles are listed once each ([`circles_of`]), so two arcs of one circle name the same circle.",
           "family": [],
           "file": "projects/engines/geometry/crates/geom-2d/src/arrange/piece.rs",
           "guarantees": [
-            "**Exact.** Every answer is a sign of `geom-num`'s exact questions: `Carrier::side`, `Round::side`, `Crossing2::side`, `Crossing2::against_round`, `cmp_x` and `cmp_y`, `Rational2::orient`, `Round::meets` and the crossings of `Crossing2`, or `sign_of_root` on the whole numbers written out below. An interval filter on a crossing's certified enclosure answers first, and only when its sign is certain.",
-            "**Ordered as the curves leave a point.** Two pieces leaving one point are ordered by their tangents, and pieces with one tangent by signed curvature (a line's is zero, a counter-clockwise arc's 1 / r and a clockwise one's −1 / r), so a tangency is a touching vertex and the curve that bends left more lies above (chapter 14.4). Equal tangent and equal curvature at one point means one curve: an overlap.",
-            "**Nothing overflows silently.** Every step is a checked operation, at the width its derivation below needs; a step that did not fit would be an error, never an answer. With a, b, k and w a crossing's parts (below 2^628, 2^209, 2^837 and 2^585: `geom_num::one_root`'s widest column), a rational point's X and Y below 2^124 and W below 2^83, and a direction's parts below 2^42: | Question | As whole numbers | Width | | --- | --- | --- | | A direction against the way from a centre to a rational point | d · (X·W' − X'·W, Y·W' − Y'·W) | 251 bits, in 512 | | The same, to a crossing | α + β√k, α = d · (A·W' − X'·w), β = W'(d · B) | α 755, β 335 bits, in 1,024 | | The turn of a crossing and two centres | α + β√k, Uᵢ = Cᵢ·w − A·Wᵢ, Vᵢ = B·Wᵢ, α = U₁ × U₂, β = −(U₁ × V₂ + V₁ × U₂) | α 1,425, β 1,006 bits, in 1,536 | | Two radii | rr · W'² against rr' · W² | 418 bits, in 512 | `sign_of_root` then squares α and β²k within its 80 limbs: below 2^2850 and 2^2851.",
-            "**Deterministic.** Integers, and certified intervals whose answers are exact signs; no platform maths. The circles' order and each circle's stored form are chosen by exact comparison and then by the integers of the input, never by the input's order."
+            "**Exact.** Every answer is a sign of `geom-num`'s exact questions: `Carrier::side`, `Round::side`, `Crossing2::side`, `Crossing2::against_round`, `cmp_x` and `cmp_y`, `Rational2::orient`, `Round::meets` and the crossings of `Crossing2`, or `sign_of_root` on the whole numbers written out below; for ellipses `Ellipse2::side`, `Crossing2::against_ellipse`, `Ellipse2::meets`, `Crossing2::of_ellipse` and `sign_of_root` on the linear forms below. An interval filter on a crossing's certified enclosure answers first, and only when its sign is certain.",
+            "**Refused, never guessed.** Where an ellipse may meet a circle or another ellipse on the pieces the sweep holds, the answer is `ArrangeError::Conic`. A pair is let pass only on certified enclosures of the quartic's roots, so a pair let pass never meets on its pieces.",
+            "**Ordered as the curves leave a point.** Two pieces leaving one point are ordered by their tangents, and pieces with one tangent by signed curvature (a line's is zero, a counter-clockwise arc's 1 / r and a clockwise one's −1 / r; an ellipse's form is positive definite, so it bends left exactly when it runs counter-clockwise), so a tangency is a touching vertex and the curve that bends left more lies above (chapter 14.4). Equal tangent and equal curvature at one point means one curve: an overlap. A line touches an ellipse only at a rational point, where the discriminant of where they meet is zero.",
+            "**Nothing overflows silently.** Every step is a checked operation, at the width its derivation below needs; a step that did not fit would be an error, never an answer. With a, b, k and w a crossing's parts (below 2^628, 2^209, 2^837 and 2^585: `geom_num::one_root`'s widest column), a rational point's X and Y below 2^124 and W below 2^83, and a direction's parts below 2^42: | Question | As whole numbers | Width | | --- | --- | --- | | A direction against the way from a centre to a rational point | d · (X·W' − X'·W, Y·W' − Y'·W) | 251 bits, in 512 | | The same, to a crossing | α + β√k, α = d · (A·W' − X'·w), β = W'(d · B) | α 755, β 335 bits, in 1,024 | | The turn of a crossing and two centres | α + β√k, Uᵢ = Cᵢ·w − A·Wᵢ, Vᵢ = B·Wᵢ, α = U₁ × U₂, β = −(U₁ × V₂ + V₁ × U₂) | α 1,425, β 1,006 bits, in 1,536 | | Two radii | rr · W'² against rr' · W² | 418 bits, in 512 | | A linear form e · (p − K) of an ellipse's (s, r, or d · ∇S, e below 2^170), at a rational point | e · (X − W·K) | 296 bits, in 1,024 | | The same, at a crossing | α + β√k, α = e · (A − w·K), β = e · B | α 800, β 380 bits, in 1,024 | | Two ellipses as curves, by their forms' ratios to their levels | A · ℓ' against A' · ℓ | 334 bits, in 512 | `sign_of_root` then squares α and β²k within its 80 limbs: below 2^2850 and 2^2851. An ellipse's form is below 2^126 in each coefficient and its level below 2^208 (`Ellipse2::form`).",
+            "**Deterministic.** Integers, and certified intervals whose answers are exact signs; no platform maths. The circles' and ellipses' order and each one's stored form are chosen by exact comparison and then by the integers of the input, never by the input's order."
           ],
-          "job": "The pieces an arrangement sweeps: segments, and arcs cut where their circles turn back in x, with every exact question the sweep and the face walk ask of them.",
+          "job": "The pieces an arrangement sweeps: segments, and arcs and ellipses cut where they turn back in x, with every exact question the sweep and the face walk ask of them.",
           "method": {
             "links": [
               "doi:10.1007/978-3-540-77974-2",
               "https://doi.org/10.1007/978-3-642-17283-0",
               "projects/engines/geometry/architecture/14-2d-drafting.md"
             ],
-            "text": "Bentley and Ottmann's sweep generalised to x-monotone curves, as de Berg, Cheong, van Kreveld and Overmars, *Computational Geometry*, 3rd ed., section 2.1 (doi:10.1007/978-3-540-77974-2) and Fogel, Halperin and Wein, *CGAL Arrangements and Their Applications*, 2012, chapter 5 (<https://doi.org/10.1007/978-3-642-17283-0>), describe it; curves cut into x-monotone pieces and curves at a point ordered by tangent and then curvature, as chapter 14.4 sets out (`projects/engines/geometry/architecture/14-2d-drafting.md`). The book only, as 14.2 says: CGAL's source not read (29.2). A tangent's turn is a cross product: for a counter-clockwise arc about C the tangent at p is p − C turned a quarter, so its cross with a direction d is d · (p − C) and with another arc's is the turn of p and the two centres."
+            "text": "Bentley and Ottmann's sweep generalised to x-monotone curves, as de Berg, Cheong, van Kreveld and Overmars, *Computational Geometry*, 3rd ed., section 2.1 (doi:10.1007/978-3-540-77974-2) and Fogel, Halperin and Wein, *CGAL Arrangements and Their Applications*, 2012, chapter 5 (<https://doi.org/10.1007/978-3-642-17283-0>), describe it; curves cut into x-monotone pieces and curves at a point ordered by tangent and then curvature, as chapter 14.4 sets out (`projects/engines/geometry/architecture/14-2d-drafting.md`). The book only, as 14.2 says: CGAL's source not read (29.2). A tangent's turn is a cross product: for a counter-clockwise arc about C the tangent at p is p − C turned a quarter, so its cross with a direction d is d · (p − C) and with another arc's is the turn of p and the two centres. An ellipse's halves are split by the diameter conjugate to the vertical, which halves every vertical chord, and its tangent is its form's gradient turned a quarter."
           },
           "path": "geom_2d::arrange::piece",
           "provenance": [],
@@ -3083,6 +3089,29 @@
           "target": "lib"
         },
         {
+          "cost": "at most [`MAX_CURVES`] curves, so at most fifteen pairs, each a few exact one-root or quartic decisions; at most [`MAX_INPUT_BYTES`] bytes read.",
+          "does": "[`decode`] turns a fuzzer's bytes into a [`Case`]: a count of curves and, for each, a kind byte and the small numbers of a segment (its two ends), an arc (its two ends and how far its centre lies along their bisector, in quarter steps) or a whole ellipse (its centre, its major-axis vector and its axis ratio). [`check`] arranges them with `arrange_curves` and tests each rule against an independent reading of it. A refusal because an ellipse may meet a circle or another ellipse ([`ArrangeError::Conic`]) is right only if some such pair meets at all, by the real roots of their quartic. Otherwise the vertices are exactly a pairwise oracle's: every end of a segment or an arc, both extremes of every ellipse and every extreme inside an arc, and every crossing of two curves that lies on both, found pair by pair from the curves' own carriers and circles (an ellipse of ratio one is its circle); Euler's formula holds, V − E + F = 1 + C for C connected components; every half-edge lies on exactly one cycle and every cycle bounds one face or is a hole of exactly one; the vertices ascend and every edge runs up and says what it lies on; and arranging the curves in the opposite order gives the same verdict, vertices, edges, faces and order round each vertex, with only the source labels renumbered. [`harness`] is `decode` then `check`.",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-fuzz/src/arrange_curves.rs",
+          "guarantees": [
+            "**Any bytes are a case.** Every byte string, the empty one included, decodes to a case.",
+            "**A bounded input.** [`decode`] reads at most [`MAX_INPUT_BYTES`] bytes, derived below; a unit test builds the input that reaches it.",
+            "**A panic is a failure; a disagreement is a [`Finding`]** naming the law and the case."
+          ],
+          "job": "Fuzz target: `geom-2d`'s arrangement of segments, circular arcs and ellipses keeps its stated laws on any input.",
+          "method": {
+            "links": [
+              "https://doi.org/10.1007/978-3-642-17283-0",
+              "https://doi.org/10.1145/800205.806346"
+            ],
+            "text": "differential testing against the crossings of each pair of curves on their own carriers and circles (the one-root points of chapter 14.2, as Fogel, Halperin and Wein's circle-segment traits define them, 2012, <https://doi.org/10.1007/978-3-642-17283-0>, from their book), with the real roots of the quartic of an ellipse and a conic (Collins and Akritas 1976, <https://doi.org/10.1145/800205.806346>) as the test of whether two such curves meet, and Euler's formula for planar graphs; written here from the rules and not from the sweep's code."
+          },
+          "path": "geom_fuzz::arrange_curves",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
           "cost": "building and querying trees of at most [`MAX_BOXES`] boxes and an index of at most [`MAX_POINTS`] points, and brute force over them, O(n²); at most [`MAX_INPUT_BYTES`] bytes.",
           "does": "[`decode`] turns a fuzzer's bytes into a [`Case`]: up to [`MAX_BOXES`] boxes in two or three dimensions, a query box, a second set of boxes, a set of moved boxes, up to [`MAX_POINTS`] grid points, a centre and a radius. [`check`] builds `geom_bvh::BoxTree`s and a `geom_bvh::CellIndex` and holds every query to the answer of a brute force written here, from the boxes' corners and exact integer distances, never from `geom-bvh`'s own tests: overlapping a box, all overlapping pairs, pairs across two trees, a refit's answers (piece G54), and the points within a radius of a point and all pairs within a radius (G55). [`harness`] is `decode` then `check`.",
           "family": [],
@@ -5371,6 +5400,28 @@
           "target": "lib"
         },
         {
+          "cost": "one `Ellipse2::meeting` and [`NARROW`] levels of narrowing to make a point; one `quartic::sign_at_root` per question; one `quartic::compare` for two points of one half, and for two halves a few dozen products for the mirror's quartic, its roots in the second instance, and up to a dozen comparisons to rank them. No recursion.",
+          "does": "a [`ConicRoot`] is one real root of another conic's equation along an ellipse (`Ellipse2::meeting`), chapter 14.2's fourth point class, never rounded. Every question about it is the sign of a polynomial at that root:",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-num/src/conic_root.rs",
+          "guarantees": [
+            "**Exact.** Every answer is a sign of whole numbers through `quartic`; the enclosure answers only when its sign is certain. A point of another ellipse is not this module's to compare: [`ConicRoot::cmp_along`] says so with `None`.",
+            "**Within the budgets.** The ellipse's equation for a conic of `Conic::new`'s stated widths is within `quartic::COEFFICIENT_BITS` (`conic`'s asserts), and so is every polynomial here but the mirror's image: the coordinate's numerator and derivative about the centre have parts below 2^64, and the line through a rational point (X / W, W below 2^83 and X below 2^124) has a first-degree coefficient W and a constant X − W · K below 2^125. The mirror multiplies each of the quartic's coefficients by four factors below 2^64 and sums five terms: below 2^(297 + 256 + 3), within `quartic::SECOND_COEFFICIENT_BITS`.",
+            "**Deterministic.** Integers and certified intervals only; no platform maths, no allocation."
+          ],
+          "job": "Conic-root points in 2D, exact: where an ellipse meets a circle or another ellipse, kept as a real root of their quartic, and the questions about one that its own ellipse can answer.",
+          "method": {
+            "links": [
+              "projects/engines/geometry/architecture/14-2d-drafting.md"
+            ],
+            "text": "the rational parametrisation of the ellipse by t = tan(θ / 2), as `conic` sets it out, with chapter 14.2's real-root isolation and exact common-root tests (`projects/engines/geometry/architecture/14-2d-drafting.md`); the monotone halves of a closed convex curve and the involution that pairs the ends of its parallel chords are textbook analytic geometry."
+          },
+          "path": "geom_num::conic_root",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
           "cost": "constant time and no allocation: a few `i128` products for the weight and the numerators, two products in [`I256`] for a side, and one restoring long division per coordinate to commit, as in [`crate::plane`].",
           "does": null,
           "family": [],
@@ -6640,14 +6691,14 @@
           "target": "lib"
         },
         {
-          "cost": "a few hundred products of 64 limbs for simple, well-separated roots. A multiple root adds a few hundred more of 160 limbs, about ten exact divisions, each a bit at a time, and the binary gcds of the content. [`compare`] of roots a long way apart is a few subtractions; of near ones, three signs at each level it must narrow them. No allocation; no recursion.",
-          "does": "[`Quartic::roots`] lists the real roots of a quartic in increasing order on the real projective line, so that t = ∞ is a root when the leading coefficient vanishes. The line is cut at −1, 0, 1 and ∞, which are tested exactly. Each of the four open pieces maps onto (0, 1), where Descartes' rule bounds the roots by the sign variations of the Möbius image, and bisection brings that bound to 0 or 1. A count that stays above 1 past [`FAST_DEPTH`] means a multiple root or two very near: the quartic is then split by subresultant gcds into square-free factors, one for each multiplicity, and each isolated apart, so that a root's multiplicity is the factor it came from. [`compare`] orders two roots of two quartics.",
+          "cost": "a few hundred products of 64 limbs for simple, well-separated roots. A multiple root adds a few hundred more of 160 limbs, about ten exact divisions, each a bit at a time, and the binary gcds of the content. [`compare`] of roots a long way apart is a few subtractions; of near ones, three signs at each level it must narrow them. [`sign_at_root`] is one [`Quartic::roots`] and at most four [`compare`]s. The second instance's steps are the same at its widths, a few times dearer each, and only the exact paths that need it take it. No allocation; no recursion.",
+          "does": "[`Quartic::roots`] lists the real roots of a quartic in increasing order on the real projective line, so that t = ∞ is a root when the leading coefficient vanishes. The line is cut at −1, 0, 1 and ∞, which are tested exactly. Each of the four open pieces maps onto (0, 1), where Descartes' rule bounds the roots by the sign variations of the Möbius image, and bisection brings that bound to 0 or 1. A count that stays above 1 past [`FAST_DEPTH`] means a multiple root or two very near: the quartic is then split by subresultant gcds into square-free factors, one for each multiplicity, and each isolated apart, so that a root's multiplicity is the factor it came from. [`compare`] orders two roots of two quartics, and [`sign_at_root`] gives the sign of one quartic at a root of another, which is the side of a curve a point where an ellipse meets another conic lies on.",
           "family": [],
           "file": "projects/engines/geometry/crates/geom-num/src/quartic.rs",
           "guarantees": [
             "Every result is exact, or an error. Nothing here is a floating-point number; a root is two whole numbers and a power of two, and a sign is a sign of a whole number.",
             "Every root is found, once, with its multiplicity. Descartes' rule over-counts only, so a stretch whose count is 0 holds no root, and one whose count is 1 holds exactly one, simple.",
-            "Nothing overflows silently. Every step is a checked operation in [`Big`] or the wider integers of the exact paths; a step that did not fit, or a bisection past its limit, is [`NumError::BudgetExceeded`], never an answer. For coefficients below 2^[`COEFFICIENT_BITS`] no input reaches either, by the bounds below and the module's asserts: | Quantity | Bound | Where | | --- | --- | --- | | A factor's coefficients | 2^303 | Mignotte's bound, 2^4 · ‖c‖₂ | | Two roots of one factor, apart | 2^−921 | Davenport (1985) and Mahler (1964) | | Roots of two quartics, apart if not one | 2^−2,442 | their resultant, a whole number | | A polynomial bisected s times | 2^(4s + 307) | the terms of 2^(4s) · c((x + a) / 2^s) |",
+            "Nothing overflows silently. Every step is a checked operation in [`Big`] or the wider integers of the exact paths; a step that did not fit, or a bisection past its limit, is [`NumError::BudgetExceeded`], never an answer. For coefficients below 2^[`COEFFICIENT_BITS`] no input reaches either, by the bounds below and the module's asserts: | Quantity | Bound | Where | | --- | --- | --- | | A factor's coefficients | 2^303 | Mignotte's bound, 2^4 · ‖c‖₂ | | Two roots of one factor, apart | 2^−921 | Davenport (1985) and Mahler (1964) | | Roots of two quartics, apart if not one | 2^−2,442 | their resultant, a whole number | | A polynomial bisected s times | 2^(4s + 307) | the terms of 2^(4s) · c((x + a) / 2^s) | The second instance's are the same bounds for coefficients below 2^[`SECOND_COEFFICIENT_BITS`] (600 bits): factors below 2^606, two roots of one factor 2^−1,830 apart, roots of two quartics 2^−4,866 apart, in 125 limbs for its quartics and 316 for its exact paths.",
             "Bounded work. Live stretches each count at least two, and Descartes' counts of disjoint stretches sum to at most four, so at most two are live at once and the frontier is a fixed array of three nodes."
           ],
           "job": "The real roots of a quartic with whole-number coefficients, exact: how many, how multiple, and in what order.",

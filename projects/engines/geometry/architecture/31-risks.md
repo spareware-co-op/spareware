@@ -768,6 +768,7 @@ The questions the owner settles in section 32 are listed once, in the first tabl
 | The 2D R-tree: chapter 29 keeps rstar out of kernel crates unless it is ported (29.8). geom-2d writes its own small integer R-tree, or ports rstar; if ported, a test shows its results do not depend on insertion order | 14, 29 | Piece "2D-19 Snaps, tracking and the 2D index" |
 | The engines README says engine-draw2d does "2D booleans"; restate that as display-only linearised booleans | 14 | Editorial fix to the engines README |
 | Review points kept: the JTS test files are reusable with their notice (EDL-1.0), and snap points are exact on their carriers using fractions | 14 | Acceptance of chapter 14 |
+| Conic-root vertices in the arrangement: where an ellipse meets a circle or another ellipse the sweep needs the root's x and y compared exactly with rational, one-root and other conic-root points. Against a rational point the vertical line's equation along the ellipse fits `quartic::COEFFICIENT_BITS`; against a one-root point of two rational circles, or another conic root, the minimal polynomials' coefficients run to about 2^1000, past the 297 bits the quartic module's separation and comparison depths are derived for. Wider quartic budgets (and their depths), a resultant method, or a bound on what may meet an ellipse; until then the sweep refuses such a meeting (`ArrangeError::Conic`) | 14 | Piece G196b (the arrangement of conics) |
 
 ### Chapter 15: Sketches
 
