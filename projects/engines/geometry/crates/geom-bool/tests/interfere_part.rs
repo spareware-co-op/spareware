@@ -8,8 +8,10 @@
 //! one of them. The test checks what comes out (every corner a pave of the tool, every vertical edge
 //! met at its own corner, two exact common blocks per box; every top corner inside the tool's front
 //! or back face, each box's front, back and bottom on the tool's own planes, and no section edge,
-//! since every face of the part meets the tool only along its own boundary) and prints the time;
-//! run it in release:
+//! since every face of the part meets the tool only along its own boundary) and prints the time.
+//! Then every flat face is split along what it met (11.4 step 5, G244): the tool's front, back and
+//! bottom are each cut round the 167 boxes standing on them, and each box's faces stay whole. The
+//! splitting is timed apart, as face splits a second. Run it in release:
 //! `cargo test --release -p geom-bool --test interfere_part -- --ignored --nocapture`.
 
 #![allow(
@@ -31,6 +33,7 @@ use geom_bool::carrier::{CarrierIx, PointGeom};
 use geom_bool::common::Proof;
 use geom_bool::interfere::{Arrangement, EdgeIn, FaceIn, Interference, VertexIn, interfere};
 use geom_bool::merge::default_remaining;
+use geom_bool::split::split;
 use geom_curve::{CurveKind, Line};
 use geom_num::P3;
 use geom_num::plane::Plane;
@@ -192,5 +195,29 @@ fn a_thousand_face_part_against_one_tool() {
         reused,
         inside,
         took
+    );
+    // Face splitting: every face is flat and bounded by lines, so none waits.
+    let start = std::time::Instant::now();
+    let splitting = split(&arr, &out, &mut meter).unwrap();
+    let split_took = start.elapsed();
+    assert!(splitting.waiting.is_empty(), "{:?}", splitting.waiting);
+    let pieces_of = |f: usize| splitting.faces.iter().filter(|s| s.face == f).count();
+    // The front and back: each box's face and the rest round them. The bottom: each box's bottom
+    // spans the tool's width, so the boxes' bottoms and the gaps between and beside them.
+    let boxes = BOXES as usize;
+    for (face, name, parts) in [
+        (tool_faces + 2, "front", boxes + 1),
+        (tool_faces + 3, "back", boxes + 1),
+        (tool_faces + 4, "bottom", 2 * boxes + 1),
+    ] {
+        assert_eq!(pieces_of(face), parts, "the tool's {name}");
+    }
+    // Every other face stays whole.
+    let faces = 6 * (BOXES + 1) as usize;
+    assert_eq!(splitting.faces.len(), faces - 3 + 4 * boxes + 3);
+    println!(
+        "{faces} faces split into {} in {split_took:?}: {:.0} face splits a second",
+        splitting.faces.len(),
+        faces as f64 / split_took.as_secs_f64()
     );
 }
