@@ -508,7 +508,7 @@ fn a_closed_curve_lying_in_a_face_is_in_where_inside() {
         let frame = Frame::new([1.0, 0.0, 0.0], [0.0, 0.0, 1.0]).unwrap();
         // Centred on the face's right edge, x = 1,000,000 (its seam, t = 0, outside), or on its
         // left edge, x = 0 (its seam inside).
-        let ring = Circle::new([cx, 500_000.0, 0.0], 200_000.0, frame, (0.0, 2.0)).unwrap();
+        let ring = Circle::new([cx, 500_000.0, 0.0], 2_000.0, frame, (0.0, 2.0)).unwrap();
         let e = b.edge(CurveKind::Circle(ring), None, 1);
         let out = b.run().unwrap();
         let pieces: Vec<usize> = (0..out.splits.len())

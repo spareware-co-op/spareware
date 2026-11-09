@@ -192,16 +192,14 @@ fn face_entry(
     let mut lo = [i64::MAX; 3];
     let mut hi = [i64::MIN; 3];
     let mut grow = |a: [i64; 3], b: [i64; 3]| {
-        for k in 0..3 {
-            if let (Some(low), Some(high), Some(&x), Some(&y)) =
-                (lo.get_mut(k), hi.get_mut(k), a.get(k), b.get(k))
-            {
-                if x < *low {
-                    *low = x;
-                }
-                if y > *high {
-                    *high = y;
-                }
+        for ((low, high), (x, y)) in lo.iter_mut().zip(hi.iter_mut()).zip(a.into_iter().zip(b)) {
+            // Named types, so the recursion check can read the comparisons.
+            let (low, high, x, y): (&mut i64, &mut i64, i64, i64) = (low, high, x, y);
+            if x < *low {
+                *low = x;
+            }
+            if y > *high {
+                *high = y;
             }
         }
     };
