@@ -6060,7 +6060,7 @@
     },
     {
       "file": "projects/engines/geometry/crates/geom-sketch/src/drag.rs",
-      "mutant": "replace > with >= in Dragger::release",
+      "mutant": "replace > with >= in Dragger::release_within",
       "line_text": "let d = if dx > dy { dx } else { dy };",
       "occurrences": 1,
       "kind": "equivalent",
@@ -6068,7 +6068,7 @@
     },
     {
       "file": "projects/engines/geometry/crates/geom-sketch/src/drag.rs",
-      "mutant": "replace > with >= in Dragger::release",
+      "mutant": "replace > with >= in Dragger::release_within",
       "line_text": "if d > largest {",
       "occurrences": 1,
       "kind": "equivalent",
