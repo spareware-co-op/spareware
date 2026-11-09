@@ -330,7 +330,7 @@ const ROWS: &[Row<'static>] = &[
     // 30.5's amendments.
     kernel("geom-format",   12, Accepted,   Elsewhere("G91"),
         "base math curve surface topo poly name mesh subd field 2d cloud draw sketch"),
-    kernel("geom-exchange", 12, Amended27, Here,
+    kernel("geom-exchange", 12, Amended27, Elsewhere("G413"),
         "base math curve surface topo format p21 intersect check"),
     kernel("geom-p21",      12, Amended27, Here, "base format"),
     kernel("geom-heal",     12, Amended27, Here, "base topo check mesh exchange"),

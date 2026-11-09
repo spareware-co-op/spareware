@@ -5289,6 +5289,134 @@
       "occurrences": 1,
       "kind": "equivalent",
       "reason": "REQUIRED is 1 and COPY_ALWAYS is 2, one bit each and not the same bit, so REQUIRED | COPY_ALWAYS and REQUIRED ^ COPY_ALWAYS are both 3."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-exchange/src/grid.rs",
+      "mutant": "replace rounded -> Option<(i128, bool)> with None",
+      "line_text": "let (whole, rest) = (num.checked_div(den)?, num.checked_rem(den)?);",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "rounded is the short path's last step, so with it None both short and short_double answer None for every value. length, positive_length, angle and map_coordinate (and their double forms) then take the frame conversion, which rounds the same exact value v*u*S once, ties to even (FrameRecord::to_frame_decimal for a decimal, to_frame for a double, chapter 17.1), and reports a count past its range as NumError::OutOfRange carrying that exact count, which becomes ExchangeError::OutOfRange { count }; map_coordinate's own frame path answers past 2^40 steps. For every value the short path answers (a count below 2^127), the frame conversion gives the same count, the same exactness and the same refusal: the short path is a 128-bit shortcut to the same rounding."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-exchange/src/grid.rs",
+      "mutant": "replace short -> Option<(i128, bool)> with None",
+      "line_text": "let e = value.exponent();",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "With short None, every decimal goes to the frame conversion. length, positive_length, angle and map_coordinate (and their double forms) then take the frame conversion, which rounds the same exact value v*u*S once, ties to even (FrameRecord::to_frame_decimal for a decimal, to_frame for a double, chapter 17.1), and reports a count past its range as NumError::OutOfRange carrying that exact count, which becomes ExchangeError::OutOfRange { count }; map_coordinate's own frame path answers past 2^40 steps. For every value the short path answers (a count below 2^127), the frame conversion gives the same count, the same exactness and the same refusal: the short path is a 128-bit shortcut to the same rounding."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-exchange/src/grid.rs",
+      "mutant": "replace < with <= in short",
+      "line_text": "rounded(num, den, value.significand() < 0)",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "The forms differ only for a zero significand, whose numerator is 0: rounded then gives the count 0 either way (0 negated is 0), exact, so the result is the same."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-exchange/src/grid.rs",
+      "mutant": "replace short_double -> Option<(i128, bool)> with None",
+      "line_text": "let bits = value.to_bits();",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "With short_double None, every double goes to the frame conversion. length, positive_length, angle and map_coordinate (and their double forms) then take the frame conversion, which rounds the same exact value v*u*S once, ties to even (FrameRecord::to_frame_decimal for a decimal, to_frame for a double, chapter 17.1), and reports a count past its range as NumError::OutOfRange carrying that exact count, which becomes ExchangeError::OutOfRange { count }; map_coordinate's own frame path answers past 2^40 steps. For every value the short path answers (a count below 2^127), the frame conversion gives the same count, the same exactness and the same refusal: the short path is a 128-bit shortcut to the same rounding."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-exchange/src/grid.rs",
+      "mutant": "replace >> with << in short_double",
+      "line_text": "let field = (bits >> 52) & 0x7ff;",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "bits << 52 has its low 52 bits clear, so the field is 0 for every double: each is read as a subnormal with k = -1074, and 1 << 1074 does not fit 128 bits, so short_double answers None and the frame conversion answers, as the entry for short_double -> None says."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-exchange/src/grid.rs",
+      "mutant": "replace & with | in short_double",
+      "line_text": "let field = (bits >> 52) & 0x7ff;",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "The field becomes at least 0x7ff, so k = field - 1075 is at least 972 and 1 << k does not fit 128 bits: short_double answers None for every double and the frame conversion answers, as the entry for short_double -> None says."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-exchange/src/grid.rs",
+      "mutant": "replace == with != in short_double",
+      "line_text": "let (m, k) = if field == 0 {",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "Every double takes the other branch: a normal one gets k = -1074 and a subnormal one k = 0 - 1075, and 1 << |k| fits 128 bits for neither, so short_double answers None and the frame conversion answers, as the entry for short_double -> None says."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-exchange/src/grid.rs",
+      "mutant": "delete - in short_double",
+      "line_text": "(fraction, -1074_i32)",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "Only a subnormal reaches it, now with k = 1074, and 1 << 1074 does not fit 128 bits, so short_double answers None and the frame conversion rounds the subnormal's exact value, as the entry for short_double -> None says."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-exchange/src/grid.rs",
+      "mutant": "replace | with ^ in short_double",
+      "line_text": "fraction | (1 << 52),",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "fraction is the double's low 52 bits, below 2^52, so it shares no bit with 1 << 52, and | and ^ give the same significand."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-exchange/src/map.rs",
+      "mutant": "replace > with >= in aligned",
+      "line_text": "if gap > 48 {",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "The forms differ only at a gap of exactly 48, where the original lines the two values up and the mutant gives up. Lined up, the larger exponent's value is its significand (at least 1) times 10^48 and the other is below 10^38 (a decimal's significand), so it is past 128 bits (no exact direction) and the smaller share of 2^30 is below 2^30 / 10^10 < 1/2, which rounds to 0. Both give the larger value's axis with its sign, inexact; Rotation stores a direction reduced, so (2^30, 0) and (1, 0) are one rotation."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-exchange/src/map.rs",
+      "mutant": "replace < with <= in direction",
+      "line_text": "let (na, nb) = (a.significand() < 0, b.significand() < 0);",
+      "occurrences": 2,
+      "kind": "equivalent",
+      "reason": "Either < becomes <=: the forms differ only for a zero component. Zero components are handled first: (0, 0) is refused, and (0, b) or (a, 0) gives the nonzero one's axis with its own sign, so na is read only when a is nonzero and nb only when b is, and the signs used are the same."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-exchange/src/map.rs",
+      "mutant": "replace > with >= in direction",
+      "line_text": "let r = if a.exponent() > b.exponent() {",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "This branch runs only when aligned gave up, which needs one exponent more than 48 above the other, so the two exponents are never equal here and > and >= choose the same axis."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-exchange/src/map.rs",
+      "mutant": "replace || with && in Ratio::reduced",
+      "line_text": "if num == 0 || den == 0 {",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "No caller passes a zero denominator: each is 1, a power of ten, a product of unit parts or of reduced denominators, all positive. A zero numerator comes only from a zero scale or factor (Ratio::of of a zero decimal), which the original refuses at once as ScaleOutOfRange. The mutant carries 0/1 on through times, and every zero ratio then reaches Ratio::scale (the horizontal scale when kx = ky, else one of the residual's three, all before FrameRecord::new), where Scale::new refuses a zero part, mapped to ScaleOutOfRange; place's steps in between fail only as ScaleOutOfRange too. The result is the same refusal."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-exchange/src/write.rs",
+      "mutant": "replace < with <= in parts",
+      "line_text": "negative: steps < 0,",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "The forms differ only for a count of 0, whose magnitude is 0: exact writes 0 (0 negated is 0) with no deviation, and shortest returns zero before it reads the sign, so the decimal and the deviation are the same."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-exchange/src/write.rs",
+      "mutant": "replace < with <= in nearest_candidate",
+      "line_text": "while c < last {",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "The mutant also weighs last + 1, the next multiple past the interval's upper end H. Every candidate lies within half the interval's width w of its middle m. If last >= m, last + 1 is farther from m than last. If last < m, last + 1 > H = m + w/2 gives m - last < spacing - w/2, and m - last <= w/2, so m - last < spacing/2 whether w is wider than the spacing or not; last + 1's distance, spacing - (m - last), is then strictly more than last's. It is never nearer nor tied, so the same candidate is written. Its distance fits: (last + 1) times the place is at most twice H."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-exchange/src/unit.rs",
+      "mutant": "replace != with == in gcd",
+      "line_text": "while b != 0 {",
+      "occurrences": 1,
+      "kind": "hangs",
+      "reason": "The mutant returns a for any nonzero b and loops forever for b = 0: there r = a % 0 is taken as 0, so a and b become 0 and the loop runs again with b still 0. The wrong gcd it returns otherwise makes Ratio::reduced divide a numerator above its denominator by itself, leaving a zero denominator (a scale of 1000 becomes 1/0), and Ratio::times then calls gcd with that zero, which never returns."
     }
   ],
   "coverage_off": [

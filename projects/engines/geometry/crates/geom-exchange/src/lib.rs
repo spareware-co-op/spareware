@@ -42,7 +42,7 @@
 //! - [`report`]: import and export reports as data.
 //! - [`error`]: the crate's error.
 //!
-//! Status: scaffold only; built by pieces G413, G414, G418, G436; G413 is done.
+//! Status: built by pieces G413, G414, G418, G436; G413 is done.
 #![cfg_attr(not(test), no_std)]
 #![forbid(unsafe_code)]
 

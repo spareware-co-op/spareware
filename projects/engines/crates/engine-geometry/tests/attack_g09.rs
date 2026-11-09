@@ -1228,7 +1228,6 @@ mod repository {
             "G387 G389 G390 G391 G394 G395 G396 G397 G398 G399 G400 G401 G402 G403 G404 G405",
         ),
         ("geom-dxf", "G430 G431 G432 G433"),
-        ("geom-exchange", "G413 G414 G418 G436"),
         (
             "geom-field",
             "G326 G327 G328 G329 G330 G331 G332 G338 G339 G352 G469",
