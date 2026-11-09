@@ -86,7 +86,7 @@ pub const PROBLEMS_DIR: &str = "projects/engines/geometry/crates/geom-gen/genera
 /// `n4x * mx_x`), so no hypothesis on the inputs, or on products of two, bounds it by the case's
 /// S; Gappa's `LIN` rules relate scales only through products of maxima, and the ratio of two
 /// such terms needs a division by a maximum that may be zero. The issue sets out the way through.
-pub const UNPROVEN: [(&str, u32); 9] = [
+pub const UNPROVEN: [(&str, u32); 15] = [
     ("tpi_side", 292),
     ("lpi_side", 292),
     ("round_grid", 292),
@@ -96,6 +96,12 @@ pub const UNPROVEN: [(&str, u32); 9] = [
     ("circle_line", 292),
     ("ellipse_side", 292),
     ("ellipse_line", 292),
+    ("line_sphere", 292),
+    ("line_cylinder", 292),
+    ("line_cone", 292),
+    ("line_cone_lead", 292),
+    ("axis_gap", 292),
+    ("cross_norm", 292),
 ];
 
 /// The filters whose `FPTaylor` problem bounds the sum of its error terms at once (`opt-exact`),

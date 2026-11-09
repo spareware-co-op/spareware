@@ -40,8 +40,9 @@ use geom_bench::avnaim;
 use geom_gen::predicate_lang::{Axis, Expr, InputKind, Op, parse};
 use geom_gen::predicates::PREDICATES;
 use geom_num::generated::{
-    carrier_order, carrier_side, circle_gap, circle_line, circle_side, ellipse_line, ellipse_side,
-    incircle, insphere, limbs, lpi_side, lpi_weight, orient2d, orient3d, plain, plane_side,
+    axis_gap, carrier_order, carrier_side, circle_gap, circle_line, circle_side, cross_norm,
+    ellipse_line, ellipse_side, incircle, insphere, limbs, line_cone, line_cone_lead,
+    line_cylinder, line_sphere, lpi_side, lpi_weight, orient2d, orient3d, plain, plane_side,
     rational_cmp, rational_orient, round_grid, round_line, round_rational, ssi_side, ssi_weight,
     tpi_side, tpi_weight,
 };
@@ -265,6 +266,17 @@ fn call(name: &str, a: &Args) -> Result<[Option<BigInt>; 3], Finding> {
         "rational_orient" => {
             three!(rational_orient, rational_orient_value; r(0)?, r(1)?, r(2)?, r(3)?, r(4)?, r(5)?, r(6)?, r(7)?, r(8)?)
         }
+        "line_sphere" => three!(line_sphere, line_sphere_value; q(0)?, q(1)?, q(2)?, r(3)?),
+        "line_cylinder" => {
+            three!(line_cylinder, line_cylinder_value; q(0)?, q(1)?, q(2)?, q(3)?, r(4)?)
+        }
+        "line_cone" => three!(line_cone, line_cone_value; q(0)?, q(1)?, q(2)?, q(3)?, r(4)?, r(5)?),
+        "line_cone_lead" => three!(
+            line_cone_lead, line_cone_lead_value;
+            q(0)?, q(1)?, q(2)?, q(3)?, r(4)?, r(5)?
+        ),
+        "cross_norm" => three!(cross_norm, cross_norm_value; q(0)?, q(1)?, q(2)?, q(3)?),
+        "axis_gap" => three!(axis_gap, axis_gap_value; q(0)?, q(1)?, q(2)?, r(3)?),
         "round_grid" => three!(round_grid, round_grid_value; p(0)?, p(1)?, r(2)?, r(3)?, r(4)?),
         "round_rational" => {
             three!(round_rational, round_rational_value; r(0)?, r(1)?, r(2)?, p(3)?, r(4)?, r(5)?, r(6)?)
