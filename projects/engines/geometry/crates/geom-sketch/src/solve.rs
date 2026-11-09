@@ -204,11 +204,11 @@ impl Damped {
 }
 
 /// What depends on a sketch's structure alone: computed once, and reused along a path.
-struct Plan {
-    assembly: Assembly,
+pub(crate) struct Plan {
+    pub(crate) assembly: Assembly,
     stages: Vec<Stage>,
     /// Each sketch variable's column.
-    merged: Vec<usize>,
+    pub(crate) merged: Vec<usize>,
     freedoms: usize,
 }
 
@@ -590,7 +590,7 @@ impl Plan {
     /// # Errors
     ///
     /// [`SketchError::Stopped`]; what its analysis and pattern refuse.
-    fn new(sketch: &Sketch, meter: &mut WorkMeter<'_>) -> Result<Plan, SketchError> {
+    pub(crate) fn new(sketch: &Sketch, meter: &mut WorkMeter<'_>) -> Result<Plan, SketchError> {
         let (substituted, read) = substitute_read(sketch)?;
         let analysis = analyse(&substituted.graph, meter)?;
         let assembly = Assembly::merged_read(sketch, &substituted, &read)?;
@@ -628,7 +628,7 @@ impl Plan {
     }
 
     /// Every stage, in order, from `x`.
-    fn run(
+    pub(crate) fn run(
         &mut self,
         x: &mut [f64],
         report: &mut Report,
@@ -641,7 +641,7 @@ impl Plan {
     }
 
     /// The sketch `base` at `x`, and the report finished.
-    fn finish(
+    pub(crate) fn finish(
         &mut self,
         base: &Sketch,
         x: &[f64],
@@ -673,7 +673,7 @@ impl Plan {
     /// has changed sign. A path of solutions keeps that sign while it passes no singular place, so a
     /// change says the step jumped to another branch, past one, as a point at a distance from a
     /// moving reference does when it lands on the reference's other side.
-    fn at_risk(
+    pub(crate) fn at_risk(
         &mut self,
         x: &[f64],
         senses: &[(usize, Sense)],
@@ -699,7 +699,7 @@ impl Plan {
     }
 }
 
-const fn empty_report() -> Report {
+pub(crate) const fn empty_report() -> Report {
     Report {
         iterations: 0,
         steps: 1,

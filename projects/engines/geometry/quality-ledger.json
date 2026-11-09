@@ -6057,6 +6057,30 @@
       "occurrences": 1,
       "kind": "equivalent",
       "reason": "The two differ only when a residual's magnitude equals the bound found so far, and then both keep the same value: the largest is the same number either way."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-sketch/src/drag.rs",
+      "mutant": "replace > with >= in Dragger::release_within",
+      "line_text": "let d = if dx > dy { dx } else { dy };",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "The forms differ only when dx equals dy, and then both branches give the same number: the larger difference is the same either way."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-sketch/src/drag.rs",
+      "mutant": "replace > with >= in Dragger::release_within",
+      "line_text": "if d > largest {",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "The forms differ only when d equals the largest so far, and then the assignment stores the same number: the largest is the same either way."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-sketch/src/drag.rs",
+      "mutant": "replace > with < in Dragger::log_of",
+      "line_text": "while kept(m, every) > MOST_WAYPOINTS {",
+      "occurrences": 1,
+      "kind": "hangs",
+      "reason": "With fewer than 257 accepted frames kept(m, every) is at most m, below 256, for every `every`, so `<` always holds and the loop counts `every` up to usize::MAX before its checked step fails: the tests stop it by their timeout. It hangs; it never returns a wrong log (a_log_keeps_at_most_256_targets_and_the_last and exactly_256_targets_are_all_kept_and_one_more_halves_them pin the thinning)."
     }
   ],
   "coverage_off": [
