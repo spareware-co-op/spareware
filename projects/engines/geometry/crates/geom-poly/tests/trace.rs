@@ -18,7 +18,7 @@ use geom_num::plane::{Plane, Tpi};
 use geom_num::{NumError, P3, Sign};
 use geom_poly::convex::Piece;
 use geom_poly::cut::{Clipped, clip, local_cuts};
-use geom_poly::trace::{Cell, Classified, Polygon, TraceError, classify};
+use geom_poly::trace::{Cell, Classified, Polygon, TraceError, classify, winding_at};
 use geom_poly::winding::{Kept, Winding, WindingError, WindingTest, kept};
 use geom_run::{Budget, WorkMeter};
 use proptest::prelude::*;
@@ -156,8 +156,8 @@ fn scene(blocks: &[Block]) -> Vec<Classified> {
         .collect();
     let cuts = local_cuts(&pieces_of(&polygons), &mut meter()).unwrap();
     let cell = Cell {
-        low: [-50; 3],
-        high: [50; 3],
+        low: [-100; 3],
+        high: [100; 3],
     };
     classify(&cell, &Winding::new(), &polygons, &cuts, &mut meter()).unwrap()
 }
@@ -220,6 +220,30 @@ fn one_block_is_inside_behind_and_outside_in_front() {
         assert_eq!(c.front, Winding::new());
         assert_eq!(c.back, inside);
         assert!(c.first);
+    }
+}
+
+#[test]
+fn the_vector_at_a_point_counts_the_blocks_around_it() {
+    // winding_at walks from the box's corner to where three planes meet, counting what it
+    // crosses: inside both blocks, inside one or the other, and outside both.
+    let b = Block {
+        low: [2, 2, 2],
+        high: [6, 6, 6],
+    };
+    let polygons: Vec<Polygon> = [A, b]
+        .iter()
+        .enumerate()
+        .flat_map(|(i, block)| faces(block, Some(i as u32)))
+        .collect();
+    let cell = Cell {
+        low: [-100; 3],
+        high: [100; 3],
+    };
+    for at in [3, 1, 5, 8] {
+        let planes = [up(0, at), up(1, at), up(2, at)];
+        let found = winding_at(&cell, &Winding::new(), &polygons, planes, &mut meter()).unwrap();
+        assert_eq!(found, oracle(&[A, b], [at * 4; 3]), "at {at}");
     }
 }
 
@@ -321,8 +345,8 @@ fn a_cutter_cuts_and_counts_nothing() {
     polygons.push(sheet);
     let cuts = local_cuts(&pieces_of(&polygons), &mut meter()).unwrap();
     let cell = Cell {
-        low: [-50; 3],
-        high: [50; 3],
+        low: [-100; 3],
+        high: [100; 3],
     };
     let classified = classify(&cell, &Winding::new(), &polygons, &cuts, &mut meter()).unwrap();
     assert_eq!(classified.len(), 4 * 2 + 2 + 5);
@@ -365,8 +389,19 @@ fn in_cell(blocks: &[Block], cell: &Cell) -> Vec<Classified> {
         .collect();
     let polygons = clipped(&all, cell);
     let cuts = local_cuts(&pieces_of(&polygons), &mut meter()).unwrap();
+    let doubled = Cell {
+        low: cell.low.map(|v| v * 2),
+        high: cell.high.map(|v| v * 2),
+    };
     let start = cell.low.map(|v| v * 4 + 1);
-    classify(cell, &oracle(blocks, start), &polygons, &cuts, &mut meter()).unwrap()
+    classify(
+        &doubled,
+        &oracle(blocks, start),
+        &polygons,
+        &cuts,
+        &mut meter(),
+    )
+    .unwrap()
 }
 
 #[test]
@@ -407,8 +442,8 @@ fn a_small_budget_stops_the_trace() {
     let polygons = faces(&A, Some(0));
     let cuts = local_cuts(&pieces_of(&polygons), &mut meter()).unwrap();
     let cell = Cell {
-        low: [-50; 3],
-        high: [50; 3],
+        low: [-100; 3],
+        high: [100; 3],
     };
     let mut small = WorkMeter::new(Budget::new(3, u64::MAX));
     let got = classify(&cell, &Winding::new(), &polygons, &cuts, &mut small);
@@ -416,13 +451,84 @@ fn a_small_budget_stops_the_trace() {
     assert_eq!(got.unwrap_err().to_string(), "the meter stopped the trace");
 }
 
+/// The three planes through a point in quarter steps.
+fn through(p: [i64; 3]) -> [Plane; 3] {
+    [0, 1, 2].map(|axis| {
+        let mut n = [0i128; 3];
+        n[axis] = 4;
+        Plane::new(n, -i128::from(p[axis])).unwrap()
+    })
+}
+
+#[test]
+fn a_point_is_traced_to_what_the_oracle_counts() {
+    let blocks = [
+        Block {
+            low: [0, 0, 0],
+            high: [8, 8, 8],
+        },
+        Block {
+            low: [4, 4, 4],
+            high: [12, 12, 12],
+        },
+    ];
+    let polygons: Vec<Polygon> = blocks
+        .iter()
+        .enumerate()
+        .flat_map(|(i, b)| faces(b, Some(i as u32)))
+        .collect();
+    let cell = Cell {
+        low: [-100; 3],
+        high: [100; 3],
+    };
+    let outside = Winding::new();
+    for x in (-7..60).step_by(10) {
+        for y in (-7..60).step_by(10) {
+            for z in (-7..60).step_by(10) {
+                let p = [x, y, z];
+                let got = winding_at(&cell, &outside, &polygons, through(p), &mut meter());
+                assert_eq!(got.unwrap(), oracle(&blocks, p), "{p:?}");
+            }
+        }
+    }
+    // A box inside the scene starts from the vector at its own corner.
+    let cell = Cell {
+        low: [2; 3],
+        high: [10; 3],
+    };
+    let start = oracle(&blocks, [9, 9, 9]);
+    assert_eq!(start.count(0), 1);
+    for p in [[9, 9, 9], [19, 19, 19], [39, 39, 39], [39, 9, 19]] {
+        let got = winding_at(&cell, &start, &polygons, through(p), &mut meter());
+        assert_eq!(got.unwrap(), oracle(&blocks, p), "{p:?}");
+    }
+}
+
+#[test]
+fn a_small_budget_stops_the_trace_to_a_point() {
+    let polygons = faces(&A, Some(0));
+    let cell = Cell {
+        low: [-100; 3],
+        high: [100; 3],
+    };
+    let mut small = WorkMeter::new(Budget::new(3, u64::MAX));
+    let got = winding_at(
+        &cell,
+        &Winding::new(),
+        &polygons,
+        through([9; 3]),
+        &mut small,
+    );
+    assert!(matches!(got, Err(TraceError::Stopped(_))), "{got:?}");
+}
+
 #[test]
 fn a_count_past_its_range_is_refused() {
     let polygons = faces(&A, Some(0));
     let cuts = local_cuts(&pieces_of(&polygons), &mut meter()).unwrap();
     let cell = Cell {
-        low: [-50; 3],
-        high: [50; 3],
+        low: [-100; 3],
+        high: [100; 3],
     };
     let mut full = Winding::new();
     full.add(0, i32::MAX).unwrap();
@@ -439,8 +545,8 @@ fn a_piece_that_is_no_polygon_is_refused() {
         bounds: vec![],
     };
     let cell = Cell {
-        low: [-50; 3],
-        high: [50; 3],
+        low: [-100; 3],
+        high: [100; 3],
     };
     let got = classify(
         &cell,
@@ -505,21 +611,54 @@ fn wedges_at(solids: &[[Plane; 4]], p: [f64; 3]) -> Winding {
     w
 }
 
-/// A point just off the middle of a piece, on the side `by` of it.
-fn off_middle(piece: &Piece, by: f64) -> [f64; 3] {
+/// A point just off a piece, on the side `by` of it: of the piece's middle and the points halfway
+/// from it to each corner, the one farthest from every plane of `solids` not parallel to the
+/// piece. A solid may touch a piece at one point, its middle included (one solid's corner at the
+/// middle of another's face), and a point just off it there lands inside that solid or not by
+/// rounding, whatever the piece holds.
+fn off_middle(piece: &Piece, by: f64, solids: &[[Plane; 4]]) -> [f64; 3] {
     let k = piece.bounds.len();
-    let mut middle = [0.0f64; 3];
-    for i in 0..k {
-        let t = Tpi::new(piece.face, piece.bounds[i], piece.bounds[(i + 1) % k]).unwrap();
-        let (x, w) = t.homogeneous().unwrap();
-        let w = w.to_i128().unwrap() as f64;
-        for axis in 0..3 {
-            middle[axis] += x[axis].to_i128().unwrap() as f64 / w / k as f64;
-        }
-    }
+    let corners: Vec<[f64; 3]> = (0..k)
+        .map(|i| {
+            let t = Tpi::new(piece.face, piece.bounds[i], piece.bounds[(i + 1) % k]).unwrap();
+            let (x, w) = t.homogeneous().unwrap();
+            let w = w.to_i128().unwrap() as f64;
+            [0, 1, 2].map(|axis| x[axis].to_i128().unwrap() as f64 / w)
+        })
+        .collect();
+    let middle = [0, 1, 2].map(|axis| corners.iter().map(|c| c[axis]).sum::<f64>() / k as f64);
+    let face = piece.face.n();
+    let crossing: Vec<&Plane> = solids
+        .iter()
+        .flatten()
+        .filter(|q| {
+            let n = q.n();
+            [1, 2, 0]
+                .iter()
+                .zip([2, 0, 1])
+                .any(|(&a, b)| n[a] * face[b] != n[b] * face[a])
+        })
+        .collect();
+    let gap = |p: &[f64; 3]| {
+        crossing
+            .iter()
+            .map(|q| {
+                let n = q.n().map(|v| v as f64);
+                let value = (0..3).map(|i| n[i] * p[i]).sum::<f64>() + q.d() as f64;
+                value.abs() / (n[0] * n[0] + n[1] * n[1] + n[2] * n[2]).sqrt()
+            })
+            .fold(f64::INFINITY, f64::min)
+    };
+    let halfway = corners
+        .iter()
+        .map(|c| [0, 1, 2].map(|axis| f64::midpoint(middle[axis], c[axis])));
+    let at = core::iter::once(middle)
+        .chain(halfway)
+        .max_by(|a, b| gap(a).total_cmp(&gap(b)))
+        .unwrap();
     let n = piece.face.n().map(|v| v as f64);
     let length = (n[0] * n[0] + n[1] * n[1] + n[2] * n[2]).sqrt();
-    [0, 1, 2].map(|axis| middle[axis] + by * n[axis] / length)
+    [0, 1, 2].map(|axis| at[axis] + by * n[axis] / length)
 }
 
 fn wedges_agree(solids: &[[Plane; 4]]) {
@@ -534,7 +673,10 @@ fn wedges_agree(solids: &[[Plane; 4]]) {
         high: [100; 3],
     };
     for c in classify(&cell, &Winding::new(), &polygons, &cuts, &mut meter()).unwrap() {
-        let (front, back) = (off_middle(&c.piece, 1e-7), off_middle(&c.piece, -1e-7));
+        let (front, back) = (
+            off_middle(&c.piece, 1e-7, solids),
+            off_middle(&c.piece, -1e-7, solids),
+        );
         assert_eq!(c.front, wedges_at(solids, front), "front of {:?}", c.piece);
         assert_eq!(c.back, wedges_at(solids, back), "back of {:?}", c.piece);
     }
@@ -552,8 +694,15 @@ fn wedges_in_cell(solids: &[[Plane; 4]], cell: &Cell) {
     // Just inside the low corner, x moved most and z least, as the box's moves are ordered.
     let [x, y, z] = cell.low.map(|v| v as f64);
     let reference = wedges_at(solids, [x + 1e-4, y + 1e-6, z + 1e-8]);
-    for c in classify(cell, &reference, &polygons, &cuts, &mut meter()).unwrap() {
-        let (front, back) = (off_middle(&c.piece, 1e-9), off_middle(&c.piece, -1e-9));
+    let doubled = Cell {
+        low: cell.low.map(|v| v * 2),
+        high: cell.high.map(|v| v * 2),
+    };
+    for c in classify(&doubled, &reference, &polygons, &cuts, &mut meter()).unwrap() {
+        let (front, back) = (
+            off_middle(&c.piece, 1e-9, solids),
+            off_middle(&c.piece, -1e-9, solids),
+        );
         assert_eq!(c.front, wedges_at(solids, front), "front of {:?}", c.piece);
         assert_eq!(c.back, wedges_at(solids, back), "back of {:?}", c.piece);
     }
@@ -577,6 +726,26 @@ fn tilted_faces_are_crossed_where_a_path_leaves_them_by_either_of_two_walls() {
     let a = outward([[0, 0, 0], [9, 1, 0], [1, 8, 1], [2, 1, 7]]).unwrap();
     let b = outward([[1, 1, 1], [8, 3, 2], [3, 9, 4], [4, 2, 9]]).unwrap();
     wedges_agree(&[a]);
+    wedges_agree(&[a, b]);
+    wedges_agree(&[b, a]);
+}
+
+#[test]
+fn a_corner_at_the_middle_of_another_s_face_is_no_reason_to_sample_there() {
+    // The first solid's corner (0, 6, -1) is the middle of the second's face opposite the origin.
+    let plane = |n: [i128; 3], d: i128| Plane::new(n, d).unwrap();
+    let a = [
+        plane([-7, 5, 30], 0),
+        plane([-1, 25, -20], -170),
+        plane([42, -30, -10], 0),
+        plane([-34, 0, 0], 0),
+    ];
+    let b = [
+        plane([8, -7, 20], 0),
+        plane([32, -28, -106], 0),
+        plane([-18, 39, 48], -186),
+        plane([-22, -4, 38], 0),
+    ];
     wedges_agree(&[a, b]);
     wedges_agree(&[b, a]);
 }

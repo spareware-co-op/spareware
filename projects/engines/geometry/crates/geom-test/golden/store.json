@@ -266,9 +266,15 @@
               "kind": "corpus",
               "piece": "G147",
               "why": "1 new count benchmark on point location (decision 32.44): mesh/locate; no existing digest moved"
+            },
+            {
+              "sha256": "af5f21bde2e193693bbaa85d4721760b1fe886ba4653a5c82fcf4aacfd75c105",
+              "kind": "corpus",
+              "piece": "G148",
+              "why": "Count benchmarks of the stack joined: geom-make's four (G101), geom-num's fourteen new functions (G138) and mesh/boolean (G148); no existing digest moved"
             }
           ],
-          "sha256": "af5f21bde2e193693bbaa85d4721760b1fe886ba4653a5c82fcf4aacfd75c105"
+          "sha256": "fb85bdc3a9a3ac6755daa281d6c4c3a845bb8e7e93aa329334de45a77352d090"
         },
         {
           "id": "geom-nurbs/operations",
@@ -522,6 +528,16 @@
           "sha256": "507472559492ae92313b7e32156a0f64df25fa341cd6eab56772404bcfd55a91"
         },
         {
+          "id": "geom-make/queries",
+          "what": "The core queries (piece G102) over 32 boxes, each also moved, 32 prisms and 8 cylinders from a fixed stream: every face's row, name and roles, twice-area vectors, the bounding box, six times the volume, the exactness report's counts and the validity report's deferred count, as tests/query_determinism.rs records them.",
+          "check": {
+            "crate": "geom-make",
+            "test": "query_determinism",
+            "function": "queries_golden_hash_is_the_same_on_every_target"
+          },
+          "sha256": "b8f2e38d41f1e8a7dacd616b124f55c6b7b46cc691203456872debd94e8f9c4f"
+        },
+        {
           "id": "geom-mesh/cdt",
           "what": "The constrained Delaunay triangulation of geom-mesh (piece G153): cocircular grids of 2 to 32 points a side, plain and with crossing constraints; 16 scatters with constraints between random points; 8 outlines refined to a quality. Vertices, triangles and constrained edges in canonical order.",
           "check": {
@@ -530,6 +546,26 @@
             "function": "cdt_golden_hash_is_the_same_on_every_target"
           },
           "sha256": "e785c8bb58ed861f1eafccaa437e35dca30ec69a695ddf3abb238d1db057cb11"
+        },
+        {
+          "id": "geom-mesh/boolean",
+          "what": "Mesh booleans of geom-mesh (piece G148): the union, intersection and difference, in one arrangement, of the shapes bench's four pairs at size class 0 and radius 2^13 steps, and of three pairs of solids reaching ±(2^40 − 1). Every array of each result mesh, its runs and its volume, and its run-level history, in canonical order.",
+          "check": {
+            "crate": "geom-mesh",
+            "test": "boolean_determinism",
+            "function": "boolean_golden_hash_is_the_same_on_every_target"
+          },
+          "sha256": "7d7eb9015bb8b9744ca2e243265c55797173b2de30c2e84e0c0a1bfab3a68f7c"
+        },
+        {
+          "id": "geom-mesh/exact",
+          "what": "The exact mesh of geom-mesh (piece G146): boxes at five scales, 16 closed height fields and a cut pyramid with corners off the grid. Every array of each mesh and its volume, in canonical order.",
+          "check": {
+            "crate": "geom-mesh",
+            "test": "exact_determinism",
+            "function": "exact_mesh_golden_hash_is_the_same_on_every_target"
+          },
+          "sha256": "c5cb15aaf5ad8f21e50ad1dd903efb38d0dbc85e695e17afc662519ecbdbc134"
         },
         {
           "id": "geom-op/determinism",
@@ -542,14 +578,14 @@
           "sha256": "9d3844529ba8b080138c3667380a91a2a7b2695dfd7b6a4f7651334d46b58d29"
         },
         {
-          "id": "geom-mesh/exact",
-          "what": "The exact mesh of geom-mesh (piece G146): boxes at five scales, 16 closed height fields and a cut pyramid with corners off the grid. Every array of each mesh and its volume, in canonical order.",
+          "id": "geom-topo/arenas",
+          "what": "The arenas of geom-topo (piece G80): 48 bodies of random sizes (six past three chunks of faces and fins), every link random and in range, filled row by row or each arena at once, each published with every column in row order, its chunk count and the work publishing charged; an edit of random rows published beside the unchanged original; and each body refused once with a link pointed past its arena and once with a column one row longer, as tests/arena_determinism.rs records them.",
           "check": {
-            "crate": "geom-mesh",
-            "test": "exact_determinism",
-            "function": "exact_mesh_golden_hash_is_the_same_on_every_target"
+            "crate": "geom-topo",
+            "test": "arena_determinism",
+            "function": "arenas_golden_hash_is_the_same_on_every_target"
           },
-          "sha256": "c5cb15aaf5ad8f21e50ad1dd903efb38d0dbc85e695e17afc662519ecbdbc134"
+          "sha256": "9df6dc9250d028d90f299d94442c212ac16472679a9d22d207c6d6e0a0a161dc"
         }
       ]
     }
