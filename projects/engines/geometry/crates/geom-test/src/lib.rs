@@ -235,6 +235,7 @@ pub mod canonical;
 pub mod corpus;
 pub mod coverage;
 pub mod deps;
+pub mod exact_rank;
 pub mod fixed;
 pub mod fixture;
 pub mod foundation;
