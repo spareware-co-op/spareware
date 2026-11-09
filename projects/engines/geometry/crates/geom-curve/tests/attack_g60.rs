@@ -22,7 +22,8 @@ use geom_curve::{
     ContractError, CurveError, CurveKind, DerivativeBound, Law, NurbsForm, ParamCurve, ParamMap,
 };
 use geom_math::{
-    Axis, GridTransform, MathError, RationalRotation, RationalTransform, Rotation, TypedTransform,
+    Axis, GridTransform, MathError, RationalRotation, RationalTransform, Rotation, Transform,
+    TypedTransform,
 };
 use geom_num::interval::Interval;
 use geom_nurbs::{Basis, Bounds, Changed, Curve, Limit, NurbsError};
@@ -467,4 +468,47 @@ fn exact_rotations_give_their_entries() {
             assert!(c.hi() - c.lo() < 1e-14, "{i}, {j}: {c:?}");
         }
     }
+}
+
+/// Claim: `Entries::stretch` is a certified upper bound on how far the linear part stretches a
+/// vector, the Frobenius norm of the exact entries, and stays tight at the entries' extremes: √29
+/// for a scale by 2, 3 and 4; √3 for a quarter turn; 2^60·√2 beside 1 for the plane scale of the
+/// curves fuzz campaign's finding (`compound.rs`); √3·2^1022 near the largest doubles, where the
+/// squares alone would overflow; 2^1000 beside 2^−1000, where the small square underflows; the
+/// smallest subnormal times √3; and 0 for the zero map.
+#[test]
+fn the_stretch_bounds_the_norm_at_the_extremes() {
+    // 2^e for a normal double, from its bits.
+    let p = |e: i64| f64::from_bits(u64::try_from(e + 1023).unwrap() << 52);
+    // (the transform, the scale factor k, the squared norm divided by k²)
+    let cases = [
+        (Transform::scale(2.0, 3.0, 4.0), 1.0, 29.0),
+        (Transform::rotation(Axis::Z, 0.5), 1.0, 3.0),
+        (Transform::scale(p(60), p(60), 1.0), p(60), 2.0),
+        (Transform::uniform_scale(p(1022)), p(1022), 3.0),
+        (Transform::scale(p(1000), p(-1000), 1.0), p(1000), 1.0),
+    ];
+    for (t, k, square) in cases {
+        let t = TypedTransform::from(t.unwrap());
+        let s = Entries::of(&t).unwrap().stretch().unwrap() / k;
+        assert!(s * s >= square, "{t:?}: {s}");
+        assert!(s * s <= square * (1.0 + 1e-14), "{t:?}: {s}");
+    }
+    // The same for an exact quarter turn, through its integer entries.
+    let s = Entries::of(&quarter()).unwrap().stretch().unwrap();
+    assert!(s * s >= 3.0 && s * s <= 3.0 * (1.0 + 1e-14), "{s}");
+    // The smallest subnormal, whose square underflows to 0 in doubles: √3 of it rounds up to two.
+    let tiny = f64::from_bits(1);
+    let t = TypedTransform::from(Transform::uniform_scale(tiny).unwrap());
+    let s = Entries::of(&t).unwrap().stretch().unwrap();
+    assert!((2.0 * tiny..=4.0 * tiny).contains(&s), "{s:e}");
+    // The zero map stretches nothing.
+    let t = TypedTransform::from(Transform::uniform_scale(0.0).unwrap());
+    assert_eq!(Entries::of(&t).unwrap().stretch().unwrap(), 0.0);
+    // Past the doubles the norm itself overflows, and says so.
+    let t = TypedTransform::from(Transform::uniform_scale(f64::MAX).unwrap());
+    assert_eq!(
+        Entries::of(&t).unwrap().stretch(),
+        Err(CurveError::NotFinite)
+    );
 }

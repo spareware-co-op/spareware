@@ -36,7 +36,8 @@
 //!   negates the distances (the left normal of the reversed curve is the right normal).
 //! - **Transforms keep the kind only when exact.** A grid transform of an offset whose basis moves
 //!   exactly gives an offset (a mirror negating the side); any other transform gives the moved
-//!   NURBS cache, with both deviations.
+//!   NURBS cache, its deviation the cache's stretched by the transform (at most by its linear
+//!   part's Frobenius norm) plus the move's.
 //!
 //! Method: offset curves as defined in ISO 10303-42 (`offset_curve_2d`, `offset_curve_3d`) and
 //! IFC 4.3 (`IfcOffsetCurveByDistances`), evaluated with automatic differentiation in interval
@@ -63,6 +64,7 @@ use geom_num::interval::Interval;
 use geom_nurbs::{Bounds, Changed, Limit};
 use geom_run::WorkMeter;
 
+use crate::affine::Entries;
 use crate::error::CurveError;
 use crate::form::check_parameter;
 use crate::jet::Jet;
@@ -824,13 +826,20 @@ impl<const D: usize> Offset<D> {
     ) -> Result<Changed<CurveKind<D>>, CurveError> {
         let n = self.to_nurbs(meter)?;
         let c = &n.value.curve;
-        let moved = match transform {
-            Some(t) => ParamCurve::transformed(c, t, meter)?,
-            None => ParamCurve::reversed(c, meter)?,
+        // The cache's deviation is a distance before the move: a transform stretches it by at most
+        // its linear part's norm (a scale of 2^60 made it 2^60 times longer, which the fuzz
+        // campaign found); a reversal keeps it.
+        let (moved, stretch) = match transform {
+            Some(t) => (
+                ParamCurve::transformed(c, t, meter)?,
+                Entries::of(t)?.stretch()?,
+            ),
+            None => (ParamCurve::reversed(c, meter)?, 1.0),
         };
+        let cache = tight::mul(point(n.deviation)?, point(stretch)?)?;
         Ok(Changed {
             value: moved.value,
-            deviation: tight::add(point(n.deviation)?, point(moved.deviation)?)?.hi(),
+            deviation: tight::add(cache, point(moved.deviation)?)?.hi(),
         })
     }
 }

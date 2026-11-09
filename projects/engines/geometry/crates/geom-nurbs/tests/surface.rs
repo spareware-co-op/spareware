@@ -256,3 +256,77 @@ fn errors_are_typed() {
         NurbsError::Weight { index: 5 }
     );
 }
+
+/// The surface form of the `nurbs` fuzz finding (`curve.rs`,
+/// `weight_sums_past_the_doubles_still_give_the_point`): a patch whose u basis is the campaign's
+/// curve's and whose every weight is `f64::MAX`. At the campaign's parameter, on the patch's
+/// edges v = 0 and v = 1, the weight sum passes the doubles exactly as the curve's did; there and
+/// at random parameters of that span, every point and partial is within its bound and order (0, 0)
+/// is the point.
+#[test]
+fn weight_sums_past_the_doubles_still_give_the_point() {
+    let max = f64::MAX;
+    let unit = || Basis::new(1, vec![0.0, 0.0, 1.0, 1.0]).unwrap();
+    // Euclidean points in [−1/4, 1/2], so the homogeneous partials, differences of these,
+    // stay inside the doubles while the weight sum does not.
+    let campaign = Basis::new(1, vec![0.0, 0.0, 0.25, 0.75, 4.5, 5.25, 5.25]).unwrap();
+    let net: Vec<[f64; 3]> = (0..10)
+        .map(|i| {
+            let s = f64::from(i) / 16.0;
+            [(0.5 - s) * max, (s - 0.25) * max, 0.125 * max]
+        })
+        .collect();
+    let s = Surface::from_homogeneous(campaign, unit(), net, Some(vec![max; 10])).unwrap();
+    // Without an overflow nothing is halved: an odd multiple of the smallest subnormal, which
+    // halving would round, comes back exactly at the corner, from the point and the partials.
+    let tiny = f64::from_bits(3);
+    let corner = Surface::from_homogeneous(
+        unit(),
+        unit(),
+        vec![[tiny, 1.0, 0.0], [1.0; 3], [1.0; 3], [1.0; 3]],
+        Some(vec![1.0; 4]),
+    )
+    .unwrap();
+    let mut out = vec![[0.0; 3]; 4];
+    let at = (Limit::FromRight, Limit::FromRight);
+    corner.derivs(0.0, 0.0, at, (1, 1), &mut out).unwrap();
+    assert_eq!(corner.point(0.0, 0.0, at).unwrap(), [tiny, 1.0, 0.0]);
+    assert_eq!(out[0], [tiny, 1.0, 0.0]);
+    let mut rng = Lcg(70);
+    let (du, dv) = (1, 1);
+    // Inside the span [0.75, 4.5], whose basis derivatives are ±1/3.75. On the narrower spans
+    // a basis derivative times a weight of f64::MAX passes the doubles itself (4·f64::MAX on
+    // [0, 0.25]), and the partials are refused as `NotFinite`.
+    let mut us: Vec<f64> = (0..12).map(|_| 0.75 + 3.75 * rng.unit()).collect();
+    us.push(1.338_235_294_117_647);
+    let mut vs: Vec<f64> = (0..12).map(|_| rng.unit()).collect();
+    vs.extend([0.0, 1.0]);
+    for &u in &us {
+        for &v in &vs {
+            for limits in LIMITS {
+                let point = s.point(u, v, limits).unwrap();
+                let mut out = vec![[0.0; 3]; 4];
+                s.derivs(u, v, limits, (du, dv), &mut out).unwrap();
+                assert_eq!(out[0], point);
+                let (e, m) = exact(&s, u, v, limits, du, dv);
+                for k in 0..=du {
+                    for l in 0..=dv {
+                        let order = k + l;
+                        let factor = gamma((order + 1) * (14 * 2 + 2 * order + 12));
+                        for d in 0..3 {
+                            assert!(
+                                within(
+                                    out[k * (dv + 1) + l][d],
+                                    &e[k][l][d],
+                                    &(&factor * &m[k][l][d])
+                                ),
+                                "({u}, {v}), order ({k}, {l}), coordinate {d}: {:?}",
+                                out[k * (dv + 1) + l]
+                            );
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
