@@ -193,11 +193,15 @@ fn face_entry(
     let mut hi = [i64::MIN; 3];
     let mut grow = |a: [i64; 3], b: [i64; 3]| {
         for k in 0..3 {
-            if let (Some(l), Some(h), Some(x), Some(y)) =
+            if let (Some(low), Some(high), Some(&x), Some(&y)) =
                 (lo.get_mut(k), hi.get_mut(k), a.get(k), b.get(k))
             {
-                *l = (*l).min(*x);
-                *h = (*h).max(*y);
+                if x < *low {
+                    *low = x;
+                }
+                if y > *high {
+                    *high = y;
+                }
             }
         }
     };
@@ -591,19 +595,7 @@ fn edge_face_point(
             meter,
         );
     }
-    let ([x0, y0, z0], [x1, y1, z1]) = (coordinates(xyz.min()), coordinates(xyz.max()));
-    let at = nearest_point([
-        x0 / 2.0 + x1 / 2.0,
-        y0 / 2.0 + y1 / 2.0,
-        z0 / 2.0 + z1 / 2.0,
-    ])?;
-    // Outside the face's box in its picture, with room for the crossing's own box: nothing to make.
-    let reach = Bound::of(((x1 - x0) + (y1 - y0) + (z1 - z0)) / 2.0 + 1.0)
-        .ok_or(NumError::BudgetExceeded)?;
-    let flat = flat_of(fs, f)?.ok_or(BuildError::Missing(Entity::Face(f)))?;
-    if flat.beyond(at, reach) {
-        return Ok(());
-    }
+    let (at, _) = centre_of(xyz)?;
     let on = SortedVec::from_items([CarrierIx::Curve(edge.curve), face.surface]);
     let point = certify(carriers, at, on.clone(), remaining, meter)?;
     let (_, within) = carriers.commit(&point)?;
@@ -806,6 +798,20 @@ fn section_paves(
     Ok(paves)
 }
 
+/// The grid point nearest the centre of `xyz`, and a bound that reaches every point of the box
+/// from it: half the box's diagonal is at most half the sum of its sides, and the rounding to the
+/// grid adds less than a step.
+fn centre_of(xyz: &Box3) -> Result<(P3, Bound), NumError> {
+    let ([x0, y0, z0], [x1, y1, z1]) = (coordinates(xyz.min()), coordinates(xyz.max()));
+    let centre = nearest_point([
+        x0 / 2.0 + x1 / 2.0,
+        y0 / 2.0 + y1 / 2.0,
+        z0 / 2.0 + z1 / 2.0,
+    ])?;
+    let reach = ((x1 - x0) + (y1 - y0) + (z1 - z0)) / 2.0 + 1.0;
+    Ok((centre, Bound::of(reach).ok_or(NumError::BudgetExceeded)?))
+}
+
 /// Whether a held region is proven outside its face: the grid point nearest its box's centre, with
 /// a bound reaching every corner of the box, placed outside the face. Placing it Out proves the
 /// ball round it apart from every boundary edge, so the whole box lies on the outer side.
@@ -818,17 +824,7 @@ fn outside(
     let Some(flat) = flat_of(fs, region.face)? else {
         return Ok(false);
     };
-    let ([x0, y0, z0], [x1, y1, z1]) =
-        (coordinates(region.xyz.min()), coordinates(region.xyz.max()));
-    let centre = nearest_point([
-        x0 / 2.0 + x1 / 2.0,
-        y0 / 2.0 + y1 / 2.0,
-        z0 / 2.0 + z1 / 2.0,
-    ])?;
-    // Half the box's diagonal is at most half the sum of its sides, and the rounding to the grid
-    // adds less than a step.
-    let reach = ((x1 - x0) + (y1 - y0) + (z1 - z0)) / 2.0 + 1.0;
-    let bound = Bound::of(reach).ok_or(NumError::BudgetExceeded)?;
+    let (centre, bound) = centre_of(&region.xyz)?;
     match flat.place(carriers, centre, bound, meter) {
         Ok(Place::Out) => Ok(true),
         Ok(_) | Err(BuildError::Unclassified { .. }) => Ok(false),
@@ -1072,4 +1068,86 @@ pub(crate) fn settle(
     }
     out.faces = fs.info;
     Ok(())
+}
+
+#[cfg(test)]
+#[allow(
+    clippy::unwrap_used,
+    clippy::indexing_slicing,
+    clippy::arithmetic_side_effects,
+    clippy::panic,
+    clippy::float_cmp,
+    reason = "test code: a failure should stop loudly"
+)]
+mod tests {
+    use super::*;
+    use geom_curve::{Circle, Frame, Line};
+    use geom_run::Budget;
+
+    fn pave(t: f64) -> Pave {
+        Pave {
+            vertex: 0,
+            t: Interval::point(t).unwrap(),
+        }
+    }
+
+    fn block(from: Option<f64>, to: Option<f64>, wraps: bool) -> PaveBlock {
+        PaveBlock {
+            edge: 0,
+            from: from.map(pave),
+            to: to.map(pave),
+            wraps,
+        }
+    }
+
+    #[test]
+    fn a_box_s_centre_and_reach() {
+        let (centre, bound) =
+            centre_of(&Box3::new(P3::new(0, 0, 0).unwrap(), P3::new(4, 2, 6).unwrap()).unwrap())
+                .unwrap();
+        assert_eq!(centre, P3::new(2, 1, 3).unwrap());
+        assert_eq!(bound, Bound::of(7.0).unwrap());
+        // Halves round to even, and the reach covers the box's corners.
+        let (centre, bound) =
+            centre_of(&Box3::new(P3::new(-3, 1, 5).unwrap(), P3::new(-2, 2, 6).unwrap()).unwrap())
+                .unwrap();
+        assert_eq!(centre, P3::new(-2, 2, 6).unwrap());
+        assert_eq!(bound, Bound::of(2.5).unwrap());
+    }
+
+    #[test]
+    fn a_block_s_middle_lies_between_its_paves() {
+        let line = Line::new([0.0; 3], [10.0, 0.0, 0.0], (0.0, 1.0)).unwrap();
+        assert_eq!(
+            middle_of(&line, &block(Some(0.25), Some(0.75), false)),
+            Some(0.5)
+        );
+        assert_eq!(middle_of(&line, &block(Some(0.5), Some(0.5), false)), None);
+        assert_eq!(middle_of(&line, &block(None, None, false)), Some(0.5));
+        let circle = Circle::new([0.0; 3], 100.0, Frame::standard().unwrap(), (0.0, 2.0)).unwrap();
+        // Round the seam: from 1.5 to the end, or from the start to the last pave.
+        assert_eq!(
+            middle_of(&circle, &block(Some(1.5), Some(0.5), true)),
+            Some(1.75)
+        );
+        assert_eq!(
+            middle_of(&circle, &block(Some(2.0), Some(0.5), true)),
+            Some(0.25)
+        );
+    }
+
+    #[test]
+    fn a_point_near_a_curve_with_its_reach() {
+        let m = &mut WorkMeter::new(Budget::UNLIMITED);
+        let line = Line::new([0.0; 3], [10.0, 0.0, 0.0], (0.0, 1.0)).unwrap();
+        // Exactly on a grid point: the rounding's step alone.
+        let (p, w) = near_point(&line, 0.5, m).unwrap();
+        assert_eq!(p, P3::new(5, 0, 0).unwrap());
+        assert_eq!(w, Bound::of(1.0).unwrap());
+        // A circle's point is enclosed with some width: a step more.
+        let circle = Circle::new([0.0; 3], 1000.0, Frame::standard().unwrap(), (0.0, 2.0)).unwrap();
+        let (p, w) = near_point(&circle, 0.25, m).unwrap();
+        assert_eq!(p, P3::new(707, 707, 0).unwrap());
+        assert_eq!(w, Bound::of(2.0).unwrap());
+    }
 }

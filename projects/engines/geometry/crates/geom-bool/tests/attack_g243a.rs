@@ -15,15 +15,20 @@
 )]
 
 use geom_bool::carrier::{Bound, CarrierIx, PointGeom};
+use geom_bool::crossing::{Enclosed, Hull, crossings};
+use geom_bool::distance::Carriers;
 use geom_bool::inside::{FlatFace, Place};
 use geom_bool::interfere::{
     Arrangement, BuildError, EdgeIn, FaceIn, Interfered, Interference, VertexIn, interfere,
 };
 use geom_bool::merge::default_remaining;
-use geom_curve::{Circle, CurveKind, Frame, Line};
+use geom_bool::rule::{ContactError, NearContact};
+use geom_curve::{Circle, CurveKind, Frame, Helix, HelixAxes, Line, ParamCurve};
 use geom_num::P3;
+use geom_num::interval::Interval;
 use geom_num::plane::Plane;
 use geom_run::{Budget, Exec, WorkMeter};
+use geom_topo::{FlatSurface, SurfaceKind};
 
 /// The largest coordinate of the frame, in steps: 2^40 − 1.
 const EDGE: i64 = (1 << 40) - 1;
@@ -401,5 +406,393 @@ fn the_face_stages_are_deterministic_and_lowest_dimension_first() {
         .filter(|i| matches!(i, Interference::EdgeFace { reused: false, .. }))
         .count();
     assert_eq!(made, 1);
+    let reused = first
+        .interferences
+        .iter()
+        .filter(|i| matches!(i, Interference::EdgeFace { reused: true, .. }))
+        .count();
+    assert_eq!(
+        reused, 2,
+        "the two edges ending at the corner meet the face there"
+    );
     assert_eq!(first.faces[0].in_vertices.len(), 2);
+}
+
+/// A U-shaped face across a large one: along the line where their planes meet, the stretch across
+/// the U's notch lies inside the large face only, and is no section edge.
+#[test]
+fn a_section_is_kept_only_where_inside_both_faces() {
+    let mut b = Build::default();
+    // The large face on y = 0.
+    let big: Vec<usize> = [
+        (0, 0),
+        (1_000_000, 0),
+        (1_000_000, 1_000_000),
+        (0, 1_000_000),
+    ]
+    .iter()
+    .map(|&(x, z)| b.vertex(p(x, 0, z), 0))
+    .collect();
+    let edges = b.ring(&big, 0);
+    let plane = b.plane([0, 1, 0], 0);
+    let large = b.face(plane, vec![edges], 0);
+    // The U on x = 500,000, open towards −y, its notch across y = 0 from z = 300,000 to 700,000.
+    let u: Vec<usize> = [
+        (100_000, 100_000),
+        (100_000, 900_000),
+        (-100_000, 900_000),
+        (-100_000, 700_000),
+        (50_000, 700_000),
+        (50_000, 300_000),
+        (-100_000, 300_002),
+        (-100_000, 100_000),
+    ]
+    .iter()
+    .map(|&(y, z)| b.vertex(p(500_000, y, z), 1))
+    .collect();
+    let edges = b.ring(&u, 1);
+    let plane = b.plane([1, 0, 0], -500_000);
+    let shape = b.face(plane, vec![edges], 1);
+    let out = b.run().unwrap();
+    let mut spans: Vec<(i64, i64)> = out
+        .sections
+        .iter()
+        .map(|s| {
+            assert_eq!(s.faces, [large, shape]);
+            let z = |v: usize| b.arr.carriers.commit(&out.vertices[v]).unwrap().0.z.get();
+            let (a, c) = (z(s.from.vertex), z(s.to.vertex));
+            (a.min(c), a.max(c))
+        })
+        .collect();
+    spans.sort_unstable();
+    // The notch's lower side slopes a little, so it crosses y = 0 off the grid, near z = 300,000.67:
+    // a vertex proven within its bound, which widens its paves.
+    assert_eq!(spans.len(), 2);
+    assert_eq!(spans[0].0, 100_000);
+    assert!((spans[0].1 - 300_000).abs() <= 1, "{spans:?}");
+    assert_eq!(spans[1], (700_000, 900_000));
+    // Each section's paves are widened by their vertices' bounds.
+    for s in &out.sections {
+        for pave in [s.from, s.to] {
+            let (_, bound) = b.arr.carriers.commit(&out.vertices[pave.vertex]).unwrap();
+            let width = pave.t.hi() - pave.t.lo();
+            assert!(
+                width >= 2.0 * bound.steps() as f64,
+                "{pave:?} within {bound:?}"
+            );
+        }
+    }
+}
+
+/// A circle lying in a square face and crossing its edge: cut at the two crossings into an arc
+/// inside and one outside, the outside one running round the circle's seam. Only the inside arc is
+/// In, whichever of them runs round the seam.
+#[test]
+fn a_closed_curve_lying_in_a_face_is_in_where_inside() {
+    for (cx, inside_wraps) in [(1_000_000.0, false), (0.0, true)] {
+        let mut b = Build::default();
+        let (face, _) = b.flat(
+            &[
+                (0, 0),
+                (1_000_000, 0),
+                (1_000_000, 1_000_000),
+                (0, 1_000_000),
+            ],
+            0,
+            0,
+        );
+        let frame = Frame::new([1.0, 0.0, 0.0], [0.0, 0.0, 1.0]).unwrap();
+        // Centred on the face's right edge, x = 1,000,000 (its seam, t = 0, outside), or on its
+        // left edge, x = 0 (its seam inside).
+        let ring = Circle::new([cx, 500_000.0, 0.0], 200_000.0, frame, (0.0, 2.0)).unwrap();
+        let e = b.edge(CurveKind::Circle(ring), None, 1);
+        let out = b.run().unwrap();
+        let pieces: Vec<usize> = (0..out.splits.len())
+            .filter(|&k| out.splits[k].source == e)
+            .collect();
+        assert_eq!(pieces.len(), 2);
+        let inside = &out.faces[face].in_blocks;
+        assert_eq!(inside.len(), 1, "{inside:?}");
+        assert_eq!(out.splits[inside[0]].block.wraps, inside_wraps);
+    }
+}
+
+/// A region the crossing engine flags just outside a face, beyond its sloping side, on planes that
+/// drop each axis in turn: proven outside by its centre and reach, so accepted; the same tangency
+/// inside the face is refused.
+#[test]
+fn a_flagged_region_just_outside_a_face_is_proven_outside() {
+    // The triangle (0, 0), (1,000,000, 0), (0, 1,000,000) in the plane's two kept coordinates, and
+    // a circle of radius 1,000 touching the plane at (600,000, 500,000), beyond the hypotenuse by
+    // about 70,000; at (300,000, 250,000) it is inside.
+    for axis in 0..3 {
+        for (at, refused) in [
+            ((600_000.0, 500_000.0), false),
+            ((300_000.0, 250_000.0), true),
+        ] {
+            let lay = |u: f64, v: f64, w: f64| -> [f64; 3] {
+                let mut q = [0.0; 3];
+                q[(axis + 1) % 3] = u;
+                q[(axis + 2) % 3] = v;
+                q[axis] = w;
+                q
+            };
+            let mut b = Build::default();
+            let corners: Vec<usize> = [(0.0, 0.0), (1_000_000.0, 0.0), (0.0, 1_000_000.0)]
+                .iter()
+                .map(|&(u, v)| {
+                    let q = lay(u, v, 0.0);
+                    b.vertex(p(q[0] as i64, q[1] as i64, q[2] as i64), 0)
+                })
+                .collect();
+            let edges = b.ring(&corners, 0);
+            let mut n = [0_i128; 3];
+            n[axis] = 1;
+            let plane = b.plane(n, 0);
+            b.face(plane, vec![edges], 0);
+            // The circle stands in the plane holding the dropped axis and the second kept one.
+            let frame = Frame::new(lay(0.0, 0.0, 1.0), lay(1.0, 0.0, 0.0)).unwrap();
+            let ring = Circle::new(lay(at.0, at.1, 1_000.0), 1_000.0, frame, (0.0, 2.0)).unwrap();
+            b.edge(CurveKind::Circle(ring), None, 1);
+            match (b.run(), refused) {
+                (Err(BuildError::Undecided { .. }), true) | (Ok(_), false) => {}
+                (other, _) => panic!("axis {axis} at {at:?}: {other:?}"),
+            }
+        }
+    }
+}
+
+/// A face on a curved carrier whose box passes the frame, a plane surface of sides far past it:
+/// its box is the whole frame, so every edge and face of another operand waits for it.
+#[test]
+fn an_unbounded_carrier_s_face_takes_the_whole_frame() {
+    let mut b = Build::default();
+    let (floor, _) = b.flat(&[(0, 0), (1_000, 0), (1_000, 1_000), (0, 1_000)], 0, 0);
+    let surface = FlatSurface::new(
+        [0.0, 0.0, 500_000_000.0],
+        [1.0, 0.0, 0.0],
+        [0.0, 1.0, 0.0],
+        ((-1.0e13, 1.0e13), (-1.0e13, 1.0e13)),
+    )
+    .unwrap();
+    let ix = b
+        .arr
+        .carriers
+        .add_surface(SurfaceKind::Plane(surface))
+        .unwrap();
+    let corners: Vec<usize> = [(0, 0), (1, 0), (1, 1)]
+        .iter()
+        .map(|&(x, y)| b.vertex(p(x, y, 500_000_000), 1))
+        .collect();
+    let edges = b.ring(&corners, 1);
+    let far = b.face(CarrierIx::Surface(ix), vec![edges], 1);
+    let out = b.run().unwrap();
+    assert_eq!(out.faces[far].pending.faces, vec![floor]);
+    assert_eq!(out.faces[far].pending.edges.len(), 4);
+}
+
+/// The quick box tests of a flat face: a point outside the box of its boundary in the picture by
+/// more than its bound, and a box apart from it.
+#[test]
+fn the_box_tests_of_a_flat_face() {
+    let mut b = Build::default();
+    let (face, _) = b.flat(&[(0, 0), (1_000, 0), (1_000, 1_000), (0, 1_000)], 0, 0);
+    let flat = FlatFace::new(&b.arr, face, &mut meter()).unwrap().unwrap();
+    let w = |k: u64| Bound(geom_num::Steps(k));
+    // Five steps left of the box, and five right of it.
+    assert!(!flat.beyond(p(-5, 500, 0), w(5)));
+    assert!(flat.beyond(p(-5, 500, 0), w(4)));
+    assert!(!flat.beyond(p(1_005, 500, 0), w(5)));
+    assert!(flat.beyond(p(1_005, 500, 0), w(4)));
+    assert!(!flat.beyond(p(500, 1_005, 0), w(5)));
+    assert!(flat.beyond(p(500, -5, 0), w(4)));
+    assert!(
+        !flat.beyond(p(500, 500, 99), w(0)),
+        "the dropped axis does not count"
+    );
+    let iv = |lo: [f64; 3], hi: [f64; 3]| (lo, hi);
+    let (lo, hi) = iv([1_001.0, 0.0, 0.0], [1_002.0, 1.0, 0.0]);
+    assert!(flat.apart_from(lo, hi));
+    let (lo, hi) = iv([1_000.0, 0.0, 0.0], [1_002.0, 1.0, 0.0]);
+    assert!(!flat.apart_from(lo, hi));
+    let (lo, hi) = iv([-5.0, 0.0, 0.0], [-1.0, 1.0, 0.0]);
+    assert!(flat.apart_from(lo, hi));
+    let (lo, hi) = iv([-5.0, 0.0, 0.0], [0.0, 1.0, 0.0]);
+    assert!(!flat.apart_from(lo, hi));
+    let (lo, hi) = iv([10.0, -9.0, 0.0], [20.0, -1.0, 0.0]);
+    assert!(flat.apart_from(lo, hi));
+    let (lo, hi) = iv([10.0, 1_001.0, -50.0], [20.0, 1_009.0, 50.0]);
+    assert!(flat.apart_from(lo, hi));
+}
+
+/// Every error of the face stages says what went wrong.
+#[test]
+fn the_face_stages_errors_say_what() {
+    let at = geom_num::P3::new(1, 2, 3).unwrap();
+    let pave = geom_bool::pave::Pave {
+        vertex: 4,
+        t: Interval::point(0.5).unwrap(),
+    };
+    let near = ContactError::NearContact(NearContact {
+        enclosure: Interval::new(0.0, 100.0).unwrap(),
+        refinement: 8,
+    });
+    for (error, words) in [
+        (
+            BuildError::Undecided {
+                edge: 2,
+                face: 3,
+                why: geom_intersect::solve::Reason::Singular,
+                at: geom_topo::Box3::from_point(at),
+            },
+            "edge 2 meets the plane of face 3",
+        ),
+        (BuildError::Unclassified { face: 7, at }, "face 7"),
+        (
+            BuildError::SectionOrder {
+                faces: [5, 6],
+                first: pave,
+                second: pave,
+            },
+            "faces 5 and 6",
+        ),
+        (BuildError::Contact(near), "refinement limit"),
+    ] {
+        let text = format!("{error}");
+        assert!(text.contains(words), "{text}");
+    }
+}
+
+fn segment(o: [f64; 3], d: [f64; 3]) -> CurveKind<3> {
+    CurveKind::Line(Line::new(o, d, (0.0, 1.0)).unwrap())
+}
+
+fn floor_plane() -> Plane {
+    Plane::new([0, 0, 1], 0).unwrap()
+}
+
+/// A segment meets a plane once, at its end, or not at all; lying in it, it is flagged whole.
+#[test]
+fn a_segment_meets_a_plane_once_or_not_at_all() {
+    let m = &mut meter();
+    let at = |c: &CurveKind<3>, m: &mut WorkMeter<'_>| crossings(c, &floor_plane(), m).unwrap();
+    let found = at(&segment([0.0, 0.0, -5.0], [0.0, 0.0, 10.0]), m);
+    assert_eq!(found.zeros.len(), 1);
+    assert!(found.zeros[0].enclosure[0].contains(0.5));
+    // Ending on the plane, and starting on it: the root at the end.
+    let found = at(&segment([0.0, 0.0, -10.0], [0.0, 0.0, 10.0]), m);
+    assert_eq!(found.zeros.len(), 1);
+    assert!(found.zeros[0].enclosure[0].contains(1.0));
+    let found = at(&segment([0.0, 0.0, 0.0], [0.0, 0.0, 10.0]), m);
+    assert_eq!(found.zeros.len(), 1);
+    assert!(found.zeros[0].enclosure[0].contains(0.0));
+    // Running down onto it from above, and up to it from below.
+    let found = at(&segment([0.0, 0.0, 10.0], [0.0, 0.0, -10.0]), m);
+    assert_eq!(found.zeros.len(), 1);
+    assert!(found.zeros[0].enclosure[0].contains(1.0));
+    // Short of it, and parallel to it above.
+    assert_eq!(
+        at(&segment([0.0, 0.0, 1.0], [0.0, 0.0, 10.0]), m)
+            .zeros
+            .len(),
+        0
+    );
+    assert_eq!(
+        at(&segment([0.0, 0.0, -11.0], [0.0, 0.0, 10.0]), m)
+            .zeros
+            .len(),
+        0
+    );
+    let found = at(&segment([0.0, 0.0, 1.0], [10.0, 0.0, 0.0]), m);
+    assert!(found.zeros.is_empty() && found.flagged.is_empty());
+    // In it: the whole domain flagged.
+    let found = at(&segment([0.0, 0.0, 0.0], [10.0, 0.0, 0.0]), m);
+    assert_eq!(found.zeros.len(), 0);
+    assert_eq!(found.flagged.len(), 1);
+    // A circle across the plane: two crossings by the engine.
+    let frame = Frame::new([1.0, 0.0, 0.0], [0.0, 1.0, 0.0]).unwrap();
+    let ring =
+        CurveKind::Circle(Circle::new([0.0, 0.0, 300.0], 1_000.0, frame, (0.0, 2.0)).unwrap());
+    assert_eq!(at(&ring, m).zeros.len(), 2);
+}
+
+/// A segment's hull is its two ends; a curve whose NURBS form is approximate has its spread
+/// widened by the form's deviation; a hull says where a curve lies from a plane.
+#[test]
+fn hulls_hold_their_curves() {
+    let m = &mut meter();
+    let floor = Enclosed::of(&floor_plane()).unwrap();
+    let hull = Hull::of(&segment([1.0, 2.0, 3.0], [4.0, 0.0, -6.0]), m).unwrap();
+    let s = hull.spread(&floor).unwrap();
+    assert!(
+        s.lo() <= -3.0 && s.lo() > -3.0001 && s.hi() >= 3.0 && s.hi() < 3.0001,
+        "{s:?}"
+    );
+    // A helix converts to NURBS within a stated deviation: its spread holds the control points'
+    // heights widened by it, both ways.
+    let helix = CurveKind::Helix(
+        Helix::new(
+            [0.0, 0.0, 0.0],
+            HelixAxes::Frame {
+                frame: Frame::standard().unwrap(),
+                radius: 1_000.0,
+                pitch: 400.0,
+            },
+            (0.0, 3.0),
+        )
+        .unwrap(),
+    );
+    let form = helix.to_nurbs(m).unwrap();
+    assert!(form.deviation > 0.0, "{}", form.deviation);
+    let nurbs = &form.value.curve;
+    let heights: Vec<f64> = (0..nurbs.homogeneous().len())
+        .map(|i| nurbs.control_point(i).unwrap()[2])
+        .collect();
+    let (low, high) = heights
+        .iter()
+        .fold((f64::INFINITY, f64::NEG_INFINITY), |(l, h), z| {
+            (l.min(*z), h.max(*z))
+        });
+    let s = Hull::of(&helix, m).unwrap().spread(&floor).unwrap();
+    assert!(
+        s.lo() <= low - form.deviation && s.lo() > low - form.deviation - 1e-6,
+        "{s:?} {low}"
+    );
+    assert!(
+        s.hi() >= high + form.deviation && s.hi() < high + form.deviation + 1e-6,
+        "{s:?} {high}"
+    );
+}
+
+/// A segment's distance from a grid point, beside it and past each end, in closed form.
+#[test]
+fn a_segment_s_distance_beside_it_and_past_each_end() {
+    let m = &mut meter();
+    let mut carriers = Carriers::new();
+    let ix = carriers
+        .add_curve(segment([0.0; 3], [10.0, 0.0, 0.0]))
+        .unwrap();
+    let mut d = |x: i64, y: i64, z: i64| {
+        carriers
+            .distance(p(x, y, z), CarrierIx::Curve(ix), 0, m)
+            .unwrap()
+    };
+    for (x, y, z) in [
+        (5, 3, 4),
+        (-3, 4, 0),
+        (13, 0, 4),
+        (0, 3, 4),
+        (10, 4, 3),
+        (-4, 0, 3),
+        (14, 3, 0),
+    ] {
+        let e = d(x, y, z);
+        assert!(
+            e.lo() > 4.999 && e.lo() <= 5.0 && e.hi() >= 5.0 && e.hi() < 5.001,
+            "({x}, {y}, {z}): {e:?}"
+        );
+    }
+    let on = d(7, 0, 0);
+    assert_eq!(on.lo(), 0.0);
+    assert!(on.hi() < 1e-9, "{on:?}");
 }

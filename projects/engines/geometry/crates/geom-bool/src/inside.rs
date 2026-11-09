@@ -524,3 +524,52 @@ impl FlatFace {
         Ok(Some(count % 2 == 1))
     }
 }
+
+#[cfg(test)]
+#[allow(
+    clippy::unwrap_used,
+    clippy::indexing_slicing,
+    clippy::arithmetic_side_effects,
+    clippy::panic,
+    clippy::float_cmp,
+    reason = "test code: a failure should stop loudly"
+)]
+mod tests {
+    use super::*;
+
+    fn iv(lo: f64, hi: f64) -> Interval {
+        Interval::new(lo, hi).unwrap()
+    }
+
+    #[test]
+    fn the_hull_of_two_boxes() {
+        let a = [iv(0.0, 1.0), iv(5.0, 6.0), iv(-2.0, -1.0)];
+        let b = [iv(2.0, 3.0), iv(4.0, 5.5), iv(-1.5, 0.0)];
+        let h = hull(a, b).unwrap();
+        assert_eq!(
+            h.map(|x| (x.lo(), x.hi())),
+            [(0.0, 3.0), (4.0, 6.0), (-2.0, 0.0)]
+        );
+        assert_eq!(
+            hull(b, a).unwrap().map(|x| (x.lo(), x.hi())),
+            [(0.0, 3.0), (4.0, 6.0), (-2.0, 0.0)]
+        );
+    }
+
+    #[test]
+    fn the_gap_from_a_point_to_a_box() {
+        let reach = ([0.0, 0.0, 0.0], [10.0, 10.0, 10.0]);
+        assert_eq!(box_gap(P3::new(5, 5, 5).unwrap(), &reach).unwrap(), 0.0);
+        let gap = box_gap(P3::new(-3, 14, 5).unwrap(), &reach).unwrap();
+        assert!(gap <= 5.0 && gap > 4.999, "{gap}");
+        let gap = box_gap(P3::new(13, -4, 5).unwrap(), &reach).unwrap();
+        assert!(gap <= 5.0 && gap > 4.999, "{gap}");
+    }
+
+    #[test]
+    fn the_least_magnitude() {
+        assert_eq!(least(iv(2.0, 3.0)), 2.0);
+        assert_eq!(least(iv(-3.0, -2.0)), 2.0);
+        assert_eq!(least(iv(-1.0, 1.0)), 0.0);
+    }
+}
