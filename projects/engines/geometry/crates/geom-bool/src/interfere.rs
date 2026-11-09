@@ -1,9 +1,10 @@
-//! Interferences, lowest dimension first: where the vertices and edges of the operands meet, as
-//! paves on the edges (11.4 step 2, G243).
+//! Interferences, lowest dimension first: where the vertices, edges and faces of the operands meet,
+//! as paves on the edges and as each face's information (11.4 steps 2 to 4, G243 and G243a).
 //!
-//! What it does: [`interfere`] takes an [`Arrangement`] (the carriers, and the vertices and edges of
-//! every operand, each edge a bounded curve of the carriers' pool between two of the vertices, or
-//! closed) and finds where they meet, one dimension at a time. Vertex with vertex: the merge stage
+//! What it does: [`interfere`] takes an [`Arrangement`] (the carriers, and the vertices, edges and
+//! faces of every operand, each edge a bounded curve of the carriers' pool between two of the
+//! vertices, or closed, and each face a region of a carrier bounded by loops of edges) and finds
+//! where they meet, one dimension at a time. Vertex with vertex: the merge stage
 //! ([`crate::merge::merge_clusters`]) joins the vertices of different operands that touch, and
 //! every later decision uses the merged vertex. Vertex with edge: a vertex of one operand that
 //! touches an edge of another, by the contact rule on its certified distance from the edge's curve,
@@ -17,7 +18,9 @@
 //! ([`crate::common::common_blocks`]). A region where two edges could not be told apart by their
 //! intersection, as along a circle and a NURBS close to it, is accepted only where a common block
 //! proven by the contact rule covers it on both edges, or where it touches a vertex both edges pass
-//! through; anywhere else it fails.
+//! through; anywhere else it fails. Between the edges' meetings and their splitting, the faces meet
+//! the vertices and edges, and after it each other ([`crate::face`]): vertex with face, edge with
+//! face, face with face, and each face's On, In and section groups.
 //!
 //! Guarantees:
 //!
@@ -49,7 +52,8 @@
 //!
 //! Cost: a box tree over the vertices and edges, then for each candidate pair one certified
 //! distance (vertex with edge) or one curve intersection (edge with edge), all charged to the
-//! meter; each edge's paves sorted once. No recursion.
+//! meter; each edge's paves sorted once; and what the face stages cost ([`crate::face`]). No
+//! recursion.
 
 use alloc::vec::Vec;
 use core::fmt;
@@ -57,6 +61,7 @@ use core::fmt;
 use geom_bvh::{Aabb, Entry};
 use geom_intersect::curve::curves;
 use geom_intersect::project::{Projection, project_curve};
+use geom_intersect::solve::Reason;
 use geom_intersect::{IntersectError, Item, ParamBox, Unresolved};
 use geom_num::interval::Interval;
 use geom_num::math::round_ties_even;
@@ -68,6 +73,7 @@ use crate::broad::{candidate_pairs, point_entries};
 use crate::carrier::{Bound, CarrierIx, PointGeom, SortedVec};
 use crate::common::{CommonBlock, common_blocks};
 use crate::distance::{Carriers, FIRST_FLOOR};
+use crate::face::{self, FaceInfo, SectionEdge};
 use crate::merge::merge_clusters;
 use crate::pave::{OrderError, Pave, PaveBlock, PaveError, SplitEdge, order, split};
 use crate::rule::{
@@ -95,15 +101,29 @@ pub struct EdgeIn {
     pub operand: u32,
 }
 
-/// What the interferences are found in: the carriers, and the vertices and edges of every operand.
+/// A face of an operand: a region of its carrier bounded by loops of the arrangement's edges.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct FaceIn {
+    /// Its carrier: a plane of the table for a flat face, a surface of the pool otherwise.
+    pub surface: CarrierIx,
+    /// Its loops, each the indices of its edges in order round it, the outer loop first.
+    pub loops: Vec<Vec<usize>>,
+    /// The operand it belongs to.
+    pub operand: u32,
+}
+
+/// What the interferences are found in: the carriers, and the vertices, edges and faces of every
+/// operand.
 #[derive(Debug, Default)]
 pub struct Arrangement {
-    /// The carriers every vertex and edge is defined on.
+    /// The carriers every vertex, edge and face is defined on.
     pub carriers: Carriers,
     /// The vertices.
     pub vertices: Vec<VertexIn>,
     /// The edges.
     pub edges: Vec<EdgeIn>,
+    /// The faces.
+    pub faces: Vec<FaceIn>,
 }
 
 /// An entity of the arrangement, by kind and index.
@@ -113,6 +133,8 @@ pub enum Entity {
     Vertex(usize),
     /// An edge.
     Edge(usize),
+    /// A face.
+    Face(usize),
 }
 
 /// Why the interferences could not be found.
@@ -141,8 +163,37 @@ pub enum BuildError {
         /// The edge.
         edge: usize,
     },
-    /// An input refers to a vertex or curve that is not there.
+    /// An input refers to a vertex, curve, face or plane that is not there.
     Missing(Entity),
+    /// A region where an edge meets a face's plane that the crossing engine could not decide, and
+    /// that no vertex the two share covers.
+    Undecided {
+        /// The edge.
+        edge: usize,
+        /// The face.
+        face: usize,
+        /// Why it is undecided.
+        why: Reason,
+        /// Where, in space.
+        at: Box3,
+    },
+    /// No ray from a point qualified to place it in a flat face: its picture in the face's plane
+    /// lies on the boundary's, though in space it is proven apart from the boundary.
+    Unclassified {
+        /// The face.
+        face: usize,
+        /// The point.
+        at: P3,
+    },
+    /// Two paves of a section line whose order is not proven.
+    SectionOrder {
+        /// The two faces whose planes meet in the line.
+        faces: [usize; 2],
+        /// The first pave, by the lower end of its enclosure.
+        first: Pave,
+        /// The pave after it, whose enclosure meets the first's.
+        second: Pave,
+    },
 }
 
 impl fmt::Display for BuildError {
@@ -159,6 +210,23 @@ impl fmt::Display for BuildError {
                 "vertex {vertex} has no one nearest point on edge {edge}: it stands on its axis"
             ),
             BuildError::Missing(e) => write!(f, "{e:?} refers to something that is not there"),
+            BuildError::Undecided { edge, face, .. } => write!(
+                f,
+                "where edge {edge} meets the plane of face {face} has a region the crossing engine could not decide"
+            ),
+            BuildError::Unclassified { face, .. } => write!(
+                f,
+                "no ray qualified to place a point in face {face}: its picture lies on the boundary's"
+            ),
+            BuildError::SectionOrder {
+                faces: [a, b],
+                first,
+                second,
+            } => write!(
+                f,
+                "the order of vertices {} and {} on the line where faces {a} and {b} meet is not proven",
+                first.vertex, second.vertex
+            ),
         }
     }
 }
@@ -221,6 +289,33 @@ pub enum Interference {
         /// rather than made for this meeting.
         reused: bool,
     },
+    /// A vertex lies inside a flat face of another operand.
+    VertexFace {
+        /// The vertex.
+        vertex: usize,
+        /// The face.
+        face: usize,
+    },
+    /// An edge crosses a flat face of another operand, inside it or on its boundary.
+    EdgeFace {
+        /// The edge.
+        edge: usize,
+        /// The face.
+        face: usize,
+        /// The vertex they meet at.
+        vertex: usize,
+        /// Whether the vertex was already there rather than made for this meeting.
+        reused: bool,
+    },
+    /// Two flat faces of different operands meet along a section edge.
+    FaceFace {
+        /// The face of lower index.
+        first: usize,
+        /// The other.
+        second: usize,
+        /// The section edge, by its index in [`Interfered::sections`].
+        section: usize,
+    },
 }
 
 /// The interferences of an arrangement.
@@ -240,6 +335,10 @@ pub struct Interfered {
     pub splits: Vec<SplitEdge>,
     /// The pieces of different edges that are one stretch of curve, by index into `splits`.
     pub common: Vec<CommonBlock>,
+    /// Each face's information: its On, In and section groups, and what waits for face splitting.
+    pub faces: Vec<FaceInfo>,
+    /// The section edges: where the planes of two flat faces meet, kept where inside both.
+    pub sections: Vec<SectionEdge>,
 }
 
 /// A region two edges' intersection could not decide, held until the common blocks are known.
@@ -279,7 +378,7 @@ fn covered(region: &Deferred, splits: &[SplitEdge], common: &[CommonBlock]) -> b
 }
 
 /// A grid point's coordinates as doubles, which hold them exactly (at most 2^40).
-fn coordinates(p: P3) -> [f64; 3] {
+pub(crate) fn coordinates(p: P3) -> [f64; 3] {
     #[allow(
         clippy::cast_precision_loss,
         reason = "a coordinate is at most 2^40 in size, which a double holds exactly"
@@ -298,13 +397,13 @@ fn nearest_whole(x: f64) -> Result<i64, NumError> {
 }
 
 /// The grid point nearest `v`.
-fn nearest_point(v: [f64; 3]) -> Result<P3, NumError> {
+pub(crate) fn nearest_point(v: [f64; 3]) -> Result<P3, NumError> {
     let [x, y, z] = v;
     P3::new(nearest_whole(x)?, nearest_whole(y)?, nearest_whole(z)?)
 }
 
 /// A whole number of steps at or below `x`, and one at or above it.
-fn floor_ceil(x: f64) -> Result<(i64, i64), NumError> {
+pub(crate) fn floor_ceil(x: f64) -> Result<(i64, i64), NumError> {
     let n = nearest_whole(x)?;
     #[allow(
         clippy::cast_precision_loss,
@@ -325,7 +424,7 @@ fn floor_ceil(x: f64) -> Result<(i64, i64), NumError> {
 }
 
 /// The box tree entry of an edge: its curve's box over its domain, padded by the contact radius.
-fn edge_entry(
+pub(crate) fn edge_entry(
     carriers: &Carriers,
     (e, edge): (usize, &EdgeIn),
     key: u64,
@@ -361,7 +460,7 @@ fn edge_entry(
 }
 
 /// The enclosure of a distance widened by a point's own bound each way, and never below zero.
-fn widened(d: Interval, by: Bound) -> Result<Interval, NumError> {
+pub(crate) fn widened(d: Interval, by: Bound) -> Result<Interval, NumError> {
     #[allow(
         clippy::cast_precision_loss,
         reason = "bounds are counts of steps far below 2^53"
@@ -373,7 +472,7 @@ fn widened(d: Interval, by: Bound) -> Result<Interval, NumError> {
 
 /// The enclosure of the distance from a grid point, within `w` of where its vertex is, to a box of
 /// grid points: the box's nearest and farthest corners, widened by `w`.
-fn to_box(p: P3, w: Bound, region: &Box3) -> Result<Interval, NumError> {
+pub(crate) fn to_box(p: P3, w: Bound, region: &Box3) -> Result<Interval, NumError> {
     let (lo, hi) = (region.min(), region.max());
     let mut near = [Interval::point(0.0)?; 3];
     let mut far = [Interval::point(0.0)?; 3];
@@ -410,7 +509,7 @@ fn to_box(p: P3, w: Bound, region: &Box3) -> Result<Interval, NumError> {
 }
 
 /// The vertex at index `v`, committed: its grid point and its bound.
-fn committed(
+pub(crate) fn committed(
     carriers: &Carriers,
     vertices: &[PointGeom],
     v: usize,
@@ -432,7 +531,7 @@ fn curve_of(arr: &Arrangement, e: usize) -> Result<CurveIx, BuildError> {
 
 /// The parameter of vertex `v`, at grid point `p`, on edge `e`: the enclosure of its nearest
 /// point's parameter at the finest refinement.
-fn parameter(
+pub(crate) fn parameter(
     arr: &Arrangement,
     e: usize,
     v: usize,
@@ -527,27 +626,27 @@ fn is_end(ends: &[Option<[usize; 2]>], e: usize, v: usize) -> bool {
         .is_some_and(|[s, t]| s == v || t == v)
 }
 
-/// The vertex among `paves` that a meeting at `xyz` touches, if one does, by the contact rule.
+/// The vertex among `ids` that a meeting at `xyz` touches, if one does, by the contact rule.
 ///
 /// # Errors
 ///
 /// [`ContactError::NearContact`] for a pave neither proven apart from the meeting nor touching it.
-fn touching(
+pub(crate) fn touching(
     carriers: &Carriers,
     vertices: &[PointGeom],
-    paves: &[&Pave],
+    ids: &[usize],
     xyz: &Box3,
 ) -> Result<Option<usize>, BuildError> {
     let mut seen: Vec<usize> = Vec::new();
-    for pave in paves {
-        if seen.contains(&pave.vertex) {
+    for &vertex in ids {
+        if seen.contains(&vertex) {
             continue;
         }
-        seen.push(pave.vertex);
-        let (p, w) = committed(carriers, vertices, pave.vertex)?;
+        seen.push(vertex);
+        let (p, w) = committed(carriers, vertices, vertex)?;
         let d = to_box(p, w, xyz)?;
         match judge(d) {
-            Verdict::Touch => return Ok(Some(pave.vertex)),
+            Verdict::Touch => return Ok(Some(vertex)),
             Verdict::Decided(_) => {}
             Verdict::Near => {
                 return Err(ContactError::NearContact(NearContact {
@@ -577,6 +676,21 @@ fn new_vertex(
         z0 / 2.0 + z1 / 2.0,
     ])?;
     let on = SortedVec::from_items(curves_met.iter().map(|c| CarrierIx::Curve(*c)));
+    certify(carriers, at, on, remaining, meter)
+}
+
+/// The grid point `at` as a vertex on the carriers `on`, proven within its bound of each.
+///
+/// # Errors
+///
+/// [`ContactError::CoincidenceChain`] when a bound passes `remaining`; a distance's errors.
+pub(crate) fn certify(
+    carriers: &Carriers,
+    at: P3,
+    on: SortedVec<CarrierIx>,
+    remaining: Bound,
+    meter: &mut WorkMeter<'_>,
+) -> Result<PointGeom, BuildError> {
     let mut within = Bound::ZERO;
     for &c in on.as_slice() {
         let (bound, d) = carriers.upper_bound(at, c, REFINEMENTS, meter)?;
@@ -597,13 +711,13 @@ fn new_vertex(
 
 /// The working state of the stages: the vertices so far, each edge's own ends and its paves so far,
 /// and what met what.
-struct Stages {
-    vertices: Vec<PointGeom>,
-    merged: Vec<usize>,
-    owner: Vec<u32>,
-    ends: Vec<Option<[usize; 2]>>,
-    paves: Vec<Vec<Pave>>,
-    interferences: Vec<Interference>,
+pub(crate) struct Stages {
+    pub(crate) vertices: Vec<PointGeom>,
+    pub(crate) merged: Vec<usize>,
+    pub(crate) owner: Vec<u32>,
+    pub(crate) ends: Vec<Option<[usize; 2]>>,
+    pub(crate) paves: Vec<Vec<Pave>>,
+    pub(crate) interferences: Vec<Interference>,
     deferred: Vec<Deferred>,
 }
 
@@ -744,12 +858,13 @@ fn edge_edge(
                     let (Some(s), Some(t)) = (at.spans().first(), at.spans().get(1)) else {
                         return Err(IntersectError::Internal.into());
                     };
-                    let near: Vec<&Pave> = st
+                    let near: Vec<usize> = st
                         .paves
                         .get(a)
                         .into_iter()
                         .chain(st.paves.get(b))
                         .flatten()
+                        .map(|p: &Pave| p.vertex)
                         .collect();
                     let found = touching(carriers, &st.vertices, &near, xyz)?;
                     let (vertex, reused) = if let Some(v) = found {
@@ -839,6 +954,8 @@ fn finish(
         interferences: st.interferences,
         splits,
         common,
+        faces: Vec::new(),
+        sections: Vec::new(),
     })
 }
 
@@ -862,5 +979,11 @@ pub fn interfere(
     let found = candidates(arr, &st.vertices, &st.owner, exec, meter)?;
     vertex_edge(arr, &mut st, &found.vertex_edge, meter)?;
     edge_edge(arr, &mut st, &found.edge_edge, remaining, meter)?;
-    finish(arr, st, meter)
+    let pairs = face::candidates(arr, &st, exec, meter)?;
+    let mut faces = face::prepare(arr, meter)?;
+    face::vertex_face(arr, &mut st, &mut faces, &pairs.vertices, meter)?;
+    face::edge_face(arr, &mut st, &mut faces, &pairs.edges, remaining, meter)?;
+    let mut out = finish(arr, st, meter)?;
+    face::settle(arr, &mut out, faces, &pairs.faces, meter)?;
+    Ok(out)
 }

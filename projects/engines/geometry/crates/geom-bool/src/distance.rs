@@ -58,7 +58,7 @@ pub struct Carriers {
 }
 
 /// The nearest doubles around a whole number held in 128 bits.
-fn enclose_i128(v: i128) -> Result<Interval, NumError> {
+pub(crate) fn enclose_i128(v: i128) -> Result<Interval, NumError> {
     if v == 0 {
         return Interval::point(0.0);
     }
