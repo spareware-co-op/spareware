@@ -32,17 +32,21 @@
 //! - [`carrier`]: what the curved builder stores: points, curves and their carriers (G242).
 //! - [`combine`]: the boolean's entry and its schema (G131).
 //! - [`common`]: common blocks, pave blocks of different edges on one curve (G243).
+//! - [`crossing`]: where a curve crosses a plane of the table, and how far it strays from one (G243a).
 //! - [`decide`]: the exact analytic decision table of the certified curved path (G242).
 //! - [`distance`]: certified distances of points from carriers, and between points (G242).
+//! - [`face`]: face information: vertices, edges and faces met with faces; On, In and sections (G243a).
 //! - [`merge`]: touching entities become one, checked against their carriers (G242).
 //! - [`half_space`]: everything on one side of a plane, as a solid operand (G130).
+//! - [`inside`]: where a point lies in a flat face, certified (G243a).
 //! - [`interfere`]: interferences, lowest dimension first, as paves on the edges (G243).
 //! - [`pave`]: paves in their proven order, pave blocks and split edges (G243).
 //! - [`rule`]: the contact rule at `ε_fit`, `NearContact` and `CoincidenceChain` (G242).
 //! - [`rebuild`]: merged pieces published as a body by canonical rules (G129).
 //!
 //! Status: the rebuild (G129), operands and selections (G130) and the entry (G131) built; the
-//! curved builder's data model (G242) and its interferences, paves and common blocks (G243) built;
+//! curved builder's data model (G242), its interferences, paves and common blocks (G243) and its
+//! face information (G243a) built;
 //! the rest by pieces G132, G133, G137, G138, G139, G144, G244, G245, G246, G247, G248, G249, G250,
 //! G324.
 #![cfg_attr(not(test), no_std)]
@@ -54,9 +58,12 @@ pub mod broad;
 pub mod carrier;
 pub mod combine;
 pub mod common;
+pub mod crossing;
 pub mod decide;
 pub mod distance;
+pub mod face;
 pub mod half_space;
+pub mod inside;
 pub mod interfere;
 pub mod merge;
 pub mod operand;

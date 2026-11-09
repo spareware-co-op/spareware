@@ -1343,9 +1343,24 @@
               "shape": "struct"
             },
             {
-              "doc": "An input refers to a vertex or curve that is not there.",
+              "doc": "An input refers to a vertex, curve, face or plane that is not there.",
               "name": "Missing",
               "shape": "tuple"
+            },
+            {
+              "doc": "A region where an edge meets a face's plane that the crossing engine could not decide, and that no vertex the two share covers.",
+              "name": "Undecided",
+              "shape": "struct"
+            },
+            {
+              "doc": "No ray from a point qualified to place it in a flat face: its picture in the face's plane lies on the boundary's, though in space it is proven apart from the boundary.",
+              "name": "Unclassified",
+              "shape": "struct"
+            },
+            {
+              "doc": "Two paves of a section line whose order is not proven.",
+              "name": "SectionOrder",
+              "shape": "struct"
             }
           ],
           "module": "geom_bool::interfere",
@@ -1589,6 +1604,29 @@
           "target": "lib"
         },
         {
+          "cost": "[`Hull::of`] is one NURBS conversion of the curve; [`Hull::spread`] is linear in its control points, with no allocation. [`crossings`] costs what the engine's boxes cost, each one bound of the curve, charged to the meter. No recursion.",
+          "does": "[`Against`] is a curve's offset from a plane, n · C(t) + d with the plane's own integers, as a field of one unknown for `geom_intersect::solve`, so [`crossings`] finds every parameter where the curve meets the plane, each proven the only one in its box, or a flagged region where that could not be decided. A line's offset is linear, n · o + d + t (n · v), and its one root is enclosed directly. [`Hull`] holds a curve's NURBS form as enclosures of its control points, with the form's certified deviation, and [`Hull::spread`] encloses the signed distance from a plane of every point of the curve at once: a NURBS curve with positive weights is at each parameter a convex combination of its control points, so n · C + d lies between the least and the greatest of the control points' values. A curve whose spread the contact rule reads as touching lies on the plane; one whose spread is proven of one sign never meets it.",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-bool/src/crossing.rs",
+          "guarantees": [
+            "**Every crossing found or flagged.** [`crossings`] is the interval engine of chapter 12.3: a parameter box is dropped only when its residual excludes zero or Krawczyk's operator proves it empty, so a crossing no zero or flag reports does not exist, and each zero is a simple root, the only one in its proof box, where the curve passes from one side of the plane to the other. On a line whose rate n · v is proven nonzero the root is the only one anywhere, enclosed as −(n · o + d) / (n · v) and cut to the domain; a root just past an end, within the enclosure, is reported at that end, where the line's end lies within the enclosure's reach of the plane.",
+            "**The plane is the table's.** n and d are the plane's integers, each enclosed by the doubles around it, never a rounded copy of the plane, so the decision is about the carrier itself.",
+            "**The spread holds the curve.** Every point of the curve lies within [`Hull::spread`] of the plane, signed: the control points' values are enclosed outward, divided by an enclosure of |n|, and widened by the NURBS form's certified deviation. A form with a weight that is not positive and finite has no such hull, and its spread is the widest interval, never a guess."
+          ],
+          "job": "Where a curve crosses a plane of the plane table, and how far a curve strays from one (11.4 step 2, G243a).",
+          "method": {
+            "links": [
+              "projects/engines/geometry/architecture/12-intersections.md",
+              "https://doi.org/10.1007/978-3-642-59223-2"
+            ],
+            "text": "the residual and its Jacobian are enclosed from the curve kind's own certified bounds (`ParamCurve::bound`, `ParamCurve::derivative_bound`) and handed to `geom_intersect::solve::solve`, chapter 12.3 (`projects/engines/geometry/architecture/12-intersections.md`): Krawczyk's operator on a subdivision work list. The hull is the convex-hull property of rational B-splines with positive weights (L. Piegl and W. Tiller, *The NURBS Book*, 2nd edition, Springer (1997), property P4.10, <https://doi.org/10.1007/978-3-642-59223-2>)."
+          },
+          "path": "geom_bool::crossing",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
           "cost": "constant, a few dozen wide multiplications. No allocation. Recursion: none.",
           "does": "the decisions the curved builder takes with no enclosure at all, on grid points and on quadrics held by grid points and whole numbers of steps. A grid point against a plane, a sphere, a cylinder, a cone or a torus ([`point_sphere`], [`point_cylinder`], [`point_cone`], [`point_torus`]; the plane's is [`geom_num::plane::Plane::side`]). A plane against a sphere or a cylinder, apart, tangent or crossing ([`plane_sphere`], [`plane_cylinder`]). Two planes, two spheres or two cylinders coinciding ([`planes_coincide`], [`spheres_coincide`], [`cylinders_coincide`]). The quadrics are `geom_num::quadric`'s, the planes are `geom_num::plane`'s; this module adds only what a boolean asks of them.",
           "family": [],
@@ -1612,14 +1650,15 @@
           "target": "lib"
         },
         {
-          "cost": "a plane, a few interval operations; any other carrier, one projection search at the floor asked, charged to the meter. No recursion.",
-          "does": "[`Carriers`] holds the builder's carriers: a table of planes and pools of surfaces and curves, named by [`CarrierIx`]. [`Carriers::distance`] encloses how far a grid point lies from one, computed from the carrier's own definition: a plane's from its integer coefficients in one exact step, every other kind's by `geom_intersect::project`, the certified nearest-point search of chapter 12.4. [`separation`] encloses how far apart two points are, each point's own bound added: a certified point may lie anywhere within its bound of where its carriers meet.",
+          "cost": "a plane or a line, a few interval operations; any other carrier, one projection search at the floor asked, charged to the meter. No recursion.",
+          "does": "[`Carriers`] holds the builder's carriers: a table of planes and pools of surfaces and curves, named by [`CarrierIx`]. [`Carriers::distance`] encloses how far a grid point lies from one, computed from the carrier's own definition: a plane's from its integer coefficients in one exact step, a line's in closed form, every other kind's by `geom_intersect::project`, the certified nearest-point search of chapter 12.4. [`separation`] encloses how far apart two points are, each point's own bound added: a certified point may lie anywhere within its bound of where its carriers meet.",
           "family": [],
           "file": "projects/engines/geometry/crates/geom-bool/src/distance.rs",
           "guarantees": [
             "**An enclosure, never a number.** Each distance holds the true distance. A refinement only narrows it: the floor of the search at refinement k is [`FIRST_FLOOR`] over 2^k steps.",
             "**From the definition.** A distance is measured from the carrier's definition, never from an earlier representative or a cached fit, so repeated operations cannot walk a point away from its carriers.",
             "**A plane's distance is exact up to one rounding.** n · p + d is computed in `i128`, checked, and enclosed by the nearest doubles around it; |n| by an interval square root.",
+            "**A line's distance is closed form.** For o + t·v over [a, b], a segment, a ray (one end infinite) or a whole line, the nearest parameter (p − o) · v / |v|² is enclosed and held to the domain; the distance is at most |p − o − t·v| over that enclosure, and at least the distance from the whole line, |(p − o) × v| / |v|, or from the end the nearest parameter is proven past, which is then a finite end. It does not change with the refinement.",
             "**Undecided is wide.** A search that reaches its floor with nearest points that cannot be told apart (`NonIsolated`) gives the widest enclosure, so the contact rule reads it as near."
           ],
           "job": "Certified distances of a grid point from a carrier, and between points that carry a bound (11.4, G242).",
@@ -1632,6 +1671,42 @@
           "path": "geom_bool::distance",
           "provenance": [],
           "spdx": null,
+          "target": "lib"
+        },
+        {
+          "cost": "one broad phase over the vertices, edges and faces; per vertex-face pair one certified distance and at most one placing; per edge-face pair one hull and at most one run of the crossing engine, and a placing per crossing; per face pair the vertices of both faces, sorted once, and two placings per piece of the line; all charged to the meter. No recursion.",
+          "does": "after the vertices and edges have met ([`crate::interfere`]), the faces meet them, lowest dimension first. **Vertex with face:** a vertex of another operand that touches a flat face's plane, by the contact rule, and lies inside the face ([`crate::inside`]) is In it. **Edge with face:** where an edge of another operand crosses a flat face's plane ([`crate::crossing::crossings`]), a point that touches a vertex already on the edge or on the face (its boundary's paves, or a vertex In it) is that vertex, so a meeting through an existing corner ends at the corner; any other point inside the face, or on its boundary, is a new vertex, certified against the edge's curve and the face's plane (and the boundary edges it touches), and a pave on the edge (and on those boundary edges). An edge lying on the plane, by its hull, is kept whole, and once the edges are split, each piece of it whose middle lies inside the face is In. **Face with face:** two flat faces of different operands on distinct planes that are not parallel meet along the line of the two planes, the exact `CurveGeom::Line`; its paves are the vertices the earlier stages put on both faces (on the boundary or In), ordered along the line, and each piece between neighbouring paves whose middle lies inside both faces is a section edge. Each face's information then holds its boundary's split edges and vertices (On), the other operands' vertices and pieces of edges inside it (In), and the section edges across it. A face whose carrier is curved is not placed here: the vertices touching its carrier, and the edges and faces whose boxes meet it, are kept as pending for face splitting, which places them in the face's parameter space (pieces G244 and G245).",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-bool/src/face.rs",
+          "guarantees": [
+            "**Lowest dimension first, and reused above.** Vertices meet faces before edges do, and every point where an edge crosses a face is first matched against the vertices already on the edge and on the face by the contact rule; a section's paves are only vertices already found.",
+            "**A section ends at an existing corner.** A corner of one face on the other's plane and inside it is a vertex of both, so the section line's pave there is that corner, never a second vertex nearby.",
+            "**Flagged regions are accepted only on proof.** A region where an edge meets a face's plane that the crossing engine could not decide stands only where a vertex the edge and the face share touches it, or where the region is proven to lie outside the face; an edge proven by its hull to lie on the plane is a shared stretch and is placed piece by piece. Anything else fails with [`BuildError::Undecided`].",
+            "**Never a guess.** Placing a point is certified ([`crate::inside`]); two section paves whose order is not proven fail with [`BuildError::SectionOrder`].",
+            "**Deterministic.** Pairs come from the broad phase in key order; each list in a face's information is sorted."
+          ],
+          "job": "Face information: vertices, edges and faces met with faces, and each face's On, In and section groups (11.4 steps 2 and 4, G243a).",
+          "method": {
+            "links": [
+              "projects/engines/geometry/architecture/11-booleans.md",
+              "projects/kit/notes/G01-evidence/02-occt-parasolid-acis.md"
+            ],
+            "text": "chapter 11.4, steps 2 and 4 (`projects/engines/geometry/architecture/11-booleans.md`): the vertex-face, edge-face and face-face interferences and the face information (On, In and section pave blocks) of `OpenCascade`'s General Fuse, studied for method only (`projects/kit/notes/G01-evidence/02-occt-parasolid-acis.md`), decided on carriers by the contact rule. That the lowest-dimension result is taken first is `SMLib`'s, read in solidcore's Rust port (`VertexFaceIntersect`, `EdgeFaceIntersect` and `FaceFaceIntersect` of its topology intersector); its imprinting within a tolerance that grows is not taken."
+          },
+          "path": "geom_bool::face",
+          "provenance": [
+            {
+              "licence": "Apache-2.0",
+              "link": "https://github.com/tangency-labs/solidcore/blob/c440e5f892452a9654aee8f3030de6095fdb1415/crates/solidcore/src/boolean/topology_intersector/p1.rs",
+              "method_note": null,
+              "name": "solidcore",
+              "notice": [],
+              "pinned": true,
+              "purpose": "for the order of the vertex, edge and face stages; no code copied.",
+              "take": "port-method"
+            }
+          ],
+          "spdx": "Apache-2.0",
           "target": "lib"
         },
         {
@@ -1657,8 +1732,45 @@
           "target": "lib"
         },
         {
-          "cost": "a box tree over the vertices and edges, then for each candidate pair one certified distance (vertex with edge) or one curve intersection (edge with edge), all charged to the meter; each edge's paves sorted once. No recursion.",
-          "does": "[`interfere`] takes an [`Arrangement`] (the carriers, and the vertices and edges of every operand, each edge a bounded curve of the carriers' pool between two of the vertices, or closed) and finds where they meet, one dimension at a time. Vertex with vertex: the merge stage ([`crate::merge::merge_clusters`]) joins the vertices of different operands that touch, and every later decision uses the merged vertex. Vertex with edge: a vertex of one operand that touches an edge of another, by the contact rule on its certified distance from the edge's curve, becomes a pave of that edge, at the enclosure of its parameter there. Edge with edge: where two edges of different operands meet (`geom_intersect::curve::curves`), a point that touches a pave already on either edge is that pave's vertex, so a meeting through an existing corner ends at the corner and makes no second vertex nearby; any other point is a new vertex, certified against both curves. Each edge's paves are then put in their proven order ([`crate::pave::order`]), the edges are cut at them into split edges with their history ([`crate::pave::split`]), and the pieces of different edges that are one stretch of curve are found as common blocks ([`crate::common::common_blocks`]). A region where two edges could not be told apart by their intersection, as along a circle and a NURBS close to it, is accepted only where a common block proven by the contact rule covers it on both edges, or where it touches a vertex both edges pass through; anywhere else it fails.",
+          "cost": "[`FlatFace::new`] converts each boundary edge to its NURBS form once. [`FlatFace::place`] is one certified distance per boundary edge whose box is within reach, then per direction tried an interval test per join and, per boundary edge not proven on one side of the ray's plane by its hull, one run of the crossing engine; all charged to the meter. No recursion.",
+          "does": "a [`FlatFace`] is a face whose carrier is a plane of the table, with its boundary edges and the joins between them. [`FlatFace::place`] says where a grid point, known within a bound, lies. **On** when it touches a boundary edge by the contact rule, measured in space from the edge's curve ([`crate::distance::Carriers::distance`]), so the decision is the one vertex with edge takes. Otherwise **In** or **Out** by the parity of a ray's crossings in the plane's own picture: the coordinate the plane's normal is largest in is dropped, an affine bijection from the plane onto the other two coordinates that keeps inside and outside. A ray runs from the point along a fixed sequence of small whole directions in that picture. Lifted back to space, the ray's line is the meeting of the face's plane with the plane through the point that holds the ray and the dropped axis, a plane of whole numbers, so each boundary edge crosses the ray where it crosses that plane ([`crate::crossing::crossings`]), on the ray's side of the point. A direction is kept only when its answer is proven: every crossing a simple root ahead of the point or behind it, no boundary edge lying in the ray's plane, no flagged region ahead, and no join within a step of the ray ahead of the point: a join is the box round the end points of the curves that meet at a vertex (or a closed curve's two ends), where a crossing could fall between two curves, or be counted on both.",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-bool/src/inside.rs",
+          "guarantees": [
+            "**On is the contact rule.** A point touches the boundary only when its distance from a boundary edge's curve, widened by the point's own bound, holds zero and lies within `ε_fit` at the finest refinement; a pair the rule cannot decide fails with [`crate::rule::NearContact`].",
+            "**In and Out are proven, never sampled.** Each crossing counted is a zero of the edge's offset from the ray's plane that Krawczyk's operator proved alone in its box, where the edge passes from one side to the other, and whose position is proven ahead of the point. A direction with any undecided part is dropped whole, and the next is tried.",
+            "**Joins cannot hide a crossing.** The boundary is its curves and the gaps where neighbouring curves meet, each gap inside its join's box, which holds the enclosures of the curves' end points there. A ray that stays more than a step from every join ahead of the point meets no gap and no curve at its end, so the crossings counted are those of the closed boundary, each once.",
+            "**Refused, never guessed.** When no direction of [`DIRECTIONS`] qualifies, the point's picture lies on the boundary's picture while the point itself is proven apart from the boundary in space, and [`FlatFace::place`] fails with [`BuildError::Unclassified`].",
+            "**Deterministic.** The directions are tried in their fixed order, and the edges in loop order."
+          ],
+          "job": "Where a point lies in a flat face: on its boundary, inside it or outside it, certified (11.4 step 4, G243a).",
+          "method": {
+            "links": [
+              "https://doi.org/10.1016/B978-0-12-336156-1.50013-6",
+              "projects/engines/geometry/architecture/12-intersections.md",
+              "projects/engines/geometry/architecture/11-booleans.md"
+            ],
+            "text": "the crossing-number test for a point in a polygon (E. Haines, \"Point in Polygon Strategies\", *Graphics Gems IV*, Academic Press (1994), section 2, <https://doi.org/10.1016/B978-0-12-336156-1.50013-6>), with every crossing proven by chapter 12.3's engine (`projects/engines/geometry/architecture/12-intersections.md`) and a fixed sequence of rays in place of a random one, as chapter 11.4's classification asks (`projects/engines/geometry/architecture/11-booleans.md`). The order of tests, the point on the carrier first and then near the boundary and then inside, is `SMLib`'s `TestAndImprintFace` and `SmLoop::ContainsUVPoint`, read in solidcore's Rust port; their winding walk samples each trim curve in steps and decides within a tolerance, which is not taken."
+          },
+          "path": "geom_bool::inside",
+          "provenance": [
+            {
+              "licence": "Apache-2.0",
+              "link": "https://github.com/tangency-labs/solidcore/blob/c440e5f892452a9654aee8f3030de6095fdb1415/crates/solidcore/src/boolean/topology_intersector/p1.rs",
+              "method_note": null,
+              "name": "solidcore",
+              "notice": [],
+              "pinned": true,
+              "purpose": "and <https://github.com/tangency-labs/solidcore/blob/c440e5f892452a9654aee8f3030de6095fdb1415/crates/solidcore/src/query/loop.rs>, for the order of the vertex-in-face tests; no code copied.",
+              "take": "port-method"
+            }
+          ],
+          "spdx": "Apache-2.0",
+          "target": "lib"
+        },
+        {
+          "cost": "a box tree over the vertices and edges, then for each candidate pair one certified distance (vertex with edge) or one curve intersection (edge with edge), all charged to the meter; each edge's paves sorted once; and what the face stages cost ([`crate::face`]). No recursion.",
+          "does": "[`interfere`] takes an [`Arrangement`] (the carriers, and the vertices, edges and faces of every operand, each edge a bounded curve of the carriers' pool between two of the vertices, or closed, and each face a region of a carrier bounded by loops of edges) and finds where they meet, one dimension at a time. Vertex with vertex: the merge stage ([`crate::merge::merge_clusters`]) joins the vertices of different operands that touch, and every later decision uses the merged vertex. Vertex with edge: a vertex of one operand that touches an edge of another, by the contact rule on its certified distance from the edge's curve, becomes a pave of that edge, at the enclosure of its parameter there. Edge with edge: where two edges of different operands meet (`geom_intersect::curve::curves`), a point that touches a pave already on either edge is that pave's vertex, so a meeting through an existing corner ends at the corner and makes no second vertex nearby; any other point is a new vertex, certified against both curves. Each edge's paves are then put in their proven order ([`crate::pave::order`]), the edges are cut at them into split edges with their history ([`crate::pave::split`]), and the pieces of different edges that are one stretch of curve are found as common blocks ([`crate::common::common_blocks`]). A region where two edges could not be told apart by their intersection, as along a circle and a NURBS close to it, is accepted only where a common block proven by the contact rule covers it on both edges, or where it touches a vertex both edges pass through; anywhere else it fails. Between the edges' meetings and their splitting, the faces meet the vertices and edges, and after it each other ([`crate::face`]): vertex with face, edge with face, face with face, and each face's On, In and section groups.",
           "family": [],
           "file": "projects/engines/geometry/crates/geom-bool/src/interfere.rs",
           "guarantees": [
@@ -1667,7 +1779,7 @@
             "**New vertices are certified against their carriers.** A vertex made where two edges cross is the grid point nearest the meeting, proven within its bound of both curves, and refused with [`crate::rule::CoincidenceChain`] when that bound passes the remaining one.",
             "**Deterministic.** Pairs are taken in index order, each edge's paves are ordered by their enclosures, and new vertices are numbered in the order their pairs are taken."
           ],
-          "job": "Interferences, lowest dimension first: where the vertices and edges of the operands meet, as paves on the edges (11.4 step 2, G243).",
+          "job": "Interferences, lowest dimension first: where the vertices, edges and faces of the operands meet, as paves on the edges and as each face's information (11.4 steps 2 to 4, G243 and G243a).",
           "method": {
             "links": [
               "projects/engines/geometry/architecture/11-booleans.md",
@@ -1838,7 +1950,7 @@
       "provenance": [],
       "sections": "10.2, 11, 13 (introduction), 13.14, 16.1, 22, 23.5 and 23.6, in the kernel architecture (`projects/engines/geometry/architecture/`).",
       "spdx": null,
-      "status": "the rebuild (G129), operands and selections (G130) and the entry (G131) built; the curved builder's data model (G242) and its interferences, paves and common blocks (G243) built; the rest by pieces G132, G133, G137, G138, G139, G144, G244, G245, G246, G247, G248, G249, G250, G324.",
+      "status": "the rebuild (G129), operands and selections (G130) and the entry (G131) built; the curved builder's data model (G242), its interferences, paves and common blocks (G243) and its face information (G243a) built; the rest by pieces G132, G133, G137, G138, G139, G144, G244, G245, G246, G247, G248, G249, G250, G324.",
       "summary": "Spare Kit geometry kernel: the arrangement engine."
     },
     {
@@ -14102,6 +14214,18 @@
       "take": "port-method",
       "used_by": [
         "projects/engines/geometry/crates/geom-bool/src/interfere.rs"
+      ]
+    },
+    {
+      "licence": "Apache-2.0",
+      "link": "https://github.com/tangency-labs/solidcore/blob/c440e5f892452a9654aee8f3030de6095fdb1415/crates/solidcore/src/boolean/topology_intersector/p1.rs",
+      "method_note": null,
+      "name": "solidcore",
+      "pinned": true,
+      "take": "port-method",
+      "used_by": [
+        "projects/engines/geometry/crates/geom-bool/src/face.rs",
+        "projects/engines/geometry/crates/geom-bool/src/inside.rs"
       ]
     },
     {

@@ -4,9 +4,10 @@
 //! What it does: [`Carriers`] holds the builder's carriers: a table of planes and pools of surfaces
 //! and curves, named by [`CarrierIx`]. [`Carriers::distance`] encloses how far a grid point lies
 //! from one, computed from the carrier's own definition: a plane's from its integer coefficients
-//! in one exact step, every other kind's by `geom_intersect::project`, the certified nearest-point
-//! search of chapter 12.4. [`separation`] encloses how far apart two points are, each point's own
-//! bound added: a certified point may lie anywhere within its bound of where its carriers meet.
+//! in one exact step, a line's in closed form, every other kind's by `geom_intersect::project`,
+//! the certified nearest-point search of chapter 12.4. [`separation`] encloses how far apart two
+//! points are, each point's own bound added: a certified point may lie anywhere within its bound of
+//! where its carriers meet.
 //!
 //! Guarantees:
 //!
@@ -17,6 +18,11 @@
 //!   its carriers.
 //! - **A plane's distance is exact up to one rounding.** n · p + d is computed in `i128`, checked,
 //!   and enclosed by the nearest doubles around it; |n| by an interval square root.
+//! - **A line's distance is closed form.** For o + t·v over [a, b], a segment, a ray (one end
+//!   infinite) or a whole line, the nearest parameter (p − o) · v / |v|² is enclosed and held to
+//!   the domain; the distance is at most |p − o − t·v| over that enclosure, and at least the
+//!   distance from the whole line, |(p − o) × v| / |v|, or from the end the nearest parameter is
+//!   proven past, which is then a finite end. It does not change with the refinement.
 //! - **Undecided is wide.** A search that reaches its floor with nearest points that cannot be told
 //!   apart (`NonIsolated`) gives the widest enclosure, so the contact rule reads it as near.
 //!
@@ -24,8 +30,8 @@
 //! `geom_intersect::project` (<https://doi.org/10.1016/S0167-8396(03)00021-9>), and the plane's
 //! signed distance n · p + d over |n| (`geom_num::plane`).
 //!
-//! Cost: a plane, a few interval operations; any other carrier, one projection search at the
-//! floor asked, charged to the meter. No recursion.
+//! Cost: a plane or a line, a few interval operations; any other carrier, one projection search at
+//! the floor asked, charged to the meter. No recursion.
 
 #![allow(
     clippy::many_single_char_names,
@@ -41,7 +47,7 @@ use geom_num::wide::I256;
 use geom_num::{NumError, P3, Steps};
 use geom_poly::plane::{PlaneIx, PlaneTable};
 use geom_run::WorkMeter;
-use geom_topo::{CurveIx, CurveKind, SurfaceIx, SurfaceKind};
+use geom_topo::{CurveIx, CurveKind, ParamCurve, SurfaceIx, SurfaceKind};
 
 use crate::carrier::{Bound, CarrierIx, PointGeom};
 use crate::rule::{ContactError, greater, lesser};
@@ -58,7 +64,7 @@ pub struct Carriers {
 }
 
 /// The nearest doubles around a whole number held in 128 bits.
-fn enclose_i128(v: i128) -> Result<Interval, NumError> {
+pub(crate) fn enclose_i128(v: i128) -> Result<Interval, NumError> {
     if v == 0 {
         return Interval::point(0.0);
     }
@@ -284,6 +290,13 @@ impl Carriers {
                     .curves
                     .get(usize::try_from(ix.row()).map_err(|_| NumError::Degenerate)?)
                     .ok_or(NumError::Degenerate)?;
+                if let CurveKind::Line(line) = curve {
+                    return Ok(segment_distance(
+                        at,
+                        (line.origin(), line.direction()),
+                        curve.domain(),
+                    )?);
+                }
                 match project_curve(curve, &at, floor, meter)? {
                     Projection::Points(found) => {
                         let mut best: Option<Interval> = None;
@@ -326,6 +339,77 @@ impl Carriers {
             }
         }
     }
+}
+
+/// Three doubles, each enclosed as itself.
+fn exact3(v: [f64; 3]) -> Result<[Interval; 3], NumError> {
+    let [x, y, z] = v;
+    Ok([
+        Interval::point(x)?,
+        Interval::point(y)?,
+        Interval::point(z)?,
+    ])
+}
+
+/// The enclosure of the distance from the point `at` to the line o + t·v, t in `span`, whose ends
+/// may be infinite: an infinite end is never used as a parameter, since the nearest parameter, a
+/// finite enclosure, is never past it.
+fn segment_distance(
+    at: [f64; 3],
+    (origin, direction): ([f64; 3], [f64; 3]),
+    (a, b): (f64, f64),
+) -> Result<Interval, NumError> {
+    let [px, py, pz] = exact3(at)?;
+    let [ox, oy, oz] = exact3(origin)?;
+    let [vx, vy, vz] = exact3(direction)?;
+    let off = [px.sub(ox)?, py.sub(oy)?, pz.sub(oz)?];
+    let [wx, wy, wz] = off;
+    let dot = |l: [Interval; 3], r: [Interval; 3]| -> Result<Interval, NumError> {
+        let [l0, l1, l2] = l;
+        let [r0, r1, r2] = r;
+        l0.mul(r0)?.add(l1.mul(r1)?)?.add(l2.mul(r2)?)
+    };
+    let along = dot(off, [vx, vy, vz])?;
+    let length_sq = dot([vx, vy, vz], [vx, vy, vz])?;
+    let nearest = along.div(length_sq)?;
+    // The parameter held to the domain, and the point there, enclosed.
+    let held = Interval::new(
+        if nearest.lo() < a {
+            a
+        } else if nearest.lo() > b {
+            b
+        } else {
+            nearest.lo()
+        },
+        if nearest.hi() > b {
+            b
+        } else if nearest.hi() < a {
+            a
+        } else {
+            nearest.hi()
+        },
+    )?;
+    let gap = |t: Interval| -> Result<Interval, NumError> {
+        Interval::norm(&[
+            wx.sub(t.mul(vx)?)?,
+            wy.sub(t.mul(vy)?)?,
+            wz.sub(t.mul(vz)?)?,
+        ])
+    };
+    let upper = gap(held)?.hi();
+    let lower = if nearest.hi() < a {
+        gap(Interval::point(a)?)?.lo()
+    } else if nearest.lo() > b {
+        gap(Interval::point(b)?)?.lo()
+    } else {
+        let cross = [
+            wy.mul(vz)?.sub(wz.mul(vy)?)?,
+            wz.mul(vx)?.sub(wx.mul(vz)?)?,
+            wx.mul(vy)?.sub(wy.mul(vx)?)?,
+        ];
+        Interval::norm(&cross)?.div(length_sq.sqrt()?)?.lo()
+    };
+    Interval::new(greater(lower, 0.0), greater(upper, greater(lower, 0.0)))
 }
 
 /// How far apart two points are, enclosed, each point's own bound added: the distance between

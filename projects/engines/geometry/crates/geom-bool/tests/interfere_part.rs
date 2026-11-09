@@ -1,12 +1,15 @@
-//! The interference benchmark of chapter 11.17, item 17 (G243): a part of about 1,000 faces against
-//! one tool, the vertices and edges of both met lowest dimension first, timed and reported against
-//! chapter 23.
+//! The interference benchmark of chapter 11.17, item 17 (G243 and G243a): a part of about 1,000
+//! faces against one tool, the vertices, edges and faces of both met lowest dimension first, timed
+//! and reported against chapter 23.
 //!
 //! The part is a row of 167 boxes (1,002 faces), 100 steps on a side at a pitch of 200; the tool is
 //! one long box standing on the same floor and against the same front and back, so each box's front
 //! and back bottom edges are collinear with the tool's bottom edges and every bottom corner lies on
 //! one of them. The test checks what comes out (every corner a pave of the tool, every vertical edge
-//! met at its own corner, two exact common blocks per box) and prints the time; run it in release:
+//! met at its own corner, two exact common blocks per box; every top corner inside the tool's front
+//! or back face, each box's front, back and bottom on the tool's own planes, and no section edge,
+//! since every face of the part meets the tool only along its own boundary) and prints the time;
+//! run it in release:
 //! `cargo test --release -p geom-bool --test interfere_part -- --ignored --nocapture`.
 
 #![allow(
@@ -24,12 +27,13 @@
     reason = "test code: a failure should stop loudly, and the timing is printed"
 )]
 
-use geom_bool::carrier::PointGeom;
+use geom_bool::carrier::{CarrierIx, PointGeom};
 use geom_bool::common::Proof;
-use geom_bool::interfere::{Arrangement, EdgeIn, Interference, VertexIn, interfere};
+use geom_bool::interfere::{Arrangement, EdgeIn, FaceIn, Interference, VertexIn, interfere};
 use geom_bool::merge::default_remaining;
 use geom_curve::{CurveKind, Line};
 use geom_num::P3;
+use geom_num::plane::Plane;
 use geom_run::{Budget, Exec, WorkMeter};
 
 /// Boxes in the part.
@@ -39,8 +43,11 @@ const SIDE: i64 = 100;
 /// The distance from one box to the next, in steps.
 const PITCH: i64 = 200;
 
-/// Adds a box from `lo` to `hi` to `arr` as operand `operand`: its 8 corners and 12 edges.
-fn add_box(arr: &mut Arrangement, lo: [i64; 3], hi: [i64; 3], operand: u32) {
+/// Adds a box from `lo` to `hi` to `arr` as operand `operand`: its 8 corners, 12 edges and 6 faces,
+/// the faces in the order x low, x high, y low, y high, z low, z high; returns the first face's
+/// index.
+fn add_box(arr: &mut Arrangement, lo: [i64; 3], hi: [i64; 3], operand: u32) -> usize {
+    let first_edge = arr.edges.len();
     let first = arr.vertices.len();
     for k in 0..8_usize {
         let pick = |axis: usize| {
@@ -76,6 +83,46 @@ fn add_box(arr: &mut Arrangement, lo: [i64; 3], hi: [i64; 3], operand: u32) {
             });
         }
     }
+    // The edges in the order made, by their two corners.
+    let mut made = Vec::new();
+    for k in 0..8_usize {
+        for axis in 0..3 {
+            if k >> axis & 1 == 0 {
+                made.push((k, k | 1 << axis));
+            }
+        }
+    }
+    let edge = |a: usize, b: usize| {
+        first_edge
+            + made
+                .iter()
+                .position(|&(u, v)| (u, v) == (a.min(b), a.max(b)))
+                .unwrap()
+    };
+    let first_face = arr.faces.len();
+    for axis in 0..3 {
+        let (b, c) = ((axis + 1) % 3, (axis + 2) % 3);
+        for side in 0..2_usize {
+            let ring: Vec<usize> = [(0, 0), (1, 0), (1, 1), (0, 1)]
+                .iter()
+                .map(|&(sb, sc)| side << axis | sb << b | sc << c)
+                .collect();
+            let loop_edges = (0..4).map(|k| edge(ring[k], ring[(k + 1) % 4])).collect();
+            let mut n = [0_i128; 3];
+            n[axis] = 1;
+            let at = if side == 1 { hi[axis] } else { lo[axis] };
+            let plane = arr
+                .carriers
+                .add_plane(&Plane::new(n, -i128::from(at)).unwrap())
+                .unwrap();
+            arr.faces.push(FaceIn {
+                surface: CarrierIx::Plane(plane),
+                loops: vec![loop_edges],
+                operand,
+            });
+        }
+    }
+    first_face
 }
 
 #[test]
@@ -87,7 +134,7 @@ fn a_thousand_face_part_against_one_tool() {
         add_box(&mut arr, [x, 0, 0], [x + SIDE, SIDE, SIDE], 0);
     }
     let end = (BOXES - 1) * PITCH + SIDE + 50;
-    add_box(&mut arr, [-50, 0, 0], [end, SIDE, 150], 1);
+    let tool_faces = add_box(&mut arr, [-50, 0, 0], [end, SIDE, 150], 1);
     let mut meter = WorkMeter::new(Budget::UNLIMITED);
     let start = std::time::Instant::now();
     let out = interfere(&arr, default_remaining(), &Exec::serial(), &mut meter).unwrap();
@@ -118,13 +165,32 @@ fn a_thousand_face_part_against_one_tool() {
     assert!(reused >= 8 * BOXES as usize, "{reused}");
     assert_eq!(out.common.len(), 2 * BOXES as usize);
     assert!(out.common.iter().all(|c| c.proof == Proof::Exact));
+    // The faces: each top corner of the part inside the tool's front or back face (the bottom
+    // corners lie on the tool's bottom edges, so on those faces' boundaries); each box's front, back
+    // and bottom on the tool's own planes; and no section edge.
+    for (face, name) in [(tool_faces + 2, "front"), (tool_faces + 3, "back")] {
+        assert_eq!(
+            out.faces[face].in_vertices.len(),
+            2 * BOXES as usize,
+            "the top corners in the tool's {name}"
+        );
+        assert_eq!(out.faces[face].same_carrier.len(), BOXES as usize);
+    }
+    assert_eq!(out.faces[tool_faces + 4].same_carrier.len(), BOXES as usize);
+    assert_eq!(out.sections.len(), 0, "{:?}", out.sections.first());
+    let inside = out
+        .interferences
+        .iter()
+        .filter(|i| matches!(i, Interference::VertexFace { .. }))
+        .count();
     println!(
-        "{} faces, {} edges, {} vertices: {} common blocks, {} meetings at existing corners, in {:?}",
+        "{} faces, {} edges, {} vertices: {} common blocks, {} meetings at existing corners, {} vertices inside faces, in {:?}",
         6 * (BOXES + 1),
         arr.edges.len(),
         arr.vertices.len(),
         out.common.len(),
         reused,
+        inside,
         took
     );
 }
