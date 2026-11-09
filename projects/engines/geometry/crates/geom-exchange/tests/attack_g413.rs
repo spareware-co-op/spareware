@@ -126,7 +126,11 @@ fn check_count(got: Result<Gridded, ExchangeError>, want: &(BigInt, bool), limit
     } else {
         match got {
             Err(ExchangeError::OutOfRange { count: c }) => {
-                assert_eq!(BigInt::from(c), *count, "{what}")
+                // The count, saturated at the ends of i128 as the numbers layer reports it.
+                let saturated = count
+                    .clone()
+                    .clamp(BigInt::from(i128::MIN), BigInt::from(i128::MAX));
+                assert_eq!(BigInt::from(c), saturated, "{what}");
             }
             other => panic!("{what}: {other:?}, expected out of range at {count}"),
         }
@@ -337,6 +341,36 @@ fn decimal_lengths_round_once_half_to_even_as_the_exact_model_does() {
             &want,
             COORD_MAX,
             &format!("{i}: {d} in {u:?} at {s:?}"),
+        );
+    }
+}
+
+#[test]
+fn long_decimals_take_the_wide_path_and_round_as_short_ones_do() {
+    // Up to 38 significant digits and exponents from -60 to 20: past 128 bits these go through the
+    // frame conversion's wide integers, and every count is still the exact model's.
+    let mut rng = Rng::new("g413 long decimals", 0x6413_000a);
+    for i in 0..3_000 {
+        let (u, s) = (units(&mut rng), rng.pick(&STEPS));
+        let hi = (rng.next() % 10_u64.pow(19)) as i128;
+        let lo = (rng.next() % 10_u64.pow(19)) as i128;
+        let m = hi * 10_i128.pow(19) + lo;
+        let m = if rng.below(2) == 0 { -m } else { m };
+        let Ok(d) = Decimal::new(m, rng.range(-60, 20) as i32) else {
+            continue;
+        };
+        let want = expected(&of_decimal(d), u, s);
+        check_count(
+            grid::length(d, u, s),
+            &want,
+            COORD_MAX,
+            &format!("{i}: {d}"),
+        );
+        check_count(
+            grid::map_coordinate(d, u, s),
+            &want,
+            ORIGIN_MAX,
+            &format!("{i}: {d} as a map coordinate"),
         );
     }
 }

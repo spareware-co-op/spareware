@@ -19,6 +19,15 @@
 //! correctly rounded conversion, not two. An angle in a unit of k angle units is converted the same
 //! way, as a length of k/6,400,000 metres at q0 (a degree is 45/32 m), whose image is exactly v·k.
 //!
+//! **The short decimals of a file, in 128 bits.** That conversion carries 1536-bit integers, tens
+//! of microseconds a value, for any decimal. A file's numbers are short: a decimal m·10^e with
+//! m·p·S·10^e (e ≥ 0) or q·10^−e (e < 0) within 128 bits, for a unit of p/q metres, is the
+//! fraction (m·p·S)/(q·10^−e) of two `u128`s, whose quotient and remainder decide the rounding, ties
+//! to even, exactly. Every metre, millimetre, inch or foot value of up to about 20 significant
+//! digits takes this path; anything longer takes the frame conversion. A double m·2^k is taken the
+//! same way, as (m·p·S)/(q·2^−k), whenever that fits (every double of the units above from about
+//! 2^−60 to 2^40 in size). Both paths are exact, so the count is the same either way.
+//!
 //! Guarantees:
 //!
 //! - **One rounding, half to even, from the exact value.** The count is the exact value rounded
@@ -39,16 +48,17 @@
 //! which rounds to nearest, ties to even (IEEE 754-2019's roundTiesToEven, section 4.3.1,
 //! <https://doi.org/10.1109/IEEESTD.2019.8766229>).
 //!
-//! Cost: one frame conversion per value: for a decimal, exact integer arithmetic of at most 1536
-//! bits; for a double in metres, a double-double product and one exact rounding. [`map_coordinate`]
+//! Cost: a short decimal, a few 128-bit multiplications and one division; otherwise one frame
+//! conversion per value: for a decimal, exact integer arithmetic of at most 1536 bits; for a double
+//! in metres, a double-double product and one exact rounding. [`map_coordinate`]
 //! converts twice when the coordinate lies beyond 2^40 steps, the second time to learn whether it
 //! was exact. [`positive_length`] converts at most twice more when the length rounds to zero. No
 //! allocation.
 
-use geom_math::frame::ORIGIN_MAX;
+use geom_math::frame::{ORIGIN_MAX, steps_per_metre};
 use geom_math::{CrsId, Decimal, DecimalPoint, FrameRecord, LinearUnit, MapPoint, Rounded};
 use geom_num::NumError;
-use geom_num::grid::{GridStep, P3};
+use geom_num::grid::{COORD_MAX, GridStep, P3};
 
 use crate::error::ExchangeError;
 use crate::unit::AngleUnit;
@@ -98,12 +108,83 @@ fn at_height(value: Decimal) -> DecimalPoint {
     }
 }
 
+/// num/den rounded to the nearest whole number, ties to even, with the sign of `negative`, and
+/// whether it was whole; `None` if a step does not fit.
+fn rounded(num: u128, den: u128, negative: bool) -> Option<(i128, bool)> {
+    let (whole, rest) = (num.checked_div(den)?, num.checked_rem(den)?);
+    // Half to even: up when the remainder is more than half the divisor, or exactly half with an
+    // odd quotient. rest < den, so den − rest does not underflow.
+    let other = den.checked_sub(rest)?;
+    let up = rest > other || (rest == other && !whole.is_multiple_of(2));
+    let magnitude = if up { whole.checked_add(1)? } else { whole };
+    let count = i128::try_from(magnitude).ok()?;
+    let count = if negative {
+        count.checked_neg()?
+    } else {
+        count
+    };
+    Some((count, rest == 0))
+}
+
+/// `value`·u·S rounded to the nearest whole count, ties to even, and whether it was whole, when the
+/// fraction fits 128 bits (see the module documentation); `None` otherwise.
+fn short(value: Decimal, unit: LinearUnit, step: GridStep) -> Option<(i128, bool)> {
+    let e = value.exponent();
+    let ten = 10_u128.checked_pow(e.unsigned_abs())?;
+    let ps = u128::from(unit.num()).checked_mul(u128::from(steps_per_metre(step)))?;
+    let top = value.significand().unsigned_abs().checked_mul(ps)?;
+    let q = u128::from(unit.den());
+    let (num, den) = if e >= 0 {
+        (top.checked_mul(ten)?, q)
+    } else {
+        (top, q.checked_mul(ten)?)
+    };
+    rounded(num, den, value.significand() < 0)
+}
+
+/// The same for a finite double x = m·2^k, its exact value (IEEE 754's binary64 encoding: the
+/// significand with its hidden bit, and the exponent less 1075; a subnormal's is −1074).
+fn short_double(value: f64, unit: LinearUnit, step: GridStep) -> Option<(i128, bool)> {
+    let bits = value.to_bits();
+    let field = (bits >> 52) & 0x7ff;
+    let fraction = bits & ((1 << 52) - 1);
+    let (m, k) = if field == 0 {
+        (fraction, -1074_i32)
+    } else {
+        (
+            fraction | (1 << 52),
+            i32::try_from(field).ok()?.checked_sub(1075)?,
+        )
+    };
+    let two = 1_u128.checked_shl(k.unsigned_abs())?;
+    let ps = u128::from(unit.num()).checked_mul(u128::from(steps_per_metre(step)))?;
+    let top = u128::from(m).checked_mul(ps)?;
+    let q = u128::from(unit.den());
+    let (num, den) = if k >= 0 {
+        (top.checked_mul(two)?, q)
+    } else {
+        (top, q.checked_mul(two)?)
+    };
+    rounded(num, den, value.is_sign_negative())
+}
+
+/// A short decimal's count within `limit`, or refused as out of range.
+fn within(count: i128, exact: bool, limit: i64) -> Result<Gridded, ExchangeError> {
+    match i64::try_from(count) {
+        Ok(c) if c.unsigned_abs() <= limit.unsigned_abs() => Ok(Gridded { count: c, exact }),
+        _ => Err(ExchangeError::OutOfRange { count }),
+    }
+}
+
 /// A length of `value` units of `unit` in steps of `step`, rounded once, half to even.
 ///
 /// # Errors
 ///
 /// [`ExchangeError::OutOfRange`] beyond ±(2^40 − 1) steps, with the exactly rounded count.
 pub fn length(value: Decimal, unit: LinearUnit, step: GridStep) -> Result<Gridded, ExchangeError> {
+    if let Some((count, exact)) = short(value, unit, step) {
+        return within(count, exact, COORD_MAX);
+    }
     Ok(height(
         frame(unit, step, 0)?.to_frame_decimal(at_height(value))?,
     ))
@@ -122,6 +203,9 @@ pub fn length_of_double(
 ) -> Result<Gridded, ExchangeError> {
     if !value.is_finite() {
         return Err(ExchangeError::NotFinite);
+    }
+    if let Some((count, exact)) = short_double(value, unit, step) {
+        return within(count, exact, COORD_MAX);
     }
     let point = MapPoint {
         easting: 0.0,
@@ -212,6 +296,9 @@ pub fn map_coordinate(
     unit: LinearUnit,
     step: GridStep,
 ) -> Result<Gridded, ExchangeError> {
+    if let Some((count, exact)) = short(value, unit, step) {
+        return within(count, exact, ORIGIN_MAX);
+    }
     match frame(unit, step, 0)?.to_frame_decimal(at_height(value)) {
         Ok(r) => Ok(height(r)),
         Err(NumError::OutOfRange { value: count }) => {
