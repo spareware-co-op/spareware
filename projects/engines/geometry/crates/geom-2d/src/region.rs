@@ -13,7 +13,8 @@
 //! a stated size without moving any vertex. [`Regions::filled`] applies an [`IslandRule`] to a
 //! region: the region alone with its holes ([`IslandRule::Outermost`]), its shell with no holes
 //! ([`IslandRule::Ignore`]), or the region and every region nested inside it at an even depth
-//! ([`IslandRule::Parity`]). [`Regions::twice_area`] is a ring's area, doubled, exactly.
+//! ([`IslandRule::Parity`]). [`Regions::twice_area`] is a grid ring's area, doubled, exactly, and [`Regions::area`] any straight
+//! ring's: exact on grid points, otherwise certified from its exact rational vertices.
 //!
 //! Guarantees:
 //!
@@ -25,7 +26,8 @@
 //!   edge. Both are listed, in edge order, and no ring holds either.
 //! - **Exact.** Locating a point decides by exact orientation and comparison signs of rational
 //!   points ([`Rational2::orient`], [`Rational2::cmp_y`]); a doubled area is an exact integer when
-//!   every vertex of the ring is a grid point.
+//!   every vertex of the ring is a grid point, and otherwise an interval rounded outward from the
+//!   exact terms (each a 512-bit numerator over its vertices' weights), which holds the exact area.
 //! - **Gaps are evidence, never a closure.** An open point is told every pair of free ends and the
 //!   exact square of their distance when both are grid points, nearest first, then by name; a gap
 //!   is closed only by a segment the caller adds between two free ends, never by moving a vertex.
@@ -60,6 +62,9 @@ use alloc::vec::Vec;
 use core::fmt;
 
 use geom_num::carrier::Rational2;
+use geom_num::interval::Interval;
+use geom_num::one_root::enclose;
+use geom_num::wide::I512;
 use geom_num::{NumError, Sign};
 
 use crate::arrange::{Along, Arrangement, At};
@@ -120,6 +125,15 @@ pub struct Region {
 
 /// A filled area: a shell and the holes kept in it, each a ring of half-edges.
 pub type Filled = (Vec<u32>, Vec<Vec<u32>>);
+
+/// A ring's doubled area.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub enum Area {
+    /// Exactly this whole number: every vertex is a grid point.
+    Exact(i128),
+    /// Within this interval, rounded outward from the exact rational: some vertex is a crossing.
+    Certified(Interval),
+}
 
 /// A gap in the linework: two free ends (vertices with one edge) and the square of the distance
 /// between them, exact when both are grid points.
@@ -573,6 +587,44 @@ impl Regions {
             sum = sum.checked_add(term).ok_or(RegionError::Range)?;
         }
         Ok(Some(sum))
+    }
+}
+
+impl Regions {
+    /// A straight ring's doubled area: exact when every vertex is a grid point, otherwise certified
+    /// from the exact rational vertices; `None` for a ring with an arc or a one-root vertex.
+    /// Positive for a counter-clockwise ring.
+    ///
+    /// # Errors
+    ///
+    /// [`RegionError::Range`] past the exact budget; [`RegionError::Malformed`] for a half-edge
+    /// past the arrangement.
+    pub fn area(arr: &Arrangement, ring: &[u32]) -> Result<Option<Area>, RegionError> {
+        if let Some(exact) = Regions::twice_area(arr, ring)? {
+            return Ok(Some(Area::Exact(exact)));
+        }
+        let mut sum = Interval::point(0.0)?;
+        for &h in ring {
+            if !matches!(arr.along(h / 2), Some(Along::Line(_))) {
+                return Ok(None);
+            }
+            let (a, b) = ends(arr, h)?;
+            let (Ok(a), Ok(b)) = (rational(arr, a), rational(arr, b)) else {
+                return Ok(None);
+            };
+            let ([xa, ya], wa) = a.coordinates();
+            let ([xb, yb], wb) = b.coordinates();
+            // (xa·yb − xb·ya) / (wa·wb): each product of two 128-bit integers fits 256 bits, and
+            // their difference 257, well inside 512.
+            let w = I512::from_i128;
+            let product = |p: i128, q: i128| w(p).checked_mul(&w(q)).ok_or(RegionError::Range);
+            let top = product(xa, yb)?
+                .checked_sub(&product(xb, ya)?)
+                .ok_or(RegionError::Range)?;
+            let term = enclose(&top)?.div(enclose(&product(wa, wb)?)?)?;
+            sum = sum.add(term)?;
+        }
+        Ok(Some(Area::Certified(sum)))
     }
 }
 

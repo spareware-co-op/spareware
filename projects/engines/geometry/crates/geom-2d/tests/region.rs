@@ -25,7 +25,7 @@
 )]
 
 use geom_2d::arrange::{Arrangement, arrange};
-use geom_2d::region::{Boundary, Gap, IslandRule, Located, Regions, polygonize};
+use geom_2d::region::{Area, Boundary, Gap, IslandRule, Located, Regions, polygonize};
 use geom_num::carrier::Rational2;
 use geom_num::grid::P2;
 use geom_run::{Budget, WorkMeter};
@@ -271,4 +271,43 @@ fn an_open_room_shows_its_gaps_and_a_bridge_closes_it() {
             .unwrap(),
         Boundary::On
     ));
+}
+
+#[test]
+fn a_ring_through_crossings_has_a_certified_area() {
+    // Two squares that cross: the regions' corners where their sides cross are crossings, here at
+    // whole points, so the areas are exact; then two triangles whose sides cross at thirds.
+    let (arr, r) = built(&[
+        &[(0, 0), (30, 0), (30, 30), (0, 30), (0, 0)],
+        &[(10, 10), (40, 10), (40, 40), (10, 40), (10, 10)],
+    ]);
+    for g in r.regions() {
+        assert!(matches!(
+            Regions::area(&arr, &g.shell).unwrap(),
+            Some(Area::Exact(_))
+        ));
+    }
+    // A triangle (0, 0), (3, 0), (0, 3) cut by the segment from (1, 2), on its long side, to
+    // (2, -1), which crosses its base at (5/3, 0): the piece at the corner (3, 0) has twice the
+    // area 8/3, the other 19/3.
+    let (arr, r) = built(&[&[(0, 0), (3, 0), (0, 3), (0, 0)], &[(1, 2), (2, -1)]]);
+    let mut certified = Vec::new();
+    for g in r.regions() {
+        match Regions::area(&arr, &g.shell).unwrap() {
+            Some(Area::Certified(i)) => certified.push(i),
+            Some(Area::Exact(_)) => {}
+            None => panic!("a straight ring"),
+        }
+    }
+    assert_eq!(certified.len(), 2);
+    let total = certified[0].add(certified[1]).unwrap();
+    assert!(total.contains(9.0), "{total:?}");
+    for (lo, hi) in [(2.666, 2.667), (6.333, 6.334)] {
+        assert!(
+            certified
+                .iter()
+                .any(|c| c.lo() > lo && c.hi() < hi && c.hi() - c.lo() < 1e-12),
+            "{certified:?}"
+        );
+    }
 }
