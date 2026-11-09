@@ -75,6 +75,22 @@ fn grown(d: ParamBox, side: Side, len: f64) -> ParamBox {
     }
 }
 
+/// How far `side`'s bound moved from `from` to `to`: the length an extension reports.
+fn moved(from: ParamBox, to: ParamBox, side: Side) -> f64 {
+    let (((u0, u1), (v0, v1)), ((a0, a1), (b0, b1))) = (from, to);
+    match side {
+        Side::UMin => u0 - a0,
+        Side::UMax => a1 - u1,
+        Side::VMin => v0 - b0,
+        Side::VMax => b1 - v1,
+    }
+}
+
+/// `moved` is the length asked, but for a rounding of the bound it moved.
+fn near(moved: f64, by: f64, bound: f64) -> bool {
+    (moved - by).abs() <= f64::EPSILON * (bound.abs() + by)
+}
+
 fn exact(s: &SurfaceKind, side: Side, by: f64) -> geom_surface::Extended {
     extend(s, side, by, Reach::Exactly, &mut meter())
         .unwrap_or_else(|e| panic!("{side:?} by {by}: {e}"))
@@ -108,8 +124,11 @@ fn analytic_kinds_extend_to_the_same_kind_on_the_wider_domain() {
             let s = make(domain);
             for side in SIDES {
                 let e = exact(&s, side, by);
-                assert_eq!(e.surface, make(grown(domain, side, by)), "{side:?}");
-                assert_eq!((e.reached, e.deviation), (by, 0.0));
+                let wider = grown(domain, side, by);
+                assert_eq!(e.surface, make(wider), "{side:?}");
+                let m = moved(domain, wider, side);
+                assert_eq!((e.reached, e.deviation), (m, 0.0));
+                assert!(near(m, by, 4.0), "{side:?}: {m} against {by}");
             }
         }
     }
@@ -357,11 +376,12 @@ fn random_spans_extend_keep_their_source_and_pass_the_certificate() {
             for reach in [Reach::Exactly, Reach::AsFarAsValid] {
                 let e = extend(&kind, side, by, reach, &mut meter())
                     .unwrap_or_else(|err| panic!("round {round}, {side:?}: {err}"));
-                assert_eq!(e.reached, by);
                 assert!(e.deviation.is_finite() && e.deviation >= 0.0);
                 let wider = e.surface.domain();
                 let (d0, d1) = (kind.domain(), grown(kind.domain(), side, by));
                 assert_eq!(wider, d1, "{d0:?}");
+                assert_eq!(e.reached, moved(d0, d1, side));
+                assert!(near(e.reached, by, 4.0), "{} against {by}", e.reached);
             }
         }
     }

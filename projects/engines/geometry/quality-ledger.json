@@ -5116,7 +5116,7 @@
     },
     {
       "file": "projects/engines/geometry/crates/geom-surface/src/extend.rs",
-      "mutant": "replace match guard r > 0.0 with true in extend",
+      "mutant": "replace match guard r > 0.0 with true in extend_capped",
       "line_text": "Some(c) if r > 0.0 => (c, r),",
       "occurrences": 1,
       "kind": "harmless",
@@ -5124,7 +5124,7 @@
     },
     {
       "file": "projects/engines/geometry/crates/geom-surface/src/extend.rs",
-      "mutant": "replace > with >= in extend",
+      "mutant": "replace > with >= in extend_capped",
       "line_text": "Some(c) if r > 0.0 => (c, r),",
       "occurrences": 1,
       "kind": "harmless",

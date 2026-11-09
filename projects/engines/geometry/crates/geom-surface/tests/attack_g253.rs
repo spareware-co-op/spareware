@@ -1,6 +1,6 @@
 //! Attacks on piece G253's claims (surface extension): far from the origin, lengths too small to
-//! move a knot and far too long to stay valid, a budget that runs out, an infinite plane, and
-//! extensions of extensions.
+//! move a knot and far too long to stay valid, a budget that runs out, an infinite plane,
+//! extensions of extensions, and a length reached where the domain's bound rounds.
 
 #![allow(
     clippy::arithmetic_side_effects,
@@ -160,4 +160,41 @@ fn an_infinite_side_stays_infinite_and_extensions_compose() {
                 .unwrap()
         );
     }
+}
+
+/// The length reported is how far the side's bound moved (attack/smlib-extend's finding). Where
+/// the turn stops a cylinder, the reach was the length bisection tried, not the rounded bound's
+/// move: a full turn reported 2.2e-16 for a domain that did not grow, and an arc whose angle runs
+/// from 10^15 half-turns, where doubles are 1/8 apart, 1.5625 for a domain that grew by 1.5.
+#[test]
+fn the_length_reached_is_how_far_the_bound_moved() {
+    let frame = Frame::new([1.0, 0.0, 0.0], [0.0, 0.0, 1.0]).unwrap();
+    let cylinder =
+        |domain| SurfaceKind::Cylinder(Cylinder::new([0.0; 3], 2.0, frame, domain).unwrap());
+    let far = 1e15;
+    let cases = [
+        (cylinder(((0.0, 2.0), (0.0, 1.0))), 0.1),
+        (cylinder(((0.0, 2.0), (0.0, 1.0))), 10.0),
+        (cylinder(((far, far + 0.5), (0.0, 1.0))), 1e6),
+        (cylinder(((0.0, 294.0 / 180.0), (0.0, 1.0))), 294.0 / 180.0),
+    ];
+    for (s, by) in &cases {
+        let ((u0, u1), _) = s.domain();
+        for side in [Side::UMin, Side::UMax] {
+            let e = extend(s, side, *by, Reach::AsFarAsValid, &mut meter()).unwrap();
+            let ((a0, a1), _) = e.surface.domain();
+            let grew = if side == Side::UMin { u0 - a0 } else { a1 - u1 };
+            assert_eq!(e.reached, grew, "{side:?} by {by}");
+            assert!(a1 - a0 <= 2.0);
+            match extend(s, side, *by, Reach::Exactly, &mut meter()) {
+                Err(ExtendError::ExtensionFailed { reached, .. }) => {
+                    assert_eq!(reached, grew, "{side:?} by {by}");
+                }
+                other => panic!("{side:?} by {by}: {other:?}"),
+            }
+        }
+    }
+    // Where nothing rounds, the length reached is the length asked.
+    let e = extend(&cases[3].0, Side::UMax, 0.25, Reach::Exactly, &mut meter()).unwrap();
+    assert_eq!(e.reached, 0.25);
 }
