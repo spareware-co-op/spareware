@@ -197,19 +197,25 @@ fn moved_determinant(
     if base != Sign::Zero {
         return Ok(base);
     }
-    // Rows p, q, r, s and the offset's column give the signs −, +, −, + of the cofactors.
+    // Rows p, q, r, s and the offset's column give the signs −, +, −, + of the cofactors. A row
+    // that is not moved adds nothing whatever its cofactor, and a row counts only where every
+    // row before it adds nothing, so each cofactor is found only where it is read: of a path's
+    // segment against a fixed plane, two at most.
     let mut rows = [
-        (p, normals_det(b, c, d)?),
-        (q, normals_det(a, c, d)?.negate()),
-        (r, normals_det(a, b, d)?),
-        (s, normals_det(a, b, c)?.negate()),
+        (p, [b, c, d], Sign::Positive),
+        (q, [a, c, d], Sign::Negative),
+        (r, [a, b, d], Sign::Positive),
+        (s, [a, b, c], Sign::Negative),
     ];
-    rows.sort_unstable_by_key(|(row, _)| row.rank);
-    Ok(rows
+    rows.sort_unstable_by_key(|(row, _, _)| row.rank);
+    let found = rows
         .iter()
-        .map(|(row, term)| row.by.mul(*term))
-        .find(|sign| *sign != Sign::Zero)
-        .unwrap_or(Sign::Zero))
+        .filter(|(row, _, _)| row.by != Sign::Zero)
+        .map(|(row, [x, y, z], cofactor)| {
+            normals_det(x, y, z).map(|det| row.by.mul(det.mul(*cofactor)))
+        })
+        .find(|sign| !sign.as_ref().is_ok_and(|sign| *sign == Sign::Zero));
+    Ok(found.transpose()?.unwrap_or(Sign::Zero))
 }
 
 /// What plane `s` reads at the point where `p`, `q` and `r` meet, which the callers know they do.
