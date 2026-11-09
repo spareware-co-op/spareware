@@ -754,6 +754,7 @@ dependencies = [
  "geom-num",
  "geom-op",
  "geom-run",
+ "geom-test",
  "geom-topo",
 ]
 
@@ -1047,6 +1048,7 @@ dependencies = [
  "geom-math",
  "geom-num",
  "geom-nurbs",
+ "geom-op",
  "geom-run",
  "geom-surface",
  "geom-test",
@@ -1211,6 +1213,7 @@ dependencies = [
  "geom-run",
  "geom-test",
  "geom-topo",
+ "proptest",
 ]
 
 [[package]]
@@ -1478,6 +1481,7 @@ dependencies = [
  "geom-math",
  "geom-num",
  "geom-nurbs",
+ "geom-op",
  "geom-run",
  "geom-surface",
  "lcov",
