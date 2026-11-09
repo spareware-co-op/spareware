@@ -102,8 +102,9 @@ pub trait Residual<const N: usize, const E: usize> {
     /// What the arithmetic refuses.
     fn residuals<S: Scalar>(&self, x: [S; N]) -> Result<[S; E], NumError>;
 
-    /// Whether `x` is on the singular set.
-    fn singular(&self, _x: &[f64; N]) -> Option<Singular> {
+    /// Whether `x` is within `within` of the singular set, on each coordinate the set fixes: on it
+    /// at `within` = 0, where every comparison is exact.
+    fn singular(&self, _x: &[f64; N], _within: f64) -> Option<Singular> {
         None
     }
 
@@ -116,6 +117,17 @@ pub trait Residual<const N: usize, const E: usize> {
     fn branch<S: Scalar>(&self, _x: [S; N]) -> Result<Option<S>, NumError> {
         Ok(None)
     }
+}
+
+/// Whether `a` is within `within` of `b`: `a == b` at `within` = 0, as a difference of finite
+/// doubles is zero exactly when they are equal.
+fn close(a: f64, b: f64, within: f64) -> bool {
+    (a - b).abs() <= within
+}
+
+/// Whether the points (ax, ay) and (bx, by) are within `within` of each other on each axis.
+fn together(ax: f64, ay: f64, bx: f64, by: f64, within: f64) -> bool {
+    close(ax, bx, within) && close(ay, by, within)
 }
 
 fn cross<S: Scalar>(u: [S; 2], v: [S; 2]) -> Result<S, NumError> {
@@ -180,9 +192,9 @@ impl Residual<7, 1> for OnLine {
         Ok([cross(u, v)?.div(c)?])
     }
 
-    fn singular(&self, x: &[f64; 7]) -> Option<Singular> {
+    fn singular(&self, x: &[f64; 7], within: f64) -> Option<Singular> {
         let [_, _, ax, ay, bx, by, _] = *x;
-        (ax == bx && ay == by).then_some(Singular::ZeroLengthLine)
+        together(ax, ay, bx, by, within).then_some(Singular::ZeroLengthLine)
     }
 }
 
@@ -199,8 +211,8 @@ impl Residual<9, 2> for Collinear {
         ])
     }
 
-    fn singular(&self, x: &[f64; 9]) -> Option<Singular> {
-        (x[0] == x[2] && x[1] == x[3]).then_some(Singular::ZeroLengthLine)
+    fn singular(&self, x: &[f64; 9], within: f64) -> Option<Singular> {
+        together(x[0], x[1], x[2], x[3], within).then_some(Singular::ZeroLengthLine)
     }
 }
 
@@ -213,8 +225,8 @@ impl Residual<5, 1> for AtDistance {
         Ok([smooth(minus([px, py], [cx, cy])?, d)?])
     }
 
-    fn singular(&self, x: &[f64; 5]) -> Option<Singular> {
-        (x[4] == 0.0).then_some(Singular::ZeroRadius)
+    fn singular(&self, x: &[f64; 5], within: f64) -> Option<Singular> {
+        close(x[4], 0.0, within).then_some(Singular::ZeroRadius)
     }
 }
 
@@ -232,8 +244,8 @@ impl Residual<6, 1> for AtSum {
         Ok([smooth(minus([px, py], [cx, cy])?, sum)?])
     }
 
-    fn singular(&self, x: &[f64; 6]) -> Option<Singular> {
-        (x[4] + self.sign * x[5] == 0.0).then_some(Singular::ZeroRadius)
+    fn singular(&self, x: &[f64; 6], within: f64) -> Option<Singular> {
+        close(x[4] + self.sign * x[5], 0.0, within).then_some(Singular::ZeroRadius)
     }
 }
 
@@ -264,8 +276,9 @@ impl Residual<10, 1> for Turned {
         Ok([cross(u, v)?.mul(cos)?.sub(dot(u, v)?.mul(sin)?)?.div(l)?])
     }
 
-    fn singular(&self, x: &[f64; 10]) -> Option<Singular> {
-        let zero = (x[0] == x[2] && x[1] == x[3]) || (x[4] == x[6] && x[5] == x[7]);
+    fn singular(&self, x: &[f64; 10], within: f64) -> Option<Singular> {
+        let zero =
+            together(x[0], x[1], x[2], x[3], within) || together(x[4], x[5], x[6], x[7], within);
         zero.then_some(Singular::ZeroLengthLine)
     }
 
@@ -287,8 +300,8 @@ impl Residual<5, 1> for Heading {
         Ok([dy.mul(t.cospi()?)?.sub(dx.mul(t.sinpi()?)?)?])
     }
 
-    fn singular(&self, x: &[f64; 5]) -> Option<Singular> {
-        (x[0] == x[2] && x[1] == x[3]).then_some(Singular::ZeroLengthLine)
+    fn singular(&self, x: &[f64; 5], within: f64) -> Option<Singular> {
+        together(x[0], x[1], x[2], x[3], within).then_some(Singular::ZeroLengthLine)
     }
 
     fn branch<S: Scalar>(&self, x: [S; 5]) -> Result<Option<S>, NumError> {
@@ -314,9 +327,9 @@ impl Residual<7, 1> for FromLine {
         Ok([cross(u, v)?.div(size)?.sub(want)?])
     }
 
-    fn singular(&self, x: &[f64; 7]) -> Option<Singular> {
+    fn singular(&self, x: &[f64; 7], within: f64) -> Option<Singular> {
         let [_, _, ax, ay, bx, by, _] = *x;
-        (ax == bx && ay == by).then_some(Singular::ZeroLengthLine)
+        together(ax, ay, bx, by, within).then_some(Singular::ZeroLengthLine)
     }
 }
 
@@ -351,9 +364,10 @@ impl Residual<9, 1> for SweptLength {
             .sub(length)?])
     }
 
-    fn singular(&self, x: &[f64; 9]) -> Option<Singular> {
+    fn singular(&self, x: &[f64; 9], within: f64) -> Option<Singular> {
         let [cx, cy, sx, sy, ex, ey, ..] = *x;
-        ((cx == sx && cy == sy) || (cx == ex && cy == ey)).then_some(Singular::ZeroRadius)
+        (together(cx, cy, sx, sy, within) || together(cx, cy, ex, ey, within))
+            .then_some(Singular::ZeroRadius)
     }
 }
 
@@ -395,8 +409,8 @@ impl Residual<9, 2> for Mirror {
         ])
     }
 
-    fn singular(&self, x: &[f64; 9]) -> Option<Singular> {
-        (x[4] == x[6] && x[5] == x[7]).then_some(Singular::ZeroLengthLine)
+    fn singular(&self, x: &[f64; 9], within: f64) -> Option<Singular> {
+        together(x[4], x[5], x[6], x[7], within).then_some(Singular::ZeroLengthLine)
     }
 }
 
@@ -1393,16 +1407,18 @@ impl Assembly {
         Ok(values)
     }
 
-    /// Runs one kind: reads its inputs, checks its singular set, and stores what it gives.
+    /// Runs one kind: reads its inputs, checks them against its singular set, widened by
+    /// `within`, and stores what it gives.
     fn run<R: Residual<N, E>, const N: usize, const E: usize>(
         &mut self,
         kind: &R,
         row: &Row,
         x: &[f64],
+        within: f64,
     ) -> Result<(), SketchError> {
         let list: &[Slot; N] = self.list_of(row)?;
         let values = self.values::<N>(row, x)?;
-        if kind.singular(&values).is_some() {
+        if kind.singular(&values, within).is_some() {
             return Err(SketchError::Degenerate(row.id));
         }
         let mut seeds = [Dual::new(Real::ZERO, [Real::ZERO; N]); N];
@@ -1470,6 +1486,22 @@ impl Assembly {
     ///
     /// As [`Assembly::evaluate_at`].
     pub(crate) fn evaluate_rule(&mut self, rule: usize, x: &[f64]) -> Result<(), SketchError> {
+        self.evaluate_rule_within(rule, x, 0.0)
+    }
+
+    /// As [`Assembly::evaluate_rule`], with the rule's singular set widened by `within` on each
+    /// coordinate it fixes: an input that close to it is [`SketchError::Degenerate`]. A solved
+    /// answer is checked so, at the solver's tolerance (chapter 15.4).
+    ///
+    /// # Errors
+    ///
+    /// As [`Assembly::evaluate_at`].
+    pub(crate) fn evaluate_rule_within(
+        &mut self,
+        rule: usize,
+        x: &[f64],
+        within: f64,
+    ) -> Result<(), SketchError> {
         let row = *self.rows.get(rule).ok_or(SketchError::Internal)?;
         let end = rule
             .checked_add(1)
@@ -1482,11 +1514,18 @@ impl Assembly {
         for &spot in spots {
             self.jacobian.set_at(spot, 0.0)?;
         }
-        self.one(&row, x)
+        self.one(&row, x, within)
     }
 
-    fn one(&mut self, row: &Row, x: &[f64]) -> Result<(), SketchError> {
-        dispatch(row, &mut Evaluate { assembly: self, x })
+    fn one(&mut self, row: &Row, x: &[f64], within: f64) -> Result<(), SketchError> {
+        dispatch(
+            row,
+            &mut Evaluate {
+                assembly: self,
+                x,
+                within,
+            },
+        )
     }
 
     /// Every rule's residuals over a box: the natural interval extension of the one text each kind
@@ -1536,10 +1575,12 @@ trait Visit {
     ) -> Result<(), SketchError>;
 }
 
-/// Evaluates a rule's residuals and Jacobian at `x`.
+/// Evaluates a rule's residuals and Jacobian at `x`, refusing an `x` within `within` of its
+/// singular set.
 struct Evaluate<'a> {
     assembly: &'a mut Assembly,
     x: &'a [f64],
+    within: f64,
 }
 
 impl Visit for Evaluate<'_> {
@@ -1548,7 +1589,7 @@ impl Visit for Evaluate<'_> {
         kind: &R,
         row: &Row,
     ) -> Result<(), SketchError> {
-        self.assembly.run(kind, row, self.x)
+        self.assembly.run(kind, row, self.x, self.within)
     }
 }
 
