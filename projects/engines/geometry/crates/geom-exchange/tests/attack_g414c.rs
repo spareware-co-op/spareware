@@ -196,6 +196,11 @@ fn lay(items: &[Item], comment: &[u8]) -> Laid {
 /// A one-entry Zip64 archive (APPNOTE 4.3.14, 4.3.15, 4.5.3): every size, offset and count in the
 /// headers and the end record holds its sentinel, and the values are in Zip64 fields.
 fn zip64(data: &[u8], extra_values: usize) -> Vec<u8> {
+    zip64_with(data, extra_values, 0)
+}
+
+/// [`zip64`] with `extensible` bytes of extensible data in the Zip64 record, which its size counts.
+fn zip64_with(data: &[u8], extra_values: usize, extensible: usize) -> Vec<u8> {
     let name = b"big.bin";
     let mut b = Vec::new();
     u32le(&mut b, 0x0403_4b50);
@@ -242,7 +247,7 @@ fn zip64(data: &[u8], extra_values: usize) -> Vec<u8> {
     }
     let record = b.len() as u64;
     u32le(&mut b, 0x0606_4b50);
-    u64le(&mut b, 44);
+    u64le(&mut b, 44 + extensible as u64);
     u16le(&mut b, 45);
     u16le(&mut b, 45);
     u32le(&mut b, 0);
@@ -251,6 +256,7 @@ fn zip64(data: &[u8], extra_values: usize) -> Vec<u8> {
     u64le(&mut b, 1);
     u64le(&mut b, record - directory);
     u64le(&mut b, directory);
+    b.extend(std::iter::repeat_n(0xa5, extensible));
     u32le(&mut b, 0x0706_4b50);
     u32le(&mut b, 0);
     u64le(&mut b, record);
@@ -804,6 +810,40 @@ fn a_zip64_archive_reads_back() {
     let mut b4 = b.clone();
     b4[locator + 16] = 2;
     refused(&b4, ZipErrorKind::MultiDisk, locator as u64);
+    // A count past 32 bits in the Zip64 record is read whole: 2^32 + 1 entries, past the budget.
+    let mut b5 = b.clone();
+    for field in [record + 24, record + 32] {
+        b5[field..field + 8].copy_from_slice(&((1_u64 << 32) + 1).to_le_bytes());
+    }
+    refused(&b5, ZipErrorKind::TooManyEntries, (b.len() - 22) as u64);
+    // Extensible data in the record, counted by its size, is allowed.
+    let wide = zip64_with(&data, 3, 1);
+    assert_eq!(
+        contents(&open(&wide).unwrap(), &wide[..]),
+        [Ok(data.clone())]
+    );
+    // More than one disk in the record, by any one of its three fields.
+    for (field, value) in [(16, 1_u32), (20, 1), (24, 2)] {
+        let mut b6 = b.clone();
+        b6[record + field..record + field + 4].copy_from_slice(&value.to_le_bytes());
+        refused(&b6, ZipErrorKind::MultiDisk, record as u64);
+    }
+}
+
+#[test]
+fn any_one_sentinel_in_the_end_record_asks_for_zip64() {
+    // An archive of nothing but its end record, with one field at a time set to its sentinel:
+    // each needs a Zip64 locator, and there is no room for one before the end record.
+    for field in [8, 12, 16] {
+        let mut b = lay(&[], b"").bytes;
+        if field == 8 {
+            put_u16(&mut b, 8, u16::MAX);
+            put_u16(&mut b, 10, u16::MAX);
+        } else {
+            put_u32(&mut b, field, u32::MAX);
+        }
+        refused(&b, ZipErrorKind::Zip64, 0);
+    }
 }
 
 #[test]
@@ -822,7 +862,17 @@ fn local_headers_that_disagree_with_the_directory_are_refused() {
     }
     // One field of the local header changed at a time.
     let laid = lay(&[base], b"");
-    for (field, value) in [(0, 0x0403_4b51_u32), (14, 1), (18, 1), (22, 1)] {
+    // A zero CRC or size in the local header is a data descriptor's mark, allowed only with flag
+    // bit 3.
+    for (field, value) in [
+        (0, 0x0403_4b51_u32),
+        (14, 1),
+        (18, 1),
+        (22, 1),
+        (14, 0),
+        (18, 0),
+        (22, 0),
+    ] {
         let mut b = laid.bytes.clone();
         put_u32(&mut b, field, value);
         refused(&b, ZipErrorKind::LocalHeader, 0);

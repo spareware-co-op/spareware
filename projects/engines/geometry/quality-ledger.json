@@ -5593,6 +5593,30 @@
       "occurrences": 1,
       "kind": "equivalent",
       "reason": "A w of 0.0 or -0.0 (which compares equal to 0.0) has already returned the half-turn error just above, so here w is nonzero and w < 0 and w <= 0 agree for every input."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-exchange/src/zip/spec.rs",
+      "mutant": "replace | with ^ in u32_at",
+      "line_text": "Some(u32::from(u16_at(b, at)?) | (u32::from(u16_at(b, at.checked_add(2)?)?) << 16))",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "The low half is a u16 widened to u32, below 2^16, and the high half is shifted left by 16, so its low 16 bits are clear: the two never share a set bit, and | and ^ give the same u32."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-exchange/src/zip/spec.rs",
+      "mutant": "replace | with ^ in u64_at",
+      "line_text": "Some(u64::from(u32_at(b, at)?) | (u64::from(u32_at(b, at.checked_add(4)?)?) << 32))",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "The low half is a u32 widened to u64, below 2^32, and the high half is shifted left by 32, so its low 32 bits are clear: the two never share a set bit, and | and ^ give the same u64."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-exchange/src/zip/spec.rs",
+      "mutant": "replace < with <= in read_zip64_extra",
+      "line_text": "while at < extra.len() {",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "The forms differ only when at equals the extra field's length, where the mutant runs one more turn: reading the next block's id there finds no bytes and returns the Zip64 refusal at the same header, which is what the original returns once its loop ends without the Zip64 block."
     }
   ],
   "coverage_off": [
