@@ -62,6 +62,7 @@
 
 extern crate alloc;
 
+use alloc::boxed::Box;
 use alloc::vec::Vec;
 use core::cmp::Ordering;
 
@@ -72,6 +73,7 @@ use geom_num::real::Real;
 use geom_num::scalar::Scalar;
 use geom_run::WorkMeter;
 
+use crate::diagnose::SketchReport;
 use crate::equation::{Assembly, Sense};
 use crate::model::{ItemId, Sketch, SketchError};
 use crate::structure::{Part, analyse, substitute_read};
@@ -120,6 +122,10 @@ pub struct Report {
     /// The rules whose start was nudged off a singular set, and those of a block that started
     /// singular and did not converge from there.
     pub nudged: Vec<ItemId>,
+    /// The sketch's diagnosis at the answer (section 15.8): its degrees of freedom, redundant
+    /// groups, special configurations and near-singular pivots. `None` from [`solve`] and
+    /// [`continue_to`], which do not diagnose; [`crate::diagnose::solve_checked`] fills it.
+    pub diagnosis: Option<Box<SketchReport>>,
 }
 
 /// A solved sketch and how it went.
@@ -701,6 +707,7 @@ const fn empty_report() -> Report {
         freedoms: 0,
         largest: 0.0,
         nudged: Vec::new(),
+        diagnosis: None,
     }
 }
 
