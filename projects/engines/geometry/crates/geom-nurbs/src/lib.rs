@@ -42,6 +42,9 @@
 //! - Knot insertion, refinement, Bezier extraction and degree elevation of surfaces,
 //!   [`Surface::insert_knot`], [`Surface::refine`], [`Surface::to_bezier`] and
 //!   [`Surface::elevate`] (A5.3, A5.5, A5.7, A5.10).
+//! - The natural extension of curves and surfaces past an end of their domain, [`Curve::extend`]
+//!   and [`Surface::extend`] (Hu, Tai and Zhang's continuation of the end span; piece G253), each
+//!   returning a [`Changed`] value with a certified deviation.
 //! - Fitting (G58), in [`fit`]: the parameters of data points and grids, [`parameters`] and
 //!   [`grid_parameters`] (equations 9.4 to 9.6, A9.3); knot vectors for interpolation and least
 //!   squares, [`averaged_knots`] and [`least_squares_knots`] (equations 9.8, 9.68 and 9.69); and
@@ -61,8 +64,8 @@
 //!   exact integer paths for grid pieces ([`exact::plane_coefficients`], [`exact::normal_patch`]).
 //! - [`NurbsError`], in [`error`].
 //!
-//! Status: basis, evaluation and knot operations (G56), fitting (G58) and the Bernstein toolkit
-//! (G59) built; the rest (G259) to come.
+//! Status: basis, evaluation and knot operations (G56), fitting (G58), the Bernstein toolkit
+//! (G59) and natural extension (G253) built; the rest (G259) to come.
 #![cfg_attr(not(test), no_std)]
 #![forbid(unsafe_code)]
 
@@ -81,6 +84,7 @@ mod elevate;
 mod enclose;
 pub mod error;
 pub mod exact;
+mod extend;
 pub mod fit;
 mod index;
 mod insert;
@@ -100,6 +104,7 @@ pub use basis::{Basis, Limit, MAX_DEGREE};
 pub use bernstein::{BernsteinCurve, BernsteinPatch, Bounds, Slab};
 pub use curve::Curve;
 pub use error::NurbsError;
+pub use extend::End;
 pub use fit::{
     Constraint, CurveFit, FitVersion, KnotMode, Parametrization, SurfaceFit, averaged_knots,
     grid_parameters, least_squares_knots, parameters,

@@ -52,10 +52,10 @@ use crate::ops::{Changed, Direction, charge_op, homs, larger, p_max, rounding, s
 use crate::surface::Surface;
 
 /// A net in `N`: its points row by row, and its numbers of rows and columns.
-struct Net<N, const D: usize> {
-    points: Vec<Hom<N, D>>,
-    rows: usize,
-    cols: usize,
+pub(crate) struct Net<N, const D: usize> {
+    pub(crate) points: Vec<Hom<N, D>>,
+    pub(crate) rows: usize,
+    pub(crate) cols: usize,
 }
 
 impl<N: Num, const D: usize> Net<N, D> {
@@ -88,7 +88,7 @@ impl<N: Num, const D: usize> Net<N, D> {
 
 /// The net with each line in direction `dir` replaced by `f` of it: `f` returns the line's new
 /// knots and points, the same knots for every line.
-fn map_lines<N: Num, const D: usize>(
+pub(crate) fn map_lines<N: Num, const D: usize>(
     meter: &mut WorkMeter<'_>,
     net: &Net<N, D>,
     dir: Direction,
@@ -127,7 +127,7 @@ fn map_lines<N: Num, const D: usize>(
 
 impl<const D: usize> Surface<D> {
     /// The basis of direction `dir`.
-    fn basis_of(&self, dir: Direction) -> &Basis {
+    pub(crate) fn basis_of(&self, dir: Direction) -> &Basis {
         match dir {
             Direction::U => self.basis_u(),
             Direction::V => self.basis_v(),
@@ -135,7 +135,7 @@ impl<const D: usize> Surface<D> {
     }
 
     /// The net in `N`, rows and columns as stored.
-    fn net<N: Num>(&self, meter: &mut WorkMeter<'_>) -> Result<Net<N, D>, NurbsError> {
+    pub(crate) fn net<N: Num>(&self, meter: &mut WorkMeter<'_>) -> Result<Net<N, D>, NurbsError> {
         Ok(Net {
             points: homs::<N, D>(meter, self.homogeneous(), self.weights())?,
             rows: self.basis_u().count(),
@@ -172,7 +172,7 @@ impl<const D: usize> Surface<D> {
     }
 
     /// The number of points of a result with `len` points per line in direction `dir`.
-    fn net_size(&self, dir: Direction, len: usize) -> Result<usize, NurbsError> {
+    pub(crate) fn net_size(&self, dir: Direction, len: usize) -> Result<usize, NurbsError> {
         match dir {
             Direction::U => mul(len, self.basis_v().count()),
             Direction::V => mul(self.basis_u().count(), len),

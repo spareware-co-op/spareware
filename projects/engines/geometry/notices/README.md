@@ -30,3 +30,4 @@ Licence text:
 | --- | --- |
 | [core-math.txt](core-math.txt) | CORE-MATH (Inria), ported into `geom-num`'s `math` module by piece G05 |
 | [usd-brep.txt](usd-brep.txt) | NLib, in NVIDIA's USD BRep, ported into `geom-nurbs` by piece G56 |
+| [solidcore.txt](solidcore.txt) | solidcore's natural continuation of an end span, ported into `geom-nurbs`'s `extend` by piece G253 |

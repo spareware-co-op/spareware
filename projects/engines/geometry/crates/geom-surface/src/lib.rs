@@ -34,13 +34,15 @@
 //! closed-form extents (`extent`, piece G67). Every kind's second partials and unit normal's
 //! partials over a box, and chapter 19.3's chord constant, come from its partials there
 //! ([`derivative`], piece G68); a rational NURBS patch's partials are the interval quotient rule
-//! with the patch itself bounded by its control points.
+//! with the patch itself bounded by its control points. A surface continued past a side of its
+//! domain, each kind by its definition and NURBS by the natural continuation of the end span,
+//! with its new strip's normal certified, is [`extend`] (piece G253).
 //!
 //! Status: the traits, the enum, the NURBS kind, `ImplicitBound` and the contract built (G60); the
 //! analytic and swept kinds (G65); the offset kind, and every kind's partials of any order
 //! (G66); the analytic kinds' closed-form extents (G67); certified second-derivative and
-//! normal-derivative bounds for every kind (G68); the other kinds to come in G253, G254, G260,
-//! G264, G315, G316, G317, G318 and G470.
+//! normal-derivative bounds for every kind (G68); surface extension (G253); the other kinds to
+//! come in G254, G260, G264, G315, G316, G317, G318 and G470.
 #![cfg_attr(not(test), no_std)]
 #![forbid(unsafe_code)]
 
@@ -50,6 +52,7 @@ pub mod analytic;
 mod cache;
 pub mod contract;
 pub mod derivative;
+pub mod extend;
 mod extent;
 pub mod implicit;
 mod jet;
@@ -61,6 +64,7 @@ mod terms;
 
 pub use analytic::{AffineSurface, Cone, Cylinder, Plane, Sphere, Torus, TorusForm};
 pub use derivative::{SecondDerivativeBound, SecondPartials};
+pub use extend::{Caps, ExtendError, Extended, Reach, Side};
 pub use implicit::{ImplicitBound, ImplicitEnclosure};
 pub use offset::Offset;
 pub use param::{ParamBox, ParamSurface, SurfaceForm, SurfaceKind, partial_index};

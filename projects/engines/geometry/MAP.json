@@ -5836,7 +5836,7 @@
               "shape": "unit"
             },
             {
-              "doc": "A knot to insert, refine with or remove is outside the domain, or a refinement's new knots are not in non-decreasing order.",
+              "doc": "A knot to insert, refine with or remove is outside the domain, a refinement's new knots are not in non-decreasing order, or an extension's length is not positive and finite or does not move the end knot.",
               "name": "KnotOutside",
               "shape": "unit"
             },
@@ -6298,6 +6298,54 @@
           "target": "lib"
         },
         {
+          "cost": "one knot insertion of at most p copies and p de Casteljau levels of O(p) combinations per line, each twice (doubles and intervals); the result and its enclosure are allocated once. No recursion.",
+          "does": "[`Curve::extend`] and [`Surface::extend`] widen the domain at one end by a parameter length e. The end knot b, repeated p + 1 times in the clamped source, drops to p copies and stays as the joint; every control point of the source is kept bit for bit; and p new control points follow, the Bezier points of the end span's polynomial over [b, b + e], with p + 1 copies of the new end knot b + e. No knot is removed. The new points come from the end span's own Bezier points (the source with the span's start knot c raised to multiplicity p, `crate::insert`'s kernel) by de Casteljau's algorithm at t = 1 + e/(b − c), taking the last point of each level: they are the polynomial's blossoms b(1^(p−i), t^i). A low end is the high end of the mirrored source (its knots negated and reversed, its points reversed), which is exact. A surface runs the curve kernel on every line of its net in the extended direction (`crate::net`), with the same coefficients on every line.",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-nurbs/src/extend.rs",
+          "guarantees": [
+            "**The source kept.** Every control point and knot of the source is in the result unchanged (the end knot once fewer), and every span of the source keeps the knots its points are evaluated with, so over the source's domain the result is the source.",
+            "**The continuation, certified.** The extension is the end span's polynomial continued: the result is C∞ across the joint (the joint knot is of multiplicity p, but the points across it are one polynomial's). The kernel runs in doubles for the result and in intervals for the exact construction (`crate::ops`); the reported deviation bounds, with certainty, how far the result lies from the exact continuation at every parameter, and it is only the new points' rounding, the source's points entering exactly.",
+            "**Refused, never weak.** A source not clamped at that end is [`NurbsError::NotClamped`]; a length that is not positive and finite, or that does not move the end knot, is [`NurbsError::KnotOutside`]; a rational continuation whose weight may not be positive is [`NurbsError::Weight`], since its curve would pass through infinity.",
+            "**Budgeted.** The result and its interval run are charged to the meter first."
+          ],
+          "job": "Extension of NURBS curves and surfaces past one end of their domain, by the natural continuation of the end span: the end span's polynomial carried on past the end, in homogeneous coordinates, so a rational span continues as the same rational curve (a conic stays on its conic).",
+          "method": {
+            "links": [
+              "https://doi.org/10.1016/S0010-4485(01",
+              "https://doi.org/10.1007/978-3-642-59223-2",
+              "https://doi.org/10.1016/0167-8396(89"
+            ],
+            "text": "the natural extension of S.-M. Hu, C.-L. Tai and S.-H. Zhang, \"An extension algorithm for B-splines by curve unclamping\", Computer-Aided Design 34(5), 2002, <https://doi.org/10.1016/S0010-4485(01)00108-7>, which keeps every derivative of the end span, built here without unclamping: the end span's Bezier points by knot insertion (The NURBS Book, 2nd ed., A5.1, <https://doi.org/10.1007/978-3-642-59223-2>) and their continuation by de Casteljau's algorithm past the span, the blossoming of L. Ramshaw, \"Blossoms are polar forms\", Computer Aided Geometric Design 6(4), 1989, <https://doi.org/10.1016/0167-8396(89)90032-0>."
+          },
+          "path": "geom_nurbs::extend",
+          "provenance": [
+            {
+              "licence": "Apache-2.0",
+              "link": "https://github.com/tangency-labs/solidcore/blob/6432dafe7d716a973a653fca72d5d4c7cd7002c8/crates/solidcore/src/surface/extend.rs",
+              "method_note": null,
+              "name": "solidcore",
+              "notice": [
+                "Copyright (c) 2026 The solidcore contributors"
+              ],
+              "pinned": true,
+              "purpose": "the Natural continuation of `Local::natural` (the end span's Bezier points from the span's start knot at multiplicity p, de Casteljau at 1 + e/(b − c), the source kept with its end knot as a joint of multiplicity p) is translated to safe `no_std` Rust on curves of any dimension and on surfaces line by line, generic over the number type so its rounding is certified by an interval run in place of solidcore's a priori γ bounds and local frames; the end span's Bezier points come from the kernel's own ported knot insertion; the solve for a length across the side, the Tangent, Curvature and Ruled continuations and the knot fixup are not taken.",
+              "take": "port"
+            },
+            {
+              "licence": "Apache-2.0",
+              "link": "https://github.com/NVIDIA-Omniverse/usd-brep/blob/3fd5b9548d19aa8c12c29bc9637a96d42a06f8a5/source/SMLib/src/NL_CrvAdv.cpp",
+              "method_note": null,
+              "name": "NVIDIA USD `BRep` `NLib`",
+              "notice": [],
+              "pinned": true,
+              "purpose": "for `N_CrvExtendByParamDist`'s `NL_CMAX` extension (infinite continuity, no knot at the join) and its refusal of weights that are not usable; its removal of the old end knot within a tolerance is not taken. No code copied.",
+              "take": "port-method"
+            }
+          ],
+          "spdx": "Apache-2.0",
+          "target": "lib"
+        },
+        {
           "cost": "linear in the number of data points (times D for the distances), plus p additions per averaged knot; each result is one allocation, charged to the meter first.",
           "does": "a fit takes data points `Q_k` and returns a [`CurveFit`] or a [`SurfaceFit`]: the nonrational curve or surface, the parameter of each data point, and `error`, a certified upper bound on `max_k` |`Q_k` − C(`u_k`)| at those parameters (so also on the distance from every data point to the curve). [`parameters`] gives a polygon's parameters by the uniform, chord-length or centripetal rule, and [`grid_parameters`] a grid's, averaged over its rows and columns. [`averaged_knots`] builds the knot vector of an interpolation, each interior knot the average of p consecutive parameters, and [`least_squares_knots`] that of a least-squares fit with fewer control points than data points, placed so every knot span holds a parameter. Every fit takes a [`FitVersion`]: the operation log records it, and a change to any fit's result is a new version while every old one keeps its behaviour (chapter 26.2).",
           "family": [],
@@ -6726,7 +6774,7 @@
       "provenance": [],
       "sections": "7, 12.3, 12.12, 13 (introduction), 14.1 and 15.6; 29.7, in the kernel architecture (`projects/engines/geometry/architecture/`).",
       "spdx": null,
-      "status": "basis, evaluation and knot operations (G56), fitting (G58) and the Bernstein toolkit (G59) built; the rest (G259) to come.",
+      "status": "basis, evaluation and knot operations (G56), fitting (G58), the Bernstein toolkit (G59) and natural extension (G253) built; the rest (G259) to come.",
       "summary": "Spare Kit geometry kernel: NURBS algorithms."
     },
     {
@@ -7583,7 +7631,32 @@
         26
       ],
       "depends": [],
-      "errors": [],
+      "errors": [
+        {
+          "doc": "What went wrong with an extension.",
+          "file": "projects/engines/geometry/crates/geom-surface/src/extend.rs",
+          "kinds": [
+            {
+              "doc": "The extension would leave the kind's definition, degenerate or fold, and no shorter one was asked for (13.9's `ExtensionFailed`): the side and the parameter length reached.",
+              "name": "ExtensionFailed",
+              "shape": "struct"
+            },
+            {
+              "doc": "The surface or its parts refused: a length that is not positive and finite, a NURBS form not clamped at the side, a value that is not finite.",
+              "name": "Curve",
+              "shape": "tuple"
+            },
+            {
+              "doc": "The work meter stopped.",
+              "name": "Stopped",
+              "shape": "tuple"
+            }
+          ],
+          "module": "geom_surface::extend",
+          "name": "ExtendError",
+          "non_exhaustive": false
+        }
+      ],
       "family": [],
       "file": "projects/engines/geometry/crates/geom-surface/src/lib.rs",
       "folder": "projects/engines/geometry/crates/geom-surface",
@@ -7689,6 +7762,52 @@
           },
           "path": "geom_surface::derivative",
           "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
+          "cost": "a definition's extension is the kind's construction; a NURBS one is `geom_nurbs::Surface::extend`'s; a reach not met costs at most [`BISECTIONS`] more of them. The certificate costs at most [`MAX_BOXES`] normal bounds, each charged to the meter, and an as-far-as-valid extension at most [`SHRINKS`] more certificates; [`extend_capped`] takes other caps ([`Caps`]). No recursion: explicit stacks.",
+          "does": "[`extend`] continues a surface past one [`Side`] of its domain by a parameter length, the parameters of the source unchanged:",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-surface/src/extend.rs",
+          "guarantees": [
+            "**The source unchanged.** Over the source's domain the extended surface is the source: the same kind's definition on a wider domain, or (NURBS, a continued profile basis) the source's own control points and knots kept, the extension after them.",
+            "**The definition, continued.** An analytic or swept extension is the kind's own definition on the wider domain, exactly; a NURBS extension is the end span's polynomial continued, C∞ across the old side, within the reported deviation.",
+            "**No degenerate normal in the extension.** Every non-analytic extension returned has a normal certified not zero over the whole new strip (so it cannot fold back at a cusp there); an analytic one keeps its definition's limits. Where that cannot be shown, the extension is refused with the length reached, or, when asked, stopped there.",
+            "**Not checked: global self-intersection.** A long extension may meet a far part of the surface without any local fold. The operation that uses an extension checks its result for global self-intersection (piece G176), as chapter 13.9 asks.",
+            "**The length reached is found, not proved the longest.** Where a definition stops short (bisection) or the certificate does (halving), the length is one that works; a rational weight's sign need not be monotone in the length."
+          ],
+          "job": "Surface extension (chapter 13.9; piece G253): a surface continued past one side of its domain, every kind by its own definition or, for NURBS, by the natural continuation of its end span, and refused where the continuation may degenerate.",
+          "method": {
+            "links": [
+              "projects/engines/geometry/architecture/13-sweeps-blends-offsets.md",
+              "https://doi.org/10.1016/S0010-4485(01"
+            ],
+            "text": "chapter 13.9 (`projects/engines/geometry/architecture/13-sweeps-blends-offsets.md`): each kind by its definition, NURBS by S.-M. Hu, C.-L. Tai and S.-H. Zhang's natural extension (Computer-Aided Design 34(5), 2002, <https://doi.org/10.1016/S0010-4485(01)00108-7>); the normal certified by interval subdivision of the kinds' normal bounds (R. E. Moore, *Interval Analysis*, 1966); the reach by bisection on the length."
+          },
+          "path": "geom_surface::extend",
+          "provenance": [
+            {
+              "licence": "Apache-2.0",
+              "link": "https://github.com/tangency-labs/solidcore/blob/6432dafe7d716a973a653fca72d5d4c7cd7002c8/crates/solidcore/src/surface/extend.rs",
+              "method_note": null,
+              "name": "solidcore",
+              "notice": [],
+              "pinned": true,
+              "purpose": "for the analytic kinds widened on their own parameters and the refusal of continued weights that are not positive, naming a length that works. No code copied.",
+              "take": "port-method"
+            },
+            {
+              "licence": "Apache-2.0",
+              "link": "https://github.com/NVIDIA-Omniverse/usd-brep/blob/3fd5b9548d19aa8c12c29bc9637a96d42a06f8a5/source/SMLib/src/SmBSplineSurfaceNLib.cpp",
+              "method_note": null,
+              "name": "NVIDIA USD `BRep` `SMLib`",
+              "notice": [],
+              "pinned": true,
+              "purpose": "for `CreateExtendedSurface`, which skips a side at a singularity and shortens its length until the extension succeeds; its tolerance-based distance and knot removal are not taken. No code copied.",
+              "take": "port-method"
+            }
+          ],
           "spdx": null,
           "target": "lib"
         },
@@ -7877,7 +7996,7 @@
       "provenance": [],
       "sections": "7, 12.1, 13 (introduction), 13.9, 16.1, 16.5, 16.6, 19.3 and 26.1, in the kernel architecture (`projects/engines/geometry/architecture/`).",
       "spdx": null,
-      "status": "the traits, the enum, the NURBS kind, `ImplicitBound` and the contract built (G60); the analytic and swept kinds (G65); the offset kind, and every kind's partials of any order (G66); the analytic kinds' closed-form extents (G67); certified second-derivative and normal-derivative bounds for every kind (G68); the other kinds to come in G253, G254, G260, G264, G315, G316, G317, G318 and G470.",
+      "status": "the traits, the enum, the NURBS kind, `ImplicitBound` and the contract built (G60); the analytic and swept kinds (G65); the offset kind, and every kind's partials of any order (G66); the analytic kinds' closed-form extents (G67); certified second-derivative and normal-derivative bounds for every kind (G68); surface extension (G253); the other kinds to come in G254, G260, G264, G315, G316, G317, G318 and G470.",
       "summary": "Spare Kit geometry kernel: every surface kind."
     },
     {
@@ -9822,6 +9941,17 @@
       ]
     },
     {
+      "licence": "Apache-2.0",
+      "link": "https://github.com/tangency-labs/solidcore/blob/6432dafe7d716a973a653fca72d5d4c7cd7002c8/crates/solidcore/src/surface/extend.rs",
+      "method_note": null,
+      "name": "solidcore",
+      "pinned": true,
+      "take": "port",
+      "used_by": [
+        "projects/engines/geometry/crates/geom-nurbs/src/extend.rs"
+      ]
+    },
+    {
       "licence": "MIT",
       "link": "https://gitlab.inria.fr/core-math/core-math/-/blob/0ce0cbc15935e24c656280e5a46c34e89f301b7a/src/binary64/atan2/atan2.c",
       "method_note": null,
@@ -9951,6 +10081,28 @@
       "take": "port-method",
       "used_by": [
         "projects/engines/geometry/crates/geom-num/src/rng.rs"
+      ]
+    },
+    {
+      "licence": "Apache-2.0",
+      "link": "https://github.com/NVIDIA-Omniverse/usd-brep/blob/3fd5b9548d19aa8c12c29bc9637a96d42a06f8a5/source/SMLib/src/NL_CrvAdv.cpp",
+      "method_note": null,
+      "name": "NVIDIA USD `BRep` `NLib`",
+      "pinned": true,
+      "take": "port-method",
+      "used_by": [
+        "projects/engines/geometry/crates/geom-nurbs/src/extend.rs"
+      ]
+    },
+    {
+      "licence": "Apache-2.0",
+      "link": "https://github.com/NVIDIA-Omniverse/usd-brep/blob/3fd5b9548d19aa8c12c29bc9637a96d42a06f8a5/source/SMLib/src/SmBSplineSurfaceNLib.cpp",
+      "method_note": null,
+      "name": "NVIDIA USD `BRep` `SMLib`",
+      "pinned": true,
+      "take": "port-method",
+      "used_by": [
+        "projects/engines/geometry/crates/geom-surface/src/extend.rs"
       ]
     },
     {
@@ -10245,6 +10397,17 @@
       "take": "port-method",
       "used_by": [
         "projects/engines/geometry/crates/geom-test/src/map/classes.rs"
+      ]
+    },
+    {
+      "licence": "Apache-2.0",
+      "link": "https://github.com/tangency-labs/solidcore/blob/6432dafe7d716a973a653fca72d5d4c7cd7002c8/crates/solidcore/src/surface/extend.rs",
+      "method_note": null,
+      "name": "solidcore",
+      "pinned": true,
+      "take": "port-method",
+      "used_by": [
+        "projects/engines/geometry/crates/geom-surface/src/extend.rs"
       ]
     },
     {
