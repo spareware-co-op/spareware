@@ -319,6 +319,188 @@ pub mod plane {
     }
 }
 
+/// Lines and rational points in the plane: `geom_num::carrier` (G187).
+pub mod carrier {
+    use geom_num::carrier::{Carrier, Rational2};
+    use geom_num::{NumError, Sign};
+
+    use super::run;
+
+    /// `Carrier::side` on each (carrier, point).
+    #[inline(never)]
+    pub fn side(batch: &[(Carrier, Rational2)], out: &mut Vec<Result<Sign, NumError>>) {
+        run(batch, out, |(l, p)| l.side(p));
+    }
+
+    /// `Carrier::order` on each (carrier, p, q).
+    #[inline(never)]
+    pub fn order(batch: &[(Carrier, Rational2, Rational2)], out: &mut Vec<Result<Sign, NumError>>) {
+        run(batch, out, |(l, p, q)| l.order(p, q));
+    }
+
+    /// `Carrier::meet` on each pair.
+    #[inline(never)]
+    pub fn meet(batch: &[(Carrier, Carrier)], out: &mut Vec<Result<Rational2, NumError>>) {
+        run(batch, out, |(l, m)| l.meet(m));
+    }
+
+    /// `Rational2::cmp_x` on each pair.
+    #[inline(never)]
+    pub fn cmp_x(batch: &[(Rational2, Rational2)], out: &mut Vec<Result<Sign, NumError>>) {
+        run(batch, out, |(p, q)| p.cmp_x(q));
+    }
+
+    /// `Rational2::orient` on each triple.
+    #[inline(never)]
+    pub fn orient(batch: &[[Rational2; 3]], out: &mut Vec<Result<Sign, NumError>>) {
+        run(batch, out, |[p, q, r]| Rational2::orient(p, q, r));
+    }
+}
+
+/// Circles and arcs in the plane: `geom_num::arc` (G188).
+pub mod arc {
+    use geom_num::arc::{Circle2, Contact, Round};
+    use geom_num::carrier::{Carrier, Rational2};
+    use geom_num::grid::P2;
+    use geom_num::{NumError, Sign};
+
+    use super::run;
+
+    /// `Round::side_of_grid` on each (round, point).
+    #[inline(never)]
+    pub fn round_grid(batch: &[(Round, P2)], out: &mut Vec<Result<Sign, NumError>>) {
+        run(batch, out, |(r, z)| r.side_of_grid(*z));
+    }
+
+    /// `Round::side` on each (round, point).
+    #[inline(never)]
+    pub fn round_side(batch: &[(Round, Rational2)], out: &mut Vec<Result<Sign, NumError>>) {
+        run(batch, out, |(r, z)| r.side(z));
+    }
+
+    /// `Round::meets` on each (round, carrier).
+    #[inline(never)]
+    pub fn round_meets(batch: &[(Round, Carrier)], out: &mut Vec<Result<Contact, NumError>>) {
+        run(batch, out, |(r, l)| r.meets(l));
+    }
+
+    /// `Circle2::side` on each (circle, point).
+    #[inline(never)]
+    pub fn circle_side(batch: &[(Circle2, Rational2)], out: &mut Vec<Result<Sign, NumError>>) {
+        run(batch, out, |(c, z)| c.side(z));
+    }
+
+    /// `Circle2::meets` on each (circle, carrier).
+    #[inline(never)]
+    pub fn circle_meets(batch: &[(Circle2, Carrier)], out: &mut Vec<Result<Contact, NumError>>) {
+        run(batch, out, |(c, l)| c.meets(l));
+    }
+}
+
+/// One-root numbers: `geom_num::one_root` (G189).
+pub mod one_root {
+    use geom_num::arc::{Arc2, Circle2, Round};
+    use geom_num::carrier::Carrier;
+    use geom_num::one_root::{Crossing2, Root};
+    use geom_num::{NumError, Sign};
+
+    use super::run;
+
+    /// `Crossing2::of_circle` on each pair.
+    #[inline(never)]
+    pub fn of_circle(batch: &[(Carrier, Circle2)], out: &mut Vec<Result<Crossing2, NumError>>) {
+        run(batch, out, |(l, c)| Crossing2::of_circle(l, c, Root::First));
+    }
+
+    /// `Crossing2::of_round` on each pair.
+    #[inline(never)]
+    pub fn of_round(batch: &[(Carrier, Round)], out: &mut Vec<Result<Crossing2, NumError>>) {
+        run(batch, out, |(l, r)| Crossing2::of_round(l, r, Root::First));
+    }
+
+    /// `Crossing2::cmp_x` on each pair.
+    #[inline(never)]
+    pub fn cmp_x(batch: &[(Crossing2, Crossing2)], out: &mut Vec<Result<Sign, NumError>>) {
+        run(batch, out, |(p, q)| p.cmp_x(q));
+    }
+
+    /// `Crossing2::side` on each pair.
+    #[inline(never)]
+    pub fn side(batch: &[(Crossing2, Carrier)], out: &mut Vec<Result<Sign, NumError>>) {
+        run(batch, out, |(p, l)| p.side(l));
+    }
+
+    /// `Crossing2::against_circle` on each pair.
+    #[inline(never)]
+    pub fn against_circle(batch: &[(Crossing2, Circle2)], out: &mut Vec<Result<Sign, NumError>>) {
+        run(batch, out, |(p, c)| p.against_circle(c));
+    }
+
+    /// `Arc2::order_crossings` on each pair.
+    #[inline(never)]
+    pub fn order_crossings(
+        batch: &[(Arc2, Crossing2, Crossing2)],
+        out: &mut Vec<Result<Sign, NumError>>,
+    ) {
+        run(batch, out, |(arc, a, b)| arc.order_crossings(a, b));
+    }
+}
+
+/// Conics: `geom_num::conic` and `geom_num::quartic` (G190).
+pub mod conic {
+    use geom_num::arc::Contact;
+    use geom_num::carrier::{Carrier, Rational2};
+    use geom_num::conic::{Conic, Ellipse2, Meeting};
+    use geom_num::one_root::{Crossing2, Root};
+    use geom_num::quartic::{self, Quartic, RealRoot};
+    use geom_num::{NumError, Sign};
+
+    use super::run;
+
+    /// `Ellipse2::side` on each pair.
+    #[inline(never)]
+    pub fn side(batch: &[(Ellipse2, Rational2)], out: &mut Vec<Result<Sign, NumError>>) {
+        run(batch, out, |(e, z)| e.side(z));
+    }
+
+    /// `Ellipse2::meets` on each pair.
+    #[inline(never)]
+    pub fn meets(batch: &[(Ellipse2, Carrier)], out: &mut Vec<Result<Contact, NumError>>) {
+        run(batch, out, |(e, l)| e.meets(l));
+    }
+
+    /// `Crossing2::of_ellipse` on each pair.
+    #[inline(never)]
+    pub fn of_ellipse(batch: &[(Carrier, Ellipse2)], out: &mut Vec<Result<Crossing2, NumError>>) {
+        run(batch, out, |(l, e)| {
+            Crossing2::of_ellipse(l, e, Root::First)
+        });
+    }
+
+    /// `Crossing2::against_ellipse` on each pair.
+    #[inline(never)]
+    pub fn against_ellipse(batch: &[(Crossing2, Ellipse2)], out: &mut Vec<Result<Sign, NumError>>) {
+        run(batch, out, |(p, e)| p.against_ellipse(e));
+    }
+
+    /// `Ellipse2::meeting` on each pair.
+    #[inline(never)]
+    pub fn meeting(batch: &[(Ellipse2, Ellipse2)], out: &mut Vec<Result<Meeting, NumError>>) {
+        run(batch, out, |(e, o)| {
+            Conic::of_ellipse(o).and_then(|c| e.meeting(&c))
+        });
+    }
+
+    /// `quartic::compare` on each pair of roots.
+    #[inline(never)]
+    pub fn compare(
+        batch: &[(Quartic, RealRoot, Quartic, RealRoot)],
+        out: &mut Vec<Result<Sign, NumError>>,
+    ) {
+        run(batch, out, |(p, a, q, b)| quartic::compare(p, a, q, b));
+    }
+}
+
 /// Where two lines cross in the plane: `geom_num::crossing` (G29).
 pub mod crossing {
     use geom_num::crossing::Ssi;
@@ -964,7 +1146,9 @@ pub mod exact_sum {
 pub mod generated {
     use geom_num::Sign;
     use geom_num::generated::{
-        incircle, insphere, lpi_side, lpi_weight, orient2d, orient3d, plane_side, ssi_side,
+        carrier_order, carrier_side, circle_gap, circle_line, circle_side, ellipse_line,
+        ellipse_side, incircle, insphere, lpi_side, lpi_weight, orient2d, orient3d, plane_side,
+        rational_cmp, rational_orient, round_grid, round_line, round_rational, ssi_side,
         ssi_weight, tpi_side, tpi_weight,
     };
     use geom_num::grid::{P2, P3};
@@ -1169,6 +1353,203 @@ pub mod generated {
             ssi_side::value(a, b, c, d, p, q)
         });
     }
+
+    /// `generated::carrier_side::filter` on each (carrier, point).
+    #[inline(never)]
+    pub fn carrier_side_filter(batch: &[([i128; 3], [i128; 3])], out: &mut Vec<Option<Sign>>) {
+        run(batch, out, |&([a, b, c], [x, y, w])| {
+            carrier_side::filter(a, b, c, x, y, w)
+        });
+    }
+
+    /// `generated::carrier_side::value` on each (carrier, point).
+    #[inline(never)]
+    pub fn carrier_side_value(batch: &[([i128; 3], [i128; 3])], out: &mut Vec<Option<I256>>) {
+        run(batch, out, |&([a, b, c], [x, y, w])| {
+            carrier_side::value(a, b, c, x, y, w)
+        });
+    }
+
+    /// `generated::carrier_order::filter` on each (normal, p, q).
+    #[inline(never)]
+    pub fn carrier_order_filter(
+        batch: &[([i128; 2], [i128; 3], [i128; 3])],
+        out: &mut Vec<Option<Sign>>,
+    ) {
+        run(batch, out, |&([a, b], [xp, yp, wp], [xq, yq, wq])| {
+            carrier_order::filter(a, b, xp, yp, xq, yq, wp, wq)
+        });
+    }
+
+    /// `generated::carrier_order::value` on each (normal, p, q).
+    #[inline(never)]
+    pub fn carrier_order_value(
+        batch: &[([i128; 2], [i128; 3], [i128; 3])],
+        out: &mut Vec<Option<I256>>,
+    ) {
+        run(batch, out, |&([a, b], [xp, yp, wp], [xq, yq, wq])| {
+            carrier_order::value(a, b, xp, yp, xq, yq, wp, wq)
+        });
+    }
+
+    /// `generated::rational_cmp::filter` on each quadruple.
+    #[inline(never)]
+    pub fn rational_cmp_filter(batch: &[[i128; 4]], out: &mut Vec<Option<Sign>>) {
+        run(batch, out, |&[p, q, wp, wq]| {
+            rational_cmp::filter(p, q, wp, wq)
+        });
+    }
+
+    /// `generated::rational_cmp::value` on each quadruple.
+    #[inline(never)]
+    pub fn rational_cmp_value(batch: &[[i128; 4]], out: &mut Vec<Option<I256>>) {
+        run(batch, out, |&[p, q, wp, wq]| {
+            rational_cmp::value(p, q, wp, wq)
+        });
+    }
+
+    /// `generated::rational_orient::filter` on each triple of rows.
+    #[inline(never)]
+    pub fn rational_orient_filter(batch: &[[[i128; 3]; 3]], out: &mut Vec<Option<Sign>>) {
+        run(batch, out, |&[[xa, ya, wa], [xb, yb, wb], [xc, yc, wc]]| {
+            rational_orient::filter(xa, ya, xb, yb, xc, yc, wa, wb, wc)
+        });
+    }
+
+    /// `generated::rational_orient::value` on each triple of rows.
+    #[inline(never)]
+    pub fn rational_orient_value(batch: &[[[i128; 3]; 3]], out: &mut Vec<Option<I384>>) {
+        run(batch, out, |&[[xa, ya, wa], [xb, yb, wb], [xc, yc, wc]]| {
+            rational_orient::value(xa, ya, xb, yb, xc, yc, wa, wb, wc)
+        });
+    }
+
+    /// `generated::ellipse_side::filter` on each (point, centre, shape).
+    #[inline(never)]
+    pub fn ellipse_side_filter(batch: &[([i128; 3], P2, [i128; 4])], out: &mut Vec<Option<Sign>>) {
+        run(batch, out, |&([x, y, w], k, [mx, my, p, q])| {
+            ellipse_side::filter(x, y, w, k, mx, my, p, q)
+        });
+    }
+
+    /// `generated::ellipse_side::value` on each (point, centre, shape).
+    #[inline(never)]
+    pub fn ellipse_side_value(batch: &[([i128; 3], P2, [i128; 4])], out: &mut Vec<Option<I384>>) {
+        run(batch, out, |&([x, y, w], k, [mx, my, p, q])| {
+            ellipse_side::value(x, y, w, k, mx, my, p, q)
+        });
+    }
+
+    /// `generated::ellipse_line::filter` on each (carrier, centre, shape).
+    #[inline(never)]
+    pub fn ellipse_line_filter(batch: &[([i128; 3], P2, [i128; 4])], out: &mut Vec<Option<Sign>>) {
+        run(batch, out, |&([a, b, d], k, [mx, my, p, q])| {
+            ellipse_line::filter(a, b, d, k, mx, my, p, q)
+        });
+    }
+
+    /// `generated::ellipse_line::value` on each (carrier, centre, shape).
+    #[inline(never)]
+    pub fn ellipse_line_value(batch: &[([i128; 3], P2, [i128; 4])], out: &mut Vec<Option<I256>>) {
+        run(batch, out, |&([a, b, d], k, [mx, my, p, q])| {
+            ellipse_line::value(a, b, d, k, mx, my, p, q)
+        });
+    }
+
+    /// `generated::round_grid::filter` on each (z, p, centre).
+    #[inline(never)]
+    pub fn round_grid_filter(batch: &[(P2, P2, [i128; 3])], out: &mut Vec<Option<Sign>>) {
+        run(batch, out, |&(z, p, [cx, cy, w])| {
+            round_grid::filter(z, p, cx, cy, w)
+        });
+    }
+
+    /// `generated::round_grid::value` on each (z, p, centre).
+    #[inline(never)]
+    pub fn round_grid_value(batch: &[(P2, P2, [i128; 3])], out: &mut Vec<Option<I256>>) {
+        run(batch, out, |&(z, p, [cx, cy, w])| {
+            round_grid::value(z, p, cx, cy, w)
+        });
+    }
+
+    /// `generated::round_rational::filter` on each (point, q, centre).
+    #[inline(never)]
+    pub fn round_rational_filter(
+        batch: &[([i128; 3], P2, [i128; 3])],
+        out: &mut Vec<Option<Sign>>,
+    ) {
+        run(batch, out, |&([x, y, v], q, [cx, cy, w])| {
+            round_rational::filter(x, y, v, q, cx, cy, w)
+        });
+    }
+
+    /// `generated::round_rational::value` on each (point, q, centre).
+    #[inline(never)]
+    pub fn round_rational_value(batch: &[([i128; 3], P2, [i128; 3])], out: &mut Vec<Option<I384>>) {
+        run(batch, out, |&([x, y, v], q, [cx, cy, w])| {
+            round_rational::value(x, y, v, q, cx, cy, w)
+        });
+    }
+
+    /// `generated::round_line::filter` on each (carrier, p, centre).
+    #[inline(never)]
+    pub fn round_line_filter(batch: &[([i128; 3], P2, [i128; 3])], out: &mut Vec<Option<Sign>>) {
+        run(batch, out, |&([a, b, d], p, [cx, cy, w])| {
+            round_line::filter(a, b, d, p, cx, cy, w)
+        });
+    }
+
+    /// `generated::round_line::value` on each (carrier, p, centre).
+    #[inline(never)]
+    pub fn round_line_value(batch: &[([i128; 3], P2, [i128; 3])], out: &mut Vec<Option<I384>>) {
+        run(batch, out, |&([a, b, d], p, [cx, cy, w])| {
+            round_line::value(a, b, d, p, cx, cy, w)
+        });
+    }
+
+    /// `generated::circle_side::filter` on each (point, centre, radius).
+    #[inline(never)]
+    pub fn circle_side_filter(batch: &[([i128; 3], P2, i128)], out: &mut Vec<Option<Sign>>) {
+        run(batch, out, |&([x, y, v], k, r)| {
+            circle_side::filter(x, y, v, k, r)
+        });
+    }
+
+    /// `generated::circle_side::value` on each (point, centre, radius).
+    #[inline(never)]
+    pub fn circle_side_value(batch: &[([i128; 3], P2, i128)], out: &mut Vec<Option<I256>>) {
+        run(batch, out, |&([x, y, v], k, r)| {
+            circle_side::value(x, y, v, k, r)
+        });
+    }
+
+    /// `generated::circle_line::filter` on each (carrier, centre, radius).
+    #[inline(never)]
+    pub fn circle_line_filter(batch: &[([i128; 3], P2, i128)], out: &mut Vec<Option<Sign>>) {
+        run(batch, out, |&([a, b, d], k, r)| {
+            circle_line::filter(a, b, d, k, r)
+        });
+    }
+
+    /// `generated::circle_line::value` on each (carrier, centre, radius).
+    #[inline(never)]
+    pub fn circle_line_value(batch: &[([i128; 3], P2, i128)], out: &mut Vec<Option<I256>>) {
+        run(batch, out, |&([a, b, d], k, r)| {
+            circle_line::value(a, b, d, k, r)
+        });
+    }
+
+    /// `generated::circle_gap::filter` on each (a, b, length).
+    #[inline(never)]
+    pub fn circle_gap_filter(batch: &[(P2, P2, i128)], out: &mut Vec<Option<Sign>>) {
+        run(batch, out, |&(a, b, t)| circle_gap::filter(a, b, t));
+    }
+
+    /// `generated::circle_gap::value` on each (a, b, length).
+    #[inline(never)]
+    pub fn circle_gap_value(batch: &[(P2, P2, i128)], out: &mut Vec<Option<i128>>) {
+        run(batch, out, |&(a, b, t)| circle_gap::value(a, b, t));
+    }
 }
 
 /// The plain-`i128` variant of the generated exact paths (chapter 23.3; piece G42), on the same
@@ -1286,6 +1667,103 @@ pub mod plain {
             plain::ssi_side_value(a, b, c, d, p, q)
         });
     }
+
+    /// `generated::plain::carrier_side_value` on each (carrier, point).
+    #[inline(never)]
+    pub fn carrier_side_value(batch: &[([i128; 3], [i128; 3])], out: &mut Vec<Option<I256>>) {
+        run(batch, out, |&([a, b, c], [x, y, w])| {
+            plain::carrier_side_value(a, b, c, x, y, w)
+        });
+    }
+
+    /// `generated::plain::carrier_order_value` on each (normal, p, q).
+    #[inline(never)]
+    pub fn carrier_order_value(
+        batch: &[([i128; 2], [i128; 3], [i128; 3])],
+        out: &mut Vec<Option<I256>>,
+    ) {
+        run(batch, out, |&([a, b], [xp, yp, wp], [xq, yq, wq])| {
+            plain::carrier_order_value(a, b, xp, yp, xq, yq, wp, wq)
+        });
+    }
+
+    /// `generated::plain::rational_cmp_value` on each quadruple.
+    #[inline(never)]
+    pub fn rational_cmp_value(batch: &[[i128; 4]], out: &mut Vec<Option<I256>>) {
+        run(batch, out, |&[p, q, wp, wq]| {
+            plain::rational_cmp_value(p, q, wp, wq)
+        });
+    }
+
+    /// `generated::plain::rational_orient_value` on each triple of rows.
+    #[inline(never)]
+    pub fn rational_orient_value(batch: &[[[i128; 3]; 3]], out: &mut Vec<Option<I384>>) {
+        run(batch, out, |&[[xa, ya, wa], [xb, yb, wb], [xc, yc, wc]]| {
+            plain::rational_orient_value(xa, ya, xb, yb, xc, yc, wa, wb, wc)
+        });
+    }
+
+    /// `generated::plain::ellipse_side_value` on each (point, centre, shape).
+    #[inline(never)]
+    pub fn ellipse_side_value(batch: &[([i128; 3], P2, [i128; 4])], out: &mut Vec<Option<I384>>) {
+        run(batch, out, |&([x, y, w], k, [mx, my, p, q])| {
+            plain::ellipse_side_value(x, y, w, k, mx, my, p, q)
+        });
+    }
+
+    /// `generated::plain::ellipse_line_value` on each (carrier, centre, shape).
+    #[inline(never)]
+    pub fn ellipse_line_value(batch: &[([i128; 3], P2, [i128; 4])], out: &mut Vec<Option<I256>>) {
+        run(batch, out, |&([a, b, d], k, [mx, my, p, q])| {
+            plain::ellipse_line_value(a, b, d, k, mx, my, p, q)
+        });
+    }
+
+    /// `generated::plain::round_grid_value` on each (z, p, centre).
+    #[inline(never)]
+    pub fn round_grid_value(batch: &[(P2, P2, [i128; 3])], out: &mut Vec<Option<I256>>) {
+        run(batch, out, |&(z, p, [cx, cy, w])| {
+            plain::round_grid_value(z, p, cx, cy, w)
+        });
+    }
+
+    /// `generated::plain::round_rational_value` on each (point, q, centre).
+    #[inline(never)]
+    pub fn round_rational_value(batch: &[([i128; 3], P2, [i128; 3])], out: &mut Vec<Option<I384>>) {
+        run(batch, out, |&([x, y, v], q, [cx, cy, w])| {
+            plain::round_rational_value(x, y, v, q, cx, cy, w)
+        });
+    }
+
+    /// `generated::plain::round_line_value` on each (carrier, p, centre).
+    #[inline(never)]
+    pub fn round_line_value(batch: &[([i128; 3], P2, [i128; 3])], out: &mut Vec<Option<I384>>) {
+        run(batch, out, |&([a, b, d], p, [cx, cy, w])| {
+            plain::round_line_value(a, b, d, p, cx, cy, w)
+        });
+    }
+
+    /// `generated::plain::circle_side_value` on each (point, centre, radius).
+    #[inline(never)]
+    pub fn circle_side_value(batch: &[([i128; 3], P2, i128)], out: &mut Vec<Option<I256>>) {
+        run(batch, out, |&([x, y, v], k, r)| {
+            plain::circle_side_value(x, y, v, k, r)
+        });
+    }
+
+    /// `generated::plain::circle_line_value` on each (carrier, centre, radius).
+    #[inline(never)]
+    pub fn circle_line_value(batch: &[([i128; 3], P2, i128)], out: &mut Vec<Option<I256>>) {
+        run(batch, out, |&([a, b, d], k, r)| {
+            plain::circle_line_value(a, b, d, k, r)
+        });
+    }
+
+    /// `generated::plain::circle_gap_value` on each (a, b, length).
+    #[inline(never)]
+    pub fn circle_gap_value(batch: &[(P2, P2, i128)], out: &mut Vec<Option<i128>>) {
+        run(batch, out, |&(a, b, t)| plain::circle_gap_value(a, b, t));
+    }
 }
 
 /// The width-aware limb variant of the generated exact paths (chapter 23.3; piece G42), on its own
@@ -1402,6 +1880,103 @@ pub mod limbs {
         run(batch, out, |&([a, b, c, d], p, q)| {
             limbs::ssi_side_value(a, b, c, d, p, q)
         });
+    }
+
+    /// `generated::limbs::carrier_side_value` on each (carrier, point).
+    #[inline(never)]
+    pub fn carrier_side_value(batch: &[([i128; 3], [i128; 3])], out: &mut Vec<Option<I256>>) {
+        run(batch, out, |&([a, b, c], [x, y, w])| {
+            limbs::carrier_side_value(a, b, c, x, y, w)
+        });
+    }
+
+    /// `generated::limbs::carrier_order_value` on each (normal, p, q).
+    #[inline(never)]
+    pub fn carrier_order_value(
+        batch: &[([i128; 2], [i128; 3], [i128; 3])],
+        out: &mut Vec<Option<I256>>,
+    ) {
+        run(batch, out, |&([a, b], [xp, yp, wp], [xq, yq, wq])| {
+            limbs::carrier_order_value(a, b, xp, yp, xq, yq, wp, wq)
+        });
+    }
+
+    /// `generated::limbs::rational_cmp_value` on each quadruple.
+    #[inline(never)]
+    pub fn rational_cmp_value(batch: &[[i128; 4]], out: &mut Vec<Option<I256>>) {
+        run(batch, out, |&[p, q, wp, wq]| {
+            limbs::rational_cmp_value(p, q, wp, wq)
+        });
+    }
+
+    /// `generated::limbs::rational_orient_value` on each triple of rows.
+    #[inline(never)]
+    pub fn rational_orient_value(batch: &[[[i128; 3]; 3]], out: &mut Vec<Option<I384>>) {
+        run(batch, out, |&[[xa, ya, wa], [xb, yb, wb], [xc, yc, wc]]| {
+            limbs::rational_orient_value(xa, ya, xb, yb, xc, yc, wa, wb, wc)
+        });
+    }
+
+    /// `generated::limbs::ellipse_side_value` on each (point, centre, shape).
+    #[inline(never)]
+    pub fn ellipse_side_value(batch: &[([i128; 3], P2, [i128; 4])], out: &mut Vec<Option<I384>>) {
+        run(batch, out, |&([x, y, w], k, [mx, my, p, q])| {
+            limbs::ellipse_side_value(x, y, w, k, mx, my, p, q)
+        });
+    }
+
+    /// `generated::limbs::ellipse_line_value` on each (carrier, centre, shape).
+    #[inline(never)]
+    pub fn ellipse_line_value(batch: &[([i128; 3], P2, [i128; 4])], out: &mut Vec<Option<I256>>) {
+        run(batch, out, |&([a, b, d], k, [mx, my, p, q])| {
+            limbs::ellipse_line_value(a, b, d, k, mx, my, p, q)
+        });
+    }
+
+    /// `generated::limbs::round_grid_value` on each (z, p, centre).
+    #[inline(never)]
+    pub fn round_grid_value(batch: &[(P2, P2, [i128; 3])], out: &mut Vec<Option<I256>>) {
+        run(batch, out, |&(z, p, [cx, cy, w])| {
+            limbs::round_grid_value(z, p, cx, cy, w)
+        });
+    }
+
+    /// `generated::limbs::round_rational_value` on each (point, q, centre).
+    #[inline(never)]
+    pub fn round_rational_value(batch: &[([i128; 3], P2, [i128; 3])], out: &mut Vec<Option<I384>>) {
+        run(batch, out, |&([x, y, v], q, [cx, cy, w])| {
+            limbs::round_rational_value(x, y, v, q, cx, cy, w)
+        });
+    }
+
+    /// `generated::limbs::round_line_value` on each (carrier, p, centre).
+    #[inline(never)]
+    pub fn round_line_value(batch: &[([i128; 3], P2, [i128; 3])], out: &mut Vec<Option<I384>>) {
+        run(batch, out, |&([a, b, d], p, [cx, cy, w])| {
+            limbs::round_line_value(a, b, d, p, cx, cy, w)
+        });
+    }
+
+    /// `generated::limbs::circle_side_value` on each (point, centre, radius).
+    #[inline(never)]
+    pub fn circle_side_value(batch: &[([i128; 3], P2, i128)], out: &mut Vec<Option<I256>>) {
+        run(batch, out, |&([x, y, v], k, r)| {
+            limbs::circle_side_value(x, y, v, k, r)
+        });
+    }
+
+    /// `generated::limbs::circle_line_value` on each (carrier, centre, radius).
+    #[inline(never)]
+    pub fn circle_line_value(batch: &[([i128; 3], P2, i128)], out: &mut Vec<Option<I256>>) {
+        run(batch, out, |&([a, b, d], k, r)| {
+            limbs::circle_line_value(a, b, d, k, r)
+        });
+    }
+
+    /// `generated::limbs::circle_gap_value` on each (a, b, length).
+    #[inline(never)]
+    pub fn circle_gap_value(batch: &[(P2, P2, i128)], out: &mut Vec<Option<i128>>) {
+        run(batch, out, |&(a, b, t)| limbs::circle_gap_value(a, b, t));
     }
 }
 
@@ -1767,6 +2342,129 @@ pub mod bvh {
             let mut meter = WorkMeter::new(Budget::UNLIMITED);
             CellIndex::build(points, &Exec::serial(), &mut meter)?
                 .within(*center, *radius, &mut meter)
+        });
+    }
+}
+
+/// `geom-2d`'s entity model (piece G194, decision 32.44): a polyline built and checked, and a
+/// shape's change under a transform's classification.
+pub mod entity {
+    use geom_2d::entity::{Becomes, Frac, Polyline, Shape};
+    use geom_math::Classification;
+    use geom_num::NumError;
+    use geom_num::grid::P2;
+    use geom_run::{Budget, WorkMeter};
+
+    use super::run;
+
+    /// `Polyline::new` on each input: the number of vertices it holds.
+    #[inline(never)]
+    pub fn polyline(batch: &[(Vec<P2>, Vec<Frac>)], out: &mut Vec<Result<u64, NumError>>) {
+        run(batch, out, |(vertices, bulges)| {
+            Polyline::new(vertices.clone(), bulges.clone(), None, false)
+                .map(|p| u64::try_from(p.vertices().len()).unwrap_or(0))
+                .map_err(|_| NumError::Degenerate)
+        });
+    }
+
+    /// `Shape::under` on each input: the tag it becomes, doubled, plus one if it mirrors.
+    #[inline(never)]
+    pub fn under(batch: &[(Shape, Classification)], out: &mut Vec<Result<u64, NumError>>) {
+        run(batch, out, |(shape, class)| {
+            let change = shape.under(*class).map_err(|_| NumError::Degenerate)?;
+            let tag = match change.becomes {
+                Becomes::One(tag) => u64::from(tag.as_u8()),
+                Becomes::Run => 0,
+            };
+            Ok(tag.wrapping_mul(2).wrapping_add(u64::from(change.mirror)))
+        });
+    }
+
+    /// `arrange` on each drawing: its vertices, edges and faces counted into one number.
+    #[inline(never)]
+    pub fn arrange(batch: &[Vec<(P2, P2)>], out: &mut Vec<Result<u64, NumError>>) {
+        run(batch, out, |segments| {
+            let mut meter = WorkMeter::new(Budget::UNLIMITED);
+            let a = geom_2d::arrange::arrange(segments, &mut meter)
+                .map_err(|_| NumError::Degenerate)?;
+            let count = |n: usize| u64::try_from(n).unwrap_or(0);
+            Ok(count(a.vertices().len())
+                .wrapping_mul(1_000_003)
+                .wrapping_add(count(a.edges().len()).wrapping_mul(1_009))
+                .wrapping_add(count(a.faces().len())))
+        });
+    }
+    /// `Live::insert` of each drawing's segments one by one: the pieces and the sources on them
+    /// counted into one number, and the piece under a probe point at the middle of the square.
+    #[inline(never)]
+    pub fn zone_insert(batch: &[Vec<(P2, P2)>], out: &mut Vec<Result<u64, NumError>>) {
+        run(batch, out, |segments| {
+            let mut meter = WorkMeter::new(Budget::UNLIMITED);
+            let mut live = geom_2d::update::Live::new();
+            for (label, &(a, b)) in (0_u32..).zip(segments) {
+                live = live
+                    .insert(a, b, label, &mut meter)
+                    .map_err(|_| NumError::Degenerate)?;
+            }
+            let count = |n: usize| u64::try_from(n).unwrap_or(0);
+            let sources: usize = live.pieces().map(|piece| piece.sources().len()).sum();
+            let at = geom_num::carrier::Rational2::new(201, 201, 2)?;
+            let found = match live
+                .locate(&at, &mut meter)
+                .map_err(|_| NumError::Degenerate)?
+            {
+                geom_2d::update::Location::Vertex(_) => 1,
+                geom_2d::update::Location::Edge(..) => 2,
+                geom_2d::update::Location::Face(None) => 3,
+                geom_2d::update::Location::Face(Some(_)) => 4,
+            };
+            Ok(count(live.len())
+                .wrapping_mul(1_000_003)
+                .wrapping_add(count(sources).wrapping_mul(1_009))
+                .wrapping_add(found))
+        });
+    }
+}
+
+/// `geom-topo`'s hot paths (piece G80, decision 32.44): a column filled, copied and written, and
+/// a builder's arenas published.
+pub mod topo {
+    use geom_run::{Budget, WorkMeter};
+    use geom_topo::{Arena, BodyKind, Builder, Column, Face, Ix, TopoError};
+
+    use super::run;
+
+    /// Fills a column with [`Column::extend`], copies it, writes one row of the copy with
+    /// [`Column::set`], and sums what [`Column::get`] reads from both.
+    #[inline(never)]
+    pub fn column_edit(batch: &[(Vec<u64>, u32, u64)], out: &mut Vec<Result<u64, TopoError>>) {
+        run(batch, out, |(values, row, value)| {
+            let mut column: Column<Face, u64> = Column::new();
+            column.extend(values.iter().copied())?;
+            let mut copy = column.clone();
+            let missing = TopoError::Full(Arena::Face);
+            copy.set(Ix::new(*row).ok_or(missing)?, *value)?;
+            let mut sum = 0_u64;
+            for r in 0..column.len() {
+                let ix = Ix::new(r).ok_or(missing)?;
+                let (a, b) = (column.get(ix).ok_or(missing)?, copy.get(ix).ok_or(missing)?);
+                sum = sum.wrapping_add(*a).wrapping_add(*b);
+            }
+            Ok(sum)
+        });
+    }
+
+    /// [`Builder::publish`] on a copy of each builder, with its void region outside; the fins of
+    /// the body it gives.
+    #[inline(never)]
+    pub fn publish(batch: &[Builder], out: &mut Vec<Result<u32, TopoError>>) {
+        run(batch, out, |builder| {
+            let mut meter = WorkMeter::new(Budget::UNLIMITED);
+            let outside = Ix::new(1).ok_or(TopoError::Full(Arena::Region))?;
+            let body = builder
+                .clone()
+                .publish(BodyKind::Solid, outside, &mut meter)?;
+            Ok(body.arenas().fins.len())
         });
     }
 }
