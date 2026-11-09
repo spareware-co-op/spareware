@@ -1508,6 +1508,15 @@ fn in_order<'s>(sides: &[&'s Side], order: &[usize]) -> Result<Vec<&'s Side>, Me
 /// whole. Only a seam can hold two fins of one sheet, so those two are the seam.
 fn without_slits(mut runs: Vec<Run>, parents: &[usize]) -> Vec<Run> {
     for run in &mut runs {
+        // A seam's two fins are of one sheet, so a run whose fins are all of different sheets, as
+        // an edge between faces is, has none.
+        let shared = |(at, fin): (usize, &RunFin)| {
+            let mut later = run.fins.iter().skip(at.saturating_add(1));
+            later.any(|other| other.sheet == fin.sheet)
+        };
+        if !run.fins.iter().enumerate().any(shared) {
+            continue;
+        }
         // Which fins are a seam's, told against every fin of the run before any goes: a flag for
         // each, rather than a copy of the fins.
         let seam: Vec<bool> = run
