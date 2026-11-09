@@ -366,7 +366,7 @@
               "sha256": "2bd33237d0660e08df18570457cf4fd866770a5f14153d34e65e2a0e2864c0bd",
               "kind": "improvement",
               "piece": "G67",
-              "why": "The analytic surface kinds' bounds, derivative bounds and partials over a box are their closed-form extents now (piece G67): a plane's, cylinder's and cone's (and their affine images') by separating the parameters, a sphere's by its factored form, a torus's by c + (R + r·cos πv)·G(u) + Q(v), where G65 took the interval extension over eighths of a turn. The change is in that route alone (a region of one point keeps the terms' own enclosure, and normal bounds are unchanged); the result count (2693) and the refusals (5) are unchanged."
+              "why": "The analytic surface kinds' bounds, derivative bounds and partials over a box are their closed-form extents now (piece G67): a plane's, cylinder's and cone's (and their affine images') by separating the parameters, a sphere's by its factored form, a torus's by c + (R + r\u00b7cos \u03c0v)\u00b7G(u) + Q(v), where G65 took the interval extension over eighths of a turn. The change is in that route alone (a region of one point keeps the terms' own enclosure, and normal bounds are unchanged); the result count (2693) and the refusals (5) are unchanged."
             },
             {
               "sha256": "0681542ec51a8126cdc8ae8543832539c2cdbdd0af20fa6b6992534d590b4bf1",
@@ -411,17 +411,6 @@
               "why": "An offset that a transform does not keep gives its NURBS cache moved, and stated the cache's deviation unscaled, though the transform stretches it (Gate 2's fuzz campaign found the transform law broken under scales of 2^36 to 2^60). The deviation is now the cache's times a certified bound on the transform's stretch, plus the move's, so the corpus's transformed offsets moved. The result count (314) and the refusals (4) are unchanged."
             }
           ]
-        },
-        {
-          "id": "geom-surface/derivative-bounds",
-          "what": "Every surface kind's second-derivative and normal-derivative bounds (piece G68): 6 rounds of a rational bicubic NURBS patch with an interior knot each way and weights from 2^-10 to 2^10 (with 1e-3 and 1e3 among them) and a nonrational biquadratic one, each over its whole domain, a quarter of it, a box of a hundredth of each side and a box across its interior knots; and a plane, a cylinder, a cone (at its apex and away from it), a sphere (at its pole and away from it), a torus and an affine image of a torus on random frames, over one box each. For every box the partials to order 2, the second-derivative bound with its chord constant M, and the normal-derivative bound; and 2 refusals: 386 results in the canonical encoding of tests/derivative_determinism.rs.",
-          "check": {
-            "crate": "geom-surface",
-            "test": "derivative_determinism",
-            "function": "derivative_bounds_golden_hash_is_the_same_on_every_target"
-          },
-          "sha256": "176e68088063809cacb3d0b44b818f69a2e9048584738a2b7fd54c536abecf9d",
-          "history": []
         },
         {
           "id": "geom-bvh/tree",
@@ -492,6 +481,37 @@
             "function": "spectral_golden_hash_is_the_same_on_every_target"
           },
           "sha256": "9c2a12093c3d4e85570d02e82f1a918d55300c7c14935ef8c3875ebac031d54a"
+        },
+        {
+          "id": "geom-op/determinism",
+          "what": "geom-op's canonical CBOR and SHA-256 corpus (piece G86): every power of two and the edges of each float width and integer head, 3,000 nested values of SKG's subset drawn from a fixed SplitMix64 stream, and the SHA-256 and 128-bit cut of each encoding and of seeded messages of every length to 300 bytes: 22,369 records in the encoding of tests/determinism.rs.",
+          "check": {
+            "crate": "geom-op",
+            "test": "determinism",
+            "function": "golden_hash_is_the_same_on_every_target"
+          },
+          "sha256": "9d3844529ba8b080138c3667380a91a2a7b2695dfd7b6a4f7651334d46b58d29"
+        },
+        {
+          "id": "geom-format/record-layer",
+          "what": "geom-format's record-layer corpus (piece G92): 40 files of random records written whole, each salvaged with one bit flipped (intact offsets and damaged spans), the CRC-32C of seeded messages of every length to 300 bytes, and the grid, real and plane range checks at the frame's edge, in the encoding of tests/record_determinism.rs.",
+          "check": {
+            "crate": "geom-format",
+            "test": "record_determinism",
+            "function": "golden_hash_is_the_same_on_every_target"
+          },
+          "sha256": "601faa6494c0ad3f9b1d7dd7b8a1e78724066b90ac4a998057959dae37206886"
+        },
+        {
+          "id": "geom-surface/derivative-bounds",
+          "what": "Every surface kind's second-derivative and normal-derivative bounds (piece G68): 6 rounds of a rational bicubic NURBS patch with an interior knot each way and weights from 2^-10 to 2^10 (with 1e-3 and 1e3 among them) and a nonrational biquadratic one, each over its whole domain, a quarter of it, a box of a hundredth of each side and a box across its interior knots; and a plane, a cylinder, a cone (at its apex and away from it), a sphere (at its pole and away from it), a torus and an affine image of a torus on random frames, over one box each. For every box the partials to order 2, the second-derivative bound with its chord constant M, and the normal-derivative bound; and 2 refusals: 386 results in the canonical encoding of tests/derivative_determinism.rs.",
+          "check": {
+            "crate": "geom-surface",
+            "test": "derivative_determinism",
+            "function": "derivative_bounds_golden_hash_is_the_same_on_every_target"
+          },
+          "sha256": "176e68088063809cacb3d0b44b818f69a2e9048584738a2b7fd54c536abecf9d",
+          "history": []
         },
         {
           "id": "geom-linalg/dense",
