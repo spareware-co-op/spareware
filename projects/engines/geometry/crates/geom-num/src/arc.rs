@@ -310,10 +310,8 @@ impl Disc {
         let ([x, y], w) = self.centre.coordinates();
         let wide = I512::from_i128;
         let sum = |p: I512, q: I512| p.checked_add(&q).ok_or(NumError::BudgetExceeded);
-        let h = less(
-            &sum(times(&wide(a), &wide(x))?, times(&wide(b), &wide(y))?)?,
-            &times(&wide(c), &wide(w))?,
-        )?;
+        let along = sum(times(&wide(a), &wide(x))?, times(&wide(b), &wide(y))?)?;
+        let h = less(&along, &times(&wide(c), &wide(w))?)?;
         let n = sum(times(&wide(a), &wide(a))?, times(&wide(b), &wide(b))?)?;
         Ok(Contact::of(
             less(&times(&h, &h)?, &times(&self.level()?, &n)?)?.signum(),
