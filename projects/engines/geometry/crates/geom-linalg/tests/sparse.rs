@@ -205,6 +205,11 @@ fn an_entry_is_found_and_set_in_place() {
     assert_eq!(a.place_of(0, 2), Err(LinalgError::Shape));
     a.set_at(1, 7.0).unwrap();
     assert_eq!(a.column(0).unwrap().1, &[1.0, 7.0]);
+    // Read back by place: each stored entry, and nothing past them.
+    assert_eq!(a.at_place(0), Ok(1.0));
+    assert_eq!(a.at_place(1), Ok(7.0));
+    assert_eq!(a.at_place(2), Ok(3.0));
+    assert_eq!(a.at_place(3), Err(LinalgError::Shape));
     assert_eq!(a.set_at(3, 1.0), Err(LinalgError::Shape));
     assert_eq!(a.set_at(0, f64::NAN), Err(LinalgError::NotFinite));
     assert_eq!(a.column(0).unwrap().1, &[1.0, 7.0]);
@@ -710,6 +715,88 @@ fn a_solve_charges_what_it_reads() {
     let symbolic = SymbolicQr::new(&a, &mut work()).unwrap();
     let qr = SparseQr::factor(&symbolic, &a, Real::ZERO, &mut work()).unwrap();
     assert!(charged_exactly(|w| qr.least_squares(&[1.0, 2.0, 3.0], w)) > 1);
+}
+
+/// The sign of det `a`, a square matrix of small whole numbers, by fraction-free elimination
+/// (Bareiss): exact in i128 for the sizes used here.
+fn exact_sign(a: &Sparse) -> core::cmp::Ordering {
+    let dense = a.to_dense().unwrap();
+    let n = a.rows();
+    let mut m: Vec<Vec<i128>> = (0..n)
+        .map(|i| (0..n).map(|j| dense.get(i, j).unwrap() as i128).collect())
+        .collect();
+    let (mut sign, mut previous) = (1_i128, 1_i128);
+    for k in 0..n {
+        if m[k][k] == 0 {
+            let Some(i) = (k + 1..n).find(|&i| m[i][k] != 0) else {
+                return core::cmp::Ordering::Equal;
+            };
+            m.swap(k, i);
+            sign = -sign;
+        }
+        for i in k + 1..n {
+            for j in k + 1..n {
+                m[i][j] = (m[i][j] * m[k][k] - m[i][k] * m[k][j]) / previous;
+            }
+        }
+        previous = m[k][k];
+    }
+    (sign * m[n - 1][n - 1]).cmp(&0)
+}
+
+#[test]
+fn the_smallest_pivot_is_the_least_diagonal_and_zero_for_a_dead_column() {
+    let pivot = |triplets: &[(usize, usize, f64)], m: usize, n: usize| {
+        let a = Sparse::from_triplets(m, n, triplets).unwrap();
+        let symbolic = SymbolicQr::new(&a, &mut work()).unwrap();
+        SparseQr::factor(&symbolic, &a, tol(), &mut work())
+            .unwrap()
+            .smallest_pivot()
+    };
+    // A diagonal matrix's R is its diagonal up to signs: the least magnitude, wherever it is.
+    assert_eq!(pivot(&[(0, 0, 3.0), (1, 1, -0.5), (2, 2, 2.0)], 3, 3), 0.5);
+    assert_eq!(pivot(&[(0, 0, 0.25), (1, 1, 4.0)], 2, 2), 0.25);
+    assert_eq!(pivot(&[(0, 0, -6.0)], 1, 1), 6.0);
+    // Two equal columns: the second is dead, so the smallest pivot is 0.
+    assert_eq!(
+        pivot(&[(0, 0, 1.0), (0, 1, 1.0), (1, 0, 2.0), (1, 1, 2.0)], 2, 2),
+        0.0
+    );
+}
+
+#[test]
+fn the_determinant_sign_is_the_exact_one() {
+    let mut rng = rng("sparse determinant sign");
+    let mut checked = 0;
+    for round in 0..400 {
+        let n = 1 + round % 8;
+        let a = scattered(&mut rng, n, n, 1 + round % 3);
+        let symbolic = SymbolicQr::new(&a, &mut work()).unwrap();
+        let qr = SparseQr::factor(&symbolic, &a, tol(), &mut work()).unwrap();
+        let exact = exact_sign(&a);
+        if exact == core::cmp::Ordering::Equal {
+            assert_eq!(qr.determinant_sign().unwrap(), None, "round {round}");
+        } else if qr.rank() == n {
+            assert_eq!(qr.determinant_sign().unwrap(), Some(exact), "round {round}");
+            checked += 1;
+        }
+    }
+    assert!(checked >= 200, "{checked}");
+    // A swap of two rows turns it, and so does a negative entry; a tall matrix has none.
+    let sign = |triplets: &[(usize, usize, f64)], m: usize, n: usize| {
+        let a = Sparse::from_triplets(m, n, triplets).unwrap();
+        let symbolic = SymbolicQr::new(&a, &mut work()).unwrap();
+        SparseQr::factor(&symbolic, &a, tol(), &mut work())
+            .unwrap()
+            .determinant_sign()
+            .unwrap()
+    };
+    let greater = Some(core::cmp::Ordering::Greater);
+    let less = Some(core::cmp::Ordering::Less);
+    assert_eq!(sign(&[(0, 0, 1.0), (1, 1, 1.0)], 2, 2), greater);
+    assert_eq!(sign(&[(0, 1, 1.0), (1, 0, 1.0)], 2, 2), less);
+    assert_eq!(sign(&[(0, 0, -2.0), (1, 1, 3.0)], 2, 2), less);
+    assert_eq!(sign(&[(0, 0, 1.0), (1, 0, 1.0)], 2, 1), None);
 }
 
 #[test]

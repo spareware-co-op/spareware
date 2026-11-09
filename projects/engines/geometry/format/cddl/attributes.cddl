@@ -1,0 +1,11 @@
+; The attributes record's payload (tag 19, schema 1): format 1 (draft), SPEC.md section 15.
+; CDDL by RFC 8610. The first rule is the one a payload is validated against; name-id is
+; names.cddl's rule, read together with this file.
+attributes = [definitions: [* definition], values: [* attribute-values]]
+definition = [attr: attr-id, kinds: [* (0 / 1 / 2 / 3 / 4)], schema: value-schema, behaviour: behaviour]
+attr-id = [owner: tstr, name: tstr, version: uint]
+value-schema = [0, id: tstr] / [1] / [2] / [3] / [4] / [5]
+behaviour = [changed: 0 / 1, transformed: [moved: transform-action, rotated: transform-action, mirrored: transform-action, scaled: transform-action], split: 0 / 1, merged: 0 / 1 / 2, copied: 0 / 1]
+transform-action = 0 / 1 / 2
+attribute-values = [attr: attr-id, values: [* [entity: name-id, carried: carried]]]
+carried = [0, value: bstr] / [1, values: [* [name: name-id, value: bstr]]]

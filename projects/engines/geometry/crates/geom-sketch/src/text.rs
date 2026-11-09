@@ -411,7 +411,64 @@ fn write_constraint(out: &mut String, constraint: &Constraint) -> Result<(), Ske
     Ok(())
 }
 
-/// `sketch` in `sketch v1`.
+/// The ids an entity names: the items it is made of, which the text form must write first.
+fn named(kind: &EntityKind) -> Vec<ItemId> {
+    match kind {
+        EntityKind::Line { start, end, .. } => alloc::vec![*start, *end],
+        EntityKind::Circle { centre, .. } | EntityKind::Ellipse { centre, .. } => {
+            alloc::vec![*centre]
+        }
+        EntityKind::Arc {
+            centre, start, end, ..
+        } => alloc::vec![*centre, *start, *end],
+        EntityKind::Spline { points, .. } => points.clone(),
+        EntityKind::Parameter { curve, .. } => alloc::vec![*curve],
+        _ => Vec::new(),
+    }
+}
+
+/// `entities` with each after the ones it names, and otherwise in id order: passes over the entities
+/// in id order, each writing those whose names are written already (in an earlier pass, or earlier in
+/// this one). A sketch whose ids already run in dependency order is written in one pass in id order,
+/// as it always was. The reader needs a name to come before its use, and ids
+/// are only names (a re-interpolated spline's control points may sort after it).
+fn dependency_order(entities: &[Entity]) -> Result<Vec<&Entity>, SketchError> {
+    let mut order: Vec<&Entity> = Vec::new();
+    order
+        .try_reserve(entities.len())
+        .map_err(|_| SketchError::OutOfMemory)?;
+    let mut written: Vec<bool> = Vec::new();
+    written
+        .try_reserve_exact(entities.len())
+        .map_err(|_| SketchError::OutOfMemory)?;
+    written.resize(entities.len(), false);
+    while order.len() < entities.len() {
+        let before = order.len();
+        for (i, entity) in entities.iter().enumerate() {
+            if written.get(i).copied().unwrap_or(true) {
+                continue;
+            }
+            // A name that is no entity here is the reader's to refuse, in place.
+            let ready = named(&entity.kind).iter().all(|id| {
+                entities
+                    .binary_search_by_key(id, |e| e.id)
+                    .ok()
+                    .is_none_or(|at| written.get(at).copied().unwrap_or(true))
+            });
+            if ready && let Some(done) = written.get_mut(i) {
+                *done = true;
+                order.push(entity);
+            }
+        }
+        if order.len() == before {
+            // A cycle cannot be made, so this is a defect, reported and not looped on.
+            return Err(SketchError::Internal);
+        }
+    }
+    Ok(order)
+}
+
+/// `sketch` in `sketch v1`. Entities come after the ones they name, and otherwise by id.
 ///
 /// # Errors
 ///
@@ -442,7 +499,7 @@ pub fn write(sketch: &Sketch) -> Result<String, SketchError> {
     }
     put(&mut out, step_name(plane.step()))?;
     out.push('\n');
-    for entity in sketch.entities() {
+    for entity in dependency_order(sketch.entities())? {
         write_entity(&mut out, entity)?;
     }
     for constraint in sketch.constraints() {

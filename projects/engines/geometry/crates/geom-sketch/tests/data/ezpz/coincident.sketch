@@ -1,0 +1,7 @@
+sketch v1
+plane lattice 0 0 0 1 0 0 0 1 0 q0
+entity 1.0 point 10240 4096
+entity 1.1 point 5120 6144
+constraint 4.0 driving 0 fix 1.0 0 3072
+constraint 4.1 driving 0 fix 1.0 1 3072
+constraint 4.2 driving 0 coincident 1.0 1.1

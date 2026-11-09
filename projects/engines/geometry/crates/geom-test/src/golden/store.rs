@@ -62,7 +62,7 @@
 use core::fmt;
 use std::collections::{BTreeMap, BTreeSet};
 
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 
 use super::sha256::{Digest, sha256};
 
@@ -176,7 +176,7 @@ pub struct Change {
 }
 
 /// The kinds of change chapter 28.13 lets a pull request record, and a corpus change.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Deserialize)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
 pub enum ChangeKind {
     /// The old digest recorded a wrong result, now fixed.
