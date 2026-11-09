@@ -709,25 +709,67 @@ fn corner(face: Plane, p: Plane, q: Plane) -> Result<Corner, NumError> {
 }
 
 /// The Plücker coordinates of a line: its direction, then its moment, the direction's first
-/// non-zero component positive. Below 2^209, in [`I256`].
+/// non-zero component positive. Below 2^209, in [`I256`]. A side holds one for its line, so it
+/// keeps only one form: the cells where all six fit machine words, as nearly every line of a mesh
+/// does, else the wide coordinates.
 #[derive(Clone, Copy, Debug)]
 struct LineKey {
-    coordinates: [I256; 6],
     first: usize,
-    /// Each coordinate over the direction's first non-zero component as a [`Cell`], where all
-    /// six fit machine words.
-    cells: Option<[Cell; 6]>,
+    form: LineForm,
+}
+
+/// A line's coordinates in one form.
+#[derive(Clone, Copy, Debug)]
+enum LineForm {
+    /// Each coordinate over the direction's first non-zero component, as a [`Cell`].
+    Cells([Cell; 6]),
+    /// The coordinates, where some does not fit a machine word.
+    Wide([I256; 6]),
+}
+
+impl LineKey {
+    /// The line of `coordinates`, by its cells where they all fit machine words.
+    fn of(coordinates: [I256; 6], first: usize) -> LineKey {
+        let form =
+            line_cells(&coordinates, first).map_or(LineForm::Wide(coordinates), LineForm::Cells);
+        LineKey { first, form }
+    }
+
+    /// Its cells, where it has them.
+    fn cells(&self) -> Option<&[Cell; 6]> {
+        match &self.form {
+            LineForm::Cells(cells) => Some(cells),
+            LineForm::Wide(_) => None,
+        }
+    }
+
+    /// Its coordinates: from cells, each the cell's floor times its divisor plus its remainder,
+    /// the `i128` it was made from, so in [`I256`] the products and sums cannot fail.
+    fn coordinates(&self) -> Option<[I256; 6]> {
+        let cells = match &self.form {
+            LineForm::Wide(coordinates) => return Some(*coordinates),
+            LineForm::Cells(cells) => cells,
+        };
+        let wide = I256::from_i128;
+        let mut out = [wide(0); 6];
+        for (slot, cell) in out.iter_mut().zip(cells) {
+            let whole = wide(cell.floor).checked_mul(&wide(cell.over))?;
+            *slot = whole.checked_add(&wide(cell.rest))?;
+        }
+        Some(out)
+    }
 }
 
 /// The line where `p` and `q` meet: direction `n_p` × `n_q`, moment `d_p` `n_q` − `d_q` `n_p`, which
 /// is the same up to scale for any two planes through the line.
 fn line_key(p: &Plane, q: &Plane) -> Result<LineKey, NumError> {
     match line_in_words(p, q) {
-        Some((coordinates, first)) => Ok(LineKey {
-            cells: line_cells_of(&coordinates, first),
-            coordinates: coordinates.map(I256::from_i128),
-            first,
-        }),
+        Some((coordinates, first)) => {
+            // Two `i64` planes' coordinates always have cells: the wide form is never taken.
+            let wide = LineForm::Wide(coordinates.map(I256::from_i128));
+            let form = line_cells_of(&coordinates, first).map_or(wide, LineForm::Cells);
+            Ok(LineKey { first, form })
+        }
         None => wide_line_key(p, q),
     }
 }
@@ -769,11 +811,7 @@ fn wide_line_key(p: &Plane, q: &Plane) -> Result<LineKey, NumError> {
             *slot = slot.checked_neg().ok_or(NumError::BudgetExceeded)?;
         }
     }
-    Ok(LineKey {
-        cells: line_cells(&coordinates, first),
-        coordinates,
-        first,
-    })
+    Ok(LineKey::of(coordinates, first))
 }
 
 /// [`line_key`]'s coordinates and `first` where both planes' coefficients fit `i64`: a product of
@@ -835,7 +873,7 @@ fn line_order(a: &LineKey, b: &LineKey) -> Option<Ordering> {
     if order != Ordering::Equal {
         return Some(order);
     }
-    if let (Some(p), Some(q)) = (&a.cells, &b.cells) {
+    if let (Some(p), Some(q)) = (a.cells(), b.cells()) {
         for (x, y) in p.iter().zip(q.iter()) {
             let order = x.order(y)?;
             if order != Ordering::Equal {
@@ -845,7 +883,7 @@ fn line_order(a: &LineKey, b: &LineKey) -> Option<Ordering> {
         return Some(Ordering::Equal);
     }
     let over = a.first;
-    let (p, q) = (&a.coordinates, &b.coordinates);
+    let (p, q) = (&a.coordinates()?, &b.coordinates()?);
     for i in 0..6 {
         let order = ratio_order::<4, 4, 8>(p.get(i)?, p.get(over)?, q.get(i)?, q.get(over)?)?;
         if order != Ordering::Equal {
@@ -1406,8 +1444,7 @@ fn by_line(
         .map(|s| {
             let from = s.key.first.saturating_add(1);
             s.key
-                .cells
-                .as_ref()
+                .cells()
                 .map(|cells| (s.key.first, MarkKey::new(cells, from)))
         })
         .collect();
@@ -2281,8 +2318,8 @@ mod tests {
     use geom_num::Sign;
 
     use super::{
-        Cell, CellKey, MarkKey, REACH, corner, lead, line_in_words, mark, point_order,
-        wide_line_key,
+        Cell, CellKey, MarkKey, REACH, corner, lead, line_cells_of, line_in_words, mark,
+        point_order, wide_line_key,
     };
 
     /// a / b against c / d, b and d positive, by cross-multiplying big integers.
@@ -2645,8 +2682,12 @@ mod tests {
         match line_in_words(&p, &q) {
             Some((coordinates, first)) => {
                 let wide = wide.unwrap();
-                assert_eq!(coordinates.map(I256::from_i128), wide.coordinates);
+                assert_eq!(Some(coordinates.map(I256::from_i128)), wide.coordinates());
                 assert_eq!(first, wide.first);
+                assert_eq!(
+                    wide.cells().is_some(),
+                    line_cells_of(&coordinates, first).is_some()
+                );
             }
             None => assert!(wide.is_err()),
         }
