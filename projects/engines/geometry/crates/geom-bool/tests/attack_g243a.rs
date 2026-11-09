@@ -1135,3 +1135,125 @@ fn a_flagged_region_ahead_refuses_the_ray() {
         Place::In
     );
 }
+
+/// A line whose offset from a plane is enclosed reaching exactly 0 at one end, which needs data of
+/// subnormal size (the least double is 2^−1074, written m): with the plane z = 0, the origin at
+/// height 12m (or −12m) and the direction m (or −m), the outward-rounded offset over [0, 1] has its
+/// lower (or upper) end exactly 0. A rate across the plane of 5m (or −5m) is enclosed with an end
+/// exactly 0. The line may meet the plane there, so each is flagged, never passed over, and never
+/// divided by an enclosure of the rate that holds zero.
+#[test]
+fn a_subnormal_line_whose_offset_reaches_zero_is_flagged() {
+    // k times the least double, 2^−1074.
+    let tiny = |k: i64| {
+        let size = f64::from_bits(k.unsigned_abs());
+        if k < 0 { -size } else { size }
+    };
+    let m = &mut meter();
+    for (oz, vz) in [(12, 1), (-12, -1), (0, 5), (0, -5)] {
+        let line = segment([0.0, 0.0, tiny(oz)], [0.0, 0.0, tiny(vz)]);
+        let found = crossings(&line, &floor_plane(), m).unwrap();
+        assert!(
+            found.zeros.is_empty() && found.flagged.len() == 1,
+            "origin {oz}m, direction {vz}m: {found:?}"
+        );
+    }
+}
+
+/// The nearest parameter's enclosure ending exactly at a segment's end: the domain is cut there,
+/// so the lower bound is the distance from the whole line, as below the end, and not from the end.
+/// Both are lower bounds there; the test pins which one the closed form takes.
+#[test]
+fn a_segment_whose_end_is_its_nearest_parameter_s_bound() {
+    let point = |x: f64| Interval::point(x).unwrap();
+    let dot = |l: [Interval; 3], r: [Interval; 3]| {
+        l[0].mul(r[0])
+            .unwrap()
+            .add(l[1].mul(r[1]).unwrap())
+            .unwrap()
+            .add(l[2].mul(r[2]).unwrap())
+            .unwrap()
+    };
+    let m = &mut meter();
+    for (q, d) in [((3, 7, 0), [10.0, 0.0, 0.0]), ((5, 2, 3), [7.0, 3.0, 1.0])] {
+        let at = p(q.0, q.1, q.2);
+        // The offset from the line's origin, (0, 0, 0), as the closed form takes it.
+        let w = coords(at).map(|c| point(c).sub(point(0.0)).unwrap());
+        let v = d.map(point);
+        let nearest = dot(w, v).div(dot(v, v)).unwrap();
+        // The distance from the whole line, as the closed form encloses it.
+        let cross = [
+            w[1].mul(v[2])
+                .unwrap()
+                .sub(w[2].mul(v[1]).unwrap())
+                .unwrap(),
+            w[2].mul(v[0])
+                .unwrap()
+                .sub(w[0].mul(v[2]).unwrap())
+                .unwrap(),
+            w[0].mul(v[1])
+                .unwrap()
+                .sub(w[1].mul(v[0]).unwrap())
+                .unwrap(),
+        ];
+        let from_line = Interval::norm(&cross)
+            .unwrap()
+            .div(dot(v, v).sqrt().unwrap())
+            .unwrap()
+            .lo();
+        // The distance from the end t = e.
+        let from_end = |e: f64| {
+            let t = point(e);
+            Interval::norm(&[
+                w[0].sub(t.mul(v[0]).unwrap()).unwrap(),
+                w[1].sub(t.mul(v[1]).unwrap()).unwrap(),
+                w[2].sub(t.mul(v[2]).unwrap()).unwrap(),
+            ])
+            .unwrap()
+            .lo()
+        };
+        for (domain, end) in [
+            ((nearest.lo() - 1.0, nearest.lo()), nearest.lo()),
+            ((nearest.hi(), nearest.hi() + 1.0), nearest.hi()),
+        ] {
+            assert_ne!(
+                from_line,
+                from_end(end),
+                "{q:?} {d:?}: the two bounds differ"
+            );
+            let mut carriers = Carriers::new();
+            let ix = carriers
+                .add_curve(CurveKind::Line(Line::new([0.0; 3], d, domain).unwrap()))
+                .unwrap();
+            let e = carriers.distance(at, CarrierIx::Curve(ix), 0, m).unwrap();
+            assert_eq!(e.lo(), from_line, "{q:?} {d:?} over {domain:?}");
+        }
+    }
+}
+
+/// A point half a step outside a slanting boundary edge, inside the edge's box: within a bound of
+/// one step it touches the edge, so it is On it; as an exact grid point it is apart, and Out. The
+/// box test that lets place skip an edge never skips one the point touches.
+#[test]
+fn a_point_inside_an_edge_s_box_and_within_its_bound_is_on_it() {
+    let mut b = Build::default();
+    let c: Vec<usize> = [(0, 0), (1_000, 1), (0, 1_000)]
+        .iter()
+        .map(|&(x, y)| b.vertex(p(x, y, 0), 0))
+        .collect();
+    let edges = b.ring(&c, 0);
+    let plane = b.plane([0, 0, 1], 0);
+    let face = b.face(plane, vec![edges.clone()], 0);
+    let m = &mut meter();
+    let flat = FlatFace::new(&b.arr, face, m).unwrap().unwrap();
+    let at = p(500, 0, 0);
+    assert_eq!(
+        flat.place(&b.arr.carriers, at, Bound(geom_num::Steps(1)), m)
+            .unwrap(),
+        Place::On(vec![edges[0]])
+    );
+    assert_eq!(
+        flat.place(&b.arr.carriers, at, Bound::ZERO, m).unwrap(),
+        Place::Out
+    );
+}

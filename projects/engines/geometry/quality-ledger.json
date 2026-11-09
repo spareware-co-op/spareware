@@ -6021,38 +6021,6 @@
     {
       "file": "projects/engines/geometry/crates/geom-bool/src/crossing.rs",
       "mutant": "replace > with >= in line_crossing",
-      "line_text": "if reach.lo() > 0.0 || reach.hi() < 0.0 {",
-      "occurrences": 1,
-      "kind": "harmless",
-      "reason": "Every bound of an interval operation is widened outward by one step (next_down, next_up), so a lower end is exactly 0 only when the rounded value below it is 2^-1074, the least subnormal; the two differ only when the lower end of the line's offset over its domain is exactly 0. A line's offset is n · o + d plus n · v times its span, each term a product of the plane's integers with the line's doubles: for the lines the builder holds, between grid points, every rounded value is a whole number or a multiple of a double's step at the line's size, never 2^-1074. Only a line of subnormal size reaches the tie, where the mutant answers no crossing in place of the root it would enclose at that end."
-    },
-    {
-      "file": "projects/engines/geometry/crates/geom-bool/src/crossing.rs",
-      "mutant": "replace < with <= in line_crossing",
-      "line_text": "if reach.lo() > 0.0 || reach.hi() < 0.0 {",
-      "occurrences": 1,
-      "kind": "harmless",
-      "reason": "Every bound of an interval operation is widened outward by one step (next_down, next_up), so a lower end is exactly 0 only when the rounded value below it is 2^-1074, the least subnormal; the two differ only when the upper end of the line's offset over its domain is exactly 0. A line's offset is n · o + d plus n · v times its span, each term a product of the plane's integers with the line's doubles: for the lines the builder holds, between grid points, every rounded value is a whole number or a multiple of a double's step at the line's size, never 2^-1074. Only a line of subnormal size reaches the tie, where the mutant answers no crossing in place of the root it would enclose at that end."
-    },
-    {
-      "file": "projects/engines/geometry/crates/geom-bool/src/crossing.rs",
-      "mutant": "replace > with >= in line_crossing",
-      "line_text": "if rate.lo() > 0.0 || rate.hi() < 0.0 {",
-      "occurrences": 1,
-      "kind": "harmless",
-      "reason": "Every bound of an interval operation is widened outward by one step (next_down, next_up), so a lower end is exactly 0 only when the rounded value below it is 2^-1074, the least subnormal; the two differ only when the lower end of n · v, the line's rate across the plane, is exactly 0, which needs a direction of subnormal size (a whole direction between grid points gives whole products). There the original flags the domain as singular and the mutant divides by a rate whose enclosure reaches zero, which the interval division refuses: an error in place of a flag, never a crossing that is not there."
-    },
-    {
-      "file": "projects/engines/geometry/crates/geom-bool/src/crossing.rs",
-      "mutant": "replace < with <= in line_crossing",
-      "line_text": "if rate.lo() > 0.0 || rate.hi() < 0.0 {",
-      "occurrences": 1,
-      "kind": "harmless",
-      "reason": "Every bound of an interval operation is widened outward by one step (next_down, next_up), so a lower end is exactly 0 only when the rounded value below it is 2^-1074, the least subnormal; the two differ only when the upper end of n · v, the line's rate across the plane, is exactly 0, which needs a direction of subnormal size (a whole direction between grid points gives whole products). There the original flags the domain as singular and the mutant divides by a rate whose enclosure reaches zero, which the interval division refuses: an error in place of a flag, never a crossing that is not there."
-    },
-    {
-      "file": "projects/engines/geometry/crates/geom-bool/src/crossing.rs",
-      "mutant": "replace > with >= in line_crossing",
       "line_text": "let lo = if root.lo() > a { root.lo() } else { a };",
       "occurrences": 1,
       "kind": "equivalent",
@@ -6134,9 +6102,9 @@
       "file": "projects/engines/geometry/crates/geom-bool/src/distance.rs",
       "mutant": "replace > with >= in segment_distance",
       "line_text": "} else if nearest.lo() > b {",
-      "occurrences": 2,
-      "kind": "harmless",
-      "reason": "Two lines carry this test. Holding the parameter to the domain, at nearest.lo() == b the mutant takes b where the original keeps nearest.lo(), the same double. Choosing the lower bound, at nearest.lo() == b the mutant takes the distance from the end b where the original takes the distance from the whole line: the nearest parameter is then at or past b, so the segment's nearest point is that end, and both are lower bounds of the true distance. Only the enclosure's width changes, never whether it holds the distance."
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "Of the two lines with this test, the one choosing the lower bound is caught (a test pins the bound at a nearest parameter ending exactly at b). Here, holding the parameter to the domain, at nearest.lo() == b the mutant takes b where the original keeps nearest.lo(): the same double."
     },
     {
       "file": "projects/engines/geometry/crates/geom-bool/src/distance.rs",
@@ -6153,14 +6121,6 @@
       "occurrences": 1,
       "kind": "equivalent",
       "reason": "When nearest.hi() equals a, the mutant holds the parameter's upper end at a and the original keeps nearest.hi(): the same double."
-    },
-    {
-      "file": "projects/engines/geometry/crates/geom-bool/src/distance.rs",
-      "mutant": "replace < with <= in segment_distance",
-      "line_text": "let lower = if nearest.hi() < a {",
-      "occurrences": 1,
-      "kind": "harmless",
-      "reason": "At nearest.hi() == a the mutant takes the distance from the end a as the lower bound where the original takes the distance from the whole line. The nearest parameter is then at or before a, so the segment's nearest point is that end, and both are lower bounds of the true distance: only the enclosure's width changes, never whether it holds the distance."
     },
     {
       "file": "projects/engines/geometry/crates/geom-bool/src/face.rs",
@@ -6232,7 +6192,7 @@
       "line_text": "let mut gaps = [Interval::point(0.0)?; 3];",
       "occurrences": 1,
       "kind": "harmless",
-      "reason": "box_gap is the quick test that lets place skip the certified distance of a boundary edge whose box lies further from the point than its bound and the contact radius; that distance is at least the gap, so the contact rule would find the edge apart, the answer the skip gives. A gap of 1.0 steps is never above the reach (ε_fit alone is 64 steps), so the mutant skips no edge and runs every distance, which finds the far edges apart: the same place at more cost. Only where the nearest-point search cannot isolate a far edge's nearest point would the mutant fail with NearContact where the original skips the edge: an error, never a wrong place."
+      "reason": "box_gap's value is the lower end of an outward-rounded norm of lower bounds of the point's gap to the box on each axis, so it is at most the true distance from the point to the box, and the edge's curve lies in that box (its certified bound over the whole domain): the edge's distance d is at least box_gap. place skips an edge only when box_gap exceeds the reach, the point's bound w plus ε_fit (64 steps). Touch needs the distance's enclosure, widened by w, to reach 0 with its upper end below ε_fit; its upper end is at least d, so with d at least w + ε_fit the widened upper end is at least 2w + ε_fit, never below ε_fit: an edge the original skips can never touch. A gap of 1 step is never above the reach, which is at least ε_fit, 64 steps, so the mutant skips no edge and runs every distance, exactly as Ok(0.0) does: the same place at more cost."
     },
     {
       "file": "projects/engines/geometry/crates/geom-bool/src/inside.rs",
@@ -6248,7 +6208,7 @@
       "line_text": "let least_gap = if below.lo() > 0.0 {",
       "occurrences": 1,
       "kind": "harmless",
-      "reason": "box_gap is the quick test that lets place skip the certified distance of a boundary edge whose box lies further from the point than its bound and the contact radius; that distance is at least the gap, so the contact rule would find the edge apart, the answer the skip gives. With == the axis's gap is taken only from a lower end of exactly 0, which is 0 either way, and otherwise falls to 0, so the gap is never larger than the original's: place skips fewer edges and runs their distances, which find them apart (the same place at more cost, or NearContact where a far edge's nearest point cannot be isolated)."
+      "reason": "box_gap's value is the lower end of an outward-rounded norm of lower bounds of the point's gap to the box on each axis, so it is at most the true distance from the point to the box, and the edge's curve lies in that box (its certified bound over the whole domain): the edge's distance d is at least box_gap. place skips an edge only when box_gap exceeds the reach, the point's bound w plus ε_fit (64 steps). Touch needs the distance's enclosure, widened by w, to reach 0 with its upper end below ε_fit; its upper end is at least d, so with d at least w + ε_fit the widened upper end is at least 2w + ε_fit, never below ε_fit: an edge the original skips can never touch. With == the first branch is taken only when below.lo() is exactly 0, where it returns that 0; a point below the box falls through to the other branches, which return 0 for it (it is not above the box). The mutant's gap is never larger than the original's on any axis, so it skips no edge the original does not: it can only run more distances, which find the extra edges apart, at more cost."
     },
     {
       "file": "projects/engines/geometry/crates/geom-bool/src/inside.rs",
@@ -6256,7 +6216,7 @@
       "line_text": "} else if above.lo() > 0.0 {",
       "occurrences": 1,
       "kind": "harmless",
-      "reason": "box_gap is the quick test that lets place skip the certified distance of a boundary edge whose box lies further from the point than its bound and the contact radius; that distance is at least the gap, so the contact rule would find the edge apart, the answer the skip gives. With == the axis's gap is taken only from a lower end of exactly 0, which is 0 either way, and otherwise falls to 0, so the gap is never larger than the original's: place skips fewer edges and runs their distances, which find them apart (the same place at more cost, or NearContact where a far edge's nearest point cannot be isolated)."
+      "reason": "box_gap's value is the lower end of an outward-rounded norm of lower bounds of the point's gap to the box on each axis, so it is at most the true distance from the point to the box, and the edge's curve lies in that box (its certified bound over the whole domain): the edge's distance d is at least box_gap. place skips an edge only when box_gap exceeds the reach, the point's bound w plus ε_fit (64 steps). Touch needs the distance's enclosure, widened by w, to reach 0 with its upper end below ε_fit; its upper end is at least d, so with d at least w + ε_fit the widened upper end is at least 2w + ε_fit, never below ε_fit: an edge the original skips can never touch. With == the second branch is taken only when above.lo() is exactly 0, where it returns that 0; a point above the box falls through to the last branch, 0. The mutant's gap is never larger than the original's on any axis, so it skips no edge the original does not: it can only run more distances, which find the extra edges apart, at more cost."
     },
     {
       "file": "projects/engines/geometry/crates/geom-bool/src/inside.rs",
@@ -6296,7 +6256,7 @@
       "line_text": "if box_gap(point, &side.reach)? > reach {",
       "occurrences": 1,
       "kind": "harmless",
-      "reason": "box_gap is the quick test that lets place skip the certified distance of a boundary edge whose box lies further from the point than its bound and the contact radius; that distance is at least the gap, so the contact rule would find the edge apart, the answer the skip gives. With == an edge is skipped only when its gap is exactly the reach, so nearly every edge's distance runs, and finds the far ones apart: the same place at more cost, or NearContact where a far edge's nearest point cannot be isolated, an error, never a wrong place."
+      "reason": "box_gap's value is the lower end of an outward-rounded norm of lower bounds of the point's gap to the box on each axis, so it is at most the true distance from the point to the box, and the edge's curve lies in that box (its certified bound over the whole domain): the edge's distance d is at least box_gap. place skips an edge only when box_gap exceeds the reach, the point's bound w plus ε_fit (64 steps). Touch needs the distance's enclosure, widened by w, to reach 0 with its upper end below ε_fit; its upper end is at least d, so with d at least w + ε_fit the widened upper end is at least 2w + ε_fit, never below ε_fit: an edge the original skips can never touch. With == an edge is skipped only when box_gap equals the reach. Every edge the mutant skips has box_gap at least the reach, so by the same bound it cannot touch: the mutant never skips a touching edge, and runs the distance of every other edge, which finds the far ones apart, at more cost."
     },
     {
       "file": "projects/engines/geometry/crates/geom-bool/src/inside.rs",
@@ -6304,7 +6264,7 @@
       "line_text": "if box_gap(point, &side.reach)? > reach {",
       "occurrences": 1,
       "kind": "harmless",
-      "reason": "box_gap is the quick test that lets place skip the certified distance of a boundary edge whose box lies further from the point than its bound and the contact radius; that distance is at least the gap, so the contact rule would find the edge apart, the answer the skip gives. With >= an edge is also skipped when its gap equals the reach: its distance is then at least the bound and ε_fit, so less the bound it is at least ε_fit, above 0, and the contact rule finds it apart, the skip's answer. Only where that edge's distance search could not isolate a nearest point does skipping it avoid a NearContact the original would report."
+      "reason": "box_gap's value is the lower end of an outward-rounded norm of lower bounds of the point's gap to the box on each axis, so it is at most the true distance from the point to the box, and the edge's curve lies in that box (its certified bound over the whole domain): the edge's distance d is at least box_gap. place skips an edge only when box_gap exceeds the reach, the point's bound w plus ε_fit (64 steps). Touch needs the distance's enclosure, widened by w, to reach 0 with its upper end below ε_fit; its upper end is at least d, so with d at least w + ε_fit the widened upper end is at least 2w + ε_fit, never below ε_fit: an edge the original skips can never touch. With >= an edge is also skipped when box_gap equals the reach; its distance is then at least w + ε_fit, so by the same bound it cannot touch, and skipping it leaves out only a distance that would find it apart."
     },
     {
       "file": "projects/engines/geometry/crates/geom-bool/src/interfere.rs",
