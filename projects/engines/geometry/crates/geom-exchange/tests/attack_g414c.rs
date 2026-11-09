@@ -388,7 +388,7 @@ fn stored_and_deflated_entries_read_back() {
     }
     // An empty archive: only its end record.
     let empty = lay(&[], b"");
-    assert!(open(&empty.bytes).unwrap().entries().is_empty());
+    assert_eq!(open(&empty.bytes).unwrap().entries().len(), 0);
     // Sizes and CRC in a data descriptor, the local header's fields zero.
     let mut described = Item::deflated("d.txt", &text);
     described.flags = 0x0008;
@@ -734,15 +734,16 @@ fn the_end_record_must_end_the_archive_on_one_disk() {
     let mut after = laid.bytes.clone();
     after.push(0);
     refused(&after, ZipErrorKind::End, after.len() as u64);
-    // Bytes before the archive: the central directory is not where its end record says.
+    // Bytes before the archive: the central directory is not where its end record says, refused at
+    // the end record.
     let mut before = vec![0x50, 0x4b, 0];
     before.extend_from_slice(&laid.bytes);
-    refused(&before, ZipErrorKind::Directory, laid.directory);
+    refused(&before, ZipErrorKind::Directory, laid.end + 3);
     // Bytes between the central directory and the end record.
     let mut between = laid.bytes[..laid.end as usize].to_vec();
     between.push(0);
     between.extend_from_slice(&laid.bytes[laid.end as usize..]);
-    refused(&between, ZipErrorKind::Directory, laid.directory);
+    refused(&between, ZipErrorKind::Directory, laid.end + 1);
     // More entries in the directory than the end record counts, and fewer.
     let two = lay(&[Item::stored("a", b"1"), Item::stored("b", b"2")], b"");
     for (count, at) in [(1, two.central[1]), (3, two.end)] {
@@ -831,13 +832,10 @@ fn local_headers_that_disagree_with_the_directory_are_refused() {
         put_u16(&mut b, field, value);
         refused(&b, ZipErrorKind::LocalHeader, 0);
     }
-    // A local header past the end of the archive.
+    // A local header past the end of the archive: refused at the central header that names it.
     let mut b = laid.bytes.clone();
     put_u32(&mut b, laid.central[0] + 42, 1 << 20);
-    assert_eq!(
-        open(&b).unwrap_err().kind,
-        ZipErrorKind::Source(SourceError::OutOfBounds)
-    );
+    refused(&b, ZipErrorKind::LocalHeader, laid.central[0]);
 }
 
 #[test]

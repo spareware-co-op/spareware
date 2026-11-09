@@ -476,6 +476,54 @@ Copyright (c) 2020-2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
    limitations under the License.
 
 
+zip2
+----
+
+Name:      zip2
+Project:   https://crates.io/crates/zip
+Taken as:  PORT (section 29.1)
+Link:      https://github.com/zip-rs/zip2/tree/ddf3ec36017345b8936dd1a3516d9bc4632a0480
+Commit:    ddf3ec36017345b8936dd1a3516d9bc4632a0480
+Licence:   MIT
+           as stated in https://github.com/zip-rs/zip2/blob/ddf3ec36017345b8936dd1a3516d9bc4632a0480/LICENSE
+
+Ported files, each with the origin files it ports and the origin's copyright lines as its header
+copies them:
+
+  projects/engines/geometry/crates/geom-exchange/src/zip/spec.rs
+    SPDX-License-Identifier: Apache-2.0 AND MIT
+    https://github.com/zip-rs/zip2/blob/ddf3ec36017345b8936dd1a3516d9bc4632a0480/src/format/blocks.rs
+      Copyright (c) 2014 Mathijs van de Nes
+    https://github.com/zip-rs/zip2/blob/ddf3ec36017345b8936dd1a3516d9bc4632a0480/src/format/find_central_directory.rs
+      Copyright (c) 2014 Mathijs van de Nes
+    https://github.com/zip-rs/zip2/blob/ddf3ec36017345b8936dd1a3516d9bc4632a0480/src/extra_fields/zip64_extended_information.rs
+      Copyright (c) 2014 Mathijs van de Nes
+
+Licence text (https://github.com/zip-rs/zip2/blob/ddf3ec36017345b8936dd1a3516d9bc4632a0480/LICENSE):
+
+The MIT License (MIT)
+
+Copyright (c) 2014 Mathijs van de Nes
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+
+
 CREDITS: SOURCES CONSULTED FOR A METHOD
 =======================================
 
@@ -483,6 +531,13 @@ Each kernel module below implements a published method in its own code and copie
 these sources (PORT METHOD, section 29.1); rule 4 asks that it credit every source it consulted.
 A source read under the method-only procedure (rule 6) names its method note in
 projects/engines/geometry/methods/.
+
+Apache POI
+  Licence:      Apache-2.0
+  Link:         https://github.com/apache/poi/blob/519e0a3c3945364e8ea75c172fe1a15fb6d4a202/poi-ooxml/src/main/java/org/apache/poi/openxml4j/opc/PackagePartName.java
+  Consulted by:
+    projects/engines/geometry/crates/geom-exchange/src/zip/part.rs
+      for the rules' wording and their order of checks (empty, slashes, segments, pchar, escapes). No code copied.
 
 Apache POI
   Licence:      Apache-2.0
@@ -824,6 +879,13 @@ Wasmtime
       for what fuel counts and how `Config::consume_fuel` meters it. No code copied.
     projects/engines/geometry/crates/geom-bench/src/guest.rs
       for what fuel counts and how `Config::consume_fuel` meters it. No code copied.
+
+zip2
+  Licence:      MIT
+  Link:         https://github.com/zip-rs/zip2/blob/ddf3ec36017345b8936dd1a3516d9bc4632a0480/src/read/zip_archive.rs
+  Consulted by:
+    projects/engines/geometry/crates/geom-exchange/src/zip.rs
+      for its overlap check over entries' byte ranges, headers included, and its checks of each local header against its central header. No code copied.
 
 
 PUBLISHED CRATES

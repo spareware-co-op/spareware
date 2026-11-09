@@ -2529,6 +2529,179 @@
           "module": "geom_exchange::inflate",
           "name": "InflateErrorKind",
           "non_exhaustive": false
+        },
+        {
+          "doc": "Why an archive or an entry was refused.",
+          "file": "projects/engines/geometry/crates/geom-exchange/src/zip.rs",
+          "kinds": [
+            {
+              "doc": "The source failed.",
+              "name": "Source",
+              "shape": "tuple"
+            },
+            {
+              "doc": "No end of central directory record whose comment ends at the archive's end.",
+              "name": "End",
+              "shape": "unit"
+            },
+            {
+              "doc": "The archive spans more than one disk.",
+              "name": "MultiDisk",
+              "shape": "unit"
+            },
+            {
+              "doc": "A Zip64 locator, record or extra field is missing, misplaced or short.",
+              "name": "Zip64",
+              "shape": "unit"
+            },
+            {
+              "doc": "The central directory does not end where its end record (or Zip64 record) starts, or its entries are not the count and size it declares.",
+              "name": "Directory",
+              "shape": "unit"
+            },
+            {
+              "doc": "A central directory header is malformed.",
+              "name": "Header",
+              "shape": "unit"
+            },
+            {
+              "doc": "More entries than the budget.",
+              "name": "TooManyEntries",
+              "shape": "unit"
+            },
+            {
+              "doc": "A name longer than the budget.",
+              "name": "NameTooLong",
+              "shape": "unit"
+            },
+            {
+              "doc": "A name that is not UTF-8.",
+              "name": "NameEncoding",
+              "shape": "unit"
+            },
+            {
+              "doc": "Two entries with the same name.",
+              "name": "Duplicate",
+              "shape": "unit"
+            },
+            {
+              "doc": "A name that could reach outside the folder it is read into (zip-slip).",
+              "name": "Escape",
+              "shape": "unit"
+            },
+            {
+              "doc": "A name the Open Packaging Conventions forbid.",
+              "name": "Part",
+              "shape": "tuple"
+            },
+            {
+              "doc": "Two entries, or an entry and the central directory, share bytes.",
+              "name": "Overlap",
+              "shape": "unit"
+            },
+            {
+              "doc": "A local header that is malformed or disagrees with its central header.",
+              "name": "LocalHeader",
+              "shape": "unit"
+            },
+            {
+              "doc": "An encrypted entry.",
+              "name": "Encrypted",
+              "shape": "unit"
+            },
+            {
+              "doc": "A compression method other than stored (0) or deflated (8).",
+              "name": "Method",
+              "shape": "unit"
+            },
+            {
+              "doc": "An entry whose bytes are not its declared size.",
+              "name": "Size",
+              "shape": "unit"
+            },
+            {
+              "doc": "An entry whose CRC-32 is not its declared one.",
+              "name": "Crc",
+              "shape": "unit"
+            },
+            {
+              "doc": "The entries declare more bytes in all than the budget.",
+              "name": "TooLarge",
+              "shape": "unit"
+            },
+            {
+              "doc": "An entry's deflated stream was refused.",
+              "name": "Inflate",
+              "shape": "tuple"
+            },
+            {
+              "doc": "The work meter stopped the read.",
+              "name": "Stopped",
+              "shape": "unit"
+            },
+            {
+              "doc": "The allocator refused.",
+              "name": "OutOfMemory",
+              "shape": "unit"
+            }
+          ],
+          "module": "geom_exchange::zip",
+          "name": "ZipErrorKind",
+          "non_exhaustive": false
+        },
+        {
+          "doc": "The first part-name rule of ECMA-376 Part 2 a name breaks.",
+          "file": "projects/engines/geometry/crates/geom-exchange/src/zip/part.rs",
+          "kinds": [
+            {
+              "doc": "[M1.1] The name is empty.",
+              "name": "Empty",
+              "shape": "unit"
+            },
+            {
+              "doc": "[M1.3] A segment is empty (`//`).",
+              "name": "EmptySegment",
+              "shape": "unit"
+            },
+            {
+              "doc": "[M1.5] The name ends in `/`.",
+              "name": "TrailingSlash",
+              "shape": "unit"
+            },
+            {
+              "doc": "[M1.6] A segment holds a character that is not a `pchar`, or a `%` not followed by two hexadecimal digits.",
+              "name": "NotPchar",
+              "shape": "unit"
+            },
+            {
+              "doc": "[M1.7] A segment holds a percent-encoded `/` or `\\`.",
+              "name": "EncodedSlash",
+              "shape": "unit"
+            },
+            {
+              "doc": "[M1.8] A segment holds a percent-encoded unreserved character.",
+              "name": "EncodedUnreserved",
+              "shape": "unit"
+            },
+            {
+              "doc": "[M1.9] A segment ends in `.`.",
+              "name": "TrailingDot",
+              "shape": "unit"
+            },
+            {
+              "doc": "[M1.10] A segment holds only dots.",
+              "name": "AllDots",
+              "shape": "unit"
+            },
+            {
+              "doc": "[M1.12] Two names are equal as case-insensitive ASCII.",
+              "name": "Equivalent",
+              "shape": "unit"
+            }
+          ],
+          "module": "geom_exchange::zip::part",
+          "name": "PartRule",
+          "non_exhaustive": false
         }
       ],
       "family": [],
@@ -2865,6 +3038,111 @@
           "path": "geom_exchange::write",
           "provenance": [],
           "spdx": null,
+          "target": "lib"
+        },
+        {
+          "cost": "one read of the archive's last 65,557 bytes and of its central directory; one read of each local header; entries sorted once by offset; each entry read is one pass of its bytes and a CRC-32. Memory: the central directory and the entries' names. No recursion.",
+          "does": "[`ZipArchive::read`] finds the end of central directory record (and the Zip64 records), reads the central directory, and checks every entry before it lists any: a name that is UTF-8, within [`ZipBudget::name`], not repeated and escaping no folder (zip-slip, [`part::escapes`]); stored or deflated, not encrypted; a local header that agrees with the central one; and an entry, its header included, that overlaps no other entry nor the central directory. The sum of the declared sizes is held to [`ZipBudget::total`] and the count of entries to [`ZipBudget::entries`]. [`ZipArchive::read_entry`] reads one entry: stored bytes as they are, deflated ones through [`crate::inflate`] within the smaller of the entry's declared size and [`ZipBudget::inflate`]; the output must be exactly the declared size and match the declared CRC-32. [`ZipArchive::check_parts`] holds every name to the Open Packaging Conventions' part-name rules ([`part::check`]) and refuses names equal as case-insensitive ASCII.",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-exchange/src/zip.rs",
+          "guarantees": [
+            "**Refused with a typed error and a byte offset, never a panic.** Every failure is a [`ZipError`] naming its [`ZipErrorKind`] and the byte offset in the archive.",
+            "**Every budget holds**, checked before the allocation or the read it bounds.",
+            "**An entry read is the entry declared**: its bytes are exactly its declared size, and their CRC-32 is its declared CRC-32.",
+            "**The same bytes give the same archive and the same entries**, however the source splits its reads."
+          ],
+          "job": "The hardened zip reader every zip-based format goes through (3MF, and other Open Packaging Conventions packages): an archive read through a [`RangeSource`], its central directory checked against every local header, and each entry inflated within its declared size and the ratio budget.",
+          "method": {
+            "links": [
+              "https://pkware.cachefly.net/webdocs/casestudies/APPNOTE.TXT",
+              "https://www.bamsoftware.com/hacks/zipbomb/"
+            ],
+            "text": "PKWARE's APPNOTE.TXT 6.3.10, sections 4.3 and 4.4, <https://pkware.cachefly.net/webdocs/casestudies/APPNOTE.TXT>, read by [`spec`], ported from zip2; the overlap check of zip2's `has_overlapping_entries` and David Fifield's analysis of overlapping-file zip bombs (USENIX WOOT 2019, <https://www.bamsoftware.com/hacks/zipbomb/>); the part-name rules of ECMA-376 Part 2 ([`part`])."
+          },
+          "path": "geom_exchange::zip",
+          "provenance": [
+            {
+              "licence": "MIT",
+              "link": "https://github.com/zip-rs/zip2/blob/ddf3ec36017345b8936dd1a3516d9bc4632a0480/src/read/zip_archive.rs",
+              "method_note": null,
+              "name": "zip2",
+              "notice": [],
+              "pinned": true,
+              "purpose": "for its overlap check over entries' byte ranges, headers included, and its checks of each local header against its central header. No code copied.",
+              "take": "port-method"
+            }
+          ],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
+          "cost": "linear in the name. No allocation except [`fold`]'s copy. No recursion.",
+          "does": "[`escapes`] says whether an item name could reach outside the folder an archive is read into: an empty name, a backslash or NUL, a drive (`C:`), a leading `/`, or a `.` or `..` segment. [`check`] holds an item name, read as the part name `/` + name, to the part-name rules [M1.1] to [M1.10] of ECMA-376 Part 2 (ISO/IEC 29500-2), and returns the first it breaks as a [`PartRule`]. Equivalence of part names, [M1.12] (case-insensitive ASCII), is checked over the whole archive by its caller with [`fold`].",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-exchange/src/zip/part.rs",
+          "guarantees": [
+            "**Each rule exactly as written.** A segment is non-empty [M1.3], holds only `pchar` characters of RFC 3986 [M1.6], no percent-encoded `/` or `\\` [M1.7] and no percent-encoded unreserved character [M1.8], does not end in `.` [M1.9] and is not all dots [M1.10]; the name does not end in `/` [M1.5] and is not empty [M1.1].",
+            "**Total.** Every function answers for every string, with no panic."
+          ],
+          "job": "Zip item names: the names no reader may write outside its folder by (zip-slip), and the part names the Open Packaging Conventions allow.",
+          "method": {
+            "links": [
+              "https://ecma-international.org/publications-and-standards/standards/ecma-376/",
+              "https://www.rfc-editor.org/rfc/rfc3986#section-3.3",
+              "https://security.snyk.io/research/zip-slip-vulnerability"
+            ],
+            "text": "ECMA-376 Part 2, Open Packaging Conventions, its part-name rules M1.1 to M1.12, <https://ecma-international.org/publications-and-standards/standards/ecma-376/>; the `pchar`, `unreserved` and `pct-encoded` productions of RFC 3986, section 3.3, <https://www.rfc-editor.org/rfc/rfc3986#section-3.3>; zip-slip as Snyk describes it, <https://security.snyk.io/research/zip-slip-vulnerability>."
+          },
+          "path": "geom_exchange::zip::part",
+          "provenance": [
+            {
+              "licence": "Apache-2.0",
+              "link": "https://github.com/apache/poi/blob/519e0a3c3945364e8ea75c172fe1a15fb6d4a202/poi-ooxml/src/main/java/org/apache/poi/openxml4j/opc/PackagePartName.java",
+              "method_note": null,
+              "name": "Apache POI",
+              "notice": [],
+              "pinned": true,
+              "purpose": "for the rules' wording and their order of checks (empty, slashes, segments, pchar, escapes). No code copied.",
+              "take": "port-method"
+            }
+          ],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
+          "cost": "constant per record, plus a backward scan of at most 65,557 bytes for the end record. No recursion.",
+          "does": "each `read_*` function takes the bytes of one record (and, for a header, the bytes after its fixed part) and returns its fields, or refuses a record whose signature, lengths or values do not hold. [`find_end`] finds the end of central directory record in the last bytes of an archive. Nothing here reads a source or allocates more than a name.",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-exchange/src/zip/spec.rs",
+          "guarantees": [
+            "**No panics, no indexing, no unchecked arithmetic.** Every field is read with `get` from a slice whose length is checked first; every sum of lengths and offsets is checked.",
+            "**Strict where a hardened reader must be.** The end record is the last one whose comment ends exactly at the end of the archive (no bytes after it); one disk only; a Zip64 locator must sit directly before the end record, and its record directly before the locator; a Zip64 value is read only for a field that holds the sentinel, and a Zip64 field shorter than the values it must hold is refused."
+          ],
+          "job": "The records of a zip archive, as PKWARE's APPNOTE lays them out, read from byte slices: the end of central directory record, the Zip64 end of central directory locator and record, central directory headers, local file headers, and the Zip64 extended information extra field.",
+          "method": {
+            "links": [
+              "https://pkware.cachefly.net/webdocs/casestudies/APPNOTE.TXT"
+            ],
+            "text": "PKWARE's APPNOTE.TXT, version 6.3.10 (2022), sections 4.3.6 (local file header), 4.3.12 (central directory header), 4.3.14 to 4.3.16 (Zip64 end of central directory record and locator, end of central directory record) and 4.5.3 (Zip64 extended information extra field), <https://pkware.cachefly.net/webdocs/casestudies/APPNOTE.TXT>; the record layouts and consistency checks of zip2 (below)."
+          },
+          "path": "geom_exchange::zip::spec",
+          "provenance": [
+            {
+              "licence": "MIT",
+              "link": "https://github.com/zip-rs/zip2/blob/ddf3ec36017345b8936dd1a3516d9bc4632a0480/src/format/blocks.rs",
+              "method_note": null,
+              "name": "zip2",
+              "notice": [
+                "<https://github.com/zip-rs/zip2/blob/ddf3ec36017345b8936dd1a3516d9bc4632a0480/src/format/find_central_directory.rs>",
+                "<https://github.com/zip-rs/zip2/blob/ddf3ec36017345b8936dd1a3516d9bc4632a0480/src/extra_fields/zip64_extended_information.rs>",
+                "Copyright (c) 2014 Mathijs van de Nes"
+              ],
+              "pinned": true,
+              "purpose": "the record layouts are read field by field from byte slices with `get` and `from_le_bytes`, in place of the source's `unsafe` plain-old-data casts of packed structs, so the code is `no_std` and safe; the end record must be the last whose comment ends exactly at the archive's end, where the source accepted garbage after the comment and searched for archives with prepended bytes; one disk only; the Zip64 record must abut its locator; errors are typed kinds with byte offsets.",
+              "take": "port"
+            }
+          ],
+          "spdx": "Apache-2.0 AND MIT",
           "target": "lib"
         }
       ],
@@ -3427,7 +3705,7 @@
             "**The same value on every target.** The crate is table-driven integer code with no processor paths, so the bits depend only on the input.",
             "**No panic, no `unsafe`.** The crate forbids `unsafe` code, and its table reads are bounded by its loop guards and an 8-bit mask (its audit, cited in `deny-no-std.toml`)."
           ],
-          "job": "CRC-32C, the cheap check every record carries so damage is found before its bytes are trusted (24.2).",
+          "job": "CRC-32C, the cheap check every record carries so damage is found before its bytes are trusted (24.2); and CRC-32, the check every zip entry carries (24.7).",
           "method": {
             "links": [
               "https://www.rfc-editor.org/rfc/rfc7143",
@@ -3976,6 +4254,28 @@
             "text": "differential testing against an independent arbitrary-precision implementation, the big-integer oracle chapter 29.3 names for the wide integers (`projects/engines/geometry/architecture/29-sources-licences.md`), here `num-bigint` 0.4.8 (<https://docs.rs/num-bigint/0.4.8/num_bigint/struct.BigInt.html>). Two's complement in `L` limbs holds exactly −2^(64L−1) ..= 2^(64L−1) − 1 (the module header of `geom_num::wide`); the oracle reads a `Wide`'s limbs with `BigInt::from_signed_bytes_le`, the same two's-complement reading, computes exactly, and writes a result that fits back with `to_signed_bytes_le`."
           },
           "path": "geom_fuzz::wide",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
+          "cost": "two reads of the archive and of each entry, each linear in the input and at most the budget's output; memory, the entries and their bytes.",
+          "does": "[`harness`] reads the fuzzer's bytes as a zip archive with `ZipArchive::read` within [`BUDGET`], and again through a source that hands out one byte per read. For an archive it accepts, it reads every entry both ways and holds every part-name check to its own rule. It checks: both reads give the same archive or the same error, kind and offset, and the same entries; every refusal's offset lies inside the input; an accepted archive holds at most the budget's entries, under distinct names that escape no folder, each entry (its local header included) before the central directory and sharing no byte with another, and declaring at most the budget's bytes in all; and an entry read is exactly its declared size, with its declared CRC-32.",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-fuzz/src/zip.rs",
+          "guarantees": [
+            "**Any bytes are a case**, the empty string included; nothing is decoded first.",
+            "**Every law above is checked on every input**, and a broken one is a [`Finding`] naming it with the input in hexadecimal."
+          ],
+          "job": "The zip reader's fuzz target (piece G414c): `geom-exchange`'s zip reader never panics, refuses inside its input, keeps its budgets, reads the same archive and the same entries however the source splits its reads, and every entry it hands back is the entry its headers declare.",
+          "method": {
+            "links": [
+              "projects/engines/geometry/architecture/28-testing.md",
+              "projects/engines/geometry/architecture/24-file-format-exchange.md"
+            ],
+            "text": "property-based fuzzing of a reader's laws (chapter 28.5, `projects/engines/geometry/architecture/28-testing.md`): the guarantees of `geom-exchange`'s `zip` module header (`projects/engines/geometry/crates/geom-exchange/src/zip.rs`, chapter 24.7, `projects/engines/geometry/architecture/24-file-format-exchange.md`) as properties."
+          },
+          "path": "geom_fuzz::zip",
           "provenance": [],
           "spdx": null,
           "target": "lib"
@@ -11157,6 +11457,17 @@
     },
     {
       "licence": "MIT",
+      "link": "https://github.com/zip-rs/zip2/blob/ddf3ec36017345b8936dd1a3516d9bc4632a0480/src/format/blocks.rs",
+      "method_note": null,
+      "name": "zip2",
+      "pinned": true,
+      "take": "port",
+      "used_by": [
+        "projects/engines/geometry/crates/geom-exchange/src/zip/spec.rs"
+      ]
+    },
+    {
+      "licence": "MIT",
       "link": "https://gitlab.inria.fr/core-math/core-math/-/blob/0ce0cbc15935e24c656280e5a46c34e89f301b7a/src/binary64/atan2/atan2.c",
       "method_note": null,
       "name": "CORE-MATH `src/binary64/atan2/atan2.c` and `src/binary64/atan2/tint.h` at commit `0ce0cbc15935e24c656280e5a46c34e89f301b7a`, by Paul Zimmermann and Alexei Sibidanov, with the help of Silviu-Ioan Filip, who designed the code that generates its rational approximation of `atan`",
@@ -11318,6 +11629,17 @@
       "take": "port-method",
       "used_by": [
         "projects/engines/geometry/crates/geom-math/src/unit.rs"
+      ]
+    },
+    {
+      "licence": "Apache-2.0",
+      "link": "https://github.com/apache/poi/blob/519e0a3c3945364e8ea75c172fe1a15fb6d4a202/poi-ooxml/src/main/java/org/apache/poi/openxml4j/opc/PackagePartName.java",
+      "method_note": null,
+      "name": "Apache POI",
+      "pinned": true,
+      "take": "port-method",
+      "used_by": [
+        "projects/engines/geometry/crates/geom-exchange/src/zip/part.rs"
       ]
     },
     {
@@ -11678,6 +12000,17 @@
       "take": "port-method",
       "used_by": [
         "projects/engines/geometry/crates/geom-exchange/src/unit.rs"
+      ]
+    },
+    {
+      "licence": "MIT",
+      "link": "https://github.com/zip-rs/zip2/blob/ddf3ec36017345b8936dd1a3516d9bc4632a0480/src/read/zip_archive.rs",
+      "method_note": null,
+      "name": "zip2",
+      "pinned": true,
+      "take": "port-method",
+      "used_by": [
+        "projects/engines/geometry/crates/geom-exchange/src/zip.rs"
       ]
     },
     {

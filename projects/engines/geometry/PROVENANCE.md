@@ -8,8 +8,8 @@ This is the record of what the geometry kernel's code takes from outside sources
 
 | Class (29.1) | Sources | Files that take them |
 | --- | --- | --- |
-| PORT | 12 | 19 |
-| PORT METHOD | 46 | 39 |
+| PORT | 13 | 20 |
+| PORT METHOD | 48 | 41 |
 | DEPEND | 4 | 4 |
 
 3 method note(s) under the method-only procedure (29.20, rule 6).
@@ -39,6 +39,7 @@ Each row is one origin file at one commit, translated into a kernel file that ke
 | NVIDIA USD `BRep` `NLib` | Apache-2.0 | allowed | <https://github.com/NVIDIA-Omniverse/usd-brep/blob/c9c5979f04cea8c38213004d4f04df0dcfb40d05/source/SMLib/src/NL_CrvTool.cpp> | `projects/engines/geometry/crates/geom-nurbs/src/remove.rs` | translated to safe `no_std` Rust from `N_CrvRemoveKnot`, one removal at a time; the decision to keep a removal uses a certified bound from re-insertion in interval arithmetic in place of `NLib`'s distance test with basis maxima from a numerical search, its rescaled tolerance for rational curves and its weight range; a new curve is returned with the deviation instead of being edited in place. |
 | NVIDIA USD `BRep` `NLib` | Apache-2.0 | allowed | <https://github.com/NVIDIA-Omniverse/usd-brep/blob/c9c5979f04cea8c38213004d4f04df0dcfb40d05/source/SMLib/src/NL_SrfNurb.cpp> | `projects/engines/geometry/crates/geom-nurbs/src/surface.rs` | translated to safe `no_std` Rust from `N_SrfEvalPtImpl` and `N_SrfDerivs`, for any dimension D instead of `NLib`'s homogeneous 4D points with its "no z" and "no w" markers; derivatives summed in the same nested order as points (v inside u), where `N_ComputeDerivativeMatrixSpec` sums products of the two bases' derivatives in one double loop, so the value of order (0, 0) equals the point; rational derivatives by the book's A4.4 on the stored homogeneous points, where `NLib` forms rational basis derivatives against points divided by their weights; parameters outside the domains and orders above the maximum are typed errors; each overflow is checked. |
 | NVIDIA USD `BRep` `NLib` | Apache-2.0 | allowed | <https://github.com/NVIDIA-Omniverse/usd-brep/blob/c9c5979f04cea8c38213004d4f04df0dcfb40d05/source/SMLib/src/NL_SrfTool.cpp> | `projects/engines/geometry/crates/geom-nurbs/src/net.rs` | `NLib`'s surface insertion, refinement, Bezier extraction and elevation are rebuilt on the ported curve kernels applied line by line, in place of its separate surface loops, with the curve kernels' changes; every result carries its certified deviation. |
+| zip2 | MIT | allowed | <https://github.com/zip-rs/zip2/blob/ddf3ec36017345b8936dd1a3516d9bc4632a0480/src/format/blocks.rs> | `projects/engines/geometry/crates/geom-exchange/src/zip/spec.rs` | the record layouts are read field by field from byte slices with `get` and `from_le_bytes`, in place of the source's `unsafe` plain-old-data casts of packed structs, so the code is `no_std` and safe; the end record must be the last whose comment ends exactly at the archive's end, where the source accepted garbage after the comment and searched for archives with prepended bytes; one disk only; the Zip64 record must abut its locator; errors are typed kinds with byte offsets. |
 
 ## PORT METHOD: sources consulted for a method
 
@@ -46,6 +47,7 @@ Each kernel file implements a published method in its own code and copied nothin
 
 | Source | Licence | Class (29.2) | Link | Method note | Consulted by, and what for |
 | --- | --- | --- | --- | --- | --- |
+| Apache POI | Apache-2.0 | allowed | <https://github.com/apache/poi/blob/519e0a3c3945364e8ea75c172fe1a15fb6d4a202/poi-ooxml/src/main/java/org/apache/poi/openxml4j/opc/PackagePartName.java> | none | `projects/engines/geometry/crates/geom-exchange/src/zip/part.rs`: for the rules' wording and their order of checks (empty, slashes, segments, pchar, escapes). No code copied. |
 | Apache POI | Apache-2.0 | allowed | <https://github.com/apache/poi/blob/519e0a3c3945364e8ea75c172fe1a15fb6d4a202/poi-ooxml/src/main/java/org/apache/poi/openxml4j/util/ZipSecureFile.java> | none | `projects/engines/geometry/crates/geom-exchange/src/inflate.rs`: for its zip-bomb thresholds: a minimum compressed-to-inflated ratio of 0.01, checked above a grace size of 100 KiB. No code copied. |
 | bolero 0.13.7 `lib/bolero/src/test/mod.rs` | MIT | allowed | <https://github.com/camshaft/bolero/blob/7642943b6c1f8a9b5e824dd1cd29b7c8e56068b8/lib/bolero/src/test/mod.rs> | none | `projects/engines/geometry/crates/geom-fuzz/src/lib.rs`: for how its test mode draws a seed per input, prints a failing input's seed and replays it, as described above. No code copied. |
 | cargo-bolero 0.13.5 `bin/cargo-bolero/src/project.rs` | MIT | allowed | <https://github.com/camshaft/bolero/blob/7642943b6c1f8a9b5e824dd1cd29b7c8e56068b8/bin/cargo-bolero/src/project.rs> | none | `projects/engines/geometry/crates/geom-fuzz/src/lib.rs`: for the options of `cargo bolero test` above: the sanitizer and its default, and the toolchain. No code copied. |
@@ -92,6 +94,7 @@ Each kernel file implements a published method in its own code and copied nothin
 | SPDX License List 3.29.0 | CC-BY-3.0 | readable | <https://github.com/spdx/license-list-data/blob/31ba1a50e5397e00a304dbadc76531740e89ee48/json/licenses.json> | none | `projects/engines/geometry/crates/geom-test/src/map/classes.rs`: to check that every identifier in the tables below is a real SPDX licence identifier, and to list the deprecated GPL, LGPL and AGPL forms and the non-commercial licences. |
 | Vigna's SplitMix64 reference code | public domain | readable | <https://prng.di.unimi.it/splitmix64.c> | none | `projects/engines/geometry/crates/geom-bench/src/rng.rs`: for the constants and steps of SplitMix64, which the tests check against its published outputs. No code copied. |
 | Wasmtime | Apache-2.0 WITH LLVM-exception | allowed | <https://github.com/bytecodealliance/wasmtime/blob/5afd63588b1f5520391c6a37fc38dfd3ccd607c2/crates/wasmtime/src/config.rs> | none | `projects/engines/geometry/crates/geom-bench/src/bin/geom-bench-guest.rs`: for what fuel counts and how `Config::consume_fuel` meters it. No code copied.<br>`projects/engines/geometry/crates/geom-bench/src/guest.rs`: for what fuel counts and how `Config::consume_fuel` meters it. No code copied. |
+| zip2 | MIT | allowed | <https://github.com/zip-rs/zip2/blob/ddf3ec36017345b8936dd1a3516d9bc4632a0480/src/read/zip_archive.rs> | none | `projects/engines/geometry/crates/geom-exchange/src/zip.rs`: for its overlap check over entries' byte ranges, headers included, and its checks of each local header against its central header. No code copied. |
 
 ## DEPEND: published crates used as they are
 

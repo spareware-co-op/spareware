@@ -219,6 +219,16 @@ fn read_range<S: RangeSource + ?Sized>(source: &S, at: u64, len: u64) -> Result<
     Ok(out)
 }
 
+/// A record that `pointer` names but that lies past the archive's end is refused as `kind` at the
+/// pointer, so every offset lies inside the archive; a failure of the source itself is kept.
+fn past_end(e: ZipError, kind: ZipErrorKind, pointer: u64) -> ZipError {
+    if e.kind == ZipErrorKind::Source(SourceError::OutOfBounds) {
+        refused(kind, pointer)
+    } else {
+        e
+    }
+}
+
 impl ZipArchive {
     /// Reads and checks the central directory of the archive `source` holds.
     ///
@@ -248,7 +258,8 @@ impl ZipArchive {
             let offset32 = u32::try_from(end.offset).unwrap_or(u32::MAX);
             if has_locator || End::needs_zip64(entries16, size32, offset32) {
                 let record = spec::read_zip64_locator(&bytes, locator)?;
-                let fixed = read_range(source, record, len_u64(spec::ZIP64_END_LEN))?;
+                let fixed = read_range(source, record, len_u64(spec::ZIP64_END_LEN))
+                    .map_err(|e| past_end(e, ZipErrorKind::Zip64, locator))?;
                 spec::read_zip64_end(&fixed, record, locator, &mut end)?;
             }
         } else if End::needs_zip64(
@@ -259,9 +270,10 @@ impl ZipArchive {
             return Err(refused(ZipErrorKind::Zip64, end.at));
         }
         // The central directory ends exactly where its end record (or Zip64 record) starts: no
-        // bytes before the archive, none hidden between.
+        // bytes before the archive, none hidden between. Refused at the record that says where it
+        // is, since the place it names may lie anywhere.
         if end.offset.checked_add(end.size) != Some(end.directory_end()) {
-            return Err(refused(ZipErrorKind::Directory, end.offset));
+            return Err(refused(ZipErrorKind::Directory, end.directory_end()));
         }
         if end.entries > len_u64(budget.entries) {
             return Err(refused(ZipErrorKind::TooManyEntries, end.at));
@@ -332,11 +344,13 @@ impl ZipArchive {
         if method == Method::Stored && c.compressed != c.size {
             return Err(refused(ZipErrorKind::Size, here));
         }
-        let fixed = read_range(source, c.header, len_u64(LOCAL_LEN))?;
+        let fixed = read_range(source, c.header, len_u64(LOCAL_LEN))
+            .map_err(|e| past_end(e, ZipErrorKind::LocalHeader, here))?;
         let l = spec::read_local(&fixed, c.header)?;
         let bad = refused(ZipErrorKind::LocalHeader, c.header);
         let name_at = c.header.checked_add(len_u64(LOCAL_LEN)).ok_or(bad)?;
-        let local_name = read_range(source, name_at, len_u64(l.name_len))?;
+        let local_name = read_range(source, name_at, len_u64(l.name_len))
+            .map_err(|e| past_end(e, ZipErrorKind::LocalHeader, here))?;
         // Bit 3: sizes and CRC in a data descriptor after the data; the local fields may be 0.
         let described = l.flags & 0x0008 != 0;
         let sentinel =
