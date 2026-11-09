@@ -496,6 +496,16 @@
             "function": "queries_golden_hash_is_the_same_on_every_target"
           },
           "sha256": "b8f2e38d41f1e8a7dacd616b124f55c6b7b46cc691203456872debd94e8f9c4f"
+        },
+        {
+          "id": "geom-spatial/instance",
+          "what": "The instance tree of geom-spatial (piece G295): nine fixed scenes of parts definitions in coarse and fine frames, nested assemblies, root assemblies of 1 to 4,000 records placed by the 48 signed permutations (one built on a pool of three threads), and rational and certified general placements around a nested assembly; each assembly's nodes and leaves, and the hits of twelve regions per scene with each hit's path, part, definition and exactness and the work each query charged, 3,811,942 bytes in the encoding of tests/instance_determinism.rs.",
+          "check": {
+            "crate": "geom-spatial",
+            "test": "instance_determinism",
+            "function": "instance_golden_hash_is_the_same_on_every_target"
+          },
+          "sha256": "ffd19c2d3c3841311ac340485bfdd4cd33e5d0166a75cc3ec4f110f4722a04bf"
         }
       ]
     }

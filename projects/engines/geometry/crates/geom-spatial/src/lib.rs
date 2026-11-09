@@ -24,6 +24,16 @@
 //! Its direct dependencies are its row of chapter 27's crate table, checked by the
 //! scaffold test in `engine-geometry` (`tests/scaffold`).
 //!
-//! Status: scaffold only; built by pieces G293, G294, G295, G296, G297.
+//! Modules today:
+//!
+//! - [`instance`]: the instance tree for huge assemblies (G295): definitions cached by content
+//!   and edition, assemblies of instance records with their tree, nested assemblies on an
+//!   explicit stack, and queries moved into each definition's own frame, fine or coarse.
+//!
+//! Status: the instance tree (G295) built; G293, G294, G296 and G297 to come.
 #![cfg_attr(not(test), no_std)]
 #![forbid(unsafe_code)]
+
+extern crate alloc;
+
+pub mod instance;
