@@ -249,9 +249,11 @@ impl Similarity {
     ///
     /// [`EditError::Range`] if a number of the composite does not fit.
     pub fn after(&self, first: &Similarity) -> Result<Similarity, EditError> {
-        // The linear parts compose: a mirror in `first` reverses the turns of `self`.
+        // The linear parts compose: a mirror in `first` reverses the turns of `self`. Every
+        // constructor keeps `turns` below 4, so `first.turns + 4 - self.turns` neither wraps nor
+        // needs `self.turns` reduced first.
         let turns = if first.mirror {
-            first.turns.wrapping_add(4).wrapping_sub(self.turns % 4) % 4
+            first.turns.wrapping_add(4).wrapping_sub(self.turns) % 4
         } else {
             first.turns.wrapping_add(self.turns) % 4
         };
@@ -582,7 +584,9 @@ pub fn array_polar(shape: &Shape, centre: P2, copies: u32) -> Result<Vec<Shape>,
     };
     (0..copies)
         .map(|i| -> Result<Shape, EditError> {
-            let turns = u8::try_from(i.checked_mul(step).ok_or(EditError::Range)? % 4)
+            // At most three quarter turns (i below four, step one, or i below two, step two), and
+            // quarter_turns reduces its count modulo four in any case.
+            let turns = u8::try_from(i.checked_mul(step).ok_or(EditError::Range)?)
                 .map_err(|_| EditError::Range)?;
             place(shape, &Similarity::quarter_turns(turns, centre)?)
         })

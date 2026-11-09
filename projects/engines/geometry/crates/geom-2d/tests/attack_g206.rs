@@ -30,7 +30,7 @@ use geom_2d::edit::{
     EditError, End, Similarity, Window, align, array_polar, array_rectangular, divide, lengthen,
     measure, place, place_polyline, polyline_length, stretch,
 };
-use geom_2d::entity::{Ends, Frac, Polyline, Shape};
+use geom_2d::entity::{Ends, EntityError, Frac, Polyline, Shape};
 use geom_2d::point::Pt2;
 use geom_num::grid::{COORD_MAX, P2};
 
@@ -426,4 +426,161 @@ fn placing_is_deterministic() {
         place_polyline(&poly, &m).unwrap(),
         place_polyline(&poly, &m).unwrap()
     );
+}
+
+// The mutation gate's survivors in edit.rs (#726's judge), each killed through the public API.
+// Two more were the same map by a redundant reduction modulo four, which edit.rs no longer makes.
+
+#[test]
+fn every_edit_error_says_what_went_wrong() {
+    for (e, text) in [
+        (
+            EditError::Range,
+            "the result is off the grid or past its range",
+        ),
+        (
+            EditError::Degenerate,
+            "a zero scale or count, or two equal points",
+        ),
+        (EditError::NotExact, "no exact map gives this"),
+        (EditError::Unsupported(7), "shape kind 7 is not placed here"),
+        (
+            EditError::Entity(EntityError::Fraction),
+            "the entity model refused the result: Fraction",
+        ),
+    ] {
+        assert_eq!(e.to_string(), text);
+    }
+}
+
+#[test]
+fn a_quarter_turn_count_is_taken_modulo_four() {
+    for about in [p(0, 0), p(3, -2)] {
+        for t in 0..4_u8 {
+            let once = Similarity::quarter_turns(t, about).unwrap();
+            for more in [4, 8, 248] {
+                assert_eq!(Similarity::quarter_turns(t + more, about).unwrap(), once);
+            }
+        }
+    }
+    assert_eq!(
+        Similarity::quarter_turns(4, p(0, 0)).unwrap(),
+        Similarity::IDENTITY
+    );
+}
+
+/// Every composition of two of the eight unit maps about the origin, shifted, against doing one
+/// map and then the other, point by point: a mirrored first map with a turned second among them.
+#[test]
+fn every_composition_of_unit_maps_is_one_then_the_other() {
+    let mut maps = Vec::new();
+    for t in 0..4_u8 {
+        let turn = Similarity::quarter_turns(t, p(0, 0)).unwrap();
+        maps.push(turn);
+        maps.push(turn.after(&Similarity::mirror_in_row(0).unwrap()).unwrap());
+    }
+    let maps: Vec<Similarity> = maps
+        .iter()
+        .enumerate()
+        .map(|(i, m)| {
+            Similarity::translation(i as i64 - 3, 2 - i as i64)
+                .after(m)
+                .unwrap()
+        })
+        .collect();
+    let probes = [p(0, 0), p(1, 0), p(0, 1), p(3, -7), p(-5, 2)];
+    for first in &maps {
+        for then in &maps {
+            let both = then.after(first).unwrap();
+            assert_eq!(both.mirrors(), first.mirrors() != then.mirrors());
+            for q in probes {
+                let step = then.point(first.point(q).unwrap()).unwrap();
+                assert_eq!(
+                    xy(both.point(q).unwrap()),
+                    xy(step),
+                    "{first:?} then {then:?}"
+                );
+            }
+        }
+    }
+}
+
+#[test]
+fn turns_and_mirrors_undo_each_other_in_composition() {
+    let o = p(0, 0);
+    let row = Similarity::mirror_in_row(0).unwrap();
+    assert_eq!(row.after(&row).unwrap(), Similarity::IDENTITY);
+    for t in 0..4_u8 {
+        let a = Similarity::quarter_turns(t, o).unwrap();
+        let b = Similarity::quarter_turns(4 - t, o).unwrap();
+        assert_eq!(a.after(&b).unwrap(), Similarity::IDENTITY, "{t}");
+    }
+    assert!(
+        !Similarity::IDENTITY
+            .after(&Similarity::IDENTITY)
+            .unwrap()
+            .mirrors()
+    );
+    assert!(row.after(&Similarity::IDENTITY).unwrap().mirrors());
+}
+
+#[test]
+fn a_half_turn_by_a_negative_scale_is_its_own_inverse() {
+    for about in [p(0, 0), p(4, -1)] {
+        let half = Similarity::scaling(-1, about).unwrap();
+        assert_eq!(half.inverse().unwrap(), half);
+        assert_eq!(
+            half.after(&half.inverse().unwrap()).unwrap(),
+            Similarity::IDENTITY
+        );
+    }
+}
+
+#[test]
+fn a_level_segment_is_placed_with_its_carrier() {
+    let seg = Shape::Line {
+        carrier: geom_2d::carrier::Line2::new(0, 1, 0).unwrap(),
+        ends: Ends::Segment(Pt2::Grid(p(0, 0)), Pt2::Grid(p(6, 0))),
+    };
+    for m in [
+        Similarity::IDENTITY,
+        Similarity::translation(2, 5),
+        Similarity::quarter_turns(2, p(1, 1)).unwrap(),
+    ] {
+        let Shape::Line {
+            carrier,
+            ends: Ends::Segment(Pt2::Grid(a), Pt2::Grid(b)),
+        } = place(&seg, &m).unwrap()
+        else {
+            panic!("a segment stays a segment");
+        };
+        assert_eq!(a.y.get(), b.y.get());
+        let ([ca, cb], cc) = carrier.coefficients();
+        for q in [a, b] {
+            assert_eq!(ca * i128::from(q.x.get()) + cb * i128::from(q.y.get()), cc);
+        }
+    }
+}
+
+#[test]
+fn align_takes_the_turn_with_a_positive_scale() {
+    assert_eq!(
+        align(p(0, 0), p(1, 0), p(0, 0), p(2, 0)).unwrap(),
+        Similarity::scaling(2, p(0, 0)).unwrap()
+    );
+    assert_eq!(
+        align(p(0, 0), p(1, 0), p(0, 0), p(0, 3)).unwrap(),
+        Similarity::scaling(3, p(0, 0))
+            .unwrap()
+            .after(&Similarity::quarter_turns(1, p(0, 0)).unwrap())
+            .unwrap()
+    );
+}
+
+#[test]
+fn halving_a_segment_gives_its_midpoint() {
+    let pts = divide(p(0, 0), p(10, 4), 2).unwrap();
+    assert_eq!(pts.len(), 1);
+    let ([x, y], w) = pts[0].coordinates();
+    assert_eq!((x, y), (5 * w, 2 * w));
 }
