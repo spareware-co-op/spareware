@@ -367,6 +367,33 @@ fn an_ellipse_of_ratio_one_is_its_circle() {
     let b = run(&[Curve::Ellipse(tilted)]);
     laws(&b, "tilted ratio one");
     assert_eq!((b.circles().len(), b.ellipses().len()), (1, 0));
+    // A whole circle, like a whole ellipse, has no vertex but its leftmost and rightmost points:
+    // not the ends (4, 5) and (-2, -3) of the axis that wrote it.
+    assert_eq!(b.vertices().len(), 2);
+    assert!(b.vertices()[0].same(&grid(-4, 1)).unwrap());
+    assert!(b.vertices()[1].same(&grid(6, 1)).unwrap());
+    let halves: Vec<Option<Along>> = (0..2).map(|e| b.along(e)).collect();
+    assert_eq!(
+        halves,
+        [
+            Some(Along::Arc {
+                circle: 0,
+                upper: false
+            }),
+            Some(Along::Arc {
+                circle: 0,
+                upper: true
+            })
+        ]
+    );
+    // Beside the arc of its circle from (6, 1) to (4, 5), the arc's ends split it there, and the
+    // arc covers the edge between them with it.
+    let arc = Curve::Arc(Arc2::new(p(6, 1), p(4, 5), p(1, 1).into()).unwrap());
+    let c = run(&[Curve::Ellipse(tilted), arc]);
+    laws(&c, "ratio one beside an arc");
+    assert_eq!((c.vertices().len(), c.edges().len()), (3, 3));
+    let covers: Vec<Vec<u32>> = c.edges().iter().map(|e| e.sources.clone()).collect();
+    assert_eq!(covers.iter().filter(|s| s.as_slice() == [0, 1]).count(), 1);
 }
 
 #[test]

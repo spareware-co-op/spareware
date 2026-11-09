@@ -76,8 +76,8 @@ use geom_topo::{
 mod piece;
 
 use piece::{
-    On, Piece, Shapes, Way, circles_of, cmp_pt, cut, cut_oval, cut_oval_arc, meetings, order_at,
-    ordering, ovals_of, side, way,
+    On, Piece, Shapes, Way, circles_of, cmp_pt, cut, cut_oval, cut_oval_arc, cut_whole, meetings,
+    order_at, ordering, ovals_of, side, way,
 };
 
 use crate::entity::Param;
@@ -575,8 +575,9 @@ pub fn arrange(
 }
 
 /// A whole ellipse of ratio 1 as the two halves of its circle, counter-clockwise from its centre
-/// plus its major-axis vector round to its centre less it and back; `None` for any other ellipse,
-/// or for one whose points there are off the grid.
+/// plus its major-axis vector round to its centre less it and back, which list the circle; `None`
+/// for any other ellipse, or for one whose points there are off the grid. The sweep cuts the circle
+/// whole, at its leftmost and rightmost points only.
 fn as_circle(e: &Ellipse2) -> Option<[Arc2; 2]> {
     if e.ratio() != (1, 1) {
         return None;
@@ -623,13 +624,14 @@ pub fn arrange_curves(
     let mut pieces: Vec<Piece> = Vec::with_capacity(curves.len());
     let mut ids: Vec<u32> = Vec::with_capacity(curves.len());
     let (mut nth_arc, mut nth_ellipse) = (0_usize, 0_usize);
-    let mut next_arc = |arc: &Arc2, pieces: &mut Vec<Piece>| -> Result<(), ArrangeError> {
+    // The listed circle of the next arc, and how many arcs it takes from the list.
+    let mut next_circle = |taken: usize| -> Result<u32, ArrangeError> {
         let circle = circle_of_arc
             .get(nth_arc)
             .copied()
             .ok_or(ArrangeError::TooMany)?;
-        nth_arc = nth_arc.saturating_add(1);
-        cut(arc, circle, &circles, pieces)
+        nth_arc = nth_arc.saturating_add(taken);
+        Ok(circle)
     };
     for (place, curve) in curves.iter().enumerate() {
         let before = pieces.len();
@@ -639,12 +641,12 @@ pub fn arrange_curves(
                     pieces.push(piece);
                 }
             }
-            Curve::Arc(arc) => next_arc(arc, &mut pieces)?,
+            Curve::Arc(arc) => cut(arc, next_circle(1)?, &circles, &mut pieces)?,
             Curve::Ellipse(e) => {
-                if let Some(halves) = as_circle(e) {
-                    for arc in &halves {
-                        next_arc(arc, &mut pieces)?;
-                    }
+                if as_circle(e).is_some() {
+                    // Its two halves were listed for the circle's form; it is cut as one whole
+                    // circle, at its extremes only.
+                    cut_whole(next_circle(2)?, &circles, &mut pieces)?;
                 } else {
                     let ellipse = oval_of_ellipse
                         .get(nth_ellipse)

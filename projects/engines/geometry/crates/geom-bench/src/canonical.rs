@@ -25,6 +25,7 @@
 
 use core::cmp::Ordering;
 
+use geom_2d::arrange::Curve;
 use geom_2d::entity::{Frac, Shape};
 use geom_math::Classification;
 use geom_num::arc::{Arc2, Circle2, Contact, Round};
@@ -322,6 +323,38 @@ impl Canonical for Ellipse2 {
         self.major().encode(h);
         self.ratio().0.encode(h);
         self.ratio().1.encode(h);
+    }
+}
+
+impl Canonical for Curve {
+    // A tag, then the curve's own data: a segment's ends, an arc, an ellipse, or an elliptic arc's
+    // ellipse and the text of its two parameters (plain data, its derived `Debug` text the same on
+    // every target, as for `Shape`).
+    fn encode(&self, h: &mut Sha256) {
+        match self {
+            Curve::Segment(a, b) => {
+                0_u32.encode(h);
+                a.encode(h);
+                b.encode(h);
+            }
+            Curve::Arc(arc) => {
+                1_u32.encode(h);
+                arc.encode(h);
+            }
+            Curve::Ellipse(e) => {
+                2_u32.encode(h);
+                e.encode(h);
+            }
+            Curve::EllipticArc {
+                ellipse,
+                start,
+                end,
+            } => {
+                3_u32.encode(h);
+                ellipse.encode(h);
+                h.update(format!("{start:?} {end:?}").as_bytes());
+            }
+        }
     }
 }
 

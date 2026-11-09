@@ -473,6 +473,7 @@ pub static OPS: &[Op] = &[
     // shape's change under a transform's classification.
     Op { group: "entity", name: "polyline", measures: "geom_2d::Polyline::new", classes: T, prepare: |c| bind(inputs::entity::polyline(c), kernels::entity::polyline) },
     Op { group: "entity", name: "arrange", measures: "geom_2d::arrange::arrange", classes: T, prepare: |c| bind(inputs::entity::arrange(c), kernels::entity::arrange) },
+    Op { group: "entity", name: "arrange_curves", measures: "geom_2d::arrange::arrange_curves", classes: T, prepare: |c| bind(inputs::entity::arrange_curves(c), kernels::entity::arrange_curves) },
     Op { group: "entity", name: "under", measures: "geom_2d::Shape::under", classes: T, prepare: |c| bind(inputs::entity::under(c), kernels::entity::under) },
     // geom-nurbs's hot paths (pieces G56, G58 and G59; decision 32.44): evaluation, interpolation
     // and the Bernstein bound.

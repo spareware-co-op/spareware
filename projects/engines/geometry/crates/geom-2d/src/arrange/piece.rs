@@ -1109,6 +1109,32 @@ pub(super) fn cut(
     Ok(())
 }
 
+/// The two halves of the whole listed circle `circle`, appended to `out`: each from the circle's
+/// leftmost point to its rightmost, the lower and the upper, at the one-root points
+/// `Crossing2::of_extreme` gives. So a whole circle has no other vertex of its own, as a whole
+/// ellipse has none.
+///
+/// # Errors
+///
+/// [`ArrangeError::Range`] if a step did not fit.
+pub(super) fn cut_whole(
+    circle: u32,
+    circles: &[Circle],
+    out: &mut Vec<Piece>,
+) -> Result<(), ArrangeError> {
+    let c = circle_of(circles, circle)?;
+    let left = root(&Crossing2::of_extreme(&c.disc, Root::First)?);
+    let right = root(&Crossing2::of_extreme(&c.disc, Root::Second)?);
+    for upper in [false, true] {
+        out.push(Piece {
+            lo: left.clone(),
+            hi: right.clone(),
+            on: On::Arc { circle, upper },
+        });
+    }
+    Ok(())
+}
+
 /// How two ellipses compare as curves: by centre x, then y, then the ratios A / ℓ, B / ℓ and C / ℓ
 /// of their forms to their levels, cross-multiplied, each product below 2^334; equal exactly when
 /// they are one curve, whatever major-axis vector and ratio wrote them.

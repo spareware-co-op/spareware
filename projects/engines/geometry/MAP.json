@@ -3089,6 +3089,29 @@
           "target": "lib"
         },
         {
+          "cost": "at most [`MAX_CURVES`] curves, so at most fifteen pairs, each a few exact one-root or quartic decisions; at most [`MAX_INPUT_BYTES`] bytes read.",
+          "does": "[`decode`] turns a fuzzer's bytes into a [`Case`]: a count of curves and, for each, a kind byte and the small numbers of a segment (its two ends), an arc (its two ends and how far its centre lies along their bisector, in quarter steps) or a whole ellipse (its centre, its major-axis vector and its axis ratio). [`check`] arranges them with `arrange_curves` and tests each rule against an independent reading of it. A refusal because an ellipse may meet a circle or another ellipse ([`ArrangeError::Conic`]) is right only if some such pair meets at all, by the real roots of their quartic. Otherwise the vertices are exactly a pairwise oracle's: every end of a segment or an arc, both extremes of every ellipse and every extreme inside an arc, and every crossing of two curves that lies on both, found pair by pair from the curves' own carriers and circles (an ellipse of ratio one is its circle); Euler's formula holds, V − E + F = 1 + C for C connected components; every half-edge lies on exactly one cycle and every cycle bounds one face or is a hole of exactly one; the vertices ascend and every edge runs up and says what it lies on; and arranging the curves in the opposite order gives the same verdict, vertices, edges, faces and order round each vertex, with only the source labels renumbered. [`harness`] is `decode` then `check`.",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-fuzz/src/arrange_curves.rs",
+          "guarantees": [
+            "**Any bytes are a case.** Every byte string, the empty one included, decodes to a case.",
+            "**A bounded input.** [`decode`] reads at most [`MAX_INPUT_BYTES`] bytes, derived below; a unit test builds the input that reaches it.",
+            "**A panic is a failure; a disagreement is a [`Finding`]** naming the law and the case."
+          ],
+          "job": "Fuzz target: `geom-2d`'s arrangement of segments, circular arcs and ellipses keeps its stated laws on any input.",
+          "method": {
+            "links": [
+              "https://doi.org/10.1007/978-3-642-17283-0",
+              "https://doi.org/10.1145/800205.806346"
+            ],
+            "text": "differential testing against the crossings of each pair of curves on their own carriers and circles (the one-root points of chapter 14.2, as Fogel, Halperin and Wein's circle-segment traits define them, 2012, <https://doi.org/10.1007/978-3-642-17283-0>, from their book), with the real roots of the quartic of an ellipse and a conic (Collins and Akritas 1976, <https://doi.org/10.1145/800205.806346>) as the test of whether two such curves meet, and Euler's formula for planar graphs; written here from the rules and not from the sweep's code."
+          },
+          "path": "geom_fuzz::arrange_curves",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
           "cost": "building and querying trees of at most [`MAX_BOXES`] boxes and an index of at most [`MAX_POINTS`] points, and brute force over them, O(n²); at most [`MAX_INPUT_BYTES`] bytes.",
           "does": "[`decode`] turns a fuzzer's bytes into a [`Case`]: up to [`MAX_BOXES`] boxes in two or three dimensions, a query box, a second set of boxes, a set of moved boxes, up to [`MAX_POINTS`] grid points, a centre and a radius. [`check`] builds `geom_bvh::BoxTree`s and a `geom_bvh::CellIndex` and holds every query to the answer of a brute force written here, from the boxes' corners and exact integer distances, never from `geom-bvh`'s own tests: overlapping a box, all overlapping pairs, pairs across two trees, a refit's answers (piece G54), and the points within a radius of a point and all pairs within a radius (G55). [`harness`] is `decode` then `check`.",
           "family": [],

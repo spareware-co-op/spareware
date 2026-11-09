@@ -254,9 +254,15 @@
               "kind": "corpus",
               "piece": "G196a",
               "why": "one arrangement benchmark added (entity/arrange)"
+            },
+            {
+              "sha256": "f880750c743004ffb4328da69f71dc1f0a416fecb5f52c69db99ea72d7937801",
+              "kind": "corpus",
+              "piece": "G196b",
+              "why": "one arrangement benchmark of segments, arcs and ellipses added (entity/arrange_curves)"
             }
           ],
-          "sha256": "f880750c743004ffb4328da69f71dc1f0a416fecb5f52c69db99ea72d7937801"
+          "sha256": "854faa1e4f55482bbbee3a7d2acf00e27e306f6f33c6f7d05391d37e7aea4736"
         },
         {
           "id": "geom-nurbs/operations",
