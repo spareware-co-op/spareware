@@ -17,7 +17,8 @@
 use geom_test::Seed;
 use geom_test::oracle::geomdl::Compared;
 use geom_test::oracle::sketches::{
-    Answer, EZPZ, FIKSI, Job, NEAR, Rule, jobs, judge, kernel, near, sketch_text,
+    Answer, EZPZ, FIKSI, Job, NEAR, PLANEGCS, Rule, SOLVESPACE, jobs, judge, kernel, near,
+    sketch_text,
 };
 use geom_test::seed::resolve;
 
@@ -236,5 +237,52 @@ fn a_job_reads_back_as_the_same_line() {
     for job in jobs(FIKSI, seed(), 20).unwrap() {
         let line = serde_json::to_string(&job).unwrap();
         assert_eq!(serde_json::from_str::<Job>(&line).unwrap(), job);
+    }
+}
+
+#[test]
+fn solvespace_and_planegcs_see_the_kinds_they_state() {
+    let kinds = |oracle: &str| {
+        let mut found = std::collections::BTreeSet::new();
+        for job in jobs(oracle, seed(), 300).unwrap() {
+            for rule in &job.rules {
+                found.insert(match rule {
+                    Rule::Midpoint { .. } => "midpoint",
+                    Rule::Mirror { .. } => "mirror",
+                    _ => "other",
+                });
+            }
+        }
+        found
+    };
+    // SolveSpace states every kind; planegcs has no midpoint rule but a mirror one.
+    assert!(kinds(SOLVESPACE).contains("midpoint") && kinds(SOLVESPACE).contains("mirror"));
+    assert!(!kinds(PLANEGCS).contains("midpoint") && kinds(PLANEGCS).contains("mirror"));
+    // Their nights are drawn the way ezpz's are from a seed, and are their own.
+    assert_eq!(jobs(SOLVESPACE, seed(), 20), jobs(EZPZ, seed(), 20));
+    assert_ne!(jobs(PLANEGCS, seed(), 40), jobs(FIKSI, seed(), 40));
+}
+
+#[test]
+fn solvespace_and_planegcs_agree_on_the_truth_and_differ_on_anything_else() {
+    for oracle in [SOLVESPACE, PLANEGCS] {
+        let night = jobs(oracle, seed(), 40).unwrap();
+        for job in &night {
+            assert_eq!(
+                judge(oracle, job, &truth(job)).unwrap(),
+                Compared::Agree,
+                "{oracle} {}",
+                job.id
+            );
+            let refused = Answer {
+                id: job.id,
+                points: None,
+            };
+            assert!(matches!(
+                judge(oracle, job, &refused).unwrap(),
+                Compared::Differ { .. }
+            ));
+        }
+        assert!(near(oracle, &night[0]).unwrap() >= NEAR);
     }
 }
