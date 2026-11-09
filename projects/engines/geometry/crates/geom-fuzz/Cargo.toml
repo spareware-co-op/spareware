@@ -16,6 +16,10 @@ dashu-ratio = { version = "0.6.1", default-features = false, features = ["std"] 
 dashu-int = { version = "0.6.2", default-features = false, features = ["std"] }
 # The kinds and transforms the curves and surfaces targets hold to the kind contract (Gate 2, 32.44). Ours,
 # Apache-2.0.
+# The entity target (G194): geom-2d's entity model, under test (ours, Apache-2.0).
+geom-2d = { path = "../geom-2d" }
+# The snap target (G198) names its entities by `NameId` (ours, Apache-2.0).
+geom-op = { path = "../geom-op" }
 geom-bvh = { path = "../geom-bvh" }
 geom-curve = { path = "../geom-curve" }
 geom-linalg = { path = "../geom-linalg" }
@@ -32,6 +36,9 @@ geom-gen = { path = "../geom-gen" }
 # The oracle of the wide-integer target (G26) and of the variants target (G42): exact
 # arbitrary-precision integers, the big-integer oracle chapter 29.3 names. MIT OR Apache-2.0.
 num-bigint = "0.4.8"
+# The arenas target (G80): geom-topo's arenas and builder, under test, and the kernel crates
+# whose values fill them (ours, Apache-2.0).
+geom-topo = { path = "../geom-topo" }
 
 [dev-dependencies]
 # The harness front end: one `check!` runs a harness as a property test (on stable), under

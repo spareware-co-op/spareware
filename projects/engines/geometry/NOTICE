@@ -504,6 +504,13 @@ CGAL `FPU.h`
     projects/engines/geometry/crates/geom-num/src/interval.rs
       for its widening with `nextafter` when the rounding mode cannot change, which the Method above names.
 
+ciborium-ll
+  Licence:      Apache-2.0
+  Link:         https://github.com/enarx/ciborium/blob/fdf3ec5c53256000f8e12f06c361ca18026a8d99/ciborium-ll/src/hdr.rs
+  Consulted by:
+    projects/engines/geometry/crates/geom-op/src/cbor.rs
+      its choice of the shortest float that keeps a double's bits; used as a test oracle only.
+
 Clippy's `clippy_dev` token cursor
   Licence:      MIT OR Apache-2.0
   Link:         https://github.com/rust-lang/rust-clippy/blob/3583eb8a9ae1161bd7d80907acfa09b3612a93f9/clippy_dev/src/parse/cursor.rs
@@ -586,6 +593,13 @@ IFC 4.3 documentation (buildingSMART)
   Consulted by:
     projects/engines/geometry/crates/geom-curve/src/transition.rs
       for the curvature and heading formulas of `IfcAlignmentHorizontalSegmentTypeEnum`'s transitions, `IfcClothoid`, the second-, third- and seventh-order polynomial spirals, `IfcCosineSpiral` and `IfcSineSpiral`, which the laws implement, and for `IfcCurveSegment`'s trimming of a parent curve by a start and a signed length, which windows and senses follow. No text adapted.
+
+JTS
+  Licence:      BSD-3-Clause
+  Link:         https://github.com/locationtech/jts/blob/5a0a73632216e3e9d277150336078ec423fd215f/modules/core/src/main/java/org/locationtech/jts/operation/polygonize/Polygonizer.java
+  Consulted by:
+    projects/engines/geometry/crates/geom-2d/src/region.rs
+      under its Eclipse Distribution License 1.0, for the order of its steps (dangles, cut edges, rings, holes). No code copied.
 
 Kani 0.68.0 `library/std/src/lib.rs`
   Licence:      MIT OR Apache-2.0
@@ -763,3 +777,5 @@ every other crate compiled into a shipped binary, go in the generated third-part
   libm 0.2.16 (MIT), https://crates.io/crates/libm/0.2.16, named by projects/engines/geometry/crates/geom-num/Cargo.toml
   libm 0.2.16 (MIT), https://crates.io/crates/libm/0.2.16, named by projects/engines/geometry/crates/geom-num/Cargo.toml
   rayon 1.12.0 (Apache-2.0 OR MIT), https://crates.io/crates/rayon/1.12.0, named by projects/engines/geometry/crates/geom-pool/Cargo.toml
+  sha2 0.11.0 (Apache-2.0 OR MIT), https://crates.io/crates/sha2/0.11.0, named by projects/engines/geometry/crates/geom-op/Cargo.toml
+  unicode-normalization =0.1.26 ((Apache-2.0 OR MIT) AND Unicode-3.0), https://crates.io/crates/unicode-normalization, named by projects/engines/geometry/crates/geom-op/Cargo.toml
