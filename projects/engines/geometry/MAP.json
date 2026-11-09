@@ -2370,7 +2370,77 @@
         30
       ],
       "depends": [],
-      "errors": [],
+      "errors": [
+        {
+          "doc": "Why an exchange step refused.",
+          "file": "projects/engines/geometry/crates/geom-exchange/src/error.rs",
+          "kinds": [
+            {
+              "doc": "A length unit outside what a frame's linear unit can hold, 2^−32 to 2^32 metres (`tera` and above, `pico` and below).",
+              "name": "UnitOutOfRange",
+              "shape": "unit"
+            },
+            {
+              "doc": "An angle unit with no exact count of angle units: the radian, whose values stay doubles.",
+              "name": "InexactAngleUnit",
+              "shape": "unit"
+            },
+            {
+              "doc": "A value whose grid count lies past the range it was asked for (±(2^40 − 1) steps for a length, ±2^60 for a frame origin, ±2^40 angle units): the count, rounded exactly once and saturated at the ends of `i128`.",
+              "name": "OutOfRange",
+              "shape": "struct"
+            },
+            {
+              "doc": "A length that must be positive (a radius, a thickness, a depth) is zero or negative.",
+              "name": "NotPositive",
+              "shape": "unit"
+            },
+            {
+              "doc": "A positive length rounds to zero steps: the finer step at which it does not, if one does.",
+              "name": "RoundsToZero",
+              "shape": "struct"
+            },
+            {
+              "doc": "A double that is NaN or infinite.",
+              "name": "NotFinite",
+              "shape": "unit"
+            },
+            {
+              "doc": "A decimal beyond the largest finite double, which no double holds.",
+              "name": "RealOutOfRange",
+              "shape": "unit"
+            },
+            {
+              "doc": "Text that is not a decimal number.",
+              "name": "Decimal",
+              "shape": "tuple"
+            },
+            {
+              "doc": "A direction given as two numbers that are both zero.",
+              "name": "ZeroDirection",
+              "shape": "unit"
+            },
+            {
+              "doc": "A scale factor that is zero or negative, or whose exact ratio needs more than 64 bits in its numerator or denominator.",
+              "name": "ScaleOutOfRange",
+              "shape": "unit"
+            },
+            {
+              "doc": "The numbers layer refused (a budget its bounds rule out, reported, never answered).",
+              "name": "Numeric",
+              "shape": "tuple"
+            },
+            {
+              "doc": "A report could not grow: the allocator refused.",
+              "name": "OutOfMemory",
+              "shape": "unit"
+            }
+          ],
+          "module": "geom_exchange::error",
+          "name": "ExchangeError",
+          "non_exhaustive": false
+        }
+      ],
       "family": [],
       "file": "projects/engines/geometry/crates/geom-exchange/src/lib.rs",
       "folder": "projects/engines/geometry/crates/geom-exchange",
@@ -2384,12 +2454,248 @@
       "job": "What every format crate shares: units as exact ratios, numbers to grid, frames from files, the ISO 10303-42 mapping, the hardened XML and zip reader, reports.",
       "kind": "kernel",
       "layer": "12",
-      "modules": [],
+      "modules": [
+        {
+          "cost": "a few words; formatting writes one sentence.",
+          "does": "[`ExchangeError`] names each refusal with what a caller needs to act on it: the exact rounded value of a number past the grid's range, the finer step that would hold a length that rounds to zero, or the numbers layer's own error.",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-exchange/src/error.rs",
+          "guarantees": [
+            "**A refusal is typed, never a guess.** Every function of the crate returns one of these kinds instead of a rounded, clamped or defaulted value.",
+            "**Plain data.** `Copy`, compared with `==`, with a `Display` in words."
+          ],
+          "job": "Why an exchange step refused: the one error type of the crate's units, numbers, frames and reports.",
+          "method": {
+            "none": "the error kinds of chapter 24.8's import and 24.10's export, with chapter 25's rule that an error says what to do next."
+          },
+          "path": "geom_exchange::error",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
+          "cost": "a short decimal, a few 128-bit multiplications and one division; otherwise one frame conversion per value: for a decimal, exact integer arithmetic of at most 1536 bits; for a double in metres, a double-double product and one exact rounding. [`map_coordinate`] converts twice when the coordinate lies beyond 2^40 steps, the second time to learn whether it was exact. [`positive_length`] converts at most twice more when the length rounds to zero. No allocation.",
+          "does": "[`length`] and [`length_of_double`] take a length in a unit to steps of a grid step; [`positive_length`] and [`positive_length_of_double`] do the same for a length the schema says is positive (IFC's `IfcPositiveLengthMeasure`, a radius or a depth), refusing one that rounds to zero with the finer step that would hold it; [`map_coordinate`] takes a map coordinate as far from zero as a frame origin may be (2^60 steps), for frames from files; [`angle`] and [`angle_of_double`] take an angle to section 17.2's angle units. Each returns the count and whether it was exact ([`Gridded`]).",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-exchange/src/grid.rs",
+          "guarantees": [
+            "**One rounding, half to even, from the exact value.** The count is the exact value rounded once to the nearest whole count, ties to the even one, and [`Gridded::is_exact`] says whether it was already whole. A decimal never passes through a double.",
+            "**Never out of range silently.** A length beyond ±(2^40 − 1) steps, a map coordinate beyond ±2^60 steps and an angle beyond ±(2^40 − 1) angle units are refused with [`ExchangeError::OutOfRange`], carrying the exactly rounded count.",
+            "**A positive length is positive.** Zero or negative is [`ExchangeError::NotPositive`]; one that rounds to zero steps is [`ExchangeError::RoundsToZero`] with the first finer step that holds it, never a zero length.",
+            "**The radian is never rounded here.** An angle in radians is [`ExchangeError::InexactAngleUnit`]: it stays a double (chapter 24.8, \"Angles and trims\")."
+          ],
+          "job": "Numbers to grid: a length or an angle from a file, given as decimal text or as a double, rounded once to a whole count of grid steps or angle units, half to even, never through another rounding.",
+          "method": {
+            "links": [
+              "projects/engines/geometry/architecture/24-file-format-exchange.md",
+              "projects/engines/geometry/architecture/17-survey-terrain-civil.md",
+              "https://doi.org/10.1109/IEEESTD.2019.8766229"
+            ],
+            "text": "chapter 24.8's \"Numbers to grid\" (`projects/engines/geometry/architecture/24-file-format-exchange.md`), through the frame conversion of chapter 17.1 (`projects/engines/geometry/architecture/17-survey-terrain-civil.md`), which rounds to nearest, ties to even (IEEE 754-2019's roundTiesToEven, section 4.3.1, <https://doi.org/10.1109/IEEESTD.2019.8766229>)."
+          },
+          "path": "geom_exchange::grid",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
+          "cost": "three map coordinates ([`crate::grid::map_coordinate`]), a greatest common divisor of 128-bit integers for the direction and each scale, and for an inexact direction 31 steps of long division in 384-bit integers. No allocation.",
+          "does": "[`MapConversion`] holds the conversion's numbers as the file gives them, as exact decimals. [`place`] turns it, with the target system's id, the map's length unit, the project's length unit and the grid step, into a [`Placement`]: the [`FrameRecord`], whether its origin and rotation are exact, and the factors the frame cannot hold.",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-exchange/src/map.rs",
+          "guarantees": [
+            "**Nothing guessed.** Every number comes from the conversion as given; an omitted Scale or factor is IFC's documented 1.0, and an omitted direction is the easting axis.",
+            "**Exact where it can be, and says so.** The origin is exact when each value lies on the grid, the rotation when the direction's reduced integers fit 31 bits, the scale always (an exact ratio, or refused); [`Placement`] reports each.",
+            "**Heights are never scaled by the frame.** A height factor other than one is returned in the residual, never folded into the frame.",
+            "**Refused, not clamped.** An origin beyond ±2^60 steps is [`ExchangeError::OutOfRange`]; a zero direction is [`ExchangeError::ZeroDirection`]; a scale or factor that is not positive or whose exact ratio needs more than 64 bits is [`ExchangeError::ScaleOutOfRange`]."
+          ],
+          "job": "Frames from files: IFC's `IfcMapConversion` and `IfcMapConversionScaled` made into chapter 17.1's frame record, with local coordinates becoming frame coordinates unchanged.",
+          "method": {
+            "links": [
+              "projects/engines/geometry/architecture/24-file-format-exchange.md",
+              "projects/engines/geometry/architecture/17-survey-terrain-civil.md",
+              "https://github.com/buildingSMART/IFC4.3.x-development/blob/7256780bd95fcc5b3653e07b3e8ec2f8389c9f3d/docs/schemas/resource/IfcRepresentationResource/Entities/IfcMapConversionScaled.md",
+              "https://www-cs-faculty.stanford.edu/~knuth/taocp.html"
+            ],
+            "text": "chapter 24.8's \"Frames from files\" and chapter 17.1's frame record (`projects/engines/geometry/architecture/24-file-format-exchange.md`, `projects/engines/geometry/architecture/17-survey-terrain-civil.md`), with `IfcMapConversion` and `IfcMapConversionScaled` as IFC 4.3 defines them (<https://github.com/buildingSMART/IFC4.3.x-development/blob/7256780bd95fcc5b3653e07b3e8ec2f8389c9f3d/docs/schemas/resource/IfcRepresentationResource/Entities/IfcMapConversionScaled.md>); binary long division (D. E. Knuth, *The Art of Computer Programming*, vol. 2, section 4.3.1, <https://www-cs-faculty.stanford.edu/~knuth/taocp.html>)."
+          },
+          "path": "geom_exchange::map",
+          "provenance": [
+            {
+              "licence": "CC-BY-ND-4.0",
+              "link": "https://github.com/buildingSMART/IFC4.3.x-development/blob/7256780bd95fcc5b3653e07b3e8ec2f8389c9f3d/docs/schemas/resource/IfcRepresentationResource/Entities/IfcMapConversionScaled.md",
+              "method_note": null,
+              "name": "IFC 4.3 schema documentation (buildingSMART)",
+              "notice": [],
+              "pinned": true,
+              "purpose": "for the order and meaning of Scale, the three factors, the rotation and the translation. No text adapted.",
+              "take": "port-method"
+            }
+          ],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
+          "cost": "[`read`] and [`nearest`] are one exact parse (one pass over the text) and the core parser's, at most a few hundred integer operations; [`shortest`] is the core formatter's shortest mode into a 32-byte buffer on the stack and one exact parse of its digits. No allocation.",
+          "does": "[`read`] parses decimal text exactly (`geom-math`'s `Decimal`) and gives the nearest double, ties to even, keeping the sign of a zero; [`nearest`] does the same for a `Decimal`. [`shortest`] writes a double as [`Shortest`]: the decimal with the fewest significant digits that reads back to exactly that double, and among those the closest to it, with whether the double was −0. Chapter 24.8 asks that such a real \"come back as the same decimal on export when it had at most 15 significant digits\": a decimal of at most 15 digits is the only one of so few digits that reads back to its nearest double (two such decimals are at least 10^−15 of their size apart, a double's rounding interval at most 2^−52), so the shortest is that decimal.",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-exchange/src/real.rs",
+          "guarantees": [
+            "**Round trip, bit for bit.** For every finite double x, `read` of `shortest(x)`'s text is x, with the same bits, −0 and the subnormals included.",
+            "**Shortest, then closest.** No decimal with fewer significant digits reads back to x, and among those with as few, the one written is the closest to x.",
+            "**Nearest on reading.** `nearest(d)` is the double nearest the decimal's exact value, ties to even; a decimal beyond the largest finite double is [`ExchangeError::RealOutOfRange`], never an infinity, and a decimal below the smallest subnormal's half reads as a zero of its sign.",
+            "**Finite only.** NaN and the infinities are [`ExchangeError::NotFinite`]."
+          ],
+          "job": "Reals that are not lengths (a parameter, a weight, a ratio): read from decimal text to the nearest double, and written back as the shortest decimal that reads back to the same double.",
+          "method": {
+            "links": [
+              "https://doi.org/10.1145/93542.93557",
+              "https://doi.org/10.1002/spe.2984",
+              "https://doi.org/10.1145/93542.93559",
+              "https://doi.org/10.1145/1806596.1806623"
+            ],
+            "text": "correctly rounded decimal-to-binary conversion (W. D. Clinger, \"How to read floating point numbers accurately\", PLDI 1990, <https://doi.org/10.1145/93542.93557>; D. Lemire, \"Number parsing at a gigabyte per second\", *Software: Practice and Experience* 51 (2021), <https://doi.org/10.1002/spe.2984>) and shortest binary-to-decimal conversion (G. L. Steele Jr. and J. L. White, \"How to print floating-point numbers accurately\", PLDI 1990, <https://doi.org/10.1145/93542.93559>; F. Loitsch, \"Printing floating-point numbers quickly and accurately with integers\", PLDI 2010, <https://doi.org/10.1145/1806596.1806623>), as Rust's core library implements them."
+          },
+          "path": "geom_exchange::real",
+          "provenance": [
+            {
+              "licence": "MIT OR Apache-2.0",
+              "link": "https://github.com/rust-lang/rust/blob/b940084d7eb6a299eb4bfeb8e34901bc051e7ac4/library/core/src/num/imp/flt2dec/mod.rs",
+              "method_note": null,
+              "name": "Rust core library",
+              "notice": [],
+              "pinned": true,
+              "purpose": "for the guarantees of the shortest mode `{:e}` formats with (read back correctly, shortest, closest among the shortest), at the release the toolchain pins (1.99.0).",
+              "take": "port-method"
+            },
+            {
+              "licence": "MIT OR Apache-2.0",
+              "link": "https://github.com/rust-lang/rust/blob/b940084d7eb6a299eb4bfeb8e34901bc051e7ac4/library/core/src/num/imp/dec2flt/mod.rs",
+              "method_note": null,
+              "name": "Rust core library",
+              "notice": [],
+              "pinned": true,
+              "purpose": "for the guarantee that `f64`'s parser rounds once, half to even, at the same release.",
+              "take": "port-method"
+            },
+            {
+              "licence": "Apache-2.0",
+              "link": "https://github.com/tangency-labs/solidcore/blob/78d1eb12d222652219313c12787b65389c4d9db8/crates/step-export/src/lib.rs",
+              "method_note": null,
+              "name": "solidcore (step-export)",
+              "notice": [],
+              "pinned": true,
+              "purpose": "for writing a STEP real by the core library's shortest formatting (`real`). No code copied.",
+              "take": "port-method"
+            }
+          ],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
+          "cost": "each record is an amortised constant-time append; [`HealTolerance::propose`] is one numbers-to-grid conversion. A report holds its entries and the text of their keys, nothing more.",
+          "does": "[`ImportReport`] is chapter 24.8's step 7: the source's SHA-256, the format, the units and where each came from, the frame, the declared precision, the healing tolerance proposed and used ([`HealTolerance`]), each body's class, Tolerant flag, bounds and import deviation ([`BodyReport`]), and every rounding ([`Rounding`]), healing action ([`HealAction`]), unsupported entity ([`Unsupported`]) and failed item ([`Failed`]). [`ExportReport`] is chapter 24.10's: the target format, its units, the bound stated in the file, every value that did not write exactly ([`Rounding`] again, from the written decimal back), and whether the caller accepted an invalid rounding. A format crate fills a report as it goes, through `record_*` methods that refuse rather than fail silently when memory runs out; the report is plain data, compared with `==`, and the same file and options give the same report.",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-exchange/src/report.rs",
+          "guarantees": [
+            "**Everything recorded, in order.** Each `record_*` appends; nothing is merged, sorted or dropped, so the report lists events in the order the reader met them, which is the file's order for a deterministic reader.",
+            "**One failed element is one failed item.** A failed item is an entry, never the end of the report.",
+            "**Refused, not lost.** An append the allocator cannot make is [`ExchangeError::OutOfMemory`], and the report is left as it was.",
+            "**The healing tolerance stays in its range.** A proposal is within 640 to 6,400 steps; a used value outside one step to 6,400 is refused with [`ExchangeError::OutOfRange`]."
+          ],
+          "job": "Import and export reports as data: what a file declared, what the importer or exporter chose, and every rounding, healing action, unsupported item and failed item, in the order they happened.",
+          "method": {
+            "links": [
+              "projects/engines/geometry/architecture/24-file-format-exchange.md",
+              "projects/engines/geometry/architecture/06-numbers.md"
+            ],
+            "text": "chapter 24.8's import report (step 7, and `ε_heal`) and chapter 24.10's export (`projects/engines/geometry/architecture/24-file-format-exchange.md`), with the tolerance ladder of `geom_num::ladder` (`HEAL_DEFAULT`, `HEAL_CAP`; chapter 6.5, `projects/engines/geometry/architecture/06-numbers.md`)."
+          },
+          "path": "geom_exchange::report",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
+          "cost": "constant time; [`metre`], [`conversion_based`] and [`steps_per`] reduce by a greatest common divisor (at most 186 remainder steps of 128-bit integers). No allocation.",
+          "does": "[`SiPrefix`] is the sixteen prefixes IFC's `IfcSIPrefix` and ISO 10303-41's `si_prefix` name, and [`metre`] the metre with one of them. [`NamedLength`] holds the conversion-based length units by their definitions: the inch, foot, yard, mile and thou of the international yard and pound, and the US survey foot. [`conversion_based`] makes the unit a file defines as a decimal factor of another (STEP's and IFC's conversion-based units), so a file's own factor always decides, never a name. [`steps_per`] gives a unit's exact ratio of grid steps at a step, and [`AngleUnit::angle_units`] an angle unit's count of section 17.2's angle units (1/2,500 of an arc-second; 3,240,000,000 to a turn).",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-exchange/src/unit.rs",
+          "guarantees": [
+            "**Exact, from the definitions.** Every length unit is the exact reduced ratio its defining document gives: the international yard of 0.9144 m and its inch, foot, mile and thou, and the US survey foot of 1,200/3,937 m. No unit is rounded.",
+            "**The file decides.** [`conversion_based`] multiplies the file's decimal factor into its base unit exactly; nothing here maps a unit's name to a factor.",
+            "**In range or refused.** A unit outside 2^−32 to 2^32 metres (a frame's linear unit range) is refused with [`ExchangeError::UnitOutOfRange`], never rounded into range.",
+            "**Angles in whole units or not at all.** The degree, gon, arc-minute and arc-second are whole counts of angle units; the radian is not, and says so."
+          ],
+          "job": "The exact unit table: every length unit an exchange file declares as an exact ratio of metres and of grid steps, and every angle unit as a whole count of angle units, or none.",
+          "method": {
+            "links": [
+              "https://doi.org/10.6028/NIST.SP.811e2008",
+              "https://www.federalregister.gov/d/2020-21902",
+              "https://www.bipm.org/en/publications/si-brochure",
+              "https://github.com/buildingSMART/IFC4.3.x-development/blob/7256780bd95fcc5b3653e07b3e8ec2f8389c9f3d/docs/schemas/resource/IfcMeasureResource/Types/IfcSIPrefix.md",
+              "projects/engines/geometry/architecture/17-survey-terrain-civil.md",
+              "https://www-cs-faculty.stanford.edu/~knuth/taocp.html"
+            ],
+            "text": "the definitions of NIST Special Publication 811 (2008 edition), \"Guide for the Use of the International System of Units\", Appendix B (<https://doi.org/10.6028/NIST.SP.811e2008>): 1 in = 2.54 cm, 1 ft = 0.3048 m, 1 yd = 0.9144 m, 1 mi = 1,609.344 m, 1 mil = 0.001 in exactly, and the US survey foot = 1,200/3,937 m, which NIST and NOAA deprecated from 1 January 2023 (Federal Register 85 FR 62698, <https://www.federalregister.gov/d/2020-21902>) and which survey files keep using; the SI prefixes of the BIPM's SI Brochure, 9th edition (2019), section 3 (<https://www.bipm.org/en/publications/si-brochure>), as IFC's `IfcSIPrefix` (<https://github.com/buildingSMART/IFC4.3.x-development/blob/7256780bd95fcc5b3653e07b3e8ec2f8389c9f3d/docs/schemas/resource/IfcMeasureResource/Types/IfcSIPrefix.md>) lists them; angle units as section 17.2 defines them (`projects/engines/geometry/architecture/17-survey-terrain-civil.md`); exact rationals reduced by Euclid's algorithm (D. E. Knuth, *The Art of Computer Programming*, vol. 2, section 4.5.2, <https://www-cs-faculty.stanford.edu/~knuth/taocp.html>)."
+          },
+          "path": "geom_exchange::unit",
+          "provenance": [
+            {
+              "licence": "CC-BY-ND-4.0",
+              "link": "https://github.com/buildingSMART/IFC4.3.x-development/blob/7256780bd95fcc5b3653e07b3e8ec2f8389c9f3d/docs/schemas/resource/IfcMeasureResource/Types/IfcSIPrefix.md",
+              "method_note": null,
+              "name": "IFC 4.3 schema documentation (buildingSMART)",
+              "notice": [],
+              "pinned": true,
+              "purpose": "for the list of SI prefixes an IFC file may name. No text copied.",
+              "take": "port-method"
+            },
+            {
+              "licence": "Apache-2.0",
+              "link": "https://github.com/tangency-labs/solidcore/blob/78d1eb12d222652219313c12787b65389c4d9db8/crates/step-import/src/map.rs",
+              "method_note": null,
+              "name": "solidcore (step-import)",
+              "notice": [],
+              "pinned": true,
+              "purpose": "for how a STEP reader resolves `si_unit` prefixes and `conversion_based_unit` factors (`unit_factor`). Its factors are doubles; here every factor is an exact ratio.",
+              "take": "port-method"
+            }
+          ],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
+          "cost": "a few 128-bit divisions, then one step of long division per decimal place, at most 40 places; a greatest common divisor for the deviation. No allocation.",
+          "does": "a count of n steps is n/(u·S) units exactly (a unit of u = p/q metres, S steps per metre). [`exact`] writes it when that rational is a terminating decimal of at most 38 digits: every metric value is (one q0 step is 0.00015625 mm). [`shortest`] writes the decimal with the fewest significant digits that the grid conversion ([`crate::grid::length`]) reads back to n, and among those the closest to n/(u·S): in inches or feet a grid value generally does not terminate, and this is what chapter 24.10 writes. [`length`] is the export rule: exact when it can be, shortest otherwise. Each says what it wrote, whether it was exact, and its exact difference from the grid value in steps ([`Written::deviation`]), which is under half a step.",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-exchange/src/write.rs",
+          "guarantees": [
+            "**Reads back.** [`crate::grid::length`] of what [`shortest`] or [`length`] writes, in the same unit and step, is n, exactly.",
+            "**Shortest, then closest.** No decimal with a coarser last place reads back to n; among those with the same last place, the one written is the closest to n/(u·S), ties to the even digit.",
+            "**Exact when it says so.** [`exact`] writes n/(u·S) itself, or nothing; [`Written::is_exact`] is true exactly when the deviation is zero.",
+            "**The difference is exact.** [`Written::deviation`] is the written decimal's value in steps less n, as a reduced fraction, of magnitude at most one half."
+          ],
+          "job": "Grid values written as decimals in a file's unit: exactly where the value terminates, and otherwise the shortest decimal that reads back to the same grid count, with the difference.",
+          "method": {
+            "links": [
+              "https://doi.org/10.1145/93542.93559",
+              "https://www-cs-faculty.stanford.edu/~knuth/taocp.html",
+              "projects/engines/geometry/architecture/24-file-format-exchange.md"
+            ],
+            "text": "the shortest decimal in a rounding interval, by digit generation of its ends (G. L. Steele Jr. and J. L. White, \"How to print floating-point numbers accurately\", PLDI 1990, <https://doi.org/10.1145/93542.93559>, free-format printing), here on the exact rational interval of a grid count rather than of a double; long division one digit at a time (D. E. Knuth, *The Art of Computer Programming*, vol. 2, section 4.3.1, <https://www-cs-faculty.stanford.edu/~knuth/taocp.html>); chapter 24.10's \"Commit numbers\" (`projects/engines/geometry/architecture/24-file-format-exchange.md`)."
+          },
+          "path": "geom_exchange::write",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        }
+      ],
       "name": "geom-exchange",
       "provenance": [],
       "sections": "24.7, 24.8, 24.10 and 24.11; open question OQ-24.6; 30.5, in the kernel architecture (`projects/engines/geometry/architecture/`).",
       "spdx": null,
-      "status": "scaffold only; built by pieces G413, G414, G418, G436.",
+      "status": "scaffold only; built by pieces G413, G414, G418, G436; G413 is done.",
       "summary": "Spare Kit geometry kernel: what every format crate shares."
     },
     {
@@ -9985,6 +10291,28 @@
     },
     {
       "licence": "CC-BY-ND-4.0",
+      "link": "https://github.com/buildingSMART/IFC4.3.x-development/blob/7256780bd95fcc5b3653e07b3e8ec2f8389c9f3d/docs/schemas/resource/IfcMeasureResource/Types/IfcSIPrefix.md",
+      "method_note": null,
+      "name": "IFC 4.3 schema documentation (buildingSMART)",
+      "pinned": true,
+      "take": "port-method",
+      "used_by": [
+        "projects/engines/geometry/crates/geom-exchange/src/unit.rs"
+      ]
+    },
+    {
+      "licence": "CC-BY-ND-4.0",
+      "link": "https://github.com/buildingSMART/IFC4.3.x-development/blob/7256780bd95fcc5b3653e07b3e8ec2f8389c9f3d/docs/schemas/resource/IfcRepresentationResource/Entities/IfcMapConversionScaled.md",
+      "method_note": null,
+      "name": "IFC 4.3 schema documentation (buildingSMART)",
+      "pinned": true,
+      "take": "port-method",
+      "used_by": [
+        "projects/engines/geometry/crates/geom-exchange/src/map.rs"
+      ]
+    },
+    {
+      "licence": "CC-BY-ND-4.0",
       "link": "https://github.com/buildingSMART/IFC4.3.x-development/tree/7256780bd95fcc5b3653e07b3e8ec2f8389c9f3d/docs/schemas",
       "method_note": null,
       "name": "IFC 4.3 documentation (buildingSMART)",
@@ -10202,6 +10530,28 @@
     },
     {
       "licence": "MIT OR Apache-2.0",
+      "link": "https://github.com/rust-lang/rust/blob/b940084d7eb6a299eb4bfeb8e34901bc051e7ac4/library/core/src/num/imp/dec2flt/mod.rs",
+      "method_note": null,
+      "name": "Rust core library",
+      "pinned": true,
+      "take": "port-method",
+      "used_by": [
+        "projects/engines/geometry/crates/geom-exchange/src/real.rs"
+      ]
+    },
+    {
+      "licence": "MIT OR Apache-2.0",
+      "link": "https://github.com/rust-lang/rust/blob/b940084d7eb6a299eb4bfeb8e34901bc051e7ac4/library/core/src/num/imp/flt2dec/mod.rs",
+      "method_note": null,
+      "name": "Rust core library",
+      "pinned": true,
+      "take": "port-method",
+      "used_by": [
+        "projects/engines/geometry/crates/geom-exchange/src/real.rs"
+      ]
+    },
+    {
+      "licence": "MIT OR Apache-2.0",
       "link": "https://github.com/rust-lang/rustdoc-types/blob/2e63bdc44b94e86fe12d6e0034d1ed9c2ac6e9dc/src/lib.rs",
       "method_note": null,
       "name": "`rustdoc-types`",
@@ -10242,6 +10592,28 @@
       "take": "port-method",
       "used_by": [
         "projects/engines/geometry/crates/geom-test/src/map/classes.rs"
+      ]
+    },
+    {
+      "licence": "Apache-2.0",
+      "link": "https://github.com/tangency-labs/solidcore/blob/78d1eb12d222652219313c12787b65389c4d9db8/crates/step-export/src/lib.rs",
+      "method_note": null,
+      "name": "solidcore (step-export)",
+      "pinned": true,
+      "take": "port-method",
+      "used_by": [
+        "projects/engines/geometry/crates/geom-exchange/src/real.rs"
+      ]
+    },
+    {
+      "licence": "Apache-2.0",
+      "link": "https://github.com/tangency-labs/solidcore/blob/78d1eb12d222652219313c12787b65389c4d9db8/crates/step-import/src/map.rs",
+      "method_note": null,
+      "name": "solidcore (step-import)",
+      "pinned": true,
+      "take": "port-method",
+      "used_by": [
+        "projects/engines/geometry/crates/geom-exchange/src/unit.rs"
       ]
     },
     {
