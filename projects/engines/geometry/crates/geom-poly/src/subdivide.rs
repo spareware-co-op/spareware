@@ -58,7 +58,7 @@ use geom_num::{NumError, Sign};
 use geom_run::{ChunkPlan, Exec, Phase, RunError, WorkMeter};
 
 use crate::convex::Piece;
-use crate::cut::{Clipped, clip_at, local_cuts_at, meetings};
+use crate::cut::{Clipped, clip_at, local_cuts_with, meetings};
 use crate::order::{Meeting, Span};
 use crate::plane::canonical;
 #[cfg(doc)]
@@ -362,15 +362,21 @@ fn solve(
         return solid_leaf(node, entry, meter);
     }
     let pieces: Vec<Piece> = node.polygons.iter().map(|p| p.piece.clone()).collect();
-    let cuts = local_cuts_at(&pieces, &node.points, meter)?;
-    // Each polygon's span from its corners' points, which the node holds, as classify would make
-    // it from points found again: the node's are made once and kept down the tree.
+    // Each polygon's face in canonical form, and its span from its corners' points, which the
+    // node holds, made once for the local cuts and the classifier both: the points are made once
+    // and kept down the tree, and neither finds them again.
     let mut held = Vec::with_capacity(node.polygons.len());
+    let mut planes = Vec::with_capacity(node.polygons.len());
+    let mut spans = Vec::with_capacity(node.polygons.len());
     for (at, polygon) in node.polygons.iter().enumerate() {
         let points = node.points.get(at);
         let span = points.and_then(|points| Span::of(points.iter().copied()));
-        held.push((polygon, canonical(&polygon.piece.face)?, span));
+        let face = canonical(&polygon.piece.face)?;
+        planes.push(face.plane);
+        spans.push(span);
+        held.push((polygon, face, span));
     }
+    let cuts = local_cuts_with(&pieces, &node.points, (&planes, &spans), meter)?;
     let mut classified = classify_with(&node.cell, &node.reference, &held, &cuts, meter)?;
     for piece in &mut classified {
         piece.polygon = node

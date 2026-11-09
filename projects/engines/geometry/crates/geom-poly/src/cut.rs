@@ -335,22 +335,33 @@ pub(crate) fn local_cuts_at(
         planes.push(canonical(&polygon.face)?.plane);
     }
     let spans: Vec<Option<Span>> = points.iter().map(|p| Span::of(p.iter().copied())).collect();
+    local_cuts_with(polygons, points, (&planes, &spans), meter)
+}
+
+/// [`local_cuts_at`], with each polygon's face in canonical form and its span, made from its corner
+/// points as [`Span::of`] makes it, given: a caller that needs them too makes them once.
+pub(crate) fn local_cuts_with(
+    polygons: &[Piece],
+    points: &[Vec<Option<Meeting>>],
+    (planes, spans): (&[Plane], &[Option<Span>]),
+    meter: &mut WorkMeter<'_>,
+) -> Result<Vec<Vec<Piece>>, ConvexError> {
     let mut out: Vec<Vec<Piece>> = Vec::with_capacity(polygons.len());
     let mine = polygons
         .iter()
         .enumerate()
-        .zip(&planes)
+        .zip(planes)
         .zip(points)
-        .zip(&spans);
+        .zip(spans);
     for ((((at, polygon), own), own_points), own_span) in mine {
         // Each piece with its corners' points, made once for every plane it is read against.
         let mut pieces = alloc::vec![(polygon.clone(), own_points.clone())];
         let others = polygons
             .iter()
             .enumerate()
-            .zip(&planes)
+            .zip(planes)
             .zip(points)
-            .zip(&spans);
+            .zip(spans);
         for ((((other_at, other), plane), other_points), other_span) in others {
             if other_at == at {
                 continue;
