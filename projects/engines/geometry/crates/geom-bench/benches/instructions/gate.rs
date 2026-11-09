@@ -3310,6 +3310,13 @@ pub mod entity {
     }
 
     #[library_benchmark(teardown = verify)]
+    #[bench::typical(leak("entity/zone_insert/typical"))]
+    fn zone_insert(run: &'static mut Named) -> &'static mut Named {
+        run.bench.measure();
+        run
+    }
+
+    #[library_benchmark(teardown = verify)]
     #[bench::typical(leak("entity/under/typical"))]
     fn under(run: &'static mut Named) -> &'static mut Named {
         run.bench.measure();
@@ -3318,7 +3325,7 @@ pub mod entity {
 
     library_benchmark_group!(
         name = entity;
-        benchmarks = polyline, arrange, under
+        benchmarks = polyline, arrange, zone_insert, under
     );
 }
 
