@@ -116,8 +116,125 @@ enum Outcome {
     Dropped,
     /// It stays whole.
     Leaf,
-    /// The lower box and the upper box.
-    Split(Box<(Node, Node)>),
+    /// It splits as the plan says.
+    Split(Box<Plan>),
+}
+
+/// How a box splits: found on the pool from the box borrowed, then carried out on the box itself,
+/// so that a polygon that goes whole into one half is moved there, with its points, not copied.
+struct Plan {
+    /// The axis the split is across, and the half step it is at.
+    axis: usize,
+    at: i64,
+    /// The vector at the upper box's reference point.
+    reference: Winding,
+    /// Where each polygon goes, in the box's order.
+    places: Vec<Place>,
+}
+
+/// Where a split puts one polygon.
+enum Place {
+    /// Whole into the upper box.
+    Above,
+    /// Whole into the lower box.
+    Below,
+    /// Its part above, with that part's points, and its part below, with its points.
+    Split(Box<[(Polygon, Vec<Option<Meeting>>); 2]>),
+}
+
+/// The polygons, sources and points of one half, in the box's order.
+type Half = (Vec<Polygon>, Vec<usize>, Vec<Vec<Option<Meeting>>>);
+
+/// Put one polygon of a split where `place` says: `whole` gives the polygon and its points, read
+/// only where it goes whole.
+fn put(
+    (below, above): (&mut Half, &mut Half),
+    (place, source): (Place, usize),
+    whole: impl FnOnce() -> (Polygon, Vec<Option<Meeting>>),
+) {
+    let push = |half: &mut Half, (polygon, points): (Polygon, Vec<Option<Meeting>>)| {
+        half.0.push(polygon);
+        half.1.push(source);
+        half.2.push(points);
+    };
+    match place {
+        Place::Above => push(above, whole()),
+        Place::Below => push(below, whole()),
+        Place::Split(parts) => {
+            let [up, down] = *parts;
+            push(above, up);
+            push(below, down);
+        }
+    }
+}
+
+/// The lower box and the upper box of `node`'s split by `plan`, each polygon moved into its half.
+fn split(node: Node, plan: Plan) -> (Node, Node) {
+    let head = (node.key, node.depth, node.cell, node.reference);
+    let (mut below, mut above) = (Half::default(), Half::default());
+    let each = node.polygons.into_iter().zip(node.sources).zip(node.points);
+    for (((polygon, source), points), place) in each.zip(plan.places) {
+        put((&mut below, &mut above), (place, source), || {
+            (polygon, points)
+        });
+    }
+    halves(head, (plan.axis, plan.at, plan.reference), (below, above))
+}
+
+/// [`split`] of a box that is only borrowed: a polygon that goes whole is copied.
+fn split_copied(node: &Node, plan: Plan) -> (Node, Node) {
+    let head = (node.key, node.depth, node.cell, node.reference.clone());
+    let (mut below, mut above) = (Half::default(), Half::default());
+    let each = node.polygons.iter().zip(&node.sources).zip(&node.points);
+    for (((polygon, source), points), place) in each.zip(plan.places) {
+        put((&mut below, &mut above), (place, *source), || {
+            (polygon.clone(), points.clone())
+        });
+    }
+    halves(head, (plan.axis, plan.at, plan.reference), (below, above))
+}
+
+/// The two boxes of a split at `at` across `axis` of the box `head` (its key, depth, cell and
+/// vector), holding `below` and `above`; the upper box's vector is `reference`.
+fn halves(
+    (key, depth, cell, lower): (u128, u32, Cell, Winding),
+    (axis, at, reference): (usize, i64, Winding),
+    (below, above): (Half, Half),
+) -> (Node, Node) {
+    let moved = |corner: [i64; 3]| {
+        let mut i = 0..;
+        corner.map(|v| if i.next() == Some(axis) { at } else { v })
+    };
+    let under = Cell {
+        low: cell.low,
+        high: moved(cell.high),
+    };
+    let over = Cell {
+        low: moved(cell.low),
+        high: cell.high,
+    };
+    let bit = 1u128.checked_shl(127u32.saturating_sub(depth)).unwrap_or(0);
+    let depth = depth.saturating_add(1);
+    (
+        Node {
+            key,
+            depth,
+            cell: under,
+            reference: lower,
+            polygons: below.0,
+            sources: below.1,
+            points: below.2,
+        },
+        Node {
+            key: key | bit,
+            depth,
+            cell: over,
+            reference,
+            polygons: above.0,
+            sources: above.1,
+            points: above.2,
+        },
+    )
 }
 
 /// The box around `polygons`, in half steps, a step clear of them with its faces on odd half
@@ -272,82 +389,46 @@ fn divide(
         };
         let n = [0, 1, 2].map(|i| if i == axis { 2 } else { 0 });
         let plane = Plane::new(n, i128::from(at).saturating_neg())?;
-        let mut below = (Vec::new(), Vec::new(), Vec::new());
-        let mut above = (Vec::new(), Vec::new(), Vec::new());
+        // Where each polygon would go; nothing is copied until the split is taken.
+        let mut places = Vec::with_capacity(count);
+        let mut parts = 0usize;
         let mut in_plane = false;
-        let each = node.polygons.iter().zip(&node.sources).zip(&node.points);
-        for ((polygon, source), points) in each {
+        for (polygon, points) in node.polygons.iter().zip(&node.points) {
             meter.charge(1)?;
-            let part = |piece: Piece| Polygon {
-                piece,
-                entry: polygon.entry,
+            let part = |piece: Piece| {
+                let points = meetings(&piece);
+                let polygon = Polygon {
+                    piece,
+                    entry: polygon.entry,
+                };
+                (polygon, points)
             };
-            match clip_at(&polygon.piece, points, &plane)? {
-                Clipped::Front => {
-                    above.0.push(polygon.clone());
-                    above.1.push(*source);
-                    above.2.push(points.clone());
-                }
-                Clipped::Back => {
-                    below.0.push(polygon.clone());
-                    below.1.push(*source);
-                    below.2.push(points.clone());
-                }
+            let goes = match clip_at(&polygon.piece, points, &plane)? {
+                Clipped::Front => Place::Above,
+                Clipped::Back => Place::Below,
                 Clipped::Split(front, back) => {
-                    above.2.push(meetings(&front));
-                    above.0.push(part(front));
-                    above.1.push(*source);
-                    below.2.push(meetings(&back));
-                    below.0.push(part(back));
-                    below.1.push(*source);
+                    parts = parts.saturating_add(1);
+                    Place::Split(Box::new([part(front), part(back)]))
                 }
                 Clipped::On => {
                     in_plane = true;
                     break;
                 }
-            }
+            };
+            places.push(goes);
         }
-        if in_plane || below.0.len().saturating_add(above.0.len()) >= enough {
+        // The two halves hold every polygon once, and each split one twice.
+        if in_plane || places.len().saturating_add(parts) >= enough {
             continue;
         }
         let reference =
             reference_above(&node.cell, axis, at, &node.reference, &node.polygons, meter)?;
-        let depth = node.depth.saturating_add(1);
-        let moved = |corner: [i64; 3]| {
-            let mut i = 0..;
-            corner.map(|v| if i.next() == Some(axis) { at } else { v })
-        };
-        let under = Cell {
-            low: node.cell.low,
-            high: moved(node.cell.high),
-        };
-        let over = Cell {
-            low: moved(node.cell.low),
-            high: node.cell.high,
-        };
-        let bit = 1u128
-            .checked_shl(127u32.saturating_sub(node.depth))
-            .unwrap_or(0);
-        return Ok(Outcome::Split(Box::new((
-            Node {
-                key: node.key,
-                depth,
-                cell: under,
-                reference: node.reference.clone(),
-                polygons: below.0,
-                sources: below.1,
-                points: below.2,
-            },
-            Node {
-                key: node.key | bit,
-                depth,
-                cell: over,
-                reference,
-                polygons: above.0,
-                sources: above.1,
-                points: above.2,
-            },
-        ))));
+        return Ok(Outcome::Split(Box::new(Plan {
+            axis,
+            at,
+            reference,
+            places,
+        })));
     }
     Ok(Outcome::Leaf)
 }
@@ -476,8 +557,8 @@ pub fn arrange_with(
             match outcome {
                 Outcome::Dropped => {}
                 Outcome::Leaf => units.push((node, true)),
-                Outcome::Split(children) => {
-                    let (under, over) = *children;
+                Outcome::Split(plan) => {
+                    let (under, over) = split(node, *plan);
                     for child in [under, over] {
                         if small(&child) {
                             units.push((child, false));
@@ -512,11 +593,19 @@ fn subtree(
 ) -> Result<Vec<Classified>, TraceError> {
     let mut out = Vec::new();
     let mut stack: Vec<Node> = Vec::new();
-    let first = divide(node, (leaf, solids), tests, meter)?;
-    take(node, first, (solids, &mut stack, &mut out), meter)?;
+    // The unit's box is borrowed, so its split copies; every box below it is the walk's own.
+    match divide(node, (leaf, solids), tests, meter)? {
+        Outcome::Dropped => {}
+        Outcome::Leaf => out.extend(solve(node, solids, meter)?),
+        Outcome::Split(plan) => {
+            let (under, over) = split_copied(node, *plan);
+            stack.push(over);
+            stack.push(under);
+        }
+    }
     while let Some(next) = stack.pop() {
         let outcome = divide(&next, (leaf, solids), tests, meter)?;
-        take(&next, outcome, (solids, &mut stack, &mut out), meter)?;
+        take(next, outcome, (solids, &mut stack, &mut out), meter)?;
     }
     Ok(out)
 }
@@ -524,16 +613,16 @@ fn subtree(
 /// What [`subtree`] does with a box's outcome: a leaf's pieces onto `out`, a split's two boxes
 /// onto `stack`, the lower last so it comes off first.
 fn take(
-    node: &Node,
+    node: Node,
     outcome: Outcome,
     (solids, stack, out): (&[Entry], &mut Vec<Node>, &mut Vec<Classified>),
     meter: &mut WorkMeter<'_>,
 ) -> Result<(), TraceError> {
     match outcome {
         Outcome::Dropped => {}
-        Outcome::Leaf => out.extend(solve(node, solids, meter)?),
-        Outcome::Split(children) => {
-            let (under, over) = *children;
+        Outcome::Leaf => out.extend(solve(&node, solids, meter)?),
+        Outcome::Split(plan) => {
+            let (under, over) = split(node, *plan);
             stack.push(over);
             stack.push(under);
         }
