@@ -10,6 +10,9 @@
 //! - **The ends of the line**: at t = ∞ the sign is that of the coefficient of t⁴, zero when it is
 //!   zero; the exact roots −1, 0 and 1 are read exactly.
 //! - **Degenerate**: the zero polynomial is zero at every root, a constant has its own sign.
+//! - **A half turn** (`Quartic::turned`, `RealRoot::turned`, t to −1 / t): every root turned is a
+//!   root of the turned quartic, and turned roots compare as −1 / t does, by the oracle, with 0
+//!   going to ∞ and 1 and −1 to each other.
 //!
 //! Seeds: the random test prints `seed: <hex>` and runs from a fixed default; `SPAREKIT_SEED=<hex>`
 //! replays another (chapter 28.17). Case counts are a tenth in debug builds.
@@ -31,7 +34,7 @@
 use std::cmp::Ordering;
 
 use geom_num::Sign;
-use geom_num::quartic::{Big, Piece, Quartic, RealRoot, sign_at_root};
+use geom_num::quartic::{Big, Piece, Quartic, RealRoot, compare, sign_at_root};
 
 /// The default seed of the random test here (G196b).
 const DEFAULT_SEED: u64 = 0x6196_b000_5eed_196b;
@@ -388,5 +391,93 @@ fn the_exact_roots_and_infinity_are_read_exactly() {
     assert_eq!(
         signs(&constant),
         [Sign::Negative, Sign::Negative, Sign::Negative, Sign::Zero]
+    );
+}
+
+/// The sign of −1 / a less −1 / b on the projective line, ∞ last, for real roots a and b.
+fn turned_order(a: Exact, b: Exact) -> Sign {
+    let zero = Exact::Ratio { p: 0, q: 1 };
+    let (za, zb) = (a.cmp(zero), b.cmp(zero));
+    match (za, zb) {
+        (Sign::Zero, Sign::Zero) => Sign::Zero,
+        (Sign::Zero, _) => Sign::Positive,
+        (_, Sign::Zero) => Sign::Negative,
+        // −1/a + 1/b = (a − b) / (a b).
+        _ => a.cmp(b).mul(za).mul(zb),
+    }
+}
+
+#[test]
+fn a_half_turn_keeps_every_root_and_orders_them_as_minus_one_over_t() {
+    let mut rng = Rng::new();
+    let cases = if cfg!(debug_assertions) { 100 } else { 1000 };
+    let mut pairs = 0;
+    for case in 0..cases {
+        let qf = factors(&mut rng, true);
+        let q = quartic(1, &qf);
+        let turned = q.turned().unwrap();
+        let want = distinct(&qf);
+        let (roots, _) = found(&q);
+        for (r, x) in roots.iter().zip(&want) {
+            let t = r.turned();
+            assert_eq!(
+                sign_at_root(&turned, &turned, &t).unwrap(),
+                Sign::Zero,
+                "case {case}: {x:?} turned is a root"
+            );
+            for (s, y) in roots.iter().zip(&want) {
+                assert_eq!(
+                    compare(&turned, &t, &turned, &s.turned()).unwrap(),
+                    turned_order(*x, *y),
+                    "case {case}: {x:?} against {y:?}"
+                );
+                pairs += 1;
+            }
+        }
+    }
+    assert!(pairs > cases);
+    // The exact roots: t(t − 1)(t + 1) has −1, 0, 1 and ∞; turned, 1, ∞, −1 and 0, each a root of
+    // the turned quartic, t⁴ · c(−1 / t), which is t³ − t again.
+    let q = quartic(
+        1,
+        &[
+            Factor::Linear { q: 1, p: 0 },
+            Factor::Linear { q: 1, p: 1 },
+            Factor::Linear { q: 1, p: -1 },
+        ],
+    );
+    let turned = q.turned().unwrap();
+    let all: Vec<RealRoot> = q.roots().unwrap().iter().copied().collect();
+    let pieces: Vec<Piece> = all.iter().map(|r| r.turned().piece()).collect();
+    assert_eq!(
+        pieces,
+        [Piece::One, Piece::Infinity, Piece::MinusOne, Piece::Zero]
+    );
+    for r in &all {
+        assert_eq!(
+            sign_at_root(&turned, &turned, &r.turned()).unwrap(),
+            Sign::Zero
+        );
+        assert_eq!(r.turned().multiplicity(), r.multiplicity());
+    }
+    // And on every open piece: roots below −1, between −1 and 0, between 0 and 1 and above 1.
+    let open = quartic(
+        1,
+        &[
+            Factor::Linear { q: 1, p: -3 },
+            Factor::Linear { q: 2, p: -1 },
+            Factor::Linear { q: 3, p: 1 },
+            Factor::Linear { q: 1, p: 5 },
+        ],
+    );
+    let pieces: Vec<Piece> = open
+        .roots()
+        .unwrap()
+        .iter()
+        .map(|r| r.turned().piece())
+        .collect();
+    assert_eq!(
+        pieces,
+        [Piece::Above, Piece::FarAbove, Piece::FarBelow, Piece::Below]
     );
 }

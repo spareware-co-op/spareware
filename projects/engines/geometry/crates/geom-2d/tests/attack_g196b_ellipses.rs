@@ -394,6 +394,23 @@ fn an_ellipse_of_ratio_one_is_its_circle() {
     assert_eq!((c.vertices().len(), c.edges().len()), (3, 3));
     let covers: Vec<Vec<u32>> = c.edges().iter().map(|e| e.sources.clone()).collect();
     assert_eq!(covers.iter().filter(|s| s.as_slice() == [0, 1]).count(), 1);
+    // An arc of another circle after it is cut on its own circle: the circle written as an ellipse
+    // takes both of the listed arcs it was listed by, and no more.
+    let beyond = Curve::Arc(Arc2::new(p(22, 0), p(18, 0), p(20, 0).into()).unwrap());
+    let d = run(&[Curve::Ellipse(tilted), beyond]);
+    laws(&d, "ratio one, then an arc of another circle");
+    assert_eq!(d.circles().len(), 2);
+    assert_eq!((d.vertices().len(), d.edges().len()), (4, 3));
+    let lies: Vec<(Vec<u32>, Option<Along>)> = (0..3)
+        .map(|e| (d.edges()[e as usize].sources.clone(), d.along(e)))
+        .collect();
+    assert!(lies.contains(&(
+        vec![1],
+        Some(Along::Arc {
+            circle: 1,
+            upper: true
+        })
+    )));
 }
 
 #[test]

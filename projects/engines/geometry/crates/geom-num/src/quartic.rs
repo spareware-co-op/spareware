@@ -610,6 +610,20 @@ impl Piece {
     const fn falling(self) -> bool {
         matches!(self, Piece::Below | Piece::FarAbove)
     }
+
+    /// The piece −1 / t lies in for t in this one, with the same x: a half turn of θ = 2 atan t.
+    const fn turned(self) -> Piece {
+        match self {
+            Piece::FarBelow => Piece::Above,
+            Piece::MinusOne => Piece::One,
+            Piece::Below => Piece::FarAbove,
+            Piece::Zero => Piece::Infinity,
+            Piece::Above => Piece::FarBelow,
+            Piece::One => Piece::MinusOne,
+            Piece::FarAbove => Piece::Below,
+            Piece::Infinity => Piece::Zero,
+        }
+    }
 }
 
 /// A real root: where it is, and how many times it is a root.
@@ -635,6 +649,19 @@ impl RealRoot {
     #[must_use]
     pub const fn multiplicity(&self) -> u8 {
         self.multiplicity
+    }
+
+    /// −1 / t for this root t, as a root of the turned quartic ([`Quartic::turned`]): a half turn of
+    /// θ = 2 atan t. Each open piece's polynomial in x is the turned one's on the piece it moves to
+    /// (t = x on (0, 1) becomes −1 / x below −1, t = −x becomes 1 / x, and back), so the root keeps
+    /// its stretch of x and only its piece changes; an exact root moves to the exact root it turns
+    /// to, 0 and ∞ to each other and 1 and −1 to each other.
+    #[must_use]
+    pub const fn turned(&self) -> RealRoot {
+        RealRoot {
+            piece: self.piece.turned(),
+            ..*self
+        }
     }
 
     /// Where it lies as an angle: cos θ and sin θ for t = tan(θ / 2), certainly. An enclosure as wide
@@ -1042,6 +1069,21 @@ impl Quartic {
     #[must_use]
     pub fn is_zero(&self) -> bool {
         degree(&self.c).is_none()
+    }
+
+    /// t⁴ · c(−1 / t): the quartic whose roots are −1 / t for the roots t of this one, read at
+    /// degree four, a half turn of θ = 2 atan t. Its coefficients are this one's reversed, the odd
+    /// ones negated, so it stays within every budget this one is within. On a half of an ellipse
+    /// through θ = π, where t passes through ∞, the turned roots run in the half's order.
+    ///
+    /// # Errors
+    ///
+    /// [`NumError::BudgetExceeded`] if a coefficient's negation did not fit, which no coefficient
+    /// within [`COEFFICIENT_BITS`] reaches.
+    pub fn turned(&self) -> Result<Quartic, NumError> {
+        Ok(Quartic {
+            c: mirrored(&reversed(&self.c))?,
+        })
     }
 
     /// The multiplicity of t = ∞, as a root of the polynomial read at degree four.
