@@ -218,7 +218,7 @@ jobs:
         run: |
           cd "$RUNNER_TEMP"
           name="wasmtime-${WASMTIME_VERSION}-x86_64-linux"
-          curl --proto '=https' --tlsv1.2 -sSfL -o "$name.tar.xz" \
+          curl --proto '=https' --tlsv1.2 -sSfL --retry 6 --retry-delay 10 --retry-connrefused -o "$name.tar.xz" \
             "https://github.com/bytecodealliance/wasmtime/releases/download/${WASMTIME_VERSION}/$name.tar.xz"
           echo "${WASMTIME_SHA256}  $name.tar.xz" | sha256sum --check --strict
           tar -xJf "$name.tar.xz"
