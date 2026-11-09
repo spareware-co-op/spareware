@@ -979,3 +979,100 @@ fn a_survey_feet_map_holds_its_unit_and_rounds_its_origin_once() {
     }
     assert_eq!(p.residual(), None);
 }
+
+#[test]
+fn every_si_prefix_has_its_power_of_ten_and_only_minus_zero_is_negative_zero() {
+    let powers = [
+        (SiPrefix::Exa, 18),
+        (SiPrefix::Peta, 15),
+        (SiPrefix::Tera, 12),
+        (SiPrefix::Giga, 9),
+        (SiPrefix::Mega, 6),
+        (SiPrefix::Kilo, 3),
+        (SiPrefix::Hecto, 2),
+        (SiPrefix::Deca, 1),
+        (SiPrefix::Deci, -1),
+        (SiPrefix::Centi, -2),
+        (SiPrefix::Milli, -3),
+        (SiPrefix::Micro, -6),
+        (SiPrefix::Nano, -9),
+        (SiPrefix::Pico, -12),
+        (SiPrefix::Femto, -15),
+        (SiPrefix::Atto, -18),
+    ];
+    for (prefix, power) in powers {
+        assert_eq!(prefix.power(), power, "{prefix:?}");
+    }
+    assert!(real::shortest(-0.0).unwrap().is_negative_zero());
+    for x in [0.0, 1.0, -1.0, 0.1, -2.5e-300] {
+        assert!(!real::shortest(x).unwrap().is_negative_zero(), "{x}");
+    }
+}
+
+#[test]
+fn a_rounded_direction_breaks_an_exact_tie_to_the_even_share() {
+    let mut c = conversion("0", "0", "0");
+    let rot = |c: &MapConversion| {
+        let p = place(c, NZTM, LinearUnit::METRE, LinearUnit::METRE, GridStep::Q0).unwrap();
+        let (cos, sin) = match p.frame().kind() {
+            FrameKind::Ground { rotation, .. } => (rotation.cos(), rotation.sin()),
+            FrameKind::Map => (1, 0),
+        };
+        (i64::from(cos), i64::from(sin), p.is_rotation_exact())
+    };
+    // (2^31, 1) does not fit 31 bits, so its share of 2^30 is rounded: 1·2^30/2^31 is exactly one
+    // half, which goes to the even 0, and 3·2^30/2^31 is exactly one and a half, which goes to 2.
+    c.x_axis = Some([d("2147483648"), d("1")]);
+    let (cos, sin, exact) = rot(&c);
+    assert!(!exact);
+    assert_eq!(sin, 0);
+    assert!(cos > 0);
+    c.x_axis = Some([d("2147483648"), d("3")]);
+    let (cos, sin, exact) = rot(&c);
+    assert!(!exact);
+    assert_eq!(cos, (1 << 29) * sin, "(2^30, 2), reduced or not");
+    assert!(sin > 0);
+    // A component 10^300 times the other: the direction is the larger one's axis, rounded, with
+    // no long division of numbers that size.
+    c.x_axis = Some([d("1e300"), d("1")]);
+    assert_eq!(rot(&c), (1, 0, false));
+    c.x_axis = Some([d("-1"), d("-1e300")]);
+    assert_eq!(rot(&c), (0, -1, false));
+}
+
+#[test]
+fn the_shortest_decimal_is_found_at_coarse_places_and_an_open_end_is_never_written() {
+    let s = steps_per_metre(GridStep::Q0);
+    // Units of a quarter, a sixth and three twentieths of a step: a step is 4, 6 and 20/3 units,
+    // so a count's interval of decimals that read back to it is wider than one unit, and its
+    // shortest decimal is a multiple of ten or lies next to an end that is one.
+    let quarter = LinearUnit::new(1, 4 * s).unwrap();
+    let sixth = LinearUnit::new(1, 6 * s).unwrap();
+    let odd = LinearUnit::new(3, 20 * s).unwrap();
+    for (unit, n, digits, exponent, deviation) in [
+        // 2 steps: [6, 10] units, both ends read back to 2 (a tie goes to the even count); 10 is
+        // its only multiple of ten.
+        (quarter, 2, 1, 1, (1, 2)),
+        (quarter, -2, -1, 1, (-1, 2)),
+        // 3 steps: (15, 21), whose only multiple of ten is 20.
+        (sixth, 3, 2, 1, (1, 3)),
+        // 1 step: (10/3, 10), its upper end 10 left out (it reads back to the even 2): of 4 to 9,
+        // 7 is the nearest to 20/3.
+        (odd, 1, 7, 0, (1, 20)),
+    ] {
+        let w = write::shortest(n, unit, GridStep::Q0).unwrap();
+        assert_eq!(
+            w.decimal(),
+            Decimal::new(digits, exponent).unwrap(),
+            "{n} steps in {unit:?}"
+        );
+        assert_eq!((w.deviation().num(), w.deviation().den()), deviation);
+        assert_eq!(
+            grid::length(w.decimal(), unit, GridStep::Q0)
+                .unwrap()
+                .count(),
+            n
+        );
+    }
+    assert_eq!(grid::length(d("10"), odd, GridStep::Q0).unwrap().count(), 2);
+}
