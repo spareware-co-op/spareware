@@ -139,6 +139,18 @@ fn at(s: &SurfaceKind, u: f64, v: f64) -> [f64; 3] {
     s.point(u, v, LIMITS).unwrap()
 }
 
+/// How far the extension's domain grew past `side`: the length it reports.
+fn growth(source: &SurfaceKind, e: &Extended, side: Side) -> f64 {
+    let ((u0, u1), (v0, v1)) = source.domain();
+    let ((a0, a1), (b0, b1)) = e.surface.domain();
+    match side {
+        Side::UMin => u0 - a0,
+        Side::UMax => a1 - u1,
+        Side::VMin => v0 - b0,
+        Side::VMax => b1 - v1,
+    }
+}
+
 /// The extension's domain holds the source's, and over the source's domain the extension is the
 /// source, at a 5 × 5 grid of points.
 fn keeps_its_source(source: &SurfaceKind, e: &Extended) {
@@ -272,7 +284,13 @@ fn a_vanishing_length_extends_by_itself_or_is_refused_and_never_runs_on() {
     let rev = revolution(4.0);
     for side in SIDES {
         let e = extend(&rev, side, 1.7e-4, Reach::Exactly, &mut meter()).unwrap();
-        assert_eq!(e.reached, 1.7e-4);
+        // The length asked, as far as the side's bound can move by it.
+        assert_eq!(e.reached, growth(&rev, &e, side));
+        assert!(
+            (e.reached - 1.7e-4).abs() < 1e-15,
+            "{side:?}: {}",
+            e.reached
+        );
         keeps_its_source(&rev, &e);
     }
     // A closed NURBS curve (its first point its last), as the sweep's `closedCurve.smc`, carried
@@ -316,12 +334,10 @@ fn a_closed_direction_reaches_nothing_and_an_open_one_at_most_a_turn() {
             for side in [Side::UMin, Side::UMax] {
                 let e = extend(s, side, by, Reach::AsFarAsValid, &mut meter()).unwrap();
                 assert_eq!(e.surface.domain(), s.domain());
-                // The length reported is no wider than a rounding (a defect: see
-                // the_length_reached_is_how_far_the_domain_grew).
-                assert!(e.reached < 1e-12, "{}", e.reached);
+                assert_eq!(e.reached, 0.0);
                 assert!(matches!(
                     extend(s, side, by, Reach::Exactly, &mut meter()),
-                    Err(ExtendError::ExtensionFailed { reached, .. }) if reached < 1e-12
+                    Err(ExtendError::ExtensionFailed { reached: 0.0, .. })
                 ));
             }
         }
@@ -513,8 +529,7 @@ fn an_offset_of_a_partial_turn_stops_at_the_turn_however_often_it_is_extended() 
     for side in [Side::UMin, Side::UMax] {
         match extend(&off, side, arc, Reach::Exactly, &mut meter()) {
             Err(ExtendError::ExtensionFailed { reached, .. }) => {
-                // Within a rounding of the rest of the turn (see
-                // the_length_reached_is_how_far_the_domain_grew).
+                // The rest of the turn, as far as the bound can move to it.
                 assert!((reached - rest).abs() < 1e-12, "{reached} against {rest}");
             }
             other => panic!("{side:?}: {other:?}"),
@@ -671,27 +686,14 @@ fn a_periodic_direction_far_from_zero_extends_at_once() {
 }
 
 /// The length an extension reports is how far its domain grew. Where the turn, a pole or an apex
-/// stops a definition, `extend` finds the length by bisection and reports the length it tried,
-/// not how far the rounded domain bound moved, so the two part by up to a rounding of that bound:
-/// a full turn widened by nothing reports 2.2e-16, and an arc whose angle runs from 10^15
-/// half-turns, where doubles are 1/8 apart, reports 1.5625 half-turns (281.25 degrees) for a
-/// domain that grew by 1.5 (270 degrees), and refuses an exact extension naming 1.5625 as valid.
-/// The domain itself never passes the turn. A caller that places the new side from the length
-/// reported puts it 11.25 degrees off there. Ignored until G253 reports the domain's own growth.
+/// stops a definition, `extend` finds the length by bisection, and G253 first reported the length
+/// it tried, not how far the rounded domain bound moved: a full turn widened by nothing reported
+/// 2.2e-16, and an arc whose angle runs from 10^15 half-turns, where doubles are 1/8 apart,
+/// 1.5625 half-turns (281.25 degrees) for a domain that grew by 1.5 (270 degrees), refusing an
+/// exact extension naming 1.5625 as valid. Found by this batch, fixed in G253 (a9ef405d).
 #[test]
-#[ignore = "defect in G253: the length reached is the bisection's, not the domain's growth"]
 fn the_length_reached_is_how_far_the_domain_grew() {
     let f = frame();
-    let grew = |source: &SurfaceKind, e: &Extended, side: Side| {
-        let ((u0, u1), (v0, v1)) = source.domain();
-        let ((a0, a1), (b0, b1)) = e.surface.domain();
-        match side {
-            Side::UMin => u0 - a0,
-            Side::UMax => a1 - u1,
-            Side::VMin => v0 - b0,
-            Side::VMax => b1 - v1,
-        }
-    };
     let full =
         SurfaceKind::Cylinder(Cylinder::new([0.0; 3], 1.0, f, ((0.0, 2.0), (0.0, 1.0))).unwrap());
     let far = 1e15;
@@ -710,7 +712,7 @@ fn the_length_reached_is_how_far_the_domain_grew() {
     ] {
         for side in [Side::UMin, Side::UMax] {
             let e = extend(s, side, by, Reach::AsFarAsValid, &mut meter()).unwrap();
-            assert_eq!(e.reached, grew(s, &e, side), "{side:?} by {by}");
+            assert_eq!(e.reached, growth(s, &e, side), "{side:?} by {by}");
             if let Err(ExtendError::ExtensionFailed { reached, .. }) =
                 extend(s, side, by, Reach::Exactly, &mut meter())
             {
