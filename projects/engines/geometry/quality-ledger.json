@@ -6321,6 +6321,46 @@
       "occurrences": 1,
       "kind": "equivalent",
       "reason": "touching's axis test skips a vertex further than its bound and ε_fit (the pad) from the meeting's box along one axis. to_box then gives a distance whose lower end, less the bound, is still at least ε_fit, above 0, which judge reads as apart, the answer the skip gives. With && a vertex is skipped only when it is outside on more axes at once, so fewer are skipped, and to_box finds those apart: touching returns the same vertex or none."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-bool/src/split.rs",
+      "mutant": "replace > with >= in senses",
+      "line_text": "let left_turning = total.lo() > 0.0;",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "The line before returns BuildError::UndecidedArea when total.lo() <= 0 and total.hi() >= 0. A total with a lower end of exactly 0 has an upper end of at least 0, so it never reaches this line, and > 0 and >= 0 agree."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-bool/src/split.rs",
+      "mutant": "replace > with >= in assemble",
+      "line_text": ".is_some_and(|a| a.lo() > 0.0)",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "Every area that reaches this test is an enclosure loops_of or senses has already checked: an enclosure whose lower end is at most 0 and whose upper end is at least 0 fails there with BuildError::UndecidedArea. So the lower end here is never exactly 0, and > 0 and >= 0 agree."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-bool/src/split.rs",
+      "mutant": "replace > with >= in assemble",
+      "line_text": "if area.is_some_and(|a| a.lo() > 0.0) {",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "Every area that reaches this test is an enclosure loops_of or senses has already checked: an enclosure whose lower end is at most 0 and whose upper end is at least 0 fails there with BuildError::UndecidedArea. So the lower end here is never exactly 0, and > 0 and >= 0 agree."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-bool/src/split.rs",
+      "mutant": "replace match guard d.curl.hi() < 0.0 with false in half",
+      "line_text": "(Sign::Zero, Sign::Positive) if d.curl.hi() < 0.0 => 2,",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "This arm reads only tangents with an exact direction, and leaving gives an exact direction only to a straight piece (a line on whole data, or a section), whose curvature it sets to the point interval 0. Its upper end is never below 0, so the guard is always false, as the mutant's is."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-bool/src/split.rs",
+      "mutant": "replace < with > in half",
+      "line_text": "(Sign::Zero, Sign::Positive) if d.curl.hi() < 0.0 => 2,",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "This arm reads only tangents with an exact direction, and leaving gives an exact direction only to a straight piece, whose curvature it sets to the point interval 0: the guard compares 0 with 0, where < and > are both false."
     }
   ],
   "coverage_off": [
