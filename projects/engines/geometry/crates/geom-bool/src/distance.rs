@@ -4,9 +4,10 @@
 //! What it does: [`Carriers`] holds the builder's carriers: a table of planes and pools of surfaces
 //! and curves, named by [`CarrierIx`]. [`Carriers::distance`] encloses how far a grid point lies
 //! from one, computed from the carrier's own definition: a plane's from its integer coefficients
-//! in one exact step, a segment's in closed form, every other kind's by `geom_intersect::project`,
-//! the certified nearest-point search of chapter 12.4. [`separation`] encloses how far apart two points are, each point's own
-//! bound added: a certified point may lie anywhere within its bound of where its carriers meet.
+//! in one exact step, a line's in closed form, every other kind's by `geom_intersect::project`,
+//! the certified nearest-point search of chapter 12.4. [`separation`] encloses how far apart two
+//! points are, each point's own bound added: a certified point may lie anywhere within its bound of
+//! where its carriers meet.
 //!
 //! Guarantees:
 //!
@@ -17,10 +18,11 @@
 //!   its carriers.
 //! - **A plane's distance is exact up to one rounding.** n · p + d is computed in `i128`, checked,
 //!   and enclosed by the nearest doubles around it; |n| by an interval square root.
-//! - **A segment's distance is closed form.** For o + t·v over [a, b], the nearest parameter
-//!   (p − o) · v / |v|² is enclosed and held to the domain; the distance is at most |p − o − t·v|
-//!   over that enclosure, and at least the distance from the whole line, |(p − o) × v| / |v|, or
-//!   from the end the nearest parameter is proven past. It does not change with the refinement.
+//! - **A line's distance is closed form.** For o + t·v over [a, b], a segment, a ray (one end
+//!   infinite) or a whole line, the nearest parameter (p − o) · v / |v|² is enclosed and held to
+//!   the domain; the distance is at most |p − o − t·v| over that enclosure, and at least the
+//!   distance from the whole line, |(p − o) × v| / |v|, or from the end the nearest parameter is
+//!   proven past, which is then a finite end. It does not change with the refinement.
 //! - **Undecided is wide.** A search that reaches its floor with nearest points that cannot be told
 //!   apart (`NonIsolated`) gives the widest enclosure, so the contact rule reads it as near.
 //!
@@ -28,8 +30,8 @@
 //! `geom_intersect::project` (<https://doi.org/10.1016/S0167-8396(03)00021-9>), and the plane's
 //! signed distance n · p + d over |n| (`geom_num::plane`).
 //!
-//! Cost: a plane, a few interval operations; any other carrier, one projection search at the
-//! floor asked, charged to the meter. No recursion.
+//! Cost: a plane or a line, a few interval operations; any other carrier, one projection search at
+//! the floor asked, charged to the meter. No recursion.
 
 #![allow(
     clippy::many_single_char_names,
@@ -289,14 +291,11 @@ impl Carriers {
                     .get(usize::try_from(ix.row()).map_err(|_| NumError::Degenerate)?)
                     .ok_or(NumError::Degenerate)?;
                 if let CurveKind::Line(line) = curve {
-                    let span = curve.domain();
-                    if span.0.is_finite() && span.1.is_finite() {
-                        return Ok(segment_distance(
-                            at,
-                            (line.origin(), line.direction()),
-                            span,
-                        )?);
-                    }
+                    return Ok(segment_distance(
+                        at,
+                        (line.origin(), line.direction()),
+                        curve.domain(),
+                    )?);
                 }
                 match project_curve(curve, &at, floor, meter)? {
                     Projection::Points(found) => {
@@ -352,7 +351,9 @@ fn exact3(v: [f64; 3]) -> Result<[Interval; 3], NumError> {
     ])
 }
 
-/// The enclosure of the distance from the point `at` to the segment o + t·v, t in `span`.
+/// The enclosure of the distance from the point `at` to the line o + t·v, t in `span`, whose ends
+/// may be infinite: an infinite end is never used as a parameter, since the nearest parameter, a
+/// finite enclosure, is never past it.
 fn segment_distance(
     at: [f64; 3],
     (origin, direction): ([f64; 3], [f64; 3]),
