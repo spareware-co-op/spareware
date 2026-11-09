@@ -587,6 +587,20 @@ IFC 4.3 documentation (buildingSMART)
     projects/engines/geometry/crates/geom-curve/src/transition.rs
       for the curvature and heading formulas of `IfcAlignmentHorizontalSegmentTypeEnum`'s transitions, `IfcClothoid`, the second-, third- and seventh-order polynomial spirals, `IfcCosineSpiral` and `IfcSineSpiral`, which the laws implement, and for `IfcCurveSegment`'s trimming of a parent curve by a start and a signed length, which windows and senses follow. No text adapted.
 
+IFC 4.3 schema documentation (buildingSMART)
+  Licence:      CC-BY-ND-4.0
+  Link:         https://github.com/buildingSMART/IFC4.3.x-development/blob/7256780bd95fcc5b3653e07b3e8ec2f8389c9f3d/docs/schemas/resource/IfcMeasureResource/Types/IfcSIPrefix.md
+  Consulted by:
+    projects/engines/geometry/crates/geom-exchange/src/unit.rs
+      for the list of SI prefixes an IFC file may name. No text copied.
+
+IFC 4.3 schema documentation (buildingSMART)
+  Licence:      CC-BY-ND-4.0
+  Link:         https://github.com/buildingSMART/IFC4.3.x-development/blob/7256780bd95fcc5b3653e07b3e8ec2f8389c9f3d/docs/schemas/resource/IfcRepresentationResource/Entities/IfcMapConversionScaled.md
+  Consulted by:
+    projects/engines/geometry/crates/geom-exchange/src/map.rs
+      for the order and meaning of Scale, the three factors, the rotation and the translation. No text adapted.
+
 Kani 0.68.0 `library/std/src/lib.rs`
   Licence:      MIT OR Apache-2.0
   Link:         https://github.com/model-checking/kani/blob/0d2328a93f0e0ff66132d6bfa1a7d884877cf862/library/std/src/lib.rs
@@ -679,6 +693,20 @@ rayon
     projects/engines/geometry/crates/geom-run/src/phase.rs
       for the lowest-index rule of `find_first`, which this crate applies to failures. No code copied.
 
+Rust core library
+  Licence:      MIT OR Apache-2.0
+  Link:         https://github.com/rust-lang/rust/blob/b940084d7eb6a299eb4bfeb8e34901bc051e7ac4/library/core/src/num/imp/dec2flt/mod.rs
+  Consulted by:
+    projects/engines/geometry/crates/geom-exchange/src/real.rs
+      for the guarantee that `f64`'s parser rounds once, half to even, at the same release.
+
+Rust core library
+  Licence:      MIT OR Apache-2.0
+  Link:         https://github.com/rust-lang/rust/blob/b940084d7eb6a299eb4bfeb8e34901bc051e7ac4/library/core/src/num/imp/flt2dec/mod.rs
+  Consulted by:
+    projects/engines/geometry/crates/geom-exchange/src/real.rs
+      for the guarantees of the shortest mode `{:e}` formats with (read back correctly, shortest, closest among the shortest), at the release the toolchain pins (1.99.0).
+
 rustc
   Licence:      MIT OR Apache-2.0
   Link:         https://github.com/rust-lang/rust/blob/21b707e3f97e0b522ebd2f277a862339625ad83f/compiler/rustc_mir_build/src/builder/matches/mod.rs
@@ -729,6 +757,20 @@ solidcore
   Consulted by:
     projects/engines/geometry/crates/geom-surface/src/frame_rule.rs
       for the rotation-minimising frame's closed form on lines and circular arcs, each span starting from the frame the last one ended with. No code copied.
+
+solidcore (step-export)
+  Licence:      Apache-2.0
+  Link:         https://github.com/tangency-labs/solidcore/blob/78d1eb12d222652219313c12787b65389c4d9db8/crates/step-export/src/lib.rs
+  Consulted by:
+    projects/engines/geometry/crates/geom-exchange/src/real.rs
+      for writing a STEP real by the core library's shortest formatting (`real`). No code copied.
+
+solidcore (step-import)
+  Licence:      Apache-2.0
+  Link:         https://github.com/tangency-labs/solidcore/blob/78d1eb12d222652219313c12787b65389c4d9db8/crates/step-import/src/map.rs
+  Consulted by:
+    projects/engines/geometry/crates/geom-exchange/src/unit.rs
+      for how a STEP reader resolves `si_unit` prefixes and `conversion_based_unit` factors (`unit_factor`). Its factors are doubles; here every factor is an exact ratio.
 
 SPDX License List 3.29.0
   Licence:      CC-BY-3.0
