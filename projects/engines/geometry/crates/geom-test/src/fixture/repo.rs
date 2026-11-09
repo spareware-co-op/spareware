@@ -45,14 +45,16 @@ pub struct File {
     pub text: String,
 }
 
-/// The files compiled into this crate.
+/// The files compiled into this crate, with `\n` line ends: `include_str!` takes a file as checked
+/// out, which a Windows checkout with Git's `core.autocrlf` gives `\r\n` ends, and a fixture's one
+/// spelling has `\n` (as [`read_dir`]'s walk reads them).
 #[must_use]
 pub fn embedded() -> Vec<File> {
     EMBEDDED
         .iter()
         .map(|(path, text)| File {
             path: (*path).to_owned(),
-            text: (*text).to_owned(),
+            text: text.replace("\r\n", "\n"),
         })
         .collect()
 }
