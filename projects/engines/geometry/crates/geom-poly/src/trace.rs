@@ -663,23 +663,32 @@ pub fn classify(
     pieces: &[Vec<Piece>],
     meter: &mut WorkMeter<'_>,
 ) -> Result<Vec<Classified>, TraceError> {
+    // A span costs a point a corner, which pays only where many paths read the polygon: for one
+    // piece, reading each polygon on its few segments costs less.
+    let mut paths = 0usize;
+    for list in pieces {
+        paths = paths.saturating_add(list.len());
+    }
     let mut held = Vec::with_capacity(polygons.len());
     for polygon in polygons {
-        held.push((polygon, canonical(&polygon.piece.face)?));
+        let span = (paths > 1).then(|| piece_span(&polygon.piece)).flatten();
+        held.push((polygon, canonical(&polygon.piece.face)?, span));
     }
     classify_with(cell, reference, &held, pieces, meter)
 }
 
-/// [`classify`], each polygon given with its face in canonical form, which a caller that has
-/// reduced every face already need not reduce again.
+/// [`classify`], each polygon given with its face in canonical form and, where the caller has
+/// one, its span, the grid cells around its corners a step wider each way: a caller that has
+/// reduced every face, and knows every corner's floors, need not find them again, and a span
+/// passes over a polygon a path cannot cross however few paths there are.
 ///
 /// # Errors
 ///
 /// As [`classify`].
-pub fn classify_with(
+pub(crate) fn classify_with(
     cell: &Cell,
     reference: &Winding,
-    polygons: &[(&Polygon, Canonical)],
+    held: &[(&Polygon, Canonical, Option<Span>)],
     pieces: &[Vec<Piece>],
     meter: &mut WorkMeter<'_>,
 ) -> Result<Vec<Classified>, TraceError> {
@@ -688,24 +697,13 @@ pub fn classify_with(
     for face in faces.iter().flatten() {
         boxes.push(canonical(&face.plane)?);
     }
-    // A span costs a point a corner, which pays only where many paths read the polygon: for one
-    // piece, reading each polygon on its few segments costs less.
-    let mut paths = 0usize;
-    for list in pieces {
-        paths = paths.saturating_add(list.len());
-    }
-    let mut held = Vec::with_capacity(polygons.len());
-    for (polygon, face) in polygons {
-        let span = (paths > 1).then(|| piece_span(&polygon.piece)).flatten();
-        held.push((*polygon, *face, span));
-    }
     let mut out = Vec::new();
     for (index, list) in pieces.iter().enumerate() {
         let mut walked = Vec::new();
         for piece in list {
             let (front, back, first) = vectors(
                 (piece, index),
-                &held,
+                held,
                 (&faces, &boxes),
                 reference,
                 &mut walked,
