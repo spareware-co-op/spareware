@@ -73,7 +73,9 @@ fn lin_jets<S: Scalar, const L: usize>(x: &[S]) -> Result<[[S; 2]; L], NumError>
     Ok(out)
 }
 
-/// Whether the first derivative of an end in the linear layout is zero, on doubles.
+/// Whether the first derivative of an end in the linear layout is zero, on doubles. Exactly, at a
+/// start and at an answer alike: a derivative is a length per unit of the parameter, not a length,
+/// so the solver's tolerance in steps is no margin for it.
 fn lin_flat(x: &[f64], level: usize) -> bool {
     let columns = level.saturating_add(1);
     let cut = columns.saturating_mul(2);
@@ -248,7 +250,7 @@ impl Residual<13, 1> for LinJoin1 {
         join_rows::<S, 1>(&x)
     }
 
-    fn singular(&self, x: &[f64; 13]) -> Option<Singular> {
+    fn singular(&self, x: &[f64; 13], _within: f64) -> Option<Singular> {
         flat_join(x, 1).then_some(Singular::ZeroLengthLine)
     }
 
@@ -265,7 +267,7 @@ impl Residual<25, 2> for LinJoin2 {
         join_rows::<S, 2>(&x)
     }
 
-    fn singular(&self, x: &[f64; 25]) -> Option<Singular> {
+    fn singular(&self, x: &[f64; 25], _within: f64) -> Option<Singular> {
         flat_join(x, 2).then_some(Singular::ZeroLengthLine)
     }
 
@@ -282,7 +284,7 @@ impl Residual<41, 3> for LinJoin3 {
         join_rows::<S, 3>(&x)
     }
 
-    fn singular(&self, x: &[f64; 41]) -> Option<Singular> {
+    fn singular(&self, x: &[f64; 41], _within: f64) -> Option<Singular> {
         flat_join(x, 3).then_some(Singular::ZeroLengthLine)
     }
 
@@ -299,7 +301,7 @@ impl Residual<11, 1> for LinAlong1 {
         along_rows::<S, 1>(&x)
     }
 
-    fn singular(&self, x: &[f64; 11]) -> Option<Singular> {
+    fn singular(&self, x: &[f64; 11], _within: f64) -> Option<Singular> {
         flat_one(x, 1).then_some(Singular::ZeroLengthLine)
     }
 
@@ -316,7 +318,7 @@ impl Residual<17, 2> for LinAlong2 {
         along_rows::<S, 2>(&x)
     }
 
-    fn singular(&self, x: &[f64; 17]) -> Option<Singular> {
+    fn singular(&self, x: &[f64; 17], _within: f64) -> Option<Singular> {
         flat_one(x, 2).then_some(Singular::ZeroLengthLine)
     }
 
@@ -333,7 +335,7 @@ impl Residual<25, 3> for LinAlong3 {
         along_rows::<S, 3>(&x)
     }
 
-    fn singular(&self, x: &[f64; 25]) -> Option<Singular> {
+    fn singular(&self, x: &[f64; 25], _within: f64) -> Option<Singular> {
         flat_one(x, 3).then_some(Singular::ZeroLengthLine)
     }
 
@@ -350,7 +352,7 @@ impl Residual<11, 1> for LinRound1 {
         round_rows::<S, 1>(&x)
     }
 
-    fn singular(&self, x: &[f64; 11]) -> Option<Singular> {
+    fn singular(&self, x: &[f64; 11], _within: f64) -> Option<Singular> {
         flat_one(x, 1).then_some(Singular::ZeroLengthLine)
     }
 
@@ -367,7 +369,7 @@ impl Residual<17, 2> for LinRound2 {
         round_rows::<S, 2>(&x)
     }
 
-    fn singular(&self, x: &[f64; 17]) -> Option<Singular> {
+    fn singular(&self, x: &[f64; 17], _within: f64) -> Option<Singular> {
         flat_one(x, 2).then_some(Singular::ZeroLengthLine)
     }
 
@@ -384,7 +386,7 @@ impl Residual<25, 3> for LinRound3 {
         round_rows::<S, 3>(&x)
     }
 
-    fn singular(&self, x: &[f64; 25]) -> Option<Singular> {
+    fn singular(&self, x: &[f64; 25], _within: f64) -> Option<Singular> {
         flat_one(x, 3).then_some(Singular::ZeroLengthLine)
     }
 

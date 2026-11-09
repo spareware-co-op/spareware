@@ -109,8 +109,9 @@ pub trait Residual<const N: usize, const E: usize> {
     /// What the arithmetic refuses.
     fn residuals<S: Scalar>(&self, x: [S; N]) -> Result<[S; E], NumError>;
 
-    /// Whether `x` is on the singular set.
-    fn singular(&self, _x: &[f64; N]) -> Option<Singular> {
+    /// Whether `x` is within `within` of the singular set, on each coordinate the set fixes: on it
+    /// at `within` = 0, where every comparison is exact.
+    fn singular(&self, _x: &[f64; N], _within: f64) -> Option<Singular> {
         None
     }
 
@@ -123,6 +124,17 @@ pub trait Residual<const N: usize, const E: usize> {
     fn branch<S: Scalar>(&self, _x: [S; N]) -> Result<Option<S>, NumError> {
         Ok(None)
     }
+}
+
+/// Whether `a` is within `within` of `b`: `a == b` at `within` = 0, as a difference of finite
+/// doubles is zero exactly when they are equal.
+fn close(a: f64, b: f64, within: f64) -> bool {
+    (a - b).abs() <= within
+}
+
+/// Whether the points (ax, ay) and (bx, by) are within `within` of each other on each axis.
+fn together(ax: f64, ay: f64, bx: f64, by: f64, within: f64) -> bool {
+    close(ax, bx, within) && close(ay, by, within)
 }
 
 fn cross<S: Scalar>(u: [S; 2], v: [S; 2]) -> Result<S, NumError> {
@@ -187,9 +199,9 @@ impl Residual<7, 1> for OnLine {
         Ok([cross(u, v)?.div(c)?])
     }
 
-    fn singular(&self, x: &[f64; 7]) -> Option<Singular> {
+    fn singular(&self, x: &[f64; 7], within: f64) -> Option<Singular> {
         let [_, _, ax, ay, bx, by, _] = *x;
-        (ax == bx && ay == by).then_some(Singular::ZeroLengthLine)
+        together(ax, ay, bx, by, within).then_some(Singular::ZeroLengthLine)
     }
 }
 
@@ -206,8 +218,8 @@ impl Residual<9, 2> for Collinear {
         ])
     }
 
-    fn singular(&self, x: &[f64; 9]) -> Option<Singular> {
-        (x[0] == x[2] && x[1] == x[3]).then_some(Singular::ZeroLengthLine)
+    fn singular(&self, x: &[f64; 9], within: f64) -> Option<Singular> {
+        together(x[0], x[1], x[2], x[3], within).then_some(Singular::ZeroLengthLine)
     }
 }
 
@@ -220,8 +232,8 @@ impl Residual<5, 1> for AtDistance {
         Ok([smooth(minus([px, py], [cx, cy])?, d)?])
     }
 
-    fn singular(&self, x: &[f64; 5]) -> Option<Singular> {
-        (x[4] == 0.0).then_some(Singular::ZeroRadius)
+    fn singular(&self, x: &[f64; 5], within: f64) -> Option<Singular> {
+        close(x[4], 0.0, within).then_some(Singular::ZeroRadius)
     }
 }
 
@@ -239,8 +251,8 @@ impl Residual<6, 1> for AtSum {
         Ok([smooth(minus([px, py], [cx, cy])?, sum)?])
     }
 
-    fn singular(&self, x: &[f64; 6]) -> Option<Singular> {
-        (x[4] + self.sign * x[5] == 0.0).then_some(Singular::ZeroRadius)
+    fn singular(&self, x: &[f64; 6], within: f64) -> Option<Singular> {
+        close(x[4] + self.sign * x[5], 0.0, within).then_some(Singular::ZeroRadius)
     }
 }
 
@@ -271,8 +283,9 @@ impl Residual<10, 1> for Turned {
         Ok([cross(u, v)?.mul(cos)?.sub(dot(u, v)?.mul(sin)?)?.div(l)?])
     }
 
-    fn singular(&self, x: &[f64; 10]) -> Option<Singular> {
-        let zero = (x[0] == x[2] && x[1] == x[3]) || (x[4] == x[6] && x[5] == x[7]);
+    fn singular(&self, x: &[f64; 10], within: f64) -> Option<Singular> {
+        let zero =
+            together(x[0], x[1], x[2], x[3], within) || together(x[4], x[5], x[6], x[7], within);
         zero.then_some(Singular::ZeroLengthLine)
     }
 
@@ -294,8 +307,8 @@ impl Residual<5, 1> for Heading {
         Ok([dy.mul(t.cospi()?)?.sub(dx.mul(t.sinpi()?)?)?])
     }
 
-    fn singular(&self, x: &[f64; 5]) -> Option<Singular> {
-        (x[0] == x[2] && x[1] == x[3]).then_some(Singular::ZeroLengthLine)
+    fn singular(&self, x: &[f64; 5], within: f64) -> Option<Singular> {
+        together(x[0], x[1], x[2], x[3], within).then_some(Singular::ZeroLengthLine)
     }
 
     fn branch<S: Scalar>(&self, x: [S; 5]) -> Result<Option<S>, NumError> {
@@ -321,9 +334,9 @@ impl Residual<7, 1> for FromLine {
         Ok([cross(u, v)?.div(size)?.sub(want)?])
     }
 
-    fn singular(&self, x: &[f64; 7]) -> Option<Singular> {
+    fn singular(&self, x: &[f64; 7], within: f64) -> Option<Singular> {
         let [_, _, ax, ay, bx, by, _] = *x;
-        (ax == bx && ay == by).then_some(Singular::ZeroLengthLine)
+        together(ax, ay, bx, by, within).then_some(Singular::ZeroLengthLine)
     }
 }
 
@@ -358,9 +371,10 @@ impl Residual<9, 1> for SweptLength {
             .sub(length)?])
     }
 
-    fn singular(&self, x: &[f64; 9]) -> Option<Singular> {
+    fn singular(&self, x: &[f64; 9], within: f64) -> Option<Singular> {
         let [cx, cy, sx, sy, ex, ey, ..] = *x;
-        ((cx == sx && cy == sy) || (cx == ex && cy == ey)).then_some(Singular::ZeroRadius)
+        (together(cx, cy, sx, sy, within) || together(cx, cy, ex, ey, within))
+            .then_some(Singular::ZeroRadius)
     }
 }
 
@@ -402,8 +416,8 @@ impl Residual<9, 2> for Mirror {
         ])
     }
 
-    fn singular(&self, x: &[f64; 9]) -> Option<Singular> {
-        (x[4] == x[6] && x[5] == x[7]).then_some(Singular::ZeroLengthLine)
+    fn singular(&self, x: &[f64; 9], within: f64) -> Option<Singular> {
+        together(x[4], x[5], x[6], x[7], within).then_some(Singular::ZeroLengthLine)
     }
 }
 
@@ -543,9 +557,9 @@ pub(crate) fn curvature_rate<S: Scalar>(d1: [S; 2], d2: [S; 2], d3: [S; 2]) -> R
     top.div(n.square()?.mul(n)?)
 }
 
-/// Whether either end's first two control points are one.
-fn flat_end(x: &[f64]) -> bool {
-    matches!(x, [a, b, c, d, ..] if a == c && b == d)
+/// Whether either end's first two control points are one, within `within` on each axis.
+fn flat_end(x: &[f64], within: f64) -> bool {
+    matches!(x, [a, b, c, d, ..] if together(*a, *b, *c, *d, within))
 }
 
 /// Two splines join at G1: the tangent lines at their ends are one line, scaled by a length.
@@ -557,9 +571,9 @@ impl Residual<11, 1> for JoinTangent {
         Ok([sine(jet1(a)?, jet1(b)?)?.mul(l)?])
     }
 
-    fn singular(&self, x: &[f64; 11]) -> Option<Singular> {
+    fn singular(&self, x: &[f64; 11], within: f64) -> Option<Singular> {
         let (a, b) = x.split_at(5);
-        (flat_end(a) || flat_end(b)).then_some(Singular::ZeroLengthLine)
+        (flat_end(a, within) || flat_end(b, within)).then_some(Singular::ZeroLengthLine)
     }
 
     fn branch<S: Scalar>(&self, x: [S; 11]) -> Result<Option<S>, NumError> {
@@ -585,9 +599,9 @@ impl Residual<19, 2> for JoinCurvature {
         ])
     }
 
-    fn singular(&self, x: &[f64; 19]) -> Option<Singular> {
+    fn singular(&self, x: &[f64; 19], within: f64) -> Option<Singular> {
         let (a, b) = x.split_at(9);
-        (flat_end(a) || flat_end(b)).then_some(Singular::ZeroLengthLine)
+        (flat_end(a, within) || flat_end(b, within)).then_some(Singular::ZeroLengthLine)
     }
 
     fn branch<S: Scalar>(&self, x: [S; 19]) -> Result<Option<S>, NumError> {
@@ -616,9 +630,9 @@ impl Residual<29, 3> for JoinCurvatureRate {
         ])
     }
 
-    fn singular(&self, x: &[f64; 29]) -> Option<Singular> {
+    fn singular(&self, x: &[f64; 29], within: f64) -> Option<Singular> {
         let (a, b) = x.split_at(14);
-        (flat_end(a) || flat_end(b)).then_some(Singular::ZeroLengthLine)
+        (flat_end(a, within) || flat_end(b, within)).then_some(Singular::ZeroLengthLine)
     }
 
     fn branch<S: Scalar>(&self, x: [S; 29]) -> Result<Option<S>, NumError> {
@@ -639,9 +653,9 @@ impl Residual<10, 1> for SplineAlong {
         Ok([sine(d, minus([bx, by], [ax, ay])?)?.mul(l)?])
     }
 
-    fn singular(&self, x: &[f64; 10]) -> Option<Singular> {
-        let flat_line = x[5] == x[7] && x[6] == x[8];
-        (flat_end(x) || flat_line).then_some(Singular::ZeroLengthLine)
+    fn singular(&self, x: &[f64; 10], within: f64) -> Option<Singular> {
+        let flat_line = together(x[5], x[6], x[7], x[8], within);
+        (flat_end(x, within) || flat_line).then_some(Singular::ZeroLengthLine)
     }
 
     fn branch<S: Scalar>(&self, x: [S; 10]) -> Result<Option<S>, NumError> {
@@ -1807,16 +1821,18 @@ impl Assembly {
         Ok(values)
     }
 
-    /// Runs one kind: reads its inputs, checks its singular set, and stores what it gives.
+    /// Runs one kind: reads its inputs, checks them against its singular set, widened by
+    /// `within`, and stores what it gives.
     fn run<R: Residual<N, E>, const N: usize, const E: usize>(
         &mut self,
         kind: &R,
         row: &Row,
         x: &[f64],
+        within: f64,
     ) -> Result<(), SketchError> {
         let list: &[Slot; N] = self.list_of(row)?;
         let values = self.values::<N>(row, x)?;
-        if kind.singular(&values).is_some() {
+        if kind.singular(&values, within).is_some() {
             return Err(SketchError::Degenerate(row.id));
         }
         let mut seeds = [Dual::new(Real::ZERO, [Real::ZERO; N]); N];
@@ -1884,6 +1900,22 @@ impl Assembly {
     ///
     /// As [`Assembly::evaluate_at`].
     pub(crate) fn evaluate_rule(&mut self, rule: usize, x: &[f64]) -> Result<(), SketchError> {
+        self.evaluate_rule_within(rule, x, 0.0)
+    }
+
+    /// As [`Assembly::evaluate_rule`], with the rule's singular set widened by `within` on each
+    /// coordinate it fixes: an input that close to it is [`SketchError::Degenerate`]. A solved
+    /// answer is checked so, at the solver's tolerance (chapter 15.4).
+    ///
+    /// # Errors
+    ///
+    /// As [`Assembly::evaluate_at`].
+    pub(crate) fn evaluate_rule_within(
+        &mut self,
+        rule: usize,
+        x: &[f64],
+        within: f64,
+    ) -> Result<(), SketchError> {
         let row = *self.rows.get(rule).ok_or(SketchError::Internal)?;
         let end = rule
             .checked_add(1)
@@ -1896,13 +1928,13 @@ impl Assembly {
         for &spot in spots {
             self.jacobian.set_at(spot, 0.0)?;
         }
-        self.one(&row, x)
+        self.one(&row, x, within)
     }
 
-    fn one(&mut self, row: &Row, x: &[f64]) -> Result<(), SketchError> {
+    fn one(&mut self, row: &Row, x: &[f64], within: f64) -> Result<(), SketchError> {
         match row.kind {
             ConstraintKind::Coincident { .. } | ConstraintKind::Concentric { .. } => {
-                self.run(&Coincident, row, x)
+                self.run(&Coincident, row, x, within)
             }
             ConstraintKind::Horizontal { .. }
             | ConstraintKind::Vertical { .. }
@@ -1910,64 +1942,66 @@ impl Assembly {
             | ConstraintKind::Upward { .. }
             | ConstraintKind::Radius { .. }
             | ConstraintKind::EqualRadius { .. }
-            | ConstraintKind::Fix { .. } => self.run(&Apart { sign: 1.0 }, row, x),
+            | ConstraintKind::Fix { .. } => self.run(&Apart { sign: 1.0 }, row, x, within),
             ConstraintKind::Offset { grows, .. } => {
                 let sign = if grows { 1.0 } else { -1.0 };
-                self.run(&Apart { sign }, row, x)
+                self.run(&Apart { sign }, row, x, within)
             }
-            ConstraintKind::Diameter { .. } => self.run(&Halved, row, x),
-            ConstraintKind::OnLine { .. } => self.run(&OnLine, row, x),
-            ConstraintKind::Collinear { .. } => self.run(&Collinear, row, x),
+            ConstraintKind::Diameter { .. } => self.run(&Halved, row, x, within),
+            ConstraintKind::OnLine { .. } => self.run(&OnLine, row, x, within),
+            ConstraintKind::Collinear { .. } => self.run(&Collinear, row, x, within),
             ConstraintKind::OnCircle { .. }
             | ConstraintKind::Distance { .. }
-            | ConstraintKind::Length { .. } => self.run(&AtDistance, row, x),
+            | ConstraintKind::Length { .. } => self.run(&AtDistance, row, x, within),
             ConstraintKind::FromCircle { outside, .. }
             | ConstraintKind::TangentCircles { outside, .. } => {
                 let sign = if outside { 1.0 } else { -1.0 };
-                self.run(&AtSum { sign }, row, x)
+                self.run(&AtSum { sign }, row, x, within)
             }
             ConstraintKind::Midpoint { .. }
             | ConstraintKind::SymmetricAbout { .. }
-            | ConstraintKind::Spaced { .. } => self.run(&Middle, row, x),
+            | ConstraintKind::Spaced { .. } => self.run(&Middle, row, x, within),
             ConstraintKind::Turned { .. }
             | ConstraintKind::Parallel { .. }
             | ConstraintKind::Perpendicular { .. }
-            | ConstraintKind::Sweep { .. } => self.run(&Turned, row, x),
-            ConstraintKind::Heading { .. } => self.run(&Heading, row, x),
-            ConstraintKind::ArcLength { .. } => self.run(&SweptLength, row, x),
+            | ConstraintKind::Sweep { .. } => self.run(&Turned, row, x, within),
+            ConstraintKind::Heading { .. } => self.run(&Heading, row, x, within),
+            ConstraintKind::ArcLength { .. } => self.run(&SweptLength, row, x, within),
             ConstraintKind::FromLine { side, .. }
             | ConstraintKind::LinesApart { side, .. }
             | ConstraintKind::TangentLine { side, .. } => {
-                self.run(&FromLine { sign: side.sign() }, row, x)
+                self.run(&FromLine { sign: side.sign() }, row, x, within)
             }
-            ConstraintKind::EqualLength { .. } => self.run(&SameLength, row, x),
-            ConstraintKind::TangentAtEnd { .. } => self.run(&AcrossRadius, row, x),
-            ConstraintKind::ArcsTangentAtEnd { .. } => self.run(&InLine, row, x),
+            ConstraintKind::EqualLength { .. } => self.run(&SameLength, row, x, within),
+            ConstraintKind::TangentAtEnd { .. } => self.run(&AcrossRadius, row, x, within),
+            ConstraintKind::ArcsTangentAtEnd { .. } => self.run(&InLine, row, x, within),
             ConstraintKind::SplineJoin { order, .. } => match (row.lin, order) {
-                (false, Smoothness::Tangent) => self.run(&JoinTangent, row, x),
-                (false, Smoothness::Curvature) => self.run(&JoinCurvature, row, x),
-                (false, Smoothness::CurvatureRate) => self.run(&JoinCurvatureRate, row, x),
-                (true, Smoothness::Tangent) => self.run(&LinJoin1, row, x),
-                (true, Smoothness::Curvature) => self.run(&LinJoin2, row, x),
-                (true, Smoothness::CurvatureRate) => self.run(&LinJoin3, row, x),
+                (false, Smoothness::Tangent) => self.run(&JoinTangent, row, x, within),
+                (false, Smoothness::Curvature) => self.run(&JoinCurvature, row, x, within),
+                (false, Smoothness::CurvatureRate) => self.run(&JoinCurvatureRate, row, x, within),
+                (true, Smoothness::Tangent) => self.run(&LinJoin1, row, x, within),
+                (true, Smoothness::Curvature) => self.run(&LinJoin2, row, x, within),
+                (true, Smoothness::CurvatureRate) => self.run(&LinJoin3, row, x, within),
             },
-            ConstraintKind::SplineTangentLine { .. } if row.lin => self.run(&LinAlong1, row, x),
-            ConstraintKind::SplineTangentLine { .. } => self.run(&SplineAlong, row, x),
+            ConstraintKind::SplineTangentLine { .. } if row.lin => {
+                self.run(&LinAlong1, row, x, within)
+            }
+            ConstraintKind::SplineTangentLine { .. } => self.run(&SplineAlong, row, x, within),
             ConstraintKind::SplineAgainst { order, .. } => match (row.round, order) {
-                (false, Smoothness::Tangent) => self.run(&LinAlong1, row, x),
-                (false, Smoothness::Curvature) => self.run(&LinAlong2, row, x),
-                (false, Smoothness::CurvatureRate) => self.run(&LinAlong3, row, x),
-                (true, Smoothness::Tangent) => self.run(&LinRound1, row, x),
-                (true, Smoothness::Curvature) => self.run(&LinRound2, row, x),
-                (true, Smoothness::CurvatureRate) => self.run(&LinRound3, row, x),
+                (false, Smoothness::Tangent) => self.run(&LinAlong1, row, x, within),
+                (false, Smoothness::Curvature) => self.run(&LinAlong2, row, x, within),
+                (false, Smoothness::CurvatureRate) => self.run(&LinAlong3, row, x, within),
+                (true, Smoothness::Tangent) => self.run(&LinRound1, row, x, within),
+                (true, Smoothness::Curvature) => self.run(&LinRound2, row, x, within),
+                (true, Smoothness::CurvatureRate) => self.run(&LinRound3, row, x, within),
             },
             ConstraintKind::SplineLength { .. } => self.run_length(row, x),
             ConstraintKind::SplineThrough { .. } => self.run_through(row, x),
-            ConstraintKind::Symmetric { .. } => self.run(&Mirror, row, x),
-            ConstraintKind::LinearPattern { .. } => self.run(&SameStep, row, x),
-            ConstraintKind::CircularPattern { .. } => self.run(&TurnedAbout, row, x),
-            ConstraintKind::Linear { .. } => self.run(&Linear, row, x),
-            ConstraintKind::Product { .. } => self.run(&Product, row, x),
+            ConstraintKind::Symmetric { .. } => self.run(&Mirror, row, x, within),
+            ConstraintKind::LinearPattern { .. } => self.run(&SameStep, row, x, within),
+            ConstraintKind::CircularPattern { .. } => self.run(&TurnedAbout, row, x, within),
+            ConstraintKind::Linear { .. } => self.run(&Linear, row, x, within),
+            ConstraintKind::Product { .. } => self.run(&Product, row, x, within),
         }
     }
 }
