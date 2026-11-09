@@ -3,7 +3,7 @@ name = "geom-surface"
 version = "0.0.0"
 edition.workspace = true
 publish.workspace = true
-license.workspace = true
+license = "Apache-2.0 AND MIT"
 description = "Spare Kit geometry kernel: every surface kind."
 
 [dependencies]
@@ -30,6 +30,10 @@ harness = false
 
 [[bench]]
 name = "offsets"
+harness = false
+
+[[bench]]
+name = "frames"
 harness = false
 
 [lints.rust]
