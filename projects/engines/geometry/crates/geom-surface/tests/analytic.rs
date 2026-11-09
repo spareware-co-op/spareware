@@ -4,6 +4,9 @@
 //! changes a kind to NURBS explicitly; a uniform whole-number scale moves every round kind exactly,
 //! a cylinder's and a cone's axial term with it; a sphere's pole keeps its normal; a torus knows
 //! its form.
+//!
+//! Covers: `SurfaceKind::Plane`, `SurfaceKind::Cylinder`, `SurfaceKind::Cone`, `SurfaceKind::Sphere`,
+//! `SurfaceKind::Torus`.
 
 #![allow(
     clippy::arithmetic_side_effects,
@@ -20,11 +23,13 @@
 
 use geom_curve::{CurveError, Frame, ParamMap};
 use geom_math::{Axis, GridTransform, RationalTransform, Rotation, Transform, TypedTransform};
+use geom_num::interval::Interval;
 use geom_nurbs::{Direction, Limit};
 use geom_run::{Budget, WorkMeter};
 use geom_surface::contract::check;
 use geom_surface::{
-    Cone, Cylinder, ParamBox, ParamSurface, Plane, Sphere, SurfaceKind, Torus, TorusForm,
+    Cone, Cylinder, ImplicitBound, ParamBox, ParamSurface, Plane, Sphere, SurfaceKind, Torus,
+    TorusForm,
 };
 
 fn meter() -> WorkMeter<'static> {
@@ -361,4 +366,29 @@ fn split_and_reverse_are_exact_and_refusals_typed() {
     )
     .unwrap();
     assert_eq!(infinite.to_nurbs(m).err(), Some(CurveError::Unbounded));
+}
+
+/// A cone's equation vanishes on it, which a slope taken from anything but its own would not.
+#[test]
+fn a_cones_equation_vanishes_on_it() {
+    let domain = ((0.25, 1.75), (-0.5, 0.5));
+    let cone = Cone::new(
+        [1.0, 2.0, 3.0],
+        5.0,
+        0.25,
+        Frame::standard().unwrap(),
+        domain,
+    )
+    .unwrap();
+    let surface = SurfaceKind::Cone(cone.clone());
+    let sides = (Limit::FromRight, Limit::FromRight);
+    for (u, v) in [(0.5, 0.25), (1.0, -0.25), (1.5, 0.5)] {
+        let [x, y, z] = surface.point(u, v, sides).unwrap();
+        let at = [x, y, z].map(|c| Interval::point(c).unwrap());
+        let value = cone.enclose_box(at).unwrap().value;
+        assert!(
+            value.lo().abs() < 1e-9 && value.hi().abs() < 1e-9,
+            "{value:?}"
+        );
+    }
 }

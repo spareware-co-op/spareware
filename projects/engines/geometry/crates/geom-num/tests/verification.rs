@@ -64,14 +64,14 @@
     clippy::indexing_slicing
 )]
 
-use std::cell::RefCell;
+use std::cell::{Cell, RefCell};
 
 use dashu_int::IBig;
 use dashu_ratio::RBig;
 use geom_num::crossing::Ssi;
 use geom_num::generated::{lpi_side, ssi_side, tpi_side};
 use geom_num::grid::{COORD_MAX, P2, P3};
-use geom_num::plane::{Lpi, Plane, Tpi};
+use geom_num::plane::{Lpi, Plane, Tpi, determinant_sign};
 use geom_num::{NumError, Sign, perturb, predicate};
 use geom_test::prop;
 use geom_test::rust_source::references;
@@ -762,11 +762,24 @@ fn made(planes: &[[Pt3; 3]]) -> Option<Vec<Plane>> {
         .collect()
 }
 
+/// Whether a plane has a coefficient past a machine word, so that `determinant_sign` skips its
+/// machine-word rung and its sign comes from the filter or the exact path.
+fn past_words(plane: &Plane) -> bool {
+    plane
+        .n()
+        .iter()
+        .chain([&plane.d()])
+        .any(|v| i64::try_from(*v).is_err())
+}
+
 /// `side_of_tpi` near its filter's bound: three planes through a grid point x0, and a fourth
-/// through x0 + k·e, x0 + B and x0 + C ([`cassini3`]), whose value at x0 is ±k.
+/// through x0 + k·e, x0 + B and x0 + C ([`cassini3`]), whose value at x0 is ±k. The same inputs
+/// cross the bound for `determinant_sign`, whose sign times the weight is the side, wherever a
+/// coefficient is past a machine word, so the filter and not the word rung decides.
 #[test]
 fn side_of_tpi_filter_boundary_crossed_both_ways() {
     let kinds = RefCell::new(Kinds::default());
+    let routed = Cell::new((0usize, 0usize));
     let strategy = (cassini3(), scaled3());
     prop::run(
         "side_of_tpi_filter_boundary_crossed_both_ways",
@@ -802,6 +815,20 @@ fn side_of_tpi_filter_boundary_crossed_both_ways() {
                     ax, ay, az, ad, bx, by, bz, bd, cx, cy, cz, cd, sx, sy, sz, sd,
                 )
                 .map(|v| v.mul(w));
+                let answer = plane.side_of_tpi(&t);
+                assert_eq!(
+                    determinant_sign(&made[0], &made[1], &made[2], &plane).map(|v| v.mul(w)),
+                    answer,
+                    "determinant_sign times the weight is the side"
+                );
+                if made.iter().chain([&plane]).any(past_words) {
+                    let (inside, outside) = routed.get();
+                    routed.set(if filter.is_none() {
+                        (inside + 1, outside)
+                    } else {
+                        (inside, outside + 1)
+                    });
+                }
                 let points = planes
                     .iter()
                     .chain(std::iter::once(&s))
@@ -810,7 +837,7 @@ fn side_of_tpi_filter_boundary_crossed_both_ways() {
                     .collect();
                 Some(Member {
                     filter,
-                    answer: plane.side_of_tpi(&t),
+                    answer,
                     fixture: Fixture {
                         predicate: "side_of_tpi".to_owned(),
                         points,
@@ -832,6 +859,11 @@ fn side_of_tpi_filter_boundary_crossed_both_ways() {
         "inside {} outside {}",
         kinds.inside,
         kinds.outside
+    );
+    let (inside, outside) = routed.get();
+    assert!(
+        inside > 0 && outside > 0,
+        "determinant_sign past its word rung: inside {inside} outside {outside}"
     );
 }
 
@@ -1584,9 +1616,52 @@ fn perturbed(
     }
 }
 
+/// The rows of the determinants of plane coefficients: `plane::determinant_sign`, whose sign times
+/// the weight is a point's side, and `plane::normals_sign`, the weight's sign. The same tests serve
+/// every class but the boundary.
+fn determinants() -> [Row; 2] {
+    use Class::*;
+    use Where::{NotApplicable, Test};
+    let row = |predicate, call, boundary| Row {
+        predicate,
+        call,
+        classes: [
+            (
+                Random,
+                Test("plane.rs", "determinants_are_exact_at_any_length"),
+            ),
+            (OneStep, Test("plane.rs", "determinants_one_step_from_zero")),
+            (Boundary, boundary),
+            (
+                Corners,
+                Test("plane.rs", "determinants_at_the_coefficient_corners"),
+            ),
+            (Laws, Test("plane.rs", "determinant_laws")),
+        ],
+    };
+    [
+        row(
+            "plane::determinant_sign",
+            "determinant_sign",
+            Test(
+                "verification.rs",
+                "side_of_tpi_filter_boundary_crossed_both_ways",
+            ),
+        ),
+        row(
+            "plane::normals_sign",
+            "normals_sign",
+            NotApplicable(
+                "it has no filter: checked machine words, else an exact cross and dot product in `Wide`",
+            ),
+        ),
+    ]
+}
+
 fn matrix() -> Vec<Row> {
     use Class::*;
     use Where::{NotApplicable, Test};
+    let [determinant_sign, normals_sign] = determinants();
     vec![
         explicit("predicate::orient2d", "predicate::orient2d"),
         explicit("predicate::orient3d", "predicate::orient3d"),
@@ -1614,6 +1689,8 @@ fn matrix() -> Vec<Row> {
                 (Laws, Test("plane.rs", "plane_laws")),
             ],
         },
+        determinant_sign,
+        normals_sign,
         implicit(
             "plane::Plane::side_of_tpi",
             ".side_of_tpi",

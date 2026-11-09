@@ -1,0 +1,7 @@
+# Seeds for failure cases proptest has generated in the past. It is
+# automatically read and these particular cases re-run before any
+# novel cases are generated.
+#
+# It is recommended to check this file in to source control so that
+# everyone who runs the test benefits from these saved cases.
+cc 1b1d75f50e842ec05a152d43d195f053dfd3421cbf9716fc775b0fc7ab0390f0 # shrinks to q = Plane { n: [-1208925819612430151450625, 0, 0], d: 0 }, a = P3 { x: Coord(0), y: Coord(0), z: Coord(0) }, b = P3 { x: Coord(0), y: Coord(0), z: Coord(0) }

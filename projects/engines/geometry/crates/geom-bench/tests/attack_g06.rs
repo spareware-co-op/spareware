@@ -69,7 +69,7 @@ use geom_num::dd::{self as dd, DD};
 use geom_num::exact_sum::ExactSum;
 use geom_num::grid::{self, COORD_MAX, Coord, GridStep, P2, P3, Rounded, Steps};
 use geom_num::interval::Interval;
-use geom_num::plane::{Lpi, Plane, Tpi};
+use geom_num::plane::{Lpi, Plane, Tpi, determinant_sign, normals_sign};
 use geom_num::real::Real;
 use geom_num::rng::{self as rng, Philox, RngError, Seed, Stream, StreamId, StreamRange};
 use geom_num::wide::Wide;
@@ -760,6 +760,25 @@ fn fold<R: Canonical>(results: impl IntoIterator<Item = R>) -> Digest {
     canonical::digest(&results)
 }
 
+/// A context of one `geom-make` operation, as the benchmarks run it.
+fn make_context() -> geom_op::OpContext<'static> {
+    geom_op::OpContext::new(
+        geom_op::OpPath::new(geom_op::OpId::from_bytes([2; 16])),
+        geom_run::Budget::UNLIMITED,
+    )
+}
+
+/// What a `geom-make` result is read by.
+fn make_counts(out: &geom_op::OpOutput<geom_make::Made>) -> [u32; 4] {
+    let a = out.result.body.arenas();
+    [
+        a.rows(geom_topo::Arena::Face),
+        a.rows(geom_topo::Arena::Edge),
+        a.rows(geom_topo::Arena::Vertex),
+        u32::from(out.exactness.rank()),
+    ]
+}
+
 /// The output digest of one run of `kernel` over `batch`, as a benchmark computes it.
 fn kernel_digest<T, R: Canonical>(kernel: fn(&[T], &mut Vec<R>), batch: &[T]) -> Digest {
     let mut out = Vec::with_capacity(batch.len());
@@ -978,9 +997,46 @@ fn growth_digest(name: &str, limbs: usize) -> Option<Digest> {
 /// The digest of the catalogued benchmark `group/name/class`, computed by calling the `geom-num`
 /// operation directly, or `None` for an operation this table does not know.
 fn direct_digest(group: &str, name: &str, class: Class) -> Option<Digest> {
+    use geom_num::quadric;
+    use inputs::quadric as iv;
     use inputs::{eft as ie, grid as ig, interval as ii, plane as ip, predicate as iq};
     use inputs::{exactness as ix, real as ir, sign as is};
     Some(match (group, name) {
+        ("quadric", "line_sphere") => fold(
+            iv::spheres(class)
+                .iter()
+                .map(|(l, s)| quadric::line_sphere(l, s)),
+        ),
+        ("quadric", "line_cylinder") => fold(
+            iv::cylinders(class)
+                .iter()
+                .map(|(l, c)| quadric::line_cylinder(l, c)),
+        ),
+        ("quadric", "line_cone") => fold(
+            iv::cones(class)
+                .iter()
+                .map(|(l, c)| quadric::line_cone(l, c)),
+        ),
+        ("quadric", "line_torus") => fold(
+            iv::tori(class)
+                .iter()
+                .map(|(l, t)| quadric::roots(l, &quadric::Surface::Torus(*t))),
+        ),
+        ("quadric", "parallel") => fold(
+            iv::directions(class)
+                .iter()
+                .map(|(u, v)| quadric::parallel(u.a, u.b, v.a, v.b)),
+        ),
+        ("quadric", "axis_gap") => fold(
+            iv::gaps(class)
+                .iter()
+                .map(|(u, v)| quadric::axis_gap(u.a, u.b, v.a, geom_num::grid::Steps(1024))),
+        ),
+        ("quadric", "tangent") => fold(
+            iv::tangents(class)
+                .iter()
+                .map(|(c, k)| quadric::tangent_cylinder_cone(c, k)),
+        ),
         ("predicate", "orient2d") => fold(
             iq::orient2d(class)
                 .into_iter()
@@ -1015,12 +1071,37 @@ fn direct_digest(group: &str, name: &str, class: Class) -> Option<Digest> {
                 .into_iter()
                 .map(|[p, q, r]| Tpi::new(p, q, r)),
         ),
+        ("plane", "tpi_meeting") => fold(
+            ip::tpi_meeting(class)
+                .into_iter()
+                .map(|[p, q, r]| Tpi::meeting(p, q, r)),
+        ),
+        ("plane", "normals_sign") => fold(
+            ip::normals_sign(class)
+                .iter()
+                .map(|[p, q, r]| normals_sign(p, q, r)),
+        ),
+        ("plane", "normals_sign_faces") => fold(
+            ip::normals_sign_faces(class)
+                .iter()
+                .map(|[p, q, r]| normals_sign(p, q, r)),
+        ),
         ("plane", "tpi_homogeneous") => {
             fold(ip::tpi_homogeneous(class).iter().map(Tpi::homogeneous))
         }
         ("plane", "side_of_tpi") => {
             fold(ip::side_of_tpi(class).iter().map(|(p, t)| p.side_of_tpi(t)))
         }
+        ("plane", "determinant_sign") => fold(
+            ip::determinant_sign(class)
+                .iter()
+                .map(|[p, q, r, s]| determinant_sign(p, q, r, s)),
+        ),
+        ("plane", "determinant_sign_faces") => fold(
+            ip::determinant_sign_faces(class)
+                .iter()
+                .map(|[p, q, r, s]| determinant_sign(p, q, r, s)),
+        ),
         ("plane", "to_grid") => fold(ip::to_grid(class).iter().map(Tpi::to_grid)),
         ("plane", "lpi_new") => fold(
             ip::lpi_new(class)
@@ -1259,6 +1340,153 @@ fn direct_digest(group: &str, name: &str, class: Class) -> Option<Digest> {
                     .map(|(a, b)| geom_num::brent::zero(inputs::roots::cubic, a, b, tol, 100)),
             )
         }
+        ("intersect", "curve_segments") => fold(
+            inputs::intersect::segment_pairs(class)
+                .iter()
+                .map(|(a, b)| {
+                    let mut meter = geom_run::WorkMeter::new(geom_run::Budget::UNLIMITED);
+                    geom_intersect::curve::curves(a, b, &mut meter)
+                }),
+        ),
+        ("intersect", "curve_circles") => {
+            fold(inputs::intersect::circle_pairs(class).iter().map(|(a, b)| {
+                let mut meter = geom_run::WorkMeter::new(geom_run::Budget::UNLIMITED);
+                geom_intersect::curve::curves(a, b, &mut meter)
+            }))
+        }
+        ("intersect", "curve_line_circle") => {
+            fold(inputs::intersect::line_circles(class).iter().map(|(a, b)| {
+                let mut meter = geom_run::WorkMeter::new(geom_run::Budget::UNLIMITED);
+                geom_intersect::curve::curves(a, b, &mut meter)
+            }))
+        }
+        ("intersect", "curve_cubics") => {
+            fold(inputs::intersect::cubic_pairs(class).iter().map(|(a, b)| {
+                let mut meter = geom_run::WorkMeter::new(geom_run::Budget::UNLIMITED);
+                geom_intersect::curve::curves(a, b, &mut meter)
+            }))
+        }
+        ("intersect", "surface_plane") => {
+            fold(inputs::intersect::line_planes(class).iter().map(|(c, s)| {
+                let mut meter = geom_run::WorkMeter::new(geom_run::Budget::UNLIMITED);
+                geom_intersect::curve_surface::curve_surface(c, s, &mut meter)
+            }))
+        }
+        ("intersect", "surface_torus") => {
+            fold(inputs::intersect::line_tori(class).iter().map(|(c, s)| {
+                let mut meter = geom_run::WorkMeter::new(geom_run::Budget::UNLIMITED);
+                geom_intersect::curve_surface::curve_surface(c, s, &mut meter)
+            }))
+        }
+        ("intersect", "surface_patch") => fold(inputs::intersect::cubic_patches(class).iter().map(
+            |(c, s)| {
+                let mut meter = geom_run::WorkMeter::new(geom_run::Budget::UNLIMITED);
+                geom_intersect::curve_surface::curve_surface(c, s, &mut meter)
+            },
+        )),
+        ("intersect", "curve_loop") => fold(inputs::intersect::loops(class).iter().map(|c| {
+            let mut meter = geom_run::WorkMeter::new(geom_run::Budget::UNLIMITED);
+            geom_intersect::curve::self_crossings(c, &mut meter)
+        })),
+        ("intersect", "sort_items") => {
+            fold(inputs::intersect::items(class).into_iter().map(|items| {
+                geom_intersect::Intersection::new(
+                    items,
+                    geom_intersect::Coverage::CompleteOutsideFlagged,
+                    Vec::new(),
+                    &mut geom_run::WorkMeter::new(geom_run::Budget::UNLIMITED),
+                )
+            }))
+        }
+        ("intersect", "trace_patch") => fold(inputs::intersect::patches(class).iter().map(
+            |(surface, centre)| {
+                let frame = geom_curve::Frame::standard().unwrap();
+                let domain = ((0.0, 2.0), (-0.5, 0.5));
+                let sphere = geom_surface::Sphere::new(*centre, 5.0, frame, domain)?;
+                let mut meter = geom_run::WorkMeter::new(geom_run::Budget::UNLIMITED);
+                let level = geom_intersect::OnImplicit(&sphere);
+                geom_intersect::trace(surface, &level, 1e-3, 1e-1, &mut meter)
+            },
+        )),
+        ("intersect", "subdivide_patch") => fold(inputs::intersect::sheets(class).iter().map(
+            |(surface, centre)| {
+                let frame = geom_curve::Frame::standard().unwrap();
+                let domain = ((0.0, 1.875), (-0.45, 0.45));
+                let sphere = geom_surface::SurfaceKind::Sphere(geom_surface::Sphere::new(
+                    *centre, 5.0, frame, domain,
+                )?);
+                let mut meter = geom_run::WorkMeter::new(geom_run::Budget::UNLIMITED);
+                geom_intersect::general::subdivide(surface, &sphere, 1.0, &mut meter)
+            },
+        )),
+        ("intersect", "march_plate") => fold(inputs::intersect::plates(class).iter().map(
+            |(surface, centre)| {
+                let frame = geom_curve::Frame::standard().unwrap();
+                let domain = ((0.0, 1.875), (-0.45, 0.45));
+                let sphere = geom_surface::SurfaceKind::Sphere(geom_surface::Sphere::new(
+                    *centre, 5.0, frame, domain,
+                )?);
+                let mut meter = geom_run::WorkMeter::new(geom_run::Budget::UNLIMITED);
+                let found = geom_intersect::general::subdivide(surface, &sphere, 1.0, &mut meter)?;
+                geom_intersect::march::march(surface, &sphere, &found, 1.0, 1.0, &mut meter)
+            },
+        )),
+        ("intersect", "analyse_rest") => {
+            fold(inputs::intersect::rests(class).iter().map(|(plate, ball)| {
+                let mut meter = geom_run::WorkMeter::new(geom_run::Budget::UNLIMITED);
+                let found = geom_intersect::general::subdivide(plate, ball, 1e-2, &mut meter)?;
+                geom_intersect::contact::analyse(plate, ball, &found, 1e-2, 1.0, &mut meter)
+            }))
+        }
+        ("intersect", "trace_silhouette") => fold(inputs::intersect::tori(class).iter().map(
+            |(surface, direction)| {
+                let mut meter = geom_run::WorkMeter::new(geom_run::Budget::UNLIMITED);
+                let level = geom_intersect::Silhouette {
+                    direction: *direction,
+                };
+                geom_intersect::trace(surface, &level, 1e-3, 1e-1, &mut meter)
+            },
+        )),
+        ("intersect", "project_arc") => {
+            fold(inputs::intersect::arcs(class).iter().map(|(curve, p)| {
+                let mut meter = geom_run::WorkMeter::new(geom_run::Budget::UNLIMITED);
+                geom_intersect::project_curve(curve, p, 1e-6, &mut meter)
+            }))
+        }
+        ("intersect", "project_sphere") => fold(inputs::intersect::spheres(class).iter().map(
+            |(surface, p)| {
+                let mut meter = geom_run::WorkMeter::new(geom_run::Budget::UNLIMITED);
+                geom_intersect::project_surface(surface, p, 1e-6, &mut meter)
+            },
+        )),
+        ("intersect", "key_circle") => fold(inputs::intersect::circles(class).iter().map(|c| {
+            let mut meter = geom_run::WorkMeter::new(geom_run::Budget::UNLIMITED);
+            geom_intersect::CanonicalKey::of_curve(c, &mut meter)
+        })),
+        ("intersect", "pair_lines") => {
+            fold(inputs::intersect::lines(class).iter().map(|(a, b)| {
+                let operand = |curve| {
+                    let mut meter = geom_run::WorkMeter::new(geom_run::Budget::UNLIMITED);
+                    geom_intersect::CanonicalKey::of_curve(curve, &mut meter).map(|key| {
+                        geom_intersect::Operand {
+                            geom: geom_intersect::Geom::Curve(curve),
+                            domain: None,
+                            bound: Steps(0),
+                            key,
+                        }
+                    })
+                };
+                let (x, y) = (operand(a)?, operand(b)?);
+                geom_intersect::pair(&x, &y, |_, _| {
+                    geom_intersect::Intersection::new(
+                        Vec::new(),
+                        geom_intersect::Coverage::TopologyCertified,
+                        Vec::new(),
+                        &mut geom_run::WorkMeter::new(geom_run::Budget::UNLIMITED),
+                    )
+                })
+            }))
+        }
         ("quadrature", "gauss_legendre") => fold(
             inputs::roots::gauss_legendre(class)
                 .into_iter()
@@ -1283,6 +1511,40 @@ fn direct_digest(group: &str, name: &str, class: Class) -> Option<Digest> {
             let sides = (geom_nurbs::Limit::FromRight, geom_nurbs::Limit::FromRight);
             fold(pairs.into_iter().map(|(u, v)| s.point(u, v, sides)))
         }
+        ("format", "cache_key") => {
+            let path = inputs::format::path();
+            fold(
+                inputs::format::cache_key(class)
+                    .into_iter()
+                    .map(|(edition, seed)| {
+                        geom_format::cache::CacheKey::new(
+                            edition,
+                            &inputs::format::SCHEMA,
+                            &path,
+                            geom_op::Precision::Final,
+                            &[inputs::format::input(seed)],
+                        )
+                        .ok()
+                    }),
+            )
+        }
+        ("format", "memo_get") => {
+            let mut store = inputs::format::store();
+            fold(inputs::format::memo_get(class).into_iter().map(|key| {
+                match store.get(&key, geom_run::Budget::UNLIMITED) {
+                    Some(Ok(answer)) => Some(answer.result),
+                    _ => None,
+                }
+            }))
+        }
+        ("format", "next_version") => fold(inputs::format::next_version(class).into_iter().map(
+            |(_, body)| {
+                let mut meter = geom_run::WorkMeter::new(geom_run::Budget::UNLIMITED);
+                geom_format::body::write_body(&body, &mut meter)
+                    .ok()
+                    .map(|stored| stored.content_id())
+            },
+        )),
         ("surface", "torus_second_bound") => {
             use geom_surface::ParamSurface;
             let s = inputs::surface::torus().unwrap();
@@ -1357,6 +1619,224 @@ fn direct_digest(group: &str, name: &str, class: Class) -> Option<Digest> {
                         .bound(&mut geom_run::WorkMeter::new(geom_run::Budget::UNLIMITED))
                 }),
         ),
+        ("topo", "column_edit") => fold(inputs::topo::column_edit(class).iter().map(
+            |(values, row, value)| -> Result<u64, geom_topo::TopoError> {
+                let mut column: geom_topo::Column<geom_topo::Face, u64> = geom_topo::Column::new();
+                for &v in values {
+                    column.push(v)?;
+                }
+                let original = column.clone();
+                column.set(geom_topo::Ix::new(*row).unwrap(), *value)?;
+                let a: u64 = original.iter().fold(0, |s, v| s.wrapping_add(*v));
+                let b: u64 = column.iter().fold(0, |s, v| s.wrapping_add(*v));
+                Ok(a.wrapping_add(b))
+            },
+        )),
+        ("topo", "publish") => fold(inputs::topo::publish(class).iter().map(
+            |builder| -> Result<u32, geom_topo::TopoError> {
+                let mut meter = geom_run::WorkMeter::new(geom_run::Budget::UNLIMITED);
+                let body = builder.clone().publish(
+                    geom_topo::BodyKind::Solid,
+                    geom_topo::Ix::new(1).unwrap(),
+                    &mut meter,
+                )?;
+                Ok(body.arenas().fins.len())
+            },
+        )),
+        ("attributes", "apply") => fold(inputs::attributes::apply(class).iter().map(
+            |scene| -> Result<u64, geom_name::AttrError> {
+                let (after, notes) = geom_name::apply(
+                    &scene.defs,
+                    &scene.before,
+                    &scene.history,
+                    &geom_name::Step::default(),
+                )?;
+                Ok(after.iter().count() as u64 + notes.len() as u64)
+            },
+        )),
+        ("batch", "run_items") => fold(inputs::batch::run_items(class).iter().map(
+            |items| -> Result<u64, geom_op::OpError> {
+                // Each item alone, as a call made one by one gives it.
+                let path = geom_op::OpPath::new(geom_op::OpId::from_bytes([7; 16]));
+                let ctx = geom_op::OpContext::new(path, geom_run::Budget::UNLIMITED);
+                let driver = geom_op::Batch::new(
+                    &ctx,
+                    geom_run::BatchBudget::new(geom_run::Budget::of_work(64)),
+                    geom_run::Phase::new("items"),
+                    geom_run::ChunkPlan::fixed::<4>(),
+                );
+                items.iter().try_fold(0_u64, |all, n| {
+                    let mut key = [0_u8; 16];
+                    key[..8].copy_from_slice(&n.to_be_bytes());
+                    key[8..].copy_from_slice(&(!n).to_le_bytes());
+                    let one = driver.single(key, n, |_, &n, meter| {
+                        meter.charge(n % 16).unwrap();
+                        Ok(n.wrapping_mul(3))
+                    })?;
+                    Ok(all ^ one)
+                })
+            },
+        )),
+        ("batch", "curve_points") => {
+            let helix = inputs::curve::helix().unwrap();
+            fold(inputs::batch::curve_points(class).iter().map(
+                |t| -> Result<Vec<f64>, geom_curve::CurveError> {
+                    let points = t
+                        .iter()
+                        .map(|&x| {
+                            geom_curve::ParamCurve::point(&helix, x, geom_nurbs::Limit::FromRight)
+                        })
+                        .collect::<Result<Vec<[f64; 3]>, _>>()?;
+                    Ok((0..3)
+                        .flat_map(|k| points.iter().map(move |p| p[k]))
+                        .collect())
+                },
+            ))
+        }
+        ("batch", "surface_points") => {
+            let torus = inputs::surface::torus().unwrap();
+            let sides = (geom_nurbs::Limit::FromRight, geom_nurbs::Limit::FromRight);
+            fold(inputs::batch::surface_points(class).iter().map(
+                |uv| -> Result<Vec<f64>, geom_curve::CurveError> {
+                    let (us, vs) = uv.split_at(uv.len() / 2);
+                    let points = us
+                        .iter()
+                        .zip(vs)
+                        .map(|(&u, &v)| geom_surface::ParamSurface::point(&torus, u, v, sides))
+                        .collect::<Result<Vec<[f64; 3]>, _>>()?;
+                    Ok((0..3)
+                        .flat_map(|k| points.iter().map(move |p| p[k]))
+                        .collect())
+                },
+            ))
+        }
+        ("make", "build_box") => {
+            let ctx = make_context();
+            fold(
+                inputs::make::boxes(class)
+                    .iter()
+                    .map(|input| geom_make::make_box(&ctx, input).map(|out| make_counts(&out))),
+            )
+        }
+        ("make", "cylinder") => {
+            let ctx = make_context();
+            fold(
+                inputs::make::cylinders(class)
+                    .iter()
+                    .map(|input| geom_make::cylinder(&ctx, input).map(|out| make_counts(&out))),
+            )
+        }
+        ("make", "move_box") => {
+            let ctx = make_context();
+            fold(
+                inputs::make::moved_boxes(class)
+                    .iter()
+                    .map(|(body, offset)| {
+                        let moved = geom_make::Moved {
+                            body: &body.result.body,
+                            exactness: body.exactness,
+                            accept: None,
+                        };
+                        geom_make::move_by(&ctx, moved, *offset).map(|out| make_counts(&out))
+                    }),
+            )
+        }
+        ("make", "turn_box") => {
+            let ctx = make_context();
+            fold(
+                inputs::make::turned_boxes(class)
+                    .iter()
+                    .map(|(body, center)| {
+                        let moved = geom_make::Moved {
+                            body: &body.result.body,
+                            exactness: body.exactness,
+                            accept: None,
+                        };
+                        let turn = geom_math::Rotation::quarter_turns(1);
+                        geom_make::rotate(&ctx, moved, geom_math::Axis::Z, turn, *center)
+                            .map(|out| make_counts(&out))
+                    }),
+            )
+        }
+        ("mesh", "point_point") => fold(
+            inputs::mesh::point_point(class)
+                .iter()
+                .map(|&([p, q], c)| geom_num::distance::point_point(p, q, c)),
+        ),
+        ("mesh", "point_line") => fold(
+            inputs::mesh::point_line(class)
+                .iter()
+                .map(|&([a, b, p], c)| geom_num::distance::point_line(a, b, p, c)),
+        ),
+        ("mesh", "point_plane") => fold(
+            inputs::mesh::point_plane(class)
+                .iter()
+                .map(|&([a, b, d, p], c)| geom_num::distance::point_plane(a, b, d, p, c)),
+        ),
+        ("mesh", "line_line") => fold(
+            inputs::mesh::line_line(class)
+                .iter()
+                .map(|&([a, b, d, p], c)| geom_num::distance::line_line(a, b, d, p, c)),
+        ),
+        ("mesh", "closest_dots") => {
+            use geom_num::distance::{dot_from, product_difference};
+            fold(
+                inputs::mesh::closest_dots(class)
+                    .iter()
+                    .map(|&[a, b, d, p]| {
+                        let (x, y) = (dot_from(a, b, p), dot_from(b, d, p));
+                        product_difference(x, y, dot_from(d, a, p), dot_from(a, d, p))
+                    }),
+            )
+        }
+        ("mesh", "triangles") => fold(inputs::mesh::triangles(class).iter().map(|&[a, b]| {
+            geom_mesh::contact::triangles(a, b).map(|c| match c {
+                geom_mesh::contact::Contact::Apart => geom_num::Sign::Negative,
+                geom_mesh::contact::Contact::Touch => geom_num::Sign::Zero,
+                geom_mesh::contact::Contact::Cross => geom_num::Sign::Positive,
+            })
+        })),
+        ("mesh", "locate") => fold(inputs::mesh::locate(class).iter().map(|probe| {
+            let mut meter = geom_run::WorkMeter::new(geom_run::Budget::UNLIMITED);
+            let exec = geom_run::Exec::serial();
+            geom_mesh::classify::Classifier::new(&probe.solid, &exec, &mut meter)?.locate_all(
+                &probe.points,
+                &exec,
+                &mut meter,
+            )
+        })),
+        ("mesh", "envelope") => fold(
+            inputs::mesh::envelope(class)
+                .iter()
+                .map(|&(t, p)| geom_mesh::envelope::TriangleEnvelope::new(t, 1 << 16)?.contains(p)),
+        ),
+        ("mesh", "boolean") => fold(inputs::mesh::boolean(class).iter().map(|pair| {
+            let mut meter = geom_run::WorkMeter::new(geom_run::Budget::UNLIMITED);
+            geom_mesh::boolean::boolean(
+                &[&pair.first, &pair.second],
+                &[geom_poly::winding::WindingTest::unite()],
+                &geom_op::OpPath::new(geom_op::OpId::from_bytes([7; 16])),
+                &geom_run::Exec::serial(),
+                &mut meter,
+            )
+        })),
+        ("mesh", "hull") => fold(inputs::mesh::hull(class).iter().map(|points| {
+            let mut meter = geom_run::WorkMeter::new(geom_run::Budget::UNLIMITED);
+            geom_mesh::hull::Hull::of(points, &mut meter)
+        })),
+        ("mesh", "slice") => fold(inputs::mesh::slice(class).iter().map(|layers| {
+            let mut meter = geom_run::WorkMeter::new(geom_run::Budget::UNLIMITED);
+            let exec = geom_run::Exec::serial();
+            geom_mesh::slice::slice(&layers.solid, &layers.planes, &exec, &mut meter)
+        })),
+        ("mesh", "exact_build") => fold(inputs::mesh::exact_build(class).iter().map(|p| {
+            let mut meter = geom_run::WorkMeter::new(geom_run::Budget::UNLIMITED);
+            geom_mesh::exact::build::build(p, &geom_run::Exec::serial(), &mut meter)
+        })),
+        ("mesh", "cdt") => fold(inputs::mesh::cdt(class).iter().map(|t| {
+            let mut meter = geom_run::WorkMeter::new(geom_run::Budget::UNLIMITED);
+            geom_mesh::triangulate(&t.sites, &t.constraints, None, &mut meter)
+        })),
         ("bvh", "tree_build_query") => fold(inputs::bvh::tree_build_query(class).iter().map(
             |(entries, query)| {
                 let mut meter = geom_run::WorkMeter::new(geom_run::Budget::UNLIMITED);
@@ -2198,6 +2678,76 @@ fn three_plane_points_agree_with_cramers_rule_on_every_input() {
             panic!("an overflow input is inside the frame");
         };
         assert!(value.unsigned_abs() < 1 << 60, "{value}");
+    }
+}
+
+/// The 4 × 4 determinant of four planes' coefficients, rows in order and the offset last, as
+/// `plane::determinant_sign` defines it.
+fn coefficients_det(planes: &[Plane; 4]) -> Big {
+    det(&planes.map(|p| {
+        let ([x, y, z], d) = coefficients(&p);
+        vec![x, y, z, d]
+    }))
+}
+
+/// The determinant of three planes' normals: the weight of the point where they meet.
+fn normals_det(planes: [&Plane; 3]) -> Big {
+    det(&planes.map(|p| coefficients(p).0.to_vec()))
+}
+
+#[test]
+fn plane_determinants_agree_with_exact_determinants_on_every_input() {
+    // Piece G138's functions against Laplace determinants: plane::determinant_sign and
+    // plane::normals_sign give the exact signs, and Tpi::meeting is Tpi::new, with the exact
+    // weight, or Degenerate exactly when the normals are dependent.
+    use inputs::plane as p;
+    for class in [Typical, Degenerate, NearlyDegenerate, Extreme] {
+        for planes @ [a, b, c, s] in p::determinant_sign(class) {
+            let exact = coefficients_det(&planes);
+            assert_eq!(
+                determinant_sign(&a, &b, &c, &s),
+                Ok(exact.sign()),
+                "{class}"
+            );
+            // The determinant is n · X + d · w for the fourth plane at the point where the first
+            // three meet, as the function documents: the value side_of_tpi takes the sign of.
+            let t = Tpi::new(a, b, c).unwrap();
+            assert_eq!(exact, side_of_tpi_value(&s, &t).0, "{class}");
+        }
+    }
+    for class in [Typical, Degenerate] {
+        for planes @ [a, b, c, s] in p::determinant_sign_faces(class) {
+            let exact = coefficients_det(&planes).sign();
+            assert_eq!(determinant_sign(&a, &b, &c, &s), Ok(exact), "{class}");
+        }
+        for [a, b, c] in p::normals_sign_faces(class) {
+            let exact = normals_det([&a, &b, &c]).sign();
+            assert_eq!(normals_sign(&a, &b, &c), Ok(exact), "{class}");
+        }
+    }
+    for class in [Typical, Degenerate, Extreme] {
+        for [a, b, c] in p::normals_sign(class) {
+            let exact = normals_det([&a, &b, &c]).sign();
+            assert_eq!(normals_sign(&a, &b, &c), Ok(exact), "{class}");
+        }
+        for planes @ [a, b, c] in p::tpi_meeting(class) {
+            let weight = normals_det([&a, &b, &c]).sign();
+            let made = Tpi::meeting(a, b, c);
+            assert_eq!(
+                made,
+                Tpi::new(a, b, c),
+                "{class}: not the point Tpi::new makes"
+            );
+            match made {
+                Ok(t) => {
+                    assert_ne!(weight, Sign::Zero, "{class}: dependent normals accepted");
+                    assert_eq!((t.weight(), *t.planes()), (weight, planes), "{class}");
+                }
+                Err(e) => {
+                    assert_eq!((e, weight), (NumError::Degenerate, Sign::Zero), "{class}");
+                }
+            }
+        }
     }
 }
 

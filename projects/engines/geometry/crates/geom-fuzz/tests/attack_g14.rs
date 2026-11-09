@@ -39,8 +39,9 @@ use std::path::{Path, PathBuf};
 
 use geom_fuzz::orient2d::{Case, PROOF_BOUND, ProofDraw, check, check_with, proof_case, reference};
 use geom_fuzz::{
-    Harness, boxtree, curves, linalg, maths, nurbs, orient2d, predicates, roots, surfaces,
-    transforms, variants, wide,
+    Harness, arenas, attributes, batch, boxtree, cache, cbor, cdt, crossings, curves, exact,
+    general, intersect, level, linalg, make, maths, nurbs, orient2d, piercing, planes, predicates,
+    project, quadric, roots, sequence, solids, surfaces, transforms, variants, wide,
 };
 use geom_num::Sign;
 use geom_num::generated::orient2d::{filter, value};
@@ -52,19 +53,37 @@ use geom_test::{Seed, SplitMix64};
 
 /// Every target of the crate, by module name, with its harness. A target module that is not here,
 /// or a name here that is not a target module, fails `attack_every_target_is_listed_here`.
-const TARGETS: [(&str, Harness); 12] = [
+const TARGETS: [(&str, Harness); 30] = [
+    ("arenas", arenas::harness),
+    ("attributes", attributes::harness),
+    ("cbor", cbor::harness),
+    ("cache", cache::harness),
+    ("intersect", intersect::harness),
+    ("make", make::harness),
+    ("batch", batch::harness),
+    ("crossings", crossings::harness),
+    ("project", project::harness),
+    ("level", level::harness),
+    ("general", general::harness),
+    ("orient2d", orient2d::harness),
+    ("piercing", piercing::harness),
+    ("cdt", cdt::harness),
+    ("exact", exact::harness),
+    ("planes", planes::harness),
+    ("quadric", quadric::harness),
+    ("solids", solids::harness),
+    ("variants", variants::harness),
+    ("wide", wide::harness),
     ("boxtree", boxtree::harness),
     ("curves", curves::harness),
     ("linalg", linalg::harness),
     ("maths", maths::harness),
     ("nurbs", nurbs::harness),
-    ("orient2d", orient2d::harness),
     ("predicates", predicates::harness),
     ("roots", roots::harness),
+    ("sequence", sequence::harness),
     ("surfaces", surfaces::harness),
     ("transforms", transforms::harness),
-    ("variants", variants::harness),
-    ("wide", wide::harness),
 ];
 
 const M: i64 = COORD_MAX;
@@ -277,6 +296,10 @@ fn target_modules() -> BTreeSet<String> {
     let mut out = BTreeSet::new();
     for entry in std::fs::read_dir(crate_dir().join("src")).unwrap() {
         let path = entry.unwrap().path();
+        // `src/bin` holds the crate's tools, not targets.
+        if path.is_dir() {
+            continue;
+        }
         let text = std::fs::read_to_string(&path).unwrap();
         if text.contains("pub fn harness(") {
             out.insert(path.file_stem().unwrap().to_str().unwrap().to_owned());
@@ -547,10 +570,13 @@ fn attack_every_target_has_its_tests_and_is_in_both_ci_matrices() {
     );
 
     // Seeded violations: each must be reported.
-    let drop_fuzz = workflow.replace(
-        "[boxtree_fuzz, curves_fuzz, linalg_fuzz, maths_fuzz, nurbs_fuzz, orient2d_fuzz, predicates_fuzz, roots_fuzz, surfaces_fuzz, transforms_fuzz, variants_fuzz, wide_fuzz]",
-        "[boxtree_fuzz, curves_fuzz, linalg_fuzz, maths_fuzz, nurbs_fuzz, predicates_fuzz, roots_fuzz, surfaces_fuzz, transforms_fuzz, variants_fuzz, wide_fuzz]",
-    );
+    // orient2d_fuzz is cut from the libFuzzer matrix's own line, read from the workflow, so the
+    // edit still lands when another piece adds a target to that line.
+    let matrix = workflow
+        .lines()
+        .find(|l| l.trim_start().starts_with("target: ["))
+        .expect("kernel-fuzz.yml has a libFuzzer matrix line");
+    let drop_fuzz = workflow.replace(matrix, &matrix.replace(" orient2d_fuzz,", ""));
     assert_ne!(drop_fuzz, workflow);
     assert!(
         layout_violations(&targets, &tests, &drop_fuzz)

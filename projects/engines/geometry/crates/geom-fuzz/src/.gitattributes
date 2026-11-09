@@ -1,0 +1,2 @@
+# A recorded file is compared with what the test prints, on every checkout.
+robustness.txt text eol=lf
