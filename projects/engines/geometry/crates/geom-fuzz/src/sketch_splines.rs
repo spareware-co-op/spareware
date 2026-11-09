@@ -124,13 +124,13 @@ pub fn check_sketch(sketch: &Sketch) -> Result<(), Finding> {
             if length.error.is_nan() || length.error < 0.0 || !length.value.is_finite() {
                 return Err(law("a length states a bound that is not negative"));
             }
-            let (Ok(first), Ok(last)) = (
+            let (Ok([fx, fy]), Ok([lx, ly])) = (
                 sketch.point(ItemId::new(1, if spline.key == 0 { 0 } else { 4 })),
                 sketch.point(ItemId::new(1, if spline.key == 0 { 3 } else { 7 })),
             ) else {
                 return Err(law("the control points are there"));
             };
-            let (dx, dy) = (first[0] - last[0], first[1] - last[1]);
+            let (dx, dy) = (fx - lx, fy - ly);
             // Compared squared, so no root is taken; the slack covers the rounding of the sums.
             let reach = length.value + length.error;
             if reach * reach * (1.0 + 1e-9) + 1e-6 < dx * dx + dy * dy {
