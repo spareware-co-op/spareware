@@ -18,6 +18,13 @@
 //!   budget, give back their roots in order, compare exactly with each other's, sign each other at
 //!   them, and part two roots 2^−400 apart, all against exact rational arithmetic; a first-instance
 //!   quartic and its roots carry over whole (`to_second`).
+//! - **Conic-root points** (`geom_num::conic_root`): where x²/36 + y²/9 = 1 meets x² + y² = 25, at
+//!   (±8/√3, ±√(11/3)), each point lies exactly on both curves and on the right side of lines and
+//!   line pairs; its x and y compare exactly with rational points, the convergents of 8/√3 and
+//!   √(11/3) among them; its halves are the right ones; points of one vertical or horizontal chord
+//!   compare equal through the mirror, and the ends of the range of x at t = 0 and t = ∞ compare
+//!   right; on a rotated ellipse every comparison agrees with the enclosures where they tell, and
+//!   turns over with its arguments.
 //!
 //! Seeds: the random test prints `seed: <hex>` and runs from a fixed default; `SPAREKIT_SEED=<hex>`
 //! replays another (chapter 28.17). Case counts are a tenth in debug builds.
@@ -33,14 +40,21 @@
     clippy::unwrap_used,
     clippy::expect_used,
     clippy::panic,
-    clippy::indexing_slicing
+    clippy::indexing_slicing,
+    clippy::many_single_char_names
 )]
 
 use std::cmp::Ordering;
 
 use dashu_int::IBig;
 use dashu_ratio::RBig;
+use geom_num::NumError;
 use geom_num::Sign;
+use geom_num::arc::Circle2;
+use geom_num::carrier::Rational2;
+use geom_num::conic::{Conic, Ellipse2, Meeting};
+use geom_num::conic_root::{Axis, ConicRoot};
+use geom_num::grid::P2;
 use geom_num::quartic::{
     Big, COEFFICIENT_BITS, Piece, Quartic, RealRoot, SECOND_COEFFICIENT_BITS, SECOND_LIMBS,
     SecondQuartic, SecondRoot, compare, sign_at_root,
@@ -656,4 +670,235 @@ fn the_second_instance_reaches_roots_past_the_first_s_budget_exactly() {
     );
     assert_eq!(compare(&near, &a[1], &far, &b[1]).unwrap(), Sign::Negative);
     assert_eq!(compare(&near, &a[0], &far, &b[0]).unwrap(), Sign::Zero);
+}
+
+// ------------------------------------------------------------------------------------------------
+// Conic-root points (`geom_num::conic_root`).
+// ------------------------------------------------------------------------------------------------
+
+fn p2(x: i64, y: i64) -> P2 {
+    P2::new(x, y).unwrap()
+}
+
+fn circle(c: (i64, i64), radius: i128) -> Conic {
+    Conic::of_circle(&Circle2::new(p2(c.0, c.1), radius).unwrap()).unwrap()
+}
+
+/// A conic about the origin from its six coefficients.
+fn conic(c: [i64; 6]) -> Conic {
+    Conic::new(p2(0, 0), c.map(Big::from_i64))
+}
+
+/// x²/36 + y²/9 = 1 and x² + y² = 25 meet at (±8/√3, ±√(11/3)): the four points, and for each the
+/// signs of its x and y, read from its enclosure.
+fn four() -> (Ellipse2, Vec<(ConicRoot, i128, i128)>) {
+    let e = Ellipse2::new(p2(0, 0), [6, 0], 1, 2).unwrap();
+    let c = circle((0, 0), 5);
+    let points = (0..4)
+        .map(|i| {
+            let z = ConicRoot::of(&e, &c, i).unwrap();
+            let [x, y] = z.enclosure();
+            let sx = if x.lo() > 0.0 { 1 } else { -1 };
+            let sy = if y.lo() > 0.0 { 1 } else { -1 };
+            assert!(x.hi() * x.lo() > 0.0 && y.hi() * y.lo() > 0.0);
+            (z, sx, sy)
+        })
+        .collect();
+    (e, points)
+}
+
+/// The sign of s·√(n / 3) less the fraction a / b, b > 0: by squares when the signs agree.
+fn surd_less(s: i128, n: i128, a: i128, b: i128) -> Sign {
+    if a == 0 || a.signum() != s {
+        return Sign::of_i128(s);
+    }
+    // Same sign: s(√(n/3) − |a|/b) has s's sign when n b² > 3 a².
+    let by = Sign::of_i128((n * b * b - 3 * a * a).signum());
+    if s > 0 { by } else { by.negate() }
+}
+
+#[test]
+fn a_conic_root_lies_exactly_on_both_curves_and_on_the_right_side_of_others() {
+    let (e, points) = four();
+    let mut mixed = 0;
+    for (_, sx, sy) in &points {
+        mixed += sx * sy;
+    }
+    assert_eq!(mixed, 0, "two points in quadrants of each parity");
+    for (z, sx, _) in &points {
+        assert_eq!(z.ellipse(), e);
+        assert_eq!(z.sign_of(&circle((0, 0), 5)).unwrap(), Sign::Zero);
+        assert_eq!(
+            z.sign_of(&Conic::of_ellipse(&e).unwrap()).unwrap(),
+            Sign::Zero
+        );
+        // x² = 64/3 and y² = 11/3 exactly: 3x² − 64 and 3y² − 11 vanish, their neighbours do not.
+        assert_eq!(z.sign_of(&conic([3, 0, 0, 0, 0, -64])).unwrap(), Sign::Zero);
+        assert_eq!(
+            z.sign_of(&conic([3, 0, 0, 0, 0, -63])).unwrap(),
+            Sign::Positive
+        );
+        assert_eq!(z.sign_of(&conic([0, 0, 3, 0, 0, -11])).unwrap(), Sign::Zero);
+        assert_eq!(
+            z.sign_of(&conic([0, 0, 3, 0, 0, -12])).unwrap(),
+            Sign::Negative
+        );
+        // x − 4 has the sign of x; x − 5 is negative at all four.
+        assert_eq!(
+            z.sign_of(&conic([0, 0, 0, 1, 0, -4])).unwrap(),
+            Sign::of_i128(*sx)
+        );
+        assert_eq!(
+            z.sign_of(&conic([0, 0, 0, 1, 0, -5])).unwrap(),
+            Sign::Negative
+        );
+        // The quartic it is a root of.
+        assert_eq!(
+            sign_at_root(&z.quartic(), &z.quartic(), &z.root()).unwrap(),
+            Sign::Zero
+        );
+    }
+    // The ellipse itself, and a fifth root, are no conic roots.
+    assert_eq!(
+        ConicRoot::of(&e, &Conic::of_ellipse(&e).unwrap(), 0).err(),
+        Some(NumError::Degenerate)
+    );
+    assert_eq!(
+        ConicRoot::of(&e, &circle((0, 0), 5), 4).err(),
+        Some(NumError::Degenerate)
+    );
+}
+
+#[test]
+fn a_conic_root_s_coordinates_compare_exactly_with_rational_points() {
+    let (_, points) = four();
+    let mut rng = Rng::new();
+    // Convergents of 8/√3 = 4.6188... and √(11/3) = 1.9148..., so close that only the exact path
+    // tells, then random fractions.
+    let near_x = [
+        (37_i128, 8_i128),
+        (1_327, 287),
+        (443_403, 96_000),
+        (1_847_361_301, 399_964_000),
+    ];
+    let near_y = [(23_i128, 12_i128), (1_225, 640), (60_011_489, 31_340_000)];
+    for (z, sx, sy) in &points {
+        let ask = |a: i128, b: i128, axis: Axis, s: i128, n: i128| {
+            for a in [a, -a] {
+                let (x, y) = if axis == Axis::X { (a, 0) } else { (0, a) };
+                let r = Rational2::new(x, y, b).unwrap();
+                assert_eq!(
+                    z.cmp_rational(&r, axis).unwrap(),
+                    surd_less(s, n, a, b),
+                    "{axis:?} against {a}/{b}"
+                );
+            }
+        };
+        for (a, b) in near_x {
+            ask(a, b, Axis::X, *sx, 64);
+        }
+        for (a, b) in near_y {
+            ask(a, b, Axis::Y, *sy, 11);
+        }
+        for _ in 0..200 {
+            let b = rng.range(1, 1_000);
+            ask(rng.range(-8_000, 8_000), b, Axis::X, *sx, 64);
+            ask(rng.range(-4_000, 4_000), b, Axis::Y, *sy, 11);
+        }
+    }
+}
+
+#[test]
+fn points_of_one_ellipse_compare_along_its_halves_and_across_its_chords() {
+    let (_, points) = four();
+    for (z, sx, sy) in &points {
+        // Counter-clockwise, x falls above the axis and rises below it; y rises right of it.
+        assert_eq!(z.half(Axis::X).unwrap(), Sign::of_i128(-sy));
+        assert_eq!(z.half(Axis::Y).unwrap(), Sign::of_i128(*sx));
+        for (w, tx, ty) in &points {
+            // Points of one vertical chord have one x: the mirror carries one onto the other's half.
+            assert_eq!(
+                z.cmp_along(w, Axis::X).unwrap(),
+                Some(Sign::of_i128(sx - tx)),
+                "x of ({sx}, {sy}) and ({tx}, {ty})"
+            );
+            assert_eq!(
+                z.cmp_along(w, Axis::Y).unwrap(),
+                Some(Sign::of_i128(sy - ty)),
+                "y of ({sx}, {sy}) and ({tx}, {ty})"
+            );
+        }
+    }
+    // The circle of radius 6 touches it at (6, 0) and (−6, 0): t = 0 and t = ∞, the ends of the
+    // range of x, and the ends of one horizontal chord.
+    let e = Ellipse2::new(p2(0, 0), [6, 0], 1, 2).unwrap();
+    let touching = circle((0, 0), 6);
+    let (right, left) = (
+        ConicRoot::of(&e, &touching, 0).unwrap(),
+        ConicRoot::of(&e, &touching, 1).unwrap(),
+    );
+    assert_eq!(right.root().piece(), Piece::Zero);
+    assert_eq!(left.root().piece(), Piece::Infinity);
+    assert_eq!(right.half(Axis::X).unwrap(), Sign::Zero);
+    assert_eq!(left.half(Axis::X).unwrap(), Sign::Zero);
+    assert_eq!(right.half(Axis::Y).unwrap(), Sign::Positive);
+    assert_eq!(left.half(Axis::Y).unwrap(), Sign::Negative);
+    assert_eq!(
+        right.cmp_along(&left, Axis::X).unwrap(),
+        Some(Sign::Positive)
+    );
+    assert_eq!(
+        left.cmp_along(&right, Axis::X).unwrap(),
+        Some(Sign::Negative)
+    );
+    assert_eq!(left.cmp_along(&left, Axis::X).unwrap(), Some(Sign::Zero));
+    assert_eq!(right.cmp_along(&left, Axis::Y).unwrap(), Some(Sign::Zero));
+    for (w, tx, _) in &points {
+        assert_eq!(right.cmp_along(w, Axis::X).unwrap(), Some(Sign::Positive));
+        assert_eq!(
+            w.cmp_along(&left, Axis::X).unwrap(),
+            Some(Sign::Positive),
+            "{tx}"
+        );
+    }
+    // A point of another ellipse is not this module's to compare.
+    let other = Ellipse2::new(p2(0, 0), [0, 6], 1, 2).unwrap();
+    let z = ConicRoot::of(&other, &circle((0, 0), 5), 0).unwrap();
+    assert_eq!(right.cmp_along(&z, Axis::X).unwrap(), None);
+}
+
+#[test]
+fn points_of_a_rotated_ellipse_agree_with_their_enclosures_and_each_other() {
+    let mut rng = Rng::new();
+    let cases = if cfg!(debug_assertions) { 6 } else { 40 };
+    let mut decided = 0;
+    for case in 0..cases {
+        let e = Ellipse2::new(p2(1, -2), [5, 2], 1, 3).unwrap();
+        let centre = (rng.range(-4, 6) as i64, rng.range(-5, 2) as i64);
+        let c = circle(centre, rng.range(2, 6));
+        let Ok(Meeting::At { roots, .. }) = e.meeting(&c) else {
+            continue;
+        };
+        let points: Vec<ConicRoot> = (0..roots.count())
+            .map(|i| ConicRoot::of(&e, &c, i).unwrap())
+            .collect();
+        for z in &points {
+            for w in &points {
+                for (axis, k) in [(Axis::X, 0), (Axis::Y, 1)] {
+                    let s = z.cmp_along(w, axis).unwrap().unwrap();
+                    assert_eq!(
+                        w.cmp_along(z, axis).unwrap().unwrap(),
+                        s.negate(),
+                        "case {case}"
+                    );
+                    let gap = z.enclosure()[k].sub(w.enclosure()[k]).unwrap();
+                    if let Some(sign @ (Sign::Positive | Sign::Negative)) = gap.certain_sign() {
+                        assert_eq!(s, sign, "case {case}: {axis:?}");
+                        decided += 1;
+                    }
+                }
+            }
+        }
+    }
+    assert!(decided > cases);
 }
