@@ -1986,15 +1986,16 @@ fn meetings(
     runs: &mut Vec<Run>,
 ) -> Result<(), MergeError> {
     let opening = runs.len();
+    // Each piece's face as the merge reduced it when it was held, not reduced again for each pair.
     let plane_of = |side: &Side| -> Result<Plane, MergeError> {
-        Ok(held.get(side.held).ok_or(MergeError::Open)?.piece.face)
+        Ok(held.get(side.held).ok_or(MergeError::Open)?.face.plane)
     };
     for (low, high, active) in stretches(sides) {
         let mut meeting = None;
         for (at, one) in active.iter().enumerate() {
-            let p = canonical(&plane_of(one)?)?.plane;
+            let p = plane_of(one)?;
             for other in active.iter().skip(at.saturating_add(1)) {
-                if other.sheet != one.sheet && canonical(&plane_of(other)?)?.plane != p {
+                if other.sheet != one.sheet && plane_of(other)? != p {
                     meeting = meeting.or(Some([p, one.bound]));
                 }
             }
