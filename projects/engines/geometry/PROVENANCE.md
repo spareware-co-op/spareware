@@ -9,7 +9,7 @@ This is the record of what the geometry kernel's code takes from outside sources
 | Class (29.1) | Sources | Files that take them |
 | --- | --- | --- |
 | PORT | 11 | 18 |
-| PORT METHOD | 41 | 39 |
+| PORT METHOD | 42 | 40 |
 | DEPEND | 4 | 3 |
 
 3 method note(s) under the method-only procedure (29.20, rule 6).
@@ -82,6 +82,7 @@ Each kernel file implements a published method in its own code and copied nothin
 | shuffling-allocator | MPL-2.0 | allowed | <https://github.com/fitzgen/shuffling-allocator/blob/983334621d6c6fd6aa4d40d24edd3221208bf085/src/lib.rs> | none | `projects/engines/geometry/crates/geom-test/src/golden/perturb.rs`: for its size classes and shuffling layer and to judge whether it could be used; not taken, for the reasons above. No code copied. |
 | solidcore | Apache-2.0 | allowed | <https://github.com/tangency-labs/solidcore/blob/45d6111b909487e94edaec309a7673a3b73d4ae5/crates/solidcore/src/boolean/topology_intersector/p1.rs> | none | `projects/engines/geometry/crates/geom-bool/src/interfere.rs`: for the order of the vertex, edge and face intersections and the lowest-dimension solution; its tolerance growth on relating entities is not taken. No code copied. |
 | solidcore | Apache-2.0 | allowed | <https://github.com/tangency-labs/solidcore/blob/c440e5f892452a9654aee8f3030de6095fdb1415/crates/solidcore/src/boolean/topology_intersector/p1.rs> | none | `projects/engines/geometry/crates/geom-bool/src/face.rs`: for the order of the vertex, edge and face stages; no code copied.<br>`projects/engines/geometry/crates/geom-bool/src/inside.rs`: and <https://github.com/tangency-labs/solidcore/blob/c440e5f892452a9654aee8f3030de6095fdb1415/crates/solidcore/src/query/loop.rs>, for the order of the vertex-in-face tests; no code copied. |
+| solidcore | Apache-2.0 | allowed | <https://github.com/tangency-labs/solidcore/blob/c440e5f892452a9654aee8f3030de6095fdb1415/crates/solidcore/src/topology/trimming_tools.rs> | none | `projects/engines/geometry/crates/geom-bool/src/split.rs`: for the order round a vertex and the grouping of outer loops and holes; no code copied. |
 | SPDX License List 3.29.0 | CC-BY-3.0 | readable | <https://github.com/spdx/license-list-data/blob/31ba1a50e5397e00a304dbadc76531740e89ee48/json/licenses.json> | none | `projects/engines/geometry/crates/geom-test/src/map/classes.rs`: to check that every identifier in the tables below is a real SPDX licence identifier, and to list the deprecated GPL, LGPL and AGPL forms and the non-commercial licences. |
 | the Model Context Protocol specification | Apache-2.0 AND MIT | allowed | <https://github.com/modelcontextprotocol/modelcontextprotocol/blob/271ecc9accafdd9b83a3c869fa67c22953b2af80/schema/2026-07-28/schema.ts> | none | `projects/engines/geometry/crates/geom-gen/src/facade.rs`: for the fields of a tool description and their rules. No code copied. |
 | Vigna's SplitMix64 reference code | public domain | readable | <https://prng.di.unimi.it/splitmix64.c> | none | `projects/engines/geometry/crates/geom-bench/src/rng.rs`: for the constants and steps of SplitMix64, which the tests check against its published outputs. No code copied. |

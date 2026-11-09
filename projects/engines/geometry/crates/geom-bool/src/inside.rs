@@ -546,22 +546,24 @@ pub(crate) fn ray_parity(
         let found = crossings(curve, &ray_plane, meter)?;
         for zero in &found.zeros {
             let [param] = zero.enclosure;
-            // Outside the span: no crossing of this side; at its end: a join.
+            // Outside the span: no crossing of this side.
             if param.hi() < lo || param.lo() > hi {
                 continue;
-            }
-            if param.lo() <= lo || param.hi() >= hi {
-                return Ok(None);
             }
             let at = curve
                 .bound((param.lo(), param.hi()), meter)
                 .map_err(geom_intersect::IntersectError::from)?;
             let ahead = along(at.lo, at.hi)?;
-            if ahead.lo() > 0.0 {
-                count = count.checked_add(1).ok_or(NumError::BudgetExceeded)?;
-            } else if ahead.hi() >= 0.0 {
+            // Proven behind the point: not on the ray, wherever it lies on the side.
+            if ahead.hi() < 0.0 {
+                continue;
+            }
+            // At the span's end, a join, which the join test above has kept off the ray; or not
+            // proven ahead: the direction fails.
+            if param.lo() <= lo || param.hi() >= hi || ahead.lo() <= 0.0 {
                 return Ok(None);
             }
+            count = count.checked_add(1).ok_or(NumError::BudgetExceeded)?;
         }
         for flag in &found.flagged {
             let [param] = flag.region;
