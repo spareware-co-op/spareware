@@ -1063,6 +1063,7 @@ dependencies = [
  "geom-bench",
  "geom-bvh",
  "geom-curve",
+ "geom-exchange",
  "geom-format",
  "geom-gen",
  "geom-linalg",

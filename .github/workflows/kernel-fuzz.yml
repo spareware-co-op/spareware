@@ -52,9 +52,11 @@ on:
       - "projects/engines/geometry/crates/geom-2d/**"
       - "projects/engines/geometry/crates/geom-bench/**"
       - "projects/engines/geometry/crates/geom-bvh/**"
+      - "projects/engines/geometry/crates/geom-check/**"
       - "projects/engines/geometry/crates/geom-cloud/**"
       - "projects/engines/geometry/crates/geom-curve/**"
       - "projects/engines/geometry/crates/geom-draw/**"
+      - "projects/engines/geometry/crates/geom-exchange/**"
       - "projects/engines/geometry/crates/geom-field/**"
       - "projects/engines/geometry/crates/geom-format/**"
       - "projects/engines/geometry/crates/geom-fuzz/**"
@@ -67,6 +69,7 @@ on:
       - "projects/engines/geometry/crates/geom-num/**"
       - "projects/engines/geometry/crates/geom-nurbs/**"
       - "projects/engines/geometry/crates/geom-op/**"
+      - "projects/engines/geometry/crates/geom-p21/**"
       - "projects/engines/geometry/crates/geom-poly/**"
       - "projects/engines/geometry/crates/geom-run/**"
       - "projects/engines/geometry/crates/geom-sketch/**"
@@ -88,9 +91,11 @@ on:
       - "projects/engines/geometry/crates/geom-2d/**"
       - "projects/engines/geometry/crates/geom-bench/**"
       - "projects/engines/geometry/crates/geom-bvh/**"
+      - "projects/engines/geometry/crates/geom-check/**"
       - "projects/engines/geometry/crates/geom-cloud/**"
       - "projects/engines/geometry/crates/geom-curve/**"
       - "projects/engines/geometry/crates/geom-draw/**"
+      - "projects/engines/geometry/crates/geom-exchange/**"
       - "projects/engines/geometry/crates/geom-field/**"
       - "projects/engines/geometry/crates/geom-format/**"
       - "projects/engines/geometry/crates/geom-fuzz/**"
@@ -103,6 +108,7 @@ on:
       - "projects/engines/geometry/crates/geom-num/**"
       - "projects/engines/geometry/crates/geom-nurbs/**"
       - "projects/engines/geometry/crates/geom-op/**"
+      - "projects/engines/geometry/crates/geom-p21/**"
       - "projects/engines/geometry/crates/geom-poly/**"
       - "projects/engines/geometry/crates/geom-run/**"
       - "projects/engines/geometry/crates/geom-sketch/**"
@@ -152,7 +158,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        target: [boxtree_fuzz, cbor_fuzz, curves_fuzz, linalg_fuzz, maths_fuzz, nurbs_fuzz, orient2d_fuzz, predicates_fuzz, roots_fuzz, surfaces_fuzz, transforms_fuzz, variants_fuzz, wide_fuzz]
+        target: [boxtree_fuzz, cbor_fuzz, curves_fuzz, linalg_fuzz, maths_fuzz, nurbs_fuzz, orient2d_fuzz, predicates_fuzz, roots_fuzz, surfaces_fuzz, transforms_fuzz, variants_fuzz, wide_fuzz, xml_fuzz]
     defaults:
       run:
         shell: bash

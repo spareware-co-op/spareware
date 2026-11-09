@@ -40,6 +40,7 @@
 //!   reads back, with the difference.
 //! - [`map`]: IFC's map conversions as frame records.
 //! - [`report`]: import and export reports as data.
+//! - [`xml`]: the hardened XML reader, its tokenizer ported from xmlparser (piece G414a).
 //! - [`error`]: the crate's error.
 //!
 //! Status: built by pieces G413, G414, G418, G436; G413 is done.
@@ -55,5 +56,6 @@ pub mod real;
 pub mod report;
 pub mod unit;
 pub mod write;
+pub mod xml;
 
 pub use error::ExchangeError;

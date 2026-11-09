@@ -3178,6 +3178,11 @@ pub mod string {
     pub struct FromUtf8Error {
         bytes: Vec<u8>,
     }
+    impl FromUtf8Error {
+        pub fn utf8_error(&self) -> crate::str::Utf8Error {
+            loop {}
+        }
+    }
     impl Deref for String {
         type Target = str;
         fn deref(&self) -> &str {
@@ -3418,6 +3423,11 @@ pub mod str {
     #[derive(Clone, Copy, Debug, PartialEq, Eq)]
     pub struct Utf8Error {
         valid_up_to: usize,
+    }
+    impl Utf8Error {
+        pub const fn valid_up_to(&self) -> usize {
+            self.valid_up_to
+        }
     }
 }
 
@@ -5604,6 +5614,21 @@ pub mod primitives {
     int_methods! {
         u8 u8 i8 u16 u16 i16 u32 u32 i32 u64 u64 i64 u128 u128 i128 usize usize isize
         i8 u8 i8 i16 u16 i16 i32 u32 i32 i64 u64 i64 i128 u128 i128 isize usize isize
+    }
+    // The ASCII tests of a byte, which only `u8` has.
+    impl u8 {
+        pub const fn is_ascii_digit(&self) -> bool {
+            loop {}
+        }
+        pub const fn is_ascii_hexdigit(&self) -> bool {
+            loop {}
+        }
+        pub const fn is_ascii_alphabetic(&self) -> bool {
+            loop {}
+        }
+        pub const fn is_ascii_alphanumeric(&self) -> bool {
+            loop {}
+        }
     }
 
     // The inherent methods and traits of the floats: `$f` the type and `$b` its bits' type.

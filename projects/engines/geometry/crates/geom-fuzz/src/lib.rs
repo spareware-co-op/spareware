@@ -21,7 +21,8 @@
 //! [`linalg`], the dense decompositions are refused or finite and the spectral ones backward stable
 //! (G49, G50), and [`roots`], the root engine misses no root and proves none twice, Brent's
 //! zero brackets its sign change (G51, G52, G53), and [`maths`], the proven maths functions are
-//! correctly rounded (G47). The layout every target follows, and how each engine runs it locally and in CI,
+//! correctly rounded (G47), and [`xml`], `geom-exchange`'s hardened XML reader never panics, keeps
+//! its budgets and nests its events, however its bytes are split (G414a). The layout every target follows, and how each engine runs it locally and in CI,
 //! is in this crate's `README.md`.
 //!
 //! Layer: Development, in chapter 27's crate table: a development crate, outside the
@@ -124,7 +125,8 @@
 //! - `geom-gen` (Apache-2.0, ours, development only), whose description parser the [`variants`]
 //!   target reads the predicates with.
 //! - `geom-format` and `geom-run` (Apache-2.0, ours), the code under test of the [`cbor`] target and
-//!   the work meter it reads with.
+//!   the work meter it reads with; `geom-exchange` (Apache-2.0 AND MIT, ours), the code under test
+//!   of the [`xml`] target.
 //! - `dashu-ratio` 0.6.1 (MIT OR Apache-2.0), without its default features: the exact rationals
 //!   of the [`nurbs`] target's oracle, `geom-test`'s NURBS reference.
 //! - `num-bigint` 0.4.8 (MIT OR Apache-2.0), the oracle of the [`wide`] and [`variants`] targets:
@@ -185,6 +187,7 @@ pub mod surfaces;
 pub mod transforms;
 pub mod variants;
 pub mod wide;
+pub mod xml;
 
 /// A law a harness found broken, with the input that broke it.
 #[derive(Clone, Debug, PartialEq, Eq)]
