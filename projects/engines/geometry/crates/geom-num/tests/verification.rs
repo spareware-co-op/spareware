@@ -1460,8 +1460,9 @@ const FILES: [(&str, &str); 12] = [
 ];
 
 /// The sources whose public predicates the matrix must list.
-const SOURCES: [(&str, &str); 9] = [
+const SOURCES: [(&str, &str); 10] = [
     ("arc", include_str!("../src/arc.rs")),
+    ("conic_root", include_str!("../src/conic_root.rs")),
     ("carrier", include_str!("../src/carrier.rs")),
     ("conic", include_str!("../src/conic.rs")),
     ("one_root", include_str!("../src/one_root.rs")),
@@ -1925,6 +1926,124 @@ fn matrix() -> Vec<Row> {
             Where::NotApplicable("no filter: stretches apart are its first step, and exact"),
             "roots_of_two_quartics_compare_exactly",
         ),
+        // The questions of a conic-root point (G196b), in attack_g196b.rs.
+        Row {
+            predicate: "conic_root::ConicRoot::sign_of",
+            call: ".sign_of",
+            classes: [
+                (
+                    Class::Random,
+                    Where::Test(
+                        "attack_g196b.rs",
+                        "conic_roots_at_the_ends_of_the_line_and_at_random_agree_with_their_enclosures",
+                    ),
+                ),
+                (
+                    Class::OneStep,
+                    Where::Test(
+                        "attack_g196b.rs",
+                        "a_conic_root_lies_exactly_on_both_curves_and_on_the_right_side_of_others",
+                    ),
+                ),
+                (
+                    Class::Boundary,
+                    Where::NotApplicable("no filter: every call takes the exact path"),
+                ),
+                (
+                    Class::Corners,
+                    Where::Test(
+                        "attack_g196b.rs",
+                        "conic_roots_at_the_ends_of_the_line_and_at_random_agree_with_their_enclosures",
+                    ),
+                ),
+                (
+                    Class::Laws,
+                    Where::Test(
+                        "attack_g196b.rs",
+                        "a_conic_root_lies_exactly_on_both_curves_and_on_the_right_side_of_others",
+                    ),
+                ),
+            ],
+        },
+        Row {
+            predicate: "conic_root::ConicRoot::cmp_rational",
+            call: ".cmp_rational",
+            classes: [
+                (
+                    Class::Random,
+                    Where::Test(
+                        "attack_g196b.rs",
+                        "conic_roots_at_the_ends_of_the_line_and_at_random_agree_with_their_enclosures",
+                    ),
+                ),
+                (
+                    Class::OneStep,
+                    Where::Test(
+                        "attack_g196b.rs",
+                        "a_conic_root_s_coordinates_compare_exactly_with_rational_points",
+                    ),
+                ),
+                (
+                    Class::Boundary,
+                    Where::Test(
+                        "attack_g196b.rs",
+                        "a_conic_root_s_coordinates_compare_exactly_with_rational_points",
+                    ),
+                ),
+                (
+                    Class::Corners,
+                    Where::Test(
+                        "attack_g196b.rs",
+                        "conic_roots_at_the_ends_of_the_line_and_at_random_agree_with_their_enclosures",
+                    ),
+                ),
+                (
+                    Class::Laws,
+                    Where::Test(
+                        "attack_g196b.rs",
+                        "a_conic_root_s_coordinates_compare_exactly_with_rational_points",
+                    ),
+                ),
+            ],
+        },
+        Row {
+            predicate: "conic_root::ConicRoot::half",
+            call: ".half",
+            classes: [
+                (
+                    Class::Random,
+                    Where::Test(
+                        "attack_g196b.rs",
+                        "conic_roots_at_the_ends_of_the_line_and_at_random_agree_with_their_enclosures",
+                    ),
+                ),
+                (
+                    Class::OneStep,
+                    Where::Test(
+                        "attack_g196b.rs",
+                        "points_of_one_ellipse_compare_along_its_halves_and_across_its_chords",
+                    ),
+                ),
+                (
+                    Class::Boundary,
+                    Where::NotApplicable("no filter: every call takes the exact path"),
+                ),
+                (
+                    Class::Corners,
+                    Where::Test(
+                        "attack_g196b.rs",
+                        "conic_roots_at_the_ends_of_the_line_and_at_random_agree_with_their_enclosures",
+                    ),
+                ),
+                (
+                    Class::Laws,
+                    Where::Test(
+                        "attack_g196b.rs",
+                        "points_of_one_ellipse_compare_along_its_halves_and_across_its_chords",
+                    ),
+                ),
+            ],
+        },
         // The sign of a quartic at another's root (G196b): its attacks are in attack_g196b.rs.
         Row {
             predicate: "quartic::sign_at_root",

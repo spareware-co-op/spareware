@@ -61,11 +61,14 @@ use crate::error::NumError;
 use crate::interval::Interval;
 use crate::one_root::enclose;
 use crate::quartic::{
-    Big, Instance, Piece, Quartic, QuarticOf, RealRoot, RealRootOf, SECOND_LIMBS, SecondQuartic,
-    SecondRoot, compare, sign_at_root,
+    Big, COEFFICIENT_BITS, Instance, Piece, Quartic, QuarticOf, RealRoot, RealRootOf,
+    SECOND_COEFFICIENT_BITS, SECOND_LIMBS, SecondQuartic, SecondRoot, compare, sign_at_root,
 };
 use crate::sign::Sign;
 use crate::wide::Wide;
+
+// The mirror's image: a first-instance coefficient by four factors below 2^64, five terms.
+const _: () = assert!(COEFFICIENT_BITS + 4 * 64 + 3 < SECOND_COEFFICIENT_BITS);
 
 /// Levels to which a point's root is narrowed for its enclosure: 2^−64 of the parameter, as the
 /// arrangement narrows the roots it weighs.

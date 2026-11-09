@@ -45,8 +45,8 @@
 //!   | A polynomial bisected s times | 2^(4s + 307) | the terms of 2^(4s) · c((x + a) / 2^s) |
 //!
 //!   The second instance's are the same bounds for coefficients below 2^[`SECOND_COEFFICIENT_BITS`]
-//!   (1,400 bits): factors below 2^1,406, two roots of one factor 2^−4,230 apart, roots of two
-//!   quartics 2^−11,266 apart, in 288 limbs for its quartics and 729 for its exact paths.
+//!   (600 bits): factors below 2^606, two roots of one factor 2^−1,830 apart, roots of two quartics
+//!   2^−4,866 apart, in 125 limbs for its quartics and 316 for its exact paths.
 //!
 //! - Bounded work. Live stretches each count at least two, and Descartes' counts of disjoint
 //!   stretches sum to at most four, so at most two are live at once and the frontier is a fixed
@@ -117,27 +117,29 @@ const _: () = {
     assert!(WIDE_BITS as usize == 64 * WIDE_LIMBS);
 };
 
-/// Limbs of the second instance's quartics and isolation: 18,432 bits.
-pub const SECOND_LIMBS: usize = 288;
+/// Limbs of the second instance's quartics and isolation: 8,000 bits.
+pub const SECOND_LIMBS: usize = 125;
 
-/// Limbs of the second instance's exact paths: 46,656 bits.
-pub const SECOND_WIDE_LIMBS: usize = 729;
+/// Limbs of the second instance's exact paths: 20,224 bits.
+pub const SECOND_WIDE_LIMBS: usize = 316;
 
-/// Coefficients within this many bits reach every root inside the second instance's budget: the
-/// quartic L² − kB² against a crossing of two rational circles, about 1,300 bits, and some.
-pub const SECOND_COEFFICIENT_BITS: u32 = 1_400;
+/// Coefficients within this many bits reach every root inside the second instance's budget: a
+/// mirror's image of a first-instance quartic, below 2^556 (`crate::conic_root`), and some. Its
+/// widths are held to what that needs, as each of its integers sits on the stack: an unoptimised
+/// build's deepest exact path stays within a test thread's 2 MiB.
+pub const SECOND_COEFFICIENT_BITS: u32 = 600;
 
-/// The second instance's levels of bisection: its separation bound's 4,230, and some.
-const SECOND_MAX_DEPTH: u32 = 4_240;
+/// The second instance's levels of bisection: its separation bound's 1,830, and some.
+const SECOND_MAX_DEPTH: u32 = 1_840;
 
-/// The second instance's levels of narrowing: its resultant's 11,266, and some.
-const SECOND_COMPARE_DEPTH: u32 = 11_300;
+/// The second instance's levels of narrowing: its resultant's 4,866, and some.
+const SECOND_COMPARE_DEPTH: u32 = 4_900;
 
 /// The bits of the second instance's quartics.
-const SECOND_BITS: u32 = 18_432;
+const SECOND_BITS: u32 = 8_000;
 
 /// The bits of the second instance's exact paths.
-const SECOND_WIDE_BITS: u32 = 46_656;
+const SECOND_WIDE_BITS: u32 = 20_224;
 
 const _: () = {
     // The same bounds as the first instance's, at the second's widths.

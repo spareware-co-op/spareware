@@ -14,7 +14,7 @@
 //!   root of the turned quartic, and turned roots compare as −1 / t does, by the oracle, with 0
 //!   going to ∞ and 1 and −1 to each other.
 //! - **The second instance** (`SecondQuartic`, chapter 14.2's as-built note of G196b): quartics of
-//!   four rational roots of up to 160-bit numerators and denominators, past the first instance's
+//!   four rational roots of up to 140-bit numerators and denominators, past the first instance's
 //!   budget, give back their roots in order, compare exactly with each other's, sign each other at
 //!   them, and part two roots 2^−400 apart, all against exact rational arithmetic; a first-instance
 //!   quartic and its roots carry over whole (`to_second`).
@@ -584,18 +584,18 @@ fn order_of(a: &RBig, b: &RBig) -> Sign {
 #[test]
 fn the_second_instance_reaches_roots_past_the_first_s_budget_exactly() {
     let mut rng = Rng::new();
-    // Each case works its gcds bit by bit in the second instance's 729 limbs: a few seconds each
+    // Each case works its gcds bit by bit in the second instance's 316 limbs: a few seconds each
     // unoptimised, so few cases.
     let cases = if cfg!(debug_assertions) { 2 } else { 12 };
     let mut widest = 0;
     for case in 0..cases {
-        // Four rational roots each, of numerators and denominators up to 160 bits: coefficients up
-        // to about 650 bits, past the first instance's COEFFICIENT_BITS.
+        // Four rational roots each, of numerators and denominators up to 140 bits: coefficients up
+        // to about 565 bits, past the first instance's COEFFICIENT_BITS.
         let draw = |rng: &mut Rng| -> Vec<(IBig, IBig)> {
             (0..4)
                 .map(|_| {
-                    let q = random_big(rng, 160, false) + IBig::from(1);
-                    (q, random_big(rng, 160, true))
+                    let q = random_big(rng, 140, false) + IBig::from(1);
+                    (q, random_big(rng, 140, true))
                 })
                 .collect()
         };
@@ -901,4 +901,79 @@ fn points_of_a_rotated_ellipse_agree_with_their_enclosures_and_each_other() {
         }
     }
     assert!(decided > cases);
+}
+
+#[test]
+fn conic_roots_at_the_ends_of_the_line_and_at_random_agree_with_their_enclosures() {
+    // The circle of radius 6 touches x²/36 + y²/9 = 1 at t = 0 and t = ∞: (6, 0) and (−6, 0).
+    let e = Ellipse2::new(p2(0, 0), [6, 0], 1, 2).unwrap();
+    let touching = circle((0, 0), 6);
+    for (i, x) in [(0, 6), (1, -6)] {
+        let z = ConicRoot::of(&e, &touching, i).unwrap();
+        assert_eq!(z.sign_of(&conic([0, 0, 0, 1, 0, -x])).unwrap(), Sign::Zero);
+        assert_eq!(z.sign_of(&conic([0, 0, 1, 0, 0, 0])).unwrap(), Sign::Zero);
+        let at = Rational2::new(i128::from(x), 0, 1).unwrap();
+        assert_eq!(z.cmp_rational(&at, Axis::X).unwrap(), Sign::Zero);
+        assert_eq!(z.cmp_rational(&at, Axis::Y).unwrap(), Sign::Zero);
+        assert_eq!(z.half(Axis::X).unwrap(), Sign::Zero);
+    }
+    // At random: lines through two grid points and rational points against the points where a
+    // rotated ellipse meets random circles, wherever the enclosure tells.
+    let mut rng = Rng::new();
+    let rotated = Ellipse2::new(p2(1, -2), [5, 2], 1, 3).unwrap();
+    let mut told = 0;
+    for _ in 0..if cfg!(debug_assertions) { 10 } else { 60 } {
+        let c = circle(
+            (rng.range(-4, 6) as i64, rng.range(-5, 2) as i64),
+            rng.range(2, 6),
+        );
+        let Ok(Meeting::At { roots, .. }) = rotated.meeting(&c) else {
+            continue;
+        };
+        for i in 0..roots.count() {
+            let z = ConicRoot::of(&rotated, &c, i).unwrap();
+            let [ex, ey] = z.enclosure();
+            let (a, b, k) = (rng.range(-5, 5), rng.range(-5, 5), rng.range(-30, 30));
+            let line = conic([0, 0, 0, a as i64, b as i64, k as i64]);
+            let value = ex
+                .mul(enclose(a))
+                .unwrap()
+                .add(ey.mul(enclose(b)).unwrap())
+                .unwrap()
+                .add(enclose(k))
+                .unwrap();
+            if let Some(sign @ (Sign::Positive | Sign::Negative)) = value.certain_sign() {
+                assert_eq!(z.sign_of(&line).unwrap(), sign);
+                told += 1;
+            }
+            let (x, w) = (rng.range(-40, 40), rng.range(1, 7));
+            let r = Rational2::new(x, x, w).unwrap();
+            for (axis, e) in [(Axis::X, ex), (Axis::Y, ey)] {
+                let gap = e.sub(enclose(x).div(enclose(w)).unwrap()).unwrap();
+                if let Some(sign @ (Sign::Positive | Sign::Negative)) = gap.certain_sign() {
+                    assert_eq!(z.cmp_rational(&r, axis).unwrap(), sign);
+                }
+            }
+            // y rises counter-clockwise where the form's x-derivative 2A u + B v is positive.
+            let [fa, fb, _] = rotated.form().unwrap();
+            let (u, v) = (ex.sub(enclose(1)).unwrap(), ey.sub(enclose(-2)).unwrap());
+            let slope = geom_num::one_root::enclose(&fa)
+                .unwrap()
+                .mul(enclose(2))
+                .unwrap()
+                .mul(u)
+                .unwrap()
+                .add(geom_num::one_root::enclose(&fb).unwrap().mul(v).unwrap())
+                .unwrap();
+            if let Some(sign @ (Sign::Positive | Sign::Negative)) = slope.certain_sign() {
+                assert_eq!(z.half(Axis::Y).unwrap(), sign);
+            }
+        }
+    }
+    assert!(told > 10);
+}
+
+/// A small whole number as a point interval, exact.
+fn enclose(v: i128) -> geom_num::interval::Interval {
+    geom_num::one_root::enclose(&Big::from_i128(v)).unwrap()
 }
