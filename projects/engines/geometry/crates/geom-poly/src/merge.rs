@@ -37,6 +37,7 @@
 //! Cost: O(n log n) exact comparisons for n sides of pieces, and a sweep of each line. Charges the
 //! meter one unit per side of a piece, per fin and per shell.
 
+use alloc::collections::BTreeMap;
 use alloc::vec::Vec;
 use core::cmp::{Ordering, Reverse};
 use core::fmt;
@@ -1133,13 +1134,38 @@ fn sheets_of<'p>(
     meter: &mut WorkMeter<'_>,
 ) -> Result<(Vec<Sheet>, Vec<Held<'p>>), MergeError> {
     let seams = merge == Merge::KeepSeams;
+    // The pieces of one polygon facing one way share its face, so each face is reduced once, at
+    // the first piece that holds it, on the pool; a piece whose face is not that piece's own is
+    // reduced for itself.
+    let mut first_of: BTreeMap<(usize, bool), usize> = BTreeMap::new();
+    let mut firsts: Vec<&Plane> = Vec::new();
+    let mut which = Vec::with_capacity(pieces.len());
+    for piece in pieces {
+        let face = &piece.piece.face;
+        let held = first_of.get(&(piece.polygon, piece.turned)).copied();
+        if let Some(k) = held.filter(|k| firsts.get(*k) == Some(&face)) {
+            which.push(k);
+            continue;
+        }
+        first_of.insert((piece.polygon, piece.turned), firsts.len());
+        which.push(firsts.len());
+        firsts.push(face);
+    }
+    let reduced = exec.try_map(meter, SHEETS, PIECES, &firsts, |_, face, _| {
+        canonical(face).map_err(MergeError::from)
+    });
+    let reduced = reduced.map_err(|e| phase_error(e, meter))?;
     let made = exec.try_map(
         meter,
         SHEETS,
         PIECES,
         pieces,
-        |_, piece, _| -> Result<(SheetKey, Canonical), MergeError> {
-            let face = canonical(&piece.piece.face)?;
+        |at, piece, _| -> Result<(SheetKey, Canonical), MergeError> {
+            let face = which
+                .get(at)
+                .and_then(|k| reduced.get(*k))
+                .copied()
+                .ok_or(MergeError::Open)?;
             let pairs = |w: &Winding| {
                 if seams {
                     w.pairs().to_vec()
@@ -2378,9 +2404,107 @@ mod tests {
     use geom_num::Sign;
 
     use super::{
-        Cell, CellKey, MarkKey, REACH, corner, lead, line_cells_of, line_in_words, mark,
-        point_order, wide_line_key,
+        Cell, CellKey, MarkKey, REACH, beyond, corner, floor_span, grid_range, lead, line_cells_of,
+        line_in_words, mark, point_order, spanned, wide_line_key,
     };
+    use crate::order::{Meeting, Span};
+
+    /// A piece's corners in the merge's form, and trace's span of them made from their meetings.
+    fn corners_and_span(face: Plane, bounds: &[Plane]) -> (Vec<super::Corner>, Option<Span>) {
+        let after = bounds.iter().cycle().skip(1);
+        let corners = bounds
+            .iter()
+            .zip(after.clone())
+            .map(|(b, n)| corner(face, *b, *n).unwrap())
+            .collect();
+        let span = Span::of(
+            bounds
+                .iter()
+                .zip(after)
+                .map(|(b, n)| Meeting::new(&face, b, n)),
+        );
+        (corners, span)
+    }
+
+    /// A triangle on a tilted face with corners off the grid, and a square on z = 3.
+    fn pieces() -> Vec<(Plane, Vec<Plane>)> {
+        let plane = |n: [i128; 3], d: i128| Plane::new(n, d).unwrap();
+        vec![
+            (
+                plane([1, 1, 3], -1),
+                vec![
+                    plane([1, 0, 0], 1),
+                    plane([0, 1, 0], 2),
+                    plane([-3, -2, 0], 11),
+                ],
+            ),
+            (
+                plane([0, 0, 1], -3),
+                vec![
+                    plane([1, 0, 0], 0),
+                    plane([0, 1, 0], 0),
+                    plane([-1, 0, 0], 5),
+                    plane([0, -1, 0], 4),
+                ],
+            ),
+        ]
+    }
+
+    #[test]
+    fn a_span_from_the_merges_corners_is_traces_span() {
+        for (face, bounds) in pieces() {
+            let (corners, span) = corners_and_span(face, &bounds);
+            let (ours, theirs) = (floor_span(&corners).unwrap(), span.unwrap());
+            assert_eq!((ours.low, ours.high), (theirs.low, theirs.high));
+        }
+    }
+
+    #[test]
+    fn a_grid_range_holds_every_corner_from_its_floor_to_its_ceiling() {
+        for (face, bounds) in pieces() {
+            let (corners, _) = corners_and_span(face, &bounds);
+            let (low, high) = grid_range(&corners).unwrap();
+            let floors: Vec<[i128; 3]> = corners
+                .iter()
+                .map(|c| c.cells.unwrap().map(|cell| cell.floor))
+                .collect();
+            let ceilings: Vec<[i128; 3]> = corners
+                .iter()
+                .map(|c| {
+                    c.cells
+                        .unwrap()
+                        .map(|cell| cell.floor + i128::from(cell.rest != 0))
+                })
+                .collect();
+            for axis in 0..3 {
+                let least = floors.iter().map(|f| f[axis]).min().unwrap();
+                let most = ceilings.iter().map(|f| f[axis]).max().unwrap();
+                assert_eq!(
+                    (i128::from(low[axis]), i128::from(high[axis])),
+                    (least, most)
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn a_floor_range_is_spanned_once_and_read_for_each_mark() {
+        let (low, high) = spanned(&[3, -2, 5], &[1, 4, 5]);
+        assert_eq!((low, high), ([1, -2, 5], [3, 4, 5]));
+        for (at, out) in [
+            ([1, -2, 5], false),
+            ([3, 4, 5], false),
+            ([2, 0, 5], false),
+            ([0, 0, 5], true),
+            ([4, 0, 5], true),
+            ([2, -3, 5], true),
+            ([2, 5, 5], true),
+            ([2, 0, 4], true),
+            ([2, 0, 6], true),
+        ] {
+            assert_eq!(beyond(&at, (&low, &high)), out, "{at:?}");
+        }
+    }
 
     /// a / b against c / d, b and d positive, by cross-multiplying big integers.
     fn exact(a: i128, b: i128, c: i128, d: i128) -> Ordering {
@@ -2674,6 +2798,21 @@ mod tests {
             assert_eq!(keys[b].cmp(&keys[a]), CellKey(q).cmp(&CellKey(p)));
         }
         assert!(!MarkKey::<6, 2>::new(&lines[0], 4).past);
+        // A key with no cells past its marks against one with some, where the marks agree and
+        // stop: the cells decide, either way round.
+        let zero = cell(0, 1);
+        let other = [zero, zero, zero, two, zero, cell(5, 1)];
+        let (short, long) = (
+            MarkKey::<6, 2>::new(&lines[0], 4),
+            MarkKey::<6, 2>::new(&other, 3),
+        );
+        assert!(!short.past && long.past);
+        assert_eq!(short.marks, long.marks);
+        assert_eq!(short.marks[0] & 1, 0);
+        let exact = CellKey(&lines[0]).cmp(&CellKey(&other));
+        assert_eq!(exact, Ordering::Greater);
+        assert_eq!(short.cmp(&long), exact);
+        assert_eq!(long.cmp(&short), exact.reverse());
     }
 
     /// A cell's floor and remainder are the Euclidean ones, in machine words or not.
