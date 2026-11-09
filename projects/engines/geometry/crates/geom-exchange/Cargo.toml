@@ -22,6 +22,22 @@ geom-p21 = { path = "../geom-p21" }
 geom-surface = { path = "../geom-surface" }
 geom-topo = { path = "../geom-topo" }
 
+[dev-dependencies]
+# Exact oracles for tests only, never linked into the kernel. All MIT OR Apache-2.0.
+num-bigint = "0.4"
+num-rational = "0.4.2"
+num-traits = "0.2"
+num-integer = "0.1"
+# Printed, replayable seeds for the randomised tests (piece G19): the kernel's development crate,
+# a development dependency only (chapter 28.1).
+geom-test = { path = "../geom-test" }
+
+# Wall-clock throughput of numbers to grid, shortest decimals and reals (piece G413), with the
+# standard library's clock only, like geom-math's; it moves to geom-bench with the others.
+[[bench]]
+name = "exchange"
+harness = false
+
 [lints.rust]
 unsafe_code = "forbid"
 missing_docs = "warn"

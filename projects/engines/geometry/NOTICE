@@ -460,6 +460,13 @@ CGAL `FPU.h`
     projects/engines/geometry/crates/geom-num/src/interval.rs
       for its widening with `nextafter` when the rounding mode cannot change, which the Method above names.
 
+ciborium-ll
+  Licence:      Apache-2.0
+  Link:         https://github.com/enarx/ciborium/blob/fdf3ec5c53256000f8e12f06c361ca18026a8d99/ciborium-ll/src/hdr.rs
+  Consulted by:
+    projects/engines/geometry/crates/geom-op/src/cbor.rs
+      its choice of the shortest float that keeps a double's bits; used as a test oracle only.
+
 Clippy's `clippy_dev` token cursor
   Licence:      MIT OR Apache-2.0
   Link:         https://github.com/rust-lang/rust-clippy/blob/3583eb8a9ae1161bd7d80907acfa09b3612a93f9/clippy_dev/src/parse/cursor.rs
@@ -542,6 +549,20 @@ IFC 4.3 documentation (buildingSMART)
   Consulted by:
     projects/engines/geometry/crates/geom-curve/src/transition.rs
       for the curvature and heading formulas of `IfcAlignmentHorizontalSegmentTypeEnum`'s transitions, `IfcClothoid`, the second-, third- and seventh-order polynomial spirals, `IfcCosineSpiral` and `IfcSineSpiral`, which the laws implement, and for `IfcCurveSegment`'s trimming of a parent curve by a start and a signed length, which windows and senses follow. No text adapted.
+
+IFC 4.3 schema documentation (buildingSMART)
+  Licence:      CC-BY-ND-4.0
+  Link:         https://github.com/buildingSMART/IFC4.3.x-development/blob/7256780bd95fcc5b3653e07b3e8ec2f8389c9f3d/docs/schemas/resource/IfcMeasureResource/Types/IfcSIPrefix.md
+  Consulted by:
+    projects/engines/geometry/crates/geom-exchange/src/unit.rs
+      for the list of SI prefixes an IFC file may name. No text copied.
+
+IFC 4.3 schema documentation (buildingSMART)
+  Licence:      CC-BY-ND-4.0
+  Link:         https://github.com/buildingSMART/IFC4.3.x-development/blob/7256780bd95fcc5b3653e07b3e8ec2f8389c9f3d/docs/schemas/resource/IfcRepresentationResource/Entities/IfcMapConversionScaled.md
+  Consulted by:
+    projects/engines/geometry/crates/geom-exchange/src/map.rs
+      for the order and meaning of Scale, the three factors, the rotation and the translation. No text adapted.
 
 Kani 0.68.0 `library/std/src/lib.rs`
   Licence:      MIT OR Apache-2.0
@@ -635,6 +656,20 @@ rayon
     projects/engines/geometry/crates/geom-run/src/phase.rs
       for the lowest-index rule of `find_first`, which this crate applies to failures. No code copied.
 
+Rust core library
+  Licence:      MIT OR Apache-2.0
+  Link:         https://github.com/rust-lang/rust/blob/b940084d7eb6a299eb4bfeb8e34901bc051e7ac4/library/core/src/num/imp/dec2flt/mod.rs
+  Consulted by:
+    projects/engines/geometry/crates/geom-exchange/src/real.rs
+      for the guarantee that `f64`'s parser rounds once, half to even, at the same release.
+
+Rust core library
+  Licence:      MIT OR Apache-2.0
+  Link:         https://github.com/rust-lang/rust/blob/b940084d7eb6a299eb4bfeb8e34901bc051e7ac4/library/core/src/num/imp/flt2dec/mod.rs
+  Consulted by:
+    projects/engines/geometry/crates/geom-exchange/src/real.rs
+      for the guarantees of the shortest mode `{:e}` formats with (read back correctly, shortest, closest among the shortest), at the release the toolchain pins (1.99.0).
+
 rustc
   Licence:      MIT OR Apache-2.0
   Link:         https://github.com/rust-lang/rust/blob/21b707e3f97e0b522ebd2f277a862339625ad83f/compiler/rustc_mir_build/src/builder/matches/mod.rs
@@ -679,6 +714,20 @@ shuffling-allocator
     projects/engines/geometry/crates/geom-test/src/golden/perturb.rs
       for its size classes and shuffling layer and to judge whether it could be used; not taken, for the reasons above. No code copied.
 
+solidcore (step-export)
+  Licence:      Apache-2.0
+  Link:         https://github.com/tangency-labs/solidcore/blob/78d1eb12d222652219313c12787b65389c4d9db8/crates/step-export/src/lib.rs
+  Consulted by:
+    projects/engines/geometry/crates/geom-exchange/src/real.rs
+      for writing a STEP real by the core library's shortest formatting (`real`). No code copied.
+
+solidcore (step-import)
+  Licence:      Apache-2.0
+  Link:         https://github.com/tangency-labs/solidcore/blob/78d1eb12d222652219313c12787b65389c4d9db8/crates/step-import/src/map.rs
+  Consulted by:
+    projects/engines/geometry/crates/geom-exchange/src/unit.rs
+      for how a STEP reader resolves `si_unit` prefixes and `conversion_based_unit` factors (`unit_factor`). Its factors are doubles; here every factor is an exact ratio.
+
 SPDX License List 3.29.0
   Licence:      CC-BY-3.0
   Link:         https://github.com/spdx/license-list-data/blob/31ba1a50e5397e00a304dbadc76531740e89ee48/json/licenses.json
@@ -709,6 +758,8 @@ PUBLISHED CRATES
 The published crates the kernel crates depend on (DEPEND, section 29.1). Their notices, and those of
 every other crate compiled into a shipped binary, go in the generated third-party notices file.
 
+  crc 3.4.0 (Apache-2.0 OR MIT), https://crates.io/crates/crc/3.4.0, named by projects/engines/geometry/crates/geom-format/Cargo.toml
   libm 0.2.16 (MIT), https://crates.io/crates/libm/0.2.16, named by projects/engines/geometry/crates/geom-num/Cargo.toml
   libm 0.2.16 (MIT), https://crates.io/crates/libm/0.2.16, named by projects/engines/geometry/crates/geom-num/Cargo.toml
   rayon 1.12.0 (Apache-2.0 OR MIT), https://crates.io/crates/rayon/1.12.0, named by projects/engines/geometry/crates/geom-pool/Cargo.toml
+  sha2 0.11.0 (Apache-2.0 OR MIT), https://crates.io/crates/sha2/0.11.0, named by projects/engines/geometry/crates/geom-op/Cargo.toml

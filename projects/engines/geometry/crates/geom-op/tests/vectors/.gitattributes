@@ -1,0 +1,5 @@
+# NIST's test vector files are kept byte for byte as published, line ends included, so their
+# SHA-256 (recorded in tests/hash.rs) can be checked against NIST's archive; the tests read their
+# line ends as \n. The cbor2 vectors are written by oracles/cbor2.py and compared as they are.
+* -text
+.gitattributes text eol=lf

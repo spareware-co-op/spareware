@@ -27,8 +27,19 @@
 //! kernel architecture (`projects/engines/geometry/architecture/`).
 //!
 //! Its direct dependencies are its row of chapter 27's crate table, checked by the
-//! scaffold test in `engine-geometry` (`tests/scaffold`).
+//! scaffold test in `engine-geometry` (`tests/scaffold`), and `sha2`, the one hash 32.20 approves.
 //!
-//! Status: scaffold only; built by pieces G82, G83, G86, G87, G88, G104, G143, G144, G459.
+//! Licences of the published crates this crate depends on (DEPEND, chapter 29.1), as each one's
+//! manifest at the version in `Cargo.lock` states it:
+//!
+//! - MIT OR Apache-2.0: `sha2`.
+//!
+//! Status: the canonical CBOR encoder ([`cbor`]) and SHA-256 ([`hash`]) are built (G86); the rest
+//! is built by pieces G82, G83, G87, G88, G104, G143, G144, G459.
 #![cfg_attr(not(test), no_std)]
 #![forbid(unsafe_code)]
+
+extern crate alloc;
+
+pub mod cbor;
+pub mod hash;
