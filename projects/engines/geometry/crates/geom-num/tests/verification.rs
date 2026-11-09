@@ -1444,7 +1444,8 @@ struct Row {
 }
 
 /// Every test file the matrix names, read when the test is built.
-const FILES: [(&str, &str); 11] = [
+const FILES: [(&str, &str); 12] = [
+    ("attack_g196b.rs", include_str!("attack_g196b.rs")),
     ("attack_g193.rs", include_str!("attack_g193.rs")),
     ("attack_g190.rs", include_str!("attack_g190.rs")),
     ("attack_g189.rs", include_str!("attack_g189.rs")),
@@ -1924,6 +1925,42 @@ fn matrix() -> Vec<Row> {
             Where::NotApplicable("no filter: stretches apart are its first step, and exact"),
             "roots_of_two_quartics_compare_exactly",
         ),
+        // The sign of a quartic at another's root (G196b): its attacks are in attack_g196b.rs.
+        Row {
+            predicate: "quartic::sign_at_root",
+            call: "sign_at_root",
+            classes: [
+                (
+                    Class::Random,
+                    Where::Test("attack_g196b.rs", "the_sign_at_every_root_is_the_oracle_s"),
+                ),
+                (
+                    Class::OneStep,
+                    Where::Test(
+                        "attack_g196b.rs",
+                        "a_shared_root_is_zero_at_every_multiplicity_and_a_near_one_is_not",
+                    ),
+                ),
+                (
+                    Class::Boundary,
+                    Where::NotApplicable("no filter: every call takes the exact path"),
+                ),
+                (
+                    Class::Corners,
+                    Where::Test(
+                        "attack_g196b.rs",
+                        "the_exact_roots_and_infinity_are_read_exactly",
+                    ),
+                ),
+                (
+                    Class::Laws,
+                    Where::Test(
+                        "attack_g196b.rs",
+                        "a_half_turn_keeps_every_root_and_orders_them_as_minus_one_over_t",
+                    ),
+                ),
+            ],
+        },
         on_root(
             "one_root::sign_of_root",
             "sign_of_root",
