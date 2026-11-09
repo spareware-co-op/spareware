@@ -37,6 +37,7 @@
 //! Cost: O(n log n) exact comparisons for n sides of pieces, and a sweep of each line. Charges the
 //! meter one unit per side of a piece, per fin and per shell.
 
+use alloc::collections::BTreeMap;
 use alloc::vec::Vec;
 use core::cmp::{Ordering, Reverse};
 use core::fmt;
@@ -1133,13 +1134,38 @@ fn sheets_of<'p>(
     meter: &mut WorkMeter<'_>,
 ) -> Result<(Vec<Sheet>, Vec<Held<'p>>), MergeError> {
     let seams = merge == Merge::KeepSeams;
+    // The pieces of one polygon facing one way share its face, so each face is reduced once, at
+    // the first piece that holds it, on the pool; a piece whose face is not that piece's own is
+    // reduced for itself.
+    let mut first_of: BTreeMap<(usize, bool), usize> = BTreeMap::new();
+    let mut firsts: Vec<&Plane> = Vec::new();
+    let mut which = Vec::with_capacity(pieces.len());
+    for piece in pieces {
+        let face = &piece.piece.face;
+        let held = first_of.get(&(piece.polygon, piece.turned)).copied();
+        if let Some(k) = held.filter(|k| firsts.get(*k) == Some(&face)) {
+            which.push(k);
+            continue;
+        }
+        first_of.insert((piece.polygon, piece.turned), firsts.len());
+        which.push(firsts.len());
+        firsts.push(face);
+    }
+    let reduced = exec.try_map(meter, SHEETS, PIECES, &firsts, |_, face, _| {
+        canonical(face).map_err(MergeError::from)
+    });
+    let reduced = reduced.map_err(|e| phase_error(e, meter))?;
     let made = exec.try_map(
         meter,
         SHEETS,
         PIECES,
         pieces,
-        |_, piece, _| -> Result<(SheetKey, Canonical), MergeError> {
-            let face = canonical(&piece.piece.face)?;
+        |at, piece, _| -> Result<(SheetKey, Canonical), MergeError> {
+            let face = which
+                .get(at)
+                .and_then(|k| reduced.get(*k))
+                .copied()
+                .ok_or(MergeError::Open)?;
             let pairs = |w: &Winding| {
                 if seams {
                     w.pairs().to_vec()
