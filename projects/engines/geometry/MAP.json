@@ -2695,7 +2695,7 @@
       "provenance": [],
       "sections": "24.7, 24.8, 24.10 and 24.11; open question OQ-24.6; 30.5, in the kernel architecture (`projects/engines/geometry/architecture/`).",
       "spdx": null,
-      "status": "scaffold only; built by pieces G413, G414, G418, G436; G413 is done.",
+      "status": "built by pieces G413, G414, G418, G436; G413 is done.",
       "summary": "Spare Kit geometry kernel: what every format crate shares."
     },
     {
