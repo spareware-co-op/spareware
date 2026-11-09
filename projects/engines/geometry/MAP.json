@@ -1358,6 +1358,16 @@
               "shape": "struct"
             },
             {
+              "doc": "Two pieces leaving a vertex of a face whose order round it is not proven: their tangents and their curvatures cannot be told apart (G244).",
+              "name": "UndecidedOrder",
+              "shape": "struct"
+            },
+            {
+              "doc": "A loop of a face being split whose sense is not proven: its area's enclosure holds zero (G244).",
+              "name": "UndecidedArea",
+              "shape": "struct"
+            },
+            {
               "doc": "Two paves of a section line whose order is not proven.",
               "name": "SectionOrder",
               "shape": "struct"
@@ -1920,6 +1930,42 @@
           "path": "geom_bool::rule",
           "provenance": [],
           "spdx": null,
+          "target": "lib"
+        },
+        {
+          "cost": "per flat face, its pieces sorted round each vertex (O(k log k) comparisons at a vertex of k pieces, each a few wide multiplications or interval products), one walk over the pieces, an area per loop, and a ray test per hole and loop pair; all charged to the meter. No recursion.",
+          "does": "[`split`] takes the interferences of an arrangement ([`crate::interfere`]) and, for each face whose carrier is a plane of the table, gathers its pieces: its boundary's split edges (On), other operands' split edges lying inside it (In) and its section edges, a common block once. In the plane's picture (the coordinate the normal is largest in dropped, as [`crate::inside`] does), the pieces leaving each vertex are put in turning order by their tangents, and where two leave along one tangent, by their curvature; the loops are then traced with each piece's left side as the face it bounds. A loop running counter-clockwise, by the sign of its certified area, bounds a split face; one running clockwise is the outside of a connected group of pieces, a hole of the smallest split face that holds it (by the certified ray test), or, held by none, the outside of the face itself. Vertices of other operands inside the face that no piece reaches are given to the split face that holds them.",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-bool/src/split.rs",
+          "guarantees": [
+            "**The turning order is proven or refused.** Two tangents are ordered by the half-plane each lies in and the sign of their cross product, exactly in wide integers where both are whole (a line between grid points, a section's n₁ × n₂), from enclosures otherwise; two along one tangent by their curvature enclosures. A pair neither orders fails with [`BuildError::UndecidedOrder`]. No angle is computed, and no tolerance compares two.",
+            "**Each loop's sense is proven.** A loop's area is enclosed piece by piece: a straight piece's exactly from its ends, a circle's or ellipse's arc in closed form with certified sines and cosines of half-turns; an area that holds zero fails with [`BuildError::UndecidedArea`].",
+            "**Holes go to the face that holds them, by proof.** A clockwise loop's point is placed in each counter-clockwise loop by the certified ray test, and the smallest by area that holds it takes it; no direction qualifying fails with [`BuildError::Unclassified`].",
+            "**What this piece does not split, it says.** A face on a curved carrier, or bounded by a curve other than a line, circle or ellipse, is listed as waiting, for G244's analytic carriers and G245's NURBS and procedural ones.",
+            "**Deterministic.** Faces in order, pieces in index order, vertices' pieces in turning order, loops in the order their first pieces come."
+          ],
+          "job": "Face splitting for flat carriers: each face cut along its In and section edges into the faces it splits into, its loops traced in the plane's picture by exact orientation (11.4 step 5, G244).",
+          "method": {
+            "links": [
+              "projects/engines/geometry/architecture/11-booleans.md",
+              "https://doi.org/10.1007/978-3-540-77974-2"
+            ],
+            "text": "chapter 11.4, step 5 (`projects/engines/geometry/architecture/11-booleans.md`): each face cut along its In and section edges in its own parameter space, the loops traced by ordering the edges around each vertex, flat faces by exact orientation predicates. The loop walk is the face traversal of a planar graph's rotation system (the next piece round each vertex from the one arriving), as in M. de Berg, O. Cheong, M. van Kreveld and M. Overmars, *Computational Geometry*, 3rd edition, Springer (2008), section 2.2, <https://doi.org/10.1007/978-3-540-77974-2>. The order round a vertex, by tangents and then by curvature where tangents agree, is `SMLib`'s `sm_NextRoundTheVertex` (`SmTrimmingTools::OrderCurvesIntoLoops`), read in solidcore's Rust port; its tangents are compared in doubles within a tolerance, and its outer loops are found by the areas of tessellations, neither of which is taken."
+          },
+          "path": "geom_bool::split",
+          "provenance": [
+            {
+              "licence": "Apache-2.0",
+              "link": "https://github.com/tangency-labs/solidcore/blob/c440e5f892452a9654aee8f3030de6095fdb1415/crates/solidcore/src/topology/trimming_tools.rs",
+              "method_note": null,
+              "name": "solidcore",
+              "notice": [],
+              "pinned": true,
+              "purpose": "for the order round a vertex and the grouping of outer loops and holes; no code copied.",
+              "take": "port-method"
+            }
+          ],
+          "spdx": "Apache-2.0",
           "target": "lib"
         },
         {
@@ -14226,6 +14272,17 @@
       "used_by": [
         "projects/engines/geometry/crates/geom-bool/src/face.rs",
         "projects/engines/geometry/crates/geom-bool/src/inside.rs"
+      ]
+    },
+    {
+      "licence": "Apache-2.0",
+      "link": "https://github.com/tangency-labs/solidcore/blob/c440e5f892452a9654aee8f3030de6095fdb1415/crates/solidcore/src/topology/trimming_tools.rs",
+      "method_note": null,
+      "name": "solidcore",
+      "pinned": true,
+      "take": "port-method",
+      "used_by": [
+        "projects/engines/geometry/crates/geom-bool/src/split.rs"
       ]
     },
     {

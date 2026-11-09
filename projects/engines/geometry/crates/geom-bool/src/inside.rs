@@ -66,7 +66,7 @@ use geom_num::interval::Interval;
 use geom_num::plane::Plane;
 use geom_num::{NumError, P3};
 use geom_run::WorkMeter;
-use geom_topo::{CurveIx, ParamCurve};
+use geom_topo::{CurveIx, CurveKind, ParamCurve};
 
 use crate::carrier::{Bound, CarrierIx};
 use crate::crossing::{Enclosed, Hull, crossings};
@@ -360,6 +360,12 @@ impl FlatFace {
         })
     }
 
+    /// The two coordinates of the plane's picture, in order; the third is the one dropped.
+    #[must_use]
+    pub fn keep(&self) -> [usize; 2] {
+        self.keep
+    }
+
     /// The face's plane.
     #[must_use]
     pub fn plane(&self) -> &Plane {
@@ -429,98 +435,146 @@ impl FlatFace {
         direction: (i64, i64),
         meter: &mut WorkMeter<'_>,
     ) -> Result<Option<bool>, BuildError> {
-        let [first, second] = self.keep;
-        let at = coords(point);
-        let (from_first, from_second) =
-            (i128::from(coord(at, first)), i128::from(coord(at, second)));
-        let (run, rise) = (i128::from(direction.0), i128::from(direction.1));
-        let fall = rise.checked_neg().ok_or(NumError::BudgetExceeded)?;
-        // The ray's plane holds the dropped axis and the direction: its normal is the direction
-        // turned a quarter, (−rise, run), in the picture's coordinates.
-        let mut normal = [0_i128; 3];
-        if let Some(slot) = normal.get_mut(first) {
-            *slot = fall;
-        }
-        if let Some(slot) = normal.get_mut(second) {
-            *slot = run;
-        }
-        let offset = dot2(fall, from_first, run, from_second)?
-            .checked_neg()
-            .ok_or(NumError::BudgetExceeded)?;
-        let ray_plane = Plane::new(normal, offset)?;
-        let enclosed = Enclosed::of(&ray_plane)?;
-
-        #[allow(
-            clippy::cast_precision_loss,
-            reason = "the direction's parts are at most 3, and the point's coordinates at most 2^40"
-        )]
-        let (run_f, rise_f, first_f, second_f) = (
-            run as f64,
-            rise as f64,
-            from_first as f64,
-            from_second as f64,
-        );
-        let along = |lo: [f64; 3], hi: [f64; 3]| -> Result<Interval, NumError> {
-            let part = |k: usize, scale: f64, origin: f64| -> Result<Interval, NumError> {
-                let span = Interval::new(
-                    lo.get(k).copied().unwrap_or(0.0),
-                    hi.get(k).copied().unwrap_or(0.0),
-                )?;
-                Interval::point(scale)?.mul(span.sub(Interval::point(origin)?)?)
-            };
-            part(first, run_f, first_f)?.add(part(second, rise_f, second_f)?)
-        };
-        // A step, in the units of the ray plane's value and of the distance along the ray: both are
-        // lengths times the direction's length.
-        let step = Interval::point(run_f)?
-            .square()?
-            .add(Interval::point(rise_f)?.square()?)?
-            .sqrt()?
-            .hi();
-        // A join within a step of the ray's line, ahead of the point or within a step behind it:
-        // the direction fails.
-        for join in &self.joins {
-            let across = enclosed.value(join)?;
-            let ahead = along(join.map(Interval::lo), join.map(Interval::hi))?;
-            if least(across) <= step && ahead.hi() >= -step {
-                return Ok(None);
-            }
-        }
-        let mut count = 0_u32;
+        let mut sides = Vec::with_capacity(self.sides.len());
         for side in &self.sides {
-            match judge(side.hull.spread(&enclosed)?) {
-                // Proven on one side of the ray's plane: no crossing.
-                Verdict::Decided(_) => continue,
-                // Lying in the ray's plane: the ray runs along it.
-                Verdict::Touch => return Ok(None),
-                Verdict::Near => {}
-            }
             let curve = carriers
                 .curve(side.curve)
                 .ok_or(BuildError::Missing(Entity::Edge(side.edge)))?;
-            let found = crossings(curve, &ray_plane, meter)?;
-            for zero in &found.zeros {
-                let [param] = zero.enclosure;
-                let at = curve
-                    .bound((param.lo(), param.hi()), meter)
-                    .map_err(geom_intersect::IntersectError::from)?;
-                let ahead = along(at.lo, at.hi)?;
-                if ahead.lo() > 0.0 {
-                    count = count.checked_add(1).ok_or(NumError::BudgetExceeded)?;
-                } else if ahead.hi() >= 0.0 {
-                    return Ok(None);
-                }
+            sides.push(Crossable {
+                curve,
+                span: curve.domain(),
+                hull: &side.hull,
+            });
+        }
+        ray_parity(self.keep, (&sides, &self.joins), point, direction, meter)
+    }
+}
+
+/// A boundary curve over a span of its parameter, for the ray test.
+pub(crate) struct Crossable<'a> {
+    /// The curve.
+    pub(crate) curve: &'a CurveKind<3>,
+    /// The span of its parameter that bounds.
+    pub(crate) span: (f64, f64),
+    /// A hull of the curve over at least that span.
+    pub(crate) hull: &'a Hull,
+}
+
+/// The parity of the crossings of the ray from `point` along `direction` in the picture whose
+/// coordinates are `keep`, with the boundary `sides` and their `joins`, or `None` when the
+/// direction does not qualify (module documentation): a join within a step of the ray ahead of
+/// the point, a side lying in the ray's plane, a crossing or flagged region that cannot be put
+/// ahead or behind, or a crossing at a side's end.
+///
+/// # Errors
+///
+/// The crossing engine's, an enclosure's, or the meter's stop.
+pub(crate) fn ray_parity(
+    keep: [usize; 2],
+    (sides, joins): (&[Crossable<'_>], &[[Interval; 3]]),
+    point: P3,
+    direction: (i64, i64),
+    meter: &mut WorkMeter<'_>,
+) -> Result<Option<bool>, BuildError> {
+    let [first, second] = keep;
+    let at = coords(point);
+    let (from_first, from_second) = (i128::from(coord(at, first)), i128::from(coord(at, second)));
+    let (run, rise) = (i128::from(direction.0), i128::from(direction.1));
+    let fall = rise.checked_neg().ok_or(NumError::BudgetExceeded)?;
+    // The ray's plane holds the dropped axis and the direction: its normal is the direction
+    // turned a quarter, (−rise, run), in the picture's coordinates.
+    let mut normal = [0_i128; 3];
+    if let Some(slot) = normal.get_mut(first) {
+        *slot = fall;
+    }
+    if let Some(slot) = normal.get_mut(second) {
+        *slot = run;
+    }
+    let offset = dot2(fall, from_first, run, from_second)?
+        .checked_neg()
+        .ok_or(NumError::BudgetExceeded)?;
+    let ray_plane = Plane::new(normal, offset)?;
+    let enclosed = Enclosed::of(&ray_plane)?;
+
+    #[allow(
+        clippy::cast_precision_loss,
+        reason = "the direction's parts are at most 3, and the point's coordinates at most 2^40"
+    )]
+    let (run_f, rise_f, first_f, second_f) = (
+        run as f64,
+        rise as f64,
+        from_first as f64,
+        from_second as f64,
+    );
+    let along = |lo: [f64; 3], hi: [f64; 3]| -> Result<Interval, NumError> {
+        let part = |k: usize, scale: f64, origin: f64| -> Result<Interval, NumError> {
+            let span = Interval::new(
+                lo.get(k).copied().unwrap_or(0.0),
+                hi.get(k).copied().unwrap_or(0.0),
+            )?;
+            Interval::point(scale)?.mul(span.sub(Interval::point(origin)?)?)
+        };
+        part(first, run_f, first_f)?.add(part(second, rise_f, second_f)?)
+    };
+    // A step, in the units of the ray plane's value and of the distance along the ray: both are
+    // lengths times the direction's length.
+    let step = Interval::point(run_f)?
+        .square()?
+        .add(Interval::point(rise_f)?.square()?)?
+        .sqrt()?
+        .hi();
+    // A join within a step of the ray's line, ahead of the point or within a step behind it:
+    // the direction fails.
+    for join in joins {
+        let across = enclosed.value(join)?;
+        let ahead = along(join.map(Interval::lo), join.map(Interval::hi))?;
+        if least(across) <= step && ahead.hi() >= -step {
+            return Ok(None);
+        }
+    }
+    let mut count = 0_u32;
+    for side in sides {
+        match judge(side.hull.spread(&enclosed)?) {
+            // Proven on one side of the ray's plane: no crossing.
+            Verdict::Decided(_) => continue,
+            // Lying in the ray's plane: the ray runs along it.
+            Verdict::Touch => return Ok(None),
+            Verdict::Near => {}
+        }
+        let curve = side.curve;
+        let (lo, hi) = side.span;
+        let found = crossings(curve, &ray_plane, meter)?;
+        for zero in &found.zeros {
+            let [param] = zero.enclosure;
+            // Outside the span: no crossing of this side; at its end: a join.
+            if param.hi() < lo || param.lo() > hi {
+                continue;
             }
-            for flag in &found.flagged {
-                let [param] = flag.region;
-                let at = curve
-                    .bound((param.lo(), param.hi()), meter)
-                    .map_err(geom_intersect::IntersectError::from)?;
-                if along(at.lo, at.hi)?.hi() >= 0.0 {
-                    return Ok(None);
-                }
+            if param.lo() <= lo || param.hi() >= hi {
+                return Ok(None);
+            }
+            let at = curve
+                .bound((param.lo(), param.hi()), meter)
+                .map_err(geom_intersect::IntersectError::from)?;
+            let ahead = along(at.lo, at.hi)?;
+            if ahead.lo() > 0.0 {
+                count = count.checked_add(1).ok_or(NumError::BudgetExceeded)?;
+            } else if ahead.hi() >= 0.0 {
+                return Ok(None);
             }
         }
-        Ok(Some(count % 2 == 1))
+        for flag in &found.flagged {
+            let [param] = flag.region;
+            if param.hi() < lo || param.lo() > hi {
+                continue;
+            }
+            let at = curve
+                .bound((param.lo(), param.hi()), meter)
+                .map_err(geom_intersect::IntersectError::from)?;
+            if along(at.lo, at.hi)?.hi() >= 0.0 {
+                return Ok(None);
+            }
+        }
     }
+    Ok(Some(count % 2 == 1))
 }

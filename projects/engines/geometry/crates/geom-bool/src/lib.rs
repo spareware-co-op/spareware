@@ -42,6 +42,7 @@
 //! - [`interfere`]: interferences, lowest dimension first, as paves on the edges (G243).
 //! - [`pave`]: paves in their proven order, pave blocks and split edges (G243).
 //! - [`rule`]: the contact rule at `ε_fit`, `NearContact` and `CoincidenceChain` (G242).
+//! - [`split`]: face splitting for flat carriers, loops traced by exact orientation (G244).
 //! - [`rebuild`]: merged pieces published as a body by canonical rules (G129).
 //!
 //! Status: the rebuild (G129), operands and selections (G130) and the entry (G131) built; the
@@ -70,4 +71,5 @@ pub mod operand;
 pub mod pave;
 pub mod rebuild;
 pub mod rule;
+pub mod split;
 mod wires;
