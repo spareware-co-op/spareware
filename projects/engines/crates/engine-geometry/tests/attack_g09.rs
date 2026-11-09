@@ -1228,14 +1228,9 @@ mod repository {
             "G387 G389 G390 G391 G394 G395 G396 G397 G398 G399 G400 G401 G402 G403 G404 G405",
         ),
         ("geom-dxf", "G430 G431 G432 G433"),
-        ("geom-exchange", "G413 G414 G418 G436"),
         (
             "geom-field",
             "G326 G327 G328 G329 G330 G331 G332 G338 G339 G352 G469",
-        ),
-        (
-            "geom-format",
-            "G91 G92 G93 G94 G95 G96 G105 G108 G112 G175 G318 G405 G410 G411 G459",
         ),
         ("geom-heal", "G417 G419 G420"),
         ("geom-ifc", "G421 G422 G423 G424 G426"),
@@ -1254,7 +1249,6 @@ mod repository {
         ("geom-meshio", "G354 G434 G435"),
         ("geom-name", "G87 G89 G90 G109 G374"),
         ("geom-offset", "G270 G275 G276 G277 G278 G279"),
-        ("geom-op", "G82 G83 G86 G87 G88 G104 G143 G144 G459"),
         ("geom-p21", "G415"),
         ("geom-panel", "G342 G343 G344 G345"),
         ("geom-poly", "G123 G124 G125 G126 G127 G128 G142"),

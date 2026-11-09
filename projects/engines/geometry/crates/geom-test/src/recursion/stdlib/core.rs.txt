@@ -3326,6 +3326,21 @@ pub mod str {
         pub fn eq_ignore_ascii_case(&self, other: &str) -> bool {
             loop {}
         }
+        pub fn to_ascii_lowercase(&self) -> String {
+            loop {}
+        }
+        pub fn split<P>(&self, pat: P) -> Split {
+            loop {}
+        }
+    }
+    pub struct Split {
+        p: PhantomData<char>,
+    }
+    impl Iterator for Split {
+        type Item = &str;
+        fn next(&mut self) -> Option<&str> {
+            loop {}
+        }
     }
     pub trait FromStr: Sized {
         type Err;
@@ -5604,6 +5619,21 @@ pub mod primitives {
     int_methods! {
         u8 u8 i8 u16 u16 i16 u32 u32 i32 u64 u64 i64 u128 u128 i128 usize usize isize
         i8 u8 i8 i16 u16 i16 i32 u32 i32 i64 u64 i64 i128 u128 i128 isize usize isize
+    }
+    // The ASCII tests of a byte, which only `u8` has.
+    impl u8 {
+        pub const fn is_ascii_digit(&self) -> bool {
+            loop {}
+        }
+        pub const fn is_ascii_hexdigit(&self) -> bool {
+            loop {}
+        }
+        pub const fn is_ascii_alphabetic(&self) -> bool {
+            loop {}
+        }
+        pub const fn is_ascii_alphanumeric(&self) -> bool {
+            loop {}
+        }
     }
 
     // The inherent methods and traits of the floats: `$f` the type and `$b` its bits' type.
