@@ -651,3 +651,45 @@ fn a_hole_is_never_placed_in_a_face_of_its_own_group() {
         2 * (1000 * 1000 - 400 * 400) * s * s
     );
 }
+
+/// A face whose right side is the line x = k·m (m the least double, 2^−1074), with a hole of its
+/// own whose corner is the origin. The ray placing the hole runs along the picture's first axis and
+/// meets the side k·m ahead; every other direction runs along the side or meets it within its
+/// rounding of the point. At k = 4 the crossing's position along the ray is enclosed from exactly 0:
+/// not proven ahead, so the direction is refused too and the hole is Unclassified; at k = 3 the
+/// enclosure holds 0; from k = 5 it is proven ahead and the hole is the face's.
+#[test]
+fn a_crossing_enclosed_from_exactly_zero_is_not_ahead() {
+    let tiny = |k: u64| f64::from_bits(k);
+    for (k, placed) in [(3, false), (4, false), (5, true)] {
+        let mut b = Build::default();
+        let l = 1000.0 * S as f64;
+        let c: Vec<usize> = [(-1000, -1000), (0, -1000), (0, 1000), (-1000, 1000)]
+            .iter()
+            .map(|&(x, y)| b.vertex(p(x, y, 0), 0))
+            .collect();
+        let bottom = b.line(c[0], c[1], 0);
+        let side = Line::new([tiny(k), -l, 0.0], [0.0, 2.0 * l, 0.0], (0.0, 1.0)).unwrap();
+        let right = b.edge(CurveKind::Line(side), Some([c[1], c[2]]), 0);
+        let top = b.line(c[2], c[3], 0);
+        let left = b.line(c[3], c[0], 0);
+        let h: Vec<usize> = [(0, 0), (0, -500), (-500, -500), (-500, 0)]
+            .iter()
+            .map(|&(x, y)| b.vertex(p(x, y, 0), 0))
+            .collect();
+        let hole = b.ring(&h, 0);
+        let plane = b.plane([0, 0, 1], 0);
+        let face = b.face(plane, vec![vec![bottom, right, top, left], hole], 0);
+        let out = interfere(&b.arr, default_remaining(), &Exec::serial(), &mut meter()).unwrap();
+        match split(&b.arr, &out, &mut meter()) {
+            Ok(splitting) if placed => {
+                let parts = of_face(&splitting, face);
+                assert_eq!(parts.len(), 1, "k = {k}: {parts:?}");
+                assert_eq!(parts[0].holes.len(), 1, "k = {k}: {parts:?}");
+            }
+            Err(geom_bool::interfere::BuildError::Unclassified { face: f, at })
+                if !placed && f == face && at == p(0, 0, 0) => {}
+            other => panic!("k = {k}: {other:?}"),
+        }
+    }
+}

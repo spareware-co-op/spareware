@@ -465,7 +465,9 @@ pub(crate) struct Crossable<'a> {
 /// coordinates are `keep`, with the boundary `sides` and their `joins`, or `None` when the
 /// direction does not qualify (module documentation): a join within a step of the ray ahead of
 /// the point, a side lying in the ray's plane, or a crossing or flagged region that cannot be put
-/// ahead or behind. Each side is searched only over its span, whose ends lie in joins.
+/// ahead or behind. Each side is searched only over its span, whose ends lie in joins. A crossing
+/// counts only when its position along the ray is proven above 0: one enclosed from exactly 0 is
+/// not proven ahead, and the direction fails.
 ///
 /// # Errors
 ///
