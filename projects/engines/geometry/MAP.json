@@ -263,6 +263,30 @@
           "non_exhaustive": false
         },
         {
+          "doc": "Why a region could not be found.",
+          "file": "projects/engines/geometry/crates/geom-2d/src/region.rs",
+          "kinds": [
+            {
+              "doc": "A step of the exact arithmetic did not fit its budget.",
+              "name": "Range",
+              "shape": "unit"
+            },
+            {
+              "doc": "An index past the arrangement's half-edges, vertices or faces: the arrangement is not one [`crate::arrange`] built.",
+              "name": "Malformed",
+              "shape": "unit"
+            },
+            {
+              "doc": "A point was located against a ring with an arc or a one-root vertex, which this module does not yet decide (chapter 14.4's arcs come with their own sides).",
+              "name": "Curved",
+              "shape": "unit"
+            }
+          ],
+          "module": "geom_2d::region",
+          "name": "RegionError",
+          "non_exhaustive": false
+        },
+        {
           "doc": "Why a snap could not be made into a point.",
           "file": "projects/engines/geometry/crates/geom-2d/src/snap.rs",
           "kinds": [
@@ -575,6 +599,41 @@
           },
           "path": "geom_2d::point",
           "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
+          "cost": "linear in the half-edges for the pruning, the faces and the rings; a point location is linear in the edges of the rings it tests. No recursion: nesting for the parity rule is walked with an explicit stack.",
+          "does": "[`polygonize`] turns an [`Arrangement`] into [`Regions`]: one [`Region`] for each bounded face, its shell (the face's outer boundary) and its holes (the outer boundaries of what lies inside it, and any loop a cut edge tied to its shell), each a ring of half-edges with the region on its left; the dangles (edges with a free end, pruned until none is left) and the cut edges (edges with the same face on both sides once the dangles are gone) are left out of every ring and listed. [`Regions::at`] names the region a point lies in, or says the point is open (in the unbounded face) or on the linework. [`Regions::filled`] applies an [`IslandRule`] to a region: the region alone with its holes ([`IslandRule::Outermost`]), its shell with no holes ([`IslandRule::Ignore`]), or the region and every region nested inside it at an even depth ([`IslandRule::Parity`]). [`Regions::twice_area`] is a ring's area, doubled, exactly.",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-2d/src/region.rs",
+          "guarantees": [
+            "**The arrangement's own faces.** Every region is a bounded face of the arrangement and every bounded face is a region; no ring is guessed from coordinates. Which ring of a face is its shell is decided by the face's lowest-leftmost vertex, which lies on its outer boundary.",
+            "**Dangles and cut edges never bound a region.** An edge with a free end, after every such edge is removed in turn, is a dangle; an edge left with the same face on both sides is a cut edge. Both are listed, in edge order, and no ring holds either.",
+            "**Exact.** Locating a point decides by exact orientation and comparison signs of rational points ([`Rational2::orient`], [`Rational2::cmp_y`]); a doubled area is an exact integer when every vertex of the ring is a grid point.",
+            "**Deterministic.** Regions are in face order, rings in half-edge order from their first half-edge, holes by their first half-edge."
+          ],
+          "job": "Region finding on an arrangement (chapter 14.4): the regions linework closes, with their holes, the dangles and cut edges left out of them, the region a pick point lies in, and which islands a hatch's island rule keeps.",
+          "method": {
+            "links": [
+              "doi:10.1145/368637.368653",
+              "https://help.autodesk.com/cloudhelp/2018/ENU/AutoCAD-DXF/files/GUID-C6C71CED-CE0F-4184-82A5-07AD6241F15B.htm"
+            ],
+            "text": "the polygonizer of JTS (`Polygonizer`, `PolygonizeGraph`, `EdgeRing`): dangles deleted by pruning nodes of degree one, cut edges found as edges whose two directed edges lie on one ring, rings walked by taking at each node the next edge clockwise from the one arrived by, and holes assigned to the shell that holds them; here the arrangement's faces already say which shell holds which hole, so no hole is assigned by a point-in-ring test. Locating a point counts the crossings of a ray to the right, as Shimrat's even-odd test (Comm. ACM 5(8), 1962, doi:10.1145/368637.368653), on exact signs. The island rules are DXF HATCH's (<https://help.autodesk.com/cloudhelp/2018/ENU/AutoCAD-DXF/files/GUID-C6C71CED-CE0F-4184-82A5-07AD6241F15B.htm>)."
+          },
+          "path": "geom_2d::region",
+          "provenance": [
+            {
+              "licence": "BSD-3-Clause",
+              "link": "https://github.com/locationtech/jts/blob/5a0a73632216e3e9d277150336078ec423fd215f/modules/core/src/main/java/org/locationtech/jts/operation/polygonize/Polygonizer.java",
+              "method_note": null,
+              "name": "JTS",
+              "notice": [],
+              "pinned": true,
+              "purpose": "under its Eclipse Distribution License 1.0, for the order of its steps (dangles, cut edges, rings, holes). No code copied.",
+              "take": "port-method"
+            }
+          ],
           "spdx": null,
           "target": "lib"
         },
@@ -12639,6 +12698,17 @@
         "projects/engines/geometry/crates/geom-bench/src/callgrind.rs",
         "projects/engines/geometry/crates/geom-bench/src/counts.rs",
         "projects/engines/geometry/crates/geom-bench/src/lib.rs"
+      ]
+    },
+    {
+      "licence": "BSD-3-Clause",
+      "link": "https://github.com/locationtech/jts/blob/5a0a73632216e3e9d277150336078ec423fd215f/modules/core/src/main/java/org/locationtech/jts/operation/polygonize/Polygonizer.java",
+      "method_note": null,
+      "name": "JTS",
+      "pinned": true,
+      "take": "port-method",
+      "used_by": [
+        "projects/engines/geometry/crates/geom-2d/src/region.rs"
       ]
     },
     {
