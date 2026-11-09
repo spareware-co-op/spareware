@@ -3,7 +3,9 @@ name = "geom-exchange"
 version = "0.0.0"
 edition.workspace = true
 publish.workspace = true
-license.workspace = true
+# Apache-2.0, with MIT for the XML tokenizer ported from xmlparser (src/xml/scan.rs), as chapter
+# 29.20, rule 4, asks of a crate with a ported file.
+license = "Apache-2.0 AND MIT"
 description = "Spare Kit geometry kernel: units, numbers to grid and the shared mappings every format crate uses."
 
 [dependencies]
@@ -21,6 +23,27 @@ geom-op = { path = "../geom-op" }
 geom-p21 = { path = "../geom-p21" }
 geom-surface = { path = "../geom-surface" }
 geom-topo = { path = "../geom-topo" }
+
+[dev-dependencies]
+# Exact oracles for tests only, never linked into the kernel. All MIT OR Apache-2.0.
+num-bigint = "0.4"
+num-rational = "0.4.2"
+num-traits = "0.2"
+num-integer = "0.1"
+# Printed, replayable seeds for the randomised tests (piece G19): the kernel's development crate,
+# a development dependency only (chapter 28.1).
+geom-test = { path = "../geom-test" }
+
+# Wall-clock throughput of numbers to grid, shortest decimals and reals (piece G413), with the
+# standard library's clock only, like geom-math's; it moves to geom-bench with the others.
+[[bench]]
+name = "exchange"
+harness = false
+
+# The hardened XML reader's throughput on a 3MF-shaped mesh document (piece G414a), the same way.
+[[bench]]
+name = "xml"
+harness = false
 
 [lints.rust]
 unsafe_code = "forbid"
