@@ -5398,6 +5398,55 @@
           "module": "geom_mesh::exact",
           "name": "MeshError",
           "non_exhaustive": false
+        },
+        {
+          "doc": "Why healing failed.",
+          "file": "projects/engines/geometry/crates/geom-mesh/src/repair/mod.rs",
+          "kinds": [
+            {
+              "doc": "This vertex has a coordinate that is not a finite number.",
+              "name": "NotFinite",
+              "shape": "struct"
+            },
+            {
+              "doc": "This vertex rounds outside the frame's ±(2^40 − 1) steps.",
+              "name": "OutOfFrame",
+              "shape": "struct"
+            },
+            {
+              "doc": "The unit is zero steps.",
+              "name": "NoUnit",
+              "shape": "unit"
+            },
+            {
+              "doc": "ε is above the cap of 6,400 steps, [`HEAL_CAP`].",
+              "name": "AboveCap",
+              "shape": "struct"
+            },
+            {
+              "doc": "These boundaries are still open, each narrower than the cap: a larger ε may close them.",
+              "name": "NotClosed",
+              "shape": "struct"
+            },
+            {
+              "doc": "These boundaries are wider than the cap, which healing never passes.",
+              "name": "ToleranceExceeded",
+              "shape": "struct"
+            },
+            {
+              "doc": "Every edge is used an even number of times, but these are used more often one way than the other once each patch faces one way: a non-orientable piece, or sheets that do not pair.",
+              "name": "Unpaired",
+              "shape": "struct"
+            },
+            {
+              "doc": "A failure of the mesh, its numbers or its budget.",
+              "name": "Mesh",
+              "shape": "tuple"
+            }
+          ],
+          "module": "geom_mesh::repair",
+          "name": "HealError",
+          "non_exhaustive": false
         }
       ],
       "family": [
@@ -5686,6 +5735,177 @@
             "text": "chapter 19.2's \"Raw meshes\", `projects/engines/geometry/architecture/19-meshes-spatial-clash.md`."
           },
           "path": "geom_mesh::exact::raw",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
+          "cost": "the steps', then the build's O(n log n) and the boolean's arrangement and merge.",
+          "does": "[`heal()`] welds the raw mesh, stitches its cracks and orients it, steps 2 to 4 (step 1, [`super::quantise()`], made the raw mesh). If any boundary is left open, or any edge cannot be paired, it fails and says which. Otherwise the faces are built into an [`ExactMesh`], checked, and handed to the mesh boolean, which keeps where the winding number is above zero: self-intersections and overlaps are resolved, and the result is a solid with maximal faces. The welded mesh carries the class of what moved, and so does the boolean's result, every face of it that bound.",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-mesh/src/repair/heal.rs",
+          "guarantees": [
+            "**A healed mesh is closed and a solid** ([`ExactMesh::is_solid`]), passed by the mesh checker on the way into the boolean and on the way out.",
+            "**Its class is what moved** (see [`crate::repair`]): Exact when nothing did, else Certified by the weld's largest move, at most ε, which every face carries as its deviation: the faces the boolean merges mix moved and unmoved parts.",
+            "**ε is never over the cap**, [`HEAL_CAP`]: a larger one is refused before anything runs.",
+            "**One run.** The input's faces are one run of `source`, so the result's history names it."
+          ],
+          "job": "Heal (19.7): the five steps in order, and step 5, the resolve, at the end.",
+          "method": {
+            "links": [
+              "projects/engines/geometry/architecture/19-meshes-spatial-clash.md"
+            ],
+            "text": "19.7's steps 2 to 5 (`projects/engines/geometry/architecture/19-meshes-spatial-clash.md`); 19.5's boolean with one operand and the test \"winding above zero\"."
+          },
+          "path": "geom_mesh::repair::heal",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
+          "cost": "per round of stitching, a sort of the edge uses and a cell index of the boundary vertices with one search per boundary edge (a long edge's search reaches far); each round stitches at least one vertex or is the last. Then the square of each loop's corners for its width.",
+          "does": "a boundary edge is one an odd number of faces use, counted without direction, since nothing is oriented yet. Every boundary vertex lying exactly inside a boundary edge is put into each face along that edge, in order, until none is left: a T-junction, or the crack a removed sliver leaves, closes without moving anything. The boundary edges left are walked into loops, each from its lowest-keyed vertex, always on to the lowest-keyed neighbour, and cut where they pass a vertex twice; each loop is returned with where it is and how wide.",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-mesh/src/repair/holes.rs",
+          "guarantees": [
+            "**Nothing moves.** A stitch adds a vertex already there to an edge it already lies on.",
+            "**Exact.** A vertex is inside an edge when the cross product is zero and the dot products put it strictly between the ends, on integers; widths are squared integer distances.",
+            "**Every boundary left is listed,** with its lowest-keyed corner, its corner count and its width, the largest distance between two of its corners, rounded up to whole steps.",
+            "**Logged.** Every stitch names the vertex and the edge it went into."
+          ],
+          "job": "Step 3 of healing (19.7): cracks of no width stitched, and the holes left listed.",
+          "method": {
+            "links": [
+              "projects/engines/geometry/architecture/19-meshes-spatial-clash.md"
+            ],
+            "text": "19.7's step 3 (`projects/engines/geometry/architecture/19-meshes-spatial-clash.md`); boundary edges as uses that do not cancel, after Manifold's `MergeMeshGLP` (consulted, see [`crate::repair`]), counted modulo 2 because no facing is known yet. Every vertex has an even number of boundary edges, since each face passes a vertex by two edges, so each walk closes."
+          },
+          "path": "geom_mesh::repair::holes",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
+          "cost": "linear in a loop's corners, but for [`uses`]' sort.",
+          "does": "a face is a loop of vertex numbers, and the vertices are grid points numbered in key order, so a number's order is its key's. [`uses`] lists every edge use, sorted by edge; [`split`] cuts a loop at a repeated vertex into simple loops; [`fan`] splits a loop into triangles from its first corner; the rest is integer geometry on grid points.",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-mesh/src/repair/loops.rs",
+          "guarantees": [
+            "**Exact.** Coordinates are within ±(2^40 − 1), so a difference is below 2^41, a product of two below 2^82 and a sum of three such below 2^84: every value here fits `i128`, and the saturating steps never saturate.",
+            "**No order of its own.** Every list comes out sorted by vertex numbers, so its order is the keys' order."
+          ],
+          "job": "What healing's steps share: faces as loops of vertex numbers, their edges, and exact integer geometry on grid points.",
+          "method": {
+            "links": [
+              "projects/engines/geometry/architecture/19-meshes-spatial-clash.md"
+            ],
+            "text": "integer vector algebra on grid points, 19.2's grid vertices (`projects/engines/geometry/architecture/19-meshes-spatial-clash.md`); a fan from one corner, which has the loop's winding number everywhere."
+          },
+          "path": "geom_mesh::repair::loops",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
+          "cost": "each step's, in its module: sorts of the vertices and the edges, one cell-index search per vertex and per boundary edge, and the boolean's arrangement of step 5.",
+          "does": "[`heal()`] turns a [`RawMesh`] into a closed [`ExactMesh`](crate::exact::ExactMesh) by 19.7's five steps, each in a module of its own. [`quantise()`] rounds coordinates into the frame, once (step 1). [`weld()`] joins each vertex to the lowest-keyed representative within ε and cleans the faces that leaves (step 2), which closes every hole no wider than ε. [`holes`] stitches the cracks of no width left and lists the boundaries still open (step 3). [`orient`] floods one facing across each patch and turns each closed patch outward by its exact volume (step 4). [`heal()`] then hands the faces to the mesh boolean, which resolves self-intersections and overlaps by winding number (step 5). Each step says what it did and where, in the [`HealLog`] the result carries, and a failure lists what was left open. Rounding imported polyhedra (24.8) calls [`quantise()`] and [`weld()`] with a weld distance of 0, never a copy of them.",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-mesh/src/repair/mod.rs",
+          "guarantees": [
+            "**Within ε, and said.** The result is [`Exact`](geom_num::Exactness::Exact) when no vertex moved. Otherwise it is [`Certified`](geom_num::Exactness::Certified) with the weld's largest move, at most ε, rounded up to whole steps: every point of a welded face is within that of the input face's matching point. The quantised input is the reference; [`quantise()`] reports its own rounding.",
+            "**Exact decisions.** Every weld, flatness, crossing, collinearity and volume decision is on grid points in integers or an exact predicate, never a float.",
+            "**The input's order does not show.** Vertices are keyed by their Morton codes and faces by their keys, so the vertices' and faces' order and where each loop starts change nothing.",
+            "**Never quietly wrong.** A boundary wider than ε is never closed: heal fails with [`HealError::NotClosed`] or, past [`HEAL_CAP`], [`HealError::ToleranceExceeded`], each boundary listed with where it is and how wide. Nothing is retried with a larger fuzz and no cutter is dilated (19.7, after `IfcOpenShell`'s dilation, which 08, section A3, records)."
+          ],
+          "job": "Repairing imported meshes (19.7): heal, within `ε_heal`, every step said.",
+          "method": {
+            "links": [
+              "projects/engines/geometry/architecture/19-meshes-spatial-clash.md",
+              "projects/kit/notes/G01-evidence/08-standards-coverage-testing.md"
+            ],
+            "text": "chapter 19.7 (`projects/engines/geometry/architecture/19-meshes-spatial-clash.md`), with 19.2's keys and 19.5's boolean; the steps of the stored analysis of mesh repair (weld, orient, then winding numbers; `projects/kit/notes/G01-evidence/08-standards-coverage-testing.md`)."
+          },
+          "path": "geom_mesh::repair",
+          "provenance": [
+            {
+              "licence": "Apache-2.0",
+              "link": "https://github.com/elalish/manifold/blob/d056b8fb70de8c8e6d6bee2e639b71c20aa08d01/src/sort.cpp",
+              "method_note": null,
+              "name": "Manifold",
+              "notice": [],
+              "pinned": true,
+              "purpose": "for `MergeMeshGLP`: open edges as directed uses that do not cancel, and welding only within a tolerance; its method, not its code.",
+              "take": "port-method"
+            }
+          ],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
+          "cost": "a sort of the edge uses and of the faces, then linear in the uses for the flood and the volume.",
+          "does": "a manifold edge is one exactly two faces use. A patch is the faces such edges join. Orientation floods across each patch from its lowest-keyed face, which keeps its turn: a neighbour that runs along the shared edge the same way is turned. A patch that, once flooded, uses each of its edges as often one way as the other is closed on its own, even where it touches another patch along an edge, and it is turned outward when its exact volume is negative. A face the turning makes repeat another the same way round is kept once. Last, every edge is counted each way: one used more often one way than the other cannot be paired, and is listed.",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-mesh/src/repair/orient.rs",
+          "guarantees": [
+            "**Exact.** The volume is six times the signed volume, the sum of integer determinants of a fan of each face from the frame's origin, each below 2^123, added in 256 bits.",
+            "**Deterministic.** Faces are keyed by their corners from the lowest, so the patches, their floods and every turn are the same whatever order the faces came in.",
+            "**Every turn and every failure said.** The log lists the input faces turned, an edge of each patch that cannot be oriented, each closed patch with no volume, the repeats removed, and the edges that cannot be paired."
+          ],
+          "job": "Step 4 of healing (19.7): each patch faces one way, and each closed patch faces out.",
+          "method": {
+            "links": [
+              "projects/engines/geometry/architecture/19-meshes-spatial-clash.md"
+            ],
+            "text": "19.7's step 4 (`projects/engines/geometry/architecture/19-meshes-spatial-clash.md`): a breadth-first flood over manifold edges, and 19.2's mass properties for the volume's sign."
+          },
+          "path": "geom_mesh::repair::orient",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
+          "cost": "one exact product and one rounding per coordinate; no allocation but the result's.",
+          "does": "[`quantise()`] takes each coordinate as a double in some unit, with how many grid steps make that unit, and rounds the exact product to the nearest step, ties to even. The result is a [`RawMesh`] on the grid and a report of what moved.",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-mesh/src/repair/quantise.rs",
+          "guarantees": [
+            "**Rounded once.** A double is taken at its exact value (24.8, \"Numbers to grid\"); the product with the unit is exact, by [`DD::exact_product`], and is rounded once, never through a second double. Each coordinate moves by at most half a step.",
+            "**Reported.** The result says how many coordinates moved and the largest move; a quantised import is Exact relative to these grid points, and the move is recorded apart (24.8, \"import deviation\").",
+            "**Refused, never clamped.** A coordinate that is not a number, or that rounds outside the frame, fails with its vertex."
+          ],
+          "job": "Step 1 of healing (19.7): coordinates rounded into the frame, once.",
+          "method": {
+            "links": [
+              "projects/engines/geometry/architecture/24-file-format-exchange.md",
+              "https://doi.org/10.1007/BF01397083"
+            ],
+            "text": "24.8's numbers to grid for binary floats (`projects/engines/geometry/architecture/24-file-format-exchange.md`); Dekker's exact product through a fused multiply-add (<https://doi.org/10.1007/BF01397083>), then a rounding of the exact double-double ([`DD::round_shifted`])."
+          },
+          "path": "geom_mesh::repair::quantise",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
+          "cost": "O(n log n) for n vertices, one cell search each; per face, linear in its corners for the cleaning and flatness and quadratic for the crossing test of a face of more than three corners.",
+          "does": "[`weld()`] keys each distinct grid point by its Morton code and visits them in key order. Each joins the lowest-keyed representative within ε, found among the candidates the cell index gives and decided by exact squared distance; a point with none becomes a representative. Then every face is rewritten onto the representatives and cleaned: a corner repeating the one before it goes, a loop that passes a vertex twice is cut there into simple loops, and a loop with no area is removed. A loop off one plane, or one that crosses itself, is split into a fan from its lowest-keyed corner. A face repeated the same way round is kept once.",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-mesh/src/repair/weld.rs",
+          "guarantees": [
+            "**Representatives never move, so clusters cannot chain.** A vertex moves at most ε, to a representative that was within ε of it; the log names every move, and [`WeldLog::movement`] is the largest, rounded up to whole steps.",
+            "**Cells change nothing.** The cell index only finds candidates; the decision is the exact squared distance, so where the cells fall does not show.",
+            "**Every face left is a simple, flat loop with area,** on distinct grid points, starting at its lowest-keyed corner, and no two are the same loop the same way round: what the mesh checker asks of a face (19.2).",
+            "**Everything removed or split is listed,** with the input face it came from.",
+            "**A weld distance of 0 joins only equal grid points,** which is what rounding imported polyhedra needs (24.8)."
+          ],
+          "job": "Step 2 of healing (19.7): vertices joined within ε, and the faces that leaves made clean.",
+          "method": {
+            "links": [
+              "projects/engines/geometry/architecture/19-meshes-spatial-clash.md"
+            ],
+            "text": "19.7's step 2 (`projects/engines/geometry/architecture/19-meshes-spatial-clash.md`) on `geom-bvh`'s Morton-sorted cell index (19.9); a loop is simple when no two of its sides meet but at their shared corner, tested by exact orientation in the plane of its dominant axis."
+          },
+          "path": "geom_mesh::repair::weld",
           "provenance": [],
           "spdx": null,
           "target": "lib"
@@ -13525,6 +13745,17 @@
       "take": "port-method",
       "used_by": [
         "projects/engines/geometry/crates/geom-mesh/src/exact/mod.rs"
+      ]
+    },
+    {
+      "licence": "Apache-2.0",
+      "link": "https://github.com/elalish/manifold/blob/d056b8fb70de8c8e6d6bee2e639b71c20aa08d01/src/sort.cpp",
+      "method_note": null,
+      "name": "Manifold",
+      "pinned": true,
+      "take": "port-method",
+      "used_by": [
+        "projects/engines/geometry/crates/geom-mesh/src/repair/mod.rs"
       ]
     },
     {

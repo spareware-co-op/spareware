@@ -166,6 +166,12 @@ Meshes from IFC files, scans and other tools are often open, inconsistently orie
 
 The result is Exact if nothing moved, otherwise Certified with the movement reached. Heal fails with `NotClosed` (listing each open boundary, its location and its size) or `ToleranceExceeded` (a gap needing more than the cap). Its remedies name `reconstruct` and the class it would give. Heal never retries with ever-larger fuzz or dilates cutters, as IfcOpenShell does ([08](../../../kit/notes/G01-evidence/08-standards-coverage-testing.md), section A3).
 
+**As built (G298).** `geom-mesh::repair` runs the five steps. `quantise` and `weld` are public on their own, for 24.8's rounding of imported polyhedra. Three things differ from the table above:
+
+- **Step 3's fan never runs after step 2 at the same ε.** A representative is never within ε of an earlier one, or it would have joined it. So any two vertices left are more than ε apart, and any loop of three or more is wider than ε. Every hole within ε is already closed by the weld, which joins its corners at a move of at most ε that the class counts. Step 3 instead stitches cracks of no width, exactly: a boundary vertex lying inside a boundary edge, such as a T-junction or the crack a removed sliver leaves, is put into every face along that edge, and nothing moves. The boundaries still open are listed. So the class is the weld's largest move alone.
+- **A boundary edge is one an odd number of faces use, counted without direction,** because step 3 comes before step 4 orients anything.
+- **The weld also makes every face fit the mesh checker.** A face that is no longer flat, or that crosses itself, is split into a fan from its lowest-keyed corner; a fan from any corner keeps the polygon's winding number. A face repeated the same way round is kept once.
+
 **Reconstruct** runs only when the caller asks. The caller names a method, or the lowest class and largest deviation it accepts; the methods are then tried in the order below, and the result names the one that ran. The result is Approximate, with its deviation measured in both directions by the distance query of 19.10. It is not bound by ε_heal, because filling a large hole moves the surface by more than that.
 
 | Method | How | What is proven |

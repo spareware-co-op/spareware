@@ -6299,6 +6299,110 @@
       "reason": "bit is the bit of the split box's depth, and a box's key has only the bits of the depths above it, so the bit is clear and | and ^ give one value."
     },
     {
+      "file": "projects/engines/geometry/crates/geom-mesh/src/repair/orient.rs",
+      "mutant": "replace == with != in closed",
+      "line_text": "let turned = turn.get(f).copied().flatten() == Some(true);",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "Every way of every edge is turned at once: whether each edge is used as often one way as the other does not change when every use is reversed."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-mesh/src/repair/orient.rs",
+      "mutant": "replace != with == in closed",
+      "line_text": "ways.push((a.min(b), a.max(b), (a < b) != turned));",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "Every way of every edge is turned at once: whether each edge is used as often one way as the other does not change when every use is reversed."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-mesh/src/repair/orient.rs",
+      "mutant": "replace < with > in closed",
+      "line_text": "ways.push((a.min(b), a.max(b), (a < b) != turned));",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "A loop's two ends of an edge are different vertices, so a > b is the opposite of a < b for every edge: Every way of every edge is turned at once: whether each edge is used as often one way as the other does not change when every use is reversed."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-mesh/src/repair/orient.rs",
+      "mutant": "replace < with <= in closed",
+      "line_text": "ways.push((a.min(b), a.max(b), (a < b) != turned));",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "A loop's two ends of an edge are different vertices (loops are cut at repeats), so a <= b and a < b agree."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-mesh/src/repair/loops.rs",
+      "mutant": "replace < with > in uses",
+      "line_text": "rising: a < b,",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "Every use is reversed at once: the flood reads only whether two uses run the same way, and the pairing test only whether rising uses are half of an edge's, neither of which a reversal of all changes."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-mesh/src/repair/loops.rs",
+      "mutant": "replace < with <= in uses",
+      "line_text": "rising: a < b,",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "An edge's two ends are different vertices (loops are cut at repeats), so a <= b and a < b agree."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-mesh/src/repair/holes.rs",
+      "mutant": "replace < with <= in stitch",
+      "line_text": "if u < v {",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "A loop's edge has two different ends (loops are cut at repeats), so u <= v and u < v agree."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-mesh/src/repair/quantise.rs",
+      "mutant": "replace > with >= in quantise",
+      "line_text": "if off > largest {",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "With >= an equal move replaces the largest by the same value: the report is the same."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-mesh/src/repair/holes.rs",
+      "mutant": "replace stitch -> Result<bool, HealError> with Ok(true)",
+      "line_text": "let edges = odd(faces)?;",
+      "occurrences": 1,
+      "kind": "hangs",
+      "reason": "Stitching repeats while a round says it stitched: always saying so never ends, and the tests stop it by their timeout. It hangs; it never returns a wrong mesh."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-mesh/src/repair/loops.rs",
+      "mutant": "replace > with == in inside_segment",
+      "line_text": "cross(along, to) == [0; 3] && dot(along, to) > 0 && dot(along, to) < dot(along, along)",
+      "occurrences": 1,
+      "kind": "hangs",
+      "reason": "The edge's own end counts as inside it, so each round of stitching puts it into the edge again, and the rounds never run out: the tests stop it by their timeout. It hangs; it never returns a wrong mesh."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-mesh/src/repair/loops.rs",
+      "mutant": "replace > with >= in inside_segment",
+      "line_text": "cross(along, to) == [0; 3] && dot(along, to) > 0 && dot(along, to) < dot(along, along)",
+      "occurrences": 1,
+      "kind": "hangs",
+      "reason": "The edge's own end counts as inside it, so each round of stitching puts it into the edge again, and the rounds never run out: the tests stop it by their timeout. It hangs; it never returns a wrong mesh."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-mesh/src/repair/loops.rs",
+      "mutant": "replace < with == in inside_segment",
+      "line_text": "cross(along, to) == [0; 3] && dot(along, to) > 0 && dot(along, to) < dot(along, along)",
+      "occurrences": 1,
+      "kind": "hangs",
+      "reason": "The edge's own end counts as inside it, so each round of stitching puts it into the edge again, and the rounds never run out: the tests stop it by their timeout. It hangs; it never returns a wrong mesh."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-mesh/src/repair/loops.rs",
+      "mutant": "replace < with <= in inside_segment",
+      "line_text": "cross(along, to) == [0; 3] && dot(along, to) > 0 && dot(along, to) < dot(along, along)",
+      "occurrences": 1,
+      "kind": "hangs",
+      "reason": "The edge's own end counts as inside it, so each round of stitching puts it into the edge again, and the rounds never run out: the tests stop it by their timeout. It hangs; it never returns a wrong mesh."
+    },
+    {
       "file": "projects/engines/geometry/crates/geom-bool/src/batch.rs",
       "mutant": "replace != with == in entered",
       "line_text": "tools.retain(|tool| tool.key != key);",
@@ -6633,6 +6737,14 @@
       "occurrences": 1,
       "kind": "equivalent",
       "reason": "grid_key only sorts an operand's vertices into buckets by grid point, so that found_vertex looks at a few. found_vertex takes a vertex only when same_point puts it exactly at the point: a grid vertex equal to the point's grid value, which must be exact, or a meeting whose three planes all pass through it. A vertex exactly at the point rounds to the point's own key, so with every vertex in one bucket, walked in the same row order, found_vertex returns the same first vertex, and so the same names. Each extra vertex it now reads, input() has read without error (at_vertex, to_grid), and side_of_tpi cannot fail for planes within budget, so no error is added either. Only the time taken changes: a walk of every vertex instead of a lookup."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-mesh/src/repair/orient.rs",
+      "mutant": "replace set with ()",
+      "line_text": "if let Some(slot) = turn.get_mut(f) {",
+      "occurrences": 1,
+      "kind": "hangs",
+      "reason": "set writes a face's turn; without it no face is ever marked, so the flood from a start face finds each neighbour unmarked again and queues it for ever, and the tests stop it by their timeout. It hangs; it never returns a wrong orientation."
     }
   ],
   "coverage_off": [
