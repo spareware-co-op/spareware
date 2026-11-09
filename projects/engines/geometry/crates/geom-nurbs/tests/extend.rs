@@ -375,3 +375,70 @@ fn every_documented_refusal() {
         Err(NurbsError::Stopped(_))
     ));
 }
+
+/// A rational line from the origin, weight 1, to (1, 2, 3), weight `w`, on [0, 1]; or, for a
+/// low end, the same weights the other way round, so the weight falls past the end extended.
+fn falling_line(w: f64, which: End) -> Curve<3> {
+    let weights = match which {
+        End::High => [1.0, w],
+        End::Low => [w, 1.0],
+    };
+    Curve::new_rational(
+        Basis::new(1, vec![0.0, 0.0, 1.0, 1.0]).unwrap(),
+        &[[0.0, 0.0, 0.0], [1.0, 2.0, 3.0]],
+        &weights,
+    )
+    .unwrap()
+}
+
+#[test]
+fn a_weight_continued_close_to_zero_is_covered_by_the_deviation() {
+    // Continued by e, the line's weight is 1 − (1 + e)(1 − w): with e just short of where that
+    // vanishes, the new point lies hundreds of times farther out than the old ones and its weight
+    // is a near cancellation, so the weight's rounding moves it far more than the coordinates'
+    // rounding does. The deviation must cover that too.
+    for (w, e) in [
+        (0.5005, 0.998),
+        (0.25, 0.3329),
+        (0.75, 2.9937),
+        (0.6, 1.4985),
+    ] {
+        for which in [End::High, End::Low] {
+            let line = falling_line(w, which);
+            let changed = line.extend(which, e, &mut meter()).unwrap();
+            assert!(changed.deviation >= 0.0, "{w}, {which:?}");
+            let new = &changed.value;
+            let (nlo, nhi) = new.basis().domain();
+            let (lo, hi) = line.basis().domain();
+            let (u, limit, span) = match which {
+                End::High => (nhi, Limit::FromLeft, line.basis().span(hi, Limit::FromLeft)),
+                End::Low => (
+                    nlo,
+                    Limit::FromRight,
+                    line.basis().span(lo, Limit::FromRight),
+                ),
+            };
+            let span = span.unwrap();
+            let got = exact_point(new, u, limit);
+            let want = span_polynomial(&line, span, u);
+            assert!(
+                distance2(&got, &want) <= q(changed.deviation) * q(changed.deviation),
+                "{w}, {which:?}: off the continuation by more than {}",
+                changed.deviation
+            );
+        }
+    }
+}
+
+#[test]
+fn a_weight_continued_to_exactly_zero_is_refused_at_its_point() {
+    // Weights 1 and 1/2, continued by 1: the new weight is 1 − 2·(1/2) = 0 exactly, at the new
+    // point: index 2 past a high end, 0 past a low one.
+    for (which, index) in [(End::High, 2), (End::Low, 0)] {
+        let got = falling_line(0.5, which).extend(which, 1.0, &mut meter());
+        assert!(
+            matches!(got, Err(NurbsError::Weight { index: i }) if i == index),
+            "{which:?}: {got:?}"
+        );
+    }
+}

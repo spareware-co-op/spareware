@@ -20,6 +20,7 @@
 )]
 
 use geom_curve::{Basis as Leaf, CurveError, Frame, Line, Trimmed};
+use geom_math::{Transform, TypedTransform};
 use geom_nurbs::{Basis, Curve, Direction, End, Limit, NurbsError, Surface};
 use geom_run::{Budget, WorkMeter};
 use geom_surface::extend::extend;
@@ -408,4 +409,272 @@ fn every_documented_refusal() {
         extend(&cusped(), Side::UMin, 0.3, Reach::Exactly, &mut tight),
         Err(ExtendError::Stopped(_))
     ));
+}
+
+/// A NURBS surface (P(t), v): the cubic Bezier `profile` in the xy plane over the parameter range
+/// `t`, carried straight up z from height v0 to v1, so v is the height and t runs across the side
+/// of a v extension and along a u one.
+fn prism(profile: [[f64; 2]; 4], t: (f64, f64), v: (f64, f64)) -> SurfaceKind {
+    let bu = Basis::new(3, vec![t.0, t.0, t.0, t.0, t.1, t.1, t.1, t.1]).unwrap();
+    let bv = Basis::new(1, vec![v.0, v.0, v.1, v.1]).unwrap();
+    let mut points = Vec::new();
+    for p in profile {
+        for z in [v.0, v.1] {
+            points.push([p[0], p[1], z]);
+        }
+    }
+    SurfaceKind::Nurbs(Surface::new(bu, bv, &points).unwrap())
+}
+
+/// (3t², 3t³) over t in [1/2, 1]: its cusp at t = 0 lies 1/2 past its low end.
+const CUSP_BELOW: [[f64; 2]; 4] = [[0.75, 0.375], [1.25, 0.75], [2.0, 1.5], [3.0, 3.0]];
+
+/// (3t², 3t³) over t in [−1, −1/2]: its cusp at t = 0 lies 1/2 past its high end.
+const CUSP_ABOVE: [[f64; 2]; 4] = [[3.0, -3.0], [2.0, -1.5], [1.25, -0.75], [0.75, -0.375]];
+
+/// An arch in the xy plane over t in [0, 1]: its tangent turns half a turn along it, so the
+/// prism's normal turns half a turn across a v side.
+const ARCH: [[f64; 2]; 4] = [[1.0, 0.0], [1.0, 1.5], [-1.0, 1.5], [-1.0, 0.0]];
+
+#[test]
+fn a_cusp_past_either_side_is_found_to_within_the_narrowest_slab() {
+    // The certificate cuts the new strip into slabs from the old side, halving a slab that fails,
+    // and a slab still failing at 2⁻²⁴ of the strip's length ends the reach at its near edge. The
+    // cusp is 1/2 from the old side, so the reach is a whole number of narrowest slabs out, the
+    // next of which holds the cusp, whichever the side and wherever the range across it.
+    let by = 0.8;
+    for (profile, t, side) in [
+        (CUSP_BELOW, (0.5, 1.0), Side::UMin),
+        (CUSP_ABOVE, (-1.0, -0.5), Side::UMax),
+    ] {
+        for across in [(0.0, 1.0), (-2.0, 1.0), (1.0, 2.0)] {
+            let s = prism(profile, t, across);
+            let (old, far) = match side {
+                Side::UMin => (t.0, t.0 - by),
+                _ => (t.1, t.1 + by),
+            };
+            let slab = (far - old).abs() / 16_777_216.0;
+            match extend(&s, side, by, Reach::Exactly, &mut meter()) {
+                Err(ExtendError::ExtensionFailed {
+                    side: failed,
+                    reached,
+                }) => {
+                    assert_eq!(failed, side);
+                    assert!(
+                        reached <= 0.5 && 0.5 <= reached + slab,
+                        "{side:?}, across {across:?}: {reached}"
+                    );
+                    let slabs = reached / slab;
+                    assert_eq!(
+                        slabs,
+                        slabs.trunc(),
+                        "{side:?}, across {across:?}: {reached}"
+                    );
+                }
+                other => panic!("{side:?}, across {across:?}: {other:?}"),
+            }
+            let short = extend(&s, side, by, Reach::AsFarAsValid, &mut meter()).unwrap();
+            assert!(
+                short.reached <= 0.5 && 0.5 <= short.reached + 2.0 * slab,
+                "{side:?}, across {across:?}: {}",
+                short.reached
+            );
+            assert_eq!(
+                short.surface.domain(),
+                grown(s.domain(), side, short.reached)
+            );
+        }
+    }
+}
+
+#[test]
+fn a_swept_cusp_is_refused_though_its_normal_has_a_zero_component() {
+    // An extrusion along z of a planar profile: its normal's z component is 0 everywhere, so a
+    // box passes only on its x or y component, never on a bound of exactly 0.
+    let profile = Curve::new(
+        Basis::new(3, vec![0.5, 0.5, 0.5, 0.5, 1.0, 1.0, 1.0, 1.0]).unwrap(),
+        &CUSP_BELOW.map(|[x, y]| [x, y, 0.0])[..],
+    )
+    .unwrap();
+    let ext = SurfaceKind::Extrusion(
+        Extrusion::new(
+            Trimmed::whole(Leaf::Nurbs(profile)).unwrap(),
+            [0.0, 0.0, 1.0],
+            (0.0, 1.0),
+        )
+        .unwrap(),
+    );
+    match extend(&ext, Side::UMin, 0.8, Reach::Exactly, &mut meter()) {
+        Err(ExtendError::ExtensionFailed {
+            side: Side::UMin,
+            reached,
+        }) => assert!(reached <= 0.5 && reached > 0.5 - 1e-3, "{reached}"),
+        other => panic!("{other:?}"),
+    }
+    let near = exact(&ext, Side::UMin, 0.3);
+    assert_eq!(near.reached, 0.3);
+}
+
+#[test]
+fn a_degenerate_sweep_has_no_normal_to_certify() {
+    // A line extruded along itself: the surface is that line, its normal exactly 0 everywhere,
+    // and its normal bounds are exactly 0 too, so no extension of it is certified.
+    let profile = Trimmed::new(
+        Leaf::Line(Line::new([0.0; 3], [1.0, 0.0, 0.0], (0.0, 1.0)).unwrap()),
+        (0.0, 1.0),
+    )
+    .unwrap();
+    let flat =
+        SurfaceKind::Extrusion(Extrusion::new(profile, [2.0, 0.0, 0.0], (0.0, 1.0)).unwrap());
+    for side in SIDES {
+        let refused = extend(&flat, side, 0.5, Reach::Exactly, &mut meter());
+        assert!(
+            matches!(refused, Err(ExtendError::ExtensionFailed { reached, .. }) if reached == 0.0),
+            "{side:?}: {refused:?}"
+        );
+        let e = extend(&flat, side, 0.5, Reach::AsFarAsValid, &mut meter()).unwrap();
+        assert_eq!((e.reached, &e.surface), (0.0, &flat), "{side:?}");
+    }
+}
+
+#[test]
+fn a_normal_that_turns_across_the_side_is_certified_box_by_box() {
+    // No one box across the arch's whole range holds a normal bound clear of zero: the
+    // certificate halves the boxes across the side until each passes.
+    for t in [(0.0, 1.0), (1.0, 2.0)] {
+        let s = prism(ARCH, t, (0.0, 1.0));
+        for side in [Side::VMin, Side::VMax] {
+            let e = exact(&s, side, 0.5);
+            assert_eq!(e.reached, 0.5);
+            assert_eq!(e.surface.domain(), grown(s.domain(), side, 0.5), "{t:?}");
+        }
+    }
+}
+
+#[test]
+fn an_affine_image_extends_to_the_same_terms_on_the_wider_domain() {
+    let frame = Frame::new([1.0, 0.0, 0.0], [0.0, 0.0, 1.0]).unwrap();
+    let squash = TypedTransform::from(Transform::scale(2.0, 0.5, 1.0).unwrap());
+    let domain = ((0.0, 1.0), (0.0, 1.0));
+    let image = |d: ParamBox| {
+        Cylinder::new([0.0; 3], 1.0, frame, d)
+            .unwrap()
+            .transformed(&squash, &mut meter())
+            .unwrap()
+            .value
+    };
+    let s = image(domain);
+    assert!(matches!(s, SurfaceKind::Affine(_)), "{s:?}");
+    for side in SIDES {
+        let e = exact(&s, side, 0.25);
+        assert_eq!(e.surface.domain(), grown(domain, side, 0.25), "{side:?}");
+        assert_eq!(e.surface, image(grown(domain, side, 0.25)), "{side:?}");
+        assert_eq!((e.reached, e.deviation), (0.25, 0.0));
+    }
+}
+
+#[test]
+fn swept_kinds_extend_past_either_end_of_a_profile_or_a_straight_direction() {
+    // An extrusion of a line segment, trimmed to `u` on a line over `line`.
+    let lined = |u: (f64, f64), v: (f64, f64), line: (f64, f64)| {
+        let profile = Trimmed::new(
+            Leaf::Line(Line::new([0.0, 0.0, 0.0], [1.0, 2.0, 0.0], line).unwrap()),
+            u,
+        )
+        .unwrap();
+        SurfaceKind::Extrusion(Extrusion::new(profile, [0.0, 0.0, 1.0], v).unwrap())
+    };
+    let ext = lined((0.0, 1.0), (0.0, 1.0), (0.0, 1.0));
+    // Past the line's start, the line itself on a wider domain; up the extrusion, a taller one.
+    let e = exact(&ext, Side::UMin, 0.5);
+    assert_eq!(e.surface, lined((-0.5, 1.0), (0.0, 1.0), (-0.5, 1.0)));
+    let e = exact(&ext, Side::VMax, 2.0);
+    assert_eq!(e.surface, lined((0.0, 1.0), (0.0, 3.0), (0.0, 1.0)));
+    // A trim inside the line's domain only moves.
+    let inner = lined((0.25, 0.75), (0.0, 1.0), (0.0, 1.0));
+    let e = exact(&inner, Side::UMin, 0.125);
+    assert_eq!(e.surface, lined((0.125, 0.75), (0.0, 1.0), (0.0, 1.0)));
+    // A revolution of a NURBS profile: continued past either end of its basis, trimmed further
+    // inside it, and turned further about its axis.
+    let frame = Frame::new([1.0, 0.0, 0.0], [0.0, 0.0, 1.0]).unwrap();
+    let profile = Curve::new(
+        Basis::new(2, vec![0.0, 0.0, 0.0, 1.0, 1.0, 1.0]).unwrap(),
+        &[[1.0, 0.0, 0.0], [1.5, 0.0, 0.5], [1.2, 0.0, 1.0]],
+    )
+    .unwrap();
+    let rev = |p: Trimmed<3>, u: (f64, f64)| {
+        SurfaceKind::Revolution(Revolution::new(p, [0.0; 3], frame, u).unwrap())
+    };
+    let whole = |c: Curve<3>| Trimmed::whole(Leaf::Nurbs(c)).unwrap();
+    let s = rev(whole(profile.clone()), (0.0, 1.0));
+    for (end, side) in [(End::Low, Side::VMin), (End::High, Side::VMax)] {
+        let e = exact(&s, side, 0.25);
+        let grown_profile = profile.extend(end, 0.25, &mut meter()).unwrap().value;
+        assert_eq!(e.surface, rev(whole(grown_profile), (0.0, 1.0)), "{end:?}");
+    }
+    let e = exact(&s, Side::UMax, 0.5);
+    assert_eq!(e.surface, rev(whole(profile.clone()), (0.0, 1.5)));
+    let trimmed = rev(
+        Trimmed::new(Leaf::Nurbs(profile.clone()), (0.25, 0.75)).unwrap(),
+        (0.0, 1.0),
+    );
+    let e = exact(&trimmed, Side::VMin, 0.125);
+    assert_eq!(
+        e.surface,
+        rev(
+            Trimmed::new(Leaf::Nurbs(profile), (0.125, 0.75)).unwrap(),
+            (0.0, 1.0)
+        )
+    );
+    assert_eq!(e.deviation, 0.0);
+}
+
+#[test]
+fn every_error_says_what_went_wrong() {
+    let failed = ExtendError::ExtensionFailed {
+        side: Side::VMax,
+        reached: 0.25,
+    }
+    .to_string();
+    assert!(
+        failed.contains("VMax") && failed.contains("0.25"),
+        "{failed}"
+    );
+    let refused = ExtendError::Curve(CurveError::SpanOutside).to_string();
+    assert!(
+        refused.contains("refused") && refused.contains("SpanOutside"),
+        "{refused}"
+    );
+    let mut tight = WorkMeter::new(Budget::new(1, u64::MAX));
+    let stopped = extend(&cusped(), Side::UMin, 0.3, Reach::Exactly, &mut tight)
+        .unwrap_err()
+        .to_string();
+    assert!(stopped.starts_with("stopped"), "{stopped}");
+}
+
+#[test]
+fn a_straight_extension_moves_nothing_whatever_the_placement() {
+    // Two exact scales by 2^340 place this extrusion by L = 2^680·I, whose norm overflows a
+    // double, though the surface's points and normals do not: its profile and direction are
+    // 2^-700 long. Extending its straight direction moves no profile, so the deviation is 0 and
+    // the placement's size never enters it.
+    let pow2 = |biased: u64| f64::from_bits(biased << 52);
+    let (tiny, big) = (pow2(1023 - 700), pow2(1023 + 340));
+    let profile = Trimmed::new(
+        Leaf::Line(Line::new([0.0; 3], [tiny, 2.0 * tiny, 0.0], (0.0, 1.0)).unwrap()),
+        (0.0, 1.0),
+    )
+    .unwrap();
+    let mut s =
+        SurfaceKind::Extrusion(Extrusion::new(profile, [0.0, 0.0, tiny], (0.0, 1.0)).unwrap());
+    let scale = TypedTransform::from(Transform::uniform_scale(big).unwrap());
+    for _ in 0..2 {
+        s = s.transformed(&scale, &mut meter()).unwrap().value;
+    }
+    assert!(matches!(s, SurfaceKind::Extrusion(_)), "{s:?}");
+    for side in [Side::VMin, Side::VMax] {
+        let e = exact(&s, side, 1.0);
+        assert_eq!((e.reached, e.deviation), (1.0, 0.0), "{side:?}");
+        assert_eq!(e.surface.domain(), grown(s.domain(), side, 1.0));
+    }
 }

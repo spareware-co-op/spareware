@@ -5073,6 +5073,118 @@
       "occurrences": 1,
       "kind": "equivalent",
       "reason": "root_floor is next_down of the correctly rounded square root of floor, and floor is at least +0 (the sqrt above refuses floor < radius, and the radius is never negative). For floor = +0 or -0 the root is a zero and its next_down is -2^-1074; for floor > 0 the root is at least 2^-537 and its next_down is positive. So root_floor is never 0.0, and > and >= against 0.0 choose the same arm for every ball."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-nurbs/src/extend.rs",
+      "mutant": "replace > with >= in new_end",
+      "line_text": "if by.is_finite() && by > 0.0 && end.is_finite() && end > b {",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "The two differ only when by is +0 or -0. Then end = b + by is b itself, so end > b is false and both refuse with KnotOutside; every other by gets the same answer from both."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-nurbs/src/extend.rs",
+      "mutant": "replace > with >= in clamped_high",
+      "line_text": "&& knots.len() > p.saturating_add(1)",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "clamped_high is only given a basis's knots or their mirror, and Basis::new refuses fewer than 2(p + 1) knots, so the length is at least 2p + 2 and both len > p + 1 and len >= p + 1 hold for every input."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-nurbs/src/extend.rs",
+      "mutant": "replace < with <= in natural_kernel",
+      "line_text": "let bezier_source = if s < p {",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "The two differ only when the end span's start knot already has multiplicity p. The mutant then inserts it zero more times: insert_kernel with times 0 returns the same knots and copies every point unchanged (its loop over 1..=times is empty and the copy between is an empty range), its basis and span lookups are on the curve's own valid knots, and vec_for charges the meter nothing, so the end span's Bezier points and every result are the same."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-surface/src/extend.rs",
+      "mutant": "replace && with || in longest",
+      "line_text": "if !(lo < mid && mid < hi) {",
+      "occurrences": 1,
+      "kind": "harmless",
+      "reason": "The guard ends the bisection once lo and hi are neighbouring doubles and the midpoint rounds to one of them. The mutant goes on to BISECTIONS steps: a build at lo reaches (it reached before), so lo stays, and one at hi does not (hi is the length asked or one that failed), so hi stays. The length found is the same; only the work charged grows by those builds, and an analytic kind's build charges none."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-surface/src/extend.rs",
+      "mutant": "replace < with <= in longest",
+      "line_text": "if !(lo < mid && mid < hi) {",
+      "occurrences": 2,
+      "kind": "harmless",
+      "reason": "Either < becomes <=: the guard then lets the bisection go on when the midpoint has rounded to lo, or to hi, once lo and hi are neighbouring doubles. A build at lo reaches (it reached before), so lo stays, and one at hi does not (hi is the length asked or one that failed), so hi stays: the length found is the same, and only the work charged grows by at most BISECTIONS builds (none for an analytic kind)."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-surface/src/extend.rs",
+      "mutant": "replace match guard r > 0.0 with true in extend",
+      "line_text": "Some(c) if r > 0.0 => (c, r),",
+      "occurrences": 1,
+      "kind": "harmless",
+      "reason": "r is the bisection's lo, 0 or a positive length, so the mutant differs only at r = 0: it builds the extension by 0, which is None for a NURBS form (KnotOutside), sending it to the source unchanged as before, or the source itself for every other kind (the same domain, trim and placement, deviation 0). The certificate then passes on a strip of no length, giving the source with reach 0 and deviation 0, which equals the unchanged result, or fails at 0, which returns the source unchanged. Only the work charged grows."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-surface/src/extend.rs",
+      "mutant": "replace > with >= in extend",
+      "line_text": "Some(c) if r > 0.0 => (c, r),",
+      "occurrences": 1,
+      "kind": "harmless",
+      "reason": "r is the bisection's lo, 0 or a positive length, never -0, so the mutant differs only at r = 0: it builds the extension by 0, which is None for a NURBS form (KnotOutside), sending it to the source unchanged as before, or the source itself for every other kind. The certificate then passes on a strip of no length, giving the source with reach 0 and deviation 0, which equals the unchanged result, or fails at 0, which returns the source unchanged. Only the work charged grows."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-surface/src/extend.rs",
+      "mutant": "replace || with && in extend",
+      "line_text": "if r <= 0.0 || tries > SHRINKS {",
+      "occurrences": 1,
+      "kind": "harmless",
+      "reason": "At a reach of 0 the mutant rebuilds by 0, which is the source or None, and recertifies a strip of no length until SHRINKS tries, returning the source unchanged as the original does. Past SHRINKS tries with a positive reach, which needs an extension whose rebuilt, shorter self fails its certificate eight times over, it keeps shortening instead of stopping: what it returns is still certified at every try, or the source unchanged. SHRINKS is a cap on work, and either result keeps every guarantee of the module."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-surface/src/extend.rs",
+      "mutant": "replace > with == in extend",
+      "line_text": "if r <= 0.0 || tries > SHRINKS {",
+      "occurrences": 1,
+      "kind": "harmless",
+      "reason": "The mutant stops at the SHRINKS-th try where the original makes one more: it differs only for an extension whose rebuilt, shorter self fails its certificate SHRINKS times over, and then returns the source unchanged where the original may return a shorter extension, certified like every result. SHRINKS is a cap on work; either answer keeps every guarantee of the module."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-surface/src/extend.rs",
+      "mutant": "replace > with >= in extend",
+      "line_text": "if r <= 0.0 || tries > SHRINKS {",
+      "occurrences": 1,
+      "kind": "harmless",
+      "reason": "The mutant stops at the SHRINKS-th try where the original makes one more: it differs only for an extension whose rebuilt, shorter self fails its certificate SHRINKS times over, and then returns the source unchanged where the original may return a shorter extension, certified like every result. SHRINKS is a cap on work; either answer keeps every guarantee of the module."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-surface/src/extend.rs",
+      "mutant": "replace > with == in slab_passes",
+      "line_text": "if *boxes > MAX_BOXES {",
+      "occurrences": 1,
+      "kind": "harmless",
+      "reason": "With == the slab test that reaches the MAX_BOXES-th box stops one box early, and every later one counts past MAX_BOXES, where == never holds again, so the cap no longer stops it. The certificate still ends: a slab test splits boxes only down to 2^-12 of the side, and slabs are halved only down to 2^-24 of the strip. Every box it passes is a certified normal bound, so the reach it reports is certified as the original's is, possibly farther, and only the work charged grows; MAX_BOXES is a cap on work."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-surface/src/extend.rs",
+      "mutant": "replace > with >= in slab_passes",
+      "line_text": "if *boxes > MAX_BOXES {",
+      "occurrences": 1,
+      "kind": "harmless",
+      "reason": "The mutant stops the certificate at the MAX_BOXES-th box, one before the original. The two differ only for a certificate that needs exactly MAX_BOXES boxes: the mutant then reports the reach certified so far (refusing under Exactly, or a shorter extension, certified again) where the original certifies with its last box. MAX_BOXES is a cap on work and a refusal never claims a normal it has not shown, so both answers keep every guarantee of the module."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-surface/src/swept.rs",
+      "mutant": "replace > with >= in larger",
+      "line_text": "if b > a { b } else { a }",
+      "occurrences": 1,
+      "kind": "harmless",
+      "reason": "The two differ only when a == b, where both are the same number unless one is -0 and the other +0 (a NURBS basis continued past a low end to exactly 0, whose end the mirror makes -0, against an asked trim end of +0). The trim's end is then the other zero: both are 0, and every point, bound, check and comparison takes them alike."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-surface/src/swept.rs",
+      "mutant": "replace < with <= in smaller",
+      "line_text": "if b < a { b } else { a }",
+      "occurrences": 1,
+      "kind": "harmless",
+      "reason": "The two differ only when a == b, where both are the same number unless one is -0 and the other +0 (a line or basis whose end is -0 against an asked end of +0). The domain or trim end is then the other zero: both are 0, and every point, bound, check and comparison takes them alike."
     }
   ],
   "coverage_off": [
