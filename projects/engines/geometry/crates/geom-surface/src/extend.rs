@@ -167,8 +167,9 @@ impl Caps {
 pub struct Extended {
     /// The surface, on its source's parameters, its domain wider past the side.
     pub surface: SurfaceKind,
-    /// The parameter length the domain was widened by: the length asked, or under
-    /// [`Reach::AsFarAsValid`] as far as the extension stays valid (0 for none).
+    /// The parameter length the domain was widened by: how far the side's bound moved, which is
+    /// the length asked, or under [`Reach::AsFarAsValid`] as far as the extension stays valid,
+    /// except where the new bound rounds (0 for none).
     pub reached: f64,
     /// A certified bound on how far the surface's defining data (a NURBS net, a continued profile
     /// basis, an offset's base) lies from the exact continuation's: 0 for an extension by
@@ -184,7 +185,7 @@ pub enum ExtendError {
     ExtensionFailed {
         /// The side.
         side: Side,
-        /// The longest length found valid.
+        /// The longest length found valid, as how far it moves the side's bound.
         reached: f64,
     },
     /// The surface or its parts refused: a length that is not positive and finite, a NURBS form
@@ -231,6 +232,15 @@ fn grown(domain: ParamBox, side: Side, len: f64) -> ParamBox {
         Side::VMin => ((u0, u1), (v0 - len, v1)),
         Side::VMax => ((u0, u1), (v0, v1 + len)),
     }
+}
+
+/// How far the side's bound of `domain` moves when widened by `len`: the rounded bound's own move,
+/// which is what the domain grows by. Where the bound rounds (a turn met to within a rounding, or
+/// a parameter far from zero, where doubles are wide apart) this differs from `len`.
+fn moved(domain: ParamBox, side: Side, len: f64) -> f64 {
+    let (old, _) = side_of(domain, side);
+    let (new, _) = side_of(grown(domain, side, len), side);
+    (new - old).abs()
 }
 
 /// The side's parameter in `domain`, and the other direction's range.
@@ -533,7 +543,12 @@ pub fn extend_capped(
         reached: 0.0,
         deviation: 0.0,
     };
-    let failed = |reached: f64| ExtendError::ExtensionFailed { side, reached };
+    // A length reported is how far it moves the side's bound, not the length tried.
+    let domain = surface.domain();
+    let failed = |r: f64| ExtendError::ExtensionFailed {
+        side,
+        reached: moved(domain, side, r),
+    };
     // The definition's reach.
     let (mut made, mut len) = if let Some(c) = built(surface, side, by, meter)? {
         (c, by)
@@ -549,7 +564,7 @@ pub fn extend_capped(
     };
     // The certificate, for every kind not decided in closed form.
     if !analytic(surface) {
-        let (old, _) = side_of(surface.domain(), side);
+        let (old, _) = side_of(domain, side);
         let mut tries = 0usize;
         while let Some(r) = certified(&made.value, side, old, caps.boxes, meter)? {
             if reach == Reach::Exactly {
@@ -568,7 +583,7 @@ pub fn extend_capped(
     }
     Ok(Extended {
         surface: made.value,
-        reached: len,
+        reached: moved(domain, side, len),
         deviation: made.deviation,
     })
 }
