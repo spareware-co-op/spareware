@@ -16,6 +16,11 @@ Ported into projects/engines/geometry/crates/geom-nurbs/src/ (piece G56): the B-
 and knot insertion, refinement, Bezier extraction, knot removal and degree change
 (NL_CrvTool.cpp, NL_SrfTool.cpp, NL_Bezier.cpp), each changed as its file's header says.
 
+Ported into projects/engines/geometry/crates/geom-test/src/smb/ (piece G262a), through solidcore's
+port: SMLib's ASCII reader of its B-rep files (SmBrepData.cpp, SmDatabaseIO.cpp) and of B-spline
+curves and surfaces (SmBSplineCurve.cpp, SmBSplineSurface.cpp), each changed as its file's header
+says.
+
 Licence text:
 Copyright (c) 2020-2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 

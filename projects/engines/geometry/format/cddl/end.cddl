@@ -1,0 +1,2 @@
+; The END record's payload (tag 2, schema 1): format 1 (draft), SPEC.md section 7.
+end = [count: uint, digest: bstr .size 32]

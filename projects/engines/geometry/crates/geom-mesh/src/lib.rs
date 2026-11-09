@@ -26,7 +26,32 @@
 //! Its direct dependencies are its row of chapter 27's crate table, checked by the
 //! scaffold test in `engine-geometry` (`tests/scaffold`).
 //!
-//! Status: scaffold only; built by pieces G146, G147, G148, G149, G150, G151, G152, G153, G288,
-//! G289, G290, G291, G298, G299, G300, G301, G302, G303, G304, G305, G306, G319, G341, G350, G411.
+//! Modules today: [`minkowski`] (piece G150), Minkowski sums of flat solids; [`boolean`] (piece
+//! G148), mesh booleans with run-level history; [`hull`], [`slice`], [`export`] and [`faceted`]
+//! (piece G149), exact hulls, plane slices, writing at each format's precision and faceted B-reps;
+//! [`classify`] (piece G147), where a point is against a closed mesh; [`cdt`] (piece G153), the
+//! kernel's one exact constrained Delaunay triangulation,
+//! [`exact`] (piece G146), the exact mesh, its checker group and its mass properties, and
+//! [`contact`] (piece G151), exact contact and closest features of triangles, and [`envelope`]
+//! (piece G152), the polyhedral envelope with integer corners.
+//!
+//! Status: built by pieces G146, G147, G148, G149, G150, G151, G152, G153, G288, G289, G290, G291,
+//! G298, G299, G300, G301, G302, G303, G304, G305, G306, G319, G341, G350, G411; G153 is in.
 #![cfg_attr(not(test), no_std)]
 #![forbid(unsafe_code)]
+
+extern crate alloc;
+
+pub mod boolean;
+pub mod cdt;
+pub mod classify;
+pub mod contact;
+pub mod envelope;
+pub mod exact;
+pub mod export;
+pub mod faceted;
+pub mod hull;
+pub mod minkowski;
+pub mod slice;
+
+pub use cdt::{Cdt, CdtError, Quality, Site, Vertex, triangulate};

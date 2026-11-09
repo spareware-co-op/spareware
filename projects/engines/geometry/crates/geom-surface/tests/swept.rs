@@ -2,6 +2,8 @@
 //! extrusions and ruled surfaces on line, arc and NURBS profiles keep every law under exact,
 //! rational, certified, non-uniform and mirroring transforms, and convert to NURBS within their
 //! stated error.
+//!
+//! Covers: `SurfaceKind::Revolution`, `SurfaceKind::Extrusion`, `SurfaceKind::Ruled`.
 
 #![allow(
     clippy::arithmetic_side_effects,

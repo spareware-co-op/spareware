@@ -29,4 +29,5 @@ Licence text:
 | File | Source |
 | --- | --- |
 | [core-math.txt](core-math.txt) | CORE-MATH (Inria), ported into `geom-num`'s `math` module by piece G05 |
-| [usd-brep.txt](usd-brep.txt) | NLib, in NVIDIA's USD BRep, ported into `geom-nurbs` by piece G56 |
+| [solidcore.txt](solidcore.txt) | solidcore, the Rust port of SMLib, whose reader of SMLib's B-rep files is ported into `geom-test` by piece G262a |
+| [usd-brep.txt](usd-brep.txt) | NLib, in NVIDIA's USD BRep, ported into `geom-nurbs` by piece G56; SMLib's reader of its B-rep files, into `geom-test` by piece G262a |

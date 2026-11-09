@@ -19,6 +19,16 @@ geom-op = { path = "../geom-op" }
 geom-surface = { path = "../geom-surface" }
 geom-topo = { path = "../geom-topo" }
 
+[dev-dependencies]
+# G262a's test of the plan on SMLib's fillet fixtures (tests/smlib_fillets.rs): geom-test's corpus
+# fetcher and its reader of SMLib's B-rep files, the lifted cases read with serde_json (MIT OR
+# Apache-2.0), and the exact rationals the shapes are read in, dashu-ratio 0.6.1 (MIT OR Apache-2.0),
+# the version geom-test pins.
+geom-test = { path = "../geom-test" }
+serde = { version = "1.0.229", features = ["derive"] }
+serde_json = "1.0.149"
+dashu-ratio = { version = "0.6.1", default-features = false, features = ["std"] }
+
 [lints.rust]
 unsafe_code = "forbid"
 missing_docs = "warn"

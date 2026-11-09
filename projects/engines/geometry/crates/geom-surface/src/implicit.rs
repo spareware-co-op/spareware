@@ -4,8 +4,8 @@
 //!
 //! What it does: [`ImplicitBound::enclose_box`] gives enclosures of F and of its gradient over a box
 //! of points, and whether F is smooth throughout it. `geom-num`'s exact [`Plane`] implements it,
-//! F(x) = n·x + d, its first implementor; quadrics and tori come with their kinds (G65) and fields
-//! with `geom-field`.
+//! F(x) = n·x + d, its first implementor; the analytic kinds implement it in `analytic`, each with
+//! the equation of its whole untrimmed shape (G168), and fields do with `geom-field`.
 //!
 //! Guarantees:
 //!

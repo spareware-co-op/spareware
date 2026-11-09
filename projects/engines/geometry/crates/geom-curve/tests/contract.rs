@@ -2,6 +2,8 @@
 //! NURBS curve, planar and spatial, rational or not, with repeated knots, passes every law under
 //! exact, rational and certified transforms; and a kind whose bound, reversal or evaluation is
 //! wrong is caught by the law it breaks.
+//!
+//! Covers: `CurveKind::Nurbs`.
 
 #![allow(
     clippy::arithmetic_side_effects,
