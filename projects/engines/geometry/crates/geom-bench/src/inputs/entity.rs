@@ -54,6 +54,25 @@ pub fn polyline(class: Class) -> Vec<(Vec<P2>, Vec<Frac>)> {
     batch_of(|_| parts(&mut g))
 }
 
+/// Segments of one drawing: 24 random segments between grid points in a 200 by 200 square.
+#[must_use]
+pub fn arrange(class: Class) -> Vec<Vec<(P2, P2)>> {
+    if class != Class::Typical {
+        return Vec::new();
+    }
+    let mut g = rng("entity::arrange", class);
+    batch_of(|_| {
+        (0..24)
+            .map(|_| Some((point_in(&mut g, 200)?, point_in(&mut g, 200)?)))
+            .collect::<Option<Vec<(P2, P2)>>>()
+    })
+}
+
+/// A grid point in the square from 0 to `span`.
+fn point_in(g: &mut SplitMix64, span: i64) -> Option<P2> {
+    P2::new(g.range(0, span), g.range(0, span)).ok()
+}
+
 /// A shape and the classification of a transform to put it through.
 #[must_use]
 pub fn under(class: Class) -> Vec<(Shape, Classification)> {

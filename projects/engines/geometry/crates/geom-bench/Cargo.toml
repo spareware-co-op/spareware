@@ -81,6 +81,11 @@ geom-test = { path = "../geom-test" }
 num-bigint = "0.4.8"
 # Wall-clock timings for people, on every platform. MIT OR Apache-2.0.
 divan = "0.1.21"
+# The library the million-segment arrangement benchmark (benches/arrange_1m.rs, piece G196a) is timed
+# against: iOverlay's segment split and graph build. MIT OR Apache-2.0, a development crate's
+# dependency only (kernel AGENTS.md section 4); pinned exactly. Its own dependencies are i_float,
+# i_key_sort, i_shape and i_tree (MIT) and libm.
+i_overlay = "=9.1.0"
 # The coverage test's readers, in place of a line scanner and text searches (piece G12a; chapter
 # 29.1), the versions engine-geometry's scaffold check pins. syn 3.0.9 (MIT OR Apache-2.0) parses
 # geom-num's source, without its default features: it needs no compiler proc_macro and prints
@@ -101,6 +106,10 @@ harness = false
 
 [[bench]]
 name = "wall_clock"
+harness = false
+
+[[bench]]
+name = "arrange_1m"
 harness = false
 
 [lints.rust]
