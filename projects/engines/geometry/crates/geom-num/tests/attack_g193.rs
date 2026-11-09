@@ -6,7 +6,8 @@
 //!   the [`Round`] or [`Circle2`] it was made from, at the budget's extremes and at random.
 //! - **Every crossing is on both its curves**, as the exact questions read it back.
 //! - **A gap is a bound**, zero exactly at a tangency.
-//! - **A narrowed root is as deep as asked**, and its angle still holds its crossing.
+//! - **A narrowed root is as deep as asked**, and its angle still holds its crossing; a root at
+//!   t = 1 or t = -1 is a quarter turn either way, exactly.
 //! - **A translated equation is the same curve.**
 //!
 //! Seeds: each randomised test prints `seed: <hex>` and runs from a fixed default;
@@ -41,7 +42,7 @@ use geom_num::carrier::{
 use geom_num::conic::{Conic, Ellipse2, Meeting};
 use geom_num::grid::{COORD_MAX, P2};
 use geom_num::one_root::{Crossing2, Root, enclose};
-use geom_num::quartic::{Big, Piece, Quartic, Roots};
+use geom_num::quartic::{Big, Piece, Quartic, RealRoot, Roots};
 use geom_num::{I256, NumError, Sign};
 
 /// The default seed of every randomised test here (G193).
@@ -979,4 +980,24 @@ fn a_narrowing_past_the_depth_of_comparisons_is_refused() {
         roots.narrowed(&quartic, 2_471),
         Err(NumError::BudgetExceeded)
     ));
+}
+
+#[test]
+fn a_root_at_one_or_minus_one_is_a_quarter_turn_exactly() {
+    // t^4 - 1 = (t - 1)(t + 1)(t^2 + 1): its real roots are t = -1 and t = 1, which are
+    // theta = -pi/2 and pi/2 along an ellipse, (cos, sin) = (0, -1) and (0, 1).
+    let big = Big::from_i64;
+    let roots = Quartic::new([big(-1), big(0), big(0), big(0), big(1)])
+        .roots()
+        .unwrap();
+    let pieces: Vec<Piece> = roots.iter().map(RealRoot::piece).collect();
+    assert_eq!(pieces, [Piece::MinusOne, Piece::One]);
+    let angles: Vec<[(f64, f64); 2]> = roots
+        .iter()
+        .map(|r| r.angle().unwrap().map(|i| (i.lo(), i.hi())))
+        .collect();
+    assert_eq!(
+        angles,
+        [[(0.0, 0.0), (-1.0, -1.0)], [(0.0, 0.0), (1.0, 1.0)]]
+    );
 }
