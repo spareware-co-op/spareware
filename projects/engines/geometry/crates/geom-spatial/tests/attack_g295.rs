@@ -558,3 +558,76 @@ fn paths_hash_as_they_compare_and_trees_count_their_bytes() {
     assert!(a.heap_bytes() >= records + least && a.heap_bytes() < 2 * (records + least));
     assert_eq!(a.placed().collect::<Vec<_>>(), vec![(0, key(1, 1))]);
 }
+
+#[test]
+fn a_quarter_turn_is_entered_to_the_box_it_owes_and_no_wider() {
+    // A quarter turn about each axis, with a shift, sends grid boxes to grid boxes, so the points
+    // of `within` it sends within one step of a region make a box: the region grown by a step,
+    // taken back through the turn, which the test reads from the transform's own images of the
+    // unit vectors. `backward` holds that box, and its rounding outward adds at most a step.
+    let within = bx([-(1 << 20); 3], [1 << 20; 3]);
+    for axis in [Axis::X, Axis::Y, Axis::Z] {
+        let t = TypedTransform::from(GridTransform::translation([12_345, -678, 90]).unwrap())
+            .compose(&TypedTransform::rotation(axis, Rotation::direction(0, 1).unwrap()).unwrap())
+            .unwrap();
+        let image = |v: [i64; 3]| coords(t.apply(p3(v)).unwrap().value());
+        let o = image([0, 0, 0]);
+        let cols: [[i64; 3]; 3] = std::array::from_fn(|j| {
+            let mut e = [0; 3];
+            e[j] = 1;
+            let q = image(e);
+            std::array::from_fn(|i| q[i] - o[i])
+        });
+        // The turn is a signed permutation, so its inverse is its transpose.
+        let back_of = |q: [i64; 3]| -> [i64; 3] {
+            std::array::from_fn(|j| (0..3).map(|i| cols[j][i] * (q[i] - o[i])).sum())
+        };
+        for (lo, hi) in [
+            ([12_300, -700, 80], [12_400, -650, 95]),
+            ([12_345, -678, 90], [12_345, -678, 90]),
+            ([13_000, -2_000, 5], [14_500, -1_000, 3_000]),
+        ] {
+            let (a, b) = (back_of(lo.map(|v| v - 1)), back_of(hi.map(|v| v + 1)));
+            let back = backward(&t, &bx(lo, hi), &within)
+                .unwrap()
+                .expect("a point is owed");
+            let (got_lo, got_hi) = (coords(back.min()), coords(back.max()));
+            for k in 0..3 {
+                let (want_lo, want_hi) = (a[k].min(b[k]), a[k].max(b[k]));
+                assert!(
+                    got_lo[k] <= want_lo && want_lo - got_lo[k] <= 1,
+                    "{axis:?}, axis {k}: {got_lo:?} for {want_lo}"
+                );
+                assert!(
+                    got_hi[k] >= want_hi && got_hi[k] - want_hi <= 1,
+                    "{axis:?}, axis {k}: {got_hi:?} for {want_hi}"
+                );
+            }
+        }
+    }
+}
+
+#[test]
+fn a_flat_definition_is_entered_through_a_general_placement() {
+    // A definition with no thickness, a sheet at z = 5: every point of it that the placement
+    // sends near the region is still owed, on a box as flat as the sheet.
+    let within = bx([-1_000, -1_000, 5], [1_000, 1_000, 5]);
+    for (c, s) in [(3, 4), (5, 12), (0, 1)] {
+        for axis in [Axis::X, Axis::Y, Axis::Z] {
+            let t = TypedTransform::from(GridTransform::translation([77, -91, 13]).unwrap())
+                .compose(
+                    &TypedTransform::rotation(axis, Rotation::direction(c, s).unwrap()).unwrap(),
+                )
+                .unwrap();
+            for p in [[0, 0, 5], [999, -1_000, 5], [-17, 400, 5]] {
+                let q = coords(t.apply(p3(p)).unwrap().value());
+                let region = bx(q.map(|v| v - 2), q.map(|v| v + 2));
+                let back = backward(&t, &region, &within)
+                    .unwrap()
+                    .expect("a point of the sheet is owed");
+                assert!(back.contains(p3(p)), "{axis:?} ({c}, {s}): {p:?}");
+                assert_eq!((back.min().z.get(), back.max().z.get()), (5, 5));
+            }
+        }
+    }
+}

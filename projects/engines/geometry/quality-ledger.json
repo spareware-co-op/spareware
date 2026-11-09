@@ -5300,6 +5300,30 @@
       "occurrences": 1,
       "kind": "equivalent",
       "reason": "Two records with equal keys, the same class and the same bound, are the same record here: every copy of a pattern takes its grid step from the input, or from the one ceiling the caller gave, so a and b differ in nothing either branch could return."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-spatial/src/instance/assembly.rs",
+      "mutant": "replace match guard c.handle == handle with false in Assembly<R>::build",
+      "line_text": "(Some(c), _) if c.handle == handle => c,",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "The guard is a shortcut for a run of records placing the same definition: the last child is always the one stored in `children` under its handle (inserted when made, or copied from there, and never changed after), so without the shortcut the next arm finds the same Copy value in the map. The lookup charges nothing and has no other effect, so every child, bound, tree and error is the same."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-spatial/src/instance/enter.rs",
+      "mutant": "replace > with >= in backward",
+      "line_text": "let lo = if o.lo() > w.lo() { o.lo() } else { w.lo() };",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "The two differ only when o.lo() == w.lo(), and then they pick the same number, apart from the sign of a zero end. The kept interval is rounded outward to grid steps before it is returned, and -0 and +0 round to the same step, so the box is the same."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-spatial/src/instance/enter.rs",
+      "mutant": "replace < with <= in backward",
+      "line_text": "let hi = if o.hi() < w.hi() { o.hi() } else { w.hi() };",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "The two differ only when o.hi() == w.hi(), and then they pick the same number, apart from the sign of a zero end. The kept interval is rounded outward to grid steps before it is returned, and -0 and +0 round to the same step, so the box is the same."
     }
   ],
   "coverage_off": [],

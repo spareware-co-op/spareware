@@ -916,3 +916,17 @@ fn an_instance_costs_at_most_160_bytes_with_its_record() {
     assert!(per <= 160.0, "{per:.1} bytes an instance");
     assert_eq!(a.tree().leaves().len(), count);
 }
+
+#[test]
+fn an_assembly_with_records_is_not_empty_and_paths_that_differ_are_unequal() {
+    let seed = resolve("instance tree emptiness", Seed::DEFAULT).unwrap();
+    let mut rng = SplitMix64::new(seed);
+    let (_, root) = scene(&mut rng);
+    assert!(root.len() >= 20);
+    assert!(!root.is_empty());
+    let a = Path::EMPTY.then(1).unwrap();
+    assert_ne!(a, Path::EMPTY);
+    assert_ne!(a, Path::EMPTY.then(2).unwrap());
+    assert_ne!(a, a.then(1).unwrap());
+    assert_eq!(a, Path::EMPTY.then(1).unwrap());
+}
