@@ -18,6 +18,10 @@ geom-num = { path = "../geom-num" }
 geom-op = { path = "../geom-op" }
 
 [dev-dependencies]
+# The exact oracle of the commit checks' tests (piece G226): rationals, never linked into the kernel.
+# MIT OR Apache-2.0; the versions geom-linalg's tests use, without default features.
+dashu-int = { version = "0.6.2", default-features = false, features = ["std"] }
+dashu-ratio = { version = "0.6.1", default-features = false, features = ["std"] }
 # The golden store, its one SHA-256 and the perturbations every golden runs under (piece G19), from
 # the kernel's development crate, a development dependency only (chapter 28.1).
 geom-test = { path = "../geom-test" }
@@ -87,4 +91,9 @@ harness = false
 # The commit of a 1,000-entity sketch (piece G225), the same way.
 [[bench]]
 name = "commit"
+harness = false
+
+# The checks after the commit of a 1,000-entity sketch (piece G226), the same way.
+[[bench]]
+name = "check"
 harness = false

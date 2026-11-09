@@ -1445,6 +1445,8 @@ dependencies = [
 name = "geom-sketch"
 version = "0.0.0"
 dependencies = [
+ "dashu-int",
+ "dashu-ratio",
  "geom-curve",
  "geom-linalg",
  "geom-math",
