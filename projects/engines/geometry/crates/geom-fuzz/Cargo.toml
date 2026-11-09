@@ -34,6 +34,11 @@ geom-gen = { path = "../geom-gen" }
 num-bigint = "0.4.8"
 # The code under test of the cbor target (G91), and the work meter it is read with (Apache-2.0, ours).
 geom-format = { path = "../geom-format" }
+# The code under test of the inflate target (G414b): geom-exchange's DEFLATE reader (Apache-2.0 AND
+# MIT, ours, its decoder ported from miniz_oxide), and its oracle, miniz_oxide itself at its latest
+# release (MIT OR Zlib OR Apache-2.0).
+geom-exchange = { path = "../geom-exchange" }
+miniz_oxide = "=0.9.1"
 
 [dev-dependencies]
 # The harness front end: one `check!` runs a harness as a property test (on stable), under

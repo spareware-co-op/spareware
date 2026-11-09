@@ -106,6 +106,66 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 
 
+miniz_oxide
+-----------
+
+Name:      miniz_oxide
+Project:   https://crates.io/crates/miniz_oxide
+Taken as:  PORT (section 29.1)
+Link:      https://github.com/Frommi/miniz_oxide/tree/b28c237471f63efebe152bddd962dc57bbb531eb
+Commit:    b28c237471f63efebe152bddd962dc57bbb531eb
+Licence:   MIT
+           as stated in https://github.com/Frommi/miniz_oxide/blob/b28c237471f63efebe152bddd962dc57bbb531eb/miniz_oxide/LICENSE-MIT.md
+
+Ported files, each with the origin files it ports and the origin's copyright lines as its header
+copies them:
+
+  projects/engines/geometry/crates/geom-exchange/src/inflate/decode.rs
+    SPDX-License-Identifier: Apache-2.0 AND MIT
+    https://github.com/Frommi/miniz_oxide/blob/b28c237471f63efebe152bddd962dc57bbb531eb/miniz_oxide/src/inflate/core.rs
+      Copyright 2013-2014 RAD Game Tools and Valve Software
+      Copyright 2010-2014 Rich Geldreich and Tenacious Software LLC
+      Copyright (c) 2017 Frommi
+      Copyright (c) 2017-2024 oyvindln
+    https://github.com/Frommi/miniz_oxide/blob/b28c237471f63efebe152bddd962dc57bbb531eb/miniz_oxide/src/inflate/output_buffer.rs
+      Copyright 2013-2014 RAD Game Tools and Valve Software
+      Copyright 2010-2014 Rich Geldreich and Tenacious Software LLC
+      Copyright (c) 2017 Frommi
+      Copyright (c) 2017-2024 oyvindln
+    https://github.com/Frommi/miniz_oxide/blob/b28c237471f63efebe152bddd962dc57bbb531eb/miniz_oxide/src/shared.rs
+      Copyright 2013-2014 RAD Game Tools and Valve Software
+      Copyright 2010-2014 Rich Geldreich and Tenacious Software LLC
+      Copyright (c) 2017 Frommi
+      Copyright (c) 2017-2024 oyvindln
+
+Licence text (https://github.com/Frommi/miniz_oxide/blob/b28c237471f63efebe152bddd962dc57bbb531eb/miniz_oxide/LICENSE-MIT.md):
+
+MIT License
+
+Copyright 2013-2014 RAD Game Tools and Valve Software
+Copyright 2010-2014 Rich Geldreich and Tenacious Software LLC
+Copyright (c) 2017 Frommi
+Copyright (c) 2017-2024 oyvindln
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+
+
 NLib, in NVIDIA's USD BRep
 --------------------------
 
@@ -424,6 +484,13 @@ these sources (PORT METHOD, section 29.1); rule 4 asks that it credit every sour
 A source read under the method-only procedure (rule 6) names its method note in
 projects/engines/geometry/methods/.
 
+Apache POI
+  Licence:      Apache-2.0
+  Link:         https://github.com/apache/poi/blob/519e0a3c3945364e8ea75c172fe1a15fb6d4a202/poi-ooxml/src/main/java/org/apache/poi/openxml4j/util/ZipSecureFile.java
+  Consulted by:
+    projects/engines/geometry/crates/geom-exchange/src/inflate.rs
+      for its zip-bomb thresholds: a minimum compressed-to-inflated ratio of 0.01, checked above a grace size of 100 KiB. No code copied.
+
 bolero 0.13.7 `lib/bolero/src/test/mod.rs`
   Licence:      MIT
   Link:         https://github.com/camshaft/bolero/blob/7642943b6c1f8a9b5e824dd1cd29b7c8e56068b8/lib/bolero/src/test/mod.rs
@@ -591,6 +658,13 @@ LLVM's llvm-cov
   Consulted by:
     projects/engines/geometry/crates/geom-test/src/coverage.rs
       with `CoverageSummaryInfo.cpp` and `CodeCoverage.cpp` beside it at the same commit (the LLVM 23.1.1 the pinned nightly ships), for how its LCOV export counts `BRF` and writes `BRDA`. No code copied.
+
+`miniz_oxide`
+  Licence:      MIT
+  Link:         https://github.com/Frommi/miniz_oxide/blob/b28c237471f63efebe152bddd962dc57bbb531eb/miniz_oxide/src/inflate/mod.rs
+  Consulted by:
+    projects/engines/geometry/crates/geom-exchange/src/inflate.rs
+      for `decompress_to_vec_inner`'s loop: the whole output given to each call as the match window, and the vector doubled up to the limit. No code copied.
 
 npm `hosted-git-info` 10.1.1
   Licence:      ISC

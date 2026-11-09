@@ -2440,6 +2440,95 @@
           "module": "geom_exchange::error",
           "name": "ExchangeError",
           "non_exhaustive": false
+        },
+        {
+          "doc": "Why a stream was refused.",
+          "file": "projects/engines/geometry/crates/geom-exchange/src/inflate.rs",
+          "kinds": [
+            {
+              "doc": "The byte source failed, or ended before `input_len` bytes.",
+              "name": "Source",
+              "shape": "tuple"
+            },
+            {
+              "doc": "The stream had not ended after `input_len` bytes.",
+              "name": "Truncated",
+              "shape": "unit"
+            },
+            {
+              "doc": "The stream ended before `input_len` bytes.",
+              "name": "TrailingBytes",
+              "shape": "unit"
+            },
+            {
+              "doc": "A block of type 3, which RFC 1951 reserves.",
+              "name": "BlockType",
+              "shape": "unit"
+            },
+            {
+              "doc": "A stored block whose length and its complement disagree.",
+              "name": "StoredLength",
+              "shape": "unit"
+            },
+            {
+              "doc": "A dynamic block with more than 286 literal and length codes or more than 30 distance codes.",
+              "name": "TableSizes",
+              "shape": "unit"
+            },
+            {
+              "doc": "Code lengths that over-subscribe a code, or leave one incomplete with codes longer than one bit (or the code-length code incomplete at all).",
+              "name": "CodeLengths",
+              "shape": "unit"
+            },
+            {
+              "doc": "A repeat of the previous code length (16) with no length before it.",
+              "name": "RepeatFirst",
+              "shape": "unit"
+            },
+            {
+              "doc": "Repeated code lengths that run past the literal and length and distance codes.",
+              "name": "RepeatOverrun",
+              "shape": "unit"
+            },
+            {
+              "doc": "A literal and length symbol of 286 or 287, or bits no code starts with.",
+              "name": "Literal",
+              "shape": "unit"
+            },
+            {
+              "doc": "A distance symbol of 30 or 31, or bits no distance code starts with.",
+              "name": "Distance",
+              "shape": "unit"
+            },
+            {
+              "doc": "A match whose distance reaches before the first byte of output.",
+              "name": "DistanceTooFar",
+              "shape": "unit"
+            },
+            {
+              "doc": "The output would pass the size budget.",
+              "name": "TooLarge",
+              "shape": "unit"
+            },
+            {
+              "doc": "The output would pass the ratio budget times the input length.",
+              "name": "Ratio",
+              "shape": "unit"
+            },
+            {
+              "doc": "The work meter stopped the read.",
+              "name": "Stopped",
+              "shape": "unit"
+            },
+            {
+              "doc": "The allocator refused.",
+              "name": "OutOfMemory",
+              "shape": "unit"
+            }
+          ],
+          "module": "geom_exchange::inflate",
+          "name": "InflateErrorKind",
+          "non_exhaustive": false
         }
       ],
       "family": [],
@@ -2497,6 +2586,93 @@
           "path": "geom_exchange::grid",
           "provenance": [],
           "spdx": null,
+          "target": "lib"
+        },
+        {
+          "cost": "linear in the input and the output (see `decode`); memory, the output, grown by doubling from 64 KiB to at most the limit, plus a 10 KiB decoder and a 4 KiB input buffer. No recursion.",
+          "does": "[`inflate`] reads exactly `input_len` compressed bytes from a byte source (a zip entry's compressed size, from its central directory), decodes them with `decode`, the decoder ported from `miniz_oxide`, and returns the output; [`inflate_slice`] does the same for bytes in memory. The output may be at most [`InflateBudget::limit`] bytes long, fixed before the first byte is read: the size budget, or the ratio budget times `input_len` where that is smaller, but never less than the grace size. The output grows in steps, never past that limit.",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-exchange/src/inflate.rs",
+          "guarantees": [
+            "**Refused with a typed error and a byte offset, never a panic.** Every failure is an [`InflateError`] naming its [`InflateErrorKind`] and the offset in the compressed bytes: of the byte holding the first bit the decoder had not used when it found the fault, for a malformed stream or a breached budget; `input_len` for a stream cut short; the first byte after the stream, for trailing bytes.",
+            "**Every budget holds.** The output is never longer than the limit, and no allocation is made past it; an allocation the allocator refuses is [`InflateErrorKind::OutOfMemory`].",
+            "**Exactly one stream.** A stream that has not ended after `input_len` bytes is [`InflateErrorKind::Truncated`]; one that ends before them is [`InflateErrorKind::TrailingBytes`], so a zip entry's bytes hide nothing after its stream.",
+            "**The split never matters.** The output, or the error's kind and offset, are the same however the source splits its reads; only a source's own failure and a stop of the work meter depend on when they happen.",
+            "**The same bytes as `miniz_oxide`.** Every stream it accepts gives exactly the bytes `miniz_oxide` 0.9.1 gives, and every stream it refuses as malformed, `miniz_oxide` refuses too (`tests/inflate_differential.rs`).",
+            "**Work is charged as it is done.** The meter is charged one unit for each compressed byte used and each byte written, after each step of at most 4 KiB of input and 64 KiB of output, so a cancellation is seen within a step."
+          ],
+          "job": "Inflate: a raw DEFLATE stream (RFC 1951), as a zip entry holds it, read through a [`ByteSource`] into the bytes it encodes, within a size budget and a ratio budget, so a zip bomb is refused with a typed error before it is written out.",
+          "method": {
+            "links": [
+              "https://www.rfc-editor.org/rfc/rfc1951"
+            ],
+            "text": "RFC 1951's format, decoded by `decode`; the output grown by doubling up to a limit, as `miniz_oxide`'s `decompress_to_vec_with_limit` grows its vector; the zip-bomb thresholds of Apache POI's `ZipSecureFile`, with the ratio taken over the whole stream, whose compressed length the caller knows, so the limit is fixed before decoding and no split can move it. P. Deutsch, \"DEFLATE Compressed Data Format Specification version 1.3\", RFC 1951 (1996), <https://www.rfc-editor.org/rfc/rfc1951>."
+          },
+          "path": "geom_exchange::inflate",
+          "provenance": [
+            {
+              "licence": "MIT",
+              "link": "https://github.com/Frommi/miniz_oxide/blob/b28c237471f63efebe152bddd962dc57bbb531eb/miniz_oxide/src/inflate/mod.rs",
+              "method_note": null,
+              "name": "`miniz_oxide`",
+              "notice": [],
+              "pinned": true,
+              "purpose": "for `decompress_to_vec_inner`'s loop: the whole output given to each call as the match window, and the vector doubled up to the limit. No code copied.",
+              "take": "port-method"
+            },
+            {
+              "licence": "Apache-2.0",
+              "link": "https://github.com/apache/poi/blob/519e0a3c3945364e8ea75c172fe1a15fb6d4a202/poi-ooxml/src/main/java/org/apache/poi/openxml4j/util/ZipSecureFile.java",
+              "method_note": null,
+              "name": "Apache POI",
+              "notice": [],
+              "pinned": true,
+              "purpose": "for its zip-bomb thresholds: a minimum compressed-to-inflated ratio of 0.01, checked above a grace size of 100 KiB. No code copied.",
+              "take": "port-method"
+            }
+          ],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
+          "cost": "linear in the input and output: a code costs one table read, or one per bit past ten; a match is one copy, or one per repeat of a distance shorter than the match. The decoder is about 10 KiB (three code tables) and allocates nothing.",
+          "does": "[`Decoder::step`] reads from a slice of compressed bytes and writes into the output buffer after a given position, until the input runs out, the output is full, the final block ends or the bytes are found not to be DEFLATE. The buffer holds all the output before that position too, since a match copies from it; called again with more input or more room, the decoder carries on exactly where it stopped. Stored, fixed-code and dynamic-code blocks are read; zlib and gzip wrappers are not (a zip entry holds raw DEFLATE).",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-exchange/src/inflate/decode.rs",
+          "guarantees": [
+            "**No panics, no indexing, no unchecked arithmetic.** Every table and buffer is read with `get`, every count is a checked or saturating step whose bound is stated beside it, and a cast is a `try_from`, an `unsigned_abs` or a byte of `to_le_bytes`.",
+            "**Malformed or refused, never misread.** A block type of 3, a stored length whose complement disagrees, more than 286 literal and length codes or 30 distance codes, an over-subscribed or incomplete code, a repeat with no length before it, repeats that run past the code lengths, the literal and length symbols 286 and 287, the distance symbols 30 and 31, and a distance reaching before the first byte of output each end the stream with their own [`InflateErrorKind`]. The decoder stays in that failure.",
+            "**The split never matters.** The output, and where in the input a failure is found, are the same however the input and the room are handed out: the decoder keeps every bit it has read and every match it has half written, and its fast loop reads exactly the bits the careful path reads.",
+            "**Bounded work per byte, no recursion.** Each state reads at most two bytes or writes at most one match before it moves on; walking a code's tree visits at most one node per bit."
+          ],
+          "job": "The DEFLATE decoder under [`crate::inflate`]'s reader: a resumable state machine that turns raw DEFLATE bytes (RFC 1951) into the bytes they encode, a piece of input and a stretch of output at a time.",
+          "method": {
+            "links": [
+              "https://www.rfc-editor.org/rfc/rfc1951"
+            ],
+            "text": "RFC 1951's block format, Huffman codes and LZ77 matches; the decoder of `miniz_oxide` (below), itself a port of Rich Geldreich's miniz `tinfl`, which reads codes of up to 10 bits from one table and longer ones by walking a tree, and keeps a fast loop for when at least 14 input bytes and 259 bytes of room remain. The checks on code lengths follow zlib's `inftrees.c` as `miniz_oxide` does. P. Deutsch, \"DEFLATE Compressed Data Format Specification version 1.3\", RFC 1951 (1996), <https://www.rfc-editor.org/rfc/rfc1951>."
+          },
+          "path": "geom_exchange::inflate::decode",
+          "provenance": [
+            {
+              "licence": "MIT",
+              "link": "https://github.com/Frommi/miniz_oxide/blob/b28c237471f63efebe152bddd962dc57bbb531eb/miniz_oxide/src/inflate/core.rs",
+              "method_note": null,
+              "name": "`miniz_oxide`",
+              "notice": [
+                "<https://github.com/Frommi/miniz_oxide/blob/b28c237471f63efebe152bddd962dc57bbb531eb/miniz_oxide/src/inflate/output_buffer.rs>",
+                "<https://github.com/Frommi/miniz_oxide/blob/b28c237471f63efebe152bddd962dc57bbb531eb/miniz_oxide/src/shared.rs>",
+                "Copyright 2013-2014 RAD Game Tools and Valve Software",
+                "Copyright 2010-2014 Rich Geldreich and Tenacious Software LLC",
+                "Copyright (c) 2017 Frommi",
+                "Copyright (c) 2017-2024 oyvindln"
+              ],
+              "pinned": true,
+              "purpose": "taken under the MIT choice of its MIT OR Zlib OR Apache-2.0; only raw DEFLATE into an output buffer that holds the whole output is kept, so the zlib header and Adler-32 states, the wrapping ring buffer and its masks, the 32-bit bit buffer and the block-boundary feature are left out; every slice is read with `get`, every count is checked or saturating within its stated bound, every cast is lossless; the match copy keeps its three cases (one byte repeated, apart, overlapping) as safe slice copies in place of the source's unrolled four-byte loop; the end of input is always \"needs more input\", and the caller says whether more exists, where the source took a flag and reported a full output in its place; failures are typed kinds instead of failure states with one status; a match that cannot fit no longer tests for a zero length it cannot have.",
+              "take": "port"
+            }
+          ],
+          "spdx": "Apache-2.0 AND MIT",
           "target": "lib"
         },
         {
@@ -3497,6 +3673,28 @@
             "text": "the kind contract of chapter 7 as `geom_curve::contract` states it, driven by coverage-guided fuzzing (chapter 28.5), with inputs aimed at the hard cases 28.5 lists (`projects/engines/geometry/architecture/28-testing.md`)."
           },
           "path": "geom_fuzz::curves",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
+          "cost": "three decodes of the input, each linear in the input and at most [`LIMIT`] bytes of output; two buffers of [`LIMIT`] bytes.",
+          "does": "[`harness`] reads the fuzzer's bytes as one raw DEFLATE stream with `inflate_slice` within [`LIMIT`] bytes of output, again through a source that hands out one byte per read, and once more through `miniz_oxide` 0.9.1, which decodes the whole input in one call into a buffer of [`LIMIT`] bytes. It checks: both reads give the same output or the same error, kind and offset; an output fits the limit; an error's offset lies inside the input; and the verdicts agree: the same output for a stream both accept, trailing bytes at the offset where `miniz_oxide` stopped, a stream cut short or past the limit for both, and a malformed stream for both.",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-fuzz/src/inflate.rs",
+          "guarantees": [
+            "**Any bytes are a case**, the empty string included; nothing is decoded first.",
+            "**Every law above is checked on every input**, and a broken one is a [`Finding`] naming it with the input in hexadecimal."
+          ],
+          "job": "The DEFLATE reader's fuzz target (piece G414b): `geom-exchange`'s inflate never panics, keeps its budget, refuses inside its input, reads the same bytes the same however the source splits them, and agrees with `miniz_oxide`, the crate its decoder is ported from, byte for byte.",
+          "method": {
+            "links": [
+              "projects/engines/geometry/architecture/28-testing.md",
+              "projects/engines/geometry/architecture/24-file-format-exchange.md"
+            ],
+            "text": "property-based fuzzing of a reader's laws, and differential testing against the reader's origin (chapter 28.5, `projects/engines/geometry/architecture/28-testing.md`): the guarantees of `geom-exchange`'s `inflate` module header (`projects/engines/geometry/crates/geom-exchange/src/inflate.rs`, chapter 24.7, `projects/engines/geometry/architecture/24-file-format-exchange.md`) as properties."
+          },
+          "path": "geom_fuzz::inflate",
           "provenance": [],
           "spdx": null,
           "target": "lib"
@@ -10863,6 +11061,17 @@
       ]
     },
     {
+      "licence": "MIT",
+      "link": "https://github.com/Frommi/miniz_oxide/blob/b28c237471f63efebe152bddd962dc57bbb531eb/miniz_oxide/src/inflate/core.rs",
+      "method_note": null,
+      "name": "`miniz_oxide`",
+      "pinned": true,
+      "take": "port",
+      "used_by": [
+        "projects/engines/geometry/crates/geom-exchange/src/inflate/decode.rs"
+      ]
+    },
+    {
       "licence": "Apache-2.0",
       "link": "https://github.com/NVIDIA-Omniverse/usd-brep/blob/c9c5979f04cea8c38213004d4f04df0dcfb40d05/source/SMLib/src/NL_BasisBasic.cpp",
       "method_note": null,
@@ -11080,6 +11289,17 @@
     },
     {
       "licence": "MIT",
+      "link": "https://github.com/Frommi/miniz_oxide/blob/b28c237471f63efebe152bddd962dc57bbb531eb/miniz_oxide/src/inflate/mod.rs",
+      "method_note": null,
+      "name": "`miniz_oxide`",
+      "pinned": true,
+      "take": "port-method",
+      "used_by": [
+        "projects/engines/geometry/crates/geom-exchange/src/inflate.rs"
+      ]
+    },
+    {
+      "licence": "MIT",
       "link": "https://github.com/OSGeo/PROJ/blob/5fa31c29f0a806568ed7bc76c1a557604db4a804/data/sql/projected_crs.sql",
       "method_note": null,
       "name": "PROJ (its copy of the EPSG dataset, whose own terms of use cover the data)",
@@ -11098,6 +11318,17 @@
       "take": "port-method",
       "used_by": [
         "projects/engines/geometry/crates/geom-math/src/unit.rs"
+      ]
+    },
+    {
+      "licence": "Apache-2.0",
+      "link": "https://github.com/apache/poi/blob/519e0a3c3945364e8ea75c172fe1a15fb6d4a202/poi-ooxml/src/main/java/org/apache/poi/openxml4j/util/ZipSecureFile.java",
+      "method_note": null,
+      "name": "Apache POI",
+      "pinned": true,
+      "take": "port-method",
+      "used_by": [
+        "projects/engines/geometry/crates/geom-exchange/src/inflate.rs"
       ]
     },
     {

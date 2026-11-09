@@ -3,7 +3,9 @@ name = "geom-exchange"
 version = "0.0.0"
 edition.workspace = true
 publish.workspace = true
-license.workspace = true
+# Apache-2.0, with MIT for the DEFLATE decoder ported from miniz_oxide (src/inflate/decode.rs), as
+# chapter 29.20, rule 4, asks of a crate with a ported file.
+license = "Apache-2.0 AND MIT"
 description = "Spare Kit geometry kernel: units, numbers to grid and the shared mappings every format crate uses."
 
 [dependencies]
@@ -31,11 +33,22 @@ num-integer = "0.1"
 # Printed, replayable seeds for the randomised tests (piece G19): the kernel's development crate,
 # a development dependency only (chapter 28.1).
 geom-test = { path = "../geom-test" }
+# The oracle of the DEFLATE decoder's differential test (piece G414b): the crate its decoder is
+# ported from, at its latest release, compared byte for byte. MIT OR Zlib OR Apache-2.0; a
+# development dependency only, never linked into the kernel (chapter 29.1: its only DEPEND is
+# `libm`).
+miniz_oxide = "=0.9.1"
 
 # Wall-clock throughput of numbers to grid, shortest decimals and reals (piece G413), with the
 # standard library's clock only, like geom-math's; it moves to geom-bench with the others.
 [[bench]]
 name = "exchange"
+harness = false
+
+# The DEFLATE reader's throughput on a compressed 3MF-shaped mesh part, beside miniz_oxide's own
+# decoder (piece G414b), the same way.
+[[bench]]
+name = "inflate"
 harness = false
 
 [lints.rust]

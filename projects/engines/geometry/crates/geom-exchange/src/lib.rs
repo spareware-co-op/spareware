@@ -40,6 +40,8 @@
 //!   reads back, with the difference.
 //! - [`map`]: IFC's map conversions as frame records.
 //! - [`report`]: import and export reports as data.
+//! - [`inflate`]: raw DEFLATE decoded within size and ratio budgets, its decoder ported from
+//!   `miniz_oxide` (piece G414b).
 //! - [`error`]: the crate's error.
 //!
 //! Status: built by pieces G413, G414, G418, G436; G413 is done.
@@ -50,6 +52,7 @@ extern crate alloc;
 
 pub mod error;
 pub mod grid;
+pub mod inflate;
 pub mod map;
 pub mod real;
 pub mod report;

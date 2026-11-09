@@ -12,7 +12,9 @@ agree with the exact determinant of orient2d's definition, computed from scratch
 flips its sign; `wide` (`src/wide.rs`, G26), the wide integers agree with `num-bigint` on
 every operation at every width, `I128` to the reserved 768 bits; `cbor` (`src/cbor.rs`, G91),
 `geom-format`'s strict CBOR decoder and its text form never panic, refuse inside their input and
-convert both ways bit for bit; and, for Gate 2 (decision 32.44:
+convert both ways bit for bit; `inflate` (`src/inflate.rs`, G414b), `geom-exchange`'s DEFLATE
+reader never panics, keeps its budget, reads the same however its bytes are split and agrees with
+`miniz_oxide` byte for byte; and, for Gate 2 (decision 32.44:
 a target per phase-2 code piece), `curves` (`src/curves.rs`) and `surfaces` (`src/surfaces.rs`),
 every curve and surface kind built from any bytes keeps the kind contract kit
 (`geom_curve::contract`, `geom_surface::contract`) under any typed transform.

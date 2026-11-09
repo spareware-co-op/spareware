@@ -21,7 +21,9 @@
 //! [`linalg`], the dense decompositions are refused or finite and the spectral ones backward stable
 //! (G49, G50), and [`roots`], the root engine misses no root and proves none twice, Brent's
 //! zero brackets its sign change (G51, G52, G53), and [`maths`], the proven maths functions are
-//! correctly rounded (G47). The layout every target follows, and how each engine runs it locally and in CI,
+//! correctly rounded (G47), and [`inflate`], `geom-exchange`'s DEFLATE reader never panics, keeps
+//! its budget, reads the same however its bytes are split and agrees with `miniz_oxide` byte for
+//! byte (G414b). The layout every target follows, and how each engine runs it locally and in CI,
 //! is in this crate's `README.md`.
 //!
 //! Layer: Development, in chapter 27's crate table: a development crate, outside the
@@ -124,7 +126,10 @@
 //! - `geom-gen` (Apache-2.0, ours, development only), whose description parser the [`variants`]
 //!   target reads the predicates with.
 //! - `geom-format` and `geom-run` (Apache-2.0, ours), the code under test of the [`cbor`] target and
-//!   the work meter it reads with.
+//!   the work meter it reads with; `geom-exchange` (Apache-2.0 AND MIT, ours), the code under test
+//!   of the [`inflate`] target.
+//! - `miniz_oxide` 0.9.1 (MIT OR Zlib OR Apache-2.0), the oracle of the [`inflate`] target: the
+//!   crate `geom-exchange`'s DEFLATE decoder is ported from.
 //! - `dashu-ratio` 0.6.1 (MIT OR Apache-2.0), without its default features: the exact rationals
 //!   of the [`nurbs`] target's oracle, `geom-test`'s NURBS reference.
 //! - `num-bigint` 0.4.8 (MIT OR Apache-2.0), the oracle of the [`wide`] and [`variants`] targets:
@@ -147,6 +152,8 @@
 //!   `dashu-ratio` and `static_assertions`.
 //! - (MIT OR Apache-2.0) AND Unicode-3.0: `unicode-ident`.
 //! - Apache-2.0: `num-modular` (through `dashu-int`).
+//! - MIT OR Zlib OR Apache-2.0: `miniz_oxide`.
+//! - 0BSD OR MIT OR Apache-2.0: `adler2` (through `miniz_oxide`).
 //! - BSD-2-Clause OR Apache-2.0 OR MIT: `zerocopy` and `zerocopy-derive`.
 //! - Apache-2.0 WITH LLVM-exception OR Apache-2.0 OR MIT: `wasip2` and `wit-bindgen` (WASI targets
 //!   only).
@@ -174,6 +181,7 @@ use core::fmt;
 pub mod boxtree;
 pub mod cbor;
 pub mod curves;
+pub mod inflate;
 pub mod linalg;
 pub mod maths;
 pub mod nurbs;
