@@ -9,8 +9,10 @@
 //! length, and leaves the point at the nearest allowed place; a cursor that would turn a parallel
 //! line half a turn is `DragLimit` and the frame is the last good one; a frame with no budget shows
 //! the previous frame; a script of frames replays to the same bits as it ran, twice over; a log
-//! keeps at most 256 targets, the last among them; and a release commits and reports no drift for
-//! an ordinary drag.
+//! keeps at most 256 targets, the last among them, and exactly 256 whole; a release commits and
+//! reports no drift for an ordinary drag, and reports a free point that trails its dragged neighbour
+//! differently on a thinned replay, with its largest drift over both coordinates; and a cursor that
+//! breaks two constraints names both.
 
 #![allow(
     clippy::arithmetic_side_effects,
@@ -26,7 +28,9 @@
 use std::fmt::Write;
 
 use geom_run::{Budget, WorkMeter};
-use geom_sketch::drag::{Dragger, MOST_WAYPOINTS, Status, replay};
+use geom_sketch::check::Checker;
+use geom_sketch::commit::Stored;
+use geom_sketch::drag::{Dragger, Frame, MOST_WAYPOINTS, Released, Status, replay};
 use geom_sketch::model::{ItemId, Sketch};
 use geom_sketch::text::parse;
 
@@ -71,7 +75,7 @@ fn a_dragged_corner_takes_the_cursor_and_its_neighbours_follow() {
     let mut drag = Dragger::begin(&s, &[ItemId::new(10, 2)], &mut meter()).unwrap();
     let frame = drag.frame(&[[500.0, 350.0]], &mut meter()).unwrap();
     assert_eq!(frame.status, Status::Held);
-    assert!(near(point(&frame.sketch, 2), [500.0, 350.0]));
+    assert_eq!(point(&frame.sketch, 2), [500.0, 350.0]);
     assert!(near(point(&frame.sketch, 1), [500.0, 0.0]));
     assert!(near(point(&frame.sketch, 3), [0.0, 350.0]));
     assert!(near(point(&frame.sketch, 0), [0.0, 0.0]));
@@ -109,12 +113,14 @@ fn a_cursor_past_a_stated_length_is_at_limit_and_names_the_length() {
     .unwrap();
     let mut drag = Dragger::begin(&s, &[ItemId::new(10, 2)], &mut meter()).unwrap();
     let frame = drag.frame(&[[900.0, 300.0]], &mut meter()).unwrap();
-    match frame.status {
-        Status::AtLimit { blocking } => {
-            assert!(blocking.contains(&ItemId::new(12, 6)), "{blocking:?}");
+    assert_eq!(
+        frame.status,
+        Status::AtLimit {
+            blocking: vec![ItemId::new(12, 6)]
         }
-        other => panic!("not at limit: {other:?}"),
-    }
+    );
+    // The projection from the cursor: ten Gauss-Newton iterations, every time.
+    assert_eq!(frame.report.iterations, 10);
     // The right side stays at x = 400, the nearest the constraints allow.
     assert!((point(&frame.sketch, 2)[0] - 400.0).abs() < 0.02);
     assert!((point(&frame.sketch, 1)[0] - 400.0).abs() < 0.02);
@@ -161,11 +167,29 @@ fn a_turn_to_the_other_branch_is_drag_limit_and_the_frame_is_the_last_good_one()
     let before = drag.frame(&[[100.0, 50.0]], &mut meter()).unwrap();
     assert_eq!(before.status, Status::Held);
     let frame = drag.frame(&[[-100.0, 50.0]], &mut meter()).unwrap();
-    match frame.status {
-        Status::DragLimit { blocking } => assert_ne!(blocking.len(), 0),
-        other => panic!("not a drag limit: {other:?}"),
-    }
+    assert_eq!(
+        frame.status,
+        Status::DragLimit {
+            blocking: vec![ItemId::new(12, 9)]
+        }
+    );
     assert_eq!(frame.sketch, before.sketch);
+    // The full step and its first half (where the two lines would meet in a point) both fail, in
+    // three iterations in all: the half is taken from where the point was before the frame.
+    assert_eq!(frame.report.iterations, 3);
+    // A cursor past the other point: its half step is past it too, so both fail again, and the
+    // frame is still the last good one.
+    let past = drag.frame(&[[-150.0, 50.0]], &mut meter()).unwrap();
+    assert_eq!(
+        past.status,
+        Status::DragLimit {
+            blocking: vec![ItemId::new(12, 9)]
+        }
+    );
+    assert_eq!(past.sketch, before.sketch);
+    // Two iterations: the full step and the half, which lies halfway from the point's place to the
+    // cursor, past the other point; a half on the near side would converge and take a third.
+    assert_eq!(past.report.iterations, 2);
 }
 
 #[test]
@@ -235,6 +259,10 @@ fn a_release_commits_the_replay_and_reports_no_drift_for_an_ordinary_drag() {
     assert_eq!(released.sketch, live.sketch);
     assert_eq!(released.moved, Vec::new());
     assert!(released.largest < 1.0, "{}", released.largest);
+    // The largest drift over both coordinates, as worked out here from the committed points.
+    let (moved, largest) = drift(&released, &live);
+    assert_eq!((released.moved.clone(), released.largest), (moved, largest));
+    assert!(largest > 0.0);
     assert_eq!(released.committed.points.len(), 4);
 }
 
@@ -242,4 +270,96 @@ fn a_release_commits_the_replay_and_reports_no_drift_for_an_ordinary_drag() {
 fn a_point_that_is_not_one_cannot_be_dragged() {
     let s = rectangle();
     assert!(Dragger::begin(&s, &[ItemId::new(11, 0)], &mut meter()).is_err());
+}
+
+#[test]
+fn a_cursor_that_breaks_two_constraints_names_both() {
+    // Both sides from the origin have stated lengths; the opposite corner taken out on both axes
+    // breaks the two of them.
+    let mut s = rectangle();
+    for (key, b, d) in [(6, 1, 400.0), (7, 3, 300.0)] {
+        s.add_constraint(geom_sketch::model::Constraint {
+            id: ItemId::new(12, key),
+            kind: geom_sketch::model::ConstraintKind::Distance {
+                a: ItemId::new(10, 0),
+                b: ItemId::new(10, b),
+                distance: geom_sketch::model::Amount::Value(d),
+            },
+            standing: geom_sketch::model::Standing::Driving,
+            priority: 0,
+        })
+        .unwrap();
+    }
+    let mut drag = Dragger::begin(&s, &[ItemId::new(10, 2)], &mut meter()).unwrap();
+    let frame = drag.frame(&[[900.0, 700.0]], &mut meter()).unwrap();
+    assert_eq!(
+        frame.status,
+        Status::AtLimit {
+            blocking: vec![ItemId::new(12, 6), ItemId::new(12, 7)]
+        }
+    );
+}
+
+#[test]
+fn exactly_256_targets_are_all_kept_and_one_more_halves_them() {
+    let s = rectangle();
+    let mut drag = Dragger::begin(&s, &[ItemId::new(10, 2)], &mut meter()).unwrap();
+    script(&mut drag, MOST_WAYPOINTS);
+    let log = drag.log_of().unwrap();
+    assert_eq!((log.every, log.path.len()), (1, MOST_WAYPOINTS));
+    script(&mut drag, 1);
+    let log = drag.log_of().unwrap();
+    // Every second of 257, from the first, holds the last: 129.
+    assert_eq!((log.every, log.path.len(), log.frames), (2, 129, 257));
+}
+
+/// The drift a release should report, worked out here from its committed grid points and the
+/// preview: each point's larger coordinate difference, the points past the fit ceiling, and the
+/// largest.
+fn drift(released: &Released, preview: &Frame) -> (Vec<(ItemId, f64)>, f64) {
+    let mut moved = Vec::new();
+    let mut largest = 0.0_f64;
+    for (id, stored) in &released.committed.points {
+        let Stored::Grid(p) = stored else {
+            panic!("{id:?} is not a grid point");
+        };
+        let shown = preview.sketch.point(*id).unwrap();
+        let dx = (p.x.get() as f64 - shown[0]).abs();
+        let dy = (p.y.get() as f64 - shown[1]).abs();
+        let d = if dx > dy { dx } else { dy };
+        if d > largest {
+            largest = d;
+        }
+        if d > Checker::fit() {
+            moved.push((*id, d));
+        }
+    }
+    (moved, largest)
+}
+
+#[test]
+fn a_release_reports_a_point_that_trails_differently_on_a_thinned_replay() {
+    // Q (10.1) is dragged in 600 frames from (1e6, 0) to (0, 1e6); P (10.0) is free and held 1e6
+    // from Q, so it trails behind, and where it ends depends on the steps it was dragged by. The
+    // release replays every third target, so P ends elsewhere, by more than the fit ceiling.
+    let mut text = HEAD.to_owned();
+    text.push_str("entity 10.0 point 0 0\n");
+    text.push_str("entity 10.1 point 1000000 0\n");
+    text.push_str("constraint 12.0 driving 0 distance 10.0 10.1 1000000\n");
+    let s = parse(&text).unwrap();
+    let mut drag = Dragger::begin(&s, &[ItemId::new(10, 1)], &mut meter()).unwrap();
+    let mut last = None;
+    for i in 1..=600 {
+        let k = f64::from(i) * (1.0e6 / 600.0);
+        last = Some(drag.frame(&[[1.0e6 - k, k]], &mut meter()).unwrap());
+    }
+    let preview = last.unwrap();
+    let released = drag.release(&mut meter()).unwrap();
+    assert_eq!(released.log.every, 3);
+    let (moved, largest) = drift(&released, &preview);
+    assert_eq!(moved.len(), 1, "{moved:?}");
+    assert_eq!(moved[0].0, ItemId::new(10, 0));
+    assert_eq!(released.moved, moved);
+    assert_eq!(released.largest, largest);
+    assert!(largest > Checker::fit(), "{largest}");
 }
