@@ -18,6 +18,9 @@
 //! - **A refusal names a size.** An infeasible chain carries [`crate::radius::Largest`]; a shared
 //!   face that is too narrow carries the factor by which every radius asking for it must be scaled
 //!   to fit.
+//! - **Only a blend's radius.** A radius asked that is not finite and positive is refused with
+//!   [`PlanError::Radius`], naming its chain, and a limit that leaves no positive radius with
+//!   [`PlanError::Num`]; no verdict is given on either.
 //! - **Nothing is built.** The plan reads facts and never calls a constructor, so it cannot leave a
 //!   hole; an unresolved overflow is an error of the plan, not a trimmed result.
 //!
@@ -104,6 +107,8 @@ pub enum PlanError {
     Num(NumError),
     /// A request, a cluster or a shared face names a chain that is not there.
     UnknownChain(usize),
+    /// The radius asked for this chain is not finite and positive: no blend has it.
+    Radius(usize),
 }
 
 impl From<OverflowError> for PlanError {
@@ -124,6 +129,7 @@ impl core::fmt::Display for PlanError {
             PlanError::Overflow(e) => e.fmt(f),
             PlanError::Num(e) => e.fmt(f),
             PlanError::UnknownChain(_) => f.write_str("a plan names a chain that is not there"),
+            PlanError::Radius(_) => f.write_str("a radius asked is not finite and positive"),
         }
     }
 }
@@ -167,7 +173,9 @@ fn crowding(
 /// # Errors
 ///
 /// [`PlanError::Overflow`] when an overflow has no allowed type, [`PlanError::UnknownChain`] for a
-/// chain index that is not there, [`PlanError::Num`] when the numbers layer refuses.
+/// chain index that is not there, [`PlanError::Radius`] for a radius asked that is not finite and
+/// positive, [`PlanError::Num`] when the numbers layer refuses (a limit that leaves no positive
+/// radius among them).
 pub fn plan(
     facts: &[ChainFacts],
     radii: &[f64],
@@ -178,11 +186,14 @@ pub fn plan(
     let mut chains = Vec::with_capacity(facts.len());
     for (i, fact) in facts.iter().enumerate() {
         let radius = radii.get(i).copied().ok_or(PlanError::UnknownChain(i))?;
+        if !(radius.is_finite() && radius > 0.0) {
+            return Err(PlanError::Radius(i));
+        }
         let found: Vec<Found> = detect(&fact.sites, radius)?;
         let overflows = resolve(&found, policy)?;
         chains.push(ChainPlan {
-            largest: largest(&fact.limits),
-            verdict: judge(&fact.limits, radius),
+            largest: largest(&fact.limits)?,
+            verdict: judge(&fact.limits, radius)?,
             overflows,
         });
     }

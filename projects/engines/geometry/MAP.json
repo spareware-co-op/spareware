@@ -1540,6 +1540,11 @@
               "doc": "A request, a cluster or a shared face names a chain that is not there.",
               "name": "UnknownChain",
               "shape": "tuple"
+            },
+            {
+              "doc": "The radius asked for this chain is not finite and positive: no blend has it.",
+              "name": "Radius",
+              "shape": "tuple"
             }
           ],
           "module": "geom_blend::plan",
@@ -1667,6 +1672,7 @@
             "**A cluster succeeds or fails as one.** [`ClusterPlan::feasible`] is true only when every chain in it is feasible with its overflows resolved and every shared face has room for all of them.",
             "**The largest feasible radius is certified, per chain.** It is the lowest lower end among the chain's limits ([`crate::radius::largest`]), so a request at or below it passes that bound.",
             "**A refusal names a size.** An infeasible chain carries [`crate::radius::Largest`]; a shared face that is too narrow carries the factor by which every radius asking for it must be scaled to fit.",
+            "**Only a blend's radius.** A radius asked that is not finite and positive is refused with [`PlanError::Radius`], naming its chain, and a limit that leaves no positive radius with [`PlanError::Num`]; no verdict is given on either.",
             "**Nothing is built.** The plan reads facts and never calls a constructor, so it cannot leave a hole; an unresolved overflow is an error of the plan, not a trimmed result."
           ],
           "job": "The blend plan: feasibility first, and the preview query (13.10, G262).",
@@ -1691,7 +1697,8 @@
             "**A refusal names the size that fits.** [`Verdict::RadiusTooLarge`] carries the largest feasible radius and the cause that sets it; the caller shows it and offers it, and never searches by retrying builds.",
             "**An open bound is reported as open.** Where a radius at the bound would leave a face or an edge of no extent, [`Largest::open`] is set and the radius reported is the largest number below the bound, not a multiple of a tolerance.",
             "**Undecided is not feasible.** A request whose radius is inside a limit's enclosure, neither below its lower end nor above its upper end, is [`Verdict::Undecided`], never accepted.",
-            "**No limit, no answer.** With no limit at all [`largest`] is `None`."
+            "**No limit, no answer.** With no limit at all [`largest`] is `None`.",
+            "**Only a blend's radius, only a size that fits.** [`judge`] refuses a radius asked that is not finite and positive, and no size named is zero or below: [`reach_limit`], [`fold_limit`], [`collapse_limit`] and [`room_limit`] refuse a width or radius that is not positive, and [`largest`] refuses a limit, made by hand, that leaves no positive radius."
           ],
           "job": "Certified radius bounds and the largest feasible radius (13.10, \"Feasibility first\", steps 3 and 5, G262).",
           "method": {

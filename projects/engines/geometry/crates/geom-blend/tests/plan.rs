@@ -69,17 +69,20 @@ fn a_face_width_sets_the_largest_radius_and_a_refusal_names_the_size_that_fits()
     let tan = half_angle_tangent([0, 0, 1], [0, 1, 0]).unwrap();
     let limit = reach_limit(iv(10.0, 10.0), tan, false).unwrap();
     assert!(limit.radius.lo() <= 10.0 && limit.radius.hi() >= 10.0);
-    let fit = largest(&[limit]).unwrap();
+    let fit = largest(&[limit]).unwrap().unwrap();
     assert_eq!(fit.cause, Cause::FaceWidth);
     assert!(fit.radius <= 10.0 && fit.radius > 9.999, "{fit:?}");
-    assert_eq!(judge(&[limit], 5.0), Verdict::Feasible);
-    assert_eq!(judge(&[limit], fit.radius), Verdict::Feasible);
-    match judge(&[limit], 12.0) {
+    assert_eq!(judge(&[limit], 5.0).unwrap(), Verdict::Feasible);
+    assert_eq!(judge(&[limit], fit.radius).unwrap(), Verdict::Feasible);
+    match judge(&[limit], 12.0).unwrap() {
         Verdict::RadiusTooLarge(l) => assert_eq!(l, fit),
         other => panic!("{other:?}"),
     }
     // A radius inside the enclosure of the limit is undecided, never accepted.
-    assert_eq!(judge(&[limit], 10.0), Verdict::Undecided(Cause::FaceWidth));
+    assert_eq!(
+        judge(&[limit], 10.0).unwrap(),
+        Verdict::Undecided(Cause::FaceWidth)
+    );
 }
 
 #[test]
@@ -89,13 +92,16 @@ fn an_open_bound_is_not_feasible_and_the_largest_is_the_number_below_it() {
         radius: iv(4.0, 4.0),
         open: true,
     };
-    let fit = largest(&[open]).unwrap();
+    let fit = largest(&[open]).unwrap().unwrap();
     assert!(
         fit.open && fit.radius < 4.0 && fit.radius > 3.999_999,
         "{fit:?}"
     );
-    assert!(matches!(judge(&[open], 4.0), Verdict::RadiusTooLarge(_)));
-    assert_eq!(judge(&[open], fit.radius), Verdict::Feasible);
+    assert!(matches!(
+        judge(&[open], 4.0).unwrap(),
+        Verdict::RadiusTooLarge(_)
+    ));
+    assert_eq!(judge(&[open], fit.radius).unwrap(), Verdict::Feasible);
 }
 
 #[test]
@@ -116,11 +122,11 @@ fn the_lowest_limit_wins_with_its_cause_and_no_limit_gives_no_answer() {
         open: false,
     };
     let limits = chain_limits(&[vec![wide, room], vec![fold]]);
-    let fit = largest(&limits).unwrap();
+    let fit = largest(&limits).unwrap().unwrap();
     assert_eq!((fit.radius, fit.cause), (6.0, Cause::Fold));
-    assert_eq!(judge(&limits, 7.0), Verdict::RadiusTooLarge(fit));
-    assert_eq!(largest(&[]), None);
-    assert_eq!(judge(&[], 1.0e9), Verdict::Feasible);
+    assert_eq!(judge(&limits, 7.0).unwrap(), Verdict::RadiusTooLarge(fit));
+    assert_eq!(largest(&[]), Ok(None));
+    assert_eq!(judge(&[], 1.0e9).unwrap(), Verdict::Feasible);
 }
 
 fn site(reach: Interval, beyond: Beyond) -> Site {
@@ -314,7 +320,7 @@ fn an_overflow_with_no_allowed_type_is_a_plan_error_and_unknown_chains_are_refus
 fn curvature_room_and_collapse_set_their_own_limits() {
     // A concave fillet cannot be larger than the supports' smallest radius of curvature, and a
     // radius at it folds the face: open.
-    let fold = fold_limit(iv(5.0, 5.0));
+    let fold = fold_limit(iv(5.0, 5.0)).unwrap();
     assert_eq!(fold.cause, Cause::Fold);
     assert!(fold.open);
     // A slot 9 wide takes a ball up to 4.5.
@@ -323,13 +329,101 @@ fn curvature_room_and_collapse_set_their_own_limits() {
     assert!(room.radius.lo() <= 4.5 && room.radius.hi() >= 4.5);
     assert_eq!(room_limit(iv(0.0, 1.0)), Err(NumError::Degenerate));
     // A cylinder of 7 collapses a ball of 7 rolling inside it.
-    let collapse = collapse_limit(iv(7.0, 7.0));
+    let collapse = collapse_limit(iv(7.0, 7.0)).unwrap();
     assert!(collapse.open);
     // Together: the lowest wins, and the open ones report the number below their bound.
     let limits = [fold, room, collapse];
-    let fit = largest(&limits).unwrap();
+    let fit = largest(&limits).unwrap().unwrap();
     assert_eq!(fit.cause, Cause::NoRoom);
     assert!(fit.radius <= 4.5 && !fit.open);
-    assert_eq!(judge(&limits, 4.0), Verdict::Feasible);
-    assert!(matches!(judge(&limits, 6.0), Verdict::RadiusTooLarge(_)));
+    assert_eq!(judge(&limits, 4.0).unwrap(), Verdict::Feasible);
+    assert!(matches!(
+        judge(&limits, 6.0).unwrap(),
+        Verdict::RadiusTooLarge(_)
+    ));
+}
+
+/// Only a blend's radius is judged, and no limit leaves a size at or below zero (the two findings
+/// of attack/smlib-blend, #739): a request of zero, below it or not finite is refused, by `judge`
+/// and by `plan` naming its chain; a width or radius that is not positive is refused as its limit
+/// is made, as `room_limit` refuses; and a limit made by hand that leaves no positive radius is
+/// refused by `largest`, `judge` and `plan` rather than named.
+#[test]
+fn a_radius_or_a_limit_that_is_not_positive_is_refused() {
+    let tan = half_angle_tangent([1, 0, 0], [0, 1, 0]).unwrap();
+    let limit = reach_limit(iv(6.0, 6.0), tan, false).unwrap();
+    for r in [0.0, -0.0, -1.0, -f64::MAX] {
+        assert_eq!(judge(&[limit], r), Err(NumError::Degenerate), "{r}");
+        assert_eq!(judge(&[], r), Err(NumError::Degenerate), "{r}");
+    }
+    for r in [f64::NAN, f64::INFINITY, f64::NEG_INFINITY] {
+        assert_eq!(judge(&[limit], r), Err(NumError::NotFinite), "{r}");
+    }
+    let facts = [
+        ChainFacts {
+            limits: vec![limit],
+            sites: vec![],
+        },
+        ChainFacts {
+            limits: vec![limit],
+            sites: vec![],
+        },
+    ];
+    let clusters = [Cluster { chains: vec![0, 1] }];
+    for r in [0.0, -2.0, f64::NAN, f64::INFINITY] {
+        let got = plan(&facts, &[1.0, r], &clusters, &[], &Policy::default());
+        assert_eq!(got, Err(PlanError::Radius(1)), "{r}");
+    }
+    // Widths and radii at or below zero are refused as their limits are made.
+    let zero = iv(0.0, 0.0);
+    assert_eq!(reach_limit(zero, tan, true), Err(NumError::Degenerate));
+    assert_eq!(
+        reach_limit(iv(-2.0, -1.0), tan, false),
+        Err(NumError::Degenerate)
+    );
+    assert_eq!(
+        reach_limit(iv(0.0, 1.0), tan, false),
+        Err(NumError::Degenerate)
+    );
+    assert_eq!(fold_limit(zero), Err(NumError::Degenerate));
+    assert_eq!(fold_limit(iv(-1.0, 2.0)), Err(NumError::Degenerate));
+    assert_eq!(collapse_limit(zero), Err(NumError::Degenerate));
+    assert_eq!(collapse_limit(iv(-1.0, 1.0)), Err(NumError::Degenerate));
+    // A limit made by hand that leaves no positive radius: refused, never named.
+    let smallest = f64::from_bits(1);
+    for (lo, open) in [(0.0, false), (-1.0, false), (0.0, true), (smallest, true)] {
+        let hand = Limit {
+            cause: Cause::Setback,
+            radius: iv(lo, 1.0),
+            open,
+        };
+        assert_eq!(
+            largest(&[limit, hand]),
+            Err(NumError::Degenerate),
+            "{lo} {open}"
+        );
+        assert_eq!(
+            judge(&[hand], 0.5),
+            Err(NumError::Degenerate),
+            "{lo} {open}"
+        );
+        let facts = [ChainFacts {
+            limits: vec![hand],
+            sites: vec![],
+        }];
+        let got = plan(&facts, &[0.5], &[], &[], &Policy::default());
+        assert_eq!(
+            got,
+            Err(PlanError::Num(NumError::Degenerate)),
+            "{lo} {open}"
+        );
+    }
+    // The smallest positive bound, closed, is a size that fits.
+    let tiny = Limit {
+        cause: Cause::Setback,
+        radius: iv(smallest, 1.0),
+        open: false,
+    };
+    assert_eq!(largest(&[tiny]).unwrap().unwrap().radius, smallest);
+    assert_eq!(judge(&[tiny], smallest), Ok(Verdict::Feasible));
 }

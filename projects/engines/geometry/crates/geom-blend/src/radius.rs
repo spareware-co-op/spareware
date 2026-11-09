@@ -23,6 +23,10 @@
 //! - **Undecided is not feasible.** A request whose radius is inside a limit's enclosure, neither
 //!   below its lower end nor above its upper end, is [`Verdict::Undecided`], never accepted.
 //! - **No limit, no answer.** With no limit at all [`largest`] is `None`.
+//! - **Only a blend's radius, only a size that fits.** [`judge`] refuses a radius asked that is not
+//!   finite and positive, and no size named is zero or below: [`reach_limit`], [`fold_limit`],
+//!   [`collapse_limit`] and [`room_limit`] refuse a width or radius that is not positive, and
+//!   [`largest`] refuses a limit, made by hand, that leaves no positive radius.
 //!
 //! Method: chapter 13.10 of the kernel architecture, "Feasibility first", steps 3 and 5, and "A
 //! refusal names the size that fits" (`projects/engines/geometry/architecture/13-sweeps-blends-offsets.md`),
@@ -156,9 +160,9 @@ pub fn half_angle_tangent(first: [i128; 3], second: [i128; 3]) -> Result<Interva
 /// # Errors
 ///
 /// [`NumError::Degenerate`] for a half-angle tangent that holds zero (a tangent edge needs no
-/// blend, and has no such limit).
+/// blend, and has no such limit), or a width that is not positive, as [`room_limit`] refuses.
 pub fn reach_limit(width: Interval, tan_half: Interval, open: bool) -> Result<Limit, NumError> {
-    if tan_half.lo() <= 0.0 {
+    if tan_half.lo() <= 0.0 || width.lo() <= 0.0 {
         return Err(NumError::Degenerate);
     }
     Ok(Limit {
@@ -171,13 +175,25 @@ pub fn reach_limit(width: Interval, tan_half: Interval, open: bool) -> Result<Li
 /// The limit a principal radius of curvature sets on the concave side: the ball cannot be larger
 /// than the smallest radius of curvature of a support across the edge, and a radius at that bound
 /// folds the face, so the bound is open.
-#[must_use]
-pub const fn fold_limit(principal_radius: Interval) -> Limit {
-    Limit {
+///
+/// # Errors
+///
+/// [`NumError::Degenerate`] for a radius of curvature that is not positive.
+pub fn fold_limit(principal_radius: Interval) -> Result<Limit, NumError> {
+    positive(principal_radius)?;
+    Ok(Limit {
         cause: Cause::Fold,
         radius: principal_radius,
         open: true,
+    })
+}
+
+/// A width or radius a limit is made from, refused unless it is certainly positive.
+fn positive(size: Interval) -> Result<(), NumError> {
+    if size.lo() <= 0.0 {
+        return Err(NumError::Degenerate);
     }
+    Ok(())
 }
 
 /// The limit a slot sets: a ball fits between two faces up to half the width between them.
@@ -186,9 +202,7 @@ pub const fn fold_limit(principal_radius: Interval) -> Limit {
 ///
 /// [`NumError::Degenerate`] for a width that is not positive.
 pub fn room_limit(width: Interval) -> Result<Limit, NumError> {
-    if width.lo() <= 0.0 {
-        return Err(NumError::Degenerate);
-    }
+    positive(width)?;
     let half = Interval::point(0.5)?.mul(width)?;
     Ok(Limit {
         cause: Cause::NoRoom,
@@ -200,19 +214,28 @@ pub fn room_limit(width: Interval) -> Result<Limit, NumError> {
 /// The limit a collapsing offset sets: a ball as wide as the cylinder or sphere it rolls on, with
 /// the ball inside, collapses that face's offset onto its axis or centre, so the support's radius is
 /// an open bound.
-#[must_use]
-pub const fn collapse_limit(support_radius: Interval) -> Limit {
-    Limit {
+///
+/// # Errors
+///
+/// [`NumError::Degenerate`] for a support radius that is not positive.
+pub fn collapse_limit(support_radius: Interval) -> Result<Limit, NumError> {
+    positive(support_radius)?;
+    Ok(Limit {
         cause: Cause::CollapsedOffset,
         radius: support_radius,
         open: true,
-    }
+    })
 }
 
 /// The largest radius that certainly builds, from the lowest lower end among the limits; `None`
 /// with no limits.
-#[must_use]
-pub fn largest(limits: &[Limit]) -> Option<Largest> {
+///
+/// # Errors
+///
+/// [`NumError::Degenerate`] for a limit that leaves no positive radius: a lower end at or below
+/// zero, or an open bound at the smallest positive double, below which only zero lies. The
+/// constructors never make one; a limit made by hand can.
+pub fn largest(limits: &[Limit]) -> Result<Option<Largest>, NumError> {
     let mut best: Option<Largest> = None;
     for limit in limits {
         let radius = if limit.open {
@@ -220,6 +243,9 @@ pub fn largest(limits: &[Limit]) -> Option<Largest> {
         } else {
             limit.radius.lo()
         };
+        if radius <= 0.0 {
+            return Err(NumError::Degenerate);
+        }
         if best.is_none_or(|b| radius < b.radius) {
             best = Some(Largest {
                 radius,
@@ -228,13 +254,25 @@ pub fn largest(limits: &[Limit]) -> Option<Largest> {
             });
         }
     }
-    best
+    Ok(best)
 }
 
 /// Answers a request for `radius`: feasible if no limit can be passed, too large with the radius
 /// that fits if one is proven passed, undecided if one holds it.
-#[must_use]
-pub fn judge(limits: &[Limit], radius: f64) -> Verdict {
+///
+/// # Errors
+///
+/// [`NumError::NotFinite`] for a radius that is not finite, [`NumError::Degenerate`] for one that
+/// is not positive (no blend has either), and as [`largest`] for a limit that leaves no positive
+/// radius.
+pub fn judge(limits: &[Limit], radius: f64) -> Result<Verdict, NumError> {
+    if !radius.is_finite() {
+        return Err(NumError::NotFinite);
+    }
+    if radius <= 0.0 {
+        return Err(NumError::Degenerate);
+    }
+    let fit = largest(limits)?;
     let mut undecided: Option<Cause> = None;
     let mut passed = false;
     for limit in limits {
@@ -257,13 +295,13 @@ pub fn judge(limits: &[Limit], radius: f64) -> Verdict {
             undecided = Some(limit.cause);
         }
     }
-    if passed && let Some(fit) = largest(limits) {
-        return Verdict::RadiusTooLarge(fit);
+    if passed && let Some(fit) = fit {
+        return Ok(Verdict::RadiusTooLarge(fit));
     }
-    match undecided {
+    Ok(match undecided {
         Some(cause) => Verdict::Undecided(cause),
         None => Verdict::Feasible,
-    }
+    })
 }
 
 /// The limits of several edges as one chain's: all of them, in order.

@@ -181,12 +181,12 @@ fn a_radius_judged_feasible_is_within_the_planar_bound_found_independently() {
             limit.radius
         );
         // A radius a tenth below the bound is feasible, one a tenth above is refused.
-        assert_eq!(judge(&[limit], want * 0.9), Verdict::Feasible);
+        assert_eq!(judge(&[limit], want * 0.9).unwrap(), Verdict::Feasible);
         assert!(matches!(
-            judge(&[limit], want * 1.1),
+            judge(&[limit], want * 1.1).unwrap(),
             Verdict::RadiusTooLarge(_)
         ));
-        let fit = largest(&[limit]).unwrap();
+        let fit = largest(&[limit]).unwrap().unwrap();
         assert!(fit.radius <= want * (1.0 + 1e-9));
         feasible += 1;
     }
