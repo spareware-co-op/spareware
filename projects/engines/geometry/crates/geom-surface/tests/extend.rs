@@ -23,9 +23,9 @@ use geom_curve::{Basis as Leaf, CurveError, Frame, Line, Trimmed};
 use geom_math::{Transform, TypedTransform};
 use geom_nurbs::{Basis, Curve, Direction, End, Limit, NurbsError, Surface};
 use geom_run::{Budget, WorkMeter};
-use geom_surface::extend::extend;
+use geom_surface::extend::{MAX_BOXES, SHRINKS, extend, extend_capped};
 use geom_surface::{
-    Cone, Cylinder, ExtendError, Extrusion, Offset, ParamBox, ParamSurface, Plane, Reach,
+    Caps, Cone, Cylinder, ExtendError, Extrusion, Offset, ParamBox, ParamSurface, Plane, Reach,
     Revolution, Side, Sphere, SurfaceKind, Torus,
 };
 use geom_test::{Seed, SplitMix64};
@@ -676,5 +676,65 @@ fn a_straight_extension_moves_nothing_whatever_the_placement() {
         let e = exact(&s, side, 1.0);
         assert_eq!((e.reached, e.deviation), (1.0, 0.0), "{side:?}");
         assert_eq!(e.surface.domain(), grown(s.domain(), side, 1.0));
+    }
+}
+
+#[test]
+fn the_certificate_stops_at_its_caps_and_not_before() {
+    let caps = |boxes, shrinks| Caps { boxes, shrinks };
+    assert_eq!(Caps::DEFAULT, caps(MAX_BOXES, SHRINKS));
+    // The arch's certificate takes exactly 7 normal bounds: the whole range across, its halves
+    // and its quarters. With a cap of 7 it passes. With 6 it stops at the 7th and refuses with
+    // nothing reached, and every slab it tries after that counts past the cap, so none passes.
+    let arch = prism(ARCH, (0.0, 1.0), (0.0, 1.0));
+    for side in [Side::VMin, Side::VMax] {
+        let e = extend_capped(
+            &arch,
+            side,
+            0.5,
+            Reach::Exactly,
+            caps(7, SHRINKS),
+            &mut meter(),
+        )
+        .unwrap();
+        assert_eq!(e.reached, 0.5);
+        let short = extend_capped(
+            &arch,
+            side,
+            0.5,
+            Reach::Exactly,
+            caps(6, SHRINKS),
+            &mut meter(),
+        );
+        assert!(
+            matches!(short, Err(ExtendError::ExtensionFailed { reached, .. }) if reached == 0.0),
+            "{side:?}: {short:?}"
+        );
+    }
+    // The cusp's as-far-as-valid extension is certified short of the cusp once, and its rebuild
+    // passes: with one shrink allowed it reaches that far, as with the default; with none it
+    // returns the source unchanged.
+    let cusp = prism(CUSP_BELOW, (0.5, 1.0), (0.0, 1.0));
+    for boxes in [64, MAX_BOXES] {
+        let run = |shrinks| {
+            extend_capped(
+                &cusp,
+                Side::UMin,
+                0.8,
+                Reach::AsFarAsValid,
+                caps(boxes, shrinks),
+                &mut meter(),
+            )
+            .unwrap()
+        };
+        let none = run(0);
+        assert_eq!((none.reached, &none.surface), (0.0, &cusp), "{boxes}");
+        let once = run(1);
+        assert!(
+            once.reached > 0.4 && once.reached <= 0.5,
+            "{boxes}: {}",
+            once.reached
+        );
+        assert_eq!(once, run(SHRINKS), "{boxes}");
     }
 }

@@ -64,7 +64,7 @@ mod terms;
 
 pub use analytic::{AffineSurface, Cone, Cylinder, Plane, Sphere, Torus, TorusForm};
 pub use derivative::{SecondDerivativeBound, SecondPartials};
-pub use extend::{ExtendError, Extended, Reach, Side};
+pub use extend::{Caps, ExtendError, Extended, Reach, Side};
 pub use implicit::{ImplicitBound, ImplicitEnclosure};
 pub use offset::Offset;
 pub use param::{ParamBox, ParamSurface, SurfaceForm, SurfaceKind, partial_index};

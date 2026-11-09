@@ -5131,60 +5131,20 @@
       "reason": "r is the bisection's lo, 0 or a positive length, never -0, so the mutant differs only at r = 0: it builds the extension by 0, which is None for a NURBS form (KnotOutside), sending it to the source unchanged as before, or the source itself for every other kind. The certificate then passes on a strip of no length, giving the source with reach 0 and deviation 0, which equals the unchanged result, or fails at 0, which returns the source unchanged. Only the work charged grows."
     },
     {
-      "file": "projects/engines/geometry/crates/geom-surface/src/extend.rs",
-      "mutant": "replace || with && in extend",
-      "line_text": "if r <= 0.0 || tries > SHRINKS {",
-      "occurrences": 1,
-      "kind": "harmless",
-      "reason": "At a reach of 0 the mutant rebuilds by 0, which is the source or None, and recertifies a strip of no length until SHRINKS tries, returning the source unchanged as the original does. Past SHRINKS tries with a positive reach, which needs an extension whose rebuilt, shorter self fails its certificate eight times over, it keeps shortening instead of stopping: what it returns is still certified at every try, or the source unchanged. SHRINKS is a cap on work, and either result keeps every guarantee of the module."
-    },
-    {
-      "file": "projects/engines/geometry/crates/geom-surface/src/extend.rs",
-      "mutant": "replace > with == in extend",
-      "line_text": "if r <= 0.0 || tries > SHRINKS {",
-      "occurrences": 1,
-      "kind": "harmless",
-      "reason": "The mutant stops at the SHRINKS-th try where the original makes one more: it differs only for an extension whose rebuilt, shorter self fails its certificate SHRINKS times over, and then returns the source unchanged where the original may return a shorter extension, certified like every result. SHRINKS is a cap on work; either answer keeps every guarantee of the module."
-    },
-    {
-      "file": "projects/engines/geometry/crates/geom-surface/src/extend.rs",
-      "mutant": "replace > with >= in extend",
-      "line_text": "if r <= 0.0 || tries > SHRINKS {",
-      "occurrences": 1,
-      "kind": "harmless",
-      "reason": "The mutant stops at the SHRINKS-th try where the original makes one more: it differs only for an extension whose rebuilt, shorter self fails its certificate SHRINKS times over, and then returns the source unchanged where the original may return a shorter extension, certified like every result. SHRINKS is a cap on work; either answer keeps every guarantee of the module."
-    },
-    {
-      "file": "projects/engines/geometry/crates/geom-surface/src/extend.rs",
-      "mutant": "replace > with == in slab_passes",
-      "line_text": "if *boxes > MAX_BOXES {",
-      "occurrences": 1,
-      "kind": "harmless",
-      "reason": "With == the slab test that reaches the MAX_BOXES-th box stops one box early, and every later one counts past MAX_BOXES, where == never holds again, so the cap no longer stops it. The certificate still ends: a slab test splits boxes only down to 2^-12 of the side, and slabs are halved only down to 2^-24 of the strip. Every box it passes is a certified normal bound, so the reach it reports is certified as the original's is, possibly farther, and only the work charged grows; MAX_BOXES is a cap on work."
-    },
-    {
-      "file": "projects/engines/geometry/crates/geom-surface/src/extend.rs",
-      "mutant": "replace > with >= in slab_passes",
-      "line_text": "if *boxes > MAX_BOXES {",
-      "occurrences": 1,
-      "kind": "harmless",
-      "reason": "The mutant stops the certificate at the MAX_BOXES-th box, one before the original. The two differ only for a certificate that needs exactly MAX_BOXES boxes: the mutant then reports the reach certified so far (refusing under Exactly, or a shorter extension, certified again) where the original certifies with its last box. MAX_BOXES is a cap on work and a refusal never claims a normal it has not shown, so both answers keep every guarantee of the module."
-    },
-    {
       "file": "projects/engines/geometry/crates/geom-surface/src/swept.rs",
       "mutant": "replace > with >= in larger",
       "line_text": "if b > a { b } else { a }",
       "occurrences": 1,
-      "kind": "harmless",
-      "reason": "The two differ only when a == b, where both are the same number unless one is -0 and the other +0 (a NURBS basis continued past a low end to exactly 0, whose end the mirror makes -0, against an asked trim end of +0). The trim's end is then the other zero: both are 0, and every point, bound, check and comparison takes them alike."
+      "kind": "equivalent",
+      "reason": "The two differ only when a == b, and then they pick equal numbers: the same double, or -0 and +0 when a NURBS basis continued past a low end to exactly 0 (whose end the mirror makes -0) meets an asked trim end of +0. Either zero is the same trim end to every point, bound, check and comparison, so no result differs."
     },
     {
       "file": "projects/engines/geometry/crates/geom-surface/src/swept.rs",
       "mutant": "replace < with <= in smaller",
       "line_text": "if b < a { b } else { a }",
       "occurrences": 1,
-      "kind": "harmless",
-      "reason": "The two differ only when a == b, where both are the same number unless one is -0 and the other +0 (a line or basis whose end is -0 against an asked end of +0). The domain or trim end is then the other zero: both are 0, and every point, bound, check and comparison takes them alike."
+      "kind": "equivalent",
+      "reason": "The two differ only when a == b, and then they pick equal numbers: the same double, or -0 and +0 when a line's or basis's end of -0 meets an asked end of +0. Either zero is the same domain or trim end to every point, bound, check and comparison, so no result differs."
     }
   ],
   "coverage_off": [

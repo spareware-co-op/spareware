@@ -69,8 +69,9 @@
 //!
 //! Cost: a definition's extension is the kind's construction; a NURBS one is
 //! `geom_nurbs::Surface::extend`'s; a reach not met costs at most [`BISECTIONS`] more of them.
-//! The certificate costs at most [`MAX_BOXES`] normal bounds, each charged to the meter. No
-//! recursion: explicit stacks.
+//! The certificate costs at most [`MAX_BOXES`] normal bounds, each charged to the meter, and an
+//! as-far-as-valid extension at most [`SHRINKS`] more certificates; [`extend_capped`] takes other
+//! caps ([`Caps`]). No recursion: explicit stacks.
 
 use alloc::vec;
 use alloc::vec::Vec;
@@ -96,7 +97,7 @@ const NARROWEST: f64 = 1.0 / 16_777_216.0;
 const NARROWEST_ACROSS: f64 = 1.0 / 4096.0;
 
 /// How many times an as-far-as-valid extension is rebuilt shorter and certified again.
-const SHRINKS: usize = 8;
+pub const SHRINKS: usize = 8;
 
 /// A side of a surface's domain.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
@@ -139,6 +140,26 @@ pub enum Reach {
     /// The length asked where the extension stays valid, or as far as it does (13.9's "as far as
     /// possible", only when asked), with the length reached reported.
     AsFarAsValid,
+}
+
+/// The work caps of an extension: how many normal bounds one certificate may take, and how many
+/// times an as-far-as-valid extension may be rebuilt shorter and certified again. [`extend`] uses
+/// [`Caps::DEFAULT`]; [`extend_capped`] takes others. A cap reached ends the work as a refusal
+/// would, never with a normal it has not certified.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub struct Caps {
+    /// The most normal bounds one certificate takes.
+    pub boxes: usize,
+    /// How many times an as-far-as-valid extension is rebuilt shorter and certified again.
+    pub shrinks: usize,
+}
+
+impl Caps {
+    /// [`MAX_BOXES`] and [`SHRINKS`].
+    pub const DEFAULT: Caps = Caps {
+        boxes: MAX_BOXES,
+        shrinks: SHRINKS,
+    };
 }
 
 /// An extended surface.
@@ -389,20 +410,21 @@ fn region(side: Side, (a, b): (f64, f64), across: (f64, f64)) -> ParamBox {
 }
 
 /// Whether the normal of `s` is certainly not zero over the slab between `a` and `b` (side
-/// parameters) and all of `across`, splitting across with an explicit stack.
+/// parameters) and all of `across`, splitting across with an explicit stack; false once the
+/// certificate's `boxes` pass `cap`.
 fn slab_passes(
     s: &SurfaceKind,
     side: Side,
     along: (f64, f64),
     across: (f64, f64),
-    boxes: &mut usize,
+    (boxes, cap): (&mut usize, usize),
     meter: &mut WorkMeter<'_>,
 ) -> Result<bool, ExtendError> {
     let narrow = (across.1 - across.0) * NARROWEST_ACROSS;
     let mut stack = vec![across];
     while let Some((a, b)) = stack.pop() {
         *boxes = boxes.saturating_add(1);
-        if *boxes > MAX_BOXES {
+        if *boxes > cap {
             return Ok(false);
         }
         meter.charge(1)?;
@@ -427,11 +449,13 @@ fn slab_passes(
 /// Whether the new strip of `s`, from the old side `old` out to its side now, has a normal
 /// certainly not zero: `None` if it has everywhere, or the length from the old side it is
 /// certified to. The strip is cut into slabs from the old side outward, halved where they do not
-/// pass; a slab still failing at its narrowest ends the reach at its near edge.
+/// pass; a slab still failing at its narrowest ends the reach at its near edge. At most `cap`
+/// normal bounds are taken.
 fn certified(
     s: &SurfaceKind,
     side: Side,
     old: f64,
+    cap: usize,
     meter: &mut WorkMeter<'_>,
 ) -> Result<Option<f64>, ExtendError> {
     let (far, across) = side_of(s.domain(), side);
@@ -452,7 +476,7 @@ fn certified(
     let mut boxes = 0usize;
     while let Some((d0, d1)) = todo.pop() {
         meter.charge(1)?;
-        if slab_passes(s, side, (at(d0), at(d1)), across, &mut boxes, meter)? {
+        if slab_passes(s, side, (at(d0), at(d1)), across, (&mut boxes, cap), meter)? {
             reached = d1;
         } else if d1 - d0 <= narrowest {
             return Ok(Some(reached));
@@ -482,6 +506,25 @@ pub fn extend(
     reach: Reach,
     meter: &mut WorkMeter<'_>,
 ) -> Result<Extended, ExtendError> {
+    extend_capped(surface, side, by, reach, Caps::DEFAULT, meter)
+}
+
+/// [`extend`] under the work caps `caps`: a certificate that would take more than `caps.boxes`
+/// normal bounds ends where it has reached, as one that cannot pass does, and an as-far-as-valid
+/// extension is rebuilt shorter at most `caps.shrinks` times before the source is returned
+/// unchanged.
+///
+/// # Errors
+///
+/// As [`extend`].
+pub fn extend_capped(
+    surface: &SurfaceKind,
+    side: Side,
+    by: f64,
+    reach: Reach,
+    caps: Caps,
+    meter: &mut WorkMeter<'_>,
+) -> Result<Extended, ExtendError> {
     if !(by.is_finite() && by > 0.0) {
         return Err(CurveError::SpanOutside.into());
     }
@@ -508,12 +551,12 @@ pub fn extend(
     if !analytic(surface) {
         let (old, _) = side_of(surface.domain(), side);
         let mut tries = 0usize;
-        while let Some(r) = certified(&made.value, side, old, meter)? {
+        while let Some(r) = certified(&made.value, side, old, caps.boxes, meter)? {
             if reach == Reach::Exactly {
                 return Err(failed(r));
             }
             tries = tries.saturating_add(1);
-            if r <= 0.0 || tries > SHRINKS {
+            if r <= 0.0 || tries > caps.shrinks {
                 return Ok(unchanged());
             }
             let Some(c) = built(surface, side, r, meter)? else {

@@ -7763,7 +7763,7 @@
           "target": "lib"
         },
         {
-          "cost": "a definition's extension is the kind's construction; a NURBS one is `geom_nurbs::Surface::extend`'s; a reach not met costs at most [`BISECTIONS`] more of them. The certificate costs at most [`MAX_BOXES`] normal bounds, each charged to the meter. No recursion: explicit stacks.",
+          "cost": "a definition's extension is the kind's construction; a NURBS one is `geom_nurbs::Surface::extend`'s; a reach not met costs at most [`BISECTIONS`] more of them. The certificate costs at most [`MAX_BOXES`] normal bounds, each charged to the meter, and an as-far-as-valid extension at most [`SHRINKS`] more certificates; [`extend_capped`] takes other caps ([`Caps`]). No recursion: explicit stacks.",
           "does": "[`extend`] continues a surface past one [`Side`] of its domain by a parameter length, the parameters of the source unchanged:",
           "family": [],
           "file": "projects/engines/geometry/crates/geom-surface/src/extend.rs",
