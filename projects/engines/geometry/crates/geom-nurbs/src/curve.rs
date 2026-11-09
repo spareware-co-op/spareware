@@ -30,6 +30,14 @@
 //!   rational curve, whose weights are taken in the normal range, n·2^−1074·(1 + 1 / Σ `N_j`·`w_j`),
 //!   the roundings before the division scaled by it and the division's own not (piece G69's fuzz
 //!   target found the point bound broken without it, at results near 2^−1074).
+//! - **Overflow.** Every w·P and w is finite, but their sums at a rational point can pass the
+//!   doubles where the exact sums do not (weights near 2^1024). The point, and the derivatives
+//!   with it, are then summed again from every w·P and w halved. Halving is exact down to
+//!   2^−1021, so each sum and quotient is the one the same arithmetic would round to with no
+//!   ceiling on the exponent, and the bounds hold; a stored value halved below that rounds by at
+//!   most 2^−1075, which the division by a weight sum above 2^1022 makes far smaller than the
+//!   2^−1074 terms counted above. Any other sum past the doubles is [`NurbsError::NotFinite`].
+//!   (An infinite weight sum gave a point of zeros: piece G70's fuzz campaign found it.)
 //! - **Derivatives.** A nonrational derivative of order k ≥ 1 is within `γ_(7p+3)` · Σ `M_j`·|`P_j`|.
 //!   A rational derivative of order k is within `γ_e` · `MC_k`, e = (k + 1)(14p + 8 + k), where
 //!   `MC_k` = (Σ `M_(k,j)`·|`w_j`·`P_j`| + `Σ_(i=1..k)` C(k, i) · (Σ `M_(i,j)`·`w_j`) · `MC_(k−i)`) / Σ `N_j`·`w_j`
@@ -239,24 +247,40 @@ impl<const D: usize> Curve<D> {
         let mut values = [0.0_f64; WIDTH];
         self.basis.funs(span, u, &mut values)?;
         let first = sub(span, p)?;
+        let (mut sum, mut weight) = self.blend(first, &values, 1.0)?;
+        if self.weights.is_none() {
+            return finite(sum);
+        }
+        if !(weight.is_finite() && sum.iter().all(|x| x.is_finite())) {
+            // A sum past the doubles while every w·P and w is finite: the same sums of everything
+            // halved give the same quotient ("Overflow" above).
+            (sum, weight) = self.blend(first, &values, 0.5)?;
+        }
+        finite(sum.map(|x| x / weight))
+    }
+
+    /// `Σ_j n_j·(s·w_j·P_j)` over the p + 1 control points from `first`, with n the basis values
+    /// `values` and s `scale`, and `Σ_j n_j·(s·w_j)` (0 for a nonrational curve), summed by
+    /// increasing index.
+    fn blend(
+        &self,
+        first: usize,
+        values: &[f64],
+        scale: f64,
+    ) -> Result<([f64; D], f64), NurbsError> {
         let mut sum = [0.0_f64; D];
         let mut weight = 0.0;
-        for j in 0..=p {
-            let nj = get(&values, j)?;
+        for j in 0..=self.degree() {
+            let nj = get(values, j)?;
             let index = add(first, j)?;
             for (sd, pd) in sum.iter_mut().zip(get(&self.points, index)?) {
-                *sd += nj * pd;
+                *sd += nj * (pd * scale);
             }
             if let Some(ws) = &self.weights {
-                weight += nj * get(ws, index)?;
+                weight += nj * (get(ws, index)? * scale);
             }
         }
-        if self.weights.is_some() {
-            for sd in &mut sum {
-                *sd /= weight;
-            }
-        }
-        finite(sum)
+        Ok((sum, weight))
     }
 
     /// The point and its derivatives at `u`: `out[k]` is the k-th derivative C^(k)(u), for k
@@ -286,21 +310,27 @@ impl<const D: usize> Curve<D> {
         for row in out.iter_mut() {
             *row = [0.0; D];
         }
-        for k in 0..=top {
-            let mut sum = [0.0_f64; D];
-            let mut weight = 0.0;
-            for j in 0..=p {
-                let nk = get(&nders, add(mul(k, width)?, j)?)?;
-                let index = add(first, j)?;
-                for (sd, pd) in sum.iter_mut().zip(get(&self.points, index)?) {
-                    *sd += nk * pd;
+        // The homogeneous derivatives, and the weight function's, of everything scaled by
+        // `scale`; whether those of order 0 are finite.
+        let mut sums = |scale: f64, out: &mut [[f64; D]]| -> Result<bool, NurbsError> {
+            let mut base = true;
+            for k in 0..=top {
+                let start = mul(k, width)?;
+                let values = nders
+                    .get(start..add(start, width)?)
+                    .ok_or(NurbsError::Defect)?;
+                let (sum, weight) = self.blend(first, values, scale)?;
+                if k == 0 {
+                    base = weight.is_finite() && sum.iter().all(|x| x.is_finite());
                 }
-                if let Some(ws) = &self.weights {
-                    weight += nk * get(ws, index)?;
-                }
+                set(out, k, sum)?;
+                set(&mut wders, k, weight)?;
             }
-            set(out, k, sum)?;
-            set(&mut wders, k, weight)?;
+            Ok(base)
+        };
+        if !sums(1.0, out)? && self.weights.is_some() {
+            // Halved exactly when `point` is, so order 0 keeps its bits ("Overflow" above).
+            sums(0.5, out)?;
         }
         if self.weights.is_some() {
             leibniz(out, &wders, top)?;
