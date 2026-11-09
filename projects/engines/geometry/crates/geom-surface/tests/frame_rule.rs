@@ -4,7 +4,9 @@
 //! between them, rebuild bit for bit and spread or refuse a closing twist; Frenet and
 //! fixed-reference frames are certified where they exist and refused, with the span, where they
 //! may not; placements are met and the turn between them shared evenly; a helical rule is a screw
-//! motion; twist and scale laws act on top of any rule; and laws are exact where given exactly.
+//! motion; twist and scale laws act on top of any rule; laws are exact where given exactly; the
+//! stations around a corner and the span reported around an inflection stop at exactly 2⁻²⁴ of
+//! the domain on any domain; and a line's length is in closed form even from a start at −∞.
 //!
 //! Seeds: each seeded law prints `seed: <hex>` and replays with `SPAREKIT_SEED`.
 
@@ -1597,4 +1599,103 @@ fn a_certified_test_examines_exactly_its_budget_of_spans() {
         frenet_defined(&path, &mut meter()),
         Err(FrameError::Undecided { from: 1.5, to: 2.0 })
     );
+}
+
+/// A quadratic B-spline on `domain`, its knot 0 doubled: two arcs, each in a plane of its own,
+/// meeting at the origin at a corner, the first arc curving out of the plane of the two tangents
+/// there, so the path near the corner is not planar at any scale.
+fn cornered(domain: (f64, f64)) -> CurveKind<3> {
+    let (a, b) = domain;
+    let basis = Basis::new(2, vec![a, a, a, 0.0, 0.0, b, b, b]).unwrap();
+    let points: [[f64; 3]; 5] = [
+        [-1.0, 0.0, 0.0],
+        [-0.5, 0.5, 0.0],
+        [0.0, 0.0, 0.0],
+        [0.2, 0.0, 0.5],
+        [0.0, 0.5, 1.0],
+    ];
+    CurveKind::Nurbs(Curve::new(basis, &points).unwrap())
+}
+
+#[test]
+fn stations_around_a_corner_stop_at_the_narrowest_span_and_report_the_shortfall() {
+    // At a corner the step across it errs about in proportion to its length (the path there is
+    // two arcs, planar only in the limit), never as its fifth power: no span holding the corner
+    // meets a tight tolerance, so the rule splits it down to 2⁻²⁴ of the domain, places it as it
+    // is and reports the shortfall in the measured twist. The domains are three wide with the
+    // corner a third or two thirds of the way along, so no split lands on it, and every span is
+    // exact: the narrowest is 3·2⁻²⁴ wide, on a domain whose middle is right of 0 or left of it.
+    let tolerance = 1e-9;
+    for domain in [(-1.0, 2.0), (-2.0, 1.0)] {
+        let s = Stations::build(
+            &cornered(domain),
+            [0.0, 0.0, 1.0],
+            1.0,
+            tolerance,
+            Closing::Open,
+            &mut WorkMeter::new(Budget::of_work(1 << 20)),
+        )
+        .unwrap();
+        let spans: Vec<(f64, f64)> = s.frames().windows(2).map(|w| (w[0].at, w[1].at)).collect();
+        let narrowest = spans
+            .iter()
+            .map(|(from, to)| to - from)
+            .fold(f64::INFINITY, f64::min);
+        assert_eq!(narrowest, 3.0 / 16_777_216.0, "{domain:?}");
+        let (from, to) = spans
+            .iter()
+            .copied()
+            .find(|(from, to)| *from < 0.0 && 0.0 < *to)
+            .unwrap();
+        assert_eq!(to - from, narrowest, "{domain:?}");
+        assert!(
+            s.measured_twist() > tolerance / PI,
+            "{domain:?}: {}",
+            s.measured_twist()
+        );
+    }
+}
+
+#[test]
+fn the_span_reported_around_an_inflection_is_exactly_the_narrowest_on_any_domain() {
+    // (t, t³, 0) inflects at 0, a third or two thirds of the way along each domain, so no split
+    // lands on it: the span reported holds it and is exactly 2⁻²⁴ of the domain wide.
+    for domain in [(-1.0, 2.0), (-2.0, 1.0)] {
+        let inflected = CurveKind::Polynomial(
+            Polynomial::new(
+                vec![[0.0; 3], [1.0, 0.0, 0.0], [0.0; 3], [0.0, 1.0, 0.0]],
+                domain,
+            )
+            .unwrap(),
+        );
+        match frenet_defined(&inflected, &mut meter()) {
+            Err(FrameError::FrameUndefined { from, to }) => {
+                assert!(from < 0.0 && 0.0 < to, "{domain:?}: [{from}, {to}]");
+                assert_eq!(to - from, 3.0 / 16_777_216.0, "{domain:?}: [{from}, {to}]");
+            }
+            other => panic!("{domain:?}: {other:?}"),
+        }
+    }
+}
+
+#[test]
+fn a_line_infinite_at_its_start_is_infinitely_long_at_every_parameter() {
+    // A line's length is its speed times the parameter run, in closed form whatever its domain:
+    // from a start at −∞ it is infinite everywhere, and a constant law, which needs no finite
+    // length, scales and turns the profile there as on any line.
+    let laws = Laws {
+        twist: Some(Law::Constant(0.5)),
+        scale: Some(Law::Constant(2.0)),
+    };
+    for direction in [[1.0, 0.0, 0.0], [0.5, -2.0, 3.0]] {
+        let ray =
+            CurveKind::Line(Line::new([0.0; 3], direction, (f64::NEG_INFINITY, 0.0)).unwrap());
+        for t in [-1e300, -1.0, 0.0] {
+            assert_eq!(arc_length(&ray, t).unwrap(), f64::INFINITY, "at {t}");
+            let p = placement(&FrameRule::Translate, &laws, &ray, t).unwrap();
+            assert_eq!(p.scale, 2.0);
+            // Half a half-turn about ẑ, the world's z, takes x̂ to the world's y.
+            assert!(angle(p.x, [0.0, 1.0, 0.0]) < 1e-15, "at {t}: {:?}", p.x);
+        }
+    }
 }
