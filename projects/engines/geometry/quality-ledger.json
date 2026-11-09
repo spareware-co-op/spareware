@@ -6004,6 +6004,22 @@
     },
     {
       "file": "projects/engines/geometry/crates/geom-sketch/src/diagnose.rs",
+      "mutant": "replace below -> Option<bool> with None",
+      "line_text": "if y_high < low {",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "below lets a choice be made on the carried bounds only when they settle it: y_high < low puts every y in its range under every largest in its range, y_low >= high the opposite, and NormBound's proof puts the y and the largest that norms computed afresh give inside those ranges, so its answer is theirs. With None every choice is made by settle on norms computed afresh, which is that same answer, and a pivot's size is tail_norm's value either way (a norm computed this step is tail_norm's, and otherwise tail_norm is called). So the pivot order, the pivots and the verdicts are the same to the bit, as the tests' independent factorisation that computes every norm afresh shows; only the work differs."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-sketch/src/diagnose.rs",
+      "mutant": "replace * with / in factor",
+      "line_text": "below(lo * PREFERRED_WITHIN, hi * PREFERRED_WITHIN, low, high)",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "With lo / 2 for 2 lo, below answers Some(false) only when lo / 2 >= high. lo is at most the column's norm and high at least the largest norm (NormBound's proof), and high is above 0 here (a zero high returns before the choice), so lo / 2 < high always and that answer never comes; Some(true) reads hi * 2, unchanged. Where the original answers Some(false) the mutant answers None, and the choice is made on norms computed afresh, which by the same proof gives the same answer. The pivot order, pivots and verdicts are unchanged to the bit; only the work differs."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-sketch/src/diagnose.rs",
       "mutant": "replace < with <= in smaller",
       "line_text": "if b < a { b } else { a }",
       "occurrences": 1,
