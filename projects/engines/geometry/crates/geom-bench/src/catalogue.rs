@@ -779,6 +779,7 @@ pub static UNMEASURED: &[(&str, &str)] = &[
     ("Roots::iter", "field accessor"),
     ("Roots::count", "a scan of four slots"),
     ("Roots::narrowed", "the halvings of quartic::compare, which is measured, to a fixed depth, once per crossing of an ellipse and a tangent construction's circle"),
+    ("quartic::sign_at_root", "Quartic::roots of one quartic, as Ellipse2::meeting measures it, and at most four quartic::compare calls, which are measured"),
     ("RealRoot::piece", "field accessor"),
     ("RealRoot::multiplicity", "field accessor"),
     ("Carrier::new", "three range checks, on the way to every carrier the benchmarks draw"),

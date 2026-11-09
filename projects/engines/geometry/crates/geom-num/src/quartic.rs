@@ -15,7 +15,9 @@
 //! brings that bound to 0 or 1. A count that stays above 1 past [`FAST_DEPTH`] means a multiple root
 //! or two very near: the quartic is then split by subresultant gcds into square-free factors, one
 //! for each multiplicity, and each isolated apart, so that a root's multiplicity is the factor it
-//! came from. [`compare`] orders two roots of two quartics.
+//! came from. [`compare`] orders two roots of two quartics, and [`sign_at_root`] gives the sign of
+//! one quartic at a root of another, which is the side of a curve a point where an ellipse meets
+//! another conic lies on.
 //!
 //! Guarantees:
 //!
@@ -50,7 +52,8 @@
 //! Cost: a few hundred products of 64 limbs for simple, well-separated roots. A multiple root adds a
 //! few hundred more of 160 limbs, about ten exact divisions, each a bit at a time, and the binary
 //! gcds of the content. [`compare`] of roots a long way apart is a few subtractions; of near ones,
-//! three signs at each level it must narrow them. No allocation; no recursion.
+//! three signs at each level it must narrow them. [`sign_at_root`] is one [`Quartic::roots`] and at
+//! most four [`compare`]s. No allocation; no recursion.
 
 use crate::error::NumError;
 use crate::interval::Interval;
@@ -1186,6 +1189,42 @@ pub fn compare(
     let (pc, qc) = (simple(first)?, simple(second)?);
     let x = order(Stretch::of(p)?, &pc, Stretch::of(q)?, &qc)?;
     Ok(if piece.falling() { x.negate() } else { x })
+}
+
+/// The sign of `p` at the real root `r` of `q`: zero exactly when `r` is a root of `p` as well.
+///
+/// At t = ∞ that is the sign of `p`'s coefficient of t⁴, as a polynomial read at degree four is
+/// there. At a finite root it is the sign `p` has as t falls to −∞, its leading term's, turned once
+/// for each real root of `p` of odd multiplicity below `r`, as only those change its sign; and each
+/// root of `p` is placed against `r` by [`compare`], which also finds a root they share.
+///
+/// # Errors
+///
+/// As for [`Quartic::roots`] and [`compare`]: [`NumError::BudgetExceeded`] if a step did not fit,
+/// which coefficients within [`COEFFICIENT_BITS`] cannot reach.
+pub fn sign_at_root(p: &Quartic, q: &Quartic, r: &RealRoot) -> Result<Sign, NumError> {
+    let Some(top) = degree(&p.c) else {
+        return Ok(Sign::Zero);
+    };
+    if r.piece == Piece::Infinity {
+        return Ok(coefficient(&p.c, 4).signum());
+    }
+    let lead = coefficient(&p.c, top).signum();
+    let mut sign = if top % 2 == 1 { lead.negate() } else { lead };
+    // The roots come in increasing order, t = ∞ last, which [`compare`] puts above every finite
+    // root: so the walk stops at the first root above `r`, at the latest at ∞.
+    for root in p.roots()?.iter() {
+        match compare(p, root, q, r)? {
+            Sign::Zero => return Ok(Sign::Zero),
+            Sign::Negative => {
+                if root.multiplicity % 2 == 1 {
+                    sign = sign.negate();
+                }
+            }
+            Sign::Positive => break,
+        }
+    }
+    Ok(sign)
 }
 
 #[cfg(test)]
