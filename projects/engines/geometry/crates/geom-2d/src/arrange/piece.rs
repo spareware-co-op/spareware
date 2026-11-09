@@ -536,12 +536,15 @@ fn certainly_off(
 ) -> Result<bool, ArrangeError> {
     let [x, _] = at;
     let ([lo, _], [hi, _]) = (enclosure_of(&piece.lo)?, enclosure_of(&piece.hi)?);
+    // Wholly left of the lower end or right of the higher, by the certified differences.
+    let left = x.sub(lo)?.certain_sign() == Some(Sign::Negative);
+    let right = x.sub(hi)?.certain_sign() == Some(Sign::Positive);
     let wrong = if upper {
         Sign::Negative
     } else {
         Sign::Positive
     };
-    Ok(x.hi() < lo.lo() || x.lo() > hi.hi() || level.certain_sign() == Some(wrong))
+    Ok(left || right || level.certain_sign() == Some(wrong))
 }
 
 /// The curve of a piece [`apart`] weighs: a circle or an ellipse.
@@ -919,9 +922,17 @@ fn cross(p: &At, a: &Way<'_>, b: &Way<'_>) -> Result<Sign, ArrangeError> {
         ) => by(first == second, turn(p, c, e)?),
         (Way::Line(d), Way::Ellipse { oval, ccw, .. }) => by(*ccw, oval.along_at(p, *d)?),
         (Way::Ellipse { oval, ccw, .. }, Way::Line(d)) => by(*ccw, oval.along_at(p, *d)?).negate(),
-        (Way::Ellipse { index: i, .. }, Way::Ellipse { index: j, .. }) if i == j => Sign::Zero,
-        (Way::Arc { .. } | Way::Ellipse { .. }, Way::Ellipse { .. })
-        | (Way::Ellipse { .. }, Way::Arc { .. }) => return Err(ArrangeError::Conic),
+        // Two pieces of one ellipse leaving one way are one curve; of two ellipses, the refusal.
+        (Way::Ellipse { index: i, .. }, Way::Ellipse { index: j, .. }) => {
+            if i == j {
+                Sign::Zero
+            } else {
+                return Err(ArrangeError::Conic);
+            }
+        }
+        (Way::Arc { .. }, Way::Ellipse { .. }) | (Way::Ellipse { .. }, Way::Arc { .. }) => {
+            return Err(ArrangeError::Conic);
+        }
     })
 }
 

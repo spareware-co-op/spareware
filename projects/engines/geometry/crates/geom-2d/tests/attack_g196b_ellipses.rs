@@ -431,6 +431,15 @@ fn an_arc_whose_circle_meets_the_ellipse_only_elsewhere_is_arranged() {
     let b = run(&[Curve::Ellipse(e), over]);
     laws(&b, "an arc away from the crossings");
     assert_eq!(b.faces().len(), 2);
+    // The circle of radius 2 about the ellipse's top (0, 3) crosses it twice, at y = (−3 + √132)/3
+    // and x = ±√(4 − (y − 3)²), near (±1.99, 2.83), on the ellipse's upper half and its own lower:
+    // its quarter from its lowest point (0, 1) to (2, 3) holds the right crossing on both pieces,
+    // and the left one lies wholly left of the quarter, so it is refused for the right one alone.
+    let short = Curve::Arc(Arc2::new(p(0, 1), p(2, 3), p(0, 3).into()).unwrap());
+    assert!(matches!(
+        try_run(&[Curve::Ellipse(e), short]),
+        Err(ArrangeError::Conic)
+    ));
 }
 
 /// A random ellipse about a grid point of a small square: its major axis a small vector, its ratio
