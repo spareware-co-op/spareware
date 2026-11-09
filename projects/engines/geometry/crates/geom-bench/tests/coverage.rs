@@ -119,7 +119,7 @@ const MATH_PRIVATE: [&str; 6] = ["atan2", "exp", "hexf", "log", "sincospi", "sup
 
 /// The modules of `geom-num`'s `generated`, one per predicate (piece G27), by path; their free
 /// functions are `generated::<predicate>::<function>`.
-const GENERATED_PARTS: [(&str, &str); 13] = [
+const GENERATED_PARTS: [(&str, &str); 17] = [
     (
         "generated::orient2d",
         include_str!("../../geom-num/src/generated/orient2d.rs"),
@@ -163,6 +163,22 @@ const GENERATED_PARTS: [(&str, &str); 13] = [
     (
         "generated::ssi_side",
         include_str!("../../geom-num/src/generated/ssi_side.rs"),
+    ),
+    (
+        "generated::tpi_height",
+        include_str!("../../geom-num/src/generated/tpi_height.rs"),
+    ),
+    (
+        "generated::mitre_time",
+        include_str!("../../geom-num/src/generated/mitre_time.rs"),
+    ),
+    (
+        "generated::mitre_side",
+        include_str!("../../geom-num/src/generated/mitre_side.rs"),
+    ),
+    (
+        "generated::mitre_at",
+        include_str!("../../geom-num/src/generated/mitre_at.rs"),
     ),
     (
         "generated::plain",

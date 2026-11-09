@@ -129,5 +129,5 @@ pub use exactness::Exactness;
 pub use grid::{Coord, GridStep, P2, P3, Rounded, Steps};
 pub use real::Real;
 pub use sign::Sign;
-pub use wide::{I256, I320, I384, I512, Wide};
+pub use wide::{I256, I320, I384, I512, I576, I768, Wide};
 pub use wide32::Wide32;

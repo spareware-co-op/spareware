@@ -336,6 +336,10 @@ Both are trimmed by the arrangement step and reported as topology changes. SMLib
 
 **Mesh offsets** use Topological Offsets (Zint, Chen, Zhu, Zorin and Schneider, [ACM TOG 44(4), 2025, doi:10.1145/3731157](https://doi.org/10.1145/3731157); MIT code at [wildmeshing/topological-offsets@d75b55e](https://github.com/wildmeshing/topological-offsets/tree/d75b55e4477dc95cd9e4781e0413d3a9d474d67d)), in section 19. Its build pulls VolumeRemesher ([JcDai/VolumeRemesher@8927a1e](https://github.com/JcDai/VolumeRemesher/tree/8927a1e057c643f1193ed50117bb3fb311b81b09), LGPL-3.0 by its repository's licence) and GMP (LGPL), which are method only (section 29).
 
+**As built (G251).** The exact ordering above is `geom_num::plane::Moving::cmp_meeting`: a `Moving` is a plane and its speed, checked below 2^125, and two meetings of four are ordered by the generated `mitre_time` in `I768`, 759 bits, each sign of its determinant of speeds by `tpi_side`. Four planes whose speeds' determinant is zero never meet at one time, and are refused as degenerate. The events' simulation, their kinds and the vertex splits are G274's.
+
+**As built (G273).** The two tests an event needs besides its order, on the same `Moving` planes. `Moving::cmp_meeting_time(four, t)` says whether the meeting of four planes comes before, at or after a time `t` of at most 2^40 − 1 grid steps (the offset distance), by the sign of nd + t ns = ns (t − te) times the sign of ns; the generated `mitre_at` does it in `I512`, 419 bits, the 4 × 4 determinant at time t. `Moving::side_at_meeting(four, other)` says which side of a fifth moving plane the meeting lies on, the validity test of an event: by Schur's complement the fifth plane's distance there is D / ns with D the 5 × 5 determinant of the rows (n, s, d), and the generated `mitre_side` expands it along the normals' three columns in `I512`, 506 bits (ten products of a 3 × 3 minor below 2^252 and a 2 × 2 minor below 2^251). Each runs its filter first, and a set of four planes with ns = 0 is `Degenerate`, as for `cmp_meeting`. The 768-bit predicate of this piece's board entry is G251's `mitre_time`, which orders two events; these two need fewer bits, so they sit in the existing total-path width.
+
 ## 13.12 Draft
 
 Moulded and cast parts need faces leaning away from the pull direction by a draft angle. Two stages, after the concepts in Parasolid's public description (pending owner check, rule 11), then a check:
@@ -408,6 +412,8 @@ A footprint roof carries one plane up from each eave at that edge's slope. Its r
 **Curved eaves.** A sloped arc eave makes a cone. A circular footprint with one slope is one exact cone. Footprints mixing arcs and lines (bays, turrets meeting a hip roof) make events among planes and cones that no published exact or certified skeleton method covers (13.22). Until `geom-skeleton` has one, they fail with `CurvedSkeletonUnsupported`, offering a polygonal eave within a stated deviation or a roof built by booleans.
 
 **Output**: a plane-based roof solid, or roof surfaces as a sheet to thicken into layers (13.11), with faces `roof(eave edge)` and `gable(edge)` and edges classed as ridge, hip or valley for drawings and schedules. Dormers, openings and meeting roofs are booleans (section 11).
+
+**As built (G251).** Ordering events by height is `geom_num::plane::Tpi::cmp_height`, the generated `tpi_height` in `I576`, 547 bits (6.2), each point's weight sign the one its `Tpi` holds. The skeleton that uses it is G271's.
 
 ## 13.16 Sheet metal (`geom-sheet`)
 

@@ -1444,10 +1444,11 @@ struct Row {
 }
 
 /// Every test file the matrix names, read when the test is built.
-const FILES: [(&str, &str); 6] = [
+const FILES: [(&str, &str); 7] = [
     ("attack_g28.rs", include_str!("attack_g28.rs")),
     ("attack_g29.rs", include_str!("attack_g29.rs")),
     ("attack_g30.rs", include_str!("attack_g30.rs")),
+    ("attack_g273.rs", include_str!("attack_g273.rs")),
     ("plane.rs", include_str!("plane.rs")),
     ("attack_plane.rs", include_str!("attack_plane.rs")),
     ("verification.rs", include_str!("verification.rs")),
@@ -1584,6 +1585,35 @@ fn perturbed(
     }
 }
 
+/// The row of `Moving::side_at_meeting` (piece G273), the one predicate on moving planes.
+fn side_at_meeting_row() -> Row {
+    use Class::*;
+    use Where::Test;
+    Row {
+        predicate: "plane::Moving::side_at_meeting",
+        call: "Moving::side_at_meeting",
+        classes: [
+            (Random, Test("attack_g273.rs", "sides_are_the_exact_signs")),
+            (
+                OneStep,
+                Test(
+                    "attack_g273.rs",
+                    "one_step_from_degenerate_is_decided_exactly",
+                ),
+            ),
+            (
+                Boundary,
+                Test("attack_g273.rs", "the_filter_boundary_is_crossed_both_ways"),
+            ),
+            (
+                Corners,
+                Test("attack_g273.rs", "events_at_the_extremes_are_exact"),
+            ),
+            (Laws, Test("attack_g273.rs", "the_side_obeys_its_laws")),
+        ],
+    }
+}
+
 fn matrix() -> Vec<Row> {
     use Class::*;
     use Where::{NotApplicable, Test};
@@ -1614,6 +1644,7 @@ fn matrix() -> Vec<Row> {
                 (Laws, Test("plane.rs", "plane_laws")),
             ],
         },
+        side_at_meeting_row(),
         implicit(
             "plane::Plane::side_of_tpi",
             ".side_of_tpi",
