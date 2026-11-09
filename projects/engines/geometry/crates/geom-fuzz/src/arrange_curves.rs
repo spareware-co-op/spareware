@@ -192,10 +192,11 @@ fn curves_of(case: &Case) -> Result<Vec<Curve>, NumError> {
                 q,
             } => {
                 let m = if major == [0, 0] { [1, 0] } else { major };
+                let [cx, cy] = centre;
                 let g = gcd(p, q);
                 let (p, q) = (p.checked_div(g).unwrap_or(p), q.checked_div(g).unwrap_or(q));
                 out.push(Curve::Ellipse(Ellipse2::new(
-                    point(centre[0], centre[1])?,
+                    point(cx, cy)?,
                     m.map(i64::from),
                     i64::from(p),
                     i64::from(q),
