@@ -10,7 +10,10 @@ use census_support::{Replay, ids_for};
 use construct_transport::census::Downloads;
 use construct_transport::jsnum::Maybe;
 use construct_transport::project::Project;
-use construct_transport::sample::{AnalyseOpts, BuildOpts, Modules, PERIODS, SampleError, analyse, assign_period, build, turn_count_csv, CsvOpts};
+use construct_transport::sample::{
+    AnalyseOpts, BuildOpts, CsvOpts, Modules, PERIODS, SampleError, analyse, assign_period, build,
+    turn_count_csv,
+};
 use edit_support::{Checker, load_json};
 use sample_support::{Fakes, exchanges};
 use serde_json::{Value, json};
@@ -48,12 +51,19 @@ fn state_of(p: &Project) -> Value {
 }
 
 fn size_of(p: &Project) -> Option<f64> {
-    p.extra.get("sample").and_then(|s| s.get("size")).and_then(Value::as_f64)
+    p.extra
+        .get("sample")
+        .and_then(|s| s.get("size"))
+        .and_then(Value::as_f64)
 }
 
 fn check_size(ck: &mut Checker, label: &str, got: Option<f64>, want: &Value) {
     match (got, want.as_f64()) {
-        (Some(g), Some(w)) => ck.same(&format!("{label}: size within 1%"), &((g - w).abs() / w < 0.01), &true),
+        (Some(g), Some(w)) => ck.same(
+            &format!("{label}: size within 1%"),
+            &((g - w).abs() / w < 0.01),
+            &true,
+        ),
         (None, None) => {}
         (g, w) => ck.same(&format!("{label}: size"), &g, &w),
     }
@@ -76,22 +86,51 @@ fn the_drury_sample_is_built_and_analysed_as_the_prototype_does() {
         let mut status: Vec<Value> = Vec::new();
         let cancel_fn = || cancelled.get();
         // without the feature scripts the prototype still has the existing land use and calibration engine, which are core scripts
-        let modules = if case["features"].as_bool().unwrap() { Modules::default() } else { Modules { elu: true, cb: true, ..Modules::none() } };
+        let modules = if case["features"].as_bool().unwrap() {
+            Modules::default()
+        } else {
+            Modules {
+                elu: true,
+                cb: true,
+                ..Modules::none()
+            }
+        };
         let o = &case["opts"];
-        let opts = BuildOpts { gtfs: o.get("gtfs").and_then(Value::as_bool), run: o.get("run").and_then(Value::as_bool) == Some(true), extras: o.get("extras").and_then(Value::as_bool), modules, cancel: Some(&cancel_fn) };
+        let opts = BuildOpts {
+            gtfs: o.get("gtfs").and_then(Value::as_bool),
+            run: o.get("run").and_then(Value::as_bool) == Some(true),
+            extras: o.get("extras").and_then(Value::as_bool),
+            modules,
+            cancel: Some(&cancel_fn),
+        };
         let mut on_status = |t: &str| {
             status.push(json!(t));
             if cancel_on.as_deref().is_some_and(|c| t.contains(c)) {
                 cancelled.set(true);
             }
         };
-        let r = build(&mut ids, &mut net, &mut dl, &mut hooks, &opts, &mut on_status);
+        let r = build(
+            &mut ids,
+            &mut net,
+            &mut dl,
+            &mut hooks,
+            &opts,
+            &mut on_status,
+        );
         let status_len_build = status.len();
-        ck.same(&format!("{name}: requests"), &net.used(), &case["log"].as_array().unwrap().len());
+        ck.same(
+            &format!("{name}: requests"),
+            &net.used(),
+            &case["log"].as_array().unwrap().len(),
+        );
         match (&r, case.get("error")) {
             (Err(e), Some(want)) => {
                 ck.check(&format!("{name}: error"), &json!({ "message": e.message(), "stage": match e { SampleError::Failed { stage, .. } => json!(stage), _ => Value::Null }, "abort": e.is_cancel() }), want);
-                ck.check(&format!("{name}: progress"), &Value::Array(status.clone()), &case["status"]);
+                ck.check(
+                    &format!("{name}: progress"),
+                    &Value::Array(status.clone()),
+                    &case["status"],
+                );
                 continue;
             }
             (Err(e), None) => {
@@ -106,19 +145,48 @@ fn the_drury_sample_is_built_and_analysed_as_the_prototype_does() {
         }
         let mut b = r.ok().unwrap();
         ck.check(&format!("{name}: notes"), &json!(b.notes), &case["notes"]);
-        ck.check(&format!("{name}: failed"), &Value::Array(b.failed.iter().map(|f| f.to_value()).collect()), &case["failed"]);
+        ck.check(
+            &format!("{name}: failed"),
+            &Value::Array(b.failed.iter().map(|f| f.to_value()).collect()),
+            &case["failed"],
+        );
         ck.check(&format!("{name}: ms"), &json!(b.ms), &case["ms"]);
         let sv = &case["scenarios"];
         ck.check(&format!("{name}: scenarios"), &json!({ "s0": b.scenarios.s0, "s1": b.scenarios.s1, "s2": b.scenarios.s2, "s3": b.scenarios.s3 }), &json!({ "s0": sv["S0"], "s1": sv["S1"], "s2": sv["S2"], "s3": sv["S3"] }));
-        ck.check(&format!("{name}: stand-in calls"), &Value::Array(hooks.calls.clone()), &case["calls"]);
-        ck.same(&format!("{name}: every junction answer used"), &hooks.approaches_done(), &true);
+        ck.check(
+            &format!("{name}: stand-in calls"),
+            &Value::Array(hooks.calls.clone()),
+            &case["calls"],
+        );
+        ck.same(
+            &format!("{name}: every junction answer used"),
+            &hooks.approaches_done(),
+            &true,
+        );
         ck.same(&format!("{name}: every request made"), &net.done(), &true);
-        ck.check(&format!("{name}: progress"), &Value::Array(status[..status_len_build].to_vec()), &json!(case["status"].as_array().unwrap()[..status_len_build]));
-        ck.check(&format!("{name}: results"), &res_summary(&b.project), &case["res"]);
-        ck.check(&format!("{name}: project"), &state_of(&b.project), &case["after"]);
+        ck.check(
+            &format!("{name}: progress"),
+            &Value::Array(status[..status_len_build].to_vec()),
+            &json!(case["status"].as_array().unwrap()[..status_len_build]),
+        );
+        ck.check(
+            &format!("{name}: results"),
+            &res_summary(&b.project),
+            &case["res"],
+        );
+        ck.check(
+            &format!("{name}: project"),
+            &state_of(&b.project),
+            &case["after"],
+        );
         check_size(&mut ck, name, size_of(&b.project), &case["size"]);
         if let Some(t) = case.get("turnCsv") {
-            let s0 = b.project.scenarios.iter().find(|s| s.role.is("existing")).unwrap();
+            let s0 = b
+                .project
+                .scenarios
+                .iter()
+                .find(|s| s.role.is("existing"))
+                .unwrap();
             for (sid, want) in t.as_object().unwrap() {
                 if sid == "named" {
                     continue;
@@ -128,7 +196,14 @@ fn the_drury_sample_is_built_and_analysed_as_the_prototype_does() {
                 ck.check(&format!("{name}: turning count {sid}"), &json!({ "csv": got.csv, "legs": got.legs.iter().cloned().collect::<std::collections::BTreeMap<_, _>>(), "centre": got.centre, "name": got.name }), want);
             }
             let first = s0.sites.get().unwrap().values().next().unwrap();
-            let got = turn_count_csv(s0, first, &CsvOpts { name: Some("Named junction".into()), date: Some("2026-04-01".into()) });
+            let got = turn_count_csv(
+                s0,
+                first,
+                &CsvOpts {
+                    name: Some("Named junction".into()),
+                    date: Some("2026-04-01".into()),
+                },
+            );
             ck.check(&format!("{name}: named turning count"), &json!({ "csv": got.csv, "legs": got.legs.iter().cloned().collect::<std::collections::BTreeMap<_, _>>(), "centre": got.centre, "name": got.name }), &t["named"][0]);
         }
         if let Some(a) = case.get("analyse") {
@@ -142,7 +217,10 @@ fn the_drury_sample_is_built_and_analysed_as_the_prototype_does() {
                 }
             };
             hooks.calls.clear();
-            let mut own = |p: &mut Project, scs: &[usize], _s: &mut dyn FnMut(&str)| -> Result<(), SampleError> {
+            let mut own = |p: &mut Project,
+                           scs: &[usize],
+                           _s: &mut dyn FnMut(&str)|
+             -> Result<(), SampleError> {
                 for &si in scs {
                     for period in PERIODS {
                         assign_period(p, si, period, None);
@@ -150,26 +228,63 @@ fn the_drury_sample_is_built_and_analysed_as_the_prototype_does() {
                 }
                 Ok(())
             };
-            let mut aopts = AnalyseOpts { extras: ao["extras"].as_bool(), modules, cancel: Some(&cancel_fn), runs: None };
+            let mut aopts = AnalyseOpts {
+                extras: ao["extras"].as_bool(),
+                modules,
+                cancel: Some(&cancel_fn),
+                runs: None,
+            };
             if ao["ownRuns"].as_bool() == Some(true) {
                 aopts.runs = Some(&mut own);
             }
-            let out = analyse(&mut b.project, &mut ids, &mut hooks, &mut aopts, &mut notes, &mut st2);
+            let out = analyse(
+                &mut b.project,
+                &mut ids,
+                &mut hooks,
+                &mut aopts,
+                &mut notes,
+                &mut st2,
+            );
             let label = format!("{name} (analyse)");
             match (&out, a.get("error")) {
                 (Ok(o), None) => {
                     ck.check(&format!("{label}: ms"), &json!(o.ms), &a["out"]["ms"]);
                     check_size(&mut ck, &label, Some(o.size), &a["out"]["size"]);
                 }
-                (Err(e), Some(want)) => ck.check(&format!("{label}: error"), &json!({ "message": e.message(), "abort": e.is_cancel() }), want),
+                (Err(e), Some(want)) => ck.check(
+                    &format!("{label}: error"),
+                    &json!({ "message": e.message(), "abort": e.is_cancel() }),
+                    want,
+                ),
                 (Ok(_), Some(_)) => ck.same(&format!("{label}: expected an error"), &false, &true),
-                (Err(e), None) => ck.same(&format!("{label}: no error"), &e.message(), &String::new()),
+                (Err(e), None) => {
+                    ck.same(&format!("{label}: no error"), &e.message(), &String::new())
+                }
             }
             ck.check(&format!("{label}: notes"), &json!(notes), &a["notes"]);
-            ck.check(&format!("{label}: stand-in calls"), &Value::Array(hooks.calls.clone()), &a["calls"]);
-            ck.check(&format!("{label}: progress"), &Value::Array(status[status_len_build..].to_vec()), &json!(case["status"].as_array().unwrap()[a["statusFrom"].as_u64().unwrap() as usize..]));
-            ck.check(&format!("{label}: results"), &res_summary(&b.project), &a["res"]);
-            ck.check(&format!("{label}: project"), &state_of(&b.project), &a["after"]);
+            ck.check(
+                &format!("{label}: stand-in calls"),
+                &Value::Array(hooks.calls.clone()),
+                &a["calls"],
+            );
+            ck.check(
+                &format!("{label}: progress"),
+                &Value::Array(status[status_len_build..].to_vec()),
+                &json!(
+                    case["status"].as_array().unwrap()
+                        [a["statusFrom"].as_u64().unwrap() as usize..]
+                ),
+            );
+            ck.check(
+                &format!("{label}: results"),
+                &res_summary(&b.project),
+                &a["res"],
+            );
+            ck.check(
+                &format!("{label}: project"),
+                &state_of(&b.project),
+                &a["after"],
+            );
             check_size(&mut ck, &label, size_of(&b.project), &a["size"]);
         }
     }

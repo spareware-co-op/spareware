@@ -25,12 +25,16 @@ fn stress_tests() {
     let mut flagged = 0;
     let mut links = 0;
     let mut total = 0;
-    for f in ["expected/calibrate-stress-corridor.json", "expected/calibrate-stress-grid.json"] {
+    for f in [
+        "expected/calibrate-stress-corridor.json",
+        "expected/calibrate-stress-grid.json",
+    ] {
         let all = load_json(f);
         for c in all["cases"].as_array().expect("cases") {
             let name = c["name"].as_str().expect("name");
             let how = &c["how"];
-            let mut p = Project::from_json(all["projectText"].as_str().expect("text")).expect("project");
+            let mut p =
+                Project::from_json(all["projectText"].as_str().expect("text")).expect("project");
             let sc_id = p.scenarios[0].id.clone();
             if !how["noRes"].as_bool().unwrap_or(false) {
                 run_both(&mut p, &sc_id);
@@ -42,18 +46,34 @@ fn stress_tests() {
             let scenario = how["scIndex"].as_u64().unwrap_or(0) as usize;
             if scenario > 0 {
                 let sc = p.scenarios[scenario].clone();
-                let res = assign(&p, &sc, &p.settings, &AssignOpts { period: Some("AM".to_string()), ..AssignOpts::default() }, None);
+                let res = assign(
+                    &p,
+                    &sc,
+                    &p.settings,
+                    &AssignOpts {
+                        period: Some("AM".to_string()),
+                        ..AssignOpts::default()
+                    },
+                    None,
+                );
                 calibrate_support::store_res(&mut p.scenarios[scenario], "AM", &res);
             }
             let sc_id = p.scenarios[scenario].id.clone();
             let opts = &c["opts"];
             let period = opts["period"].as_str();
-            let factors: Option<Vec<f64>> = opts["factors"].as_array().map(|a| a.iter().map(|x| x.as_f64().expect("factor")).collect());
+            let factors: Option<Vec<f64>> = opts["factors"]
+                .as_array()
+                .map(|a| a.iter().map(|x| x.as_f64().expect("factor")).collect());
             let mut prog: Vec<Value> = Vec::new();
             let mut cb = |k: f64, n: f64, m: &str| prog.push(json!([pn(k), pn(n), m]));
-            let r = stress_test(&p, &sc_id, period, factors.as_deref(), Some(&mut cb)).expect("stress test");
+            let r = stress_test(&p, &sc_id, period, factors.as_deref(), Some(&mut cb))
+                .expect("stress test");
             let label = format!("{f}: {name}");
-            assert_close(&Value::Array(prog), &c["progress"], &format!("{label}: progress"));
+            assert_close(
+                &Value::Array(prog),
+                &c["progress"],
+                &format!("{label}: progress"),
+            );
             let got = json!({
                 "scId": r.sc_id, "period": r.period, "factors": r.factors, "top": r.nodes.first().map(|n| n.id.clone()),
                 "nodes": r.nodes.iter().map(|n| json!({ "id": n.id, "name": n.name, "dos0": pn(n.dos0), "sens": pn(n.sens), "flag": n.flag,
@@ -66,7 +86,10 @@ fn stress_tests() {
                 // the project is held as JSON, whose objects serde_json sorts by key, so only the set of junctions is compared
                 for v in [&mut got, &mut want] {
                     v["top"] = Value::Null;
-                    v["nodes"].as_array_mut().expect("nodes").sort_by_key(|n| n["id"].as_str().unwrap_or("").to_string());
+                    v["nodes"]
+                        .as_array_mut()
+                        .expect("nodes")
+                        .sort_by_key(|n| n["id"].as_str().unwrap_or("").to_string());
                 }
             }
             assert_close(&got, &want, &label);
@@ -76,5 +99,8 @@ fn stress_tests() {
         }
     }
     assert_eq!(total, 20);
-    assert!(flagged >= 2 && links >= 10, "{flagged} flagged junctions and {links} roads over capacity across the cases");
+    assert!(
+        flagged >= 2 && links >= 10,
+        "{flagged} flagged junctions and {links} roads over capacity across the cases"
+    );
 }

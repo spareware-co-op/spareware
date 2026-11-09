@@ -58,7 +58,7 @@ use geom_topo::{
     Body, Builder, Edge, Face, Fin, Ix, Loop, PointKind, Region, Sense, Shell, TopoError, Vertex,
 };
 
-use crate::build::{Made, Motion, PER_ROW, PHASE, fail, finish, unbuilt};
+use crate::build::{Made, Motion, PHASE, charge_rows, fail, finish, unbuilt};
 
 /// The most a rotation held in doubles can stretch a length: 2^−34 (`geom_num::ladder::ANGULAR`,
 /// the `ε_ang` such a rotation keeps lengths within), as 1 + 2^−34 written over 2^34.
@@ -288,7 +288,7 @@ fn run(
     };
     ctx.run(|meter| {
         let copy = moved_copy(ctx, meter, input, &t, &names, &keep)?;
-        settle(ctx, meter, copy, Some(motion))
+        settle(ctx, copy, Some(motion))
     })
 }
 
@@ -312,13 +312,11 @@ pub(crate) struct Copied {
 /// where groups 2 and 3 follow it today.
 pub(crate) fn settle(
     ctx: &OpContext<'_>,
-    meter: &mut WorkMeter<'_>,
     copy: Copied,
     motion: Option<Motion>,
 ) -> Result<OpOutput<Made>, OpError> {
     finish(
         ctx,
-        meter,
         copy.body,
         copy.records,
         copy.names,
@@ -376,9 +374,7 @@ pub(crate) fn moved_copy(
     .into_iter()
     .try_fold(0u64, |n, k| n.checked_add(u64::from(a.rows(k))))
     .ok_or_else(defect)?;
-    PER_ROW
-        .charge(meter, rows)
-        .map_err(|stop| ctx.stopped(meter, stop, PHASE))?;
+    charge_rows(ctx, meter, rows)?;
     let mut b = Builder::new();
     let out = &mut b.arenas;
     // Points: rounded once each.

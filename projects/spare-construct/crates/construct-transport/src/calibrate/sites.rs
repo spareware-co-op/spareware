@@ -1,7 +1,10 @@
 //! Counted sites against a result (`Calibrate.sites`), count groups fitted as totals (`Calibrate.parallel`,
 //! `Calibrate.units`) and the weights of counts in estimation.
 
-use crate::datahub::{Count, Data, Match, OBS_METHODS, count_weight, is_estimate, matches, model_flow, geh, period_vol, Matches};
+use crate::datahub::{
+    Count, Data, Match, Matches, OBS_METHODS, count_weight, geh, is_estimate, matches, model_flow,
+    period_vol,
+};
 use crate::jsnum::math_max;
 use crate::project::{Scenario, Settings};
 use crate::results::Res;
@@ -104,8 +107,12 @@ pub fn sites(
             continue;
         }
         let Some(mt) = m.get(&c.id) else { continue };
-        let Some(pv) = period_vol(c, period, s) else { continue };
-        let Some(model) = model_flow(res, mt) else { continue };
+        let Some(pv) = period_vol(c, period, s) else {
+            continue;
+        };
+        let Some(model) = model_flow(res, mt) else {
+            continue;
+        };
         let keys: Vec<String> = if mt.dir == "both" {
             vec![format!("{}:ab", mt.link), format!("{}:ba", mt.link)]
         } else {
@@ -118,7 +125,10 @@ pub fn sites(
             obs,
             model,
             geh: geh(model, obs),
-            arcs: keys.iter().filter_map(|k| idx.get(k.as_str()).copied()).collect(),
+            arcs: keys
+                .iter()
+                .filter_map(|k| idx.get(k.as_str()).copied())
+                .collect(),
             w: weight_of(c, period, opts, s),
         });
     }
@@ -242,7 +252,10 @@ pub fn parallel(res: &Res, rows: &[SiteRow], groups: &[Group], s: &Settings) -> 
     let mut shared: HashMap<usize, f64> = HashMap::new();
     let mut flow: HashMap<usize, f64> = HashMap::new();
     for x in &gs {
-        flow.insert(x.gi, x.members.iter().fold(0.0f64, |s, &k| s + rows[k].model));
+        flow.insert(
+            x.gi,
+            x.members.iter().fold(0.0f64, |s, &k| s + rows[k].model),
+        );
     }
     if let Some(paths) = res.paths.get() {
         for od in paths {
@@ -275,7 +288,10 @@ pub fn parallel(res: &Res, rows: &[SiteRow], groups: &[Group], s: &Settings) -> 
     for x in &gs {
         let g = &groups[x.gi];
         let sh = shared.get(&x.gi).copied().unwrap_or(0.0) / pf;
-        let lim = math_max(SEQ_MIN_PCU, SEQ_SHARE * flow.get(&x.gi).copied().unwrap_or(0.0));
+        let lim = math_max(
+            SEQ_MIN_PCU,
+            SEQ_SHARE * flow.get(&x.gi).copied().unwrap_or(0.0),
+        );
         let ids: Vec<String> = x.members.iter().map(|&k| rows[k].c.id.clone()).collect();
         if sh > lim {
             out.rejected.push(Rejected {

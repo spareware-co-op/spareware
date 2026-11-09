@@ -102,7 +102,11 @@ pub fn nz_offset_ms(utc_ms: f64) -> f64 {
     // the instants daylight time starts and ends in this year (in UTC)
     let start = dst_start_day(y) as f64 * DAY + 2.0 * HOUR - 12.0 * HOUR;
     let end = dst_end_day(y) as f64 * DAY + 3.0 * HOUR - 13.0 * HOUR;
-    if utc_ms < end || utc_ms >= start { 13.0 * HOUR } else { 12.0 * HOUR }
+    if utc_ms < end || utc_ms >= start {
+        13.0 * HOUR
+    } else {
+        12.0 * HOUR
+    }
 }
 
 /// `nzDate(now)`: the New Zealand date at an instant (ms since 1970).
@@ -114,7 +118,9 @@ pub fn nz_date(utc_ms: f64) -> NzDate {
 
 /// `new Date(ms).toLocaleDateString('en-NZ', { month: 'short', year: 'numeric' })` in New Zealand time: "Mar 2025" ("Sept" for September).
 pub fn nz_month_year(utc_ms: f64) -> String {
-    const MONTHS: [&str; 12] = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sept", "Oct", "Nov", "Dec"];
+    const MONTHS: [&str; 12] = [
+        "Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sept", "Oct", "Nov", "Dec",
+    ];
     let d = nz_date(utc_ms);
     format!("{} {}", MONTHS[(d.m - 1) as usize], d.y)
 }

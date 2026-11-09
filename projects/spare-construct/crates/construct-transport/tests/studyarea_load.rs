@@ -18,11 +18,23 @@ use studyarea_support::{NOW, corners, exchanges, fixed_ids, project};
 fn the_size_of_a_study_area_is_judged_as_the_prototype_does() {
     let ex = load_json("expected/studyarea-estimate.json");
     let mut ck = Checker::default();
-    ck.same("warning limit", &construct_transport::studyarea::WARN_KM2, &ex["constants"]["WARN_KM2"].as_f64().unwrap());
-    ck.same("refusal limit", &construct_transport::studyarea::MAX_KM2, &ex["constants"]["MAX_KM2"].as_f64().unwrap());
+    ck.same(
+        "warning limit",
+        &construct_transport::studyarea::WARN_KM2,
+        &ex["constants"]["WARN_KM2"].as_f64().unwrap(),
+    );
+    ck.same(
+        "refusal limit",
+        &construct_transport::studyarea::MAX_KM2,
+        &ex["constants"]["MAX_KM2"].as_f64().unwrap(),
+    );
     for (i, c) in ex["cases"].as_array().expect("cases").iter().enumerate() {
         let e = estimate(&corners(&c["bounds"]));
-        ck.check(&format!("estimate[{i}] {}", c["bounds"]), &e.to_value(), &c["out"]);
+        ck.check(
+            &format!("estimate[{i}] {}", c["bounds"]),
+            &e.to_value(),
+            &c["out"],
+        );
     }
     ck.finish("study area estimates");
 }
@@ -31,7 +43,12 @@ fn the_size_of_a_study_area_is_judged_as_the_prototype_does() {
 fn the_crash_window_follows_new_zealands_calendar() {
     let ex = load_json("expected/studyarea-load.json");
     let mut ck = Checker::default();
-    for (i, c) in ex["casWindow"].as_array().expect("cases").iter().enumerate() {
+    for (i, c) in ex["casWindow"]
+        .as_array()
+        .expect("cases")
+        .iter()
+        .enumerate()
+    {
         let w = cas_window(c["now"].as_f64().unwrap(), c["years"].as_f64());
         let out = &c["out"];
         let got = json!({
@@ -39,7 +56,11 @@ fn the_crash_window_follows_new_zealands_calendar() {
             "lagNote": if let Some(y) = w.lag_year { json!(format!("{y} may be incomplete (CAS entry lag up to 3 months, MBCM)")) } else { json!("") },
             "label": w.label, "where": w.where_,
         });
-        ck.check(&format!("casWindow[{i}] {} years {}", c["now"], c["years"]), &got, out);
+        ck.check(
+            &format!("casWindow[{i}] {} years {}", c["now"], c["years"]),
+            &got,
+            out,
+        );
     }
     ck.finish("crash windows");
 }
@@ -72,7 +93,12 @@ fn counts_and_crashes_download_and_fail_as_the_prototype_does() {
         let mut net = Replay::new(&case["log"], &table);
         let ids = fixed_ids();
         let b = corners(&case["bounds"]);
-        let which: Vec<&str> = case["which"].as_array().unwrap().iter().map(|w| w.as_str().unwrap()).collect();
+        let which: Vec<&str> = case["which"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|w| w.as_str().unwrap())
+            .collect();
         let opts = LoadOpts {
             cas_years: case["opts"].get("casYears").map(value_to_number),
             timeout_ms: case["opts"].get("timeout").map(value_to_number),
@@ -82,15 +108,41 @@ fn counts_and_crashes_download_and_fail_as_the_prototype_does() {
             let label = format!("{name} (call {i})");
             let before = net.used();
             let smark = status.len();
-            let got = load_all(&mut p, &ids, &mut net, &b, &which, &mut |t| status.push(t.to_string()), &opts);
+            let got = load_all(
+                &mut p,
+                &ids,
+                &mut net,
+                &b,
+                &which,
+                &mut |t| status.push(t.to_string()),
+                &opts,
+            );
             let v = match got {
                 Ok(m) => json!({ "msgs": m, "error": null }),
                 Err(e) => json!({ "msgs": null, "error": e }),
             };
-            ck.check(&format!("{label}: answer"), &v, &json!({ "msgs": r["msgs"], "error": r["error"] }));
-            ck.same(&format!("{label}: requests"), &vec![before, net.used()], &vec![r["requests"][0].as_u64().unwrap() as usize, r["requests"][1].as_u64().unwrap() as usize]);
-            let (s0, s1) = (r["status"][0].as_u64().unwrap() as usize, r["status"][1].as_u64().unwrap() as usize);
-            ck.check(&format!("{label}: messages"), &json!(status[smark..]), &json!(case["status"].as_array().unwrap()[s0..s1]));
+            ck.check(
+                &format!("{label}: answer"),
+                &v,
+                &json!({ "msgs": r["msgs"], "error": r["error"] }),
+            );
+            ck.same(
+                &format!("{label}: requests"),
+                &vec![before, net.used()],
+                &vec![
+                    r["requests"][0].as_u64().unwrap() as usize,
+                    r["requests"][1].as_u64().unwrap() as usize,
+                ],
+            );
+            let (s0, s1) = (
+                r["status"][0].as_u64().unwrap() as usize,
+                r["status"][1].as_u64().unwrap() as usize,
+            );
+            ck.check(
+                &format!("{label}: messages"),
+                &json!(status[smark..]),
+                &json!(case["status"].as_array().unwrap()[s0..s1]),
+            );
         }
         ck.same(&format!("{name}: every request made"), &net.done(), &true);
         let data = serde_json::to_value(&p.data).unwrap();
@@ -101,10 +153,18 @@ fn counts_and_crashes_download_and_fail_as_the_prototype_does() {
                 .iter()
                 .map(|k| json!({ "id": k["id"], "ref": k["ref"], "name": k["name"], "date": k["date"], "note": k["note"], "peakTime": k["peakTime"] }))
                 .collect();
-            ck.check(&format!("{name}: counts"), &json!(counts), &case["data"]["counts"]);
+            ck.check(
+                &format!("{name}: counts"),
+                &json!(counts),
+                &case["data"]["counts"],
+            );
         } else if case.get("atAnswers").is_some() {
             let counts: Vec<Value> = data["counts"].as_array().unwrap().iter().map(|k| json!({ "id": k["id"], "ref": k["ref"], "name": k["name"], "date": k["date"], "note": k["note"], "peakTime": k["peakTime"] })).collect();
-            ck.check(&format!("{name}: counts"), &json!(counts), &case["data"]["counts"]);
+            ck.check(
+                &format!("{name}: counts"),
+                &json!(counts),
+                &case["data"]["counts"],
+            );
         } else {
             ck.check(&format!("{name}: project data"), &data, &case["data"]);
         }

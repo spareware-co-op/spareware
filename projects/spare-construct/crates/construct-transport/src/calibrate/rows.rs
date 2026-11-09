@@ -4,11 +4,11 @@
 use super::common::{dist_to_line, is_mw, point_in_poly};
 use super::roles::{Ctx, method_of};
 use super::stats::{GehBand, geh_bands};
-use crate::datahub::{Count, Match, jt_check, model_flow, period_vol, regression, JtCheck, geh};
+use crate::datahub::{Count, JtCheck, Match, geh, jt_check, model_flow, period_vol, regression};
 use crate::graph::js_sort_by;
 use crate::jsnum::{Maybe, value_to_js_string};
 use crate::project::{Point, Scenario};
-use crate::results::{Res, plain, travel, Travel};
+use crate::results::{Res, Travel, plain, travel};
 use crate::util::{LatLng, fmt};
 use serde::Serialize;
 use serde_json::Value;
@@ -78,12 +78,17 @@ pub fn core_area(ctx: &Ctx, sc: &Scenario) -> Core {
         }
     }
     for b in base.links.values() {
-        if !sc.links.contains_key(&b.id) && base.nodes.contains_key(&b.a) && base.nodes.contains_key(&b.b) {
+        if !sc.links.contains_key(&b.id)
+            && base.nodes.contains_key(&b.a)
+            && base.nodes.contains_key(&b.b)
+        {
             lines.push(base.geom(b));
         }
     }
     if lines.is_empty() {
-        return none("no area of influence: no road differs from the base scenario, so every count is inside");
+        return none(
+            "no area of influence: no road differs from the base scenario, so every count is inside",
+        );
     }
     let r = ctx.cfg.core_buffer_n();
     let n = lines.len();
@@ -109,7 +114,9 @@ fn same_num(a: &crate::jsnum::Num, b: &crate::jsnum::Num) -> bool {
         (Maybe::Set(JsNum::Number(x)), Maybe::Set(JsNum::Number(y))) => x == y,
         (Maybe::Set(JsNum::Text(x)), Maybe::Set(JsNum::Text(y))) => x == y,
         (Maybe::Set(JsNum::Bool(x)), Maybe::Set(JsNum::Bool(y))) => x == y,
-        (Maybe::Set(x), Maybe::Set(y)) => x.to_value() == y.to_value() && !matches!(x, JsNum::Other(_)),
+        (Maybe::Set(x), Maybe::Set(y)) => {
+            x.to_value() == y.to_value() && !matches!(x, JsNum::Other(_))
+        }
         _ => false,
     }
 }
@@ -161,7 +168,13 @@ pub struct CountRow {
 /// `raw` gives roles without the rules that turn a validation count seen by estimation into a calibration count.
 /// Note: unlike `DataHub.calibration` and `Calibrate.report`, this includes RAMM centreline estimates (as
 /// "adt_factored" sites): the prototype does not leave them out here.
-pub fn count_rows(ctx: &Ctx, sc: &Scenario, period: &str, res: Option<&Res>, raw: bool) -> Vec<CountRow> {
+pub fn count_rows(
+    ctx: &Ctx,
+    sc: &Scenario,
+    period: &str,
+    res: Option<&Res>,
+    raw: bool,
+) -> Vec<CountRow> {
     let Some(res) = res else { return Vec::new() };
     let m = ctx.matches(sc);
     let core = core_area(ctx, sc);
@@ -171,11 +184,15 @@ pub fn count_rows(ctx: &Ctx, sc: &Scenario, period: &str, res: Option<&Res>, raw
             continue;
         }
         let Some(mt) = m.get(&c.id) else { continue };
-        let Some(pv) = period_vol(c, period, ctx.s()) else { continue };
+        let Some(pv) = period_vol(c, period, ctx.s()) else {
+            continue;
+        };
         if !(pv.v >= 0.0) {
             continue;
         }
-        let Some(model) = model_flow(res, mt) else { continue };
+        let Some(model) = model_flow(res, mt) else {
+            continue;
+        };
         let l = sc.links.get(&mt.link);
         let method = method_of(c, period);
         let role = ctx.role_of(c, period, raw);
@@ -403,12 +420,24 @@ pub fn stats_of_rows(rows: &[(f64, f64, f64)]) -> CalStats {
             cnt.within20 += 1;
         }
     }
-    let share = |k: usize| if n > 0 { Some(k as f64 / n as f64) } else { None };
+    let share = |k: usize| {
+        if n > 0 {
+            Some(k as f64 / n as f64)
+        } else {
+            None
+        }
+    };
     let xs: Vec<f64> = rows.iter().map(|r| r.0).collect();
     let ys: Vec<f64> = rows.iter().map(|r| r.1).collect();
     let gehs: Vec<f64> = rows.iter().map(|r| r.2).collect();
-    let reg = if n >= 2 { Some(regression(&xs, &ys)) } else { None };
-    let se = rows.iter().fold(0.0f64, |s, r| s + (r.1 - r.0) * (r.1 - r.0));
+    let reg = if n >= 2 {
+        Some(regression(&xs, &ys))
+    } else {
+        None
+    };
+    let se = rows
+        .iter()
+        .fold(0.0f64, |s, r| s + (r.1 - r.0) * (r.1 - r.0));
     CalStats {
         n,
         cnt,
@@ -474,7 +503,9 @@ fn obj_num(v: &Maybe<Value>, k: &str, sub: Option<&str>) -> f64 {
     match v.get() {
         Some(Value::Object(m)) => match (m.get(k), sub) {
             (Some(x), None) => crate::jsnum::value_to_number(x),
-            (Some(Value::Object(o)), Some(s)) => o.get(s).map_or(f64::NAN, crate::jsnum::value_to_number),
+            (Some(Value::Object(o)), Some(s)) => {
+                o.get(s).map_or(f64::NAN, crate::jsnum::value_to_number)
+            }
             _ => f64::NAN,
         },
         _ => f64::NAN,
@@ -488,7 +519,8 @@ pub fn journeys(ctx: &Ctx, sc: &Scenario, period: &str, res: Option<&Res>) -> Ve
         let (mut mt, mut len) = (None, None);
         let from = j.from.js_string();
         let to = j.to.js_string();
-        if sc.nodes.contains_key(&from) && sc.nodes.contains_key(&to)
+        if sc.nodes.contains_key(&from)
+            && sc.nodes.contains_key(&to)
             && let Some(Travel::Route(r)) = travel(sc, ctx.s(), res, &from, &to)
         {
             mt = Some(r.time);
@@ -498,7 +530,10 @@ pub fn journeys(ctx: &Ctx, sc: &Scenario, period: &str, res: Option<&Res>) -> Ve
             let t = obj_num(&j.obs, period, None);
             if t > 0.0 {
                 let src = match j.obs.get() {
-                    Some(Value::Object(m)) => m.get("src").filter(|v| crate::jsnum::value_truthy(v)).map(value_to_js_string),
+                    Some(Value::Object(m)) => m
+                        .get("src")
+                        .filter(|v| crate::jsnum::value_truthy(v))
+                        .map(value_to_js_string),
                     _ => None,
                 };
                 Some((t, src.unwrap_or_else(|| "observed".to_string())))
@@ -559,21 +594,38 @@ pub struct JtStats {
 
 /// `jtStats(rows)`: the routes with an observed time (else those with a predicted one) against the two tiers.
 pub fn jt_stats(rows: &[JourneyRow]) -> JtStats {
-    let with_obs: Vec<&JourneyRow> = rows.iter().filter(|r| r.chk.is_some() && r.obs.is_some()).collect();
+    let with_obs: Vec<&JourneyRow> = rows
+        .iter()
+        .filter(|r| r.chk.is_some() && r.obs.is_some())
+        .collect();
     let usable: Vec<&JourneyRow> = if with_obs.is_empty() {
         rows.iter().filter(|r| r.chk.is_some()).collect()
     } else {
         with_obs.clone()
     };
     let n = usable.len();
-    let t1 = usable.iter().filter(|r| r.chk.as_ref().is_some_and(|c| c.tier1)).count();
-    let t2 = usable.iter().filter(|r| r.chk.as_ref().is_some_and(|c| c.tier2)).count();
+    let t1 = usable
+        .iter()
+        .filter(|r| r.chk.as_ref().is_some_and(|c| c.tier1))
+        .count();
+    let t2 = usable
+        .iter()
+        .filter(|r| r.chk.as_ref().is_some_and(|c| c.tier2))
+        .count();
     JtStats {
         n,
         jt1_n: t1,
         jt2_n: t2,
-        jt1: if n > 0 { Some(t1 as f64 / n as f64) } else { None },
-        jt2: if n > 0 { Some(t2 as f64 / n as f64) } else { None },
+        jt1: if n > 0 {
+            Some(t1 as f64 / n as f64)
+        } else {
+            None
+        },
+        jt2: if n > 0 {
+            Some(t2 as f64 / n as f64)
+        } else {
+            None
+        },
         predicted: with_obs.is_empty() && n > 0,
     }
 }

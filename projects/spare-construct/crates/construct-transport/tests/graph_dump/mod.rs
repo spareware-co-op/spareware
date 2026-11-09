@@ -63,7 +63,14 @@ pub fn arc_value(a: &Arc) -> Value {
     put("outB", n(a.out_b));
     put("ctrl", json!(a.ctrl.as_str()));
     put("internal", json!(a.internal));
-    put("toll", if a.toll != 0.0 { n(a.toll) } else { Value::Null });
+    put(
+        "toll",
+        if a.toll != 0.0 {
+            n(a.toll)
+        } else {
+            Value::Null
+        },
+    );
     put("zone", a.zone.as_ref().map_or(Value::Null, |z| json!(z)));
     put("node", a.node.map_or(Value::Null, |x| json!(x)));
     put("phase", a.phase.map_or(Value::Null, |x| json!(x)));
@@ -77,8 +84,14 @@ pub fn arc_value(a: &Arc) -> Value {
             Value::Array(cf.iter().map(|&(j, f)| json!([j, n(f)])).collect())
         }),
     );
-    put("ringIn", a.ring_in.as_ref().map_or(Value::Null, |r| idx_list(r)));
-    put("ringOut", a.ring_out.as_ref().map_or(Value::Null, |r| idx_list(r)));
+    put(
+        "ringIn",
+        a.ring_in.as_ref().map_or(Value::Null, |r| idx_list(r)),
+    );
+    put(
+        "ringOut",
+        a.ring_out.as_ref().map_or(Value::Null, |r| idx_list(r)),
+    );
     put("lmSrc", a.lm_src.clone().unwrap_or(Value::Null));
     Value::Object(m)
 }
@@ -176,11 +189,16 @@ pub fn case_inputs(p: &Project, expected: &Value, case: &Value) -> (Scenario, Se
     let id = case["scenario"].as_str().expect("scenario id");
     if case["variant"] == Value::Bool(true) {
         let v = &expected["variants"][id];
-        let sc: Scenario = serde_json::from_str(v["scenario"].as_str().expect("scenario text")).expect("variant scenario");
-        let s: Settings = serde_json::from_str(v["settings"].as_str().expect("settings text")).expect("variant settings");
+        let sc: Scenario = serde_json::from_str(v["scenario"].as_str().expect("scenario text"))
+            .expect("variant scenario");
+        let s: Settings = serde_json::from_str(v["settings"].as_str().expect("settings text"))
+            .expect("variant settings");
         (sc, s)
     } else {
-        (p.scenario(id).expect("scenario").clone(), p.settings.clone())
+        (
+            p.scenario(id).expect("scenario").clone(),
+            p.settings.clone(),
+        )
     }
 }
 
@@ -205,19 +223,30 @@ impl Checker {
         }
         let _ = write!(self.report, "\n{total} difference(s) under {path}:");
         for d in diffs.iter().take(8) {
-            let _ = write!(self.report, "\n  {}\n      expected {}\n      actual   {}", d.path, d.expected, d.actual);
+            let _ = write!(
+                self.report,
+                "\n  {}\n      expected {}\n      actual   {}",
+                d.path, d.expected, d.actual
+            );
         }
     }
     /// Prints the counts and panics when any check failed.
     pub fn finish(self, what: &str) {
-        println!("{what}: {} of {} checks match the JavaScript", self.passed, self.run);
+        println!(
+            "{what}: {} of {} checks match the JavaScript",
+            self.passed, self.run
+        );
         if self.passed != self.run {
             let mut r = self.report;
             if r.len() > 60000 {
                 r.truncate(60000);
                 r.push_str("\n...");
             }
-            panic!("{what}: {} of {} checks differ from the JavaScript:{r}", self.run - self.passed, self.run);
+            panic!(
+                "{what}: {} of {} checks differ from the JavaScript:{r}",
+                self.run - self.passed,
+                self.run
+            );
         }
     }
 }

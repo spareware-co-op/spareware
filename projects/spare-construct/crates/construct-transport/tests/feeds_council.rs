@@ -28,7 +28,11 @@ fn pasted_addresses_are_cleaned_as_recorded() {
                 assert_eq!(json!(u), rec["cleaned"], "cleaned {url:?}");
                 let mut read = CouncilRead::new(&url, 30_000.0, &MetaCache::new()).unwrap();
                 let req = read.next_request().expect("a request");
-                assert_eq!(req.url, rec["requests"][0]["url"].as_str().unwrap(), "request for {url:?}");
+                assert_eq!(
+                    req.url,
+                    rec["requests"][0]["url"].as_str().unwrap(),
+                    "request for {url:?}"
+                );
             }
             (Err(m), Some(t)) => {
                 assert_eq!(m, t.as_str().unwrap(), "error for {url:?}");
@@ -46,7 +50,11 @@ fn guessed_fields_match() {
     assert_eq!(recs.len(), 6);
     for rec in recs {
         let got = serde_json::to_value(guess_fields(rec.get("meta").unwrap())).unwrap();
-        assert_close(&got, &rec.get("guess").unwrap().to_value(), &format!("guess for {}", rec.get("label").unwrap().js_string()));
+        assert_close(
+            &got,
+            &rec.get("guess").unwrap().to_value(),
+            &format!("guess for {}", rec.get("label").unwrap().js_string()),
+        );
     }
 }
 
@@ -65,7 +73,8 @@ fn read_layer(url: &str) -> CouncilLayer {
     let mut read = CouncilRead::new(url, 30_000.0, &MetaCache::new()).expect("an address");
     while let Some(req) = read.next_request() {
         assert_eq!(req.url, format!("{}?f=json", council_url(url).unwrap()));
-        read.answer(Ok(Answer::Json(fixture_json(meta_file(url))))).expect("answered");
+        read.answer(Ok(Answer::Json(fixture_json(meta_file(url)))))
+            .expect("answered");
     }
     read.finish().expect("a layer")
 }
@@ -105,29 +114,63 @@ fn imports_match() {
     assert_eq!(recs.len(), 40);
     for (rec, orec) in recs.iter().zip(ordered_recs) {
         let url = rec["url"].as_str().unwrap();
-        let label = format!("{} {} {} preset {} at {}", rec["project"], url, rec["mapLabel"], rec["preset"], rec["now"]);
+        let label = format!(
+            "{} {} {} preset {} at {}",
+            rec["project"], url, rec["mapLabel"], rec["preset"], rec["now"]
+        );
         let now = rec["now"].as_f64().unwrap();
         let layer = read_layer(url);
         let map: JsonValue = orec.get("map").unwrap().clone();
         let mut p = project(rec["project"].as_str().unwrap());
         construct_transport::datahub::ensure_data(&mut p);
-        p.data.get_mut().unwrap().extra.insert("counts".to_string(), rec["startCounts"].clone());
-        let mut imp = CouncilImport::new(layer, map, &bounds_of(&rec["bounds"]), rec["preset"].as_str(), now, 30_000.0);
+        p.data
+            .get_mut()
+            .unwrap()
+            .extra
+            .insert("counts".to_string(), rec["startCounts"].clone());
+        let mut imp = CouncilImport::new(
+            layer,
+            map,
+            &bounds_of(&rec["bounds"]),
+            rec["preset"].as_str(),
+            now,
+            30_000.0,
+        );
         let log = rec["requests"].as_array().unwrap();
         let mut k = 0;
         let mut statuses: Vec<String> = Vec::new();
         while let Some(req) = imp.next_request() {
-            let r = log.get(k).unwrap_or_else(|| panic!("{label}: unrecorded request {}", req.url));
+            let r = log
+                .get(k)
+                .unwrap_or_else(|| panic!("{label}: unrecorded request {}", req.url));
             check_request(&req, r, &format!("{label} request {k}"));
             k += 1;
             imp.answer(answer_of(&r["answer"])).expect("a page");
-            statuses.push(format!("Downloading council counts\u{2026} {}", imp.count()));
+            statuses.push(format!(
+                "Downloading council counts\u{2026} {}",
+                imp.count()
+            ));
         }
         all_used(log, k, &label);
         assert_eq!(json!(statuses), rec["statuses"], "{label}: status lines");
         let res = imp.finish(&mut p);
-        assert_close(&serde_json::to_value(&res).unwrap(), &rec["result"], &format!("{label} result"));
-        assert_close(&p.data.get().unwrap().extra["counts"], &rec["counts"], &format!("{label} counts"));
-        assert_close(&p.extra.get("feeds").cloned().unwrap_or_else(|| json!({ "vintage": {} })), &rec["feeds"], &format!("{label} feeds"));
+        assert_close(
+            &serde_json::to_value(&res).unwrap(),
+            &rec["result"],
+            &format!("{label} result"),
+        );
+        assert_close(
+            &p.data.get().unwrap().extra["counts"],
+            &rec["counts"],
+            &format!("{label} counts"),
+        );
+        assert_close(
+            &p.extra
+                .get("feeds")
+                .cloned()
+                .unwrap_or_else(|| json!({ "vintage": {} })),
+            &rec["feeds"],
+            &format!("{label} feeds"),
+        );
     }
 }

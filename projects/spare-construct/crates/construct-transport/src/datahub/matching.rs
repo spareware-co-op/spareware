@@ -163,7 +163,14 @@ pub fn project_dist(g: &[LatLng], ll: &LatLng) -> f64 {
     let py = f.y(ll);
     let mut best = f64::INFINITY;
     for i in 0..g.len().saturating_sub(1) {
-        let r = seg_dist(px, py, f.x(&g[i]), f.y(&g[i]), f.x(&g[i + 1]), f.y(&g[i + 1]));
+        let r = seg_dist(
+            px,
+            py,
+            f.x(&g[i]),
+            f.y(&g[i]),
+            f.x(&g[i + 1]),
+            f.y(&g[i + 1]),
+        );
         if r.d < best {
             best = r.d;
         }
@@ -194,11 +201,17 @@ pub fn match_counts(sc: &Scenario, s: &Settings, counts: &[Rc<Count>]) -> Matche
     let r = s.data.get().map_or(40.0, |d| d.match_radius.or(40.0));
     let mut items: Vec<Item> = Vec::new();
     for lk in sc.links.values() {
-        if lk.status.is("closed") || !sc.nodes.contains_key(&lk.a) || !sc.nodes.contains_key(&lk.b) {
+        if lk.status.is("closed") || !sc.nodes.contains_key(&lk.a) || !sc.nodes.contains_key(&lk.b)
+        {
             continue;
         }
         let g = sc.geom(lk);
-        let (mut la0, mut la1, mut ln0, mut ln1) = (f64::INFINITY, f64::NEG_INFINITY, f64::INFINITY, f64::NEG_INFINITY);
+        let (mut la0, mut la1, mut ln0, mut ln1) = (
+            f64::INFINITY,
+            f64::NEG_INFINITY,
+            f64::INFINITY,
+            f64::NEG_INFINITY,
+        );
         for p in &g {
             la0 = math_min(la0, p[0]);
             la1 = math_max(la1, p[0]);
@@ -227,7 +240,11 @@ pub fn match_counts(sc: &Scenario, s: &Settings, counts: &[Rc<Count>]) -> Matche
         let mut best: Option<Match> = None;
         let mut best_named: Option<Match> = None;
         for it in &items {
-            if ll[0] < it.la0 - pad || ll[0] > it.la1 + pad || ll[1] < it.ln0 - pad * 1.3 || ll[1] > it.ln1 + pad * 1.3 {
+            if ll[0] < it.la0 - pad
+                || ll[0] > it.la1 + pad
+                || ll[1] < it.ln0 - pad * 1.3
+                || ll[1] > it.ln1 + pad * 1.3
+            {
                 continue;
             }
             let d = project_dist(&it.g, &ll);
@@ -269,7 +286,11 @@ pub fn match_counts(sc: &Scenario, s: &Settings, counts: &[Rc<Count>]) -> Matche
                 }
                 dir = if ab <= ba { "ab" } else { "ba" };
             } else if !(it.link.lanes_ab.num() > 0.0 && it.link.lanes_ba.num() > 0.0) {
-                dir = if it.link.lanes_ab.num() > 0.0 { "ab" } else { "ba" };
+                dir = if it.link.lanes_ab.num() > 0.0 {
+                    "ab"
+                } else {
+                    "ba"
+                };
             }
             let cand = Match {
                 link: it.link.id.clone(),

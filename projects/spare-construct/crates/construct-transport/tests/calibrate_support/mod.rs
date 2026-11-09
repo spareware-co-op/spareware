@@ -4,8 +4,8 @@
 
 use construct_transport::assign::assign;
 use construct_transport::calibrate::{
-    FitOpts, Group, ParallelCheck, SiteOpts, SiteRow, Unit, base_view, fit, id_set, parallel, report, sites_for, stats, stored_res,
-    units,
+    FitOpts, Group, ParallelCheck, SiteOpts, SiteRow, Unit, base_view, fit, id_set, parallel,
+    report, sites_for, stats, stored_res, units,
 };
 use construct_transport::datahub::Data;
 use construct_transport::jsnum::{Maybe, plain_number};
@@ -48,7 +48,11 @@ pub fn res_out(res: &Res) -> Value {
     if let Some(d0) = &res.d0 {
         m.insert("D0".into(), pv(d0));
     }
-    let arcs: Map<String, Value> = res.arcs.iter().map(|(k, a)| (k.to_string(), pn(a.v))).collect();
+    let arcs: Map<String, Value> = res
+        .arcs
+        .iter()
+        .map(|(k, a)| (k.to_string(), pn(a.v)))
+        .collect();
     m.insert("arcsV".into(), Value::Object(arcs));
     let paths = match res.paths.get() {
         Some(ps) => json!(ps.iter().map(|od| od.list.len()).sum::<usize>()),
@@ -133,7 +137,10 @@ pub fn stale_of(p: &Project, from: usize) -> Value {
                     if v.is_null() {
                         Value::Null
                     } else {
-                        json!(v.get("stale").is_some_and(construct_transport::jsnum::value_truthy))
+                        json!(
+                            v.get("stale")
+                                .is_some_and(construct_transport::jsnum::value_truthy)
+                        )
                     },
                 );
             }
@@ -153,7 +160,10 @@ pub fn stale_by_period(sc: &Scenario) -> Value {
                 if v.is_null() {
                     Value::Null
                 } else {
-                    json!(v.get("stale").is_some_and(construct_transport::jsnum::value_truthy))
+                    json!(
+                        v.get("stale")
+                            .is_some_and(construct_transport::jsnum::value_truthy)
+                    )
                 },
             );
         }
@@ -167,7 +177,10 @@ pub fn store_res(sc: &mut Scenario, period: &str, res: &Res) {
         sc.res = Maybe::Set(Value::Object(Map::new()));
     }
     if let Some(Value::Object(r)) = sc.res.get_mut() {
-        r.insert(period.to_string(), serde_json::to_value(res).expect("a result serialises"));
+        r.insert(
+            period.to_string(),
+            serde_json::to_value(res).expect("a result serialises"),
+        );
     }
 }
 
@@ -185,17 +198,23 @@ impl RecOpts {
     pub fn of(rec: &Value) -> RecOpts {
         RecOpts {
             period: rec["period"].as_str().expect("period").to_string(),
-            count_ids: rec
-                .get("countIds")
-                .filter(|v| !v.is_null())
-                .map(|v| v.as_array().expect("ids").iter().map(|x| x.as_str().expect("id").to_string()).collect()),
+            count_ids: rec.get("countIds").filter(|v| !v.is_null()).map(|v| {
+                v.as_array()
+                    .expect("ids")
+                    .iter()
+                    .map(|x| x.as_str().expect("id").to_string())
+                    .collect()
+            }),
             groups: rec.get("groups").filter(|v| !v.is_null()).map(groups_of),
             opts: rec["opts"].clone(),
             caller: rec["weightKind"] == "caller",
             date: rec["date"].as_str().expect("date").to_string(),
         }
     }
-    pub fn fit_opts<'a>(&'a self, weight: Option<&'a dyn Fn(&construct_transport::datahub::Count, &str) -> f64>) -> FitOpts<'a> {
+    pub fn fit_opts<'a>(
+        &'a self,
+        weight: Option<&'a dyn Fn(&construct_transport::datahub::Count, &str) -> f64>,
+    ) -> FitOpts<'a> {
         let o = &self.opts;
         let f = |k: &str| o.get(k).and_then(|v| v.as_f64());
         FitOpts {
@@ -217,7 +236,12 @@ impl RecOpts {
 }
 
 /// The prior run of a recorded fit: the base-year view assigned without this period's factors, its counted sites, statistics, units and the parallel check.
-pub fn prior_block(p: &Project, sc_id: &str, ro: &RecOpts, weight: Option<&dyn Fn(&construct_transport::datahub::Count, &str) -> f64>) -> Value {
+pub fn prior_block(
+    p: &Project,
+    sc_id: &str,
+    ro: &RecOpts,
+    weight: Option<&dyn Fn(&construct_transport::datahub::Count, &str) -> f64>,
+) -> Value {
     let sc = p.scenario(sc_id).expect("scenario");
     let period = ro.period.as_str();
     let bv = base_view(sc, &p.settings);
@@ -240,34 +264,75 @@ pub fn prior_block(p: &Project, sc_id: &str, ro: &RecOpts, weight: Option<&dyn F
         weight,
     };
     let rows = sites_for(&bv.view, &res0, period, &so, &p.settings, &data);
-    let plain_rows = sites_for(&bv.view, &res0, period, &SiteOpts::default(), &p.settings, &data);
+    let plain_rows = sites_for(
+        &bv.view,
+        &res0,
+        period,
+        &SiteOpts::default(),
+        &p.settings,
+        &data,
+    );
     let mut m = Map::new();
     m.insert("same".into(), json!(bv.same));
     m.insert("viewId".into(), json!(bv.view.id));
-    m.insert("rows".into(), Value::Array(rows.iter().map(row_out).collect()));
-    m.insert("stats".into(), serde_json::to_value(stats(&rows)).expect("stats"));
-    m.insert("plainRows".into(), Value::Array(plain_rows.iter().map(row_out).collect()));
+    m.insert(
+        "rows".into(),
+        Value::Array(rows.iter().map(row_out).collect()),
+    );
+    m.insert(
+        "stats".into(),
+        serde_json::to_value(stats(&rows)).expect("stats"),
+    );
+    m.insert(
+        "plainRows".into(),
+        Value::Array(plain_rows.iter().map(row_out).collect()),
+    );
     match &ro.groups {
         Some(gs) => {
-            let chk = if res0.paths.get().is_some() { Some(parallel(&res0, &rows, gs, &p.settings)) } else { None };
-            m.insert("parallel".into(), chk.as_ref().map_or(Value::Null, |c| parallel_out(c, gs)));
-            m.insert("units".into(), Value::Array(units(&rows, chk.as_ref()).iter().map(unit_out).collect()));
+            let chk = if res0.paths.get().is_some() {
+                Some(parallel(&res0, &rows, gs, &p.settings))
+            } else {
+                None
+            };
+            m.insert(
+                "parallel".into(),
+                chk.as_ref().map_or(Value::Null, |c| parallel_out(c, gs)),
+            );
+            m.insert(
+                "units".into(),
+                Value::Array(units(&rows, chk.as_ref()).iter().map(unit_out).collect()),
+            );
         }
         None => {
-            m.insert("units".into(), Value::Array(units(&rows, None).iter().map(unit_out).collect()));
+            m.insert(
+                "units".into(),
+                Value::Array(units(&rows, None).iter().map(unit_out).collect()),
+            );
         }
     }
     Value::Object(m)
 }
 
 /// Replays one recorded fit and compares everything the generator recorded. `weight` is the caller's weights, for a case that has them.
-pub fn replay_fit(rec: &Value, project_text: &str, weight: Option<&dyn Fn(&construct_transport::datahub::Count, &str) -> f64>) {
+pub fn replay_fit(
+    rec: &Value,
+    project_text: &str,
+    weight: Option<&dyn Fn(&construct_transport::datahub::Count, &str) -> f64>,
+) {
     use crate::support::assert_close;
-    let name = format!("{}:{}", rec["fixture"].as_str().unwrap_or("?"), rec["name"].as_str().unwrap_or("?"));
+    let name = format!(
+        "{}:{}",
+        rec["fixture"].as_str().unwrap_or("?"),
+        rec["name"].as_str().unwrap_or("?")
+    );
     let mut p = Project::from_json(project_text).expect("project reads");
     let ro = RecOpts::of(rec);
     let sc_id = rec["scenario"].as_str().expect("scenario").to_string();
-    let idx = p.scenarios.iter().position(|s| s.id == sc_id).expect("scenario");
+    let idx = p
+        .scenarios
+        .iter()
+        .position(|s| s.id == sc_id)
+        .expect("scenario");
     if let Some(s) = rec["setup"].as_str() {
         let setup = FitOpts {
             period: Some(if s == "fit-pm" { "PM" } else { "AM" }),
@@ -277,7 +342,11 @@ pub fn replay_fit(rec: &Value, project_text: &str, weight: Option<&dyn Fn(&const
         fit(&mut p, &sc_id, &setup, None).expect("setup fit");
     }
     let period = ro.period.clone();
-    assert_close(&serde_json::to_value(&p.me).expect("me"), &rec["meBefore"], &format!("{name}.meBefore"));
+    assert_close(
+        &serde_json::to_value(&p.me).expect("me"),
+        &rec["meBefore"],
+        &format!("{name}.meBefore"),
+    );
     if rec.get("reportBefore").is_some() {
         let res = assign(
             &p,
@@ -290,31 +359,65 @@ pub fn replay_fit(rec: &Value, project_text: &str, weight: Option<&dyn Fn(&const
             None,
         );
         store_res(&mut p.scenarios[idx], &period, &res);
-        let r = report(&p, &p.scenarios[idx], &period, stored_res(&p.scenarios[idx], &period).as_ref());
-        assert_close(&serde_json::to_value(&r).expect("report"), &rec["reportBefore"], &format!("{name}.reportBefore"));
+        let r = report(
+            &p,
+            &p.scenarios[idx],
+            &period,
+            stored_res(&p.scenarios[idx], &period).as_ref(),
+        );
+        assert_close(
+            &serde_json::to_value(&r).expect("report"),
+            &rec["reportBefore"],
+            &format!("{name}.reportBefore"),
+        );
     }
-    assert_close(&prior_block(&p, &sc_id, &ro, weight), &rec["prior"], &format!("{name}.prior"));
+    assert_close(
+        &prior_block(&p, &sc_id, &ro, weight),
+        &rec["prior"],
+        &format!("{name}.prior"),
+    );
     // the fit
     let mut progress: Vec<Value> = Vec::new();
     let mut cb = |k: f64, n: f64, m: &str| progress.push(json!([pn(k), pn(n), m]));
     let out = fit(&mut p, &sc_id, &ro.fit_opts(weight), Some(&mut cb)).expect("fit runs");
-    assert_close(&Value::Array(progress), &rec["progress"], &format!("{name}.progress"));
+    assert_close(
+        &Value::Array(progress),
+        &rec["progress"],
+        &format!("{name}.progress"),
+    );
     let mut result = serde_json::to_value(&out).expect("fit result");
     result["res"] = out.res.as_ref().map_or(Value::Null, res_out);
     assert_close(&result, &rec["result"], &format!("{name}.result"));
-    assert_close(&serde_json::to_value(&p.me).expect("me"), &rec["me"], &format!("{name}.me"));
+    assert_close(
+        &serde_json::to_value(&p.me).expect("me"),
+        &rec["me"],
+        &format!("{name}.me"),
+    );
     let sc = &p.scenarios[idx];
     let own = stored_res(sc, &period);
-    assert_close(&own.as_ref().map_or(Value::Null, res_out), &rec["scRes"], &format!("{name}.scRes"));
+    assert_close(
+        &own.as_ref().map_or(Value::Null, res_out),
+        &rec["scRes"],
+        &format!("{name}.scRes"),
+    );
     let mut keys: Vec<String> = match sc.res.get() {
         Some(Value::Object(m)) => m.keys().cloned().collect(),
         _ => Vec::new(),
     };
     keys.sort();
-    let mut want: Vec<String> = rec["scResKeys"].as_array().expect("keys").iter().map(|k| k.as_str().expect("key").to_string()).collect();
+    let mut want: Vec<String> = rec["scResKeys"]
+        .as_array()
+        .expect("keys")
+        .iter()
+        .map(|k| k.as_str().expect("key").to_string())
+        .collect();
     want.sort();
     assert_eq!(keys, want, "{name}: the scenario's result periods");
-    assert_close(&stale_of(&p, 1), &rec["otherStale"], &format!("{name}.otherStale"));
+    assert_close(
+        &stale_of(&p, 1),
+        &rec["otherStale"],
+        &format!("{name}.otherStale"),
+    );
     if rec.get("report").is_some() {
         for pd in ["AM", "PM"] {
             if stored_res(&p.scenarios[idx], pd).is_none() {
@@ -330,8 +433,17 @@ pub fn replay_fit(rec: &Value, project_text: &str, weight: Option<&dyn Fn(&const
                 );
                 store_res(&mut p.scenarios[idx], pd, &res);
             }
-            let r = report(&p, &p.scenarios[idx], pd, stored_res(&p.scenarios[idx], pd).as_ref());
-            assert_close(&serde_json::to_value(&r).expect("report"), &rec["report"][pd], &format!("{name}.report.{pd}"));
+            let r = report(
+                &p,
+                &p.scenarios[idx],
+                pd,
+                stored_res(&p.scenarios[idx], pd).as_ref(),
+            );
+            assert_close(
+                &serde_json::to_value(&r).expect("report"),
+                &rec["report"][pd],
+                &format!("{name}.report.{pd}"),
+            );
         }
     }
     if let Some(clears) = rec.get("clears").and_then(|c| c.as_array()) {
@@ -344,9 +456,21 @@ pub fn replay_fit(rec: &Value, project_text: &str, weight: Option<&dyn Fn(&const
             let n = construct_transport::calibrate::clear(&mut p, arg);
             let path = format!("{name}.clears[{k}]");
             assert_eq!(n as u64, c["n"].as_u64().expect("n"), "{path}.n");
-            assert_close(&serde_json::to_value(&p.me).expect("me"), &c["me"], &format!("{path}.me"));
-            assert_close(&stale_of(&p, 1), &c["otherStale"], &format!("{path}.otherStale"));
-            assert_close(&stale_by_period(&p.scenarios[idx]), &c["scStale"], &format!("{path}.scStale"));
+            assert_close(
+                &serde_json::to_value(&p.me).expect("me"),
+                &c["me"],
+                &format!("{path}.me"),
+            );
+            assert_close(
+                &stale_of(&p, 1),
+                &c["otherStale"],
+                &format!("{path}.otherStale"),
+            );
+            assert_close(
+                &stale_by_period(&p.scenarios[idx]),
+                &c["scStale"],
+                &format!("{path}.scStale"),
+            );
         }
     }
 }

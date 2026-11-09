@@ -1,10 +1,15 @@
 //! Front matter: cover, contents, regulatory context, document control, data vintage, model status, scope, limitations and the
 //! executive summary.
 
-use super::consts::{AT_LICENCE_DEFAULT, Licence, PERIODS, VINTAGE, attrib, level, reg, rr422, scope};
-use super::ctx::{Ctx, Head, Row, Tbl, TableOpts, cells, disc, disc_with, h, hn, note, para};
+use super::consts::{
+    AT_LICENCE_DEFAULT, Licence, PERIODS, VINTAGE, attrib, level, reg, rr422, scope,
+};
+use super::ctx::{Ctx, Head, Row, TableOpts, Tbl, cells, disc, disc_with, h, hn, note, para};
 use super::js;
-use super::shared::{RegCtx, assessed_sites, crash_years, j_sum, junction_count, junction_rows, model_version, reg_ctx, plural};
+use super::shared::{
+    RegCtx, assessed_sites, crash_years, j_sum, junction_count, junction_rows, model_version,
+    plural, reg_ctx,
+};
 use crate::edit::json::JsonValue;
 use crate::jsnum::{number_to_js_string, value_truthy};
 use crate::results::iso_day_of_ms;
@@ -22,14 +27,22 @@ pub(crate) fn int(v: Option<&JsonValue>) -> String {
         Some(JsonValue::String(s)) if s.is_empty() => fmt::DASH.to_string(),
         Some(x) => {
             let n = x.to_number();
-            if n.is_finite() { fmt::int(n) } else { fmt::DASH.to_string() }
+            if n.is_finite() {
+                fmt::int(n)
+            } else {
+                fmt::DASH.to_string()
+            }
         }
     }
 }
 
 /// `int(v)` for a number that may be missing.
 pub(crate) fn int_f(v: f64) -> String {
-    if v.is_finite() { fmt::int(v) } else { fmt::DASH.to_string() }
+    if v.is_finite() {
+        fmt::int(v)
+    } else {
+        fmt::DASH.to_string()
+    }
 }
 
 /// `yearTxt(v)`: a four-digit year, or an en dash.
@@ -51,11 +64,11 @@ pub(crate) fn vintage_rows(r: &super::Rep) -> Vec<Vec<String>> {
     let l = r.loaded();
     let mut rows: Vec<Vec<String>> = Vec::new();
     let fv0 = js::path(Some(r.raw), &["feeds", "vintage"]).filter(|v| v.is_object());
-    let any_osm = r
-        .project
-        .scenarios
-        .iter()
-        .any(|s| s.links.values().any(|lk| lk.osm.get().is_some_and(value_truthy)));
+    let any_osm = r.project.scenarios.iter().any(|s| {
+        s.links
+            .values()
+            .any(|lk| lk.osm.get().is_some_and(value_truthy))
+    });
     let mut seen: Vec<&str> = Vec::new();
     for (k, src, ds, lic) in VINTAGE.iter() {
         seen.push(k);
@@ -69,28 +82,43 @@ pub(crate) fn vintage_rows(r: &super::Rep) -> Vec<Vec<String>> {
             Licence::At => at_lic().to_string(),
         };
         if *k == "osm" && x.is_none() {
-            let n = r
-                .project
-                .scenarios
-                .first()
-                .map_or(0.0, |s| s.links.values().filter(|lk| lk.osm.get().is_some_and(value_truthy)).count() as f64);
+            let n = r.project.scenarios.first().map_or(0.0, |s| {
+                s.links
+                    .values()
+                    .filter(|lk| lk.osm.get().is_some_and(value_truthy))
+                    .count() as f64
+            });
             rows.push(vec![
                 src.to_string(),
                 ds.to_string(),
-                if any_osm { "Imported (query date not recorded)".to_string() } else { "Not used".to_string() },
-                if any_osm { plural(n, "link", "links") } else { fmt::DASH.to_string() },
+                if any_osm {
+                    "Imported (query date not recorded)".to_string()
+                } else {
+                    "Not used".to_string()
+                },
+                if any_osm {
+                    plural(n, "link", "links")
+                } else {
+                    fmt::DASH.to_string()
+                },
                 lic_text,
             ]);
             continue;
         }
-        let at = x.and_then(|x| js::get(Some(x), "at")).filter(|a| a.truthy());
+        let at = x
+            .and_then(|x| js::get(Some(x), "at"))
+            .filter(|a| a.truthy());
         let n_cell = match x {
             Some(x) => {
                 let n = js::get(Some(x), "n").filter(|n| !n.is_null());
                 let base = match n {
                     Some(n) => {
                         let v = n.to_number();
-                        if v.is_finite() { fmt::int(v) } else { fmt::DASH.to_string() }
+                        if v.is_finite() {
+                            fmt::int(v)
+                        } else {
+                            fmt::DASH.to_string()
+                        }
                     }
                     None => fmt::DASH.to_string(),
                 };
@@ -127,7 +155,9 @@ pub(crate) fn vintage_rows(r: &super::Rep) -> Vec<Vec<String>> {
         let g = |key: &str| js::get(Some(x), key).filter(|v| v.truthy());
         rows.push(vec![
             g("source").map_or(k.to_string(), JsonValue::js_string),
-            g("dataset").or_else(|| g("label")).map_or(k.to_string(), JsonValue::js_string),
+            g("dataset")
+                .or_else(|| g("label"))
+                .map_or(k.to_string(), JsonValue::js_string),
             match g("at") {
                 Some(a) => day(Some(a)),
                 None => fmt::DASH.to_string(),
@@ -145,7 +175,9 @@ pub(crate) fn vintage_rows(r: &super::Rep) -> Vec<Vec<String>> {
             continue;
         }
         let g = |key: &str| js::get(Some(x), key).filter(|v| v.truthy());
-        let note_t = g("note").or_else(|| g("label")).map_or(k.to_string(), JsonValue::js_string);
+        let note_t = g("note")
+            .or_else(|| g("label"))
+            .map_or(k.to_string(), JsonValue::js_string);
         rows.push(vec![
             g("source").map_or(k.to_string(), JsonValue::js_string),
             format!(
@@ -156,7 +188,11 @@ pub(crate) fn vintage_rows(r: &super::Rep) -> Vec<Vec<String>> {
             match g("at") {
                 Some(a) => {
                     let d = day(Some(a));
-                    if d.is_empty() { fmt::DASH.to_string() } else { d }
+                    if d.is_empty() {
+                        fmt::DASH.to_string()
+                    } else {
+                        d
+                    }
                 }
                 None => fmt::DASH.to_string(),
             },
@@ -179,7 +215,11 @@ pub(crate) fn vintage_rows(r: &super::Rep) -> Vec<Vec<String>> {
             match g("at") {
                 Some(a) => {
                     let d = day(Some(a));
-                    if d.is_empty() { fmt::DASH.to_string() } else { d }
+                    if d.is_empty() {
+                        fmt::DASH.to_string()
+                    } else {
+                        d
+                    }
                 }
                 None => fmt::DASH.to_string(),
             },
@@ -198,16 +238,26 @@ pub(crate) fn cover(c: &mut Ctx) -> String {
     let r = c.r;
     let d = &r.rs.details;
     let rg = reg_ctx(r);
-    let pw = if rg.label.is_empty() { "Pathway not stated".to_string() } else { rg.label.clone() };
+    let pw = if rg.label.is_empty() {
+        "Pathway not stated".to_string()
+    } else {
+        rg.label.clone()
+    };
     let row = |k: &str, v: &str| {
         format!(
             "<tr><th>{}</th><td>{}</td></tr>",
             k,
-            if v.is_empty() { "<span class=\"muted\">Not stated</span>" } else { v }
+            if v.is_empty() {
+                "<span class=\"muted\">Not stated</span>"
+            } else {
+                v
+            }
         )
     };
     let stale = (0..r.project.scenarios.len()).any(|i| {
-        PERIODS.iter().any(|p| r.results[i].get(p).is_some_and(|res| res.stale))
+        PERIODS
+            .iter()
+            .any(|p| r.results[i].get(p).is_some_and(|res| res.stale))
     });
     let with = c.sel.with.map(|i| {
         format!(
@@ -219,7 +269,11 @@ pub(crate) fn cover(c: &mut Ctx) -> String {
     let signed = r.rs.signed_off();
     let site = {
         let s = js::text_or_empty(d.get("site"));
-        if s.is_empty() { "Site address not stated".to_string() } else { s }
+        if s.is_empty() {
+            "Site address not stated".to_string()
+        } else {
+            s
+        }
     };
     format!(
         "<div class=\"cover\"><div class=\"kicker\">Integrated Transport Assessment</div><h1 class=\"title\">{}</h1>\n      <div class=\"subtitle\">{}</div>\n      <table class=\"meta\">{}{}{}{}\n        {}{}{}{}</table>\n      {}\n      {}\n      {}</div>",
@@ -229,10 +283,17 @@ pub(crate) fn cover(c: &mut Ctx) -> String {
         row("Client", &esc(&js::text(d.get("client")))),
         row("Author", &esc(&js::text(d.get("author")))),
         row("Reviewer", &esc(&js::text(r.rs.signoff.get("reviewer")))),
-        row("Report date", &esc(&{
-            let t = js::text_or_empty(d.get("date"));
-            if t.is_empty() { iso_day_of_ms(r.now_ms).unwrap_or_default() } else { t }
-        })),
+        row(
+            "Report date",
+            &esc(&{
+                let t = js::text_or_empty(d.get("date"));
+                if t.is_empty() {
+                    iso_day_of_ms(r.now_ms).unwrap_or_default()
+                } else {
+                    t
+                }
+            })
+        ),
         row("Lodgement date", &esc(&rg.date)),
         row("Assessed scenario", &esc(&with.unwrap_or_default())),
         row("Model version", &esc(&model_version(r))),
@@ -250,7 +311,10 @@ pub(crate) fn cover(c: &mut Ctx) -> String {
             "<p class=\"stamp draft\">DRAFT: not yet reviewed and signed off.</p>".to_string()
         },
         if stale {
-            note("Some results are out of date: the network or demand changed after the last run. Run the model again before issuing this report.", true)
+            note(
+                "Some results are out of date: the network or demand changed after the last run. Run the model again before issuing this report.",
+                true,
+            )
         } else {
             String::new()
         },
@@ -294,29 +358,54 @@ pub(crate) fn regulatory(c: &mut Ctx) -> String {
         "Authorities",
         Tbl::new(
             vec![h("Body"), h("Role")],
-            reg::AUTHORITIES.iter().map(|(a, b)| Row::new(vec![esc(a), esc(b)])).collect(),
+            reg::AUTHORITIES
+                .iter()
+                .map(|(a, b)| Row::new(vec![esc(a), esc(b)]))
+                .collect(),
         ),
         &TableOpts::default(),
     );
-    format!("{}\n      {}\n      {}{}", t1, t2, disc_with("D10", Some(reg::AS_AT), None), disc("D11"))
+    format!(
+        "{}\n      {}\n      {}{}",
+        t1,
+        t2,
+        disc_with("D10", Some(reg::AS_AT), None),
+        disc("D11")
+    )
 }
 
 /// `report-doc-control`.
 pub(crate) fn doc_control(c: &mut Ctx) -> String {
-    let rows: Vec<Row> = c
-        .r
-        .rs
-        .revisions
-        .iter()
-        .map(|r| {
-            let g = |k: &str| esc(&js::text(r.get(k)));
-            Row::new(vec![g("rev"), g("date"), g("desc"), g("prepared"), g("reviewed"), g("approved")])
-        })
-        .collect();
+    let rows: Vec<Row> =
+        c.r.rs
+            .revisions
+            .iter()
+            .map(|r| {
+                let g = |k: &str| esc(&js::text(r.get(k)));
+                Row::new(vec![
+                    g("rev"),
+                    g("date"),
+                    g("desc"),
+                    g("prepared"),
+                    g("reviewed"),
+                    g("approved"),
+                ])
+            })
+            .collect();
     c.table(
         "Document control",
-        Tbl::new(vec![h("Rev"), h("Date"), h("Description"), h("Prepared"), h("Reviewed"), h("Approved")], rows)
-            .empty("No revisions recorded. Add them in the Report tab."),
+        Tbl::new(
+            vec![
+                h("Rev"),
+                h("Date"),
+                h("Description"),
+                h("Prepared"),
+                h("Reviewed"),
+                h("Approved"),
+            ],
+            rows,
+        )
+        .empty("No revisions recorded. Add them in the Report tab."),
         &TableOpts::default(),
     )
 }
@@ -344,10 +433,22 @@ pub(crate) fn model_status(c: &mut Ctx) -> String {
         return super::build::merged_html(c, &cm, "Calibration and validation status");
     }
     let cat = tm
-        .and_then(|t| if t.category.truthy() { Some(t.category.js_string()) } else { None })
+        .and_then(|t| {
+            if t.category.truthy() {
+                Some(t.category.js_string())
+            } else {
+                None
+            }
+        })
         .unwrap_or_else(|| "E".to_string())
         .to_uppercase();
-    let just = tm.map_or(String::new(), |t| if t.justification.truthy() { t.justification.js_string() } else { String::new() });
+    let just = tm.map_or(String::new(), |t| {
+        if t.justification.truthy() {
+            t.justification.js_string()
+        } else {
+            String::new()
+        }
+    });
     let rows: Vec<Row> = c
         .periods
         .iter()
@@ -372,7 +473,11 @@ pub(crate) fn model_status(c: &mut Ctx) -> String {
                 "<span class=\"warn\">The justification for this category has not been given (Settings \u{203a} Calibration and validation \u{203a} Why this category).</span>".to_string()
             }
         )),
-        c.table("Calibration and validation status", Tbl::new(vec![h("Period"), h("Status"), h("Date")], rows), &TableOpts::default()),
+        c.table(
+            "Calibration and validation status",
+            Tbl::new(vec![h("Period"), h("Status"), h("Date")], rows),
+            &TableOpts::default()
+        ),
         note(&esc(crate::standards::STANDARDS.tmdg.standing), false)
     )
 }
@@ -427,7 +532,11 @@ fn exec_bullets(c: &mut Ctx) -> Vec<String> {
         out.push(format!(
             "Pathway: {}{}. Regime: {}.",
             esc(&rg.label),
-            if rg.date.is_empty() { String::new() } else { format!(", lodgement {}", esc(&rg.date)) },
+            if rg.date.is_empty() {
+                String::new()
+            } else {
+                format!(", lodgement {}", esc(&rg.date))
+            },
             esc(&rg.regime)
         ));
     }
@@ -437,7 +546,11 @@ fn exec_bullets(c: &mut Ctx) -> Vec<String> {
             .iter()
             .filter_map(|p| {
                 let res = r.results[w].get(p)?;
-                Some(format!("{} veh/h in the {} peak hour", r_veh(res.dev.trips), p))
+                Some(format!(
+                    "{} veh/h in the {} peak hour",
+                    r_veh(res.dev.trips),
+                    p
+                ))
             })
             .collect();
         if !per.is_empty() {
@@ -450,8 +563,11 @@ fn exec_bullets(c: &mut Ctx) -> Vec<String> {
         }
         let js_rows = junction_rows(r, &c.sel.clone(), w, None);
         let mut worst: Option<&super::shared::JRow> = None;
-        let mut with_s: Vec<&super::shared::JRow> = js_rows.iter().filter(|x| x.s.is_some()).collect();
-        crate::graph::js_sort_by(&mut with_s, |a, b| b.s.as_ref().map_or(0.0, |s| s.dos) - a.s.as_ref().map_or(0.0, |s| s.dos));
+        let mut with_s: Vec<&super::shared::JRow> =
+            js_rows.iter().filter(|x| x.s.is_some()).collect();
+        crate::graph::js_sort_by(&mut with_s, |a, b| {
+            b.s.as_ref().map_or(0.0, |s| s.dos) - a.s.as_ref().map_or(0.0, |s| s.dos)
+        });
         if let Some(x) = with_s.first() {
             worst = Some(x);
         }
@@ -483,7 +599,11 @@ fn exec_bullets(c: &mut Ctx) -> Vec<String> {
                 .map(|e| format!(
                     "{} peak {} and {} over the 5%/10% thresholds",
                     e.p,
-                    plural(e.x.rows.iter().filter(|r| r.included).count() as f64, "link direction", "link directions"),
+                    plural(
+                        e.x.rows.iter().filter(|r| r.included).count() as f64,
+                        "link direction",
+                        "link directions"
+                    ),
                     plural(e.x.sites.len() as f64, "junction", "junctions")
                 ))
                 .collect::<Vec<_>>()
@@ -500,18 +620,29 @@ fn exec_bullets(c: &mut Ctx) -> Vec<String> {
         ));
     }
     let conv_n = (0..r.project.scenarios.len())
-        .flat_map(|i| r.rep_periods(i).into_iter().filter_map(move |p| r.results[i].get(p)))
+        .flat_map(|i| {
+            r.rep_periods(i)
+                .into_iter()
+                .filter_map(move |p| r.results[i].get(p))
+        })
         .filter(|res| !res.converged)
         .count();
     out.push(format!(
         "Model status: {}; {}.",
         c.periods
             .iter()
-            .map(|p| format!("{} {}", p, esc(&crate::results::model_status(r.project, p).short)))
+            .map(|p| format!(
+                "{} {}",
+                p,
+                esc(&crate::results::model_status(r.project, p).short)
+            ))
             .collect::<Vec<_>>()
             .join(", "),
         if conv_n > 0 {
-            format!("<span class=\"warn\">{} did not converge</span>", plural(conv_n as f64, "run", "runs"))
+            format!(
+                "<span class=\"warn\">{} did not converge</span>",
+                plural(conv_n as f64, "run", "runs")
+            )
         } else {
             "every stored run converged".to_string()
         }
@@ -525,11 +656,19 @@ fn exec_bullets(c: &mut Ctx) -> Vec<String> {
 }
 
 pub(crate) fn r_veh(v: f64) -> String {
-    if v.is_finite() { fmt::int(v) } else { fmt::DASH.to_string() }
+    if v.is_finite() {
+        fmt::int(v)
+    } else {
+        fmt::DASH.to_string()
+    }
 }
 
 pub(crate) fn r_dos(v: f64) -> String {
-    if v.is_finite() { fmt::num(v, 2) } else { fmt::DASH.to_string() }
+    if v.is_finite() {
+        fmt::num(v, 2)
+    } else {
+        fmt::DASH.to_string()
+    }
 }
 
 /// `report-exec`.
@@ -545,5 +684,13 @@ pub(crate) fn exec(c: &mut Ctx) -> String {
 /// Keeps helper imports used by other front-matter sections linked.
 #[allow(dead_code)]
 fn _link(_: Head, _: &str) {
-    let _ = (hn("x"), level('P'), rr422::ID, attrib::OSM, assessed_sites, j_sum, number_to_js_string(1.0));
+    let _ = (
+        hn("x"),
+        level('P'),
+        rr422::ID,
+        attrib::OSM,
+        assessed_sites,
+        j_sum,
+        number_to_js_string(1.0),
+    );
 }

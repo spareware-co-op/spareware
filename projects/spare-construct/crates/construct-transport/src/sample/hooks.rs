@@ -31,15 +31,30 @@ pub struct LaneApproach {
 #[allow(unused_variables)]
 pub trait SampleHooks {
     /// `Feeds.nslr.all(near, [src], status)`: the legal speed limits of the roads of the first scenario.
-    fn nslr_all(&mut self, p: &mut Project, near: &Bx, scenario: usize, status: &mut dyn FnMut(&str)) -> Result<(), SampleError> {
+    fn nslr_all(
+        &mut self,
+        p: &mut Project,
+        near: &Bx,
+        scenario: usize,
+        status: &mut dyn FnMut(&str),
+    ) -> Result<(), SampleError> {
         Ok(())
     }
     /// `Feeds.tms.load(Feeds.tms.sites(), { status })`: the NZTA TMS daily counts of the count sites loaded.
-    fn tms_load(&mut self, p: &mut Project, status: &mut dyn FnMut(&str)) -> Result<(), SampleError> {
+    fn tms_load(
+        &mut self,
+        p: &mut Project,
+        status: &mut dyn FnMut(&str),
+    ) -> Result<(), SampleError> {
         Ok(())
     }
     /// `Feeds.hazards.load(near, { status })`: the flood plains and coastal inundation areas.
-    fn hazards_load(&mut self, p: &mut Project, near: &Bx, status: &mut dyn FnMut(&str)) -> Result<Hazards, SampleError> {
+    fn hazards_load(
+        &mut self,
+        p: &mut Project,
+        near: &Bx,
+        status: &mut dyn FnMut(&str),
+    ) -> Result<Hazards, SampleError> {
         Ok(Hazards::default())
     }
     /// `Feeds.hazards.links(sc)`: the length of each road in each hazard layer, for one scenario.
@@ -51,7 +66,14 @@ pub trait SampleHooks {
         Ok(None)
     }
     /// `Feeds.gtfs.load`, `routes`, `apply` and `keep`: loads the timetable, puts its bus routes in the scenario and keeps what they use; gives the number of routes.
-    fn gtfs_apply(&mut self, p: &mut Project, feed: &Value, near: &Bx, scenario: usize, status: &mut dyn FnMut(&str)) -> Result<usize, SampleError> {
+    fn gtfs_apply(
+        &mut self,
+        p: &mut Project,
+        feed: &Value,
+        near: &Bx,
+        scenario: usize,
+        status: &mut dyn FnMut(&str),
+    ) -> Result<usize, SampleError> {
         Ok(0)
     }
     /// `Junctions.approaches(sc, nodeId)`: the roads into a junction node that carry traffic into it (not connectors), with their lanes.
@@ -59,7 +81,13 @@ pub trait SampleHooks {
         Vec::new()
     }
     /// `Compliance.state(P)` then `Object.assign(C.ctx, ctx)` and, when given, `Object.assign(C.site, site)`.
-    fn compliance_context(&mut self, p: &mut Project, ctx: &Map<String, Value>, site: Option<&Map<String, Value>>) {}
+    fn compliance_context(
+        &mut self,
+        p: &mut Project,
+        ctx: &Map<String, Value>,
+        site: Option<&Map<String, Value>>,
+    ) {
+    }
     /// `Compliance.lookupSite(P)`: the site's zone, precinct and FDS area from Auckland Council.
     fn lookup_site(&mut self, p: &mut Project) -> Result<(), SampleError> {
         Ok(())
@@ -97,11 +125,21 @@ pub trait SampleHooks {
         Ok(())
     }
     /// `Report.staging(P, { steps, onProgress })`: the proposal at each build-out step. `progress(k, n, text)` is called as each step finishes and gives an error when the build was cancelled.
-    fn staging(&mut self, p: &mut Project, steps: &[f64], progress: &mut dyn FnMut(usize, usize, &str) -> Result<(), SampleError>) -> Result<(), SampleError> {
+    fn staging(
+        &mut self,
+        p: &mut Project,
+        steps: &[f64],
+        progress: &mut dyn FnMut(usize, usize, &str) -> Result<(), SampleError>,
+    ) -> Result<(), SampleError> {
         Ok(())
     }
     /// `Report.sensitivity(P, { tests, onProgress })`: the sensitivity tests. `progress` is as for [`SampleHooks::staging`].
-    fn sensitivity(&mut self, p: &mut Project, tests: &[&str], progress: &mut dyn FnMut(usize, usize, &str) -> Result<(), SampleError>) -> Result<(), SampleError> {
+    fn sensitivity(
+        &mut self,
+        p: &mut Project,
+        tests: &[&str],
+        progress: &mut dyn FnMut(usize, usize, &str) -> Result<(), SampleError>,
+    ) -> Result<(), SampleError> {
         Ok(())
     }
 }

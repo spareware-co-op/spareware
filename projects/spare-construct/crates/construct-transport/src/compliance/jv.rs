@@ -72,13 +72,16 @@ impl Jx for V {
         self.as_array().map_or(0, |a| a.len())
     }
     fn entries(&self) -> Vec<(&str, &V)> {
-        self.as_object().map_or_else(Vec::new, |m| m.iter().collect())
+        self.as_object()
+            .map_or_else(Vec::new, |m| m.iter().collect())
     }
     fn keys(&self) -> Vec<&str> {
-        self.as_object().map_or_else(Vec::new, |m| m.keys().collect())
+        self.as_object()
+            .map_or_else(Vec::new, |m| m.keys().collect())
     }
     fn vals(&self) -> Vec<&V> {
-        self.as_object().map_or_else(Vec::new, |m| m.values().collect())
+        self.as_object()
+            .map_or_else(Vec::new, |m| m.values().collect())
     }
     fn n(&self) -> f64 {
         self.to_number()
@@ -87,7 +90,11 @@ impl Jx for V {
         self.js_string()
     }
     fn sn(&self) -> String {
-        if self.is_null() { String::new() } else { self.js_string() }
+        if self.is_null() {
+            String::new()
+        } else {
+            self.js_string()
+        }
     }
     fn t(&self) -> bool {
         self.truthy()
@@ -225,12 +232,21 @@ pub fn arr(items: impl IntoIterator<Item = V>) -> V {
 
 /// An array of text values.
 pub fn strs<S: AsRef<str>>(items: impl IntoIterator<Item = S>) -> V {
-    V::Array(items.into_iter().map(|s| V::String(s.as_ref().to_string())).collect())
+    V::Array(
+        items
+            .into_iter()
+            .map(|s| V::String(s.as_ref().to_string()))
+            .collect(),
+    )
 }
 
 /// `{ ...a, ...b }`: the fields of a, then those of b (a field in both keeps a's place and takes b's value).
 pub fn merge(a: &V, b: &V) -> V {
-    let mut o = if a.is_object() { a.clone() } else { V::object() };
+    let mut o = if a.is_object() {
+        a.clone()
+    } else {
+        V::object()
+    };
     for (k, v) in b.entries() {
         o.set(k, v.clone());
     }
@@ -257,7 +273,10 @@ pub fn arr_at<'a>(o: &'a mut V, k: &str) -> &'a mut Vec<V> {
     if !ok {
         o.set(k, V::Array(Vec::new()));
     }
-    o.get_mut(k).expect("field set above").as_array_mut().expect("array set above")
+    o.get_mut(k)
+        .expect("field set above")
+        .as_array_mut()
+        .expect("array set above")
 }
 
 /// A dotted path read from a value (`getPath`): null when any step is missing.
@@ -265,7 +284,11 @@ pub fn path<'a>(v: &'a V, p: &str) -> &'a V {
     let mut cur = v;
     for k in p.split('.') {
         cur = match cur {
-            V::Array(a) => k.parse::<usize>().ok().and_then(|i| a.get(i)).unwrap_or(&NULL),
+            V::Array(a) => k
+                .parse::<usize>()
+                .ok()
+                .and_then(|i| a.get(i))
+                .unwrap_or(&NULL),
             _ => cur.g(k),
         };
     }
@@ -323,19 +346,32 @@ pub fn has_str(a: &[&str], x: &str) -> bool {
 /// `U.csvCell(v)`: one RFC 4180 cell. Text that a spreadsheet would read as a formula gets a leading apostrophe; null is an empty
 /// cell; numbers (a number that is not finite prints as NaN or Infinity), booleans, arrays and objects are written as `String(v)`.
 pub fn csv_cell(v: &V) -> String {
-    let mut s = if v.is_null() { String::new() } else { v.js_string() };
+    let mut s = if v.is_null() {
+        String::new()
+    } else {
+        v.js_string()
+    };
     if let V::String(_) = v {
         let first = s.chars().next();
-        if matches!(first, Some('=' | '+' | '-' | '@' | '\t' | '\r')) && !super::rx::rx(r"^[-+]?(\d+\.?\d*|\.\d+)(e[-+]?\d+)?$", "i").test(trim(&s)) {
+        if matches!(first, Some('=' | '+' | '-' | '@' | '\t' | '\r'))
+            && !super::rx::rx(r"^[-+]?(\d+\.?\d*|\.\d+)(e[-+]?\d+)?$", "i").test(trim(&s))
+        {
             s.insert(0, '\'');
         }
     }
-    if s.contains(['"', ',', '\r', '\n']) { format!("\"{}\"", s.replace('"', "\"\"")) } else { s }
+    if s.contains(['"', ',', '\r', '\n']) {
+        format!("\"{}\"", s.replace('"', "\"\""))
+    } else {
+        s
+    }
 }
 
 /// `U.csv(rows)`: cells joined with commas, rows with CRLF.
 pub fn csv(rows: &[Vec<V>]) -> String {
-    rows.iter().map(|r| r.iter().map(csv_cell).collect::<Vec<_>>().join(",")).collect::<Vec<_>>().join("\r\n")
+    rows.iter()
+        .map(|r| r.iter().map(csv_cell).collect::<Vec<_>>().join(","))
+        .collect::<Vec<_>>()
+        .join("\r\n")
 }
 
 /// `U.parseCSV(text)`: rows of cells, quotes and doubled quotes read, rows that are blank left out.
@@ -374,5 +410,7 @@ pub fn parse_csv(text: &str) -> Vec<Vec<String>> {
         row.push(cur);
         rows.push(row);
     }
-    rows.into_iter().filter(|r| r.iter().any(|v| !trim(v).is_empty())).collect()
+    rows.into_iter()
+        .filter(|r| r.iter().any(|v| !trim(v).is_empty()))
+        .collect()
 }

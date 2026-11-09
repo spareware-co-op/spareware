@@ -9,7 +9,8 @@ use construct_transport::compliance::jv::{Jx, V};
 
 /// An expected file (expected/compliance-<name>.json), read with ordered objects.
 pub fn load(name: &str) -> V {
-    V::parse(&read_truth(&format!("expected/compliance-{name}.json"))).unwrap_or_else(|e| panic!("compliance-{name}: {e}"))
+    V::parse(&read_truth(&format!("expected/compliance-{name}.json")))
+        .unwrap_or_else(|e| panic!("compliance-{name}: {e}"))
 }
 
 /// Applies a case's sets (dotted path to value, in the order the case lists them) to a project.
@@ -34,7 +35,11 @@ pub fn set_clock() {
 /// Panics unless an answer matches the case's recorded `ok` (numbers within the comparator's tolerance, text exactly).
 pub fn check_ok(case: &V, got: &V) {
     let id = case.g("id").s();
-    assert!(case.has("ok"), "case {id} has no recorded answer: {}", case.g("error").s());
+    assert!(
+        case.has("ok"),
+        "case {id} has no recorded answer: {}",
+        case.g("error").s()
+    );
     check(&id, got, &case.g("ok").to_value());
 }
 

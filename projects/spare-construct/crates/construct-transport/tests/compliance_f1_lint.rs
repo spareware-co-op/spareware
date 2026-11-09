@@ -27,11 +27,26 @@ fn linter() {
         let got: V = match call {
             "lint" => lint::lint(&p, a.g("text").as_str()),
             "overrideLint" => {
-                let reason = if a.g("reason").t() { a.g("reason").s() } else { String::new() };
+                let reason = if a.g("reason").t() {
+                    a.g("reason").s()
+                } else {
+                    String::new()
+                };
                 let r = lint::override_lint(&mut p, &a.g("key").s(), &reason);
-                let ov = construct_transport::compliance::extra::ctx::data(&p).g("lint").g("override").clone();
+                let ov = construct_transport::compliance::extra::ctx::data(&p)
+                    .g("lint")
+                    .g("override")
+                    .clone();
                 if want.get("record").is_some() {
-                    obj(vec![("r", r), ("record", construct_transport::compliance::extra::ctx::data(&p).g("lint").clone())])
+                    obj(vec![
+                        ("r", r),
+                        (
+                            "record",
+                            construct_transport::compliance::extra::ctx::data(&p)
+                                .g("lint")
+                                .clone(),
+                        ),
+                    ])
                 } else {
                     obj(vec![("r", r), ("override", ov)])
                 }

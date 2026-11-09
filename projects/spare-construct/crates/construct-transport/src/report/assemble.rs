@@ -2,13 +2,17 @@
 //! carry, number the tables and figures and write the contents list.
 
 use super::build::{
-    BuildOpts, Built, TocEntry, chapter_of, fix_tables, has_assumption, has_source_line, has_word, number_figcaptions, number_foreign,
+    BuildOpts, Built, TocEntry, chapter_of, fix_tables, has_assumption, has_source_line, has_word,
+    number_figcaptions, number_foreign,
 };
 use super::consts::{Chapter, chapters};
 use super::ctx::{ChapterState, Ctx, SectionState, disc};
 use super::host::ForeignSection;
 use super::{Rep, pick};
-use super::{sections_app as app, sections_assess as assess, sections_crash as crash, sections_end as end, sections_env as env};
+use super::{
+    sections_app as app, sections_assess as assess, sections_crash as crash, sections_end as end,
+    sections_env as env,
+};
 use super::{sections_front as front, sections_prop as prop};
 use crate::jsnum::{is_js_space, js_trim};
 use crate::junction_tools::{ReportCtx, perf_title, report_section_ids, report_section_meta};
@@ -73,66 +77,676 @@ fn own(
 fn own_defs() -> Vec<Def> {
     let t = |s: &'static str| Some(s);
     vec![
-        own("report-cover", "front", 1.0, None, None, "mixed", false, false, true, front::cover),
-        own("report-contents", "front", 2.0, None, t("Contents"), "auto", false, false, false, front::contents),
-        own("report-regulatory", "front", 3.0, None, t("Regulatory context"), "auto", false, false, true, front::regulatory),
-        own("report-doc-control", "front", 4.0, None, t("Document control"), "author", false, false, true, front::doc_control),
-        own("report-data-vintage", "front", 5.0, None, t("Data sources and vintage"), "auto", false, false, true, front::data_vintage),
-        own("report-model-status", "front", 6.0, None, t("Model purpose and status"), "mixed", false, false, true, front::model_status),
-        own("report-scope", "front", 7.0, None, t("Scope and proportionality"), "mixed", false, false, true, front::scope_section),
-        own("report-limitations", "front", 8.0, None, t("Limitations"), "mixed", false, false, true, front::limitations),
-        own("report-exec", "front", 9.0, None, t("Executive summary"), "mixed", false, false, true, front::exec),
-        own("report-purpose", "1", 10.0, t("1.1"), t("Purpose and statutory context"), "author", false, false, true, env::purpose),
-        own("report-reason", "1", 20.0, t("1.2"), t("Reason for consent"), "mixed", false, false, true, env::reason),
-        own("report-engagement", "1", 30.0, t("1.3"), t("Scoping and engagement log"), "author", false, false, true, env::engagement),
-        own("report-rr422", "1", 40.0, t("1.4"), t("ITA scope checklist"), "auto", false, false, true, env::rr422_section),
-        own("report-locality", "2", 10.0, t("2.1"), t("Site and locality"), "mixed", false, false, true, env::locality),
-        own("report-zoning", "2", 20.0, t("2.2"), t("Zoning"), "mixed", false, false, true, env::zoning),
-        own("report-roads", "2", 30.0, t("2.3"), t("Road network"), "auto", false, false, true, env::roads),
-        own("report-active", "2", 40.0, t("2.4"), t("Walking, cycling and public transport"), "mixed", false, false, true, env::active),
-        own("report-volumes", "2", 50.0, t("2.5"), t("Traffic volumes"), "auto", false, false, true, env::volumes),
-        own("report-speeds", "2", 60.0, t("2.6"), t("Speeds and existing performance"), "auto", true, false, true, env::speeds),
-        own("report-crashes", "2", 70.0, t("2.7"), t("Crash history"), "mixed", true, false, true, crash::crashes),
-        own("report-receiving", "2", 80.0, t("2.8"), t("Future receiving environment"), "auto", false, false, true, crash::receiving),
-        own("report-landuse", "3", 10.0, t("3.1"), t("Land-use schedule"), "auto", false, false, true, prop::landuse),
-        own("report-access", "3", 20.0, t("3.2"), t("Access"), "author", false, false, true, prop::access),
-        own("report-accessibility", "3", 30.0, t("3.3"), t("Accessibility and parking"), "mixed", false, false, true, prop::accessibility),
-        own("report-staging-plan", "3", 40.0, t("3.4"), t("Staging and sequencing"), "mixed", false, false, true, prop::staging_plan),
-        own("report-construction", "3", 50.0, t("3.5"), t("Construction traffic"), "author", false, false, true, prop::construction),
-        own("report-tripgen", "3", 60.0, t("3.6"), t("Trip generation, distribution and assignment"), "auto", true, false, true, prop::tripgen),
-        own("report-scenarios", "4", 10.0, t("4.1"), t("Assessment scenarios"), "auto", false, false, true, assess::scenarios),
-        own("report-modelling", "4", 20.0, t("4.2"), t("Model description and calibration summary"), "auto", false, false, true, assess::modelling),
-        own("report-walk", "4", 30.0, t("4.2.1"), t("Walking, cycling and public transport levels of service"), "mixed", false, false, true, assess::walk),
-        own("report-extent", "4", 38.0, t("4.2.2"), t("Extent of effects"), "auto", true, false, true, assess::extent),
-        own("report-junctions", "4", 39.0, t("4.2.3"), t("Junction performance"), "auto", true, false, true, assess::junctions),
-        own("report-safety", "4", 60.0, t("4.3"), t("Road user safety"), "mixed", true, false, true, assess::safety),
-        own("report-alignment", "4", 70.0, t("4.4"), t("Network and policy alignment"), "mixed", false, false, true, assess::alignment),
-        own("report-climate", "4", 75.0, t("4.5"), t("Climate adaptation"), "author", false, true, true, assess::climate),
-        own("report-sensitivity", "4", 80.0, t("4.6"), t("Sensitivity tests"), "auto", false, false, true, assess::sensitivity),
-        own("report-economics", "4", 84.0, t("4.7"), t("Indicative economics"), "auto", false, false, true, assess::economics),
-        own("report-mitigation", "5", 10.0, t("5.1"), t("Mitigation register"), "mixed", true, false, true, end::mitigation),
-        own("report-staging", "5", 20.0, t("5.2"), t("Staging triggers"), "auto", false, false, true, end::staging),
-        own("report-conditions", "5", 30.0, t("5.3"), t("Conditions and monitoring"), "mixed", false, false, true, end::conditions),
-        own("report-conclusion", "6", 10.0, t("6.1"), t("Conclusion"), "mixed", false, false, true, end::conclusion),
-        own("report-app-data", "A", 5.0, None, t("Data sources, licences and basis"), "auto", false, false, true, app::app_data),
-        own("report-app-settings", "A", 10.0, None, t("Model settings"), "auto", false, false, true, app::app_settings),
-        own("report-app-rates", "A", 20.0, None, t("Trip rates"), "auto", false, false, true, app::app_rates),
-        own("report-app-zones", "A", 30.0, None, t("Zones and gateways"), "auto", true, false, true, app::app_zones),
-        own("report-app-network", "A", 40.0, None, t("Junction controls and network edits"), "auto", true, false, true, app::app_network),
-        own("report-app-assumptions", "A", 50.0, None, t("Standards and assumptions register"), "auto", false, false, true, app::app_assumptions),
-        own("report-app-calibration", "B", 10.0, None, t("Calibration and validation criteria"), "auto", false, false, true, app::app_calibration),
-        own("report-app-convergence", "B", 20.0, None, t("Convergence"), "auto", false, false, true, app::app_convergence),
-        own("report-app-counts", "B", 30.0, None, t("Count data and journey times"), "auto", false, false, true, app::app_counts),
-        own("report-app-movements", "C", 10.0, None, t("Movement summaries by approach"), "auto", true, false, true, app::app_movements),
-        own("report-app-crashes", "D", 10.0, None, t("Crash listing"), "auto", true, false, true, app::app_crashes),
-        own("report-app-anop", "E", 10.0, None, t("ANOP tool inputs"), "auto", false, true, true, app::app_anop),
-        own("report-app-datapack", "F", 10.0, None, t("Data pack manifest"), "auto", false, false, true, app::app_datapack),
-        own("report-app-expert", "G", 10.0, None, t("Expert disclosure and sign-off"), "mixed", false, false, true, app::app_expert),
+        own(
+            "report-cover",
+            "front",
+            1.0,
+            None,
+            None,
+            "mixed",
+            false,
+            false,
+            true,
+            front::cover,
+        ),
+        own(
+            "report-contents",
+            "front",
+            2.0,
+            None,
+            t("Contents"),
+            "auto",
+            false,
+            false,
+            false,
+            front::contents,
+        ),
+        own(
+            "report-regulatory",
+            "front",
+            3.0,
+            None,
+            t("Regulatory context"),
+            "auto",
+            false,
+            false,
+            true,
+            front::regulatory,
+        ),
+        own(
+            "report-doc-control",
+            "front",
+            4.0,
+            None,
+            t("Document control"),
+            "author",
+            false,
+            false,
+            true,
+            front::doc_control,
+        ),
+        own(
+            "report-data-vintage",
+            "front",
+            5.0,
+            None,
+            t("Data sources and vintage"),
+            "auto",
+            false,
+            false,
+            true,
+            front::data_vintage,
+        ),
+        own(
+            "report-model-status",
+            "front",
+            6.0,
+            None,
+            t("Model purpose and status"),
+            "mixed",
+            false,
+            false,
+            true,
+            front::model_status,
+        ),
+        own(
+            "report-scope",
+            "front",
+            7.0,
+            None,
+            t("Scope and proportionality"),
+            "mixed",
+            false,
+            false,
+            true,
+            front::scope_section,
+        ),
+        own(
+            "report-limitations",
+            "front",
+            8.0,
+            None,
+            t("Limitations"),
+            "mixed",
+            false,
+            false,
+            true,
+            front::limitations,
+        ),
+        own(
+            "report-exec",
+            "front",
+            9.0,
+            None,
+            t("Executive summary"),
+            "mixed",
+            false,
+            false,
+            true,
+            front::exec,
+        ),
+        own(
+            "report-purpose",
+            "1",
+            10.0,
+            t("1.1"),
+            t("Purpose and statutory context"),
+            "author",
+            false,
+            false,
+            true,
+            env::purpose,
+        ),
+        own(
+            "report-reason",
+            "1",
+            20.0,
+            t("1.2"),
+            t("Reason for consent"),
+            "mixed",
+            false,
+            false,
+            true,
+            env::reason,
+        ),
+        own(
+            "report-engagement",
+            "1",
+            30.0,
+            t("1.3"),
+            t("Scoping and engagement log"),
+            "author",
+            false,
+            false,
+            true,
+            env::engagement,
+        ),
+        own(
+            "report-rr422",
+            "1",
+            40.0,
+            t("1.4"),
+            t("ITA scope checklist"),
+            "auto",
+            false,
+            false,
+            true,
+            env::rr422_section,
+        ),
+        own(
+            "report-locality",
+            "2",
+            10.0,
+            t("2.1"),
+            t("Site and locality"),
+            "mixed",
+            false,
+            false,
+            true,
+            env::locality,
+        ),
+        own(
+            "report-zoning",
+            "2",
+            20.0,
+            t("2.2"),
+            t("Zoning"),
+            "mixed",
+            false,
+            false,
+            true,
+            env::zoning,
+        ),
+        own(
+            "report-roads",
+            "2",
+            30.0,
+            t("2.3"),
+            t("Road network"),
+            "auto",
+            false,
+            false,
+            true,
+            env::roads,
+        ),
+        own(
+            "report-active",
+            "2",
+            40.0,
+            t("2.4"),
+            t("Walking, cycling and public transport"),
+            "mixed",
+            false,
+            false,
+            true,
+            env::active,
+        ),
+        own(
+            "report-volumes",
+            "2",
+            50.0,
+            t("2.5"),
+            t("Traffic volumes"),
+            "auto",
+            false,
+            false,
+            true,
+            env::volumes,
+        ),
+        own(
+            "report-speeds",
+            "2",
+            60.0,
+            t("2.6"),
+            t("Speeds and existing performance"),
+            "auto",
+            true,
+            false,
+            true,
+            env::speeds,
+        ),
+        own(
+            "report-crashes",
+            "2",
+            70.0,
+            t("2.7"),
+            t("Crash history"),
+            "mixed",
+            true,
+            false,
+            true,
+            crash::crashes,
+        ),
+        own(
+            "report-receiving",
+            "2",
+            80.0,
+            t("2.8"),
+            t("Future receiving environment"),
+            "auto",
+            false,
+            false,
+            true,
+            crash::receiving,
+        ),
+        own(
+            "report-landuse",
+            "3",
+            10.0,
+            t("3.1"),
+            t("Land-use schedule"),
+            "auto",
+            false,
+            false,
+            true,
+            prop::landuse,
+        ),
+        own(
+            "report-access",
+            "3",
+            20.0,
+            t("3.2"),
+            t("Access"),
+            "author",
+            false,
+            false,
+            true,
+            prop::access,
+        ),
+        own(
+            "report-accessibility",
+            "3",
+            30.0,
+            t("3.3"),
+            t("Accessibility and parking"),
+            "mixed",
+            false,
+            false,
+            true,
+            prop::accessibility,
+        ),
+        own(
+            "report-staging-plan",
+            "3",
+            40.0,
+            t("3.4"),
+            t("Staging and sequencing"),
+            "mixed",
+            false,
+            false,
+            true,
+            prop::staging_plan,
+        ),
+        own(
+            "report-construction",
+            "3",
+            50.0,
+            t("3.5"),
+            t("Construction traffic"),
+            "author",
+            false,
+            false,
+            true,
+            prop::construction,
+        ),
+        own(
+            "report-tripgen",
+            "3",
+            60.0,
+            t("3.6"),
+            t("Trip generation, distribution and assignment"),
+            "auto",
+            true,
+            false,
+            true,
+            prop::tripgen,
+        ),
+        own(
+            "report-scenarios",
+            "4",
+            10.0,
+            t("4.1"),
+            t("Assessment scenarios"),
+            "auto",
+            false,
+            false,
+            true,
+            assess::scenarios,
+        ),
+        own(
+            "report-modelling",
+            "4",
+            20.0,
+            t("4.2"),
+            t("Model description and calibration summary"),
+            "auto",
+            false,
+            false,
+            true,
+            assess::modelling,
+        ),
+        own(
+            "report-walk",
+            "4",
+            30.0,
+            t("4.2.1"),
+            t("Walking, cycling and public transport levels of service"),
+            "mixed",
+            false,
+            false,
+            true,
+            assess::walk,
+        ),
+        own(
+            "report-extent",
+            "4",
+            38.0,
+            t("4.2.2"),
+            t("Extent of effects"),
+            "auto",
+            true,
+            false,
+            true,
+            assess::extent,
+        ),
+        own(
+            "report-junctions",
+            "4",
+            39.0,
+            t("4.2.3"),
+            t("Junction performance"),
+            "auto",
+            true,
+            false,
+            true,
+            assess::junctions,
+        ),
+        own(
+            "report-safety",
+            "4",
+            60.0,
+            t("4.3"),
+            t("Road user safety"),
+            "mixed",
+            true,
+            false,
+            true,
+            assess::safety,
+        ),
+        own(
+            "report-alignment",
+            "4",
+            70.0,
+            t("4.4"),
+            t("Network and policy alignment"),
+            "mixed",
+            false,
+            false,
+            true,
+            assess::alignment,
+        ),
+        own(
+            "report-climate",
+            "4",
+            75.0,
+            t("4.5"),
+            t("Climate adaptation"),
+            "author",
+            false,
+            true,
+            true,
+            assess::climate,
+        ),
+        own(
+            "report-sensitivity",
+            "4",
+            80.0,
+            t("4.6"),
+            t("Sensitivity tests"),
+            "auto",
+            false,
+            false,
+            true,
+            assess::sensitivity,
+        ),
+        own(
+            "report-economics",
+            "4",
+            84.0,
+            t("4.7"),
+            t("Indicative economics"),
+            "auto",
+            false,
+            false,
+            true,
+            assess::economics,
+        ),
+        own(
+            "report-mitigation",
+            "5",
+            10.0,
+            t("5.1"),
+            t("Mitigation register"),
+            "mixed",
+            true,
+            false,
+            true,
+            end::mitigation,
+        ),
+        own(
+            "report-staging",
+            "5",
+            20.0,
+            t("5.2"),
+            t("Staging triggers"),
+            "auto",
+            false,
+            false,
+            true,
+            end::staging,
+        ),
+        own(
+            "report-conditions",
+            "5",
+            30.0,
+            t("5.3"),
+            t("Conditions and monitoring"),
+            "mixed",
+            false,
+            false,
+            true,
+            end::conditions,
+        ),
+        own(
+            "report-conclusion",
+            "6",
+            10.0,
+            t("6.1"),
+            t("Conclusion"),
+            "mixed",
+            false,
+            false,
+            true,
+            end::conclusion,
+        ),
+        own(
+            "report-app-data",
+            "A",
+            5.0,
+            None,
+            t("Data sources, licences and basis"),
+            "auto",
+            false,
+            false,
+            true,
+            app::app_data,
+        ),
+        own(
+            "report-app-settings",
+            "A",
+            10.0,
+            None,
+            t("Model settings"),
+            "auto",
+            false,
+            false,
+            true,
+            app::app_settings,
+        ),
+        own(
+            "report-app-rates",
+            "A",
+            20.0,
+            None,
+            t("Trip rates"),
+            "auto",
+            false,
+            false,
+            true,
+            app::app_rates,
+        ),
+        own(
+            "report-app-zones",
+            "A",
+            30.0,
+            None,
+            t("Zones and gateways"),
+            "auto",
+            true,
+            false,
+            true,
+            app::app_zones,
+        ),
+        own(
+            "report-app-network",
+            "A",
+            40.0,
+            None,
+            t("Junction controls and network edits"),
+            "auto",
+            true,
+            false,
+            true,
+            app::app_network,
+        ),
+        own(
+            "report-app-assumptions",
+            "A",
+            50.0,
+            None,
+            t("Standards and assumptions register"),
+            "auto",
+            false,
+            false,
+            true,
+            app::app_assumptions,
+        ),
+        own(
+            "report-app-calibration",
+            "B",
+            10.0,
+            None,
+            t("Calibration and validation criteria"),
+            "auto",
+            false,
+            false,
+            true,
+            app::app_calibration,
+        ),
+        own(
+            "report-app-convergence",
+            "B",
+            20.0,
+            None,
+            t("Convergence"),
+            "auto",
+            false,
+            false,
+            true,
+            app::app_convergence,
+        ),
+        own(
+            "report-app-counts",
+            "B",
+            30.0,
+            None,
+            t("Count data and journey times"),
+            "auto",
+            false,
+            false,
+            true,
+            app::app_counts,
+        ),
+        own(
+            "report-app-movements",
+            "C",
+            10.0,
+            None,
+            t("Movement summaries by approach"),
+            "auto",
+            true,
+            false,
+            true,
+            app::app_movements,
+        ),
+        own(
+            "report-app-crashes",
+            "D",
+            10.0,
+            None,
+            t("Crash listing"),
+            "auto",
+            true,
+            false,
+            true,
+            app::app_crashes,
+        ),
+        own(
+            "report-app-anop",
+            "E",
+            10.0,
+            None,
+            t("ANOP tool inputs"),
+            "auto",
+            false,
+            true,
+            true,
+            app::app_anop,
+        ),
+        own(
+            "report-app-datapack",
+            "F",
+            10.0,
+            None,
+            t("Data pack manifest"),
+            "auto",
+            false,
+            false,
+            true,
+            app::app_datapack,
+        ),
+        own(
+            "report-app-expert",
+            "G",
+            10.0,
+            None,
+            t("Expert disclosure and sign-off"),
+            "mixed",
+            false,
+            false,
+            true,
+            app::app_expert,
+        ),
     ]
 }
 
 /// Sections printed inside one of the report's own (`MERGED`): left out of the document while their host is there.
-const MERGED: [&str; 4] = ["compliance-scope", "compliance-model-status", "landuse-tripgen", "landuse-distribution"];
+const MERGED: [&str; 4] = [
+    "compliance-scope",
+    "compliance-model-status",
+    "landuse-tripgen",
+    "landuse-distribution",
+];
 
 /// A section after numbering.
 struct Numbered {
@@ -163,21 +777,33 @@ fn same(a: Option<&str>, b: Option<&str>) -> bool {
 fn number_chapter(ch: &Chapter, defs: &[Def], done: &[(usize, String)]) -> Vec<Numbered> {
     let mut out: Vec<Numbered> = Vec::new();
     if ch.app || ch.num.is_empty() {
-        let filled = done.iter().any(|(d, b)| !b.is_empty() && !defs[*d].fallback && !defs[*d].id.starts_with("report-"));
+        let filled = done.iter().any(|(d, b)| {
+            !b.is_empty() && !defs[*d].fallback && !defs[*d].id.starts_with("report-")
+        });
         let mut k = 0;
         for (d, b) in done {
             let x = &defs[*d];
             if b.is_empty() || (x.fallback && filled) {
                 continue;
             }
-            let numbered = !ch.num.is_empty() && x.title.as_deref().is_some_and(|t| !t.is_empty()) && x.numbered;
+            let numbered = !ch.num.is_empty()
+                && x.title.as_deref().is_some_and(|t| !t.is_empty())
+                && x.numbered;
             let num = if numbered {
                 k += 1;
                 format!("{}{}{}", ch.num, if ch.app { "" } else { "." }, k)
             } else {
                 String::new()
             };
-            out.push(Numbered { d: *d, body: b.clone(), num, level: 2, merged: false, kids: None, drop: false });
+            out.push(Numbered {
+                d: *d,
+                body: b.clone(),
+                num,
+                level: 2,
+                merged: false,
+                kids: None,
+                drop: false,
+            });
         }
         return out;
     }
@@ -186,7 +812,11 @@ fn number_chapter(ch: &Chapter, defs: &[Def], done: &[(usize, String)]) -> Vec<N
         if let Some(at) = defs[*d].at
             && !b.is_empty()
         {
-            let n = at.split('.').nth(1).and_then(|s| s.parse::<f64>().ok()).unwrap_or(0.0);
+            let n = at
+                .split('.')
+                .nth(1)
+                .and_then(|s| s.parse::<f64>().ok())
+                .unwrap_or(0.0);
             top = top.max(n);
         }
     }
@@ -217,16 +847,40 @@ fn number_chapter(ch: &Chapter, defs: &[Def], done: &[(usize, String)]) -> Vec<N
             } else {
                 String::new()
             };
-            out.push(Numbered { d: *d, body: b.clone(), num, level: 2, merged: false, kids: None, drop: false });
+            out.push(Numbered {
+                d: *d,
+                body: b.clone(),
+                num,
+                level: 2,
+                merged: false,
+                kids: None,
+                drop: false,
+            });
             continue;
         }
         let Some(p) = parent else {
-            out.push(Numbered { d: *d, body: b.clone(), num: String::new(), level: 2, merged: false, kids: None, drop: false });
+            out.push(Numbered {
+                d: *d,
+                body: b.clone(),
+                num: String::new(),
+                level: 2,
+                merged: false,
+                kids: None,
+                drop: false,
+            });
             continue;
         };
         let pd = &defs[out[p].d];
         let merged = same(x.title.as_deref(), pd.title.as_deref()) && !pd.fallback;
-        out.push(Numbered { d: *d, body: b.clone(), num: String::new(), level: 3, merged, kids: None, drop: false });
+        out.push(Numbered {
+            d: *d,
+            body: b.clone(),
+            num: String::new(),
+            level: 3,
+            merged,
+            kids: None,
+            drop: false,
+        });
         let idx = out.len() - 1;
         if let Some(k) = out[p].kids.as_mut() {
             k.push(idx);
@@ -242,7 +896,11 @@ fn number_chapter(ch: &Chapter, defs: &[Def], done: &[(usize, String)]) -> Vec<N
         if pfallback && !kids.is_empty() {
             out[p].drop = true;
             for (i, k) in kids.iter().enumerate() {
-                out[*k].num = if i > 0 { format!("{pnum}.{i}") } else { pnum.clone() };
+                out[*k].num = if i > 0 {
+                    format!("{pnum}.{i}")
+                } else {
+                    pnum.clone()
+                };
                 out[*k].level = if i > 0 { 3 } else { plevel };
             }
             continue;
@@ -269,7 +927,10 @@ pub(crate) fn strip_leading_title(body: &str, title: &str) -> String {
         i
     };
     let b = body.as_bytes();
-    if !(b.get(a) == Some(&b'<') && b.get(a + 1) == Some(&b'h') && b.get(a + 2).is_some_and(|c| (b'1'..=b'4').contains(c))) {
+    if !(b.get(a) == Some(&b'<')
+        && b.get(a + 1) == Some(&b'h')
+        && b.get(a + 2).is_some_and(|c| (b'1'..=b'4').contains(c)))
+    {
         return body.to_string();
     }
     let Some(gt) = body[a + 3..].find('>') else {
@@ -298,7 +959,10 @@ pub(crate) fn strip_leading_title(body: &str, title: &str) -> String {
             loop {
                 let rest = &body[e..];
                 let rb = rest.as_bytes();
-                if rest.starts_with("</h") && rb.get(3).is_some_and(|c| (b'1'..=b'4').contains(c)) && rb.get(4) == Some(&b'>') {
+                if rest.starts_with("</h")
+                    && rb.get(3).is_some_and(|c| (b'1'..=b'4').contains(c))
+                    && rb.get(4) == Some(&b'>')
+                {
                     return body[e + 5..].to_string();
                 }
                 if e == end {
@@ -347,7 +1011,11 @@ fn shown_title(title: &str) -> String {
     };
     i += c.len_utf8();
     i = ws(title, i);
-    let Some(sep) = title[i..].chars().next().filter(|c| matches!(c, ':' | '\u{b7}' | '.' | '\u{2013}' | '-')) else {
+    let Some(sep) = title[i..]
+        .chars()
+        .next()
+        .filter(|c| matches!(c, ':' | '\u{b7}' | '.' | '\u{2013}' | '-'))
+    else {
         return title.to_string();
     };
     i += sep.len_utf8();
@@ -409,17 +1077,26 @@ impl<'a> Rep<'a> {
     pub fn context<'r>(&'r self, opts: &BuildOpts) -> Ctx<'a, 'r> {
         let sel = pick(&self.tools());
         let periods: Vec<String> = match sel.with {
-            Some(w) if !self.rep_periods(w).is_empty() => self.rep_periods(w).iter().map(|p| p.to_string()).collect(),
+            Some(w) if !self.rep_periods(w).is_empty() => {
+                self.rep_periods(w).iter().map(|p| p.to_string()).collect()
+            }
             _ => vec!["AM".to_string(), "PM".to_string()],
         };
         Ctx {
             r: self,
             sel,
-            period: opts.period.clone().filter(|p| !p.is_empty()).unwrap_or_else(|| self.st().period.get().cloned().unwrap_or_default()),
+            period: opts
+                .period
+                .clone()
+                .filter(|p| !p.is_empty())
+                .unwrap_or_else(|| self.st().period.get().cloned().unwrap_or_default()),
             periods,
             map_images: opts.map_images.clone(),
             requests: Vec::new(),
-            chapter: ChapterState { id: "4".to_string(), num: "4".to_string() },
+            chapter: ChapterState {
+                id: "4".to_string(),
+                num: "4".to_string(),
+            },
             section: SectionState::default(),
             counters: (0, 0),
             refs: Vec::new(),
@@ -442,7 +1119,11 @@ impl<'a> Rep<'a> {
                 chapter: m.chapter.to_string(),
                 order: m.order,
                 at: None,
-                title: Some(if id == "junctions-performance" { perf_title() } else { m.title.to_string() }),
+                title: Some(if id == "junctions-performance" {
+                    perf_title()
+                } else {
+                    m.title.to_string()
+                }),
                 tag: None,
                 landscape: false,
                 fallback: false,
@@ -466,9 +1147,15 @@ impl<'a> Rep<'a> {
             });
         }
         let mut sorted: Vec<usize> = (0..defs.len()).collect();
-        sorted.sort_by(|a, b| defs[*a].order.partial_cmp(&defs[*b].order).unwrap_or(std::cmp::Ordering::Equal));
+        sorted.sort_by(|a, b| {
+            defs[*a]
+                .order
+                .partial_cmp(&defs[*b].order)
+                .unwrap_or(std::cmp::Ordering::Equal)
+        });
         let all = chapters();
-        let mut groups: HashMap<&str, Vec<usize>> = all.iter().map(|c| (c.id, Vec::new())).collect();
+        let mut groups: HashMap<&str, Vec<usize>> =
+            all.iter().map(|c| (c.id, Vec::new())).collect();
         for i in sorted {
             let d = &defs[i];
             if MERGED.contains(&d.id.as_str()) {
@@ -492,24 +1179,46 @@ impl<'a> Rep<'a> {
                         .order
                         .partial_cmp(&defs[*b].order)
                         .unwrap_or(std::cmp::Ordering::Equal)
-                        .then_with(|| (defs[*b].at.is_some() as i32).cmp(&(defs[*a].at.is_some() as i32)))
+                        .then_with(|| {
+                            (defs[*b].at.is_some() as i32).cmp(&(defs[*a].at.is_some() as i32))
+                        })
                 });
             }
-            ctx.chapter = ChapterState { id: ch.id.to_string(), num: ch.num.to_string() };
+            ctx.chapter = ChapterState {
+                id: ch.id.to_string(),
+                num: ch.num.to_string(),
+            };
             ctx.counters = (0, 0);
             let mut done: Vec<(usize, String)> = Vec::new();
             for &i in &list {
                 let d = &defs[i];
-                ctx.section = SectionState { id: d.id.clone(), num: String::new(), title: d.title.clone().unwrap_or_default() };
+                ctx.section = SectionState {
+                    id: d.id.clone(),
+                    num: String::new(),
+                    title: d.title.clone().unwrap_or_default(),
+                };
                 let body = match d.kind {
                     Kind::Own(f) => f(&mut ctx),
                     Kind::Junction(id) => self
                         .tools()
-                        .report_section(id, &ReportCtx { sel: Some(ctx.sel.clone()), scenarios: None })
+                        .report_section(
+                            id,
+                            &ReportCtx {
+                                sel: Some(ctx.sel.clone()),
+                                scenarios: None,
+                            },
+                        )
                         .unwrap_or_default(),
                     Kind::Foreign(k) => foreign[k].html.clone(),
                 };
-                done.push((i, if js_trim(&body).is_empty() { String::new() } else { body }));
+                done.push((
+                    i,
+                    if js_trim(&body).is_empty() {
+                        String::new()
+                    } else {
+                        body
+                    },
+                ));
             }
             let mut parts: Vec<String> = Vec::new();
             for x in number_chapter(ch, &defs, &done) {
@@ -535,7 +1244,11 @@ impl<'a> Rep<'a> {
                     ));
                 }
                 // every junction table carries D3, including tables from other features
-                if body.contains("<table") && has_word(&body, "DoS") && has_word(&body, "LoS") && !body.contains("data-d=\"D3\"") {
+                if body.contains("<table")
+                    && has_word(&body, "DoS")
+                    && has_word(&body, "LoS")
+                    && !body.contains("data-d=\"D3\"")
+                {
                     body.push_str(&disc("D3"));
                 }
                 // D4 on every economic table, D5 on every ANOP table and D13 wherever a 'Spare Construct assumption' is used
@@ -549,17 +1262,24 @@ impl<'a> Rep<'a> {
                 if has_assumption(&body) && !body.contains("data-d=\"D13\"") {
                     body.push_str(&disc("D13"));
                 }
-                let pre = if ch.num.is_empty() { String::new() } else { format!("{}{}", ch.num, if ch.app { "" } else { "." }) };
+                let pre = if ch.num.is_empty() {
+                    String::new()
+                } else {
+                    format!("{}{}", ch.num, if ch.app { "" } else { "." })
+                };
                 let has_num = !ch.num.is_empty();
                 let mut tcount = ctx.counters.0;
                 let mut fcount = ctx.counters.1;
                 body = number_tables(&body, &mut |id| {
                     if has_num {
                         tcount += 1;
-                        format!("Table {pre}{tcount}{}: ", match id {
-                            Some(i) if !i.is_empty() => format!(" ({})", esc(i)),
-                            _ => String::new(),
-                        })
+                        format!(
+                            "Table {pre}{tcount}{}: ",
+                            match id {
+                                Some(i) if !i.is_empty() => format!(" ({})", esc(i)),
+                                _ => String::new(),
+                            }
+                        )
                     } else {
                         String::new()
                     }
@@ -581,7 +1301,9 @@ impl<'a> Rep<'a> {
                     body = out;
                 }
                 ctx.counters = (tcount, fcount);
-                let tag = d.tag.map_or(String::new(), |t| format!("<span class=\"tag noprint\">{}</span>", esc(t)));
+                let tag = d.tag.map_or(String::new(), |t| {
+                    format!("<span class=\"tag noprint\">{}</span>", esc(t))
+                });
                 let shown = match d.title.as_deref() {
                     Some(t) if ch.app && !t.is_empty() => shown_title(t),
                     Some(t) => t.to_string(),
@@ -593,20 +1315,38 @@ impl<'a> Rep<'a> {
                         "<{hl} class=\"sec-h{}\" id=\"s-{}\">{}{}{}</{hl}>",
                         if x.level == 3 { " sub" } else { "" },
                         esc(&d.id),
-                        if x.num.is_empty() { String::new() } else { format!("<span class=\"no\">{}</span> ", esc(&x.num)) },
+                        if x.num.is_empty() {
+                            String::new()
+                        } else {
+                            format!("<span class=\"no\">{}</span> ", esc(&x.num))
+                        },
                         esc(&shown),
                         tag
                     )
                 } else {
                     String::new()
                 };
-                if d.title.as_deref().is_some_and(|t| !t.is_empty()) && !x.merged && d.numbered && d.id != "report-contents" {
-                    toc.push(TocEntry { ch: ch.id.to_string(), num: x.num.clone(), title: shown.clone(), id: d.id.clone(), level: x.level });
+                if d.title.as_deref().is_some_and(|t| !t.is_empty())
+                    && !x.merged
+                    && d.numbered
+                    && d.id != "report-contents"
+                {
+                    toc.push(TocEntry {
+                        ch: ch.id.to_string(),
+                        num: x.num.clone(),
+                        title: shown.clone(),
+                        id: d.id.clone(),
+                        level: x.level,
+                    });
                 }
                 parts.push(format!(
                     "<section class=\"sec{}{}{}\" data-sec=\"{}\">{}{}</section>",
                     if d.landscape { " landscape" } else { "" },
-                    if d.id == "report-cover" { " cover-sec" } else { "" },
+                    if d.id == "report-cover" {
+                        " cover-sec"
+                    } else {
+                        ""
+                    },
                     if x.merged { " merged" } else { "" },
                     esc(&d.id),
                     head,
@@ -622,7 +1362,11 @@ impl<'a> Rep<'a> {
                 format!(
                     "<h1 class=\"ch\" id=\"ch-{}\">{}{} {}</h1>",
                     esc(ch.id),
-                    if ch.app { if ch.id == "P" { "Annex " } else { "Appendix " } } else { "" },
+                    if ch.app {
+                        if ch.id == "P" { "Annex " } else { "Appendix " }
+                    } else {
+                        ""
+                    },
                     esc(ch.num),
                     esc(ch.title)
                 )
@@ -638,7 +1382,8 @@ impl<'a> Rep<'a> {
                 ),
             ));
         }
-        let contents = format!(
+        let contents =
+            format!(
             "<ol class=\"toc\">{}</ol>",
             all.iter()
                 .filter(|ch| ch.id != "front" && chapter_html.iter().any(|(c, _)| c.id == ch.id))

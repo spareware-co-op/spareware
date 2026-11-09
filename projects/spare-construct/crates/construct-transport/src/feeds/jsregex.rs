@@ -21,15 +21,27 @@ enum Item {
 enum Node {
     Char(u16),
     Any,
-    Class { neg: bool, items: Vec<Item> },
+    Class {
+        neg: bool,
+        items: Vec<Item>,
+    },
     Seq(Vec<Node>),
     Alt(Vec<Node>),
     Group(Box<Node>, Option<usize>),
-    Repeat { node: Box<Node>, min: usize, max: Option<usize>, greedy: bool, caps: (usize, usize) },
+    Repeat {
+        node: Box<Node>,
+        min: usize,
+        max: Option<usize>,
+        greedy: bool,
+        caps: (usize, usize),
+    },
     Start,
     End,
     WordB(bool),
-    Look { node: Box<Node>, neg: bool },
+    Look {
+        node: Box<Node>,
+        neg: bool,
+    },
 }
 
 /// A compiled pattern.
@@ -55,7 +67,11 @@ pub struct Match {
 impl Match {
     /// The text of group `i` (0 is the whole match), or None when it did not take part.
     pub fn text(&self, s: &[u16], i: usize) -> Option<String> {
-        let (a, b) = if i == 0 { (self.start, self.end) } else { (*self.groups.get(i - 1)?)?.to_owned() };
+        let (a, b) = if i == 0 {
+            (self.start, self.end)
+        } else {
+            (*self.groups.get(i - 1)?)?.to_owned()
+        };
         Some(String::from_utf16_lossy(&s[a..b]))
     }
 }
@@ -67,7 +83,10 @@ struct Parser<'a> {
 }
 
 fn is_word_unit(c: u16) -> bool {
-    (c >= b'0' as u16 && c <= b'9' as u16) || (c >= b'a' as u16 && c <= b'z' as u16) || (c >= b'A' as u16 && c <= b'Z' as u16) || c == b'_' as u16
+    (c >= b'0' as u16 && c <= b'9' as u16)
+        || (c >= b'a' as u16 && c <= b'z' as u16)
+        || (c >= b'A' as u16 && c <= b'Z' as u16)
+        || c == b'_' as u16
 }
 
 impl Parser<'_> {
@@ -87,7 +106,11 @@ impl Parser<'_> {
         while self.eat('|') {
             alts.push(self.seq()?);
         }
-        Ok(if alts.len() == 1 { alts.pop().unwrap() } else { Node::Alt(alts) })
+        Ok(if alts.len() == 1 {
+            alts.pop().unwrap()
+        } else {
+            Node::Alt(alts)
+        })
     }
     fn seq(&mut self) -> Result<Node, String> {
         let mut items = Vec::new();
@@ -104,7 +127,10 @@ impl Parser<'_> {
     }
     fn number(&mut self) -> Option<usize> {
         let s = self.i;
-        while self.peek().is_some_and(|c| (b'0' as u16..=b'9' as u16).contains(&c)) {
+        while self
+            .peek()
+            .is_some_and(|c| (b'0' as u16..=b'9' as u16).contains(&c))
+        {
             self.i += 1;
         }
         if self.i == s {
@@ -113,7 +139,10 @@ impl Parser<'_> {
         String::from_utf16_lossy(&self.p[s..self.i]).parse().ok()
     }
     fn quant(&mut self, atom: Node, caps: (usize, usize)) -> Result<Node, String> {
-        let (min, max) = match self.peek().map(|c| if c < 128 { c as u8 as char } else { '\u{ffff}' }) {
+        let (min, max) = match self
+            .peek()
+            .map(|c| if c < 128 { c as u8 as char } else { '\u{ffff}' })
+        {
             Some('?') => {
                 self.i += 1;
                 (0, Some(1))
@@ -131,7 +160,11 @@ impl Parser<'_> {
                 self.i += 1;
                 match self.number() {
                     Some(lo) => {
-                        let hi = if self.eat(',') { self.number() } else { Some(lo) };
+                        let hi = if self.eat(',') {
+                            self.number()
+                        } else {
+                            Some(lo)
+                        };
                         if self.eat('}') {
                             (lo, hi)
                         } else {
@@ -148,7 +181,13 @@ impl Parser<'_> {
             _ => return Ok(atom),
         };
         let greedy = !self.eat('?');
-        Ok(Node::Repeat { node: Box::new(atom), min, max, greedy, caps })
+        Ok(Node::Repeat {
+            node: Box::new(atom),
+            min,
+            max,
+            greedy,
+            caps,
+        })
     }
     fn escape_item(&mut self, c: u16) -> Option<Item> {
         Some(match c as u8 as char {
@@ -201,7 +240,10 @@ impl Parser<'_> {
                     if !self.eat(')') {
                         return Err("missing )".into());
                     }
-                    return Ok(Node::Look { node: Box::new(n), neg });
+                    return Ok(Node::Look {
+                        node: Box::new(n),
+                        neg,
+                    });
                 }
                 self.ncaps += 1;
                 let idx = self.ncaps;
@@ -230,11 +272,17 @@ impl Parser<'_> {
                             items.push(it);
                             continue;
                         }
-                        if e == b'b' as u16 { 8 } else { Self::escaped_char(e) }
+                        if e == b'b' as u16 {
+                            8
+                        } else {
+                            Self::escaped_char(e)
+                        }
                     } else {
                         c
                     };
-                    if self.peek() == Some(b'-' as u16) && self.p.get(self.i + 1).is_some_and(|n| *n != b']' as u16) {
+                    if self.peek() == Some(b'-' as u16)
+                        && self.p.get(self.i + 1).is_some_and(|n| *n != b']' as u16)
+                    {
                         self.i += 1;
                         let mut hi = self.peek().ok_or("bad range")?;
                         self.i += 1;
@@ -260,7 +308,10 @@ impl Parser<'_> {
                 let e = self.peek().ok_or("bad escape")?;
                 self.i += 1;
                 if let Some(it) = self.escape_item(e) {
-                    return Ok(Node::Class { neg: false, items: vec![it] });
+                    return Ok(Node::Class {
+                        neg: false,
+                        items: vec![it],
+                    });
                 }
                 match e as u8 as char {
                     'b' if e < 128 => Ok(Node::WordB(true)),
@@ -275,7 +326,11 @@ impl Parser<'_> {
 
 fn canon(c: u16) -> u16 {
     if c < 128 {
-        if (b'a' as u16..=b'z' as u16).contains(&c) { c - 32 } else { c }
+        if (b'a' as u16..=b'z' as u16).contains(&c) {
+            c - 32
+        } else {
+            c
+        }
     } else {
         match char::from_u32(c as u32) {
             Some(ch) => {
@@ -323,7 +378,13 @@ impl Run<'_> {
     fn word_at(&self, i: usize) -> bool {
         self.s.get(i).is_some_and(|c| is_word_unit(*c))
     }
-    fn m(&self, n: &Node, pos: usize, caps: &mut Caps, k: &mut dyn FnMut(usize, &mut Caps) -> bool) -> bool {
+    fn m(
+        &self,
+        n: &Node,
+        pos: usize,
+        caps: &mut Caps,
+        k: &mut dyn FnMut(usize, &mut Caps) -> bool,
+    ) -> bool {
         match n {
             Node::Char(c) => match self.s.get(pos) {
                 Some(&x) if x == *c || (self.icase && canon(x) == canon(*c)) => k(pos + 1, caps),
@@ -361,7 +422,13 @@ impl Run<'_> {
                     })
                 }
             },
-            Node::Repeat { node, min, max, greedy, caps: cr } => self.rep(node, *min, *max, *greedy, *cr, 0, pos, caps, k),
+            Node::Repeat {
+                node,
+                min,
+                max,
+                greedy,
+                caps: cr,
+            } => self.rep(node, *min, *max, *greedy, *cr, 0, pos, caps, k),
             Node::Start => pos == 0 && k(pos, caps),
             Node::End => pos == self.s.len() && k(pos, caps),
             Node::WordB(want) => {
@@ -383,14 +450,34 @@ impl Run<'_> {
             }
         }
     }
-    fn seq(&self, items: &[Node], i: usize, pos: usize, caps: &mut Caps, k: &mut dyn FnMut(usize, &mut Caps) -> bool) -> bool {
+    fn seq(
+        &self,
+        items: &[Node],
+        i: usize,
+        pos: usize,
+        caps: &mut Caps,
+        k: &mut dyn FnMut(usize, &mut Caps) -> bool,
+    ) -> bool {
         if i == items.len() {
             return k(pos, caps);
         }
-        self.m(&items[i], pos, caps, &mut |p2, caps: &mut Caps| self.seq(items, i + 1, p2, caps, k))
+        self.m(&items[i], pos, caps, &mut |p2, caps: &mut Caps| {
+            self.seq(items, i + 1, p2, caps, k)
+        })
     }
     #[allow(clippy::too_many_arguments)]
-    fn rep(&self, node: &Node, min: usize, max: Option<usize>, greedy: bool, cr: (usize, usize), count: usize, pos: usize, caps: &mut Caps, k: &mut dyn FnMut(usize, &mut Caps) -> bool) -> bool {
+    fn rep(
+        &self,
+        node: &Node,
+        min: usize,
+        max: Option<usize>,
+        greedy: bool,
+        cr: (usize, usize),
+        count: usize,
+        pos: usize,
+        caps: &mut Caps,
+        k: &mut dyn FnMut(usize, &mut Caps) -> bool,
+    ) -> bool {
         let can_more = max.is_none_or(|mx| count < mx);
         let more = |caps: &mut Caps, k: &mut dyn FnMut(usize, &mut Caps) -> bool| -> bool {
             // each step starts with the groups inside the repeated part empty
@@ -428,12 +515,21 @@ impl Regex {
     /// Compiles a pattern with flags ("i", "g", or both); an error for syntax this matcher does not know.
     pub fn new(pattern: &str, flags: &str) -> Result<Regex, String> {
         let p: Vec<u16> = pattern.encode_utf16().collect();
-        let mut parser = Parser { p: &p, i: 0, ncaps: 0 };
+        let mut parser = Parser {
+            p: &p,
+            i: 0,
+            ncaps: 0,
+        };
         let node = parser.alt()?;
         if parser.i != p.len() {
             return Err(format!("unmatched ) at {}", parser.i));
         }
-        Ok(Regex { node, ncaps: parser.ncaps, icase: flags.contains('i'), global: flags.contains('g') })
+        Ok(Regex {
+            node,
+            ncaps: parser.ncaps,
+            icase: flags.contains('i'),
+            global: flags.contains('g'),
+        })
     }
     /// Compiles a pattern that is part of the program (a mistake in it is a bug).
     pub fn lit(pattern: &str, flags: &str) -> Regex {
@@ -441,7 +537,10 @@ impl Regex {
     }
     /// `re.exec(s)` from a position: the leftmost match starting at or after `from` (code unit index).
     pub fn exec_units(&self, s: &[u16], from: usize) -> Option<Match> {
-        let run = Run { s, icase: self.icase };
+        let run = Run {
+            s,
+            icase: self.icase,
+        };
         for start in from..=s.len() {
             let mut caps: Caps = vec![None; self.ncaps];
             let mut end = None;
@@ -449,7 +548,11 @@ impl Regex {
                 end = Some(p);
                 true
             }) {
-                return Some(Match { start, end: end.unwrap(), groups: caps });
+                return Some(Match {
+                    start,
+                    end: end.unwrap(),
+                    groups: caps,
+                });
             }
         }
         None
@@ -468,7 +571,9 @@ impl Regex {
         let mut out = Vec::new();
         let mut at = 0;
         while at <= s.len() {
-            let Some(m) = self.exec_units(s, at) else { break };
+            let Some(m) = self.exec_units(s, at) else {
+                break;
+            };
             at = if m.end == m.start { m.end + 1 } else { m.end };
             out.push(m);
             if !self.global {

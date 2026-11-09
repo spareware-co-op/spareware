@@ -2,7 +2,9 @@
 
 use super::consts::{self, VarSpec, aup_name};
 use super::geo::{Poly, Ring, rings_of};
-use crate::jsnum::{js_trim, number_to_js_string, value_to_js_string, value_to_number, value_truthy};
+use crate::jsnum::{
+    js_trim, number_to_js_string, value_to_js_string, value_to_number, value_truthy,
+};
 use serde_json::{Map, Value, json};
 
 /// One downloaded ArcGIS layer: its field list (from `?f=json`) and its features.
@@ -17,7 +19,14 @@ pub struct Layer {
 impl Layer {
     /// A layer from the layer description (`meta.fields`) and the features.
     pub fn from_meta(meta: &Value, features: Vec<Value>) -> Layer {
-        Layer { fields: meta.get("fields").and_then(Value::as_array).cloned().unwrap_or_default(), features }
+        Layer {
+            fields: meta
+                .get("fields")
+                .and_then(Value::as_array)
+                .cloned()
+                .unwrap_or_default(),
+            features,
+        }
     }
 }
 
@@ -54,11 +63,30 @@ pub fn resolve(fields: &[Value], spec: &[VarSpec], year: f64) -> Vec<Resolved> {
                 a.contains(&yr) && a.ends_with(&want)
             });
             match hit {
-                Some(f) => Resolved { key: v.key.clone(), name: f.get("name").filter(|x| !x.is_null()).map(value_to_js_string), by: "alias" },
-                None if fields.iter().any(|f| field_name(f) == Some(v.code.as_str())) || fields.is_empty() => {
-                    Resolved { key: v.key.clone(), name: Some(v.code.clone()), by: "code" }
+                Some(f) => Resolved {
+                    key: v.key.clone(),
+                    name: f
+                        .get("name")
+                        .filter(|x| !x.is_null())
+                        .map(value_to_js_string),
+                    by: "alias",
+                },
+                None if fields
+                    .iter()
+                    .any(|f| field_name(f) == Some(v.code.as_str()))
+                    || fields.is_empty() =>
+                {
+                    Resolved {
+                        key: v.key.clone(),
+                        name: Some(v.code.clone()),
+                        by: "code",
+                    }
                 }
-                None => Resolved { key: v.key.clone(), name: None, by: "missing" },
+                None => Resolved {
+                    key: v.key.clone(),
+                    name: None,
+                    by: "missing",
+                },
             }
         })
         .collect()
@@ -66,24 +94,38 @@ pub fn resolve(fields: &[Value], spec: &[VarSpec], year: f64) -> Vec<Resolved> {
 
 // A code field name such as SA12023_V1_00: the prefix, four digits, "_V", one or more digits, "_00"
 fn is_code_field(name: &str, prefix: &str) -> bool {
-    let Some(rest) = name.strip_prefix(prefix) else { return false };
+    let Some(rest) = name.strip_prefix(prefix) else {
+        return false;
+    };
     let b = rest.as_bytes();
     if b.len() < 4 || !b[..4].iter().all(u8::is_ascii_digit) {
         return false;
     }
-    let Some(rest) = rest[4..].strip_prefix("_V") else { return false };
-    let Some(digits) = rest.strip_suffix("_00") else { return false };
+    let Some(rest) = rest[4..].strip_prefix("_V") else {
+        return false;
+    };
+    let Some(digits) = rest.strip_suffix("_00") else {
+        return false;
+    };
     !digits.is_empty() && digits.bytes().all(|c| c.is_ascii_digit())
 }
 
 /// `codeField(fields, re)` for the SA1 code field (`SA1\d{4}_V\d+_00`), or None.
 pub fn sa1_code_field(fields: &[Value]) -> Option<String> {
-    fields.iter().find_map(|f| field_name(f).filter(|n| is_code_field(n, "SA1")).map(str::to_string))
+    fields.iter().find_map(|f| {
+        field_name(f)
+            .filter(|n| is_code_field(n, "SA1"))
+            .map(str::to_string)
+    })
 }
 
 /// `codeField(fields, re)` for the SA2 code field (`SA2\d{4}_V\d+_00`), or None.
 pub fn sa2_code_field(fields: &[Value]) -> Option<String> {
-    fields.iter().find_map(|f| field_name(f).filter(|n| is_code_field(n, "SA2")).map(str::to_string))
+    fields.iter().find_map(|f| {
+        field_name(f)
+            .filter(|n| is_code_field(n, "SA2"))
+            .map(str::to_string)
+    })
 }
 
 /// `val(a, name)`: a count from a feature's attributes; missing, non-numeric and negative cells (suppressed) are None.
@@ -94,7 +136,11 @@ pub fn val(a: &Value, name: Option<&str>) -> Option<f64> {
         return None;
     }
     let x = value_to_number(v);
-    if !x.is_finite() || x < 0.0 { None } else { Some(x) }
+    if !x.is_finite() || x < 0.0 {
+        None
+    } else {
+        Some(x)
+    }
 }
 
 /// `setP(o, k, v)`: sets an item, "a.b" going into the object a.
@@ -105,11 +151,15 @@ fn set_p(o: &mut Map<String, Value>, k: &str, v: Option<f64>) {
             o.insert(k.to_string(), value);
         }
         Some((p0, p1)) => {
-            let e = o.entry(p0.to_string()).or_insert_with(|| Value::Object(Map::new()));
+            let e = o
+                .entry(p0.to_string())
+                .or_insert_with(|| Value::Object(Map::new()));
             if !e.is_object() {
                 *e = Value::Object(Map::new());
             }
-            e.as_object_mut().expect("an object").insert(p1.to_string(), value);
+            e.as_object_mut()
+                .expect("an object")
+                .insert(p1.to_string(), value);
         }
     }
 }
@@ -197,7 +247,10 @@ pub fn parse_census(layers: &CensusLayers) -> CensusData {
         }
         for f in &l.features {
             let empty = json!({});
-            let a = f.get("attributes").filter(|x| value_truthy(x)).unwrap_or(&empty);
+            let a = f
+                .get("attributes")
+                .filter(|x| value_truthy(x))
+                .unwrap_or(&empty);
             let code = match a.get(&cf) {
                 None | Some(Value::Null) => String::new(),
                 Some(x) => value_to_js_string(x),
@@ -206,7 +259,17 @@ pub fn parse_census(layers: &CensusLayers) -> CensusData {
                 continue;
             }
             let i = *index.entry(code.clone()).or_insert_with(|| {
-                by_code.push((code.clone(), Sa1 { code: code.clone(), poly: Poly { rings: Vec::new(), bb: [f64::NAN; 4] }, v: Map::new() }));
+                by_code.push((
+                    code.clone(),
+                    Sa1 {
+                        code: code.clone(),
+                        poly: Poly {
+                            rings: Vec::new(),
+                            bb: [f64::NAN; 4],
+                        },
+                        v: Map::new(),
+                    },
+                ));
                 by_code.len() - 1
             });
             let o = &mut by_code[i].1;
@@ -220,7 +283,11 @@ pub fn parse_census(layers: &CensusLayers) -> CensusData {
         }
     }
     CensusData {
-        sa1: by_code.into_iter().map(|(_, o)| o).filter(|o| !o.poly.rings.is_empty()).collect(),
+        sa1: by_code
+            .into_iter()
+            .map(|(_, o)| o)
+            .filter(|o| !o.poly.rings.is_empty())
+            .collect(),
         fields,
         missing,
         errors: Vec::new(),
@@ -231,7 +298,11 @@ pub fn parse_census(layers: &CensusLayers) -> CensusData {
 /// `censusFields(lk)(fields)`: the field names to ask a Census layer for: the SA1 code field and every item that was found.
 pub fn census_fields(lk: &str, fields: &[Value]) -> Vec<String> {
     let mut out = vec![sa1_code_field(fields).unwrap_or_else(|| "SA12023_V1_00".to_string())];
-    out.extend(resolve(fields, &consts::census_vars_of(lk), 2023.0).into_iter().filter_map(|r| r.name));
+    out.extend(
+        resolve(fields, &consts::census_vars_of(lk), 2023.0)
+            .into_iter()
+            .filter_map(|r| r.name),
+    );
     out
 }
 
@@ -266,7 +337,11 @@ pub struct EmployeeData {
 // /^ec(\d{4})$/
 fn ec_year(name: &str) -> Option<f64> {
     let d = name.strip_prefix("ec")?;
-    if d.len() == 4 && d.bytes().all(|c| c.is_ascii_digit()) { d.parse().ok() } else { None }
+    if d.len() == 4 && d.bytes().all(|c| c.is_ascii_digit()) {
+        d.parse().ok()
+    } else {
+        None
+    }
 }
 
 /// `parseEmployees(L)`: SA2 employee counts, using the latest `ecYYYY` field in the layer.
@@ -274,17 +349,31 @@ pub fn parse_employees(l: &Layer) -> EmployeeData {
     let fl = &l.fields;
     let cf = sa2_code_field(fl).unwrap_or_else(|| "SA22023_V1_00".to_string());
     let nf = format!("{cf}_NAME");
-    let nf = fl.iter().any(|f| field_name(f) == Some(nf.as_str())).then_some(nf);
-    let years: Vec<f64> = fl.iter().filter_map(|f| field_name(f).and_then(ec_year)).collect();
-    let year = if years.is_empty() { 2025.0 } else { crate::jsnum::math_max_of(&years) };
+    let nf = fl
+        .iter()
+        .any(|f| field_name(f) == Some(nf.as_str()))
+        .then_some(nf);
+    let years: Vec<f64> = fl
+        .iter()
+        .filter_map(|f| field_name(f).and_then(ec_year))
+        .collect();
+    let year = if years.is_empty() {
+        2025.0
+    } else {
+        crate::jsnum::math_max_of(&years)
+    };
     let ef = format!("ec{}", number_to_js_string(year));
-    let gf = (fl.iter().any(|f| field_name(f) == Some("ec_avperinc")) || fl.is_empty()).then_some("ec_avperinc");
+    let gf = (fl.iter().any(|f| field_name(f) == Some("ec_avperinc")) || fl.is_empty())
+        .then_some("ec_avperinc");
     let sa2 = l
         .features
         .iter()
         .filter_map(|f| {
             let empty = json!({});
-            let a = f.get("attributes").filter(|x| value_truthy(x)).unwrap_or(&empty);
+            let a = f
+                .get("attributes")
+                .filter(|x| value_truthy(x))
+                .unwrap_or(&empty);
             let rg = rings_of(f.get("geometry"));
             let code = match a.get(&cf) {
                 None | Some(Value::Null) => String::new(),
@@ -294,22 +383,54 @@ pub fn parse_employees(l: &Layer) -> EmployeeData {
                 Some(x) if value_truthy(x) => value_to_js_string(x),
                 _ => code.clone(),
             };
-            let growth = gf.and_then(|g| a.get(g)).filter(|x| !x.is_null() && value_to_number(x).is_finite()).map(value_to_number);
+            let growth = gf
+                .and_then(|g| a.get(g))
+                .filter(|x| !x.is_null() && value_to_number(x).is_finite())
+                .map(value_to_number);
             if code.is_empty() || rg.is_empty() {
                 return None;
             }
-            Some(Sa2 { code, name, n: val(a, Some(&ef)), year, growth, poly: Poly::new(rg) })
+            Some(Sa2 {
+                code,
+                name,
+                n: val(a, Some(&ef)),
+                year,
+                growth,
+                poly: Poly::new(rg),
+            })
         })
         .collect();
-    EmployeeData { sa2, year, field: ef }
+    EmployeeData {
+        sa2,
+        year,
+        field: ef,
+    }
 }
 
 /// The Ministry of Education fields asked for, by directory ("schools" or "ece").
 pub fn moe_fields(kind: &str) -> &'static [&'static str] {
     if kind == "ece" {
-        &["ECE_Id", "Org_Name", "Org_Type", "All_Children", "Total", "Roll_Date", "Latitude", "Longitude"]
+        &[
+            "ECE_Id",
+            "Org_Name",
+            "Org_Type",
+            "All_Children",
+            "Total",
+            "Roll_Date",
+            "Latitude",
+            "Longitude",
+        ]
     } else {
-        &["School_Id", "Org_Name", "Org_Type", "Total", "Roll_Date", "Latitude", "Longitude", "Status"]
+        &[
+            "School_Id",
+            "Org_Name",
+            "Org_Type",
+            "Total",
+            "Roll_Date",
+            "Latitude",
+            "Longitude",
+            "Status",
+        ]
     }
 }
 
@@ -432,7 +553,13 @@ pub fn parse_moe(records: &[Value], kind: &str) -> Vec<Moe> {
             let roll_date: String = plain_text(r.get("Roll_Date")).chars().take(10).collect();
             let status = match r.get("Status") {
                 Some(x) if value_truthy(x) => value_to_js_string(x),
-                _ => if m.is_some() { "Proposed".to_string() } else { "Open".to_string() },
+                _ => {
+                    if m.is_some() {
+                        "Proposed".to_string()
+                    } else {
+                        "Open".to_string()
+                    }
+                }
             };
             let (lat, lng) = (num(r.get("Latitude")), num(r.get("Longitude")));
             let rec = Moe {
@@ -441,14 +568,23 @@ pub fn parse_moe(records: &[Value], kind: &str) -> Vec<Moe> {
                 name: js_trim(&strip_proposed(&name)).to_string(),
                 kind_of_org: plain_text(r.get("Org_Type")),
                 roll: num(r.get("Total")),
-                places: if kind == "ece" { num(r.get("All_Children")) } else { None },
-                roll_date: if roll_date.is_empty() { None } else { Some(roll_date) },
+                places: if kind == "ece" {
+                    num(r.get("All_Children"))
+                } else {
+                    None
+                },
+                roll_date: if roll_date.is_empty() {
+                    None
+                } else {
+                    Some(roll_date)
+                },
                 lat: lat.unwrap_or(f64::NAN),
                 lng: lng.unwrap_or(f64::NAN),
                 status,
                 opens: m,
             };
-            (lat.is_some() && lng.is_some() && !rec.status.eq_ignore_ascii_case("closed")).then_some(rec)
+            (lat.is_some() && lng.is_some() && !rec.status.eq_ignore_ascii_case("closed"))
+                .then_some(rec)
         })
         .collect()
 }
@@ -486,8 +622,16 @@ fn domain(fl: &[Value], name: &str) -> Vec<(String, String)> {
         .and_then(|d| d.get("codedValues"))
         .and_then(Value::as_array);
     for c in coded.into_iter().flatten() {
-        let k = c.get("code").map_or("undefined".to_string(), value_to_js_string);
-        let v = c.get("name").map_or(String::new(), |x| if value_truthy(x) { value_to_js_string(x) } else { String::new() });
+        let k = c
+            .get("code")
+            .map_or("undefined".to_string(), value_to_js_string);
+        let v = c.get("name").map_or(String::new(), |x| {
+            if value_truthy(x) {
+                value_to_js_string(x)
+            } else {
+                String::new()
+            }
+        });
         match out.iter_mut().find(|(ek, _)| *ek == k) {
             Some(e) => e.1 = v,
             None => out.push((k, v)),
@@ -497,29 +641,48 @@ fn domain(fl: &[Value], name: &str) -> Vec<(String, String)> {
 }
 
 fn dom_get(d: &[(String, String)], key: &str) -> String {
-    d.iter().find(|(k, _)| k == key).map(|(_, v)| v.clone()).unwrap_or_default()
+    d.iter()
+        .find(|(k, _)| k == key)
+        .map(|(_, v)| v.clone())
+        .unwrap_or_default()
 }
 
 /// `parseAUP(L)`: the zone polygons with their names, groups and status from the layer's coded domains.
 pub fn parse_aup(l: &Layer) -> AupData {
     let fl = &l.fields;
-    let (zn, gn, vs) = (domain(fl, "ZONE"), domain(fl, "GROUPZONE"), domain(fl, "VERSIONSTATUS"));
+    let (zn, gn, vs) = (
+        domain(fl, "ZONE"),
+        domain(fl, "GROUPZONE"),
+        domain(fl, "VERSIONSTATUS"),
+    );
     let zones = l
         .features
         .iter()
         .filter_map(|f| {
             let empty = json!({});
-            let a = f.get("attributes").filter(|x| value_truthy(x)).unwrap_or(&empty);
+            let a = f
+                .get("attributes")
+                .filter(|x| value_truthy(x))
+                .unwrap_or(&empty);
             let rg: Vec<Ring> = rings_of(f.get("geometry"));
             let code = a.get("ZONE").map_or(f64::NAN, value_to_number);
             let key = |k: &str| a.get(k).map_or("undefined".to_string(), value_to_js_string);
             let mut name = dom_get(&zn, &number_to_js_string(code));
             if name.is_empty() {
-                name = aup_name(code).map_or_else(|| format!("AUP zone {}", number_to_js_string(code)), str::to_string);
+                name = aup_name(code).map_or_else(
+                    || format!("AUP zone {}", number_to_js_string(code)),
+                    str::to_string,
+                );
             }
             let group = dom_get(&gn, &key("GROUPZONE"));
             let status = dom_get(&vs, &key("VERSIONSTATUS"));
-            (!rg.is_empty() && code.is_finite()).then(|| AupZone { code, name, group, status, poly: Poly::new(rg) })
+            (!rg.is_empty() && code.is_finite()).then(|| AupZone {
+                code,
+                name,
+                group,
+                status,
+                poly: Poly::new(rg),
+            })
         })
         .collect();
     AupData { zones, names: zn }

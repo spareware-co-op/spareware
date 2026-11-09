@@ -2,9 +2,16 @@
 
 pub mod util;
 
-use self::util::{cells, fld_s, Put, int32, label, n0, numk, or_s, or_v, put_some, tbl, tbl_th, unique, xs};
-use super::ctx::{active_sc, assumption, assumptions, class_of, context, data, day, disc, disclaimer, esc, esc_s, link_name, long_date_s, node_name, num, pair, periods_of, posted, res_of, sc_by_id, stamped};
-use super::shared::{changed_links, crashes_on, dev_mix, econ_of, kpi_p, neg_pp, per_period, pp_text, route_p};
+use self::util::{
+    Put, cells, fld_s, int32, label, n0, numk, or_s, or_v, put_some, tbl, tbl_th, unique, xs,
+};
+use super::ctx::{
+    active_sc, assumption, assumptions, class_of, context, data, day, disc, disclaimer, esc, esc_s,
+    link_name, long_date_s, node_name, num, pair, periods_of, posted, res_of, sc_by_id, stamped,
+};
+use super::shared::{
+    changed_links, crashes_on, dev_mix, econ_of, kpi_p, neg_pp, per_period, pp_text, route_p,
+};
 use super::{lint, mitigation};
 use crate::compliance::data::{m as model, x as xdata};
 use crate::compliance::html::{ReportCtx, rt, th, thn};
@@ -15,8 +22,8 @@ use crate::util::{fmt, r1, r3};
 use std::collections::HashSet;
 
 /* =====================================================================================
-   Options and alternatives (reg-alternatives)
-   ===================================================================================== */
+Options and alternatives (reg-alternatives)
+===================================================================================== */
 
 /// One row of the options list: the option's own fields and the scenario it names (`{ ...o, sc }`).
 pub struct OptionEntry<'a> {
@@ -32,7 +39,14 @@ pub fn option_list(p: &V) -> Vec<OptionEntry<'_>> {
     let base = pair(p).base;
     let opts = cx.g("options");
     if opts.jlen() > 0 {
-        return opts.items().iter().map(|o| OptionEntry { o: merge(&V::object(), o), sc: sc_by_id(p, o.g("scId")) }).collect();
+        return opts
+            .items()
+            .iter()
+            .map(|o| OptionEntry {
+                o: merge(&V::object(), o),
+                sc: sc_by_id(p, o.g("scId")),
+            })
+            .collect();
     }
     p.g("scenarios")
         .items()
@@ -50,13 +64,21 @@ pub fn option_list(p: &V) -> Vec<OptionEntry<'_>> {
 
 /// The level of service text of a result node (`nr.intersectionLos || nr.los` printed in a template).
 fn los_text(nr: &V) -> String {
-    if nr.g("intersectionLos").t() { nr.g("intersectionLos").s() } else { fld_s(nr, "los") }
+    if nr.g("intersectionLos").t() {
+        nr.g("intersectionLos").s()
+    } else {
+        fld_s(nr, "los")
+    }
 }
 
 /// `Engine.yearOf(sc)`: the scenario's year where set (and positive), otherwise the project's year.
 fn year_of(p: &V, sc: &V) -> f64 {
     let y = sc.g("year").n();
-    if y > 0.0 { y } else { numk(p.g("settings"), "year") }
+    if y > 0.0 {
+        y
+    } else {
+        numk(p.g("settings"), "year")
+    }
 }
 
 /// `alternatives(P)`: the options against the intervention hierarchy: `{ base, rows, warnings, sections, label, source }`. `base` is a copy of
@@ -70,7 +92,12 @@ pub fn alternatives(p: &V) -> V {
     for e in option_list(p) {
         let o = &e.o;
         let sc = e.sc;
-        let ps: Vec<&str> = sc.map_or_else(Vec::new, |s| periods_of(s).into_iter().filter(|x| res_of(base, x).is_some()).collect());
+        let ps: Vec<&str> = sc.map_or_else(Vec::new, |s| {
+            periods_of(s)
+                .into_iter()
+                .filter(|x| res_of(base, x).is_some())
+                .collect()
+        });
         let name = if o.g("name").t() {
             o.g("name").clone()
         } else if sc.is_some_and(|s| s.g("name").t()) {
@@ -84,18 +111,43 @@ pub fn alternatives(p: &V) -> V {
         put_some(&mut row, "id", o.get("id"));
         row.put("name", name);
         row.put("hierarchy", or_s(o.g("hierarchy"), ""));
-        row.put("label", if lab.t() { lab.clone() } else { V::String("Not tagged".into()) });
-        row.put("scName", sc.map_or(V::String("No scenario".into()), |s| s.g("name").clone()));
+        row.put(
+            "label",
+            if lab.t() {
+                lab.clone()
+            } else {
+                V::String("Not tagged".into())
+            },
+        );
+        row.put(
+            "scName",
+            sc.map_or(V::String("No scenario".into()), |s| s.g("name").clone()),
+        );
         row.put("ran", !ps.is_empty());
         row.put("notes", or_s(o.g("notes"), ""));
         if let (Some(sc), false) = (sc, ps.is_empty()) {
             // per modelled peak hour, each period on its own (the means fill the numeric columns)
-            let vht = per_period(base, sc, &|s, pd| kpi_p("vht", s, pd), &ps, 1, "veh\u{b7}h/h");
+            let vht = per_period(
+                base,
+                sc,
+                &|s, pd| kpi_p("vht", s, pd),
+                &ps,
+                1,
+                "veh\u{b7}h/h",
+            );
             let vkt = per_period(base, sc, &|s, pd| kpi_p("vkt", s, pd), &ps, 0, "veh-km/h");
             let co2 = per_period(base, sc, &|s, pd| kpi_p("co2", s, pd), &ps, 2, "t/h");
             let route = per_period(base, sc, &|s, pd| route_p(s, pd), &ps, 0, "s");
-            let means = [vht.g("mean").clone(), vkt.g("mean").clone(), co2.g("mean").clone(), route.g("mean").clone()];
-            row.put("pp", jobj! { "vht" => vht, "vkt" => vkt, "co2" => co2, "route" => route });
+            let means = [
+                vht.g("mean").clone(),
+                vkt.g("mean").clone(),
+                co2.g("mean").clone(),
+                route.g("mean").clone(),
+            ];
+            row.put(
+                "pp",
+                jobj! { "vht" => vht, "vkt" => vkt, "co2" => co2, "route" => route },
+            );
             row.put("dVht", means[0].clone());
             row.put("dVkt", means[1].clone());
             row.put("dCo2", means[2].clone());
@@ -112,7 +164,13 @@ pub fn alternatives(p: &V) -> V {
             row.put(
                 "worst",
                 match nodes.first() {
-                    Some((id, pd, nr)) => format!("{} {}: DoS {}, LoS {}", node_name(sc, id), pd, num(nr.g("dos"), 2), los_text(nr)),
+                    Some((id, pd, nr)) => format!(
+                        "{} {}: DoS {}, LoS {}",
+                        node_name(sc, id),
+                        pd,
+                        num(nr.g("dos"), 2),
+                        los_text(nr)
+                    ),
                     None => fmt::DASH.to_string(),
                 },
             );
@@ -132,7 +190,11 @@ pub fn alternatives(p: &V) -> V {
             row.put("cas", crashes_on(p, base, &ch));
             let ec = econ_of(p, base, sc);
             let bcr = if ec.t() && !ec.g("mismatch").t() {
-                if ec.g("bcrText").t() { ec.g("bcrText").clone() } else { V::String(num(ec.g("bcr"), 1)) }
+                if ec.g("bcrText").t() {
+                    ec.g("bcrText").clone()
+                } else {
+                    V::String(num(ec.g("bcr"), 1))
+                }
             } else if ec.t() && ec.g("mismatch").t() {
                 V::String("years differ".into())
             } else {
@@ -140,7 +202,18 @@ pub fn alternatives(p: &V) -> V {
             };
             row.put("bcr", bcr);
             let ipm = if ec.t() && ec.g("ipm").t() && ec.g("ipm").jlen() > 0 {
-                ec.g("ipm").items().iter().map(|b| format!("{}{}", fld_s(b, "band"), if b.g("draft").t() { " (draft)" } else { "" })).collect::<Vec<_>>().join(" / ")
+                ec.g("ipm")
+                    .items()
+                    .iter()
+                    .map(|b| {
+                        format!(
+                            "{}{}",
+                            fld_s(b, "band"),
+                            if b.g("draft").t() { " (draft)" } else { "" }
+                        )
+                    })
+                    .collect::<Vec<_>>()
+                    .join(" / ")
             } else {
                 fmt::DASH.to_string()
             };
@@ -162,7 +235,14 @@ pub fn alternatives(p: &V) -> V {
                 ));
             }
         }
-        row.put("dsi", if !o.g("dsi").nullish() && !o.g("dsi").eq_s("") { V::Number(o.g("dsi").n()) } else { V::Null });
+        row.put(
+            "dsi",
+            if !o.g("dsi").nullish() && !o.g("dsi").eq_s("") {
+                V::Number(o.g("dsi").n())
+            } else {
+                V::Null
+            },
+        );
         rows.push(row);
     }
     let has = |t: &str| rows.iter().any(|r| r.g("hierarchy").eq_s(t));
@@ -189,50 +269,112 @@ pub fn alternative_sections(p: &V, c: Option<&V>) -> V {
         }
     };
     let mut out: Vec<V> = Vec::new();
-    let mut add = |id: &str, title: &str, rf: &str, include: V, why: &str| out.push(jobj! { "id" => id, "title" => title, "ref" => rf, "include" => include, "why" => why });
+    let mut add = |id: &str, title: &str, rf: &str, include: V, why: &str| {
+        out.push(
+            jobj! { "id" => id, "title" => title, "ref" => rf, "include" => include, "why" => why },
+        )
+    };
     let kind = c.g("kind");
     let pathway = c.g("pathway");
     let sig = c.g("sigEffect").t();
     if kind.eq_s("rc") || pathway.eq_s("ftaa-consent") {
         add(
-            "cl6-1a", "Alternative locations or methods", "RMA Sch 4 cl 6(1)(a)", V::Bool(sig),
-            if sig { "The author flags a likely significant adverse effect." } else { "Shown only if the author flags a likely significant adverse effect." },
+            "cl6-1a",
+            "Alternative locations or methods",
+            "RMA Sch 4 cl 6(1)(a)",
+            V::Bool(sig),
+            if sig {
+                "The author flags a likely significant adverse effect."
+            } else {
+                "Shown only if the author flags a likely significant adverse effect."
+            },
         );
     }
     if pathway.eq_s("nor") || pathway.eq_s("outline-plan") {
         let li = c.g("landInterest");
         if li.eq_s("no") {
-            add("s168-3b-b", "Alternative sites, routes and methods", "RMA s168(3B)(b), s171(1)(b)", V::Bool(true), "The requiring authority has no sufficient interest in the land.");
-            add("necessity", "Reasonable necessity", "RMA s171(1)(c)", V::Bool(true), "Required with the alternatives assessment.");
+            add(
+                "s168-3b-b",
+                "Alternative sites, routes and methods",
+                "RMA s168(3B)(b), s171(1)(b)",
+                V::Bool(true),
+                "The requiring authority has no sufficient interest in the land.",
+            );
+            add(
+                "necessity",
+                "Reasonable necessity",
+                "RMA s171(1)(c)",
+                V::Bool(true),
+                "Required with the alternatives assessment.",
+            );
         } else if li.eq_s("yes") {
             add(
-                "s168-3b-c", "Alternative sites, routes and methods", "RMA s168(3B)(c)", V::Bool(sig),
-                if sig { "Sufficient land interest, but the author flags a likely significant adverse effect." } else { "Sufficient land interest and no significant adverse effect flagged: not required." },
+                "s168-3b-c",
+                "Alternative sites, routes and methods",
+                "RMA s168(3B)(c)",
+                V::Bool(sig),
+                if sig {
+                    "Sufficient land interest, but the author flags a likely significant adverse effect."
+                } else {
+                    "Sufficient land interest and no significant adverse effect flagged: not required."
+                },
             );
         } else {
-            add("s168-3b", "Alternative sites, routes and methods", "RMA s168(3B), s171(1)(b)", V::Null, "Record whether the requiring authority has sufficient interest in the land (Compliance tab).");
+            add(
+                "s168-3b",
+                "Alternative sites, routes and methods",
+                "RMA s168(3B), s171(1)(b)",
+                V::Null,
+                "Record whether the requiring authority has sufficient interest in the land (Compliance tab).",
+            );
         }
     }
     if pathway.eq_s("ftaa-nor") {
-        add("ftaa-12g", "Alternatives", "FTAA Sch 5 cl 12(1)(g)", V::Bool(true), "Fast-track NoR.");
-        add("ftaa-12h", "Reasonable necessity", "FTAA Sch 5 cl 12(1)(h)", V::Bool(true), "Fast-track NoR.");
+        add(
+            "ftaa-12g",
+            "Alternatives",
+            "FTAA Sch 5 cl 12(1)(g)",
+            V::Bool(true),
+            "Fast-track NoR.",
+        );
+        add(
+            "ftaa-12h",
+            "Reasonable necessity",
+            "FTAA Sch 5 cl 12(1)(h)",
+            V::Bool(true),
+            "Fast-track NoR.",
+        );
     }
     if kind.eq_s("pc") {
-        add("s32-1b", "Reasonably practicable options", "RMA s32(1)(b)", V::Bool(true), "Plan change evaluation.");
+        add(
+            "s32-1b",
+            "Reasonably practicable options",
+            "RMA s32(1)(b)",
+            V::Bool(true),
+            "Plan change evaluation.",
+        );
     }
     if kind.eq_s("fund") {
-        add("ltma-20", "Alternatives and options", "LTMA s20(2)(c)(ii)", V::Bool(true), "NLTF activity.");
+        add(
+            "ltma-20",
+            "Alternatives and options",
+            "LTMA s20(2)(c)(ii)",
+            V::Bool(true),
+            "NLTF activity.",
+        );
     }
     V::Array(out)
 }
 
 /* =====================================================================================
-   Plan change mode (reg-plan-change)
-   ===================================================================================== */
+Plan change mode (reg-plan-change)
+===================================================================================== */
 
 /// `zonedOf(z, proposed)`: a zone's entered zoned capacity (operative, or PC120 proposed) when it is an object, else null.
 pub fn zoned_of(z: &V, proposed: bool) -> V {
-    let x = z.g("cx").g(if proposed { "zonedProposed" } else { "zoned" });
+    let x = z
+        .g("cx")
+        .g(if proposed { "zonedProposed" } else { "zoned" });
     if x.is_obj() { x.clone() } else { V::Null }
 }
 
@@ -246,11 +388,16 @@ pub fn merge_zoned(current: &V, zoned: &V) -> V {
     let landuses = model("LANDUSES");
     let mut entered = V::object();
     for (k, v) in zoned.entries() {
-        if landuses.has(k) && landuses.g(k).t() && !v.nullish() && !v.eq_s("") && v.n().is_finite() {
+        if landuses.has(k) && landuses.g(k).t() && !v.nullish() && !v.eq_s("") && v.n().is_finite()
+        {
             entered.set(k, V::Number(v.n()));
         }
     }
-    let cur = if current.t() { current.clone() } else { V::object() };
+    let cur = if current.t() {
+        current.clone()
+    } else {
+        V::object()
+    };
     let mut out = merge(&V::object(), &cur);
     let dw_in = DW_KEYS.iter().any(|k| entered.has(k));
     if dw_in {
@@ -263,7 +410,12 @@ pub fn merge_zoned(current: &V, zoned: &V) -> V {
     }
     let mut replaced: Vec<String> = entered.keys().iter().map(|k| k.to_string()).collect();
     if dw_in {
-        replaced.extend(DW_KEYS.iter().filter(|k| !entered.has(k) && cur.g(k).n() > 0.0).map(|k| k.to_string()));
+        replaced.extend(
+            DW_KEYS
+                .iter()
+                .filter(|k| !entered.has(k) && cur.g(k).n() > 0.0)
+                .map(|k| k.to_string()),
+        );
     }
     let kept: Vec<String> = cur
         .keys()
@@ -300,7 +452,11 @@ pub fn full_buildout(p: &V, sc: Option<&V>) -> V {
             "current" => if z.g("lu").t() { z.g("lu").clone() } else { V::object() }, "proposed" => zoned_of(z, proposed).t() && proposed,
         });
     }
-    let sum = |keys: &[&str]| zones.iter().fold(0.0, |s, z| s + keys.iter().fold(0.0, |t, k| t + n0(z.g("lu").g(k))));
+    let sum = |keys: &[&str]| {
+        zones.iter().fold(0.0, |s, z| {
+            s + keys.iter().fold(0.0, |t, k| t + n0(z.g("lu").g(k)))
+        })
+    };
     let dw = sum(&DW_KEYS);
     let gfa = sum(&super::ctx::GFA_KEYS);
     jobj! {
@@ -329,13 +485,29 @@ pub fn create_full_buildout(p: &mut V, sc: Option<&V>) -> V {
             }
         }
     }
-    let taken: Vec<String> = p.g("scenarios").items().iter().map(|s| s.g("id").s()).collect();
+    let taken: Vec<String> = p
+        .g("scenarios")
+        .items()
+        .iter()
+        .map(|s| s.g("id").s())
+        .collect();
     let mut n = 1;
     while taken.contains(&format!("s{n}")) {
         n += 1;
     }
     ns.set("id", V::String(format!("s{n}")));
-    ns.set("name", V::String(format!("{} \u{b7} full build-out{}", sc.g("name").s(), if fb.g("proposed").t() { " (PC120 proposed)" } else { "" })));
+    ns.set(
+        "name",
+        V::String(format!(
+            "{} \u{b7} full build-out{}",
+            sc.g("name").s(),
+            if fb.g("proposed").t() {
+                " (PC120 proposed)"
+            } else {
+                ""
+            }
+        )),
+    );
     ns.set("role", or_s(sc.g("role"), "proposal"));
     ns.set("buildout", V::Number(100.0));
     match sc.get("year") {
@@ -344,7 +516,14 @@ pub fn create_full_buildout(p: &mut V, sc: Option<&V>) -> V {
             ns.remove("year");
         }
     }
-    ns.set("notes", V::String(format!("{}. {}. Created by Compliance+ plan change mode.", fb.g("label").s(), fb.g("rule").s())));
+    ns.set(
+        "notes",
+        V::String(format!(
+            "{}. {}. Created by Compliance+ plan change mode.",
+            fb.g("label").s(),
+            fb.g("rule").s()
+        )),
+    );
     if let Some(list) = p.get_mut("scenarios").and_then(|s| s.as_array_mut()) {
         list.push(ns.clone());
     }
@@ -359,15 +538,31 @@ pub fn rltp_relied(p: &V) -> String {
     for l in sc.g("links").vals() {
         if net::link_stage(l) == "committed" && !l.g("status").eq_s("closed") {
             let f = l.g("funding").s();
-            let fl = if funding.has(&f) && funding.g(&f).t() { funding.g(&f).s() } else { "funding not recorded".to_string() };
+            let fl = if funding.has(&f) && funding.g(&f).t() {
+                funding.g(&f).s()
+            } else {
+                "funding not recorded".to_string()
+            };
             names.push(format!("{} ({})", link_name(l), fl));
         }
     }
     let re = crate::compliance::rx::rx("transport|road|network", "i");
     for r in p.g("register").items() {
-        let ty = if r.g("type").t() { r.g("type").s() } else { String::new() };
+        let ty = if r.g("type").t() {
+            r.g("type").s()
+        } else {
+            String::new()
+        };
         if re.test(&ty) {
-            names.push(format!("{} ({})", fld_s(r, "name"), if r.g("status").t() { r.g("status").s() } else { "status not recorded".to_string() }));
+            names.push(format!(
+                "{} ({})",
+                fld_s(r, "name"),
+                if r.g("status").t() {
+                    r.g("status").s()
+                } else {
+                    "status not recorded".to_string()
+                }
+            ));
         }
     }
     let names = unique(names);
@@ -375,7 +570,11 @@ pub fn rltp_relied(p: &V) -> String {
         return "None recorded: mark committed network projects (road inspector \u{203a} stage) or add them to the register.".to_string();
     }
     let shown = names.iter().take(8).cloned().collect::<Vec<_>>().join("; ");
-    if names.len() > 8 { format!("{shown}; and {} more", names.len() - 8) } else { shown }
+    if names.len() > 8 {
+        format!("{shown}; and {} more", names.len() - 8)
+    } else {
+        shown
+    }
 }
 
 /// `planChange(P)`: the plan change process, s32 table, policy rows, road function table and the cl 23 pack:
@@ -384,8 +583,18 @@ pub fn plan_change(p: &V) -> V {
     let c = context(p);
     let cx = data(p);
     let pc = cx.g("planChange");
-    let kind = if c.g("kind").eq_s("pc") { c.g("pathway").s() } else if pc.g("kind").t() { pc.g("kind").s() } else { String::new() };
-    let n = if c.g("notification").t() { c.g("notification").s() } else { day(pc.g("notification")) };
+    let kind = if c.g("kind").eq_s("pc") {
+        c.g("pathway").s()
+    } else if pc.g("kind").t() {
+        pc.g("kind").s()
+    } else {
+        String::new()
+    };
+    let n = if c.g("notification").t() {
+        c.g("notification").s()
+    } else {
+        day(pc.g("notification"))
+    };
     let transition = xs("STD.dates.transition");
     let private_bar = xs("STD.dates.privatePcBar");
     let mut proc: Vec<V> = Vec::new();
@@ -411,8 +620,16 @@ pub fn plan_change(p: &V) -> V {
     let base = pr.base;
     let fb = full_buildout(p, None);
     let alt = alternatives(p);
-    let econ_settings = if p.g("settings").g("econ").t() { p.g("settings").g("econ").clone() } else { V::object() };
-    let hrs = if econ_settings.g("periodHours").t() { econ_settings.g("periodHours").clone() } else { jobj! { "AM" => 600, "PM" => 600 } };
+    let econ_settings = if p.g("settings").g("econ").t() {
+        p.g("settings").g("econ").clone()
+    } else {
+        V::object()
+    };
+    let hrs = if econ_settings.g("periodHours").t() {
+        econ_settings.g("periodHours").clone()
+    } else {
+        jobj! { "AM" => 600, "PM" => 600 }
+    };
     let a = assumptions(p);
     let opts = option_list(p);
     let voc = a.g("vocPerKm");
@@ -427,7 +644,12 @@ pub fn plan_change(p: &V) -> V {
             Some(e) => (&e.o, e.sc),
             None => (&empty, None),
         };
-        let ps: Vec<&str> = sc.map_or_else(Vec::new, |s| periods_of(s).into_iter().filter(|x| res_of(base, x).is_some()).collect());
+        let ps: Vec<&str> = sc.map_or_else(Vec::new, |s| {
+            periods_of(s)
+                .into_iter()
+                .filter(|x| res_of(base, x).is_some())
+                .collect()
+        });
         let kpi_of = |x: &V, pd: &str| res_of(x, pd).map_or(V::Null, |r| r.g("kpi").clone());
         let ann = |k: &str| {
             ps.iter().fold(0.0, |s, &pd| {
@@ -436,13 +658,24 @@ pub fn plan_change(p: &V) -> V {
             })
         };
         let (ann_h, ann_vkt) = (ann("vht"), ann("vkt"));
-        let unf: Vec<&V> = sc.map_or_else(Vec::new, |s| s.g("links").vals().into_iter().filter(|l| !l.g("status").eq_s("closed") && net::link_unfunded(l)).collect());
+        let unf: Vec<&V> = sc.map_or_else(Vec::new, |s| {
+            s.g("links")
+                .vals()
+                .into_iter()
+                .filter(|l| !l.g("status").eq_s("closed") && net::link_unfunded(l))
+                .collect()
+        });
         let cas = r.g("cas");
         let safety = if cas.t() {
             format!(
                 "{} crashes ({} DSI) on changed roads in the CAS window; predicted change {}",
-                cas.g("crashes").s(), cas.g("dsi").s(),
-                if !r.g("dsi").nullish() { format!("{} DSI/yr", fmt::signed(r.g("dsi").n(), 1)) } else { "not modelled".to_string() }
+                cas.g("crashes").s(),
+                cas.g("dsi").s(),
+                if !r.g("dsi").nullish() {
+                    format!("{} DSI/yr", fmt::signed(r.g("dsi").n(), 1))
+                } else {
+                    "not modelled".to_string()
+                }
             )
         } else {
             "CAS not loaded".to_string()
@@ -488,7 +721,8 @@ pub fn plan_change(p: &V) -> V {
     let mut roads: Vec<V> = Vec::new();
     for l in sc.g("links").vals() {
         let lcx = l.g("cx");
-        if !(l.g("status").eq_s("proposed") || (lcx.t() && (lcx.g("rasf").t() || lcx.g("fn").t()))) {
+        if !(l.g("status").eq_s("proposed") || (lcx.t() && (lcx.g("rasf").t() || lcx.g("fn").t())))
+        {
             continue;
         }
         let cyc = l.g("cycle").s();
@@ -508,18 +742,55 @@ pub fn plan_change(p: &V) -> V {
     let sens_rows = p.g("report").g("sens").g("rows");
     let cl23 = vec![
         jarr!["Model status and purpose", stat],
-        jarr!["Sensitivity tests", if sens_rows.t() { format!("{} tests run", sens_rows.jlen()) } else { "Not run: run the sensitivity pack".to_string() }],
+        jarr![
+            "Sensitivity tests",
+            if sens_rows.t() {
+                format!("{} tests run", sens_rows.jlen())
+            } else {
+                "Not run: run the sensitivity pack".to_string()
+            }
+        ],
         jarr![
             "Full build-out",
             if fb.g("zones").jlen() > 0 {
-                format!("{} dwellings, {} m\u{b2} GFA ({})", fmt::int(fb.g("dwellings").n()), fmt::int(fb.g("gfa").n()), fb.g("label").s())
+                format!(
+                    "{} dwellings, {} m\u{b2} GFA ({})",
+                    fmt::int(fb.g("dwellings").n()),
+                    fmt::int(fb.g("gfa").n()),
+                    fb.g("label").s()
+                )
             } else {
                 "Zoned capacity not entered".to_string()
             }
         ],
-        jarr!["Options assessed (s32(1)(b))", format!("{} option{}", alt.g("rows").jlen(), if alt.g("rows").jlen() == 1 { "" } else { "s" })],
-        jarr!["Scope and wording", if lint_n > 0 { format!("{} linter finding{} open", lint_n, if lint_n == 1 { "" } else { "s" }) } else { "No linter findings".to_string() }],
-        jarr!["Staging triggers", if cx.g("triggers").t() { "Trigger finder run" } else { "Not run" }],
+        jarr![
+            "Options assessed (s32(1)(b))",
+            format!(
+                "{} option{}",
+                alt.g("rows").jlen(),
+                if alt.g("rows").jlen() == 1 { "" } else { "s" }
+            )
+        ],
+        jarr![
+            "Scope and wording",
+            if lint_n > 0 {
+                format!(
+                    "{} linter finding{} open",
+                    lint_n,
+                    if lint_n == 1 { "" } else { "s" }
+                )
+            } else {
+                "No linter findings".to_string()
+            }
+        ],
+        jarr![
+            "Staging triggers",
+            if cx.g("triggers").t() {
+                "Trigger finder run"
+            } else {
+                "Not run"
+            }
+        ],
     ];
     jobj! {
         "kind" => kind.as_str(), "notification" => n, "process" => V::Array(proc), "buildout" => fb, "s32" => V::Array(s32), "s32Label" => label("s32"), "policy" => V::Array(policy),
@@ -528,37 +799,94 @@ pub fn plan_change(p: &V) -> V {
 }
 
 /* =====================================================================================
-   CSV exports
-   ===================================================================================== */
+CSV exports
+===================================================================================== */
 
 /// `optionsCSV(P)`: the options appraisal, ready for the EAST and AST tools, with the version stamp.
 pub fn options_csv(p: &V) -> String {
     let a = alternatives(p);
     let pv = |r: &V, k: &str, pd: &str, f: &dyn Fn(f64) -> f64| -> V {
         let x = r.g("pp").g(k).g("by").g(pd);
-        if r.g("pp").t() && r.g("pp").g(k).t() && !x.nullish() { V::Number(f(x.n())) } else { V::String(String::new()) }
+        if r.g("pp").t() && r.g("pp").g(k).t() && !x.nullish() {
+            V::Number(f(x.n()))
+        } else {
+            V::String(String::new())
+        }
     };
     let junction = label("junction");
     let mut rows: Vec<Vec<V>> = vec![
-        cells!["Appraisal summary (EAST/AST-ready)", format!("Do-minimum: {}", a.g("base").g("name").s()), "Values are per modelled peak hour, each period on its own"],
         cells![
-            "Option", "Intervention hierarchy", "Scenario", "\u{394}VHT AM (veh\u{b7}h/h)", "\u{394}VHT PM (veh\u{b7}h/h)", format!("Worst junction ({junction})"),
-            "Bus route time change AM (min)", "Bus route time change PM (min)", "New cycle facility (km)", "CAS crashes on changed roads", "CAS DSI", "Predicted DSI change",
-            "\u{394}VKT AM (veh-km/h, information)", "\u{394}VKT PM (veh-km/h, information)", "\u{394}CO2e AM (t/h, information)", "\u{394}CO2e PM (t/h, information)",
-            "Indicative BCR", "IPM band", "Cost (NZ$m)", "Notes"
+            "Appraisal summary (EAST/AST-ready)",
+            format!("Do-minimum: {}", a.g("base").g("name").s()),
+            "Values are per modelled peak hour, each period on its own"
+        ],
+        cells![
+            "Option",
+            "Intervention hierarchy",
+            "Scenario",
+            "\u{394}VHT AM (veh\u{b7}h/h)",
+            "\u{394}VHT PM (veh\u{b7}h/h)",
+            format!("Worst junction ({junction})"),
+            "Bus route time change AM (min)",
+            "Bus route time change PM (min)",
+            "New cycle facility (km)",
+            "CAS crashes on changed roads",
+            "CAS DSI",
+            "Predicted DSI change",
+            "\u{394}VKT AM (veh-km/h, information)",
+            "\u{394}VKT PM (veh-km/h, information)",
+            "\u{394}CO2e AM (t/h, information)",
+            "\u{394}CO2e PM (t/h, information)",
+            "Indicative BCR",
+            "IPM band",
+            "Cost (NZ$m)",
+            "Notes"
         ],
     ];
     let blank = || V::String(String::new());
     for r in a.g("rows").items() {
         let cas = r.g("cas");
         rows.push(cells![
-            r.g("name"), r.g("label"), r.g("scName"), pv(r, "vht", "AM", &r1), pv(r, "vht", "PM", &r1), or_s(r.g("worst"), ""),
-            pv(r, "route", "AM", &|x| r1(x / 60.0)), pv(r, "route", "PM", &|x| r1(x / 60.0)),
-            if !r.g("cycleKm").nullish() { V::Number(r3(r.g("cycleKm").n())) } else { blank() },
-            if cas.t() { cas.g("crashes").clone() } else { blank() }, if cas.t() { cas.g("dsi").clone() } else { blank() },
-            if !r.g("dsi").nullish() { r.g("dsi").clone() } else { V::String("not modelled".into()) },
-            pv(r, "vkt", "AM", &r1), pv(r, "vkt", "PM", &r1), pv(r, "co2", "AM", &r3), pv(r, "co2", "PM", &r3), or_s(r.g("bcr"), ""), or_s(r.g("ipm"), ""),
-            if !r.g("cost").nullish() { V::Number(r3(r.g("cost").n())) } else { blank() }, r.g("notes")
+            r.g("name"),
+            r.g("label"),
+            r.g("scName"),
+            pv(r, "vht", "AM", &r1),
+            pv(r, "vht", "PM", &r1),
+            or_s(r.g("worst"), ""),
+            pv(r, "route", "AM", &|x| r1(x / 60.0)),
+            pv(r, "route", "PM", &|x| r1(x / 60.0)),
+            if !r.g("cycleKm").nullish() {
+                V::Number(r3(r.g("cycleKm").n()))
+            } else {
+                blank()
+            },
+            if cas.t() {
+                cas.g("crashes").clone()
+            } else {
+                blank()
+            },
+            if cas.t() {
+                cas.g("dsi").clone()
+            } else {
+                blank()
+            },
+            if !r.g("dsi").nullish() {
+                r.g("dsi").clone()
+            } else {
+                V::String("not modelled".into())
+            },
+            pv(r, "vkt", "AM", &r1),
+            pv(r, "vkt", "PM", &r1),
+            pv(r, "co2", "AM", &r3),
+            pv(r, "co2", "PM", &r3),
+            or_s(r.g("bcr"), ""),
+            or_s(r.g("ipm"), ""),
+            if !r.g("cost").nullish() {
+                V::Number(r3(r.g("cost").n()))
+            } else {
+                blank()
+            },
+            r.g("notes")
         ]);
     }
     rows.push(vec![]);
@@ -576,13 +904,38 @@ pub fn plan_change_csv(p: &V) -> String {
     let bo = pc.g("buildout");
     let mut rows: Vec<Vec<V>> = vec![cells!["Plan change process"]];
     for x in pc.g("process").items() {
-        rows.push(cells![if x.g("level").eq_s("warn") { "Warning" } else { "Note" }, x.g("text")]);
+        rows.push(cells![
+            if x.g("level").eq_s("warn") {
+                "Warning"
+            } else {
+                "Note"
+            },
+            x.g("text")
+        ]);
     }
     rows.push(vec![]);
     rows.push(cells!["s32 transport table", pc.g("s32Label")]);
-    rows.push(cells!["Option", "Hierarchy", "Travel time", "Safety", "Vehicle operating cost", "Infrastructure cost and timing", "Risk of acting", "Risk of not acting"]);
+    rows.push(cells![
+        "Option",
+        "Hierarchy",
+        "Travel time",
+        "Safety",
+        "Vehicle operating cost",
+        "Infrastructure cost and timing",
+        "Risk of acting",
+        "Risk of not acting"
+    ]);
     for r in pc.g("s32").items() {
-        rows.push(cells![r.g("name"), r.g("label"), r.g("travel"), r.g("safety"), r.g("voc"), r.g("cost"), r.g("acting"), r.g("notActing")]);
+        rows.push(cells![
+            r.g("name"),
+            r.g("label"),
+            r.g("travel"),
+            r.g("safety"),
+            r.g("voc"),
+            r.g("cost"),
+            r.g("acting"),
+            r.g("notActing")
+        ]);
     }
     rows.push(vec![]);
     rows.push(cells!["Policy rows"]);
@@ -592,12 +945,38 @@ pub fn plan_change_csv(p: &V) -> String {
     }
     rows.push(vec![]);
     rows.push(cells!["Draft road function table"]);
-    rows.push(cells!["Road", "Class", "Draft function", "RASF", "Future Connect (general traffic)", "Limit (km/h)", "Lanes", "Cycling", "Status"]);
+    rows.push(cells![
+        "Road",
+        "Class",
+        "Draft function",
+        "RASF",
+        "Future Connect (general traffic)",
+        "Limit (km/h)",
+        "Lanes",
+        "Cycling",
+        "Status"
+    ]);
     for r in pc.g("roads").items() {
-        rows.push(cells![r.g("name"), r.g("cls"), r.g("fn"), r.g("rasf"), r.g("fc"), r.g("speed"), r.g("lanes"), r.g("cycle"), r.g("status")]);
+        rows.push(cells![
+            r.g("name"),
+            r.g("cls"),
+            r.g("fn"),
+            r.g("rasf"),
+            r.g("fc"),
+            r.g("speed"),
+            r.g("lanes"),
+            r.g("cycle"),
+            r.g("status")
+        ]);
     }
     rows.push(vec![]);
-    rows.push(cells!["Full build-out", bo.g("label"), format!("{} dwellings", bo.g("dwellings").s()), format!("{} m\u{b2} GFA", bo.g("gfa").s()), bo.g("rule")]);
+    rows.push(cells![
+        "Full build-out",
+        bo.g("label"),
+        format!("{} dwellings", bo.g("dwellings").s()),
+        format!("{} m\u{b2} GFA", bo.g("gfa").s()),
+        bo.g("rule")
+    ]);
     rows.push(vec![]);
     rows.push(cells!["Sch 1 cl 23 response pack"]);
     rows.push(cells!["Item", "Status"]);
@@ -608,14 +987,25 @@ pub fn plan_change_csv(p: &V) -> String {
 }
 
 /* =====================================================================================
-   Report sections
-   ===================================================================================== */
+Report sections
+===================================================================================== */
 
 /// `altTable(a)`: the multi-criteria table of the options (against the do-minimum).
 pub fn alt_table(a: &V) -> String {
     let head = [
-        th("Option"), th("Hierarchy"), th("\u{394}VHT veh\u{b7}h/h"), th("Worst junction"), th("Bus time \u{394} min"), thn("New cycle km"), th("CAS (DSI)"), th("Predicted DSI"),
-        th("\u{394}VKT veh-km/h"), th("\u{394}CO2e t/h"), th("BCR"), th("IPM band"), thn("Cost"),
+        th("Option"),
+        th("Hierarchy"),
+        th("\u{394}VHT veh\u{b7}h/h"),
+        th("Worst junction"),
+        th("Bus time \u{394} min"),
+        thn("New cycle km"),
+        th("CAS (DSI)"),
+        th("Predicted DSI"),
+        th("\u{394}VKT veh-km/h"),
+        th("\u{394}CO2e t/h"),
+        th("BCR"),
+        th("IPM band"),
+        thn("Cost"),
     ];
     let dash = || fmt::DASH.to_string();
     let rows: Vec<Vec<String>> = a
@@ -631,14 +1021,38 @@ pub fn alt_table(a: &V) -> String {
                 let route_pp = jobj! { "by" => route };
                 let cas = r.g("cas");
                 vec![
-                    esc(r.g("name")), esc(r.g("label")), esc_s(&pp_text(r.g("pp").g("vht"), 1, "")), esc(r.g("worst")), esc_s(&pp_text(&route_pp, 1, "")), num(r.g("cycleKm"), 2),
-                    if cas.t() { format!("{} ({})", cas.g("crashes").s(), cas.g("dsi").s()) } else { dash() },
-                    if !r.g("dsi").nullish() { fmt::signed(r.g("dsi").n(), 1) } else { "not modelled".to_string() },
-                    esc_s(&pp_text(r.g("pp").g("vkt"), 0, "")), esc_s(&pp_text(r.g("pp").g("co2"), 2, "")), esc(r.g("bcr")), esc(r.g("ipm")),
-                    fmt::money(if r.g("cost").nullish() { f64::NAN } else { r.g("cost").n() }),
+                    esc(r.g("name")),
+                    esc(r.g("label")),
+                    esc_s(&pp_text(r.g("pp").g("vht"), 1, "")),
+                    esc(r.g("worst")),
+                    esc_s(&pp_text(&route_pp, 1, "")),
+                    num(r.g("cycleKm"), 2),
+                    if cas.t() {
+                        format!("{} ({})", cas.g("crashes").s(), cas.g("dsi").s())
+                    } else {
+                        dash()
+                    },
+                    if !r.g("dsi").nullish() {
+                        fmt::signed(r.g("dsi").n(), 1)
+                    } else {
+                        "not modelled".to_string()
+                    },
+                    esc_s(&pp_text(r.g("pp").g("vkt"), 0, "")),
+                    esc_s(&pp_text(r.g("pp").g("co2"), 2, "")),
+                    esc(r.g("bcr")),
+                    esc(r.g("ipm")),
+                    fmt::money(if r.g("cost").nullish() {
+                        f64::NAN
+                    } else {
+                        r.g("cost").n()
+                    }),
                 ]
             } else {
-                let mut v = vec![esc(r.g("name")), esc(r.g("label")), "Run this scenario and the do-minimum".to_string()];
+                let mut v = vec![
+                    esc(r.g("name")),
+                    esc(r.g("label")),
+                    "Run this scenario and the do-minimum".to_string(),
+                ];
                 v.extend(std::iter::repeat_n(String::new(), 10));
                 v
             }
@@ -654,15 +1068,32 @@ fn report_alternatives(p: &V, ctx: Option<&dyn ReportCtx>) -> String {
     }
     let note = format!(
         "Values per modelled peak hour, each period on its own. {}. VKT and CO2e: {}. Junction results: {}.",
-        esc_s(&xs("HIER_SRC")), esc_s(&label("vkt")), esc_s(&label("junction"))
+        esc_s(&xs("HIER_SRC")),
+        esc_s(&label("vkt")),
+        esc_s(&label("junction"))
     );
-    let mut out = rt(ctx, "Options against the intervention hierarchy", &alt_table(&a), &note);
+    let mut out = rt(
+        ctx,
+        "Options against the intervention hierarchy",
+        &alt_table(&a),
+        &note,
+    );
     out.push_str(&disc("D3", p, None));
     for w in a.g("warnings").items() {
         out.push_str(&format!("<p class=\"note warn\">{}</p>", esc(w)));
     }
-    for s in a.g("sections").items().iter().filter(|s| s.g("include").t()) {
-        out.push_str(&format!("<p class=\"note\">{} ({}): {}</p>", esc(s.g("title")), esc(s.g("ref")), esc(s.g("why"))));
+    for s in a
+        .g("sections")
+        .items()
+        .iter()
+        .filter(|s| s.g("include").t())
+    {
+        out.push_str(&format!(
+            "<p class=\"note\">{} ({}): {}</p>",
+            esc(s.g("title")),
+            esc(s.g("ref")),
+            esc(s.g("why"))
+        ));
     }
     out
 }
@@ -674,25 +1105,83 @@ fn report_plan_change(p: &V, ctx: Option<&dyn ReportCtx>) -> String {
     }
     let mut out = String::new();
     for x in pc.g("process").items() {
-        out.push_str(&format!("<p class=\"note{}\">{}</p>", if x.g("level").eq_s("warn") { " warn" } else { "" }, esc(x.g("text"))));
+        out.push_str(&format!(
+            "<p class=\"note{}\">{}</p>",
+            if x.g("level").eq_s("warn") {
+                " warn"
+            } else {
+                ""
+            },
+            esc(x.g("text"))
+        ));
     }
-    let s32_rows: Vec<Vec<String>> =
-        pc.g("s32").items().iter().map(|r| ["name", "travel", "safety", "voc", "cost", "acting", "notActing"].iter().map(|k| esc(r.g(k))).collect()).collect();
-    let s32 = tbl(&["Option", "Travel time", "Safety", "VOC", "Cost and timing", "Risk of acting", "Risk of not acting"], s32_rows, "Run the options.");
-    out.push_str(&rt(ctx, "s32 transport evaluation", &s32, &format!("<b>{}</b>", esc(pc.g("s32Label")))));
-    let pol_rows: Vec<Vec<String>> = pc.g("policy").items().iter().map(|r| vec![esc(r.g("ref")), esc(r.g("policy")), esc(r.g("text"))]).collect();
+    let s32_rows: Vec<Vec<String>> = pc
+        .g("s32")
+        .items()
+        .iter()
+        .map(|r| {
+            [
+                "name",
+                "travel",
+                "safety",
+                "voc",
+                "cost",
+                "acting",
+                "notActing",
+            ]
+            .iter()
+            .map(|k| esc(r.g(k)))
+            .collect()
+        })
+        .collect();
+    let s32 = tbl(
+        &[
+            "Option",
+            "Travel time",
+            "Safety",
+            "VOC",
+            "Cost and timing",
+            "Risk of acting",
+            "Risk of not acting",
+        ],
+        s32_rows,
+        "Run the options.",
+    );
+    out.push_str(&rt(
+        ctx,
+        "s32 transport evaluation",
+        &s32,
+        &format!("<b>{}</b>", esc(pc.g("s32Label"))),
+    ));
+    let pol_rows: Vec<Vec<String>> = pc
+        .g("policy")
+        .items()
+        .iter()
+        .map(|r| vec![esc(r.g("ref")), esc(r.g("policy")), esc(r.g("text"))])
+        .collect();
     let bo = pc.g("buildout");
     out.push_str("\n        ");
-    out.push_str(&rt(ctx, "Policy matters", &tbl(&["Reference", "Policy", "Evidence"], pol_rows, ""), ""));
+    out.push_str(&rt(
+        ctx,
+        "Policy matters",
+        &tbl(&["Reference", "Policy", "Evidence"], pol_rows, ""),
+        "",
+    ));
     out.push_str(&format!(
         "<p class=\"note\">Full build-out: {} dwellings, {} m\u{b2} GFA ({}; {}).</p>",
-        fmt::int(bo.g("dwellings").n()), fmt::int(bo.g("gfa").n()), esc(bo.g("label")), esc(bo.g("rule"))
+        fmt::int(bo.g("dwellings").n()),
+        fmt::int(bo.g("gfa").n()),
+        esc(bo.g("label")),
+        esc(bo.g("rule"))
     ));
     out
 }
 
 /// The report sections of this part the report lane can ask for (see [`report`]).
-pub const REPORT_IDS: &[&str] = &["compliance-extra-alternatives", "compliance-extra-planchange"];
+pub const REPORT_IDS: &[&str] = &[
+    "compliance-extra-alternatives",
+    "compliance-extra-planchange",
+];
 
 /// The HTML of a report section of this part (`REPORT[id].render(P, ctx)`); None when the id is not one of this part's. A section that has
 /// nothing to say gives an empty string, as the prototype's does.

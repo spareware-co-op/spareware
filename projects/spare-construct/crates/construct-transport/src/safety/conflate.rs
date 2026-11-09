@@ -73,10 +73,21 @@ fn opt(s: &Option<String>) -> Value {
 }
 
 // order of general-traffic classes, highest first
-const GT_ORDER: [&str; 6] = ["motorway", "strategic", "primary", "secondary", "collector", "local"];
+const GT_ORDER: [&str; 6] = [
+    "motorway",
+    "strategic",
+    "primary",
+    "secondary",
+    "collector",
+    "local",
+];
 
 fn gt_rank(g: &Value) -> f64 {
-    let text = if value_truthy(g) { crate::jsnum::value_to_js_string(g) } else { String::new() };
+    let text = if value_truthy(g) {
+        crate::jsnum::value_to_js_string(g)
+    } else {
+        String::new()
+    };
     let n = norm(&text);
     match GT_ORDER.iter().position(|x| n.starts_with(x)) {
         Some(k) => k as f64,
@@ -93,7 +104,13 @@ fn cell_key(cx: f64, cy: f64) -> i64 {
 /// `radius` (default 15 m) and `bearing` (default 30 degrees) are the options of the prototype, where 0 or a missing value
 /// gives the default. `now_ms` stamps `fc.at` with the date (UTC). Links with an `fc` that has no Future Connect source are
 /// left; a link that lost its match loses an earlier Future Connect class.
-pub fn conflate_fc(sc: &mut Scenario, feats: &[FutureConnect], radius: Option<f64>, bearing_limit: Option<f64>, now_ms: f64) -> ConflateResult {
+pub fn conflate_fc(
+    sc: &mut Scenario,
+    feats: &[FutureConnect],
+    radius: Option<f64>,
+    bearing_limit: Option<f64>,
+    now_ms: f64,
+) -> ConflateResult {
     let pick = |v: Option<f64>, d: f64| match v {
         Some(x) if x != 0.0 && !x.is_nan() => x,
         _ => d,
@@ -104,7 +121,13 @@ pub fn conflate_fc(sc: &mut Scenario, feats: &[FutureConnect], radius: Option<f6
     let now = utc_date(now_ms);
     let use_: Vec<&FutureConnect> = feats
         .iter()
-        .filter(|f| truthy(&f.gt) || truthy(&f.pt) || truthy(&f.gt10) || truthy(&f.pt10) || (truthy(&f.freight) && f.freight.as_deref() != Some("Rail")))
+        .filter(|f| {
+            truthy(&f.gt)
+                || truthy(&f.pt)
+                || truthy(&f.gt10)
+                || truthy(&f.pt10)
+                || (truthy(&f.freight) && f.freight.as_deref() != Some("Rail"))
+        })
         .collect();
     let lat0 = sc.nodes.values().next().map_or(-36.85, |n| n.lat.num());
     let fl = flat(lat0);
@@ -140,7 +163,10 @@ pub fn conflate_fc(sc: &mut Scenario, feats: &[FutureConnect], radius: Option<f6
         if l.status.is("closed") || !sc.nodes.contains_key(&l.a) || !sc.nodes.contains_key(&l.b) {
             continue;
         }
-        if l.fc.get().is_some_and(|fc| fc.get("user").is_some_and(value_truthy)) {
+        if l.fc
+            .get()
+            .is_some_and(|fc| fc.get("user").is_some_and(value_truthy))
+        {
             continue;
         }
         links += 1;
@@ -192,13 +218,18 @@ pub fn conflate_fc(sc: &mut Scenario, feats: &[FutureConnect], radius: Option<f6
         }
         let mut pick: Option<(usize, f64, f64)> = None;
         for &(fi, n, d) in &votes {
-            if n >= 2.0 && name_ok(l.name.as_str().unwrap_or(""), &use_[fi].name) && pick.is_none_or(|p| n > p.1 || (n == p.1 && d < p.2)) {
+            if n >= 2.0
+                && name_ok(l.name.as_str().unwrap_or(""), &use_[fi].name)
+                && pick.is_none_or(|p| n > p.1 || (n == p.1 && d < p.2))
+            {
                 pick = Some((fi, n, d));
             }
         }
         let Some((fi, n, d)) = pick else {
             let l = sc.links.get_mut(id.as_str()).expect("link");
-            if l.fc.get().is_some_and(|fc| fc.get("src").and_then(Value::as_str) == Some("AT Future Connect")) {
+            if l.fc.get().is_some_and(|fc| {
+                fc.get("src").and_then(Value::as_str) == Some("AT Future Connect")
+            }) {
                 l.fc = crate::jsnum::Maybe::Missing;
             }
             continue;
@@ -229,29 +260,60 @@ pub fn conflate_fc(sc: &mut Scenario, feats: &[FutureConnect], radius: Option<f6
     for _pass in 0..3 {
         for id in &ids {
             let l = &sc.links[id.as_str()];
-            if l.fc.get().is_some_and(value_truthy) || l.status.is("closed") || !sc.nodes.contains_key(&l.a) || !sc.nodes.contains_key(&l.b) || sc.link_len(l) >= 60.0 {
+            if l.fc.get().is_some_and(value_truthy)
+                || l.status.is("closed")
+                || !sc.nodes.contains_key(&l.a)
+                || !sc.nodes.contains_key(&l.b)
+                || sc.link_len(l) >= 60.0
+            {
                 continue;
             }
-            let fc_src = |m: &crate::project::Link| m.fc.get().and_then(|fc| fc.get("src")).and_then(Value::as_str).map(str::to_string);
+            let fc_src = |m: &crate::project::Link| {
+                m.fc.get()
+                    .and_then(|fc| fc.get("src"))
+                    .and_then(Value::as_str)
+                    .map(str::to_string)
+            };
             let mut adj: Vec<&crate::project::Link> = Vec::new();
             for end in [&l.a, &l.b] {
                 for mid in at.get(end).map(Vec::as_slice).unwrap_or(&[]) {
                     let m = &sc.links[mid.as_str()];
-                    if m.id != l.id && m.fc.get().is_some_and(value_truthy) && fc_src(m).unwrap_or_default().starts_with("AT Future Connect") {
+                    if m.id != l.id
+                        && m.fc.get().is_some_and(value_truthy)
+                        && fc_src(m)
+                            .unwrap_or_default()
+                            .starts_with("AT Future Connect")
+                    {
                         adj.push(m);
                     }
                 }
             }
             let pool: Vec<&crate::project::Link> = if l.ring.truthy() {
-                adj.iter().copied().filter(|m| !m.ring.truthy() || fc_src(m).as_deref() == Some("AT Future Connect")).collect()
+                adj.iter()
+                    .copied()
+                    .filter(|m| {
+                        !m.ring.truthy() || fc_src(m).as_deref() == Some("AT Future Connect")
+                    })
+                    .collect()
             } else {
                 let mine = norm(l.name.as_str().unwrap_or(""));
-                adj.iter().copied().filter(|m| { let n = norm(m.name.as_str().unwrap_or("")); !n.is_empty() && n == mine }).collect()
+                adj.iter()
+                    .copied()
+                    .filter(|m| {
+                        let n = norm(m.name.as_str().unwrap_or(""));
+                        !n.is_empty() && n == mine
+                    })
+                    .collect()
             };
             if pool.is_empty() {
                 continue;
             }
-            let gt_of = |m: &crate::project::Link| m.fc.get().and_then(|fc| fc.get("gt")).cloned().unwrap_or(Value::Null);
+            let gt_of = |m: &crate::project::Link| {
+                m.fc.get()
+                    .and_then(|fc| fc.get("gt"))
+                    .cloned()
+                    .unwrap_or(Value::Null)
+            };
             let mut m = pool[0];
             for c in &pool[1..] {
                 if gt_rank(&gt_of(c)) < gt_rank(&gt_of(m)) {
@@ -262,7 +324,10 @@ pub fn conflate_fc(sc: &mut Scenario, feats: &[FutureConnect], radius: Option<f6
                 Some(Value::Object(o)) => o.clone(),
                 _ => Map::new(),
             };
-            fc.insert("src".to_string(), json!("AT Future Connect (from the adjacent link)"));
+            fc.insert(
+                "src".to_string(),
+                json!("AT Future Connect (from the adjacent link)"),
+            );
             fc.insert("from".to_string(), json!(m.id));
             let is_art = l.cls.is("arterial");
             let target = sc.links.get_mut(id.as_str()).expect("link");
@@ -278,7 +343,15 @@ pub fn conflate_fc(sc: &mut Scenario, feats: &[FutureConnect], radius: Option<f6
         links,
         arterials: art,
         arterials_matched: art_m,
-        share: if links > 0 { matched as f64 / links as f64 } else { 0.0 },
-        arterial_share: if art > 0 { Some(art_m as f64 / art as f64) } else { None },
+        share: if links > 0 {
+            matched as f64 / links as f64
+        } else {
+            0.0
+        },
+        arterial_share: if art > 0 {
+            Some(art_m as f64 / art as f64)
+        } else {
+            None
+        },
     }
 }

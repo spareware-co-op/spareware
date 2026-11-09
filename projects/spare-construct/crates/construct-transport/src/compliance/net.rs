@@ -30,7 +30,11 @@ pub fn len(sc: &V, l: &V) -> f64 {
 
 /// `Net.linksAt(sc, nid)`: the links that start or end at a node, in the scenario's order.
 pub fn links_at<'a>(sc: &'a V, nid: &str) -> Vec<&'a V> {
-    sc.g("links").vals().into_iter().filter(|l| l.g("a").eq_s(nid) || l.g("b").eq_s(nid)).collect()
+    sc.g("links")
+        .vals()
+        .into_iter()
+        .filter(|l| l.g("a").eq_s(nid) || l.g("b").eq_s(nid))
+        .collect()
 }
 
 /// The result of [`project`].
@@ -50,18 +54,33 @@ pub fn project(sc: &V, l: &V, ll: LatLng) -> Option<Projection> {
     let (px, py) = (f.x(&ll), f.y(&ll));
     let mut best: Option<(f64, usize, f64, f64)> = None;
     for i in 0..g.len().saturating_sub(1) {
-        let r = util::seg_dist(px, py, f.x(&g[i]), f.y(&g[i]), f.x(&g[i + 1]), f.y(&g[i + 1]));
+        let r = util::seg_dist(
+            px,
+            py,
+            f.x(&g[i]),
+            f.y(&g[i]),
+            f.x(&g[i + 1]),
+            f.y(&g[i + 1]),
+        );
         if best.is_none_or(|b| r.d < b.0) {
             best = Some((r.d, i, r.x, r.y));
         }
     }
     let (d, i, x, y) = best.unwrap_or((f64::INFINITY, 0, f64::NAN, f64::NAN));
-    Some(Projection { d, i, p: [y / f.ky, x / f.kx] })
+    Some(Projection {
+        d,
+        i,
+        p: [y / f.ky, x / f.kx],
+    })
 }
 
 /// `Object.values(sc.links)` that are open (`L.status !== 'closed'`).
 pub fn open_links(sc: &V) -> Vec<&V> {
-    sc.g("links").vals().into_iter().filter(|l| !l.g("status").eq_s("closed")).collect()
+    sc.g("links")
+        .vals()
+        .into_iter()
+        .filter(|l| !l.g("status").eq_s("closed"))
+        .collect()
 }
 
 /// `Kit.junctionName(id, sc)`: the names of the roads at a junction (up to three, joined with " / "), or "Unnamed junction".
@@ -73,12 +92,19 @@ pub fn junction_name(sc: &V, id: &str) -> String {
             names.push(n.s());
         }
     }
-    if names.is_empty() { "Unnamed junction".to_string() } else { names.into_iter().take(3).collect::<Vec<_>>().join(" / ") }
+    if names.is_empty() {
+        "Unnamed junction".to_string()
+    } else {
+        names.into_iter().take(3).collect::<Vec<_>>().join(" / ")
+    }
 }
 
 /// `roadLinks(sc, id)`: the open links at a junction.
 pub fn road_links<'a>(sc: &'a V, id: &str) -> Vec<&'a V> {
-    links_at(sc, id).into_iter().filter(|l| !l.g("status").eq_s("closed")).collect()
+    links_at(sc, id)
+        .into_iter()
+        .filter(|l| !l.g("status").eq_s("closed"))
+        .collect()
 }
 
 /// `Scenarios.zoneRole(z)`: "external" for a gateway, else the zone's role when it is a known one, else "existing" for an existing
@@ -92,7 +118,11 @@ pub fn zone_role(z: &V) -> &'static str {
             return r;
         }
     }
-    if z.g("existing").strict_eq(&V::Bool(true)) { "existing" } else { "development" }
+    if z.g("existing").strict_eq(&V::Bool(true)) {
+        "existing"
+    } else {
+        "development"
+    }
 }
 
 /// `Engine.zoneClass(z)`: "external" for a gateway, else the zone's role when it is existing, committed or development, else existing
@@ -109,13 +139,21 @@ pub fn zone_class(z: &V) -> &'static str {
             return r;
         }
     }
-    if z.g("existing").strict_eq(&V::Bool(true)) { "existing" } else { "development" }
+    if z.g("existing").strict_eq(&V::Bool(true)) {
+        "existing"
+    } else {
+        "development"
+    }
 }
 
 /// `Engine.stageOf(z, sc)`: the share of a zone built out: its own `buildout` percent, times the scenario's for a development zone.
 pub fn stage_of(z: &V, sc: &V) -> f64 {
     let ok = |v: &V| v.entered();
-    let mut k = if ok(z.g("buildout")) { util::clamp(z.g("buildout").n(), 0.0, 100.0) / 100.0 } else { 1.0 };
+    let mut k = if ok(z.g("buildout")) {
+        util::clamp(z.g("buildout").n(), 0.0, 100.0) / 100.0
+    } else {
+        1.0
+    };
     if ok(sc.g("buildout")) && zone_class(z) == "development" {
         k *= util::clamp(sc.g("buildout").n(), 0.0, 100.0) / 100.0;
     }
@@ -124,12 +162,22 @@ pub fn stage_of(z: &V, sc: &V) -> f64 {
 
 /// `Scenarios.linkStage(L)`: the link's stage, or "proposal" for a proposed link and "existing" otherwise.
 pub fn link_stage(l: &V) -> &'static str {
-    for s in ["existing", "committed", "unfunded", "proposal", "mitigation"] {
+    for s in [
+        "existing",
+        "committed",
+        "unfunded",
+        "proposal",
+        "mitigation",
+    ] {
         if l.g("stage").eq_s(s) {
             return s;
         }
     }
-    if l.g("status").eq_s("proposed") { "proposal" } else { "existing" }
+    if l.g("status").eq_s("proposed") {
+        "proposal"
+    } else {
+        "existing"
+    }
 }
 
 /// `Scenarios.unfunded(L)`: stage "unfunded", or committed with funding "unfunded".
@@ -146,5 +194,9 @@ pub fn lu_of(z: &V, k: &str) -> f64 {
 
 /// The development zones of a scenario (`Object.values(sc.zones).filter(z => z.kind !== 'gateway' && role is development)`).
 pub fn dev_zones(sc: &V) -> Vec<&V> {
-    sc.g("zones").vals().into_iter().filter(|z| !z.g("kind").eq_s("gateway") && zone_role(z) == "development").collect()
+    sc.g("zones")
+        .vals()
+        .into_iter()
+        .filter(|z| !z.g("kind").eq_s("gateway") && zone_role(z) == "development")
+        .collect()
 }

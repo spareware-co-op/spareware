@@ -4,7 +4,9 @@ pub mod statement;
 
 pub use self::statement::{cbds, crash_history, section_crashes};
 
-use super::ctx::{active_sc, authority_of, data, disclaimer, esc, esc_s, link_name, nn, pair, posted, stamped};
+use super::ctx::{
+    active_sc, authority_of, data, disclaimer, esc, esc_s, link_name, nn, pair, posted, stamped,
+};
 use super::options::util::{cells, int32, label, or_s, tbl, unique};
 use crate::compliance::data::x as xdata;
 use crate::compliance::html::{ReportCtx, note, rt};
@@ -43,13 +45,27 @@ pub fn speed_sections(sc: &V) -> Vec<Vec<&V>> {
         .g("links")
         .vals()
         .into_iter()
-        .filter(|l| !l.g("status").eq_s("closed") && l.g("cx").t() && (l.g("cx").g("ruleClass").t() || nn(l.g("cx").g("limit")).is_some() || l.g("cx").g("variable").t()))
+        .filter(|l| {
+            !l.g("status").eq_s("closed")
+                && l.g("cx").t()
+                && (l.g("cx").g("ruleClass").t()
+                    || nn(l.g("cx").g("limit")).is_some()
+                    || l.g("cx").g("variable").t())
+        })
         .collect();
     let key = |l: &V| -> String {
         if l.g("cx").g("section").t() {
             format!("s:{}", l.g("cx").g("section").s())
         } else {
-            format!("n:{}|{}", if l.g("name").t() { l.g("name").s() } else { l.g("id").s() }, number_to_js_string(limit_of(l)))
+            format!(
+                "n:{}|{}",
+                if l.g("name").t() {
+                    l.g("name").s()
+                } else {
+                    l.g("id").s()
+                },
+                number_to_js_string(limit_of(l))
+            )
         }
     };
     let mut groups: Vec<(String, Vec<&V>)> = Vec::new();
@@ -77,7 +93,12 @@ pub fn speed_sections(sc: &V) -> Vec<Vec<&V>> {
                 comp.push(l);
                 for o in &ls {
                     let oid = o.g("id").s();
-                    if left.contains(&oid) && (o.g("a").strict_eq(l.g("a")) || o.g("a").strict_eq(l.g("b")) || o.g("b").strict_eq(l.g("a")) || o.g("b").strict_eq(l.g("b"))) {
+                    if left.contains(&oid)
+                        && (o.g("a").strict_eq(l.g("a"))
+                            || o.g("a").strict_eq(l.g("b"))
+                            || o.g("b").strict_eq(l.g("a"))
+                            || o.g("b").strict_eq(l.g("b")))
+                    {
                         left.retain(|x| *x != oid);
                         st.push(oid);
                     }
@@ -100,7 +121,11 @@ pub fn road_len(sc: &V, ls: &[&V]) -> f64 {
             return f64::NAN;
         }
         let b = util::bearing(&g[0], &g[g.len() - 1]);
-        if int32(l.g("lanesAB")) > 0.0 { b } else { (b + 180.0) % 360.0 }
+        if int32(l.g("lanesAB")) > 0.0 {
+            b
+        } else {
+            (b + 180.0) % 360.0
+        }
     };
     let mut len = 0.0;
     for &l in ls {
@@ -118,7 +143,11 @@ pub fn road_len(sc: &V, ls: &[&V]) -> f64 {
         let b = head(l);
         let name_of = |x: &V| or_s(x.g("name"), "");
         let paired = ls.iter().any(|&o| {
-            !std::ptr::eq(o, l) && one_way(o) && name_of(o).strict_eq(&name_of(l)) && util::ang_diff(b, head(o)) > 135.0 && net::project(sc, o, mid).is_some_and(|x| x.d <= pair_m)
+            !std::ptr::eq(o, l)
+                && one_way(o)
+                && name_of(o).strict_eq(&name_of(l))
+                && util::ang_diff(b, head(o)) > 135.0
+                && net::project(sc, o, mid).is_some_and(|x| x.d <= pair_m)
         });
         len += if paired { ll / 2.0 } else { ll };
     }
@@ -148,14 +177,19 @@ pub fn speed_check(p: &V, sc: Option<&V>) -> V {
         if !cls.t() {
             flags.push(jobj! { "id" => "class", "text" => "No Rule class: choose one from Schedule 3 Tables 1-3 (road inspector \u{203a} Speed limit).", "rule" => "cl 4.5" });
         } else if limit < cls.g("min").n() || limit > cls.g("max").n() {
-            let range = if cls.g("min").n() == cls.g("max").n() { cls.g("min").s() } else { format!("{}\u{2013}{}", cls.g("min").s(), cls.g("max").s()) };
+            let range = if cls.g("min").n() == cls.g("max").n() {
+                cls.g("min").s()
+            } else {
+                format!("{}\u{2013}{}", cls.g("min").s(), cls.g("max").s())
+            };
             flags.push(jobj! { "id" => "range", "text" => format!("{ls_txt} km/h is outside the Schedule 3 range for {} ({range} km/h).", cls.g("label").s()), "rule" => "cl 4.5, Schedule 3" });
         }
         if cls.t() && cls.g("crashHistory").t() && !x.g("crashHistory").t() {
             flags.push(jobj! { "id" => "isz", "text" => format!("{}s need a history of high-risk crash types: record it.", cls.g("label").s()), "rule" => "Schedule 3 Table 3" });
         }
         let min = min_len_for(limit);
-        let exc: String = if x.g("exception").t() && sp.g("exceptions").g(&x.g("exception").s()).t() {
+        let exc: String = if x.g("exception").t() && sp.g("exceptions").g(&x.g("exception").s()).t()
+        {
             x.g("exception").s()
         } else if limit < 40.0 {
             "below40".to_string()
@@ -184,7 +218,12 @@ pub fn speed_check(p: &V, sc: Option<&V>) -> V {
         }
         let onf: Vec<String> = if x.g("onf").t() {
             let want = x.g("onf").s().to_lowercase();
-            sp.g("onf").entries().into_iter().filter(|(_, v)| v.items().iter().any(|n| n.s().to_lowercase() == want)).map(|(k, _)| sp.g("classes").g(k).g("label").s()).collect()
+            sp.g("onf")
+                .entries()
+                .into_iter()
+                .filter(|(_, v)| v.items().iter().any(|n| n.s().to_lowercase() == want))
+                .map(|(k, _)| sp.g("classes").g(k).g("label").s())
+                .collect()
         } else {
             Vec::new()
         };
@@ -225,27 +264,55 @@ pub fn school_speeds(sc: &V) -> V {
 }
 
 /* =====================================================================================
-   CSV export
-   ===================================================================================== */
+CSV export
+===================================================================================== */
 
 /// `speedCSV(P)`: the speed limit validation and the stored cost benefit disclosure statement, with the version stamp.
 pub fn speed_csv(p: &V) -> String {
     let mut rows: Vec<Vec<V>> = vec![
         cells!["Speed limit validation (Setting of Speed Limits Rule 2024)"],
         cells![
-            "Road", "Rule class", "Current limit", "Proposed limit", "Section length (m, a divided road counted once)", "Schedule 1 minimum (m)", "Exception", "Decision-maker", "Flags",
+            "Road",
+            "Rule class",
+            "Current limit",
+            "Proposed limit",
+            "Section length (m, a divided road counted once)",
+            "Schedule 1 minimum (m)",
+            "Exception",
+            "Decision-maker",
+            "Flags",
             "ONF suggestion"
         ],
     ];
     for r in speed_check(p, None).items() {
-        let flags = r.g("flags").items().iter().map(|f| format!("{} ({})", f.g("text").s(), f.g("rule").s())).collect::<Vec<_>>().join(" | ");
-        rows.push(cells![r.g("name"), r.g("classLabel"), r.g("current"), r.g("limit"), math_round(r.g("len").n()), r.g("minLen"), r.g("exception"), r.g("decision"), flags, r.g("onf")]);
+        let flags = r
+            .g("flags")
+            .items()
+            .iter()
+            .map(|f| format!("{} ({})", f.g("text").s(), f.g("rule").s()))
+            .collect::<Vec<_>>()
+            .join(" | ");
+        rows.push(cells![
+            r.g("name"),
+            r.g("classLabel"),
+            r.g("current"),
+            r.g("limit"),
+            math_round(r.g("len").n()),
+            r.g("minLen"),
+            r.g("exception"),
+            r.g("decision"),
+            flags,
+            r.g("onf")
+        ]);
     }
     let cx = data(p);
     let cb = cx.g("speed").g("cbds");
     if cb.t() && cb.g("ok").t() {
         rows.push(vec![]);
-        rows.push(cells![format!("Cost benefit disclosure statement: {}", cb.g("name").s()), label("cbds")]);
+        rows.push(cells![
+            format!("Cost benefit disclosure statement: {}", cb.g("name").s()),
+            label("cbds")
+        ]);
         for h in cb.g("headings").items() {
             rows.push(cells![h.g("title"), h.g("rule")]);
             for r in h.g("rows").items() {
@@ -265,8 +332,8 @@ pub fn speed_csv(p: &V) -> String {
 }
 
 /* =====================================================================================
-   Report section
-   ===================================================================================== */
+Report section
+===================================================================================== */
 
 /// `cbdsHtml(cb)`: a cost benefit disclosure statement as the watermarked block of the report.
 pub fn cbds_html(cb: &V) -> String {
@@ -278,8 +345,17 @@ pub fn cbds_html(cb: &V) -> String {
         esc(cb.g("decision"))
     );
     for x in cb.g("headings").items() {
-        let rows: Vec<Vec<String>> = x.g("rows").items().iter().map(|r| vec![esc(r.ix(0)), esc(r.ix(1))]).collect();
-        s.push_str(&format!("<h4>{} <span class=\"note\">{}</span></h4>", esc(x.g("title")), esc(x.g("rule"))));
+        let rows: Vec<Vec<String>> = x
+            .g("rows")
+            .items()
+            .iter()
+            .map(|r| vec![esc(r.ix(0)), esc(r.ix(1))])
+            .collect();
+        s.push_str(&format!(
+            "<h4>{} <span class=\"note\">{}</span></h4>",
+            esc(x.g("title")),
+            esc(x.g("rule"))
+        ));
         s.push_str(&tbl(&["Item", "Value"], rows, ""));
         if x.g("basis").t() {
             s.push_str(&format!("<p class=\"note\">{}</p>", esc(x.g("basis"))));
@@ -288,7 +364,10 @@ pub fn cbds_html(cb: &V) -> String {
     for w in cb.g("warn").items() {
         s.push_str(&note(&esc(w), true));
     }
-    s.push_str(&format!("<p class=\"note disclaimer\" data-disclaimer=\"D9\"><b>D9.</b> {}</p></div>", esc(cb.g("disclaimer"))));
+    s.push_str(&format!(
+        "<p class=\"note disclaimer\" data-disclaimer=\"D9\"><b>D9.</b> {}</p></div>",
+        esc(cb.g("disclaimer"))
+    ));
     s
 }
 
@@ -309,13 +388,37 @@ fn report_speed(p: &V, ctx: Option<&dyn ReportCtx>) -> String {
                 vec![
                     esc(r.g("name")),
                     esc(r.g("classLabel")),
-                    format!("{} \u{2192} {}", super::ctx::num(r.g("current"), 0), super::ctx::num(r.g("limit"), 0)),
+                    format!(
+                        "{} \u{2192} {}",
+                        super::ctx::num(r.g("current"), 0),
+                        super::ctx::num(r.g("limit"), 0)
+                    ),
                     fmt::int(r.g("len").n()),
-                    if r.g("flags").jlen() > 0 { esc_s(&r.g("flags").items().iter().map(|f| f.g("text").s()).collect::<Vec<_>>().join(" ")) } else { "None".to_string() },
+                    if r.g("flags").jlen() > 0 {
+                        esc_s(
+                            &r.g("flags")
+                                .items()
+                                .iter()
+                                .map(|f| f.g("text").s())
+                                .collect::<Vec<_>>()
+                                .join(" "),
+                        )
+                    } else {
+                        "None".to_string()
+                    },
                 ]
             })
             .collect();
-        out.push_str(&rt(ctx, "Speed limit validation", &tbl(&["Road", "Rule class", "Limit", "Section (m)", "Flags"], trs, ""), "A divided road counts once in the section length."));
+        out.push_str(&rt(
+            ctx,
+            "Speed limit validation",
+            &tbl(
+                &["Road", "Rule class", "Limit", "Section (m)", "Flags"],
+                trs,
+                "",
+            ),
+            "A divided road counts once in the section length.",
+        ));
     }
     if cb_ok {
         out.push_str(&cbds_html(cb));
@@ -329,7 +432,11 @@ pub const REPORT_IDS: &[&str] = &["compliance-extra-speed"];
 /// The HTML of a report section of this part (`REPORT[id].render(P, ctx)`); None when the id is not one of this part's. A section that has
 /// nothing to say gives an empty string, as the prototype's does.
 pub fn report(id: &str, p: &V, ctx: Option<&dyn ReportCtx>) -> Option<String> {
-    if id == "compliance-extra-speed" { Some(report_speed(p, ctx)) } else { None }
+    if id == "compliance-extra-speed" {
+        Some(report_speed(p, ctx))
+    } else {
+        None
+    }
 }
 
 /// The exports of this part (`EXPORTS`, ids as the prototype registers them: "compliance-extra-<id>").
@@ -337,10 +444,18 @@ pub const EXPORT_IDS: &[&str] = &["compliance-extra-speed"];
 
 /// The text of an export of this part (`build(P)`); None when the id is not one of this part's.
 pub fn export_build(id: &str, p: &V) -> Option<String> {
-    if id == "compliance-extra-speed" { Some(speed_csv(p)) } else { None }
+    if id == "compliance-extra-speed" {
+        Some(speed_csv(p))
+    } else {
+        None
+    }
 }
 
 /// Whether an export of this part is offered for the project (`enabled()`); None when the id is not one of this part's.
 pub fn export_enabled(id: &str, p: &V) -> Option<bool> {
-    if id == "compliance-extra-speed" { Some(speed_check(p, None).jlen() > 0 || data(p).g("speed").g("cbds").t()) } else { None }
+    if id == "compliance-extra-speed" {
+        Some(speed_check(p, None).jlen() > 0 || data(p).g("speed").g("cbds").t())
+    } else {
+        None
+    }
 }

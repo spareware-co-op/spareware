@@ -5,17 +5,17 @@
 //! the share of registered cars and vans that are not battery electric (tailpipe CO2 only; hybrids count as fuel-burning).
 
 use super::arcgis::{FetchFailure, HttpRequest};
-use super::flow::{get_error, resolve_fields, Answer, ArcQuery, Flow, LayerMeta, MetaCache};
+use super::flow::{Answer, ArcQuery, Flow, LayerMeta, MetaCache, get_error, resolve_fields};
 use super::jsregex::Regex;
 use super::sources::{FLEET_DAYS, FLEET_TIMEOUT, NZTA};
 use super::vintage::{feeds_of, stamp};
 use crate::edit::ids::iso_string;
 use crate::edit::json::JsonValue;
 use crate::graph::js_sort_by;
-use crate::jsnum::{json_number, math_max, Maybe};
+use crate::jsnum::{Maybe, json_number, math_max};
 use crate::project::Project;
 use crate::util::{clamp, fmt};
-use serde_json::{json, Map, Value};
+use serde_json::{Map, Value, json};
 
 /// `fleetCacheKey(district)`: the key a host keeps a district's result under ("corridor.feeds.fleet.AUCKLAND").
 pub fn fleet_cache_key(district: &str) -> String {
@@ -26,7 +26,10 @@ pub fn fleet_cache_key(district: &str) -> String {
 pub fn fleet_district(text: &str) -> Result<String, String> {
     let d = crate::jsnum::js_trim(text).to_uppercase().replace('\'', "");
     if d.is_empty() {
-        return Err("Type a district name as the register spells it, such as AUCKLAND or HAMILTON CITY.".to_string());
+        return Err(
+            "Type a district name as the register spells it, such as AUCKLAND or HAMILTON CITY."
+                .to_string(),
+        );
     }
     Ok(d)
 }
@@ -58,7 +61,20 @@ impl Fleet {
     }
 }
 
-const MON: [(&str, f64); 12] = [("Jan", 1.0), ("Feb", 2.0), ("Mar", 3.0), ("Apr", 4.0), ("May", 5.0), ("Jun", 6.0), ("Jul", 7.0), ("Aug", 8.0), ("Sep", 9.0), ("Oct", 10.0), ("Nov", 11.0), ("Dec", 12.0)];
+const MON: [(&str, f64); 12] = [
+    ("Jan", 1.0),
+    ("Feb", 2.0),
+    ("Mar", 3.0),
+    ("Apr", 4.0),
+    ("May", 5.0),
+    ("Jun", 6.0),
+    ("Jul", 7.0),
+    ("Aug", 8.0),
+    ("Sep", 9.0),
+    ("Oct", 10.0),
+    ("Nov", 11.0),
+    ("Dec", 12.0),
+];
 
 /// The newest register layer in the NZTA services list: the name ("MVR_Oct26") with a monthly number to compare.
 pub fn newest_mvr(list: &JsonValue) -> Option<String> {
@@ -69,12 +85,16 @@ pub fn newest_mvr(list: &JsonValue) -> Option<String> {
     };
     let mut found: Vec<(String, f64)> = Vec::new();
     for s in services {
-        let full = s.get("name").map_or_else(|| "undefined".to_string(), JsonValue::js_string);
+        let full = s
+            .get("name")
+            .map_or_else(|| "undefined".to_string(), JsonValue::js_string);
         let n = full.rsplit('/').next().unwrap_or("").to_string();
         let u: Vec<u16> = n.encode_utf16().collect();
         if let Some(m) = re.exec_units(&u, 0) {
             let mon = m.text(&u, 1).unwrap_or_default();
-            let yy: f64 = m.text(&u, 2).map_or(f64::NAN, |t| crate::jsnum::string_to_number(&t));
+            let yy: f64 = m
+                .text(&u, 2)
+                .map_or(f64::NAN, |t| crate::jsnum::string_to_number(&t));
             if let Some((_, k)) = MON.iter().find(|(name, _)| *name == mon) {
                 found.push((n, (2000.0 + yy) * 12.0 + k));
             }
@@ -85,13 +105,24 @@ pub fn newest_mvr(list: &JsonValue) -> Option<String> {
 }
 
 /// What the statistics answer holds, as the fleet.
-pub fn fleet_from_answer(features: &[JsonValue], district: &str, service: &str, url: &str, mp: &str, now_ms: f64) -> Result<Fleet, String> {
+pub fn fleet_from_answer(
+    features: &[JsonValue],
+    district: &str,
+    service: &str,
+    url: &str,
+    mp: &str,
+    now_ms: f64,
+) -> Result<Fleet, String> {
     let empty = JsonValue::object();
     let mut counts: Vec<(String, f64)> = Vec::new();
     let mut total = 0.0;
     for f in features {
         let a = f.get("attributes").filter(|a| a.truthy()).unwrap_or(&empty);
-        let k = [a.get(mp), a.get(&mp.to_lowercase())].into_iter().flatten().find(|v| !v.is_null()).map_or_else(|| "UNKNOWN".to_string(), JsonValue::js_string);
+        let k = [a.get(mp), a.get(&mp.to_lowercase())]
+            .into_iter()
+            .flatten()
+            .find(|v| !v.is_null())
+            .map_or_else(|| "UNKNOWN".to_string(), JsonValue::js_string);
         let num = |key: &str| a.get(key).map_or(f64::NAN, JsonValue::to_number);
         let n = {
             let x = num("n");
@@ -109,7 +140,9 @@ pub fn fleet_from_answer(features: &[JsonValue], district: &str, service: &str, 
         total += n;
     }
     if total == 0.0 || total.is_nan() {
-        return Err(format!("The register has no passenger cars for '{district}'. Check the spelling (for example AUCKLAND, HAMILTON CITY, CHRISTCHURCH CITY)."));
+        return Err(format!(
+            "The register has no passenger cars for '{district}'. Check the spelling (for example AUCKLAND, HAMILTON CITY, CHRISTCHURCH CITY)."
+        ));
     }
     js_sort_by(&mut counts, |p, q| q.1 - p.1);
     Ok(Fleet {
@@ -171,17 +204,39 @@ impl FleetLoad {
     }
     fn start_query(&mut self) {
         let meta = self.meta.as_ref().and_then(LayerMeta::meta);
-        let pick = |w: &str| resolve_fields(meta, &[w]).into_iter().next().unwrap_or_else(|| w.to_string());
+        let pick = |w: &str| {
+            resolve_fields(meta, &[w])
+                .into_iter()
+                .next()
+                .unwrap_or_else(|| w.to_string())
+        };
         self.tla = pick("TLA");
         self.vt = pick("VEHICLE_TYPE");
         self.mp = pick("MOTIVE_POWER");
         let oid = pick("OBJECTID");
         let params = vec![
-            ("where".to_string(), format!("{}='{}' AND {}='PASSENGER CAR/VAN'", self.tla, self.district, self.vt)),
+            (
+                "where".to_string(),
+                format!(
+                    "{}='{}' AND {}='PASSENGER CAR/VAN'",
+                    self.tla, self.district, self.vt
+                ),
+            ),
             ("groupByFieldsForStatistics".to_string(), self.mp.clone()),
-            ("outStatistics".to_string(), format!("[{{\"statisticType\":\"count\",\"onStatisticField\":{},\"outStatisticFieldName\":\"n\"}}]", serde_json::to_string(&oid).expect("text"))),
+            (
+                "outStatistics".to_string(),
+                format!(
+                    "[{{\"statisticType\":\"count\",\"onStatisticField\":{},\"outStatisticFieldName\":\"n\"}}]",
+                    serde_json::to_string(&oid).expect("text")
+                ),
+            ),
         ];
-        self.query = Some(ArcQuery::new(&self.url, params, 2, math_max(self.timeout_ms, FLEET_TIMEOUT * 1000.0)));
+        self.query = Some(ArcQuery::new(
+            &self.url,
+            params,
+            2,
+            math_max(self.timeout_ms, FLEET_TIMEOUT * 1000.0),
+        ));
         self.stage = FStage::Query;
     }
 }
@@ -190,7 +245,12 @@ impl Flow for FleetLoad {
     fn next_request(&mut self) -> Option<HttpRequest> {
         loop {
             match self.stage {
-                FStage::List => return Some(HttpRequest::get_json(format!("{NZTA}?f=json"), self.timeout_ms)),
+                FStage::List => {
+                    return Some(HttpRequest::get_json(
+                        format!("{NZTA}?f=json"),
+                        self.timeout_ms,
+                    ));
+                }
                 FStage::Meta => match self.meta.as_mut().and_then(Flow::next_request) {
                     Some(r) => return Some(r),
                     None => self.start_query(),
@@ -205,7 +265,13 @@ impl Flow for FleetLoad {
             FStage::List => {
                 let list = match a {
                     Ok(Answer::Json(j)) => j,
-                    Ok(_) => return Err(get_error(NZTA, self.timeout_ms, &FetchFailure::Unreadable("not JSON".into()))),
+                    Ok(_) => {
+                        return Err(get_error(
+                            NZTA,
+                            self.timeout_ms,
+                            &FetchFailure::Unreadable("not JSON".into()),
+                        ));
+                    }
                     Err(f) => return Err(get_error(NZTA, self.timeout_ms, &f)),
                 };
                 let Some(n) = newest_mvr(&list) else {
@@ -230,7 +296,14 @@ impl Flow for FleetLoad {
                 q.answer(a)?;
                 if q.is_done() {
                     let q = self.query.take().expect("query");
-                    let fleet = fleet_from_answer(q.features(), &self.district, &self.service, &self.url, &self.mp, self.now_ms)?;
+                    let fleet = fleet_from_answer(
+                        q.features(),
+                        &self.district,
+                        &self.service,
+                        &self.url,
+                        &self.mp,
+                        self.now_ms,
+                    )?;
                     self.fleet = Some(fleet);
                     self.stage = FStage::Done;
                 }
@@ -250,7 +323,13 @@ pub fn apply_fleet(p: &mut Project, fleet: &Fleet, now_ms: f64) {
     let mut e = Map::new();
     e.insert("url".into(), json!(fleet.url));
     e.insert("n".into(), json_number(fleet.total));
-    e.insert("note".into(), json!(format!("{}: passenger cars and vans registered in {}, by motive power.", fleet.service, fleet.district)));
+    e.insert(
+        "note".into(),
+        json!(format!(
+            "{}: passenger cars and vans registered in {}, by motive power.",
+            fleet.service, fleet.district
+        )),
+    );
     stamp(p, "mvr", &e, now_ms);
 }
 
@@ -287,15 +366,30 @@ pub fn use_cached_fleet(p: &mut Project, cached: &Value, now_ms: f64) -> Option<
 /// `shares` is the fleet's share by motive power in any order. Gives (factor, source text).
 pub fn fleet_co2(district: &str, service: &str, shares: &[(String, f64)]) -> (f64, String) {
     let electric = Regex::lit("^ELECTRIC$", "i");
-    let bev = shares.iter().filter(|(k, _)| electric.test(crate::jsnum::js_trim(k))).fold(0.0, |a, (_, v)| a + if *v == 0.0 || v.is_nan() { 0.0 } else { *v });
+    let bev = shares
+        .iter()
+        .filter(|(k, _)| electric.test(crate::jsnum::js_trim(k)))
+        .fold(0.0, |a, (_, v)| {
+            a + if *v == 0.0 || v.is_nan() { 0.0 } else { *v }
+        });
     let k = crate::jsnum::math_round(clamp(1.0 - bev, 0.0, 1.0) * 1000.0) / 1000.0;
-    (k, format!("{} fleet, {}: {} battery electric (tailpipe CO\u{2082} only; hybrids counted as fuel-burning, Spare Construct assumption)", district, service, fmt::pct(bev, 1)))
+    (
+        k,
+        format!(
+            "{} fleet, {}: {} battery electric (tailpipe CO\u{2082} only; hybrids counted as fuel-burning, Spare Construct assumption)",
+            district,
+            service,
+            fmt::pct(bev, 1)
+        ),
+    )
 }
 
 /// Sets the model's CO2 factor and where it came from (`settings.co2Factor`, `settings.co2FactorSrc`).
 pub fn apply_fleet_co2(p: &mut Project, factor: f64, src_text: &str) {
     p.settings.co2_factor = Maybe::number(factor);
-    p.settings.extra.insert("co2FactorSrc".to_string(), json!(src_text));
+    p.settings
+        .extra
+        .insert("co2FactorSrc".to_string(), json!(src_text));
 }
 
 /// Goes back to the generic fleet: removes the CO2 factor and its source.

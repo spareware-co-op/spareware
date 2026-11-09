@@ -1,7 +1,7 @@
 //! Count roles and observation methods of the calibration panel: which counts calibrate the model, which are held
 //! out to validate it, which set gateway flows and which are not used (`Calibration.roleOf`, `holdOut` and friends).
 
-use super::common::{calib_cfg, CalibCfg, hash};
+use super::common::{CalibCfg, calib_cfg, hash};
 use super::criteria::{METHODS, corridor, panel_method, role_name};
 use super::store::CalibStore;
 use crate::datahub::{AsText, Count, Data, Matches, matches, source};
@@ -106,7 +106,9 @@ impl<'a> Ctx<'a> {
         match info {
             None => MeUsed::None,
             Some(i) => match i.extra.get("countIds") {
-                Some(Value::Array(a)) => MeUsed::Ids(a.iter().map(crate::jsnum::value_to_js_string).collect()),
+                Some(Value::Array(a)) => {
+                    MeUsed::Ids(a.iter().map(crate::jsnum::value_to_js_string).collect())
+                }
                 _ => MeUsed::All,
             },
         }
@@ -166,7 +168,11 @@ impl<'a> Ctx<'a> {
             MeUsed::All => true,
             MeUsed::Ids(s) => s.contains(&c.id),
         };
-        if used { "seen by ME" } else { "used by trip-end factors" }
+        if used {
+            "seen by ME"
+        } else {
+            "used by trip-end factors"
+        }
     }
 }
 
@@ -180,7 +186,11 @@ pub fn count_label(c: &Count) -> String {
         "{}{} {} {}",
         short,
         if c.virtual_.truthy() { " estimate" } else { "" },
-        if c.reference.truthy() { c.reference.js_string() } else { String::new() },
+        if c.reference.truthy() {
+            c.reference.js_string()
+        } else {
+            String::new()
+        },
         c.name.js_string()
     )
 }
@@ -197,7 +207,11 @@ pub fn method_of(c: &Count, period: &str) -> &'static str {
     }
     if c.src_is("user") {
         let v = if period == "AM" { &c.am } else { &c.pm };
-        return if v.truthy() { "measured_hour" } else { "adt_factored" };
+        return if v.truthy() {
+            "measured_hour"
+        } else {
+            "adt_factored"
+        };
     }
     if c.src_is("at") && c.peak.truthy() && c.peak_time.truthy() {
         let pt = c.peak_time.js_string();
@@ -239,7 +253,13 @@ fn sync_value(p: &mut Project, roles: &[(String, &'static str)]) {
 pub fn sync_counts(p: &mut Project) {
     let roles: Vec<(String, &'static str)> = {
         let ctx = Ctx::new(p);
-        let period = p.settings.period.as_str().filter(|x| !x.is_empty()).unwrap_or("AM").to_string();
+        let period = p
+            .settings
+            .period
+            .as_str()
+            .filter(|x| !x.is_empty())
+            .unwrap_or("AM")
+            .to_string();
         ctx.data
             .counts
             .iter()
@@ -255,7 +275,10 @@ pub fn set_role(p: &mut Project, id: &str, role: &str) {
     if role == "me" || role_name(role).is_none() || role == "gateway" {
         st.roles.remove(id);
     } else {
-        st.roles.insert(id.to_string(), Maybe::Set(crate::jsnum::JsNum::Text(role.to_string())));
+        st.roles.insert(
+            id.to_string(),
+            Maybe::Set(crate::jsnum::JsNum::Text(role.to_string())),
+        );
     }
     st.write(p);
     sync_counts(p);
@@ -281,7 +304,13 @@ pub fn hold_out(p: &mut Project, sc_id: &str, every: usize) -> (usize, usize) {
             .data
             .counts
             .iter()
-            .filter(|c| ctx.data.in_use(c) && !c.virtual_.truthy() && m.get(&c.id).is_some() && !gw.contains(&c.id) && ctx.base_role(c) != "off")
+            .filter(|c| {
+                ctx.data.in_use(c)
+                    && !c.virtual_.truthy()
+                    && m.get(&c.id).is_some()
+                    && !gw.contains(&c.id)
+                    && ctx.base_role(c) != "off"
+            })
             .map(|c| {
                 let l = sc.links.get(&m.get(&c.id).expect("matched").link);
                 E {
@@ -293,9 +322,18 @@ pub fn hold_out(p: &mut Project, sc_id: &str, every: usize) -> (usize, usize) {
             .collect();
         js_sort_by(&mut el, |a, b| {
             let d = b.rank - a.rank;
-            if d != 0.0 && !d.is_nan() { d } else { a.h as f64 - b.h as f64 }
+            if d != 0.0 && !d.is_nan() {
+                d
+            } else {
+                a.h as f64 - b.h as f64
+            }
         });
-        (el.into_iter().map(|e| e.c.id.clone()).collect::<Vec<String>>(), ctx.store.clone())
+        (
+            el.into_iter()
+                .map(|e| e.c.id.clone())
+                .collect::<Vec<String>>(),
+            ctx.store.clone(),
+        )
     };
     // a fresh hold-out: every role except 'not used' is cleared first, so the result depends only on the counts
     let keys: Vec<String> = st.roles.keys().map(String::from).collect();
@@ -307,7 +345,10 @@ pub fn hold_out(p: &mut Project, sc_id: &str, every: usize) -> (usize, usize) {
     let mut k = 0;
     for (i, id) in ids.iter().enumerate() {
         if i % every == every - 1 {
-            st.roles.insert(id.clone(), Maybe::Set(crate::jsnum::JsNum::Text("valid".to_string())));
+            st.roles.insert(
+                id.clone(),
+                Maybe::Set(crate::jsnum::JsNum::Text("valid".to_string())),
+            );
             k += 1;
         } else {
             st.roles.remove(id);

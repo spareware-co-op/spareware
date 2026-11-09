@@ -11,7 +11,10 @@ pub const TAG: &str = "UK TAG M3.1 (May 2026)";
 
 macro_rules! tmdg {
     ($s:expr) => {
-        concat!("NZTA Transport Model Development Guidelines (TMDG) 2019", $s)
+        concat!(
+            "NZTA Transport Model Development Guidelines (TMDG) 2019",
+            $s
+        )
     };
 }
 macro_rules! tag {
@@ -321,7 +324,11 @@ pub fn origin(x: &[f64], y: &[f64]) -> OriginFit {
     OriginFit {
         b0: Some(b0),
         r2c: if st > 0.0 { Some(1.0 - se / st) } else { None },
-        r2e: if syy > 0.0 { Some(1.0 - se / syy) } else { None },
+        r2e: if syy > 0.0 {
+            Some(1.0 - se / syy)
+        } else {
+            None
+        },
     }
 }
 
@@ -387,7 +394,13 @@ pub struct GehBand {
 }
 
 /// `Calibrate.GEH_BANDS`: the bands of the criteria library.
-pub const GEH_BANDS: [(f64, f64); 5] = [(0.0, 5.0), (5.0, 7.5), (7.5, 10.0), (10.0, 12.0), (12.0, f64::INFINITY)];
+pub const GEH_BANDS: [(f64, f64); 5] = [
+    (0.0, 5.0),
+    (5.0, 7.5),
+    (7.5, 10.0),
+    (10.0, 12.0),
+    (12.0, f64::INFINITY),
+];
 
 /// `Calibrate.gehBands(rows)`: count and cumulative share of sites per GEH band.
 pub fn geh_bands(gehs: &[f64]) -> Vec<GehBand> {
@@ -410,8 +423,16 @@ pub fn geh_bands(gehs: &[f64]) -> Vec<GehBand> {
                     format!("{}\u{2013}{}", t(lo), t(hi))
                 },
                 n: k,
-                share: if n > 0 { Some(k as f64 / n as f64) } else { None },
-                cum: if n > 0 { Some(cum as f64 / n as f64) } else { None },
+                share: if n > 0 {
+                    Some(k as f64 / n as f64)
+                } else {
+                    None
+                },
+                cum: if n > 0 {
+                    Some(cum as f64 / n as f64)
+                } else {
+                    None
+                },
             }
         })
         .collect()

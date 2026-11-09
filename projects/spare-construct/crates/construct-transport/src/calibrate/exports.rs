@@ -2,7 +2,9 @@
 //! turn validation (`Calibration.countsCSV`, `summaryCSV`, `screenlinesCSV`, `turnsCSV`).
 
 use super::assess::{EvOpts, assess};
-use super::criteria::{GEH_BANDS_PANEL, SOURCES, criteria_source, standard_name, tag_band, target_text, tmdg_band};
+use super::criteria::{
+    GEH_BANDS_PANEL, SOURCES, criteria_source, standard_name, tag_band, target_text, tmdg_band,
+};
 use super::roles::Ctx;
 use super::rows::count_rows;
 use super::screen::{sl_crossings, sl_rows};
@@ -43,7 +45,11 @@ pub fn n_days(c: &Count) -> Option<Value> {
     if !c.n_days.is_nullish() {
         return Some(raw(&c.n_days));
     }
-    let note = if c.note.truthy() { c.note.js_string() } else { String::new() };
+    let note = if c.note.truthy() {
+        c.note.js_string()
+    } else {
+        String::new()
+    };
     let t: Vec<char> = note.chars().collect();
     let pat: Vec<char> = " counted days".chars().collect();
     let mut i = 0;
@@ -96,12 +102,19 @@ pub fn counts_csv(ctx: &Ctx, sc: &Scenario, res_of: &dyn Fn(&str) -> Option<Res>
         "road_class",
     ];
     let mut out: Vec<Vec<Value>> = vec![head.iter().map(|h| s(h)).collect()];
-    let sls: Vec<&super::store::Screenline> = ctx.store.screenlines.iter().filter(|x| !x.is_type("core")).collect();
+    let sls: Vec<&super::store::Screenline> = ctx
+        .store
+        .screenlines
+        .iter()
+        .filter(|x| !x.is_type("core"))
+        .collect();
     for p in ["AM", "PM"] {
         let Some(res) = res_of(p) else { continue };
         for r in count_rows(ctx, sc, p, Some(&res), false) {
             let c = &r.c;
-            let band = GEH_BANDS_PANEL.iter().find(|(lo, hi)| r.geh >= *lo && r.geh < *hi);
+            let band = GEH_BANDS_PANEL
+                .iter()
+                .find(|(lo, hi)| r.geh >= *lo && r.geh < *hi);
             let sl_ids: Vec<&str> = sls
                 .iter()
                 .filter(|x| sl_crossings(sc, x).iter().any(|k| k.link == r.mt.link))
@@ -113,9 +126,17 @@ pub fn counts_csv(ctx: &Ctx, sc: &Scenario, res_of: &dyn Fn(&str) -> Option<Res>
             out.push(vec![
                 s(&c.id),
                 raw(&c.src),
-                if c.reference.truthy() { raw(&c.reference) } else { s("") },
+                if c.reference.truthy() {
+                    raw(&c.reference)
+                } else {
+                    s("")
+                },
                 or_cell(&c.road, &c.name),
-                if c.dir.truthy() { raw(&c.dir) } else { s("both") },
+                if c.dir.truthy() {
+                    raw(&c.dir)
+                } else {
+                    s("both")
+                },
                 s(p),
                 n(r1(r.obs)),
                 s(r.method),
@@ -126,14 +147,22 @@ pub fn counts_csv(ctx: &Ctx, sc: &Scenario, res_of: &dyn Fn(&str) -> Option<Res>
                 n(if r.in_core { 1.0 } else { 0.0 }),
                 n(r1(r.model)),
                 n(r1(r.model - r.obs)),
-                if r.obs > 0.0 { n(r1(100.0 * (r.model - r.obs) / r.obs)) } else { s("") },
+                if r.obs > 0.0 {
+                    n(r1(100.0 * (r.model - r.obs) / r.obs))
+                } else {
+                    s("")
+                },
                 n(r3(r.geh)),
                 match band {
                     Some((lo, hi)) => {
                         if *hi == f64::INFINITY {
                             s("12+")
                         } else {
-                            s(&format!("{}-{}", crate::jsnum::number_to_js_string(*lo), crate::jsnum::number_to_js_string(*hi)))
+                            s(&format!(
+                                "{}-{}",
+                                crate::jsnum::number_to_js_string(*lo),
+                                crate::jsnum::number_to_js_string(*hi)
+                            ))
                         }
                     }
                     None => s(""),
@@ -154,7 +183,21 @@ pub fn counts_csv(ctx: &Ctx, sc: &Scenario, res_of: &dyn Fn(&str) -> Option<Res>
 
 /// `summaryCSV(sc)`: the criteria table of each period that has a result: each test with its target, what was achieved and its status, then the overall line.
 pub fn summary_csv(ctx: &Ctx, sc: &Scenario, res_of: &dyn Fn(&str) -> Option<Res>) -> String {
-    let mut out: Vec<Vec<Value>> = vec![["criterion", "standard", "category", "period", "target", "achieved", "n", "status"].iter().map(|h| s(h)).collect()];
+    let mut out: Vec<Vec<Value>> = vec![
+        [
+            "criterion",
+            "standard",
+            "category",
+            "period",
+            "target",
+            "achieved",
+            "n",
+            "status",
+        ]
+        .iter()
+        .map(|h| s(h))
+        .collect(),
+    ];
     for p in ["AM", "PM"] {
         let Some(res) = res_of(p) else { continue };
         let a = assess(ctx, sc, p, Some(&res), &EvOpts::default());
@@ -162,8 +205,20 @@ pub fn summary_csv(ctx: &Ctx, sc: &Scenario, res_of: &dyn Fn(&str) -> Option<Res
             let src = criteria_source(r.t.src).unwrap_or(&SOURCES[0]);
             out.push(vec![
                 s(&r.t.label),
-                s(&format!("{}{}", src.short, if r.t.table.is_empty() { String::new() } else { format!(", {}", r.t.table) })),
-                if a.standard == "tmdg" { s(&a.category.to_string()) } else { s("") },
+                s(&format!(
+                    "{}{}",
+                    src.short,
+                    if r.t.table.is_empty() {
+                        String::new()
+                    } else {
+                        format!(", {}", r.t.table)
+                    }
+                )),
+                if a.standard == "tmdg" {
+                    s(&a.category.to_string())
+                } else {
+                    s("")
+                },
                 s(p),
                 s(&target_text(&r.t)),
                 s(&r.shown),
@@ -173,7 +228,11 @@ pub fn summary_csv(ctx: &Ctx, sc: &Scenario, res_of: &dyn Fn(&str) -> Option<Res
         }
         out.push(vec![
             s("Overall"),
-            if a.standard == "tmdg" { s("TMDG 2019") } else { standard_name(&a.standard).map_or(Value::Null, s) },
+            if a.standard == "tmdg" {
+                s("TMDG 2019")
+            } else {
+                standard_name(&a.standard).map_or(Value::Null, s)
+            },
             s(&a.category.to_string()),
             s(p),
             s(""),
@@ -283,8 +342,10 @@ pub fn turns_csv(ctx: &Ctx, sc: &Scenario, res_of: &dyn Fn(&str) -> Option<Res>)
                     n(r1(x.obs)),
                     x.model.map_or_else(|| s(""), |m| n(r1(m))),
                     x.geh.map_or_else(|| s(""), |g| n(r3(g))),
-                    x.model.map_or_else(|| s(""), |m| n(if tmdg_band(m, x.obs) { 1.0 } else { 0.0 })),
-                    x.model.map_or_else(|| s(""), |m| n(if tag_band(m, x.obs) { 1.0 } else { 0.0 })),
+                    x.model
+                        .map_or_else(|| s(""), |m| n(if tmdg_band(m, x.obs) { 1.0 } else { 0.0 })),
+                    x.model
+                        .map_or_else(|| s(""), |m| n(if tag_band(m, x.obs) { 1.0 } else { 0.0 })),
                     n(if x.estimated { 1.0 } else { 0.0 }),
                     n(if x.balanced { 1.0 } else { 0.0 }),
                     raw(&st.role),

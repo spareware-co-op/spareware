@@ -6,7 +6,7 @@ use super::data::c as table;
 use super::dates::{long_date, today};
 use super::engine;
 use super::jv::{Jx, V, csv, jarr, jobj, st};
-use super::record::{state, stamp, version};
+use super::record::{stamp, state, version};
 use super::rx::rx;
 use crate::util;
 
@@ -26,7 +26,11 @@ pub fn hash(text: &str) -> String {
 /// `inputsOf(P)`: the text of everything a sign-off covers: the settings (without the view settings), every scenario's network, zones,
 /// routes and matrix, the matrix estimation, the register and the counts.
 pub fn inputs_of(p: &V) -> String {
-    let mut s = if p.g("settings").is_obj() { p.g("settings").clone() } else { V::object() };
+    let mut s = if p.g("settings").is_obj() {
+        p.g("settings").clone()
+    } else {
+        V::object()
+    };
     for k in ["period", "basemap", "linzKey", "sim"] {
         s.remove(k);
     }
@@ -35,13 +39,32 @@ pub fn inputs_of(p: &V) -> String {
     for sc in p.g("scenarios").items() {
         let mut o = V::object();
         // a field the scenario lacks is left out of the text, as JSON.stringify leaves out undefined
-        for (k, f) in [("id", "id"), ("n", "nodes"), ("l", "links"), ("z", "zones"), ("r", "routes")] {
+        for (k, f) in [
+            ("id", "id"),
+            ("n", "nodes"),
+            ("l", "links"),
+            ("z", "zones"),
+            ("r", "routes"),
+        ] {
             if sc.has(f) {
                 o.set(k, sc.g(f).clone());
             }
         }
-        o.set("od", if sc.g("odManual").t() { sc.g("odManual").clone() } else { V::Null });
-        for (k, f) in [("y", "year"), ("ro", "role"), ("b", "buildout"), ("p", "periods"), ("si", "sites")] {
+        o.set(
+            "od",
+            if sc.g("odManual").t() {
+                sc.g("odManual").clone()
+            } else {
+                V::Null
+            },
+        );
+        for (k, f) in [
+            ("y", "year"),
+            ("ro", "role"),
+            ("b", "buildout"),
+            ("p", "periods"),
+            ("si", "sites"),
+        ] {
             o.set(k, nn(sc.g(f)));
         }
         scs.push(o);
@@ -51,13 +74,40 @@ pub fn inputs_of(p: &V) -> String {
         .g("counts")
         .items()
         .iter()
-        .map(|c| jarr![c.g("id"), c.g("adt"), c.g("am"), c.g("pm"), c.g("peak"), if c.g("date").t() { c.g("date").clone() } else { V::Null }])
+        .map(|c| {
+            jarr![
+                c.g("id"),
+                c.g("adt"),
+                c.g("am"),
+                c.g("pm"),
+                c.g("peak"),
+                if c.g("date").t() {
+                    c.g("date").clone()
+                } else {
+                    V::Null
+                }
+            ]
+        })
         .collect();
     let mut all = V::object();
     all.set("s", s);
     all.set("sc", V::Array(scs));
-    all.set("me", if p.g("me").t() { p.g("me").clone() } else { V::Null });
-    all.set("reg", if p.g("register").t() { p.g("register").clone() } else { V::Null });
+    all.set(
+        "me",
+        if p.g("me").t() {
+            p.g("me").clone()
+        } else {
+            V::Null
+        },
+    );
+    all.set(
+        "reg",
+        if p.g("register").t() {
+            p.g("register").clone()
+        } else {
+            V::Null
+        },
+    );
     all.set("c", V::Array(counts));
     all.stringify()
 }
@@ -71,10 +121,24 @@ pub fn fingerprint(p: &V) -> String {
 pub fn sign_state(p: &V) -> V {
     let c = state(p);
     let signoffs = c.g("expert").g("signoffs");
-    let fp = if signoffs.jlen() > 0 { Some(fingerprint(p)) } else { None };
+    let fp = if signoffs.jlen() > 0 {
+        Some(fingerprint(p))
+    } else {
+        None
+    };
     let matches = |s: &V| fp.as_deref().is_some_and(|f| s.g("fp").eq_s(f));
-    let valid: Vec<V> = signoffs.items().iter().filter(|s| matches(s)).cloned().collect();
-    let stale: Vec<V> = signoffs.items().iter().filter(|s| !matches(s)).cloned().collect();
+    let valid: Vec<V> = signoffs
+        .items()
+        .iter()
+        .filter(|s| matches(s))
+        .cloned()
+        .collect();
+    let stale: Vec<V> = signoffs
+        .items()
+        .iter()
+        .filter(|s| !matches(s))
+        .cloned()
+        .collect();
     let signed = valid.iter().any(|s| s.g("role").eq_s("prepared"));
     let sup = c.g("expert").g("supersession");
     let _ = sup;
@@ -85,7 +149,7 @@ pub fn sign_state(p: &V) -> V {
         ""
     };
     jobj! { "signed" => signed, "valid" => V::Array(valid), "stale" => V::Array(stale), "watermark" => if signed { "" } else { table("DRAFT").as_str().unwrap_or("") },
-        "supplementary" => supplementary, "prompt" => prompt }
+    "supplementary" => supplementary, "prompt" => prompt }
 }
 
 /// `disclaimer(id, P, opts)`: the text of a standing disclaimer for the project (the version date filled in, the tool named for
@@ -101,8 +165,14 @@ pub fn disclaimer(id: &str, p: Option<&V>, tool: Option<&str>) -> String {
             t = rx(r"\[[^\]]+\]", "").replace_with(&t, tool);
         }
     }
-    let add = p.map(|p| state(p).g("notes").g(id).clone()).unwrap_or(V::Null);
-    if add.t() { format!("{t} {}", add.s()) } else { t }
+    let add = p
+        .map(|p| state(p).g("notes").g(id).clone())
+        .unwrap_or(V::Null);
+    if add.t() {
+        format!("{t} {}", add.s())
+    } else {
+        t
+    }
 }
 
 /// `String.prototype.replace(text, text)`: the first occurrence only.
@@ -130,11 +200,20 @@ pub fn csv_footer(p: &V, handover: Option<&str>) -> String {
     if sg.g("watermark").t() {
         rows.push(vec![st(format!("# {}", sg.g("watermark").s()))]);
     }
-    rows.push(vec![st(format!("# {}", stamp(p, &V::Null).g("footer").s()))]);
-    let status: Vec<String> = ["AM", "PM"].iter().map(|per| engine::model_status(p, per).g("footer").s()).collect();
+    rows.push(vec![st(format!(
+        "# {}",
+        stamp(p, &V::Null).g("footer").s()
+    ))]);
+    let status: Vec<String> = ["AM", "PM"]
+        .iter()
+        .map(|per| engine::model_status(p, per).g("footer").s())
+        .collect();
     rows.push(vec![st(format!("# {}", status.join(" \u{b7} ")))]);
     if let Some(tool) = handover.filter(|t| !t.is_empty()) {
-        rows.push(vec![st(format!("# {}", disclaimer("D12", Some(p), Some(tool))))]);
+        rows.push(vec![st(format!(
+            "# {}",
+            disclaimer("D12", Some(p), Some(tool))
+        ))]);
     }
     csv(&rows)
 }
@@ -144,7 +223,11 @@ pub fn stamp_csv(csv: &str, p: &V, handover: Option<&str>) -> String {
     if rx(r#"^"?# Version stamp: "#, "m").test(csv) {
         return csv.to_string();
     }
-    let body = if csv.is_empty() { String::new() } else { format!("{}\r\n", rx(r"(\r?\n)*$", "").replace_with(csv, "")) };
+    let body = if csv.is_empty() {
+        String::new()
+    } else {
+        format!("{}\r\n", rx(r"(\r?\n)*$", "").replace_with(csv, ""))
+    };
     body + &csv_footer(p, handover)
 }
 

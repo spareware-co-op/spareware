@@ -2255,6 +2255,22 @@ pub mod slice {
             a.eq(a);
             loop {}
         }
+        pub fn strip_prefix(&self, prefix: &[T]) -> Option<&[T]>
+        where
+            T: PartialEq,
+        {
+            let a: &T = crate::any();
+            a.eq(a);
+            loop {}
+        }
+        pub fn strip_suffix(&self, suffix: &[T]) -> Option<&[T]>
+        where
+            T: PartialEq,
+        {
+            let a: &T = crate::any();
+            a.eq(a);
+            loop {}
+        }
         pub fn sort(&mut self)
         where
             T: Ord,

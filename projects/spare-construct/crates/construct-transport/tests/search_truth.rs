@@ -19,7 +19,9 @@ fn cases() -> Value {
 fn text_of(q: &Value) -> String {
     match q {
         Value::String(s) => s.clone(),
-        Value::Number(n) if n.as_f64() != Some(0.0) => construct_transport::jsnum::number_to_js_string(n.as_f64().unwrap()),
+        Value::Number(n) if n.as_f64() != Some(0.0) => {
+            construct_transport::jsnum::number_to_js_string(n.as_f64().unwrap())
+        }
         _ => String::new(),
     }
 }
@@ -35,7 +37,11 @@ fn typed_coordinates_match() {
     assert_eq!(recs.len(), 66);
     for rec in recs {
         let q = text_of(&rec["q"]);
-        assert_close(&place_value(parse_coords(&q)), &rec["result"], &format!("coordinates of {:?}", rec["q"]));
+        assert_close(
+            &place_value(parse_coords(&q)),
+            &rec["result"],
+            &format!("coordinates of {:?}", rec["q"]),
+        );
     }
 }
 
@@ -45,12 +51,22 @@ fn road_abbreviations_and_display_names_match() {
     let ex = e["expand"].as_array().unwrap();
     assert_eq!(ex.len(), 89);
     for rec in ex {
-        assert_eq!(expand(rec["q"].as_str().unwrap()), rec["result"].as_str().unwrap(), "expand {:?}", rec["q"]);
+        assert_eq!(
+            expand(rec["q"].as_str().unwrap()),
+            rec["result"].as_str().unwrap(),
+            "expand {:?}",
+            rec["q"]
+        );
     }
     let sh = e["shorten"].as_array().unwrap();
     assert_eq!(sh.len(), 44);
     for rec in sh {
-        assert_eq!(shorten(&text_of(&rec["q"])), rec["result"].as_str().unwrap(), "shorten {:?}", rec["q"]);
+        assert_eq!(
+            shorten(&text_of(&rec["q"])),
+            rec["result"].as_str().unwrap(),
+            "shorten {:?}",
+            rec["q"]
+        );
     }
     assert_eq!(GAP_MS, e["gap"].as_f64().unwrap());
 }
@@ -62,8 +78,16 @@ fn boxes_around_points_match() {
     assert_eq!(recs.len(), 125);
     for rec in recs {
         let (lat, lng) = (rec["lat"].as_f64().unwrap(), rec["lng"].as_f64().unwrap());
-        let q = format!("{}, {}", construct_transport::jsnum::number_to_js_string(lat), construct_transport::jsnum::number_to_js_string(lng));
-        assert_close(&place_value(parse_coords(&q)), &rec["result"], &format!("box at {lat}, {lng}"));
+        let q = format!(
+            "{}, {}",
+            construct_transport::jsnum::number_to_js_string(lat),
+            construct_transport::jsnum::number_to_js_string(lng)
+        );
+        assert_close(
+            &place_value(parse_coords(&q)),
+            &rec["result"],
+            &format!("box at {lat}, {lng}"),
+        );
     }
 }
 
@@ -77,7 +101,9 @@ fn answer_of(a: &Value) -> Result<JsonValue, FetchFailure> {
         return Err(FetchFailure::Http(status));
     }
     if a["body"] == "throw" {
-        return Err(FetchFailure::Unreadable("Unexpected end of JSON input".to_string()));
+        return Err(FetchFailure::Unreadable(
+            "Unexpected end of JSON input".to_string(),
+        ));
     }
     Ok(JsonValue::from_value(&a["body"]))
 }
@@ -93,7 +119,10 @@ fn queries_make_the_recorded_requests_and_places() {
         let requests = rec["requests"].as_array().unwrap();
         let result: Result<Vec<Place>, String> = match plan(&q) {
             Plan::Empty => {
-                assert!(requests.is_empty(), "{label}: no request for an empty query");
+                assert!(
+                    requests.is_empty(),
+                    "{label}: no request for an empty query"
+                );
                 Ok(Vec::new())
             }
             Plan::Coords(p) => {
@@ -103,13 +132,19 @@ fn queries_make_the_recorded_requests_and_places() {
             Plan::Ask { request, .. } => {
                 assert_eq!(requests.len(), 1, "{label}: one request");
                 assert_eq!(request.method, "GET");
-                assert_eq!(request.url, requests[0].as_str().unwrap(), "{label}: address");
+                assert_eq!(
+                    request.url,
+                    requests[0].as_str().unwrap(),
+                    "{label}: address"
+                );
                 let answer = answer_of(&e["answers"][rec["label"].as_str().unwrap()]);
                 read_answer(answer.as_ref().map_err(Clone::clone))
             }
         };
         match (result, rec.get("thrown")) {
-            (Ok(places), None) => assert_close(&json!(places), &rec["result"], &format!("{label} places")),
+            (Ok(places), None) => {
+                assert_close(&json!(places), &rec["result"], &format!("{label} places"))
+            }
             (Err(m), Some(t)) => assert_eq!(m, t.as_str().unwrap(), "{label}: error"),
             (g, t) => panic!("{label}: got {g:?}, recorded {t:?}"),
         }

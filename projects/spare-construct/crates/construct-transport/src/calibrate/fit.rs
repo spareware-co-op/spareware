@@ -1,9 +1,10 @@
 //! The matrix estimation fit itself (`Calibrate.fit`) and clearing its factors (`Calibrate.clear`).
 
 use super::estimate::{
-    FitOptions, MatrixChange, base_view, better, breach, eligible, matrix_change, step, stats, to_obj, wfit,
+    FitOptions, MatrixChange, base_view, better, breach, eligible, matrix_change, stats, step,
+    to_obj, wfit,
 };
-use super::sites::{Group, ParallelCheck, Rejected, SiteOpts, parallel, sites, units, id_set};
+use super::sites::{Group, ParallelCheck, Rejected, SiteOpts, id_set, parallel, sites, units};
 use super::stats::Stats;
 use crate::assign::assign;
 use crate::datahub::{Count, Data, matches};
@@ -272,7 +273,10 @@ pub fn fit(
     prog(
         0.0,
         o.iters,
-        &format!("Running the base year ({}) with the prior matrix", s.base_year.js_string()),
+        &format!(
+            "Running the base year ({}) with the prior matrix",
+            s.base_year.js_string()
+        ),
     );
     let ao = AssignOpts {
         period: Some(period.clone()),
@@ -284,7 +288,9 @@ pub fn fit(
     let before = stats(&rows);
     let mut history: Vec<Stats> = vec![before.clone()];
     let chk: Option<ParallelCheck> = match groups {
-        Some(gs) if res0.paths.is_set() && !res0.paths.is_null() => Some(parallel(&res0, &rows, gs, &s)),
+        Some(gs) if res0.paths.is_set() && !res0.paths.is_null() => {
+            Some(parallel(&res0, &rows, gs, &s))
+        }
         _ => None,
     };
     let rejected: Vec<Rejected> = chk.as_ref().map(|c| c.rejected.clone()).unwrap_or_default();
@@ -311,7 +317,9 @@ pub fn fit(
     }
     if before.n == 0 {
         return Ok(none!(
-            format!("No counts match the network for the {period} peak. Load counts for this area first."),
+            format!(
+                "No counts match the network for the {period} peak. Load counts for this area first."
+            ),
             history
         ));
     }
@@ -357,7 +365,10 @@ pub fn fit(
     };
     let mut stopped = "iterations".to_string();
     let step0 = o.max_step;
-    let mut steps: Vec<f64> = [2.0, 1.5, 1.25, 1.1].into_iter().filter(|&x| x < step0).collect();
+    let mut steps: Vec<f64> = [2.0, 1.5, 1.25, 1.1]
+        .into_iter()
+        .filter(|&x| x < step0)
+        .collect();
     let mut tries = 0;
     loop {
         let mut f: OrderedMap<f64> = OrderedMap::new();
@@ -367,7 +378,9 @@ pub fn fit(
         let mut k = 1.0f64;
         while k <= o.iters {
             step(view, &res, &units(&rows, chk.as_ref()), &mut f, &o);
-            me_of(p).factors.insert(period.clone(), Maybe::Set(to_obj(&f)));
+            me_of(p)
+                .factors
+                .insert(period.clone(), Maybe::Set(to_obj(&f)));
             prog(
                 k,
                 o.iters,
@@ -376,7 +389,10 @@ pub fn fit(
                     crate::jsnum::number_to_js_string(k),
                     crate::jsnum::number_to_js_string(o.iters),
                     if tries > 0 {
-                        format!(" (smaller steps, up to \u{d7}{})", crate::jsnum::number_to_js_string(o.max_step))
+                        format!(
+                            " (smaller steps, up to \u{d7}{})",
+                            crate::jsnum::number_to_js_string(o.max_step)
+                        )
                     } else {
                         String::new()
                     }
@@ -440,14 +456,21 @@ pub fn fit(
         return Ok(out);
     }
     let factors = to_obj(&best.f);
-    me_of(p).factors.insert(period.clone(), Maybe::Set(factors.clone()));
+    me_of(p)
+        .factors
+        .insert(period.clone(), Maybe::Set(factors.clone()));
     let mc = match best.mc.clone() {
         Some(m) => m,
         None => mc_of(p, &g.zones, &period, &prior),
     };
     /* Additive deltas for future years (docs/spec/matrix-estimation: futures inherit meDelta = T_post - T_prior):
-       veh/h per estimated pair, from the base-year prior; applyME uses them for other scenario years */
-    let zi: std::collections::HashMap<&str, usize> = g.zones.iter().enumerate().map(|(i, z)| (z.id.as_str(), i)).collect();
+    veh/h per estimated pair, from the base-year prior; applyME uses them for other scenario years */
+    let zi: std::collections::HashMap<&str, usize> = g
+        .zones
+        .iter()
+        .enumerate()
+        .map(|(i, z)| (z.id.as_str(), i))
+        .collect();
     let zn = g.zones.len();
     let mut delta = Map::new();
     for (key, fv) in factors.iter() {
@@ -460,7 +483,10 @@ pub fn fit(
         };
         let d = prior[i * zn + j] * (fv.num() - 1.0);
         if d.is_finite() && d.abs() >= 0.0005 {
-            delta.insert(key.to_string(), crate::jsnum::json_number(math_round(d * 1000.0) / 1000.0));
+            delta.insert(
+                key.to_string(),
+                crate::jsnum::json_number(math_round(d * 1000.0) / 1000.0),
+            );
         }
     }
     let mut extra: Map<String, Value> = Map::new();
@@ -468,7 +494,11 @@ pub fn fit(
     extra.insert("before".to_string(), to_plain(&before));
     extra.insert("after".to_string(), to_plain(&best.st));
     extra.insert("matrixChange".to_string(), to_plain(&mc));
-    extra.insert("tripEndR2".to_string(), mc.trip_end_r2.map_or(Value::Null, crate::jsnum::json_number));
+    extra.insert(
+        "tripEndR2".to_string(),
+        mc.trip_end_r2
+            .map_or(Value::Null, crate::jsnum::json_number),
+    );
     extra.insert("options".to_string(), to_plain(&o));
     extra.insert("scenario".to_string(), Value::String(sc.id.clone()));
     extra.insert("stopped".to_string(), Value::String(stopped.clone()));
@@ -518,7 +548,11 @@ pub fn fit(
         }
     }
     // The scenario's own result: the fitted one when the scenario is the base year, else a fresh run with the factors
-    prog(o.iters, o.iters, "Running the scenario with the fitted matrix");
+    prog(
+        o.iters,
+        o.iters,
+        "Running the scenario with the fitted matrix",
+    );
     let own = if same {
         best.res.clone()
     } else {
@@ -530,7 +564,10 @@ pub fn fit(
             target.res = Maybe::Set(Value::Object(Map::new()));
         }
         if let Some(Value::Object(r)) = target.res.get_mut() {
-            r.insert(period.clone(), serde_json::to_value(&own).expect("a result serialises"));
+            r.insert(
+                period.clone(),
+                serde_json::to_value(&own).expect("a result serialises"),
+            );
         }
     }
     let n = factors.len();
@@ -549,12 +586,22 @@ pub fn fit(
         note.push_str(&format!(
             " {} count group{} left out: counts in sequence ({}).",
             rejected.len(),
-            if rejected.len() == 1 { " was" } else { "s were" },
-            rejected.iter().map(|r| r.label.as_str()).collect::<Vec<_>>().join(", ")
+            if rejected.len() == 1 {
+                " was"
+            } else {
+                "s were"
+            },
+            rejected
+                .iter()
+                .map(|r| r.label.as_str())
+                .collect::<Vec<_>>()
+                .join(", ")
         ));
     }
     if !same {
-        note.push_str(" Other years carry the estimation forward as an additive delta on the same OD pairs.");
+        note.push_str(
+            " Other years carry the estimation forward as an additive delta on the same OD pairs.",
+        );
     }
     Ok(FitResult {
         before,
@@ -598,7 +645,11 @@ pub fn clear(p: &mut Project, period: Option<&str>) -> usize {
         _ => vec!["AM".to_string(), "PM".to_string()],
     };
     for pd in &periods {
-        let k = me.factors.get(pd).and_then(|f| f.get()).map_or(0, |f| f.len());
+        let k = me
+            .factors
+            .get(pd)
+            .and_then(|f| f.get())
+            .map_or(0, |f| f.len());
         if me.factors.get(pd).is_some_and(|f| f.is_set()) {
             n += k;
             me.factors.remove(pd);
@@ -642,7 +693,9 @@ pub fn stored_res(sc: &crate::project::Scenario, period: &str) -> Option<Res> {
 }
 
 /// A progress callback lent to a call for a moment (the callback itself stays with the caller).
-pub(crate) fn lend<'a>(p: &'a mut Option<&mut dyn FnMut(f64, f64, &str)>) -> Option<&'a mut dyn FnMut(f64, f64, &str)> {
+pub(crate) fn lend<'a>(
+    p: &'a mut Option<&mut dyn FnMut(f64, f64, &str)>,
+) -> Option<&'a mut dyn FnMut(f64, f64, &str)> {
     match p {
         Some(f) => Some(&mut **f),
         None => None,

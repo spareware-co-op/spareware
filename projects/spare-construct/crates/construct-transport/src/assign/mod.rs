@@ -54,7 +54,11 @@ pub fn assign(
     };
     let g = build_graph(sc, s, Some(period));
     let mut dem = demand(p, sc, &g, period, s);
-    let df = if opts.demand_factor.num() > 0.0 { opts.demand_factor.num() } else { 1.0 };
+    let df = if opts.demand_factor.num() > 0.0 {
+        opts.demand_factor.num()
+    } else {
+        1.0
+    };
     if df != 1.0 {
         for v in dem.t.iter_mut() {
             *v *= df;

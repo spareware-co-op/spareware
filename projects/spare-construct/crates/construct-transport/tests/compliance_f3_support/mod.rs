@@ -11,7 +11,8 @@ use std::panic::{AssertUnwindSafe, catch_unwind};
 
 /// An expected file (expected/compliance-<name>.json), read with ordered objects.
 pub fn load(name: &str) -> V {
-    V::parse(&read_truth(&format!("expected/compliance-{name}.json"))).unwrap_or_else(|e| panic!("compliance-{name}: {e}"))
+    V::parse(&read_truth(&format!("expected/compliance-{name}.json")))
+        .unwrap_or_else(|e| panic!("compliance-{name}: {e}"))
 }
 
 /// Applies a case's sets (dotted path to value, in the order the case lists them) to a project.
@@ -55,7 +56,11 @@ pub fn set_clock() {
 
 /// Whether text is a random id of the prototype (`pk` and at least three of 0-9 a-z).
 fn is_uid(s: &str) -> bool {
-    s.len() >= 5 && s.starts_with("pk") && s[2..].bytes().all(|b| b.is_ascii_digit() || b.is_ascii_lowercase())
+    s.len() >= 5
+        && s.starts_with("pk")
+        && s[2..]
+            .bytes()
+            .all(|b| b.is_ascii_digit() || b.is_ascii_lowercase())
 }
 
 /// The value with every `id` that looks like a random id replaced by "<uid>" (the generator does the same to the prototype's answers).
@@ -65,7 +70,11 @@ pub fn norm_uid(v: &V) -> V {
         V::Object(_) => {
             let mut o = V::object();
             for (k, x) in v.entries() {
-                let nv = if k == "id" && x.is_str() && is_uid(&x.s()) { V::String("<uid>".to_string()) } else { norm_uid(x) };
+                let nv = if k == "id" && x.is_str() && is_uid(&x.s()) {
+                    V::String("<uid>".to_string())
+                } else {
+                    norm_uid(x)
+                };
                 o.set(k, nv);
             }
             o
@@ -77,7 +86,11 @@ pub fn norm_uid(v: &V) -> V {
 /// Panics unless an answer matches the case's recorded `ok` (numbers within the comparator's tolerance, text exactly).
 pub fn check_ok(case: &V, got: &V) {
     let id = case.g("id").s();
-    assert!(case.has("ok"), "case {id} has no recorded answer: {}", case.g("error").s());
+    assert!(
+        case.has("ok"),
+        "case {id} has no recorded answer: {}",
+        case.g("error").s()
+    );
     check(&id, &norm_uid(got), &case.g("ok").to_value());
 }
 
@@ -100,7 +113,11 @@ pub fn guard<T>(f: impl FnOnce() -> T) -> Option<T> {
     match catch_unwind(AssertUnwindSafe(f)) {
         Ok(v) => Some(v),
         Err(e) => {
-            let msg = e.downcast_ref::<String>().cloned().or_else(|| e.downcast_ref::<&str>().map(|s| s.to_string())).unwrap_or_default();
+            let msg = e
+                .downcast_ref::<String>()
+                .cloned()
+                .or_else(|| e.downcast_ref::<&str>().map(|s| s.to_string()))
+                .unwrap_or_default();
             if msg.starts_with("not yet implemented") {
                 None
             } else {

@@ -65,7 +65,10 @@ impl CalibCfg {
     }
     /// The window of a period (`cfg().windows[period]`).
     pub fn window(&self, period: &str) -> Option<&[String; 2]> {
-        self.windows.iter().find(|(p, _)| p == period).map(|(_, w)| w)
+        self.windows
+            .iter()
+            .find(|(p, _)| p == period)
+            .map(|(_, w)| w)
     }
 }
 
@@ -150,7 +153,13 @@ fn num_value(n: &Num) -> Value {
 pub fn category(s: Option<&Settings>) -> char {
     let raw = s
         .and_then(|s| s.tmdg.get())
-        .map(|t| if t.category.truthy() { t.category.js_string() } else { "E".to_string() })
+        .map(|t| {
+            if t.category.truthy() {
+                t.category.js_string()
+            } else {
+                "E".to_string()
+            }
+        })
         .unwrap_or_else(|| "E".to_string());
     let up = raw.to_uppercase();
     let mut cs = up.chars();
@@ -194,7 +203,11 @@ fn digits(s: &[char], from: usize, min: usize, max: usize) -> Option<(usize, usi
     while j < s.len() && s[j].is_ascii_digit() && j - from < max {
         j += 1;
     }
-    if j - from >= min { Some((from, j)) } else { None }
+    if j - from >= min {
+        Some((from, j))
+    } else {
+        None
+    }
 }
 
 /// `toMin(t)`: minutes after midnight from "HH:MM", "H.MM", "HHMM", "7:15 am" or a date-time such as "2026-03-10 07:15:00" (the last time in the text); None when no valid time can be read.
@@ -273,7 +286,11 @@ pub fn to_min(t: &str) -> Option<f64> {
         }
         h = h % 12.0 + if pm { 12.0 } else { 0.0 };
     }
-    if h < 24.0 && m < 60.0 { Some(h * 60.0 + m) } else { None }
+    if h < 24.0 && m < 60.0 {
+        Some(h * 60.0 + m)
+    } else {
+        None
+    }
 }
 
 /// `isoDate(v)`: a count date as ISO "yyyy-mm-dd" from ISO, yyyy/mm/dd, or NZ dd/mm/yyyy (also d-m-yy and dd.mm.yyyy); Some("") for an empty cell; None when the text is not a real date.
@@ -300,7 +317,11 @@ pub fn iso_date(v: &str) -> Option<String> {
         if f < s.len() && s[f].is_ascii_digit() {
             return None;
         }
-        Some((s[a..b].iter().collect(), s[c..d1].iter().collect(), s[e..f].iter().collect()))
+        Some((
+            s[a..b].iter().collect(),
+            s[c..d1].iter().collect(),
+            s[e..f].iter().collect(),
+        ))
     };
     // /^(\d{1,2})[-/.](\d{1,2})[-/.](\d{2}|\d{4})(?!\d)/
     let try_dmy = || -> Option<(String, String, String)> {
@@ -335,7 +356,12 @@ pub fn iso_date(v: &str) -> Option<String> {
             return None;
         }
         let yy = if yy.len() == 2 { format!("20{yy}") } else { yy };
-        Some((s[a..b].iter().collect::<String>(), s[c..d1].iter().collect::<String>(), yy)).map(|(dd, mm, y)| (y, mm, dd))
+        Some((
+            s[a..b].iter().collect::<String>(),
+            s[c..d1].iter().collect::<String>(),
+            yy,
+        ))
+        .map(|(dd, mm, y)| (y, mm, dd))
     };
     if let Some((yy, mm, dd)) = try_ymd() {
         y = yy;
@@ -348,9 +374,17 @@ pub fn iso_date(v: &str) -> Option<String> {
     } else {
         return None;
     }
-    let (yn, mn, dn) = (y.parse::<i64>().ok()?, mo.parse::<i64>().ok()?, d.parse::<i64>().ok()?);
+    let (yn, mn, dn) = (
+        y.parse::<i64>().ok()?,
+        mo.parse::<i64>().ok()?,
+        d.parse::<i64>().ok()?,
+    );
     // new Date(Date.UTC(y, m - 1, d)) must read back as the same y, m, d (years 0 to 99 would map to 1900 to 1999 in Date.UTC, as the prototype's check does)
-    let yy = if (0..=99).contains(&yn) { 1900 + yn } else { yn };
+    let yy = if (0..=99).contains(&yn) {
+        1900 + yn
+    } else {
+        yn
+    };
     let dim = |yr: i64, m: i64| -> i64 {
         match m {
             1 | 3 | 5 | 7 | 8 | 10 | 12 => 31,
@@ -399,7 +433,15 @@ pub fn dist_to_line(ll: &LatLng, pts: &[LatLng]) -> f64 {
     for i in 0..pts.len().saturating_sub(1) {
         d = math_min(
             d,
-            seg_dist(px, py, f.x(&pts[i]), f.y(&pts[i]), f.x(&pts[i + 1]), f.y(&pts[i + 1])).d,
+            seg_dist(
+                px,
+                py,
+                f.x(&pts[i]),
+                f.y(&pts[i]),
+                f.x(&pts[i + 1]),
+                f.y(&pts[i + 1]),
+            )
+            .d,
         );
     }
     d

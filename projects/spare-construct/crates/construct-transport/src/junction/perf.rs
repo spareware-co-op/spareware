@@ -62,7 +62,8 @@ pub fn arc_time(a: &Arc, x: f64, p: &PerfSet) -> f64 {
         let c = math_max(1.0, a.gl as f64 * p.sat_flow * g_c);
         let xx = q / c;
         let g = g_c;
-        let d1 = 0.5 * a.c.unwrap_or(f64::NAN) * (1.0 - g) * (1.0 - g) / (1.0 - math_min(1.0, xx) * g);
+        let d1 =
+            0.5 * a.c.unwrap_or(f64::NAN) * (1.0 - g) * (1.0 - g) / (1.0 - math_min(1.0, xx) * g);
         let d2 = 900.0 * tt * ((xx - 1.0) + ((xx - 1.0) * (xx - 1.0) + 4.0 * xx / (c * tt)).sqrt());
         t += d1 + d2;
     } else {
@@ -93,9 +94,10 @@ pub fn eff_cap(a: &Arc, p: &PerfSet) -> f64 {
             a.cap_mid,
             a.gl as f64 * p.sat_flow * a.g_c.unwrap_or(f64::NAN),
         ),
-        Ctrl::Minor | Ctrl::Rbt => {
-            math_min(a.cap_mid, or_default(a.cap_n.unwrap_or(f64::NAN), a.cap_mid))
-        }
+        Ctrl::Minor | Ctrl::Rbt => math_min(
+            a.cap_mid,
+            or_default(a.cap_n.unwrap_or(f64::NAN), a.cap_mid),
+        ),
         Ctrl::Free => a.cap_mid,
     }
 }

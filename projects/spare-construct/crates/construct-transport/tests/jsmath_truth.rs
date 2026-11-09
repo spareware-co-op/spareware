@@ -36,7 +36,10 @@ fn exp_sin_cos_and_asin_match_node_bit_for_bit() {
         for c in list {
             let (x, want) = (bits(&c[0]), bits(&c[1]));
             let got = f(x);
-            assert!(same(got, want), "{name}({x:e}): node {want:e}, port {got:e}");
+            assert!(
+                same(got, want),
+                "{name}({x:e}): node {want:e}, port {got:e}"
+            );
             n += 1;
         }
     }
@@ -50,15 +53,30 @@ fn pow_special_cases_exact_and_the_rest_within_one_ulp() {
     for c in cases["pow"].as_array().expect("pow cases") {
         let (x, y, want) = (bits(&c[0]), bits(&c[1]), bits(&c[2]));
         let got = jsmath::pow(x, y);
-        let special = y == 0.0 || y == 1.0 || y == 2.0 || y == 0.5 || y.is_nan() || y.is_infinite() || x == 0.0 || x.is_infinite() || x.is_nan() || x == 1.0 || x == -1.0;
+        let special = y == 0.0
+            || y == 1.0
+            || y == 2.0
+            || y == 0.5
+            || y.is_nan()
+            || y.is_infinite()
+            || x == 0.0
+            || x.is_infinite()
+            || x.is_nan()
+            || x == 1.0
+            || x == -1.0;
         if special {
-            assert!(same(got, want), "pow({x:e}, {y:e}): node {want:e}, port {got:e}");
+            assert!(
+                same(got, want),
+                "pow({x:e}, {y:e}): node {want:e}, port {got:e}"
+            );
             exact += 1;
         } else if same(got, want) {
             near += 1;
         } else {
             assert!(
-                got.is_finite() == want.is_finite() && got.signum() == want.signum() && ulps(got, want) <= 1,
+                got.is_finite() == want.is_finite()
+                    && got.signum() == want.signum()
+                    && ulps(got, want) <= 1,
                 "pow({x:e}, {y:e}): node {want:e}, port {got:e}"
             );
             off_by_one += 1;

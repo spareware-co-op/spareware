@@ -21,7 +21,9 @@
 #![allow(clippy::needless_range_loop, clippy::neg_cmp_op_on_partial_ord)]
 
 use crate::graph::{Graph, zone_class};
-use crate::jsnum::{JsNum, Maybe, Num, math_max, number_to_js_string, or_default, value_to_number, value_truthy};
+use crate::jsnum::{
+    JsNum, Maybe, Num, math_max, number_to_js_string, or_default, value_to_number, value_truthy,
+};
 use crate::project::{LANDUSES, OrderedMap, Project, Scenario, Settings, Zone};
 use crate::standards::{growth, year_of};
 use crate::util::{clamp, dist, fmt};
@@ -120,12 +122,22 @@ pub fn trip_ends(p: &Project, z: &Zone, s: &Settings, period: &str, sc: &Scenari
     let pout = format!("{period}out");
     if z.kind.is("gateway") {
         let measured = z.gw_src.get().is_some_and(value_truthy);
-        let gf = growth(s, Some(sc)) * if f.is_some() && !measured { factor_of(f, "gateways") } else { 1.0 };
+        let gf = growth(s, Some(sc))
+            * if f.is_some() && !measured {
+                factor_of(f, "gateways")
+            } else {
+                1.0
+            };
         let g = z.gw.get();
         let get = |k: &str| g.map_or(f64::NAN, |g| g.num_at(k).num());
         o = or_default(get(&pin), 0.0) * gf;
         d = or_default(get(&pout), 0.0) * gf;
-    } else if z.tg.get().is_some_and(|tg| tg.get("on").is_some_and(value_truthy)) && z.tg_load.is_set() {
+    } else if z
+        .tg
+        .get()
+        .is_some_and(|tg| tg.get("on").is_some_and(value_truthy))
+        && z.tg_load.is_set()
+    {
         // A switched-on trip-generation table replaces land use times rates and the extra trips; the
         // reduction and staging still apply, as they do to every land-use zone
         let load = z.tg_load.get().expect("set");
@@ -135,7 +147,11 @@ pub fn trip_ends(p: &Project, z: &Zone, s: &Settings, period: &str, sc: &Scenari
         o *= k;
         d *= k;
     } else {
-        let lf = if f.is_some() && lf_eligible(z) { f } else { None };
+        let lf = if f.is_some() && lf_eligible(z) {
+            f
+        } else {
+            None
+        };
         let rates = s.rates.get();
         for lu in LANDUSES.iter() {
             let q = z.lu.get().map_or(f64::NAN, |m| m.num_at(lu.key).num());
@@ -151,11 +167,22 @@ pub fn trip_ends(p: &Project, z: &Zone, s: &Settings, period: &str, sc: &Scenari
             else {
                 continue;
             };
-            let t = q / lu.per * r.rate.num() * if lf.is_some() { factor_of(lf, lu.key) } else { 1.0 };
+            let t = q / lu.per
+                * r.rate.num()
+                * if lf.is_some() {
+                    factor_of(lf, lu.key)
+                } else {
+                    1.0
+                };
             d += t * r.in_pct.num() / 100.0;
             o += t * (1.0 - r.in_pct.num() / 100.0);
         }
-        let extra = |k: &str| or_default(z.extra_trips.get().map_or(f64::NAN, |m| m.num_at(k).num()), 0.0);
+        let extra = |k: &str| {
+            or_default(
+                z.extra_trips.get().map_or(f64::NAN, |m| m.num_at(k).num()),
+                0.0,
+            )
+        };
         o += extra(&pout);
         d += extra(&pin);
         let k = reduction_stage(z, sc);
@@ -207,7 +234,13 @@ pub fn furness(z: usize, o: &[f64], d: &[f64], f: &[f64], t: &mut [f64]) -> Opti
 /// Only pairs whose ends are gateways or existing land use are touched. A fit that recorded
 /// additive deltas for another year than the scenario's is carried forward as
 /// `T = max(0, T + delta)`; otherwise the fitted factors multiply the pairs that carry trips.
-pub fn apply_me(p: &Project, zones: &[Zone], period: &str, t: &mut [f64], year: Option<f64>) -> String {
+pub fn apply_me(
+    p: &Project,
+    zones: &[Zone],
+    period: &str,
+    t: &mut [f64],
+    year: Option<f64>,
+) -> String {
     let zn = zones.len();
     let Some(me) = p.me.get() else {
         return String::new();
@@ -224,7 +257,11 @@ pub fn apply_me(p: &Project, zones: &[Zone], period: &str, t: &mut [f64], year: 
             pos.insert(z.id.as_str(), i);
         }
     }
-    let info = me.info.get().and_then(|m| m.get(period)).and_then(|i| i.get());
+    let info = me
+        .info
+        .get()
+        .and_then(|m| m.get(period))
+        .and_then(|i| i.get());
     let by = info.and_then(|i| (i.base_year.num() > 0.0).then(|| i.base_year.num()));
     let add = match (year, by, info) {
         (Some(y), Some(by), Some(info)) if y > 0.0 && y != by => match info.delta.get() {
@@ -317,7 +354,11 @@ pub fn demand(p: &Project, sc: &Scenario, g: &Graph, period: &str, s: &Settings)
     }
     let mut note = String::new();
     let mut manual = false;
-    let man = sc.od_manual.get().and_then(|m| m.get(period)).and_then(|m| m.get());
+    let man = sc
+        .od_manual
+        .get()
+        .and_then(|m| m.get(period))
+        .and_then(|m| m.get());
     let man_zones = man.and_then(|m| m.zones.get());
     if let (Some(man), Some(man_zones)) = (man, man_zones) {
         manual = true;
@@ -383,7 +424,13 @@ pub fn demand(p: &Project, sc: &Scenario, g: &Graph, period: &str, s: &Settings)
         // the part not used by zone trips passes through to other gateways.
         let is_g: Vec<bool> = g.zones.iter().map(|z| z.kind.is("gateway")).collect();
         let beta = s.gravity_beta.num();
-        let f = |k: usize| if sk[k].is_finite() { crate::jsmath::exp(-beta * sk[k] / 60.0) } else { 0.0 };
+        let f = |k: usize| {
+            if sk[k].is_finite() {
+                crate::jsmath::exp(-beta * sk[k] / 60.0)
+            } else {
+                0.0
+            }
+        };
         let mut notes: Vec<String> = Vec::new();
         let mut lost = 0.0f64;
         // 1. trips leaving each zone, to zones (by attraction) and gateways (by outbound count)
@@ -439,7 +486,11 @@ pub fn demand(p: &Project, sc: &Scenario, g: &Graph, period: &str, s: &Settings)
         }
         // 3. the rest of each gateway count is through traffic, favouring gateways on the far side of the area
         let yr = year_of(Some(sc), s);
-        let gz: Vec<&Zone> = g.zones.iter().filter(|z| z.kind.is("gateway") && !(z.year.num() > yr)).collect();
+        let gz: Vec<&Zone> = g
+            .zones
+            .iter()
+            .filter(|z| z.kind.is("gateway") && !(z.year.num() > yr))
+            .collect();
         let mut diag = 1.0f64;
         for a in &gz {
             for b in &gz {
@@ -505,7 +556,11 @@ pub fn demand(p: &Project, sc: &Scenario, g: &Graph, period: &str, s: &Settings)
     let (mut o0, mut d0) = (None, None);
     if !me.is_empty() {
         // O and D follow the factored matrix, so they match T and the assigned flows; O0 / D0 keep the prior
-        note = if note.is_empty() { me } else { format!("{note} {me}") };
+        note = if note.is_empty() {
+            me
+        } else {
+            format!("{note} {me}")
+        };
         o0 = Some(o.clone());
         d0 = Some(d.clone());
         o.fill(0.0);

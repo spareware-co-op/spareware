@@ -8,19 +8,24 @@ use super::sites::site_results;
 use crate::demand::Demand;
 use crate::graph::{js_sort_by, turn_type};
 use crate::jsnum::{Maybe, math_max, math_min, math_round, or_default};
-use crate::junction::{ArcFlow, ConvInfo, JUNCTION_LABEL, cap_src, conv_text, eff_cap, junction_result};
+use crate::junction::{
+    ArcFlow, ConvInfo, JUNCTION_LABEL, cap_src, conv_text, eff_cap, junction_result,
+};
 use crate::project::{OrderedMap, Project, Scenario, Settings};
 use crate::results::*;
-use crate::standards::{LOS_VC, STANDARDS, ef, growth, growth_basis, junction_set, los_of, year_of};
-use crate::util::{r1, r3};
 use crate::routes::bus_freq;
+use crate::standards::{
+    LOS_VC, STANDARDS, ef, growth, growth_basis, junction_set, los_of, year_of,
+};
+use crate::util::{r1, r3};
 use std::collections::HashMap;
 
 /// The assignment's `ZCLASS`: the development classes in the order the class flows list them.
 const ZCLASS: [&str; 3] = ["existing", "committed", "development"];
 
 /// `SELECT_LABEL`: the caveat printed with select-link results.
-pub(super) const SELECT_LABEL: &str = "Frank-Wolfe path splits are not unique; select-link results are indicative.";
+pub(super) const SELECT_LABEL: &str =
+    "Frank-Wolfe path splits are not unique; select-link results are indicative.";
 
 struct Totals {
     vkt: f64,
@@ -58,7 +63,8 @@ fn arc_results(run: &Run) -> (OrderedMap<ArcRes>, Vec<ArcFlow>, Totals) {
         let veh = run.x[a] / pf;
         let cap = eff_cap(arc, &run.perf);
         let t = run.cost[a] - run.apen[a];
-        let run_t = arc.ff * (1.0 + s.bpr_alpha.num() * crate::jsmath::pow(tot / arc.cap_mid, s.bpr_beta.num()));
+        let run_t = arc.ff
+            * (1.0 + s.bpr_alpha.num() * crate::jsmath::pow(tot / arc.cap_mid, s.bpr_beta.num()));
         let vc = tot / cap;
         let spd = arc.len / t * 3.6;
         // What sets the capacity: the mid-block, or the junction at the arc's downstream end (results-trust (c))
@@ -66,10 +72,16 @@ fn arc_results(run: &Run) -> (OrderedMap<ArcRes>, Vec<ArcFlow>, Totals) {
             crate::graph::Ctrl::Sig => {
                 arc.gl as f64 * s.sat_flow.num() * arc.g_c.unwrap_or(f64::NAN)
             }
-            crate::graph::Ctrl::Minor | crate::graph::Ctrl::Rbt => or_default(arc.cap_n.unwrap_or(f64::NAN), arc.cap_mid),
+            crate::graph::Ctrl::Minor | crate::graph::Ctrl::Rbt => {
+                or_default(arc.cap_n.unwrap_or(f64::NAN), arc.cap_mid)
+            }
             crate::graph::Ctrl::Free => f64::INFINITY,
         };
-        let cap_ctl = if node_cap < arc.cap_mid { arc.node.and_then(|n| g.ctl_of(n)) } else { None };
+        let cap_ctl = if node_cap < arc.cap_mid {
+            arc.node.and_then(|n| g.ctl_of(n))
+        } else {
+            None
+        };
         let nd = r1(t - run_t) + 0.0;
         arcs_res.insert(
             arc.key.clone(),
@@ -177,7 +189,10 @@ fn class_results(run: &Run) -> (ClassFlows, DevRes) {
         let c1 = run.trk[T_C1].x[a] / pf;
         let c2 = run.trk[T_C2].x[a] / pf;
         if tot > 0.05 && (c1 > 0.05 || c2 > 0.05) {
-            arcs.insert(arc.key.clone(), vec![r1(math_max(0.0, tot - c1 - c2)), r1(c1), r1(c2)]);
+            arcs.insert(
+                arc.key.clone(),
+                vec![r1(math_max(0.0, tot - c1 - c2)), r1(c1), r1(c2)],
+            );
         }
     }
     let cls = ClassFlows {
@@ -192,10 +207,17 @@ fn class_results(run: &Run) -> (ClassFlows, DevRes) {
         via_gateways: 0.0,
     };
     for &(i, o, d) in &run.dev_zone {
-        dev.zones.insert(g.zones[i].id.clone(), DevZone { o: r1(o), d: r1(d) });
+        dev.zones
+            .insert(g.zones[i].id.clone(), DevZone { o: r1(o), d: r1(d) });
     }
     for &(gi, inn, out) in &run.dev_gw {
-        dev.gateways.insert(g.zones[gi].id.clone(), DevGateway { r#in: r1(inn), out: r1(out) });
+        dev.gateways.insert(
+            g.zones[gi].id.clone(),
+            DevGateway {
+                r#in: r1(inn),
+                out: r1(out),
+            },
+        );
         dev.via_gateways += inn + out;
     }
     dev.via_gateways = r1(dev.via_gateways);
@@ -224,7 +246,10 @@ fn select_result(run: &Run, turns: &OrderedMap<Vec<TurnRow>>) -> Option<Select> 
             od_pairs: None,
             tot: None,
             label: None,
-            error: Some("The selected zone, link or turn is not in this network (or the turn is banned).".to_string()),
+            error: Some(
+                "The selected zone, link or turn is not in this network (or the turn is banned)."
+                    .to_string(),
+            ),
         });
     }
     let (xs, xts, xod) = (
@@ -264,7 +289,11 @@ fn select_result(run: &Run, turns: &OrderedMap<Vec<TurnRow>>) -> Option<Select> 
                 (Some(&a), Some(&b)) => g.turn_idx(a, b),
                 _ => -1,
             };
-            let v = if t >= 0 { run.trk[xts].x[t as usize] / pf } else { 0.0 };
+            let v = if t >= 0 {
+                run.trk[xts].x[t as usize] / pf
+            } else {
+                0.0
+            };
             if v > 0.05 {
                 if s_turns.get(id).is_none() {
                     s_turns.insert(id, Vec::new());
@@ -288,7 +317,10 @@ fn select_result(run: &Run, turns: &OrderedMap<Vec<TurnRow>>) -> Option<Select> 
         "turn"
     };
     // key: sel.zone ?? sel.arc ?? sel.turn
-    let key = ["zone", "arc", "turn"].iter().find_map(|k| field(k)).cloned();
+    let key = ["zone", "arc", "turn"]
+        .iter()
+        .find_map(|k| field(k))
+        .cloned();
     Some(Select {
         kind: kind.to_string(),
         key,
@@ -344,7 +376,10 @@ pub(super) fn build_res(
         }
         js_sort_by(&mut d, |p, q| p - q);
         if !d.is_empty() {
-            let at = math_min((d.len() - 1) as f64, math_round(0.95 * (d.len() - 1) as f64));
+            let at = math_min(
+                (d.len() - 1) as f64,
+                math_round(0.95 * (d.len() - 1) as f64),
+            );
             noise95 = Some(r1(d[at as usize]));
         }
     }
@@ -373,7 +408,8 @@ pub(super) fn build_res(
     let mut worst: Option<KpiWorst> = None;
     for ctl in &g.ctl {
         let jr = junction_result(g, ctl, &run.xt, &flows, s, &j, pf);
-        let nr: NodeRes = serde_json::from_value(jr.to_value()).expect("a junction result reads as a NodeRes");
+        let nr: NodeRes =
+            serde_json::from_value(jr.to_value()).expect("a junction result reads as a NodeRes");
         let id = g.ids[ctl.n].clone();
         if worst.as_ref().is_none_or(|w| nr.delay > w.delay) {
             worst = Some(KpiWorst {
@@ -400,7 +436,11 @@ pub(super) fn build_res(
             let ai = ra[q];
             let arc = &g.arcs[ai];
             len += arc.len;
-            t += if arc.bus { arc.ff * 1.1 } else { run.cost[ai] - run.apen[ai] };
+            t += if arc.bus {
+                arc.ff * 1.1
+            } else {
+                run.cost[ai] - run.apen[ai]
+            };
             if q > 0 {
                 let ti = g.turn_idx(ra[q - 1], ai);
                 if ti >= 0 && g.tpen()[ti as usize].is_finite() {
@@ -421,7 +461,11 @@ pub(super) fn build_res(
     }
     let zn = run.zn;
     let (sites, site_turns, basis) = match site_out {
-        Some(o) => (Some(o.sites), Some(o.site_turns), Some(if o.traced { "paths" } else { "shares" }.to_string())),
+        Some(o) => (
+            Some(o.sites),
+            Some(o.site_turns),
+            Some(if o.traced { "paths" } else { "shares" }.to_string()),
+        ),
         None => (None, None, None),
     };
     let ts = crate::util::now_ms();
@@ -454,8 +498,10 @@ pub(super) fn build_res(
             f95: j.f95,
             honest: JUNCTION_LABEL.to_string(),
             cap_method: j.cap_method.as_str().to_string(),
-            cap_label: (j.cap_method == crate::standards::CapMethod::Movement).then(|| STANDARDS.gaps.label.to_string()),
-            rbt_label: (j.cap_method == crate::standards::CapMethod::Movement).then(|| STANDARDS.rbt_lanes.label.to_string()),
+            cap_label: (j.cap_method == crate::standards::CapMethod::Movement)
+                .then(|| STANDARDS.gaps.label.to_string()),
+            rbt_label: (j.cap_method == crate::standards::CapMethod::Movement)
+                .then(|| STANDARDS.rbt_lanes.label.to_string()),
         },
         arcs: arcs_res,
         nodes: nodes_res,
@@ -470,7 +516,11 @@ pub(super) fn build_res(
         scenario: ScenarioInfo {
             id: sc.id.clone(),
             role: sc.role.as_str().filter(|r| !r.is_empty()).map(String::from),
-            buildout: if sc.buildout.is_nullish() { Maybe::Null } else { sc.buildout.clone() },
+            buildout: if sc.buildout.is_nullish() {
+                Maybe::Null
+            } else {
+                sc.buildout.clone()
+            },
             demand_factor: df,
         },
         meta: model_meta(
