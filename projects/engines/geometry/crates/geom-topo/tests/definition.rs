@@ -185,3 +185,36 @@ fn errors_and_kinds_print_what_they_are() {
     let names: Vec<String> = TransformKind::ALL.iter().map(ToString::to_string).collect();
     assert_eq!(names, ["move", "rotate", "mirror", "scale"]);
 }
+
+#[test]
+fn attributes_rebuild_with_their_classes_and_take_a_checked_class() {
+    use geom_topo::attributes::{Attributes, Carried, Value};
+    use geom_topo::order::NameKey;
+    let a = attr("rating", 1);
+    let b = behaviour(TransformAction::Keep);
+    let held = Attributes::new().define(a.clone(), b.class()).unwrap();
+    let other = attr("missing", 1);
+    let rebuilt = held.rebuilt([
+        (a.clone(), NameKey([1; 16]), Carried::One(Value(vec![1]))),
+        (
+            other.clone(),
+            NameKey([2; 16]),
+            Carried::One(Value(vec![2])),
+        ),
+    ]);
+    // A value whose attribute has no class is left out; the classes stay.
+    assert_eq!(rebuilt.class(&a), Some(b.class()));
+    assert_eq!(rebuilt.class(&other), None);
+    let all: Vec<_> = rebuilt.iter().map(|(x, n, _)| (x.clone(), *n)).collect();
+    assert_eq!(all, [(a.clone(), NameKey([1; 16]))]);
+    // A class set by `defined_as` replaces whatever was held.
+    let mut c = b.class();
+    c.split = SplitAction::Delete;
+    let changed = held.defined_as(a.clone(), c);
+    assert_eq!(changed.class(&a), Some(c));
+    assert_eq!(held.class(&a), Some(b.class()));
+    assert_eq!(
+        Attributes::new().defined_as(a.clone(), c).class(&a),
+        Some(c)
+    );
+}
