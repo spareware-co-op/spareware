@@ -16,6 +16,10 @@
     clippy::panic,
     clippy::unwrap_used
 )]
+// Every test here runs the `ssi` tool and its runner as processes and writes a temporary folder,
+// which a WebAssembly (WASI) test run can do neither of; a failed spawn there aborts the whole
+// binary. The tool's logic is tested on wasm32 through `ssi.rs`.
+#![cfg(not(target_family = "wasm"))]
 
 use std::fs;
 use std::path::{Path, PathBuf};
