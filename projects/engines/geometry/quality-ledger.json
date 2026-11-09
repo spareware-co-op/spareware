@@ -5289,6 +5289,54 @@
       "occurrences": 1,
       "kind": "equivalent",
       "reason": "REQUIRED is 1 and COPY_ALWAYS is 2, one bit each and not the same bit, so REQUIRED | COPY_ALWAYS and REQUIRED ^ COPY_ALWAYS are both 3."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-exchange/src/xml/scan.rs",
+      "mutant": "replace < with <= in is_name_start",
+      "line_text": "if c < 128 {",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "The forms differ only for U+0080, which the mutant judges by the ASCII rule (a letter, ':' or '_': no) and the original by XML's NameStartChar ranges, which start at U+00C0: no. Both refuse it."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-exchange/src/xml/scan.rs",
+      "mutant": "replace < with <= in is_name_char",
+      "line_text": "if c < 128 {",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "The forms differ only for U+0080, which the mutant judges by is_name_byte (0x80 is none of its ASCII bytes: no) and the original by XML's NameChar ranges, whose lowest is U+00B7: no. Both refuse it."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-exchange/src/xml/scan.rs",
+      "mutant": "replace < with <= in is_xml_char",
+      "line_text": "if c < 0x20 {",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "The forms differ only for U+0020, the space, which the mutant judges by is_space (a space: yes) and the original by the rest of the rule (not U+FFFE or U+FFFF: yes). Both accept it."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-exchange/src/xml/scan.rs",
+      "mutant": "replace match guard p <= self.text.len() with true in Cursor<'a>::advance",
+      "line_text": "Some(p) if p <= self.text.len() => {",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "Every call advances over bytes already seen to be there: a byte or character just read, a quote, colon, '/' or '>' just matched, or a string just matched by starts_with ('<?xml ', 'encoding', 'standalone', 'yes', 'no', '<!--', '<?', '<![CDATA[', '</', '<'). So pos + n never passes the text's end and the guard is true at every call; the mutant changes nothing."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-exchange/src/xml/scan.rs",
+      "mutant": "replace Cursor<'a>::starts_with_space -> bool with true",
+      "line_text": "self.byte().is_some_and(is_space)",
+      "occurrences": 1,
+      "kind": "hangs",
+      "reason": "skip_spaces loops while starts_with_space is true, moving pos one byte a turn with a saturating add: with it always true the loop never ends, even at usize::MAX, and every document's first skip_spaces (the prolog's, or a start tag's before its attributes) never returns."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-exchange/src/xml/scan.rs",
+      "mutant": "replace Cursor<'a>::skip_spaces with ()",
+      "line_text": "while self.starts_with_space() {",
+      "occurrences": 1,
+      "kind": "hangs",
+      "reason": "A space in the prolog (after the XML declaration, or before the root) makes step skip spaces and return no token; with skip_spaces doing nothing, pos does not move, and next_token's loop calls step at the same space forever, inside one next_token call, where no meter is charged."
     }
   ],
   "coverage_off": [

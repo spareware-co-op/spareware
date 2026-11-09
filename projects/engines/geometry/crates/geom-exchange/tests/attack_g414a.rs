@@ -8,6 +8,9 @@
 //! file is copied): billion laughs (CVE-2003-1564's nested entities), external entities (OWASP's
 //! XXE cheat sheet: a `SYSTEM` entity naming a file, and a parameter entity), quadratic blowup (one
 //! large entity referenced many times), and an entity reference with no declaration.
+//!
+//! Every document is read under a watchdog: a meter whose cancellation fires once read 2^12 times,
+//! after 2^18 events, so a reader that stops making progress fails instead of hanging.
 
 #![allow(
     clippy::unwrap_used,
@@ -19,16 +22,31 @@
 )]
 
 use std::fmt::Write as _;
+use std::sync::Mutex;
 
 use geom_exchange::xml::scan::ScanErrorKind;
 use geom_exchange::xml::{Event, XmlBudget, XmlError, XmlErrorKind, XmlName, XmlText};
 use geom_format::source::{ByteSource, SliceSource, SourceError};
-use geom_run::{Budget, WorkMeter};
+use geom_run::{Budget, Cancel, WorkMeter};
+
+/// A cancellation that fires once it has been read 2^12 times. The meter is charged once an event
+/// and reads it every 64 charges, so it fires after 2^18 events, far past any document here.
+#[derive(Default)]
+struct Watchdog(Mutex<u64>);
+
+impl Cancel for Watchdog {
+    fn requested(&self) -> bool {
+        let mut polls = self.0.lock().unwrap();
+        *polls += 1;
+        *polls > 1 << 12
+    }
+}
 
 /// Reads `doc` within `budget` to its end: the events, flattened to text, or the first error.
 fn read_with(doc: &[u8], budget: XmlBudget) -> Result<Vec<String>, XmlError> {
     let text = XmlText::read(&mut SliceSource::new(doc), &budget)?;
-    let mut meter = WorkMeter::new(Budget::UNLIMITED);
+    let dog = Watchdog::default();
+    let mut meter = WorkMeter::new(Budget::UNLIMITED).with_cancel(&dog);
     let mut events = text.events(budget);
     let mut out = Vec::new();
     while let Some(e) = events.next(&mut meter)? {
@@ -351,7 +369,8 @@ fn the_split_of_the_source_never_matters_and_its_failure_is_reported() {
     )
     .unwrap();
     assert_eq!(text.as_str(), doc);
-    let mut meter = WorkMeter::new(Budget::UNLIMITED);
+    let dog = Watchdog::default();
+    let mut meter = WorkMeter::new(Budget::UNLIMITED).with_cancel(&dog);
     let mut events = text.events(XmlBudget::DEFAULT);
     let mut split = Vec::new();
     while let Some(e) = events.next(&mut meter).unwrap() {
@@ -395,4 +414,103 @@ fn the_meter_stops_a_read_and_an_error_ends_the_events() {
         events.next(&mut WorkMeter::new(Budget::UNLIMITED)),
         Ok(None)
     );
+}
+
+#[test]
+fn each_budget_admits_exactly_its_size() {
+    let small = XmlBudget {
+        bytes: 1_000,
+        depth: 4,
+        attributes: 3,
+        name: 8,
+        value: 10,
+        text: 12,
+    };
+    for doc in [
+        "<a b='1234567890'/>",
+        "<a>123456789012</a>",
+        "<a><![CDATA[123456789012]]></a>",
+        "<a><!--123456789012--></a>",
+        "<a><?p 123456789012?></a>",
+        "<a><?abcdefgh?></a>",
+    ] {
+        assert!(read_with(doc.as_bytes(), small).is_ok(), "{doc}");
+    }
+    let whole = format!("<a>{}</a>", "x".repeat(993));
+    assert_eq!(whole.len(), 1_000);
+    let exact = XmlBudget {
+        text: 1_000,
+        ..small
+    };
+    assert!(read_with(whole.as_bytes(), exact).is_ok());
+    assert_eq!(
+        read_with(format!("{whole} ").as_bytes(), exact).unwrap_err(),
+        XmlError {
+            kind: XmlErrorKind::TooLarge,
+            offset: 1_000
+        }
+    );
+}
+
+#[test]
+fn values_say_what_was_written_and_where() {
+    let doc = "<r a='&quot;x&apos;'>t&amp;<![CDATA[<c>]]></r>";
+    let text = XmlText::read(&mut SliceSource::new(doc.as_bytes()), &XmlBudget::DEFAULT).unwrap();
+    let mut events = text.events(XmlBudget::DEFAULT);
+    let dog = Watchdog::default();
+    let mut meter = WorkMeter::new(Budget::UNLIMITED).with_cancel(&dog);
+    let mut values = Vec::new();
+    while let Some(e) = events.next(&mut meter).unwrap() {
+        if let Event::Attribute { value, .. } | Event::Text(value) = e {
+            let mut decoded = String::new();
+            value.decode_into(&mut decoded).unwrap();
+            values.push((value.raw().to_owned(), value.offset(), decoded));
+        }
+    }
+    let own = |a: &str, b: usize, c: &str| (a.to_owned(), b, c.to_owned());
+    assert_eq!(
+        values,
+        [
+            own("&quot;x&apos;", 6, "\"x'"),
+            own("t&amp;", 21, "t&"),
+            own("<c>", 36, "<c>"),
+        ]
+    );
+}
+
+#[test]
+fn malformed_documents_are_refused_where_they_break() {
+    let at = |doc: &str| {
+        let e = refused(doc);
+        (e.kind, e.offset)
+    };
+    let s = XmlErrorKind::Scan;
+    // An attribute with no `=`, attributes with no space between, a close tag with more after its
+    // name.
+    assert_eq!(at("<a b\"1\"/>"), (s(ScanErrorKind::Unexpected), 4));
+    assert_eq!(at("<a b=\"1\"c=\"2\"/>"), (s(ScanErrorKind::Unexpected), 8));
+    assert_eq!(at("<a></a x>"), (s(ScanErrorKind::Unexpected), 7));
+    // Cut off with an element open, and no root at all: at the document's end.
+    assert_eq!(at("<a><b>"), (s(ScanErrorKind::UnexpectedEnd), 6));
+    assert_eq!(at("<!-- c -->"), (XmlErrorKind::NoRoot, 10));
+    // A `?` inside an instruction and a `]` inside CDATA are content.
+    assert_eq!(
+        read("<a><?p a?b?><![CDATA[x]y]]]></a>").unwrap(),
+        [
+            "start a",
+            "open",
+            "pi p Some(\"a?b\")",
+            "text x]y]",
+            "end a"
+        ]
+    );
+}
+
+#[test]
+fn errors_say_what_and_where() {
+    let e = XmlError {
+        kind: XmlErrorKind::NoRoot,
+        offset: 12,
+    };
+    assert_eq!(e.to_string(), "XML refused at byte 12: NoRoot");
 }
