@@ -30,4 +30,5 @@ Licence text:
 | --- | --- |
 | [core-math.txt](core-math.txt) | CORE-MATH (Inria), ported into `geom-num`'s `math` module by piece G05 |
 | [usd-brep.txt](usd-brep.txt) | NLib, in NVIDIA's USD BRep, ported into `geom-nurbs` by piece G56 |
+| [tinyspline.txt](tinyspline.txt) | tinyspline's double-reflection frames, ported into `geom-surface`'s `frame_rule` by piece G254 |
 | [xmlparser.txt](xmlparser.txt) | xmlparser, its tokenizer ported into `geom-exchange`'s `xml` module by piece G414a |

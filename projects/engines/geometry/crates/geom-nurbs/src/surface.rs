@@ -26,6 +26,9 @@
 //!   for its count n of roundings (7p + 7q + 2 for a point, 7p + 7q + 6 or e below for a
 //!   derivative); for a rational surface, whose weights are taken in the normal range,
 //!   n·2^−1074·(1 + 1 / `Σ_i` `NU_i` `Σ_j` `NV_j`·`w_ij`) (piece G69).
+//! - **Overflow.** Where the sums at a rational point pass the doubles while every w·P and w is
+//!   finite, the point and its partials are summed again from everything halved, as for curves
+//!   (`crate::curve`, "Overflow"), and the bounds hold.
 //! - **Derivatives.** A nonrational derivative is within `γ_(7p+7q+6)` · `Σ_i` `MU_(k,i)` `Σ_j`
 //!   `MV_(l,j)`·|`P_ij`|. A rational one is within `γ_e` · `MS_(k,l)`, e = (D + 1)(14p + 14q +
 //!   2D + 12), where `MS` is A4.4's recurrence run on magnitudes (every subtraction an addition,
@@ -208,21 +211,28 @@ impl<const D: usize> Surface<D> {
         let mut nv = [0.0_f64; WIDTH];
         self.u.funs(su, u, &mut nu)?;
         self.v.funs(sv, v, &mut nv)?;
-        let (sum, weight) = self.blend(sub(su, p)?, sub(sv, q)?, &nu, &nv)?;
-        if self.weights.is_some() {
-            finite(sum.map(|x| x / weight))
-        } else {
-            finite(sum)
+        let (first_u, first_v) = (sub(su, p)?, sub(sv, q)?);
+        let (mut sum, mut weight) = self.blend(first_u, first_v, &nu, &nv, 1.0)?;
+        if self.weights.is_none() {
+            return finite(sum);
         }
+        if !(weight.is_finite() && sum.iter().all(|x| x.is_finite())) {
+            // A sum past the doubles while every w·P and w is finite: the same sums of everything
+            // halved give the same quotient (`crate::curve`, "Overflow").
+            (sum, weight) = self.blend(first_u, first_v, &nu, &nv, 0.5)?;
+        }
+        finite(sum.map(|x| x / weight))
     }
 
-    /// `Σ_i` `nu_i` · (`Σ_j` `nv_j` · `P_(first_u+i, first_v+j)`), and the same sum of the weights.
+    /// `Σ_i` `nu_i` · (`Σ_j` `nv_j` · (s · `P_(first_u+i, first_v+j)`)), and the same sum of the
+    /// weights, with s `scale`.
     fn blend(
         &self,
         first_u: usize,
         first_v: usize,
         nu: &[f64],
         nv: &[f64],
+        scale: f64,
     ) -> Result<([f64; D], f64), NurbsError> {
         let (p, q) = (self.u.degree(), self.v.degree());
         let cols = self.v.count();
@@ -236,10 +246,10 @@ impl<const D: usize> Surface<D> {
                 let nj = get(nv, j)?;
                 let index = add(row, add(first_v, j)?)?;
                 for (id, pd) in inner.iter_mut().zip(get(&self.points, index)?) {
-                    *id += nj * pd;
+                    *id += nj * (pd * scale);
                 }
                 if let Some(ws) = &self.weights {
-                    inner_w += nj * get(ws, index)?;
+                    inner_w += nj * (get(ws, index)? * scale);
                 }
             }
             let ni = get(nu, i)?;
@@ -296,18 +306,33 @@ impl<const D: usize> Surface<D> {
         for row in out.iter_mut() {
             *row = [0.0; D];
         }
-        for k in 0..=tu {
-            let u_values = ndu
-                .get(mul(k, wu)?..add(mul(k, wu)?, wu)?)
-                .ok_or(NurbsError::Defect)?;
-            for l in 0..=tv {
-                let v_terms = ndv
-                    .get(mul(l, wv)?..add(mul(l, wv)?, wv)?)
+        // The homogeneous partials, and the weight function's, of everything scaled by `scale`;
+        // whether those of order (0, 0) are finite.
+        let mut sums = |scale: f64, out: &mut [[f64; D]]| -> Result<bool, NurbsError> {
+            let mut base = true;
+            for k in 0..=tu {
+                let u_values = ndu
+                    .get(mul(k, wu)?..add(mul(k, wu)?, wu)?)
                     .ok_or(NurbsError::Defect)?;
-                let (sum, weight) = self.blend(sub(su, p)?, sub(sv, q)?, u_values, v_terms)?;
-                set(out, add(mul(k, cols)?, l)?, sum)?;
-                set(&mut wders, add(mul(k, WIDTH)?, l)?, weight)?;
+                for l in 0..=tv {
+                    let v_terms = ndv
+                        .get(mul(l, wv)?..add(mul(l, wv)?, wv)?)
+                        .ok_or(NurbsError::Defect)?;
+                    let (sum, weight) =
+                        self.blend(sub(su, p)?, sub(sv, q)?, u_values, v_terms, scale)?;
+                    if k == 0 && l == 0 {
+                        base = weight.is_finite() && sum.iter().all(|x| x.is_finite());
+                    }
+                    set(out, add(mul(k, cols)?, l)?, sum)?;
+                    set(&mut wders, add(mul(k, WIDTH)?, l)?, weight)?;
+                }
             }
+            Ok(base)
+        };
+        if !sums(1.0, out)? && self.weights.is_some() {
+            // Halved exactly when `point` is, so order (0, 0) keeps its bits (`crate::curve`,
+            // "Overflow").
+            sums(0.5, out)?;
         }
         if self.weights.is_some() {
             leibniz2(out, &wders, (du, dv))?;

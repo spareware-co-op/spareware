@@ -907,30 +907,6 @@
       "reason": "A defect guard: the plane comes from a sweep that skips planes with an empty side, and the partition puts each entry on the side of its bin, so both sides hold at least one entry and neither condition, alone or together, is ever true."
     },
     {
-      "file": "projects/engines/geometry/crates/geom-bvh/src/build.rs",
-      "mutant": "replace index -> Result<u32, BvhError> with Ok(0)",
-      "line_text": "u32::try_from(i).map_err(|_| BvhError::TooManyEntries)",
-      "occurrences": 1,
-      "kind": "hangs",
-      "reason": "Every child index becomes 0, the root, so each split node's children point back at the root and every walk of the tree (queries, the checker, the debug walk) goes round that cycle for ever; the bounded walk in build.rs's own test fails at once, but the other tests in the binary loop, so the run ends by its timeout. It hangs; no query returns an answer from the cyclic tree."
-    },
-    {
-      "file": "projects/engines/geometry/crates/geom-bvh/src/build.rs",
-      "mutant": "replace index -> Result<u32, BvhError> with Ok(1)",
-      "line_text": "u32::try_from(i).map_err(|_| BvhError::TooManyEntries)",
-      "occurrences": 1,
-      "kind": "hangs",
-      "reason": "Every child index becomes 1, so node 1's children are node 1 itself and every walk that reaches it goes round for ever; the bounded walk in build.rs's own test fails at once, but the other tests in the binary loop, so the run ends by its timeout. It hangs; no query returns an answer from the cyclic tree."
-    },
-    {
-      "file": "projects/engines/geometry/crates/geom-bvh/src/build.rs",
-      "mutant": "replace == with != in splice",
-      "line_text": "if j == 0 {",
-      "occurrences": 1,
-      "kind": "hangs",
-      "reason": "Every spliced child other than the subtree's root is mapped to the placeholder `node`, so the subtree's inner nodes point back at the node that holds them and every walk through a spliced subtree (trees past the grain) loops for ever; the bounded walk in build.rs's own test fails at once, but the other tests in the binary loop, so the run ends by its timeout. It hangs; no query returns an answer from the cyclic tree."
-    },
-    {
       "file": "projects/engines/geometry/crates/geom-bvh/src/cells.rs",
       "mutant": "replace | with ^ in spread21",
       "line_text": "x = (x | (x << 32)) & 0x001f_0000_0000_ffff;",
@@ -5465,6 +5441,30 @@
       "occurrences": 1,
       "kind": "hangs",
       "reason": "The mutant returns a for any nonzero b and loops forever for b = 0: there r = a % 0 is taken as 0, so a and b become 0 and the loop runs again with b still 0. The wrong gcd it returns otherwise makes Ratio::reduced divide a numerator above its denominator by itself, leaving a zero denominator (a scale of 1000 becomes 1/0), and Ratio::times then calls gcd with that zero, which never returns."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-surface/src/frame_rule.rs",
+      "mutant": "replace < with <= in Stations::build",
+      "line_text": "if !(a.is_finite() && b.is_finite() && a < b) {",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "They differ only for a domain with a == b, which no curve kind has: Line::new refuses one without lo < hi, the conics, helices, polynomials, involutes and trimmed curves refuse it through form::check_domain, a NURBS basis with an empty domain is NurbsError::EmptyDomain, a composite's starts must increase, and offset curves and curves on surfaces take their domains from such parts. So every path that reaches the test has a < b, and a < b and a <= b agree."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-surface/src/frame_rule.rs",
+      "mutant": "delete - in closed_form_frame",
+      "line_text": "let normal = times(-1.0, add(times(c, x), times(s, y)));",
+      "occurrences": 1,
+      "kind": "harmless",
+      "reason": "The helix's Frenet normal and binormal are only the basis the start normal's angle is measured in and turned back in. Without the sign both are negated, the start's angle atan2(r0.b0, r0.n0) moves by one half-turn, and cos(phi).n + sin(phi).b is the same vector, since cos(phi + 1 half-turn).(-n) = cos(phi).n and likewise for b. The closed form then differs only in its rounding, a few units in the last place, far inside the allowance the laws hold the stations to it with."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-surface/src/frame_rule.rs",
+      "mutant": "replace < with <= in share_turn",
+      "line_text": "let (w, q) = if w < 0.0 {",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "A w of 0.0 or -0.0 (which compares equal to 0.0) has already returned the half-turn error just above, so here w is nonzero and w < 0 and w <= 0 agree for every input."
     }
   ],
   "coverage_off": [

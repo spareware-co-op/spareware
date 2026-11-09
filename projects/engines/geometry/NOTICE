@@ -416,6 +416,50 @@ Copyright (c) 2020-2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
    limitations under the License.
 
 
+tinyspline, a library for NURBS, B-splines and Bezier curves (Marcel Steinbeck)
+-------------------------------------------------------------------------------
+
+Name:      tinyspline, a library for NURBS, B-splines and Bezier curves (Marcel Steinbeck)
+Project:   https://github.com/msteinbeck/tinyspline
+Taken as:  PORT (section 29.1)
+Link:      https://github.com/msteinbeck/tinyspline/tree/bb3b02cdfaa039aa236a5240f2ba8bce66bea527
+Commit:    bb3b02cdfaa039aa236a5240f2ba8bce66bea527
+Licence:   MIT
+           as stated in https://github.com/msteinbeck/tinyspline/blob/bb3b02cdfaa039aa236a5240f2ba8bce66bea527/LICENSE
+
+Ported files, each with the origin files it ports and the origin's copyright lines as its header
+copies them:
+
+  projects/engines/geometry/crates/geom-surface/src/frame_rule.rs
+    SPDX-License-Identifier: Apache-2.0 AND MIT
+    https://github.com/msteinbeck/tinyspline/blob/bb3b02cdfaa039aa236a5240f2ba8bce66bea527/src/tinyspline.c
+      Copyright (c) 2016 Marcel Steinbeck
+
+Licence text (https://github.com/msteinbeck/tinyspline/blob/bb3b02cdfaa039aa236a5240f2ba8bce66bea527/LICENSE):
+
+MIT License
+
+Copyright (c) 2016 Marcel Steinbeck
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+
+
 xmlparser
 ---------
 
@@ -761,6 +805,13 @@ shuffling-allocator
   Consulted by:
     projects/engines/geometry/crates/geom-test/src/golden/perturb.rs
       for its size classes and shuffling layer and to judge whether it could be used; not taken, for the reasons above. No code copied.
+
+solidcore
+  Licence:      Apache-2.0
+  Link:         https://github.com/tangency-labs/solidcore/blob/7a593124c98e2bdfc7adc4fa94aeeb9b758cf450/crates/solidcore/src/surface/procedural_sweep/path.rs
+  Consulted by:
+    projects/engines/geometry/crates/geom-surface/src/frame_rule.rs
+      for the rotation-minimising frame's closed form on lines and circular arcs, each span starting from the frame the last one ended with. No code copied.
 
 solidcore (step-export)
   Licence:      Apache-2.0
