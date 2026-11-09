@@ -70,6 +70,10 @@ const STORED: &[(&str, &[u8])] = &[
         include_bytes!("../museum/v1/moved-box-log.skgf"),
     ),
     (
+        "v1/stamped-bodies.skgf",
+        include_bytes!("../museum/v1/stamped-bodies.skgf"),
+    ),
+    (
         "v1/wall-body.skgf",
         include_bytes!("../museum/v1/wall-body.skgf"),
     ),
