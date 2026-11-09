@@ -13,6 +13,11 @@
 //! - **A half turn** (`Quartic::turned`, `RealRoot::turned`, t to −1 / t): every root turned is a
 //!   root of the turned quartic, and turned roots compare as −1 / t does, by the oracle, with 0
 //!   going to ∞ and 1 and −1 to each other.
+//! - **The second instance** (`SecondQuartic`, chapter 14.2's as-built note of G196b): quartics of
+//!   four rational roots of up to 160-bit numerators and denominators, past the first instance's
+//!   budget, give back their roots in order, compare exactly with each other's, sign each other at
+//!   them, and part two roots 2^−400 apart, all against exact rational arithmetic; a first-instance
+//!   quartic and its roots carry over whole (`to_second`).
 //!
 //! Seeds: the random test prints `seed: <hex>` and runs from a fixed default; `SPAREKIT_SEED=<hex>`
 //! replays another (chapter 28.17). Case counts are a tenth in debug builds.
@@ -33,8 +38,14 @@
 
 use std::cmp::Ordering;
 
+use dashu_int::IBig;
+use dashu_ratio::RBig;
 use geom_num::Sign;
-use geom_num::quartic::{Big, Piece, Quartic, RealRoot, compare, sign_at_root};
+use geom_num::quartic::{
+    Big, COEFFICIENT_BITS, Piece, Quartic, RealRoot, SECOND_COEFFICIENT_BITS, SECOND_LIMBS,
+    SecondQuartic, SecondRoot, compare, sign_at_root,
+};
+use geom_num::wide::Wide;
 
 /// The default seed of the random test here (G196b).
 const DEFAULT_SEED: u64 = 0x6196_b000_5eed_196b;
@@ -480,4 +491,169 @@ fn a_half_turn_keeps_every_root_and_orders_them_as_minus_one_over_t() {
         pieces,
         [Piece::Above, Piece::FarAbove, Piece::FarBelow, Piece::Below]
     );
+}
+
+/// A random whole number below 2^`bits` in magnitude, of either sign when `signed`.
+fn random_big(rng: &mut Rng, bits: u32, signed: bool) -> IBig {
+    let mut v = IBig::from(0);
+    for _ in 0..bits.div_ceil(64) {
+        v = (v << 64) + IBig::from(rng.next());
+    }
+    v >>= (bits.div_ceil(64) * 64 - bits) as usize;
+    if signed && rng.next() % 2 == 1 { -v } else { v }
+}
+
+/// `v` at the second instance's width.
+fn second(v: &IBig) -> Wide<SECOND_LIMBS> {
+    let negative = *v < IBig::from(0);
+    let mut magnitude = if negative { -v.clone() } else { v.clone() };
+    let mut limbs = [0_u64; SECOND_LIMBS];
+    let mask = (IBig::from(1) << 64) - IBig::from(1);
+    for limb in &mut limbs {
+        let low: IBig = magnitude.clone() & mask.clone();
+        *limb = u64::try_from(low).unwrap();
+        magnitude >>= 64;
+    }
+    assert_eq!(magnitude, IBig::from(0), "fits the second instance");
+    let w = Wide::from_le_limbs(limbs);
+    if negative {
+        w.checked_neg().unwrap()
+    } else {
+        w
+    }
+}
+
+/// The product of the factors q t − p, in the second instance, and its coefficients' widest bits.
+fn second_quartic(roots: &[(IBig, IBig)]) -> (SecondQuartic, usize) {
+    let mut c = vec![IBig::from(1)];
+    for (q, p) in roots {
+        let mut next = vec![IBig::from(0); c.len() + 1];
+        for (i, a) in c.iter().enumerate() {
+            next[i] -= a * p;
+            next[i + 1] += a * q;
+        }
+        c = next;
+    }
+    let bits = |v: &IBig| {
+        let mut m = if *v < IBig::from(0) {
+            -v.clone()
+        } else {
+            v.clone()
+        };
+        let mut n = 0;
+        while m > IBig::from(0) {
+            m >>= 1;
+            n += 1;
+        }
+        n
+    };
+    let widest = c.iter().map(bits).max().unwrap_or(0);
+    let mut out = [Wide::from_i64(0); 5];
+    for (slot, v) in out.iter_mut().zip(&c) {
+        *slot = second(v);
+    }
+    (SecondQuartic::new(out), widest)
+}
+
+fn ratio(q: &IBig, p: &IBig) -> RBig {
+    RBig::from(p.clone()) / RBig::from(q.clone())
+}
+
+fn order_of(a: &RBig, b: &RBig) -> Sign {
+    match a.cmp(b) {
+        Ordering::Less => Sign::Negative,
+        Ordering::Equal => Sign::Zero,
+        Ordering::Greater => Sign::Positive,
+    }
+}
+
+#[test]
+fn the_second_instance_reaches_roots_past_the_first_s_budget_exactly() {
+    let mut rng = Rng::new();
+    // Each case works its gcds bit by bit in the second instance's 729 limbs: a few seconds each
+    // unoptimised, so few cases.
+    let cases = if cfg!(debug_assertions) { 2 } else { 12 };
+    let mut widest = 0;
+    for case in 0..cases {
+        // Four rational roots each, of numerators and denominators up to 160 bits: coefficients up
+        // to about 650 bits, past the first instance's COEFFICIENT_BITS.
+        let draw = |rng: &mut Rng| -> Vec<(IBig, IBig)> {
+            (0..4)
+                .map(|_| {
+                    let q = random_big(rng, 160, false) + IBig::from(1);
+                    (q, random_big(rng, 160, true))
+                })
+                .collect()
+        };
+        let (pr, qr) = (draw(&mut rng), draw(&mut rng));
+        let ((p, wp), (q, wq)) = (second_quartic(&pr), second_quartic(&qr));
+        widest = widest.max(wp).max(wq);
+        assert!(wp <= SECOND_COEFFICIENT_BITS as usize && wq <= SECOND_COEFFICIENT_BITS as usize);
+        let mut want_p: Vec<RBig> = pr.iter().map(|(q, p)| ratio(q, p)).collect();
+        let mut want_q: Vec<RBig> = qr.iter().map(|(q, p)| ratio(q, p)).collect();
+        want_p.sort();
+        want_q.sort();
+        let (got_p, got_q): (Vec<SecondRoot>, Vec<SecondRoot>) = (
+            p.roots().unwrap().iter().copied().collect(),
+            q.roots().unwrap().iter().copied().collect(),
+        );
+        assert_eq!((got_p.len(), got_q.len()), (4, 4), "case {case}");
+        for (r, x) in got_p.iter().zip(&want_p) {
+            for (s, y) in got_q.iter().zip(&want_q) {
+                assert_eq!(
+                    compare(&p, r, &q, s).unwrap(),
+                    order_of(x, y),
+                    "case {case}"
+                );
+            }
+            // q at p's root: the product of its factors' signs there.
+            let at = qr.iter().fold(Sign::Positive, |acc, (b, a)| {
+                acc.mul(order_of(
+                    &(RBig::from(b.clone()) * x),
+                    &RBig::from(a.clone()),
+                ))
+            });
+            assert_eq!(sign_at_root(&q, &p, r).unwrap(), at, "case {case}");
+            assert_eq!(sign_at_root(&p, &p, r).unwrap(), Sign::Zero);
+        }
+    }
+    assert!(
+        widest > COEFFICIENT_BITS as usize,
+        "past the first instance: {widest} bits"
+    );
+    // A first-instance quartic and its roots carry over whole: each root is the same root of the
+    // same polynomial there.
+    for _ in 0..20 {
+        let qf = factors(&mut rng, true);
+        let q = quartic(2, &qf);
+        let wide = q.to_second().unwrap();
+        let (mine, theirs): (Vec<RealRoot>, Vec<SecondRoot>) = (
+            q.roots().unwrap().iter().copied().collect(),
+            wide.roots().unwrap().iter().copied().collect(),
+        );
+        assert_eq!(mine.len(), theirs.len());
+        for (i, r) in mine.iter().enumerate() {
+            let carried = r.to_second().unwrap();
+            assert_eq!(carried.piece(), r.piece());
+            for (j, t) in theirs.iter().enumerate() {
+                let want = Sign::of_i128(i as i128 - j as i128);
+                assert_eq!(compare(&wide, &carried, &wide, t).unwrap(), want);
+            }
+        }
+    }
+    // 3 and 3 + 2^−400: coefficients of 402 bits, a hair apart, parted exactly.
+    let k = IBig::from(1) << 400;
+    let three = (k.clone(), IBig::from(3) * &k);
+    let above = (k.clone(), IBig::from(3) * &k + IBig::from(1));
+    let one = (IBig::from(1), IBig::from(1));
+    let ((near, _), (far, _)) = (
+        second_quartic(&[three, one.clone()]),
+        second_quartic(&[above, one]),
+    );
+    let (a, b): (Vec<SecondRoot>, Vec<SecondRoot>) = (
+        near.roots().unwrap().iter().copied().collect(),
+        far.roots().unwrap().iter().copied().collect(),
+    );
+    assert_eq!(compare(&near, &a[1], &far, &b[1]).unwrap(), Sign::Negative);
+    assert_eq!(compare(&near, &a[0], &far, &b[0]).unwrap(), Sign::Zero);
 }

@@ -19,6 +19,13 @@
 //! one quartic at a root of another, which is the side of a curve a point where an ellipse meets
 //! another conic lies on.
 //!
+//! Two instances of the same code, by [`Instance`]: the [`First`] ([`Quartic`], [`RealRoot`],
+//! [`Roots`]) takes an ellipse's quartic against any conic of `crate::conic`, within
+//! [`COEFFICIENT_BITS`]; the [`Second`] ([`SecondQuartic`], [`SecondRoot`], [`SecondRoots`]) is the
+//! same method at wider integers and deeper limits, within [`SECOND_COEFFICIENT_BITS`], for the
+//! exact comparisons of conic-root points that pass the first's budget (chapter 14.2's as-built
+//! note of G196b, the main session's call of 2026-11-09).
+//!
 //! Guarantees:
 //!
 //! - Every result is exact, or an error. Nothing here is a floating-point number; a root is two
@@ -37,6 +44,10 @@
 //!   | Roots of two quartics, apart if not one | 2^−2,442 | their resultant, a whole number |
 //!   | A polynomial bisected s times | 2^(4s + 307) | the terms of 2^(4s) · c((x + a) / 2^s) |
 //!
+//!   The second instance's are the same bounds for coefficients below 2^[`SECOND_COEFFICIENT_BITS`]
+//!   (1,400 bits): factors below 2^1,406, two roots of one factor 2^−4,230 apart, roots of two
+//!   quartics 2^−11,266 apart, in 288 limbs for its quartics and 729 for its exact paths.
+//!
 //! - Bounded work. Live stretches each count at least two, and Descartes' counts of disjoint
 //!   stretches sum to at most four, so at most two are live at once and the frontier is a fixed
 //!   array of three nodes.
@@ -53,7 +64,10 @@
 //! few hundred more of 160 limbs, about ten exact divisions, each a bit at a time, and the binary
 //! gcds of the content. [`compare`] of roots a long way apart is a few subtractions; of near ones,
 //! three signs at each level it must narrow them. [`sign_at_root`] is one [`Quartic::roots`] and at
-//! most four [`compare`]s. No allocation; no recursion.
+//! most four [`compare`]s. The second instance's steps are the same at its widths, a few times
+//! dearer each, and only the exact paths that need it take it. No allocation; no recursion.
+
+use core::marker::PhantomData;
 
 use crate::error::NumError;
 use crate::interval::Interval;
@@ -68,10 +82,7 @@ pub const LIMBS: usize = 64;
 pub type Big = Wide<LIMBS>;
 
 /// Limbs of the exact paths, the gcds and the comparison of two quartics' roots: 10,240 bits.
-const WIDE_LIMBS: usize = 160;
-
-/// The integers of the exact paths.
-type Wider = Wide<WIDE_LIMBS>;
+pub const WIDE_LIMBS: usize = 160;
 
 /// Coefficients within this many bits reach every root inside the budget.
 pub const COEFFICIENT_BITS: u32 = 297;
@@ -89,7 +100,7 @@ const COMPARE_DEPTH: u32 = 2_470;
 /// The bits of [`Big`].
 const BITS: u32 = 4_096;
 
-/// The bits of [`Wider`].
+/// The bits of the exact paths' integers.
 const WIDE_BITS: u32 = 10_240;
 
 const _: () = {
@@ -105,6 +116,80 @@ const _: () = {
     assert!(4 * COMPARE_DEPTH + COEFFICIENT_BITS + 6 + 8 < WIDE_BITS);
     assert!(WIDE_BITS as usize == 64 * WIDE_LIMBS);
 };
+
+/// Limbs of the second instance's quartics and isolation: 18,432 bits.
+pub const SECOND_LIMBS: usize = 288;
+
+/// Limbs of the second instance's exact paths: 46,656 bits.
+pub const SECOND_WIDE_LIMBS: usize = 729;
+
+/// Coefficients within this many bits reach every root inside the second instance's budget: the
+/// quartic L² − kB² against a crossing of two rational circles, about 1,300 bits, and some.
+pub const SECOND_COEFFICIENT_BITS: u32 = 1_400;
+
+/// The second instance's levels of bisection: its separation bound's 4,230, and some.
+const SECOND_MAX_DEPTH: u32 = 4_240;
+
+/// The second instance's levels of narrowing: its resultant's 11,266, and some.
+const SECOND_COMPARE_DEPTH: u32 = 11_300;
+
+/// The bits of the second instance's quartics.
+const SECOND_BITS: u32 = 18_432;
+
+/// The bits of the second instance's exact paths.
+const SECOND_WIDE_BITS: u32 = 46_656;
+
+const _: () = {
+    // The same bounds as the first instance's, at the second's widths.
+    assert!(4 * SECOND_MAX_DEPTH + SECOND_COEFFICIENT_BITS + 6 + 8 + 8 < SECOND_BITS);
+    assert!(SECOND_BITS as usize == 64 * SECOND_LIMBS);
+    assert!(3 * (SECOND_COEFFICIENT_BITS + 8) + 6 < SECOND_MAX_DEPTH);
+    assert!(8 * (SECOND_COEFFICIENT_BITS + 5) + 26 < SECOND_COMPARE_DEPTH);
+    assert!(4 * SECOND_COMPARE_DEPTH + SECOND_COEFFICIENT_BITS + 6 + 8 < SECOND_WIDE_BITS);
+    assert!(SECOND_WIDE_BITS as usize == 64 * SECOND_WIDE_LIMBS);
+};
+
+/// The widths and depths of one instance of this module. A quartic of an instance holds integers of
+/// [`Instance::LIMBS`] limbs and works its exact paths in [`Instance::WIDE_LIMBS`]; within
+/// [`Instance::COEFFICIENT_BITS`] its depths reach every root, by the five bounds asserted for each.
+pub trait Instance: Clone + Copy + core::fmt::Debug {
+    /// The limbs of a quartic's integers and its isolation.
+    const LIMBS: usize;
+    /// The limbs of the exact paths.
+    const WIDE_LIMBS: usize;
+    /// Coefficients within this many bits reach every root inside the budget.
+    const COEFFICIENT_BITS: u32;
+    /// Levels of bisection past which a stretch is given up.
+    const MAX_DEPTH: u32;
+    /// Levels of narrowing past which two roots are given up.
+    const COMPARE_DEPTH: u32;
+}
+
+/// The first instance: an ellipse's quartic against any conic of `crate::conic`, within
+/// [`COEFFICIENT_BITS`].
+#[derive(Clone, Copy, Debug)]
+pub enum First {}
+
+impl Instance for First {
+    const LIMBS: usize = LIMBS;
+    const WIDE_LIMBS: usize = WIDE_LIMBS;
+    const COEFFICIENT_BITS: u32 = COEFFICIENT_BITS;
+    const MAX_DEPTH: u32 = MAX_DEPTH;
+    const COMPARE_DEPTH: u32 = COMPARE_DEPTH;
+}
+
+/// The second, wider instance, for the exact comparisons of conic-root points past the first's
+/// budget (chapter 14.2's as-built note of G196b): within [`SECOND_COEFFICIENT_BITS`].
+#[derive(Clone, Copy, Debug)]
+pub enum Second {}
+
+impl Instance for Second {
+    const LIMBS: usize = SECOND_LIMBS;
+    const WIDE_LIMBS: usize = SECOND_WIDE_LIMBS;
+    const COEFFICIENT_BITS: u32 = SECOND_COEFFICIENT_BITS;
+    const MAX_DEPTH: u32 = SECOND_MAX_DEPTH;
+    const COMPARE_DEPTH: u32 = SECOND_COMPARE_DEPTH;
+}
 
 /// One polynomial of degree at most four, lowest term first.
 type Terms<const L: usize> = [Wide<L>; 5];
@@ -508,38 +593,34 @@ fn divided<const L: usize>(a: &Terms<L>, b: &Terms<L>) -> Result<Terms<L>, NumEr
     primitive(&quotient)
 }
 
-/// `c` at the width of the exact paths.
-fn widened(c: &Terms<LIMBS>) -> Result<Terms<WIDE_LIMBS>, NumError> {
+/// `c` at another width: the exact paths', or back at a quartic's, as a factor of a quartic is no
+/// larger than the budget allows.
+fn resized<const L: usize, const M: usize>(c: &Terms<L>) -> Result<Terms<M>, NumError> {
     let [c0, c1, c2, c3, c4] = c;
-    let up = |v: &Big| budget(v.resize());
-    Ok([up(c0)?, up(c1)?, up(c2)?, up(c3)?, up(c4)?])
-}
-
-/// `c` back at a quartic's width: a factor of a quartic is no larger than the budget allows.
-fn narrowed_terms(c: &Terms<WIDE_LIMBS>) -> Result<Terms<LIMBS>, NumError> {
-    let [c0, c1, c2, c3, c4] = c;
-    let down = |v: &Wider| budget(v.resize());
-    Ok([down(c0)?, down(c1)?, down(c2)?, down(c3)?, down(c4)?])
+    let to = |v: &Wide<L>| budget(v.resize());
+    Ok([to(c0)?, to(c1)?, to(c2)?, to(c3)?, to(c4)?])
 }
 
 /// `c`'s roots each once: c / gcd(c, c′), primitive.
-fn square_free(c: &Terms<WIDE_LIMBS>) -> Result<Terms<WIDE_LIMBS>, NumError> {
+fn square_free<const W: usize>(c: &Terms<W>) -> Result<Terms<W>, NumError> {
     divided(c, &gcd(c, &derivative(c)?)?)
 }
 
 /// One factor of a quartic's square-free factorisation: its roots are simple in it, and have this
 /// multiplicity in the quartic.
 #[derive(Clone, Copy)]
-struct Factor {
-    terms: Terms<LIMBS>,
+struct Factor<const L: usize> {
+    terms: Terms<L>,
     multiplicity: u8,
 }
 
 /// Musser's factors: with g = gcd(c, c′) and w = c / g, at step i, y = gcd(w, g) leaves in w / y the
 /// roots of multiplicity exactly i, and w and g go on as y and g / y.
-fn factors(c: &Terms<LIMBS>) -> Result<[Option<Factor>; 4], NumError> {
+fn factors<const L: usize, const W: usize>(
+    c: &Terms<L>,
+) -> Result<[Option<Factor<L>>; 4], NumError> {
     let mut out = [None; 4];
-    let c = primitive(&widened(c)?)?;
+    let c: Terms<W> = primitive(&resized(c)?)?;
     let mut g = gcd(&c, &derivative(&c)?)?;
     let mut w = divided(&c, &g)?;
     let mut multiplicity = 1_u8;
@@ -549,7 +630,7 @@ fn factors(c: &Terms<LIMBS>) -> Result<[Option<Factor>; 4], NumError> {
         let exactly = divided(&w, &y)?;
         if degree(&exactly).is_some_and(|d| d > 0) {
             *budget(slots.next())? = Some(Factor {
-                terms: narrowed_terms(&exactly)?,
+                terms: resized(&exactly)?,
                 multiplicity,
             });
         }
@@ -628,17 +709,23 @@ impl Piece {
 
 /// A real root: where it is, and how many times it is a root.
 #[derive(Clone, Copy, Debug)]
-pub struct RealRoot {
+pub struct RealRootOf<const L: usize> {
     piece: Piece,
     /// The root's x is a / 2^s if `point`, and lies in (a / 2^s, (a + 1) / 2^s) if not; unused on
     /// an exact piece.
-    a: Big,
+    a: Wide<L>,
     s: u32,
     point: bool,
     multiplicity: u8,
 }
 
-impl RealRoot {
+/// A real root of a quartic of the first instance.
+pub type RealRoot = RealRootOf<LIMBS>;
+
+/// A real root of a quartic of the second instance.
+pub type SecondRoot = RealRootOf<SECOND_LIMBS>;
+
+impl<const L: usize> RealRootOf<L> {
     /// The stretch of the line it lies in.
     #[must_use]
     pub const fn piece(&self) -> Piece {
@@ -657,8 +744,8 @@ impl RealRoot {
     /// its stretch of x and only its piece changes; an exact root moves to the exact root it turns
     /// to, 0 and ∞ to each other and 1 and −1 to each other.
     #[must_use]
-    pub const fn turned(&self) -> RealRoot {
-        RealRoot {
+    pub const fn turned(&self) -> RealRootOf<L> {
+        RealRootOf {
             piece: self.piece.turned(),
             ..*self
         }
@@ -692,7 +779,7 @@ impl RealRoot {
         } else {
             let next = self
                 .a
-                .checked_add(&Big::one())
+                .checked_add(&Wide::one())
                 .ok_or(NumError::BudgetExceeded)?;
             Interval::new(low.lo(), enclose(&next)?.div(scale)?.hi())?
         };
@@ -711,13 +798,19 @@ impl RealRoot {
 
 /// The real roots of a quartic, increasing, on the projective line.
 #[derive(Clone, Copy, Debug)]
-pub struct Roots {
-    list: [Option<RealRoot>; 4],
+pub struct RootsOf<const L: usize> {
+    list: [Option<RealRootOf<L>>; 4],
 }
 
-impl Roots {
+/// The real roots of a quartic of the first instance.
+pub type Roots = RootsOf<LIMBS>;
+
+/// The real roots of a quartic of the second instance.
+pub type SecondRoots = RootsOf<SECOND_LIMBS>;
+
+impl<const L: usize> RootsOf<L> {
     /// The roots, in order.
-    pub fn iter(&self) -> impl Iterator<Item = &RealRoot> {
+    pub fn iter(&self) -> impl Iterator<Item = &RealRootOf<L>> {
         self.list.iter().flatten()
     }
 
@@ -738,8 +831,12 @@ impl Roots {
     ///
     /// [`NumError::BudgetExceeded`] for a `depth` past the depth of comparisons, or a step that did
     /// not fit, which coefficients within [`COEFFICIENT_BITS`] cannot reach.
-    pub fn narrowed(&self, quartic: &Quartic, depth: u32) -> Result<Roots, NumError> {
-        let simple = square_free(&primitive(&widened(&quartic.c)?)?)?;
+    pub fn narrowed<B: Instance, const W: usize>(
+        &self,
+        quartic: &QuarticOf<B, L, W>,
+        depth: u32,
+    ) -> Result<RootsOf<L>, NumError> {
+        let simple: Terms<W> = square_free(&primitive(&resized(&quartic.c)?)?)?;
         let mut out = *self;
         for slot in &mut out.list {
             let Some(root) = slot.as_mut() else {
@@ -748,14 +845,14 @@ impl Roots {
             let c = root.piece.open_on_unit(&simple)?;
             let mut at = Stretch::of(root)?;
             while !at.point && at.s < depth {
-                at = at.narrowed(&c)?;
+                at = at.narrowed(&c, B::COMPARE_DEPTH)?;
             }
             *root = at.applied(root)?;
         }
         Ok(out)
     }
 
-    fn push(&mut self, root: &RealRoot) -> Result<(), NumError> {
+    fn push(&mut self, root: &RealRootOf<L>) -> Result<(), NumError> {
         *budget(self.list.iter_mut().find(|s| s.is_none()))? = Some(*root);
         Ok(())
     }
@@ -763,14 +860,14 @@ impl Roots {
 
 /// One dyadic stretch of (0, 1), or a dyadic point of it, at the width of the exact paths.
 #[derive(Clone, Copy)]
-struct Stretch {
-    a: Wider,
+struct Stretch<const W: usize> {
+    a: Wide<W>,
     s: u32,
     point: bool,
 }
 
-impl Stretch {
-    fn of(root: &RealRoot) -> Result<Stretch, NumError> {
+impl<const W: usize> Stretch<W> {
+    fn of<const L: usize>(root: &RealRootOf<L>) -> Result<Stretch<W>, NumError> {
         Ok(Stretch {
             a: budget(root.a.resize())?,
             s: root.s,
@@ -779,8 +876,8 @@ impl Stretch {
     }
 
     /// `root`, in this stretch.
-    fn applied(&self, root: &RealRoot) -> Result<RealRoot, NumError> {
-        Ok(RealRoot {
+    fn applied<const L: usize>(&self, root: &RealRootOf<L>) -> Result<RealRootOf<L>, NumError> {
+        Ok(RealRootOf {
             a: budget(self.a.resize())?,
             s: self.s,
             point: self.point,
@@ -789,7 +886,7 @@ impl Stretch {
     }
 
     /// Its two ends over 2^`top`, `top` at least its own s.
-    fn ends(&self, top: u32) -> Result<(Wider, Wider), NumError> {
+    fn ends(&self, top: u32) -> Result<(Wide<W>, Wide<W>), NumError> {
         let up = budget(top.checked_sub(self.s))?;
         let low = shifted(&self.a, up)?;
         if self.point {
@@ -798,10 +895,11 @@ impl Stretch {
         Ok((low, shifted(&add(&self.a, &Wide::from_i64(1))?, up)?))
     }
 
-    /// The half of it that holds the simple root of `c` it holds, or the root itself.
-    fn narrowed(&self, c: &Terms<WIDE_LIMBS>) -> Result<Stretch, NumError> {
+    /// The half of it that holds the simple root of `c` it holds, or the root itself; past `limit`
+    /// levels, the instance's depth of comparisons, refused.
+    fn narrowed(&self, c: &Terms<W>, limit: u32) -> Result<Stretch<W>, NumError> {
         let s = budget(self.s.checked_add(1))?;
-        if s > COMPARE_DEPTH {
+        if s > limit {
             return Err(NumError::BudgetExceeded);
         }
         let low = add(&self.a, &self.a)?;
@@ -824,7 +922,7 @@ impl Stretch {
 }
 
 /// The sign of p less q, if their stretches tell.
-fn apart(p: &Stretch, q: &Stretch) -> Result<Option<Sign>, NumError> {
+fn apart<const W: usize>(p: &Stretch<W>, q: &Stretch<W>) -> Result<Option<Sign>, NumError> {
     let top = p.s.max(q.s);
     let ((p_low, p_high), (q_low, q_high)) = (p.ends(top)?, q.ends(top)?);
     if p.point && q.point {
@@ -842,11 +940,12 @@ fn apart(p: &Stretch, q: &Stretch) -> Result<Option<Sign>, NumError> {
 /// The order in x of the root of `pc` in `p` and the root of `qc` in `q`, both polynomials
 /// square-free. Apart stretches settle it. Else a common root in the overlap is both roots, for
 /// each stretch holds one root of its polynomial; and without one, narrowing parts them.
-fn order(
-    mut p: Stretch,
-    pc: &Terms<WIDE_LIMBS>,
-    mut q: Stretch,
-    qc: &Terms<WIDE_LIMBS>,
+fn order<const W: usize>(
+    mut p: Stretch<W>,
+    pc: &Terms<W>,
+    mut q: Stretch<W>,
+    qc: &Terms<W>,
+    limit: u32,
 ) -> Result<Sign, NumError> {
     if let Some(sign) = apart(&p, &q)? {
         return Ok(sign);
@@ -861,12 +960,12 @@ fn order(
             if sign_at(qc, &p.a, p.s)? == Sign::Zero {
                 return Ok(Sign::Zero);
             }
-            q = q.narrowed(qc)?;
+            q = q.narrowed(qc, limit)?;
         } else if q.point {
             if sign_at(pc, &q.a, q.s)? == Sign::Zero {
                 return Ok(Sign::Zero);
             }
-            p = p.narrowed(pc)?;
+            p = p.narrowed(pc, limit)?;
         } else {
             let top = p.s.max(q.s);
             let ((p_low, p_high), (q_low, q_high)) = (p.ends(top)?, q.ends(top)?);
@@ -883,40 +982,48 @@ fn order(
             if shared && sign_above(&common, &low, top)? != sign_below(&common, &high, top)? {
                 return Ok(Sign::Zero);
             }
-            p = p.narrowed(pc)?;
-            q = q.narrowed(qc)?;
+            p = p.narrowed(pc, limit)?;
+            q = q.narrowed(qc, limit)?;
         }
     }
 }
 
-/// A polynomial with whole-number coefficients, of degree at most four.
+/// A polynomial with whole-number coefficients, of degree at most four, in the instance `B`, whose
+/// widths `L` and `W` are `B`'s (checked when it is made).
 #[derive(Clone, Copy, Debug)]
-pub struct Quartic {
-    c: Terms<LIMBS>,
+pub struct QuarticOf<B: Instance, const L: usize, const W: usize> {
+    c: Terms<L>,
+    instance: PhantomData<B>,
 }
+
+/// A quartic of the first instance.
+pub type Quartic = QuarticOf<First, LIMBS, WIDE_LIMBS>;
+
+/// A quartic of the second, wider instance.
+pub type SecondQuartic = QuarticOf<Second, SECOND_LIMBS, SECOND_WIDE_LIMBS>;
 
 /// One stretch of (0, 1) still to be decided.
 #[derive(Clone, Copy)]
-struct Node {
-    terms: Terms<LIMBS>,
-    a: Big,
+struct Node<const L: usize> {
+    terms: Terms<L>,
+    a: Wide<L>,
     s: u32,
 }
 
 /// A root found on an open piece, and which factor it is a root of.
 #[derive(Clone, Copy)]
-struct Found {
-    root: RealRoot,
+struct Found<const L: usize> {
+    root: RealRootOf<L>,
     factor: usize,
 }
 
 /// The roots found so far, in no order.
-struct Isolated {
-    list: [Option<Found>; 4],
+struct Isolated<const L: usize> {
+    list: [Option<Found<L>>; 4],
 }
 
-impl Isolated {
-    fn push(&mut self, found: &Found) -> Result<(), NumError> {
+impl<const L: usize> Isolated<L> {
+    fn push(&mut self, found: &Found<L>) -> Result<(), NumError> {
         *budget(self.list.iter_mut().find(|s| s.is_none()))? = Some(*found);
         Ok(())
     }
@@ -932,9 +1039,15 @@ struct Job {
 
 impl Job {
     /// `a` and `s` as a root of this job, `times` a root of its polynomial.
-    fn root(&self, a: &Big, s: u32, point: bool, times: u8) -> Result<Found, NumError> {
+    fn root<const L: usize>(
+        &self,
+        a: &Wide<L>,
+        s: u32,
+        point: bool,
+        times: u8,
+    ) -> Result<Found<L>, NumError> {
         Ok(Found {
-            root: RealRoot {
+            root: RealRootOf {
                 piece: self.piece,
                 a: *a,
                 s,
@@ -946,11 +1059,11 @@ impl Job {
     }
 
     /// `node` decided: nothing, a root, or a place on the list.
-    fn place(
+    fn place<const L: usize>(
         &self,
-        node: &Node,
-        found: &mut Isolated,
-        live: &mut [Option<Node>; 3],
+        node: &Node<L>,
+        found: &mut Isolated<L>,
+        live: &mut [Option<Node<L>>; 3],
     ) -> Result<(), NumError> {
         match descartes(&node.terms)? {
             0 => Ok(()),
@@ -964,11 +1077,15 @@ impl Job {
 
     /// Every root of `c` on the piece's open stretch. `false` if a stretch stayed undecided at the
     /// limit, which a multiple root does.
-    fn isolate(&self, c: &Terms<LIMBS>, found: &mut Isolated) -> Result<bool, NumError> {
-        let mut live: [Option<Node>; 3] = [None; 3];
+    fn isolate<const L: usize>(
+        &self,
+        c: &Terms<L>,
+        found: &mut Isolated<L>,
+    ) -> Result<bool, NumError> {
+        let mut live: [Option<Node<L>>; 3] = [None; 3];
         let start = Node {
             terms: self.piece.on_unit(c)?,
-            a: Big::from_i64(0),
+            a: Wide::from_i64(0),
             s: 0,
         };
         self.place(&start, found, &mut live)?;
@@ -979,7 +1096,7 @@ impl Job {
             let left = left_half(&node.terms)?;
             let right = taylor_shift(&left)?;
             let doubled = add(&node.a, &node.a)?;
-            let middle = add(&doubled, &Big::from_i64(1))?;
+            let middle = add(&doubled, &Wide::from_i64(1))?;
             let s = budget(node.s.checked_add(1))?;
             // The lowest terms of the polynomial from the middle say how multiple a root it is.
             let times = right.iter().position(|v| !v.is_zero()).unwrap_or(0);
@@ -995,15 +1112,16 @@ impl Job {
     }
 }
 
-/// Puts one piece's roots in increasing order of t.
-fn sort_open(
-    here: &mut [Option<Found>; 4],
-    list: &[Option<Factor>; 4],
+/// Puts one piece's roots in increasing order of t, narrowing within `limit` levels.
+fn sort_open<const L: usize, const W: usize>(
+    here: &mut [Option<Found<L>>; 4],
+    list: &[Option<Factor<L>>; 4],
     piece: Piece,
+    limit: u32,
 ) -> Result<(), NumError> {
-    let simple = |found: &Found| -> Result<Terms<WIDE_LIMBS>, NumError> {
+    let simple = |found: &Found<L>| -> Result<Terms<W>, NumError> {
         let factor = budget(list.get(found.factor).copied().flatten())?;
-        piece.open_on_unit(&widened(&factor.terms)?)
+        piece.open_on_unit(&resized(&factor.terms)?)
     };
     // Bubble, on at most four.
     for _ in 0..4 {
@@ -1014,7 +1132,13 @@ fn sort_open(
                 continue;
             };
             let (pc, qc) = (simple(&p)?, simple(&q)?);
-            let x = order(Stretch::of(&p.root)?, &pc, Stretch::of(&q.root)?, &qc)?;
+            let x = order(
+                Stretch::of(&p.root)?,
+                &pc,
+                Stretch::of(&q.root)?,
+                &qc,
+                limit,
+            )?;
             let t = if piece.falling() { x.negate() } else { x };
             if t == Sign::Positive {
                 here.swap(k, next);
@@ -1030,13 +1154,13 @@ fn sort_open(
             continue;
         };
         let (pc, qc) = (simple(&p)?, simple(&q)?);
-        let (mut a, mut b) = (Stretch::of(&p.root)?, Stretch::of(&q.root)?);
+        let (mut a, mut b) = (Stretch::<W>::of(&p.root)?, Stretch::<W>::of(&q.root)?);
         while apart(&a, &b)?.is_none() {
             if !a.point {
-                a = a.narrowed(&pc)?;
+                a = a.narrowed(&pc, limit)?;
             }
             if !b.point {
-                b = b.narrowed(&qc)?;
+                b = b.narrowed(&qc, limit)?;
             }
         }
         let (parted_p, parted_q) = (a.applied(&p.root)?, b.applied(&q.root)?);
@@ -1052,16 +1176,20 @@ fn sort_open(
     Ok(())
 }
 
-impl Quartic {
+impl<B: Instance, const L: usize, const W: usize> QuarticOf<B, L, W> {
     /// The polynomial with these coefficients, lowest term first.
     #[must_use]
-    pub const fn new(c: [Big; 5]) -> Quartic {
-        Quartic { c }
+    pub const fn new(c: [Wide<L>; 5]) -> QuarticOf<B, L, W> {
+        const { assert!(L == B::LIMBS && W == B::WIDE_LIMBS) };
+        QuarticOf {
+            c,
+            instance: PhantomData,
+        }
     }
 
     /// Its coefficients, lowest term first.
     #[must_use]
-    pub const fn coefficients(&self) -> [Big; 5] {
+    pub const fn coefficients(&self) -> [Wide<L>; 5] {
         self.c
     }
 
@@ -1080,10 +1208,8 @@ impl Quartic {
     ///
     /// [`NumError::BudgetExceeded`] if a coefficient's negation did not fit, which no coefficient
     /// within [`COEFFICIENT_BITS`] reaches.
-    pub fn turned(&self) -> Result<Quartic, NumError> {
-        Ok(Quartic {
-            c: mirrored(&reversed(&self.c))?,
-        })
+    pub fn turned(&self) -> Result<QuarticOf<B, L, W>, NumError> {
+        Ok(QuarticOf::new(mirrored(&reversed(&self.c))?))
     }
 
     /// The multiplicity of t = ∞, as a root of the polynomial read at degree four.
@@ -1108,7 +1234,10 @@ impl Quartic {
 
     /// The roots of the factors in `list` on the open pieces, each to `limit`. `None` if a stretch
     /// stayed undecided.
-    fn isolated(list: &[Option<Factor>; 4], limit: u32) -> Result<Option<Isolated>, NumError> {
+    fn isolated(
+        list: &[Option<Factor<L>>; 4],
+        limit: u32,
+    ) -> Result<Option<Isolated<L>>, NumError> {
         let mut found = Isolated { list: [None; 4] };
         for (at, factor) in list.iter().enumerate() {
             let Some(Factor {
@@ -1140,7 +1269,7 @@ impl Quartic {
     /// [`NumError::Degenerate`] for the zero polynomial, of which every t is a root;
     /// [`NumError::BudgetExceeded`] if a step did not fit, which coefficients within
     /// [`COEFFICIENT_BITS`] cannot reach.
-    pub fn roots(&self) -> Result<Roots, NumError> {
+    pub fn roots(&self) -> Result<RootsOf<L>, NumError> {
         if self.is_zero() {
             return Err(NumError::Degenerate);
         }
@@ -1156,14 +1285,18 @@ impl Quartic {
         if let Some(found) = Self::isolated(&itself, FAST_DEPTH)? {
             return self.assemble(&itself, &found);
         }
-        let list = factors(&self.c)?;
-        let found = budget(Self::isolated(&list, MAX_DEPTH)?)?;
+        let list = factors::<L, W>(&self.c)?;
+        let found = budget(Self::isolated(&list, B::MAX_DEPTH)?)?;
         self.assemble(&list, &found)
     }
 
     /// The open stretches' roots with the exact ones, in order.
-    fn assemble(&self, list: &[Option<Factor>; 4], open: &Isolated) -> Result<Roots, NumError> {
-        let mut out = Roots { list: [None; 4] };
+    fn assemble(
+        &self,
+        list: &[Option<Factor<L>>; 4],
+        open: &Isolated<L>,
+    ) -> Result<RootsOf<L>, NumError> {
+        let mut out = RootsOf { list: [None; 4] };
         for piece in [
             Piece::FarBelow,
             Piece::MinusOne,
@@ -1175,21 +1308,21 @@ impl Quartic {
             Piece::Infinity,
         ] {
             if OPEN.contains(&piece) {
-                let mut here: [Option<Found>; 4] = [None; 4];
+                let mut here: [Option<Found<L>>; 4] = [None; 4];
                 let on_this = open.list.iter().flatten().filter(|f| f.root.piece == piece);
                 for (slot, found) in here.iter_mut().zip(on_this) {
                     *slot = Some(*found);
                 }
-                sort_open(&mut here, list, piece)?;
+                sort_open::<L, W>(&mut here, list, piece, B::COMPARE_DEPTH)?;
                 for found in here.iter().flatten() {
                     out.push(&found.root)?;
                 }
             } else {
                 let multiplicity = self.at_exact(piece)?;
                 if multiplicity > 0 {
-                    out.push(&RealRoot {
+                    out.push(&RealRootOf {
                         piece,
-                        a: Big::from_i64(0),
+                        a: Wide::from_i64(0),
                         s: 0,
                         point: true,
                         multiplicity,
@@ -1201,6 +1334,35 @@ impl Quartic {
     }
 }
 
+impl Quartic {
+    /// The same polynomial in the second instance, for an exact path past the first's budget.
+    ///
+    /// # Errors
+    ///
+    /// None in practice: every integer of the first instance fits the second's.
+    pub fn to_second(&self) -> Result<SecondQuartic, NumError> {
+        Ok(SecondQuartic::new(resized(&self.c)?))
+    }
+}
+
+impl RealRoot {
+    /// The same root of the same polynomial in the second instance ([`Quartic::to_second`]): its
+    /// piece and stretch carry over.
+    ///
+    /// # Errors
+    ///
+    /// None in practice: the first instance's stretch fits the second's integers.
+    pub fn to_second(&self) -> Result<SecondRoot, NumError> {
+        Ok(RealRootOf {
+            piece: self.piece,
+            a: budget(self.a.resize())?,
+            s: self.s,
+            point: self.point,
+            multiplicity: self.multiplicity,
+        })
+    }
+}
+
 /// How two real roots of two quartics compare: the sign of the first less the second, zero when
 /// they are one number. Disjoint stretches settle it; overlapping ones are narrowed unless the
 /// quartics' gcd has a root in both, which makes the two roots one.
@@ -1209,11 +1371,11 @@ impl Quartic {
 ///
 /// [`NumError::BudgetExceeded`] if a step did not fit, which coefficients within
 /// [`COEFFICIENT_BITS`] cannot reach.
-pub fn compare(
-    first: &Quartic,
-    p: &RealRoot,
-    second: &Quartic,
-    q: &RealRoot,
+pub fn compare<B: Instance, const L: usize, const W: usize>(
+    first: &QuarticOf<B, L, W>,
+    p: &RealRootOf<L>,
+    second: &QuarticOf<B, L, W>,
+    q: &RealRootOf<L>,
 ) -> Result<Sign, NumError> {
     if p.piece != q.piece {
         return Ok(if p.piece < q.piece {
@@ -1226,10 +1388,11 @@ pub fn compare(
     if !OPEN.contains(&piece) {
         return Ok(Sign::Zero);
     }
-    let simple =
-        |quartic: &Quartic| piece.open_on_unit(&square_free(&primitive(&widened(&quartic.c)?)?)?);
+    let simple = |quartic: &QuarticOf<B, L, W>| -> Result<Terms<W>, NumError> {
+        piece.open_on_unit(&square_free(&primitive(&resized(&quartic.c)?)?)?)
+    };
     let (pc, qc) = (simple(first)?, simple(second)?);
-    let x = order(Stretch::of(p)?, &pc, Stretch::of(q)?, &qc)?;
+    let x = order(Stretch::of(p)?, &pc, Stretch::of(q)?, &qc, B::COMPARE_DEPTH)?;
     Ok(if piece.falling() { x.negate() } else { x })
 }
 
@@ -1244,7 +1407,11 @@ pub fn compare(
 ///
 /// As for [`Quartic::roots`] and [`compare`]: [`NumError::BudgetExceeded`] if a step did not fit,
 /// which coefficients within [`COEFFICIENT_BITS`] cannot reach.
-pub fn sign_at_root(p: &Quartic, q: &Quartic, r: &RealRoot) -> Result<Sign, NumError> {
+pub fn sign_at_root<B: Instance, const L: usize, const W: usize>(
+    p: &QuarticOf<B, L, W>,
+    q: &QuarticOf<B, L, W>,
+    r: &RealRootOf<L>,
+) -> Result<Sign, NumError> {
     let Some(top) = degree(&p.c) else {
         return Ok(Sign::Zero);
     };
@@ -1356,11 +1523,14 @@ mod tests {
             s: COMPARE_DEPTH - 1,
             point: false,
         };
-        assert!(at.narrowed(&c).is_ok());
+        assert!(at.narrowed(&c, COMPARE_DEPTH).is_ok());
         let past = Stretch {
             s: COMPARE_DEPTH,
             ..at
         };
-        assert_eq!(past.narrowed(&c).err(), Some(NumError::BudgetExceeded));
+        assert_eq!(
+            past.narrowed(&c, COMPARE_DEPTH).err(),
+            Some(NumError::BudgetExceeded)
+        );
     }
 }
