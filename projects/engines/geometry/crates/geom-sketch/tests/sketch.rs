@@ -583,7 +583,10 @@ fn errors_say_what_went_wrong() {
             SketchError::RootChoiceUndetermined(x),
             "the drawing does not decide the root",
         ),
-        (SketchError::Degenerate(x), "the start is on a singular set"),
+        (
+            SketchError::Degenerate(x),
+            "the start or the answer is on a singular set",
+        ),
         (SketchError::Text { line: 3 }, "text that is not sketch v1"),
         (SketchError::OutOfMemory, "an allocation could not be made"),
         (SketchError::Stopped, "the work meter stopped"),

@@ -10630,7 +10630,7 @@
               "shape": "tuple"
             },
             {
-              "doc": "The start is on this constraint's singular set.",
+              "doc": "The start is on this constraint's singular set, or the answer within a tolerance of it.",
               "name": "Degenerate",
               "shape": "tuple"
             },
@@ -10913,6 +10913,7 @@
             "**QR, never normal equations.** A damped step is the least-squares solution of J stacked on √λ·I, by `geom_linalg`'s sparse QR; the pattern of each is analysed once, in the plan.",
             "**Convergence in grid steps.** A stage has converged when each of its residuals is at most [`TOLERANCE`]. Every residual is a length with a gradient near one, so that means the same at any size, and no further division by the block's size would change a step.",
             "**Never a partial answer.** A block that does not converge is [`SketchError::Unsolved`], naming its worst rule, and running out of budget is [`SketchError::Stopped`]; neither returns a sketch.",
+            "**Never an answer on a singular set.** A stage's answer that leaves one of its rules within [`TOLERANCE`] of the rule's singular set is [`SketchError::Degenerate`]: there the residual is met without the rule meaning anything, as a parallel to a line folded to a point.",
             "**A singular start is nudged once.** A rule on its singular set has its points moved by small amounts derived from its id alone, which the report records; a rule still on it is [`SketchError::Degenerate`] (chapter 15.4). A block whose Jacobian is singular at its start, though no rule of it is on its own singular set, is started again with every rule's inputs nudged if it does not converge: no step leaves such a start. Square or not, as 15.4 asks of every singular start: a point drawn on the reference it must be a distance from has no step out whether or not anything else holds it.",
             "**The branch is followed.** Each stored sense is checked after each step of a path with interval arithmetic, and a sign that cannot be certified counts as at risk; the smallest pivot of each square block is held at or above [`INDEPENDENT`], and the sign of its determinant is kept: a step that changes it has jumped to another branch. After [`MOST_HALVINGS`] halvings at one place the answer is [`SketchError::BranchLost`], with the rule and how far along the path it stopped. A step is halved after a failure and doubled after a success, and the halvings are those that brought the step to its size: a failed step of 2^-10 of the path loses it. Read as halvings since the last success, 15.7's rule would let a path creep up on a singular place in ever smaller steps that each succeed, and never end. So a path takes at most about 2,000 steps: each success moves at least 2^-10 of it, and each failure undoes at most one doubling.",
             "**Deterministic.** Stages, rows and steps run in an order that depends on stored data alone, and the schedule of a path on the stored state and the new values alone (chapter 15.7)."
