@@ -427,3 +427,29 @@ fn a_radius_or_a_limit_that_is_not_positive_is_refused() {
     assert_eq!(largest(&[tiny]).unwrap().unwrap().radius, smallest);
     assert_eq!(judge(&[tiny], smallest), Ok(Verdict::Feasible));
 }
+
+/// Every plan error says what went wrong: its own words, or the error it carries.
+#[test]
+fn every_plan_error_says_what_went_wrong() {
+    let overflow = OverflowError::NoOverflowPossible {
+        boundary: EdgeId(4),
+    };
+    for (e, text) in [
+        (PlanError::Overflow(overflow), overflow.to_string()),
+        (
+            PlanError::Num(NumError::Degenerate),
+            NumError::Degenerate.to_string(),
+        ),
+        (
+            PlanError::UnknownChain(3),
+            "a plan names a chain that is not there".to_owned(),
+        ),
+        (
+            PlanError::Radius(0),
+            "a radius asked is not finite and positive".to_owned(),
+        ),
+    ] {
+        assert_eq!(e.to_string(), text);
+        assert_ne!(text, "");
+    }
+}
