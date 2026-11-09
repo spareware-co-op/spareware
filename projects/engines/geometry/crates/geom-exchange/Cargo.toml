@@ -51,6 +51,12 @@ harness = false
 name = "inflate"
 harness = false
 
+# The zip reader's cost on a 3MF-shaped package (piece G414c): its directory checked, its part
+# names held to the packaging rules and its model part read, beside inflating that part alone.
+[[bench]]
+name = "zip"
+harness = false
+
 [lints.rust]
 unsafe_code = "forbid"
 missing_docs = "warn"
