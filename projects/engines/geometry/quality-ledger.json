@@ -5067,12 +5067,508 @@
       "reason": "Only the scan's start moves, and it still meets the same member. last_within is private; members, its one caller, passes it only periodic families from Scalar::critical, whose lower ends c lie in [−1.5, 2.5] up to a rounding (φ = atan2/π in [−1, 1], plus ψ in [−½, ½], 1 − ψ or 1, or the involute's ½ and 3/2), and extent sends spans past 2⁵⁰ to the pieces' route first. With X = (t₁ − c)/2, the answer is ⌊X⌋, or ⌊X⌋ + 1 when rounding a member down lets it meet t₁ (only for X within ¼ below a whole number). The mutant starts at ⌊(t₁ + c)/2⌋ + 2 = ⌊X + c + e⌋ + 2 with |e| ≤ 1/16 (the roundings of t₁ + c, below 2⁵¹, and of its half), which lies at or above the answer and at most ⌊X⌋ + 5: inside the scan's six steps down. The scan returns the first m from the top whose member's lower end is at most t₁, so both return the same m."
     },
     {
+      "file": "projects/engines/geometry/crates/geom-format/src/cbor/decode.rs",
+      "mutant": "replace | with ^ in Decoder<'a>::head",
+      "line_text": ".fold(0_u64, |value, &byte| (value << 8) | u64::from(byte));",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "value << 8 has its low eight bits clear and u64::from(byte) sets only those eight. Two words with no set bit in common give the same word under OR and XOR, so the result is the same for every input."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-format/src/cbor/decode.rs",
+      "mutant": "replace Decoder<'a>::open -> Result<(), CborError> with Ok(())",
+      "line_text": "let (start, end) = head;",
+      "occurrences": 1,
+      "kind": "hangs",
+      "reason": "Without pushing the frame or moving past the container's head, the next call of next reads the same head again, for ever under the tests' unlimited meter (a metered read stops at its budget). It hangs; it never accepts bytes the original refuses."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-format/src/cbor/decode.rs",
+      "mutant": "replace Decoder<'a>::complete -> Result<(), CborError> with Ok(())",
+      "line_text": "self.at = end;",
+      "occurrences": 1,
+      "kind": "hangs",
+      "reason": "Without moving past the item it just read, the next call of next reads the same head again, for ever under the tests' unlimited meter. It hangs; it never accepts bytes the original refuses."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-format/src/cbor/float.rs",
+      "mutant": "replace | with ^ in half",
+      "line_text": "u16::try_from(magnitude >> 13).ok().map(|m| m | sign)",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "m is at most 0x7bff (larger magnitudes are refused just above), so its bit 15 is clear, and sign is 0 or 0x8000. Two words with no set bit in common give the same word under OR and XOR, so the result is the same for every input."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-format/src/cbor/parse.rs",
+      "mutant": "replace Cursor<'_>::bump -> Option<char> with Some(Default::default())",
+      "line_text": "let c = self.peek()?;",
+      "occurrences": 1,
+      "kind": "hangs",
+      "reason": "The cursor never advances, so the first loop that reads past a character (whitespace, a digit, a string) reads the same character for ever. It hangs; it never returns bytes."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-format/src/cbor/parse.rs",
+      "mutant": "replace Cursor<'_>::bump -> Option<char> with None",
+      "line_text": "let c = self.peek()?;",
+      "occurrences": 1,
+      "kind": "hangs",
+      "reason": "The cursor never advances, so the first loop that reads past a character (whitespace, a digit, a string) reads the same character for ever. It hangs; it never returns bytes."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-format/src/cbor/parse.rs",
+      "mutant": "replace Parser<'_>::item -> Result<bool, TextError> with Ok(false)",
+      "line_text": "let (line, column) = (self.cursor.line, self.cursor.column);",
+      "occurrences": 1,
+      "kind": "hangs",
+      "reason": "No item ever completes and nothing is consumed, so the parse loop calls item for ever under the tests' unlimited meter. It hangs; it never returns bytes."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-format/src/cbor/parse.rs",
+      "mutant": "replace | with ^ in hex_float",
+      "line_text": "significand = (significand << 4) | u128::from(d);",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "significand << 4 has its low four bits clear and d is a hexadecimal digit, below 16. Two words with no set bit in common give the same word under OR and XOR, so the result is the same for every input."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-format/src/cbor/parse.rs",
+      "mutant": "replace | with ^ in escape",
+      "line_text": "let code = (((unit & 0x3ff) << 10) | (low & 0x3ff))",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "(unit & 0x3ff) << 10 sets only bits 10 to 19 and low & 0x3ff only bits 0 to 9. Two words with no set bit in common give the same word under OR and XOR, so the result is the same for every input."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-format/src/cbor/parse.rs",
+      "mutant": "replace | with ^ in hex4",
+      "line_text": "unit = (unit << 4) | d;",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "unit << 4 has its low four bits clear and d is a hexadecimal digit, below 16. Two words with no set bit in common give the same word under OR and XOR, so the result is the same for every input."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-format/src/cbor/parse.rs",
+      "mutant": "replace | with ^ in hex_bytes",
+      "line_text": "Some(h) => out.push(u8::try_from((h << 4) | d).map_err(|_| here)?),",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "h << 4 has its low four bits clear and d is a hexadecimal digit, below 16. Two words with no set bit in common give the same word under OR and XOR, so the result is the same for every input."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-format/src/cbor/parse.rs",
+      "mutant": "replace | with ^ in head",
+      "line_text": "out.push(initial | small);",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "initial is the major type shifted up five places, so its low five bits are clear, and small is below 24. Two words with no set bit in common give the same word under OR and XOR, so the result is the same for every input."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-format/src/cbor/parse.rs",
+      "mutant": "replace | with ^ in head",
+      "line_text": "out.push(initial | info);",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "initial is the major type shifted up five places, so its low five bits are clear, and info is 24, 25, 26 or 27. Two words with no set bit in common give the same word under OR and XOR, so the result is the same for every input."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-format/src/cbor/text.rs",
+      "mutant": "replace < with <= in hex_float",
+      "line_text": "let (normal, offset) = if magnitude < f64::MIN_POSITIVE {",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "The two branches differ only at magnitude = f64::MIN_POSITIVE = 2^-1022. Scaled by 2^64 it reads with exponent field 65 and offset 1087, unscaled with field 1 and offset 1023: the same exponent -1022 and the same empty fraction, so the same text."
+    },
+    {
       "file": "projects/engines/geometry/crates/geom-num/src/ball.rs",
       "mutant": "replace > with >= in <impl Scalar for Ball>::sqrt",
       "line_text": "let spread = if root_floor > 0.0 {",
       "occurrences": 1,
       "kind": "equivalent",
       "reason": "root_floor is next_down of the correctly rounded square root of floor, and floor is at least +0 (the sqrt above refuses floor < radius, and the radius is never negative). For floor = +0 or -0 the root is a zero and its next_down is -2^-1074; for floor > 0 the root is at least 2^-537 and its next_down is positive. So root_floor is never 0.0, and > and >= against 0.0 choose the same arm for every ball."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-op/src/cbor.rs",
+      "mutant": "replace | with ^ in head",
+      "line_text": "out.push(major | b7);",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "head writes the first byte of a head as the major type, one of 0x00, 0x20, ... 0xe0, so only its top three bits can be set, joined with the additional information, which is below 24 or one of 0x18 to 0x1b, so only its low five bits can be set. The two never share a bit, so | and ^ give the same byte for every argument of every head. Here the argument is below 24, so b7 is the whole argument."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-op/src/cbor.rs",
+      "mutant": "replace | with ^ in head",
+      "line_text": "out.extend_from_slice(&[major | 0x18, b7]);",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "head writes the first byte of a head as the major type, one of 0x00, 0x20, ... 0xe0, so only its top three bits can be set, joined with the additional information, which is below 24 or one of 0x18 to 0x1b, so only its low five bits can be set. The two never share a bit, so | and ^ give the same byte for every argument of every head."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-op/src/cbor.rs",
+      "mutant": "replace | with ^ in head",
+      "line_text": "out.extend_from_slice(&[major | 0x19, b6, b7]);",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "head writes the first byte of a head as the major type, one of 0x00, 0x20, ... 0xe0, so only its top three bits can be set, joined with the additional information, which is below 24 or one of 0x18 to 0x1b, so only its low five bits can be set. The two never share a bit, so | and ^ give the same byte for every argument of every head."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-op/src/cbor.rs",
+      "mutant": "replace | with ^ in head",
+      "line_text": "out.extend_from_slice(&[major | 0x1a, b4, b5, b6, b7]);",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "head writes the first byte of a head as the major type, one of 0x00, 0x20, ... 0xe0, so only its top three bits can be set, joined with the additional information, which is below 24 or one of 0x18 to 0x1b, so only its low five bits can be set. The two never share a bit, so | and ^ give the same byte for every argument of every head."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-op/src/cbor.rs",
+      "mutant": "replace | with ^ in head",
+      "line_text": "out.extend_from_slice(&[major | 0x1b, b0, b1, b2, b3, b4, b5, b6, b7]);",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "head writes the first byte of a head as the major type, one of 0x00, 0x20, ... 0xe0, so only its top three bits can be set, joined with the additional information, which is below 24 or one of 0x18 to 0x1b, so only its low five bits can be set. The two never share a bit, so | and ^ give the same byte for every argument of every head."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-op/src/cbor.rs",
+      "mutant": "replace | with ^ in narrow",
+      "line_text": "(exponent.checked_sub(format.rebias)? << format.fraction) | (fraction >> format.dropped)",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "The narrow exponent field is shifted left by the narrow format's fraction width M, so its low M bits are zero, and the narrow fraction is the binary64 fraction shifted right by 52 - M, so it is below 2^M. The two never share a bit, so | and ^ give the same bits for every double."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-op/src/cbor.rs",
+      "mutant": "replace | with ^ in narrow",
+      "line_text": "let q = (1 << 52) | fraction;",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "fraction is the binary64's low 52 bits (bits & (2^52 - 1)), so it is below 2^52 and never has bit 52, the implicit leading bit set here; | and ^ give the same q for every double."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-op/src/cbor.rs",
+      "mutant": "replace | with ^ in narrow",
+      "line_text": "Some(sign | magnitude)",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "sign is zero or the narrow format's sign bit alone (bit 15 of a binary16, bit 31 of a binary32), and magnitude is a narrow exponent field of at most 30 (binary16) or 254 (binary32) above an M-bit fraction, so it is below 0x7c00 or 0x7f800000 and never has the sign bit. The two never share a bit, so | and ^ give the same bits."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-format/src/file.rs",
+      "mutant": "replace | with ^ in pull_record",
+      "line_text": "bytes.iter().fold(0_u64, |a, &b| (a << 8) | u64::from(b))",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "The value so far is shifted left by 8, so its low byte is zero, and u64::from(b) is a single byte, below 256. The two never share a bit, so | and ^ give the same argument for every head."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-format/src/record.rs",
+      "mutant": "replace | with ^",
+      "line_text": "const FLAGS: u64 = REQUIRED | COPY_ALWAYS;",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "REQUIRED is 1 and COPY_ALWAYS is 2, one bit each and not the same bit, so REQUIRED | COPY_ALWAYS and REQUIRED ^ COPY_ALWAYS are both 3."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-exchange/src/inflate.rs",
+      "mutant": "replace < with <= in inflate",
+      "line_text": "if out_pos == out.len() && out.len() < limit {",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "The forms differ only when the output is full at exactly the limit. The grow step then computes min(max(2 * len, 64 KiB), limit) = limit, the length it has, so it reserves nothing (try_reserve_exact of 0 cannot fail) and resizes to the same length: the vector, its capacity and the next step are unchanged, and the full output is refused at the same offset."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-exchange/src/inflate/decode.rs",
+      "mutant": "replace || with && in Output<'_>::copy_match",
+      "line_text": "if dist == 0 || end > self.buf.len() {",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "Both terms are false at every call, so the guard is false with either operator. Every distance is a DIST_BASE entry (at least 1) plus extra bits, never 0. The three callers copy only what fits: HuffDecodeOuterLoop2 when the length is at most the room, WriteLenBytesToEnd the smaller of the room and the length, and decompress_fast at most a 258-byte match after at most one literal, with 259 bytes of room checked first."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-exchange/src/inflate/decode.rs",
+      "mutant": "replace < with <= in Locals::fill",
+      "line_text": "if self.num_bits < 30",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "With exactly 30 bits held the mutant reads the next four bytes too, which both callers have checked are there (the middle branch needs four input bytes, the fast loop fourteen). 30 + 32 = 62 bits fit the 64-bit buffer and nothing is pushed above 15 bits held, so no bit is lost or misread. Read-ahead changes no returned value: a step gives every whole byte it read ahead back unless it stopped for input, having used all it was given, and inflate's offsets are the byte of the first unused bit."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-exchange/src/inflate/decode.rs",
+      "mutant": "replace < with <= in Decoder::run",
+      "line_text": "if input.len() < 4 || out.left() < 2 {",
+      "occurrences": 2,
+      "kind": "equivalent",
+      "reason": "Either < becomes <=: with exactly four input bytes left, or exactly two bytes of room, a code is decoded on the careful path one at a time instead of by the middle branch two at a time after one four-byte fill. Both decode the same codes from the same input bits (the fill reads only the four bytes there, giving at least 30 bits for two codes of at most 15) and write the same literals into room both have, so the output, every refusal and its offset (the byte of the first unused bit) are the same."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-exchange/src/inflate/decode.rs",
+      "mutant": "replace > with >= in Decoder::run",
+      "line_text": "} else if len > out.left() {",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "When a match is exactly as long as the room, the mutant sends it to WriteLenBytesToEnd, which copies the smaller of the room and the length, all of it, from the same distance (the room is at least 3, a match's least length, so the copy runs) and goes on to DecodeLitlen with the count at zero: the same bytes, the same state and the same refusal on a bad distance as the direct copy."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-exchange/src/inflate/decode.rs",
+      "mutant": "replace < with <= in Decoder::decode_huffman_code",
+      "line_text": "if l.num_bits < 15 {",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "With exactly 15 bits held, every code (at most 15 bits) is already whole. The mutant then either pushes two more input bytes, which are there, or runs the careful loop, which finds the code in the bits held and reads nothing. The same symbol is decoded from the same bits, and read-ahead changes no returned value: whole bytes read ahead are given back at the step's end or counted out of every offset."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-exchange/src/inflate/decode.rs",
+      "mutant": "replace < with <= in Decoder::decode_huffman_code",
+      "line_text": "if input.len() < 2 {",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "With exactly two input bytes left and fewer than 15 bits held, the mutant reads them one at a time while the code is not yet whole instead of both at once. Two bytes bring at least 16 bits, enough for any code, so it never stops for input, and the same code is decoded from the same bits; the bytes it did not need stay unread, which changes no returned value."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-exchange/src/inflate/decode.rs",
+      "mutant": "replace | with ^ in Decoder::init_tree",
+      "line_text": "let entry = (i16::from(size & 15) << 9) | symbol;",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "symbol is a code's index, below 288 < 2^9, and (size & 15) << 9 has its low nine bits clear, so the two operands never share a set bit and | and ^ give the same fast-table entry."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-exchange/src/inflate/decode.rs",
+      "mutant": "replace < with <= in Decoder::init_tree",
+      "line_text": "while usize::from(rev_code) < FAST_LOOKUP_SIZE {",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "The mutant adds a turn only when rev_code is exactly 1024 (a code starting at 0, stepped by its power of two), where look_up.get_mut(1024) is None and nothing is written; rev_code then grows by the step, at least 2, past 1024 and the loop ends. The table built is the same."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-exchange/src/grid.rs",
+      "mutant": "replace rounded -> Option<(i128, bool)> with None",
+      "line_text": "let (whole, rest) = (num.checked_div(den)?, num.checked_rem(den)?);",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "rounded is the short path's last step, so with it None both short and short_double answer None for every value. length, positive_length, angle and map_coordinate (and their double forms) then take the frame conversion, which rounds the same exact value v*u*S once, ties to even (FrameRecord::to_frame_decimal for a decimal, to_frame for a double, chapter 17.1), and reports a count past its range as NumError::OutOfRange carrying that exact count, which becomes ExchangeError::OutOfRange { count }; map_coordinate's own frame path answers past 2^40 steps. For every value the short path answers (a count below 2^127), the frame conversion gives the same count, the same exactness and the same refusal: the short path is a 128-bit shortcut to the same rounding."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-exchange/src/grid.rs",
+      "mutant": "replace short -> Option<(i128, bool)> with None",
+      "line_text": "let e = value.exponent();",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "With short None, every decimal goes to the frame conversion. length, positive_length, angle and map_coordinate (and their double forms) then take the frame conversion, which rounds the same exact value v*u*S once, ties to even (FrameRecord::to_frame_decimal for a decimal, to_frame for a double, chapter 17.1), and reports a count past its range as NumError::OutOfRange carrying that exact count, which becomes ExchangeError::OutOfRange { count }; map_coordinate's own frame path answers past 2^40 steps. For every value the short path answers (a count below 2^127), the frame conversion gives the same count, the same exactness and the same refusal: the short path is a 128-bit shortcut to the same rounding."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-exchange/src/grid.rs",
+      "mutant": "replace < with <= in short",
+      "line_text": "rounded(num, den, value.significand() < 0)",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "The forms differ only for a zero significand, whose numerator is 0: rounded then gives the count 0 either way (0 negated is 0), exact, so the result is the same."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-exchange/src/grid.rs",
+      "mutant": "replace short_double -> Option<(i128, bool)> with None",
+      "line_text": "let bits = value.to_bits();",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "With short_double None, every double goes to the frame conversion. length, positive_length, angle and map_coordinate (and their double forms) then take the frame conversion, which rounds the same exact value v*u*S once, ties to even (FrameRecord::to_frame_decimal for a decimal, to_frame for a double, chapter 17.1), and reports a count past its range as NumError::OutOfRange carrying that exact count, which becomes ExchangeError::OutOfRange { count }; map_coordinate's own frame path answers past 2^40 steps. For every value the short path answers (a count below 2^127), the frame conversion gives the same count, the same exactness and the same refusal: the short path is a 128-bit shortcut to the same rounding."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-exchange/src/grid.rs",
+      "mutant": "replace >> with << in short_double",
+      "line_text": "let field = (bits >> 52) & 0x7ff;",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "bits << 52 has its low 52 bits clear, so the field is 0 for every double: each is read as a subnormal with k = -1074, and 1 << 1074 does not fit 128 bits, so short_double answers None and the frame conversion answers, as the entry for short_double -> None says."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-exchange/src/grid.rs",
+      "mutant": "replace & with | in short_double",
+      "line_text": "let field = (bits >> 52) & 0x7ff;",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "The field becomes at least 0x7ff, so k = field - 1075 is at least 972 and 1 << k does not fit 128 bits: short_double answers None for every double and the frame conversion answers, as the entry for short_double -> None says."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-exchange/src/grid.rs",
+      "mutant": "replace == with != in short_double",
+      "line_text": "let (m, k) = if field == 0 {",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "Every double takes the other branch: a normal one gets k = -1074 and a subnormal one k = 0 - 1075, and 1 << |k| fits 128 bits for neither, so short_double answers None and the frame conversion answers, as the entry for short_double -> None says."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-exchange/src/grid.rs",
+      "mutant": "delete - in short_double",
+      "line_text": "(fraction, -1074_i32)",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "Only a subnormal reaches it, now with k = 1074, and 1 << 1074 does not fit 128 bits, so short_double answers None and the frame conversion rounds the subnormal's exact value, as the entry for short_double -> None says."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-exchange/src/grid.rs",
+      "mutant": "replace | with ^ in short_double",
+      "line_text": "fraction | (1 << 52),",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "fraction is the double's low 52 bits, below 2^52, so it shares no bit with 1 << 52, and | and ^ give the same significand."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-exchange/src/map.rs",
+      "mutant": "replace > with >= in aligned",
+      "line_text": "if gap > 48 {",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "The forms differ only at a gap of exactly 48, where the original lines the two values up and the mutant gives up. Lined up, the larger exponent's value is its significand (at least 1) times 10^48 and the other is below 10^38 (a decimal's significand), so it is past 128 bits (no exact direction) and the smaller share of 2^30 is below 2^30 / 10^10 < 1/2, which rounds to 0. Both give the larger value's axis with its sign, inexact; Rotation stores a direction reduced, so (2^30, 0) and (1, 0) are one rotation."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-exchange/src/map.rs",
+      "mutant": "replace < with <= in direction",
+      "line_text": "let (na, nb) = (a.significand() < 0, b.significand() < 0);",
+      "occurrences": 2,
+      "kind": "equivalent",
+      "reason": "Either < becomes <=: the forms differ only for a zero component. Zero components are handled first: (0, 0) is refused, and (0, b) or (a, 0) gives the nonzero one's axis with its own sign, so na is read only when a is nonzero and nb only when b is, and the signs used are the same."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-exchange/src/map.rs",
+      "mutant": "replace > with >= in direction",
+      "line_text": "let r = if a.exponent() > b.exponent() {",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "This branch runs only when aligned gave up, which needs one exponent more than 48 above the other, so the two exponents are never equal here and > and >= choose the same axis."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-exchange/src/map.rs",
+      "mutant": "replace || with && in Ratio::reduced",
+      "line_text": "if num == 0 || den == 0 {",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "No caller passes a zero denominator: each is 1, a power of ten, a product of unit parts or of reduced denominators, all positive. A zero numerator comes only from a zero scale or factor (Ratio::of of a zero decimal), which the original refuses at once as ScaleOutOfRange. The mutant carries 0/1 on through times, and every zero ratio then reaches Ratio::scale (the horizontal scale when kx = ky, else one of the residual's three, all before FrameRecord::new), where Scale::new refuses a zero part, mapped to ScaleOutOfRange; place's steps in between fail only as ScaleOutOfRange too. The result is the same refusal."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-exchange/src/write.rs",
+      "mutant": "replace < with <= in parts",
+      "line_text": "negative: steps < 0,",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "The forms differ only for a count of 0, whose magnitude is 0: exact writes 0 (0 negated is 0) with no deviation, and shortest returns zero before it reads the sign, so the decimal and the deviation are the same."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-exchange/src/write.rs",
+      "mutant": "replace < with <= in nearest_candidate",
+      "line_text": "while c < last {",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "The mutant also weighs last + 1, the next multiple past the interval's upper end H. Every candidate lies within half the interval's width w of its middle m. If last >= m, last + 1 is farther from m than last. If last < m, last + 1 > H = m + w/2 gives m - last < spacing - w/2, and m - last <= w/2, so m - last < spacing/2 whether w is wider than the spacing or not; last + 1's distance, spacing - (m - last), is then strictly more than last's. It is never nearer nor tied, so the same candidate is written. Its distance fits: (last + 1) times the place is at most twice H."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-exchange/src/unit.rs",
+      "mutant": "replace != with == in gcd",
+      "line_text": "while b != 0 {",
+      "occurrences": 1,
+      "kind": "hangs",
+      "reason": "The mutant returns a for any nonzero b and loops forever for b = 0: there r = a % 0 is taken as 0, so a and b become 0 and the loop runs again with b still 0. The wrong gcd it returns otherwise makes Ratio::reduced divide a numerator above its denominator by itself, leaving a zero denominator (a scale of 1000 becomes 1/0), and Ratio::times then calls gcd with that zero, which never returns."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-exchange/src/inflate/decode.rs",
+      "mutant": "replace >= with < in HuffmanTable::tree_lookup",
+      "line_text": "if symbol >= 0 {",
+      "occurrences": 1,
+      "kind": "hangs",
+      "reason": "tree_lookup's walk now ends only on a negative node: once it reaches a symbol, the next step from it reads past the tree as i16::MAX, a symbol again, and the loop runs forever for every code longer than ten bits, inside one call of Decoder::step, which charges no meter, so no test can stop it."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-exchange/src/inflate/decode.rs",
+      "mutant": "replace Input<'_>::len -> usize with 1",
+      "line_text": "self.rest.len()",
+      "occurrences": 1,
+      "kind": "hangs",
+      "reason": "With the input's length always 1, RawMemcpy2 never sees the input empty: when a stored block's bytes run out mid-block it copies min(room, 1, count) bytes from an empty slice, which is none, and jumps back to RawMemcpy1, which sends it to RawMemcpy2 again, forever, inside one call of Decoder::step, which charges no meter, so no test can stop it."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-exchange/src/inflate/decode.rs",
+      "mutant": "replace < with <= in Output<'_>::copy_match",
+      "line_text": "while at < end {",
+      "occurrences": 1,
+      "kind": "hangs",
+      "reason": "At at == end the copy is min(dist, 0) = 0 bytes and at does not move, so the loop never ends for any match at a distance of two or more, inside one call of Decoder::step, which charges no meter, so no test can stop it."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-exchange/src/inflate/decode.rs",
+      "mutant": "replace == with != in Decoder::run",
+      "line_text": "} else if out.left() == 0 {",
+      "occurrences": 1,
+      "kind": "hangs",
+      "reason": "RawMemcpy1 now goes to RawMemcpy2 when there is no room, and RawMemcpy2 copies min(0, input, count) = 0 bytes and jumps back: a stored block that reaches the end of the output window loops between the two forever, inside one call of Decoder::step, which charges no meter, so no test can stop it."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-exchange/src/inflate/decode.rs",
+      "mutant": "replace == with != in Decoder::run",
+      "line_text": "if input.len() == 0 {",
+      "occurrences": 1,
+      "kind": "hangs",
+      "reason": "RawMemcpy2 now copies only when the input is empty: it copies min(room, 0, count) = 0 bytes and jumps to RawMemcpy1, which sends it back while the count and room are nonzero, so a stored block whose input runs out mid-block loops forever, inside one call of Decoder::step, which charges no meter, so no test can stop it."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-exchange/src/inflate/decode.rs",
+      "mutant": "replace && with || in Decoder::run",
+      "line_text": "} else if out.left() >= 259 && input.len() >= 14 {",
+      "occurrences": 1,
+      "kind": "hangs",
+      "reason": "DecodeLitlen now enters the fast loop when either of its conditions holds, and the fast loop returns to DecodeLitlen at once unless both hold: with 259 bytes of room but fewer than 14 input bytes (or the other way round) the two jump to each other forever, inside one call of Decoder::step, which charges no meter, so no test can stop it."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-exchange/src/inflate/decode.rs",
+      "mutant": "replace >= with < in Decoder::run",
+      "line_text": "} else if out.left() >= 259 && input.len() >= 14 {",
+      "occurrences": 2,
+      "kind": "hangs",
+      "reason": "Either >= becomes <: DecodeLitlen enters the fast loop with less than 259 bytes of room or fewer than 14 input bytes, exactly when the fast loop's own test sends it straight back, so the two jump to each other forever near the end of the input or the window, inside one call of Decoder::step, which charges no meter, so no test can stop it."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-exchange/src/inflate/decode.rs",
+      "mutant": "replace > with >= in Decoder::run",
+      "line_text": "if out.left() > 0 {",
+      "occurrences": 1,
+      "kind": "hangs",
+      "reason": "WriteLenBytesToEnd now copies with no room left: min(0, count) = 0 bytes, the count unchanged, and the state runs again, forever, for any match that crosses the end of the output window, inside one call of Decoder::step, which charges no meter, so no test can stop it."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-exchange/src/inflate/decode.rs",
+      "mutant": "replace == with != in Decoder::run",
+      "line_text": "if l.counter == 0 {",
+      "occurrences": 1,
+      "kind": "hangs",
+      "reason": "After the part of a match that fits, the state now goes on to DecodeLitlen only while bytes of the match remain, and with the match done it runs itself again: it copies min(room, 0) = 0 bytes and repeats forever while room remains, inside one call of Decoder::step, which charges no meter, so no test can stop it."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-exchange/src/inflate/decode.rs",
+      "mutant": "replace == with != in Decoder::init_tree",
+      "line_text": "if bt == HUFFLEN_TABLE {",
+      "occurrences": 1,
+      "kind": "hangs",
+      "reason": "init_tree now sends the literal and distance tables, not the code-length table, on to ReadLitlenDistTablesCodeSize. For a fixed block that code-length table is empty, so every code length reads as 0 with no bit used; the tables are then rebuilt and sent back to the same read, and the two alternate forever on the same bits, inside one call of Decoder::step, which charges no meter, so no test can stop it."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-exchange/src/inflate/decode.rs",
+      "mutant": "replace < with == in Decoder::decompress_fast",
+      "line_text": "if out.left() < 259 || input.len() < 14 {",
+      "occurrences": 2,
+      "kind": "hangs",
+      "reason": "Either < becomes ==: the fast loop now returns to DecodeLitlen only at exactly 259 bytes of room (or exactly 14 input bytes), where DecodeLitlen's test sends it straight back, so the two jump to each other forever once that point is met, inside one call of Decoder::step, which charges no meter, so no test can stop it."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-exchange/src/inflate/decode.rs",
+      "mutant": "replace < with > in Decoder::decompress_fast",
+      "line_text": "if out.left() < 259 || input.len() < 14 {",
+      "occurrences": 2,
+      "kind": "hangs",
+      "reason": "Either < becomes >: the fast loop returns to DecodeLitlen whenever there is more than 259 bytes of room (or more than 14 input bytes), exactly when DecodeLitlen sends it back, so the two jump to each other forever, inside one call of Decoder::step, which charges no meter, so no test can stop it."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-exchange/src/inflate/decode.rs",
+      "mutant": "replace < with <= in Decoder::decompress_fast",
+      "line_text": "if out.left() < 259 || input.len() < 14 {",
+      "occurrences": 2,
+      "kind": "hangs",
+      "reason": "Either < becomes <=: at exactly 259 bytes of room (or exactly 14 input bytes) the fast loop returns to DecodeLitlen, whose test (at least 259 and at least 14) sends it straight back, forever, inside one call of Decoder::step, which charges no meter, so no test can stop it."
     },
     {
       "file": "projects/engines/geometry/crates/geom-surface/src/frame_rule.rs",

@@ -28,6 +28,35 @@
 //! Its direct dependencies are its row of chapter 27's crate table, checked by the
 //! scaffold test in `engine-geometry` (`tests/scaffold`).
 //!
-//! Status: scaffold only; built by pieces G413, G414, G418, G436.
+//! Modules (piece G413, exchange basics):
+//!
+//! - [`unit`]: the exact unit table: SI prefixes, the international yard and pound's units and the
+//!   US survey foot as exact ratios of metres and of grid steps, angle units as counts of section
+//!   17.2's angle units.
+//! - [`grid`]: numbers to grid, decimal or double, rounded once, half to even.
+//! - [`real`]: reals that are not lengths, read to the nearest double and written as the shortest
+//!   decimal that reads back.
+//! - [`write`]: grid values written as decimals: exact where they terminate, else the shortest that
+//!   reads back, with the difference.
+//! - [`map`]: IFC's map conversions as frame records.
+//! - [`report`]: import and export reports as data.
+//! - [`inflate`]: raw DEFLATE decoded within size and ratio budgets, its decoder ported from
+//!   `miniz_oxide` (piece G414b).
+//! - [`error`]: the crate's error.
+//!
+//! Status: built by pieces G413, G414, G418, G436; G413 is done.
 #![cfg_attr(not(test), no_std)]
 #![forbid(unsafe_code)]
+
+extern crate alloc;
+
+pub mod error;
+pub mod grid;
+pub mod inflate;
+pub mod map;
+pub mod real;
+pub mod report;
+pub mod unit;
+pub mod write;
+
+pub use error::ExchangeError;
