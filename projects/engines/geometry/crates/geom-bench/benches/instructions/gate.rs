@@ -2749,3 +2749,151 @@ pub mod helper {
         benchmarks = lone_serial, lone_pool
     );
 }
+
+pub mod angle {
+    use super::*;
+
+    #[library_benchmark(teardown = verify)]
+    #[bench::typical(leak("angle/sin_cos/typical"))]
+    #[bench::extreme(leak("angle/sin_cos/extreme"))]
+    fn sin_cos(run: &'static mut Named) -> &'static mut Named {
+        run.bench.measure();
+        run
+    }
+
+    #[library_benchmark(teardown = verify)]
+    #[bench::typical(leak("angle/nearest_radians/typical"))]
+    fn nearest_radians(run: &'static mut Named) -> &'static mut Named {
+        run.bench.measure();
+        run
+    }
+
+    #[library_benchmark(teardown = verify)]
+    #[bench::typical(leak("angle/of_vector/typical"))]
+    fn of_vector(run: &'static mut Named) -> &'static mut Named {
+        run.bench.measure();
+        run
+    }
+
+    #[library_benchmark(teardown = verify)]
+    #[bench::typical(leak("angle/reduced/typical"))]
+    #[bench::extreme(leak("angle/reduced/extreme"))]
+    fn reduced(run: &'static mut Named) -> &'static mut Named {
+        run.bench.measure();
+        run
+    }
+
+    #[library_benchmark(teardown = verify)]
+    #[bench::typical(leak("angle/rotated/typical"))]
+    fn rotated(run: &'static mut Named) -> &'static mut Named {
+        run.bench.measure();
+        run
+    }
+
+    #[library_benchmark(teardown = verify)]
+    #[bench::typical(leak("angle/reversed/typical"))]
+    fn reversed(run: &'static mut Named) -> &'static mut Named {
+        run.bench.measure();
+        run
+    }
+
+    #[library_benchmark(teardown = verify)]
+    #[bench::typical(leak("angle/from_ifc/typical"))]
+    fn from_ifc(run: &'static mut Named) -> &'static mut Named {
+        run.bench.measure();
+        run
+    }
+
+    #[library_benchmark(teardown = verify)]
+    #[bench::typical(leak("angle/to_ifc/typical"))]
+    fn to_ifc(run: &'static mut Named) -> &'static mut Named {
+        run.bench.measure();
+        run
+    }
+
+    library_benchmark_group!(
+        name = angle;
+        benchmarks = sin_cos, nearest_radians, of_vector, reduced, rotated, reversed, from_ifc, to_ifc
+    );
+}
+
+pub mod angle_text {
+    use super::*;
+
+    #[library_benchmark(teardown = verify)]
+    #[bench::typical(leak("angle_text/parse/typical"))]
+    fn parse(run: &'static mut Named) -> &'static mut Named {
+        run.bench.measure();
+        run
+    }
+
+    #[library_benchmark(teardown = verify)]
+    #[bench::typical(leak("angle_text/write/typical"))]
+    fn write(run: &'static mut Named) -> &'static mut Named {
+        run.bench.measure();
+        run
+    }
+
+    #[library_benchmark(teardown = verify)]
+    #[bench::typical(leak("angle_text/shortest/typical"))]
+    fn shortest(run: &'static mut Named) -> &'static mut Named {
+        run.bench.measure();
+        run
+    }
+
+    #[library_benchmark(teardown = verify)]
+    #[bench::typical(leak("angle_text/parse_quadrant/typical"))]
+    fn parse_quadrant(run: &'static mut Named) -> &'static mut Named {
+        run.bench.measure();
+        run
+    }
+
+    #[library_benchmark(teardown = verify)]
+    #[bench::typical(leak("angle_text/write_quadrant/typical"))]
+    fn write_quadrant(run: &'static mut Named) -> &'static mut Named {
+        run.bench.measure();
+        run
+    }
+
+    library_benchmark_group!(
+        name = angle_text;
+        benchmarks = parse, write, shortest, parse_quadrant, write_quadrant
+    );
+}
+
+pub mod cogo {
+    use super::*;
+
+    #[library_benchmark(teardown = verify)]
+    #[bench::typical(leak("cogo/forward/typical"))]
+    fn forward(run: &'static mut Named) -> &'static mut Named {
+        run.bench.measure();
+        run
+    }
+
+    #[library_benchmark(teardown = verify)]
+    #[bench::typical(leak("cogo/inverse/typical"))]
+    fn inverse(run: &'static mut Named) -> &'static mut Named {
+        run.bench.measure();
+        run
+    }
+
+    #[library_benchmark(teardown = verify)]
+    #[bench::typical(leak("cogo/nearest_root/typical"))]
+    fn nearest_root(run: &'static mut Named) -> &'static mut Named {
+        run.bench.measure();
+        run
+    }
+
+    #[library_benchmark(teardown = verify)]
+    #[bench::typical(leak("cogo/misclosure/typical"))]
+    fn misclosure(run: &'static mut Named) -> &'static mut Named {
+        run.bench.measure();
+        run
+    }
+
+    library_benchmark_group!(
+        name = cogo;
+        benchmarks = forward, inverse, nearest_root, misclosure
+    );
+}

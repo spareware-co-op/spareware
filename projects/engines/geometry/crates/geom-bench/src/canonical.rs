@@ -910,6 +910,114 @@ impl<T: Canonical> Canonical for Result<T, geom_num::quadrature::QuadError> {
     }
 }
 
+// Angle units, their text and core COGO (piece G359).
+
+impl Canonical for geom_num::angle::AngleUnits {
+    fn encode(&self, h: &mut Sha256) {
+        self.get().encode(h);
+    }
+}
+
+impl Canonical for geom_num::angle::Bearing {
+    fn encode(&self, h: &mut Sha256) {
+        self.units().encode(h);
+    }
+}
+
+impl<T: Canonical + Copy> Canonical for geom_num::angle::Nearest<T> {
+    // The value, its bound and whether it is certain (the fields are private to geom-num; these
+    // are its getters).
+    fn encode(&self, h: &mut Sha256) {
+        self.value().encode(h);
+        self.bound().encode(h);
+        self.is_certain().encode(h);
+    }
+}
+
+impl Canonical for geom_num::angle_text::Written {
+    // The text it writes, which is all of it: sign, digits, places and notation.
+    fn encode(&self, h: &mut Sha256) {
+        self.to_string().encode(h);
+    }
+}
+
+impl<T: Canonical> Canonical for Result<T, geom_num::angle_text::AngleTextError> {
+    fn encode(&self, h: &mut Sha256) {
+        match self {
+            Ok(v) => {
+                h.update(&[0]);
+                v.encode(h);
+            }
+            Err(e) => {
+                h.update(&[1]);
+                debug_text(e, h);
+            }
+        }
+    }
+}
+
+impl Canonical for geom_num::angle_text::Quadrant {
+    // The text it writes, which is all of it.
+    fn encode(&self, h: &mut Sha256) {
+        self.to_string().encode(h);
+    }
+}
+
+impl Canonical for geom_2d::cogo::Forward {
+    fn encode(&self, h: &mut Sha256) {
+        self.point().encode(h);
+        self.bound().encode(h);
+        self.is_certain().encode(h);
+    }
+}
+
+impl Canonical for geom_2d::cogo::Root {
+    fn encode(&self, h: &mut Sha256) {
+        self.value().encode(h);
+        self.is_exact().encode(h);
+    }
+}
+
+impl Canonical for geom_2d::cogo::Inverse {
+    fn encode(&self, h: &mut Sha256) {
+        self.delta().encode(h);
+        self.squared().encode(h);
+        self.distance().encode(h);
+        self.bearing().encode(h);
+    }
+}
+
+impl Canonical for geom_2d::cogo::Misclosure {
+    fn encode(&self, h: &mut Sha256) {
+        self.east().encode(h);
+        self.north().encode(h);
+        self.length().encode(h);
+        self.travelled().encode(h);
+    }
+}
+
+impl Canonical for geom_2d::cogo::Leg {
+    fn encode(&self, h: &mut Sha256) {
+        self.bearing.encode(h);
+        self.distance.encode(h);
+    }
+}
+
+impl<T: Canonical> Canonical for Result<T, geom_2d::cogo::CogoError> {
+    fn encode(&self, h: &mut Sha256) {
+        match self {
+            Ok(v) => {
+                h.update(&[0]);
+                v.encode(h);
+            }
+            Err(e) => {
+                h.update(&[1]);
+                debug_text(e, h);
+            }
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

@@ -37,7 +37,32 @@
         17
       ],
       "depends": [],
-      "errors": [],
+      "errors": [
+        {
+          "doc": "Why a COGO construction gave no answer.",
+          "file": "projects/engines/geometry/crates/geom-2d/src/cogo.rs",
+          "kinds": [
+            {
+              "doc": "The numbers layer refused: a point outside the frame ([`NumError::OutOfRange`]), or an enclosure it could not form.",
+              "name": "Num",
+              "shape": "tuple"
+            },
+            {
+              "doc": "A distance longer than [`LONGEST`].",
+              "name": "TooLong",
+              "shape": "unit"
+            },
+            {
+              "doc": "The meter stopped the traverse.",
+              "name": "Stopped",
+              "shape": "tuple"
+            }
+          ],
+          "module": "geom_2d::cogo",
+          "name": "CogoError",
+          "non_exhaustive": false
+        }
+      ],
       "family": [
         "2D"
       ],
@@ -53,12 +78,38 @@
       "job": "Drafting entities, the 2D arrangement, regions, hatches, 2D booleans and offsets, edits, snaps and references, 2D distance and clearance, survey linework and COGO.",
       "kind": "kernel",
       "layer": "6",
-      "modules": [],
+      "modules": [
+        {
+          "cost": "constant time for [`forward`], [`inverse`] and [`nearest_root`], no allocation; [`misclosure`] is linear in its legs, with no allocation.",
+          "does": "[`forward`] puts the point a bearing and a distance from another, committed to the grid. [`inverse`] gives the squared distance between two grid points exactly, the distance to the nearest step by [`nearest_root`], and the bearing to the nearest angle unit. [`misclosure`] runs a traverse's legs from a start point and encloses how far it ends from where it should.",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-2d/src/cogo.rs",
+          "guarantees": [
+            "**Forward is committed and certified.** The new point is the nearest grid point to the midpoint of an enclosure of the exact one, ties to even, so the same on every target. Its bound is at least its distance from the exact point on each axis: half a step plus the maths bound, rounded up to whole steps (17.2). On the quarter turns it is exact, computed in integers. [`Forward::is_certain`] says whether every point of the enclosure rounds to it.",
+            "**Inverse is exact where it can be.** The squared distance is an exact integer, so \"which is longer\" is exact. The distance is its nearest whole square root, decided exactly in integers, never through a double: past about 14.8 m the squared distance in steps passes 2^53, where a double stops holding every integer. No tie is possible, since a square root half way between two integers would square to a quarter. The bearing is [`Bearing::of_vector`]'s: exact on the axes and diagonals, and otherwise the certified nearest unit. The direction kept as the vector between the points is exact.",
+            "**The misclosure is a certified vector.** Each leg's run is enclosed from the bearing's certified sine and cosine, the legs are added in the order given, and the box contains the exact misclosure; its length encloses the exact length. Nothing is distributed: adjusting a traverse belongs to the survey crates (17.2).",
+            "**Charged and stoppable.** A traverse charges the meter one unit per leg, so a long one stops cleanly when the budget does."
+          ],
+          "job": "Core COGO on the grid: forward and inverse, the nearest whole distance, and a traverse's misclosure (17.2).",
+          "method": {
+            "links": [
+              "projects/engines/geometry/architecture/17-survey-terrain-civil.md",
+              "https://www.pearson.com/en-us/subject-catalog/p/elementary-surveying/P200000003266",
+              "https://doi.org/10.1137/1.9780898717716"
+            ],
+            "text": "forward and inverse COGO and traverse misclosure as chapter 17.2 sets them (`projects/engines/geometry/architecture/17-survey-terrain-civil.md`): bearings clockwise from north, so a leg of length d on bearing β runs d · sin β east and d · cos β north (C. D. Ghilani and P. R. Wolf, *Elementary Surveying: An Introduction to Geomatics*, chapters 10 and 11, <https://www.pearson.com/en-us/subject-catalog/p/elementary-surveying/P200000003266>); on interval arithmetic (Moore, Kearfott and Cloud, *Introduction to Interval Analysis*, SIAM 2009, <https://doi.org/10.1137/1.9780898717716>); the integer square root is `u128::isqrt` from Rust's core library, rounded to nearest by the exact comparison 17.2 gives."
+          },
+          "path": "geom_2d::cogo",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        }
+      ],
       "name": "geom-2d",
       "provenance": [],
       "sections": "14 and 17.2; open questions OQ-12.1 and OQ-14.9, in the kernel architecture (`projects/engines/geometry/architecture/`).",
       "spdx": null,
-      "status": "scaffold only; built by pieces G192, G193, G194, G195, G196, G197, G198, G199, G200, G201, G202, G203, G204, G205, G206, G207, G208, G209, G210, G211, G212, G213, G359, G360, G361.",
+      "status": "core COGO built (G359); the rest to come in pieces G192, G193, G194, G195, G196, G197, G198, G199, G200, G201, G202, G203, G204, G205, G206, G207, G208, G209, G210, G211, G212, G213, G360 and G361.",
       "summary": "Spare Kit geometry kernel: 2D drafting."
     },
     {
@@ -432,6 +483,46 @@
           "target": "lib"
         },
         {
+          "cost": "a few draws of [`SplitMix64`] per input, once per batch, outside every measured run.",
+          "does": null,
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-bench/src/inputs/angle.rs",
+          "guarantees": [
+            "every batch is full and the same on every target, and every result of a batch is `Ok` (`tests/inputs.rs`); every result is the operation's own, run directly (`tests/attack_g06.rs`)."
+          ],
+          "job": "Inputs for angle units (`geom_num::angle`, piece G359): angles for their sine and cosine, enclosures in radians for the nearest unit, and integer vectors for their bearings.",
+          "method": {
+            "links": [
+              "projects/engines/geometry/architecture/28-testing.md"
+            ],
+            "text": "one class per path of each operation, as chapter 28.14 sets benchmarks out (`projects/engines/geometry/architecture/28-testing.md`)."
+          },
+          "path": "geom_bench::inputs::angle",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
+          "cost": "a few draws of [`SplitMix64`] and one short string per input, once per batch, outside every measured run.",
+          "does": null,
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-bench/src/inputs/angle_text.rs",
+          "guarantees": [
+            "every batch is full and the same on every target, and every result of a batch is `Ok` (`tests/inputs.rs`); every result is the operation's own, run directly (`tests/attack_g06.rs`)."
+          ],
+          "job": "Inputs for angles as text (`geom_num::angle_text`, piece G359): readings in degrees, minutes and seconds to read, and angles to write.",
+          "method": {
+            "links": [
+              "projects/engines/geometry/architecture/28-testing.md"
+            ],
+            "text": "one class per operation, as chapter 28.14 sets benchmarks out (`projects/engines/geometry/architecture/28-testing.md`)."
+          },
+          "path": "geom_bench::inputs::angle_text",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
           "cost": "about a hundred draws of [`SplitMix64`] per input, once per batch, outside every measured run.",
           "does": null,
           "family": [],
@@ -447,6 +538,26 @@
             "text": "the queries of `geom-bvh`'s tests (`tests/tree.rs`, `tests/cells.rs`, each checked there against brute force), built and queried whole under an unlimited budget on the serial executor, at one scene size. Each is measured as chapter 28.14 sets benchmarks out, `projects/engines/geometry/architecture/28-testing.md`."
           },
           "path": "geom_bench::inputs::bvh",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
+          "cost": "a few draws of [`SplitMix64`] per value, once per batch, outside every measured run.",
+          "does": null,
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-bench/src/inputs/cogo.rs",
+          "guarantees": [
+            "every batch is full and the same on every target, and every result of a batch is `Ok` (`tests/inputs.rs`); every result is the operation's own, run directly (`tests/attack_g06.rs`)."
+          ],
+          "job": "Inputs for `geom-2d`'s core COGO (piece G359, decision 32.44): points, bearings and distances for forward, pairs of points for inverse, and traverses for their misclosure.",
+          "method": {
+            "links": [
+              "projects/engines/geometry/architecture/28-testing.md"
+            ],
+            "text": "one class per operation, as chapter 28.14 sets benchmarks out (`projects/engines/geometry/architecture/28-testing.md`)."
+          },
+          "path": "geom_bench::inputs::cogo",
           "provenance": [],
           "spdx": null,
           "target": "lib"
@@ -4248,6 +4359,70 @@
       ],
       "errors": [
         {
+          "doc": "Why a text is not an angle, or an angle cannot be written as asked. Positions are byte offsets into the text.",
+          "file": "projects/engines/geometry/crates/geom-num/src/angle_text.rs",
+          "kinds": [
+            {
+              "doc": "The text holds no number.",
+              "name": "Empty",
+              "shape": "unit"
+            },
+            {
+              "doc": "A character that does not belong to the notation there.",
+              "name": "Unexpected",
+              "shape": "struct"
+            },
+            {
+              "doc": "A number of degrees, minutes and seconds with no symbol after it.",
+              "name": "MissingSymbol",
+              "shape": "struct"
+            },
+            {
+              "doc": "A part of degrees, minutes and seconds out of order or given twice.",
+              "name": "OutOfOrder",
+              "shape": "struct"
+            },
+            {
+              "doc": "A part after one with a fraction: only the last part may have one.",
+              "name": "FractionNotLast",
+              "shape": "struct"
+            },
+            {
+              "doc": "Minutes of 60 or more.",
+              "name": "MinutesOutOfRange",
+              "shape": "struct"
+            },
+            {
+              "doc": "Seconds of 60 or more.",
+              "name": "SecondsOutOfRange",
+              "shape": "struct"
+            },
+            {
+              "doc": "More than 30 decimal places, or more digits before the point than `u64` holds.",
+              "name": "TooManyDigits",
+              "shape": "struct"
+            },
+            {
+              "doc": "An angle beyond `i64` units.",
+              "name": "TooLarge",
+              "shape": "unit"
+            },
+            {
+              "doc": "A quadrant bearing whose angle is negative or more than 90°.",
+              "name": "QuadrantAngle",
+              "shape": "unit"
+            },
+            {
+              "doc": "More than [`MAX_WRITE_PLACES`] decimal places asked of [`write`].",
+              "name": "TooManyPlaces",
+              "shape": "unit"
+            }
+          ],
+          "module": "geom_num::angle_text",
+          "name": "AngleTextError",
+          "non_exhaustive": false
+        },
+        {
           "doc": "Why a search could not give its result.",
           "file": "projects/engines/geometry/crates/geom-num/src/brent.rs",
           "kinds": [
@@ -4503,10 +4678,69 @@
         "A sum of doubles taken with [`exact_sum::ExactSum`] is exact until it is rounded once, to nearest with ties to even, so its bits depend only on the terms, never on their order, on how they were split into chunks, or on the order of merges.",
         "No `unsafe`, no panics outside tests, no platform maths: every maths function comes from [`math`]. `sinpi`, `cospi`, `exp`, `ln` and `atan2` are correctly rounded CORE-MATH ports with proven error bounds, so their bits are fixed by their specification. Everything else comes from the pure-Rust `libm` crate, the same code on every target; where `libm` uses a processor instruction instead (the square root, and the fused multiply-add where the processor has one), it is one IEEE 754 defines exactly, so results are identical on every target. The `libm` functions without a proven bound are kept apart in [`math::unproven`], and nothing in this crate uses them."
       ],
-      "job": "numbers: where coordinates live, how \"which side is this on\" is answered exactly, how curved computations carry proven bounds, where maths functions come from, where a randomised method's random numbers come from (a counter-based generator keyed by explicit seeds), and the tolerance ladder.",
+      "job": "numbers: where coordinates live, how \"which side is this on\" is answered exactly, how curved computations carry proven bounds, where maths functions come from, where a randomised method's random numbers come from (a counter-based generator keyed by explicit seeds), angles as whole angle units and their text ([`angle`], [`angle_text`]), and the tolerance ladder.",
       "kind": "kernel",
       "layer": "1",
       "modules": [
+        {
+          "cost": "constant time and no allocation: a few integer remainders, one interval division and one `sinpi` and `cospi` of an interval for [`AngleUnits::sin_cos`]; one interval `atan2`, division and product for [`AngleUnits::nearest_radians`] and [`Bearing::of_vector`].",
+          "does": "[`AngleUnits`] holds an angle exactly, as surveyors write angles down. A full turn is [`FULL_TURN`], 3,240,000,000 units: the least common multiple of the turn's 129,600,000 hundredths of an arc-second and its 40,000,000 hundred-thousandths of a gon, so readings in degrees, minutes and seconds to 0.01″, in gon to 0.00001 gon and in decimal degrees to six places are all whole numbers of units ([`crate::angle_text`] reads and writes them). A [`Bearing`] is an angle measured clockwise from frame north, held within one turn. [`AngleUnits::sin_cos`] and [`Bearing::east_north`] enclose an angle's sine and cosine: the angle is reduced to an eighth of a turn exactly, in integers, and only what is left becomes a double, in half-turns, for the proven `sinpi` and `cospi`. [`AngleUnits::nearest_radians`] goes the other way, from an enclosure of an angle in radians, such as `atan2`'s, to the whole number of units nearest it, with a certified bound; [`Bearing::of_vector`] is that for the direction of an integer vector, exact on the axes and the diagonals.",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-num/src/angle.rs",
+          "guarantees": [
+            "**Exact arithmetic.** Adding, subtracting, negating and reducing angles, turning a bearing by an angle (a Ground frame's rotation, 17.2), reversing it, and converting to and from IFC's angles, anticlockwise from east (a bearing β is the IFC angle 90° − β), are exact integer steps. A sum or difference beyond `i64` is `None`, never wrapped or saturated.",
+            "**Reduced in integers.** Before any double is formed, an angle is reduced to `[0, FULL_TURN)`, then to its quarter turn and to a part of at most an eighth of a turn, all by exact integer remainders, so an angle of any size loses nothing to its reduction (17.2; tested at the ends of `i64`).",
+            "**Exact on the quarter turns, enclosed elsewhere.** At a multiple of a quarter turn the sine and cosine are exactly 0 and ±1, as single points. Every other enclosure contains the exact sine and cosine of the angle: the part left after the reduction becomes an interval in half-turns that contains it, and `sinpi` and `cospi` of an interval contain the function over every real in it (`Interval::sinpi`). Tested against an exact oracle on every input class.",
+            "**A certified unit back.** [`AngleUnits::nearest_radians`] gives the whole unit nearest the midpoint of the enclosure in units, ties to even, so the same bits on every target. Its bound, a whole number of units rounded up, is at least the distance from that unit to every angle in the enclosure: half a unit plus the maths bound, so 1 for a narrow enclosure, and 0 only for exactly zero radians, the one double that is a whole number of units. [`Nearest::is_certain`] says whether every angle in the enclosure has that unit as its nearest, so a caller that must not guess can say the rounding is undecided (17.2: \"the kernel says so rather than guessing\").",
+            "**Bearings of integer vectors.** [`Bearing::of_vector`] is exact, bound 0, for a vector along an axis or a diagonal, decided by exact integer comparisons, and otherwise the certified nearest unit of `atan2`'s enclosure; the zero vector has no bearing and is refused."
+          ],
+          "job": "Angles as whole angle units, each 1/2,500 of an arc-second; bearings; and an angle's sine and cosine, and back (17.2).",
+          "method": {
+            "links": [
+              "projects/engines/geometry/architecture/17-survey-terrain-civil.md",
+              "doi:10.1007/978-1-4899-7983-4"
+            ],
+            "text": "whole angle units and bearings clockwise from north as chapter 17.2 sets them (`projects/engines/geometry/architecture/17-survey-terrain-civil.md`); argument reduction by an exact integer remainder to the first octant with the symmetries of sine and cosine (J.-M. Muller, *Elementary Functions: Algorithms and Implementation*, 3rd ed., Birkhäuser 2016, chapter 11, doi:10.1007/978-1-4899-7983-4), on the certified enclosures of `sinpi`, `cospi` and `atan2` (`crate::math`)."
+          },
+          "path": "geom_num::angle",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
+          "cost": "linear in the length of the text, with no allocation: fixed-width integer arithmetic, at most 128 bits wide.",
+          "does": "[`parse`] reads an angle in one of four [`Notation`]s into whole angle units, and [`parse_quadrant`] a surveyor's quadrant bearing, `N 12°34'56\" E`. Each reports whether the text was a whole number of units or had to be rounded, half to even, to the nearest ([`Rounded`]). [`write`] writes an angle to a number of decimal places, again reporting whether the text is exact, and [`shortest`] the shortest exact text when there is one. A unit is 0.0004″, so every angle has an exact text in degrees, minutes and seconds with at most four decimals of a second; in decimal degrees an angle has one only if it is a whole number of millionths of a degree (9 units), with at most six decimals, and in gon only if it is a whole number of hundred-thousandths of a gon (81 units), with at most five, because 9,000,000 and 8,100,000 hold the factor 3, which no power of ten does.",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-num/src/angle_text.rs",
+          "guarantees": [
+            "**Exact or reported.** A text that is a whole number of units is read exactly, and one that is not is rounded once, half to even, to the nearest unit, and says so: Certified within half a unit (17.2). Writing rounds the same way and says whether the text is exactly the angle.",
+            "**Round trips.** For every angle, [`parse`] of [`shortest`]'s text gives the angle back, exactly; and for every reading on an instrument's grid (0.01″, 0.000001°, 0.00001 gon), the text [`write`] gives at that many places reads back as the same angle. Tested exhaustively over whole ranges of each grid.",
+            "**Refused, never guessed.** A text that does not follow its notation is an [`AngleTextError`] naming the byte where it went wrong: an unexpected character, a number without its symbol, parts out of order or repeated, a fraction before the last part, 60 or more minutes or seconds, more than 30 decimals, or an angle beyond `i64` units. Nothing in the text is skipped or guessed."
+          ],
+          "job": "Angles as text: degrees, minutes and seconds, the compact `dd.mmss` form, decimal degrees, gon, and quadrant bearings, read and written exactly (17.2).",
+          "method": {
+            "links": [
+              "projects/engines/geometry/architecture/17-survey-terrain-civil.md",
+              "https://doi.org/10.1109/IEEESTD.2019.8766229"
+            ],
+            "text": "the notations surveyors and their instruments write (chapter 17.2, `projects/engines/geometry/architecture/17-survey-terrain-civil.md`), read by exact decimal arithmetic on integers, with the rounding rule of IEEE 754's roundTiesToEven (IEEE 754-2019, <https://doi.org/10.1109/IEEESTD.2019.8766229>), as `geom-math`'s decimals are; the symbols each part accepts, the order of the parts and the rule that only the last may have a fraction follow `GeographicLib`'s `DMS::Decode`, whose parser rounds through doubles, which this one does not."
+          },
+          "path": "geom_num::angle_text",
+          "provenance": [
+            {
+              "licence": "MIT",
+              "link": "https://github.com/geographiclib/geographiclib/blob/48959dfc4a581ad29f76b526726a801473767c98/src/DMS.cpp",
+              "method_note": null,
+              "name": "`GeographicLib` `DMS.cpp`",
+              "notice": [],
+              "pinned": true,
+              "purpose": "for the symbols it accepts for degrees, minutes, seconds and signs, the order of the parts, and its rules that only the last part has a fraction and that minutes and seconds are below 60. No code copied.",
+              "take": "port-method"
+            }
+          ],
+          "spdx": null,
+          "target": "lib"
+        },
         {
           "cost": "one [`DD`] operation and a few double operations per operation; the maths functions add an interval enclosure on each side. No allocation, no recursion.",
           "does": "a [`Ball`] is a centre, a [`DD`], and a radius, a double rounded up; it stands for every real within the radius of the centre. Each operation computes its centre by the [`DD`] operation of the same name, and its radius from the operands' centres and radii (midpoint-radius arithmetic) plus that [`DD`] operation's proven error bound, every step of the radius rounded up. `Ball` implements [`Scalar`], so a residual written once runs in it, and [`crate::dual::Dual`] over it gives enclosures of Jacobians. Near a root, where a residual is the small difference of large terms, an enclosure in doubles is as wide as the rounding of the terms, while a ball is about 2^−53 times narrower; [`crate::isolate`] evaluates a box in balls when the evaluation in doubles is not precise enough (chapter 12.3: \"that box is evaluated in double-double arithmetic\").",
@@ -10073,6 +10307,17 @@
       "take": "port-method",
       "used_by": [
         "projects/engines/geometry/crates/geom-test/src/golden/perturb.rs"
+      ]
+    },
+    {
+      "licence": "MIT",
+      "link": "https://github.com/geographiclib/geographiclib/blob/48959dfc4a581ad29f76b526726a801473767c98/src/DMS.cpp",
+      "method_note": null,
+      "name": "`GeographicLib` `DMS.cpp`",
+      "pinned": true,
+      "take": "port-method",
+      "used_by": [
+        "projects/engines/geometry/crates/geom-num/src/angle_text.rs"
       ]
     },
     {

@@ -5097,6 +5097,70 @@
       "occurrences": 1,
       "kind": "equivalent",
       "reason": "root_floor is next_down of the correctly rounded square root of floor, and floor is at least +0 (the sqrt above refuses floor < radius, and the radius is never negative). For floor = +0 or -0 the root is a zero and its next_down is -2^-1074; for floor > 0 the root is at least 2^-537 and its next_down is positive. So root_floor is never 0.0, and > and >= against 0.0 choose the same arm for every ball."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-2d/src/cogo.rs",
+      "mutant": "replace || with && in committed",
+      "line_text": "if lo < -most || hi > most {",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "A guard: committed is called only by forward, on x + d*sin(bearing) and y + d*cos(bearing) with |x|, |y| at most 2^40 - 1 (a frame coordinate) and d at most LONGEST, 2^42, so every end of the enclosure lies within 2^43 of 0 and never reaches 2^53. The guard's condition is false for every input, and so is this one, which needs both ends past the limit."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-2d/src/cogo.rs",
+      "mutant": "replace < with == in committed",
+      "line_text": "if lo < -most || hi > most {",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "A guard: committed is called only by forward, on x + d*sin(bearing) and y + d*cos(bearing) with |x|, |y| at most 2^40 - 1 (a frame coordinate) and d at most LONGEST, 2^42, so every end of the enclosure lies within 2^43 of 0 and never reaches 2^53. The guard's condition is false for every input, and so is this one: the lower end is never -2^53."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-2d/src/cogo.rs",
+      "mutant": "replace < with <= in committed",
+      "line_text": "if lo < -most || hi > most {",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "A guard: committed is called only by forward, on x + d*sin(bearing) and y + d*cos(bearing) with |x|, |y| at most 2^40 - 1 (a frame coordinate) and d at most LONGEST, 2^42, so every end of the enclosure lies within 2^43 of 0 and never reaches 2^53. The guard's condition is false for every input, and so is this one: the lower end is never -2^53 or below."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-2d/src/cogo.rs",
+      "mutant": "replace > with == in committed",
+      "line_text": "if lo < -most || hi > most {",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "A guard: committed is called only by forward, on x + d*sin(bearing) and y + d*cos(bearing) with |x|, |y| at most 2^40 - 1 (a frame coordinate) and d at most LONGEST, 2^42, so every end of the enclosure lies within 2^43 of 0 and never reaches 2^53. The guard's condition is false for every input, and so is this one: the upper end is never 2^53."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-2d/src/cogo.rs",
+      "mutant": "replace > with >= in committed",
+      "line_text": "if lo < -most || hi > most {",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "A guard: committed is called only by forward, on x + d*sin(bearing) and y + d*cos(bearing) with |x|, |y| at most 2^40 - 1 (a frame coordinate) and d at most LONGEST, 2^42, so every end of the enclosure lies within 2^43 of 0 and never reaches 2^53. The guard's condition is false for every input, and so is this one: the upper end is never 2^53 or above."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-2d/src/cogo.rs",
+      "mutant": "replace > with == in committed",
+      "line_text": "value: if hi > most { i128::MAX } else { i128::MIN },",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "A guard: committed is called only by forward, on x + d*sin(bearing) and y + d*cos(bearing) with |x|, |y| at most 2^40 - 1 (a frame coordinate) and d at most LONGEST, 2^42, so every end of the enclosure lies within 2^43 of 0 and never reaches 2^53. This line is inside the guard's refusal, which no input reaches, so how it picks the reported value never runs."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-2d/src/cogo.rs",
+      "mutant": "replace > with < in committed",
+      "line_text": "value: if hi > most { i128::MAX } else { i128::MIN },",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "A guard: committed is called only by forward, on x + d*sin(bearing) and y + d*cos(bearing) with |x|, |y| at most 2^40 - 1 (a frame coordinate) and d at most LONGEST, 2^42, so every end of the enclosure lies within 2^43 of 0 and never reaches 2^53. This line is inside the guard's refusal, which no input reaches, so how it picks the reported value never runs."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-2d/src/cogo.rs",
+      "mutant": "replace > with >= in committed",
+      "line_text": "value: if hi > most { i128::MAX } else { i128::MIN },",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "A guard: committed is called only by forward, on x + d*sin(bearing) and y + d*cos(bearing) with |x|, |y| at most 2^40 - 1 (a frame coordinate) and d at most LONGEST, 2^42, so every end of the enclosure lies within 2^43 of 0 and never reaches 2^53. This line is inside the guard's refusal, which no input reaches, so how it picks the reported value never runs."
     }
   ],
   "coverage_off": [

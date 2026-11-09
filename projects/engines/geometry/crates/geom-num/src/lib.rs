@@ -3,8 +3,8 @@
 //! Everything the kernel decides about shape rests on the numbers in this crate. Its one job is
 //! numbers: where coordinates live, how "which side is this on" is answered exactly, how curved
 //! computations carry proven bounds, where maths functions come from, where a randomised method's
-//! random numbers come from (a counter-based generator keyed by explicit seeds), and the tolerance
-//! ladder.
+//! random numbers come from (a counter-based generator keyed by explicit seeds), angles as whole
+//! angle units and their text ([`angle`], [`angle_text`]), and the tolerance ladder.
 //!
 //! Layer: 1, Numbers and the contract (chapter 27's proposed layer table).
 //!
@@ -94,6 +94,8 @@
 // vector, reserved fallibly and charged to the caller's logical-memory budget (chapter 23.10).
 extern crate alloc;
 
+pub mod angle;
+pub mod angle_text;
 pub mod ball;
 pub mod brent;
 pub mod crossing;

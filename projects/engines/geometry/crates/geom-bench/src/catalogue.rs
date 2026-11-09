@@ -424,10 +424,32 @@ pub static OPS: &[Op] = &[
     // pool, so its lone wave is counted both ways (decision 32.44).
     Op { group: "helper", name: "lone_serial", measures: "geom_run::Exec::map", classes: T, prepare: |c| bind(inputs::helper::lone_serial(c), kernels::helper::lone_serial) },
     Op { group: "helper", name: "lone_pool", measures: "geom_run::Exec::map", classes: T, prepare: |c| bind(inputs::helper::lone_pool(c), kernels::helper::lone_pool) },
+    // Angle units, bearings and their sines and cosines (piece G359, 17.2).
+    Op { group: "angle", name: "sin_cos", measures: "AngleUnits::sin_cos", classes: TE, prepare: |c| bind(inputs::angle::sin_cos(c), kernels::angle::sin_cos) },
+    Op { group: "angle", name: "nearest_radians", measures: "AngleUnits::nearest_radians", classes: T, prepare: |c| bind(inputs::angle::nearest_radians(c), kernels::angle::nearest_radians) },
+    Op { group: "angle", name: "of_vector", measures: "Bearing::of_vector", classes: T, prepare: |c| bind(inputs::angle::of_vector(c), kernels::angle::of_vector) },
+    Op { group: "angle", name: "reduced", measures: "AngleUnits::reduced", classes: TE, prepare: |c| bind(inputs::angle::reduced(c), kernels::angle::reduced) },
+    Op { group: "angle", name: "rotated", measures: "Bearing::rotated", classes: T, prepare: |c| bind(inputs::angle::rotated(c), kernels::angle::rotated) },
+    Op { group: "angle", name: "reversed", measures: "Bearing::reversed", classes: T, prepare: |c| bind(inputs::angle::reversed(c), kernels::angle::reversed) },
+    Op { group: "angle", name: "from_ifc", measures: "Bearing::from_ifc", classes: T, prepare: |c| bind(inputs::angle::from_ifc(c), kernels::angle::from_ifc) },
+    Op { group: "angle", name: "to_ifc", measures: "Bearing::to_ifc", classes: T, prepare: |c| bind(inputs::angle::to_ifc(c), kernels::angle::to_ifc) },
+    // Angles as text (piece G359, 17.2): degrees, minutes and seconds read and written, and quadrant
+    // bearings.
+    Op { group: "angle_text", name: "parse", measures: "angle_text::parse", classes: T, prepare: |c| bind(inputs::angle_text::parse(c), kernels::angle_text::parse) },
+    Op { group: "angle_text", name: "write", measures: "angle_text::write", classes: T, prepare: |c| bind(inputs::angle_text::write(c), kernels::angle_text::write) },
+    Op { group: "angle_text", name: "shortest", measures: "angle_text::shortest", classes: T, prepare: |c| bind(inputs::angle_text::shortest(c), kernels::angle_text::shortest) },
+    Op { group: "angle_text", name: "parse_quadrant", measures: "angle_text::parse_quadrant", classes: T, prepare: |c| bind(inputs::angle_text::parse_quadrant(c), kernels::angle_text::parse_quadrant) },
+    Op { group: "angle_text", name: "write_quadrant", measures: "angle_text::write_quadrant", classes: T, prepare: |c| bind(inputs::angle_text::write_quadrant(c), kernels::angle_text::write_quadrant) },
+    // geom-2d's core COGO (piece G359; decision 32.44): forward, inverse, the nearest whole
+    // distance and a traverse's misclosure.
+    Op { group: "cogo", name: "forward", measures: "geom_2d::cogo::forward", classes: T, prepare: |c| bind(inputs::cogo::forward(c), kernels::cogo::forward) },
+    Op { group: "cogo", name: "inverse", measures: "geom_2d::cogo::inverse", classes: T, prepare: |c| bind(inputs::cogo::inverse(c), kernels::cogo::inverse) },
+    Op { group: "cogo", name: "nearest_root", measures: "geom_2d::cogo::nearest_root", classes: T, prepare: |c| bind(inputs::cogo::nearest_root(c), kernels::cogo::nearest_root) },
+    Op { group: "cogo", name: "misclosure", measures: "geom_2d::cogo::misclosure", classes: T, prepare: |c| bind(inputs::cogo::misclosure(c), kernels::cogo::misclosure) },
 ];
 
 /// The groups of [`OPS`], in order.
-pub const GROUPS: [&str; 31] = [
+pub const GROUPS: [&str; 34] = [
     "predicate",
     "sign",
     "wide",
@@ -459,6 +481,9 @@ pub const GROUPS: [&str; 31] = [
     "quadrature",
     "linalg",
     "helper",
+    "angle",
+    "angle_text",
+    "cogo",
 ];
 
 /// The group of the growth checks.
@@ -608,6 +633,19 @@ pub fn prepare_named(name: &str) -> Option<Prepared> {
 /// `tests/coverage.rs` checks that each constant still refuses, so its entry cannot outlive it.
 #[rustfmt::skip]
 pub static UNMEASURED: &[(&str, &str)] = &[
+    ("AngleUnits::get", "field accessor"),
+    ("AngleUnits::checked_add", "one match on a checked addition"),
+    ("AngleUnits::checked_sub", "one match on a checked subtraction"),
+    ("AngleUnits::checked_neg", "one match on a checked negation"),
+    ("Nearest::value", "field accessor"),
+    ("Nearest::bound", "field accessor"),
+    ("Nearest::is_exact", "field accessor"),
+    ("Nearest::is_certain", "field accessor"),
+    ("Bearing::new", "one call of AngleUnits::reduced, which is measured"),
+    ("Bearing::units", "field accessor"),
+    ("Bearing::east_north", "one call of AngleUnits::sin_cos, which is measured"),
+    ("Written::notation", "field accessor"),
+    ("Written::places", "field accessor"),
     ("Coord::get", "field accessor"),
     ("Steps::get", "field accessor"),
     ("Real::get", "field accessor"),

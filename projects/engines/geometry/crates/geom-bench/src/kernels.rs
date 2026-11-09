@@ -2075,3 +2075,146 @@ pub mod helper {
         });
     }
 }
+
+/// Angle units: `geom_num::angle` (piece G359).
+pub mod angle {
+    use geom_num::NumError;
+    use geom_num::angle::{AngleUnits, Bearing, Nearest};
+    use geom_num::interval::Interval;
+
+    use super::run;
+
+    /// `AngleUnits::sin_cos` of each angle.
+    #[inline(never)]
+    pub fn sin_cos(batch: &[AngleUnits], out: &mut Vec<Result<(Interval, Interval), NumError>>) {
+        run(batch, out, |a| a.sin_cos());
+    }
+
+    /// `AngleUnits::nearest_radians` of each enclosure.
+    #[inline(never)]
+    pub fn nearest_radians(
+        batch: &[Interval],
+        out: &mut Vec<Result<Nearest<AngleUnits>, NumError>>,
+    ) {
+        run(batch, out, |theta| AngleUnits::nearest_radians(*theta));
+    }
+
+    /// `Bearing::of_vector` of each vector.
+    #[inline(never)]
+    pub fn of_vector(batch: &[(i64, i64)], out: &mut Vec<Result<Nearest<Bearing>, NumError>>) {
+        run(batch, out, |(east, north)| {
+            Bearing::of_vector(*east, *north)
+        });
+    }
+
+    /// `AngleUnits::reduced` of each angle.
+    #[inline(never)]
+    pub fn reduced(batch: &[AngleUnits], out: &mut Vec<AngleUnits>) {
+        run(batch, out, |a| a.reduced());
+    }
+
+    /// `Bearing::rotated` of each bearing by its angle.
+    #[inline(never)]
+    pub fn rotated(batch: &[(Bearing, AngleUnits)], out: &mut Vec<Bearing>) {
+        run(batch, out, |(b, a)| b.rotated(*a));
+    }
+
+    /// `Bearing::reversed` of each bearing.
+    #[inline(never)]
+    pub fn reversed(batch: &[Bearing], out: &mut Vec<Bearing>) {
+        run(batch, out, |b| b.reversed());
+    }
+
+    /// `Bearing::from_ifc` of each IFC angle.
+    #[inline(never)]
+    pub fn from_ifc(batch: &[AngleUnits], out: &mut Vec<Bearing>) {
+        run(batch, out, |a| Bearing::from_ifc(*a));
+    }
+
+    /// `Bearing::to_ifc` of each bearing.
+    #[inline(never)]
+    pub fn to_ifc(batch: &[Bearing], out: &mut Vec<AngleUnits>) {
+        run(batch, out, |b| b.to_ifc());
+    }
+}
+
+/// Angles as text: `geom_num::angle_text` (piece G359).
+pub mod angle_text {
+    use geom_num::Rounded;
+    use geom_num::angle::{AngleUnits, Bearing};
+    use geom_num::angle_text::{self as text, AngleTextError, Notation, Quadrant, Written};
+
+    use super::run;
+
+    /// `angle_text::parse` of each reading, in degrees, minutes and seconds.
+    #[inline(never)]
+    pub fn parse(batch: &[String], out: &mut Vec<Result<Rounded<AngleUnits>, AngleTextError>>) {
+        run(batch, out, |t| text::parse(t, Notation::Dms));
+    }
+
+    /// `angle_text::write` of each angle, in degrees, minutes and seconds to 0.01″.
+    #[inline(never)]
+    pub fn write(batch: &[AngleUnits], out: &mut Vec<Result<Rounded<Written>, AngleTextError>>) {
+        run(batch, out, |a| text::write(*a, Notation::Dms, 2));
+    }
+
+    /// `angle_text::shortest` of each angle, in degrees, minutes and seconds.
+    #[inline(never)]
+    pub fn shortest(batch: &[AngleUnits], out: &mut Vec<Option<Written>>) {
+        run(batch, out, |a| text::shortest(*a, Notation::Dms));
+    }
+
+    /// `angle_text::parse_quadrant` of each quadrant bearing.
+    #[inline(never)]
+    pub fn parse_quadrant(
+        batch: &[String],
+        out: &mut Vec<Result<Rounded<Bearing>, AngleTextError>>,
+    ) {
+        run(batch, out, |t| text::parse_quadrant(t));
+    }
+
+    /// `angle_text::write_quadrant` of each bearing, to 0.01″.
+    #[inline(never)]
+    pub fn write_quadrant(
+        batch: &[Bearing],
+        out: &mut Vec<Result<Rounded<Quadrant>, AngleTextError>>,
+    ) {
+        run(batch, out, |b| text::write_quadrant(*b, 2));
+    }
+}
+
+/// `geom-2d`'s core COGO (piece G359, decision 32.44).
+pub mod cogo {
+    use geom_2d::cogo::{self as c, CogoError, Forward, Inverse, Leg, Misclosure};
+    use geom_num::angle::Bearing;
+    use geom_num::grid::{P2, Steps};
+    use geom_run::{Budget, WorkMeter};
+
+    use super::run;
+
+    /// `cogo::forward` of each point, bearing and distance.
+    #[inline(never)]
+    pub fn forward(batch: &[(P2, Bearing, Steps)], out: &mut Vec<Result<Forward, CogoError>>) {
+        run(batch, out, |(p, b, d)| c::forward(*p, *b, *d));
+    }
+
+    /// `cogo::inverse` of each pair of points.
+    #[inline(never)]
+    pub fn inverse(batch: &[(P2, P2)], out: &mut Vec<Result<Inverse, CogoError>>) {
+        run(batch, out, |(from, to)| c::inverse(*from, *to));
+    }
+
+    /// `cogo::nearest_root` of each squared distance.
+    #[inline(never)]
+    pub fn nearest_root(batch: &[u128], out: &mut Vec<c::Root>) {
+        run(batch, out, |n| c::nearest_root(*n));
+    }
+
+    /// `cogo::misclosure` of each traverse, on a meter of its own.
+    #[inline(never)]
+    pub fn misclosure(batch: &[(P2, Vec<Leg>, P2)], out: &mut Vec<Result<Misclosure, CogoError>>) {
+        run(batch, out, |(start, legs, end)| {
+            c::misclosure(*start, legs, *end, &mut WorkMeter::new(Budget::UNLIMITED))
+        });
+    }
+}
