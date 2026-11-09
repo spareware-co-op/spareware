@@ -69,7 +69,7 @@ use geom_run::WorkMeter;
 use geom_topo::{CurveIx, CurveKind, ParamCurve};
 
 use crate::carrier::{Bound, CarrierIx};
-use crate::crossing::{Enclosed, Hull, crossings};
+use crate::crossing::{Enclosed, Hull, crossings_over};
 use crate::distance::Carriers;
 use crate::interfere::{Arrangement, BuildError, Entity, widened};
 use crate::rule::{Contact, EPS_FIT, Verdict, decide, judge};
@@ -138,7 +138,7 @@ pub struct FlatFace {
 }
 
 /// The box round two enclosed points.
-fn hull(a: [Interval; 3], b: [Interval; 3]) -> Result<[Interval; 3], NumError> {
+pub(crate) fn hull(a: [Interval; 3], b: [Interval; 3]) -> Result<[Interval; 3], NumError> {
     let [a0, a1, a2] = a;
     let [b0, b1, b2] = b;
     let span = |x: Interval, y: Interval| {
@@ -454,7 +454,8 @@ impl FlatFace {
 pub(crate) struct Crossable<'a> {
     /// The curve.
     pub(crate) curve: &'a CurveKind<3>,
-    /// The span of its parameter that bounds.
+    /// The span of its parameter searched for crossings. The rest of the stretch that bounds, if
+    /// any, lies in the joins at its ends.
     pub(crate) span: (f64, f64),
     /// A hull of the curve over at least that span.
     pub(crate) hull: &'a Hull,
@@ -463,8 +464,8 @@ pub(crate) struct Crossable<'a> {
 /// The parity of the crossings of the ray from `point` along `direction` in the picture whose
 /// coordinates are `keep`, with the boundary `sides` and their `joins`, or `None` when the
 /// direction does not qualify (module documentation): a join within a step of the ray ahead of
-/// the point, a side lying in the ray's plane, a crossing or flagged region that cannot be put
-/// ahead or behind, or a crossing at a side's end.
+/// the point, a side lying in the ray's plane, or a crossing or flagged region that cannot be put
+/// ahead or behind. Each side is searched only over its span, whose ends lie in joins.
 ///
 /// # Errors
 ///
@@ -542,34 +543,22 @@ pub(crate) fn ray_parity(
             Verdict::Near => {}
         }
         let curve = side.curve;
-        let (lo, hi) = side.span;
-        let found = crossings(curve, &ray_plane, meter)?;
+        // Only the side's own span of its curve: a crossing beyond it is no crossing of this side.
+        let found = crossings_over(curve, side.span, &ray_plane, meter)?;
         for zero in &found.zeros {
             let [param] = zero.enclosure;
-            // Outside the span: no crossing of this side.
-            if param.hi() < lo || param.lo() > hi {
-                continue;
-            }
             let at = curve
                 .bound((param.lo(), param.hi()), meter)
                 .map_err(geom_intersect::IntersectError::from)?;
             let ahead = along(at.lo, at.hi)?;
-            // Proven behind the point: not on the ray, wherever it lies on the side.
-            if ahead.hi() < 0.0 {
-                continue;
-            }
-            // At the span's end, a join, which the join test above has kept off the ray; or not
-            // proven ahead: the direction fails.
-            if param.lo() <= lo || param.hi() >= hi || ahead.lo() <= 0.0 {
+            if ahead.lo() > 0.0 {
+                count = count.checked_add(1).ok_or(NumError::BudgetExceeded)?;
+            } else if ahead.hi() >= 0.0 {
                 return Ok(None);
             }
-            count = count.checked_add(1).ok_or(NumError::BudgetExceeded)?;
         }
         for flag in &found.flagged {
             let [param] = flag.region;
-            if param.hi() < lo || param.lo() > hi {
-                continue;
-            }
             let at = curve
                 .bound((param.lo(), param.hi()), meter)
                 .map_err(geom_intersect::IntersectError::from)?;

@@ -6,20 +6,24 @@
 //! edges (On), other operands' split edges lying inside it (In) and its section edges, a common
 //! block once. In the plane's picture (the coordinate the normal is largest in dropped, as
 //! [`crate::inside`] does), the pieces leaving each vertex are put in turning order by their
-//! tangents, and where two leave along one tangent, by their curvature; the loops are then traced
-//! with each piece's left side as the face it bounds. A loop running counter-clockwise, by the sign
-//! of its certified area, bounds a split face; one running clockwise is the outside of a connected
-//! group of pieces, a hole of the smallest split face that holds it (by the certified ray test),
-//! or, held by none, the outside of the face itself. Vertices of other operands inside the face
-//! that no piece reaches are given to the split face that holds them.
+//! tangents, counted from a whole reference direction that no tangent there can lie along; the
+//! loops are then traced with each piece's left side as the face it bounds. A loop running
+//! counter-clockwise, by the sign of its certified area, bounds a split face; one running
+//! clockwise is the outside of a connected group of pieces, a hole of the smallest split face that
+//! holds it (by the certified ray test), or, held by none, the outside of the face itself.
+//! Vertices of other operands inside the face that no piece reaches are given to the split face
+//! that holds them.
 //!
 //! Guarantees:
 //!
-//! - **The turning order is proven or refused.** Two tangents are ordered by the half-plane each
-//!   lies in and the sign of their cross product, exactly in wide integers where both are whole
-//!   (a line between grid points, a section's n₁ × n₂), from enclosures otherwise; two along one
-//!   tangent by their curvature enclosures. A pair neither orders fails with
-//!   [`BuildError::UndecidedOrder`]. No angle is computed, and no tolerance compares two.
+//! - **The turning order is proven or refused.** Two tangents are ordered by the side of a whole
+//!   reference direction each leaves on and the sign of their cross product, exactly in wide
+//!   integers where both are whole (a line between grid points, a section's n₁ × n₂), from
+//!   enclosures otherwise. The reference at a vertex is the first ray direction of
+//!   [`crate::inside::DIRECTIONS`] whose line no tangent's enclosure there meets, so a tangent
+//!   along an axis, as a circle's at its top, is ordered as any other. Two pieces along one
+//!   tangent, a pair whose cross product is not proven, and a vertex no direction serves fail
+//!   with [`BuildError::UndecidedOrder`]. No angle is computed, and no tolerance compares two.
 //! - **Each loop's sense is proven.** A loop's area is enclosed piece by piece: a straight piece's
 //!   exactly from its ends, a circle's or ellipse's arc in closed form with certified sines and
 //!   cosines of half-turns; an area that holds zero fails with [`BuildError::UndecidedArea`].
@@ -38,19 +42,24 @@
 //! face traversal of a planar graph's rotation system (the next piece round each vertex from the
 //! one arriving), as in M. de Berg, O. Cheong, M. van Kreveld and M. Overmars, *Computational
 //! Geometry*, 3rd edition, Springer (2008), section 2.2, <https://doi.org/10.1007/978-3-540-77974-2>.
-//! The order round a vertex, by tangents and then by curvature where tangents agree, is `SMLib`'s
-//! `sm_NextRoundTheVertex` (`SmTrimmingTools::OrderCurvesIntoLoops`), read in solidcore's Rust
-//! port; its tangents are compared in doubles within a tolerance, and its outer loops are found by
-//! the areas of tessellations, neither of which is taken.
+//! The order round a vertex by tangents is `SMLib`'s `sm_NextRoundTheVertex`
+//! (`SmTrimmingTools::OrderCurvesIntoLoops`), read in solidcore's Rust port; it compares tangents
+//! in doubles within a tolerance, and where they agree goes on to curvature, and its outer loops
+//! are found by the areas of tessellations. None of that is taken: tangents are compared by proven
+//! signs, and two along one tangent are refused, the curvature step waiting for the analytic
+//! carriers, whose tangents can be proven to agree. The order is counted from a reference direction
+//! chosen to avoid every tangent at the vertex, so no tangent sits where the count starts and ends:
+//! counted from a fixed axis, a curve leaving along the axis could belong at either end.
 //!
 //! Consulted: solidcore, Apache-2.0,
 //!   <https://github.com/tangency-labs/solidcore/blob/c440e5f892452a9654aee8f3030de6095fdb1415/crates/solidcore/src/topology/trimming_tools.rs>,
 //!   for the order round a vertex and the grouping of outer loops and holes; no code copied.
 //! SPDX-License-Identifier: Apache-2.0
 //!
-//! Cost: per flat face, its pieces sorted round each vertex (O(k log k) comparisons at a vertex of
-//! k pieces, each a few wide multiplications or interval products), one walk over the pieces, an
-//! area per loop, and a ray test per hole and loop pair; all charged to the meter. No recursion.
+//! Cost: per flat face, its pieces sorted round each vertex (at most 16 side tests per piece there
+//! to find the reference, then O(k²) comparisons at a vertex of k pieces, each a few wide
+//! multiplications or interval products), one walk over the pieces, an area per loop, and a ray
+//! test per hole and loop pair; all charged to the meter. No recursion.
 
 use alloc::collections::BTreeMap;
 use alloc::vec::Vec;
@@ -63,9 +72,9 @@ use geom_num::{NumError, P3, Sign};
 use geom_run::WorkMeter;
 use geom_topo::{Axes, CurveKind, DerivativeBound, Line, ParamCurve};
 
-use crate::carrier::{Bound, CarrierIx, CurveGeom};
+use crate::carrier::{CarrierIx, CurveGeom};
 use crate::crossing::{Enclosed, Hull};
-use crate::inside::{Crossable, DIRECTIONS, FlatFace, ray_parity};
+use crate::inside::{Crossable, DIRECTIONS, FlatFace, hull as hull_of, ray_parity};
 use crate::interfere::{Arrangement, BuildError, Entity, Interfered, committed, nearest_point};
 
 /// A piece of edge that bounds a split face.
@@ -154,13 +163,11 @@ type Outers<'r> = (
     &'r [Option<usize>],
 );
 
-/// A tangent in the picture, leaving a vertex: whole when it can be, its enclosure, and the
-/// curvature's enclosure as it leaves (zero for a straight piece).
+/// A tangent in the picture, leaving a vertex: whole when it can be, and its enclosure.
 #[derive(Clone, Copy, Debug)]
 struct Dir {
     exact: Option<[I256; 2]>,
     approx: [Interval; 2],
-    curl: Interval,
 }
 
 /// The picture's two coordinates of a vector of three.
@@ -202,28 +209,41 @@ fn boxed(lo: [f64; 3], hi: [f64; 3]) -> Result<[Interval; 3], NumError> {
     ])
 }
 
-/// The half-plane a tangent lies in, turning from the picture's first axis: 0 for the upper half
-/// with the first axis's own direction, 1 for the lower, 2 for the first axis's direction when the
-/// piece bends below it (it comes last round the vertex); `None` when it cannot be told.
-fn half(d: &Dir) -> Option<u8> {
+/// Where a tangent leaves from the whole reference direction r, turning counter-clockwise: 0 along
+/// r itself, 1 left of r's line, 2 along −r, 3 right of r's line. Only a whole tangent is proven to
+/// lie along the line; `None` for an enclosure that meets it.
+fn side(d: &Dir, (run, rise): (i64, i64)) -> Option<u8> {
     if let Some([x, y]) = d.exact {
-        let (sx, sy) = (x.signum(), y.signum());
-        return Some(match (sy, sx) {
-            (Sign::Zero, Sign::Positive) if d.curl.hi() < 0.0 => 2,
-            (Sign::Positive, _) | (Sign::Zero, Sign::Positive) => 0,
-            _ => 1,
+        let (run, rise) = (I256::from_i64(run), I256::from_i64(rise));
+        // r × d and r · d, exactly.
+        let across = run.checked_mul(&y)?.checked_sub(&rise.checked_mul(&x)?)?;
+        let along = run.checked_mul(&x)?.checked_add(&rise.checked_mul(&y)?)?;
+        return Some(match (across.signum(), along.signum()) {
+            (Sign::Positive, _) => 1,
+            (Sign::Negative, _) => 3,
+            (Sign::Zero, Sign::Positive) => 0,
+            (Sign::Zero, Sign::Negative | Sign::Zero) => 2,
         });
     }
     let [x, y] = d.approx;
-    let on_axis = y.lo() == 0.0 && y.hi() == 0.0;
-    if y.lo() > 0.0 {
-        Some(0)
-    } else if y.hi() < 0.0 || (on_axis && x.hi() < 0.0) {
-        Some(1)
-    } else if on_axis && x.lo() > 0.0 {
-        Some(if d.curl.hi() < 0.0 { 2 } else { 0 })
-    } else {
-        None
+    #[allow(
+        clippy::cast_precision_loss,
+        reason = "a reference direction's parts are at most 3"
+    )]
+    let (run, rise) = (
+        Interval::point(run as f64).ok()?,
+        Interval::point(rise as f64).ok()?,
+    );
+    match run
+        .mul(y)
+        .ok()?
+        .sub(rise.mul(x).ok()?)
+        .ok()?
+        .certain_sign()?
+    {
+        Sign::Positive => Some(1),
+        Sign::Negative => Some(3),
+        Sign::Zero => None,
     }
 }
 
@@ -237,35 +257,22 @@ fn cross(a: &Dir, b: &Dir) -> Option<Sign> {
         return Some(left.checked_sub(&right)?.signum());
     }
     let ([ax, ay], [bx, by]) = (a.approx, b.approx);
-    let value = ax.mul(by).ok()?.sub(ay.mul(bx).ok()?).ok()?;
-    if value.lo() > 0.0 {
-        Some(Sign::Positive)
-    } else if value.hi() < 0.0 {
-        Some(Sign::Negative)
-    } else {
-        None
-    }
+    ax.mul(by).ok()?.sub(ay.mul(bx).ok()?).ok()?.certain_sign()
 }
 
-/// The turning order of two tangents leaving one vertex, counter-clockwise from the picture's
-/// first axis; along one tangent, the one bending less to the left first. `None` when not proven.
-fn turning(a: &Dir, b: &Dir) -> Option<Ordering> {
-    let (ha, hb) = (half(a)?, half(b)?);
-    if ha != hb {
-        return Some(ha.cmp(&hb));
+/// The turning order of two tangents leaving one vertex, counter-clockwise from the reference
+/// direction `r`, which neither's enclosure meets the line of: by the side each leaves on, then,
+/// on one side, where every turn between them is less than a half-turn, by their cross product.
+/// `None` when not proven, as for two along one tangent.
+fn turning(a: &Dir, b: &Dir, r: (i64, i64)) -> Option<Ordering> {
+    let (sa, sb) = (side(a, r)?, side(b, r)?);
+    if sa != sb {
+        return Some(sa.cmp(&sb));
     }
     match cross(a, b)? {
         Sign::Positive => Some(Ordering::Less),
         Sign::Negative => Some(Ordering::Greater),
-        Sign::Zero => {
-            if a.curl.hi() < b.curl.lo() {
-                Some(Ordering::Less)
-            } else if a.curl.lo() > b.curl.hi() {
-                Some(Ordering::Greater)
-            } else {
-                None
-            }
-        }
+        Sign::Zero => None,
     }
 }
 
@@ -388,7 +395,6 @@ fn leaving(
     keep: [usize; 2],
     meter: &mut WorkMeter<'_>,
 ) -> Result<Option<Dir>, BuildError> {
-    let zero = Interval::point(0.0)?;
     let flip = |v: Interval| if at_start { v } else { v.neg() };
     match &bounding.shape {
         Shape::Straight { direction, approx } => {
@@ -407,7 +413,6 @@ fn leaving(
             Ok(Some(Dir {
                 exact: Some(exact),
                 approx: [flip(ax), flip(ay)],
-                curl: zero,
             }))
         }
         Shape::Curve { curve, span, .. } => {
@@ -430,37 +435,21 @@ fn leaving(
                 return Ok(Some(Dir {
                     exact,
                     approx: [flip(Interval::point(dx)?), flip(Interval::point(dy)?)],
-                    curl: zero,
                 }));
             }
-            let span = (t.lo(), t.hi());
-            let (DerivativeBound::Bounded(d1), DerivativeBound::Bounded(d2)) = (
-                curve
-                    .derivative_bound(span, 1, meter)
-                    .map_err(IntersectError::from)?,
-                curve
-                    .derivative_bound(span, 2, meter)
-                    .map_err(IntersectError::from)?,
-            ) else {
+            let DerivativeBound::Bounded(d1) = curve
+                .derivative_bound((t.lo(), t.hi()), 1, meter)
+                .map_err(IntersectError::from)?
+            else {
                 return Ok(None);
             };
-            let (Some([x1, y1]), Some([x2, y2])) = (
-                pick(boxed(d1.lo, d1.hi)?, keep),
-                pick(boxed(d2.lo, d2.hi)?, keep),
-            ) else {
+            let Some([x1, y1]) = pick(boxed(d1.lo, d1.hi)?, keep) else {
                 return Err(IntersectError::Internal.into());
             };
-            // The signed curvature, (x′y″ − y′x″) / |v|³; running the curve backwards turns its
-            // tangent round and its curvature's sign with it.
-            let speed = Interval::norm(&[x1, y1])?;
-            let curl = x1
-                .mul(y2)?
-                .sub(y1.mul(x2)?)?
-                .div(speed.mul(speed)?.mul(speed)?)?;
+            // Running the curve backwards turns its tangent round.
             Ok(Some(Dir {
                 exact: None,
                 approx: [flip(x1), flip(y1)],
-                curl: flip(curl),
             }))
         }
     }
@@ -719,13 +708,24 @@ fn rotations(
             at.entry(vertex).or_default().push((half_edge, dir));
         }
     }
-    // Insertion sort by a proven order: a vertex has few pieces.
     for (vertex, list) in &mut at {
+        // The order is counted from the first ray direction whose line no tangent's enclosure at
+        // the vertex meets; any such direction gives the same order round the vertex.
+        let Some(reference) = DIRECTIONS
+            .into_iter()
+            .find(|&r| list.iter().all(|(_, d)| side(d, r).is_some()))
+        else {
+            return Err(BuildError::UndecidedOrder {
+                face: f,
+                vertex: *vertex,
+            });
+        };
+        // Insertion sort by a proven order: a vertex has few pieces.
         let mut sorted: Vec<(usize, Dir)> = Vec::with_capacity(list.len());
         for item in list.drain(..) {
             let mut place = sorted.len();
             for (k, other) in sorted.iter().enumerate() {
-                match turning(&item.1, &other.1) {
+                match turning(&item.1, &other.1, reference) {
                     Some(Ordering::Less) => {
                         place = k;
                         break;
@@ -825,19 +825,6 @@ struct Ring {
     joins: Vec<[Interval; 3]>,
 }
 
-/// The box round two enclosed points.
-fn hull_of(a: [Interval; 3], b: [Interval; 3]) -> Result<[Interval; 3], NumError> {
-    let [a0, a1, a2] = a;
-    let [b0, b1, b2] = b;
-    let span = |x: Interval, y: Interval| {
-        Interval::new(
-            if x.lo() < y.lo() { x.lo() } else { y.lo() },
-            if x.hi() > y.hi() { x.hi() } else { y.hi() },
-        )
-    };
-    Ok([span(a0, b0)?, span(a1, b1)?, span(a2, b2)?])
-}
-
 /// The enclosure of a curve's point over the parameter enclosure `t`.
 fn point_at(
     curve: &CurveKind<3>,
@@ -848,28 +835,6 @@ fn point_at(
         .bound((t.lo(), t.hi()), meter)
         .map_err(IntersectError::from)?;
     Ok(boxed(at.lo, at.hi)?)
-}
-
-/// A grid point within `bound`, as a box.
-fn ball(point: P3, bound: Bound) -> Result<[Interval; 3], NumError> {
-    #[allow(
-        clippy::cast_precision_loss,
-        reason = "a coordinate is at most 2^40 and a bound a small count, which doubles hold exactly"
-    )]
-    let (reach, at) = (
-        bound.steps() as f64,
-        [
-            point.x.get() as f64,
-            point.y.get() as f64,
-            point.z.get() as f64,
-        ],
-    );
-    let [cx, cy, cz] = at;
-    Ok([
-        Interval::new(cx - reach, cx + reach)?,
-        Interval::new(cy - reach, cy + reach)?,
-        Interval::new(cz - reach, cz + reach)?,
-    ])
 }
 
 /// The straight chord of a section between its two vertices, as a line of the curve kinds.
@@ -920,16 +885,15 @@ fn ring(
     for one in uses {
         let i = *index.get(&one.piece).ok_or(IntersectError::Internal)?;
         let bounding = pieces.get(i).ok_or(IntersectError::Internal)?;
-        if let Some([u, v]) = bounding.ends {
-            for w in [u, v] {
-                let (p, bound) = committed(&arr.carriers, &out.vertices, w)?;
-                join(w, ball(p, bound)?)?;
-            }
-        }
+        // Each join is the box round the ends of the sides that meet at its vertex, where the ring
+        // could pass from one side to the next: a chord's ends are its vertices' grid points, a
+        // curve's its points at the paves' parameters.
         match &bounding.shape {
             Shape::Straight { .. } => {
-                let ends = bounding.ends.ok_or(IntersectError::Internal)?;
-                let kind = chord(arr, out, ends)?;
+                let [u, v] = bounding.ends.ok_or(IntersectError::Internal)?;
+                let kind = chord(arr, out, [u, v])?;
+                join(u, point_at(&kind, Interval::point(0.0)?, meter)?)?;
+                join(v, point_at(&kind, Interval::point(1.0)?, meter)?)?;
                 let hull = Hull::of(&kind, meter)?;
                 made.sides
                     .push((Source::Chord(made.chords.len()), (0.0, 1.0), hull));
@@ -939,15 +903,22 @@ fn ring(
                 let (a, b) = curve.domain();
                 let hull = Hull::of(curve, meter)?;
                 if let (Some((from, to)), Some([u, v])) = (span, bounding.ends) {
+                    // The stretches within the paves' parameters lie in the joins at their
+                    // vertices, so the ray test searches only between them; round the seam, the
+                    // seam is a join of its own, where the search's two spans meet.
                     join(u, point_at(curve, *from, meter)?)?;
                     join(v, point_at(curve, *to, meter)?)?;
                     if *wraps {
+                        made.joins.push(hull_of(
+                            point_at(curve, Interval::point(a)?, meter)?,
+                            point_at(curve, Interval::point(b)?, meter)?,
+                        )?);
                         made.sides
-                            .push((Source::Piece(i), (from.lo(), b), hull.clone()));
-                        made.sides.push((Source::Piece(i), (a, to.hi()), hull));
+                            .push((Source::Piece(i), (from.hi(), b), hull.clone()));
+                        made.sides.push((Source::Piece(i), (a, to.lo()), hull));
                     } else {
                         made.sides
-                            .push((Source::Piece(i), (from.lo(), to.hi()), hull));
+                            .push((Source::Piece(i), (from.hi(), to.lo()), hull));
                     }
                 } else {
                     // A closed curve with no pave: its seam is a join of its own.

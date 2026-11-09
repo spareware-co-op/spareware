@@ -498,3 +498,156 @@ fn a_hole_whose_ray_crosses_a_section_goes_to_its_own_part() {
         (2000 * 2000 - 800 * 800) * s * s
     );
 }
+
+/// A face with a round hole, cut by a plate whose side passes through the hole's top and bottom
+/// points, where the circle leaves each vertex along the picture's first axis, its tangent's
+/// enclosure holding that axis's line: the order round those vertices is counted from the next ray
+/// direction, and the face splits into the part either side of the plate and the plate's strip
+/// above and below the hole, whichever way the circle runs.
+#[test]
+fn a_plate_through_a_round_hole_s_top_and_bottom_splits_the_face() {
+    for normal in [[0.0, 0.0, 1.0], [0.0, 0.0, -1.0]] {
+        let mut b = Build::default();
+        let corners: Vec<usize> = [(0, 0), (1000, 0), (1000, 1000), (0, 1000)]
+            .iter()
+            .map(|&(x, y)| b.vertex(p(x, y, 0), 0))
+            .collect();
+        let outer = b.ring(&corners, 0);
+        let frame = Frame::new([1.0, 0.0, 0.0], normal).unwrap();
+        let k = S as f64;
+        let circle =
+            Circle::new([500.0 * k, 500.0 * k, 0.0], 200.0 * k, frame, (0.0, 2.0)).unwrap();
+        let hole = b.edge(CurveKind::Circle(circle), None, 0);
+        let plane = b.plane([0, 0, 1], 0);
+        let face = b.face(plane, vec![outer, vec![hole]], 0);
+        b.cuboid([500, -100, -100], [510, 1100, 100], 1);
+        let (_, splitting) = b.run();
+        let parts = of_face(&splitting, face);
+        assert_eq!(
+            outer_sizes(&parts),
+            vec![4, 4, 6, 6],
+            "{normal:?}: {parts:?}"
+        );
+        assert!(parts.iter().all(|s| s.holes.is_empty()), "{parts:?}");
+    }
+}
+
+/// A face with a round hole, and a line lying in it from the hole's top point up to the face's
+/// edge, its direction (0, 0.5) not whole: at the top point the circle leaves along the picture's
+/// first axis both ways and the line along its second, each enclosure holding its axis's line, so
+/// the order there is counted from the diagonal. The face stays one, its outer loop running round
+/// the hole and up and down the line, whichever way the circle runs.
+#[test]
+fn a_hole_and_a_line_along_the_axes_are_ordered_from_the_diagonal() {
+    for normal in [[0.0, 0.0, 1.0], [0.0, 0.0, -1.0]] {
+        let mut b = Build::default();
+        let corners: Vec<usize> = [(0, 0), (1000, 0), (1000, 1000), (0, 1000)]
+            .iter()
+            .map(|&(x, y)| b.vertex(p(x, y, 0), 0))
+            .collect();
+        let outer = b.ring(&corners, 0);
+        let frame = Frame::new([1.0, 0.0, 0.0], normal).unwrap();
+        let k = S as f64;
+        let circle =
+            Circle::new([500.0 * k, 400.0 * k, 0.0], 200.0 * k, frame, (0.0, 2.0)).unwrap();
+        let hole = b.edge(CurveKind::Circle(circle), None, 0);
+        let plane = b.plane([0, 0, 1], 0);
+        let face = b.face(plane, vec![outer, vec![hole]], 0);
+        let (start, end) = (b.vertex(p(500, 600, 0), 1), b.vertex(p(500, 1000, 0), 1));
+        let line = Line::new(
+            [500.0 * k, 600.0 * k, 0.0],
+            [0.0, 0.5, 0.0],
+            (0.0, 800.0 * k),
+        )
+        .unwrap();
+        b.edge(CurveKind::Line(line), Some([start, end]), 1);
+        let (_, splitting) = b.run();
+        let parts = of_face(&splitting, face);
+        assert_eq!(outer_sizes(&parts), vec![8], "{normal:?}: {parts:?}");
+        assert!(parts[0].holes.is_empty(), "{parts:?}");
+    }
+}
+
+/// A triangle cut by a slanting plate along x + y = −2,400 (or, on a wall, x + z = −2,400), with a
+/// column through the corner below the section and one through the strip above it: the ray placing
+/// each column's outline runs into the straight chord between the section's two vertices, or
+/// beside it, at negative coordinates off both axes, so each column is a hole of its own part.
+#[test]
+fn holes_beside_a_slanting_section_go_to_their_own_parts() {
+    // The picture's second coordinate is y on the floor and z on the wall.
+    for wall in [false, true] {
+        let at = |u: i64, v: i64, w: i64| if wall { p(u, w, v) } else { p(u, v, w) };
+        let normal = |nu: i128, nv: i128, nw: i128| if wall { [nu, nw, nv] } else { [nu, nv, nw] };
+        let mut b = Build::default();
+        let c: Vec<usize> = [(-3000, -1000), (-1000, -1000), (-3000, 1000)]
+            .iter()
+            .map(|&(u, v)| b.vertex(at(u, v, 0), 0))
+            .collect();
+        let face = b.polygon(&c, normal(0, 0, 1), 0, 0);
+        let plate: Vec<usize> = [
+            (-1300, -1100, -100),
+            (-3100, 700, -100),
+            (-3100, 700, 100),
+            (-1300, -1100, 100),
+        ]
+        .iter()
+        .map(|&(u, v, w)| b.vertex(at(u, v, w), 1))
+        .collect();
+        b.polygon(&plate, normal(1, 1, 0), 2400 * i128::from(S), 1);
+        // One column in the corner below the section, one in the strip above it.
+        for (lo, hi, operand) in [
+            ((-2800, -900), (-2700, -800), 2),
+            ((-1900, -400), (-1800, -300), 3),
+        ] {
+            let (l, h) = (at(lo.0, lo.1, -100), at(hi.0, hi.1, 100));
+            let unit = |q: P3| [q.x.get() / S, q.y.get() / S, q.z.get() / S];
+            b.cuboid(unit(l), unit(h), operand);
+        }
+        let (_, splitting) = b.run();
+        let parts = of_face(&splitting, face);
+        // The corner, the strip and the columns' sections.
+        assert_eq!(
+            outer_sizes(&parts),
+            vec![3, 4, 4, 4],
+            "wall {wall}: {parts:?}"
+        );
+        let holding: Vec<&&SplitFace> = parts.iter().filter(|s| !s.holes.is_empty()).collect();
+        assert_eq!(
+            outer_sizes(&holding.iter().map(|s| **s).collect::<Vec<_>>()),
+            vec![3, 4],
+            "wall {wall}: {parts:?}"
+        );
+        assert!(holding.iter().all(|s| s.holes.len() == 1), "{parts:?}");
+    }
+}
+
+/// A square lying in a face with its diagonal, of another operand, from corner to corner: one
+/// group of pieces, whose two triangles' loops and the hole round it start at different pieces.
+/// The hole is the face's, never placed in a triangle of its own group, though its point, a corner,
+/// is a vertex of both.
+#[test]
+fn a_hole_is_never_placed_in_a_face_of_its_own_group() {
+    let mut b = Build::default();
+    let corners: Vec<usize> = [(0, 0), (1000, 0), (1000, 1000), (0, 1000)]
+        .iter()
+        .map(|&(x, y)| b.vertex(p(x, y, 0), 0))
+        .collect();
+    let face = b.polygon(&corners, [0, 0, 1], 0, 0);
+    let square: Vec<usize> = [(200, 200), (600, 200), (600, 600), (200, 600)]
+        .iter()
+        .map(|&(x, y)| b.vertex(p(x, y, 0), 1))
+        .collect();
+    b.ring(&square, 1);
+    let (from, to) = (b.vertex(p(200, 200, 0), 2), b.vertex(p(600, 600, 0), 2));
+    b.line(from, to, 2);
+    let (out, splitting) = b.run();
+    let parts = of_face(&splitting, face);
+    assert_eq!(outer_sizes(&parts), vec![3, 3, 4], "{parts:?}");
+    let rest = parts.iter().find(|s| s.outer.len() == 4).unwrap();
+    assert_eq!(rest.holes.len(), 1, "{rest:?}");
+    let s = i128::from(S);
+    assert_eq!(
+        twice_face_area(&b, &out, rest, [0, 1]),
+        2 * (1000 * 1000 - 400 * 400) * s * s
+    );
+}
