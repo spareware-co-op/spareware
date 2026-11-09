@@ -316,11 +316,11 @@ An operation is a function in the crate of its family, with its schema in the fa
 
 1. **Find its crate.** Chapter 10.2's family names it, and `MAP.json` says which crate holds the family. If no crate does, stop: section 7.
 2. **Write the operation.** `pub fn <name>(ctx: &OpContext<'_>, input: ...) -> Result<OpOutput<R>, OpError>`, in a module with a header (section 5). Do the work inside `ctx.run`, so nothing is published past a stop. Charge the meter as you go: what each phase charges is part of the version (`geom_op::Charge`). Reserve with `geom_op::reserve`, never with a bare `Vec::with_capacity`.
-3. **Refuse with a typed error.** Each refusal is a detail in the family's enum in `geom-op/src/detail.rs`, with its base kind and, where it can give one, a remedy with a number. A coordinate past the grid is the numbers layer's `OutOfRange`, never a defect. `Internal` is for defects only.
+3. **Refuse with a typed error.** Each refusal is a detail in the family's enum in `crates/geom-op/src/detail.rs`, with its base kind and, where it can give one, a remedy with a number. A coordinate past the grid is the numbers layer's `OutOfRange`, never a defect. `Internal` is for defects only.
 4. **Keep its promises.** Run `geom-check` on every body it returns. Record a history (chapter 20) that keeps the laws of `geom_test::history::check_laws`. State the exactness: no more exact than the least exact input, and refuse a less exact result with `ExactnessNotAccepted` unless the caller accepted it.
 5. **Register it.** Add its `OpSchema` to `projects/engines/crates/engine-geometry/src/operations.rs`, in name order, as `Tier::Preview { since }`: inputs with units, outputs, the roles it names, its errors, its exactness classes, its charges, and an example whose text after `gives` states what the call gives. List only errors it can return: the laws require a trigger for each. Re-export its function and input types there.
 6. **Regenerate.** `cargo run --locked -p geom-gen -- write` rewrites the API documentation and the MCP tool descriptions.
-7. **Drive it through the laws.** Add a `Driver` and a row of `drivers()` to `engine-geometry/tests/contract_laws.rs`. An operation with no driver fails `every_registered_operation_has_a_driver`. The driver gives:
+7. **Drive it through the laws.** Add a `Driver` and a row of `drivers()` to `projects/engines/crates/engine-geometry/tests/contract_laws.rs`. An operation with no driver fails `every_registered_operation_has_a_driver`. The driver gives:
    - calls that succeed, each with its inputs' exactness: `transactional` injects a cancellation at each read and every budget below the least that passes;
    - a `Trigger` for each error the schema lists, except `Internal` and `BudgetExceeded`;
    - each remedy that gives a number: the input, a failing value, and the call at a value, which must pass at the number and fail one step beyond it;
@@ -331,9 +331,9 @@ An operation is a function in the crate of its family, with its schema in the fa
    - unit and property tests: `Covers: make.box.` in `tests/<name>.rs`; a file holding `proptest!` counts as both;
    - the family's laws (28.3): `Family laws: Make.` in the test that checks them;
    - a fuzz target: `Covers:` in its module in `geom-fuzz/src`, one target may serve several;
-   - a benchmark: `Covers:` in `geom-bench/src/catalogue.rs`, for the benchmark added there as `geom-bench`'s crate header says;
-   - the contract: `Covers:` in `tests/contract_laws.rs`.
-9. **Regenerate the map and read what is missing.** `cargo run --locked -p geom-test --bin map -- write` lists the operation in `MAP.json`, with `evidence` and `missing`. A Preview operation may ship with parts missing, each listed there; `tests/completeness.rs` refuses a Stable one that lacks any. It graduates to `Tier::Stable` by an owner's decision within 12 months, or it is dropped (chapter 25).
+   - a benchmark: `Covers:` in `crates/geom-bench/src/catalogue.rs`, for the benchmark added there as `geom-bench`'s crate header says;
+   - the contract: `Covers:` in `projects/engines/crates/engine-geometry/tests/contract_laws.rs`.
+9. **Regenerate the map and read what is missing.** `cargo run --locked -p geom-test --bin map -- write` lists the operation in `MAP.json`, with `evidence` and `missing`. A Preview operation may ship with parts missing, each listed there; `crates/geom-test/tests/completeness.rs` refuses a Stable one that lacks any. It graduates to `Tier::Stable` by an owner's decision within 12 months, or it is dropped (chapter 25).
 10. **Run every gate** in section 3, then commit (`git commit -s`).
 
 ### How to add a query
