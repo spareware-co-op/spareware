@@ -427,6 +427,49 @@ fn a_small_arc_of_a_large_circle_opens_only_what_it_meets() {
 }
 
 #[test]
+fn an_arc_away_from_its_circles_lowest_point_opens_only_what_its_ends_span() {
+    // A lattice of unit segments over [600, 640] x [0, 40], and the arc of the circle about
+    // (0, 1000) through the origin from (600, 200) to (800, 400): on its lower half, but not past
+    // its lowest point (0, 0), so its box is that of its ends, above the lattice.
+    let mut lattice = Vec::new();
+    for y in 0..=40_i64 {
+        for x in 0..40_i64 {
+            lattice.push((p(600 + x, y), p(601 + x, y), lattice.len() as u32));
+            lattice.push((p(600 + y, x), p(600 + y, x + 1), lattice.len() as u32));
+        }
+    }
+    let live = Live::from_noded(&lattice).unwrap();
+    let side = arc((600, 200), (800, 400), (0, 1000));
+    let (after, cost) = live
+        .insert_curve_costed(&side, 9999, &mut unlimited())
+        .unwrap();
+    assert_eq!(cost.chunks_opened, 0, "{cost:?}");
+    assert_eq!(after.len(), live.len() + 1);
+    // Over the lowest point, from (-600, 200) to (600, 200), the box reaches down to the circle's
+    // bottom, through the lattice, which the arc does not meet.
+    let under = arc((-600, 200), (600, 200), (0, 1000));
+    let (after, cost) = live
+        .insert_curve_costed(&under, 9999, &mut unlimited())
+        .unwrap();
+    assert!(cost.chunks_opened > 0, "{cost:?}");
+    assert_eq!(after.len(), live.len() + 1);
+}
+
+#[test]
+fn the_two_halves_of_a_circle_between_the_same_points_are_not_the_same_drawing() {
+    // Both run between (-5, 0) and (5, 0) on one circle with one label: only the half differs.
+    let upper = built(&[arc((5, 0), (-5, 0), (0, 0))], &[0]);
+    let lower = built(&[arc((-5, 0), (5, 0), (0, 0))], &[0]);
+    assert_eq!((upper.len(), lower.len()), (1, 1));
+    assert!(!upper.same_as(&lower).unwrap());
+    assert!(!lower.same_as(&upper).unwrap());
+    assert!(upper.same_as(&upper.clone()).unwrap());
+    // The same half of another circle through both points is not the same either.
+    let other = built(&[arc((5, 0), (-5, 0), (0, -1))], &[0]);
+    assert!(!upper.same_as(&other).unwrap());
+}
+
+#[test]
 fn a_stopped_meter_stops_an_arc_insert() {
     let live = built(&[seg((-6, 3), (6, 3))], &[0]);
     let mut tight = WorkMeter::new(Budget::new(1, 1));

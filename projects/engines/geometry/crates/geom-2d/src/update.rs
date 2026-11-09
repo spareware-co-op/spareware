@@ -62,7 +62,6 @@
     reason = "s, e, p, q, h, u, v, w are the geometry's own letters, and the insert and the location are each one procedure that reads best whole"
 )]
 
-use alloc::borrow::Cow;
 use alloc::boxed::Box;
 use alloc::sync::Arc;
 use alloc::vec::Vec;
@@ -73,6 +72,7 @@ use geom_num::Sign;
 use geom_num::arc::Round;
 use geom_num::carrier::{Carrier, Rational2};
 use geom_num::grid::P2;
+use geom_num::math;
 use geom_num::one_root::{Crossing2, Root, enclose};
 use geom_num::wide::I256;
 use geom_run::WorkMeter;
@@ -95,20 +95,14 @@ fn floor(v: i128, w: i128) -> i128 {
     v.checked_div_euclid(w).unwrap_or(0)
 }
 
-/// The floor of a finite double. A double of magnitude 2^53 or more is whole, and every bound here
-/// is below 2^126, so the conversion is exact either way.
+/// The floor of a bound of an enclosure, by `geom_num::math::floor`, or the least `i128` for a
+/// double that is not finite, which no enclosure holds.
 #[allow(
     clippy::cast_possible_truncation,
-    clippy::cast_precision_loss,
-    reason = "a whole double below 2^126 converts exactly, and below 2^53 the comparison is exact"
+    reason = "a whole double converts exactly below 2^127, and every bound here is below 2^126"
 )]
 fn floor_of(v: f64) -> i128 {
-    let t = v as i128;
-    if (t as f64) > v {
-        t.saturating_sub(1)
-    } else {
-        t
-    }
+    math::floor(v).map_or(i128::MIN, |f| f.get() as i128)
 }
 
 /// The box of a point: its floors, or the floors of a one-root point's certified enclosure.
@@ -274,31 +268,33 @@ impl Piece {
 
     /// The piece `run`, with an arc's circle and the sources, held plainly when it can be.
     fn of(run: piece::Piece, ring: Option<Arc<Ring>>, sources: Arc<[u32]>) -> Piece {
-        match (&run.lo, &run.hi, run.on, &ring) {
-            (At::Rational(lo), At::Rational(hi), On::Line { line, .. }, None) => {
-                Piece(Shape::Plain {
-                    lo: *lo,
-                    hi: *hi,
-                    line,
-                    sources,
-                })
-            }
-            _ => Piece(Shape::Other(Box::new(General { run, ring, sources }))),
+        // Held either way the piece answers every question alike; plainly, it takes less room.
+        if let (At::Rational(lo), At::Rational(hi), On::Line { line, .. }, None) =
+            (&run.lo, &run.hi, run.on, &ring)
+        {
+            return Piece(Shape::Plain {
+                lo: *lo,
+                hi: *hi,
+                line,
+                sources,
+            });
         }
+        Piece(Shape::Other(Box::new(General { run, ring, sources })))
     }
 
-    /// The piece as the sweep holds its pieces.
-    fn run(&self) -> Cow<'_, piece::Piece> {
+    /// The piece as the sweep holds its pieces, a copy: a plain piece holds no such thing, and the
+    /// gate's recursion check reads no borrowed-or-owned (`Cow`) type.
+    fn run(&self) -> piece::Piece {
         match &self.0 {
-            Shape::Plain { lo, hi, line, .. } => Cow::Owned(piece::Piece {
+            Shape::Plain { lo, hi, line, .. } => piece::Piece {
                 lo: At::Rational(*lo),
                 hi: At::Rational(*hi),
                 on: On::Line {
                     line: *line,
                     dir: line.direction(),
                 },
-            }),
-            Shape::Other(g) => Cow::Borrowed(&g.run),
+            },
+            Shape::Other(g) => g.run.clone(),
         }
     }
 
@@ -701,7 +697,7 @@ impl Edit {
             let (lo, hi) = (e.lo(), e.hi());
             let mut inside: Vec<At> = Vec::new();
             for t in touch {
-                if cmp_pt(&lo, &t)? == Ordering::Less && cmp_pt(&t, &hi)? == Ordering::Less {
+                if cmp_at(&lo, &t)? == Ordering::Less && cmp_at(&t, &hi)? == Ordering::Less {
                     inside.push(t.clone());
                 }
                 cuts.push(t);
@@ -753,24 +749,15 @@ fn holds(e: &Piece, t: &At) -> Result<bool, ArrangeError> {
         && side(&run, e.circles(), t)? == Sign::Zero)
 }
 
-/// Whether two pieces lie on one line, or on one circle (either half).
-fn one_carrier(s: &Piece, e: &Piece) -> Result<bool, ArrangeError> {
-    match (s.track()?, e.track()?, s.ring(), e.ring()) {
-        (Track::Line(l), Track::Line(m), _, _) => Ok(l.same(&m)?),
-        (Track::Arc { .. }, Track::Arc { .. }, Some(a), Some(b)) => {
-            Ok(same_circle(&a.circle, &b.circle)? == Ordering::Equal)
-        }
-        _ => Ok(false),
-    }
-}
-
-/// Where two pieces on different lines or circles cross after `after`, the later of their lower
-/// ends, as the sweep finds it: each piece's circle placed in one list.
+/// Where two pieces cross after `after`, as the sweep finds it, each piece's circle placed in one
+/// list: none for two pieces of one line (parallel) or of one circle (`Crossing2::of_rounds` says
+/// two circles about one centre are degenerate, and the sweep's question takes that as no point),
+/// whose common points are their ends.
 fn crossings(s: &Piece, e: &Piece, after: &At) -> Result<[Option<At>; 2], ArrangeError> {
     let (r, t) = (s.run(), e.run());
     match (s.ring(), e.ring()) {
         (Some(a), Some(b)) => {
-            let mut t = t.into_owned();
+            let mut t = t;
             if let On::Arc { upper, .. } = t.on {
                 t.on = On::Arc { circle: 1, upper };
             }
@@ -825,16 +812,15 @@ fn contacts(s: &Piece, e: &Piece) -> Result<Vec<At>, ArrangeError> {
             }
         }
     }
-    if !one_carrier(s, e)? {
-        // A crossing at the later lower end is that end, on the other piece, and found above.
-        let (sl, el) = (s.lo(), e.lo());
-        let after = if cmp_pt(&sl, &el)? == Ordering::Less {
-            el
-        } else {
-            sl
-        };
-        out.extend(crossings(s, e, &after)?.into_iter().flatten());
-    }
+    // The sweep's question takes a point after the later of the two lower ends (it asks only
+    // there), and one at that end is found above.
+    let (sl, el) = (s.lo(), e.lo());
+    let after = if cmp_pt(&sl, &el)? == Ordering::Less {
+        el
+    } else {
+        sl
+    };
+    out.extend(crossings(s, e, &after)?.into_iter().flatten());
     Ok(out)
 }
 
@@ -855,13 +841,22 @@ fn try_sort<T>(
     fail.map_or(Ok(()), Err)
 }
 
+/// The order of two points, x then y: as [`cmp_pt`], straight on the rational coordinates when
+/// both points are rational, as every point of a drawing of segments is.
+fn cmp_at(a: &At, b: &At) -> Result<Ordering, ArrangeError> {
+    if let (At::Rational(p), At::Rational(q)) = (a, b) {
+        return cmp_rational(p, q);
+    }
+    cmp_pt(a, b)
+}
+
 /// `points`, ascending and without repeats.
 fn sorted(mut points: Vec<At>) -> Result<Vec<At>, ArrangeError> {
-    try_sort(&mut points, cmp_pt)?;
+    try_sort(&mut points, cmp_at)?;
     let mut out: Vec<At> = Vec::with_capacity(points.len());
     for p in points {
         match out.last() {
-            Some(last) if cmp_pt(last, &p)? == Ordering::Equal => {}
+            Some(last) if cmp_at(last, &p)? == Ordering::Equal => {}
             _ => out.push(p),
         }
     }
@@ -1370,11 +1365,10 @@ impl Live {
             let ring = self.at(&v)?;
             let (back, _) = e.leaving(&v)?;
             let next = clockwise_from(&v, &back, &ring, Some(&e))?.ok_or(ArrangeError::TooMany)?;
+            // Back at the start, about to run along the first edge again: its other end is the
+            // half-edge's end, since the first edge runs between the two.
             if v.same(&half.from)? && cmp_key(&next, &first)? == Ordering::Equal {
-                let (_, to) = next.leaving(&v)?;
-                if to.same(&half.to)? {
-                    return Ok(out);
-                }
+                return Ok(out);
             }
             e = next;
             u = v;
