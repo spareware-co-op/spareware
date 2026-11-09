@@ -36,7 +36,7 @@ use geom_blend::chain::{EdgeId, EdgeRow, Join, Tangency, VertexId, chains};
 use geom_blend::cluster::{Cluster, FaceId};
 use geom_blend::convexity::{Convexity, corner_class};
 use geom_blend::overflow::Policy;
-use geom_blend::plan::{ChainFacts, SharedFace, plan};
+use geom_blend::plan::{ChainFacts, PlanError, SharedFace, plan};
 use geom_blend::radius::{
     Cause, Limit, Verdict, collapse_limit, fold_limit, half_angle_tangent, judge, largest,
     reach_limit,
@@ -144,25 +144,25 @@ fn rounds_that_take_more_of_a_face_than_it_has_fail_as_one() {
 /// the largest radius below 3 that fits; a ball of exactly 3 folds too.
 #[test]
 fn a_ball_larger_than_the_round_it_rolls_on_is_refused_with_the_size_that_fits() {
-    let limits = [fold_limit(Interval::point(3.0).unwrap())];
-    let fit = largest(&limits).unwrap();
+    let limits = [fold_limit(Interval::point(3.0).unwrap()).unwrap()];
+    let fit = largest(&limits).unwrap().unwrap();
     assert_eq!(fit.cause, Cause::Fold);
     assert!(fit.open);
     assert_eq!(fit.radius, 3.0_f64.next_down());
     for r in [3.1, 3.5, 5.0, 3.0] {
-        match judge(&limits, r) {
+        match judge(&limits, r).unwrap() {
             Verdict::RadiusTooLarge(l) => assert_eq!(l, fit, "r {r}"),
             other => panic!("r {r}: {other:?}"),
         }
     }
-    assert_eq!(judge(&limits, fit.radius), Verdict::Feasible);
-    assert_eq!(judge(&limits, 2.9), Verdict::Feasible);
+    assert_eq!(judge(&limits, fit.radius).unwrap(), Verdict::Feasible);
+    assert_eq!(judge(&limits, 2.9).unwrap(), Verdict::Feasible);
     // The second round's own r5 neighbour does not hide the binding one.
     let both = [
-        fold_limit(Interval::point(5.0).unwrap()),
-        fold_limit(Interval::point(3.0).unwrap()),
+        fold_limit(Interval::point(5.0).unwrap()).unwrap(),
+        fold_limit(Interval::point(3.0).unwrap()).unwrap(),
     ];
-    assert_eq!(largest(&both).unwrap(), fit);
+    assert_eq!(largest(&both).unwrap().unwrap(), fit);
 }
 
 /// WR-346--inset-round-thinner-than-wall.md and
@@ -173,17 +173,17 @@ fn a_ball_larger_than_the_round_it_rolls_on_is_refused_with_the_size_that_fits()
 #[test]
 fn a_ball_as_wide_as_its_support_collapses_its_offset_and_is_refused() {
     for support in [0.5, 1.0, 2.0] {
-        let limits = [collapse_limit(Interval::point(support).unwrap())];
-        let fit = largest(&limits).unwrap();
+        let limits = [collapse_limit(Interval::point(support).unwrap()).unwrap()];
+        let fit = largest(&limits).unwrap().unwrap();
         assert_eq!((fit.cause, fit.open), (Cause::CollapsedOffset, true));
         assert_eq!(fit.radius, support.next_down());
         for r in [support, 2.0 * support, 4.0] {
             assert!(
-                matches!(judge(&limits, r), Verdict::RadiusTooLarge(l) if l == fit),
+                matches!(judge(&limits, r).unwrap(), Verdict::RadiusTooLarge(l) if l == fit),
                 "support {support}, r {r}"
             );
         }
-        assert_eq!(judge(&limits, 0.5 * support), Verdict::Feasible);
+        assert_eq!(judge(&limits, 0.5 * support).unwrap(), Verdict::Feasible);
     }
 }
 
@@ -322,47 +322,48 @@ fn a_long_tangent_loop_closes_and_a_corner_on_it_opens_it() {
 
 /// The plan's claims at their edges, beside the defects: a request whose radius is zero,
 /// negative, or not a number is not a blend, so no plan judges it feasible, whatever its limits.
+/// Found by this batch: G262 first called such a radius Feasible (with no limits, any value); it
+/// now refuses it (7d084ce0).
 #[test]
-#[ignore = "defect in G262: judge and plan call a radius that is not positive, or NaN, feasible"]
 fn a_radius_that_is_not_positive_is_never_feasible() {
     let t = right_angle();
     let limits = [reach_limit(Interval::point(6.0).unwrap(), t, false).unwrap()];
     for r in [0.0, -0.0, -1.0, -f64::MAX, f64::NAN, f64::NEG_INFINITY] {
-        assert_ne!(judge(&limits, r), Verdict::Feasible, "r {r}");
-        assert_ne!(judge(&[], r), Verdict::Feasible, "no limits, r {r}");
+        assert!(judge(&limits, r).is_err(), "r {r}");
+        assert!(judge(&[], r).is_err(), "no limits, r {r}");
         let facts = [ChainFacts {
             limits: limits.to_vec(),
             sites: vec![],
         }];
         let clusters = [Cluster { chains: vec![0] }];
-        if let Ok(p) = plan(&facts, &[r], &clusters, &[], &Policy::default()) {
-            assert!(!p.clusters[0].feasible, "plan, r {r}");
-        }
+        assert_eq!(
+            plan(&facts, &[r], &clusters, &[], &Policy::default()),
+            Err(PlanError::Radius(0)),
+            "plan, r {r}"
+        );
     }
 }
 
 /// "A refusal names the size that fits": the largest radius reported is one that fits, so it is
-/// never negative. A limit whose bound is zero (a face of no width, a support of no radius), open
-/// or closed, leaves no radius that fits, and a face of negative width is not a face; neither may
-/// name a negative size.
+/// never zero or below. A limit whose bound is zero (a face of no width, a support of no radius),
+/// open or closed, leaves no radius that fits, and a face of negative width is not a face; each is
+/// refused as it is made, and one made by hand is refused by `largest`. Found by this batch: G262
+/// first named -5e-324, and took a face of negative width; it now refuses both (7d084ce0).
 #[test]
-#[ignore = "defect in G262: an open bound at zero, or a face of negative width, names a negative radius"]
 fn the_largest_radius_named_is_never_negative() {
     let t = right_angle();
     let zero = Interval::point(0.0).unwrap();
-    for limit in [
-        collapse_limit(zero),
-        fold_limit(zero),
-        reach_limit(zero, t, true).unwrap(),
-    ] {
-        if let Some(fit) = largest(&[limit]) {
-            assert!(fit.radius >= 0.0, "{limit:?}: {fit:?}");
-        }
-    }
-    let negative = Interval::new(-2.0, -1.0).unwrap();
-    if let Ok(limit) = reach_limit(negative, t, false) {
-        let fit = largest(&[limit]).unwrap();
-        assert!(fit.radius >= 0.0, "{limit:?}: {fit:?}");
+    assert!(collapse_limit(zero).is_err());
+    assert!(fold_limit(zero).is_err());
+    assert!(reach_limit(zero, t, true).is_err());
+    assert!(reach_limit(Interval::new(-2.0, -1.0).unwrap(), t, false).is_err());
+    for open in [false, true] {
+        let hand = Limit {
+            cause: Cause::FaceWidth,
+            radius: zero,
+            open,
+        };
+        assert!(largest(&[hand]).is_err(), "{hand:?}");
     }
 }
 
@@ -421,11 +422,11 @@ fn the_binding_cause_is_the_one_named() {
     let t = right_angle();
     let limits: Vec<Limit> = vec![
         reach_limit(Interval::point(6.0).unwrap(), t, false).unwrap(),
-        fold_limit(Interval::point(4.0).unwrap()),
-        collapse_limit(Interval::point(5.0).unwrap()),
+        fold_limit(Interval::point(4.0).unwrap()).unwrap(),
+        collapse_limit(Interval::point(5.0).unwrap()).unwrap(),
     ];
-    let fit = largest(&limits).unwrap();
+    let fit = largest(&limits).unwrap().unwrap();
     assert_eq!((fit.cause, fit.radius), (Cause::Fold, 4.0_f64.next_down()));
-    assert!(matches!(judge(&limits, 4.5), Verdict::RadiusTooLarge(l) if l == fit));
-    assert_eq!(judge(&limits, 3.9), Verdict::Feasible);
+    assert!(matches!(judge(&limits, 4.5).unwrap(), Verdict::RadiusTooLarge(l) if l == fit));
+    assert_eq!(judge(&limits, 3.9).unwrap(), Verdict::Feasible);
 }
