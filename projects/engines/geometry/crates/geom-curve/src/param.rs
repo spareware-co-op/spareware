@@ -256,6 +256,34 @@ impl<const D: usize> ParamCurve<D> for CurveKind<D> {
         }
     }
 
+    // One dispatch on the kind for the whole call, not one per point (chapter 23.6), so the kind's
+    // own `points` runs its own `point` in its loop.
+    fn points(
+        &self,
+        t: &[f64],
+        side: Limit,
+        out: &mut [f64],
+        results: &mut [Result<(), CurveError>],
+    ) -> Result<(), CurveError> {
+        match self {
+            CurveKind::Nurbs(c) => ParamCurve::points(c, t, side, out, results),
+            CurveKind::Line(c) => ParamCurve::points(c, t, side, out, results),
+            CurveKind::Circle(c) => ParamCurve::points(c, t, side, out, results),
+            CurveKind::Ellipse(c) => ParamCurve::points(c, t, side, out, results),
+            CurveKind::Hyperbola(c) => ParamCurve::points(c, t, side, out, results),
+            CurveKind::Parabola(c) => ParamCurve::points(c, t, side, out, results),
+            CurveKind::Helix(c) => ParamCurve::points(c, t, side, out, results),
+            CurveKind::Polynomial(c) => ParamCurve::points(c, t, side, out, results),
+            CurveKind::Involute(c) => ParamCurve::points(c, t, side, out, results),
+            CurveKind::Bulge(c) => ParamCurve::points(c, t, side, out, results),
+            CurveKind::Trimmed(c) => ParamCurve::points(c, t, side, out, results),
+            CurveKind::Composite(c) => ParamCurve::points(c, t, side, out, results),
+            CurveKind::Offset(c) => ParamCurve::points(c, t, side, out, results),
+            CurveKind::OnSurface(c) => ParamCurve::points(c, t, side, out, results),
+            CurveKind::Transition(c) => ParamCurve::points(c, t, side, out, results),
+        }
+    }
+
     fn derivatives(&self, t: f64, side: Limit, out: &mut [[f64; D]]) -> Result<(), CurveError> {
         match self {
             CurveKind::Nurbs(c) => ParamCurve::derivatives(c, t, side, out),
