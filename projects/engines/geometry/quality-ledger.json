@@ -5985,6 +5985,382 @@
       "occurrences": 1,
       "kind": "equivalent",
       "reason": "It moves the ray infinitely little to the other side of y, in every face at once. That is another ray from a point infinitely near the first, which orientation's precondition keeps off the shell, so it lies on the same side of it, and the parity of a ray that meets no edge is that side."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-bool/src/crossing.rs",
+      "mutant": "replace - with / in <impl Field<1> for Against<'_>>::reach",
+      "line_text": "let w = hi - lo;",
+      "occurrences": 1,
+      "kind": "hangs",
+      "reason": "reach is how wide a parameter box's image is, which the crossing engine compares with the resolution floor to stop splitting a box its operator cannot settle (a tangency, a curve along the plane). hi / lo is about 1 for every box away from the origin, never below the floor's test for long, so such a box is split until the work meter's budget runs out: the attack tests' tangencies run past the timeout. It hangs; it never returns a wrong crossing."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-bool/src/crossing.rs",
+      "mutant": "replace - with + in <impl Field<1> for Against<'_>>::reach",
+      "line_text": "let w = hi - lo;",
+      "occurrences": 1,
+      "kind": "hangs",
+      "reason": "reach is how wide a parameter box's image is, which the crossing engine compares with the resolution floor to stop splitting a box its operator cannot settle (a tangency, a curve along the plane). hi + lo is twice the box's position, which no split makes smaller, so such a box is split until the work meter's budget runs out: the attack tests' tangencies run past the timeout. It hangs; it never returns a wrong crossing."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-bool/src/crossing.rs",
+      "mutant": "replace > with >= in <impl Field<1> for Against<'_>>::reach",
+      "line_text": "if w > widest {",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "The loop keeps the widest side of the box. When w equals widest the mutant stores w, the same double, so every box's reach is the same."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-bool/src/crossing.rs",
+      "mutant": "replace <impl Field<1> for Against<'_>>::over -> Result<Option<[Interval; 1]>, IntersectError> with Ok(None)",
+      "line_text": "let [t] = x;",
+      "occurrences": 1,
+      "kind": "harmless",
+      "reason": "over lets the crossing engine drop a box whose range over it excludes zero before trying Krawczyk's operator. Without it every such box goes to the operator, which proves it empty or splits it: the zeros and flags are the same in every test (a near miss a hundredth of a step from the plane included), at more cost. Where the operator could not exclude a box the range would, the box would be flagged, which the face stages refuse with BuildError::Undecided: a refusal, never a wrong crossing."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-bool/src/crossing.rs",
+      "mutant": "replace > with >= in line_crossing",
+      "line_text": "if reach.lo() > 0.0 || reach.hi() < 0.0 {",
+      "occurrences": 1,
+      "kind": "harmless",
+      "reason": "Every bound of an interval operation is widened outward by one step (next_down, next_up), so a lower end is exactly 0 only when the rounded value below it is 2^-1074, the least subnormal; the two differ only when the lower end of the line's offset over its domain is exactly 0. A line's offset is n · o + d plus n · v times its span, each term a product of the plane's integers with the line's doubles: for the lines the builder holds, between grid points, every rounded value is a whole number or a multiple of a double's step at the line's size, never 2^-1074. Only a line of subnormal size reaches the tie, where the mutant answers no crossing in place of the root it would enclose at that end."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-bool/src/crossing.rs",
+      "mutant": "replace < with <= in line_crossing",
+      "line_text": "if reach.lo() > 0.0 || reach.hi() < 0.0 {",
+      "occurrences": 1,
+      "kind": "harmless",
+      "reason": "Every bound of an interval operation is widened outward by one step (next_down, next_up), so a lower end is exactly 0 only when the rounded value below it is 2^-1074, the least subnormal; the two differ only when the upper end of the line's offset over its domain is exactly 0. A line's offset is n · o + d plus n · v times its span, each term a product of the plane's integers with the line's doubles: for the lines the builder holds, between grid points, every rounded value is a whole number or a multiple of a double's step at the line's size, never 2^-1074. Only a line of subnormal size reaches the tie, where the mutant answers no crossing in place of the root it would enclose at that end."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-bool/src/crossing.rs",
+      "mutant": "replace > with >= in line_crossing",
+      "line_text": "if rate.lo() > 0.0 || rate.hi() < 0.0 {",
+      "occurrences": 1,
+      "kind": "harmless",
+      "reason": "Every bound of an interval operation is widened outward by one step (next_down, next_up), so a lower end is exactly 0 only when the rounded value below it is 2^-1074, the least subnormal; the two differ only when the lower end of n · v, the line's rate across the plane, is exactly 0, which needs a direction of subnormal size (a whole direction between grid points gives whole products). There the original flags the domain as singular and the mutant divides by a rate whose enclosure reaches zero, which the interval division refuses: an error in place of a flag, never a crossing that is not there."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-bool/src/crossing.rs",
+      "mutant": "replace < with <= in line_crossing",
+      "line_text": "if rate.lo() > 0.0 || rate.hi() < 0.0 {",
+      "occurrences": 1,
+      "kind": "harmless",
+      "reason": "Every bound of an interval operation is widened outward by one step (next_down, next_up), so a lower end is exactly 0 only when the rounded value below it is 2^-1074, the least subnormal; the two differ only when the upper end of n · v, the line's rate across the plane, is exactly 0, which needs a direction of subnormal size (a whole direction between grid points gives whole products). There the original flags the domain as singular and the mutant divides by a rate whose enclosure reaches zero, which the interval division refuses: an error in place of a flag, never a crossing that is not there."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-bool/src/crossing.rs",
+      "mutant": "replace > with >= in line_crossing",
+      "line_text": "let lo = if root.lo() > a { root.lo() } else { a };",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "When root.lo() equals a, both branches give the same double, so the root's enclosure cut to the domain is the same."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-bool/src/crossing.rs",
+      "mutant": "replace < with <= in line_crossing",
+      "line_text": "let hi = if root.hi() < b { root.hi() } else { b };",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "When root.hi() equals b, both branches give the same double, so the root's enclosure cut to the domain is the same."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-bool/src/crossing.rs",
+      "mutant": "replace && with || in Hull::of",
+      "line_text": "let mut convex = form.deviation.is_finite() && form.deviation >= 0.0;",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "Every curve kind's to_nurbs states its deviation as a certified upper bound on a distance, a finite double of at least 0, or fails: the conversions build it from outward-rounded interval operations, which refuse an overflow. Both tests are true for every form, so && and || agree."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-bool/src/crossing.rs",
+      "mutant": "replace && with || in Hull::of",
+      "line_text": "if !(w > 0.0 && w.is_finite()) {",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "A NURBS curve holds only weights that are positive and finite: geom_nurbs refuses any other with NurbsError::Weight when the curve is made, and a curve without weights is read with weight 1. Both tests are true for every weight, so && and || agree."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-bool/src/crossing.rs",
+      "mutant": "replace > with >= in Hull::of",
+      "line_text": "if !(w > 0.0 && w.is_finite()) {",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "A NURBS curve holds only weights that are positive and finite (geom_nurbs refuses any other with NurbsError::Weight when the curve is made), so no weight is 0 and > 0 and >= 0 agree."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-bool/src/crossing.rs",
+      "mutant": "replace && with || in Hull::of",
+      "line_text": "if a.is_finite() && b.is_finite() {",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "The two differ only for a ray, a line with one infinite end. The original asks for its NURBS form, which a ray has none of, and fails with IntersectError::InvalidInput; the mutant encloses the point at its infinite end, which the interval arithmetic refuses with NumError::NotFinite, and that reaches the caller as IntersectError::InvalidInput too. A line infinite both ways takes the original's path either way."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-bool/src/crossing.rs",
+      "mutant": "replace && with || in Hull::of",
+      "line_text": "let convex = convex && !points.is_empty();",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "convex is true here for every curve (its form's deviation is finite and at least 0, and every weight positive and finite), and a NURBS curve has at least one control point, so points is not empty: convex && !empty and convex || !empty are both true."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-bool/src/crossing.rs",
+      "mutant": "replace < with <= in Hull::spread",
+      "line_text": "if v.lo() < lo {",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "The loop keeps the least lower end. When v.lo() equals lo the mutant stores the same double, so the spread is the same."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-bool/src/crossing.rs",
+      "mutant": "replace > with >= in Hull::spread",
+      "line_text": "if v.hi() > hi {",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "The loop keeps the greatest upper end. When v.hi() equals hi the mutant stores the same double, so the spread is the same."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-bool/src/distance.rs",
+      "mutant": "replace < with <= in segment_distance",
+      "line_text": "if nearest.lo() < a {",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "When nearest.lo() equals a, the mutant holds the parameter's lower end at a and the original keeps nearest.lo(): the same double."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-bool/src/distance.rs",
+      "mutant": "replace > with >= in segment_distance",
+      "line_text": "} else if nearest.lo() > b {",
+      "occurrences": 2,
+      "kind": "harmless",
+      "reason": "Two lines carry this test. Holding the parameter to the domain, at nearest.lo() == b the mutant takes b where the original keeps nearest.lo(), the same double. Choosing the lower bound, at nearest.lo() == b the mutant takes the distance from the end b where the original takes the distance from the whole line: the nearest parameter is then at or past b, so the segment's nearest point is that end, and both are lower bounds of the true distance. Only the enclosure's width changes, never whether it holds the distance."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-bool/src/distance.rs",
+      "mutant": "replace > with >= in segment_distance",
+      "line_text": "if nearest.hi() > b {",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "When nearest.hi() equals b, the mutant holds the parameter's upper end at b and the original keeps nearest.hi(): the same double."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-bool/src/distance.rs",
+      "mutant": "replace < with <= in segment_distance",
+      "line_text": "} else if nearest.hi() < a {",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "When nearest.hi() equals a, the mutant holds the parameter's upper end at a and the original keeps nearest.hi(): the same double."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-bool/src/distance.rs",
+      "mutant": "replace < with <= in segment_distance",
+      "line_text": "let lower = if nearest.hi() < a {",
+      "occurrences": 1,
+      "kind": "harmless",
+      "reason": "At nearest.hi() == a the mutant takes the distance from the end a as the lower bound where the original takes the distance from the whole line. The nearest parameter is then at or before a, so the segment's nearest point is that end, and both are lower bounds of the true distance: only the enclosure's width changes, never whether it holds the distance."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-bool/src/face.rs",
+      "mutant": "replace < with <= in face_entry",
+      "line_text": "if x < *low {",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "The box grows to the least lower corner. When x equals the corner so far the mutant stores the same number."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-bool/src/face.rs",
+      "mutant": "replace > with >= in face_entry",
+      "line_text": "if y > *high {",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "The box grows to the greatest upper corner. When y equals the corner so far the mutant stores the same number."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-bool/src/face.rs",
+      "mutant": "replace > with >= in face_entry",
+      "line_text": "if lo.iter().zip(&hi).any(|(l, h)| l > h) {",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "The face's box grows only by its boundary edges' boxes, which edge_entry pads by the contact radius, and a curved face's surface box, padded by ε_fit too, so every side it has is wider than 0 and l == h never occurs. A face with no boundary keeps lo at i64::MAX and hi at i64::MIN, where both tests are true."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-bool/src/face.rs",
+      "mutant": "replace > with >= in near_point",
+      "line_text": "if w > reach {",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "The loop keeps the widest side of the curve point's box. When w equals reach the mutant stores the same double, so the bound is the same."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-bool/src/face.rs",
+      "mutant": "replace < with <= in middle_of",
+      "line_text": "let between = |lo: f64, hi: f64| (lo < hi).then_some(lo / 2.0 + hi / 2.0);",
+      "occurrences": 1,
+      "kind": "harmless",
+      "reason": "The two differ only where lo == hi. A block's paves are in proven order (pave::order keeps one after another only when last.t.hi() < pave.t.lo()), and a domain has a < b, so that happens only for a block round a closed curve's seam whose last pave's enclosure ends exactly at the domain's end. The stages give a seam point the parameter at the domain's start, an enclosure from a (the projection's, in the vertex stage), and flag a crossing at the seam rather than enclose it, so no pave ends at b; were one to, the mutant would place the seam point, a point of the block, in place of the middle of the stretch after it."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-bool/src/inside.rs",
+      "mutant": "replace < with <= in hull",
+      "line_text": "if x.lo() < y.lo() { x.lo() } else { y.lo() },",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "When x.lo() equals y.lo() both branches give the same double, so the join's box is the same."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-bool/src/inside.rs",
+      "mutant": "replace > with >= in hull",
+      "line_text": "if x.hi() > y.hi() { x.hi() } else { y.hi() },",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "When x.hi() equals y.hi() both branches give the same double, so the join's box is the same."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-bool/src/inside.rs",
+      "mutant": "replace box_gap -> Result<f64, NumError> with Ok(0.0)",
+      "line_text": "let mut gaps = [Interval::point(0.0)?; 3];",
+      "occurrences": 1,
+      "kind": "harmless",
+      "reason": "box_gap is the quick test that lets place skip the certified distance of a boundary edge whose box lies further from the point than its bound and the contact radius; that distance is at least the gap, so the contact rule would find the edge apart, the answer the skip gives. A gap of 0.0 steps is never above the reach (ε_fit alone is 64 steps), so the mutant skips no edge and runs every distance, which finds the far edges apart: the same place at more cost. Only where the nearest-point search cannot isolate a far edge's nearest point would the mutant fail with NearContact where the original skips the edge: an error, never a wrong place."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-bool/src/inside.rs",
+      "mutant": "replace box_gap -> Result<f64, NumError> with Ok(1.0)",
+      "line_text": "let mut gaps = [Interval::point(0.0)?; 3];",
+      "occurrences": 1,
+      "kind": "harmless",
+      "reason": "box_gap is the quick test that lets place skip the certified distance of a boundary edge whose box lies further from the point than its bound and the contact radius; that distance is at least the gap, so the contact rule would find the edge apart, the answer the skip gives. A gap of 1.0 steps is never above the reach (ε_fit alone is 64 steps), so the mutant skips no edge and runs every distance, which finds the far edges apart: the same place at more cost. Only where the nearest-point search cannot isolate a far edge's nearest point would the mutant fail with NearContact where the original skips the edge: an error, never a wrong place."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-bool/src/inside.rs",
+      "mutant": "replace box_gap -> Result<f64, NumError> with Ok(-1.0)",
+      "line_text": "let mut gaps = [Interval::point(0.0)?; 3];",
+      "occurrences": 1,
+      "kind": "harmless",
+      "reason": "box_gap is the quick test that lets place skip the certified distance of a boundary edge whose box lies further from the point than its bound and the contact radius; that distance is at least the gap, so the contact rule would find the edge apart, the answer the skip gives. A gap of -1.0 steps is never above the reach (ε_fit alone is 64 steps), so the mutant skips no edge and runs every distance, which finds the far edges apart: the same place at more cost. Only where the nearest-point search cannot isolate a far edge's nearest point would the mutant fail with NearContact where the original skips the edge: an error, never a wrong place."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-bool/src/inside.rs",
+      "mutant": "replace > with == in box_gap",
+      "line_text": "let least_gap = if below.lo() > 0.0 {",
+      "occurrences": 1,
+      "kind": "harmless",
+      "reason": "box_gap is the quick test that lets place skip the certified distance of a boundary edge whose box lies further from the point than its bound and the contact radius; that distance is at least the gap, so the contact rule would find the edge apart, the answer the skip gives. With == the axis's gap is taken only from a lower end of exactly 0, which is 0 either way, and otherwise falls to 0, so the gap is never larger than the original's: place skips fewer edges and runs their distances, which find them apart (the same place at more cost, or NearContact where a far edge's nearest point cannot be isolated)."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-bool/src/inside.rs",
+      "mutant": "replace > with == in box_gap",
+      "line_text": "} else if above.lo() > 0.0 {",
+      "occurrences": 1,
+      "kind": "harmless",
+      "reason": "box_gap is the quick test that lets place skip the certified distance of a boundary edge whose box lies further from the point than its bound and the contact radius; that distance is at least the gap, so the contact rule would find the edge apart, the answer the skip gives. With == the axis's gap is taken only from a lower end of exactly 0, which is 0 either way, and otherwise falls to 0, so the gap is never larger than the original's: place skips fewer edges and runs their distances, which find them apart (the same place at more cost, or NearContact where a far edge's nearest point cannot be isolated)."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-bool/src/inside.rs",
+      "mutant": "replace > with >= in box_gap",
+      "line_text": "let least_gap = if below.lo() > 0.0 {",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "At below.lo() == 0 the mutant returns that 0. The original goes on to above, the point less the box's upper corner, which is at most below's negation and so not above 0, and returns 0: the same gap."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-bool/src/inside.rs",
+      "mutant": "replace > with >= in box_gap",
+      "line_text": "} else if above.lo() > 0.0 {",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "At above.lo() == 0 the mutant returns that 0 and the original falls to its last branch, 0: the same gap."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-bool/src/inside.rs",
+      "mutant": "replace > with >= in least",
+      "line_text": "if x.lo() > 0.0 {",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "At x.lo() == 0 the mutant returns x.lo(), 0. The original goes on: x.hi() is at least 0, so it returns 0.0 too."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-bool/src/inside.rs",
+      "mutant": "replace < with <= in least",
+      "line_text": "} else if x.hi() < 0.0 {",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "At x.hi() == 0 the mutant returns -x.hi(), -0.0, where the original returns 0.0. least's only use is least(across) <= step with a positive step, where -0 and +0 compare alike."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-bool/src/inside.rs",
+      "mutant": "replace > with == in FlatFace::place",
+      "line_text": "if box_gap(point, &side.reach)? > reach {",
+      "occurrences": 1,
+      "kind": "harmless",
+      "reason": "box_gap is the quick test that lets place skip the certified distance of a boundary edge whose box lies further from the point than its bound and the contact radius; that distance is at least the gap, so the contact rule would find the edge apart, the answer the skip gives. With == an edge is skipped only when its gap is exactly the reach, so nearly every edge's distance runs, and finds the far ones apart: the same place at more cost, or NearContact where a far edge's nearest point cannot be isolated, an error, never a wrong place."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-bool/src/inside.rs",
+      "mutant": "replace > with >= in FlatFace::place",
+      "line_text": "if box_gap(point, &side.reach)? > reach {",
+      "occurrences": 1,
+      "kind": "harmless",
+      "reason": "box_gap is the quick test that lets place skip the certified distance of a boundary edge whose box lies further from the point than its bound and the contact radius; that distance is at least the gap, so the contact rule would find the edge apart, the answer the skip gives. With >= an edge is also skipped when its gap equals the reach: its distance is then at least the bound and ε_fit, so less the bound it is at least ε_fit, above 0, and the contact rule finds it apart, the skip's answer. Only where that edge's distance search could not isolate a nearest point does skipping it avoid a NearContact the original would report."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-bool/src/interfere.rs",
+      "mutant": "replace || with && in touching",
+      "line_text": "|c: i64, a: i64, b: i64| c < a.saturating_sub(pad) || c > b.saturating_add(pad);",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "touching's axis test skips a vertex further than its bound and ε_fit (the pad) from the meeting's box along one axis. to_box then gives a distance whose lower end, less the bound, is still at least ε_fit, above 0, which judge reads as apart, the answer the skip gives. With the mutant it never skips, and to_box finds those vertices apart, so touching returns the same vertex or none."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-bool/src/interfere.rs",
+      "mutant": "replace < with == in touching",
+      "line_text": "|c: i64, a: i64, b: i64| c < a.saturating_sub(pad) || c > b.saturating_add(pad);",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "touching's axis test skips a vertex further than its bound and ε_fit (the pad) from the meeting's box along one axis. to_box then gives a distance whose lower end, less the bound, is still at least ε_fit, above 0, which judge reads as apart, the answer the skip gives. With the mutant it skips fewer vertices, and to_box finds those vertices apart, so touching returns the same vertex or none."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-bool/src/interfere.rs",
+      "mutant": "replace > with == in touching",
+      "line_text": "|c: i64, a: i64, b: i64| c < a.saturating_sub(pad) || c > b.saturating_add(pad);",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "touching's axis test skips a vertex further than its bound and ε_fit (the pad) from the meeting's box along one axis. to_box then gives a distance whose lower end, less the bound, is still at least ε_fit, above 0, which judge reads as apart, the answer the skip gives. With the mutant it skips fewer vertices, and to_box finds those vertices apart, so touching returns the same vertex or none."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-bool/src/interfere.rs",
+      "mutant": "replace < with <= in touching",
+      "line_text": "|c: i64, a: i64, b: i64| c < a.saturating_sub(pad) || c > b.saturating_add(pad);",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "touching's axis test skips a vertex further than its bound and ε_fit (the pad) from the meeting's box along one axis. to_box then gives a distance whose lower end, less the bound, is still at least ε_fit, above 0, which judge reads as apart, the answer the skip gives. The mutant also skips a vertex exactly the pad from the box, whose distance less its bound is at least ε_fit, so to_box would find it apart too: touching returns the same vertex or none."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-bool/src/interfere.rs",
+      "mutant": "replace > with >= in touching",
+      "line_text": "|c: i64, a: i64, b: i64| c < a.saturating_sub(pad) || c > b.saturating_add(pad);",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "touching's axis test skips a vertex further than its bound and ε_fit (the pad) from the meeting's box along one axis. to_box then gives a distance whose lower end, less the bound, is still at least ε_fit, above 0, which judge reads as apart, the answer the skip gives. The mutant also skips a vertex exactly the pad from the box, whose distance less its bound is at least ε_fit, so to_box would find it apart too: touching returns the same vertex or none."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-bool/src/interfere.rs",
+      "mutant": "replace || with && in touching",
+      "line_text": "|| outside(p.y.get(), lo.y.get(), hi.y.get())",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "touching's axis test skips a vertex further than its bound and ε_fit (the pad) from the meeting's box along one axis. to_box then gives a distance whose lower end, less the bound, is still at least ε_fit, above 0, which judge reads as apart, the answer the skip gives. With && a vertex is skipped only when it is outside on more axes at once, so fewer are skipped, and to_box finds those apart: touching returns the same vertex or none."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-bool/src/interfere.rs",
+      "mutant": "replace || with && in touching",
+      "line_text": "|| outside(p.z.get(), lo.z.get(), hi.z.get())",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "touching's axis test skips a vertex further than its bound and ε_fit (the pad) from the meeting's box along one axis. to_box then gives a distance whose lower end, less the bound, is still at least ε_fit, above 0, which judge reads as apart, the answer the skip gives. With && a vertex is skipped only when it is outside on more axes at once, so fewer are skipped, and to_box finds those apart: touching returns the same vertex or none."
     }
   ],
   "coverage_off": [
