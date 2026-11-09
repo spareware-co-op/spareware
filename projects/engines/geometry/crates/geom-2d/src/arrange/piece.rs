@@ -9,7 +9,9 @@
 //! ([`side`]), where two pieces meet ([`meetings`]), and in what order pieces leave a point
 //! ([`order_at`]): by the half-plane their tangent points into, counter-clockwise from the negative x
 //! direction, then by the tangent's turn, then by curvature. The circles are listed once each
-//! ([`circles_of`]), so two arcs of one circle name the same circle.
+//! ([`circles_of`]), so two arcs of one circle name the same circle. The live arrangement
+//! (`crate::update`) asks the same questions of its pieces, and [`same_circle`] tells it when two
+//! arcs lie on one circle.
 //!
 //! Guarantees:
 //!

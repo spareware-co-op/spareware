@@ -1,8 +1,9 @@
 //! How long one edit takes on a drawing of a million edges, by the standard library's clock (piece
 //! G199): the done-when's "one edit on a 1M-edge drawing". Builds a lattice of about a million unit
-//! edges once, then inserts a short segment, a segment across a hundred cells and a segment along
-//! a whole row, each into the same version, and locates points. `ZONE_SIDE` replaces the side of
-//! the lattice, 707 cells. Prints one line per stage; the gate is the count benchmark in `geom-bench`.
+//! edges once, then inserts a short segment, a segment across a hundred cells, a segment along a
+//! whole row and half circles over ten and a hundred cells (piece G199a), each into the same
+//! version, and locates points. `ZONE_SIDE` replaces the side of the lattice, 707 cells. Prints one
+//! line per stage; the gate is the count benchmark in `geom-bench`.
 
 #![allow(
     clippy::arithmetic_side_effects,
@@ -20,7 +21,9 @@
 use std::hint::black_box;
 use std::time::Instant;
 
+use geom_2d::arrange::Curve;
 use geom_2d::update::Live;
+use geom_num::arc::Arc2;
 use geom_num::carrier::Rational2;
 use geom_num::grid::P2;
 use geom_run::{Budget, WorkMeter};
@@ -66,6 +69,23 @@ fn main() {
     for (name, a, b) in edits {
         let start = Instant::now();
         let (next, cost) = live.insert_costed(a, b, label, &mut meter).unwrap();
+        let took = start.elapsed();
+        println!(
+            "edit {name}: {took:?}; {} -> {} edges; {cost:?}; {} of {} chunks shared",
+            live.len(),
+            next.len(),
+            next.shared_chunks(&live),
+            live.chunk_count()
+        );
+        black_box(next);
+    }
+    // Arcs (piece G199a): half circles over the middle, each crossing the lattice's lines at
+    // one-root points.
+    for (name, radius) in [("arc over ten cells", 5), ("arc over a hundred cells", 50)] {
+        let centre = Rational2::from(p(mid + radius, mid));
+        let arc = Curve::Arc(Arc2::new(p(mid + 2 * radius, mid), p(mid, mid), centre).unwrap());
+        let start = Instant::now();
+        let (next, cost) = live.insert_curve_costed(&arc, label, &mut meter).unwrap();
         let took = start.elapsed();
         println!(
             "edit {name}: {took:?}; {} -> {} edges; {cost:?}; {} of {} chunks shared",

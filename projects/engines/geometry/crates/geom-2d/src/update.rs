@@ -62,6 +62,7 @@
     reason = "s, e, p, q, h, u, v, w are the geometry's own letters, and the insert and the location are each one procedure that reads best whole"
 )]
 
+use alloc::borrow::Cow;
 use alloc::boxed::Box;
 use alloc::sync::Arc;
 use alloc::vec::Vec;
@@ -77,9 +78,9 @@ use geom_num::wide::I256;
 use geom_run::WorkMeter;
 
 use crate::arrange::piece::{
-    self, Circle, On, Way, cmp_pt, cut, meetings, order_at, same_circle, side, way,
+    self, Circle, On, Way, cmp_pt, cross_sign, cut, meetings, order_at, same_circle, side, way,
 };
-use crate::arrange::{Along, ArrangeError, At, Curve, arrange_curves, segment};
+use crate::arrange::{Along, ArrangeError, Arrangement, At, Curve, arrange_curves, segment};
 
 /// Pieces a chunk is split into halves at twice this many.
 const CHUNK: usize = 256;
@@ -193,32 +194,139 @@ pub enum Track {
 /// A piece of the drawing: an edge between two vertices, lowest first, on a line or on one half of
 /// a circle, with the curves along it.
 #[derive(Clone, Debug)]
-pub struct Piece {
-    /// The ends and what the piece lies on, as the sweep holds its pieces; an arc's circle is the
-    /// one of `ring`, at place 0 of [`Piece::circles`].
+pub struct Piece(Shape);
+
+/// How a piece is held. A segment's stretch between two rational points, every piece of a drawing
+/// of segments, is held as plainly as before arcs came in, so such a drawing takes no more memory;
+/// any other piece (an arc's, or a segment's with a one-root end) is boxed. The enum is no larger
+/// than its first variant: the box fits beside that variant's non-null pointer.
+#[derive(Clone, Debug)]
+enum Shape {
+    /// A segment's stretch between rational points: its ends, its line running from `lo` to `hi`,
+    /// and its sources.
+    Plain {
+        lo: Rational2,
+        hi: Rational2,
+        line: Carrier,
+        sources: Arc<[u32]>,
+    },
+    /// Any piece.
+    Other(Box<General>),
+}
+
+/// A piece as the sweep holds its pieces, with an arc's circle (at place 0 of the piece's own list
+/// of circles) and its sources.
+#[derive(Clone, Debug)]
+struct General {
     run: piece::Piece,
-    /// The circle of an arc piece; none for a line.
     ring: Option<Arc<Ring>>,
     sources: Arc<[u32]>,
 }
 
+fn sign_order(s: Sign) -> Ordering {
+    match s {
+        Sign::Negative => Ordering::Less,
+        Sign::Zero => Ordering::Equal,
+        Sign::Positive => Ordering::Greater,
+    }
+}
+
+/// The order of two rational points, x then y.
+fn cmp_rational(a: &Rational2, b: &Rational2) -> Result<Ordering, ArrangeError> {
+    match sign_order(a.cmp_x(b)?) {
+        Ordering::Equal => Ok(sign_order(a.cmp_y(b)?)),
+        other => Ok(other),
+    }
+}
+
+/// Whether `t` lies between `lo` and `hi`, ends included, for three points on one line.
+fn between(lo: &Rational2, t: &Rational2, hi: &Rational2) -> Result<bool, ArrangeError> {
+    Ok(cmp_rational(lo, t)? != Ordering::Greater && cmp_rational(t, hi)? != Ordering::Greater)
+}
+
+/// The box of the segment `lo`..`hi` between rational points.
+fn box_of(lo: &Rational2, hi: &Rational2) -> Box4 {
+    let ([lx, ly], lw) = lo.coordinates();
+    let ([hx, hy], hw) = hi.coordinates();
+    let (x0, y0, x1, y1) = (floor(lx, lw), floor(ly, lw), floor(hx, hw), floor(hy, hw));
+    [x0.min(x1), y0.min(y1), x0.max(x1), y0.max(y1)]
+}
+
 impl Piece {
+    /// The piece `run`, with an arc's circle and the sources, held plainly when it can be.
+    fn of(run: piece::Piece, ring: Option<Arc<Ring>>, sources: Arc<[u32]>) -> Piece {
+        match (&run.lo, &run.hi, run.on, &ring) {
+            (At::Rational(lo), At::Rational(hi), On::Line { line, .. }, None) => {
+                Piece(Shape::Plain {
+                    lo: *lo,
+                    hi: *hi,
+                    line,
+                    sources,
+                })
+            }
+            _ => Piece(Shape::Other(Box::new(General { run, ring, sources }))),
+        }
+    }
+
+    /// The piece as the sweep holds its pieces.
+    fn run(&self) -> Cow<'_, piece::Piece> {
+        match &self.0 {
+            Shape::Plain { lo, hi, line, .. } => Cow::Owned(piece::Piece {
+                lo: At::Rational(*lo),
+                hi: At::Rational(*hi),
+                on: On::Line {
+                    line: *line,
+                    dir: line.direction(),
+                },
+            }),
+            Shape::Other(g) => Cow::Borrowed(&g.run),
+        }
+    }
+
+    /// The circle of an arc piece.
+    fn ring(&self) -> Option<&Arc<Ring>> {
+        match &self.0 {
+            Shape::Plain { .. } => None,
+            Shape::Other(g) => g.ring.as_ref(),
+        }
+    }
+
     /// The lexicographically lower end.
     #[must_use]
-    pub fn lo(&self) -> &At {
-        &self.run.lo
+    pub fn lo(&self) -> At {
+        match &self.0 {
+            Shape::Plain { lo, .. } => At::Rational(*lo),
+            Shape::Other(g) => g.run.lo.clone(),
+        }
     }
 
     /// The higher end.
     #[must_use]
-    pub fn hi(&self) -> &At {
-        &self.run.hi
+    pub fn hi(&self) -> At {
+        match &self.0 {
+            Shape::Plain { hi, .. } => At::Rational(*hi),
+            Shape::Other(g) => g.run.hi.clone(),
+        }
     }
 
     /// The labels of the curves that cover the piece, ascending.
     #[must_use]
     pub fn sources(&self) -> &[u32] {
-        &self.sources
+        self.labels()
+    }
+
+    fn labels(&self) -> &Arc<[u32]> {
+        match &self.0 {
+            Shape::Plain { sources, .. } => sources,
+            Shape::Other(g) => &g.sources,
+        }
+    }
+
+    fn set_labels(&mut self, labels: Arc<[u32]>) {
+        match &mut self.0 {
+            Shape::Plain { sources, .. } => *sources = labels,
+            Shape::Other(g) => g.sources = labels,
+        }
     }
 
     /// What the piece lies on.
@@ -227,28 +335,34 @@ impl Piece {
     ///
     /// [`ArrangeError::TooMany`] for an arc piece without its circle, which no `Live` holds.
     pub fn track(&self) -> Result<Track, ArrangeError> {
-        match (self.run.on, &self.ring) {
-            (On::Line { line, .. }, _) => Ok(Track::Line(line)),
-            (On::Arc { upper, .. }, Some(ring)) => Ok(Track::Arc {
-                circle: ring.circle.round,
-                upper,
-            }),
-            (On::Arc { .. }, None) => Err(ArrangeError::TooMany),
+        match &self.0 {
+            Shape::Plain { line, .. } => Ok(Track::Line(*line)),
+            Shape::Other(g) => match (g.run.on, &g.ring) {
+                (On::Line { line, .. }, _) => Ok(Track::Line(line)),
+                (On::Arc { upper, .. }, Some(ring)) => Ok(Track::Arc {
+                    circle: ring.circle.round,
+                    upper,
+                }),
+                (On::Arc { .. }, None) => Err(ArrangeError::TooMany),
+            },
         }
     }
 
     /// The circles the piece's questions read: its own circle at place 0, or none for a line.
     fn circles(&self) -> &[Circle] {
-        self.ring
-            .as_deref()
+        self.ring()
             .map_or(&[], |ring| slice::from_ref(&ring.circle))
     }
 
     /// The piece's box: its ends', and for an arc that may pass the top or the bottom of its circle,
     /// that extreme too.
     fn bounds(&self) -> Box4 {
-        let b = join(&point_box(&self.run.lo), &point_box(&self.run.hi));
-        match (&self.ring, self.run.on) {
+        let g = match &self.0 {
+            Shape::Plain { lo, hi, .. } => return box_of(lo, hi),
+            Shape::Other(g) => g,
+        };
+        let b = join(&point_box(&g.run.lo), &point_box(&g.run.hi));
+        match (&g.ring, g.run.on) {
             // The piece spans the centre's x exactly when its ends' x lie either side of it; the
             // floors keep that order, so this test may take a piece that does not span it, never
             // miss one that does.
@@ -265,22 +379,28 @@ impl Piece {
         }
     }
 
+    /// Whether `v` is an end of the piece.
+    fn has_end(&self, v: &At) -> Result<bool, ArrangeError> {
+        if let (Shape::Plain { lo, hi, .. }, At::Rational(r)) = (&self.0, v) {
+            return Ok(lo.same(r)? || hi.same(r)?);
+        }
+        Ok(self.lo().same(v)? || self.hi().same(v)?)
+    }
+
     /// The way the piece leaves `v`, one of its ends, and its other end.
     fn leaving(&self, v: &At) -> Result<(Way<'_>, At), ArrangeError> {
-        if self.run.lo.same(v)? {
-            Ok((way(&self.run, self.circles(), false)?, self.run.hi.clone()))
+        let run = self.run();
+        if run.lo.same(v)? {
+            Ok((way(&run, self.circles(), false)?, run.hi.clone()))
         } else {
-            Ok((way(&self.run, self.circles(), true)?, self.run.lo.clone()))
+            Ok((way(&run, self.circles(), true)?, run.lo.clone()))
         }
     }
 
     /// The piece as a half-edge from `from`, one of its ends, to the other.
     fn half_from(&self, from: &At) -> Result<Half, ArrangeError> {
-        let to = if self.run.lo.same(from)? {
-            self.run.hi.clone()
-        } else {
-            self.run.lo.clone()
-        };
+        let (lo, hi) = (self.lo(), self.hi());
+        let to = if lo.same(from)? { hi } else { lo };
         Ok(Half {
             from: from.clone(),
             to,
@@ -290,15 +410,22 @@ impl Piece {
 
     /// The same stretch of the same curve, from `lo` to `hi`.
     fn between(&self, lo: &At, hi: &At) -> Piece {
-        Piece {
-            run: piece::Piece {
+        let on = match &self.0 {
+            Shape::Plain { line, .. } => On::Line {
+                line: *line,
+                dir: line.direction(),
+            },
+            Shape::Other(g) => g.run.on,
+        };
+        Piece::of(
+            piece::Piece {
                 lo: lo.clone(),
                 hi: hi.clone(),
-                on: self.run.on,
+                on,
             },
-            ring: self.ring.clone(),
-            sources: self.sources.clone(),
-        }
+            self.ring().cloned(),
+            self.labels().clone(),
+        )
     }
 }
 
@@ -361,6 +488,18 @@ pub struct Half {
     pub on: Track,
 }
 
+/// What a ray straight down from a point makes of a piece.
+enum Probe {
+    /// The point is an end of the piece.
+    Vertex,
+    /// The point is on the piece, between its ends.
+    Edge,
+    /// The piece is not below the point.
+    Miss,
+    /// The ray meets the piece at this point, below the point.
+    Below(At),
+}
+
 /// An arrangement of segments and arcs that can be changed, in chunks shared between versions.
 #[derive(Clone, Debug, Default)]
 pub struct Live {
@@ -378,18 +517,26 @@ struct Edit {
 /// The order of pieces: by lower end, then higher end, then the order they leave the lower end in
 /// (a chord before or after its arc, counter-clockwise). Equal only for one stretch of one curve.
 fn cmp_key(p: &Piece, q: &Piece) -> Result<Ordering, ArrangeError> {
-    match cmp_pt(&p.run.lo, &q.run.lo)? {
+    if let (Shape::Plain { lo: a, hi: b, .. }, Shape::Plain { lo: c, hi: d, .. }) = (&p.0, &q.0) {
+        // Two segments' stretches with the same ends lie on one line.
+        return match cmp_rational(a, c)? {
+            Ordering::Equal => cmp_rational(b, d),
+            other => Ok(other),
+        };
+    }
+    let (r, t) = (p.run(), q.run());
+    match cmp_pt(&r.lo, &t.lo)? {
         Ordering::Equal => {}
         other => return Ok(other),
     }
-    match cmp_pt(&p.run.hi, &q.run.hi)? {
+    match cmp_pt(&r.hi, &t.hi)? {
         Ordering::Equal => {}
         other => return Ok(other),
     }
     order_at(
-        &p.run.lo,
-        &way(&p.run, p.circles(), false)?,
-        &way(&q.run, q.circles(), false)?,
+        &r.lo,
+        &way(&r, p.circles(), false)?,
+        &way(&t, q.circles(), false)?,
     )
 }
 
@@ -472,7 +619,7 @@ impl Edit {
         let half = {
             let chunk = self.own(c)?;
             if let (true, Some(there)) = (found, chunk.pieces.get_mut(i)) {
-                there.sources = merge(&there.sources, &piece.sources);
+                there.set_labels(merge(there.sources(), piece.sources()));
                 return Ok(());
             }
             // The chunk is not empty, so its box is a box of pieces, and joins the new one's.
@@ -515,15 +662,17 @@ impl Edit {
         self.cost.examined = self.cost.examined.saturating_add(looked);
         meter.charge(looked.saturating_add(1))?;
         // Where the piece is cut, and where each piece it meets is.
-        let mut cuts: Vec<At> = alloc::vec![s.run.lo.clone(), s.run.hi.clone()];
+        let mut cuts: Vec<At> = alloc::vec![s.lo(), s.hi()];
         let mut splits: Vec<(Piece, Vec<At>)> = Vec::new();
         for e in &near {
             let touch = contacts(s, e)?;
+            if touch.is_empty() {
+                continue;
+            }
+            let (lo, hi) = (e.lo(), e.hi());
             let mut inside: Vec<At> = Vec::new();
             for t in touch {
-                if cmp_pt(&e.run.lo, &t)? == Ordering::Less
-                    && cmp_pt(&t, &e.run.hi)? == Ordering::Less
-                {
+                if cmp_pt(&lo, &t)? == Ordering::Less && cmp_pt(&t, &hi)? == Ordering::Less {
                     inside.push(t.clone());
                 }
                 cuts.push(t);
@@ -535,7 +684,7 @@ impl Edit {
         for (e, inside) in splits {
             self.cost.split = self.cost.split.saturating_add(1);
             self.remove(&e)?;
-            let mut chain: Vec<At> = alloc::vec![e.run.lo.clone(), e.run.hi.clone()];
+            let mut chain: Vec<At> = alloc::vec![e.lo(), e.hi()];
             chain.extend(inside);
             let chain = sorted(chain)?;
             for (u, v) in chain.iter().zip(chain.iter().skip(1)) {
@@ -566,19 +715,22 @@ impl Edit {
 /// Whether `t` lies on `e`: not before its lower end, not past its higher, and on its line or its
 /// half of its circle.
 fn holds(e: &Piece, t: &At) -> Result<bool, ArrangeError> {
-    Ok(cmp_pt(&e.run.lo, t)? != Ordering::Greater
-        && cmp_pt(t, &e.run.hi)? != Ordering::Greater
-        && side(&e.run, e.circles(), t)? == Sign::Zero)
+    if let (Shape::Plain { lo, hi, line, .. }, At::Rational(r)) = (&e.0, t) {
+        return Ok(line.side(r)? == Sign::Zero && between(lo, r, hi)?);
+    }
+    let run = e.run();
+    Ok(cmp_pt(&run.lo, t)? != Ordering::Greater
+        && cmp_pt(t, &run.hi)? != Ordering::Greater
+        && side(&run, e.circles(), t)? == Sign::Zero)
 }
 
 /// Whether two pieces lie on one line, or on one circle (either half).
 fn one_carrier(s: &Piece, e: &Piece) -> Result<bool, ArrangeError> {
-    match (s.run.on, e.run.on, &s.ring, &e.ring) {
-        (On::Line { line: l, .. }, On::Line { line: m, .. }, _, _) => Ok(l.same(&m)?),
-        (On::Arc { .. }, On::Arc { .. }, Some(a), Some(b)) => {
+    match (s.track()?, e.track()?, s.ring(), e.ring()) {
+        (Track::Line(l), Track::Line(m), _, _) => Ok(l.same(&m)?),
+        (Track::Arc { .. }, Track::Arc { .. }, Some(a), Some(b)) => {
             Ok(same_circle(&a.circle, &b.circle)? == Ordering::Equal)
         }
-        (On::Arc { .. }, _, None, _) | (_, On::Arc { .. }, _, None) => Err(ArrangeError::TooMany),
         _ => Ok(false),
     }
 }
@@ -586,18 +738,19 @@ fn one_carrier(s: &Piece, e: &Piece) -> Result<bool, ArrangeError> {
 /// Where two pieces on different lines or circles cross after `after`, the later of their lower
 /// ends, as the sweep finds it: each piece's circle placed in one list.
 fn crossings(s: &Piece, e: &Piece, after: &At) -> Result<[Option<At>; 2], ArrangeError> {
-    match (&s.ring, &e.ring) {
+    let (r, t) = (s.run(), e.run());
+    match (s.ring(), e.ring()) {
         (Some(a), Some(b)) => {
-            let mut t = e.run.clone();
+            let mut t = t.into_owned();
             if let On::Arc { upper, .. } = t.on {
                 t.on = On::Arc { circle: 1, upper };
             }
             let circles = [a.circle.clone(), b.circle.clone()];
-            meetings(&s.run, &t, &circles, after)
+            meetings(&r, &t, &circles, after)
         }
-        (Some(a), None) => meetings(&s.run, &e.run, slice::from_ref(&a.circle), after),
-        (None, Some(b)) => meetings(&s.run, &e.run, slice::from_ref(&b.circle), after),
-        (None, None) => meetings(&s.run, &e.run, &[], after),
+        (Some(a), None) => meetings(&r, &t, slice::from_ref(&a.circle), after),
+        (None, Some(b)) => meetings(&r, &t, slice::from_ref(&b.circle), after),
+        (None, None) => meetings(&r, &t, &[], after),
     }
 }
 
@@ -605,21 +758,53 @@ fn crossings(s: &Piece, e: &Piece, after: &At) -> Result<[Option<At>; 2], Arrang
 /// and, on different lines or circles, where they cross.
 fn contacts(s: &Piece, e: &Piece) -> Result<Vec<At>, ArrangeError> {
     let mut out = Vec::new();
+    if let (
+        Shape::Plain {
+            lo: sl,
+            hi: sh,
+            line: l,
+            ..
+        },
+        Shape::Plain {
+            lo: el,
+            hi: eh,
+            line: m,
+            ..
+        },
+    ) = (&s.0, &e.0)
+    {
+        // Two segments' stretches: one crossing, or for two on one line the ends of each that lie
+        // on both.
+        if cross_sign(l.direction(), m.direction())? != Ordering::Equal {
+            let q = l.meet(m)?;
+            if between(sl, &q, sh)? && between(el, &q, eh)? {
+                out.push(At::Rational(q));
+            }
+        } else if l.same(m)? {
+            for t in [el, eh, sl, sh] {
+                if between(sl, t, sh)? && between(el, t, eh)? {
+                    out.push(At::Rational(*t));
+                }
+            }
+        }
+        return Ok(out);
+    }
     for (a, b) in [(s, e), (e, s)] {
-        for t in [&a.run.lo, &a.run.hi] {
-            if holds(b, t)? {
-                out.push(t.clone());
+        for t in [a.lo(), a.hi()] {
+            if holds(b, &t)? {
+                out.push(t);
             }
         }
     }
     if !one_carrier(s, e)? {
         // A crossing at the later lower end is that end, on the other piece, and found above.
-        let after = if cmp_pt(&s.run.lo, &e.run.lo)? == Ordering::Less {
-            &e.run.lo
+        let (sl, el) = (s.lo(), e.lo());
+        let after = if cmp_pt(&sl, &el)? == Ordering::Less {
+            el
         } else {
-            &s.run.lo
+            sl
         };
-        out.extend(crossings(s, e, after)?.into_iter().flatten());
+        out.extend(crossings(s, e, &after)?.into_iter().flatten());
     }
     Ok(out)
 }
@@ -692,9 +877,9 @@ fn clockwise_from(
 
 /// Whether a piece lies on what `track` names.
 fn on_track(p: &Piece, track: &Track) -> Result<bool, ArrangeError> {
-    match (p.run.on, track, &p.ring) {
-        (On::Line { line, .. }, Track::Line(other), _) => Ok(line.same(other)?),
-        (On::Arc { upper, .. }, Track::Arc { circle, upper: u }, Some(ring)) => {
+    match (p.track()?, track, p.ring()) {
+        (Track::Line(line), Track::Line(other), _) => Ok(line.same(other)?),
+        (Track::Arc { upper, .. }, Track::Arc { circle, upper: u }, Some(ring)) => {
             Ok(upper == *u && same_circle(&ring.circle, &Circle::of(*circle)?)? == Ordering::Equal)
         }
         _ => Ok(false),
@@ -762,7 +947,16 @@ impl Live {
     ///
     /// As [`arrange_curves`].
     pub fn batch_curves(curves: &[Curve], meter: &mut WorkMeter<'_>) -> Result<Live, ArrangeError> {
-        let arrangement = arrange_curves(curves, meter)?;
+        Live::of_arrangement(&arrange_curves(curves, meter)?)
+    }
+
+    /// The pieces of an arrangement the sweep built, with their sources, as a `Live`.
+    ///
+    /// # Errors
+    ///
+    /// [`ArrangeError::Range`] past the exact budget; [`ArrangeError::TooMany`] for an edge whose
+    /// vertex or circle the arrangement does not hold, which the sweep never makes.
+    pub fn of_arrangement(arrangement: &Arrangement) -> Result<Live, ArrangeError> {
         let vertices = arrangement.vertices();
         let mut rings: Vec<Arc<Ring>> = Vec::with_capacity(arrangement.circles().len());
         for round in arrangement.circles() {
@@ -797,15 +991,15 @@ impl Live {
                     (On::Arc { circle: 0, upper }, Some(ring))
                 }
             };
-            pieces.push(Piece {
-                run: piece::Piece {
+            pieces.push(Piece::of(
+                piece::Piece {
                     lo: end(edge.from)?,
                     hi: end(edge.to)?,
                     on,
                 },
                 ring,
-                sources: Arc::from(edge.sources.clone()),
-            });
+                Arc::from(edge.sources.clone()),
+            ));
         }
         Live::from_pieces(pieces)
     }
@@ -840,11 +1034,7 @@ impl Live {
         let mut pieces = Vec::with_capacity(segments.len());
         for &(a, b, label) in segments {
             if let Some(run) = segment(a, b)? {
-                pieces.push(Piece {
-                    run,
-                    ring: None,
-                    sources: Arc::from([label]),
-                });
+                pieces.push(Piece::of(run, None, Arc::from([label])));
             }
         }
         Live::from_pieces(pieces)
@@ -861,9 +1051,9 @@ impl Live {
             return Ok(false);
         }
         for (a, b) in self.pieces().zip(other.pieces()) {
-            if !a.run.lo.same(&b.run.lo)?
-                || !a.run.hi.same(&b.run.hi)?
-                || a.sources != b.sources
+            if !a.lo().same(&b.lo())?
+                || !a.hi().same(&b.hi())?
+                || a.sources() != b.sources()
                 || !on_track(a, &b.track()?)?
             {
                 return Ok(false);
@@ -949,11 +1139,7 @@ impl Live {
         let sources: Arc<[u32]> = Arc::from([label]);
         let mut edit = Edit::of(self);
         for run in runs {
-            let s = Piece {
-                run,
-                ring: ring.clone(),
-                sources: sources.clone(),
-            };
+            let s = Piece::of(run, ring.clone(), sources.clone());
             edit.insert(&s, meter)?;
         }
         Ok(edit.done())
@@ -982,9 +1168,7 @@ impl Live {
                 continue;
             }
             for piece in &chunk.pieces {
-                if meets(&piece.bounds(), &vbox)
-                    && (piece.run.lo.same(v)? || piece.run.hi.same(v)?)
-                {
+                if meets(&piece.bounds(), &vbox) && piece.has_end(v)? {
                     out.push(piece.clone());
                 }
             }
@@ -992,36 +1176,74 @@ impl Live {
         Ok(out)
     }
 
-    /// Where the ray straight down along `vertical` meets the piece `e`, whose x range holds the
-    /// ray's: the top end of a vertical piece, or the point of `e`'s line or half circle there.
-    fn hit(e: &Piece, vertical: &Carrier) -> Result<At, ArrangeError> {
-        if e.run.lo.cmp_x(&e.run.hi)? == Sign::Zero {
-            return Ok(e.run.hi.clone());
-        }
-        match (e.run.on, &e.ring) {
-            (On::Line { line, .. }, _) => Ok(At::Rational(vertical.meet(&line)?)),
-            (On::Arc { upper, .. }, Some(ring)) => {
-                // The vertical meets the circle twice (once where it touches it); the point on the
-                // piece's half is the one not below the centre for the upper half, not above it for
-                // the lower.
-                let centre = At::Rational(ring.circle.centre);
-                for root in [Root::First, Root::Second] {
-                    let z = At::Root(Box::new(Crossing2::of_round(
-                        vertical,
-                        &ring.circle.round,
-                        root,
-                    )?));
-                    let level = z.cmp_y(&centre)?;
-                    if (upper && level != Sign::Negative) || (!upper && level != Sign::Positive) {
-                        return Ok(z);
-                    }
-                }
-                // A point of the piece is on the vertical, so a root is on its half; a step that
-                // found none is past the budget.
-                Err(ArrangeError::Range)
+    /// What the ray straight down from `p` makes of the piece `e`: `p` is its end or on it, or the
+    /// ray meets it below `p` (at the top end of a vertical piece, or at the point of its line or
+    /// half circle at `p`'s x, `vertical`), or it is no matter.
+    fn probe(e: &Piece, p: &At, vertical: &Carrier) -> Result<Probe, ArrangeError> {
+        if let (Shape::Plain { lo, hi, line, .. }, At::Rational(r)) = (&e.0, p) {
+            if lo.same(r)? || hi.same(r)? {
+                return Ok(Probe::Vertex);
             }
-            (On::Arc { .. }, None) => Err(ArrangeError::TooMany),
+            if line.side(r)? == Sign::Zero && between(lo, r, hi)? {
+                return Ok(Probe::Edge);
+            }
+            if lo.cmp_x(r)? == Sign::Positive || hi.cmp_x(r)? == Sign::Negative {
+                return Ok(Probe::Miss);
+            }
+            let h = if lo.cmp_x(hi)? == Sign::Zero {
+                *hi
+            } else {
+                vertical.meet(line)?
+            };
+            if h.cmp_y(r)? != Sign::Negative {
+                return Ok(Probe::Miss);
+            }
+            return Ok(Probe::Below(At::Rational(h)));
         }
+        let run = e.run();
+        if run.lo.same(p)? || run.hi.same(p)? {
+            return Ok(Probe::Vertex);
+        }
+        if holds(e, p)? {
+            return Ok(Probe::Edge);
+        }
+        if run.lo.cmp_x(p)? == Sign::Positive || run.hi.cmp_x(p)? == Sign::Negative {
+            return Ok(Probe::Miss);
+        }
+        let h = if run.lo.cmp_x(&run.hi)? == Sign::Zero {
+            run.hi.clone()
+        } else {
+            match (run.on, e.ring()) {
+                (On::Line { line, .. }, _) => At::Rational(vertical.meet(&line)?),
+                (On::Arc { upper, .. }, Some(ring)) => Live::on_half(ring, vertical, upper)?,
+                (On::Arc { .. }, None) => return Err(ArrangeError::TooMany),
+            }
+        };
+        if h.cmp_y(p)? != Sign::Negative {
+            return Ok(Probe::Miss);
+        }
+        Ok(Probe::Below(h))
+    }
+
+    /// Where `vertical` meets the upper or the lower half of `ring`'s circle: of the two points
+    /// where it meets the circle (one where it touches it), the one not below the centre for the
+    /// upper half, not above it for the lower.
+    fn on_half(ring: &Ring, vertical: &Carrier, upper: bool) -> Result<At, ArrangeError> {
+        let centre = At::Rational(ring.circle.centre);
+        for root in [Root::First, Root::Second] {
+            let z = At::Root(Box::new(Crossing2::of_round(
+                vertical,
+                &ring.circle.round,
+                root,
+            )?));
+            let level = z.cmp_y(&centre)?;
+            if (upper && level != Sign::Negative) || (!upper && level != Sign::Positive) {
+                return Ok(z);
+            }
+        }
+        // A point of the piece is on the vertical, so a root is on its half; a step that found
+        // none is past the budget.
+        Err(ArrangeError::Range)
     }
 
     /// What lies at `p`.
@@ -1042,7 +1264,7 @@ impl Live {
         // The closest hit below p: its point, the first piece found that reaches it, and whether
         // that piece ends there. Pieces meet only at their ends, so a point that is the end of one
         // piece reaching it is the end of every piece reaching it, and any one piece decides.
-        let mut best: Option<(At, Piece, bool)> = None;
+        let mut best: Option<(At, &Piece, bool)> = None;
         let mut looked = 0_u64;
         for chunk in &self.chunks {
             if !meets(&chunk.bounds, &column) {
@@ -1053,27 +1275,19 @@ impl Live {
                     continue;
                 }
                 looked = looked.saturating_add(1);
-                if e.run.lo.same(&at)? || e.run.hi.same(&at)? {
-                    return Ok(Location::Vertex(at));
-                }
-                if holds(e, &at)? {
-                    return Ok(Location::Edge(e.half_from(&e.run.lo)?));
-                }
-                if e.run.lo.cmp_x(&at)? == Sign::Positive || e.run.hi.cmp_x(&at)? == Sign::Negative
-                {
-                    continue;
-                }
-                let h = Live::hit(e, &vertical)?;
-                if h.cmp_y(&at)? != Sign::Negative {
-                    continue;
-                }
+                let h = match Live::probe(e, &at, &vertical)? {
+                    Probe::Vertex => return Ok(Location::Vertex(at)),
+                    Probe::Edge => return Ok(Location::Edge(e.half_from(&e.lo())?)),
+                    Probe::Miss => continue,
+                    Probe::Below(h) => h,
+                };
                 let higher = match &best {
                     Some((b, _, _)) => h.cmp_y(b)? == Sign::Positive,
                     None => true,
                 };
                 if higher {
-                    let ends = e.run.lo.same(&h)? || e.run.hi.same(&h)?;
-                    best = Some((h, e.clone(), ends));
+                    let ends = e.has_end(&h)?;
+                    best = Some((h, e, ends));
                 }
             }
         }
@@ -1083,7 +1297,7 @@ impl Live {
         };
         if !at_end {
             // Under an edge's inside: the face above it is on the left of the edge as it runs.
-            return Ok(Location::Face(Some(under.half_from(&under.run.lo)?)));
+            return Ok(Location::Face(Some(under.half_from(&under.lo())?)));
         }
         // At a vertex: the face is the one the first edge clockwise from straight up bounds.
         let ring = self.at(&h)?;
@@ -1204,11 +1418,7 @@ mod tests {
     /// Taking out a key that is not there changes nothing, in an empty drawing or not.
     #[test]
     fn removing_a_key_that_is_not_there_changes_nothing() {
-        let key = |a: P2, b: P2| Piece {
-            run: segment(a, b).unwrap().unwrap(),
-            ring: None,
-            sources: Arc::from([0]),
-        };
+        let key = |a: P2, b: P2| Piece::of(segment(a, b).unwrap().unwrap(), None, Arc::from([0]));
         let mut empty = Edit::of(&Live::new());
         empty.remove(&key(p(0, 0), p(1, 0))).unwrap();
         let (live, cost) = empty.done();
@@ -1221,6 +1431,17 @@ mod tests {
         assert!(after.same_as(&drawing).unwrap());
         assert_eq!(cost, Cost::default());
         assert_eq!(after.shared_chunks(&drawing), drawing.chunk_count());
+    }
+
+    /// A piece is no larger than two rational points, a carrier and the sources, as it was before
+    /// arcs came in: the boxed variant fits beside the plain one's pointer.
+    #[cfg(target_pointer_width = "64")]
+    #[test]
+    fn a_piece_is_as_small_as_a_segment_needs() {
+        let plain = 2 * core::mem::size_of::<Rational2>()
+            + core::mem::size_of::<Carrier>()
+            + core::mem::size_of::<Arc<[u32]>>();
+        assert_eq!(core::mem::size_of::<Piece>(), plain);
     }
 
     /// A chunk index that is not there is refused.
@@ -1247,4 +1468,3 @@ mod tests {
         }
     }
 }
-

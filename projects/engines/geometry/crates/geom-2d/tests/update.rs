@@ -543,9 +543,10 @@ fn assert_pieces_run_low_to_high(drawing: &Live, what: &str) {
             panic!("{what}: a segment's piece on a circle: {piece:?}");
         };
         let (lo, hi) = (
-            piece.lo().rational().unwrap(),
-            piece.hi().rational().unwrap(),
+            *piece.lo().rational().unwrap(),
+            *piece.hi().rational().unwrap(),
         );
+        let (lo, hi) = (&lo, &hi);
         assert_eq!(line.side(lo).unwrap(), Sign::Zero, "{what}: {piece:?}");
         assert_eq!(line.side(hi).unwrap(), Sign::Zero, "{what}: {piece:?}");
         let d = line.direction();
