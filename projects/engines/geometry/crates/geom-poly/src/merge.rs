@@ -47,7 +47,7 @@ use geom_num::{I256, I320, NumError, Sign, Wide};
 use geom_run::{ChunkPlan, Exec, Phase, RunError, Stopped, WorkMeter};
 
 use crate::convex::{Piece, opposite};
-use crate::order::{Flap, Line, Meeting, Ray, about, around, plane_words, wide_product};
+use crate::order::{Flap, Line, Meeting, Ray, Span, about, around, plane_words, wide_product};
 use crate::plane::{Canonical, canonical};
 use crate::subdivide::around_on;
 use crate::trace::{Cell as Box3, Classified, Polygon, TraceError, classify_with};
@@ -709,25 +709,67 @@ fn corner(face: Plane, p: Plane, q: Plane) -> Result<Corner, NumError> {
 }
 
 /// The Plücker coordinates of a line: its direction, then its moment, the direction's first
-/// non-zero component positive. Below 2^209, in [`I256`].
+/// non-zero component positive. Below 2^209, in [`I256`]. A side holds one for its line, so it
+/// keeps only one form: the cells where all six fit machine words, as nearly every line of a mesh
+/// does, else the wide coordinates.
 #[derive(Clone, Copy, Debug)]
 struct LineKey {
-    coordinates: [I256; 6],
     first: usize,
-    /// Each coordinate over the direction's first non-zero component as a [`Cell`], where all
-    /// six fit machine words.
-    cells: Option<[Cell; 6]>,
+    form: LineForm,
+}
+
+/// A line's coordinates in one form.
+#[derive(Clone, Copy, Debug)]
+enum LineForm {
+    /// Each coordinate over the direction's first non-zero component, as a [`Cell`].
+    Cells([Cell; 6]),
+    /// The coordinates, where some does not fit a machine word.
+    Wide([I256; 6]),
+}
+
+impl LineKey {
+    /// The line of `coordinates`, by its cells where they all fit machine words.
+    fn of(coordinates: [I256; 6], first: usize) -> LineKey {
+        let form =
+            line_cells(&coordinates, first).map_or(LineForm::Wide(coordinates), LineForm::Cells);
+        LineKey { first, form }
+    }
+
+    /// Its cells, where it has them.
+    fn cells(&self) -> Option<&[Cell; 6]> {
+        match &self.form {
+            LineForm::Cells(cells) => Some(cells),
+            LineForm::Wide(_) => None,
+        }
+    }
+
+    /// Its coordinates: from cells, each the cell's floor times its divisor plus its remainder,
+    /// the `i128` it was made from, so in [`I256`] the products and sums cannot fail.
+    fn coordinates(&self) -> Option<[I256; 6]> {
+        let cells = match &self.form {
+            LineForm::Wide(coordinates) => return Some(*coordinates),
+            LineForm::Cells(cells) => cells,
+        };
+        let wide = I256::from_i128;
+        let mut out = [wide(0); 6];
+        for (slot, cell) in out.iter_mut().zip(cells) {
+            let whole = wide(cell.floor).checked_mul(&wide(cell.over))?;
+            *slot = whole.checked_add(&wide(cell.rest))?;
+        }
+        Some(out)
+    }
 }
 
 /// The line where `p` and `q` meet: direction `n_p` × `n_q`, moment `d_p` `n_q` − `d_q` `n_p`, which
 /// is the same up to scale for any two planes through the line.
 fn line_key(p: &Plane, q: &Plane) -> Result<LineKey, NumError> {
     match line_in_words(p, q) {
-        Some((coordinates, first)) => Ok(LineKey {
-            cells: line_cells_of(&coordinates, first),
-            coordinates: coordinates.map(I256::from_i128),
-            first,
-        }),
+        Some((coordinates, first)) => {
+            // Two `i64` planes' coordinates always have cells: the wide form is never taken.
+            let wide = LineForm::Wide(coordinates.map(I256::from_i128));
+            let form = line_cells_of(&coordinates, first).map_or(wide, LineForm::Cells);
+            Ok(LineKey { first, form })
+        }
         None => wide_line_key(p, q),
     }
 }
@@ -769,11 +811,7 @@ fn wide_line_key(p: &Plane, q: &Plane) -> Result<LineKey, NumError> {
             *slot = slot.checked_neg().ok_or(NumError::BudgetExceeded)?;
         }
     }
-    Ok(LineKey {
-        cells: line_cells(&coordinates, first),
-        coordinates,
-        first,
-    })
+    Ok(LineKey::of(coordinates, first))
 }
 
 /// [`line_key`]'s coordinates and `first` where both planes' coefficients fit `i64`: a product of
@@ -835,7 +873,7 @@ fn line_order(a: &LineKey, b: &LineKey) -> Option<Ordering> {
     if order != Ordering::Equal {
         return Some(order);
     }
-    if let (Some(p), Some(q)) = (&a.cells, &b.cells) {
+    if let (Some(p), Some(q)) = (a.cells(), b.cells()) {
         for (x, y) in p.iter().zip(q.iter()) {
             let order = x.order(y)?;
             if order != Ordering::Equal {
@@ -845,7 +883,7 @@ fn line_order(a: &LineKey, b: &LineKey) -> Option<Ordering> {
         return Some(Ordering::Equal);
     }
     let over = a.first;
-    let (p, q) = (&a.coordinates, &b.coordinates);
+    let (p, q) = (&a.coordinates()?, &b.coordinates()?);
     for i in 0..6 {
         let order = ratio_order::<4, 4, 8>(p.get(i)?, p.get(over)?, q.get(i)?, q.get(over)?)?;
         if order != Ordering::Equal {
@@ -1406,8 +1444,7 @@ fn by_line(
         .map(|s| {
             let from = s.key.first.saturating_add(1);
             s.key
-                .cells
-                .as_ref()
+                .cells()
                 .map(|cells| (s.key.first, MarkKey::new(cells, from)))
         })
         .collect();
@@ -1471,6 +1508,15 @@ fn in_order<'s>(sides: &[&'s Side], order: &[usize]) -> Result<Vec<&'s Side>, Me
 /// whole. Only a seam can hold two fins of one sheet, so those two are the seam.
 fn without_slits(mut runs: Vec<Run>, parents: &[usize]) -> Vec<Run> {
     for run in &mut runs {
+        // A seam's two fins are of one sheet, so a run whose fins are all of different sheets, as
+        // an edge between faces is, has none.
+        let shared = |(at, fin): (usize, &RunFin)| {
+            let mut later = run.fins.iter().skip(at.saturating_add(1));
+            later.any(|other| other.sheet == fin.sheet)
+        };
+        if !run.fins.iter().enumerate().any(shared) {
+            continue;
+        }
         // Which fins are a seam's, told against every fin of the run before any goes: a flag for
         // each, rather than a copy of the fins.
         let seam: Vec<bool> = run
@@ -1498,12 +1544,22 @@ fn floors(corner: &Corner) -> Option<[i128; 3]> {
     corner.cells.map(|[x, y, z]| [x.floor, y.floor, z.floor])
 }
 
-/// Whether a corner whose floors are `at` lies outside the cells from `a` to `b`: a point of the
-/// segment between two corners lies within their floors' range and a unit more.
-fn beyond(at: &[i128; 3], (a, b): (&[i128; 3], &[i128; 3])) -> bool {
+/// Whether a corner whose floors are `at` lies outside the floors' range `low` to `high` of two
+/// corners: a point of the segment between them lies within it.
+fn beyond(at: &[i128; 3], (low, high): (&[i128; 3], &[i128; 3])) -> bool {
     at.iter()
-        .zip(a.iter().zip(b))
-        .any(|(v, (p, q))| v < &(*p).min(*q) || v > &(*p).max(*q))
+        .zip(low.iter().zip(high))
+        .any(|(v, (l, h))| v < l || v > h)
+}
+
+/// The lowest and highest of two corners' floors on each axis.
+fn spanned(a: &[i128; 3], b: &[i128; 3]) -> ([i128; 3], [i128; 3]) {
+    let (mut low, mut high) = (*a, *a);
+    for ((l, h), v) in low.iter_mut().zip(&mut high).zip(b) {
+        *l = (*l).min(*v);
+        *h = (*h).max(*v);
+    }
+    (low, high)
 }
 
 /// `runs`, each cut wherever another run ends on its line. A run's line holds only points between
@@ -1555,15 +1611,18 @@ fn cuts_of(
     places: &[Place<'_>],
 ) -> Result<Vec<usize>, MergeError> {
     let [p, q] = run.on;
+    // The floors' range on each axis, made once for the run rather than for each mark.
     let span = cells.get(run.low).zip(cells.get(run.high));
-    let span = span.and_then(|(a, b)| a.as_ref().zip(b.as_ref()));
+    let span = span
+        .and_then(|(a, b)| a.as_ref().zip(b.as_ref()))
+        .map(|(a, b)| spanned(a, b));
     let from = ends.partition_point(|e| *e <= run.low);
     let to = ends.partition_point(|e| *e < run.high);
     let mut marks = Vec::new();
     for mark in ends.get(from..to).unwrap_or_default() {
         let outside = span
             .zip(cells.get(*mark).and_then(Option::as_ref))
-            .is_some_and(|(span, at)| beyond(at, span));
+            .is_some_and(|((low, high), at)| beyond(at, (&low, &high)));
         if outside {
             continue;
         }
@@ -1713,19 +1772,19 @@ fn join_around(
     Ok(())
 }
 
-/// `pieces` as polygons of one shell, each with `entry`, and their faces in canonical form.
+/// `pieces` as polygons of one shell, each with `entry`, and their faces and spans.
 fn polygons_of(
-    pieces: &[(&Piece, Canonical)],
+    pieces: &[Traced<'_>],
     entry: Option<Entry>,
-) -> (Vec<Polygon>, Vec<Canonical>) {
+) -> (Vec<Polygon>, Vec<(Canonical, Option<Span>)>) {
     let mut polygons = Vec::with_capacity(pieces.len());
     let mut faces = Vec::with_capacity(pieces.len());
-    for (piece, face) in pieces {
+    for (piece, face, span) in pieces {
         polygons.push(Polygon {
             piece: (*piece).clone(),
             entry,
         });
-        faces.push(*face);
+        faces.push((*face, *span));
     }
     (polygons, faces)
 }
@@ -1749,11 +1808,34 @@ fn grid_range(corners: &[Corner]) -> Option<GridRange> {
 /// A grid range: its lowest and highest coordinates.
 type GridRange = ([i64; 3], [i64; 3]);
 
-/// The vectors in front of and behind the first of `polygons`, whose faces in canonical form are
-/// `faces`, traced through all of them inside `cell`, or the box [`around_on`] finds for them
-/// where there is none.
+/// The span of `corners`, as trace's span of a piece is made from its corners' floors, where each
+/// has [`Cell`]s with floors in machine words: their lowest floors a step lower, and their highest
+/// two steps higher.
+fn floor_span(corners: &[Corner]) -> Option<Span> {
+    let mut low = [i64::MAX; 3];
+    let mut high = [i64::MIN; 3];
+    for corner in corners {
+        let cells = corner.cells.as_ref()?;
+        for ((l, h), cell) in low.iter_mut().zip(&mut high).zip(cells) {
+            let floor = i64::try_from(cell.floor).ok()?;
+            *l = (*l).min(floor);
+            *h = (*h).max(floor);
+        }
+    }
+    Some(Span {
+        low: low.map(|v| v.saturating_sub(1)),
+        high: high.map(|v| v.saturating_add(2)),
+    })
+}
+
+/// What [`nest`] holds of a piece: the piece, its face in canonical form and its span.
+type Traced<'p> = (&'p Piece, Canonical, Option<Span>);
+
+/// The vectors in front of and behind the first of `polygons`, whose faces in canonical form and
+/// spans are `faces`, traced through all of them inside `cell`, or the box [`around_on`] finds
+/// for them where there is none.
 fn sides_of_first(
-    (polygons, faces): (&[Polygon], &[Canonical]),
+    (polygons, faces): (&[Polygon], &[(Canonical, Option<Span>)]),
     cell: Option<Box3>,
     exec: &Exec<'_>,
     meter: &mut WorkMeter<'_>,
@@ -1767,7 +1849,11 @@ fn sides_of_first(
         .take(1)
         .map(|polygon| alloc::vec![polygon.piece.clone()])
         .collect();
-    let held: Vec<(&Polygon, Canonical)> = polygons.iter().zip(faces.iter().copied()).collect();
+    let held: Vec<(&Polygon, Canonical, Option<Span>)> = polygons
+        .iter()
+        .zip(faces)
+        .map(|(polygon, (face, span))| (polygon, *face, *span))
+        .collect();
     let found = classify_with(&cell, &Winding::new(), &held, &lists, meter)?;
     let first = found.into_iter().next();
     Ok(first.map_or_else(|| (Winding::new(), Winding::new()), |c| (c.front, c.back)))
@@ -1775,7 +1861,7 @@ fn sides_of_first(
 
 /// Which of the shells `among` lie around a point behind shell `at`.
 fn around_shell(
-    of_shell: &[Vec<(&Piece, Canonical)>],
+    of_shell: &[Vec<Traced<'_>>],
     (at, among): (usize, &[usize]),
     exec: &Exec<'_>,
     meter: &mut WorkMeter<'_>,
@@ -1807,19 +1893,23 @@ fn around_shell(
 fn nest(
     held: &[Held<'_>],
     (shell_of_piece, shells): (&[usize], usize),
-    ranges: &[Option<GridRange>],
+    (ranges, spans): (&[Option<GridRange>], &[Option<Span>]),
     exec: &Exec<'_>,
     meter: &mut WorkMeter<'_>,
 ) -> Result<Vec<(bool, Option<usize>)>, MergeError> {
-    let mut of_shell: Vec<Vec<(&Piece, Canonical)>> = alloc::vec![Vec::new(); shells];
+    let mut of_shell: Vec<Vec<Traced<'_>>> = alloc::vec![Vec::new(); shells];
     let mut range_of_shell: Vec<Option<GridRange>> =
         alloc::vec![Some(([i64::MAX; 3], [i64::MIN; 3])); shells];
-    for ((entry, shell), range) in held.iter().zip(shell_of_piece).zip(ranges) {
+    let pieces = held
+        .iter()
+        .zip(shell_of_piece)
+        .zip(ranges.iter().zip(spans));
+    for ((entry, shell), (range, span)) in pieces {
         of_shell
             .iter_mut()
             .skip(*shell)
             .take(1)
-            .for_each(|list| list.push((entry.piece, entry.face)));
+            .for_each(|list| list.push((entry.piece, entry.face, *span)));
         range_of_shell
             .iter_mut()
             .skip(*shell)
@@ -2199,7 +2289,14 @@ pub fn merge_on(
         Vec::new()
     } else {
         let ranges: Vec<Option<GridRange>> = corners.iter().map(|c| grid_range(c)).collect();
-        nest(&held, (&shell_of_piece, tops.len()), &ranges, exec, meter)?
+        let spans: Vec<Option<Span>> = corners.iter().map(|c| floor_span(c)).collect();
+        nest(
+            &held,
+            (&shell_of_piece, tops.len()),
+            (&ranges, &spans),
+            exec,
+            meter,
+        )?
     };
 
     // Faces and shells.
@@ -2281,8 +2378,8 @@ mod tests {
     use geom_num::Sign;
 
     use super::{
-        Cell, CellKey, MarkKey, REACH, corner, lead, line_in_words, mark, point_order,
-        wide_line_key,
+        Cell, CellKey, MarkKey, REACH, corner, lead, line_cells_of, line_in_words, mark,
+        point_order, wide_line_key,
     };
 
     /// a / b against c / d, b and d positive, by cross-multiplying big integers.
@@ -2645,8 +2742,12 @@ mod tests {
         match line_in_words(&p, &q) {
             Some((coordinates, first)) => {
                 let wide = wide.unwrap();
-                assert_eq!(coordinates.map(I256::from_i128), wide.coordinates);
+                assert_eq!(Some(coordinates.map(I256::from_i128)), wide.coordinates());
                 assert_eq!(first, wide.first);
+                assert_eq!(
+                    wide.cells().is_some(),
+                    line_cells_of(&coordinates, first).is_some()
+                );
             }
             None => assert!(wide.is_err()),
         }
