@@ -1,6 +1,9 @@
 //! Attacks on G243a's claims (chapter 11.4 steps 2 and 4): the face stages at the frame's edge,
 //! rays through many corners and along edges, round holes with a seam, faces on one plane, an edge
-//! lying in a face, a flagged region far from any vertex, and the same answer every time.
+//! lying in a face, a flagged region far from any vertex, and the same answer every time. Then each
+//! guard at the edge of its case: a ray that only one direction can take, joins with gaps, a vertex
+//! or a flagged region ahead, a point in a gap, a curve that comes near a plane without meeting it,
+//! held regions and lying pieces a step or two from a face's edge, and a face with no boundary.
 
 #![allow(
     clippy::unwrap_used,
@@ -19,11 +22,12 @@ use geom_bool::crossing::{Enclosed, Hull, crossings};
 use geom_bool::distance::Carriers;
 use geom_bool::inside::{FlatFace, Place};
 use geom_bool::interfere::{
-    Arrangement, BuildError, EdgeIn, FaceIn, Interfered, Interference, VertexIn, interfere,
+    Arrangement, BuildError, EdgeIn, Entity, FaceIn, Interfered, Interference, VertexIn, interfere,
 };
 use geom_bool::merge::default_remaining;
 use geom_bool::rule::{ContactError, NearContact};
-use geom_curve::{Circle, CurveKind, Frame, Helix, HelixAxes, Line, ParamCurve};
+use geom_curve::{Circle, CurveKind, Frame, Helix, HelixAxes, Line, ParamCurve, Polynomial};
+use geom_intersect::IntersectError;
 use geom_num::P3;
 use geom_num::interval::Interval;
 use geom_num::plane::Plane;
@@ -705,6 +709,9 @@ fn a_segment_meets_a_plane_once_or_not_at_all() {
     );
     let found = at(&segment([0.0, 0.0, 1.0], [10.0, 0.0, 0.0]), m);
     assert!(found.zeros.is_empty() && found.flagged.is_empty());
+    // Parallel to it below: no crossing and nothing flagged either.
+    let found = at(&segment([0.0, 0.0, -1.0], [10.0, 0.0, 0.0]), m);
+    assert!(found.zeros.is_empty() && found.flagged.is_empty());
     // In it: the whole domain flagged.
     let found = at(&segment([0.0, 0.0, 0.0], [10.0, 0.0, 0.0]), m);
     assert_eq!(found.zeros.len(), 0);
@@ -795,4 +802,336 @@ fn a_segment_s_distance_beside_it_and_past_each_end() {
     let on = d(7, 0, 0);
     assert_eq!(on.lo(), 0.0);
     assert!(on.hi() < 1e-9, "{on:?}");
+    // A slanting segment, from a point before its start and one past its end: both √17 from its
+    // ends. Its nearest parameter is held to the domain, so the distance is measured at the end,
+    // not over the stretch of line beyond it.
+    let slant = carriers
+        .add_curve(segment([0.0; 3], [10.0, 10.0, 0.0]))
+        .unwrap();
+    let root17 = 17.0_f64.sqrt();
+    for (x, y) in [(-4, 1), (14, 11), (1, -4), (11, 14)] {
+        let e = carriers
+            .distance(p(x, y, 0), CarrierIx::Curve(slant), 0, m)
+            .unwrap();
+        assert!(
+            e.lo() > root17 - 1e-9
+                && e.lo() <= root17
+                && e.hi() >= root17
+                && e.hi() < root17 + 1e-9,
+            "({x}, {y}): {e:?}"
+        );
+    }
+    // A ray and a whole line are measured in the same closed form.
+    for domain in [(0.0, f64::INFINITY), (f64::NEG_INFINITY, f64::INFINITY)] {
+        let ray = carriers
+            .add_curve(CurveKind::Line(
+                Line::new([0.0; 3], [1.0, 0.0, 0.0], domain).unwrap(),
+            ))
+            .unwrap();
+        let e = carriers
+            .distance(p(1_000, 3, 4), CarrierIx::Curve(ray), 0, m)
+            .unwrap();
+        assert!(e.lo() > 4.999 && e.hi() < 5.001, "{domain:?}: {e:?}");
+    }
+}
+
+/// A ray has no hull: its NURBS form is refused, as a ray's is, never made from its infinite end.
+#[test]
+fn a_ray_has_no_hull() {
+    let ray = CurveKind::Line(Line::new([0.0; 3], [1.0, 0.0, 0.0], (0.0, f64::INFINITY)).unwrap());
+    assert!(matches!(
+        Hull::of(&ray, &mut meter()),
+        Err(IntersectError::InvalidInput)
+    ));
+}
+
+/// A parabola that comes within a hundredth of a step of a plane without meeting it: no crossing is
+/// found and nothing is flagged.
+#[test]
+fn a_curve_near_a_plane_without_meeting_it_has_no_crossing() {
+    let h = 0.01;
+    // z = 100 + (4h − 400) t + (400 − 4h) t², least at t = 1/2, where it is h.
+    let dip = CurveKind::Polynomial(
+        Polynomial::new(
+            vec![
+                [0.0, 0.0, 100.0],
+                [100.0, 0.0, 4.0 * h - 400.0],
+                [0.0, 0.0, 400.0 - 4.0 * h],
+            ],
+            (0.0, 1.0),
+        )
+        .unwrap(),
+    );
+    let found = crossings(&dip, &floor_plane(), &mut meter()).unwrap();
+    assert!(
+        found.zeros.is_empty() && found.flagged.is_empty(),
+        "{found:?}"
+    );
+}
+
+/// A face with no boundary has no box: it is missing, not a face of the whole frame or of none.
+#[test]
+fn a_face_with_no_boundary_is_missing() {
+    let mut b = Build::default();
+    b.flat(&[(0, 0), (1_000, 0), (0, 1_000)], 0, 0);
+    let plane = b.plane([0, 0, 1], -5);
+    let empty = b.face(plane, Vec::new(), 1);
+    assert!(
+        matches!(b.run(), Err(BuildError::Missing(Entity::Face(f))) if f == empty),
+        "{:?}",
+        b.run()
+    );
+}
+
+/// An edge whose end is a step above a face's plane, inside the face, meets the face at that end:
+/// the end is reused, and it is In the face, though by itself it does not touch the plane.
+#[test]
+fn an_edge_ending_a_step_above_a_face_meets_it_at_its_end() {
+    let mut b = Build::default();
+    let (face, _) = b.flat(
+        &[
+            (0, 0),
+            (1_000_000, 0),
+            (1_000_000, 1_000_000),
+            (0, 1_000_000),
+        ],
+        0,
+        0,
+    );
+    let top = b.vertex(p(500_000, 500_000, 1), 1);
+    let bottom = b.vertex(p(500_000, 500_000, -1_000), 1);
+    let e = b.line(top, bottom, 1);
+    let out = b.run().unwrap();
+    assert_eq!(out.faces[face].in_vertices, vec![out.merged[top]]);
+    assert!(out.interferences.iter().any(|i| matches!(
+        i,
+        Interference::EdgeFace { edge, face: f, vertex, reused: true }
+            if *edge == e && *f == face && *vertex == out.merged[top]
+    )));
+}
+
+/// A circle lying in a face, its middle (t = 1, opposite its seam) 1.8 or 2.4 steps inside a
+/// slanting edge of the face. The middle's grid point is placed within its bound of the curve,
+/// two steps here (the rounding's step and the enclosure's width): 1.8 steps from the edge it
+/// touches it, so the piece is not In; 2.4 steps from it, it is.
+#[test]
+fn a_lying_piece_s_middle_is_placed_within_its_bound() {
+    // The slanting edge lies on 3x + 4y = k; the middle is at (100,600, 100,800), where
+    // 3x + 4y = 705,000, so k − 705,000 is five times its distance from the edge.
+    let near: &[(i64, i64)] = &[(0, 0), (235_003, 0), (3, 176_250), (0, 176_250)];
+    let far: &[(i64, i64)] = &[(0, 0), (235_004, 0), (0, 176_253)];
+    for (k, xy, inside) in [(705_009_i64, near, false), (705_012, far, true)] {
+        let mut b = Build::default();
+        for &(x, y) in xy {
+            assert!(3 * x + 4 * y <= k, "({x}, {y})");
+        }
+        let (face, _) = b.flat(xy, 0, 0);
+        let frame = Frame::new([-3.0, -4.0, 0.0], [0.0, 0.0, 1.0]).unwrap();
+        let ring = Circle::new([100_000.0, 100_000.0, 0.0], 1_000.0, frame, (0.0, 2.0)).unwrap();
+        let e = b.edge(CurveKind::Circle(ring), None, 1);
+        let out = b.run().unwrap();
+        let pieces: Vec<usize> = (0..out.splits.len())
+            .filter(|&s| out.splits[s].source == e)
+            .collect();
+        assert_eq!(pieces.len(), 1);
+        let expected = if inside { pieces } else { Vec::new() };
+        assert_eq!(out.faces[face].in_blocks, expected, "k = {k}");
+    }
+}
+
+/// A circle standing on a face's plane, touching it a few steps beyond the face's slanting edge
+/// x + y = k: the flagged regions round the tangency are accepted only when the grid point at each
+/// region's centre lies further from the edge than the region's reach, half the sum of its box's
+/// sides and a step. The two circles' regions have boxes of sides (1, 0, 2) and (2, 1, 2), so
+/// reaches of 3 and 4 steps; each is refused one diagonal step nearer.
+#[test]
+fn a_held_region_is_outside_only_beyond_its_reach() {
+    for (centre, k, accepted) in [
+        ((600_000.0, 500_000.0), 1_099_995_i64, true),
+        ((600_000.0, 500_000.0), 1_099_996, false),
+        ((600_000.5, 500_000.5), 1_099_994, true),
+        ((600_000.5, 500_000.5), 1_099_995, false),
+    ] {
+        let mut b = Build::default();
+        b.flat(&[(0, 0), (k, 0), (0, k)], 0, 0);
+        let frame = Frame::new([1.0, 0.0, 0.0], [0.0, 1.0, 0.0]).unwrap();
+        let ring = Circle::new([centre.0, centre.1, 1_000.0], 1_000.0, frame, (0.0, 2.0)).unwrap();
+        b.edge(CurveKind::Circle(ring), None, 1);
+        match (b.run(), accepted) {
+            (Ok(_), true) | (Err(BuildError::Undecided { .. }), false) => {}
+            (other, _) => panic!("{centre:?} with k = {k}: {other:?}"),
+        }
+    }
+}
+
+/// A face whose corners lie on the rays of every direction but one, from a point inside it: each of
+/// those rays meets a join and is refused, so only the one left can place the point, and does.
+#[test]
+fn a_point_only_one_direction_can_place_is_placed() {
+    let directions = geom_bool::inside::DIRECTIONS;
+    for (skip, &(sx, sy)) in directions.iter().enumerate() {
+        let mut corners: Vec<(i64, i64)> = directions
+            .iter()
+            .enumerate()
+            .filter(|&(k, _)| k != skip)
+            .map(|(_, &(a, b))| {
+                let m = 300_000 / a.abs().max(b.abs());
+                (a * m, b * m)
+            })
+            .collect();
+        // Corners behind the point, where no ray of the list starts, close the face round it.
+        corners.extend([
+            (-200_000, 250_000),
+            (-300_000, 0),
+            (-200_000, -250_000),
+            (0, -300_000),
+        ]);
+        corners.sort_by(|a, b| {
+            let (ta, tb) = (
+                (a.1 as f64).atan2(a.0 as f64),
+                (b.1 as f64).atan2(b.0 as f64),
+            );
+            ta.partial_cmp(&tb).unwrap()
+        });
+        let mut b = Build::default();
+        let (face, _) = b.flat(&corners, 0, 0);
+        let m = &mut meter();
+        let flat = FlatFace::new(&b.arr, face, m).unwrap().unwrap();
+        assert_eq!(
+            flat.place(&b.arr.carriers, p(0, 0, 0), Bound::ZERO, m)
+                .unwrap(),
+            Place::In,
+            "only ({sx}, {sy}) left"
+        );
+    }
+}
+
+/// A square whose right side is two edges meeting at a vertex in its middle, their curves' ends a
+/// little apart there, either leaving a gap or overlapping. A ray from inside the square level with
+/// the vertex runs through the join, and is refused: the join's box holds both ends. The next ray
+/// places the point In.
+#[test]
+fn a_join_holds_both_curves_ends() {
+    for (lower_end, upper_start) in [(1_000, 1_010), (1_010, 1_000)] {
+        let mut b = Build::default();
+        let c: Vec<usize> = [
+            (0, 0),
+            (2_000, 0),
+            (2_000, 1_005),
+            (2_000, 2_000),
+            (0, 2_000),
+        ]
+        .iter()
+        .map(|&(x, y)| b.vertex(p(x, y, 0), 0))
+        .collect();
+        let mut edges = vec![b.line(c[0], c[1], 0)];
+        let lower = Line::new(
+            [2_000.0, 0.0, 0.0],
+            [0.0, f64::from(lower_end), 0.0],
+            (0.0, 1.0),
+        );
+        edges.push(b.edge(CurveKind::Line(lower.unwrap()), Some([c[1], c[2]]), 0));
+        let upper = Line::new(
+            [2_000.0, f64::from(upper_start), 0.0],
+            [0.0, 2_000.0 - f64::from(upper_start), 0.0],
+            (0.0, 1.0),
+        );
+        edges.push(b.edge(CurveKind::Line(upper.unwrap()), Some([c[2], c[3]]), 0));
+        edges.push(b.line(c[3], c[4], 0));
+        edges.push(b.line(c[4], c[0], 0));
+        let plane = b.plane([0, 0, 1], 0);
+        let face = b.face(plane, vec![edges], 0);
+        let m = &mut meter();
+        let flat = FlatFace::new(&b.arr, face, m).unwrap().unwrap();
+        assert_eq!(
+            flat.place(&b.arr.carriers, p(1_000, 1_005, 0), Bound::ZERO, m)
+                .unwrap(),
+            Place::In,
+            "ends at {lower_end} and {upper_start}"
+        );
+    }
+}
+
+/// A point whose first ray runs through a corner ahead of it, where the boundary passes from one
+/// side of the ray to the other, with nothing level with it behind: the ray is refused rather than
+/// counting the corner twice, and the point is In.
+#[test]
+fn a_ray_through_a_corner_ahead_is_refused() {
+    let mut b = Build::default();
+    let (face, _) = b.flat(&[(1_000, 0), (0, 1_000), (-1_000, 500), (0, -1_000)], 0, 0);
+    let m = &mut meter();
+    let flat = FlatFace::new(&b.arr, face, m).unwrap().unwrap();
+    assert_eq!(
+        flat.place(&b.arr.carriers, p(0, 0, 0), Bound::ZERO, m)
+            .unwrap(),
+        Place::In
+    );
+}
+
+/// A point in a wide gap between two boundary curves' ends, further than the contact radius from
+/// both: every ray runs through the join round the gap, so the point is refused, never guessed.
+#[test]
+fn a_point_in_a_gap_of_the_boundary_is_refused() {
+    let mut b = Build::default();
+    let c: Vec<usize> = [
+        (0, 0),
+        (2_000, 0),
+        (2_000, 1_000),
+        (2_000, 2_000),
+        (0, 2_000),
+    ]
+    .iter()
+    .map(|&(x, y)| b.vertex(p(x, y, 0), 0))
+    .collect();
+    let mut edges = vec![b.line(c[0], c[1], 0)];
+    let lower = Line::new([2_000.0, 0.0, 0.0], [0.0, 800.0, 0.0], (0.0, 1.0)).unwrap();
+    edges.push(b.edge(CurveKind::Line(lower), Some([c[1], c[2]]), 0));
+    let upper = Line::new([2_000.0, 1_200.0, 0.0], [0.0, 800.0, 0.0], (0.0, 1.0)).unwrap();
+    edges.push(b.edge(CurveKind::Line(upper), Some([c[2], c[3]]), 0));
+    edges.push(b.line(c[3], c[4], 0));
+    edges.push(b.line(c[4], c[0], 0));
+    let plane = b.plane([0, 0, 1], 0);
+    let face = b.face(plane, vec![edges], 0);
+    let m = &mut meter();
+    let flat = FlatFace::new(&b.arr, face, m).unwrap().unwrap();
+    assert!(matches!(
+        flat.place(&b.arr.carriers, p(2_000, 1_000, 0), Bound::ZERO, m),
+        Err(BuildError::Unclassified { face: f, .. }) if f == face
+    ));
+}
+
+/// A square whose right side is a cubic meeting the line y = 1,000 with a triple root, where it
+/// turns flat: the engine flags it ahead of a point on that line, so the ray is refused rather
+/// than counting no crossing there, and the point is In.
+#[test]
+fn a_flagged_region_ahead_refuses_the_ray() {
+    let mut b = Build::default();
+    let c: Vec<usize> = [(0, 0), (2_000, 0), (2_000, 2_000), (0, 2_000)]
+        .iter()
+        .map(|&(x, y)| b.vertex(p(x, y, 0), 0))
+        .collect();
+    let mut edges = vec![b.line(c[0], c[1], 0)];
+    // y = 1,000 + 1,000 (2t − 1)³ along x = 2,000.
+    let side = Polynomial::new(
+        vec![
+            [2_000.0, 0.0, 0.0],
+            [0.0, 6_000.0, 0.0],
+            [0.0, -12_000.0, 0.0],
+            [0.0, 8_000.0, 0.0],
+        ],
+        (0.0, 1.0),
+    )
+    .unwrap();
+    edges.push(b.edge(CurveKind::Polynomial(side), Some([c[1], c[2]]), 0));
+    edges.push(b.line(c[2], c[3], 0));
+    edges.push(b.line(c[3], c[0], 0));
+    let plane = b.plane([0, 0, 1], 0);
+    let face = b.face(plane, vec![edges], 0);
+    let m = &mut meter();
+    let flat = FlatFace::new(&b.arr, face, m).unwrap().unwrap();
+    assert_eq!(
+        flat.place(&b.arr.carriers, p(1_000, 1_000, 0), Bound::ZERO, m)
+            .unwrap(),
+        Place::In
+    );
 }

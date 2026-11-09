@@ -931,7 +931,8 @@ fn section(
 }
 
 /// The edges held as lying on a face's plane, placed piece by piece: each split edge of one whose
-/// box meets the face's box and whose middle lies inside the face is In it.
+/// middle lies inside the face is In it. A middle outside the face's box is placed Out by
+/// [`FlatFace::place`]'s own box test, at once.
 fn lying(
     arr: &Arrangement,
     out: &Interfered,
@@ -940,27 +941,6 @@ fn lying(
     meter: &mut WorkMeter<'_>,
 ) -> Result<(), BuildError> {
     let carriers = &arr.carriers;
-    // The box of each split edge, for a quick test against a face's box.
-    let mut piece_boxes = Vec::with_capacity(out.splits.len());
-    for piece in &out.splits {
-        let edge = arr
-            .edges
-            .get(piece.source)
-            .ok_or(BuildError::Missing(Entity::Edge(piece.source)))?;
-        let curve = carriers
-            .curve(edge.curve)
-            .ok_or(BuildError::Missing(Entity::Edge(piece.source)))?;
-        let (a, b) = curve.domain();
-        let span = match (piece.block.from, piece.block.to) {
-            (Some(from), Some(to)) if !piece.block.wraps => (
-                if from.t.lo() > a { from.t.lo() } else { a },
-                if to.t.hi() < b { to.t.hi() } else { b },
-            ),
-            _ => (a, b),
-        };
-        let reach = curve.bound(span, meter).map_err(IntersectError::from)?;
-        piece_boxes.push((reach.lo, reach.hi));
-    }
     let on_plane = core::mem::take(&mut fs.on_plane);
     for (e, f) in on_plane {
         let edge = arr
@@ -973,12 +953,9 @@ fn lying(
         let flat = flat_of(fs, f)?.ok_or(BuildError::Missing(Entity::Face(f)))?;
         let mut inside = Vec::new();
         for &k in by_source.get(e).into_iter().flatten() {
-            let (Some(piece), Some((lo, hi))) = (out.splits.get(k), piece_boxes.get(k)) else {
+            let Some(piece) = out.splits.get(k) else {
                 continue;
             };
-            if flat.apart_from(*lo, *hi) {
-                continue;
-            }
             let Some(t) = middle_of(curve, &piece.block) else {
                 continue;
             };
