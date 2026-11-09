@@ -711,7 +711,7 @@ The questions the owner settles in section 32 are listed once, in the first tabl
 | Which query on `Face.bound` of a curved face first needs the surface's certified extent: nothing culls on it yet, and group 3 tests every pair without culling | G102 build | Piece "Checker groups 2 and 3 for curved geometry" |
 | Bodies with implicit vertices: `geom_topo::mass` takes corners as a list, and `Body`'s points are grid points; how an implicit vertex reaches a body, and so how `query.volume` answers with an interval and a certified class | G102 build | Piece "Booleans of flat bodies" and its plane-based bodies |
 | A query's result type in the schema's vocabulary: `query.area` and `query.volume` return exact integers past a JSON number's range, written as decimal strings in the MCP tools; whether chapter 25's stable value types need a wide integer of their own | G102 build | Chapter 25's first stable release |
-| `geom_check::VERSION` must rise once G102's checks land beside G108's stamp, since a stamp from before them never tested loop sense, shell orientation or nesting | G102 build | Whichever of G102 and G108 merges second |
+| `geom_check::VERSION` must rise once G102's checks land beside G108's stamp, since a stamp from before them never tested loop sense, shell orientation or nesting | G102 build | After Phase 3's first train, which held both (as built): version 2, for groups 2 and 3 (G85), G101's exact plane test and G102's checks, so a body stamped by version 1 gets the full check again |
 
 ### Chapter 9: Representations and exactness
 
