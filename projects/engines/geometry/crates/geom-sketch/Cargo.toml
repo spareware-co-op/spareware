@@ -97,3 +97,8 @@ harness = false
 [[bench]]
 name = "check"
 harness = false
+
+# The chained certificates of a 200-constraint family (piece G227), the same way.
+[[bench]]
+name = "certify"
+harness = false

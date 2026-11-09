@@ -10880,6 +10880,40 @@
       "depends": [],
       "errors": [
         {
+          "doc": "Why a block could not be proven.",
+          "file": "projects/engines/geometry/crates/geom-sketch/src/certify.rs",
+          "kinds": [
+            {
+              "doc": "More unknowns than [`BLOCK_LIMIT`].",
+              "name": "TooLarge",
+              "shape": "unit"
+            },
+            {
+              "doc": "The Jacobian at the committed point cannot be inverted: the block is singular or too nearly so for its pivots to be told from zero.",
+              "name": "Singular",
+              "shape": "unit"
+            },
+            {
+              "doc": "No box around the committed point was mapped strictly into itself by Krawczyk's operator in the inflations allowed, or the box proved reaches [`HUGE`] steps from it: the block is too nearly singular over its box, or the committed point is too far from a solution.",
+              "name": "NoInclusion",
+              "shape": "unit"
+            },
+            {
+              "doc": "The interval arithmetic refused (a range reaching a singular set, an overflow).",
+              "name": "Refused",
+              "shape": "unit"
+            },
+            {
+              "doc": "No independent equation: nothing to certify.",
+              "name": "Empty",
+              "shape": "unit"
+            }
+          ],
+          "module": "geom_sketch::certify",
+          "name": "Reason",
+          "non_exhaustive": false
+        },
+        {
           "doc": "Why a sketch or one of its items could not be made.",
           "file": "projects/engines/geometry/crates/geom-sketch/src/model.rs",
           "kinds": [
@@ -11067,7 +11101,31 @@
           "target": "lib"
         },
         {
-          "cost": "one interval evaluation of every rule, and one exact predicate for every root choice; linear in the sketch, no recursion. A 1,000-entity sketch is checked in about 2 ms (`benches/check.rs`).",
+          "cost": "for a block of r unknowns, O(r^3) for the preconditioner and one interval Jacobian per inflation step (at most twenty, usually one or two); linear in the sketch for blocks of bounded size. A block of more than [`BLOCK_LIMIT`] unknowns is not attempted. No recursion.",
+          "does": "[`certify`] takes a sketch and its [`Committed`] geometry and walks the structural plan (`structure::analyse`) in solve order. For each block it picks a square, independent subsystem (all of a square block's equations; for an over- or under-determined part, a set of independent equations and as many unknowns, by pivoted QR, the rest of the equations set aside and the rest of the variables held at their committed values) and applies Krawczyk's test to it: the Jacobian over a box around the committed point, a preconditioner `C` from an LU inverse of the midpoint Jacobian (`geom-linalg`), and the operator `K(X) = x̃ - C F(x̃) + (I - C J(X))(X - x̃)`. If `K` lies strictly inside `X`, the box holds exactly one solution, and `K` holds it. That box then stands in for the block's unknowns, as an interval input, in every later block, so the radius a block proves is the distance from the stored geometry to the exact solution of the whole sketch so far, with free variables held at their committed values.",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-sketch/src/certify.rs",
+          "guarantees": [
+            "**A proof or a reason.** A block is [`Certificate::Proven`] with a radius only when Krawczyk's strict inclusion held in outward-rounded interval arithmetic ([`strictly_inside`]: an image touching its box's boundary is not inside) and its box lies within [`HUGE`] steps of the committed point; otherwise it is [`Certificate::Unproven`] with the reason, and its constraints keep their residual bounds (`check`). Nothing is rounded into a proof.",
+            "**Chained.** A block's equations are evaluated with every earlier block's proven box as the interval for its unknowns, never the committed point, so an upstream uncertainty widens a downstream radius instead of being forgotten.",
+            "**Dependent equations are set aside, not lost.** A redundant group is certified without its dependent equations; they are listed in [`Block::set_aside`] and keep only their residual bounds.",
+            "**Deterministic.** Blocks in plan order; ties by index; the same bits on every target."
+          ],
+          "job": "Chained Krawczyk certificates: a proof, block by block in the plan's order, that an exact solution of the sketch lies within a stated distance of the committed geometry.",
+          "method": {
+            "links": [
+              "doi:10.1007/BF02234767",
+              "doi:10.1017/S096249291000005X"
+            ],
+            "text": "R. Krawczyk, \"Newton-Algorithmen zur Bestimmung von Nullstellen mit Fehlerschranken\", Computing 4 (1969), doi:10.1007/BF02234767, as R. E. Moore (1977) and S. M. Rump (1983) made it a proof of existence and uniqueness, with the epsilon-inflation of S. M. Rump, \"Verification methods: rigorous results using floating-point arithmetic\", Acta Numerica 19 (2010), doi:10.1017/S096249291000005X; the single-step operator of `geom_num::newton` (G52) extended to blocks of any size on `geom_linalg`'s dense LU and pivoted QR; chapter 15.10's \"Certificate\" and chapter 12.4. The selection of independent equations is chapter 15.8's pivot thresholds."
+          },
+          "path": "geom_sketch::certify",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
+          "cost": "one interval evaluation of every rule, and one exact predicate for every root choice; linear in the sketch, no recursion. A 1,000-entity sketch is checked in about 2 ms (`benches/check.rs`). The meter is charged eight units of work for each constraint, before anything is read.",
           "does": "[`Checker::new`] builds a sketch's equations once. [`Checker::check`] then takes a [`Committed`] sketch (`commit`) and runs chapter 15.10's first two checks, in order. **Root choices:** a side, an outside or a tangency stored on a constraint is decided again with exact predicates on the committed geometry; one that has flipped, or whose point now lies on the boundary where the choice cannot be told, fails the commit with [`SketchError::CommitFlip`], naming the constraint. **Ceiling:** the residual of every constraint the commit did not make exact is enclosed in interval arithmetic on the committed values, by the very text the solver differentiates (`Assembly::enclose`), and must be at most the ceiling, or the commit fails with [`SketchError::ExactnessNotAccepted`], naming the constraint and its bound. What it returns is each constraint's [`Holds`]: `Exact`, `Within` a bound in grid steps, or `Unresolved`.",
           "family": [],
           "file": "projects/engines/geometry/crates/geom-sketch/src/check.rs",
