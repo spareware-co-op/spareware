@@ -6267,6 +6267,14 @@
       "reason": "box_gap's value is the lower end of an outward-rounded norm of lower bounds of the point's gap to the box on each axis, so it is at most the true distance from the point to the box, and the edge's curve lies in that box (its certified bound over the whole domain): the edge's distance d is at least box_gap. place skips an edge only when box_gap exceeds the reach, the point's bound w plus ε_fit (64 steps). Touch needs the distance's enclosure, widened by w, to reach 0 with its upper end below ε_fit; its upper end is at least d, so with d at least w + ε_fit the widened upper end is at least 2w + ε_fit, never below ε_fit: an edge the original skips can never touch. With >= an edge is also skipped when box_gap equals the reach; its distance is then at least w + ε_fit, so by the same bound it cannot touch, and skipping it leaves out only a distance that would find it apart."
     },
     {
+      "file": "projects/engines/geometry/crates/geom-bool/src/inside.rs",
+      "mutant": "replace > with >= in ray_parity",
+      "line_text": "if ahead.lo() > 0.0 {",
+      "occurrences": 1,
+      "kind": "harmless",
+      "reason": "G243a's entry for this line, in FlatFace::ray, under main's ruling there; the code is the same, moved into ray_parity, which FlatFace::place and split's rings share. Every bound of an interval operation is widened outward by one step, so ahead, a sum of two such products, has a lower end of exactly 0 only when its rounded sum is 2^-1074. That needs both parts below 2^-1021 in size: the crossing's box must lie within 2^-1020 of the point in the picture, so the side passes that near the point. In place the point then touches the side and place returns On before any ray. In a split ring the point is a grid vertex of another group: a chord between grid points passing that near a grid point passes through it, and a curve that near a vertex of another operand touches it, either way making it a pave of the side and the two one group. Otherwise the crossing is at or past the point (the true position is at least the widened 0), past it unless the point lies on the curve: the mutant counts a crossing that is ahead, and its parity is the true one; the original refuses the direction and answers from the next. They can differ only where no other direction qualifies: the original refuses with Unclassified, the mutant gives the true answer."
+    },
+    {
       "file": "projects/engines/geometry/crates/geom-bool/src/interfere.rs",
       "mutant": "replace || with && in touching",
       "line_text": "|c: i64, a: i64, b: i64| c < a.saturating_sub(pad) || c > b.saturating_add(pad);",
