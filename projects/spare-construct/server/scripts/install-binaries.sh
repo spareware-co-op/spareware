@@ -27,19 +27,19 @@ mkdir -p "$STACK_HOME/bin" "$STACK_HOME/download"
 cd "$STACK_HOME/download"
 
 if [ ! -x "$STACK_HOME/bin/tikv-server" ]; then
-  curl -fsSLO "$mirror/tikv-$TIKV_VERSION-linux-$go_arch.tar.gz"
+  curl -fsSL --retry 6 --retry-delay 10 --retry-connrefused -O "$mirror/tikv-$TIKV_VERSION-linux-$go_arch.tar.gz"
   echo "$tikv_sha  tikv-$TIKV_VERSION-linux-$go_arch.tar.gz" | sha256sum -c -
   tar -xzf "tikv-$TIKV_VERSION-linux-$go_arch.tar.gz" -C "$STACK_HOME/bin"
 fi
 if [ ! -x "$STACK_HOME/bin/pd-server" ]; then
-  curl -fsSLO "$mirror/pd-$TIKV_VERSION-linux-$go_arch.tar.gz"
+  curl -fsSL --retry 6 --retry-delay 10 --retry-connrefused -O "$mirror/pd-$TIKV_VERSION-linux-$go_arch.tar.gz"
   echo "$pd_sha  pd-$TIKV_VERSION-linux-$go_arch.tar.gz" | sha256sum -c -
   tar -xzf "pd-$TIKV_VERSION-linux-$go_arch.tar.gz" -C "$STACK_HOME/bin"
 fi
 if [ ! -x "$STACK_HOME/bin/rustfs" ]; then
   zip="rustfs-linux-$rust_arch-gnu-v$RUSTFS_VERSION.zip"
-  curl -fsSLO "$rustfs_url/$zip"
-  curl -fsSLO "$rustfs_url/SHA256SUMS"
+  curl -fsSL --retry 6 --retry-delay 10 --retry-connrefused -O "$rustfs_url/$zip"
+  curl -fsSL --retry 6 --retry-delay 10 --retry-connrefused -O "$rustfs_url/SHA256SUMS"
   grep " $zip\$" SHA256SUMS | sha256sum -c -
   unzip -oq "$zip" -d "$STACK_HOME/bin"
   chmod +x "$STACK_HOME/bin/rustfs"
