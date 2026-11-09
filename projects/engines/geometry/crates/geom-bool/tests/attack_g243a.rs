@@ -835,7 +835,7 @@ fn a_segment_s_distance_beside_it_and_past_each_end() {
     }
 }
 
-/// A ray has no hull: its NURBS form is refused, as a ray's is, never made from its infinite end.
+/// A ray has no hull: its conversion to NURBS is refused, and none is made from its infinite end.
 #[test]
 fn a_ray_has_no_hull() {
     let ray = CurveKind::Line(Line::new([0.0; 3], [1.0, 0.0, 0.0], (0.0, f64::INFINITY)).unwrap());
