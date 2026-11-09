@@ -845,8 +845,8 @@ fn a_ray_has_no_hull() {
     ));
 }
 
-/// A parabola that comes within a hundredth of a step of a plane without meeting it: its enclosure
-/// over each box proves it apart, so nothing is found and nothing flagged.
+/// A parabola that comes within a hundredth of a step of a plane without meeting it: no crossing is
+/// found and nothing is flagged.
 #[test]
 fn a_curve_near_a_plane_without_meeting_it_has_no_crossing() {
     let h = 0.01;

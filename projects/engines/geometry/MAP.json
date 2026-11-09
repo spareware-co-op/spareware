@@ -1650,15 +1650,15 @@
           "target": "lib"
         },
         {
-          "cost": "a plane, a few interval operations; any other carrier, one projection search at the floor asked, charged to the meter. No recursion.",
-          "does": "[`Carriers`] holds the builder's carriers: a table of planes and pools of surfaces and curves, named by [`CarrierIx`]. [`Carriers::distance`] encloses how far a grid point lies from one, computed from the carrier's own definition: a plane's from its integer coefficients in one exact step, a segment's in closed form, every other kind's by `geom_intersect::project`, the certified nearest-point search of chapter 12.4. [`separation`] encloses how far apart two points are, each point's own bound added: a certified point may lie anywhere within its bound of where its carriers meet.",
+          "cost": "a plane or a line, a few interval operations; any other carrier, one projection search at the floor asked, charged to the meter. No recursion.",
+          "does": "[`Carriers`] holds the builder's carriers: a table of planes and pools of surfaces and curves, named by [`CarrierIx`]. [`Carriers::distance`] encloses how far a grid point lies from one, computed from the carrier's own definition: a plane's from its integer coefficients in one exact step, a line's in closed form, every other kind's by `geom_intersect::project`, the certified nearest-point search of chapter 12.4. [`separation`] encloses how far apart two points are, each point's own bound added: a certified point may lie anywhere within its bound of where its carriers meet.",
           "family": [],
           "file": "projects/engines/geometry/crates/geom-bool/src/distance.rs",
           "guarantees": [
             "**An enclosure, never a number.** Each distance holds the true distance. A refinement only narrows it: the floor of the search at refinement k is [`FIRST_FLOOR`] over 2^k steps.",
             "**From the definition.** A distance is measured from the carrier's definition, never from an earlier representative or a cached fit, so repeated operations cannot walk a point away from its carriers.",
             "**A plane's distance is exact up to one rounding.** n · p + d is computed in `i128`, checked, and enclosed by the nearest doubles around it; |n| by an interval square root.",
-            "**A segment's distance is closed form.** For o + t·v over [a, b], the nearest parameter (p − o) · v / |v|² is enclosed and held to the domain; the distance is at most |p − o − t·v| over that enclosure, and at least the distance from the whole line, |(p − o) × v| / |v|, or from the end the nearest parameter is proven past. It does not change with the refinement.",
+            "**A line's distance is closed form.** For o + t·v over [a, b], a segment, a ray (one end infinite) or a whole line, the nearest parameter (p − o) · v / |v|² is enclosed and held to the domain; the distance is at most |p − o − t·v| over that enclosure, and at least the distance from the whole line, |(p − o) × v| / |v|, or from the end the nearest parameter is proven past, which is then a finite end. It does not change with the refinement.",
             "**Undecided is wide.** A search that reaches its floor with nearest points that cannot be told apart (`NonIsolated`) gives the widest enclosure, so the contact rule reads it as near."
           ],
           "job": "Certified distances of a grid point from a carrier, and between points that carry a bound (11.4, G242).",
