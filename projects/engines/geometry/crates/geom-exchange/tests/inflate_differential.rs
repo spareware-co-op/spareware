@@ -2,7 +2,8 @@
 //! its decoder is ported from, `miniz_oxide` 0.9.1 (a development dependency), byte for byte, on
 //! streams `miniz_oxide` itself compresses at every level, on those streams cut, extended and with
 //! bits flipped, on random bytes, and on attack streams. Each input is also read through a source
-//! that splits it at seeded points. `SPAREKIT_SEED` replays a run.
+//! that splits it at seeded points. `SPAREKIT_SEED` replays a run. Every read runs under a
+//! watchdog, so a reader that stops making progress fails instead of hanging.
 //!
 //! The oracle decodes the whole input in one call into a buffer the size of the reader's limit, so
 //! its verdict maps one to one: done with every byte used is the same output, done early is
@@ -22,8 +23,10 @@
 use geom_exchange::inflate::{
     InflateBudget, InflateError, InflateErrorKind, inflate, inflate_slice,
 };
+use std::sync::Mutex;
+
 use geom_format::source::{ByteSource, SourceError};
-use geom_run::{Budget, WorkMeter};
+use geom_run::{Budget, Cancel, WorkMeter};
 use geom_test::seed::{self, Seed};
 use miniz_oxide::inflate::TINFLStatus;
 use miniz_oxide::inflate::core::{DecompressorOxide, decompress, inflate_flags};
@@ -60,8 +63,24 @@ fn oracle(input: &[u8], limit: usize) -> Oracle {
     }
 }
 
-fn meter() -> WorkMeter<'static> {
-    WorkMeter::new(Budget::UNLIMITED)
+/// A cancellation that fires once it has been read 2^12 times: the meter reads it every 64
+/// charges and is charged once a step, so a read stuck in steps that make no progress is refused
+/// as `Stopped` after 2^18 of them instead of hanging; no read here takes twenty-five thousand.
+#[derive(Default)]
+struct Watchdog(Mutex<u64>);
+
+impl Watchdog {
+    fn meter(&self) -> WorkMeter<'_> {
+        WorkMeter::new(Budget::UNLIMITED).with_cancel(self)
+    }
+}
+
+impl Cancel for Watchdog {
+    fn requested(&self) -> bool {
+        let mut polls = self.0.lock().unwrap();
+        *polls += 1;
+        *polls > 1 << 12
+    }
 }
 
 /// The reader's result in the oracle's terms, and the check that they agree.
@@ -71,7 +90,7 @@ fn agree(input: &[u8], limit: usize, rng: &mut Rng) {
         ratio: u64::MAX,
         grace: 0,
     };
-    let ours = inflate_slice(input, &budget, &mut meter());
+    let ours = inflate_slice(input, &budget, &mut Watchdog::default().meter());
     let theirs = oracle(input, limit);
     let same = match (&ours, &theirs) {
         (Ok(out), Oracle::Done(used, want)) => *used == input.len() && out == want,
@@ -109,7 +128,12 @@ fn agree(input: &[u8], limit: usize, rng: &mut Rng) {
             sizes: sizes.clone(),
             at: 0,
         };
-        let split = inflate(&mut source, input.len() as u64, &budget, &mut meter());
+        let split = inflate(
+            &mut source,
+            input.len() as u64,
+            &budget,
+            &mut Watchdog::default().meter(),
+        );
         assert_eq!(split, ours, "stream {input:02x?} split as {sizes:?}");
     }
 }
@@ -216,7 +240,7 @@ fn every_stream_miniz_oxide_writes_reads_back_the_same() {
                 ratio: u64::MAX,
                 grace: 0,
             },
-            &mut meter(),
+            &mut Watchdog::default().meter(),
         )
         .unwrap();
         assert_eq!(out, d, "level {level}");
@@ -309,6 +333,11 @@ fn attack_streams_are_judged_as_miniz_oxide_judges_them() {
     }
     // The bomb under the default budget: refused for its ratio.
     let bomb = streams.last().unwrap();
-    let e: InflateError = inflate_slice(bomb, &InflateBudget::DEFAULT, &mut meter()).unwrap_err();
+    let e: InflateError = inflate_slice(
+        bomb,
+        &InflateBudget::DEFAULT,
+        &mut Watchdog::default().meter(),
+    )
+    .unwrap_err();
     assert_eq!(e.kind, InflateErrorKind::Ratio);
 }
