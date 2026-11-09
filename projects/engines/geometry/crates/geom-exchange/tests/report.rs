@@ -171,6 +171,13 @@ fn an_export_report_records_what_did_not_write_exactly() {
     assert_eq!(r.roundings()[0].count, 1);
     assert_eq!(r.failed().len(), 0);
     assert!(!r.accepted_invalid_rounding);
+    // An item that could not be written is listed, with its reason.
+    let lost = Failed {
+        item: SourceKey::Instance(9),
+        reason: "a body with no faces".to_owned(),
+    };
+    r.record_failed(lost.clone()).unwrap();
+    assert_eq!(r.failed(), [lost].as_slice());
 }
 
 #[test]
