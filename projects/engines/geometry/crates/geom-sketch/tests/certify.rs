@@ -386,6 +386,30 @@ fn a_box_that_leaves_the_committed_point_behind_is_still_judged_over_the_segment
 }
 
 #[test]
+fn a_box_that_leaves_the_committed_point_behind_on_its_upper_side_is_judged_over_the_segment_too() {
+    // The sketch above mirrored in the x axis: the solution, near (-46.51, -10.49), is now below
+    // the committed point (-46, -10) in y, so the box leaves the committed point behind on its
+    // upper side, and the hull takes the committed point as its upper end there.
+    let s = build(
+        vec![
+            reference(1, -42.0, -46.0),
+            reference(2, -44.0, 17.0),
+            point(3, -46.2, -10.5),
+        ],
+        vec![distance(1, 1, 3, 35.8), distance(2, 2, 3, 27.6)],
+    );
+    let committed = commit(&s, &mut meter()).unwrap();
+    let got = certify(&s, &committed, &mut meter()).unwrap();
+    assert_eq!(got.blocks.len(), 1, "{got:?}");
+    let radius = proven(&got.blocks[0]);
+    assert_eq!(radius.to_bits(), 0x3feb_13d1_d688_9c81_u64, "{radius}");
+    for (slot, want) in [(0_u8, -46.511_900_596_575_2), (1, -10.485_457_161_796_04)] {
+        let b = box_of(&got, pid(3), slot);
+        assert!(b.lo() < want && want < b.hi(), "slot {slot}: {b:?}");
+    }
+}
+
+#[test]
 fn a_point_no_solution_is_near_is_not_certified() {
     // P is to be 10 from (0, 0) and from (100, 0): the two circles are 80 apart and never meet.
     // Committed where it is drawn, at (50, 5), the Jacobian is regular, but no box around it is
