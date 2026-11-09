@@ -450,3 +450,26 @@ fn refusals_are_typed_and_poles_honest() {
     let n = pole.normal_bound(((0.0, 0.5), (0.25, 0.4)), m).unwrap();
     assert!(n.lo[1] > 0.0 || n.hi[1] < 0.0, "{n:?}");
 }
+
+/// A fuzz finding (Gate 2's `surfaces` target, the nightly campaign of 4 November 2026, and of 2
+/// November on another input): an offset moved by a certified scale gives its NURBS cache, moved,
+/// and reported the cache's deviation unscaled. The scale stretches that distance too, here 2^36
+/// times, so the moved surface missed the image of the offset by more than its stated deviation,
+/// and the transform law failed. The deviation is now the cache's times the transform's stretch,
+/// plus the move's.
+#[test]
+fn an_offset_moved_by_a_huge_scale_stretches_its_cache_deviation() {
+    const HUGE: f64 = 68_719_476_736.0; // 2^36
+    let m = &mut meter();
+    let f = Frame::new([0.0, 0.0, -1.75], [-1.75, -1.75, -1.75]).unwrap();
+    let cyl = Cylinder::new([-1.0, 0.0, 0.0], 1.0, f, ((0.0, 2.0), (0.0, 1.0))).unwrap();
+    let off = Offset::new(SurfaceKind::Cylinder(cyl), -1.75).unwrap();
+    let scale = TypedTransform::from(Transform::uniform_scale(HUGE).unwrap());
+    let at = [(0.925_490_196_078_431_4, 0.0), (0.0, 0.0)];
+    check(&off, &at, &scale, m).unwrap_or_else(|e| panic!("{e}"));
+    // The stated deviation covers the cache's, stretched.
+    let cache = off.to_nurbs(m).unwrap().deviation;
+    let moved = off.transformed(&scale, m).unwrap().deviation;
+    assert!(cache > 0.0, "{cache}");
+    assert!(moved >= cache * HUGE, "{moved} against {cache}");
+}

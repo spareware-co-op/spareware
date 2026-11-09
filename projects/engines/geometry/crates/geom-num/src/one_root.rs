@@ -809,10 +809,8 @@ impl Crossing2 {
             sub(&mul(&cw, &y.a)?, &mul(&x.w, &cy)?)?,
         ];
         let v = [mul(&cw, &x.b)?, mul(&cw, &y.b)?];
-        let whole = sub(
-            &add(&dot(&u, &u)?, &mul(&dot(&v, &v)?, &x.k)?)?,
-            &mul(&rr, &mul(&x.w, &x.w)?)?,
-        )?;
+        let squares = add(&dot(&u, &u)?, &mul(&dot(&v, &v)?, &x.k)?)?;
+        let whole = sub(&squares, &mul(&rr, &mul(&x.w, &x.w)?)?)?;
         let half = dot(&u, &v)?;
         root_sign(&whole, &add(&half, &half)?, &x.k)
     }

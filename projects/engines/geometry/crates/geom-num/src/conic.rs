@@ -508,21 +508,16 @@ impl Conic {
         let dx = sub(&big(at.x.get()), &big(self.origin.x.get()))?;
         let dy = sub(&big(at.y.get()), &big(self.origin.y.get()))?;
         let twice = |v: &Big| add(v, v);
-        let x = add(
-            &add(&mul(&twice(&self.xx)?, &dx)?, &mul(&self.xy, &dy)?)?,
-            &self.x,
-        )?;
-        let y = add(
-            &add(&mul(&self.xy, &dx)?, &mul(&twice(&self.yy)?, &dy)?)?,
-            &self.y,
-        )?;
-        let square = add(
-            &add(
-                &mul(&self.xx, &mul(&dx, &dx)?)?,
-                &mul(&self.xy, &mul(&dx, &dy)?)?,
-            )?,
-            &mul(&self.yy, &mul(&dy, &dy)?)?,
-        )?;
+        let x_part = add(&mul(&twice(&self.xx)?, &dx)?, &mul(&self.xy, &dy)?)?;
+        let x = add(&x_part, &self.x)?;
+        let y_part = add(&mul(&self.xy, &dx)?, &mul(&twice(&self.yy)?, &dy)?)?;
+        let y = add(&y_part, &self.y)?;
+        let (xx, xy) = (
+            mul(&self.xx, &mul(&dx, &dx)?)?,
+            mul(&self.xy, &mul(&dx, &dy)?)?,
+        );
+        let yy = mul(&self.yy, &mul(&dy, &dy)?)?;
+        let square = add(&add(&xx, &xy)?, &yy)?;
         let line = add(&mul(&self.x, &dx)?, &mul(&self.y, &dy)?)?;
         Ok(Conic {
             origin: at,
