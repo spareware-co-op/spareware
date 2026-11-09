@@ -424,7 +424,7 @@ fn smallest(line: Carrier) -> Result<Carrier, ArrangeError> {
 }
 
 /// The piece of the segment from `a` to `b`, lower end first, or none for a segment of no length.
-pub(crate) fn segment(a: P2, b: P2) -> Result<Option<Piece>, ArrangeError> {
+fn segment(a: P2, b: P2) -> Result<Option<Piece>, ArrangeError> {
     let (ra, rb) = (Rational2::from(a), Rational2::from(b));
     let (lo, hi, p, q) = match ordering(ra.cmp_x(&rb)?).then(ordering(ra.cmp_y(&rb)?)) {
         Ordering::Equal => return Ok(None),

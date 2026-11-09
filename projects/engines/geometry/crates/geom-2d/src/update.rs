@@ -80,7 +80,7 @@ use geom_run::WorkMeter;
 use crate::arrange::piece::{
     self, Circle, On, Way, cmp_pt, cross_sign, cut, meetings, order_at, same_circle, side, way,
 };
-use crate::arrange::{Along, ArrangeError, Arrangement, At, Curve, arrange_curves, segment};
+use crate::arrange::{Along, ArrangeError, Arrangement, At, Curve, arrange_curves};
 
 /// Pieces a chunk is split into halves at twice this many.
 const CHUNK: usize = 256;
@@ -253,6 +253,25 @@ fn box_of(lo: &Rational2, hi: &Rational2) -> Box4 {
 }
 
 impl Piece {
+    /// The segment from `a` to `b` as a plain piece, lower end first, on the line through them
+    /// running that way; none for a segment of no length. The line is the one through the two
+    /// points, not reduced to its smallest form as the sweep's is: every question asked of it is
+    /// the same for any positive multiple.
+    fn segment(a: P2, b: P2, sources: Arc<[u32]>) -> Result<Option<Piece>, ArrangeError> {
+        let (ra, rb) = (Rational2::from(a), Rational2::from(b));
+        let (lo, hi, p, q) = match cmp_rational(&ra, &rb)? {
+            Ordering::Equal => return Ok(None),
+            Ordering::Less => (ra, rb, a, b),
+            Ordering::Greater => (rb, ra, b, a),
+        };
+        Ok(Some(Piece(Shape::Plain {
+            lo,
+            hi,
+            line: Carrier::through(p, q)?,
+            sources,
+        })))
+    }
+
     /// The piece `run`, with an arc's circle and the sources, held plainly when it can be.
     fn of(run: piece::Piece, ring: Option<Arc<Ring>>, sources: Arc<[u32]>) -> Piece {
         match (&run.lo, &run.hi, run.on, &ring) {
@@ -410,6 +429,16 @@ impl Piece {
 
     /// The same stretch of the same curve, from `lo` to `hi`.
     fn between(&self, lo: &At, hi: &At) -> Piece {
+        if let (Shape::Plain { line, sources, .. }, At::Rational(lo), At::Rational(hi)) =
+            (&self.0, lo, hi)
+        {
+            return Piece(Shape::Plain {
+                lo: *lo,
+                hi: *hi,
+                line: *line,
+                sources: sources.clone(),
+            });
+        }
         let on = match &self.0 {
             Shape::Plain { line, .. } => On::Line {
                 line: *line,
@@ -1033,9 +1062,7 @@ impl Live {
     pub fn from_noded(segments: &[(P2, P2, u32)]) -> Result<Live, ArrangeError> {
         let mut pieces = Vec::with_capacity(segments.len());
         for &(a, b, label) in segments {
-            if let Some(run) = segment(a, b)? {
-                pieces.push(Piece::of(run, None, Arc::from([label])));
-            }
+            pieces.extend(Piece::segment(a, b, Arc::from([label]))?);
         }
         Live::from_pieces(pieces)
     }
@@ -1121,25 +1148,25 @@ impl Live {
         label: u32,
         meter: &mut WorkMeter<'_>,
     ) -> Result<(Live, Cost), ArrangeError> {
-        let mut runs: Vec<piece::Piece> = Vec::new();
-        let ring = match curve {
+        let arc = match curve {
             Curve::Segment(a, b) => {
-                runs.extend(segment(*a, *b)?);
-                None
+                // A segment is one plain piece, made directly.
+                let Some(s) = Piece::segment(*a, *b, Arc::from([label]))? else {
+                    return Ok((self.clone(), Cost::default()));
+                };
+                let mut edit = Edit::of(self);
+                edit.insert(&s, meter)?;
+                return Ok(edit.done());
             }
-            Curve::Arc(arc) => {
-                let ring = Arc::new(Ring::of(arc.round())?);
-                cut(arc, 0, slice::from_ref(&ring.circle), &mut runs)?;
-                Some(ring)
-            }
+            Curve::Arc(arc) => arc,
         };
-        if runs.is_empty() {
-            return Ok((self.clone(), Cost::default()));
-        }
+        let ring = Arc::new(Ring::of(arc.round())?);
+        let mut runs: Vec<piece::Piece> = Vec::new();
+        cut(arc, 0, slice::from_ref(&ring.circle), &mut runs)?;
         let sources: Arc<[u32]> = Arc::from([label]);
         let mut edit = Edit::of(self);
         for run in runs {
-            let s = Piece::of(run, ring.clone(), sources.clone());
+            let s = Piece::of(run, Some(ring.clone()), sources.clone());
             edit.insert(&s, meter)?;
         }
         Ok(edit.done())
@@ -1418,7 +1445,7 @@ mod tests {
     /// Taking out a key that is not there changes nothing, in an empty drawing or not.
     #[test]
     fn removing_a_key_that_is_not_there_changes_nothing() {
-        let key = |a: P2, b: P2| Piece::of(segment(a, b).unwrap().unwrap(), None, Arc::from([0]));
+        let key = |a: P2, b: P2| Piece::segment(a, b, Arc::from([0])).unwrap().unwrap();
         let mut empty = Edit::of(&Live::new());
         empty.remove(&key(p(0, 0), p(1, 0))).unwrap();
         let (live, cost) = empty.done();
