@@ -1544,12 +1544,22 @@ fn floors(corner: &Corner) -> Option<[i128; 3]> {
     corner.cells.map(|[x, y, z]| [x.floor, y.floor, z.floor])
 }
 
-/// Whether a corner whose floors are `at` lies outside the cells from `a` to `b`: a point of the
-/// segment between two corners lies within their floors' range and a unit more.
-fn beyond(at: &[i128; 3], (a, b): (&[i128; 3], &[i128; 3])) -> bool {
+/// Whether a corner whose floors are `at` lies outside the floors' range `low` to `high` of two
+/// corners: a point of the segment between them lies within it.
+fn beyond(at: &[i128; 3], (low, high): (&[i128; 3], &[i128; 3])) -> bool {
     at.iter()
-        .zip(a.iter().zip(b))
-        .any(|(v, (p, q))| v < &(*p).min(*q) || v > &(*p).max(*q))
+        .zip(low.iter().zip(high))
+        .any(|(v, (l, h))| v < l || v > h)
+}
+
+/// The lowest and highest of two corners' floors on each axis.
+fn spanned(a: &[i128; 3], b: &[i128; 3]) -> ([i128; 3], [i128; 3]) {
+    let (mut low, mut high) = (*a, *a);
+    for ((l, h), v) in low.iter_mut().zip(&mut high).zip(b) {
+        *l = (*l).min(*v);
+        *h = (*h).max(*v);
+    }
+    (low, high)
 }
 
 /// `runs`, each cut wherever another run ends on its line. A run's line holds only points between
@@ -1601,15 +1611,18 @@ fn cuts_of(
     places: &[Place<'_>],
 ) -> Result<Vec<usize>, MergeError> {
     let [p, q] = run.on;
+    // The floors' range on each axis, made once for the run rather than for each mark.
     let span = cells.get(run.low).zip(cells.get(run.high));
-    let span = span.and_then(|(a, b)| a.as_ref().zip(b.as_ref()));
+    let span = span
+        .and_then(|(a, b)| a.as_ref().zip(b.as_ref()))
+        .map(|(a, b)| spanned(a, b));
     let from = ends.partition_point(|e| *e <= run.low);
     let to = ends.partition_point(|e| *e < run.high);
     let mut marks = Vec::new();
     for mark in ends.get(from..to).unwrap_or_default() {
         let outside = span
             .zip(cells.get(*mark).and_then(Option::as_ref))
-            .is_some_and(|(span, at)| beyond(at, span));
+            .is_some_and(|((low, high), at)| beyond(at, (&low, &high)));
         if outside {
             continue;
         }
