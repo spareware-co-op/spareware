@@ -2798,6 +2798,21 @@ mod tests {
             assert_eq!(keys[b].cmp(&keys[a]), CellKey(q).cmp(&CellKey(p)));
         }
         assert!(!MarkKey::<6, 2>::new(&lines[0], 4).past);
+        // A key with no cells past its marks against one with some, where the marks agree and
+        // stop: the cells decide, either way round.
+        let zero = cell(0, 1);
+        let other = [zero, zero, zero, two, zero, cell(5, 1)];
+        let (short, long) = (
+            MarkKey::<6, 2>::new(&lines[0], 4),
+            MarkKey::<6, 2>::new(&other, 3),
+        );
+        assert!(!short.past && long.past);
+        assert_eq!(short.marks, long.marks);
+        assert_eq!(short.marks[0] & 1, 0);
+        let exact = CellKey(&lines[0]).cmp(&CellKey(&other));
+        assert_eq!(exact, Ordering::Greater);
+        assert_eq!(short.cmp(&long), exact);
+        assert_eq!(long.cmp(&short), exact.reverse());
     }
 
     /// A cell's floor and remainder are the Euclidean ones, in machine words or not.
