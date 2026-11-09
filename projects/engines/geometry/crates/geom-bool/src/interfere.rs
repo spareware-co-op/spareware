@@ -634,16 +634,23 @@ fn is_end(ends: &[Option<[usize; 2]>], e: usize, v: usize) -> bool {
 pub(crate) fn touching(
     carriers: &Carriers,
     vertices: &[PointGeom],
-    ids: &[usize],
+    ids: impl IntoIterator<Item = usize>,
     xyz: &Box3,
 ) -> Result<Option<usize>, BuildError> {
-    let mut seen: Vec<usize> = Vec::new();
-    for &vertex in ids {
-        if seen.contains(&vertex) {
+    let (lo, hi) = (xyz.min(), xyz.max());
+    for vertex in ids {
+        let (p, w) = committed(carriers, vertices, vertex)?;
+        // Further than its bound and the contact radius from the box along one axis: proven apart,
+        // as the enclosure below would say, without it.
+        let pad = i64::try_from(w.steps().saturating_add(EPS_FIT.0)).unwrap_or(i64::MAX);
+        let outside =
+            |c: i64, a: i64, b: i64| c < a.saturating_sub(pad) || c > b.saturating_add(pad);
+        if outside(p.x.get(), lo.x.get(), hi.x.get())
+            || outside(p.y.get(), lo.y.get(), hi.y.get())
+            || outside(p.z.get(), lo.z.get(), hi.z.get())
+        {
             continue;
         }
-        seen.push(vertex);
-        let (p, w) = committed(carriers, vertices, vertex)?;
         let d = to_box(p, w, xyz)?;
         match judge(d) {
             Verdict::Touch => return Ok(Some(vertex)),
@@ -866,7 +873,7 @@ fn edge_edge(
                         .flatten()
                         .map(|p: &Pave| p.vertex)
                         .collect();
-                    let found = touching(carriers, &st.vertices, &near, xyz)?;
+                    let found = touching(carriers, &st.vertices, near.iter().copied(), xyz)?;
                     let (vertex, reused) = if let Some(v) = found {
                         (v, true)
                     } else {

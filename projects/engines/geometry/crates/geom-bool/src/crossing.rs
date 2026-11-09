@@ -4,7 +4,8 @@
 //! What it does: [`Against`] is a curve's offset from a plane, n · C(t) + d with the plane's own
 //! integers, as a field of one unknown for `geom_intersect::solve`, so [`crossings`] finds every
 //! parameter where the curve meets the plane, each proven the only one in its box, or a flagged
-//! region where that could not be decided. [`Hull`] holds a curve's NURBS form as enclosures of its
+//! region where that could not be decided. A line's offset is linear, n · o + d + t (n · v), and
+//! its one root is enclosed directly. [`Hull`] holds a curve's NURBS form as enclosures of its
 //! control points, with the form's certified deviation, and [`Hull::spread`] encloses the signed
 //! distance from a plane of every point of the curve at once: a NURBS curve with positive weights
 //! is at each parameter a convex combination of its control points, so n · C + d lies between the
@@ -17,6 +18,9 @@
 //!   parameter box is dropped only when its residual excludes zero or Krawczyk's operator proves it
 //!   empty, so a crossing no zero or flag reports does not exist, and each zero is a simple root,
 //!   the only one in its proof box, where the curve passes from one side of the plane to the other.
+//!   On a line whose rate n · v is proven nonzero the root is the only one anywhere, enclosed as
+//!   −(n · o + d) / (n · v) and cut to the domain; a root just past an end, within the enclosure,
+//!   is reported at that end, where the line's end lies within the enclosure's reach of the plane.
 //! - **The plane is the table's.** n and d are the plane's integers, each enclosed by the doubles
 //!   around it, never a rounded copy of the plane, so the decision is about the carrier itself.
 //! - **The spread holds the curve.** Every point of the curve lies within [`Hull::spread`] of the
@@ -39,7 +43,7 @@
 use alloc::vec::Vec;
 
 use geom_intersect::IntersectError;
-use geom_intersect::solve::{Field, Solved, solve};
+use geom_intersect::solve::{Field, Flagged, Reason, Solved, Zero, solve};
 use geom_num::NumError;
 use geom_num::interval::Interval;
 use geom_num::plane::Plane;
@@ -92,6 +96,16 @@ impl Enclosed {
         let [x, y, z] = *v;
         n0.mul(x)?.add(n1.mul(y)?)?.add(n2.mul(z)?)
     }
+}
+
+/// Three doubles, each enclosed as itself.
+fn exact(v: [f64; 3]) -> Result<[Interval; 3], NumError> {
+    let [x, y, z] = v;
+    Ok([
+        Interval::point(x)?,
+        Interval::point(y)?,
+        Interval::point(z)?,
+    ])
 }
 
 /// The enclosure of a box given by its corners.
@@ -173,11 +187,63 @@ pub fn crossings(
     meter: &mut WorkMeter<'_>,
 ) -> Result<Solved<1>, IntersectError> {
     let (a, b) = curve.domain();
+    let enclosed = Enclosed::of(plane)?;
+    if let CurveKind::Line(line) = curve {
+        return line_crossing(line.origin(), line.direction(), (a, b), &enclosed);
+    }
     let field = Against {
         curve,
-        plane: Enclosed::of(plane)?,
+        plane: enclosed,
     };
     solve(&field, [Interval::new(a, b)?], |_, _| Ok(true), meter)
+}
+
+/// Where the line o + t·v, over `domain`, meets `plane`: its one root, enclosed and cut to the
+/// domain, when the rate is proven nonzero; the whole domain flagged when the line may run along
+/// the plane.
+fn line_crossing(
+    origin: [f64; 3],
+    direction: [f64; 3],
+    (a, b): (f64, f64),
+    plane: &Enclosed,
+) -> Result<Solved<1>, IntersectError> {
+    let point = |v: [f64; 3]| -> Result<[Interval; 3], NumError> {
+        let [vx, vy, vz] = v;
+        Ok([
+            Interval::point(vx)?,
+            Interval::point(vy)?,
+            Interval::point(vz)?,
+        ])
+    };
+    let start = plane.value(&point(origin)?)?;
+    let rate = plane.along(&point(direction)?)?;
+    let span = Interval::new(a, b)?;
+    let mut out = Solved {
+        zeros: Vec::new(),
+        flagged: Vec::new(),
+    };
+    let reach = start.add(rate.mul(span)?)?;
+    if reach.lo() > 0.0 || reach.hi() < 0.0 {
+        return Ok(out);
+    }
+    if rate.lo() > 0.0 || rate.hi() < 0.0 {
+        let root = start.neg().div(rate)?;
+        let lo = if root.lo() > a { root.lo() } else { a };
+        let hi = if root.hi() < b { root.hi() } else { b };
+        if lo <= hi {
+            let at = Interval::new(lo, hi)?;
+            out.zeros.push(Zero {
+                enclosure: [at],
+                proof: [span],
+            });
+        }
+    } else {
+        out.flagged.push(Flagged {
+            region: [span],
+            why: Reason::Singular,
+        });
+    }
+    Ok(out)
 }
 
 /// A curve's NURBS form as enclosures of its control points, with the form's certified deviation.
@@ -198,6 +264,28 @@ impl Hull {
     ///
     /// The curve kind's conversion's errors, such as an unbounded line.
     pub fn of(curve: &CurveKind<3>, meter: &mut WorkMeter<'_>) -> Result<Hull, IntersectError> {
+        // A segment is its two ends' convex combinations: its hull is those ends, enclosed.
+        if let CurveKind::Line(line) = curve {
+            let (a, b) = curve.domain();
+            if a.is_finite() && b.is_finite() {
+                let (origin, direction) = (exact(line.origin())?, exact(line.direction())?);
+                let at = |t: f64| -> Result<[Interval; 3], NumError> {
+                    let t = Interval::point(t)?;
+                    let [o0, o1, o2] = origin;
+                    let [d0, d1, d2] = direction;
+                    Ok([
+                        o0.add(t.mul(d0)?)?,
+                        o1.add(t.mul(d1)?)?,
+                        o2.add(t.mul(d2)?)?,
+                    ])
+                };
+                return Ok(Hull {
+                    points: alloc::vec![at(a)?, at(b)?],
+                    deviation: 0.0,
+                    convex: true,
+                });
+            }
+        }
         let form = curve.to_nurbs(meter)?;
         let nurbs = &form.value.curve;
         let weights = nurbs.weights();

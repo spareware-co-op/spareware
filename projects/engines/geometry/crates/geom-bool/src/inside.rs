@@ -323,6 +323,43 @@ impl FlatFace {
         }))
     }
 
+    /// Whether the grid point `point`, within `bound` of where its vertex is, lies outside the box
+    /// of the face's boundary in the plane's picture by more than the bound: then it is Out, and in
+    /// space further from every boundary edge than the bound, so not On either.
+    #[must_use]
+    pub fn beyond(&self, point: P3, bound: Bound) -> bool {
+        #[allow(
+            clippy::cast_precision_loss,
+            reason = "bounds are counts of steps far below 2^53, and a coordinate at most 2^40"
+        )]
+        let (slack, at) = (bound.steps() as f64, coords(point).map(|c| c as f64));
+        self.keep.iter().enumerate().any(|(slot, k)| {
+            let here = at.get(*k).copied().unwrap_or(0.0);
+            let (lo, hi) = (
+                self.area.0.get(slot).copied().unwrap_or(f64::INFINITY),
+                self.area.1.get(slot).copied().unwrap_or(f64::NEG_INFINITY),
+            );
+            here + slack < lo || here - slack > hi
+        })
+    }
+
+    /// Whether the box `lo..hi` lies outside the box of the face's boundary in the plane's
+    /// picture: then no point of it lies in the face or on its boundary.
+    #[must_use]
+    pub fn apart_from(&self, lo: [f64; 3], hi: [f64; 3]) -> bool {
+        self.keep.iter().enumerate().any(|(slot, k)| {
+            let (a, b) = (
+                self.area.0.get(slot).copied().unwrap_or(f64::INFINITY),
+                self.area.1.get(slot).copied().unwrap_or(f64::NEG_INFINITY),
+            );
+            let (low, high) = (
+                lo.get(*k).copied().unwrap_or(0.0),
+                hi.get(*k).copied().unwrap_or(0.0),
+            );
+            high < a || low > b
+        })
+    }
+
     /// The face's plane.
     #[must_use]
     pub fn plane(&self) -> &Plane {
@@ -352,22 +389,7 @@ impl FlatFace {
             reason = "bounds are counts of steps far below 2^53"
         )]
         let reach = (bound.steps().saturating_add(EPS_FIT.0)) as f64;
-        // Outside the boundary's box in the picture by more than the point's bound: Out, and in
-        // space further from every boundary edge than the bound, so not On either.
-        #[allow(
-            clippy::cast_precision_loss,
-            reason = "bounds are counts of steps far below 2^53, and a coordinate at most 2^40"
-        )]
-        let (slack, at) = (bound.steps() as f64, coords(point).map(|c| c as f64));
-        let beyond = self.keep.iter().enumerate().any(|(slot, k)| {
-            let here = at.get(*k).copied().unwrap_or(0.0);
-            let (lo, hi) = (
-                self.area.0.get(slot).copied().unwrap_or(f64::INFINITY),
-                self.area.1.get(slot).copied().unwrap_or(f64::NEG_INFINITY),
-            );
-            here + slack < lo || here - slack > hi
-        });
-        if beyond {
+        if self.beyond(point, bound) {
             return Ok(Place::Out);
         }
         let mut touched = Vec::new();

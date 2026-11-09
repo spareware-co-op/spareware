@@ -156,6 +156,11 @@ pub(crate) struct FaceStage {
     on_plane: Vec<(usize, usize)>,
     /// Undecided regions of edges with faces' planes.
     deferred: Vec<Deferred>,
+    /// Each face's boundary vertices, sorted, made when first needed and dropped when a pave is
+    /// put on one of its edges.
+    boundary: Vec<Option<Vec<usize>>>,
+    /// The faces each edge bounds.
+    faces_of_edge: Vec<Vec<usize>>,
 }
 
 /// A count as a key of the box tree.
@@ -332,12 +337,23 @@ pub(crate) fn prepare(
     for f in 0..arr.faces.len() {
         flats.push(FlatFace::new(arr, f, meter)?);
     }
+    let mut faces_of_edge = alloc::vec![Vec::new(); arr.edges.len()];
+    for (f, face) in arr.faces.iter().enumerate() {
+        for &e in face.loops.iter().flatten() {
+            faces_of_edge
+                .get_mut(e)
+                .ok_or(BuildError::Missing(Entity::Edge(e)))?
+                .push(f);
+        }
+    }
     Ok(FaceStage {
         flats,
         info: alloc::vec![FaceInfo::default(); arr.faces.len()],
         hulls: alloc::vec![None; arr.edges.len()],
         on_plane: Vec::new(),
         deferred: Vec::new(),
+        boundary: alloc::vec![None; arr.faces.len()],
+        faces_of_edge,
     })
 }
 
@@ -355,6 +371,22 @@ fn boundary_vertices(arr: &Arrangement, paves: &[Vec<Pave>], f: usize) -> Vec<us
     out.sort_unstable();
     out.dedup();
     out
+}
+
+/// Face `f`'s boundary vertices, sorted, from the stage's store.
+fn boundary_of(
+    fs: &mut FaceStage,
+    arr: &Arrangement,
+    paves: &[Vec<Pave>],
+    f: usize,
+) -> Result<Vec<usize>, BuildError> {
+    let slot = fs
+        .boundary
+        .get_mut(f)
+        .ok_or(BuildError::Missing(Entity::Face(f)))?;
+    Ok(slot
+        .get_or_insert_with(|| boundary_vertices(arr, paves, f))
+        .clone())
 }
 
 /// The face's information and flat form, or a missing face.
@@ -392,6 +424,15 @@ pub(crate) fn vertex_face(
             .faces
             .get(f)
             .ok_or(BuildError::Missing(Entity::Face(f)))?;
+        // A vertex already on the face's boundary, by the earlier stages, is On it.
+        let on_boundary = fs
+            .boundary
+            .get_mut(f)
+            .ok_or(BuildError::Missing(Entity::Face(f)))?
+            .get_or_insert_with(|| boundary_vertices(arr, &st.paves, f));
+        if on_boundary.binary_search(&v).is_ok() {
+            continue;
+        }
         let (p, w) = committed(carriers, &st.vertices, v)?;
         let contact = decide(|level: u32| {
             let d = carriers.distance(p, face.surface, level, meter)?;
@@ -413,14 +454,26 @@ pub(crate) fn vertex_face(
     Ok(())
 }
 
-/// Pushes a pave of `vertex` on `edge` at `t`, unless the vertex is already a pave of it.
-fn pave_on(st: &mut Stages, edge: usize, vertex: usize, t: Interval) -> Result<(), BuildError> {
+/// Pushes a pave of `vertex` on `edge` at `t`, unless the vertex is already a pave of it, and
+/// drops the stored boundary vertices of the faces the edge bounds.
+fn pave_on(
+    st: &mut Stages,
+    fs: &mut FaceStage,
+    edge: usize,
+    vertex: usize,
+    t: Interval,
+) -> Result<(), BuildError> {
     let list = st
         .paves
         .get_mut(edge)
         .ok_or(BuildError::Missing(Entity::Edge(edge)))?;
     if !list.iter().any(|p: &Pave| p.vertex == vertex) {
         list.push(Pave { vertex, t });
+        for &f in fs.faces_of_edge.get(edge).into_iter().flatten() {
+            if let Some(slot) = fs.boundary.get_mut(f) {
+                *slot = None;
+            }
+        }
     }
     Ok(())
 }
@@ -449,6 +502,53 @@ fn hull_of<'a>(
     slot.as_ref().ok_or(BuildError::Missing(Entity::Edge(e)))
 }
 
+/// The vertex `v` already there, where edge `e` crosses the plane of flat face `f` at `param`: put
+/// on the edge and on the face as it lies there, In or on the boundary; nothing when it lies
+/// outside the face.
+fn reuse_point(
+    arr: &Arrangement,
+    st: &mut Stages,
+    fs: &mut FaceStage,
+    (e, f, v): (usize, usize, usize),
+    param: Interval,
+    (on_boundary, inside): (&[usize], &[usize]),
+    meter: &mut WorkMeter<'_>,
+) -> Result<(), BuildError> {
+    let carriers = &arr.carriers;
+    let place = if on_boundary.binary_search(&v).is_ok() {
+        Place::On(Vec::new())
+    } else if inside.contains(&v) {
+        Place::In
+    } else {
+        let (spot, bound) = committed(carriers, &st.vertices, v)?;
+        let flat = flat_of(fs, f)?.ok_or(BuildError::Missing(Entity::Face(f)))?;
+        flat.place(carriers, spot, bound, meter)?
+    };
+    match place {
+        Place::Out => return Ok(()),
+        Place::In => {
+            if !inside.contains(&v) {
+                info_of(fs, f)?.in_vertices.push(v);
+            }
+        }
+        Place::On(sides) => {
+            for b in sides {
+                let (spot, _) = committed(carriers, &st.vertices, v)?;
+                let at = parameter(arr, b, v, spot, meter)?;
+                pave_on(st, fs, b, v, at)?;
+            }
+        }
+    }
+    pave_on(st, fs, e, v, param)?;
+    st.interferences.push(Interference::EdgeFace {
+        edge: e,
+        face: f,
+        vertex: v,
+        reused: true,
+    });
+    Ok(())
+}
+
 /// Where edge `e` crosses the plane of flat face `f`, at `param` within `xyz`: the vertex there, reused
 /// or made, put on the edge and on the face (In, or on the boundary edges it touches); nothing when
 /// the point is outside the face.
@@ -470,52 +570,26 @@ fn edge_face_point(
         .faces
         .get(f)
         .ok_or(BuildError::Missing(Entity::Face(f)))?;
-    let on_boundary = boundary_vertices(arr, &st.paves, f);
+    let on_boundary = boundary_of(fs, arr, &st.paves, f)?;
     let inside = info_of(fs, f)?.in_vertices.clone();
-    let mut known: Vec<usize> = st
+    let known = st
         .paves
         .get(e)
         .into_iter()
         .flatten()
         .map(|p: &Pave| p.vertex)
         .chain(on_boundary.iter().copied())
-        .chain(inside.iter().copied())
-        .collect();
-    known.sort_unstable();
-    known.dedup();
-    if let Some(v) = touching(carriers, &st.vertices, &known, xyz)? {
-        let place = if on_boundary.binary_search(&v).is_ok() {
-            Place::On(Vec::new())
-        } else if inside.contains(&v) {
-            Place::In
-        } else {
-            let (spot, bound) = committed(carriers, &st.vertices, v)?;
-            let flat = flat_of(fs, f)?.ok_or(BuildError::Missing(Entity::Face(f)))?;
-            flat.place(carriers, spot, bound, meter)?
-        };
-        match place {
-            Place::Out => return Ok(()),
-            Place::In => {
-                if !inside.contains(&v) {
-                    info_of(fs, f)?.in_vertices.push(v);
-                }
-            }
-            Place::On(sides) => {
-                for b in sides {
-                    let (spot, _) = committed(carriers, &st.vertices, v)?;
-                    let at = parameter(arr, b, v, spot, meter)?;
-                    pave_on(st, b, v, at)?;
-                }
-            }
-        }
-        pave_on(st, e, v, param)?;
-        st.interferences.push(Interference::EdgeFace {
-            edge: e,
-            face: f,
-            vertex: v,
-            reused: true,
-        });
-        return Ok(());
+        .chain(inside.iter().copied());
+    if let Some(v) = touching(carriers, &st.vertices, known, xyz)? {
+        return reuse_point(
+            arr,
+            st,
+            fs,
+            (e, f, v),
+            param,
+            (&on_boundary, &inside),
+            meter,
+        );
     }
     let ([x0, y0, z0], [x1, y1, z1]) = (coordinates(xyz.min()), coordinates(xyz.max()));
     let at = nearest_point([
@@ -523,6 +597,13 @@ fn edge_face_point(
         y0 / 2.0 + y1 / 2.0,
         z0 / 2.0 + z1 / 2.0,
     ])?;
+    // Outside the face's box in its picture, with room for the crossing's own box: nothing to make.
+    let reach = Bound::of(((x1 - x0) + (y1 - y0) + (z1 - z0)) / 2.0 + 1.0)
+        .ok_or(NumError::BudgetExceeded)?;
+    let flat = flat_of(fs, f)?.ok_or(BuildError::Missing(Entity::Face(f)))?;
+    if flat.beyond(at, reach) {
+        return Ok(());
+    }
     let on = SortedVec::from_items([CarrierIx::Curve(edge.curve), face.surface]);
     let point = certify(carriers, at, on.clone(), remaining, meter)?;
     let (_, within) = carriers.commit(&point)?;
@@ -545,13 +626,13 @@ fn edge_face_point(
     };
     st.vertices.push(point);
     let v = st.vertices.len().saturating_sub(1);
-    pave_on(st, e, v, param)?;
+    pave_on(st, fs, e, v, param)?;
     if sides.is_empty() {
         info_of(fs, f)?.in_vertices.push(v);
     }
     for b in sides {
         let at = parameter(arr, b, v, at, meter)?;
-        pave_on(st, b, v, at)?;
+        pave_on(st, fs, b, v, at)?;
     }
     st.interferences.push(Interference::EdgeFace {
         edge: e,
@@ -682,14 +763,13 @@ fn shared_touch(
     Ok(false)
 }
 
-/// The paves of the line where the planes `pa` of face `f1` and `pb` of face `f2` meet: the
-/// vertices the earlier stages put on both faces (on the boundary or In), each with the enclosure
-/// of its distance along the line's direction n₁ × n₂, widened by its bound.
+/// The paves of the line where the planes `pa` and `pb` of two faces meet: the vertices in both
+/// `first` and `second`, each face's vertices by the earlier stages (on its boundary or In), each
+/// with the enclosure of its distance along the line's direction n₁ × n₂, widened by its bound.
 fn section_paves(
     arr: &Arrangement,
     out: &Interfered,
-    fs: &FaceStage,
-    (f1, f2): (usize, usize),
+    (first, second): (&[usize], &[usize]),
     (pa, pb): (&Plane, &Plane),
 ) -> Result<Vec<Pave>, BuildError> {
     let (ea, eb) = (Enclosed::of(pa)?, Enclosed::of(pb)?);
@@ -700,16 +780,6 @@ fn section_paves(
         a0.mul(b1)?.sub(a1.mul(b0)?)?,
     ];
     let length = Interval::norm(&direction)?;
-    let on = |f: usize| -> Vec<usize> {
-        let mut list = boundary_vertices(arr, &out.paves, f);
-        if let Some(info) = fs.info.get(f) {
-            list.extend(info.in_vertices.iter().copied());
-        }
-        list.sort_unstable();
-        list.dedup();
-        list
-    };
-    let (first, second) = (on(f1), on(f2));
     let mut paves = Vec::new();
     for v in first.iter().filter(|v| second.binary_search(v).is_ok()) {
         let (spot, bound) = committed(&arr.carriers, &out.vertices, *v)?;
@@ -771,7 +841,7 @@ fn section(
     arr: &Arrangement,
     out: &mut Interfered,
     fs: &mut FaceStage,
-    (f1, f2): (usize, usize),
+    ((f1, f2), on_face): ((usize, usize), &mut [Option<Vec<usize>>]),
     meter: &mut WorkMeter<'_>,
 ) -> Result<(), BuildError> {
     if flat_of(fs, f1)?.is_none() || flat_of(fs, f2)?.is_none() {
@@ -801,7 +871,24 @@ fn section(
         Err(e) => return Err(e.into()),
         Ok(_) => {}
     }
-    let paves = section_paves(arr, out, fs, (f1, f2), (&pa, &pb))?;
+    for f in [f1, f2] {
+        let slot = on_face
+            .get_mut(f)
+            .ok_or(BuildError::Missing(Entity::Face(f)))?;
+        if slot.is_none() {
+            let mut list = boundary_vertices(arr, &out.paves, f);
+            if let Some(info) = fs.info.get(f) {
+                list.extend(info.in_vertices.iter().copied());
+            }
+            list.sort_unstable();
+            list.dedup();
+            *slot = Some(list);
+        }
+    }
+    let (Some(Some(first)), Some(Some(second))) = (on_face.get(f1), on_face.get(f2)) else {
+        return Err(BuildError::Missing(Entity::Face(f1)));
+    };
+    let paves = section_paves(arr, out, (first, second), (&pa, &pb))?;
     let ordered = order(f1, paves).map_err(|e| match e {
         OrderError::Undecided(p) => BuildError::SectionOrder {
             faces: [f1, f2],
@@ -847,6 +934,68 @@ fn section(
     Ok(())
 }
 
+/// The edges held as lying on a face's plane, placed piece by piece: each split edge of one whose
+/// box meets the face's box and whose middle lies inside the face is In it.
+fn lying(
+    arr: &Arrangement,
+    out: &Interfered,
+    fs: &mut FaceStage,
+    by_source: &[Vec<usize>],
+    meter: &mut WorkMeter<'_>,
+) -> Result<(), BuildError> {
+    let carriers = &arr.carriers;
+    // The box of each split edge, for a quick test against a face's box.
+    let mut piece_boxes = Vec::with_capacity(out.splits.len());
+    for piece in &out.splits {
+        let edge = arr
+            .edges
+            .get(piece.source)
+            .ok_or(BuildError::Missing(Entity::Edge(piece.source)))?;
+        let curve = carriers
+            .curve(edge.curve)
+            .ok_or(BuildError::Missing(Entity::Edge(piece.source)))?;
+        let (a, b) = curve.domain();
+        let span = match (piece.block.from, piece.block.to) {
+            (Some(from), Some(to)) if !piece.block.wraps => (
+                if from.t.lo() > a { from.t.lo() } else { a },
+                if to.t.hi() < b { to.t.hi() } else { b },
+            ),
+            _ => (a, b),
+        };
+        let reach = curve.bound(span, meter).map_err(IntersectError::from)?;
+        piece_boxes.push((reach.lo, reach.hi));
+    }
+    let on_plane = core::mem::take(&mut fs.on_plane);
+    for (e, f) in on_plane {
+        let edge = arr
+            .edges
+            .get(e)
+            .ok_or(BuildError::Missing(Entity::Edge(e)))?;
+        let curve = carriers
+            .curve(edge.curve)
+            .ok_or(BuildError::Missing(Entity::Edge(e)))?;
+        let flat = flat_of(fs, f)?.ok_or(BuildError::Missing(Entity::Face(f)))?;
+        let mut inside = Vec::new();
+        for &k in by_source.get(e).into_iter().flatten() {
+            let (Some(piece), Some((lo, hi))) = (out.splits.get(k), piece_boxes.get(k)) else {
+                continue;
+            };
+            if flat.apart_from(*lo, *hi) {
+                continue;
+            }
+            let Some(t) = middle_of(curve, &piece.block) else {
+                continue;
+            };
+            let (p, w) = near_point(curve, t, meter)?;
+            if flat.place(carriers, p, w, meter)? == Place::In {
+                inside.push(k);
+            }
+        }
+        info_of(fs, f)?.in_blocks.extend(inside);
+    }
+    Ok(())
+}
+
 /// The face stages finished once the edges are split: held regions checked, edges lying on a
 /// face's plane placed piece by piece, the sections made, and each face's On group filled.
 ///
@@ -888,31 +1037,11 @@ pub(crate) fn settle(
             .ok_or(BuildError::Missing(Entity::Edge(piece.source)))?
             .push(k);
     }
-    let on_plane = core::mem::take(&mut fs.on_plane);
-    for (e, f) in on_plane {
-        let edge = arr
-            .edges
-            .get(e)
-            .ok_or(BuildError::Missing(Entity::Edge(e)))?;
-        let curve = carriers
-            .curve(edge.curve)
-            .ok_or(BuildError::Missing(Entity::Edge(e)))?;
-        for &k in by_source.get(e).into_iter().flatten() {
-            let Some(piece) = out.splits.get(k) else {
-                continue;
-            };
-            let Some(t) = middle_of(curve, &piece.block) else {
-                continue;
-            };
-            let (p, w) = near_point(curve, t, meter)?;
-            let flat = flat_of(&fs, f)?.ok_or(BuildError::Missing(Entity::Face(f)))?;
-            if flat.place(carriers, p, w, meter)? == Place::In {
-                info_of(&mut fs, f)?.in_blocks.push(k);
-            }
-        }
-    }
+    lying(arr, out, &mut fs, &by_source, meter)?;
+    // Each face's vertices, by the earlier stages (on its boundary or In), made once when needed.
+    let mut on_face: Vec<Option<Vec<usize>>> = alloc::vec![None; arr.faces.len()];
     for &pair in face_pairs {
-        section(arr, out, &mut fs, pair, meter)?;
+        section(arr, out, &mut fs, (pair, &mut on_face), meter)?;
     }
     for (f, face) in arr.faces.iter().enumerate() {
         let blocks: Vec<usize> = face
