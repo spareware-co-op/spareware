@@ -25,7 +25,7 @@
 )]
 
 use geom_2d::arrange::{Arrangement, arrange};
-use geom_2d::region::{IslandRule, Located, Regions, polygonize};
+use geom_2d::region::{Boundary, Gap, IslandRule, Located, Regions, polygonize};
 use geom_num::carrier::Rational2;
 use geom_num::grid::P2;
 use geom_run::{Budget, WorkMeter};
@@ -220,4 +220,55 @@ fn rooms_come_from_a_wall_plan() {
     // A point in the left room, and one on the stub, which lies inside that room.
     assert!(matches!(located(&arr, &r, 100, 100, 1), Located::In(_)));
     assert!(matches!(located(&arr, &r, 200, 500, 1), Located::In(_)));
+}
+
+#[test]
+fn an_open_room_shows_its_gaps_and_a_bridge_closes_it() {
+    // A room whose wall stops 90 steps short of the corner (a door), and a stub elsewhere.
+    let walls: &[&[(i64, i64)]] = &[
+        &[(0, 0), (500, 0), (500, 400), (0, 400), (0, 90)],
+        &[(700, 0), (700, 30)],
+    ];
+    let (arr, r) = built(walls);
+    assert_eq!(r.regions().len(), 0);
+    let door = |g: &Gap| arr.vertices()[g.a as usize].rational().is_some();
+    match r
+        .boundary_at(&arr, &Rational2::new(100, 100, 1).unwrap())
+        .unwrap()
+    {
+        Boundary::Open(gaps) => {
+            // Four free ends: the door's two (0, 0) and (0, 90), and the stub's two; the door is
+            // the nearest pair after the stub itself (30), at 90.
+            assert_eq!(r.free_ends().len(), 4);
+            assert_eq!(gaps.len(), 6);
+            assert_eq!(gaps[0].squared, Some(900));
+            assert_eq!(gaps[1].squared, Some(8_100));
+            assert!(door(&gaps[1]));
+        }
+        other => panic!("{other:?}"),
+    }
+    // Bridging up to 100 steps closes the stub's own ends and the door; 50 only the stub.
+    assert_eq!(r.bridges(&arr, 50 * 50).unwrap().len(), 1);
+    let bridges = r.bridges(&arr, 100 * 100).unwrap();
+    assert_eq!(bridges.len(), 2);
+    let mut segments = lines(walls);
+    for g in &bridges {
+        let at = |v: u32| {
+            let ([x, y], _) = arr.vertices()[v as usize].rational().unwrap().coordinates();
+            p(x as i64, y as i64)
+        };
+        segments.push((at(g.a), at(g.b)));
+    }
+    let closed = arrange(&segments, &mut WorkMeter::new(Budget::UNLIMITED)).unwrap();
+    let r = polygonize(&closed).unwrap();
+    assert!(matches!(
+        r.boundary_at(&closed, &Rational2::new(100, 100, 1).unwrap())
+            .unwrap(),
+        Boundary::Closed(_)
+    ));
+    assert!(matches!(
+        r.boundary_at(&closed, &Rational2::new(0, 50, 1).unwrap())
+            .unwrap(),
+        Boundary::On
+    ));
 }

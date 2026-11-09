@@ -8,7 +8,9 @@
 //! region on its left; the dangles (edges with a free end, pruned until none is left) and the cut
 //! edges (edges with the same face on both sides once the dangles are gone) are left out of every
 //! ring and listed. [`Regions::at`] names the region a point lies in, or says the point is open
-//! (in the unbounded face) or on the linework. [`Regions::filled`] applies an [`IslandRule`] to a
+//! (in the unbounded face) or on the linework, and [`Regions::boundary_at`] gives an open point
+//! every gap between two free ends, nearest first, which [`Regions::bridges`] picks to close up to
+//! a stated size without moving any vertex. [`Regions::filled`] applies an [`IslandRule`] to a
 //! region: the region alone with its holes ([`IslandRule::Outermost`]), its shell with no holes
 //! ([`IslandRule::Ignore`]), or the region and every region nested inside it at an even depth
 //! ([`IslandRule::Parity`]). [`Regions::twice_area`] is a ring's area, doubled, exactly.
@@ -24,6 +26,9 @@
 //! - **Exact.** Locating a point decides by exact orientation and comparison signs of rational
 //!   points ([`Rational2::orient`], [`Rational2::cmp_y`]); a doubled area is an exact integer when
 //!   every vertex of the ring is a grid point.
+//! - **Gaps are evidence, never a closure.** An open point is told every pair of free ends and the
+//!   exact square of their distance when both are grid points, nearest first, then by name; a gap
+//!   is closed only by a segment the caller adds between two free ends, never by moving a vertex.
 //! - **Deterministic.** Regions are in face order, rings in half-edge order from their first
 //!   half-edge, holes by their first half-edge.
 //!
@@ -116,6 +121,29 @@ pub struct Region {
 /// A filled area: a shell and the holes kept in it, each a ring of half-edges.
 pub type Filled = (Vec<u32>, Vec<Vec<u32>>);
 
+/// A gap in the linework: two free ends (vertices with one edge) and the square of the distance
+/// between them, exact when both are grid points.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct Gap {
+    /// The lower-numbered free end.
+    pub a: u32,
+    /// The other.
+    pub b: u32,
+    /// The squared distance in grid steps, or `None` when an end is not a grid point.
+    pub squared: Option<i128>,
+}
+
+/// The boundary a pick point gives.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum Boundary {
+    /// The region at this place of [`Regions::regions`] holds the point.
+    Closed(usize),
+    /// No region holds it: the linework leaks. Every gap between two free ends, nearest first.
+    Open(Vec<Gap>),
+    /// The point is on the linework.
+    On,
+}
+
 /// Where a point lies among the regions.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Located {
@@ -133,6 +161,8 @@ pub struct Regions {
     found: Vec<Region>,
     dangles: Vec<u32>,
     cut_edges: Vec<u32>,
+    /// The vertices with one edge, in vertex order.
+    free_ends: Vec<u32>,
     /// For each half-edge, the face on its left.
     face_of: Vec<u32>,
     /// For each face, its region's place, if it is bounded.
@@ -209,6 +239,12 @@ pub fn polygonize(arr: &Arrangement) -> Result<Regions, RegionError> {
             }
         }
     }
+    let free_ends: Vec<u32> = (0..arr.vertices().len())
+        .map(index)
+        .collect::<Result<Vec<u32>, _>>()?
+        .into_iter()
+        .filter(|&v| arr.around(v).len() == 1)
+        .collect();
     let dangles: Vec<u32> = (0..edges)
         .filter(|&e| gone.get(e) == Some(&true))
         .map(index)
@@ -333,6 +369,7 @@ pub fn polygonize(arr: &Arrangement) -> Result<Regions, RegionError> {
         found: regions,
         dangles,
         cut_edges,
+        free_ends,
         face_of,
         region_of,
     })
@@ -355,6 +392,82 @@ impl Regions {
     #[must_use]
     pub fn cut_edges(&self) -> &[u32] {
         &self.cut_edges
+    }
+
+    /// The free ends: the vertices with one edge, in vertex order.
+    #[must_use]
+    pub fn free_ends(&self) -> &[u32] {
+        &self.free_ends
+    }
+
+    /// Every gap between two free ends, nearest first: by exact squared distance (an unknown one
+    /// last), then by the ends' numbers.
+    ///
+    /// # Errors
+    ///
+    /// [`RegionError::Range`] past 128 bits; [`RegionError::Malformed`] for a vertex past the
+    /// arrangement.
+    pub fn gaps(&self, arr: &Arrangement) -> Result<Vec<Gap>, RegionError> {
+        let mut gaps = Vec::new();
+        for (i, &a) in self.free_ends.iter().enumerate() {
+            for &b in self.free_ends.get(i.saturating_add(1)..).unwrap_or(&[]) {
+                let squared = match (grid(arr, a)?, grid(arr, b)?) {
+                    (Some((ax, ay)), Some((bx, by))) => {
+                        // Each difference is below 2^42, so each square is below 2^84.
+                        let dx = bx.checked_sub(ax).ok_or(RegionError::Range)?;
+                        let dy = by.checked_sub(ay).ok_or(RegionError::Range)?;
+                        let sum = dx
+                            .checked_mul(dx)
+                            .and_then(|x| dy.checked_mul(dy).and_then(|y| x.checked_add(y)))
+                            .ok_or(RegionError::Range)?;
+                        Some(sum)
+                    }
+                    _ => None,
+                };
+                gaps.push(Gap { a, b, squared });
+            }
+        }
+        gaps.sort_by_key(|g| (g.squared.is_none(), g.squared, g.a, g.b));
+        Ok(gaps)
+    }
+
+    /// The boundary a pick point gives: the region that holds it, the linework it is on, or, when
+    /// no region holds it, every gap (see [`Regions::gaps`]).
+    ///
+    /// # Errors
+    ///
+    /// As [`Regions::at`] and [`Regions::gaps`].
+    pub fn boundary_at(&self, arr: &Arrangement, p: &Rational2) -> Result<Boundary, RegionError> {
+        Ok(match self.at(arr, p)? {
+            Located::In(place) => Boundary::Closed(place),
+            Located::On => Boundary::On,
+            Located::Open => Boundary::Open(self.gaps(arr)?),
+        })
+    }
+
+    /// The gaps to close with `gap.bridge` segments: those of squared size at most `within`,
+    /// nearest first, each free end used once. The caller adds a segment between each pair's
+    /// ends and arranges again; no vertex is moved.
+    ///
+    /// # Errors
+    ///
+    /// As [`Regions::gaps`].
+    pub fn bridges(&self, arr: &Arrangement, within: i128) -> Result<Vec<Gap>, RegionError> {
+        let mut used: Vec<u32> = Vec::new();
+        let mut out = Vec::new();
+        for gap in self.gaps(arr)? {
+            let Some(size) = gap.squared else { break };
+            if size > within {
+                break;
+            }
+            if used.contains(&gap.a) || used.contains(&gap.b) {
+                continue;
+            }
+            used.push(gap.a);
+            used.push(gap.b);
+            out.push(gap);
+        }
+        Ok(out)
     }
 
     /// The regions a hatch of the region at `place` fills under `rule`, as (shell, holes kept)
