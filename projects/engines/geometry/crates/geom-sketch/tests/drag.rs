@@ -175,8 +175,8 @@ fn a_turn_to_the_other_branch_is_drag_limit_and_the_frame_is_the_last_good_one()
     );
     assert_eq!(frame.sketch, before.sketch);
     // The full step and its first half (where the two lines would meet in a point) both fail, in
-    // three iterations in all: the half is taken from where the point was before the frame.
-    assert_eq!(frame.report.iterations, 3);
+    // two iterations in all: the half is taken from where the point was before the frame.
+    assert_eq!(frame.report.iterations, 2);
     // A cursor past the other point: its half step is past it too, so both fail again, and the
     // frame is still the last good one.
     let past = drag.frame(&[[-150.0, 50.0]], &mut meter()).unwrap();
@@ -190,6 +190,18 @@ fn a_turn_to_the_other_branch_is_drag_limit_and_the_frame_is_the_last_good_one()
     // Two iterations: the full step and the half, which lies halfway from the point's place to the
     // cursor, past the other point; a half on the near side would converge and take a third.
     assert_eq!(past.report.iterations, 2);
+    // A cursor short of the other point: the full step turns the line and fails, its half (at 20)
+    // keeps the line's direction and converges, and the rest from there turns it and fails. Three
+    // iterations, one a step; a half taken at the cursor would fail as the full step did, in two.
+    let short = drag.frame(&[[-60.0, 50.0]], &mut meter()).unwrap();
+    assert_eq!(
+        short.status,
+        Status::DragLimit {
+            blocking: vec![ItemId::new(12, 9)]
+        }
+    );
+    assert_eq!(short.sketch, before.sketch);
+    assert_eq!(short.report.iterations, 3);
 }
 
 #[test]
