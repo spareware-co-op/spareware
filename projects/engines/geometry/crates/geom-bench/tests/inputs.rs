@@ -2487,6 +2487,8 @@ fn mesh_typical_batches_all_succeed() {
     k::locate(&probes, &mut found);
     assert!(found.iter().flatten().all(|l| l.len() == m::PROBES));
     all_ok("boolean", k::boolean, &m::boolean(Typical));
+    all_ok("hull", k::hull, &m::hull(Typical));
+    all_ok("slice", k::slice, &m::slice(Typical));
     all_ok("point_point", k::point_point, &m::point_point(Typical));
     all_ok("point_line", k::point_line, &m::point_line(Typical));
     all_ok("point_plane", k::point_plane, &m::point_plane(Typical));
