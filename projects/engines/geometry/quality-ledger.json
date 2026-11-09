@@ -5489,6 +5489,110 @@
       "occurrences": 1,
       "kind": "hangs",
       "reason": "The mutant returns a for any nonzero b and loops forever for b = 0: there r = a % 0 is taken as 0, so a and b become 0 and the loop runs again with b still 0. The wrong gcd it returns otherwise makes Ratio::reduced divide a numerator above its denominator by itself, leaving a zero denominator (a scale of 1000 becomes 1/0), and Ratio::times then calls gcd with that zero, which never returns."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-exchange/src/inflate/decode.rs",
+      "mutant": "replace >= with < in HuffmanTable::tree_lookup",
+      "line_text": "if symbol >= 0 {",
+      "occurrences": 1,
+      "kind": "hangs",
+      "reason": "tree_lookup's walk now ends only on a negative node: once it reaches a symbol, the next step from it reads past the tree as i16::MAX, a symbol again, and the loop runs forever for every code longer than ten bits, inside one call of Decoder::step, which charges no meter, so no test can stop it."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-exchange/src/inflate/decode.rs",
+      "mutant": "replace Input<'_>::len -> usize with 1",
+      "line_text": "self.rest.len()",
+      "occurrences": 1,
+      "kind": "hangs",
+      "reason": "With the input's length always 1, RawMemcpy2 never sees the input empty: when a stored block's bytes run out mid-block it copies min(room, 1, count) bytes from an empty slice, which is none, and jumps back to RawMemcpy1, which sends it to RawMemcpy2 again, forever, inside one call of Decoder::step, which charges no meter, so no test can stop it."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-exchange/src/inflate/decode.rs",
+      "mutant": "replace < with <= in Output<'_>::copy_match",
+      "line_text": "while at < end {",
+      "occurrences": 1,
+      "kind": "hangs",
+      "reason": "At at == end the copy is min(dist, 0) = 0 bytes and at does not move, so the loop never ends for any match at a distance of two or more, inside one call of Decoder::step, which charges no meter, so no test can stop it."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-exchange/src/inflate/decode.rs",
+      "mutant": "replace == with != in Decoder::run",
+      "line_text": "} else if out.left() == 0 {",
+      "occurrences": 1,
+      "kind": "hangs",
+      "reason": "RawMemcpy1 now goes to RawMemcpy2 when there is no room, and RawMemcpy2 copies min(0, input, count) = 0 bytes and jumps back: a stored block that reaches the end of the output window loops between the two forever, inside one call of Decoder::step, which charges no meter, so no test can stop it."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-exchange/src/inflate/decode.rs",
+      "mutant": "replace == with != in Decoder::run",
+      "line_text": "if input.len() == 0 {",
+      "occurrences": 1,
+      "kind": "hangs",
+      "reason": "RawMemcpy2 now copies only when the input is empty: it copies min(room, 0, count) = 0 bytes and jumps to RawMemcpy1, which sends it back while the count and room are nonzero, so a stored block whose input runs out mid-block loops forever, inside one call of Decoder::step, which charges no meter, so no test can stop it."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-exchange/src/inflate/decode.rs",
+      "mutant": "replace && with || in Decoder::run",
+      "line_text": "} else if out.left() >= 259 && input.len() >= 14 {",
+      "occurrences": 1,
+      "kind": "hangs",
+      "reason": "DecodeLitlen now enters the fast loop when either of its conditions holds, and the fast loop returns to DecodeLitlen at once unless both hold: with 259 bytes of room but fewer than 14 input bytes (or the other way round) the two jump to each other forever, inside one call of Decoder::step, which charges no meter, so no test can stop it."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-exchange/src/inflate/decode.rs",
+      "mutant": "replace >= with < in Decoder::run",
+      "line_text": "} else if out.left() >= 259 && input.len() >= 14 {",
+      "occurrences": 2,
+      "kind": "hangs",
+      "reason": "Either >= becomes <: DecodeLitlen enters the fast loop with less than 259 bytes of room or fewer than 14 input bytes, exactly when the fast loop's own test sends it straight back, so the two jump to each other forever near the end of the input or the window, inside one call of Decoder::step, which charges no meter, so no test can stop it."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-exchange/src/inflate/decode.rs",
+      "mutant": "replace > with >= in Decoder::run",
+      "line_text": "if out.left() > 0 {",
+      "occurrences": 1,
+      "kind": "hangs",
+      "reason": "WriteLenBytesToEnd now copies with no room left: min(0, count) = 0 bytes, the count unchanged, and the state runs again, forever, for any match that crosses the end of the output window, inside one call of Decoder::step, which charges no meter, so no test can stop it."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-exchange/src/inflate/decode.rs",
+      "mutant": "replace == with != in Decoder::run",
+      "line_text": "if l.counter == 0 {",
+      "occurrences": 1,
+      "kind": "hangs",
+      "reason": "After the part of a match that fits, the state now goes on to DecodeLitlen only while bytes of the match remain, and with the match done it runs itself again: it copies min(room, 0) = 0 bytes and repeats forever while room remains, inside one call of Decoder::step, which charges no meter, so no test can stop it."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-exchange/src/inflate/decode.rs",
+      "mutant": "replace == with != in Decoder::init_tree",
+      "line_text": "if bt == HUFFLEN_TABLE {",
+      "occurrences": 1,
+      "kind": "hangs",
+      "reason": "init_tree now sends the literal and distance tables, not the code-length table, on to ReadLitlenDistTablesCodeSize. For a fixed block that code-length table is empty, so every code length reads as 0 with no bit used; the tables are then rebuilt and sent back to the same read, and the two alternate forever on the same bits, inside one call of Decoder::step, which charges no meter, so no test can stop it."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-exchange/src/inflate/decode.rs",
+      "mutant": "replace < with == in Decoder::decompress_fast",
+      "line_text": "if out.left() < 259 || input.len() < 14 {",
+      "occurrences": 2,
+      "kind": "hangs",
+      "reason": "Either < becomes ==: the fast loop now returns to DecodeLitlen only at exactly 259 bytes of room (or exactly 14 input bytes), where DecodeLitlen's test sends it straight back, so the two jump to each other forever once that point is met, inside one call of Decoder::step, which charges no meter, so no test can stop it."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-exchange/src/inflate/decode.rs",
+      "mutant": "replace < with > in Decoder::decompress_fast",
+      "line_text": "if out.left() < 259 || input.len() < 14 {",
+      "occurrences": 2,
+      "kind": "hangs",
+      "reason": "Either < becomes >: the fast loop returns to DecodeLitlen whenever there is more than 259 bytes of room (or more than 14 input bytes), exactly when DecodeLitlen sends it back, so the two jump to each other forever, inside one call of Decoder::step, which charges no meter, so no test can stop it."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-exchange/src/inflate/decode.rs",
+      "mutant": "replace < with <= in Decoder::decompress_fast",
+      "line_text": "if out.left() < 259 || input.len() < 14 {",
+      "occurrences": 2,
+      "kind": "hangs",
+      "reason": "Either < becomes <=: at exactly 259 bytes of room (or exactly 14 input bytes) the fast loop returns to DecodeLitlen, whose test (at least 259 and at least 14) sends it straight back, forever, inside one call of Decoder::step, which charges no meter, so no test can stop it."
     }
   ],
   "coverage_off": [
