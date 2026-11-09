@@ -472,3 +472,29 @@ fn two_sides_almost_parallel_at_the_frame_s_size_are_ordered_exactly() {
     assert_eq!(parts.len(), 1, "{parts:?}");
     assert_eq!(parts[0].outer.len(), 4);
 }
+
+/// The same triangle, plate and column moved to negative coordinates, with the column low down,
+/// where the ray placing its outline crosses the plate's section: each part's loop is closed across
+/// the section by the straight chord between the section's two vertices, from (−1,800, −1,000) to
+/// (−1,800, −200), so the column is a hole of the large part only.
+#[test]
+fn a_hole_whose_ray_crosses_a_section_goes_to_its_own_part() {
+    let mut b = Build::default();
+    let c: Vec<usize> = [(-3000, -1000), (-1000, -1000), (-3000, 1000)]
+        .iter()
+        .map(|&(x, y)| b.vertex(p(x, y, 0), 0))
+        .collect();
+    let face = b.polygon(&c, [0, 0, 1], 0, 0);
+    b.cuboid([-1800, -1100, -100], [-1750, 1100, 100], 1);
+    b.cuboid([-2800, -700, -100], [-2700, -600, 100], 2);
+    let (out, splitting) = b.run();
+    let parts = of_face(&splitting, face);
+    assert_eq!(parts.len(), 4, "{parts:?}");
+    let with_hole: Vec<&&SplitFace> = parts.iter().filter(|s| !s.holes.is_empty()).collect();
+    assert_eq!(with_hole.len(), 1, "{parts:?}");
+    let s = i128::from(S);
+    assert_eq!(
+        twice_area(&b, &out, &with_hole[0].outer, [0, 1]),
+        (2000 * 2000 - 800 * 800) * s * s
+    );
+}
