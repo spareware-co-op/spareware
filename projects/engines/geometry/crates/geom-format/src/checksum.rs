@@ -1,5 +1,5 @@
 //! CRC-32C, the cheap check every record carries so damage is found before its bytes are trusted
-//! (24.2).
+//! (24.2); and CRC-32, the check every zip entry carries (24.7).
 //!
 //! What it does: [`crc32c`] is the CRC-32C (Castagnoli) of a byte string, computed by the `crc`
 //! crate with its catalogue entry `CRC_32_ISCSI`: polynomial 0x1EDC6F41, reflected input and output,
@@ -22,10 +22,20 @@
 //! Cost: linear in the input, one table read per byte; the table is a constant built at compile
 //! time, and nothing is allocated.
 
-use crc::{CRC_32_ISCSI, Crc};
+use crc::{CRC_32_ISCSI, CRC_32_ISO_HDLC, Crc};
 
 /// The CRC-32C engine, its table built at compile time.
 const CASTAGNOLI: Crc<u32> = Crc::<u32>::new(&CRC_32_ISCSI);
+
+/// The CRC-32 engine of zip (ISO-HDLC: polynomial 0x04C11DB7, reflected, initial value and final
+/// XOR 0xFFFFFFFF), as PKWARE's APPNOTE 4.4.7 defines it; its table built at compile time.
+const ISO_HDLC: Crc<u32> = Crc::<u32>::new(&CRC_32_ISO_HDLC);
+
+/// The CRC-32 of `bytes`, as a zip entry declares it.
+#[must_use]
+pub fn crc32(bytes: &[u8]) -> u32 {
+    ISO_HDLC.checksum(bytes)
+}
 
 /// The CRC-32C of `bytes`.
 #[must_use]

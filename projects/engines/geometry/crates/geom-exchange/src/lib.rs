@@ -42,6 +42,9 @@
 //! - [`report`]: import and export reports as data.
 //! - [`inflate`]: raw DEFLATE decoded within size and ratio budgets, its decoder ported from
 //!   `miniz_oxide` (piece G414b).
+//! - [`zip`]: the hardened zip reader: central directory, local headers, zip-slip, overlaps, the
+//!   Open Packaging Conventions' part names, entries inflated within their declared sizes (piece
+//!   G414c), its records ported from zip2.
 //! - [`error`]: the crate's error.
 //!
 //! Status: built by pieces G413, G414, G418, G436; G413 is done.
@@ -58,5 +61,6 @@ pub mod real;
 pub mod report;
 pub mod unit;
 pub mod write;
+pub mod zip;
 
 pub use error::ExchangeError;
