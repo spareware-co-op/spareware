@@ -1,4 +1,4 @@
-//! Inputs for `geom-math`'s hot paths (pieces G45, G46 and G48, decision 32.44): grid points for
+//! Inputs for `geom-math`'s hot paths (pieces G45, G46 and G48, decision 32.46): grid points for
 //! the typed transforms and the rational rotation, unit directions for the rational-rotation
 //! search, grid points for the frame-to-map conversion, and survey coordinates as decimal text.
 //!

@@ -43,11 +43,14 @@ use crate::map::header::Header;
 use crate::map::links::{self, LinkKind};
 use crate::map::{
     CRATES_DIR, CrateInput, FACADE_DIR, Gap, Generated, Input, MAP_FILE, PENDING, Pending, Problem,
-    Rule, SourceFile, build, compare, is_facade,
+    Registry, Rule, SourceFile, build, compare, is_facade,
 };
 
 /// The deepest folder under `src/` that is read.
 pub const MAX_DEPTH: usize = 8;
+
+/// The facade's generated tool descriptions, which hold every operation in the registry.
+pub const TOOLS: &str = "projects/engines/crates/engine-geometry/generated/mcp-tools.json";
 
 /// An I/O failure that stops the run.
 #[derive(Debug)]
@@ -281,12 +284,35 @@ pub fn read_with(root: &Path, pending: &[Pending]) -> Result<Input, MapError> {
         .filter(|p| !exists_exactly(root, p.folder))
         .copied()
         .collect();
+    let registry = registry(root, &crates)?;
     Ok(Input {
         crates,
         unreadable,
         repo_paths: Some(repo_paths),
         pending,
+        registry,
     })
+}
+
+/// What the map's operations and kinds are read from, if the tree holds the facade's generated
+/// tool descriptions: them, and every crate's tests, fuzz targets and benchmarks.
+fn registry(root: &Path, crates: &[CrateInput]) -> Result<Option<Registry>, MapError> {
+    let path = root.join(TOOLS);
+    if !path.is_file() {
+        return Ok(None);
+    }
+    let tools = fs::read_to_string(&path).map_err(|e| error(&path, &e))?;
+    let mut evidence = Vec::new();
+    for krate in crates {
+        let tests = root.join(&krate.folder).join("tests");
+        if tests.is_dir() {
+            evidence.extend(sources(&tests, &format!("{}/tests", krate.folder))?);
+        }
+        if krate.name == "geom-fuzz" || krate.name == "geom-bench" {
+            evidence.extend(krate.files.iter().cloned());
+        }
+    }
+    Ok(Some(Registry { tools, evidence }))
 }
 
 /// A problem for every entry of `pending` whose folder the workspace at `root` now holds.

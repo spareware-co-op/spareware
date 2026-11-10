@@ -2464,7 +2464,7 @@ pub mod ball {
     );
 }
 
-/// geom-math's hot paths (pieces G45, G46 and G48; decision 32.44).
+/// geom-math's hot paths (pieces G45, G46 and G48; decision 32.46).
 pub mod math_types {
     use super::*;
 
@@ -2523,7 +2523,7 @@ pub mod math_types {
     );
 }
 
-/// geom-linalg's hot paths (pieces G49 and G50; decision 32.44).
+/// geom-linalg's hot paths (pieces G49 and G50; decision 32.46).
 pub mod linalg {
     use super::*;
 
@@ -2547,7 +2547,7 @@ pub mod linalg {
     );
 }
 
-/// geom-bvh's hot paths (pieces G54 and G55; decision 32.44).
+/// geom-bvh's hot paths (pieces G54 and G55; decision 32.46).
 pub mod bvh {
     use super::*;
 
@@ -2571,7 +2571,79 @@ pub mod bvh {
     );
 }
 
-/// geom-nurbs's hot paths (pieces G56, G58 and G59; decision 32.44).
+/// The attribute step's hot path (piece G90; decision 32.46).
+pub mod attributes {
+    use super::*;
+
+    #[library_benchmark(teardown = verify)]
+    #[bench::typical(leak("attributes/apply/typical"))]
+    fn apply(run: &'static mut Named) -> &'static mut Named {
+        run.bench.measure();
+        run
+    }
+
+    library_benchmark_group!(
+        name = attributes;
+        benchmarks = apply
+    );
+}
+
+/// geom-topo's hot paths (piece G80; decision 32.46).
+pub mod topo {
+    use super::*;
+
+    #[library_benchmark(teardown = verify)]
+    #[bench::typical(leak("topo/column_edit/typical"))]
+    fn column_edit(run: &'static mut Named) -> &'static mut Named {
+        run.bench.measure();
+        run
+    }
+
+    #[library_benchmark(teardown = verify)]
+    #[bench::typical(leak("topo/publish/typical"))]
+    fn publish(run: &'static mut Named) -> &'static mut Named {
+        run.bench.measure();
+        run
+    }
+
+    library_benchmark_group!(
+        name = topo;
+        benchmarks = column_edit, publish
+    );
+}
+
+/// The batch runner's hot paths (piece G104; decision 32.46).
+pub mod batch {
+    use super::*;
+
+    #[library_benchmark(teardown = verify)]
+    #[bench::typical(leak("batch/run_items/typical"))]
+    fn run_items(run: &'static mut Named) -> &'static mut Named {
+        run.bench.measure();
+        run
+    }
+
+    #[library_benchmark(teardown = verify)]
+    #[bench::typical(leak("batch/curve_points/typical"))]
+    fn curve_points(run: &'static mut Named) -> &'static mut Named {
+        run.bench.measure();
+        run
+    }
+
+    #[library_benchmark(teardown = verify)]
+    #[bench::typical(leak("batch/surface_points/typical"))]
+    fn surface_points(run: &'static mut Named) -> &'static mut Named {
+        run.bench.measure();
+        run
+    }
+
+    library_benchmark_group!(
+        name = batch;
+        benchmarks = run_items, curve_points, surface_points
+    );
+}
+
+/// geom-nurbs's hot paths (pieces G56, G58 and G59; decision 32.46).
 pub mod nurbs {
     use super::*;
 
@@ -2602,7 +2674,7 @@ pub mod nurbs {
     );
 }
 
-/// geom-curve's hot paths (pieces G60 to G64 and G67; decision 32.44).
+/// geom-curve's hot paths (pieces G60 to G64 and G67; decision 32.46).
 pub mod curve {
     use super::*;
 
@@ -2647,7 +2719,38 @@ pub mod curve {
     );
 }
 
-/// geom-surface's hot paths (pieces G65 to G68; decision 32.44).
+/// geom-format's hot paths (piece G105; decision 32.46).
+pub mod format {
+    use super::*;
+
+    #[library_benchmark(teardown = verify)]
+    #[bench::typical(leak("format/cache_key/typical"))]
+    fn cache_key(run: &'static mut Named) -> &'static mut Named {
+        run.bench.measure();
+        run
+    }
+
+    #[library_benchmark(teardown = verify)]
+    #[bench::typical(leak("format/memo_get/typical"))]
+    fn memo_get(run: &'static mut Named) -> &'static mut Named {
+        run.bench.measure();
+        run
+    }
+
+    #[library_benchmark(teardown = verify)]
+    #[bench::typical(leak("format/next_version/typical"))]
+    fn next_version(run: &'static mut Named) -> &'static mut Named {
+        run.bench.measure();
+        run
+    }
+
+    library_benchmark_group!(
+        name = format;
+        benchmarks = cache_key, memo_get, next_version
+    );
+}
+
+/// geom-surface's hot paths (pieces G65 to G68; decision 32.46).
 pub mod surface {
     use super::*;
 
@@ -2692,7 +2795,7 @@ pub mod surface {
     );
 }
 
-/// Root finding and quadrature (piece G51; decision 32.44).
+/// Root finding and quadrature (piece G51; decision 32.46).
 pub mod brent {
     use super::*;
 
@@ -2709,7 +2812,7 @@ pub mod brent {
     );
 }
 
-/// Root finding and quadrature (piece G51; decision 32.44).
+/// Root finding and quadrature (piece G51; decision 32.46).
 pub mod quadrature {
     use super::*;
 
@@ -2726,7 +2829,7 @@ pub mod quadrature {
     );
 }
 
-/// geom-run's parallel helper: a lone wave on the serial executor and on a pool (decision 32.44).
+/// geom-run's parallel helper: a lone wave on the serial executor and on a pool (decision 32.46).
 pub mod helper {
     use super::*;
 
@@ -2747,5 +2850,43 @@ pub mod helper {
     library_benchmark_group!(
         name = helper;
         benchmarks = lone_serial, lone_pool
+    );
+}
+
+/// geom-make's hot paths (piece G101; decision 32.46).
+pub mod make {
+    use super::*;
+
+    #[library_benchmark(teardown = verify)]
+    #[bench::typical(leak("make/build_box/typical"))]
+    fn build_box(run: &'static mut Named) -> &'static mut Named {
+        run.bench.measure();
+        run
+    }
+
+    #[library_benchmark(teardown = verify)]
+    #[bench::typical(leak("make/cylinder/typical"))]
+    fn cylinder(run: &'static mut Named) -> &'static mut Named {
+        run.bench.measure();
+        run
+    }
+
+    #[library_benchmark(teardown = verify)]
+    #[bench::typical(leak("make/move_box/typical"))]
+    fn move_box(run: &'static mut Named) -> &'static mut Named {
+        run.bench.measure();
+        run
+    }
+
+    #[library_benchmark(teardown = verify)]
+    #[bench::typical(leak("make/turn_box/typical"))]
+    fn turn_box(run: &'static mut Named) -> &'static mut Named {
+        run.bench.measure();
+        run
+    }
+
+    library_benchmark_group!(
+        name = make;
+        benchmarks = build_box, cylinder, move_box, turn_box
     );
 }

@@ -1,0 +1,12 @@
+; The record envelope every SKG record shares: format 1 (draft), SPEC.md section 4.
+; CDDL by RFC 8610. The first rule is the one a record is validated against.
+record = [
+  tag: uint,
+  flags: uint,
+  schema: uint,
+  depends: [* content-id],
+  payload: bstr,
+  check: uint,
+]
+
+content-id = [alg: uint, digest: bstr]
