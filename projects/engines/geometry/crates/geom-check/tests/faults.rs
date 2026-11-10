@@ -17,8 +17,8 @@
 mod common;
 
 use common::{
-    CUBE, CUBE_FACES, Rows, acorn, circle, cube, faces_into, faults, has, ix, kinds, pcircle,
-    polyhedron, report, sphere, square_sheet, wire,
+    CUBE, CUBE_FACES, Rows, acorn, certified, circle, cube, faces_into, faults, has, ix, kinds,
+    pcircle, polyhedron, report, sphere, square_sheet, wire,
 };
 use geom_check::{Entity, Fault, FaultKind, Group, MAX_FAULTS};
 use geom_num::Exactness;
@@ -637,4 +637,122 @@ fn a_fault_written_to_a_failing_writer_reports_the_failure() {
         assert!(write!(FailAfter { left: n }, "{fault}").is_err(), "{n}");
     }
     assert!(writes >= 3, "{full}");
+}
+
+#[test]
+fn only_the_two_unchecked_kinds_say_nothing_is_wrong() {
+    let all = [
+        FaultKind::ChainCycle,
+        FaultKind::ListedTwice,
+        FaultKind::WrongParent,
+        FaultKind::Orphan,
+        FaultKind::EmptyLoop,
+        FaultKind::FinRing,
+        FaultKind::FinPrev,
+        FaultKind::RadialRing,
+        FaultKind::RadialEdge,
+        FaultKind::OffRadialRing,
+        FaultKind::EdgeEnds,
+        FaultKind::Misplaced,
+        FaultKind::LoopOpen,
+        FaultKind::RingEdgeInLoop,
+        FaultKind::FinCount,
+        FaultKind::PartnerSense,
+        FaultKind::PartnerShells,
+        FaultKind::ShellDisconnected,
+        FaultKind::EmptyShell,
+        FaultKind::EmptyRegion,
+        FaultKind::NoMaterial,
+        FaultKind::MaterialInKind,
+        FaultKind::ShellOfVoid,
+        FaultKind::Euler,
+        FaultKind::NotFlat,
+        FaultKind::NotStraight,
+        FaultKind::CurvedPcurve,
+        FaultKind::VertexOffSurface,
+        FaultKind::VertexOffCurve,
+        FaultKind::EdgeOffSurface,
+        FaultKind::Unchecked,
+        FaultKind::EdgesCross,
+        FaultKind::FacesCross,
+        FaultKind::PairUnchecked,
+        FaultKind::LoopSense,
+        FaultKind::FaceBound,
+        FaultKind::ShellInward,
+        FaultKind::ShellOutward,
+        FaultKind::ShellNesting,
+    ];
+    let uncertified: Vec<FaultKind> = all.into_iter().filter(|k| k.uncertified()).collect();
+    assert_eq!(
+        uncertified,
+        [FaultKind::Unchecked, FaultKind::PairUnchecked]
+    );
+}
+
+#[test]
+fn a_report_tells_not_certified_from_wrong() {
+    // A body that passes is neither.
+    let passed = report(&cube(), BodyKind::Solid, Exactness::Exact);
+    assert!(passed.passed() && !passed.uncertified());
+    // A fin's pcurve has no certified check: a fault, and nothing found wrong.
+    let mut r = cube();
+    r.pcurves.push(pcircle());
+    r.fins[0].pcurve = Some(ix(0));
+    let found = report(&r, BodyKind::Solid, certified());
+    assert_eq!(kinds(found.faults()), [FaultKind::Unchecked]);
+    assert!(!found.passed() && found.uncertified());
+    // Recorded Exact, the same pcurve is also wrong: curved in an exact body.
+    let found = report(&r, BodyKind::Solid, Exactness::Exact);
+    assert_eq!(
+        kinds(found.faults()),
+        [FaultKind::Unchecked, FaultKind::CurvedPcurve]
+    );
+    assert!(!found.passed() && !found.uncertified());
+    // A fault that says something is wrong, alone.
+    let flipped = broken_cube(|r| r.faces[0].sense = Sense::Reversed);
+    assert!(!flipped.is_empty() && flipped.iter().all(|f| !f.kind.uncertified()));
+    let mut r = cube();
+    r.faces[0].sense = Sense::Reversed;
+    assert!(!report(&r, BodyKind::Solid, certified()).uncertified());
+}
+
+#[test]
+fn a_fault_counted_past_the_cap_still_says_whether_something_is_wrong() {
+    // A prism over `n` corners of a parabola, 10 high: n + 2 faces and 6n fins.
+    let prism = |n: u32| {
+        let ring = |z: i64| (0..i64::from(n)).map(move |i| [i, i * i, z]);
+        let points: Vec<[i64; 3]> = ring(0).chain(ring(10)).collect();
+        let bottom: Vec<u32> = (0..n).rev().collect();
+        let top: Vec<u32> = (n..2 * n).collect();
+        let sides: Vec<[u32; 4]> = (0..n)
+            .map(|i| {
+                let j = (i + 1) % n;
+                [i, j, j + n, i + n]
+            })
+            .collect();
+        let mut faces: Vec<&[u32]> = vec![&bottom, &top];
+        faces.extend(sides.iter().map(<[u32; 4]>::as_slice));
+        polyhedron(&points, &faces)
+    };
+    // 360 fins, each with a pcurve: 360 unchecked faults, 104 of them past the cap.
+    let mut r = prism(60);
+    r.pcurves.push(pcircle());
+    for fin in &mut r.fins {
+        fin.pcurve = Some(ix(0));
+    }
+    assert_eq!(r.fins.len(), 360);
+    let found = report(&r, BodyKind::Solid, certified());
+    assert_eq!(found.faults().len(), MAX_FAULTS);
+    assert_eq!(found.more(), 360 - MAX_FAULTS as u64);
+    assert!(found.faults().iter().all(|f| f.kind.uncertified()));
+    assert!(found.uncertified());
+    // Recorded Exact, group 4 finds every pcurve curved, after the cap is reached: every fault
+    // kept is still an unchecked one, and the report knows something is wrong.
+    let found = report(&r, BodyKind::Solid, Exactness::Exact);
+    assert_eq!(found.faults().len(), MAX_FAULTS);
+    assert_eq!(found.more(), 720 - MAX_FAULTS as u64);
+    assert!(found.faults().iter().all(|f| f.kind.uncertified()));
+    assert!(!found.uncertified());
+    // Without the pcurves the prism passes, so those faults are the pcurves' alone.
+    assert!(report(&prism(60), BodyKind::Solid, Exactness::Exact).passed());
 }

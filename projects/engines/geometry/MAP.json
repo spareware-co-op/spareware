@@ -1846,6 +1846,7 @@
           "file": "projects/engines/geometry/crates/geom-check/src/report.rs",
           "guarantees": [
             "**Nothing hidden.** A [`Report`] passes only when it found no fault, kept or counted; a group the level asked for but which is not built yet is listed in [`Report::missing`], never counted as passed, and what a curved face or shell leaves unjudged is counted in [`Report::deferred`].",
+            "**Not certified is told from wrong.** A fault of a kind that says only that no certified check exists yet ([`FaultKind::uncertified`]) is still a fault, and the report does not pass; [`Report::uncertified`] says whether those are all it found, counting the faults past the cap, so a caller can tell a body the checker could not follow from one it found wrong.",
             "**One order.** Faults are listed in the order the checks find them, which is fixed (each check runs over rows in ascending order), so the same body gives the same report everywhere.",
             "**Plain words.** Every [`FaultKind`] has a sentence saying what is wrong ([`FaultKind::what`]), and [`Fault`]'s `Display` names its entities by arena and row."
           ],
@@ -1917,7 +1918,7 @@
           "family": [],
           "file": "projects/engines/geometry/crates/geom-check/src/sink.rs",
           "guarantees": [
-            "**The first faults kept, in order, and the rest counted.** [`Sink::push`] keeps a fault while fewer than [`MAX_FAULTS`] are kept, and counts it otherwise; it never allocates.",
+            "**The first faults kept, in order, and the rest counted.** [`Sink::push`] keeps a fault while fewer than [`MAX_FAULTS`] are kept, and counts it otherwise; it never allocates. It notes, for kept and counted faults alike, whether any says something is wrong rather than only that no certified check exists yet (`crate::FaultKind::uncertified`).",
             "**Never aborts on memory.** A refused reservation is the meter's [`geom_run::Stop::OutOfMemory`]."
           ],
           "job": "Where a check puts what it finds, and how it pays for its work: the faults found so far, the count of those past the cap, and the caller's meter.",
@@ -5924,7 +5925,7 @@
           "file": "projects/engines/geometry/crates/geom-make/src/build.rs",
           "guarantees": [
             "**Names, not positions.** Every index of the body follows its entities' names, and every name comes from the operation's path, a role and the names it is relative to: never from the order the rows were written in (8.2, 20.2).",
-            "**Checked before returned.** A body that does not pass the checker at the build's level is never returned; the operation fails with [`MakeDetail::ResultInvalid`], a defect, instead.",
+            "**Checked before returned.** A body that does not pass the checker at the build's level is never returned. What the operation fails with instead is [`Unpassed`]'s to say: [`MakeDetail::ResultInvalid`], a defect, where the checker follows the body's data in full or found something wrong; [`MakeDetail::NotCertifiedYet`], naming the piece that widens the checker, where the data are less than exact and the checker could not certify them.",
             "**Charged by what it builds.** One meter unit ([`PER_ROW`]) and 64 logical bytes per row built, before it is built (23.10), and the publishing charges its own rows to the same meter. The postcondition check runs on a meter of its own, cancellable and without a limit: its level differs between a test build and a shipped one, and a budget must stop an operation the same way in both.",
             "**Transactional.** Nothing the caller holds is changed; a failure, or a stop the operation did not report, returns no body (`OpContext::run`)."
           ],
@@ -5998,6 +5999,7 @@
             "**The class never rises.** The result keeps the input's class or a less exact one: an Approximate body stays Approximate whatever its bound does (principle 3).",
             "**Accepted, or refused.** A result less exact than the input is returned only when the caller accepts it ([`Moved::accept`]): a class at least as loose and a ceiling at least the result's bound; otherwise [`MakeDetail::NotAccepted`] names the class the result would have.",
             "**Kinds change only where the checker can follow.** A transform that does not keep circles turns them into ellipses and analytic surfaces into affine ones, which the checker cannot certify yet: on a body with curved geometry it is [`MakeDetail::KindNotCertified`] (G177).",
+            "**Not certified is a refusal, never a defect.** The checker follows exact data in full, so a result recorded Exact that it does not pass is a defect ([`MakeDetail::ResultInvalid`]). Data less than exact it follows only as far as its certified tests reach. So a transform that rounds a corner or moves curved geometry by a deviation, and gives a body the checker does not pass, is [`MakeDetail::NotCertifiedYet`]; and so is an exact transform of a body that was less than exact already (corners an earlier transform rounded, a round primitive) when the checker finds nothing wrong and cannot certify the result: its interval tests of planes not given by integers depend on the size of the numbers, so a whole-number scale of a body it passed can leave a pair of parallel faces it cannot tell apart. A fault that says something is wrong there is still a defect: an exact move of a body that passed breaks nothing.",
             "**Mirrors keep the outside outside.** A mirror reverses orientation, so every face's sense and every loop's direction is reversed with it."
           ],
           "job": "The Transform family of chapter 10.2: move, rotate, mirror and scale a body, its entities keeping their names, its geometry changing kind only as chapter 7's typed transforms say.",
@@ -9687,7 +9689,7 @@
             },
             {
               "base_kind": "Unsupported",
-              "doc": "A transform that rounds corners or moves curved geometry by a certified deviation gave a body the checker cannot certify yet: rounded corners leave their faces' planes, and a tilted curved face meets its caps where only exact data is followed today.",
+              "doc": "A transform gave a body the checker cannot certify yet, from corners it rounded or curved geometry it moved by a certified deviation, or from a body an earlier transform left so: rounded corners leave their faces' planes, a tilted curved face meets its caps where only exact data is followed today, and two planes off the integers are told apart only while their normals stay exact in doubles.",
               "name": "NotCertifiedYet",
               "shape": "struct"
             },
@@ -15076,7 +15078,8 @@
           "projects/engines/geometry/crates/geom-make/tests/attack_g101.rs"
         ],
         "unit": [
-          "projects/engines/geometry/crates/geom-make/tests/attack_g101.rs"
+          "projects/engines/geometry/crates/geom-make/tests/attack_g101.rs",
+          "projects/engines/geometry/crates/geom-make/tests/not_certified.rs"
         ]
       },
       "family": "Transform",
@@ -15105,7 +15108,8 @@
           "projects/engines/geometry/crates/geom-make/tests/attack_g101.rs"
         ],
         "unit": [
-          "projects/engines/geometry/crates/geom-make/tests/attack_g101.rs"
+          "projects/engines/geometry/crates/geom-make/tests/attack_g101.rs",
+          "projects/engines/geometry/crates/geom-make/tests/not_certified.rs"
         ]
       },
       "family": "Transform",
@@ -15129,7 +15133,8 @@
           "projects/engines/geometry/crates/geom-make/tests/attack_g101.rs"
         ],
         "unit": [
-          "projects/engines/geometry/crates/geom-make/tests/attack_g101.rs"
+          "projects/engines/geometry/crates/geom-make/tests/attack_g101.rs",
+          "projects/engines/geometry/crates/geom-make/tests/not_certified.rs"
         ]
       },
       "family": "Transform",
@@ -15158,7 +15163,8 @@
           "projects/engines/geometry/crates/geom-make/tests/attack_g101.rs"
         ],
         "unit": [
-          "projects/engines/geometry/crates/geom-make/tests/attack_g101.rs"
+          "projects/engines/geometry/crates/geom-make/tests/attack_g101.rs",
+          "projects/engines/geometry/crates/geom-make/tests/not_certified.rs"
         ]
       },
       "family": "Transform",
@@ -15182,7 +15188,8 @@
           "projects/engines/geometry/crates/geom-make/tests/attack_g101.rs"
         ],
         "unit": [
-          "projects/engines/geometry/crates/geom-make/tests/attack_g101.rs"
+          "projects/engines/geometry/crates/geom-make/tests/attack_g101.rs",
+          "projects/engines/geometry/crates/geom-make/tests/not_certified.rs"
         ]
       },
       "family": "Transform",
