@@ -220,6 +220,7 @@ The map lists every error kind of every kernel and facade crate (not the develop
 - **Why by name and by use.** Chapter 22 names the shared error types, but leaves the name of each family's detail enum (the enum a sweep's `MitreMismatch { .. }` sits in) to its piece. The name rule needs no marker that could be forgotten, the use rule finds every enum the code treats as an error, and the checks make both complete: a public error enum inside a function, an inline module or another block is a problem, never skipped.
 - **What is recorded:** the enum's name, its module, the first paragraph of its doc comment, whether it is `#[non_exhaustive]` (chapter 22: the base kinds are not, the details are), and each kind's name, shape (`unit`, `tuple` or `struct`) and the first paragraph of its doc comment. Doc comments are `///` or `/** */` lines; `#[doc = "..."]` is not read.
 - **Every kind is explained:** an error enum or a variant without a doc comment is a problem.
+- **Every detail has its base kind.** Chapter 22 maps every operation's detail to one base kind, the variants of `geom-op`'s `ErrorKind`. Where an error enum's `impl` block, in the file that declares it, has a function `kind` returning `ErrorKind`, the map reads each variant's base kind from that function, which must be one `match self` whose arms are `Enum::Variant => ErrorKind::Kind` (or `Self::Variant`, with the variant's fields or none, several joined by `|`, the value alone or in a block) or `Enum::Variant(detail) => detail.kind()` for a variant that holds another detail, written `held detail` in the map. A body in another form, an arm in another form, a variant with no arm or with two, and a base kind that is not a variant of an `ErrorKind` enum in the map are problems.
 
 rustdoc's JSON output would give the same doc text with every item resolved, which is how a map could otherwise be made. It is not used: it needs a nightly compiler (`--output-format json` is unstable, tracking issue rust-lang/rust#76578), its format changes with every breaking release (`FORMAT_VERSION` 61 in `rustdoc-types` at commit `2e63bdc44b94e86fe12d6e0034d1ed9c2ac6e9dc`), and the kernel's toolchain is pinned to a stable release. Reading the source works with the pinned toolchain today and forever.
 
@@ -232,15 +233,16 @@ rustdoc's JSON output would give the same doc text with every item resolved, whi
 | `crates` | One entry per crate folder, by name: `name`, `folder`, `file` (its root), `kind` (`kernel`, `development` or `facade`), `summary`, `job`, `layer`, `invariants`, `sections`, `chapters`, `family`, `status`, `provenance`, `spdx`, `depends`, `modules` and `errors` |
 | `crates[].modules` | One entry per module file (a crate root that holds code included), by path: `file`, `path` (`geom_num::interval`, a binary's name, or `<binary>::<module>`), `target` (`lib` or `bin`), `job`, `does`, `guarantees`, `method`, `cost`, `family`, `provenance`, `spdx` |
 | `crates[].depends` | Each published crate the crate depends on: `name`, `link` (its crates.io page at the manifest's version), `licence` (from the crate header's `Licences` list), `manifest`, `purpose` (the version requirement), `take` (`depend`) |
-| `crates[].errors` | Each error enum: `name`, `module`, `file`, `doc`, `non_exhaustive`, `kinds` (`name`, `shape`, `doc`) |
+| `crates[].errors` | Each error enum: `name`, `module`, `file`, `doc`, `non_exhaustive`, `kinds` (`name`, `shape`, `doc`, and `base_kind` where the enum has a `kind` function: the base kind's name, or `held detail`) |
 | `sources` | One record per source and how it was taken, in chapter 29.20's `Take` terms: `port` (a `Source:` record), `port-method` (a `Consulted:` record: a source a module that implements a published method consulted) or `depend` (a published crate a kernel or facade crate's manifest names). Each has `name`, `licence`, `link` (without its fragment), `pinned`, `take`, `method_note` and `used_by`. ORACLE and STUDY records come from the oracle runner and design notes, not from headers, and join when those land |
+| `operations`, `kinds` | Every operation and geometry kind: `name`, `tier`, `evidence`, `missing`, and for an operation `family` and `version` |
 | `gaps` | The known gaps below, each with its file, rule, exact problem and reason |
 | `pending` | The pending folders below that the tree does not hold yet, each with its reason |
 | `format`, `grammar`, `generated_by` | The map's format (1; it changes only when a field's meaning changes or a field goes), this page, and the command that writes it |
 
 The map is deterministic: crates in name order, modules in path order, object keys sorted, list items in header order, paths relative to the repository root with `/`, `\n` line ends, no timestamps. A field a header lacks is `null` or empty, and the check fails. The check compares line ends as `\n`, because a Windows checkout may turn them into `\r\n`; every other byte must match.
 
-Operations and geometry kinds, which chapter 26.3 also asks the map to list, join it when the pieces that define them land (the operation contract in `geom-op`, the kinds in `geom-curve` and `geom-surface`).
+**Operations and kinds (piece G103).** `operations` holds every operation in the facade's registry and `kinds` every variant of `CurveKind` and `SurfaceKind`, each with its `tier`, its `evidence` (what claims each part of chapter 28.2's table, and in which files) and what it is `missing`. A test, fuzz or benchmark file claims what it covers with a `Covers: make.box, CurveKind::Line.` paragraph in its header (`CurveKind` alone claims every variant) and a family's laws with `Family laws: Make.`; the module that declares a kind enum states `Tier: Preview since 2026-10-31.` Where the file sits says which part it proves (`geom_test::map::registry`). `geom_test::completeness` holds the entries to their tiers.
 
 ## Rules
 
@@ -268,6 +270,8 @@ Operations and geometry kinds, which chapter 26.3 also asks the map to list, joi
 | `Uncredited` | A link to outside code in the header or a doc comment that no `Source:` or `Consulted:` record credits, or a commit named by an abbreviated name | `uncredited` |
 | `Error enum` | A public error enum declared inside a block, where the map cannot place it | `error_enum` |
 | `Error doc` | An error enum or error kind without a doc comment | `error_doc` |
+| `Error base` | A `kind` function returning `ErrorKind` that is not one `match self`, an arm that is not `Enum::Variant => ErrorKind::Kind` or `Enum::Variant(detail) => detail.kind()`, a variant with no arm or with two, or a base kind that is not a variant of `ErrorKind` | `error_base` |
+| `Covers` | A `Covers:` item that names no operation or kind, or a kind enum's module with no `Tier:` | `covers` |
 | `Stale map` | `MAP.json` is missing, or differs from the map the headers give | `stale` |
 | `Stale gap` | A known gap that no longer occurs, or a pending folder the tree now holds | `gaps` (and `a_pending_folder_is_checked_once_it_exists` in `tests/map_files.rs`) |
 

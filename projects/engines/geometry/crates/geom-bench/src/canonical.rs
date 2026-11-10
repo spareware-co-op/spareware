@@ -580,7 +580,7 @@ impl<A: Canonical, B: Canonical, C: Canonical, D: Canonical> Canonical for (A, B
     }
 }
 
-// `geom-math`'s types (decision 32.44's count benchmarks for pieces G45, G46 and G48).
+// `geom-math`'s types (decision 32.46's count benchmarks for pieces G45, G46 and G48).
 
 impl<T: Canonical + Copy> Canonical for geom_math::Rounded<T> {
     // The value, then whether it is exact (the fields are private to geom-math; these are its
@@ -672,7 +672,7 @@ impl<T: Canonical> Canonical for Result<T, geom_math::DecimalError> {
     }
 }
 
-// `geom-linalg`'s types (decision 32.44's count benchmarks for pieces G49 and G50).
+// `geom-linalg`'s types (decision 32.46's count benchmarks for pieces G49 and G50).
 
 impl Canonical for geom_linalg::Matrix {
     // The shape, then every entry row by row (its getter refuses no index inside the shape).
@@ -732,7 +732,70 @@ impl<T: Canonical> Canonical for Result<T, geom_linalg::LinalgError> {
     }
 }
 
-// `geom-bvh`'s types (decision 32.44's count benchmarks for pieces G54 and G55).
+// `geom-topo`'s types (decision 32.46's count benchmarks for piece G80).
+
+impl Canonical for geom_topo::Builder {
+    fn encode(&self, h: &mut Sha256) {
+        debug_text(self, h);
+    }
+}
+
+// `geom-op`'s error (decision 32.46's count benchmarks for pieces G104 and G101).
+
+impl<T: Canonical> Canonical for Result<T, geom_op::OpError> {
+    fn encode(&self, h: &mut Sha256) {
+        match self {
+            Ok(v) => {
+                h.update(&[0]);
+                v.encode(h);
+            }
+            Err(e) => {
+                h.update(&[1]);
+                debug_text(e, h);
+            }
+        }
+    }
+}
+
+impl<T: Canonical> Canonical for Result<T, geom_topo::TopoError> {
+    fn encode(&self, h: &mut Sha256) {
+        match self {
+            Ok(v) => {
+                h.update(&[0]);
+                v.encode(h);
+            }
+            Err(e) => {
+                h.update(&[1]);
+                debug_text(e, h);
+            }
+        }
+    }
+}
+
+// The attribute step's types (decision 32.46's count benchmarks for piece G90).
+
+impl Canonical for crate::inputs::attributes::Scene {
+    fn encode(&self, h: &mut Sha256) {
+        debug_text(self, h);
+    }
+}
+
+impl<T: Canonical> Canonical for Result<T, geom_name::AttrError> {
+    fn encode(&self, h: &mut Sha256) {
+        match self {
+            Ok(v) => {
+                h.update(&[0]);
+                v.encode(h);
+            }
+            Err(e) => {
+                h.update(&[1]);
+                debug_text(e, h);
+            }
+        }
+    }
+}
+
+// `geom-bvh`'s types (decision 32.46's count benchmarks for pieces G54 and G55).
 
 impl<const D: usize> Canonical for geom_bvh::Aabb<D> {
     fn encode(&self, h: &mut Sha256) {
@@ -770,7 +833,7 @@ impl<T: Canonical> Canonical for Result<T, geom_bvh::BvhError> {
     }
 }
 
-// `geom-run`'s helper (decision 32.44's count benchmark of a lone wave).
+// `geom-run`'s helper (decision 32.46's count benchmark of a lone wave).
 
 impl<T: Canonical> Canonical for Result<T, geom_run::RunError> {
     fn encode(&self, h: &mut Sha256) {
@@ -787,12 +850,43 @@ impl<T: Canonical> Canonical for Result<T, geom_run::RunError> {
     }
 }
 
-// `geom-nurbs`'s types (decision 32.44's count benchmarks for pieces G56, G58 and G59).
+// `geom-nurbs`'s types (decision 32.46's count benchmarks for pieces G56, G58 and G59).
 
 impl<const D: usize> Canonical for geom_nurbs::Bounds<D> {
     fn encode(&self, h: &mut Sha256) {
         self.lo.encode(h);
         self.hi.encode(h);
+    }
+}
+
+impl Canonical for geom_format::cache::CacheKey {
+    fn encode(&self, h: &mut Sha256) {
+        h.update(&self.to_bytes());
+    }
+}
+
+impl Canonical for geom_format::content::ContentId {
+    fn encode(&self, h: &mut Sha256) {
+        self.alg().encode(h);
+        h.update(self.digest());
+    }
+}
+
+impl Canonical for geom_format::body::BodyVersion {
+    // A version is what it names.
+    fn encode(&self, h: &mut Sha256) {
+        self.content_id().encode(h);
+    }
+}
+
+impl Canonical for geom_topo::Body {
+    // A body is the bytes it stores: its content ID, or a mark for one that has no stored form.
+    fn encode(&self, h: &mut Sha256) {
+        let mut meter = geom_run::WorkMeter::new(geom_run::Budget::UNLIMITED);
+        geom_format::body::write_body(self, &mut meter)
+            .ok()
+            .map(|stored| stored.content_id())
+            .encode(h);
     }
 }
 
@@ -845,7 +939,7 @@ impl<T: Canonical> Canonical for Result<T, geom_nurbs::NurbsError> {
     }
 }
 
-// `geom-curve`'s types (decision 32.44's count benchmarks for pieces G60 to G64 and G67).
+// `geom-curve`'s types (decision 32.46's count benchmarks for pieces G60 to G64 and G67).
 
 impl<const D: usize> Canonical for geom_nurbs::Changed<geom_curve::NurbsForm<D>> {
     // The converted curve and whether the conversion changed it, all in its `Debug` text, which
@@ -870,7 +964,35 @@ impl<T: Canonical> Canonical for Result<T, geom_curve::CurveError> {
     }
 }
 
-// Root finding and quadrature (decision 32.44's count benchmark for piece G51).
+// `geom-make`'s operations (decision 32.46's count benchmarks for piece G101).
+
+impl Canonical for geom_make::BoxInput {
+    fn encode(&self, h: &mut Sha256) {
+        self.min.encode(h);
+        self.size.map(geom_num::Steps::get).encode(h);
+    }
+}
+
+impl Canonical for geom_make::RoundInput {
+    fn encode(&self, h: &mut Sha256) {
+        self.base.encode(h);
+        self.radius.get().encode(h);
+        self.height.get().encode(h);
+        self.step.rung().encode(h);
+    }
+}
+
+impl Canonical for geom_op::OpOutput<geom_make::Made> {
+    // A built body, as a transform's input: its corners, then its class's rank.
+    fn encode(&self, h: &mut Sha256) {
+        for point in self.result.body.arenas().points.iter() {
+            point.encode(h);
+        }
+        u32::from(self.exactness.rank()).encode(h);
+    }
+}
+
+// Root finding and quadrature (decision 32.46's count benchmark for piece G51).
 
 impl Canonical for geom_num::brent::Zero {
     // Its fields (the zero's bracket and the evaluations used) are all in its `Debug` text, which

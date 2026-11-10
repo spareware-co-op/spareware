@@ -1,0 +1,32 @@
+{
+  "format": 1,
+  "id": "budget/0001-logical-memory",
+  "source": {
+    "closed-form": {
+      "derivation": "a box's rows reserve past a budget of 64 logical bytes"
+    }
+  },
+  "fixed_by": null,
+  "speed": "fast",
+  "log": "d9d9f8da534b474643424f5286010101805834878201000001a70118400210031902800419190005190c800601073821831200007173706172652d6b69742066697874757265a01ab36d7aa38614010180583a86815000000000000000020000000000000000686d616b652e626f7801804f828300000083191900190c80190640821b000001000000000018401aa808ed77860201018058248202582035ab66d8369b1164ed4ed6fed5dd54cd88d6b7c5631e1df2b91adde054ef42651a69c13666",
+  "expect": [
+    {
+      "edition": "pre-edition",
+      "operations": {
+        "make.box": 1
+      },
+      "expect": {
+        "err": {
+          "kind": "BudgetExceeded",
+          "entities": [],
+          "work": {
+            "work": 58,
+            "logical_bytes": 3712
+          }
+        }
+      }
+    }
+  ],
+  "status": "pass",
+  "history": []
+}

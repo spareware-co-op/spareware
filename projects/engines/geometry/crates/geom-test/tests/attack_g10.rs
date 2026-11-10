@@ -723,14 +723,14 @@ fn the_nightly_campaign_fuzzes_every_target() {
     assert_eq!(campaign_violations(&campaign, &fuzz), Vec::<String>::new());
 
     // Seeded violations: each must be reported.
-    let dropped = campaign.replacen("'[\"boxtree_fuzz\", ", "'[", 1);
+    let dropped = campaign.replacen("'[\"arenas_fuzz\", ", "'[", 1);
     assert_ne!(dropped, campaign);
     assert!(
         campaign_violations(&dropped, &fuzz)
             .iter()
             .any(|v| v.contains("not kernel-fuzz.yml's targets"))
     );
-    let added = fuzz.replacen("[boxtree_fuzz, ", "[boxtree_fuzz, extra_fuzz, ", 1);
+    let added = fuzz.replacen("[arenas_fuzz, ", "[arenas_fuzz, extra_fuzz, ", 1);
     assert_ne!(added, fuzz);
     assert!(
         campaign_violations(&campaign, &added)
@@ -747,8 +747,8 @@ fn the_nightly_campaign_fuzzes_every_target() {
     // The run started by hand: each edit below breaks one thing a dispatch is promised.
     for (from, to, said) in [
         (
-            " || inputs.targets == 'all') && '[\"boxtree_fuzz\"",
-            ") && '[\"boxtree_fuzz\"",
+            " || inputs.targets == 'all') && '[\"arenas_fuzz\"",
+            ") && '[\"arenas_fuzz\"",
             "does not get the nightly list",
         ),
         (

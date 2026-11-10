@@ -1,0 +1,4 @@
+# Tests read these workflows as text and split them on \n (geom-test's museum test reads kernel.yml),
+# so git must check them out with \n on every OS: a Windows checkout would otherwise turn \n into \r\n.
+*.yml text eol=lf
+.gitattributes text eol=lf

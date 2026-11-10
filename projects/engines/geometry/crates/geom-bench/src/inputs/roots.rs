@@ -1,4 +1,4 @@
-//! Inputs for root finding and quadrature (piece G51, decision 32.44): brackets for Brent's zero
+//! Inputs for root finding and quadrature (piece G51, decision 32.46): brackets for Brent's zero
 //! search on a fixed cubic, and intervals for Gauss-Legendre quadrature of a fixed quintic.
 //!
 //! The functions are fixed per operation ([`cubic`] and
