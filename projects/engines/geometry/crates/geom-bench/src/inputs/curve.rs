@@ -1,4 +1,4 @@
-//! Inputs for `geom-curve`'s hot paths (pieces G60 to G64 and G67, decision 32.44): parameters
+//! Inputs for `geom-curve`'s hot paths (pieces G60 to G64 and G67, decision 32.46): parameters
 //! on an exact helix (its point, and its certified enclosure with two derivatives), bulge
 //! polylines for their conversion to NURBS, stations on a clothoid transition, and transition
 //! lengths for their conversion to NURBS.

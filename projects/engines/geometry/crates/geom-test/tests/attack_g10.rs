@@ -12,7 +12,9 @@
 //!   records the golden store only after every call has passed, and only that job may write.
 //! - `the_nightly_campaign_fuzzes_every_target`: `kernel-fuzz-campaign.yml` runs every night, and
 //!   its nightly list of targets is `kernel-fuzz.yml`'s libFuzzer matrix, which geom-fuzz's
-//!   `tests/attack_g14.rs` holds to the fuzz targets themselves.
+//!   `tests/attack_g14.rs` holds to the fuzz targets themselves. A run started by hand gets that
+//!   list too when it asks for `all` targets, and `wide_fuzz` for five hours when it asks for
+//!   nothing; it never shares a concurrency group with the night's run, and no run is cancelled.
 //! - `the_matrix_has_every_runner_in_both_modes`: `kernel.yml` tests on the six native runners
 //!   G10's done-when names (x86-64 and arm64 Linux, Windows and macOS) in debug and release, with
 //!   a `target-cpu=native` leg in release, and on wasm32 under wasmtime and Node.
@@ -392,6 +394,50 @@ fn campaign_violations(campaign: &str, fuzz: &str) -> Vec<String> {
             "the nightly campaign fuzzes {nightly:?}, not kernel-fuzz.yml's targets {all:?}"
         ));
     }
+
+    // By hand (workflow_dispatch): `all` is the nightly list, and the default is today's.
+    if !target.contains("inputs.targets == 'all'") {
+        found.push(format!(
+            "a dispatch that asks for all targets does not get the nightly list: {target}"
+        ));
+    }
+    let shard = job["strategy"]["matrix"]["shard"]
+        .as_str()
+        .unwrap_or_default();
+    let chooser = |e: &str| e.split(" && '[").next().unwrap_or_default().to_owned();
+    if chooser(shard) != chooser(target) {
+        found.push(format!(
+            "the shards are not chosen by the condition that chooses the targets: {shard}"
+        ));
+    }
+    let inputs = &c["on"]["workflow_dispatch"]["inputs"];
+    if inputs["targets"]["default"].as_str() != Some("wide")
+        || strings(&inputs["targets"]["options"]) != ["wide", "all"]
+    {
+        found.push("a dispatch does not choose between wide, the default, and all".to_owned());
+    }
+    let hours = strings(&inputs["hours"]["options"]);
+    if inputs["hours"]["default"].as_str() != Some("5")
+        || hours.is_empty()
+        || !hours
+            .iter()
+            .all(|h| h.parse::<u32>().is_ok_and(|h| (1..=5).contains(&h)))
+    {
+        found.push(format!(
+            "a dispatch's hours are not five by default and one to five by choice: {hours:?}"
+        ));
+    }
+    let group = c["concurrency"]["group"].as_str().unwrap_or_default();
+    if !group
+        .contains("github.event_name == 'workflow_dispatch' && github.run_id || github.event_name")
+    {
+        found.push(format!(
+            "a run started by hand shares a concurrency group with the night's run: {group}"
+        ));
+    }
+    if c["concurrency"]["cancel-in-progress"].as_bool() != Some(false) {
+        found.push("a campaign that has started can be cancelled by a newer one".to_owned());
+    }
     found
 }
 
@@ -677,14 +723,14 @@ fn the_nightly_campaign_fuzzes_every_target() {
     assert_eq!(campaign_violations(&campaign, &fuzz), Vec::<String>::new());
 
     // Seeded violations: each must be reported.
-    let dropped = campaign.replacen("'[\"boxtree_fuzz\", ", "'[", 1);
+    let dropped = campaign.replacen("'[\"arenas_fuzz\", ", "'[", 1);
     assert_ne!(dropped, campaign);
     assert!(
         campaign_violations(&dropped, &fuzz)
             .iter()
             .any(|v| v.contains("not kernel-fuzz.yml's targets"))
     );
-    let added = fuzz.replacen("[boxtree_fuzz, ", "[boxtree_fuzz, extra_fuzz, ", 1);
+    let added = fuzz.replacen("[arenas_fuzz, ", "[arenas_fuzz, extra_fuzz, ", 1);
     assert_ne!(added, fuzz);
     assert!(
         campaign_violations(&campaign, &added)
@@ -698,6 +744,53 @@ fn the_nightly_campaign_fuzzes_every_target() {
             .iter()
             .any(|v| v.contains("every night"))
     );
+    // The run started by hand: each edit below breaks one thing a dispatch is promised.
+    for (from, to, said) in [
+        (
+            " || inputs.targets == 'all') && '[\"arenas_fuzz\"",
+            ") && '[\"arenas_fuzz\"",
+            "does not get the nightly list",
+        ),
+        (
+            " || inputs.targets == 'all') && '[1]'",
+            ") && '[1]'",
+            "not chosen by the condition",
+        ),
+        (
+            "        default: wide\n",
+            "        default: all\n",
+            "wide, the default",
+        ),
+        (
+            "        default: \"5\"\n",
+            "        default: \"1\"\n",
+            "not five by default",
+        ),
+        (
+            "          - \"5\"\n",
+            "          - \"6\"\n          - \"5\"\n",
+            "one to five by choice",
+        ),
+        (
+            "-${{ github.event_name == 'workflow_dispatch' && github.run_id || github.event_name }}\n",
+            "\n",
+            "shares a concurrency group",
+        ),
+        (
+            "  cancel-in-progress: false\n",
+            "  cancel-in-progress: true\n",
+            "can be cancelled",
+        ),
+    ] {
+        let seeded = campaign.replacen(from, to, 1);
+        assert_ne!(seeded, campaign, "{from}");
+        assert!(
+            campaign_violations(&seeded, &fuzz)
+                .iter()
+                .any(|v| v.contains(said)),
+            "{said}"
+        );
+    }
 }
 
 #[cfg_attr(

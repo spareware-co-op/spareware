@@ -27,6 +27,8 @@
 //! trait split chapter 7 decides ("Storage uses closed enums ... Behaviour uses traits").
 //!
 //! Cost: none here; each kind's implementation states its own.
+//!
+//! Tier: Preview since 2026-10-31.
 
 use alloc::vec::Vec;
 
@@ -71,6 +73,26 @@ pub trait ParamCurve<const D: usize> {
     ///
     /// [`CurveError::ParameterOutside`] if `t` is not in the domain; [`CurveError::NotFinite`].
     fn point(&self, t: f64, side: Limit) -> Result<[f64; D], CurveError>;
+
+    /// The points at every parameter of `t`, into flat arrays (chapter 23.6): coordinate k of the
+    /// point at `t[i]` goes to `out[k·n + i]`, n = `t.len()` (all x values, then all y values, …),
+    /// and `results[i]` says whether it succeeded. Each point is [`ParamCurve::point`]'s at
+    /// `t[i]` and `side`, bit for bit; a parameter that fails gets [`ParamCurve::point`]'s error in
+    /// `results` and zeros in `out`, and fails no other ([`crate::flat::fill`]).
+    ///
+    /// # Errors
+    ///
+    /// [`CurveError::ArrayLength`] unless `results` holds n entries and `out` D·n values; then
+    /// nothing is written.
+    fn points(
+        &self,
+        t: &[f64],
+        side: Limit,
+        out: &mut [f64],
+        results: &mut [Result<(), CurveError>],
+    ) -> Result<(), CurveError> {
+        crate::flat::fill(out, results, t.iter().map(|&ti| self.point(ti, side)))
+    }
 
     /// The point and its derivatives at `t` into `out`: `out[k]` is the k-th derivative, for k up to
     /// `out.len()` − 1.
@@ -231,6 +253,34 @@ impl<const D: usize> ParamCurve<D> for CurveKind<D> {
             CurveKind::Offset(c) => ParamCurve::point(c, t, side),
             CurveKind::OnSurface(c) => ParamCurve::point(c, t, side),
             CurveKind::Transition(c) => ParamCurve::point(c, t, side),
+        }
+    }
+
+    // One dispatch on the kind for the whole call, not one per point (chapter 23.6), so the kind's
+    // own `points` runs its own `point` in its loop.
+    fn points(
+        &self,
+        t: &[f64],
+        side: Limit,
+        out: &mut [f64],
+        results: &mut [Result<(), CurveError>],
+    ) -> Result<(), CurveError> {
+        match self {
+            CurveKind::Nurbs(c) => ParamCurve::points(c, t, side, out, results),
+            CurveKind::Line(c) => ParamCurve::points(c, t, side, out, results),
+            CurveKind::Circle(c) => ParamCurve::points(c, t, side, out, results),
+            CurveKind::Ellipse(c) => ParamCurve::points(c, t, side, out, results),
+            CurveKind::Hyperbola(c) => ParamCurve::points(c, t, side, out, results),
+            CurveKind::Parabola(c) => ParamCurve::points(c, t, side, out, results),
+            CurveKind::Helix(c) => ParamCurve::points(c, t, side, out, results),
+            CurveKind::Polynomial(c) => ParamCurve::points(c, t, side, out, results),
+            CurveKind::Involute(c) => ParamCurve::points(c, t, side, out, results),
+            CurveKind::Bulge(c) => ParamCurve::points(c, t, side, out, results),
+            CurveKind::Trimmed(c) => ParamCurve::points(c, t, side, out, results),
+            CurveKind::Composite(c) => ParamCurve::points(c, t, side, out, results),
+            CurveKind::Offset(c) => ParamCurve::points(c, t, side, out, results),
+            CurveKind::OnSurface(c) => ParamCurve::points(c, t, side, out, results),
+            CurveKind::Transition(c) => ParamCurve::points(c, t, side, out, results),
         }
     }
 

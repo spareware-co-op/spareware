@@ -1,4 +1,4 @@
-//! Inputs for `geom-linalg`'s hot paths (pieces G49 and G50, decision 32.44): small dense
+//! Inputs for `geom-linalg`'s hot paths (pieces G49 and G50, decision 32.46): small dense
 //! matrices for the column-pivoted QR factorisation and the one-sided Jacobi singular value
 //! decomposition.
 //!

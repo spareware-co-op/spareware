@@ -2203,6 +2203,39 @@ fn isolate_and_ball_classes_are_what_they_claim() {
     );
 }
 
+/// Every typical batch of `geom-format`'s benchmarks is full and succeeds: every key is made, every
+/// lookup hits, and a new version writes the one chunk its edit touched.
+#[test]
+fn format_typical_batches_all_succeed() {
+    use geom_bench::inputs::format as m;
+    use geom_bench::kernels::format as k;
+    let keys = m::cache_key(Typical);
+    let mut out = Vec::with_capacity(BATCH);
+    k::cache_key(&keys, &mut out);
+    assert_eq!(out.len(), BATCH);
+    assert!(out.iter().all(Option::is_some));
+
+    let lookups = m::memo_get(Typical);
+    let mut out = Vec::with_capacity(BATCH);
+    k::memo_get(&lookups, &mut out);
+    assert_eq!(out.len(), BATCH);
+    assert!(out.iter().all(Option::is_some));
+
+    let versions = m::next_version(Typical);
+    let mut out = Vec::with_capacity(BATCH);
+    k::next_version(&versions, &mut out);
+    assert_eq!(out.len(), BATCH);
+    assert!(out.iter().all(Option::is_some));
+    let (first, body) = &versions[0];
+    let mut meter = geom_run::WorkMeter::new(geom_run::Budget::UNLIMITED);
+    assert_eq!(first.next(body, &mut meter).unwrap().written().len(), 1);
+    for class in [Degenerate, Extreme] {
+        assert!(m::cache_key(class).is_empty());
+        assert!(m::memo_get(class).is_empty());
+        assert!(m::next_version(class).is_empty());
+    }
+}
+
 /// Runs `kernel` on `batch` and requires a full batch of `Ok` results, naming the first error.
 fn all_ok<T, R, E: core::fmt::Debug>(
     name: &str,
@@ -2221,7 +2254,7 @@ fn all_ok<T, R, E: core::fmt::Debug>(
     }
 }
 
-/// Every typical batch of `geom-math`'s benchmarks (decision 32.44) is what its module says: full,
+/// Every typical batch of `geom-math`'s benchmarks (decision 32.46) is what its module says: full,
 /// and every transform image, rotation, map point and decimal in it is `Ok`, so each benchmark
 /// measures the path that succeeds.
 #[test]
@@ -2253,7 +2286,7 @@ fn math_types_typical_batches_all_succeed() {
     );
 }
 
-/// Every typical batch of `geom-linalg`'s benchmarks (decision 32.44) factorises every matrix.
+/// Every typical batch of `geom-linalg`'s benchmarks (decision 32.46) factorises every matrix.
 #[test]
 fn linalg_typical_batches_all_succeed() {
     use geom_bench::inputs::linalg as m;
@@ -2262,7 +2295,18 @@ fn linalg_typical_batches_all_succeed() {
     all_ok("svd_jacobi", k::svd_jacobi, &m::svd_jacobi(Typical));
 }
 
-/// Every typical batch of `geom-bvh`'s benchmarks (decision 32.44) builds every scene and answers
+/// Every typical batch of `geom-make`'s benchmarks (decision 32.46) builds or moves every body.
+#[test]
+fn make_typical_batches_all_succeed() {
+    use geom_bench::inputs::make as m;
+    use geom_bench::kernels::make as k;
+    all_ok("build_box", k::boxes, &m::boxes(Typical));
+    all_ok("cylinder", k::cylinders, &m::cylinders(Typical));
+    all_ok("move_box", k::moved_boxes, &m::moved_boxes(Typical));
+    all_ok("turn_box", k::turned_boxes, &m::turned_boxes(Typical));
+}
+
+/// Every typical batch of `geom-bvh`'s benchmarks (decision 32.46) builds every scene and answers
 /// every query.
 #[test]
 fn bvh_typical_batches_all_succeed() {
@@ -2276,7 +2320,35 @@ fn bvh_typical_batches_all_succeed() {
     all_ok("cells_within", k::cells_within, &m::cells_within(Typical));
 }
 
-/// Every typical batch of `geom-run`'s helper benchmarks (decision 32.44) maps every list.
+/// Every typical batch of `geom-topo`'s benchmarks (decision 32.46) edits every column and
+/// publishes every builder, and a column's write lands in its rows.
+#[test]
+fn topo_typical_batches_all_succeed() {
+    use geom_bench::inputs::topo as m;
+    use geom_bench::kernels::topo as k;
+    let columns = m::column_edit(Typical);
+    assert!(columns.iter().all(|(_, row, _)| (*row as usize) < m::ROWS));
+    assert!(columns.iter().all(|(values, _, _)| values.len() == m::ROWS));
+    all_ok("column_edit", k::column_edit, &columns);
+    all_ok("publish", k::publish, &m::publish(Typical));
+}
+
+/// Every typical batch of the batch runner's benchmarks (decision 32.46) runs every item and
+/// gives every point, and each list of items has distinct keys.
+#[test]
+fn batch_typical_batches_all_succeed() {
+    use geom_bench::inputs::batch as m;
+    use geom_bench::kernels::batch as k;
+    all_ok("run_items", k::run_items, &m::run_items(Typical));
+    all_ok("curve_points", k::curve_points, &m::curve_points(Typical));
+    all_ok(
+        "surface_points",
+        k::surface_points,
+        &m::surface_points(Typical),
+    );
+}
+
+/// Every typical batch of `geom-run`'s helper benchmarks (decision 32.46) maps every list.
 #[test]
 fn helper_typical_batches_all_succeed() {
     use geom_bench::inputs::helper as m;
@@ -2285,7 +2357,20 @@ fn helper_typical_batches_all_succeed() {
     all_ok("lone_pool", k::lone_pool, &m::lone_pool(Typical));
 }
 
-/// Every typical batch of `geom-nurbs`'s benchmarks (decision 32.44) evaluates, interpolates and
+/// Every typical batch of the attribute step's benchmark (decision 32.46) carries every value it
+/// should: two of every three entities live on.
+#[test]
+fn attributes_typical_batches_all_succeed() {
+    use geom_bench::inputs::attributes as m;
+    use geom_bench::kernels::attributes as k;
+    let batch = m::apply(Typical);
+    all_ok("apply", k::apply, &batch);
+    let mut out = Vec::new();
+    k::apply(&batch, &mut out);
+    assert!(out.iter().all(|r| *r == Ok(16)));
+}
+
+/// Every typical batch of `geom-nurbs`'s benchmarks (decision 32.46) evaluates, interpolates and
 /// bounds every input.
 #[test]
 fn nurbs_typical_batches_all_succeed() {
@@ -2300,7 +2385,7 @@ fn nurbs_typical_batches_all_succeed() {
     );
 }
 
-/// Every typical batch of `geom-curve`'s benchmarks (decision 32.44) evaluates, encloses and
+/// Every typical batch of `geom-curve`'s benchmarks (decision 32.46) evaluates, encloses and
 /// converts every input.
 #[test]
 fn curve_typical_batches_all_succeed() {
@@ -2329,7 +2414,7 @@ fn curve_typical_batches_all_succeed() {
     );
 }
 
-/// Every typical batch of `geom-surface`'s benchmarks (decision 32.44) evaluates and encloses
+/// Every typical batch of `geom-surface`'s benchmarks (decision 32.46) evaluates and encloses
 /// every pair.
 #[test]
 fn surface_typical_batches_all_succeed() {
@@ -2371,7 +2456,7 @@ fn surface_typical_batches_all_succeed() {
     )));
 }
 
-/// Every typical batch of the root-finding and quadrature benchmarks (decision 32.44) finds every
+/// Every typical batch of the root-finding and quadrature benchmarks (decision 32.46) finds every
 /// zero and integrates every interval.
 #[test]
 fn roots_typical_batches_all_succeed() {

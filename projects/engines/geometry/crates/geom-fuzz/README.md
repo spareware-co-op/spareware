@@ -10,10 +10,23 @@ how each engine runs a target, on your machine and in CI. The first target built
 agree with the exact determinant of orient2d's definition, computed from scratch. The others:
 `predicates` (`src/predicates.rs`, G11), every exact predicate answers and swapping two points
 flips its sign; `wide` (`src/wide.rs`, G26), the wide integers agree with `num-bigint` on
-every operation at every width, `I128` to the reserved 768 bits; and, for Gate 2 (decision 32.44:
+every operation at every width, `I128` to the reserved 768 bits; `cbor` (`src/cbor.rs`, G91),
+`geom-format`'s strict CBOR decoder and its text form never panic, refuse inside their input and
+convert both ways bit for bit; `cache` (`src/cache.rs`, G105), `geom-format`'s memo store keeps to
+its bound, forgets the entry used longest ago first and answers only where the caller's budget
+covers the stored run; and, for Gate 2 (decision 32.46:
 a target per phase-2 code piece), `curves` (`src/curves.rs`) and `surfaces` (`src/surfaces.rs`),
 every curve and surface kind built from any bytes keeps the kind contract kit
-(`geom_curve::contract`, `geom_surface::contract`) under any typed transform.
+(`geom_curve::contract`, `geom_surface::contract`) under any typed transform; `arenas` (`src/arenas.rs`,
+G80), `geom-topo` publishes exactly the arenas its rules allow, and a body's versions never see
+each other's edits; `attributes` (`src/attributes.rs`, G90), `geom-name`'s attribute step gives
+each output exactly what section 8.4's table gives; `batch` (`src/batch.rs`, G104), `geom-op`'s
+batch driver gives each item its own result, and the many-point calls give the single calls' bits;
+`make` (`src/make.rs`, G101), the primitives and transforms return only what the full checker
+passes, keep their laws, and refuse with a typed error; and `sequence` (`src/sequence.rs`, G116),
+whole operation logs replay to the same hash and keep every law at every step. `src/adversarial.rs`
+holds the generators aimed at the hard cases, and `src/robustness.rs` counts how many plain designs
+succeed per family: `src/robustness.txt` records it, and a count may not fall.
 
 ## One law, four engines
 
@@ -158,10 +171,18 @@ cargo bolero test orient2d_fuzz --package geom-fuzz --toolchain nightly-2026-10-
 `-T` bounds the run; `--runs`, `--jobs` and `--max-input-length` are the other limits. A crash is
 written to `tests/__fuzz__/orient2d/crashes`, where `cargo test` replays it.
 
-**Campaigns.** `.github/workflows/kernel-fuzz-campaign.yml` runs `wide_fuzz` under libFuzzer in
-five shards of five hours, 25 CPU hours, for G26's "24 hours clean". It runs only on demand: when
-the label `fuzz-campaign` is added to a pull request, or by hand from the Actions tab once the file
-is on `main`. Each shard uploads any crash and the corpus it grew.
+**Campaigns.** `.github/workflows/kernel-fuzz-campaign.yml` runs every target under libFuzzer for
+five hours each night, one shard each. On demand it runs `wide_fuzz` in five shards of five hours,
+25 CPU hours, for G26's "24 hours clean": when the label `fuzz-campaign` is added to a pull
+request, or by hand from the Actions tab. By hand it can also run every target as a night does, on
+the head of the branch or tag it is started on:
+
+```text
+gh workflow run kernel-fuzz-campaign.yml --ref main -f targets=all
+```
+
+`-f hours=1` (one to five, five by default) shortens every shard for a trial. Each shard uploads
+any crash and the corpus it grew.
 
 **Kani**, on Linux or macOS:
 
