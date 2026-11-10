@@ -314,7 +314,10 @@ fn det5(m: &[[i128; 5]; 5]) -> Option<I256> {
 
 #[cfg(test)]
 mod tests {
-    use super::{det3, det4, det5};
+    use super::{det3, det4, det5, orient2d, tie};
+    use crate::error::NumError;
+    use crate::grid::P2;
+    use crate::sign::Sign;
     use crate::wide::I256;
 
     #[test]
@@ -341,6 +344,47 @@ mod tests {
             ]),
             Some(I256::from_i128(-7))
         );
+    }
+
+    /// A stand-in for a determinant whose every coefficient is zero.
+    #[allow(
+        clippy::unnecessary_wraps,
+        reason = "the signature `tie` takes a determinant in"
+    )]
+    fn always_zero(_: &[[i128; 3]; 3]) -> Option<I256> {
+        Some(I256::ZERO)
+    }
+
+    /// A stand-in for a determinant that never fits.
+    fn never_fits(_: &[[i128; 3]; 3]) -> Option<I256> {
+        None
+    }
+
+    /// `tie` answers with the first non-zero coefficient of the perturbed determinant, and when
+    /// the walk over every mask finds none it reports `BudgetExceeded`, never a sign. A true
+    /// determinant always has one (the module's method), so no public call reaches that end; here
+    /// `tie` is called with a function that is zero on every matrix. Beside it, the same rows
+    /// with the true determinant give the sign worked out by hand below, so the error comes from
+    /// the coefficients alone.
+    #[test]
+    fn a_tie_with_no_non_zero_coefficient_is_an_error_not_a_sign() {
+        // Three coinciding points (5, 5) with keys 1, 2, 3: an exact tie. In ε order the entries
+        // are a.x, a.y, b.x, b.y, c.x, c.y (masks 1, 2, 4, ...). Masks 1 and 2 replace row a
+        // alone and mask 4 row b alone, each leaving two equal rows: zero. Masks 3 and 5 take
+        // one row or one column twice. Mask 6 replaces a by (0, 1, 0) and b by (1, 0, 0):
+        // det[0 1 0; 1 0 0; 5 5 1] = −1, the first non-zero coefficient.
+        let rows = [([5, 5, 1], 1), ([5, 5, 1], 2), ([5, 5, 1], 3)];
+        assert_eq!(tie(rows, det3), Ok(Sign::Negative));
+        let public = P2::new(5, 5).and_then(|p| orient2d((p, 1), (p, 2), (p, 3)));
+        assert_eq!(public, Ok(Sign::Negative));
+
+        assert_eq!(tie(rows, always_zero), Err(NumError::BudgetExceeded));
+        // The same end for rows that are not a tie and for keys in another order: the answer
+        // depends on the coefficients only.
+        let turning = [([0, 0, 1], 9), ([1, 0, 1], 4), ([0, 1, 1], 7)];
+        assert_eq!(tie(turning, always_zero), Err(NumError::BudgetExceeded));
+        // A coefficient that does not fit is the same error, at the first mask.
+        assert_eq!(tie(rows, never_fits), Err(NumError::BudgetExceeded));
     }
 }
 

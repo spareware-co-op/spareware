@@ -1459,6 +1459,84 @@ mod tests {
         assert_eq!(failed, Err(crate::error::NumError::BudgetExceeded));
     }
 
+    /// The sign of a `num-bigint` value.
+    fn sign_of(v: &BigInt) -> Sign {
+        match v.sign() {
+            num_bigint::Sign::Minus => Sign::Negative,
+            num_bigint::Sign::NoSign => Sign::Zero,
+            num_bigint::Sign::Plus => Sign::Positive,
+        }
+    }
+
+    /// `orient2d_unfiltered` is the step `orient2d` takes when its filter cannot decide. Only a
+    /// target that runs the filter first calls it (32-bit targets and WebAssembly), so on a 64-bit
+    /// host nothing did. Here it gives the sign of the `num-bigint` determinant on the points the
+    /// filter cannot decide (determinants of 0 and ±1 between products near 2^80) and on every
+    /// triple of points at the grid's edges, one step inside them and at its centre. The filter is
+    /// asked beside it: it answers nothing on the first set, and wherever it answers, its sign is
+    /// the same, so the filter-first route gives the public function's sign on every triple.
+    #[test]
+    fn orient2d_unfiltered_gives_the_exact_sign_where_the_filter_cannot_decide() {
+        use super::{orient2d, orient2d_unfiltered};
+        use crate::generated::orient2d::filter;
+        use crate::grid::P2;
+
+        let p2 = |[x, y]: [i64; 2]| P2::new(x, y).unwrap();
+        let check = |a: [i64; 2], b: [i64; 2], c: [i64; 2]| -> (Sign, Option<Sign>) {
+            let expected = sign_of(&oracle(&[&a, &b, &c], false, false));
+            let (pa, pb, pc) = (p2(a), p2(b), p2(c));
+            let what = format!("orient2d {:?}", [a, b, c]);
+            assert_eq!(orient2d_unfiltered(pa, pb, pc), Ok(expected), "{what}");
+            assert_eq!(orient2d(pa, pb, pc), Ok(expected), "{what}");
+            let filtered = filter(pa, pb, pc);
+            assert!(filtered.is_none_or(|sign| sign == expected), "{what}");
+            (expected, filtered)
+        };
+
+        // M(M − 2) − (M − 1)² = −1: two products near 2^80 that differ by one.
+        let undecided = [
+            ([0, 0], [M, M - 1], [M - 1, M - 2], Sign::Negative),
+            ([0, 0], [M - 1, M - 2], [M, M - 1], Sign::Positive),
+            ([-M, -M], [0, 0], [M, M], Sign::Zero),
+            ([-M, M], [M, -M], [1, -1], Sign::Zero),
+            ([-M, -M], [M, M - 1], [M - 1, M - 2], Sign::Negative),
+        ];
+        for (a, b, c, sign) in undecided {
+            assert_eq!(check(a, b, c), (sign, None), "{:?}", [a, b, c]);
+        }
+
+        let decided = [
+            ([0, 0], [1, 0], [0, 1], Sign::Positive),
+            ([0, 0], [0, 1], [1, 0], Sign::Negative),
+            ([-M, -M], [M, -M], [M, M], Sign::Positive),
+            ([-M, -M], [M, M], [M, -M], Sign::Negative),
+            // Three coinciding points: a zero scale, which the filter answers at once.
+            ([5, 5], [5, 5], [5, 5], Sign::Zero),
+        ];
+        for (a, b, c, sign) in decided {
+            assert_eq!(check(a, b, c), (sign, Some(sign)), "{:?}", [a, b, c]);
+        }
+
+        let points = square(&LEVELS_5);
+        let mut seen = [0usize; 3];
+        for &a in &points {
+            for &b in &points {
+                for &c in &points {
+                    let (sign, _) = check(a, b, c);
+                    seen[match sign {
+                        Sign::Negative => 0,
+                        Sign::Zero => 1,
+                        Sign::Positive => 2,
+                    }] += 1;
+                }
+            }
+        }
+        // Swapping b and c flips the sign, so the two turns are equally many, and both occur.
+        assert_eq!(seen[0], seen[2]);
+        assert!(seen[0] > 0 && seen[1] > 0);
+        assert_eq!(seen.iter().sum::<usize>(), points.len().pow(3));
+    }
+
     /// The two rules the compiler applies to the total path's bounds are sound: on every pair of
     /// values with magnitudes below 2^a and 2^b, for a and b up to 6, the product is below the
     /// product rule's bound and the sum and difference below the sum rule's. Each rule's bound is
