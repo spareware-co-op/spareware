@@ -801,6 +801,7 @@ Every merge gate and the violation seeded to make it fail. R: the real tool runs
 | `kernel.yml` | `suite` | The tests of `test`: every test of every kernel crate once per target and mode, in parts (`cargo nextest run --partition count:k/n`, doctests in part 1); a failing test fails its part (J: `geom-test/tests/attack_g19.rs::kernel_yml_runs_every_golden_in_every_native_build_mode`) |
 | `kernel.yml` | `guard` | R: the job itself (`libm`'s `sin` changed by one bit must fail a golden); J: `geom-test/tests/attack_g20.rs::a_trip_counts_only_for_the_right_reason` |
 | `kernel.yml` | `wasm` | R: each leg first runs `guard prove --golden-run --target wasm32-wasip1 --release`: `libm`'s `sin` changed by one bit must make the leg's own `golden run` fail, under wasmtime and under Node, with `geom-num/determinism`'s digest differing from the store's; J: `geom-test/tests/attack_g19.rs::a_run_that_does_not_prove_its_goldens_is_refused` |
+| `kernel.yml` | `big-endian` | J: `geom-test/tests/museum.rs::a_byte_changed_in_a_stored_file_is_caught_first`, one byte's order moved in an exhibit, and `geom-test/tests/museum.rs::format_round_trips_run_on_a_big_endian_target`, which holds the job's commands (G99) |
 | `kernel.yml` | `wasm-suite` | The tests of `wasm`: geom-num's test vectors and the whole suite in release on wasm32, under wasmtime and under Node |
 | `kernel.yml` | `lint` | `trip fmt`; R: `engine-geometry/tests/scaffold/gate.rs::gate_clippy_fails_on_each_seeded_violation` |
 | `kernel-build.yml` | `list` | Not a gate: it lists the crates the other jobs build, and fails when it lists none |
@@ -818,6 +819,7 @@ Every merge gate and the violation seeded to make it fail. R: the real tool runs
 | `kernel-dev.yml` | `wasm` | The tests of `native` on wasm32: a failing test fails it, and the checks they test are seeded under `native` |
 | `kernel-dev.yml` | `verus` | `trip verus` |
 | `kernel-golden.yml` | `store` | J: `geom-test/tests/attack_g19.rs::seeded_violations_of_the_real_tree_are_found`; R: `geom-test/tests/attack_g19.rs::golden_diff_holds_a_change_to_the_owner_rule_end_to_end` |
+| `kernel-golden.yml` | `fixtures` | J: `geom-test/tests/fixture_tool.rs::a_tree_that_breaks_a_rule_fails_its_check`; R: `geom-test/tests/fixture_tool.rs::diff_holds_a_pull_request_to_the_rules` |
 | `kernel-bench.yml` | `scope` | Not a gate: it decides which count jobs run, from the same paths as the workflow's trigger |
 | `kernel-bench.yml` | `cheap` | Not a gate: it waits for the cheap checks (format and lints, clippy, scaffold, sign-off) of the pull request's head commit and fails if one failed, so the heavy jobs of this workflow start only when they passed |
 | `kernel-bench.yml` | `checks` | The tools of `kernel.yml`'s `lint`: `trip fmt`; R: `engine-geometry/tests/scaffold/gate.rs::gate_clippy_fails_on_each_seeded_violation` |
@@ -827,6 +829,9 @@ Every merge gate and the violation seeded to make it fail. R: the real tool runs
 | `kernel-fuzz.yml` | `cheap` | Not a gate: it waits for the cheap checks (format and lints, clippy, scaffold, sign-off) of the pull request's head commit and fails if one failed, so the heavy jobs of this workflow start only when they passed |
 | `kernel-fuzz.yml` | `kani` | `trip kani-fuzz` |
 | `kernel-fuzz.yml` | `kani-num` | `trip kani-num` |
+| `kernel-fuzz.yml` | `kani-format` | `trip kani-format` |
+| `kernel-fuzz.yml` | `kani-op` | `trip kani-op` |
+| `kernel-fuzz.yml` | `kani-topo` | `trip kani-topo` |
 | `kernel-fuzz.yml` | `kani-limbs` | `trip kani-limbs` |
 | `kernel-fuzz.yml` | `clusterfuzzlite` | `trip clusterfuzzlite`, run by the job `clusterfuzzlite-seeded` through this job's actions' own images with this job's inputs: the actions build a fresh clone of the pull request, which a planted line never reaches |
 | `kernel-fuzz.yml` | `clusterfuzzlite-seeded` | `trip clusterfuzzlite`: the job is `clusterfuzzlite`'s seeded run, and fails if ClusterFuzzLite's build and fuzzing stop finding the planted crash |
@@ -938,3 +943,33 @@ Off CI, on a development machine, on `piece/G69` at 8ed3fe32 (G68 and G69 on mai
 - **Decided: a count benchmark per code piece, as 30.1 says.** The dry run asked whether the phase-2 crates outside geom-num could keep wall-clock benchmarks only. They cannot. 30.1 asks every code piece for "at least one [benchmark], under the 5% count gate", principle 12 blocks every speed regression over 5%, and 28.14 explains why only counts can gate a pull request: wall clock on shared runners varies by more than 5%. So `geom-bench` gains count benchmarks, under the instruction and fuel gates of 23.13, on each phase-2 piece's hot path (a transform's image, a dense solve and a spectral step, a box-tree query and build, a NURBS point and knot insertion, a curve kind's and a surface kind's enclosure, bound and conversion, a root search); the existing wall-clock benchmarks stay for the nightly reference runner. One benchmark may serve several pieces of a crate when it runs each piece's code; the gate's record names the benchmark for each piece.
 
 **Changes:** this record; issue #418. The evidence it cites is the pieces' own (G44 to G69), and G69's law catalogue with its nightly job. The two decisions above add work before the gate: the phase-2 fuzz targets and count benchmarks. The record was drafted as 32.44, a number main gave to another decision first; two history records of `geom-test`'s golden store, for the count benchmarks, still cite it so, since the store's history only grows.
+
+## 32.47 Fixed runs stay: no name-ordered bucket tree (G105)
+
+**What it is.** 31.7 left one question to the piece "Content hashes and cache keys": keep cutting a body's tables into fixed runs of 4,096 rows (24.2), or cut them by name, ending a bucket where a row's name meets a fixed condition, so that adding an entity, which shifts every row after it in name order (32.17), leaves the other chunks alone.
+
+**Measured** by `geom-format`'s `tests/bucket_tree.rs`, in counts, the same on every machine. The body is a strip of 20,000 quads published by name, each table past the chunk size, 460,032 rows and 9,302,983 bytes of chunk payload once one more quad is added with a name in the middle of the order. A row counts as changed if no row of the old version has its values. The bucket column is not one guess at a cut but a lower bound for any cut whose buckets hold at least 1,024 rows, a quarter of the mean: all rows outside runs of that many unchanged rows. A table's rows are counted at its mean bytes.
+
+| Tables | Bytes | Fixed runs rewrite | Any bucket cut rewrites at least |
+| --- | --- | --- | --- |
+| Faces, loops, fins, edges: rows of links | 3,504,818 | 3,021,772 | 2,915,162 |
+| Vertices, points, surfaces, curves, names: rows of values | 5,798,165 | 4,176,392 | 29,226 |
+| All | 9,302,983 | 7,198,164 (77%) | 2,944,388 (32%) |
+
+An edit in place, which moves no row, rewrites one chunk under either scheme (241,522 bytes here), and `BodyVersion::next` hashes only that chunk. The first analysis of this question expected nothing from buckets, since links are row numbers. That is true of the link tables, but the tables of values only shift, and buckets could keep nearly all of them.
+
+| Option | What it means |
+| --- | --- |
+| A. Fixed runs in every table | One rule. A row's chunk is its row divided by 4,096. Adding an entity to a big body rewrites most of it |
+| B. Buckets in every table | The link tables gain nothing: every row of them changes, whatever the cut |
+| C. Buckets in the tables of values only | Up to 59% fewer bytes for this edit. Two rules in the specification, and the index and chunks change |
+
+**Decided 2026-10-31: A.**
+- **C's saving is real but narrow.** It needs a table past 4,096 rows, so a body of about a thousand faces or more: a wall or a door has one chunk per table, rewritten whole under any scheme.
+- **It saves bytes stored, not time.** A cut has to read every row to find its ends, and buckets lie across the columns' chunks, so `BodyVersion::next` could not skip them: hashing a new version would cost no less.
+- **It costs what the fixed rule gives.** With fixed runs a reader finds a row's chunk by division, which the browser's chunks in view rely on (23.9). Buckets need a search over row counts, a chunk's place taken out of its payload (a shifted bucket must keep its ID), and a second cutting rule in `SPEC.md`.
+- **It can come later.** The cut is fixed by the specification and versioned (24.2), and a chunk record has a schema, so a later format can cut the tables of values differently and still read every file (24.6). 32.17's remedy, a canonical key before the name, stays open too.
+
+Reopen this if real containers show saved versions dominated by the tables of values of big bodies; `tests/bucket_tree.rs` then gives the numbers again.
+
+**Changes:** 24.2, 23.8's as-built note, 31.7, `tests/bucket_tree.rs`.

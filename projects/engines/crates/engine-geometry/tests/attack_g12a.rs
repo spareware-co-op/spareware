@@ -62,17 +62,48 @@ fn real_list() -> String {
 fn attack_the_real_allow_list_is_vetted_and_pinned_to_the_lock() {
     let list = vetted::read_text(&real_list()).unwrap_or_else(|e| panic!("{e:#?}"));
     let names: Vec<&str> = list.iter().map(|v| v.name.as_str()).collect();
-    assert_eq!(names, ["libm"], "the list holds libm alone today");
+    assert_eq!(
+        names,
+        [
+            "libm",
+            "block-buffer",
+            "cfg-if",
+            "cpufeatures",
+            "crc",
+            "crc-catalog",
+            "crypto-common",
+            "digest",
+            "hybrid-array",
+            "libc",
+            "sha2",
+            "tinyvec",
+            "typenum",
+            "unicode-normalization"
+        ],
+        "the list holds libm, sha2 with the crates it brings (G86), unicode-normalization with tinyvec (G87), and crc with its catalogue (G92)"
+    );
     let lock = fs::read_to_string(root().join("Cargo.lock")).unwrap();
     assert_eq!(vetted::against_lock(&list, &lock), Vec::<String>::new());
-    // The audit is the one the board gave G24 ("the committed libm audit"), and it is committed.
-    let audit = "projects/kit/notes/G24-libm-audit.md";
-    assert!(
-        matches!(&list[0].audited, vetted::Audit::File(path) if path == audit),
-        "{:?}",
-        list[0].audited
-    );
-    assert!(root().join(audit).is_file(), "{audit} is not committed");
+    // Each audit is the one the board gave its piece, and it is committed: G24's for libm ("the
+    // committed libm audit"), G86's for sha2 and every crate it brings (32.20), and G87's for
+    // unicode-normalization and the crate it brings (32.19).
+    for entry in &list {
+        let audit = match entry.name.as_str() {
+            "libm" => "projects/kit/notes/G24-libm-audit.md",
+            "unicode-normalization" | "tinyvec" => {
+                "projects/kit/notes/G87-unicode-normalization-audit.md"
+            }
+            name if name.starts_with("crc") => "projects/kit/notes/G92-crc-audit.md",
+            _ => "projects/kit/notes/G86-sha2-audit.md",
+        };
+        assert!(
+            matches!(&entry.audited, vetted::Audit::File(path) if path == audit),
+            "{}: {:?}",
+            entry.name,
+            entry.audited
+        );
+        assert!(root().join(audit).is_file(), "{audit} is not committed");
+    }
 }
 
 #[test]
