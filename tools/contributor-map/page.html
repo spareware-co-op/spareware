@@ -1,0 +1,86 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Who's Building Spareware</title>
+<link rel="stylesheet" href="./tokens.css">
+<style>
+/* A co-op page in the shared look: projects joined by lines to the people who merged work into them. */
+body { margin: 0; background: var(--page); color: var(--ink); font-family: var(--font-ui); font-size: 15px; line-height: 1.5;
+  padding: 20px max(16px, env(safe-area-inset-right, 0px)) 32px max(16px, env(safe-area-inset-left, 0px)); }
+.wrap { max-width: 1240px; margin: 0 auto; display: grid; gap: 16px; }
+header { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: 8px 24px; }
+h1 { font-size: clamp(24px, 4vw, 34px); margin: 0; text-wrap: balance; }
+h1 a { color: inherit; text-decoration: none; }
+.sub { color: var(--ink-2); margin: 2px 0 0; max-width: 64ch; }
+.stats { font-family: var(--font-mono); font-size: 13px; color: var(--ink-2); display: flex; gap: 18px; flex-wrap: wrap; font-variant-numeric: tabular-nums; }
+.stats b { color: var(--ink); font-weight: 600; }
+.bar { display: flex; flex-wrap: wrap; gap: 10px 16px; align-items: center; justify-content: space-between; }
+.seg { display: inline-flex; border: 1px solid var(--rule); border-radius: var(--radius); overflow: hidden; font-size: 13px; }
+.seg button { font: inherit; background: var(--panel); color: var(--ink-2); border: 0; padding: 6px 12px; cursor: pointer; }
+.seg button + button { border-left: 1px solid var(--hairline); }
+.seg button[aria-pressed="true"] { background: var(--spare-red); color: var(--panel); }
+button:focus-visible, a:focus-visible { outline: 2px solid var(--spare-red); outline-offset: 2px; }
+.main { display: grid; grid-template-columns: minmax(0, 1fr) 320px; gap: 16px; align-items: start; }
+@media (max-width: 860px) { .main { grid-template-columns: minmax(0, 1fr); } }
+#map { position: relative; width: 100%; aspect-ratio: 16 / 10; max-width: 100%; background: var(--panel); border: 1px solid var(--hairline); border-radius: var(--radius); overflow: hidden; }
+@media (max-width: 560px) { #map { aspect-ratio: 3 / 4; } }
+#graph { width: 100%; height: 100%; display: block; cursor: grab; touch-action: none; }
+#graph:active { cursor: grabbing; }
+.edge { stroke: var(--ink-3); stroke-opacity: .5; fill: none; }
+.edge.hot { stroke: var(--spare-red); stroke-opacity: .9; }
+.edge.dim { stroke-opacity: .08; }
+.node text { fill: var(--ink); paint-order: stroke; stroke: var(--panel); stroke-width: 4px; stroke-linejoin: round; pointer-events: none; }
+.node.person text { font-weight: 700; font-size: 16px; }
+.node.program text { font-weight: 600; font-size: 14px; }
+.node.area text { font-size: 12px; fill: var(--ink-2); }
+.node circle { stroke: var(--ink-3); stroke-width: 1px; cursor: pointer; }
+.node.person circle { fill: var(--spare-red); stroke: var(--panel); stroke-width: 2px; }
+.node.dim { opacity: .25; }
+.node:focus-visible circle { stroke: var(--spare-red); stroke-width: 3px; }
+aside { background: var(--panel); border: 1px solid var(--hairline); border-radius: var(--radius); padding: 14px 16px; display: grid; gap: 12px; min-width: 0; }
+aside h2 { font-size: 18px; margin: 0; text-wrap: balance; }
+.eyebrow { font-size: 11px; letter-spacing: .08em; text-transform: uppercase; color: var(--ink-2); }
+table { width: 100%; border-collapse: collapse; font-size: 14px; }
+td { padding: 5px 0; border-bottom: 1px solid var(--hairline); vertical-align: top; }
+td.n { text-align: right; font-family: var(--font-mono); font-size: 13px; font-variant-numeric: tabular-nums; white-space: nowrap; padding-left: 10px; }
+.prs { max-height: 320px; overflow-y: auto; font-size: 13px; display: grid; gap: 4px; }
+.prs a { color: var(--spare-red); text-decoration: none; font-family: var(--font-mono); }
+.prs a:hover { text-decoration: underline; }
+.prs div { min-width: 0; overflow-wrap: anywhere; }
+.note { font-size: 13px; color: var(--ink-2); margin: 0; }
+footer { font-size: 12px; color: var(--ink-2); }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <div>
+      <h1><a href="./">Spareware</a> · Who's building it</h1>
+      <p class="sub">Each project is joined by a line to everyone who has merged work into it; the thicker the line, the more pull requests. Scroll or pinch to zoom, drag to move around, and click a project to open out its parts.</p>
+    </div>
+    <div class="stats" id="stats"></div>
+  </header>
+  <div class="bar">
+    <div class="seg" role="group" aria-label="View"><button type="button" id="fit">Fit to screen</button><button type="button" id="collapse">Close all projects</button></div>
+    <div class="seg" role="group" aria-label="Line thickness by">
+      <button type="button" id="by-prs" aria-pressed="true">Pull requests</button>
+      <button type="button" id="by-lines" aria-pressed="false">Lines changed</button>
+    </div>
+  </div>
+  <div class="main">
+    <div id="map"><svg id="graph" role="img" aria-label="Network of projects and the people who contributed to them"></svg></div>
+    <aside aria-live="polite">
+      <div><div class="eyebrow" id="kind">Whole project</div><h2 id="here">Spareware</h2></div>
+      <table id="people"><tbody></tbody></table>
+      <div><div class="eyebrow" id="prs-head">Pull requests</div><div class="prs" id="prs"></div></div>
+      <p class="note">Agent-built work is merged from its owner's account, so it appears under that name. A pull request that changes several parts counts once in each.</p>
+    </aside>
+  </div>
+  <footer id="foot"></footer>
+</div>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/d3/7.9.0/d3.min.js"></script>
+<!--GRAPH-->
+</body>
+</html>
