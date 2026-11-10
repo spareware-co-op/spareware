@@ -961,6 +961,10 @@ impl Parent {
 }
 
 impl<const D: usize> ParamCurve<D> for Transition<D> {
+    fn breaks(&self) -> Vec<f64> {
+        Transition::breaks(self)
+    }
+
     fn domain(&self) -> (f64, f64) {
         let (a, b) = self.window;
         if self.reversed { (-b, -a) } else { (a, b) }
