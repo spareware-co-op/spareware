@@ -360,12 +360,16 @@ mod tests {
         None
     }
 
-    /// `tie` answers with the first non-zero coefficient of the perturbed determinant, and when
-    /// the walk over every mask finds none it reports `BudgetExceeded`, never a sign. A true
-    /// determinant always has one (the module's method), so no public call reaches that end; here
-    /// `tie` is called with a function that is zero on every matrix. Beside it, the same rows
-    /// with the true determinant give the sign worked out by hand below, so the error comes from
-    /// the coefficients alone.
+    /// `tie` walks the masks in order and answers with the sign of the first coefficient that is
+    /// not zero; its last line, after the walk, reports `BudgetExceeded` when every coefficient
+    /// was zero. With a true determinant that line cannot run, for any rows and any keys: the
+    /// mask that gives the first N − 1 rows in key order the unit vectors of columns 0 to N − 2
+    /// leaves the last row's constant 1 as the only entry of its column, a coefficient of ±1. So
+    /// the only input that reaches the line is a `det` argument that returns zero for every
+    /// matrix it is given, which is not a determinant at all. `tie` takes `det` as a parameter, so
+    /// this test passes such a function. It checks what the line is for: `tie` reports the error
+    /// rather than a sign when nothing decides. Beside it, the same rows with the true determinant
+    /// give the sign worked out by hand below, so the error comes from the coefficients alone.
     #[test]
     fn a_tie_with_no_non_zero_coefficient_is_an_error_not_a_sign() {
         // Three coinciding points (5, 5) with keys 1, 2, 3: an exact tie. In ε order the entries

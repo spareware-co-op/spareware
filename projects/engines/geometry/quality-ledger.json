@@ -5559,48 +5559,6 @@
     },
     {
       "file": "projects/engines/geometry/crates/geom-num/src/predicate.rs",
-      "line_text": "const fn magnitude_bits(limbs: usize) -> usize {",
-      "occurrences": 1,
-      "piece": "G41",
-      "reason": "magnitude_bits runs only at compile time, in constants, and the filtered orient2d path is off while ORIENT2D_FILTER_FIRST is false (G42's measurement keeps it off), so no test runs these lines. G41 proves or removes them."
-    },
-    {
-      "file": "projects/engines/geometry/crates/geom-num/src/predicate.rs",
-      "line_text": "let Some(bits) = limbs.checked_mul(64) else {",
-      "occurrences": 1,
-      "piece": "G41",
-      "reason": "magnitude_bits runs only at compile time, in constants, and the filtered orient2d path is off while ORIENT2D_FILTER_FIRST is false (G42's measurement keeps it off), so no test runs these lines. G41 proves or removes them."
-    },
-    {
-      "file": "projects/engines/geometry/crates/geom-num/src/predicate.rs",
-      "line_text": "return 0;",
-      "occurrences": 2,
-      "piece": "G41",
-      "reason": "magnitude_bits runs only at compile time, in constants, and the filtered orient2d path is off while ORIENT2D_FILTER_FIRST is false (G42's measurement keeps it off), so no test runs these lines. G41 proves or removes them."
-    },
-    {
-      "file": "projects/engines/geometry/crates/geom-num/src/predicate.rs",
-      "line_text": "let Some(magnitude) = bits.checked_sub(1) else {",
-      "occurrences": 1,
-      "piece": "G41",
-      "reason": "magnitude_bits runs only at compile time, in constants, and the filtered orient2d path is off while ORIENT2D_FILTER_FIRST is false (G42's measurement keeps it off), so no test runs these lines. G41 proves or removes them."
-    },
-    {
-      "file": "projects/engines/geometry/crates/geom-num/src/predicate.rs",
-      "line_text": "magnitude",
-      "occurrences": 1,
-      "piece": "G41",
-      "reason": "magnitude_bits runs only at compile time, in constants, and the filtered orient2d path is off while ORIENT2D_FILTER_FIRST is false (G42's measurement keeps it off), so no test runs these lines. G41 proves or removes them."
-    },
-    {
-      "file": "projects/engines/geometry/crates/geom-num/src/predicate.rs",
-      "line_text": "}",
-      "occurrences": 1,
-      "piece": "G41",
-      "reason": "magnitude_bits runs only at compile time, in constants, and the filtered orient2d path is off while ORIENT2D_FILTER_FIRST is false (G42's measurement keeps it off), so no test runs these lines. G41 proves or removes them."
-    },
-    {
-      "file": "projects/engines/geometry/crates/geom-num/src/predicate.rs",
       "line_text": "if ORIENT2D_FILTER_FIRST {",
       "occurrences": 1,
       "piece": "G41",

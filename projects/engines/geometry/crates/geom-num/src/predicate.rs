@@ -520,7 +520,7 @@ mod bounded {
     /// 64L − 1 for a [`Wide`](crate::wide::Wide) of L limbs of 64 bits, which holds every value
     /// from −2^(64L − 1) to 2^(64L − 1) − 1, so every magnitude below 2^(64L − 1). Every step is
     /// checked; an overflow gives 0, which no bound fits.
-    const fn magnitude_bits(limbs: usize) -> usize {
+    pub(super) const fn magnitude_bits(limbs: usize) -> usize {
         let Some(bits) = limbs.checked_mul(64) else {
             return 0;
         };
@@ -1024,7 +1024,7 @@ mod tests {
     use num_bigint::BigInt;
     use proptest::prelude::*;
 
-    use super::bounded::{TOTAL_BITS, declarable, product_bits, sum_bits};
+    use super::bounded::{TOTAL_BITS, declarable, magnitude_bits, product_bits, sum_bits};
     use super::exponent_sum;
     use super::{
         Bounded, Diff, Total, fast_else_total, incircle_fast, incircle_terms, incircle_total,
@@ -1457,6 +1457,84 @@ mod tests {
         }
         let failed = fast_else_total::<64>(None, || None);
         assert_eq!(failed, Err(crate::error::NumError::BudgetExceeded));
+    }
+
+    /// What `magnitude_bits` documents for `limbs`: 64L − 1, or 0 when a step does not fit a
+    /// `usize` (the product 64L above `usize::MAX`, or the difference below zero).
+    fn documented_magnitude_bits(limbs: usize) -> BigInt {
+        let product = BigInt::from(limbs) * 64;
+        let difference = &product - 1;
+        if product > BigInt::from(usize::MAX) || difference < BigInt::from(0) {
+            BigInt::from(0)
+        } else {
+            difference
+        }
+    }
+
+    /// 2^`magnitude_bits(L)` is one more than the largest value a `Wide<L>` holds.
+    fn holds_every_magnitude_below<const L: usize>() {
+        let largest = big(&Wide::<L>::max_value());
+        assert_eq!(
+            largest + 1,
+            BigInt::from(1) << magnitude_bits(L),
+            "{L} limbs"
+        );
+    }
+
+    /// `magnitude_bits` at run time. Only the constant `TOTAL_BITS` calls it, so only the
+    /// compiler ever ran it, and only for six limbs. Here it runs on limb counts from zero to the
+    /// largest `usize`, against 64L − 1 computed in `num-bigint`, where no step can overflow:
+    /// its value, and 0 for each of its two refusals.
+    #[test]
+    fn magnitude_bits_is_64_limbs_less_one_or_zero_when_a_step_does_not_fit() {
+        // The last limb count whose product fits a `usize`, and the first whose product does
+        // not: there 64L is exactly 2^BITS, so 64L − 1 would fit, but the product does not.
+        let last_fitting = usize::MAX / 64;
+        let first_overflowing = last_fitting + 1;
+        let counts = [
+            0,
+            1,
+            2,
+            4,
+            5,
+            6,
+            8,
+            1000,
+            last_fitting - 1,
+            last_fitting,
+            first_overflowing,
+            first_overflowing + 1,
+            usize::MAX / 2,
+            usize::MAX - 1,
+            usize::MAX,
+        ];
+        for limbs in counts {
+            assert_eq!(
+                BigInt::from(magnitude_bits(limbs)),
+                documented_magnitude_bits(limbs),
+                "{limbs} limbs"
+            );
+        }
+        // Both refusals, and the values on either side of each, written out.
+        assert_eq!(magnitude_bits(0), 0);
+        assert_eq!(magnitude_bits(1), 63);
+        assert_eq!(magnitude_bits(last_fitting), usize::MAX - 64);
+        assert_eq!(magnitude_bits(first_overflowing), 0);
+        assert_eq!(magnitude_bits(usize::MAX), 0);
+        // The one call the crate makes.
+        assert_eq!(magnitude_bits(Total::ZERO.to_le_limbs().len()), TOTAL_BITS);
+        assert_eq!(magnitude_bits(6), 383);
+    }
+
+    /// `magnitude_bits` is the exponent of the first magnitude a `Wide` of that many limbs
+    /// cannot hold, for every width the crate names.
+    #[test]
+    fn magnitude_bits_is_the_exponent_of_the_first_magnitude_a_wide_cannot_hold() {
+        holds_every_magnitude_below::<2>();
+        holds_every_magnitude_below::<4>();
+        holds_every_magnitude_below::<5>();
+        holds_every_magnitude_below::<6>();
+        holds_every_magnitude_below::<8>();
     }
 
     /// The sign of a `num-bigint` value.

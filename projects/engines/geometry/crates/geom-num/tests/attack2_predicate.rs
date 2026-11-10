@@ -279,7 +279,7 @@ mod copy {
         mod bounded {
             use super::Total;
             const ANY_I64_DIFFERENCE_BITS: usize = 64;
-            const fn magnitude_bits(limbs: usize) -> usize {
+            pub(super) const fn magnitude_bits(limbs: usize) -> usize {
                 let Some(bits) = limbs.checked_mul(64) else {
                     return 0;
                 };
