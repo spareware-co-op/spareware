@@ -37,8 +37,15 @@ use geom_num::Real;
 use geom_num::grid::{COORD_MAX, P3};
 use geom_run::{Budget, Exec, WorkMeter};
 
+/// The work each build and query here may do: at least 64 times what the largest correct one
+/// needs, and little enough that a walk which never ends, over a tree whose child links lead back
+/// up, stops within a second with `OverBudget` instead of hanging this binary. Under an unlimited
+/// meter such a walk ran until its stack could not grow, so whether the mutation gate saw those
+/// mutants caught or timed out depended on the runner (decision 32.46).
+const WORK: u64 = 1 << 24;
+
 fn meter() -> WorkMeter<'static> {
-    WorkMeter::new(Budget::UNLIMITED)
+    WorkMeter::new(Budget::of_work(WORK))
 }
 
 fn p3(x: i64, y: i64, z: i64) -> P3 {
@@ -278,9 +285,11 @@ fn ub_221_the_box_tree_never_has_links_that_disagree() {
         })
         .collect();
     let tree = BoxTree::build(&same, &exec, &mut meter()).unwrap();
-    assert!(tree.depth().unwrap() <= MAX_DEPTH);
     assert_eq!(tree.overlapping(&query, &mut meter()).unwrap().len(), 300);
     assert_eq!(tree.pairs(&mut meter()).unwrap().len(), 300 * 299 / 2);
+    // After the metered walks: `depth` follows the child links with no meter, so a tree whose
+    // links loop would hang it, and the walks above stop such a tree first.
+    assert!(tree.depth().unwrap() <= MAX_DEPTH);
 }
 
 /// solidcore plan/upstream-issues/UB-41--smpointset3d-gettightpbox-on-an-empty-planar-set-reads-m.md
