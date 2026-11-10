@@ -312,7 +312,12 @@ impl Basis {
                 let le = get(&left, sub(k, l)?)?;
                 // Both differences are at least zero and r > 0 or le > 0 (the span is more than
                 // one value), so delta > 0 and each quotient lies in [0, 1].
-                let delta = self.width(span, k, l, r + le)?;
+                let sum = r + le;
+                let delta = if sum.is_finite() {
+                    sum
+                } else {
+                    self.width(span, k, l)?
+                };
                 let temp = get(n, l)?;
                 set(n, l, saved + temp * (r / delta))?;
                 saved = temp * (le / delta);
@@ -329,10 +334,12 @@ impl Basis {
     /// knot difference itself, taken directly, is finite for every basis ([`Basis::new`] checks
     /// the widest) and is used there. It is no smaller than either difference it divides,
     /// because rounding keeps order, and it carries one rounding where the sum carries three.
-    fn width(&self, span: usize, k: usize, l: usize, sum: f64) -> Result<f64, NurbsError> {
-        if sum.is_finite() {
-            return Ok(sum);
-        }
+    ///
+    /// Called only where the sum is not finite, and kept out of line (`cold`), so the steps
+    /// whose sum is finite, which is every step of every ordinary basis, pay one test and no
+    /// call: the count benchmark `nurbs/curve_point/typical` rose 5.9% with the test inside.
+    #[cold]
+    fn width(&self, span: usize, k: usize, l: usize) -> Result<f64, NurbsError> {
         let upper = add(add(span, l)?, 1)?;
         Ok(get(&self.knots, upper)? - get(&self.knots, sub(upper, k)?)?)
     }
@@ -390,7 +397,12 @@ impl Basis {
             for r in 0..j {
                 let ri = get(&right, add(r, 1)?)?;
                 let le = get(&left, sub(j, r)?)?;
-                let delta = self.width(span, j, r, ri + le)?;
+                let sum = ri + le;
+                let delta = if sum.is_finite() {
+                    sum
+                } else {
+                    self.width(span, j, r)?
+                };
                 set(&mut ndu, at_(j, r)?, delta)?;
                 let prev = get(&ndu, at_(r, sub(j, 1)?)?)?;
                 set(&mut ndu, at_(r, j)?, saved + prev * (ri / delta))?;
