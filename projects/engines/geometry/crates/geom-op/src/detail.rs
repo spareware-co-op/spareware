@@ -381,9 +381,11 @@ pub enum MakeDetail {
     /// a scale that is not uniform makes cylinders, cones, spheres and tori affine surfaces and
     /// circles ellipses.
     KindNotCertified,
-    /// A transform that rounds corners or moves curved geometry by a certified deviation gave a
-    /// body the checker cannot certify yet: rounded corners leave their faces' planes, and a tilted
-    /// curved face meets its caps where only exact data is followed today.
+    /// A transform gave a body the checker cannot certify yet, from corners it rounded or curved
+    /// geometry it moved by a certified deviation, or from a body an earlier transform left so:
+    /// rounded corners leave their faces' planes, a tilted curved face meets its caps where only
+    /// exact data is followed today, and two planes off the integers are told apart only while
+    /// their normals stay exact in doubles.
     NotCertifiedYet {
         /// The piece that widens what the checker certifies, by its board number.
         piece: &'static str,
