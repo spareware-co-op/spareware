@@ -27,6 +27,23 @@
 //!   six roundings, all relative. On a clamped knot vector the values at the ends of the domain
 //!   are exactly 1 and 0. [`Basis::eval_derivs`] gives the same bits for the values as
 //!   [`Basis::eval`].
+//! - **The p + 1 functions are right on every knot range.** [`Basis::eval`] and
+//!   [`Basis::eval_derivs`] keep their bounds on every basis [`Basis::new`] accepts, up to a knot
+//!   range of the largest double, and never refuse one for its size. Their schemes divide by the
+//!   sum of two rounded differences, each finite, and on such a range the sum can round to
+//!   infinity. Where it does, the knot difference the sum stands for divides instead: it is
+//!   finite, it is at least each difference it divides, and it carries one rounding in place of
+//!   three, so the bounds hold as written. Where the sum is finite it divides, as it always has.
+//! - **Relative bounds, so for runs in which nothing underflows.** A quotient, product or
+//!   derivative below 2^−1022 is rounded to the spacing of the doubles there, 2^−1074, and no
+//!   bound here counts that rounding. A first derivative on a range near the largest double is
+//!   such a value. So is an intermediate of [`Basis::eval_one`] and [`Basis::eval_one_derivs`]
+//!   where a knot difference is above 2^1022 times the lower-degree value it divides, or a
+//!   difference times such a value is below 2^−1022: they divide a value by one knot difference
+//!   before they multiply it by another, or multiply before they divide, in `NLib`'s order. So
+//!   on a knot range wide enough or narrow enough (the widest is one) a function of ordinary
+//!   size loses bits its bound needs and a small one can come out 0; their bounds hold while no
+//!   such intermediate underflows.
 //! - **Derivatives, bounded by their magnitudes.** Each derivative of order k ≥ 1 is within
 //!   `γ_(6p+2)` · M of the exact derivative, where M is the same scheme run on magnitudes: every
 //!   difference of two terms replaced by the sum of their absolute values, with the exact knots
@@ -64,7 +81,9 @@
 //!   of `N_BasisIEval` apply only to a clamped end, where they are exact; the zero-divisor guard
 //!   (10^−24) is dropped, because a valid basis never divides by a difference that is not
 //!   positive; the factor p!/(p − k)! is a double rather than an integer, which overflowed past
-//!   degree 12; the checks of `N_KnotVectorIsValid` are those of chapter 24.7, which also accept
+//!   degree 12; a step of `N_BasisEval` or `N_BasisDerivs` whose sum of two differences is past
+//!   the largest double divides by the knot difference instead; the checks of
+//!   `N_KnotVectorIsValid` are those of chapter 24.7, which also accept
 //!   unclamped knots and interior knots repeated p + 1 times; every result that could overflow is
 //!   checked.
 //! SPDX-License-Identifier: Apache-2.0
@@ -293,7 +312,7 @@ impl Basis {
                 let le = get(&left, sub(k, l)?)?;
                 // Both differences are at least zero and r > 0 or le > 0 (the span is more than
                 // one value), so delta > 0 and each quotient lies in [0, 1].
-                let delta = r + le;
+                let delta = self.width(span, k, l, r + le)?;
                 let temp = get(n, l)?;
                 set(n, l, saved + temp * (r / delta))?;
                 saved = temp * (le / delta);
@@ -301,6 +320,21 @@ impl Basis {
             set(n, k, saved)?;
         }
         Ok(())
+    }
+
+    /// The knot difference that divides step `l` of level `k` of A2.2 and A2.3 at `span`,
+    /// `u_(span+l+1)` − `u_(span+l+1−k)`: `sum`, the two rounded differences from the parameter
+    /// added as the book adds them, wherever that is finite. Where the knots span nearly all the
+    /// doubles the sum can round past the largest of them though each difference is finite; the
+    /// knot difference itself, taken directly, is finite for every basis ([`Basis::new`] checks
+    /// the widest) and is used there. It is no smaller than either difference it divides,
+    /// because rounding keeps order, and it carries one rounding where the sum carries three.
+    fn width(&self, span: usize, k: usize, l: usize, sum: f64) -> Result<f64, NurbsError> {
+        if sum.is_finite() {
+            return Ok(sum);
+        }
+        let upper = add(add(span, l)?, 1)?;
+        Ok(get(&self.knots, upper)? - get(&self.knots, sub(upper, k)?)?)
     }
 
     /// The basis functions that do not vanish at `u` and their derivatives up to order `order`,
@@ -356,7 +390,7 @@ impl Basis {
             for r in 0..j {
                 let ri = get(&right, add(r, 1)?)?;
                 let le = get(&left, sub(j, r)?)?;
-                let delta = ri + le;
+                let delta = self.width(span, j, r, ri + le)?;
                 set(&mut ndu, at_(j, r)?, delta)?;
                 let prev = get(&ndu, at_(r, sub(j, 1)?)?)?;
                 set(&mut ndu, at_(r, j)?, saved + prev * (ri / delta))?;
