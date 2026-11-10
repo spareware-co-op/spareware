@@ -252,19 +252,9 @@ fn the_fuzzers_triangle_scaled_unevenly_then_by_three_waits_for_the_checker() {
 /// exact move of a body that passed breaks nothing, so only a body that was broken gives one.
 #[test]
 fn a_wrong_body_moved_exactly_is_still_a_defect_when_it_is_less_than_exact() {
-    let wide = a_rounded_box();
-    let broken = edited(&wide.result.body, |b| {
-        let f = Ix::new(0).unwrap();
-        let flipped = match *b.arenas.fins.sense.get(f).unwrap() {
-            Sense::Forward => Sense::Reversed,
-            Sense::Reversed => Sense::Forward,
-        };
-        b.arenas.fins.sense.set(f, flipped).unwrap();
-    });
-    let found = report(&broken, wide.exactness);
-    assert!(!found.passed() && !found.uncertified());
+    let (broken, record) = a_broken_rounded_box();
     let c = ctx();
-    let input = moved(&broken, wide.exactness);
+    let input = moved(&broken, record);
     let by_three = [s(3, 1), s(1, 1), s(1, 1)];
     let stretch = RationalTransform::new([[3, 0, 0], [0, 1, 0], [0, 0, 1]], [0; 3], 1).unwrap();
     let instance = Instance {
@@ -280,6 +270,66 @@ fn a_wrong_body_moved_exactly_is_still_a_defect_when_it_is_less_than_exact() {
         assert_eq!(e.kind(), ErrorKind::Internal);
         assert_eq!(e.remedies(), [Remedy::Report]);
     }
+}
+
+/// The rounded box with one fin turned the other way: a body broken by hand, which the checker
+/// finds wrong.
+fn a_broken_rounded_box() -> (Body, Exactness) {
+    let wide = a_rounded_box();
+    let broken = edited(&wide.result.body, |b| {
+        let f = Ix::new(0).unwrap();
+        let flipped = match *b.arenas.fins.sense.get(f).unwrap() {
+            Sense::Forward => Sense::Reversed,
+            Sense::Reversed => Sense::Forward,
+        };
+        b.arenas.fins.sense.set(f, flipped).unwrap();
+    });
+    let found = report(&broken, wide.exactness);
+    assert!(!found.passed() && !found.uncertified());
+    (broken, wide.exactness)
+}
+
+/// A transform that is not exact keeps the rule it had: whatever the checker reports waits for
+/// the piece, whether it rounded a corner or moved a plane by a deviation. Rounding can break a
+/// body by itself, so a fault that says something is wrong is no defect there.
+#[test]
+fn a_transform_that_is_not_exact_waits_whatever_the_checker_finds() {
+    let c = ctx();
+    // A corner rounded, every plane moved exactly: a thin prism halved. Its corner at (0, 1)
+    // lands on the one at (0, 0), and the checker finds two edges of a face that meet.
+    let base = vec![p(0, 0, 0), p(2, 0, 0), p(0, 1, 0)];
+    let height = Steps(2);
+    let thin = prism(&c, &PrismInput { base, height }).unwrap();
+    let input = moved(&thin.result.body, thin.exactness);
+    let e = scale(&c, input, [s(1, 2); 3], p(0, 0, 0)).unwrap_err();
+    assert_eq!(
+        *e.detail(),
+        OpErrorDetail::Make(MakeDetail::NotCertifiedYet { piece: "G134" })
+    );
+    assert!(
+        e.message().contains("two edges of the face meet"),
+        "{}",
+        e.message()
+    );
+    // A plane moved by a deviation, no corner rounded: the rounded box scaled by 3 along y,
+    // where 3 × 7/3 in doubles is not a double. Its bound is the input's, stretched by 3, and
+    // one step for the deviation; a rounded corner would add another.
+    let wide = a_rounded_box();
+    let along_y = [s(1, 1), s(3, 1), s(1, 1)];
+    let input = moved(&wide.result.body, wide.exactness);
+    let taller = valid("taller", scale(&c, input, along_y, p(0, 0, 0)).unwrap());
+    let (Some((before, _)), Some((after, _))) = (wide.exactness.bound(), taller.exactness.bound())
+    else {
+        panic!("both are certified");
+    };
+    assert_eq!(after.get(), 3 * before.get() + 1);
+    // The same transform of the body broken by hand: this arm is as it was, and waits.
+    let (broken, record) = a_broken_rounded_box();
+    let e = scale(&c, moved(&broken, record), along_y, p(0, 0, 0)).unwrap_err();
+    assert_eq!(
+        *e.detail(),
+        OpErrorDetail::Make(MakeDetail::NotCertifiedYet { piece: "G134" })
+    );
 }
 
 /// A box with one face's plane written from a point off the grid: the same plane, which the
