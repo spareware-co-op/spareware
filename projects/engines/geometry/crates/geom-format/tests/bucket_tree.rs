@@ -1,4 +1,4 @@
-//! The benchmark behind 32.46: should chunks be cut by name (content-defined buckets, a bucket
+//! The benchmark behind 32.47: should chunks be cut by name (content-defined buckets, a bucket
 //! ending where a row's name meets a fixed condition) so that one inserted face leaves the other
 //! chunks alone, as 31.7 asks of piece G105?
 //!
@@ -412,7 +412,7 @@ fn one_inserted_face() {
         totals.fixed
     );
 
-    // The numbers of 32.46. Row links change nearly every row of the faces, loops, fins and edges,
+    // The numbers of 32.47. Row links change nearly every row of the faces, loops, fins and edges,
     // so about a third of the bytes go whatever the cut. Fixed runs also rewrite the pools and the
     // name tables, whose rows only shift: up to 59% of what they rewrite could stay. A format
     // change that moves these moves the decision.

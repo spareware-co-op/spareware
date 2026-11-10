@@ -898,7 +898,7 @@ Earlier records in this chapter that name MPL-2.0 as ours are kept as they were 
 
 **Changes:** this record; the root `LICENSE`, `README.md`, `NOTICE` files and every manifest's licence field; chapter 29 (29.1, 29.2, rule 4 of 29.20); the file headers' SPDX lines; `geom-test`'s map, provenance and licence checks; `engine-geometry`'s licence gate; `MAP.json`; the K07 note.
 
-## 32.46 Fixed runs stay: no name-ordered bucket tree (G105)
+## 32.47 Fixed runs stay: no name-ordered bucket tree (G105)
 
 **What it is.** 31.7 left one question to the piece "Content hashes and cache keys": keep cutting a body's tables into fixed runs of 4,096 rows (24.2), or cut them by name, ending a bucket where a row's name meets a fixed condition, so that adding an entity, which shifts every row after it in name order (32.17), leaves the other chunks alone.
 
