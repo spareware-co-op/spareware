@@ -208,7 +208,12 @@ fn probe<const D: usize>(case: &Case<D>, transforms: &[TypedTransform]) -> Vec<S
 
     // 2. Bounds hold dense samples, over many spans.
     let mut rng = Lcg(0xa0d1_7000 ^ case.name.len() as u64);
-    let mut spans = vec![(a, b), (a, a), (b, b)];
+    let mut spans = vec![(a, b)];
+    for end in [a, b] {
+        if !case.breaks.contains(&end) {
+            spans.push((end, end));
+        }
+    }
     // A span that is one break is left to `audit_spans.rs`, which found the kinds disagree there.
     for &x in &case.breaks {
         if a < x && x < b {
@@ -230,7 +235,15 @@ fn probe<const D: usize>(case: &Case<D>, transforms: &[TypedTransform]) -> Vec<S
                     continue;
                 }
                 for &t in &inside {
-                    for side in [Limit::FromRight, Limit::FromLeft] {
+                    // At an end of the span, the side inside it: a curve may jump at a break.
+                    let sides: &[Limit] = if lo < hi && t == lo {
+                        &[Limit::FromRight]
+                    } else if lo < hi && t == hi {
+                        &[Limit::FromLeft]
+                    } else {
+                        &[Limit::FromRight, Limit::FromLeft]
+                    };
+                    for &side in sides {
                         let Ok(p) = k.point(t, side) else { continue };
                         let slack = 1e-9 * scale;
                         if !p
@@ -765,7 +778,8 @@ fn cases2() -> Vec<Case<2>> {
     push(
         "trimmed bulge",
         CurveKind::Trimmed(Trimmed::new(Basis::Bulge(poly.clone()), (0.5, 2.0)).unwrap()),
-        vec![1.0],
+        // The trim's end is a vertex too: a span of that one parameter is `audit_spans.rs`'s.
+        vec![1.0, 2.0],
     );
     let after = Line::new([4.0, 3.0], [1.0, 2.0], (0.0, 1.5)).unwrap();
     let mixed = Composite::new(vec![
