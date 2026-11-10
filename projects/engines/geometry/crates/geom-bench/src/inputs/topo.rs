@@ -1,4 +1,4 @@
-//! Inputs for `geom-topo`'s hot paths (piece G80, decision 32.44): a column filled, copied as a
+//! Inputs for `geom-topo`'s hot paths (piece G80, decision 32.46): a column filled, copied as a
 //! new version and written across a chunk boundary, and a small body's arenas published.
 //!
 //! Class `typical` only: each [`column_edit`] input is a column of [`ROWS`] values, one full chunk

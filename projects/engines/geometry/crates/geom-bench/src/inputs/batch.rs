@@ -1,4 +1,4 @@
-//! Inputs for the batch runner's hot paths (piece G104, decision 32.44): `geom-op`'s driver over a
+//! Inputs for the batch runner's hot paths (piece G104, decision 32.46): `geom-op`'s driver over a
 //! list of items, and the flat arrays of a curve's and a surface's points.
 //!
 //! Class `typical` only: each [`run_items`] input is [`ITEMS`] distinct items, each [`curve_points`]

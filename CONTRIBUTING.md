@@ -6,7 +6,7 @@ Anyone can read Spareware. Only invited contributors can push work, and a person
 
 1. **Read the [README](README.md)**, especially "Built legally, or not at all".
 2. **Open a join request:** [New join request](https://github.com/spareware-co-op/spareware/issues/new?template=join-request.yml). It asks what you'd like to work on, a link to your LinkedIn (or another public profile) so an owner can check your background, and for three promises:
-   - you build only with Claude Opus 5.5 at Extra high effort, or a newer, more capable model;
+   - you build with the model each kind of work needs ([AGENTS.md](AGENTS.md), step 0): Claude Opus 5.5 at Extra high effort for pieces and proofs, or a newer, more capable model;
    - you follow the legal rules with no exceptions;
    - any work on an employer's time is cleared with your employer first.
 3. **Sign off your commits.** Every commit carries a Developer Certificate of Origin sign-off (`git commit -s`). You keep the copyright to your work; it is licensed under the project's licence, Apache-2.0, and the project will never move to a closed, paid or subscription licence. There is no contributor licence agreement.

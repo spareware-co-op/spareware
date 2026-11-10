@@ -2464,7 +2464,7 @@ pub mod ball {
     );
 }
 
-/// geom-math's hot paths (pieces G45, G46 and G48; decision 32.44).
+/// geom-math's hot paths (pieces G45, G46 and G48; decision 32.46).
 pub mod math_types {
     use super::*;
 
@@ -2523,7 +2523,7 @@ pub mod math_types {
     );
 }
 
-/// geom-linalg's hot paths (pieces G49 and G50; decision 32.44).
+/// geom-linalg's hot paths (pieces G49 and G50; decision 32.46).
 pub mod linalg {
     use super::*;
 
@@ -2547,7 +2547,7 @@ pub mod linalg {
     );
 }
 
-/// geom-bvh's hot paths (pieces G54 and G55; decision 32.44).
+/// geom-bvh's hot paths (pieces G54 and G55; decision 32.46).
 pub mod bvh {
     use super::*;
 
@@ -2571,7 +2571,7 @@ pub mod bvh {
     );
 }
 
-/// The attribute step's hot path (piece G90; decision 32.44).
+/// The attribute step's hot path (piece G90; decision 32.46).
 pub mod attributes {
     use super::*;
 
@@ -2588,7 +2588,7 @@ pub mod attributes {
     );
 }
 
-/// geom-topo's hot paths (piece G80; decision 32.44).
+/// geom-topo's hot paths (piece G80; decision 32.46).
 pub mod topo {
     use super::*;
 
@@ -2612,7 +2612,7 @@ pub mod topo {
     );
 }
 
-/// The batch runner's hot paths (piece G104; decision 32.44).
+/// The batch runner's hot paths (piece G104; decision 32.46).
 pub mod batch {
     use super::*;
 
@@ -2643,7 +2643,7 @@ pub mod batch {
     );
 }
 
-/// geom-nurbs's hot paths (pieces G56, G58 and G59; decision 32.44).
+/// geom-nurbs's hot paths (pieces G56, G58 and G59; decision 32.46).
 pub mod nurbs {
     use super::*;
 
@@ -2674,7 +2674,7 @@ pub mod nurbs {
     );
 }
 
-/// geom-curve's hot paths (pieces G60 to G64 and G67; decision 32.44).
+/// geom-curve's hot paths (pieces G60 to G64 and G67; decision 32.46).
 pub mod curve {
     use super::*;
 
@@ -2719,7 +2719,7 @@ pub mod curve {
     );
 }
 
-/// geom-format's hot paths (piece G105; decision 32.44).
+/// geom-format's hot paths (piece G105; decision 32.46).
 pub mod format {
     use super::*;
 
@@ -2750,7 +2750,7 @@ pub mod format {
     );
 }
 
-/// geom-surface's hot paths (pieces G65 to G68; decision 32.44).
+/// geom-surface's hot paths (pieces G65 to G68; decision 32.46).
 pub mod surface {
     use super::*;
 
@@ -2795,7 +2795,7 @@ pub mod surface {
     );
 }
 
-/// Root finding and quadrature (piece G51; decision 32.44).
+/// Root finding and quadrature (piece G51; decision 32.46).
 pub mod brent {
     use super::*;
 
@@ -2812,7 +2812,7 @@ pub mod brent {
     );
 }
 
-/// Root finding and quadrature (piece G51; decision 32.44).
+/// Root finding and quadrature (piece G51; decision 32.46).
 pub mod quadrature {
     use super::*;
 
@@ -2829,7 +2829,7 @@ pub mod quadrature {
     );
 }
 
-/// geom-run's parallel helper: a lone wave on the serial executor and on a pool (decision 32.44).
+/// geom-run's parallel helper: a lone wave on the serial executor and on a pool (decision 32.46).
 pub mod helper {
     use super::*;
 
@@ -2853,7 +2853,7 @@ pub mod helper {
     );
 }
 
-/// geom-make's hot paths (piece G101; decision 32.44).
+/// geom-make's hot paths (piece G101; decision 32.46).
 pub mod make {
     use super::*;
 

@@ -58,8 +58,15 @@ fn set<const D: usize>(rng: &mut Lcg, n: usize, span: i64, size: i64) -> Vec<Ent
         .collect()
 }
 
+/// The work each build and query here may do: at least 64 times what the largest correct one
+/// needs, and little enough that a walk which never ends, over a tree whose child links lead back
+/// up, stops within a second with `OverBudget` instead of hanging this binary. Under an unlimited
+/// meter such a walk ran until its stack could not grow, so whether the mutation gate saw those
+/// mutants caught or timed out depended on the runner (decision 32.46).
+const WORK: u64 = 1 << 24;
+
 fn meter() -> WorkMeter<'static> {
-    WorkMeter::new(Budget::UNLIMITED)
+    WorkMeter::new(Budget::of_work(WORK))
 }
 
 #[derive(Default)]

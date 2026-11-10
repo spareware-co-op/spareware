@@ -22,7 +22,7 @@
 //! and transforms return only what the full checker passes, keep their laws, and refuse with a
 //! typed error; and [`sequence`] (G116), whole operation logs replay to the same hash and keep
 //! every law at every step. [`adversarial`] holds the generators aimed at chapter 28.5's hard
-//! cases, and [`robustness`] counts how many plain designs succeed. Gate 2 (32.44) adds
+//! cases, and [`robustness`] counts how many plain designs succeed. Gate 2 (32.46) adds
 //! [`curves`], every curve kind keeps the kind contract on any bytes (G60 to G64, G67, G68), and
 //! [`surfaces`], every surface kind likewise (G60, G65 to G68), and [`nurbs`], NURBS curves keep
 //! their stated bounds against exact rational evaluation (G56, G58, G59), and [`transforms`], the

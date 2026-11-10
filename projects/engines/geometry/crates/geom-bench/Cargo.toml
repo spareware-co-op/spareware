@@ -41,7 +41,7 @@ geom-run = { path = "../geom-run" }
 # Cache keys, the memo store and body versions (piece G105), with the crates their inputs need
 # (geom-op and geom-topo, listed below with phase 3's other count benchmarks).
 geom-format = { path = "../geom-format" }
-# The math types of phase 2 (pieces G45, G46 and G48): their count benchmarks, as decision 32.44
+# The math types of phase 2 (pieces G45, G46 and G48): their count benchmarks, as decision 32.46
 # asks of every phase-2 code piece.
 geom-math = { path = "../geom-math" }
 # The box tree and cell index of phase 2 (pieces G54 and G55), for the same count benchmarks.

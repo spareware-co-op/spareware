@@ -511,7 +511,7 @@
           "guarantees": [
             "every batch is full and the same on every target, and every result of a typical batch is `Ok` (`tests/inputs.rs`); every result is the operation's own, run directly (`tests/attack_g06.rs`)."
           ],
-          "job": "Inputs for the attribute step's hot path (piece G90, decision 32.44): one attribute over a small body's entities, carried across an operation that leaves some unchanged, changes some and deletes the rest.",
+          "job": "Inputs for the attribute step's hot path (piece G90, decision 32.46): one attribute over a small body's entities, carried across an operation that leaves some unchanged, changes some and deletes the rest.",
           "method": {
             "links": [
               "projects/engines/geometry/architecture/28-testing.md"
@@ -531,7 +531,7 @@
           "guarantees": [
             "every batch is full and the same on every target, and every result of a typical batch is `Ok` (`tests/inputs.rs`); every result is the operation's own, run directly (`tests/attack_g06.rs`)."
           ],
-          "job": "Inputs for the batch runner's hot paths (piece G104, decision 32.44): `geom-op`'s driver over a list of items, and the flat arrays of a curve's and a surface's points.",
+          "job": "Inputs for the batch runner's hot paths (piece G104, decision 32.46): `geom-op`'s driver over a list of items, and the flat arrays of a curve's and a surface's points.",
           "method": {
             "links": [
               "projects/engines/geometry/architecture/28-testing.md"
@@ -551,7 +551,7 @@
           "guarantees": [
             "every batch is full and the same on every target, and every result of a typical batch is `Ok` (`tests/inputs.rs`); every result is the operation's own, run directly (`tests/attack_g06.rs`)."
           ],
-          "job": "Inputs for `geom-bvh`'s hot paths (pieces G54 and G55, decision 32.44): small scenes for the box tree (build, then the boxes meeting a query box) and for the Morton-sorted cell index (build, then the points within a radius of a centre).",
+          "job": "Inputs for `geom-bvh`'s hot paths (pieces G54 and G55, decision 32.46): small scenes for the box tree (build, then the boxes meeting a query box) and for the Morton-sorted cell index (build, then the points within a radius of a centre).",
           "method": {
             "links": [
               "projects/engines/geometry/architecture/28-testing.md"
@@ -591,7 +591,7 @@
           "guarantees": [
             "every batch is full and the same on every target, and every result of a typical batch is `Ok` (`tests/inputs.rs`); every result is the operation's own, run directly (`tests/attack_g06.rs`)."
           ],
-          "job": "Inputs for `geom-curve`'s hot paths (pieces G60 to G64 and G67, decision 32.44): parameters on an exact helix (its point, and its certified enclosure with two derivatives), bulge polylines for their conversion to NURBS, stations on a clothoid transition, and transition lengths for their conversion to NURBS.",
+          "job": "Inputs for `geom-curve`'s hot paths (pieces G60 to G64 and G67, decision 32.46): parameters on an exact helix (its point, and its certified enclosure with two derivatives), bulge polylines for their conversion to NURBS, stations on a clothoid transition, and transition lengths for their conversion to NURBS.",
           "method": {
             "links": [
               "projects/engines/geometry/architecture/28-testing.md"
@@ -694,7 +694,7 @@
           "guarantees": [
             "every typical batch is full and every call succeeds (`tests/inputs.rs`), so each benchmark measures the path that succeeds: every key is found, and a new version hashes one chunk, as an edit in place does. Only the typical class exists: a key's cost does not depend on its bytes."
           ],
-          "job": "Inputs for `geom-format`'s hot paths (piece G105, decision 32.44): calls whose cache keys differ by edition and input, keys to look up in a memo store, and new versions of a body, each one row of its last chunk moved to another surface.",
+          "job": "Inputs for `geom-format`'s hot paths (piece G105, decision 32.46): calls whose cache keys differ by edition and input, keys to look up in a memo store, and new versions of a body, each one row of its last chunk moved to another surface.",
           "method": {
             "links": [
               "projects/engines/geometry/architecture/28-testing.md"
@@ -774,7 +774,7 @@
           "guarantees": [
             "every batch is full and the same on every target, and every result of a typical batch is `Ok` (`tests/inputs.rs`); every result is the operation's own, run directly (`tests/attack_g06.rs`)."
           ],
-          "job": "Inputs for `geom-run`'s parallel helper (decision 32.44): lists of [`LIST`] words, each one call of `Exec::map` whose items fit a single chunk, so its one wave is a lone task.",
+          "job": "Inputs for `geom-run`'s parallel helper (decision 32.46): lists of [`LIST`] words, each one call of `Exec::map` whose items fit a single chunk, so its one wave is a lone task.",
           "method": {
             "links": [
               "projects/engines/geometry/architecture/28-testing.md"
@@ -834,7 +834,7 @@
           "guarantees": [
             "every batch is full and the same on every target, and every result of a typical batch is `Ok` (`tests/inputs.rs`); every result is the operation's own, run directly (`tests/attack_g06.rs`)."
           ],
-          "job": "Inputs for `geom-linalg`'s hot paths (pieces G49 and G50, decision 32.44): small dense matrices for the column-pivoted QR factorisation and the one-sided Jacobi singular value decomposition.",
+          "job": "Inputs for `geom-linalg`'s hot paths (pieces G49 and G50, decision 32.46): small dense matrices for the column-pivoted QR factorisation and the one-sided Jacobi singular value decomposition.",
           "method": {
             "links": [
               "projects/engines/geometry/architecture/28-testing.md"
@@ -854,7 +854,7 @@
           "guarantees": [
             "every batch is full and the same on every target, and every result of a typical batch is `Ok` (`tests/inputs.rs`); every result is the operation's own, run directly (`tests/attack_g06.rs`)."
           ],
-          "job": "Inputs for `geom-make`'s hot paths (piece G101, decision 32.44): a box and a cylinder built from their inputs, and a box moved and quarter-turned, each with its checker postcondition.",
+          "job": "Inputs for `geom-make`'s hot paths (piece G101, decision 32.46): a box and a cylinder built from their inputs, and a box moved and quarter-turned, each with its checker postcondition.",
           "method": {
             "links": [
               "projects/engines/geometry/architecture/28-testing.md"
@@ -894,7 +894,7 @@
           "guarantees": [
             "every batch is full and the same on every target, and every result of a typical batch is `Ok` (`tests/inputs.rs`); every result is the operation's own, run directly (`tests/attack_g06.rs`)."
           ],
-          "job": "Inputs for `geom-math`'s hot paths (pieces G45, G46 and G48, decision 32.44): grid points for the typed transforms and the rational rotation, unit directions for the rational-rotation search, grid points for the frame-to-map conversion, and survey coordinates as decimal text.",
+          "job": "Inputs for `geom-math`'s hot paths (pieces G45, G46 and G48, decision 32.46): grid points for the typed transforms and the rational rotation, unit directions for the rational-rotation search, grid points for the frame-to-map conversion, and survey coordinates as decimal text.",
           "method": {
             "links": [
               "projects/engines/geometry/architecture/28-testing.md"
@@ -957,7 +957,7 @@
           "guarantees": [
             "every batch is full and the same on every target, and every result of a typical batch is `Ok` (`tests/inputs.rs`); every result is the operation's own, run directly (`tests/attack_g06.rs`)."
           ],
-          "job": "Inputs for `geom-nurbs`'s hot paths (pieces G56, G58 and G59, decision 32.44): parameters for evaluating a clamped cubic curve, point sets for its interpolation, and interval control points for the Bernstein bound.",
+          "job": "Inputs for `geom-nurbs`'s hot paths (pieces G56, G58 and G59, decision 32.46): parameters for evaluating a clamped cubic curve, point sets for its interpolation, and interval control points for the Bernstein bound.",
           "method": {
             "links": [
               "projects/engines/geometry/architecture/28-testing.md"
@@ -1080,7 +1080,7 @@
           "guarantees": [
             "every batch is full and the same on every target, and every result of a typical batch is `Ok` (`tests/inputs.rs`); every result is the operation's own, run directly (`tests/attack_g06.rs`)."
           ],
-          "job": "Inputs for root finding and quadrature (piece G51, decision 32.44): brackets for Brent's zero search on a fixed cubic, and intervals for Gauss-Legendre quadrature of a fixed quintic.",
+          "job": "Inputs for root finding and quadrature (piece G51, decision 32.46): brackets for Brent's zero search on a fixed cubic, and intervals for Gauss-Legendre quadrature of a fixed quintic.",
           "method": {
             "links": [
               "projects/engines/geometry/architecture/28-testing.md"
@@ -1120,7 +1120,7 @@
           "guarantees": [
             "every batch is full and the same on every target, and every result of a typical batch is `Ok` (`tests/inputs.rs`); every result is the operation's own, run directly (`tests/attack_g06.rs`)."
           ],
-          "job": "Inputs for `geom-surface`'s hot paths (pieces G65 to G68, decision 32.44): parameter pairs on a torus (its point, and its certified enclosure with first partials) and on an offset cylinder (its point).",
+          "job": "Inputs for `geom-surface`'s hot paths (pieces G65 to G68, decision 32.46): parameter pairs on a torus (its point, and its certified enclosure with first partials) and on an offset cylinder (its point).",
           "method": {
             "links": [
               "projects/engines/geometry/architecture/28-testing.md"
@@ -1140,7 +1140,7 @@
           "guarantees": [
             "every batch is full and the same on every target, and every result of a typical batch is `Ok` (`tests/inputs.rs`); every result is the operation's own, run directly (`tests/attack_g06.rs`)."
           ],
-          "job": "Inputs for `geom-topo`'s hot paths (piece G80, decision 32.44): a column filled, copied as a new version and written across a chunk boundary, and a small body's arenas published.",
+          "job": "Inputs for `geom-topo`'s hot paths (piece G80, decision 32.46): a column filled, copied as a new version and written across a chunk boundary, and a small body's arenas published.",
           "method": {
             "links": [
               "projects/engines/geometry/architecture/28-testing.md"
@@ -4688,7 +4688,7 @@
         },
         {
           "cost": "one kind built and one contract check per input, each bounded by [`WORK`] work units; at most [`MAX_INPUT_BYTES`] bytes read.",
-          "does": "[`decode`] turns a fuzzer's bytes into a [`Case`]: a curve kind (one of the 15 of `geom_curve::CurveKind`, in two or three dimensions as the kind allows), the doubles it is built from, up to four parameters in its domain and a typed transform. [`check`] builds the kind and runs `geom_curve::contract::check` on it, the kind contract kit every kind is held to (piece G60, with G68's derivative laws), under a bounded work meter. [`harness`] is `decode` then `check`, the function every fuzzing engine drives (the crate README sets out the layout). It reaches pieces G60 to G64, G67 and G68 (Gate 2, 32.44).",
+          "does": "[`decode`] turns a fuzzer's bytes into a [`Case`]: a curve kind (one of the 15 of `geom_curve::CurveKind`, in two or three dimensions as the kind allows), the doubles it is built from, up to four parameters in its domain and a typed transform. [`check`] builds the kind and runs `geom_curve::contract::check` on it, the kind contract kit every kind is held to (piece G60, with G68's derivative laws), under a bounded work meter. [`harness`] is `decode` then `check`, the function every fuzzing engine drives (the crate README sets out the layout). It reaches pieces G60 to G64, G67 and G68 (Gate 2, 32.46).",
           "family": [],
           "file": "projects/engines/geometry/crates/geom-fuzz/src/curves.rs",
           "guarantees": [
@@ -4965,7 +4965,7 @@
         },
         {
           "cost": "one kind built and one contract check per input, each bounded by [`WORK`] work units; at most [`MAX_INPUT_BYTES`] bytes read.",
-          "does": "[`decode`] turns a fuzzer's bytes into a [`Case`]: a surface kind (one of the 11 of `geom_surface::SurfaceKind`), the doubles it is built from, up to four parameter pairs in its domain and a typed transform. [`check`] builds the kind and runs `geom_surface::contract::check` on it, the kind contract kit every surface kind is held to (piece G60, with G68's derivative laws), under a bounded work meter. [`harness`] is `decode` then `check`, the function every fuzzing engine drives (the crate README sets out the layout). It reaches pieces G60 and G65 to G68 (Gate 2, 32.44).",
+          "does": "[`decode`] turns a fuzzer's bytes into a [`Case`]: a surface kind (one of the 11 of `geom_surface::SurfaceKind`), the doubles it is built from, up to four parameter pairs in its domain and a typed transform. [`check`] builds the kind and runs `geom_surface::contract::check` on it, the kind contract kit every surface kind is held to (piece G60, with G68's derivative laws), under a bounded work meter. [`harness`] is `decode` then `check`, the function every fuzzing engine drives (the crate README sets out the layout). It reaches pieces G60 and G65 to G68 (Gate 2, 32.46).",
           "family": [],
           "file": "projects/engines/geometry/crates/geom-fuzz/src/surfaces.rs",
           "guarantees": [

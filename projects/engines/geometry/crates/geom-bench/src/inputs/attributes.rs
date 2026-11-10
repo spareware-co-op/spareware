@@ -1,4 +1,4 @@
-//! Inputs for the attribute step's hot path (piece G90, decision 32.44): one attribute over a small
+//! Inputs for the attribute step's hot path (piece G90, decision 32.46): one attribute over a small
 //! body's entities, carried across an operation that leaves some unchanged, changes some and
 //! deletes the rest.
 //!
