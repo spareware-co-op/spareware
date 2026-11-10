@@ -5153,164 +5153,94 @@
     },
     {
       "file": "projects/engines/geometry/crates/geom-num/src/exact_sum.rs",
-      "line_text": "if propagate(&mut theirs).is_none() {",
-      "occurrences": 1,
-      "piece": "G41",
-      "reason": "ExactSum's lost-precision arm: it runs only when the accumulator overflows or an index leaves its chunks, which needs more additions or a wider exponent than the tests make. G41's ExactSum harnesses prove it unreachable, or a test reaches it."
-    },
-    {
-      "file": "projects/engines/geometry/crates/geom-num/src/exact_sum.rs",
       "line_text": "self.lost = true;",
-      "occurrences": 8,
+      "occurrences": 3,
       "piece": "G41",
-      "reason": "ExactSum's lost-precision arm: it runs only when the accumulator overflows or an index leaves its chunks, which needs more additions or a wider exponent than the tests make. G41's ExactSum harnesses prove it unreachable, or a test reaches it."
-    },
-    {
-      "file": "projects/engines/geometry/crates/geom-num/src/exact_sum.rs",
-      "line_text": "if propagate(&mut self.chunks).is_none() {",
-      "occurrences": 1,
-      "piece": "G41",
-      "reason": "ExactSum's lost-precision arm: it runs only when the accumulator overflows or an index leaves its chunks, which needs more additions or a wider exponent than the tests make. G41's ExactSum harnesses prove it unreachable, or a test reaches it."
+      "reason": "An arm of ExactSum that no state reaches, so no test can run it: a conversion between u32, usize and u64 that cannot fail on a 32-bit or 64-bit target; an index that is always inside its table (a finite double's exponent field is at most 2046, its sign-and-exponent pattern is below 4096, and a pattern whose used bit exists has a chunk); a u128 sum that stays below 2^69; a slice that always holds a chunk; or round_finite's shift, which is always 12 to 65 (its documentation). The arms a test can reach are tested, in tests/coverage_exact_sum.rs and the module's unit tests. This one waits for a Kani harness that proves it unreachable, or for the step to be written so that it cannot fail."
     },
     {
       "file": "projects/engines/geometry/crates/geom-num/src/exact_sum.rs",
       "line_text": "let Ok(j) = usize::try_from(exponent >> 5) else {",
       "occurrences": 2,
       "piece": "G41",
-      "reason": "ExactSum's lost-precision arm: it runs only when the accumulator overflows or an index leaves its chunks, which needs more additions or a wider exponent than the tests make. G41's ExactSum harnesses prove it unreachable, or a test reaches it."
+      "reason": "An arm of ExactSum that no state reaches, so no test can run it: a conversion between u32, usize and u64 that cannot fail on a 32-bit or 64-bit target; an index that is always inside its table (a finite double's exponent field is at most 2046, its sign-and-exponent pattern is below 4096, and a pattern whose used bit exists has a chunk); a u128 sum that stays below 2^69; a slice that always holds a chunk; or round_finite's shift, which is always 12 to 65 (its documentation). The arms a test can reach are tested, in tests/coverage_exact_sum.rs and the module's unit tests. This one waits for a Kani harness that proves it unreachable, or for the step to be written so that it cannot fail."
     },
     {
       "file": "projects/engines/geometry/crates/geom-num/src/exact_sum.rs",
       "line_text": "return;",
-      "occurrences": 9,
+      "occurrences": 5,
       "piece": "G41",
-      "reason": "ExactSum's lost-precision arm: it runs only when the accumulator overflows or an index leaves its chunks, which needs more additions or a wider exponent than the tests make. G41's ExactSum harnesses prove it unreachable, or a test reaches it."
+      "reason": "An arm of ExactSum that no state reaches, so no test can run it: a conversion between u32, usize and u64 that cannot fail on a 32-bit or 64-bit target; an index that is always inside its table (a finite double's exponent field is at most 2046, its sign-and-exponent pattern is below 4096, and a pattern whose used bit exists has a chunk); a u128 sum that stays below 2^69; a slice that always holds a chunk; or round_finite's shift, which is always 12 to 65 (its documentation). The arms a test can reach are tested, in tests/coverage_exact_sum.rs and the module's unit tests. This one waits for a Kani harness that proves it unreachable, or for the step to be written so that it cannot fail."
     },
     {
       "file": "projects/engines/geometry/crates/geom-num/src/exact_sum.rs",
       "line_text": "if let Some([first, second, ..]) = self.chunks.get_mut(j..) {",
       "occurrences": 1,
       "piece": "G41",
-      "reason": "ExactSum's lost-precision arm: it runs only when the accumulator overflows or an index leaves its chunks, which needs more additions or a wider exponent than the tests make. G41's ExactSum harnesses prove it unreachable, or a test reaches it."
-    },
-    {
-      "file": "projects/engines/geometry/crates/geom-num/src/exact_sum.rs",
-      "line_text": "let ok = bump(first, low, negative) && bump(second, high, negative);",
-      "occurrences": 1,
-      "piece": "G41",
-      "reason": "ExactSum's lost-precision arm: it runs only when the accumulator overflows or an index leaves its chunks, which needs more additions or a wider exponent than the tests make. G41's ExactSum harnesses prove it unreachable, or a test reaches it."
-    },
-    {
-      "file": "projects/engines/geometry/crates/geom-num/src/exact_sum.rs",
-      "line_text": "if !ok {",
-      "occurrences": 2,
-      "piece": "G41",
-      "reason": "ExactSum's lost-precision arm: it runs only when the accumulator overflows or an index leaves its chunks, which needs more additions or a wider exponent than the tests make. G41's ExactSum harnesses prove it unreachable, or a test reaches it."
-    },
-    {
-      "file": "projects/engines/geometry/crates/geom-num/src/exact_sum.rs",
-      "line_text": "let Some([a, b, c, ..]) = self.chunks.get_mut(j..) else {",
-      "occurrences": 1,
-      "piece": "G41",
-      "reason": "ExactSum's lost-precision arm: it runs only when the accumulator overflows or an index leaves its chunks, which needs more additions or a wider exponent than the tests make. G41's ExactSum harnesses prove it unreachable, or a test reaches it."
-    },
-    {
-      "file": "projects/engines/geometry/crates/geom-num/src/exact_sum.rs",
-      "line_text": ".is_ok_and(|part| part < (1 << 32) && bump(chunk, small(part), negative));",
-      "occurrences": 1,
-      "piece": "G41",
-      "reason": "ExactSum's lost-precision arm: it runs only when the accumulator overflows or an index leaves its chunks, which needs more additions or a wider exponent than the tests make. G41's ExactSum harnesses prove it unreachable, or a test reaches it."
-    },
-    {
-      "file": "projects/engines/geometry/crates/geom-num/src/exact_sum.rs",
-      "line_text": "None => false,",
-      "occurrences": 1,
-      "piece": "G41",
-      "reason": "ExactSum's lost-precision arm: it runs only when the accumulator overflows or an index leaves its chunks, which needs more additions or a wider exponent than the tests make. G41's ExactSum harnesses prove it unreachable, or a test reaches it."
+      "reason": "An arm of ExactSum that no state reaches, so no test can run it: a conversion between u32, usize and u64 that cannot fail on a 32-bit or 64-bit target; an index that is always inside its table (a finite double's exponent field is at most 2046, its sign-and-exponent pattern is below 4096, and a pattern whose used bit exists has a chunk); a u128 sum that stays below 2^69; a slice that always holds a chunk; or round_finite's shift, which is always 12 to 65 (its documentation). The arms a test can reach are tested, in tests/coverage_exact_sum.rs and the module's unit tests. This one waits for a Kani harness that proves it unreachable, or for the step to be written so that it cannot fail."
     },
     {
       "file": "projects/engines/geometry/crates/geom-num/src/exact_sum.rs",
       "line_text": "[] => return None,",
       "occurrences": 1,
       "piece": "G41",
-      "reason": "ExactSum's lost-precision arm: it runs only when the accumulator overflows or an index leaves its chunks, which needs more additions or a wider exponent than the tests make. G41's ExactSum harnesses prove it unreachable, or a test reaches it."
+      "reason": "An arm of ExactSum that no state reaches, so no test can run it: a conversion between u32, usize and u64 that cannot fail on a 32-bit or 64-bit target; an index that is always inside its table (a finite double's exponent field is at most 2046, its sign-and-exponent pattern is below 4096, and a pattern whose used bit exists has a chunk); a u128 sum that stays below 2^69; a slice that always holds a chunk; or round_finite's shift, which is always 12 to 65 (its documentation). The arms a test can reach are tested, in tests/coverage_exact_sum.rs and the module's unit tests. This one waits for a Kani harness that proves it unreachable, or for the step to be written so that it cannot fail."
     },
     {
       "file": "projects/engines/geometry/crates/geom-num/src/exact_sum.rs",
       "line_text": "if !(12..=65).contains(&shift) {",
       "occurrences": 1,
       "piece": "G41",
-      "reason": "ExactSum's lost-precision arm: it runs only when the accumulator overflows or an index leaves its chunks, which needs more additions or a wider exponent than the tests make. G41's ExactSum harnesses prove it unreachable, or a test reaches it."
+      "reason": "An arm of ExactSum that no state reaches, so no test can run it: a conversion between u32, usize and u64 that cannot fail on a 32-bit or 64-bit target; an index that is always inside its table (a finite double's exponent field is at most 2046, its sign-and-exponent pattern is below 4096, and a pattern whose used bit exists has a chunk); a u128 sum that stays below 2^69; a slice that always holds a chunk; or round_finite's shift, which is always 12 to 65 (its documentation). The arms a test can reach are tested, in tests/coverage_exact_sum.rs and the module's unit tests. This one waits for a Kani harness that proves it unreachable, or for the step to be written so that it cannot fail."
     },
     {
       "file": "projects/engines/geometry/crates/geom-num/src/exact_sum.rs",
       "line_text": "return None;",
       "occurrences": 1,
       "piece": "G41",
-      "reason": "ExactSum's lost-precision arm: it runs only when the accumulator overflows or an index leaves its chunks, which needs more additions or a wider exponent than the tests make. G41's ExactSum harnesses prove it unreachable, or a test reaches it."
+      "reason": "An arm of ExactSum that no state reaches, so no test can run it: a conversion between u32, usize and u64 that cannot fail on a 32-bit or 64-bit target; an index that is always inside its table (a finite double's exponent field is at most 2046, its sign-and-exponent pattern is below 4096, and a pattern whose used bit exists has a chunk); a u128 sum that stays below 2^69; a slice that always holds a chunk; or round_finite's shift, which is always 12 to 65 (its documentation). The arms a test can reach are tested, in tests/coverage_exact_sum.rs and the module's unit tests. This one waits for a Kani harness that proves it unreachable, or for the step to be written so that it cannot fail."
     },
     {
       "file": "projects/engines/geometry/crates/geom-num/src/exact_sum.rs",
       "line_text": "if let (Some(count), Some(chunk)) = (self.counts.get_mut(index), self.chunks.get_mut(index))",
       "occurrences": 2,
       "piece": "G41",
-      "reason": "ExactSum's lost-precision arm: it runs only when the accumulator overflows or an index leaves its chunks, which needs more additions or a wider exponent than the tests make. G41's ExactSum harnesses prove it unreachable, or a test reaches it."
+      "reason": "An arm of ExactSum that no state reaches, so no test can run it: a conversion between u32, usize and u64 that cannot fail on a 32-bit or 64-bit target; an index that is always inside its table (a finite double's exponent field is at most 2046, its sign-and-exponent pattern is below 4096, and a pattern whose used bit exists has a chunk); a u128 sum that stays below 2^69; a slice that always holds a chunk; or round_finite's shift, which is always 12 to 65 (its documentation). The arms a test can reach are tested, in tests/coverage_exact_sum.rs and the module's unit tests. This one waits for a Kani harness that proves it unreachable, or for the step to be written so that it cannot fail."
     },
     {
       "file": "projects/engines/geometry/crates/geom-num/src/exact_sum.rs",
       "line_text": "}",
       "occurrences": 1,
       "piece": "G41",
-      "reason": "ExactSum's lost-precision arm: it runs only when the accumulator overflows or an index leaves its chunks, which needs more additions or a wider exponent than the tests make. G41's ExactSum harnesses prove it unreachable, or a test reaches it."
-    },
-    {
-      "file": "projects/engines/geometry/crates/geom-num/src/exact_sum.rs",
-      "line_text": "let Some(used) = self.used.get_mut(word) else {",
-      "occurrences": 1,
-      "piece": "G41",
-      "reason": "ExactSum's lost-precision arm: it runs only when the accumulator overflows or an index leaves its chunks, which needs more additions or a wider exponent than the tests make. G41's ExactSum harnesses prove it unreachable, or a test reaches it."
+      "reason": "An arm of ExactSum that no state reaches, so no test can run it: a conversion between u32, usize and u64 that cannot fail on a 32-bit or 64-bit target; an index that is always inside its table (a finite double's exponent field is at most 2046, its sign-and-exponent pattern is below 4096, and a pattern whose used bit exists has a chunk); a u128 sum that stays below 2^69; a slice that always holds a chunk; or round_finite's shift, which is always 12 to 65 (its documentation). The arms a test can reach are tested, in tests/coverage_exact_sum.rs and the module's unit tests. This one waits for a Kani harness that proves it unreachable, or for the step to be written so that it cannot fail."
     },
     {
       "file": "projects/engines/geometry/crates/geom-num/src/exact_sum.rs",
       "line_text": "sum.lost = true;",
-      "occurrences": 7,
+      "occurrences": 4,
       "piece": "G41",
-      "reason": "ExactSum's lost-precision arm: it runs only when the accumulator overflows or an index leaves its chunks, which needs more additions or a wider exponent than the tests make. G41's ExactSum harnesses prove it unreachable, or a test reaches it."
-    },
-    {
-      "file": "projects/engines/geometry/crates/geom-num/src/exact_sum.rs",
-      "line_text": "let (Some(count), Some(chunk)) = (self.counts.get_mut(index), self.chunks.get_mut(index))",
-      "occurrences": 1,
-      "piece": "G41",
-      "reason": "ExactSum's lost-precision arm: it runs only when the accumulator overflows or an index leaves its chunks, which needs more additions or a wider exponent than the tests make. G41's ExactSum harnesses prove it unreachable, or a test reaches it."
-    },
-    {
-      "file": "projects/engines/geometry/crates/geom-num/src/exact_sum.rs",
-      "line_text": "let Some(n) = LARGE_ADDS.checked_sub(*count) else {",
-      "occurrences": 1,
-      "piece": "G41",
-      "reason": "ExactSum's lost-precision arm: it runs only when the accumulator overflows or an index leaves its chunks, which needs more additions or a wider exponent than the tests make. G41's ExactSum harnesses prove it unreachable, or a test reaches it."
+      "reason": "An arm of ExactSum that no state reaches, so no test can run it: a conversion between u32, usize and u64 that cannot fail on a 32-bit or 64-bit target; an index that is always inside its table (a finite double's exponent field is at most 2046, its sign-and-exponent pattern is below 4096, and a pattern whose used bit exists has a chunk); a u128 sum that stays below 2^69; a slice that always holds a chunk; or round_finite's shift, which is always 12 to 65 (its documentation). The arms a test can reach are tested, in tests/coverage_exact_sum.rs and the module's unit tests. This one waits for a Kani harness that proves it unreachable, or for the step to be written so that it cannot fail."
     },
     {
       "file": "projects/engines/geometry/crates/geom-num/src/exact_sum.rs",
       "line_text": "let Ok(pattern) = u64::try_from(index) else {",
       "occurrences": 1,
       "piece": "G41",
-      "reason": "ExactSum's lost-precision arm: it runs only when the accumulator overflows or an index leaves its chunks, which needs more additions or a wider exponent than the tests make. G41's ExactSum harnesses prove it unreachable, or a test reaches it."
+      "reason": "An arm of ExactSum that no state reaches, so no test can run it: a conversion between u32, usize and u64 that cannot fail on a 32-bit or 64-bit target; an index that is always inside its table (a finite double's exponent field is at most 2046, its sign-and-exponent pattern is below 4096, and a pattern whose used bit exists has a chunk); a u128 sum that stays below 2^69; a slice that always holds a chunk; or round_finite's shift, which is always 12 to 65 (its documentation). The arms a test can reach are tested, in tests/coverage_exact_sum.rs and the module's unit tests. This one waits for a Kani harness that proves it unreachable, or for the step to be written so that it cannot fail."
     },
     {
       "file": "projects/engines/geometry/crates/geom-num/src/exact_sum.rs",
       "line_text": "let Some(significands) = u128::from(fractions).checked_add(implicit) else {",
       "occurrences": 1,
       "piece": "G41",
-      "reason": "ExactSum's lost-precision arm: it runs only when the accumulator overflows or an index leaves its chunks, which needs more additions or a wider exponent than the tests make. G41's ExactSum harnesses prove it unreachable, or a test reaches it."
+      "reason": "An arm of ExactSum that no state reaches, so no test can run it: a conversion between u32, usize and u64 that cannot fail on a 32-bit or 64-bit target; an index that is always inside its table (a finite double's exponent field is at most 2046, its sign-and-exponent pattern is below 4096, and a pattern whose used bit exists has a chunk); a u128 sum that stays below 2^69; a slice that always holds a chunk; or round_finite's shift, which is always 12 to 65 (its documentation). The arms a test can reach are tested, in tests/coverage_exact_sum.rs and the module's unit tests. This one waits for a Kani harness that proves it unreachable, or for the step to be written so that it cannot fail."
     },
     {
       "file": "projects/engines/geometry/crates/geom-num/src/exact_sum.rs",
       "line_text": "let Ok(position) = usize::try_from(position) else {",
       "occurrences": 1,
       "piece": "G41",
-      "reason": "ExactSum's lost-precision arm: it runs only when the accumulator overflows or an index leaves its chunks, which needs more additions or a wider exponent than the tests make. G41's ExactSum harnesses prove it unreachable, or a test reaches it."
+      "reason": "An arm of ExactSum that no state reaches, so no test can run it: a conversion between u32, usize and u64 that cannot fail on a 32-bit or 64-bit target; an index that is always inside its table (a finite double's exponent field is at most 2046, its sign-and-exponent pattern is below 4096, and a pattern whose used bit exists has a chunk); a u128 sum that stays below 2^69; a slice that always holds a chunk; or round_finite's shift, which is always 12 to 65 (its documentation). The arms a test can reach are tested, in tests/coverage_exact_sum.rs and the module's unit tests. This one waits for a Kani harness that proves it unreachable, or for the step to be written so that it cannot fail."
     },
     {
       "file": "projects/engines/geometry/crates/geom-num/src/grid.rs",
