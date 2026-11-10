@@ -4,19 +4,14 @@ name: Site
 # Layout: /index.html (hub), /<program>/index.html (demo), /<program>/features.json, /<program>/FEATURES.md
 
 on:
+  # Every merge to main: the contributor map (/contributors.html) counts merged pull requests.
   push:
     branches: [main]
-    paths:
-      - "site/**"
-      - "projects/**/demo/**"
-      - "projects/**/features.json"
-      - "projects/**/FEATURES.md"
-      - "design/**"
-      - ".github/workflows/site.yml"
   workflow_dispatch:
 
 permissions:
   contents: read
+  pull-requests: read
   pages: write
   id-token: write
 
@@ -29,6 +24,9 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          # Full history, so the contributor map counts a renamed project folder under its new name.
+          fetch-depth: 0
       - name: Assemble the site
         run: |
           mkdir -p _site
@@ -47,6 +45,10 @@ jobs:
             done
           done
           touch _site/.nojekyll
+      - name: Build the contributor map
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: python3 tools/contributor-map/build.py _site/contributors.html
           find _site -maxdepth 2 | sort
       - uses: actions/configure-pages@v5
       - uses: actions/upload-pages-artifact@v3
