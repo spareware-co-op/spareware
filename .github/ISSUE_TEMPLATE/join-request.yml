@@ -38,7 +38,7 @@ body:
     attributes:
       label: Promises
       options:
-        - label: I will build only with Claude Opus 5.5 at Extra high effort, or a newer, more capable model.
+        - label: I will use the model each kind of work needs (AGENTS.md, step 0), Claude Opus 5.5 at Extra high effort for pieces and proofs, or a newer, more capable model.
           required: true
         - label: I will follow "Built legally, or not at all" with no exceptions.
           required: true
