@@ -1,4 +1,4 @@
-//! Inputs for `geom-bvh`'s hot paths (pieces G54 and G55, decision 32.44): small scenes for the
+//! Inputs for `geom-bvh`'s hot paths (pieces G54 and G55, decision 32.46): small scenes for the
 //! box tree (build, then the boxes meeting a query box) and for the Morton-sorted cell index
 //! (build, then the points within a radius of a centre).
 //!

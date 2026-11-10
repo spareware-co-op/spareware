@@ -483,7 +483,7 @@ fn the_parser_finds_every_public_function_however_it_is_written() {
     assert_eq!(modules(&file, false), BTreeSet::from(["inner".to_owned()]));
 }
 
-/// The other kernel crates whose hot paths the catalogue measures (decision 32.44: a count
+/// The other kernel crates whose hot paths the catalogue measures (decision 32.46: a count
 /// benchmark for every phase-2 code piece), each with the source files that define the functions
 /// it measures there, by module name.
 const OTHER_CRATES: &[(&str, &[(&str, &str)])] = &[
@@ -662,7 +662,7 @@ fn every_public_function_of_geom_num_is_measured_or_says_why_not() {
         .flat_map(|(m, src)| public_functions(m, src))
         .collect();
     assert!(public.len() > 60, "the parser found only {public:?}");
-    // Another kernel crate's functions (decision 32.44) are named with their crate's path and
+    // Another kernel crate's functions (decision 32.46) are named with their crate's path and
     // checked by `every_function_measured_in_another_crate_is_public_there`.
     let measured: BTreeSet<String> = OPS
         .iter()
