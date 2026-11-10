@@ -1604,7 +1604,7 @@ pub mod ball {
     }
 }
 
-/// `geom-math`'s hot paths (pieces G45, G46 and G48, decision 32.44): the typed transforms, the
+/// `geom-math`'s hot paths (pieces G45, G46 and G48, decision 32.46): the typed transforms, the
 /// rational rotation and its search, the frame-to-map conversion and the decimal reader. Each
 /// kernel builds its fixed transform, rotation or frame once per batch, as `geom-math`'s
 /// `benches/transform.rs` does; were one ever refused, the kernel returns no results, which the
@@ -1713,7 +1713,7 @@ pub mod math_types {
     }
 }
 
-/// `geom-linalg`'s hot paths (pieces G49 and G50, decision 32.44): the column-pivoted QR
+/// `geom-linalg`'s hot paths (pieces G49 and G50, decision 32.46): the column-pivoted QR
 /// factorisation and the one-sided Jacobi singular value decomposition, each under an unlimited
 /// budget.
 pub mod linalg {
@@ -1736,7 +1736,7 @@ pub mod linalg {
     }
 }
 
-/// `geom-bvh`'s hot paths (pieces G54 and G55, decision 32.44): building the box tree and the
+/// `geom-bvh`'s hot paths (pieces G54 and G55, decision 32.46): building the box tree and the
 /// cell index of a scene and querying it, on the serial executor under an unlimited budget.
 pub mod bvh {
     use geom_bvh::{Aabb, BoxTree, BvhError, CellIndex, Entry, Point};
@@ -1771,7 +1771,7 @@ pub mod bvh {
     }
 }
 
-/// The attribute step's hot path (piece G90, decision 32.44).
+/// The attribute step's hot path (piece G90, decision 32.46).
 pub mod attributes {
     use geom_name::{AttrError, Step, apply as step};
 
@@ -1790,7 +1790,7 @@ pub mod attributes {
     }
 }
 
-/// `geom-topo`'s hot paths (piece G80, decision 32.44): a column filled, copied and written, and
+/// `geom-topo`'s hot paths (piece G80, decision 32.46): a column filled, copied and written, and
 /// a builder's arenas published.
 pub mod topo {
     use geom_run::{Budget, WorkMeter};
@@ -1833,7 +1833,7 @@ pub mod topo {
     }
 }
 
-/// The batch runner's hot paths (piece G104, decision 32.44): `geom-op`'s driver over a list of
+/// The batch runner's hot paths (piece G104, decision 32.46): `geom-op`'s driver over a list of
 /// items, on the serial executor, and the flat arrays of a curve's and a surface's points.
 pub mod batch {
     use geom_curve::{CurveError, ParamCurve};
@@ -1920,7 +1920,7 @@ pub mod batch {
     }
 }
 
-/// `geom-nurbs`'s hot paths (pieces G56, G58 and G59, decision 32.44): evaluating a clamped cubic,
+/// `geom-nurbs`'s hot paths (pieces G56, G58 and G59, decision 32.46): evaluating a clamped cubic,
 /// chord-length interpolation, and the bound of a cubic Bernstein piece, each under an unlimited
 /// budget where it takes one.
 pub mod nurbs {
@@ -1969,7 +1969,7 @@ pub mod nurbs {
     }
 }
 
-/// `geom-curve`'s hot paths (pieces G60 to G64 and G67, decision 32.44), through the kind contract
+/// `geom-curve`'s hot paths (pieces G60 to G64 and G67, decision 32.46), through the kind contract
 /// (`ParamCurve`): an exact helix's point and certified enclosure, a bulge polyline's conversion
 /// to NURBS, and a clothoid transition's point and conversion to NURBS, each under an unlimited
 /// budget where it takes one. Were the helix or the transition ever refused, the kernel returns no
@@ -2049,7 +2049,7 @@ pub mod curve {
     }
 }
 
-/// `geom-surface`'s hot paths (pieces G65 to G67, decision 32.44), through the kind contract
+/// `geom-surface`'s hot paths (pieces G65 to G67, decision 32.46), through the kind contract
 /// (`ParamSurface`): a torus's point and certified enclosure, and an offset cylinder's point. Were
 /// a surface ever refused, the kernel returns no results, which the golden digests and
 /// `tests/inputs.rs` catch.
@@ -2139,7 +2139,7 @@ pub mod surface {
     }
 }
 
-/// Root finding and quadrature (piece G51, decision 32.44): Brent's zero search on a fixed cubic
+/// Root finding and quadrature (piece G51, decision 32.46): Brent's zero search on a fixed cubic
 /// and an eight-point Gauss-Legendre rule on a fixed quintic. The functions use the four basic
 /// operations only, so their cost is the methods' own plus a known number of evaluations.
 pub mod roots {
@@ -2175,7 +2175,7 @@ pub mod roots {
     }
 }
 
-/// `geom-format`'s hot paths (piece G105; decision 32.44): a cache key, a lookup in a memo store,
+/// `geom-format`'s hot paths (piece G105; decision 32.46): a cache key, a lookup in a memo store,
 /// and a new version of a body, which hashes the one chunk that changed. The keys and versions a
 /// batch holds are built before the measured run; the store each lookup reads is built inside it,
 /// once, since a lookup changes it.
@@ -2229,7 +2229,7 @@ pub mod format {
     }
 }
 
-/// `geom-make`'s hot paths (piece G101, decision 32.44): a primitive built and a body moved, named,
+/// `geom-make`'s hot paths (piece G101, decision 32.46): a primitive built and a body moved, named,
 /// published and checked as the operation does it, under an unlimited budget.
 pub mod make {
     use geom_make::{BoxInput, Made, Moved, RoundInput, cylinder, make_box, move_by, rotate};
@@ -2305,7 +2305,7 @@ pub mod make {
     }
 }
 
-/// `geom-run`'s parallel helper (decision 32.44): `Exec::map` over a list that fits one chunk, on
+/// `geom-run`'s parallel helper (decision 32.46): `Exec::map` over a list that fits one chunk, on
 /// the serial executor and on a pool, under an unlimited budget. The pool runs its tasks on the
 /// calling thread, in order, so the two counts differ by the helper's own dispatch only, never by
 /// a thread's wake-up: a lone wave runs on the calling thread on either, so they should match.

@@ -22,7 +22,7 @@
 //! Public functions of `geom-num` without a benchmark of their own
 //! are listed with the reason in [`catalogue::UNMEASURED`], and a test keeps that list complete.
 //! It also measures the hot path of every phase-2 code piece in the crates above the numbers
-//! layer (decision 32.44): `geom-math`'s typed transforms, rational rotation, frames and decimal
+//! layer (decision 32.46): `geom-math`'s typed transforms, rational rotation, frames and decimal
 //! reader, `geom-linalg`'s pivoted QR and SVD, `geom-bvh`'s box tree and cell index,
 //! `geom-nurbs`'s evaluation, interpolation and Bernstein bound, and the curve and surface kinds'
 //! evaluation, certified enclosures and conversion to NURBS in `geom-curve` and `geom-surface`,
