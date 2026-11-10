@@ -103,6 +103,7 @@ pub fn check(
     Ok(Report {
         faults: sink.faults,
         more: sink.more,
+        wrong: sink.wrong,
         deferred: sink.deferred,
         ran,
         missing,
