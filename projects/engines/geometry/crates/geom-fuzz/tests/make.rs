@@ -9,6 +9,9 @@
 //!   (`SPAREKIT_SEED` replays it), the same on every target.
 //! - The input bound is reached exactly; both a primitive built and each kind of step are reached;
 //!   and an operation that loses a name, gives no history or raises a class is caught.
+//! - The target's first two findings, cut to their smallest cases, hold the laws (28.16): an exact
+//!   scale of a body an earlier scale rounded, which the checker cannot certify, is refused with a
+//!   type. Their inputs as the fuzzer wrote them are in the target's crash folder.
 
 #![allow(
     clippy::arithmetic_side_effects,
@@ -194,4 +197,63 @@ fn most_cases_reach_a_body_and_every_kind_of_step_runs() {
     println!("{built} of 1000 clean; {stepped} with steps");
     assert_eq!(built, 1000);
     assert!(stepped > 500);
+}
+
+/// A prism on `base`, `height` high, and `steps` on it.
+fn prism_case(base: &[(i64, i64, i64)], height: u64, steps: Vec<Step>) -> Case {
+    Case {
+        shape: Shape::Prism(geom_make::PrismInput {
+            base: base.iter().map(|&(x, y, z)| p(x, y, z)).collect(),
+            height: Steps(height),
+        }),
+        steps,
+    }
+}
+
+/// A scale by `factors` about `center`, any bound up to `accept` accepted.
+fn scaled(factors: [(u64, u64); 3], center: P3, accept: u64, pattern: bool) -> Step {
+    Step {
+        motions: vec![Motion::Scale(factors, center)],
+        pattern,
+        accept: Some(accept),
+        work: 787,
+    }
+}
+
+/// The first finding (crash-dc639a8b7a2af6c90c4a6c108eb2ea4930e40338), cut to four corners and
+/// three steps: two scales by 5/2 round the prism's corners and leave its planes off the
+/// integers; a pattern's exact scale by 5 then gives a body whose two parallel sides the checker
+/// cannot certify apart. That was reported as a defect.
+#[test]
+fn an_exact_scale_of_a_twice_rounded_prism_is_refused_with_a_type() {
+    let base = [(-40, -11, 1), (-39, -10, 1), (-38, -7, 1), (-37, -2, 1)];
+    let center = p(50_368_000, 50_368_000, 50_368_000);
+    let half = |pattern| scaled([(5, 2); 3], center, 1 << 30, pattern);
+    let five = |pattern| scaled([(5, 1); 3], p(1_241_601, 0, 0), 64, pattern);
+    for pattern in [true, false] {
+        let steps = vec![half(false), half(false), five(pattern)];
+        holds(check(&prism_case(&base, 41_472_000, steps)));
+    }
+}
+
+/// The second finding (crash-5c649c78ec4ac8d4244d360b9e70380a31d7fa56), cut to its two steps: a
+/// scale by (2, 7/3, 1) rounds a triangle prism's corners; a scale by (3, 1, 1), which is exact,
+/// then gives a body whose caps the checker cannot certify apart.
+#[test]
+fn an_exact_scale_of_a_rounded_triangle_is_refused_with_a_type() {
+    let base = [
+        (4094, 2048, 64_000),
+        (4095, 2049, 64_000),
+        (4096, 2052, 64_000),
+    ];
+    let steps = vec![
+        scaled(
+            [(4, 2), (7, 3), (2, 2)],
+            p(-12_799, 4_518_401, -22),
+            64,
+            false,
+        ),
+        scaled([(6, 2), (2, 2), (1, 1)], p(2_880_001, 1, 0), 64, false),
+    ];
+    holds(check(&prism_case(&base, 41_472_000, steps)));
 }
