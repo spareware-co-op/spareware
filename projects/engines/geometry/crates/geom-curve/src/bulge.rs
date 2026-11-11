@@ -15,6 +15,9 @@
 //!
 //! - **Exact definition, certified evaluation.** Points, derivatives of every order (Leibniz's rule
 //!   on W·C = A) and bounds over spans are interval evaluations of those rational functions.
+//! - **A span of one vertex is bounded from both sides.** The tangent turns at a vertex, so a
+//!   bound over the vertex alone is the hull of the segment before it and the segment after it
+//!   there, as the trait's rule for a span of one parameter asks ([`ParamCurve`]).
 //! - **An exact NURBS form.** The segments are rational quadratic Bezier pieces on the same
 //!   parameter; an arc whose middle weight is low (a semicircle or more) is first halved, or
 //!   quartered, by de Casteljau's algorithm at dyadic parameters, which keeps every weight
@@ -425,6 +428,15 @@ fn rational_doubles<const D: usize>(
 }
 
 impl<const D: usize> ParamCurve<D> for BulgePolyline<D> {
+    /// The vertices' parameters.
+    fn breaks(&self) -> Vec<f64> {
+        let (a, _) = ParamCurve::domain(self);
+        (0..=self.segments())
+            .filter_map(|i| u32::try_from(i).ok())
+            .map(|i| a + f64::from(i))
+            .collect()
+    }
+
     fn domain(&self) -> (f64, f64) {
         // Whole numbers below 2^53, so exact.
         (
@@ -631,7 +643,11 @@ impl<const D: usize> ParamCurve<D> for BulgePolyline<D> {
     }
 }
 
-/// The hull of the derivative of `order` over `span`, segment by segment.
+/// The hull of the derivative of `order` over `span`, segment by segment: the segments from the
+/// one holding the span's start from the right to the one holding its end from the left. A span
+/// that is one interior vertex has those the other way round, the segment after the vertex and
+/// the one before it, and meets both: the trait's rule for a span of one parameter
+/// ([`ParamCurve`]), under which the box holds the vertex and the derivative from each side.
 fn hull<const D: usize>(
     p: &BulgePolyline<D>,
     span: (f64, f64),
@@ -643,11 +659,11 @@ fn hull<const D: usize>(
         lo: [f64::INFINITY; D],
         hi: [f64::NEG_INFINITY; D],
     };
-    let (first, last) = (
+    let (after, before) = (
         p.locate(span.0, Limit::FromRight)?.0,
         p.locate(span.1, Limit::FromLeft)?.0,
     );
-    for i in first..=last {
+    for i in after.min(before)..=after.max(before) {
         meter.charge(1)?;
         let v = p.local(i, span)?;
         let e = rational_derivatives(&p.segment(i)?, v, order)?;
