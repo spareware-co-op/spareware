@@ -25,13 +25,14 @@
 
 use geom_curve::contract::check;
 use geom_curve::{
-    Axes, Basis, BulgePolyline, Composite, CurveError, CurveKind, DerivativeBound, Ellipse, Frame,
-    Law, Line, NurbsForm, Offset, OffsetLaw, ParamCurve, Station, Trimmed,
+    Axes, Basis, BulgePolyline, Composite, CurvatureLaw, CurveError, CurveKind, DerivativeBound,
+    Ellipse, Frame, Law, Line, NurbsForm, Offset, OffsetLaw, ParamCurve, Station, Transition,
+    Trimmed,
 };
 use geom_math::{Axis, GridTransform, TypedTransform};
 use geom_num::interval::Interval;
 use geom_nurbs::{Basis as Knots, Bounds, Changed, Curve, Limit};
-use geom_run::{Budget, WorkMeter};
+use geom_run::{Budget, BudgetKind, WorkMeter};
 
 fn meter() -> WorkMeter<'static> {
     WorkMeter::new(Budget::UNLIMITED)
@@ -300,6 +301,28 @@ fn a_composite_bounds_a_vertex_inside_a_segment() {
     assert!(holds(&b, &[4.0, 0.0], 1e-12), "{b:?}");
 }
 
+/// A segment that starts inside its curve's domain, at 0.125 of a polyline whose vertex is at 1:
+/// the vertex's parameter in the composite is the segment's start there plus the vertex's
+/// distance from the segment's own start, 0 + (1 − 0.125), and the bound over it holds both
+/// tangents.
+#[test]
+fn a_composite_lists_a_vertex_of_a_segment_that_starts_inside_its_curve() {
+    let after = Line::new([4.0, 3.0], [1.0, 0.0], (0.0, 2.0)).unwrap();
+    let c = Composite::new(vec![
+        Trimmed::new(Basis::Bulge(three_segments()), (0.125, 2.0)).unwrap(),
+        Trimmed::whole(Basis::Line(after)).unwrap(),
+    ])
+    .unwrap();
+    assert_eq!(ParamCurve::breaks(&c), vec![0.0, 0.875, 1.875, 3.875]);
+    let k = CurveKind::Composite(c);
+    let (l, r) = (
+        derivative(&k, 0.875, Limit::FromLeft, 1),
+        derivative(&k, 0.875, Limit::FromRight, 1),
+    );
+    assert!((l[0] - r[0]).abs() + (l[1] - r[1]).abs() > 1.0);
+    both_sides_at(&k, 0.875, 1);
+}
+
 /// A joint with a gap, as a transform or a stored composite may leave one: the curve has two
 /// points there, half a unit apart, and the bound over the joint holds both.
 #[test]
@@ -418,6 +441,45 @@ fn the_points_over_one_station_of_a_line_keep_their_one_piece() {
     assert!(holds(&b, &point_from(&k, 0.5, Limit::FromLeft), 1e-9));
 }
 
+/// The second piece is for a station alone: the tangents over one station are read from both
+/// sides and cost two pieces' work, and over one parameter that is no station they are read
+/// once, for one piece's work, though the law has stations elsewhere.
+#[test]
+fn the_tangents_over_one_parameter_that_is_no_station_cost_one_piece() {
+    let o = by_distances(&[(0.25, 0.1), (0.5, -0.2), (1.0, 0.3)]);
+    let work = |t: f64| {
+        let mut m = meter();
+        o.derivative_bound((t, t), 1, &mut m).unwrap();
+        m.used().get(BudgetKind::Work)
+    };
+    let (station, between) = (work(0.5), work(0.375));
+    assert!(between > 0);
+    assert_eq!(station, 2 * between);
+}
+
+/// Helmert's transition is not smooth at its middle, half its length: the kind lists that
+/// parameter as its one break, reversed it is minus that, and the bounds over it hold both
+/// sides.
+#[test]
+fn a_helmert_transition_lists_its_middle() {
+    let law = CurvatureLaw::Helmert {
+        start: 0.0,
+        end: 0.0625,
+    };
+    let t = Transition::new([0.0, 0.0], [1.0, 0.0], 8.0, law, &mut meter()).unwrap();
+    assert_eq!(ParamCurve::breaks(&t), vec![4.0]);
+    let back = t.segment((0.0, 8.0), true).unwrap();
+    assert_eq!(ParamCurve::breaks(&back), vec![-4.0]);
+    let k = CurveKind::Transition(t);
+    assert_eq!(k.breaks(), vec![4.0]);
+    for order in 1..=2 {
+        both_sides_at(&k, 4.0, order);
+    }
+    let b = k.bound((4.0, 4.0), &mut meter()).unwrap();
+    assert!(holds(&b, &point_from(&k, 4.0, Limit::FromRight), 1e-9));
+    assert!(holds(&b, &point_from(&k, 4.0, Limit::FromLeft), 1e-9));
+}
+
 /// The offset of a polyline parts at a vertex: the normal turns there, so the offset has two
 /// points, (4, 0.5) and (3.5, 0) here, and the bound over the vertex holds both.
 #[test]
@@ -489,8 +551,14 @@ enum Fault {
     None,
     /// The bound on the points is the empty box, +∞ to −∞.
     Inverted,
-    /// The derivative bound is the derivative from the right alone.
-    OneSided,
+    /// The bound on the points is the kind's own with its upper ends at +∞: it holds every
+    /// point it should and is no box.
+    Open,
+    /// The derivative bound is the kind's own with its upper ends at +∞.
+    OpenDerivative,
+    /// The derivative bound is the derivative from this side alone (at an end of the domain,
+    /// from the one side inside it).
+    OneSided(Limit),
 }
 
 /// A kind with one of the old faults put back, over spans of one parameter only.
@@ -525,6 +593,11 @@ impl ParamCurve<2> for Faulty {
                 hi: [f64::NEG_INFINITY; 2],
             });
         }
+        if self.fault == Fault::Open && span.0 == span.1 {
+            let mut b = self.inner.bound(span, meter)?;
+            b.hi = [f64::INFINITY; 2];
+            return Ok(b);
+        }
         self.inner.bound(span, meter)
     }
     fn derivative_bound(
@@ -533,14 +606,32 @@ impl ParamCurve<2> for Faulty {
         order: usize,
         meter: &mut WorkMeter<'_>,
     ) -> Result<DerivativeBound<2>, CurveError> {
-        if self.fault == Fault::OneSided && span.0 == span.1 {
-            let e = self.inner.enclose(span.0, Limit::FromRight, order, meter)?;
+        if let Fault::OneSided(side) = self.fault
+            && span.0 == span.1
+        {
+            let (lo, hi) = self.inner.domain();
+            let side = if span.0 == lo {
+                Limit::FromRight
+            } else if span.0 == hi {
+                Limit::FromLeft
+            } else {
+                side
+            };
+            let e = self.inner.enclose(span.0, side, order, meter)?;
             return Ok(DerivativeBound::Bounded(Bounds {
                 lo: e[order].map(Interval::lo),
                 hi: e[order].map(Interval::hi),
             }));
         }
-        self.inner.derivative_bound(span, order, meter)
+        let bound = self.inner.derivative_bound(span, order, meter)?;
+        if let DerivativeBound::Bounded(mut b) = bound
+            && self.fault == Fault::OpenDerivative
+            && span.0 == span.1
+        {
+            b.hi = [f64::INFINITY; 2];
+            return Ok(DerivativeBound::Bounded(b));
+        }
+        Ok(bound)
     }
     fn breaks(&self) -> Vec<f64> {
         self.inner.breaks()
@@ -587,7 +678,8 @@ fn corner() -> CurveKind<2> {
 
 /// The kind contract visits every break a kind lists, so the kinds of this file pass it at
 /// parameters that name no break, and each of the two old faults is caught by its law at the
-/// break, a parameter the test never gave.
+/// break, a parameter the test never gave: the derivative from one side alone, whichever side
+/// it is, and a bound that is no box, whether it is empty or holds everything up to +∞.
 #[test]
 fn the_contract_holds_every_kind_to_the_rule_at_its_breaks() {
     let kinds: Vec<(&str, CurveKind<2>, f64, [f64; 2])> = vec![
@@ -627,16 +719,30 @@ fn the_contract_holds_every_kind_to_the_rule_at_its_breaks() {
         };
         let e = check(&inverted, &[], &quarter(), &mut meter()).unwrap_err();
         assert_eq!(e.law, Law::BoundHoldsPoints, "{name}: {e}");
-        let one_sided = Faulty {
-            inner: kind,
-            fault: Fault::OneSided,
+        let open = Faulty {
+            inner: kind.clone(),
+            fault: Fault::Open,
         };
-        let e = check(&one_sided, &[], &quarter(), &mut meter()).unwrap_err();
-        assert_eq!(
-            (e.law, e.at),
-            (Law::DerivativeBoundHoldsDerivatives, at),
-            "{name}: {e}"
-        );
+        let e = check(&open, &[], &quarter(), &mut meter()).unwrap_err();
+        assert_eq!(e.law, Law::BoundHoldsPoints, "{name}: {e}");
+        let open_derivative = Faulty {
+            inner: kind.clone(),
+            fault: Fault::OpenDerivative,
+        };
+        let e = check(&open_derivative, &[], &quarter(), &mut meter()).unwrap_err();
+        assert_eq!(e.law, Law::DerivativeBoundHoldsDerivatives, "{name}: {e}");
+        for side in [Limit::FromRight, Limit::FromLeft] {
+            let one_sided = Faulty {
+                inner: kind.clone(),
+                fault: Fault::OneSided(side),
+            };
+            let e = check(&one_sided, &[], &quarter(), &mut meter()).unwrap_err();
+            assert_eq!(
+                (e.law, e.at),
+                (Law::DerivativeBoundHoldsDerivatives, at),
+                "{name}, {side:?}: {e}"
+            );
+        }
     }
 }
 
