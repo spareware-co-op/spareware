@@ -2392,3 +2392,146 @@ pub mod helper {
         });
     }
 }
+
+/// The flat boolean's scenarios (piece G140; 23.13's scenarios at reduced scale): whole jobs a
+/// building model gives `geom-bool`, each run as a program runs it, under an unlimited budget, on
+/// one thread so the counts do not depend on scheduling.
+pub mod scenario {
+    use geom_bool::batch::{BatchRule, CutResult, cut};
+    use geom_bool::combine::{Combined, combine, unite};
+    use geom_bool::operand::{BooleanInput, Selection, Term};
+    use geom_op::{OpContext, OpError, OpId, OpOutput, OpPath};
+    use geom_poly::merge::Merge;
+    use geom_run::{Budget, Exec};
+    use geom_topo::{Arena, Body};
+
+    use super::run;
+    use crate::inputs::scenario::{
+        Host, Many, Picks, Recut, Storey, cut_of, seeds, selections, solid,
+    };
+
+    /// A context of one operation, under no limit.
+    fn context() -> OpContext<'static> {
+        OpContext::new(OpPath::new(OpId::from_bytes([4; 16])), Budget::UNLIMITED)
+    }
+
+    /// What results are read by: the faces, edges and vertices of every body, and how many bodies.
+    fn counts<'b>(bodies: impl IntoIterator<Item = &'b Body>) -> [u32; 4] {
+        let mut sum = [0u32; 4];
+        for body in bodies {
+            let a = body.arenas();
+            let [faces, edges, vertices, many] = &mut sum;
+            *faces = faces.saturating_add(a.rows(Arena::Face));
+            *edges = edges.saturating_add(a.rows(Arena::Edge));
+            *vertices = vertices.saturating_add(a.rows(Arena::Vertex));
+            *many = many.saturating_add(1);
+        }
+        sum
+    }
+
+    /// A cut's bodies' counts.
+    fn cut_counts(out: Result<OpOutput<Vec<CutResult>>, OpError>) -> Result<[u32; 4], OpError> {
+        out.map(|done| counts(done.result.iter().map(|one| &one.result.body)))
+    }
+
+    /// The selections' bodies' counts.
+    fn picked_counts(
+        out: Result<OpOutput<Vec<Vec<Combined>>>, OpError>,
+    ) -> Result<[u32; 4], OpError> {
+        out.map(|done| counts(done.result.iter().flatten().map(|one| &one.body)))
+    }
+
+    /// Each host cut by all its tools in one call.
+    #[inline(never)]
+    pub fn openings(batch: &[Host], out: &mut Vec<Result<[u32; 4], OpError>>) {
+        let ctx = context();
+        run(batch, out, |host| {
+            cut_counts(cut(
+                &ctx,
+                &Exec::serial(),
+                &[cut_of(host, None)],
+                BatchRule::Atomic,
+            ))
+        });
+    }
+
+    /// Each host cut again, after a tool moved, from the first cut's cache.
+    #[inline(never)]
+    pub fn moved_door(batch: &[Recut], out: &mut Vec<Result<[u32; 4], OpError>>) {
+        let ctx = context();
+        run(batch, out, |recut| {
+            cut_counts(cut(
+                &ctx,
+                &Exec::serial(),
+                &[cut_of(&recut.host, Some(&recut.cache))],
+                BatchRule::Atomic,
+            ))
+        });
+    }
+
+    /// Each set of solids united in one call.
+    #[inline(never)]
+    pub fn union(batch: &[Many], out: &mut Vec<Result<[u32; 4], OpError>>) {
+        let ctx = context();
+        run(batch, out, |many| {
+            let operands: Vec<_> = many
+                .bodies
+                .iter()
+                .enumerate()
+                .map(|(k, body)| solid(k, body))
+                .collect();
+            unite(&ctx, &Exec::serial(), &operands).map(|done| counts([&done.result.body]))
+        });
+    }
+
+    /// A host and its tools as one boolean's input, keyed as [`cut_of`] keys them, choosing
+    /// `select`.
+    fn input(host: &Host, select: Vec<Selection>) -> BooleanInput<'_> {
+        let cut = cut_of(host, None);
+        let mut operands = vec![cut.host];
+        operands.extend(cut.tools);
+        BooleanInput {
+            operands,
+            select,
+            merge: Merge::RemoveRedundant,
+            accept: None,
+        }
+    }
+
+    /// Each host and its tools read for its selections from one arrangement (11.17).
+    #[inline(never)]
+    pub fn selections_of(batch: &[Picks], out: &mut Vec<Result<[u32; 4], OpError>>) {
+        let ctx = context();
+        run(batch, out, |picks| {
+            let input = input(&picks.host, selections(picks));
+            picked_counts(combine(&ctx, &Exec::serial(), &input))
+        });
+    }
+
+    /// Each storey's rooms: the cells inside its envelope and outside every wall, one per seed.
+    #[inline(never)]
+    pub fn storey(batch: &[Storey], out: &mut Vec<Result<[u32; 4], OpError>>) {
+        let ctx = context();
+        run(batch, out, |storey| {
+            let envelope = solid(0, &storey.envelope);
+            let mut test = vec![Term::Inside(envelope.key)];
+            let mut operands = vec![envelope];
+            for (k, wall) in storey.walls.iter().enumerate() {
+                let one = solid(k + 1, wall);
+                test.extend([Term::Inside(one.key), Term::Not, Term::And]);
+                operands.push(one);
+            }
+            let select = vec![Selection::Cells {
+                test,
+                seeds: seeds(storey),
+            }];
+            let input = BooleanInput {
+                operands,
+                select,
+                merge: Merge::RemoveRedundant,
+                accept: None,
+            };
+            picked_counts(combine(&ctx, &Exec::serial(), &input))
+        });
+    }
+}

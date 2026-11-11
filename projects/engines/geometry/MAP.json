@@ -1093,6 +1093,26 @@
           "target": "lib"
         },
         {
+          "cost": "one box built per body, outside every measured run.",
+          "does": null,
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-bench/src/inputs/scenario.rs",
+          "guarantees": [
+            "every scenario is the same on every target, every body in it is a valid solid made by `geom-make`, and every result of a scenario is `Ok` (`tests/inputs.rs`)."
+          ],
+          "job": "Inputs for the flat boolean's scenarios (piece G140; chapter 23.13, \"Scenarios at reduced scale\"): whole jobs a building model gives `geom-bool`, each at about a tenth of its full size.",
+          "method": {
+            "links": [
+              "projects/engines/geometry/architecture/23-performance.md"
+            ],
+            "text": "chapter 23.13's scenarios at reduced scale (`projects/engines/geometry/architecture/23-performance.md`), on the shapes of `geom-bool`'s own tests (`tests/batch.rs`'s wall of doors, `tests/cells.rs`'s rooms), grown to a size, with no randomness: a scenario is a fixed job, as Spare Construct's targets are (28.14)."
+          },
+          "path": "geom_bench::inputs::scenario",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
           "cost": "a few draws of [`crate::rng::SplitMix64`] per input, once per batch, outside every measured run.",
           "does": null,
           "family": [],
@@ -11136,7 +11156,7 @@
           "target": "lib"
         },
         {
-          "cost": "O(n) clips per level for n polygons across the level's boxes, and at most 123 levels: a box of the frame halves 41 times along each axis. Each leaf costs what [`local_cuts`] and [`classify`] cost on its polygons. Charges the meter one unit per polygon a split clips.",
+          "cost": "O(n) clips per level for n polygons across the level's boxes, and at most 126 levels: a box of the frame halves at most 42 times along each axis (the recursion statement above). Each leaf costs what [`local_cuts`] and [`classify`] cost on its polygons. Charges the meter one unit per polygon a split clips.",
           "does": "[`arrange`] takes the polygons of an arrangement and classifies every piece. A box is split in two along its longest axis until it holds few polygons; polygons across the split are clipped exactly, and the upper box's reference point is walked up from the lower's, adding up the polygons it crosses, so each leaf can be solved on its own: [`local_cuts`], then [`classify`]. A box whose every test is settled by its reference vector alone, whatever the polygons in it do, is dropped (step 4).",
           "family": [],
           "file": "projects/engines/geometry/crates/geom-poly/src/subdivide.rs",
