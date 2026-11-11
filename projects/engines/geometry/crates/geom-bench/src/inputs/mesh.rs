@@ -2,7 +2,8 @@
 //! scatter of survey points with breaklines across it; and a small height field, every face on its
 //! own plane, for the exact mesh's build and check.
 //!
-//! For the distance comparisons of piece G151, grid points in a room a million steps across, each
+//! For point location (piece G147), that field closed into a solid, with points in its box. For
+//! the distance comparisons of piece G151, grid points in a room a million steps across, each
 //! with a clearance of up to as much; for triangle contact, pairs of triangles in that room whose
 //! planes mostly cut each other.
 //!
@@ -23,11 +24,12 @@
 use std::collections::BTreeSet;
 
 use geom_mesh::Site;
-use geom_mesh::exact::build::{Corner, Polygons, Source};
-use geom_mesh::exact::{PropTable, Role};
+use geom_mesh::exact::build::{Corner, Polygons, Source, build};
+use geom_mesh::exact::{ExactMesh, PropTable, Role};
 use geom_num::Exactness;
 use geom_num::grid::{P2, P3};
 use geom_op::NameId;
+use geom_run::{Budget, Exec, WorkMeter};
 
 use super::{Class, batch_of, p3, rng, within};
 use crate::rng::SplitMix64;
@@ -43,6 +45,18 @@ const SIDE: u16 = 8;
 
 /// The triangles of a height field: two to each of 7 × 7 cells.
 pub const FACES: usize = 98;
+
+/// The points of one [`Probe`].
+pub const PROBES: usize = 64;
+
+/// What `geom_mesh::classify` takes.
+#[derive(Clone, Debug)]
+pub struct Probe {
+    /// A closed solid.
+    pub solid: ExactMesh,
+    /// Points in and around it.
+    pub points: Vec<P3>,
+}
 
 /// What `geom_mesh::triangulate` takes.
 #[derive(Clone, Debug)]
@@ -141,6 +155,77 @@ pub fn exact_build(class: Class) -> Vec<Polygons> {
     }
     let mut g = rng("mesh::exact_build", class);
     batch_of(|_| field(&mut g))
+}
+
+/// One closed solid from `rng`: a height field's triangles over a flat base, with four walls.
+fn solid(r: &mut SplitMix64) -> Option<ExactMesh> {
+    let mut polygons = field(r)?;
+    let side = u32::from(SIDE);
+    let low = side.saturating_mul(side);
+    let flat: Vec<Corner> = polygons
+        .vertices
+        .iter()
+        .map(|corner| match corner {
+            Corner::Grid(at) => P3::new(at.x.get(), at.y.get(), -4096).map(Corner::Grid),
+            other => Ok(*other),
+        })
+        .collect::<Result<_, _>>()
+        .ok()?;
+    polygons.vertices.extend(flat);
+    let at = |x: u32, y: u32| y.saturating_mul(side).saturating_add(x);
+    let mut face = |vertices: &[u32]| {
+        polygons.corners.extend_from_slice(vertices);
+        let end = u32::try_from(polygons.corners.len()).ok()?;
+        polygons.loop_start.push(end);
+        Some(())
+    };
+    for y in 0..side.saturating_sub(1) {
+        for x in 0..side.saturating_sub(1) {
+            let a = low.saturating_add(at(x, y));
+            let b = low.saturating_add(at(x.saturating_add(1), y));
+            let d = low.saturating_add(at(x, y.saturating_add(1)));
+            let c = low.saturating_add(at(x.saturating_add(1), y.saturating_add(1)));
+            face(&[a, c, b])?;
+            face(&[a, d, c])?;
+        }
+    }
+    let end = side.saturating_sub(1);
+    for i in 0..end {
+        let next = i.saturating_add(1);
+        for (a, b) in [
+            (at(i, 0), at(next, 0)),
+            (at(end, i), at(end, next)),
+            (at(next, end), at(i, end)),
+            (at(0, next), at(0, i)),
+        ] {
+            face(&[low.saturating_add(a), low.saturating_add(b), b, a])?;
+        }
+    }
+    let faces = polygons.loop_start.len().saturating_sub(1);
+    polygons.face_loops = (0..=u32::try_from(faces).ok()?).collect();
+    polygons.face_run = alloc_zeros(faces);
+    let mut meter = WorkMeter::new(Budget::UNLIMITED);
+    build(&polygons, &Exec::serial(), &mut meter).ok()
+}
+
+/// A closed solid and [`PROBES`] points in its box for `geom_mesh::classify`.
+#[must_use]
+pub fn locate(class: Class) -> Vec<Probe> {
+    if class != Class::Typical {
+        return Vec::new();
+    }
+    let mut g = rng("mesh::locate", class);
+    let reach = i64::from(SIDE).saturating_mul(4096);
+    batch_of(|_| {
+        let solid = solid(&mut g)?;
+        let mut points = Vec::with_capacity(PROBES);
+        for _ in 0..PROBES {
+            let x = within(&mut g, reach).abs();
+            let y = within(&mut g, reach).abs();
+            points.push(P3::new(x, y, within(&mut g, 8192)).ok()?);
+        }
+        Some(Probe { solid, points })
+    })
 }
 
 /// The reach of the distance benchmarks' coordinates, in grid steps.

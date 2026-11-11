@@ -324,6 +324,8 @@ pub enum Contact {
 - **Time of first contact.** For moving bodies, `geom-spatial` finds when a moving vertex first meets a moving triangle, or two moving edges meet, by the Tight Inclusion method (Wang et al. 2021, [doi:10.1145/3460775](https://doi.org/10.1145/3460775); MIT code at [6f84001a](https://github.com/Continuous-Collision-Detection/Tight-Inclusion/tree/6f84001a790a9d3362b7c13d410037140d83fa2c)). It subdivides time and space with inclusion tests that never miss a contact. Our port runs on linear motions between grid positions with outward-rounded inclusion tests. It reports the first contact time as an interval: Certified, never missing a contact, possibly reporting one within its stated bound. Its tests use the authors' Apache-2.0 time-of-impact sample and our own exact cases; the 2021 benchmark carries no licence, so it waits until the authors clear it (owner action G285, 32.31).
 - **Scan against model.** Comparing a laser scan with the model (as built against as designed) uses the same distance query, point by point, from `geom-cloud` (section 17).
 
+**As built (G147).** `geom-mesh::classify`: a ray up z from a grid point, its start moved by (ε², ε), so the mesh never moves. A three-plane point takes `beside`: a grid corner off the surface, then one exact trace with `geom-poly`, the point's wedge as the cutter.
+
 ## 19.12 Instancing for huge assemblies
 
 A building with 2,000 identical doors, a tower of repeated floors, a car of 30,000 parts or a 50 km corridor of repeated barriers stores each shape once.
