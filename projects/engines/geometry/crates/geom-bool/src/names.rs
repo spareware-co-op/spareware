@@ -327,7 +327,7 @@ impl<'k> Mint<'k> {
 }
 
 /// The role `name` of the operand with `key`.
-fn keyed_role(name: &str, key: OperandKey) -> Result<Role, NameError> {
+pub(crate) fn keyed_role(name: &str, key: OperandKey) -> Result<Role, NameError> {
     Role::new(name, [RoleArg::Name(NameId::from_bytes(key.0))])
 }
 

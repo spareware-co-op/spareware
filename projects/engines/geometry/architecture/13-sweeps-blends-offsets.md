@@ -394,6 +394,19 @@ enum TopologyChange {
 
 Every class is decided from the arrangement (section 11): exact on flat bodies, certified on curved ones.
 
+**As built (G144).** `geom_bool::local::local_step` is the arrangement step every local operation runs. It takes the target, the geometry step's new faces as tool operands and the selection, arranges them once through `combine`, and records in the history each change it finds. A change outside the call's `geom_op::local::AllowSet` is `TopologyChangeNotAllowed` (kind `NoSolution`, remedy: allow the class), naming the class and the entities. An operation declares its set beside its schema (`LocalSchema`), and a caller narrows it. The fast path takes a plan's proof that the operands lie outside each other but on whole faces two of them share, facing opposite ways. It skips the arrangement, gives each polygon its own piece with the winding numbers that proof fixes, and runs the full path's own selection, canonical rebuild, names and checker. So the two paths give the same body, which the tests hold byte for byte on an extrusion, a box beside another, one apart, one level with it and a cut that only touches. A shared face that is not a whole face of both is refused, never arranged instead, and the diagnostics record each skip. Each class is read from the arrangement's pieces of each input face (kept; buried, lying with the side it faces in another operand's material; or shared with an opposite face) and from the result's history:
+
+- A tool's face that comes through is Face added, in the role a boolean gives a tool's faces.
+- A merged face is Faces merge.
+- A face in several pieces is Loop changes, and so is a face that came through with fewer loops.
+- More solid lumps is Body splits.
+- Faces partly buried are Clash trimmed, and target faces wholly buried are Overshoot removed.
+- A target face dropped with nothing buried or shared is Face vanishes.
+- A self-overlap cut never happens on a flat body, whose planar faces cannot cross themselves: the curved arrangement decides it, from a face's self-intersection (G176).
+- A deleted vertex of four or more faces, replaced by new vertices joined by new edges, is Vertex split.
+
+A face shared by a tool and the target is replaced, and is no change. A face turning inside out is the geometry step's to report, since its pieces arrive the right way round. A test makes every other class. The fast path's benchmark joins G140's flat boolean benchmarks, as G130's and G137's did.
+
 ## 13.15 Straight skeletons and roofs (`geom-skeleton`)
 
 A footprint roof carries one plane up from each eave at that edge's slope. Its ridges, hips and valleys form the **straight skeleton** of the footprint (Aichholzer, Aurenhammer, Alberts and Gärtner, [J.UCS 1(12), 1995, doi:10.1007/978-3-642-80350-5_65](https://doi.org/10.1007/978-3-642-80350-5_65)), weighted by the slopes (Eppstein and Erickson, [DCG 22, 1999, doi:10.1007/PL00009479](https://doi.org/10.1007/PL00009479)). The same skeleton makes tapered extrusions past collapse (13.4) and splits offset vertices (13.11).

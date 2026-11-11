@@ -1688,6 +1688,29 @@
           "target": "lib"
         },
         {
+          "cost": "the boolean's, or on the fast path the selection's alone. Classifying is linear in the pieces and the history's records, and quadratic only in a deleted vertex's faces. The fast path matches shared faces in O(p²) over the polygons. Recursion: none.",
+          "does": "a local operation is a geometry step followed by one arrangement step (13.1). [`local_step`] is that step: it takes the operation's target, the new faces its geometry step made as tool operands extended past their final size, and the selection to keep. It arranges them once, as a boolean does, and returns the body with its history. That history records every [`TopologyChange`] the step made, and refuses any change its [`AllowSet`] does not hold, as `TopologyChangeNotAllowed`.",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-bool/src/local.rs",
+          "guarantees": [
+            "**One arrangement, or a proven skip.** The fast path runs only on the plan's proof that the operands meet on whole shared faces. What it builds then goes through the full path's own selection, rebuild, names and checker, so a valid plan gives the same body either way.",
+            "**Every change recorded, none unallowed.** The history holds each change found, in name order, and a change outside the call's set is an error naming its class and entities.",
+            "**Exact on flat bodies.** Every fate is a winding number of the exact arrangement, or a name in the history; nothing is measured."
+          ],
+          "job": "The arrangement step of local operations, and the topology changes it makes (13.1, 13.14).",
+          "method": {
+            "links": [
+              "projects/engines/geometry/architecture/13-sweeps-blends-offsets.md",
+              "projects/engines/geometry/architecture/11-booleans.md"
+            ],
+            "text": "chapter 13.1's five steps and fast path and 13.14's taxonomy (`projects/engines/geometry/architecture/13-sweeps-blends-offsets.md`), on chapter 11's arrangement and its names (`projects/engines/geometry/architecture/11-booleans.md`)."
+          },
+          "path": "geom_bool::local",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
           "cost": "`O(n log n)` in the entities of the result and the operands. Charges the meter nothing of its own: the rows it writes are charged by the publication.",
           "does": "[`name`] gives every region, face, edge and vertex of a merged result its persistent name and its history record, from the names of the faces it came from. A target's face that passes through keeps its name; a tool's is `Created { op, role: tool(key), from }`; several kept pieces of one face are `Split { of, piece: ByTools }`; flush faces become `Merged { of }`. An edge or vertex that was already there keeps its name and a new one is `Bounded` by the faces around it. Names two operands both bring are qualified by the operand's key, and those that would still collide take a weak ordinal.",
           "family": [],
@@ -10863,6 +10886,60 @@
           "non_exhaustive": false
         },
         {
+          "doc": "One topology change a local operation made (13.14), recorded with its history.",
+          "file": "projects/engines/geometry/crates/geom-op/src/history.rs",
+          "kinds": [
+            {
+              "doc": "`vertex` became several, joined by `edges`.",
+              "name": "VertexSplit",
+              "shape": "struct"
+            },
+            {
+              "doc": "`face` vanished, and was deleted.",
+              "name": "FaceVanished",
+              "shape": "struct"
+            },
+            {
+              "doc": "Part of `face` was cut away along `along`.",
+              "name": "SelfOverlapCut",
+              "shape": "struct"
+            },
+            {
+              "doc": "`faces` were trimmed against each other.",
+              "name": "ClashTrimmed",
+              "shape": "struct"
+            },
+            {
+              "doc": "`faces` passed through each other and were deleted.",
+              "name": "OvershootRemoved",
+              "shape": "struct"
+            },
+            {
+              "doc": "`faces` became the one face `into`.",
+              "name": "FacesMerged",
+              "shape": "struct"
+            },
+            {
+              "doc": "`face` was added in `role`.",
+              "name": "FaceAdded",
+              "shape": "struct"
+            },
+            {
+              "doc": "`face`'s loops changed.",
+              "name": "LoopChanged",
+              "shape": "struct"
+            },
+            {
+              "doc": "One solid became `lumps`.",
+              "name": "BodySplit",
+              "shape": "struct"
+            }
+          ],
+          "module": "geom_op::history",
+          "name": "TopologyChange",
+          "non_exhaustive": false
+        },
+        {
           "doc": "Why records cannot make a history.",
           "file": "projects/engines/geometry/crates/geom-op/src/history.rs",
           "kinds": [
@@ -10982,6 +11059,21 @@
           ],
           "module": "geom_op::kind",
           "name": "ErrorKind",
+          "non_exhaustive": false
+        },
+        {
+          "doc": "A refusal of a local operation's changes (13.20).",
+          "file": "projects/engines/geometry/crates/geom-op/src/local.rs",
+          "kinds": [
+            {
+              "base_kind": "NoSolution",
+              "doc": "The operation would make a change of `class`, which the call does not allow.",
+              "name": "TopologyChangeNotAllowed",
+              "shape": "struct"
+            }
+          ],
+          "module": "geom_op::local",
+          "name": "LocalDetail",
           "non_exhaustive": false
         },
         {
@@ -11307,6 +11399,29 @@
             "text": "chapter 22's table of base kinds (`projects/engines/geometry/architecture/22-errors-queries-ai.md`), with chapter 23.10's rule that cancellation and refused allocations are never stored."
           },
           "path": "geom_op::kind",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
+          "cost": "a set is one word; [`allowed`] is linear in the changes. No allocation but the remedy list. Recursion: none.",
+          "does": "an [`AllowSet`] is a set of chapter 13.14's [`ChangeClass`]es. Each local operation declares the set it may make, its [`LocalSchema`] beside its [`OpSchema`], and a caller narrows it ([`AllowSet::narrowed`]). [`allowed`] holds the changes an operation made to the set and returns the first it does not allow as a [`LocalDetail::TopologyChangeNotAllowed`], which names the class; the error built from it names the entities.",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-op/src/local.rs",
+          "guarantees": [
+            "**Never wider than declared.** [`AllowSet::narrowed`] keeps only what both sets hold, so a caller can take classes away and never add one the operation does not declare.",
+            "**The first refusal, in order.** [`allowed`] reads the changes in the order given, which a [`History`](crate::history::History) keeps by name, so the same changes give the same refusal.",
+            "**One kind.** A change outside the set is `NoSolution`: no result exists within the changes the caller allows, and its remedy is to allow the class (13.20)."
+          ],
+          "job": "What a local operation may change, and its refusal of anything else (13.14; piece G144).",
+          "method": {
+            "links": [
+              "projects/engines/geometry/architecture/13-sweeps-blends-offsets.md",
+              "projects/engines/geometry/architecture/22-errors-queries-ai.md"
+            ],
+            "text": "chapter 13.14's taxonomy and allow-sets and 13.20's `TopologyChangeNotAllowed` (`projects/engines/geometry/architecture/13-sweeps-blends-offsets.md`), on chapter 22's error kinds (`projects/engines/geometry/architecture/22-errors-queries-ai.md`)."
+          },
+          "path": "geom_op::local",
           "provenance": [],
           "spdx": null,
           "target": "lib"

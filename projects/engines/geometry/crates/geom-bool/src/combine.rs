@@ -1123,15 +1123,7 @@ pub(crate) fn arranged_input(
     reuse: Option<&Solved>,
     meter: &mut WorkMeter<'_>,
 ) -> Result<(Vec<Classified>, Exactness, Solved), OpError> {
-    let mut exactness = Exactness::Exact;
-    for operand in &input.operands {
-        exactness = exactness
-            .combine(operand.exactness)
-            .ok_or_else(|| numbers(ctx, NumError::BudgetExceeded))?;
-    }
-    if !accepted(exactness, input.accept) {
-        return Err(fail(ctx, CombineDetail::NotAccepted { would: exactness }));
-    }
+    let exactness = operands_exactness(ctx, input)?;
     let cell = cell_of(&ready.cells).map_err(|e| numbers(ctx, e))?;
     let (classified, solved) = arrange_reusing(
         exec,
@@ -1145,6 +1137,24 @@ pub(crate) fn arranged_input(
     )
     .map_err(|e| arranged(ctx, e, meter))?;
     Ok((classified, exactness, solved))
+}
+
+/// How exact a result of `input`'s operands is: the least exact of them, refused unless the caller
+/// accepts it.
+pub(crate) fn operands_exactness(
+    ctx: &OpContext<'_>,
+    input: &BooleanInput<'_>,
+) -> Result<Exactness, OpError> {
+    let mut exactness = Exactness::Exact;
+    for operand in &input.operands {
+        exactness = exactness
+            .combine(operand.exactness)
+            .ok_or_else(|| numbers(ctx, NumError::BudgetExceeded))?;
+    }
+    if !accepted(exactness, input.accept) {
+        return Err(fail(ctx, CombineDetail::NotAccepted { would: exactness }));
+    }
+    Ok(exactness)
 }
 
 /// Each selection's bodies, and what the last selection that merged once kept for the next merge
