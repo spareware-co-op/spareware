@@ -192,11 +192,12 @@ jobs:
       # Gate 1 (G43): on the first leg, libFuzzer must first find a planted violation, a carry
       # dropped from geom-num's wide integers, which wide_fuzz compares with big integers
       # (geom-test's trip module and binary). The corpus and crash that run leaves are removed,
-      # so a later failure uploads only its own.
+      # so a later failure uploads only its own. It runs with the next step's options, the input
+      # time limit too, so the planted run is the real one.
       - name: libFuzzer finds a planted violation
         if: strategy.job-index == 0
         run: |
-          cargo run --locked -q -p geom-test --bin trip -- libfuzzer -- cargo bolero test wide_fuzz --package geom-fuzz --toolchain "$FUZZ_NIGHTLY" --engine libfuzzer -T 60s
+          cargo run --locked -q -p geom-test --bin trip -- libfuzzer -- cargo bolero test wide_fuzz --package geom-fuzz --toolchain "$FUZZ_NIGHTLY" --engine libfuzzer -T 60s --timeout 10s
           rm -rf projects/engines/geometry/crates/geom-fuzz/tests/__fuzz__/wide
       # --timeout: an input that runs for ten seconds fails the job, and libFuzzer saves it as
       # timeout-<sha1> beside the crash files, which the next step uploads (a slow or hung input,
