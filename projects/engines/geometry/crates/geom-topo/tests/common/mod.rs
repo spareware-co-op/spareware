@@ -226,7 +226,9 @@ pub fn wall_builder(exact: bool) -> Builder {
         a.vertices.extend(&w.vertices).unwrap();
         a.surfaces.extend(w.surfaces).unwrap();
         a.curves.extend(w.curves).unwrap();
-        a.points.extend(w.points).unwrap();
+        a.points
+            .extend(w.points.into_iter().map(geom_topo::PointKind::Grid))
+            .unwrap();
     } else {
         for r in w.regions {
             a.regions.push(r).unwrap();
@@ -256,7 +258,7 @@ pub fn wall_builder(exact: bool) -> Builder {
             a.curves.push(r).unwrap();
         }
         for r in w.points {
-            a.points.push(r).unwrap();
+            a.points.push(r.into()).unwrap();
         }
     }
     b

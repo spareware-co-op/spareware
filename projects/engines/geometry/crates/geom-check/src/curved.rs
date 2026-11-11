@@ -335,6 +335,7 @@ impl Torus {
 }
 
 /// How two faces' carriers lie, as far as group 3 can certify.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub(crate) enum Pair {
     /// Two parallel planes, certainly apart: their faces cannot meet.
     Apart,
