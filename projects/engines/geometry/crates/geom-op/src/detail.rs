@@ -400,6 +400,11 @@ pub enum MakeDetail {
         /// The piece that widens what the checker certifies, by its board number.
         piece: &'static str,
     },
+    /// A placed instance names a row past the document's side table of transforms.
+    NoSuchPlacement {
+        /// The row.
+        index: u32,
+    },
     /// The body given carries no names: it was not published in name order, so its entities
     /// cannot keep their names through the transform.
     BodyNotNamed,
@@ -427,6 +432,7 @@ impl MakeDetail {
             | MakeDetail::BaseNotConvex
             | MakeDetail::MinorNotBelowMajor { .. }
             | MakeDetail::BodyNotNamed
+            | MakeDetail::NoSuchPlacement { .. }
             | MakeDetail::EmptyPattern
             | MakeDetail::RepeatedKey
             | MakeDetail::SingularTransform => ErrorKind::InvalidInput,
@@ -463,6 +469,7 @@ impl MakeDetail {
             MakeDetail::KindNotCertified => vec![Remedy::AwaitPiece { piece: "G177" }],
             MakeDetail::NotCertifiedYet { piece } => vec![Remedy::AwaitPiece { piece }],
             MakeDetail::BodyNotNamed => vec![change("body", None)],
+            MakeDetail::NoSuchPlacement { .. } => vec![change("placement", None)],
             MakeDetail::EmptyPattern | MakeDetail::RepeatedKey | MakeDetail::SingularTransform => {
                 vec![change("instances", None)]
             }
@@ -496,6 +503,9 @@ impl fmt::Display for MakeDetail {
                 "the checker cannot certify the transformed body yet; piece {piece} widens it"
             ),
             MakeDetail::BodyNotNamed => f.write_str("the body carries no names"),
+            MakeDetail::NoSuchPlacement { index } => {
+                write!(f, "row {index} is past the table of placements")
+            }
             MakeDetail::EmptyPattern => f.write_str("the pattern has no instance"),
             MakeDetail::RepeatedKey => f.write_str("two instances of the pattern have one key"),
             MakeDetail::SingularTransform => {
