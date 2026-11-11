@@ -5508,14 +5508,6 @@
     },
     {
       "file": "projects/engines/geometry/crates/geom-bool/src/names.rs",
-      "mutant": "replace <impl WeakOrder for Rank>::direction -> Option<Ordering> with None",
-      "line_text": "Some(Ordering::Equal)",
-      "occurrences": 1,
-      "kind": "equivalent",
-      "reason": "direction is read only by geom_name's compare, as the last of its three steps: Some(Equal) there ends the loop and compare returns None, which is what None returns at once."
-    },
-    {
-      "file": "projects/engines/geometry/crates/geom-bool/src/names.rs",
       "mutant": "replace grid_key -> (i64, i64, i64) with (0, 1, 0)",
       "line_text": "(g.x.get(), g.y.get(), g.z.get())",
       "occurrences": 1,
@@ -5745,6 +5737,54 @@
       "occurrences": 1,
       "kind": "equivalent",
       "reason": "A winding vector's pairs hold no zero count, so on each of them a count above 0 and a count of 0 or more are one test."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-bool/src/passage.rs",
+      "mutant": "replace > with < in narrowest",
+      "line_text": "if best.get(&block).is_some_and(|held| *held > reach) {",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "A block's best is never below the reach it was queued with, so the mutant never skips: it walks stale entries too. A stale entry comes off the queue after the block's best one (widest first), whose portals already gave every neighbour a way at least as wide, so the stale one changes no best and no pinch; and its neighbours' traces are held, so it charges the meter nothing more."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-bool/src/passage.rs",
+      "mutant": "replace < with == in narrowest",
+      "line_text": "if best.get(&next).is_none_or(|held| *held < wide) {",
+      "occurrences": 1,
+      "kind": "hangs",
+      "reason": "The tests stop it by their timeout: the mutant queues a block again whenever a way as wide as its best reaches it, so two open blocks side by side queue each other again for ever, and nothing in the walk charges the meter once their traces are held. It is a hang the tests catch; kept so that the judge counts it as one."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-bool/src/passage.rs",
+      "mutant": "replace < with <= in narrowest",
+      "line_text": "if best.get(&next).is_none_or(|held| *held < wide) {",
+      "occurrences": 1,
+      "kind": "hangs",
+      "reason": "The tests stop it by their timeout: the mutant queues a block again whenever a way at least as wide as its best reaches it, so two open blocks side by side queue each other again for ever, and nothing in the walk charges the meter once their traces are held. It is a hang the tests catch; kept so that the judge counts it as one."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-check/src/self_intersection.rs",
+      "mutant": "replace == with != in runs",
+      "line_text": "out.push((fin.edge.row(), fin.sense == Sense::Forward));",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "runs is read only by back_to_back, which compares f's sorted runs with g's turned over: they are equal exactly where, edge by edge, g's fins all run one way and f's as many run the other. The mutant turns every way over in both lists, and that holds of the turned lists exactly when it holds of the first."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-bool/src/combine.rs",
+      "mutant": "replace && with || in Scene<'a>::seated",
+      "line_text": "*low < half && half < *high",
+      "occurrences": 1,
+      "kind": "harmless",
+      "reason": "The box test only refuses a seed outside the cells' box early. The seating that follows traces the seed's vector and refuses a seed no cell holds as SeedOutside too, and a seed outside the box is in no cell: the seeds outside in cells.rs and combine.rs get SeedOutside under the mutant as without it."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-bool/src/combine.rs",
+      "mutant": "replace < with <= in Scene<'a>::seated",
+      "line_text": "*low < half && half < *high",
+      "occurrences": 2,
+      "kind": "equivalent",
+      "reason": "The cells' box (around) has its faces on odd half steps, and a seed's coordinate doubled is even, so half never equals low or high and < and <= agree."
     }
   ],
   "coverage_off": [

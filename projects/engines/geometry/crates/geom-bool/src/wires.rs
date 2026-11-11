@@ -371,9 +371,12 @@ impl Built {
     }
 
     fn curves(self) -> Curves {
+        // A wire target's edge meets no pieces: it is cut by them, not made where they meet.
+        let meets = alloc::vec![Vec::new(); self.edges.len()];
         Curves {
             vertices: self.vertices,
             edges: self.edges,
+            meets,
         }
     }
 }
