@@ -1302,6 +1302,7 @@ dependencies = [
  "geom-num",
  "geom-op",
  "geom-poly",
+ "geom-pool",
  "geom-run",
  "geom-surface",
  "geom-test",

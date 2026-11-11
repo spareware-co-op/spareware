@@ -278,9 +278,15 @@
               "kind": "corpus",
               "piece": "G153",
               "why": "1 new count benchmark on the triangulation (decision 32.44): mesh/cdt; no existing digest moved"
+            },
+            {
+              "sha256": "ee9154d79ff4ddf499a1edfed52d31390ad8e230ee310dbc73e2fa189b782ef6",
+              "kind": "corpus",
+              "piece": "G146",
+              "why": "1 new count benchmark on the exact mesh (decision 32.44): mesh/exact_build; no existing digest moved"
             }
           ],
-          "sha256": "ee9154d79ff4ddf499a1edfed52d31390ad8e230ee310dbc73e2fa189b782ef6"
+          "sha256": "0f92bfe436e4a8f1ed9a8e92bd80bea615141656b7aadb25dd73607f031c4380"
         },
         {
           "id": "geom-nurbs/operations",
@@ -695,6 +701,16 @@
             "function": "cdt_golden_hash_is_the_same_on_every_target"
           },
           "sha256": "e785c8bb58ed861f1eafccaa437e35dca30ec69a695ddf3abb238d1db057cb11"
+        },
+        {
+          "id": "geom-mesh/exact",
+          "what": "The exact mesh of geom-mesh (piece G146): boxes at five scales, 16 closed height fields and a cut pyramid with corners off the grid. Every array of each mesh and its volume, in canonical order.",
+          "check": {
+            "crate": "geom-mesh",
+            "test": "exact_determinism",
+            "function": "exact_mesh_golden_hash_is_the_same_on_every_target"
+          },
+          "sha256": "c5cb15aaf5ad8f21e50ad1dd903efb38d0dbc85e695e17afc662519ecbdbc134"
         }
       ]
     }
