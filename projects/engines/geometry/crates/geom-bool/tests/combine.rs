@@ -300,7 +300,12 @@ fn refusals_name_what_is_wrong() {
 #[test]
 fn a_half_space_clips_a_block_under_a_roof() {
     let block = cuboid([0, 0, 0], [60, 60, 60]);
-    let roof = half_space([p(60, 0, 0), p(60, 60, 0), p(0, 0, 60)], &mut meter()).unwrap();
+    let roof = half_space(
+        ctx().path(),
+        [p(60, 0, 0), p(60, 60, 0), p(0, 0, 60)],
+        &mut meter(),
+    )
+    .unwrap();
     checked(&roof);
     let out = intersect(&ctx(), &SERIAL, &[solid(1, &block), solid(2, &roof)]).unwrap();
     assert_eq!(sixfold(&out.result.body), 6 * 108_000);
@@ -323,7 +328,7 @@ fn half_spaces_face_every_way_and_steep_ones_too() {
         ([p(60, 0, 0), p(60, 0, 1), p(0, 60, 0)], 108_000),
     ];
     for (points, want) in cases {
-        let space = half_space(points, &mut meter()).unwrap();
+        let space = half_space(ctx().path(), points, &mut meter()).unwrap();
         let out = intersect(&ctx(), &SERIAL, &[solid(1, &block), solid(2, &space)]).unwrap();
         assert_eq!(sixfold(&out.result.body), 6 * want, "{points:?}");
         checked(&out.result.body);
@@ -334,7 +339,7 @@ fn half_spaces_face_every_way_and_steep_ones_too() {
 fn a_half_space_needs_three_points_that_make_a_plane() {
     let line = [p(0, 0, 0), p(1, 1, 1), p(2, 2, 2)];
     assert!(matches!(
-        half_space(line, &mut meter()),
+        half_space(ctx().path(), line, &mut meter()),
         Err(RebuildError::Num(_))
     ));
 }
@@ -510,6 +515,12 @@ fn a_split_gives_one_body_per_cell() {
         "both ends and the middle"
     );
     out.result[0].iter().for_each(|c| checked(&c.body));
+    // The wall's long faces lie in all three bodies, so their pieces' names are qualified.
+    assert!(
+        out.diagnostics
+            .iter()
+            .any(|d| d.code == "bool.names_qualified")
+    );
     let line = sheet(0, 30, [-10, -10], [20, 70]);
     let out = picked(vec![solid(1, &wall), cutter(2, &line)], selection.clone());
     let mut volumes: Vec<i128> = out.result[0].iter().map(|c| sixfold(&c.body)).collect();
@@ -597,8 +608,9 @@ fn polyline(points: &[[i64; 3]]) -> Body {
     let curves = Curves {
         vertices: points.iter().map(|q| at(*q)).collect(),
         edges: (1..points.len()).map(|k| (k - 1, k)).collect(),
+        meets: vec![Vec::new(); points.len() - 1],
     };
-    wire(&curves, &mut meter()).unwrap()
+    wire(&curves, None, &mut meter()).unwrap()
 }
 
 /// A wire's vertices as grid points, sorted, and how many edges it has.
@@ -645,7 +657,12 @@ fn keep_clips_a_wire_to_a_solid() {
         (vec![[-10, 5, 5], [0, 5, 5], [10, 20, 5], [10, 30, 5]], 2)
     );
     // A tilted face splits an edge off the grid; nothing is kept twice.
-    let roof = half_space([p(0, 0, 8), p(40, 0, 8), p(0, 40, 12)], &mut meter()).unwrap();
+    let roof = half_space(
+        ctx().path(),
+        [p(0, 0, 8), p(40, 0, 8), p(0, 40, 12)],
+        &mut meter(),
+    )
+    .unwrap();
     let rod = polyline(&[[5, 5, 0], [5, 5, 30]]);
     let under = picked(
         vec![solid(1, &roof), cutter(2, &rod)],
@@ -798,7 +815,12 @@ fn a_wire_lying_in_a_face_falls_the_same_side_whichever_way_it_runs() {
     }
     // In a tilted face the step towards +x decides first: a wire in the plane x = y falls as one a
     // step towards +x does, upright or across, though the material lies towards +y.
-    let wedge = half_space([p(0, 0, 0), p(10, 10, 0), p(0, 0, 10)], &mut meter()).unwrap();
+    let wedge = half_space(
+        ctx().path(),
+        [p(0, 0, 0), p(10, 10, 0), p(0, 0, 10)],
+        &mut meter(),
+    )
+    .unwrap();
     for (ends, beside) in [
         ([[5, 5, 2], [5, 5, 8]], [[6, 5, 2], [6, 5, 8]]),
         ([[5, 5, 8], [5, 5, 2]], [[6, 5, 2], [6, 5, 8]]),
@@ -1261,7 +1283,12 @@ fn keep_takes_a_sheet_that_lies_on_a_solids_face() {
 #[test]
 fn a_half_space_on_a_side_of_the_range_box_is_the_whole_box() {
     let m = geom_num::grid::COORD_MAX;
-    let whole = half_space([p(m, 0, 0), p(m, 1, 0), p(m, 0, 1)], &mut meter()).unwrap();
+    let whole = half_space(
+        ctx().path(),
+        [p(m, 0, 0), p(m, 1, 0), p(m, 0, 1)],
+        &mut meter(),
+    )
+    .unwrap();
     assert_eq!(whole.arenas().faces.len(), 6);
     checked(&whole);
 }
@@ -1284,7 +1311,12 @@ fn a_seam_that_ends_off_the_grid_comes_back_in() {
         .remove(0)
         .body;
     // 3y + z = 101 meets the seam on top at y = 61/3.
-    let tilt = half_space([p(0, 30, 11), p(1, 30, 11), p(0, 31, 8)], &mut meter()).unwrap();
+    let tilt = half_space(
+        ctx().path(),
+        [p(0, 30, 11), p(1, 30, 11), p(0, 31, 8)],
+        &mut meter(),
+    )
+    .unwrap();
     let meeting = call(
         vec![solid(1, &seamed), solid(2, &tilt)],
         Selection::Intersect,

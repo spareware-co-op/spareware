@@ -23,6 +23,9 @@
 //!   meet in one circle at most, so faces on them that share a full circle edge meet only along
 //!   it. Any other pair is reported unchecked.
 //! - **Edges with a vertex where three planes meet** are tested by `crate::planar` too.
+//! - **A wall between two cells is two faces.** In a general body, two faces with the same edges,
+//!   each run the opposite way, are the two sides of one wall, each in its own cell's shell
+//!   (11.7), and do not cross. No other pair of coincident faces has that excuse.
 //!
 //! Guarantees:
 //!
@@ -51,10 +54,14 @@
     reason = "the names are the predicates': p, q, r and s segment ends, v a shared vertex, a to d 2D points"
 )]
 
+use alloc::vec::Vec;
+
 use geom_curve::{Circle, ParamCurve};
 use geom_num::predicate::orient3d;
 use geom_num::{Coord, Exactness, P3, Sign};
 use geom_run::Stopped;
+use geom_topo::BodyKind;
+use geom_topo::Sense;
 use geom_topo::entity::{Edge, Face, Vertex};
 use geom_topo::ix::Arena;
 use geom_topo::mass::Corner;
@@ -95,9 +102,13 @@ pub(crate) fn check(
             }
         }
     }
+    let cells = body.kind() == BodyKind::General;
     for (i, f) in rows::<Face>(a.rows(Arena::Face)).enumerate() {
         for g in rows::<Face>(a.rows(Arena::Face)).skip(i).skip(1) {
             sink.charge()?;
+            if cells && back_to_back(a, f, g) {
+                continue;
+            }
             let found = if pieces(f).is_empty() || pieces(g).is_empty() {
                 other_faces_meet(a, f, g, exact)
             } else {
@@ -107,6 +118,30 @@ pub(crate) fn check(
         }
     }
     Ok(())
+}
+
+/// The edges of `f`, each with the way its fin runs, sorted.
+fn runs(a: &Arenas, f: Ix<Face>) -> Vec<(u32, bool)> {
+    let mut out = Vec::new();
+    let mut at_loop = a.faces.get(f).and_then(|face| face.first_loop);
+    while let Some(ix) = at_loop {
+        let held = a.loops.get(ix);
+        let first = held.and_then(|l| l.first_fin);
+        let mut at = first;
+        while let Some(fin) = at.and_then(|ix| a.fins.get(ix)) {
+            out.push((fin.edge.row(), fin.sense == Sense::Forward));
+            at = Some(fin.next).filter(|next| Some(*next) != first);
+        }
+        at_loop = held.and_then(|l| l.next);
+    }
+    out.sort_unstable();
+    out
+}
+
+/// Whether `f` and `g` are the two sides of one wall: the same edges, each run the opposite way.
+fn back_to_back(a: &Arenas, f: Ix<Face>, g: Ix<Face>) -> bool {
+    let turned: Vec<(u32, bool)> = runs(a, g).into_iter().map(|(e, way)| (e, !way)).collect();
+    runs(a, f) == turned
 }
 
 /// How two faces meet that are not both outlines, as far as their carriers say.
