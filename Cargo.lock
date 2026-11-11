@@ -1608,6 +1608,7 @@ dependencies = [
  "geom-format",
  "geom-make",
  "geom-math",
+ "geom-mesh",
  "geom-num",
  "geom-nurbs",
  "geom-op",
