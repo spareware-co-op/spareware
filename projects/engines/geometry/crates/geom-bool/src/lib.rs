@@ -28,6 +28,7 @@
 //! Modules:
 //!
 //! - [`operand`]: operands and selections, and an operand's faces as convex polygons (G130).
+//! - [`batch`]: any number of tools through any number of hosts (G138).
 //! - [`certificate`]: what a result must show before it is returned (G133).
 //! - [`combine`]: the boolean's entry and its schema (G131).
 //! - [`half_space`]: everything on one side of a plane, as a solid operand (G130).
@@ -43,6 +44,7 @@
 
 extern crate alloc;
 
+pub mod batch;
 pub mod certificate;
 pub mod combine;
 pub mod half_space;

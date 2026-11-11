@@ -363,6 +363,52 @@ fn a_split_passes_over_a_plane_that_holds_a_polygon() {
 }
 
 #[test]
+fn a_box_a_multiple_of_four_half_steps_wide_splits_between_the_whole_steps() {
+    // A block from 1 to 6 sits in a box from -1/2 to 15/2, sixteen half steps wide on every axis,
+    // so each middle, 7, is already odd: the split falls at 3 1/2, between the whole steps where
+    // faces end and meet, never at 3. Every bound a split gives a piece is then 2x = odd, the form
+    // by which the merge leaves the boxes' own planes out of a point's name; the others are the
+    // input's planes, either way round.
+    let blocks = [Block {
+        low: [1, 1, 1],
+        high: [6, 6, 6],
+    }];
+    let list = polygons(&blocks);
+    let cell = around(&list).unwrap();
+    assert_eq!((cell.low, cell.high), ([-1; 3], [15; 3]));
+    let mut planes = Vec::new();
+    for polygon in &list {
+        planes.push(polygon.piece.face);
+        planes.extend(polygon.piece.bounds.iter().copied());
+    }
+    let input = |p: &Plane| {
+        planes
+            .iter()
+            .any(|q| q == p || (q.n().map(|v| -v) == p.n() && -q.d() == p.d()))
+    };
+    let split = |p: &Plane| {
+        let n = p.n();
+        n.iter().filter(|v| **v != 0).count() == 1
+            && n.iter().any(|v| v.abs() == 2)
+            && p.d() % 2 != 0
+    };
+    for leaf in [1, 2, 4] {
+        let got = run(&blocks, leaf, &[]);
+        agrees(&blocks, &got);
+        assert!(got.len() > list.len(), "leaf {leaf}: the box split");
+        for c in &got {
+            for bound in &c.piece.bounds {
+                assert!(
+                    input(bound) || split(bound),
+                    "leaf {leaf}: {bound:?} bounds {:?}",
+                    c.piece
+                );
+            }
+        }
+    }
+}
+
+#[test]
 fn twenty_cubes_on_one_top_and_bottom_stop_at_their_shared_planes() {
     // Each overlaps the next, all between z = 0 and z = 4 (EMBER's figure 25).
     let blocks: Vec<Block> = (0..20)

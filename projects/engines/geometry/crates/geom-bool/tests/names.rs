@@ -12,14 +12,16 @@
 use std::collections::{BTreeMap, BTreeSet};
 
 use geom_bool::combine::{Combined, combine, subtract, unite};
+use geom_bool::half_space::half_space;
 use geom_bool::names::NamingError;
 use geom_bool::operand::{BooleanInput, Operand, OperandKey, OperandKind, Selection};
 use geom_check::{Level, check};
 use geom_make::{BoxInput, PrismInput, make_box, prism};
-use geom_num::{Exactness, P3, Steps};
+use geom_name::OrderError;
+use geom_num::{Exactness, NumError, P3, Steps};
 use geom_op::{
-    EdgeOrVertex, History, NameId, NameSet, OpContext, OpId, OpOutput, OpPath, Origin, PieceKey,
-    Record, RoleArg, Side, TopoName,
+    EdgeOrVertex, History, HistoryError, NameError, NameId, NameSet, OpContext, OpId, OpOutput,
+    OpPath, Origin, PieceKey, Record, RoleArg, Side, TopoName,
 };
 use geom_poly::merge::Merge;
 use geom_run::{Budget, Exec, WorkMeter};
@@ -209,6 +211,12 @@ fn bounded_edges(body: &Body) -> Vec<NameId> {
             .unwrap()
         })
         .collect()
+}
+
+/// The half-space behind the plane through `points`, made by operation `op`.
+fn behind(op: u8, points: [[i64; 3]; 3]) -> Body {
+    let points = points.map(|p| P3::new(p[0], p[1], p[2]).unwrap());
+    half_space(ctx_of(op).path(), points, &mut meter()).unwrap()
 }
 
 /// The upright prism over the triangle `corners`, from z = −5 to 35, made by operation `op`.
@@ -523,6 +531,153 @@ fn an_operand_without_names_gives_a_body_without_history() {
     assert!(out.result.history.is_none());
 }
 
+#[test]
+fn a_naming_error_says_what_failed() {
+    assert_eq!(NamingError::Broken.to_string(), "naming lost a row");
+    let output = NameId::from_bytes([3; 16]);
+    let cases = [
+        (NamingError::Num(NumError::Degenerate), "naming met "),
+        (
+            NamingError::Name(NameError::EmptyRole),
+            "a name could not be formed: ",
+        ),
+        (
+            NamingError::History(HistoryError::RepeatedOutput { output }),
+            "a history could not be formed: ",
+        ),
+        (
+            NamingError::Order(OrderError::TooMany),
+            "names could not be ordered: ",
+        ),
+    ];
+    for (error, opening) in cases {
+        let text = error.to_string();
+        assert!(text.starts_with(opening), "{text}");
+        assert!(text.len() > opening.len(), "{text}: the cause is missing");
+    }
+}
+
+#[test]
+fn edges_a_cut_leaves_alone_keep_their_names_and_one_it_shortens_is_modified() {
+    // The notch takes the wall's top right edge, and shortens the four edges that end there; the
+    // window, in the middle of the wall, touches no edge of it.
+    let wall = cuboid(1, [0, 0, 0], [100, 10, 60]);
+    let notch = cuboid(2, [90, -5, 50], [20, 20, 20]);
+    let window = cuboid(3, [40, -5, 20], [20, 20, 20]);
+    let operands = [solid(1, &wall), solid(2, &notch), solid(3, &window)];
+    let result = subtract(&ctx(), &SERIAL, key(1), &operands).unwrap().result;
+    let history = lawful(&result, &[&wall, &notch, &window]);
+    let after: BTreeSet<NameId> = edges(&result.body).iter().map(|(_, n)| *n).collect();
+    let (mut unchanged, mut modified, mut gone) = (0, 0, 0);
+    for ([low, high], name) in edges(&wall) {
+        let at_notch = |p: [i64; 3]| p[0] == 100 && p[2] == 60;
+        match (at_notch(low), at_notch(high)) {
+            (true, true) => {
+                assert!(!after.contains(&name));
+                assert!(history.deleted().names().contains(&name));
+                gone += 1;
+            }
+            (true, false) | (false, true) => {
+                assert!(after.contains(&name), "a shortened edge lost its name");
+                let Origin::Modified { from } = origin_of(history, name) else {
+                    panic!("a shortened edge is {:?}", origin_of(history, name))
+                };
+                assert_eq!(from.names(), [name]);
+                modified += 1;
+            }
+            (false, false) => {
+                assert!(
+                    after.contains(&name),
+                    "an edge the cut left alone lost its name"
+                );
+                assert_eq!(origin_of(history, name), &Origin::Unchanged);
+                unchanged += 1;
+            }
+        }
+    }
+    assert_eq!((unchanged, modified, gone), (7, 4, 1));
+}
+
+#[test]
+fn a_new_edge_is_named_by_the_faces_around_it_and_the_faces_that_end_it() {
+    let wall = cuboid(1, [0, 0, 0], [100, 10, 60]);
+    let window = cuboid(2, [40, -5, 20], [20, 20, 20]);
+    let operands = [solid(1, &wall), solid(2, &window)];
+    let result = subtract(&ctx(), &SERIAL, key(1), &operands).unwrap().result;
+    let history = lawful(&result, &[&wall, &window]);
+    let expected = bounded_edges(&result.body);
+    let mut new = 0;
+    for (row, (_, name)) in edges(&result.body).into_iter().enumerate() {
+        if let Origin::Generated { role, .. } = origin_of(history, name) {
+            assert_eq!(role.name(), "edge");
+            assert_eq!(name, expected[row], "edge {row}");
+            new += 1;
+        }
+    }
+    // Four where the reveals meet, and four where each meets the front and the back.
+    assert_eq!(new, 12);
+}
+
+#[test]
+fn a_vertex_where_three_planes_meet_keeps_its_name_through_a_later_cut() {
+    // x + y + 3z = 149 takes the corner (30, 30, 30) off, and meets the vertical edge under it at
+    // z = 89/3, off the grid.
+    let block = cuboid(1, [0, 0, 0], [30, 30, 30]);
+    let corner = behind(5, [[29, 30, 30], [30, 29, 30], [2, 0, 49]]);
+    let operands = [solid(1, &block), solid(2, &corner)];
+    let cut = subtract(&ctx(), &SERIAL, key(1), &operands).unwrap().result;
+    lawful(&cut, &[&block, &corner]);
+    let met = meetings(&cut.body);
+    assert_eq!(met.len(), 1);
+    // A hole far from that corner.
+    let hole = cuboid(6, [5, -5, 5], [5, 40, 5]);
+    let operands = [solid(1, &cut.body), solid(2, &hole)];
+    let again = subtract(&ctx_of(8), &SERIAL, key(1), &operands)
+        .unwrap()
+        .result;
+    let history = lawful(&again, &[&cut.body, &hole]);
+    assert_eq!(meetings(&again.body), met);
+    for (_, name) in vertices(&cut.body) {
+        assert!(vertices(&again.body).iter().any(|(_, n)| *n == name));
+        assert_eq!(origin_of(history, name), &Origin::Unchanged);
+    }
+}
+
+#[test]
+fn a_new_vertex_half_a_step_from_an_old_one_takes_a_name_of_its_own() {
+    // z = 89/3 rounds to the corner (30, 30, 30) that the cut takes away, but is not it.
+    let block = cuboid(1, [0, 0, 0], [30, 30, 30]);
+    let corner = behind(5, [[29, 30, 30], [30, 29, 30], [2, 0, 49]]);
+    let operands = [solid(1, &block), solid(2, &corner)];
+    let cut = subtract(&ctx(), &SERIAL, key(1), &operands).unwrap().result;
+    let history = lawful(&cut, &[&block, &corner]);
+    let gone = vertex_at(&block, [30, 30, 30]).unwrap();
+    assert!(vertices(&cut.body).iter().all(|(_, n)| *n != gone));
+    assert!(history.deleted().names().contains(&gone));
+    let met = meetings(&cut.body);
+    assert_eq!(met.len(), 1);
+    assert!(matches!(
+        origin_of(history, met[0]),
+        Origin::Generated { .. }
+    ));
+    // x + y + 7z = 267 takes that point off in turn, and meets the same edge at z = 207/7, which
+    // rounds to the same grid point but lies on another plane.
+    let more = behind(7, [[27, 30, 30], [30, 27, 30], [0, 1, 38]]);
+    let operands = [solid(1, &cut.body), solid(2, &more)];
+    let again = subtract(&ctx_of(8), &SERIAL, key(1), &operands)
+        .unwrap()
+        .result;
+    let history = lawful(&again, &[&cut.body, &more]);
+    assert!(vertices(&again.body).iter().all(|(_, n)| *n != met[0]));
+    assert!(history.deleted().names().contains(&met[0]));
+    let now = meetings(&again.body);
+    assert_eq!(now.len(), 1);
+    assert!(matches!(
+        origin_of(history, now[0]),
+        Origin::Generated { .. }
+    ));
+}
+
 /// A box made by operation `op`, with the names its making reported.
 fn cuboid_named(op: u8, low: [i64; 3], size: [u64; 3]) -> (Body, Vec<TopoName>) {
     let input = BoxInput {
@@ -709,68 +864,7 @@ fn a_naming_failure_says_what_failed() {
 }
 
 #[test]
-fn edges_a_cut_leaves_alone_keep_their_names_and_one_it_shortens_is_modified() {
-    // The notch takes the wall's top right edge, and shortens the four edges that end there; the
-    // window, in the middle of the wall, touches no edge of it.
-    let wall = cuboid(1, [0, 0, 0], [100, 10, 60]);
-    let notch = cuboid(2, [90, -5, 50], [20, 20, 20]);
-    let window = cuboid(3, [40, -5, 20], [20, 20, 20]);
-    let operands = [solid(1, &wall), solid(2, &notch), solid(3, &window)];
-    let result = subtract(&ctx(), &SERIAL, key(1), &operands).unwrap().result;
-    let history = lawful(&result, &[&wall, &notch, &window]);
-    let after: BTreeSet<NameId> = edges(&result.body).iter().map(|(_, n)| *n).collect();
-    let (mut unchanged, mut modified, mut gone) = (0, 0, 0);
-    for ([low, high], name) in edges(&wall) {
-        let at_notch = |p: [i64; 3]| p[0] == 100 && p[2] == 60;
-        match (at_notch(low), at_notch(high)) {
-            (true, true) => {
-                assert!(!after.contains(&name));
-                assert!(history.deleted().names().contains(&name));
-                gone += 1;
-            }
-            (true, false) | (false, true) => {
-                assert!(after.contains(&name), "a shortened edge lost its name");
-                let Origin::Modified { from } = origin_of(history, name) else {
-                    panic!("a shortened edge is {:?}", origin_of(history, name))
-                };
-                assert_eq!(from.names(), [name]);
-                modified += 1;
-            }
-            (false, false) => {
-                assert!(
-                    after.contains(&name),
-                    "an edge the cut left alone lost its name"
-                );
-                assert_eq!(origin_of(history, name), &Origin::Unchanged);
-                unchanged += 1;
-            }
-        }
-    }
-    assert_eq!((unchanged, modified, gone), (7, 4, 1));
-}
-
-#[test]
-fn a_new_edge_is_named_by_the_faces_around_it_and_the_faces_that_end_it() {
-    let wall = cuboid(1, [0, 0, 0], [100, 10, 60]);
-    let window = cuboid(2, [40, -5, 20], [20, 20, 20]);
-    let operands = [solid(1, &wall), solid(2, &window)];
-    let result = subtract(&ctx(), &SERIAL, key(1), &operands).unwrap().result;
-    let history = lawful(&result, &[&wall, &window]);
-    let expected = bounded_edges(&result.body);
-    let mut new = 0;
-    for (row, (_, name)) in edges(&result.body).into_iter().enumerate() {
-        if let Origin::Generated { role, .. } = origin_of(history, name) {
-            assert_eq!(role.name(), "edge");
-            assert_eq!(name, expected[row], "edge {row}");
-            new += 1;
-        }
-    }
-    // Four where the reveals meet, and four where each meets the front and the back.
-    assert_eq!(new, 12);
-}
-
-#[test]
-fn a_vertex_where_three_planes_meet_keeps_its_name_through_a_later_cut() {
+fn a_vertex_a_wedge_makes_where_three_planes_meet_keeps_its_name_through_a_later_cut() {
     // x + 3y = 119 takes the block's corner column off, and meets its top and bottom edges along y
     // at y = 89/3, off the grid.
     let block = cuboid(1, [0, 0, 0], [30, 30, 30]);
@@ -795,7 +889,7 @@ fn a_vertex_where_three_planes_meet_keeps_its_name_through_a_later_cut() {
 }
 
 #[test]
-fn a_new_vertex_half_a_step_from_an_old_one_takes_a_name_of_its_own() {
+fn a_new_vertex_a_wedge_makes_half_a_step_from_old_ones_takes_a_name_of_its_own() {
     // y = 89/3 rounds to the corners (30, 30, 0) and (30, 30, 30) that the cut takes away, but is
     // neither of them.
     let block = cuboid(1, [0, 0, 0], [30, 30, 30]);
