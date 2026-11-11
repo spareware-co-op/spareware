@@ -14582,6 +14582,30 @@
           "target": "lib"
         },
         {
+          "cost": "rationals grow with the depth of the sums, and each pair of faces costs the product of their edges. This checker accepts that, because it runs on tests only. No recursion.",
+          "does": "[`check`] reads a body's rows into rationals: each vertex a point, each face its rings of corners and the plane its surface gives. Then it tests the rules one by one, in the most direct way there is, and lists a [`Finding`] for each one broken.",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-test/src/second_check.rs",
+          "guarantees": [
+            "**Exact.** Every value is a rational and every comparison a comparison of rationals, with no width to overflow and no tolerance but the bound the body is recorded with.",
+            "**Independent.** A different method wherever one exists: points listed and located, where `geom-check` compares stretches of a line by the signs of planes; Cramer's rule, where it never leaves the planes; crossing numbers, where it counts by moved lines.",
+            "**Says what it cannot judge.** A curved face or edge, or a face whose corners leave one plane, is [`Finding::Unjudged`], never a pass (flat bodies and meshes are what 28.4 asks of it)."
+          ],
+          "job": "The second checker for flat bodies (chapter 28.4; piece G135): chapter 8.3's rules, written again from their definitions in exact rationals, sharing no code with `geom-check`, to stand behind it.",
+          "method": {
+            "links": [
+              "projects/engines/geometry/architecture/08-topology.md",
+              "doi:10.1016/B978-0-12-336156-1.50013-6",
+              "doi:10.1016/B978-0-08-050754-5.50043-8"
+            ],
+            "text": "chapter 8.3's rules (`projects/engines/geometry/architecture/08-topology.md`); the crossing number for a point in a polygon (Haines, \"Point in polygon strategies\", Graphics Gems IV, 1994, doi:10.1016/B978-0-12-336156-1.50013-6); Cramer's rule for three planes; the divergence theorem for a polyhedron's volume (Goldman, Graphics Gems II, 1991, doi:10.1016/B978-0-08-050754-5.50043-8)."
+          },
+          "path": "geom_test::second_check",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
           "cost": "constant time; one environment read per [`resolve`], none for [`fixed`].",
           "does": "a [`Seed`] is a 64-bit value that decides every input a seeded test draws. [`resolve`] picks a test's seed, the value of the environment variable [`ENV_VAR`] (`SPAREKIT_SEED`) when it is set and the test's fixed default otherwise, and prints it as `seed: <hex>` before the test draws anything. [`fixed`] prints a seed that a test must use whatever the environment says, because its assertions depend on that seed (a golden hash, a recorded case).",
           "family": [],
