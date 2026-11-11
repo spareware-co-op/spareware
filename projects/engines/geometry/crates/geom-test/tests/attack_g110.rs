@@ -27,6 +27,7 @@ use geom_num::{Exactness, GridStep, P3, Steps};
 use geom_op::{OpContext, OpId, OpOutput, OpPath};
 use geom_run::Budget;
 use geom_test::faults::{Applied, AttackError, CATALOGUE, attack, attack_with, full_check, missed};
+use geom_test::plane_bodies::{CORPUS, meeting, scaled_jog};
 use geom_topo::Body;
 
 fn ctx() -> OpContext<'static> {
@@ -119,6 +120,9 @@ fn corpus() -> Vec<(String, Body, Exactness)> {
         }
         all.push((name, out.result.body, out.exactness));
     }
+    // A body of planes, for the faults only such a body has (G135).
+    let tilted = meeting(CORPUS[0], &scaled_jog(1)).unwrap();
+    all.push(("a tilted box".to_string(), tilted, Exactness::Exact));
     all
 }
 
