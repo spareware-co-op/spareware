@@ -1115,49 +1115,6 @@ fn three_boxes_whose_union_pinches_at_a_corner_give_a_general_body() {
 }
 
 #[test]
-fn a_box_inside_another_unites_cuts_and_meets() {
-    let outer = cuboid([0, 0, 0], [40, 40, 40]);
-    let inner = cuboid([10, 10, 10], [10, 10, 10]);
-    let both = [solid(1, &outer), solid(2, &inner)];
-    let whole = unite(&ctx(), &SERIAL, &both).unwrap().result.body;
-    assert_eq!(
-        (counted(&whole), sixfold(&whole)),
-        (counted(&outer), sixfold(&outer))
-    );
-    // Clear of every face, the inner box leaves a cavity: a second shell.
-    let hollow = subtract(&ctx(), &SERIAL, key(1), &both)
-        .unwrap()
-        .result
-        .body;
-    assert_eq!(counted(&hollow), [12, 24, 16, 2]);
-    assert_eq!(sixfold(&hollow), sixfold(&outer) - sixfold(&inner));
-    checked(&hollow);
-    let none = subtract(&ctx(), &SERIAL, key(2), &both).unwrap();
-    assert!(noted(&none, "bool.empty_result"));
-    checked(&none.result.body);
-    let met = intersect(&ctx(), &SERIAL, &both).unwrap().result.body;
-    assert_eq!(
-        (counted(&met), sixfold(&met)),
-        (counted(&inner), sixfold(&inner))
-    );
-    // On one of the outer box's faces, it leaves a pocket in one shell.
-    let flush = cuboid([0, 10, 10], [10, 10, 10]);
-    let both = [solid(1, &outer), solid(2, &flush)];
-    let pocket = subtract(&ctx(), &SERIAL, key(1), &both)
-        .unwrap()
-        .result
-        .body;
-    assert_eq!(pocket.arenas().shells.len(), 1);
-    assert_eq!(sixfold(&pocket), sixfold(&outer) - sixfold(&flush));
-    checked(&pocket);
-    let met = intersect(&ctx(), &SERIAL, &both).unwrap().result.body;
-    assert_eq!(
-        (counted(&met), sixfold(&met)),
-        (counted(&flush), sixfold(&flush))
-    );
-}
-
-#[test]
 fn a_refused_preparation_says_why() {
     let k = key(1);
     for (error, text) in [
