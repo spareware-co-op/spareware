@@ -25,6 +25,11 @@
 //!   wide to separate it from zero) a derivative bound is `Unbounded` and an enclosure is refused,
 //!   never guessed; a bound on the points still holds there, from the basis's bound widened by
 //!   the offset's largest size.
+//! - **A span of one break is bounded from both sides.** The offsets' slopes jump at a station
+//!   and the basis's tangent may turn at one of its breaks, so a derivative bound over one such
+//!   parameter alone holds the derivative from each side, and a bound on the points there holds
+//!   the offset of each side, as the trait's rule for a span of one parameter asks
+//!   ([`ParamCurve`]).
 //! - **Converted wherever it is defined.** Where the normal vanishes, or cannot be told from zero
 //!   even over the narrowest piece the conversion cuts (the domain's width times 2^−52, or two
 //!   neighbouring doubles where those are farther apart), the offset is undefined (a cusp of the basis, or a tangent parallel to the reference direction),
@@ -116,11 +121,13 @@ pub struct Offset<const D: usize> {
 /// The degree of the cache's pieces.
 const CACHE_DEGREE: usize = 9;
 
-/// Where an offset is evaluated: one parameter from one side, or every parameter of a span.
+/// Where an offset is evaluated: one parameter from one side, or every parameter of a span. A
+/// span lies in one station piece; where it is one station alone, the side says which of the two
+/// pieces that meet there gives the offsets' slopes.
 #[derive(Clone, Copy)]
 enum At {
     Point(f64, Limit),
-    Span(f64, f64),
+    Span(f64, f64, Limit),
 }
 
 /// What the cache's halving makes of a piece (`Offset::halved`).
@@ -255,7 +262,7 @@ impl<const D: usize> Offset<D> {
         let mut d: Vec<[Interval; D]> = Vec::with_capacity(k.saturating_add(1));
         match at {
             At::Point(t, side) => d = self.basis.enclose(t, side, k, meter)?,
-            At::Span(lo, hi) => {
+            At::Span(lo, hi, _) => {
                 for j in 0..=k {
                     let b = if j == 0 {
                         self.basis.bound((lo, hi), meter)?
@@ -289,7 +296,7 @@ impl<const D: usize> Offset<D> {
     fn station_jets(stations: &[Station], at: At, order: usize) -> Result<(Jet, Jet), CurveError> {
         let (t, side) = match at {
             At::Point(t, side) => (Interval::point(t)?, side),
-            At::Span(lo, hi) => (Interval::new(lo, hi)?, Limit::FromRight),
+            At::Span(lo, hi, side) => (Interval::new(lo, hi)?, side),
         };
         let (first, last) = match (stations.first(), stations.last()) {
             (Some(f), Some(l)) => (*f, *l),
@@ -297,7 +304,7 @@ impl<const D: usize> Offset<D> {
         };
         let probe = match at {
             At::Point(x, _) => x,
-            At::Span(lo, hi) => f64::midpoint(lo, hi),
+            At::Span(lo, hi, _) => f64::midpoint(lo, hi),
         };
         let constant = |s: Station| -> Result<(Jet, Jet), CurveError> {
             Ok((
@@ -428,13 +435,35 @@ impl<const D: usize> Offset<D> {
         Ok(out)
     }
 
-    /// The span cut at the breaks inside it and into a few pieces each, for tighter jets.
-    fn pieces(&self, (lo, hi): (f64, f64)) -> Result<Vec<(f64, f64)>, CurveError> {
+    /// The span cut at the breaks inside it and into a few pieces each, for tighter jets, each
+    /// with the side its stations are read from: the right. A span that is one station is read
+    /// from each side the domain has there when a derivative is asked (`order` above 0): the
+    /// offsets' slopes jump at a station, and the trait's rule for a span of one parameter asks
+    /// for both sides inside the domain, and at an end of it for the one side there is
+    /// ([`ParamCurve`]). The offsets themselves do not jump, so the points keep the one piece. A
+    /// break of the basis needs no second piece: the basis's own bounds over it hold both sides.
+    fn pieces(
+        &self,
+        (lo, hi): (f64, f64),
+        order: usize,
+    ) -> Result<Vec<(f64, f64, Limit)>, CurveError> {
+        let (a, b) = self.basis.interval();
+        if let OffsetLaw::Distances(s) = &self.law
+            && order > 0
+            && lo == hi
+            && s.iter().any(|x| x.at == lo)
+        {
+            let sides = [
+                (lo < b).then_some(Limit::FromRight),
+                (a < lo).then_some(Limit::FromLeft),
+            ];
+            return Ok(sides.into_iter().flatten().map(|s| (lo, hi, s)).collect());
+        }
         let c = taylor::cuts_between((lo, hi), &self.breaks(), 4)?;
         let mut out = Vec::with_capacity(c.len());
         for p in c.windows(2) {
             if let (Some(&x), Some(&y)) = (p.first(), p.get(1)) {
-                out.push((x, y));
+                out.push((x, y, Limit::FromRight));
             }
         }
         Ok(out)
@@ -448,8 +477,8 @@ impl<const D: usize> Offset<D> {
         span: (f64, f64),
         meter: &mut WorkMeter<'_>,
     ) -> Result<bool, CurveError> {
-        for (lo, hi) in self.pieces(span)? {
-            match self.derivative_enclosures(At::Span(lo, hi), 0, meter) {
+        for (lo, hi, side) in self.pieces(span, 0)? {
+            match self.derivative_enclosures(At::Span(lo, hi, side), 0, meter) {
                 Ok(_) => {}
                 Err(CurveError::Unbounded) => return Ok(false),
                 Err(e) => return Err(e),
@@ -571,6 +600,11 @@ impl<const D: usize> Offset<D> {
 }
 
 impl<const D: usize> ParamCurve<D> for Offset<D> {
+    /// The basis's breaks and the stations.
+    fn breaks(&self) -> Vec<f64> {
+        Offset::breaks(self)
+    }
+
     fn domain(&self) -> (f64, f64) {
         self.basis.interval()
     }
@@ -608,8 +642,8 @@ impl<const D: usize> ParamCurve<D> for Offset<D> {
             lo: [f64::INFINITY; D],
             hi: [f64::NEG_INFINITY; D],
         };
-        for (lo, hi) in self.pieces(span)? {
-            let b = match self.derivative_enclosures(At::Span(lo, hi), 0, meter) {
+        for (lo, hi, side) in self.pieces(span, 0)? {
+            let b = match self.derivative_enclosures(At::Span(lo, hi, side), 0, meter) {
                 Ok(e) => {
                     let x = e.first().ok_or(CurveError::Defect)?;
                     Bounds {
@@ -660,8 +694,8 @@ impl<const D: usize> ParamCurve<D> for Offset<D> {
             lo: [f64::INFINITY; D],
             hi: [f64::NEG_INFINITY; D],
         };
-        for (lo, hi) in self.pieces(span)? {
-            let e = match self.derivative_enclosures(At::Span(lo, hi), order, meter) {
+        for (lo, hi, side) in self.pieces(span, order)? {
+            let e = match self.derivative_enclosures(At::Span(lo, hi, side), order, meter) {
                 Ok(e) => e,
                 Err(CurveError::Unbounded) => return Ok(DerivativeBound::Unbounded),
                 Err(e) => return Err(e),
