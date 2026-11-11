@@ -5503,13 +5503,6 @@
     },
     {
       "file": "projects/engines/geometry/crates/geom-num/src/predicate.rs",
-      "line_text": "Some(sign) => Ok(sign),",
-      "occurrences": 1,
-      "piece": "G41",
-      "reason": "magnitude_bits runs only at compile time, in constants, and the filtered orient2d path is off while ORIENT2D_FILTER_FIRST is false (G42's measurement keeps it off), so no test runs these lines. G41 proves or removes them."
-    },
-    {
-      "file": "projects/engines/geometry/crates/geom-num/src/predicate.rs",
       "line_text": "None => orient2d_unfiltered(a, b, c),",
       "occurrences": 1,
       "piece": "G41",
@@ -5738,6 +5731,27 @@
       "occurrences": 1,
       "piece": "G41",
       "reason": "Tpi::new's one error other than Degenerate is BudgetExceeded, the arm G41's proofs close in geom-num: planes within budget cannot reach it, and every Plane is within budget, so no test can run this line."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-num/src/predicate.rs",
+      "line_text": "Some(sign) => Ok(sign),",
+      "occurrences": 2,
+      "piece": "G41",
+      "reason": "magnitude_bits runs only at compile time, in constants, and the filtered orient2d path is off while ORIENT2D_FILTER_FIRST is false (G42's measurement keeps it off), so no test runs these lines. G41 proves or removes them."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-num/src/predicate.rs",
+      "line_text": "match orient2d_narrow(a, b, c) {",
+      "occurrences": 1,
+      "piece": "G41",
+      "reason": "magnitude_bits runs only at compile time, in constants, and the filtered orient2d path is off while ORIENT2D_FILTER_FIRST is false (G42's measurement keeps it off), so no test runs these lines. G41 proves or removes them."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-num/src/predicate.rs",
+      "line_text": "None => orient2d_exact(a, b, c),",
+      "occurrences": 1,
+      "piece": "G41",
+      "reason": "magnitude_bits runs only at compile time, in constants, and the filtered orient2d path is off while ORIENT2D_FILTER_FIRST is false (G42's measurement keeps it off), so no test runs these lines. G41 proves or removes them."
     }
   ]
 }

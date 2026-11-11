@@ -30,6 +30,8 @@
 //! each named in the catalogue with its crate's path and checked to be a public function there;
 //! and, from phase 3, `geom-topo`'s columns and publishing, `geom-name`'s attribute step, and
 //! `geom-op`'s batch driver and the flat arrays of points.
+//! Beside the gates, [`steps`] tallies which step of chapter 23.2's ladder settled each call, per
+//! corpus.
 //!
 //! Map: chapter 23.13 (benchmarks and regression gates) and 28.14 (benchmarks in the test suite)
 //! of the kernel architecture, `projects/engines/geometry/architecture/`; board entry G18, which
@@ -296,6 +298,7 @@ pub mod inputs;
 pub mod kernels;
 pub mod rng;
 pub mod sha256;
+pub mod steps;
 // Unix and Windows only, with the `reference` feature (on by default): the reference runner's
 // nightly records and report (piece G107), which run where the runner does. Like the judge, it is
 // left out of the WebAssembly guest, whose fuel the gate measures, and out of the gate's measured
