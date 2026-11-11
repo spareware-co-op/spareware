@@ -171,10 +171,18 @@ cargo bolero test orient2d_fuzz --package geom-fuzz --toolchain nightly-2026-10-
 `-T` bounds the run; `--runs`, `--jobs` and `--max-input-length` are the other limits. A crash is
 written to `tests/__fuzz__/orient2d/crashes`, where `cargo test` replays it.
 
-**Campaigns.** `.github/workflows/kernel-fuzz-campaign.yml` runs `wide_fuzz` under libFuzzer in
-five shards of five hours, 25 CPU hours, for G26's "24 hours clean". It runs only on demand: when
-the label `fuzz-campaign` is added to a pull request, or by hand from the Actions tab once the file
-is on `main`. Each shard uploads any crash and the corpus it grew.
+**Campaigns.** `.github/workflows/kernel-fuzz-campaign.yml` runs every target under libFuzzer for
+five hours each night, one shard each. On demand it runs `wide_fuzz` in five shards of five hours,
+25 CPU hours, for G26's "24 hours clean": when the label `fuzz-campaign` is added to a pull
+request, or by hand from the Actions tab. By hand it can also run every target as a night does, on
+the head of the branch or tag it is started on:
+
+```text
+gh workflow run kernel-fuzz-campaign.yml --ref main -f targets=all
+```
+
+`-f hours=1` (one to five, five by default) shortens every shard for a trial. Each shard uploads
+any crash and the corpus it grew.
 
 **Kani**, on Linux or macOS:
 

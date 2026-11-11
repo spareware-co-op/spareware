@@ -20,6 +20,13 @@ name: Kernel fuzz campaign
 #   hours in all: on a pull request when someone adds the label `fuzz-campaign` (a pull request's
 #   own copy of this file runs, so a campaign can run before the file reaches main), and by hand
 #   from the Actions tab (workflow_dispatch), on any branch, once this file is on main.
+# - By hand, the whole set: a dispatch with `targets` set to `all` runs what a night runs, every
+#   target in one shard, on the head of the branch or tag it is started on. A gate that needs its
+#   campaign on one commit starts it there and does not wait for the night's run:
+#   `gh workflow run kernel-fuzz-campaign.yml --ref <branch or tag> -f targets=all`. `hours`
+#   (default 5) shortens every shard of a dispatched run, for a trial. A dispatched run's name in
+#   the run list says which targets it fuzzed, for how long, and on which commit; every other
+#   run keeps the name GitHub gives it.
 #
 # Never on an ordinary push. kernel-fuzz.yml keeps the minute of libFuzzer every pull request gets.
 # The machines are GitHub's hosted runners, free for a public repository (decision 32.4), until
@@ -29,10 +36,39 @@ name: Kernel fuzz campaign
 # for libFuzzer's flags, cargo-bolero's exact version from its published lockfile, every action
 # pinned to a full commit; Cargo.lock is held to the reviewed one before anything builds.
 
+# A run started by hand says what it fuzzed. The other two names are GitHub's own defaults: a
+# pull request's title, and this workflow's name for a scheduled run (a called run has its
+# caller's name).
+run-name: >-
+  ${{ github.event_name == 'workflow_dispatch'
+  && format('Kernel fuzz campaign by hand: {0}, {1} h a shard, on {2}', inputs.targets == 'all' && 'all targets' || 'wide_fuzz in five shards', inputs.hours || '5', github.sha)
+  || github.event.pull_request.title
+  || 'Kernel fuzz campaign' }}
+
 on:
   pull_request:
     types: [labeled]
   workflow_dispatch:
+    inputs:
+      targets:
+        description: "wide: wide_fuzz in five shards (G26). all: every target in one shard, as a night runs"
+        required: false
+        default: wide
+        type: choice
+        options:
+          - wide
+          - all
+      hours:
+        description: "Hours of fuzzing in each shard (a hosted job may run six hours, so five at most)"
+        required: false
+        default: "5"
+        type: choice
+        options:
+          - "5"
+          - "4"
+          - "3"
+          - "2"
+          - "1"
   schedule:
     # Every night at 12:47 UTC, before the nightly predicate suite (kernel-nightly.yml).
     - cron: "47 12 * * *"
@@ -42,8 +78,13 @@ on:
 permissions:
   contents: read
 
+# Runs of one kind on one ref queue behind each other, and none is cancelled once it has started.
+# The kinds are apart, so a run started by hand never waits behind the night's run on the same
+# branch, and the night's run never waits behind it. Every run started by hand is a group of its
+# own: GitHub keeps only the newest waiting run of a group and cancels the others, which would
+# lose a campaign someone asked for.
 concurrency:
-  group: kernel-fuzz-campaign-${{ github.ref }}
+  group: kernel-fuzz-campaign-${{ github.ref }}-${{ github.event_name == 'workflow_dispatch' && github.run_id || github.event_name }}
   cancel-in-progress: false
 
 env:
@@ -56,22 +97,23 @@ env:
 
 jobs:
   campaign:
-    name: ${{ matrix.target }} under libFuzzer for five hours (shard ${{ matrix.shard }})
+    name: ${{ matrix.target }} under libFuzzer for ${{ (inputs.hours || '5') == '5' && 'five hours' || format('{0} h', inputs.hours) }} (shard ${{ matrix.shard }})
     if: >-
       github.event_name == 'workflow_dispatch'
       || github.event_name == 'schedule'
       || github.event.label.name == 'fuzz-campaign'
       || startsWith(github.ref, 'refs/tags/geom-v')
     runs-on: ubuntu-latest
-    # Five hours of fuzzing, the build before it and the uploads after, inside the six hours a
-    # hosted job may run.
+    # Five hours of fuzzing (fewer if a dispatch asks), the build before it and the uploads after,
+    # inside the six hours a hosted job may run.
     timeout-minutes: 330
     strategy:
       fail-fast: false
       matrix:
-        # Nightly and on a release: every target, one shard each. On demand: wide_fuzz in five.
-        target: ${{ fromJSON((github.event_name == 'schedule' || startsWith(github.ref, 'refs/tags/geom-v')) && '["arenas_fuzz", "attributes_fuzz", "batch_fuzz", "boxtree_fuzz", "cache_fuzz", "cbor_fuzz", "curves_fuzz", "linalg_fuzz", "make_fuzz", "maths_fuzz", "nurbs_fuzz", "orient2d_fuzz", "predicates_fuzz", "roots_fuzz", "sequence_fuzz", "surfaces_fuzz", "transforms_fuzz", "variants_fuzz", "wide_fuzz"]' || '["wide_fuzz"]') }}
-        shard: ${{ fromJSON((github.event_name == 'schedule' || startsWith(github.ref, 'refs/tags/geom-v')) && '[1]' || '[1, 2, 3, 4, 5]') }}
+        # Nightly, on a release and by hand with `targets: all`: every target, one shard each.
+        # Otherwise on demand: wide_fuzz in five. Both lines choose by the same condition.
+        target: ${{ fromJSON((github.event_name == 'schedule' || startsWith(github.ref, 'refs/tags/geom-v') || inputs.targets == 'all') && '["arenas_fuzz", "attributes_fuzz", "batch_fuzz", "boxtree_fuzz", "cache_fuzz", "cbor_fuzz", "curves_fuzz", "linalg_fuzz", "make_fuzz", "maths_fuzz", "nurbs_fuzz", "orient2d_fuzz", "predicates_fuzz", "roots_fuzz", "sequence_fuzz", "surfaces_fuzz", "transforms_fuzz", "variants_fuzz", "wide_fuzz"]' || '["wide_fuzz"]') }}
+        shard: ${{ fromJSON((github.event_name == 'schedule' || startsWith(github.ref, 'refs/tags/geom-v') || inputs.targets == 'all') && '[1]' || '[1, 2, 3, 4, 5]') }}
     defaults:
       run:
         shell: bash
@@ -95,10 +137,12 @@ jobs:
           --no-default-features --features libfuzzer
       - name: Cargo.lock is the reviewed one
         run: cargo metadata --locked --format-version 1 > /dev/null
-      - name: Fuzz ${{ matrix.target }} with libFuzzer for five hours
+      - name: Fuzz ${{ matrix.target }} with libFuzzer for ${{ (inputs.hours || '5') == '5' && 'five hours' || format('{0} h', inputs.hours) }}
+        env:
+          HOURS: ${{ inputs.hours || '5' }}
         run: >-
           cargo bolero test "${{ matrix.target }}" --package geom-fuzz
-          --toolchain "$FUZZ_NIGHTLY" --engine libfuzzer -T 18000s
+          --toolchain "$FUZZ_NIGHTLY" --engine libfuzzer -T "$((HOURS * 3600))s"
       - name: Upload the crashing input
         if: failure()
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2

@@ -9,6 +9,11 @@
 //!   nothing; `None` for an input one past its range.
 //! - **`Lpi::points`, `Lpi::plane` and `Ssi::points`.** The accessors, which return what the
 //!   point was built from.
+//! - **`Ssi::orient2d` and `Plane::side_of_lpi` where the weight's filter cannot decide.** Two
+//!   nearly parallel lines, and a line nearly parallel to its plane, at the edge of the grid: the
+//!   weight is a small difference of huge products, so the classification takes the weight's exact
+//!   path, which no other test made it take (piece G41's waiting lines). Each answer against the
+//!   side of the point itself, formed by division in exact rationals (`num-rational`).
 //!
 //! Seeds: the randomised tests print `seed: <hex>` and run from a fixed default;
 //! `SPAREKIT_SEED=<hex>` replays another (chapter 28.17).
@@ -36,6 +41,7 @@ use geom_num::grid::COORD_MAX;
 use geom_num::plane::{Lpi, Plane};
 use geom_num::{P2, P3, Sign};
 use num_bigint::BigInt;
+use num_rational::BigRational;
 
 const DEFAULT_SEED: u64 = 0x6721_0000_5eed_0002;
 
@@ -242,4 +248,173 @@ fn the_implicit_points_return_what_they_were_built_from() {
     let pts = [q(0, 0), q(4, 4), q(0, 4), q(4, 0)];
     let s = Ssi::new(pts[0], pts[1], pts[2], pts[3]).unwrap();
     assert_eq!(s.points(), pts);
+}
+
+// ---------------------------------------------------------------------------------------------
+// The exact weight, where the generated filter cannot decide it (piece G41's waiting lines).
+// ---------------------------------------------------------------------------------------------
+
+const M: i64 = COORD_MAX;
+
+fn rational(v: i64) -> BigRational {
+    BigRational::from_integer(BigInt::from(v))
+}
+
+fn sign_of_rational(v: &BigRational) -> Sign {
+    sign_of(v.numer())
+}
+
+/// orient2d(p, q, x) for the point x where the line a b crosses the line c d, in exact rationals:
+/// x = a + t (b − a) with t = orient2d(c, d, a) / (orient2d(c, d, a) − orient2d(c, d, b)), then
+/// (q − p) × (x − p). The point is formed by division, which the kernel never does.
+fn ssi_side_oracle(pts: [[i64; 2]; 4], p: [i64; 2], q: [i64; 2]) -> Sign {
+    let cross = |o: [i64; 2], u: [i64; 2], v: [i64; 2]| {
+        (rational(u[0]) - rational(o[0])) * (rational(v[1]) - rational(o[1]))
+            - (rational(u[1]) - rational(o[1])) * (rational(v[0]) - rational(o[0]))
+    };
+    let [a, b, c, d] = pts;
+    let (oa, ob) = (cross(c, d, a), cross(c, d, b));
+    let t = &oa / (&oa - &ob);
+    let x = [0, 1].map(|k| rational(a[k]) + &t * (rational(b[k]) - rational(a[k])));
+    let side = (rational(q[0]) - rational(p[0])) * (&x[1] - rational(p[1]))
+        - (rational(q[1]) - rational(p[1])) * (&x[0] - rational(p[0]));
+    sign_of_rational(&side)
+}
+
+/// Two lines whose directions (M, M − 1) and (M − 1, M − 2) are nearly parallel: the weight
+/// (b − a) × (d − c) is M (M − 2) − (M − 1)² = −1, the difference of two products near 2^80, far
+/// inside the `f64` filter's bound. So `Ssi::orient2d` must take the weight's exact path, which
+/// no other test made it do. Its answer is checked against the side of the crossing point
+/// computed in exact rationals, for lines through the point (the two lines themselves, either
+/// way round: `Zero`), for lines beside it, and for random lines at every scale; with the second
+/// line reversed the weight is +1 and every answer is the same, since the point is the same.
+#[test]
+fn a_crossing_whose_weight_the_filter_cannot_decide_is_classified_exactly() {
+    let mut rng = Rng::for_test("ssi undecided weight");
+    let q2 = |p: [i64; 2]| P2::new(p[0], p[1]).unwrap();
+    let (a, b, c, d) = ([0, 0], [M, M - 1], [-3, -7], [M - 4, M - 9]);
+    for (pts, weight) in [
+        ([a, b, c, d], Sign::Negative),
+        ([a, b, d, c], Sign::Positive),
+    ] {
+        let [pa, pb, pc, pd] = pts.map(q2);
+        assert_eq!(ssi_weight::filter(pa, pb, pc, pd), None, "{pts:?}");
+        assert_eq!(ssi_weight::exact(pa, pb, pc, pd), Some(weight), "{pts:?}");
+        let s = Ssi::new(pa, pb, pc, pd).unwrap();
+
+        let check = |p: [i64; 2], q: [i64; 2]| -> Sign {
+            let expected = ssi_side_oracle(pts, p, q);
+            assert_eq!(
+                s.orient2d(q2(p), q2(q)),
+                Ok(expected),
+                "{pts:?} {p:?} {q:?}"
+            );
+            expected
+        };
+        // The point lies on both of its own lines, whichever way each is walked.
+        for (p, q) in [(a, b), (b, a), (c, d), (d, c)] {
+            assert_eq!(check(p, q), Sign::Zero);
+        }
+        // With orient2d(c, d, a) = 4M − 1 and orient2d(c, d, b) = 4M, the lines cross at
+        // −(4M − 1) b, far below and to the left of the frame. So the x axis walked rightwards
+        // has the point on its right, and walked leftwards on its left.
+        assert_eq!(check([0, 0], [1, 0]), Sign::Negative);
+        assert_eq!(check([1, 0], [0, 0]), Sign::Positive);
+        // A line parallel to a b, one step above it and one step below it.
+        assert_eq!(check([0, 1], [M, M]), Sign::Negative);
+        assert_eq!(check([0, -1], [M, M - 2]), Sign::Positive);
+
+        let mut seen = [0usize; 3];
+        for _ in 0..4_000 {
+            let p = [rng.coord(), rng.coord()];
+            let q = [rng.coord(), rng.coord()];
+            seen[match check(p, q) {
+                Sign::Negative => 0,
+                Sign::Zero => 1,
+                Sign::Positive => 2,
+            }] += 1;
+        }
+        assert!(seen[0] > 0 && seen[2] > 0, "{seen:?}");
+    }
+}
+
+/// n · x + d at the point x where the line p q meets `first`, for the plane (n, d) = `second`,
+/// in exact rationals: x = p + t (q − p) with t = −(n₁ · p + d₁) / (n₁ · (q − p)). The point is
+/// formed by division, which the kernel never does.
+fn lpi_side_oracle(first: &Plane, second: &Plane, p: [i64; 3], q: [i64; 3]) -> Sign {
+    let int = |v: i128| BigRational::from_integer(BigInt::from(v));
+    let at = |plane: &Plane, x: &[BigRational; 3]| {
+        let n = plane.n();
+        int(n[0]) * &x[0] + int(n[1]) * &x[1] + int(n[2]) * &x[2] + int(plane.d())
+    };
+    let (rp, rq) = (p.map(rational), q.map(rational));
+    let (sp, sq) = (at(first, &rp), at(first, &rq));
+    let t = -&sp / (&sq - &sp);
+    let x = [0, 1, 2].map(|k| &rp[k] + &t * (&rq[k] - &rp[k]));
+    sign_of_rational(&at(second, &x))
+}
+
+/// A line nearly parallel to its plane: the plane through (0, 0, 0), (M, M − 1, 0) and
+/// (0, 0, M) has the normal (M (M − 1), −M², 0), and the line's direction (M − 1, M − 2, 0)
+/// gives the weight n · (q − p) = M ((M − 1)² − M (M − 2)) = M, the difference of two products
+/// near 2^120, far inside the `f64` filter's bound. So `Plane::side_of_lpi` must take the
+/// weight's exact path, which no other test made it do. Its answer is checked against the side
+/// of the meeting point computed in exact rationals: `Zero` for the line's own plane and for
+/// planes that hold the line, and the oracle's sign for planes through random grid points at
+/// every scale; with the line reversed the weight is −M and every answer is the same.
+#[test]
+fn a_line_plane_point_whose_weight_the_filter_cannot_decide_is_classified_exactly() {
+    let mut rng = Rng::for_test("lpi undecided weight");
+    let p3 = |p: [i64; 3]| P3::new(p[0], p[1], p[2]).unwrap();
+    let through = |a: [i64; 3], b: [i64; 3], c: [i64; 3]| Plane::through(p3(a), p3(b), p3(c));
+    let first = through([0, 0, 0], [M, M - 1, 0], [0, 0, M]).unwrap();
+    let m = i128::from(M);
+    assert_eq!(first.n(), [m * (m - 1), -m * m, 0]);
+    let (p, q) = ([0, 0, 1], [M - 1, M - 2, 1]);
+    for (p, q, weight) in [(p, q, Sign::Positive), (q, p, Sign::Negative)] {
+        let [nx, ny, nz] = first.n();
+        assert_eq!(lpi_weight::filter(nx, ny, nz, p3(p), p3(q)), None);
+        assert_eq!(lpi_weight::exact(nx, ny, nz, p3(p), p3(q)), Some(weight));
+        assert_eq!(
+            lpi_weight::value(nx, ny, nz, p3(p), p3(q)).map(i128::abs),
+            Some(m)
+        );
+        let l = Lpi::new(p3(p), p3(q), first).unwrap();
+
+        let check = |second: &Plane| -> Sign {
+            let expected = lpi_side_oracle(&first, second, p, q);
+            assert_eq!(
+                second.side_of_lpi(&l),
+                Ok(expected),
+                "{second:?} {p:?} {q:?}"
+            );
+            expected
+        };
+        // The point lies on its own plane, and on every plane that holds its line.
+        assert_eq!(check(&first), Sign::Zero);
+        assert_eq!(check(&through(p, q, [0, 0, 0]).unwrap()), Sign::Zero);
+        assert_eq!(check(&through(p, q, [-M, M, -M]).unwrap()), Sign::Zero);
+        // The line runs at height 1: the plane z = 0 with its normal up has the point above it,
+        // and the same plane with its normal down has it below.
+        let floor = through([0, 0, 0], [1, 0, 0], [0, 1, 0]).unwrap();
+        assert_eq!(floor.n(), [0, 0, 1]);
+        assert_eq!(check(&floor), Sign::Positive);
+        let ceiling = through([0, 0, 0], [0, 1, 0], [1, 0, 0]).unwrap();
+        assert_eq!(check(&ceiling), Sign::Negative);
+
+        let mut seen = [0usize; 3];
+        for _ in 0..4_000 {
+            let mut corner = || [rng.coord(), rng.coord(), rng.coord()];
+            // Three collinear points make no plane; such a draw is skipped.
+            let Ok(second) = through(corner(), corner(), corner()) else {
+                continue;
+            };
+            seen[match check(&second) {
+                Sign::Negative => 0,
+                Sign::Zero => 1,
+                Sign::Positive => 2,
+            }] += 1;
+        }
+        assert!(seen[0] > 0 && seen[2] > 0, "{seen:?}");
+    }
 }
