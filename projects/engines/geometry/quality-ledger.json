@@ -236,22 +236,6 @@
     },
     {
       "file": "projects/engines/geometry/crates/geom-num/src/wide.rs",
-      "mutant": "replace < with == in Wide<L>::from_i128",
-      "line_text": "let u = if v < 0 {",
-      "occurrences": 1,
-      "kind": "equivalent",
-      "reason": "For a negative v the mutant takes the other arm, `v as u128`, which reads v's two's complement as unsigned, v + 2^128: the same u the original builds as (v - i128::MIN) + 2^127 (it only avoids a cast clippy flags as losing the sign). For v = 0 the mutant takes the first arm, where 0 - i128::MIN overflows, so checked_sub gives None and u = 0, as `0 as u128` does. Every v gives the same u, so the same limbs."
-    },
-    {
-      "file": "projects/engines/geometry/crates/geom-num/src/wide.rs",
-      "mutant": "replace < with <= in Wide<L>::from_i128",
-      "line_text": "let u = if v < 0 {",
-      "occurrences": 1,
-      "kind": "equivalent",
-      "reason": "The two differ only at v = 0, where the mutant takes the first arm: 0 - i128::MIN = 2^127 overflows i128, so checked_sub gives None and u = 0, the same u as the original's `0 as u128`."
-    },
-    {
-      "file": "projects/engines/geometry/crates/geom-num/src/wide.rs",
       "mutant": "replace | with ^ in Wide<L>::from_i128",
       "line_text": "(v.wrapping_sub(i128::MIN) as u128) | (1u128 << 127)",
       "occurrences": 1,
