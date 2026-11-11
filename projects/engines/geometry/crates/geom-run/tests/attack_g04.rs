@@ -270,11 +270,20 @@ fn spin(rounds: u64) -> u64 {
 }
 
 /// The first item index a run over [`HUGE`] never reaches. Every such run stops within its first
-/// wave of chunks (`geom_run::WAVE_FIRST`, 64 items, on a pool; item 10 or before serially), by its
-/// budget, its cancellation or an item's failure. A helper that misses the stop would otherwise run
-/// `usize::MAX` items; [`runaway`] stops it here, as out of memory, so the test fails instead of
-/// hanging.
-const RUNAWAY: usize = 10_000;
+/// wave of chunks (`geom_run::pool::WAVE_FIRST`, 64 items, on a pool; item 10 or before serially),
+/// by its budget, its cancellation or an item's failure. A helper that misses the stop would
+/// otherwise run `usize::MAX` items; [`runaway`] stops it here, as out of memory, so the test fails
+/// instead of hanging.
+///
+/// The index lies inside the second wave (items 64 to 191) on purpose. Waves double, and
+/// `Threads(usize::MAX)` starts a thread for every task of a wave but one, so a run that missed
+/// its stop and went on to item 10 000 reached waves of 4096 tasks: 4095 threads at once, whose
+/// stacks are more memory than the mutation job allows a process. The test then ended by an abort
+/// in a thread that could not start, which sometimes took longer than the job waits, so the same
+/// mutant was caught in one run and timed out in the next. Stopped here, such a run hands its pool
+/// 64 tasks and then 128, and fails the same way on every machine
+/// (`a_run_that_misses_its_stop_ends_in_its_second_wave`).
+const RUNAWAY: usize = 100;
 
 /// Stops the item's meter as out of memory at item [`RUNAWAY`] (see there).
 fn runaway(i: usize, meter: &mut WorkMeter<'_>) -> Result<(), Stopped> {
@@ -404,6 +413,46 @@ fn serial_many_chunks_with_early_stop_is_fine() {
         runaway(i, meter)
     });
     assert_eq!(cancelled, Err(RunError::Cancelled));
+}
+
+/// The guard of the tests above, tested itself: a run over [`HUGE`] that nothing else stops ends
+/// at item [`RUNAWAY`], as out of memory, having handed its pool a wave of 64 tasks and one of
+/// 128. So a helper that misses a stop fails those tests at once and with at most 127 threads
+/// started for a wave, whatever the memory of the machine.
+#[test]
+fn a_run_that_misses_its_stop_ends_in_its_second_wave() {
+    /// Runs every task on the calling thread and records how many each call gave it.
+    struct Waves(Mutex<Vec<usize>>);
+
+    impl Pool for Waves {
+        fn run_all(&self, tasks: &mut [&mut (dyn FnMut() + Send)]) {
+            self.0.lock().unwrap().push(tasks.len());
+            for task in tasks.iter_mut() {
+                task();
+            }
+        }
+    }
+
+    let pool = Waves(Mutex::new(Vec::new()));
+    let highest = Mutex::new(0_usize);
+    let mut meter = WorkMeter::new(Budget::UNLIMITED);
+    let got = Exec::with_pool(&pool).map(&mut meter, PHASE, plan(1), &HUGE[..], |i, (), meter| {
+        let mut highest = highest.lock().unwrap();
+        *highest = (*highest).max(i);
+        runaway(i, meter)
+    });
+    assert_eq!(got, Err(RunError::OutOfMemory));
+    assert_eq!(*pool.0.lock().unwrap(), [64, 128]);
+    assert_eq!(*highest.lock().unwrap(), 64 + 128 - 1);
+    // Serially nothing runs past the item that stops the phase.
+    let reached = Mutex::new(0_usize);
+    let mut meter = WorkMeter::new(Budget::UNLIMITED);
+    let got = Exec::serial().map(&mut meter, PHASE, plan(1), &HUGE[..], |i, (), meter| {
+        *reached.lock().unwrap() = i;
+        runaway(i, meter)
+    });
+    assert_eq!(got, Err(RunError::OutOfMemory));
+    assert_eq!(*reached.lock().unwrap(), RUNAWAY);
 }
 
 /// Huge thread counts on small problems: no overflow, same answer.
