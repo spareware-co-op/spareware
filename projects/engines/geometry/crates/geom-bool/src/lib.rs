@@ -25,7 +25,15 @@
 //! Its direct dependencies are its row of chapter 27's crate table, checked by the
 //! scaffold test in `engine-geometry` (`tests/scaffold`).
 //!
-//! Status: scaffold only; built by pieces G129, G130, G131, G132, G133, G137, G138, G139, G144,
-//! G242, G243, G244, G245, G246, G247, G248, G249, G250, G324.
+//! Modules:
+//!
+//! - [`rebuild`]: merged pieces published as a body by canonical rules (G129).
+//!
+//! Status: the rebuild built (G129); the rest by pieces G130, G131, G132, G133, G137, G138, G139,
+//! G144, G242, G243, G244, G245, G246, G247, G248, G249, G250, G324.
 #![cfg_attr(not(test), no_std)]
 #![forbid(unsafe_code)]
+
+extern crate alloc;
+
+pub mod rebuild;
