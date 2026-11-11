@@ -414,6 +414,8 @@ pub static OPS: &[Op] = &[
     Op { group: "batch", name: "run_items", measures: "geom_op::Batch::run", classes: T, prepare: |c| bind(inputs::batch::run_items(c), kernels::batch::run_items) },
     Op { group: "batch", name: "curve_points", measures: "geom_curve::ParamCurve::points", classes: T, prepare: |c| bind(inputs::batch::curve_points(c), kernels::batch::curve_points) },
     Op { group: "batch", name: "surface_points", measures: "geom_surface::ParamSurface::points", classes: T, prepare: |c| bind(inputs::batch::surface_points(c), kernels::batch::surface_points) },
+    // The triangulation's hot path (piece G153; decision 32.46).
+    Op { group: "mesh", name: "cdt", measures: "geom_mesh::cdt::triangulate", classes: T, prepare: |c| bind(inputs::mesh::cdt(c), kernels::mesh::cdt) },
     // geom-nurbs's hot paths (pieces G56, G58 and G59; decision 32.46): evaluation, interpolation
     // and the Bernstein bound.
     Op { group: "nurbs", name: "curve_point", measures: "geom_nurbs::Curve::point", classes: T, prepare: |c| bind(inputs::nurbs::curve_point(c), kernels::nurbs::curve_point) },
@@ -524,7 +526,7 @@ pub fn full_scenario(op: &str) -> Option<Prepared> {
 }
 
 /// The groups of [`OPS`], in order.
-pub const GROUPS: [&str; 37] = [
+pub const GROUPS: [&str; 38] = [
     "predicate",
     "sign",
     "wide",
@@ -552,6 +554,7 @@ pub const GROUPS: [&str; 37] = [
     "attributes",
     "topo",
     "batch",
+    "mesh",
     "nurbs",
     "curve",
     "format",
