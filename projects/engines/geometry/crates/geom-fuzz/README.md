@@ -171,6 +171,17 @@ cargo bolero test orient2d_fuzz --package geom-fuzz --toolchain nightly-2026-10-
 `-T` bounds the run; `--runs`, `--jobs` and `--max-input-length` are the other limits. A crash is
 written to `tests/__fuzz__/orient2d/crashes`, where `cargo test` replays it.
 
+`--timeout` (10 seconds unless given; both workflows give it) bounds one input: an input that runs
+that long stops the run, which fails, and libFuzzer writes it to the same folder as
+`timeout-<sha1>`. That is a slow or hung input, not a broken law, so find why it is slow rather
+than leave it with the crash files, where `cargo test` would replay it every time. libFuzzer
+enforces the limit only on the thread that runs the fuzzer, and cargo-bolero starts the fuzzer
+inside the test harness, on a thread of its own, while the timer's signal goes to the main thread;
+so on Linux each target's test makes it work itself: the first `holds` under libFuzzer starts a
+thread that sends that signal to the fuzzing thread once a second, and libFuzzer's own handler
+decides (`tests/common/mod.rs`, issue #764). Before that the limit never fired. On macOS it still
+does not.
+
 **Campaigns.** `.github/workflows/kernel-fuzz-campaign.yml` runs every target under libFuzzer for
 five hours each night, one shard each. On demand it runs `wide_fuzz` in five shards of five hours,
 25 CPU hours, for G26's "24 hours clean": when the label `fuzz-campaign` is added to a pull
