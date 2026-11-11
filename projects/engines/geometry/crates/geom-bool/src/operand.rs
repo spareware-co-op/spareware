@@ -208,6 +208,8 @@ pub struct Prepared {
     pub owners: Vec<usize>,
     /// Each polygon's face, counted over every operand.
     pub sources: Vec<usize>,
+    /// Each polygon's face, a row of its operand's.
+    pub rows: Vec<u32>,
     /// One test per selection.
     pub tests: Vec<WindingTest>,
     /// One place in `keys` per selection that names a target.
@@ -486,7 +488,7 @@ fn polygons_of(
         planes.push(Some(plane));
         rows.push(face);
     }
-    for (face, plane) in rows.iter().zip(&planes) {
+    for (row, (face, plane)) in (0u32..).zip(rows.iter().zip(&planes)) {
         let plane = plane.as_ref().ok_or(broken)?;
         let mut rings: Vec<Vec<Side>> = Vec::new();
         let mut at_loop = face.first_loop;
@@ -520,6 +522,7 @@ fn polygons_of(
             });
             ready.owners.push(owner);
             ready.sources.push(source);
+            ready.rows.push(row);
         }
     }
     Ok(())
@@ -622,6 +625,7 @@ pub fn prepare(
         carriers: Vec::new(),
         owners: Vec::new(),
         sources: Vec::new(),
+        rows: Vec::new(),
         tests,
         targets,
         segments: Vec::new(),
