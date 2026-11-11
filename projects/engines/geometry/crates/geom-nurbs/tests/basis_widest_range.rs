@@ -8,6 +8,10 @@
 //! values come from the rational reference of `common`, and for degree 1 from the definition by
 //! hand. The first two tests are those of an independent audit of the merged kernel (issue 751),
 //! which found every value 0 and a line's point at the origin.
+//!
+//! The basis tests a sum only on a knot range of 2^1023 or more, below which none can overflow.
+//! The last tests hold the values, the first derivatives and the divisor on the double below
+//! that range, on it and on the double above.
 
 #![allow(
     clippy::arithmetic_side_effects,
@@ -47,13 +51,18 @@ fn ends() -> (f64, f64) {
     (a, b)
 }
 
-/// The basis of degree `p` on the widest range with `interior` between its clamped ends.
-fn wide(p: usize, interior: &[f64]) -> Basis {
-    let (a, b) = ends();
+/// The basis of degree `p` on [a, b] with `interior` between its clamped ends.
+fn clamped(a: f64, b: f64, p: usize, interior: &[f64]) -> Basis {
     let mut knots = vec![a; p + 1];
     knots.extend_from_slice(interior);
     knots.extend(vec![b; p + 1]);
     Basis::new(p, knots).unwrap()
+}
+
+/// The basis of degree `p` on the widest range with `interior` between its clamped ends.
+fn wide(p: usize, interior: &[f64]) -> Basis {
+    let (a, b) = ends();
+    clamped(a, b, p, interior)
 }
 
 /// The degree-1 basis on [a, a, b, b].
@@ -143,29 +152,35 @@ fn values_on_the_widest_range_are_within_their_bound_of_the_recurrence() {
         "only {reached} parameters make the sum overflow"
     );
     for basis in wide_bases() {
-        let p = basis.degree();
-        let bound_factor = gamma(6 * p);
-        for &u in &params {
-            for limit in LIMITS {
-                let mut n = vec![0.0; p + 1];
-                let span = basis.eval(u, limit, &mut n).unwrap();
-                let exact = cox_de_boor(basis.knots(), p, u, limit);
-                let mut total = 0.0;
-                for (r, &value) in n.iter().enumerate() {
-                    assert!((0.0..=1.0).contains(&value));
-                    let e = &exact[p][span - p + r];
-                    let bound = &bound_factor * e;
-                    assert!(
-                        within(value, e, &bound),
-                        "degree {p}, u {u:e}, function {r}: {value}"
-                    );
-                    total += value;
-                }
-                assert!((total - 1.0).abs() < 1e-12, "degree {p}, u {u:e}: {total}");
-                let mut rows = vec![0.0; p + 1];
-                let again = basis.eval_derivs(u, limit, 0, &mut rows).unwrap();
-                assert_eq!((again, &rows), (span, &n), "degree {p}, u {u:e}");
+        values_are_within_their_bound(&basis, &params);
+    }
+}
+
+/// The values of `basis` at each parameter, from each side: in [0, 1], within γ_(6p) · N of the
+/// exact recurrence, summing to one, and the same bits from `eval_derivs`.
+fn values_are_within_their_bound(basis: &Basis, params: &[f64]) {
+    let p = basis.degree();
+    let bound_factor = gamma(6 * p);
+    for &u in params {
+        for limit in LIMITS {
+            let mut n = vec![0.0; p + 1];
+            let span = basis.eval(u, limit, &mut n).unwrap();
+            let exact = cox_de_boor(basis.knots(), p, u, limit);
+            let mut total = 0.0;
+            for (r, &value) in n.iter().enumerate() {
+                assert!((0.0..=1.0).contains(&value));
+                let e = &exact[p][span - p + r];
+                let bound = &bound_factor * e;
+                assert!(
+                    within(value, e, &bound),
+                    "degree {p}, u {u:e}, function {r}: {value}"
+                );
+                total += value;
             }
+            assert!((total - 1.0).abs() < 1e-12, "degree {p}, u {u:e}: {total}");
+            let mut rows = vec![0.0; p + 1];
+            let again = basis.eval_derivs(u, limit, 0, &mut rows).unwrap();
+            assert_eq!((again, &rows), (span, &n), "degree {p}, u {u:e}");
         }
     }
 }
@@ -206,24 +221,30 @@ fn first_derivatives_on_the_widest_range_are_within_their_bound() {
     let mut rng = Lcg(0x5eed_0753);
     let params = wide_parameters(&mut rng);
     for basis in wide_bases() {
-        let p = basis.degree();
-        let bound_factor = gamma(6 * p + 2);
-        let underflow = q(pow2(-1074)) * q((4 * p) as f64);
-        for &u in &params {
-            for limit in LIMITS {
-                let mut rows = vec![0.0; 2 * (p + 1)];
-                let span = basis.eval_derivs(u, limit, 1, &mut rows).unwrap();
-                let exact = derivatives(basis.knots(), p, u, limit, 1);
-                let mags = magnitudes_a23(basis.knots(), p, span, u, limit, 1);
-                for r in 0..=p {
-                    let e = &exact[1][span - p + r];
-                    let bound = &bound_factor * &mags[1][r] + &underflow;
-                    assert!(
-                        within(rows[p + 1 + r], e, &bound),
-                        "degree {p}, u {u:e}, function {r}: {:e}",
-                        rows[p + 1 + r]
-                    );
-                }
+        first_derivatives_are_within_their_bound(&basis, &params);
+    }
+}
+
+/// The first derivatives of `basis` at each parameter, from each side, within γ_(6p+2) · M and
+/// 4·p spacings of the exact derivative formula.
+fn first_derivatives_are_within_their_bound(basis: &Basis, params: &[f64]) {
+    let p = basis.degree();
+    let bound_factor = gamma(6 * p + 2);
+    let underflow = q(pow2(-1074)) * q((4 * p) as f64);
+    for &u in params {
+        for limit in LIMITS {
+            let mut rows = vec![0.0; 2 * (p + 1)];
+            let span = basis.eval_derivs(u, limit, 1, &mut rows).unwrap();
+            let exact = derivatives(basis.knots(), p, u, limit, 1);
+            let mags = magnitudes_a23(basis.knots(), p, span, u, limit, 1);
+            for r in 0..=p {
+                let e = &exact[1][span - p + r];
+                let bound = &bound_factor * &mags[1][r] + &underflow;
+                assert!(
+                    within(rows[p + 1 + r], e, &bound),
+                    "degree {p}, u {u:e}, function {r}: {:e}",
+                    rows[p + 1 + r]
+                );
             }
         }
     }
@@ -248,4 +269,122 @@ fn a_finite_sum_still_divides() {
         .eval_derivs(u, Limit::FromRight, 1, &mut rows)
         .unwrap();
     assert_eq!(rows, [r / sum, le / sum, -1.0 / sum, 1.0 / sum]);
+}
+
+/// The same on the widest range, where every sum is tested: one that is finite still divides,
+/// and the knot difference does not take its place. At 2^970 the difference to the first knot
+/// rounds down and the sum with it, to the double below the knot difference, so the first
+/// quotient differs by which one divides.
+#[test]
+fn a_finite_sum_on_the_widest_range_still_divides() {
+    let (a, b) = ends();
+    let u = pow2(970);
+    let (r, le) = (b - u, u - a);
+    let sum = r + le;
+    assert!(sum.is_finite());
+    assert_ne!(sum, b - a);
+    assert_ne!(r / sum, r / (b - a));
+    let basis = wide_basis();
+    let mut n = [0.0; 2];
+    basis.eval(u, Limit::FromRight, &mut n).unwrap();
+    assert_eq!(n, [r / sum, le / sum]);
+    let mut rows = [0.0; 4];
+    basis
+        .eval_derivs(u, Limit::FromRight, 1, &mut rows)
+        .unwrap();
+    assert_eq!(rows, [r / sum, le / sum, -1.0 / sum, 1.0 / sum]);
+}
+
+/// The basis tests the sum of a step's two differences only on a knot range of 2^1023 or more,
+/// because below that no sum can overflow. These are the ends [a, b] and a parameter on the
+/// double below that range, on it and on the double above. At each parameter the sum of the two
+/// rounded differences is finite and is not the rounded knot difference, so a degree-1 basis
+/// tells which of the two divided.
+fn about_the_cut() -> [(f64, f64, f64); 3] {
+    let cut = pow2(1023);
+    let cases = [
+        (
+            0xFFC0_0000_0000_0000_u64,
+            0x7FD7_FFFF_FFFF_FFFF_u64,
+            0x7FC8_0000_0000_0003_u64,
+        ),
+        (
+            0xFFC0_0000_0000_0000,
+            0x7FD8_0000_0000_0001,
+            0xFFB0_0000_0000_0003,
+        ),
+        (
+            0xFFC0_0000_0000_0001,
+            0x7FD8_0000_0000_0001,
+            0x7FC0_0000_0000_0004,
+        ),
+    ]
+    .map(|(a, b, u)| (f64::from_bits(a), f64::from_bits(b), f64::from_bits(u)));
+    let ranges = cases.map(|(a, b, _)| (b - a).to_bits());
+    assert_eq!(
+        ranges,
+        [cut.to_bits() - 1, cut.to_bits(), cut.to_bits() + 1],
+        "the double below 2^1023, 2^1023 and the double above"
+    );
+    cases
+}
+
+/// On each side of the range from which the sums are tested, and on it, a finite sum divides:
+/// the values and first derivatives of degree 1 are the quotients by the sum, bit for bit, and
+/// not those by the knot difference.
+#[test]
+fn a_finite_sum_divides_below_the_cut_on_it_and_above() {
+    for (a, b, u) in about_the_cut() {
+        let (r, le) = (b - u, u - a);
+        let sum = r + le;
+        assert!(sum.is_finite());
+        assert_ne!(sum, b - a);
+        assert_ne!(r / sum, r / (b - a));
+        assert_ne!(le / sum, le / (b - a));
+        let basis = clamped(a, b, 1, &[]);
+        let mut n = [0.0; 2];
+        basis.eval(u, Limit::FromRight, &mut n).unwrap();
+        assert_eq!(n, [r / sum, le / sum], "range {:e}", b - a);
+        let mut rows = [0.0; 4];
+        basis
+            .eval_derivs(u, Limit::FromRight, 1, &mut rows)
+            .unwrap();
+        assert_eq!(
+            rows,
+            [r / sum, le / sum, -1.0 / sum, 1.0 / sum],
+            "range {:e}",
+            b - a
+        );
+    }
+}
+
+/// The header's bounds on the same three ranges, for one span of degrees 1 to 5 and for bases
+/// with interior knots: the values against the exact recurrence and the first derivatives
+/// against the exact formula, at the ends, the middle, the pinned parameter and random ones.
+#[test]
+fn values_and_first_derivatives_about_the_cut_are_within_their_bounds() {
+    let mut rng = Lcg(0x5eed_0758);
+    for (a, b, pinned) in about_the_cut() {
+        let mut params = vec![a, b, 0.0, pinned];
+        for _ in 0..40 {
+            let t = rng.unit();
+            let u = t * b + (1.0 - t) * a;
+            if a <= u && u <= b {
+                params.push(u);
+            }
+        }
+        assert!(params.len() > 30, "{} parameters", params.len());
+        let bases = [
+            clamped(a, b, 1, &[]),
+            clamped(a, b, 2, &[]),
+            clamped(a, b, 3, &[]),
+            clamped(a, b, 5, &[]),
+            clamped(a, b, 2, &[0.0]),
+            clamped(a, b, 3, &[a + pow2(970), 0.0, 0.0, b - pow2(970)]),
+        ];
+        for basis in &bases {
+            values_are_within_their_bound(basis, &params);
+            first_derivatives_are_within_their_bound(basis, &params);
+        }
+    }
 }

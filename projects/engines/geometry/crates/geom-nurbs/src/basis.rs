@@ -110,6 +110,21 @@ pub(crate) const WIDTH: usize = 29;
 
 const _: () = assert!(WIDTH == MAX_DEGREE + 1);
 
+/// 2^1023: A2.2 and A2.3 test the sum of a step's two differences only on a knot range, last
+/// knot minus first as a double, of at least this.
+///
+/// Below it no sum overflows. Each of a step's two rounded differences is a knot minus the
+/// parameter or the parameter minus a knot, and the parameter and every knot lie between the
+/// first knot and the last, so each is at most the rounded range, because rounding keeps order.
+/// A range below 2^1023 is at most the double before it, 2^1023 − 2^970, so the exact sum of
+/// the two is at most 2^1024 − 2^971, which is the largest double, and the rounded sum is no
+/// more.
+///
+/// The cut is safe, not sharp. The two differences of a step add up to one knot difference, so
+/// a sum overflows only on a range near the largest double, about twice this one. The ranges
+/// between pay the test and never need it, and the results are the same bits either way.
+const WIDE: f64 = f64::from_bits(0x7FE0_0000_0000_0000);
+
 /// Which one-sided limit to take at a knot, where a function's derivatives may jump.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, Default)]
 pub enum Limit {
@@ -299,6 +314,35 @@ impl Basis {
 
     /// A2.2 at a known span: `N_(span−p+i)` into `n[i]`, for i from 0 to p.
     pub(crate) fn funs(&self, span: usize, u: f64, n: &mut [f64]) -> Result<(), NurbsError> {
+        if self.range()? >= WIDE {
+            self.funs_on::<true>(span, u, n)
+        } else {
+            self.funs_on::<false>(span, u, n)
+        }
+    }
+
+    /// The last knot minus the first, rounded: finite for every basis ([`Basis::new`] checks
+    /// it). [`Basis::funs`] and [`Basis::ders`] compare it with [`WIDE`] once a call.
+    fn range(&self) -> Result<f64, NurbsError> {
+        match (self.knots.first(), self.knots.last()) {
+            (Some(first), Some(last)) => Ok(last - first),
+            _ => Err(NurbsError::Defect),
+        }
+    }
+
+    /// [`Basis::funs`] on a knot range below [`WIDE`] (`CHECKED` false), where no sum of two
+    /// differences can overflow and the loop is the book's, or on any range (`CHECKED` true),
+    /// where each sum is tested and one past the largest double gives way to
+    /// [`Basis::width`]. One body for both, so the two cannot drift apart; the flag is a
+    /// constant of each copy, so the copy for ordinary ranges carries no test in its loop. With
+    /// the test in the loop of every range, the count benchmark `nurbs/curve_point/typical`
+    /// rose 5.5% on aarch64.
+    fn funs_on<const CHECKED: bool>(
+        &self,
+        span: usize,
+        u: f64,
+        n: &mut [f64],
+    ) -> Result<(), NurbsError> {
         let u_ = &self.knots;
         let mut left = [0.0_f64; WIDTH];
         let mut right = [0.0_f64; WIDTH];
@@ -313,10 +357,10 @@ impl Basis {
                 // Both differences are at least zero and r > 0 or le > 0 (the span is more than
                 // one value), so delta > 0 and each quotient lies in [0, 1].
                 let sum = r + le;
-                let delta = if sum.is_finite() {
-                    sum
-                } else {
+                let delta = if CHECKED && !sum.is_finite() {
                     self.width(span, k, l)?
+                } else {
+                    sum
                 };
                 let temp = get(n, l)?;
                 set(n, l, saved + temp * (r / delta))?;
@@ -335,9 +379,10 @@ impl Basis {
     /// the widest) and is used there. It is no smaller than either difference it divides,
     /// because rounding keeps order, and it carries one rounding where the sum carries three.
     ///
-    /// Called only where the sum is not finite, and kept out of line (`cold`), so the steps
-    /// whose sum is finite, which is every step of every ordinary basis, pay one test and no
-    /// call: the count benchmark `nurbs/curve_point/typical` rose 5.9% with the test inside.
+    /// Called only where the sum is not finite, which needs a knot range of at least [`WIDE`],
+    /// and kept out of line (`cold`), so on such a range the steps whose sum is finite pay one
+    /// test and no call. On every other range nothing tests the sum at all
+    /// ([`Basis::funs_on`]).
     #[cold]
     fn width(&self, span: usize, k: usize, l: usize) -> Result<f64, NurbsError> {
         let upper = add(add(span, l)?, 1)?;
@@ -380,6 +425,22 @@ impl Basis {
         order: usize,
         out: &mut [f64],
     ) -> Result<(), NurbsError> {
+        if self.range()? >= WIDE {
+            self.ders_on::<true>(span, u, order, out)
+        } else {
+            self.ders_on::<false>(span, u, order, out)
+        }
+    }
+
+    /// [`Basis::ders`] with every sum of two differences tested (`CHECKED` true, for a knot
+    /// range of [`WIDE`] or more) or none (`CHECKED` false), as [`Basis::funs_on`].
+    fn ders_on<const CHECKED: bool>(
+        &self,
+        span: usize,
+        u: f64,
+        order: usize,
+        out: &mut [f64],
+    ) -> Result<(), NurbsError> {
         let p = self.degree;
         let w = add(p, 1)?;
         // ndu[j][r]: below the diagonal the knot differences, on and above it the basis values
@@ -398,10 +459,10 @@ impl Basis {
                 let ri = get(&right, add(r, 1)?)?;
                 let le = get(&left, sub(j, r)?)?;
                 let sum = ri + le;
-                let delta = if sum.is_finite() {
-                    sum
-                } else {
+                let delta = if CHECKED && !sum.is_finite() {
                     self.width(span, j, r)?
+                } else {
+                    sum
                 };
                 set(&mut ndu, at_(j, r)?, delta)?;
                 let prev = get(&ndu, at_(r, sub(j, 1)?)?)?;
