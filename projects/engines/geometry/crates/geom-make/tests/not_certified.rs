@@ -9,6 +9,9 @@
 //! arithmetic, which says so only while every product in their normals is exact in doubles. The
 //! operation reported that as `ResultInvalid`, a defect. The tests here hold the rule that
 //! replaced it, arm by arm, on the smallest cases found and on a seeded sweep.
+//! From G134 the checker certifies a rounded flat face by its fan of triangles, so the fuzzer's
+//! cases themselves now pass, and their tests say so; what still waits is a transform that is not
+//! exact (G417 for flat bodies) and curved geometry (G177).
 //!
 //! Covers: `transform.mirror`, `transform.move`, `transform.pattern`, `transform.rotate`,
 //! `transform.scale`.
@@ -75,6 +78,14 @@ fn valid(name: &str, out: OpOutput<Made>) -> OpOutput<Made> {
     out
 }
 
+/// Asserts every copy of a pattern passes every checker group at the pattern's record.
+fn valid_copies<K>(name: &str, copies: &OpOutput<Vec<(K, Made)>>) {
+    for (_, made) in &copies.result {
+        let found = report(&made.body, copies.exactness);
+        assert!(found.passed(), "{name}: {:?}", found.faults());
+    }
+}
+
 /// `body` to transform, recorded `exactness`, any bound accepted in its class.
 fn moved(body: &Body, exactness: Exactness) -> Moved<'_> {
     let accept = match exactness {
@@ -91,7 +102,7 @@ fn moved(body: &Body, exactness: Exactness) -> Moved<'_> {
     }
 }
 
-/// Asserts `e` is the typed refusal that waits for `piece`, with the checker's words.
+/// Asserts `e` is the typed refusal that waits for `piece`, unsupported and with that remedy.
 fn waits(what: &str, e: &OpError, piece: &'static str) {
     assert_eq!(
         *e.detail(),
@@ -101,11 +112,6 @@ fn waits(what: &str, e: &OpError, piece: &'static str) {
     );
     assert_eq!(e.kind(), ErrorKind::Unsupported, "{what}");
     assert_eq!(e.remedies(), [Remedy::AwaitPiece { piece }], "{what}");
-    assert!(
-        e.message().contains("no certified"),
-        "{what}: {}",
-        e.message()
-    );
 }
 
 /// A unit cube scaled by 7/3 along y, which rounds its far corners from 7/3 to 2: a body the
@@ -147,24 +153,24 @@ fn edited(body: &Body, edit: impl FnOnce(&mut Builder)) -> Body {
 }
 
 /// The smallest case: one scale that rounds, then one by whole numbers. The second rounds
-/// nothing and moves every plane exactly, and the checker cannot certify the caps apart: their
-/// normals' one coordinate, 3 × 7/3 in doubles, is no longer a double.
+/// nothing and moves every plane exactly. The caps' normals are then no longer doubles (their one
+/// coordinate is 3 × 7/3), so until G134 the checker could not certify the caps apart and the
+/// scale waited. From G134 a rounded flat face stands for its fan of triangles, whose planes are
+/// integers, and the result is certified.
 #[test]
-fn an_exact_scale_of_a_rounded_box_waits_for_the_checker_and_is_no_defect() {
+fn an_exact_scale_of_a_rounded_box_is_certified() {
     let c = ctx();
     let wide = a_rounded_box();
     let input = moved(&wide.result.body, wide.exactness);
     let by_three = [s(3, 1), s(1, 1), s(1, 1)];
-    let e = scale(&c, input, by_three, p(0, 0, 0)).unwrap_err();
-    waits("scale", &e, "G134");
+    valid("scale", scale(&c, input, by_three, p(0, 0, 0)).unwrap());
     // The same in a pattern, whose copies go through the same check.
     let stretch = RationalTransform::new([[3, 0, 0], [0, 1, 0], [0, 0, 1]], [0; 3], 1).unwrap();
     let instance = Instance {
         key: [1; 16],
         transform: TypedTransform::from(stretch),
     };
-    let e = pattern(&c, input, &[instance]).unwrap_err();
-    waits("pattern", &e, "G134");
+    valid_copies("pattern", &pattern(&c, input, &[instance]).unwrap());
     // And for a body recorded Approximate, which the checker judges by the same bound.
     let Exactness::Certified { bound, step } = wide.exactness else {
         panic!("a rounded box is certified");
@@ -173,9 +179,9 @@ fn an_exact_scale_of_a_rounded_box_waits_for_the_checker_and_is_no_defect() {
         deviation: bound,
         step,
     };
-    let e = scale(&c, moved(&wide.result.body, measured), by_three, p(0, 0, 0)).unwrap_err();
-    waits("approximate", &e, "G134");
-    // A scale by two keeps every product a double: the same body, certified.
+    let again = scale(&c, moved(&wide.result.body, measured), by_three, p(0, 0, 0));
+    valid("approximate", again.unwrap());
+    // A scale by two keeps every product a double: certified before G134 too.
     let doubled = scale(&c, input, [s(2, 1), s(1, 1), s(1, 1)], p(0, 0, 0));
     valid("doubled", doubled.unwrap());
     // And so do the transforms that only move, turn or mirror it.
@@ -189,9 +195,10 @@ fn an_exact_scale_of_a_rounded_box_waits_for_the_checker_and_is_no_defect() {
 }
 
 /// The fuzzer's first finding (crash-dc639a8b..., cut to four corners): two scales by 5/2, then
-/// one by 5. Its sides on the lines of slope 3 lie on parallel planes off the integers.
+/// one by 5. Its sides on the lines of slope 3 lie on parallel planes off the integers, which
+/// the checker certifies from G134 by each face's fan of triangles.
 #[test]
-fn the_fuzzers_prism_scaled_by_five_halves_twice_then_by_five_waits_for_the_checker() {
+fn the_fuzzers_prism_scaled_by_five_halves_twice_then_by_five_is_certified() {
     let c = ctx();
     let base = vec![p(-40, -11, 1), p(-39, -10, 1), p(-38, -7, 1), p(-37, -2, 1)];
     let height = Steps(41_472_000);
@@ -203,15 +210,14 @@ fn the_fuzzers_prism_scaled_by_five_halves_twice_then_by_five_waits_for_the_chec
     }
     assert_eq!(body.exactness, certified(7));
     let input = moved(&body.result.body, body.exactness);
-    let e = scale(&c, input, [s(5, 1); 3], p(1_241_601, 0, 0)).unwrap_err();
-    waits("scale by 5", &e, "G134");
+    let by_five = scale(&c, input, [s(5, 1); 3], p(1_241_601, 0, 0));
+    valid("scale by 5", by_five.unwrap());
     let five = RationalTransform::uniform_scale(s(5, 1)).unwrap();
     let instance = Instance {
         key: [0; 16],
         transform: TypedTransform::from(five),
     };
-    let e = pattern(&c, input, &[instance]).unwrap_err();
-    waits("pattern by 5", &e, "G134");
+    valid_copies("pattern by 5", &pattern(&c, input, &[instance]).unwrap());
     // By 4 and by 100 its planes land on integers, where the checker is exact.
     for k in [4, 100] {
         valid("whole", scale(&c, input, [s(k, 1); 3], p(0, 0, 0)).unwrap());
@@ -219,9 +225,9 @@ fn the_fuzzers_prism_scaled_by_five_halves_twice_then_by_five_waits_for_the_chec
 }
 
 /// The fuzzer's second finding (crash-5c649c78...): a triangle prism scaled by (2, 7/3, 1), then
-/// by (3, 1, 1).
+/// by (3, 1, 1), certified from G134.
 #[test]
-fn the_fuzzers_triangle_scaled_unevenly_then_by_three_waits_for_the_checker() {
+fn the_fuzzers_triangle_scaled_unevenly_then_by_three_is_certified() {
     let c = ctx();
     let base = vec![
         p(4094, 2048, 64_000),
@@ -238,14 +244,13 @@ fn the_fuzzers_triangle_scaled_unevenly_then_by_three_waits_for_the_checker() {
     );
     let first = valid("the scale that rounds", first.unwrap());
     assert_eq!(first.exactness, certified(2));
-    let e = scale(
+    let second = scale(
         &c,
         moved(&first.result.body, first.exactness),
         [s(6, 2), s(2, 2), s(1, 1)],
         p(2_880_001, 1, 0),
-    )
-    .unwrap_err();
-    waits("the scale by whole numbers", &e, "G134");
+    );
+    valid("the scale by whole numbers", second.unwrap());
 }
 
 /// A fault that says something is wrong stays a defect on a body that is less than exact: an
@@ -302,10 +307,7 @@ fn a_transform_that_is_not_exact_waits_whatever_the_checker_finds() {
     let thin = prism(&c, &PrismInput { base, height }).unwrap();
     let input = moved(&thin.result.body, thin.exactness);
     let e = scale(&c, input, [s(1, 2); 3], p(0, 0, 0)).unwrap_err();
-    assert_eq!(
-        *e.detail(),
-        OpErrorDetail::Make(MakeDetail::NotCertifiedYet { piece: "G134" })
-    );
+    waits("a rounded corner", &e, "G417");
     assert!(
         e.message().contains("two edges of the face meet"),
         "{}",
@@ -326,10 +328,7 @@ fn a_transform_that_is_not_exact_waits_whatever_the_checker_finds() {
     // The same transform of the body broken by hand: this arm is as it was, and waits.
     let (broken, record) = a_broken_rounded_box();
     let e = scale(&c, moved(&broken, record), along_y, p(0, 0, 0)).unwrap_err();
-    assert_eq!(
-        *e.detail(),
-        OpErrorDetail::Make(MakeDetail::NotCertifiedYet { piece: "G134" })
-    );
+    waits("the broken body", &e, "G417");
 }
 
 /// A box with one face's plane written from a point off the grid: the same plane, which the
@@ -394,9 +393,9 @@ fn an_exact_record_the_checker_cannot_follow_is_a_defect_and_a_certified_one_wai
 }
 
 /// The rounded box with its caps' planes written from longer vectors, 3 along x: the same
-/// planes, whose normals are then no longer doubles, so the checker cannot certify the caps
-/// apart. A body made by hand that no operation returns.
-fn a_box_the_checker_cannot_certify() -> (Body, Exactness) {
+/// planes, whose normals are then no longer doubles. A body made by hand that no operation
+/// returns. Until G134 the checker could not certify its caps apart.
+fn a_box_with_caps_off_the_doubles() -> (Body, Exactness) {
     let wide = a_rounded_box();
     let body = edited(&wide.result.body, |b| {
         for row in 0..6 {
@@ -417,25 +416,27 @@ fn a_box_the_checker_cannot_certify() -> (Body, Exactness) {
     (body, wide.exactness)
 }
 
-/// The rule is the body's record and the checker's report, not which transform ran: a move or
-/// a mirror of a body the checker cannot certify waits for the checker too.
+/// The rule is the body's record and the checker's report, not which transform ran. This body
+/// was the one the checker could not certify (one `PairUnchecked`), so a move, a mirror or a
+/// quarter turn of it waited for G134. From G134 its faces stand for their fans of triangles,
+/// the checker passes it, and so do its exact transforms. A flat body no fan can stand for (a
+/// face with a hole or a reflex corner, piece G417) is not built here yet: the flat arm of that
+/// wait is held by `a_transform_that_is_not_exact_waits_whatever_the_checker_finds` and the
+/// sweep, and the curved arm (G177) by the sweep.
 #[test]
-fn a_move_of_a_body_the_checker_cannot_certify_waits_for_the_checker() {
-    let (body, record) = a_box_the_checker_cannot_certify();
+fn a_move_of_the_body_the_checker_could_not_certify_is_certified() {
+    let (body, record) = a_box_with_caps_off_the_doubles();
     let found = report(&body, record);
-    assert_eq!(
-        found.faults().iter().map(|f| f.kind).collect::<Vec<_>>(),
-        [FaultKind::PairUnchecked]
-    );
-    assert!(found.uncertified());
+    assert!(found.passed(), "{:?}", found.faults());
     let c = ctx();
     let input = moved(&body, record);
-    waits("move", &move_by(&c, input, [1, 0, 0]).unwrap_err(), "G134");
-    let mirrored = mirror(&c, input, Axis::Y, p(0, 0, 0));
-    waits("mirror", &mirrored.unwrap_err(), "G134");
+    valid("move", move_by(&c, input, [1, 0, 0]).unwrap());
+    valid("mirror", mirror(&c, input, Axis::Y, p(0, 0, 0)).unwrap());
     let turn = Rotation::quarter_turns(1);
-    let turned = rotate(&c, input, Axis::X, turn, p(0, 0, 0));
-    waits("quarter turn", &turned.unwrap_err(), "G134");
+    valid(
+        "quarter turn",
+        rotate(&c, input, Axis::X, turn, p(0, 0, 0)).unwrap(),
+    );
 }
 
 /// A value below `n`.
@@ -665,7 +666,7 @@ fn exact_transforms_of_bodies_less_than_exact_pass_or_refuse_with_a_type() {
                             rounded,
                             "case {case}, {what}: an exact body waits for nothing"
                         );
-                        assert_eq!(*piece, if flat { "G134" } else { "G177" }, "case {case}");
+                        assert_eq!(*piece, if flat { "G417" } else { "G177" }, "case {case}");
                         waited += 1;
                     }
                 }
