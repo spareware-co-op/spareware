@@ -92,7 +92,7 @@
 //! path is a handful of integer instructions, five times cheaper than its filter, so filtering
 //! first made exactly zero calls (the common case in buildings, chapter 23.2) slower than before
 //! this module was generated. There, and only there, [`orient2d`] goes straight to the exact
-//! path (`ORIENT2D_FILTER_FIRST`): switching a filter off where measurement shows it does not
+//! path (the second `orient2d_routed`): switching a filter off where measurement shows it does not
 //! pay is chapter 23.2's proposed amendment to 6.2, which an owner has yet to accept (section 32),
 //! applied only where principle 12 leaves no other choice. The width-aware exact path does less
 //! work than the hand-written one it replaced (64-bit differences and single widening products
@@ -806,25 +806,33 @@ fn xyz(p: P3) -> [i64; 3] {
 /// [`NumError::BudgetExceeded`] only if every exact path failed, which no grid points can cause
 /// (the module documentation): never a sign that was not computed.
 pub fn orient2d(a: P2, b: P2, c: P2) -> Result<Sign, NumError> {
-    if ORIENT2D_FILTER_FIRST {
-        match filtered(|| generated::orient2d::filter(a, b, c)) {
-            Some(sign) => Ok(sign),
-            None => orient2d_unfiltered(a, b, c),
-        }
-    } else {
-        orient2d_exact(a, b, c)
+    orient2d_routed(a, b, c)
+}
+
+/// [`orient2d`]'s route where its generated filter runs first, as chapter 6.2 asks: on every
+/// target but a 64-bit one other than WebAssembly.
+///
+/// The two routes are two functions, each built only for its targets, not a branch on a constant:
+/// code a target never runs is then not in its build, so the coverage gate, which measures a
+/// 64-bit build, has no line of this one to count as never run, and the WebAssembly tests run it.
+#[cfg(not(all(target_pointer_width = "64", not(target_family = "wasm"))))]
+#[inline]
+fn orient2d_routed(a: P2, b: P2, c: P2) -> Result<Sign, NumError> {
+    match filtered(|| generated::orient2d::filter(a, b, c)) {
+        Some(sign) => Ok(sign),
+        None => orient2d_unfiltered(a, b, c),
     }
 }
 
-/// Whether [`orient2d`] runs its generated filter first on this target: not on a 64-bit target
-/// other than WebAssembly, whose 64 × 64 → 128-bit multiply makes the exact path five times
-/// cheaper than the filter, so the filter would only slow every call it cannot decide (module
-/// documentation, routing); everywhere else, as chapter 6.2 asks. Either way the sign is the
-/// exact one.
-const ORIENT2D_FILTER_FIRST: bool = !cfg!(all(
-    target_pointer_width = "64",
-    not(target_family = "wasm")
-));
+/// [`orient2d`]'s route on a 64-bit target other than WebAssembly: straight to the exact path.
+/// There a 64 × 64 → 128-bit multiply makes the exact path five times cheaper than the filter, so
+/// the filter would only slow every call it cannot decide (module documentation, routing). Either
+/// way the sign is the exact one.
+#[cfg(all(target_pointer_width = "64", not(target_family = "wasm")))]
+#[inline]
+fn orient2d_routed(a: P2, b: P2, c: P2) -> Result<Sign, NumError> {
+    orient2d_exact(a, b, c)
+}
 
 /// Whether this build runs the generated filters: false in reference mode (23.13; piece G106), the
 /// `reference` feature, where every predicate answers from its exact path.
@@ -841,7 +849,12 @@ pub(crate) fn filtered<T>(filter: impl FnOnce() -> Option<T>) -> Option<T> {
 }
 
 /// [`orient2d`] when its filter cannot decide. Out of line, so that a call the filter answers
-/// does not pay for the exact paths' stack frame.
+/// does not pay for the exact paths' stack frame. Built where the filter runs first, and for the
+/// tests of every target.
+#[cfg(any(
+    test,
+    not(all(target_pointer_width = "64", not(target_family = "wasm")))
+))]
 #[inline(never)]
 fn orient2d_unfiltered(a: P2, b: P2, c: P2) -> Result<Sign, NumError> {
     orient2d_exact(a, b, c)

@@ -452,20 +452,23 @@ mod copy {
             [p.x.get(), p.y.get(), p.z.get()]
         }
         pub fn orient2d(a: P2, b: P2, c: P2) -> Result<Sign, NumError> {
-            if ORIENT2D_FILTER_FIRST {
-                match filtered(|| generated::orient2d::filter(a, b, c)) {
-                    Some(sign) => Ok(sign),
-                    None => orient2d_unfiltered(a, b, c),
-                }
-            } else {
-                orient2d_exact(a, b, c)
+            orient2d_routed(a, b, c)
+        }
+
+        #[cfg(not(all(target_pointer_width = "64", not(target_family = "wasm"))))]
+        #[inline]
+        fn orient2d_routed(a: P2, b: P2, c: P2) -> Result<Sign, NumError> {
+            match filtered(|| generated::orient2d::filter(a, b, c)) {
+                Some(sign) => Ok(sign),
+                None => orient2d_unfiltered(a, b, c),
             }
         }
 
-        const ORIENT2D_FILTER_FIRST: bool = !cfg!(all(
-            target_pointer_width = "64",
-            not(target_family = "wasm")
-        ));
+        #[cfg(all(target_pointer_width = "64", not(target_family = "wasm")))]
+        #[inline]
+        fn orient2d_routed(a: P2, b: P2, c: P2) -> Result<Sign, NumError> {
+            orient2d_exact(a, b, c)
+        }
 
         pub const FILTERS: bool = !cfg!(feature = "reference");
 
@@ -474,6 +477,7 @@ mod copy {
             FILTERS.then(filter).flatten()
         }
 
+        #[cfg(any(test, not(all(target_pointer_width = "64", not(target_family = "wasm")))))]
         #[inline(never)]
         fn orient2d_unfiltered(a: P2, b: P2, c: P2) -> Result<Sign, NumError> {
             orient2d_exact(a, b, c)
@@ -569,6 +573,13 @@ mod copy {
     /// insphere's (lift, signed 3 × 3 cofactor) pairs in `i128`.
     pub(crate) fn is_terms([a, b, c, d, e]: [Pt3; 5]) -> Option<[(i128, i128); 4]> {
         insphere_terms(a, b, c, d, e)
+    }
+
+    /// orient2d's step when its filter cannot decide. The copy builds it for every target, as
+    /// predicate.rs does for its tests; `orient2d` itself calls it only where its filter runs
+    /// first.
+    pub(crate) fn o2_unfiltered(a: P2, b: P2, c: P2) -> Result<Sign, NumError> {
+        orient2d_unfiltered(a, b, c)
     }
 
     /// orient2d's total path.
@@ -965,6 +976,7 @@ proptest! {
         let [f, g, h, k, _] = p2.map(g2);
         prop_assert_eq!(copy::orient2d(f, g, h), predicate::orient2d(f, g, h));
         prop_assert_eq!(copy::orient3d(a, b, c, d), predicate::orient3d(a, b, c, d));
+        prop_assert_eq!(copy::o2_unfiltered(f, g, h), predicate::orient2d(f, g, h));
         prop_assert_eq!(copy::incircle(f, g, h, k), predicate::incircle(f, g, h, k));
         prop_assert_eq!(copy::insphere(a, b, c, d, e), predicate::insphere(a, b, c, d, e));
     }
