@@ -18,7 +18,7 @@
 //! Bytes per wall body, measured (23.9) by `tests/attack_g80.rs`: a plain wall, the solid and
 //! the outside region, one shell, six planar faces each with one loop of four fins, twelve line
 //! edges and eight vertices, built with exact reservations, holds 16,804 heap bytes in 29 chunks
-//! on 64-bit targets and 15,088 on wasm32, beside the body's own 1,008 bytes (508 on wasm32). The
+//! on 64-bit targets and 15,088 on wasm32, beside the body's own 1,016 bytes (512 on wasm32). The
 //! geometry pools are most of it: six planes at 1,008 bytes a row and twelve lines at 592 (536 on
 //! wasm32), each row the size of its kind's largest variant. The topology's own rows take 1,308
 //! bytes and the eight points 192; each of the 29 chunks adds 72 bytes of header and chunk
@@ -34,6 +34,8 @@
 //! [`Body::memory`] is linear in the number of chunks.
 
 use alloc::sync::Arc;
+
+use geom_op::Bounds;
 
 use crate::arenas::Arenas;
 use crate::column::Memory;
@@ -64,6 +66,8 @@ pub struct Body {
     /// The names of its named entities, in name order, when it was published by name (G81);
     /// shared, so cloning a body copies one pointer for them.
     names: Option<Arc<Names>>,
+    /// Its entities' error bounds, when an operation has given it any (13.2); shared likewise.
+    bounds: Option<Arc<Bounds>>,
 }
 
 impl Body {
@@ -74,6 +78,7 @@ impl Body {
             outside,
             arenas,
             names: None,
+            bounds: None,
         }
     }
 
@@ -90,6 +95,22 @@ impl Body {
     #[must_use]
     pub fn names(&self) -> Option<&Names> {
         self.names.as_deref()
+    }
+
+    /// Its entities' error bounds, if an operation has given it any: none means every entity is
+    /// exact as far as this body knows (13.2).
+    #[must_use]
+    pub fn bounds(&self) -> Option<&Bounds> {
+        self.bounds.as_deref()
+    }
+
+    /// The same body, carrying `bounds`.
+    #[must_use]
+    pub fn with_bounds(self, bounds: Bounds) -> Body {
+        Body {
+            bounds: Some(Arc::new(bounds)),
+            ..self
+        }
     }
 
     /// What the body is made of.

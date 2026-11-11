@@ -78,6 +78,7 @@
 extern crate alloc;
 
 pub mod batch;
+pub mod bounds;
 pub mod canonical;
 pub mod cbor;
 pub mod context;
@@ -95,8 +96,11 @@ pub mod run;
 pub mod schema;
 
 pub use batch::{Batch, BatchDetail, Key};
+pub use bounds::{Bounds, Limits, Spent};
 pub use context::{OpContext, Precision};
-pub use detail::{CombineDetail, MakeDetail, NumDetail, OpErrorDetail, QueryDetail, RunDetail};
+pub use detail::{
+    BoundDetail, CombineDetail, MakeDetail, NumDetail, OpErrorDetail, QueryDetail, RunDetail,
+};
 pub use error::OpError;
 pub use evidence::{Evidence, Value};
 pub use geom_num::Exactness;

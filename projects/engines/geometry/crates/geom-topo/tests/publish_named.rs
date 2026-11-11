@@ -569,6 +569,21 @@ fn a_body_in_name_order_publishes_unchanged() {
 }
 
 #[test]
+fn a_body_carries_its_bounds_through_a_copy() {
+    let w = wall();
+    let n = names(&w, 3);
+    let body = publish(&w, &n).unwrap();
+    assert_eq!(body.bounds(), None);
+    let bounds = geom_op::Bounds::new(geom_num::GridStep::Q0);
+    let carried = body.clone().with_bounds(bounds.clone());
+    assert_eq!(carried.bounds(), Some(&bounds));
+    assert_eq!(carried.arenas(), body.arenas());
+    assert_eq!(carried.names(), body.names());
+    assert_ne!(carried, body);
+    assert_eq!(carried.clone().bounds(), Some(&bounds));
+}
+
+#[test]
 fn fins_of_one_edge_in_one_loop_go_forward_first() {
     // A face whose loop runs along a seam edge both ways, as on a cylinder: edge 0 forward, the
     // seam (edge 1) forward, edge 2 reversed, the seam reversed.
