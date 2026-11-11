@@ -158,6 +158,10 @@ const _: () = {
     // n ≤ 4096 terms' fractions, each below 2^52, fit 64 bits.
     assert!((LARGE_ADDS as u128) * ((1 << 52) - 1) < (1 << 64));
     assert!(LARGE_CHUNKS == 1 << 12);
+    // A chunk position (below 2^27, from a `u32`) and a bit position (below 64) are cast to
+    // `usize`, and a table index (a `usize`) to `u64`: lossless while a `usize` is 32 to 64 bits,
+    // which every target the kernel builds for has.
+    assert!(usize::BITS >= 32 && usize::BITS <= 64);
 };
 
 /// The exact sum of doubles, rounded once at the end (module documentation).
@@ -248,6 +252,12 @@ const fn exponent_field(bits: u64) -> u32 {
 )]
 const fn small(v: u64) -> i64 {
     v as i64
+}
+
+/// The chunk an exponent field starts in: the field divided by 32. Below 2^27, which every
+/// `usize` holds (asserted beside the constants).
+const fn chunk_of(exponent: u32) -> usize {
+    (exponent >> 5) as usize
 }
 
 impl ExactSum {
@@ -433,16 +443,18 @@ impl ExactSum {
         let low = small((significand << k) & 0xffff_ffff);
         let high = small(significand >> 32_u32.abs_diff(k));
         let negative = bits >> 63 != 0;
-        let Ok(j) = usize::try_from(exponent >> 5) else {
-            self.lost = true;
-            return;
+        self.add_parts(chunk_of(exponent), low, high, negative);
+    }
+
+    /// Adds `±low` to chunk `j` and `±high` to the chunk above it. A `j` without both chunks, or a
+    /// chunk that cannot take its part, is reported lost; [`ExactSum::add_bits`] passes `j ≤ 63`,
+    /// which has both.
+    fn add_parts(&mut self, j: usize, low: i64, high: i64, negative: bool) {
+        let ok = match self.chunks.get_mut(j..) {
+            Some([first, second, ..]) => bump(first, low, negative) && bump(second, high, negative),
+            _ => false,
         };
-        if let Some([first, second, ..]) = self.chunks.get_mut(j..) {
-            let ok = bump(first, low, negative) && bump(second, high, negative);
-            if !ok {
-                self.lost = true;
-            }
-        } else {
+        if !ok {
             self.lost = true;
         }
     }
@@ -460,11 +472,7 @@ impl ExactSum {
             (shifted >> 32) & 0xffff_ffff,
             shifted >> 64,
         ];
-        let Ok(j) = usize::try_from(exponent >> 5) else {
-            self.lost = true;
-            return;
-        };
-        let Some([a, b, c, ..]) = self.chunks.get_mut(j..) else {
+        let Some([a, b, c, ..]) = self.chunks.get_mut(chunk_of(exponent)..) else {
             self.lost = true;
             return;
         };
@@ -560,12 +568,12 @@ fn round_finite(chunks: &[i64; CHUNKS]) -> Option<f64> {
     let Some(highest) = body.iter().rposition(|&chunk| chunk != 0) else {
         return Some(0.0);
     };
-    let (window, below) = match body.get(..=highest)? {
-        [rest @ .., third, second, first] => (window3(*first, *second, *third)?, rest),
-        [second, first] => (window3(*first, *second, 0)?, &[][..]),
-        [first] => (window3(*first, 0, 0)?, &[][..]),
-        [] => return None,
-    };
+    // The chunks up to the highest non-zero one, which is the first of the window; the two below
+    // it are the rest of the window, zero where the sum has no such chunk.
+    let (first, rest) = body.get(..=highest)?.split_last()?;
+    let (second, rest) = rest.split_last().map_or((0, rest), |(c, r)| (*c, r));
+    let (third, below) = rest.split_last().map_or((0, rest), |(c, r)| (*c, r));
+    let window = window3(*first, second, third)?;
     let sticky = below.iter().any(|&chunk| chunk != 0);
     let base = i32::try_from(highest)
         .ok()?
@@ -578,10 +586,9 @@ fn round_finite(chunks: &[i64; CHUNKS]) -> Option<f64> {
         return Some(f64::from_bits(sign | (SPECIAL_FIELD << 52)));
     }
     let quantum = exponent.checked_sub(52)?.max(-1074);
-    let shift = u32::try_from(quantum.checked_sub(base)?).ok()?;
-    if !(12..=65).contains(&shift) {
-        return None;
-    }
+    let shift = u32::try_from(quantum.checked_sub(base)?)
+        .ok()
+        .filter(|shift| (12..=65).contains(shift))?;
     let kept = window >> shift;
     let rest = window & (1_u128 << shift).checked_sub(1)?;
     let half = 1_u128 << shift.checked_sub(1)?;
@@ -629,7 +636,14 @@ impl Large {
     /// chunk has additions left; otherwise the slow path.
     #[inline]
     fn add(&mut self, bits: u64, sum: &mut ExactSum) {
-        let index = sign_and_exponent(bits);
+        self.add_at(sign_and_exponent(bits), bits, sum);
+    }
+
+    /// [`Large::add`] for the term with these bits at chunk `index`, which is the term's sign and
+    /// exponent. An index outside the table has no chunk, and goes to the slow path, which reports
+    /// it lost.
+    #[inline]
+    fn add_at(&mut self, index: usize, bits: u64, sum: &mut ExactSum) {
         if let (Some(count), Some(chunk)) = (self.counts.get_mut(index), self.chunks.get_mut(index))
         {
             if let Some(left) = count.checked_sub(1) {
@@ -652,54 +666,34 @@ impl Large {
             return;
         }
         let (word, bit) = (index >> 6, 1_u64 << (index & 63));
-        let Some(used) = self.used.get_mut(word) else {
+        // One lookup of the chunk, its count and its bit in `used`: the three tables hold the same
+        // 4096 patterns, so an index has all three or none.
+        let (Some(used), Some(count), Some(chunk)) = (
+            self.used.get_mut(word),
+            self.counts.get_mut(index),
+            self.chunks.get_mut(index),
+        ) else {
             sum.lost = true;
             return;
         };
         if *used & bit == 0 {
             *used |= bit;
         } else {
-            self.transfer(index, sum);
+            move_chunk(index, count, chunk, sum);
         }
-        if let (Some(count), Some(chunk)) = (self.counts.get_mut(index), self.chunks.get_mut(index))
-        {
-            *count = LARGE_ADDS - 1;
-            *chunk = bits;
-        } else {
-            sum.lost = true;
-        }
+        *count = LARGE_ADDS - 1;
+        *chunk = bits;
     }
 
-    /// Moves a chunk in use to the small accumulator and empties it (Neal's
-    /// `xsum_add_lchunk_to_small`). With n = 4096 − count terms added, the chunk is
-    /// `n·(index·2^52) + F` modulo 2^64, where F, the sum of their fraction fields, is below
-    /// `n·2^52 ≤ 2^64`; so `F = chunk − n·index·2^52`, computed modulo 2^64 (the wrapping is the
-    /// specification: the true F is in [0, 2^64), so the residue is F itself). Their significands
-    /// sum to F plus `n·2^52` implicit bits when the exponent field is not 0.
+    /// Moves the chunk at `index` to the small accumulator and empties it ([`move_chunk`]). An
+    /// index outside the table has no chunk to move, and is reported lost.
     fn transfer(&mut self, index: usize, sum: &mut ExactSum) {
         let (Some(count), Some(chunk)) = (self.counts.get_mut(index), self.chunks.get_mut(index))
         else {
             sum.lost = true;
             return;
         };
-        let Some(n) = LARGE_ADDS.checked_sub(*count) else {
-            sum.lost = true;
-            return;
-        };
-        let Ok(pattern) = u64::try_from(index) else {
-            sum.lost = true;
-            return;
-        };
-        let fractions = chunk.wrapping_sub((pattern << 52).wrapping_mul(u64::from(n)));
-        let field = exponent_field(pattern << 52);
-        let implicit = if field == 0 { 0 } else { u128::from(n) << 52 };
-        let Some(significands) = u128::from(fractions).checked_add(implicit) else {
-            sum.lost = true;
-            return;
-        };
-        *chunk = 0;
-        *count = 0;
-        sum.add_significands(field, significands, pattern >> 11 != 0);
+        move_chunk(index, count, chunk, sum);
     }
 
     /// Moves every chunk in use to the small accumulator, by the bits of `used`.
@@ -710,14 +704,38 @@ impl Large {
             while left != 0 {
                 let position = left.trailing_zeros();
                 left &= !(1_u64 << position);
-                let Ok(position) = usize::try_from(position) else {
-                    sum.lost = true;
-                    return;
-                };
+                // A bit position, below 64: every `usize` holds it.
+                let position = position as usize;
                 self.transfer((word << 6) | position, sum);
             }
         }
     }
+}
+
+/// Moves a large chunk in use, with its count, to the small accumulator and empties it (Neal's
+/// `xsum_add_lchunk_to_small`). With n = 4096 − count terms added, the chunk is
+/// `n·(index·2^52) + F` modulo 2^64, where F, the sum of their fraction fields, is below
+/// `n·2^52 ≤ 2^64`; so `F = chunk − n·index·2^52`, computed modulo 2^64 (the wrapping is the
+/// specification: the true F is in [0, 2^64), so the residue is F itself). Their significands
+/// sum to F plus `n·2^52` implicit bits when the exponent field is not 0: below 2^65, so that
+/// sum never fails. A count above 4096 would mean fewer than no terms, and is reported lost.
+fn move_chunk(index: usize, count: &mut u16, chunk: &mut u64, sum: &mut ExactSum) {
+    // The chunk's sign and exponent bits: an index of the table, below 2^12 (a `usize` is at most
+    // 64 bits, asserted beside the constants).
+    let pattern = index as u64;
+    let field = exponent_field(pattern << 52);
+    let terms = LARGE_ADDS.checked_sub(*count).and_then(|n| {
+        let fractions = chunk.wrapping_sub((pattern << 52).wrapping_mul(u64::from(n)));
+        let implicit = if field == 0 { 0 } else { u128::from(n) << 52 };
+        u128::from(fractions).checked_add(implicit)
+    });
+    let Some(significands) = terms else {
+        sum.lost = true;
+        return;
+    };
+    *chunk = 0;
+    *count = 0;
+    sum.add_significands(field, significands, pattern >> 11 != 0);
 }
 
 #[cfg(test)]
@@ -908,6 +926,28 @@ mod tests {
     }
 
     #[test]
+    fn parts_whose_chunks_do_not_both_exist_are_reported_lost() {
+        // The last position with two chunks takes both parts exactly.
+        let mut sum = ExactSum::new();
+        sum.add_parts(CHUNKS - 2, 5, 7, false);
+        assert!(!sum.lost);
+        assert_eq!(sum.chunks, chunks_of(&[(CHUNKS - 2, 5), (CHUNKS - 1, 7)]));
+        sum.add_parts(CHUNKS - 2, 5, 7, true);
+        assert!(!sum.lost);
+        assert_eq!(sum.chunks, [0; CHUNKS]);
+        // One chunk, none, and a position past the end: nothing is added, and it is reported.
+        for j in [CHUNKS - 1, CHUNKS, CHUNKS + 1, usize::MAX] {
+            let mut sum = ExactSum::new();
+            sum.add_parts(j, 5, 7, false);
+            assert_lost(&sum);
+            assert_eq!(sum.chunks, [0; CHUNKS], "{j}");
+        }
+        // A double's exponent field never asks for one: its largest starts in chunk 63.
+        assert_eq!(chunk_of(0x7fe), 63);
+        assert_eq!(chunk_of(u32::MAX), (1 << 27) - 1);
+    }
+
+    #[test]
     fn a_large_chunk_outside_the_table_is_reported_lost() {
         // The last finite pattern, −Ω's (sign 1, exponent field 2046: index 4094), is inside:
         // put in use and moved to the sum, it is −Ω exactly.
@@ -929,6 +969,21 @@ mod tests {
         let mut sum = ExactSum::new();
         large.transfer(LARGE_CHUNKS, &mut sum);
         assert_lost(&sum);
+        // Nor has it a chunk to add a term to: the fast path hands it to the slow one.
+        let mut sum = ExactSum::new();
+        large.add_at(LARGE_CHUNKS, bits, &mut sum);
+        assert_lost(&sum);
+        assert_eq!(large.used, [0; LARGE_CHUNKS / 64]);
+        // Inside the table the fast path is the term itself, as `add` gives it.
+        let (mut by_index, mut by_bits) = (Large::new(), Large::new());
+        let (mut a, mut b) = (ExactSum::new(), ExactSum::new());
+        by_index.add_at(index, bits, &mut a);
+        by_bits.add(bits, &mut b);
+        by_index.empty_into(&mut a);
+        by_bits.empty_into(&mut b);
+        assert!(!a.lost && !b.lost);
+        assert_eq!(a.round_ieee().to_bits(), bits);
+        assert_eq!(b.round_ieee().to_bits(), bits);
     }
 
     #[test]
