@@ -39,6 +39,11 @@ geom-pool = { path = "../geom-pool" }
 name = "cdt"
 harness = false
 
+# Point location's timing (piece G147), at 1 and 8 threads.
+[[bench]]
+name = "classify"
+harness = false
+
 # The triangle contact test's timing (piece G151).
 [[bench]]
 name = "contact"
