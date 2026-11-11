@@ -137,6 +137,8 @@ pub const COMBINE: OpSchema = OpSchema {
     classes: &[Class::Exact, Class::Certified],
     charges: &[Charge::new(ARRANGEMENT, "polygon a split clips", 1)],
     batch: false,
+    // A result's names come from its operands' keys and faces (chapter 10), so no name-free key.
+    name_free: false,
     example: "a 4 m cube less a 2 m cube at its corner: a cube with a corner notch",
 };
 
