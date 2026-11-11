@@ -1743,6 +1743,11 @@ fn direct_digest(group: &str, name: &str, class: Class) -> Option<Digest> {
                 geom_mesh::contact::Contact::Cross => geom_num::Sign::Positive,
             })
         })),
+        ("mesh", "envelope") => fold(
+            inputs::mesh::envelope(class)
+                .iter()
+                .map(|&(t, p)| geom_mesh::envelope::TriangleEnvelope::new(t, 1 << 16)?.contains(p)),
+        ),
         ("mesh", "cdt") => fold(inputs::mesh::cdt(class).iter().map(|t| {
             let mut meter = geom_run::WorkMeter::new(geom_run::Budget::UNLIMITED);
             geom_mesh::triangulate(&t.sites, &t.constraints, None, &mut meter)

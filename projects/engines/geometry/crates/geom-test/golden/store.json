@@ -290,9 +290,15 @@
               "kind": "corpus",
               "piece": "G151",
               "why": "7 new count benchmarks on the distance comparisons and triangle contact (decision 32.44): mesh/point_point and its fellows, mesh/triangles; no existing digest moved"
+            },
+            {
+              "sha256": "44872f106084a3f1479c01329e2f7a88f090fed7e2274923055806d613c852c2",
+              "kind": "corpus",
+              "piece": "G152",
+              "why": "1 new count benchmark on the polyhedral envelope (decision 32.44): mesh/envelope; no existing digest moved"
             }
           ],
-          "sha256": "44872f106084a3f1479c01329e2f7a88f090fed7e2274923055806d613c852c2"
+          "sha256": "86bf96c63c5d5c4f18a04df79187c9698b96945adb3d00a931a7da85b7bd4c38"
         },
         {
           "id": "geom-nurbs/operations",
