@@ -270,53 +270,11 @@
             {
               "sha256": "889323ae8306639d37f0a83194768968d86dea765bc9bfcf1efdc2250ba238c1",
               "kind": "corpus",
-              "piece": "G138",
-              "why": "14 new benchmarks of geom-num's three new public functions (principle 12): plane::determinant_sign on side_of_tpi's four classes and on the planes of a building's faces, which its machine-word rung decides; plane::normals_sign on Tpi::new's three classes and on faces; Tpi::meeting on Tpi::new's three classes; no existing digest moved"
-            },
-            {
-              "sha256": "c783e47b66c4d40fd2973a552b0d7c71ea3657dd632dd434f8df41593eda8a04",
-              "kind": "corpus",
-              "piece": "G153",
-              "why": "1 new count benchmark on the triangulation (decision 32.44): mesh/cdt; no existing digest moved"
-            },
-            {
-              "sha256": "ee9154d79ff4ddf499a1edfed52d31390ad8e230ee310dbc73e2fa189b782ef6",
-              "kind": "corpus",
-              "piece": "G146",
-              "why": "1 new count benchmark on the exact mesh (decision 32.44): mesh/exact_build; no existing digest moved"
-            },
-            {
-              "sha256": "0f92bfe436e4a8f1ed9a8e92bd80bea615141656b7aadb25dd73607f031c4380",
-              "kind": "corpus",
-              "piece": "G151",
-              "why": "7 new count benchmarks on the distance comparisons and triangle contact (decision 32.44): mesh/point_point and its fellows, mesh/triangles; no existing digest moved"
-            },
-            {
-              "sha256": "44872f106084a3f1479c01329e2f7a88f090fed7e2274923055806d613c852c2",
-              "kind": "corpus",
-              "piece": "G152",
-              "why": "1 new count benchmark on the polyhedral envelope (decision 32.44): mesh/envelope; no existing digest moved"
-            },
-            {
-              "sha256": "86bf96c63c5d5c4f18a04df79187c9698b96945adb3d00a931a7da85b7bd4c38",
-              "kind": "corpus",
-              "piece": "G147",
-              "why": "1 new count benchmark on point location (decision 32.44): mesh/locate; no existing digest moved"
-            },
-            {
-              "sha256": "4262a6e03b4cb30709a53f5d20da1dbe59700a8b561a1160a6851e5928756a70",
-              "kind": "corpus",
-              "piece": "G140",
-              "why": "7 new count benchmarks of the flat boolean's scenarios (23.13's scenarios at reduced scale): a wall's openings, a moved door cut again from the arrangement cache, a slab's holes, a union of many boxes, one and three selections from one arrangement, and a storey's rooms; no existing digest moved"
-            },
-            {
-              "sha256": null,
-              "kind": "corpus",
-              "piece": "G155",
-              "why": "topo/publish's input pushes each vertex's point as a PointKind, the point pool's type since G136's line (a grid point or three planes' meeting), so the input's canonical encoding and its digest moved; its result digest is unchanged, and no other digest moved"
+              "piece": "Phase 4 train 1 (G123 to G155)",
+              "why": "Phase 4's first train, one record for its pieces' 31 new count benchmarks: 14 on geom-num's plane functions (G138: plane::determinant_sign and its fellows), mesh/cdt (G153), mesh/exact_build (G146), 6 on the distance comparisons and triangle contact (G151), mesh/envelope (G152), mesh/locate (G147) and 7 scenarios of the flat boolean (G140); and topo/publish's input digest, which moves because a vertex's point is now a PointKind (the G129 fix), while its output digest stays. No other existing digest moved"
             }
           ],
-          "sha256": "d56669b57872c04f31f97f7f64c8cda8298fab326f0f76fcf5621e9934fec53a"
+          "sha256": "4262a6e03b4cb30709a53f5d20da1dbe59700a8b561a1160a6851e5928756a70"
         },
         {
           "id": "geom-nurbs/operations",

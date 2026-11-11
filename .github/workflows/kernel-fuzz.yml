@@ -28,7 +28,7 @@ name: Kernel fuzzing and proofs
 #   found.
 #
 # Path filters: the workflow runs when the code a target fuzzes or proves changes: geom-fuzz and
-# every crate of the workspace it depends on (geom-bench, geom-bvh, geom-check, geom-curve,
+# every crate of the workspace it depends on (geom-bench, geom-bool, geom-bvh, geom-check, geom-curve,
 # geom-format, geom-gen, geom-intersect, geom-linalg, geom-make, geom-math, geom-mesh, geom-name, geom-num,
 # geom-nurbs, geom-op, geom-poly, geom-pool, geom-run, geom-surface, geom-test and geom-topo today, with
 # engine-geometry and kit-core through geom-gen's facade generators;
@@ -55,6 +55,7 @@ on:
       - "projects/engines/crates/engine-geometry/**"
       - "projects/engines/geometry/crates/geom-2d/**"
       - "projects/engines/geometry/crates/geom-bench/**"
+      - "projects/engines/geometry/crates/geom-bool/**"
       - "projects/engines/geometry/crates/geom-bvh/**"
       - "projects/engines/geometry/crates/geom-check/**"
       - "projects/engines/geometry/crates/geom-cloud/**"
@@ -96,6 +97,7 @@ on:
       - "projects/engines/crates/engine-geometry/**"
       - "projects/engines/geometry/crates/geom-2d/**"
       - "projects/engines/geometry/crates/geom-bench/**"
+      - "projects/engines/geometry/crates/geom-bool/**"
       - "projects/engines/geometry/crates/geom-bvh/**"
       - "projects/engines/geometry/crates/geom-check/**"
       - "projects/engines/geometry/crates/geom-cloud/**"
