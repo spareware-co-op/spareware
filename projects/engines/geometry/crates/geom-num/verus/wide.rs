@@ -1234,7 +1234,7 @@ fn limb_at<const N: usize>(a: &[u64; N], i: usize) -> u64 {
     requires
         i < N,
     ensures
-        a@ == old(a)@.update(i as int, v),
+        final(a)@ == old(a)@.update(i as int, v),
 )]
 fn put_limb<const N: usize>(a: &mut [u64; N], i: usize, v: u64) {
     if let Some(slot) = a.get_mut(i) {
