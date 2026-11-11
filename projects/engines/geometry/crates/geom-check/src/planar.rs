@@ -21,25 +21,43 @@
 //! - **Two edges of one face.** Each is a stretch of its own line; they may meet only at a vertex
 //!   they share.
 //! - **A flat face its rounded corners have bent.** A Certified face whose grid corners leave one
-//!   plane has no plane to read, so it stands for the fan of triangles from its first corner, which
-//!   lies within the record's bound of the true face, provided every triangle turns the way the
-//!   first does. Each triangle is an outline, and the face meets another where any of its triangles
-//!   does. A bent face no fan can stand for has no outline.
+//!   plane has no plane to read, so it stands for the star of triangles from the mean of its
+//!   corners, one to each edge, which lies within the record's bound of the true face (every point
+//!   of it is a mix of rounded corners, each within the bound of its true place), provided every
+//!   triangle turns the way the ring does as a whole. Each triangle is an outline, and the face
+//!   meets another where any of its triangles does. A bent face no star can stand for has no
+//!   outline.
 //! - **A point against a shell.** The parity of the crossings of a ray along the line of two of the
 //!   point's planes, moved infinitely little off both, so that no tie is left.
+//!
+//! Why a star from the mean, and not a fan from a corner: what the checker finds of a body must
+//! depend on where the body lies and on nothing else. A fan needs a corner to start from, and a
+//! ring's first corner is chosen by the body's names (`geom_topo::Builder::publish_named` starts
+//! each loop at its least fin), so a mirror, which turns every ring round, and a pattern's copy,
+//! which renames everything, moved the fan, and a valid body's exact copy could be found crossing
+//! itself. The mean of a ring's corners, the triangles from it and the test of their turning are
+//! the same whichever corner the ring starts at and whichever way it runs, and the mean of a ring
+//! moved by any affine map is the moved mean. So a body, its mirror, and every exact move, turn,
+//! scale and renumbered copy of it get one verdict.
 //!
 //! Guarantees:
 //!
 //! - **Exact.** Every decision is the sign of a plane at a grid point or at a meeting of three
 //!   planes (`geom_num::plane::Plane::side` and `side_of_tpi`, within 384 bits), or the sign of a
 //!   3 × 3 determinant of normals (`geom_num::plane::Tpi::weight`). No double is read and nothing
-//!   is sampled.
+//!   is sampled. The mean of n corners is such a meeting, of the planes n x = Σx, n y = Σy and
+//!   n z = Σz, so a star needs no arithmetic of its own.
+//! - **One verdict for a shape.** A bent face's star depends on where its corners lie, in their
+//!   order round the ring, and on nothing else (above).
 //! - **Any polygon.** A face that is not convex, has holes, or has several outer loops is cut like
 //!   any other. A vertex on the line, an edge along it and a touch from one side all fall to the
 //!   moved line, which sees each as ordinary crossings at one mark.
 //! - **Fails closed.** A step that cannot be decided is [`Meet::Unknown`], which the caller reports,
 //!   never a pass. A face without a plane or a plane for each side has no outline, and its pairs are
-//!   the caller's to report.
+//!   the caller's to report. So is a bent face with no star: one with a second loop, one whose
+//!   mean does not see every edge from inside, and one of five or more corners so wide that a
+//!   triangle's plane passes a plane's budget (its normal is the sum of n − 2 normals of triangles
+//!   of grid points, each below 2^82, against the budget's 2^83; a ring of four never does).
 //! - **Runs on bodies that passed group 2.** Every vertex is on every face it bounds, so a shared
 //!   edge lies on both faces' planes and the other face's plane crosses along it.
 //! - **Charged.** One meter unit per side visited and per pair of sides or stretches compared.
@@ -74,7 +92,7 @@ use geom_topo::{Arenas, Ix, SurfaceKind};
 use crate::combinatorial::{edge_fins, face_fins, face_loops, fin_edge, fin_ends, fin_face, rows};
 use crate::curved::Pair;
 use crate::geometric::{corner, planes_lie, surface};
-use crate::self_intersection::Meet;
+use crate::self_intersection::{Meet, cross, diff, dot};
 use crate::sink::Sink;
 
 /// Why a test could not finish.
@@ -110,17 +128,18 @@ fn known<T>(step: Option<T>) -> Result<T, Stuck> {
     step.ok_or(Stuck::Undecided)
 }
 
-/// A vertex of an outline.
+/// A corner of an outline.
 #[derive(Clone)]
 struct End {
-    vertex: Ix<Vertex>,
+    /// The vertex; `None` for the hub of a star, which no vertex is at and no other face shares.
+    vertex: Option<Ix<Vertex>>,
     at: Corner,
 }
 
-/// One fin of an outline.
+/// One side of an outline.
 #[derive(Clone)]
 struct Side {
-    /// The edge; `None` for a diagonal of a fan.
+    /// The edge; `None` for a spoke of a star.
     edge: Option<Ix<Edge>>,
     start: End,
     end: End,
@@ -142,7 +161,7 @@ pub(crate) struct Outline {
     pub(crate) implicit: bool,
 }
 
-/// What a face is made of, as outlines: one, a fan's, or none for a face that has none.
+/// What a face is made of, as outlines: one, a star's, or none for a face that has none.
 pub(crate) struct Slot(pub(crate) Vec<Outline>);
 
 impl LogicalSize for Slot {
@@ -414,11 +433,11 @@ fn side_of(
         edge: Some(edge),
         across: across(a, (face, edge), plane, [&start, &end], exact)?,
         start: End {
-            vertex: first,
+            vertex: Some(first),
             at: start,
         },
         end: End {
-            vertex: last,
+            vertex: Some(last),
             at: end,
         },
     })
@@ -475,7 +494,8 @@ fn same_way(first: [i128; 3], second: [i128; 3]) -> bool {
     sum.is_some_and(|s| s.signum() == Sign::Positive)
 }
 
-/// A corner of a face a fan stands for: where it lies, and the edge from it to the next.
+/// A corner of a face a star stands for, where a spoke ends: where it lies, and the edge from it
+/// to the next.
 #[derive(Clone, Copy)]
 struct Spoke {
     at: P3,
@@ -519,77 +539,188 @@ fn ring(a: &Arenas, f: Ix<Face>, sink: &mut Sink<'_, '_>) -> Result<Option<Vec<S
     Ok(Some(out))
 }
 
-/// One triangle of a fan, its three corners with the edges along its sides: `None` for corners on
-/// one line.
-fn triangle(
-    face: Ix<Face>,
-    [p, q, r]: [Option<&Spoke>; 3],
-    edges: [Option<Ix<Edge>>; 3],
-    sink: &mut Sink<'_, '_>,
-) -> Result<Option<Outline>, Stopped> {
-    let plane = p
-        .zip(q)
-        .zip(r)
-        .and_then(|((p, q), r)| Plane::through(p.at, q.at, r.at).ok());
-    let Some(plane) = plane else {
-        return Ok(None);
-    };
-    let mut sides: Vec<Side> = reserve(sink.meter(), 3)?;
-    for ((from, to), edge) in [(p, q), (q, r), (r, p)].into_iter().zip(edges) {
-        sides.extend(from.zip(to).and_then(|(s, t)| {
-            Some(Side {
-                edge,
-                start: End {
-                    vertex: s.vertex,
-                    at: Corner::Grid(s.at),
-                },
-                end: End {
-                    vertex: t.vertex,
-                    at: Corner::Grid(t.at),
-                },
-                across: stood_on(&plane, s.at, t.at)?,
-            })
-        }));
-    }
-    Ok((sides.len() == 3).then_some(Outline {
-        face,
-        plane,
-        sides,
-        implicit: false,
-    }))
+/// `p`'s coordinates.
+fn wide(p: P3) -> [i128; 3] {
+    [p.x, p.y, p.z].map(|c| i128::from(c.get()))
 }
 
-/// Flat face `f` as the fan of triangles from its first corner, if it has a ring of grid corners and
-/// every triangle turns the way the first does; none otherwise.
-fn fan(a: &Arenas, f: Ix<Face>, sink: &mut Sink<'_, '_>) -> Result<Vec<Outline>, Stopped> {
+/// `u` + `v`: `None` past an `i128`, which no sum over a ring of an arena reaches.
+fn added(u: [i128; 3], v: [i128; 3]) -> Option<[i128; 3]> {
+    let mut sum = u;
+    for (total, term) in sum.iter_mut().zip(v) {
+        *total = total.checked_add(term)?;
+    }
+    Some(sum)
+}
+
+/// The plane with normal `normal` through the point `through`: `None` for a zero normal, or a
+/// normal or an offset past a plane's budget.
+fn plane_at(normal: [i128; 3], through: [i128; 3]) -> Option<Plane> {
+    Plane::new(normal, dot(normal, through)?.checked_neg()?).ok()
+}
+
+/// The hub of a star: the mean of a ring's corners, kept exactly as their sum Σ and their number n.
+struct Hub {
+    sum: [i128; 3],
+    count: i128,
+    /// The mean as the meeting of the planes n x = Σx, n y = Σy and n z = Σz.
+    at: Corner,
+}
+
+/// One triangle of a star, as planes: its own, turning as the ring runs, and one along each of its
+/// three sides that crosses it.
+struct Wedge {
+    plane: Plane,
+    /// Along the spoke from the hub out to the first corner.
+    out: Plane,
+    /// Along the ring's edge from the first corner to the second.
+    along: Plane,
+    /// Along the spoke from the second corner back to the hub.
+    back: Plane,
+}
+
+impl Hub {
+    /// The mean of `ring`'s corners: `None` for a ring of none.
+    ///
+    /// Bit budget: n coordinates of at most 2^40 sum to at most n · 2^40, far inside a plane's
+    /// offset (2^125), and n is far inside its normal (2^83), so the three planes are planes; they
+    /// lie along the three axes, so they meet.
+    fn of(ring: &[Spoke]) -> Option<Hub> {
+        let count = i128::from(count(ring.len()));
+        let mut corners = ring.iter().map(|spoke| wide(spoke.at));
+        let sum = corners.try_fold([0_i128; 3], added)?;
+        let [x, y, z] = sum;
+        let at = Tpi::new(
+            Plane::new([count, 0, 0], x.checked_neg()?).ok()?,
+            Plane::new([0, count, 0], y.checked_neg()?).ok()?,
+            Plane::new([0, 0, count], z.checked_neg()?).ok()?,
+        );
+        Some(Hub {
+            sum,
+            count,
+            at: Corner::Tpi(at.ok()?),
+        })
+    }
+
+    /// n times the vector from the mean to `p`, n p − Σ: whole numbers, where the vector itself
+    /// has n in its denominators.
+    fn arm(&self, p: P3) -> Option<[i128; 3]> {
+        let mut out = wide(p);
+        for (slot, total) in out.iter_mut().zip(self.sum) {
+            *slot = self.count.checked_mul(*slot)?.checked_sub(total)?;
+        }
+        Some(out)
+    }
+
+    /// The triangle from the mean to `p` and on to `q`, as planes. Its own has the normal
+    /// (n p − Σ) × (q − p) and holds `p`, so it holds `q` and the mean. A spoke's is the plane
+    /// through the spoke and along an axis the triangle's plane is not parallel to, which
+    /// therefore crosses it; the edge's is one stood on its two corners.
+    ///
+    /// `None` for a triangle of no area, and for one whose plane is past a plane's budget. The
+    /// normal is the sum, over the ring's other n − 2 corners r, of (p − r) × (q − r), the normal
+    /// of a triangle of grid points, below 2^82: it stays inside 2^83 for every ring of four
+    /// corners, and for a ring of five or more unless the ring spans most of the frame.
+    fn wedge(&self, p: P3, q: P3) -> Option<Wedge> {
+        let (from, to) = (self.arm(p)?, self.arm(q)?);
+        let plane = plane_at(cross(from, diff(q, p)?)?, wide(p))?;
+        let k = plane.n().iter().position(|&c| c != 0)?;
+        let mut unit = [0_i128; 3];
+        *unit.get_mut(k)? = 1;
+        let spoke = |arm: [i128; 3], end: P3| plane_at(cross(arm, unit)?, wide(end));
+        Some(Wedge {
+            plane,
+            out: spoke(from, p)?,
+            along: stood_on(&plane, p, q)?,
+            back: spoke(to, q)?,
+        })
+    }
+}
+
+/// One triangle of a star as an outline: from the hub out to `p`, along `p`'s edge to `q`, and
+/// back. The hub is a meeting of planes but no vertex, so the outline is not marked `implicit`:
+/// the face's own edges all run between grid points, and are tested as the segments they are.
+fn triangle(
+    face: Ix<Face>,
+    hub: &Hub,
+    wedge: &Wedge,
+    (p, q): (&Spoke, &Spoke),
+    sink: &mut Sink<'_, '_>,
+) -> Result<Outline, Stopped> {
+    let middle = || End {
+        vertex: None,
+        at: hub.at.clone(),
+    };
+    let rim = |s: &Spoke| End {
+        vertex: Some(s.vertex),
+        at: Corner::Grid(s.at),
+    };
+    let mut sides: Vec<Side> = reserve(sink.meter(), 3)?;
+    sides.push(Side {
+        edge: None,
+        start: middle(),
+        end: rim(p),
+        across: wedge.out,
+    });
+    sides.push(Side {
+        edge: Some(p.edge),
+        start: rim(p),
+        end: rim(q),
+        across: wedge.along,
+    });
+    sides.push(Side {
+        edge: None,
+        start: rim(q),
+        end: middle(),
+        across: wedge.back,
+    });
+    Ok(Outline {
+        face,
+        plane: wedge.plane,
+        sides,
+        implicit: false,
+    })
+}
+
+/// Whether every one of `normals`, those of a star's triangles, points the way their sum does.
+///
+/// The sum is n times the ring's area vector, whatever point the star is drawn from, so each
+/// triangle is asked to turn the way the ring does as a whole. No triangle is the one the others
+/// are held to, so the answer does not depend on where the ring starts.
+fn one_way(normals: impl Iterator<Item = [i128; 3]> + Clone) -> bool {
+    let mut each = normals.clone();
+    let mut all = normals;
+    each.try_fold([0_i128; 3], added)
+        .is_some_and(|whole| all.all(|one| same_way(one, whole)))
+}
+
+/// Flat face `f` as the star of triangles from the mean of its corners, one to each edge, if it
+/// has a ring of grid corners and every triangle turns the way the ring does as a whole; none
+/// otherwise.
+///
+/// The mean, the triangles and the test of their turning are the same whichever corner the ring
+/// starts at and whichever way it runs, and the mean of a ring moved by an affine map is the moved
+/// mean. So a face's star, and what the checker finds of it, depend on where its corners lie and on
+/// nothing else: not on a name, nor on the order a body was built in. A fan from the ring's first
+/// corner did depend on them, and found a valid body's mirror crossing itself.
+fn star(a: &Arenas, f: Ix<Face>, sink: &mut Sink<'_, '_>) -> Result<Vec<Outline>, Stopped> {
     let Some(ring) = ring(a, f, sink)? else {
         return Ok(Vec::new());
     };
-    let pieces = ring.len().saturating_sub(2);
-    let mut out: Vec<Outline> = reserve(sink.meter(), count(pieces))?;
-    let mut turn: Option<[i128; 3]> = None;
-    let edge = |k: usize| ring.get(k).map(|s| s.edge);
-    for k in 0..pieces {
-        let (next, after) = (k.saturating_add(1), k.saturating_add(2));
-        let corners = [ring.first(), ring.get(next), ring.get(after)];
-        // Only the first triangle has the first edge, and only the last the edge back.
-        let edges = [
-            (k == 0).then(|| edge(0)).flatten(),
-            edge(next),
-            (after.saturating_add(1) == ring.len())
-                .then(|| edge(after))
-                .flatten(),
-        ];
-        let piece = triangle(f, corners, edges, sink)?.filter(|one| {
-            let normal = one.plane.n();
-            same_way(*turn.get_or_insert(normal), normal)
-        });
-        let Some(one) = piece else {
+    // Only a ring of no corners has no mean, and it has no triangle to ask for one.
+    let hub = Hub::of(&ring);
+    let mut out: Vec<Outline> = reserve(sink.meter(), count(ring.len()))?;
+    for (p, q) in ring.iter().zip(ring.iter().cycle().skip(1)) {
+        let wedge = hub
+            .as_ref()
+            .and_then(|hub| Some((hub, hub.wedge(p.at, q.at)?)));
+        let Some((hub, wedge)) = wedge else {
             return Ok(Vec::new());
         };
-        out.push(one);
+        out.push(triangle(f, hub, &wedge, (p, q), sink)?);
     }
-    Ok(out)
+    let turns = one_way(out.iter().map(|one| one.plane.n()));
+    Ok(if turns { out } else { Vec::new() })
 }
 
 /// One slot per face of `a`.
@@ -606,7 +737,7 @@ pub(crate) fn outlines(
                 list.push(one);
                 list
             }
-            None => fan(a, f, sink)?,
+            None => star(a, f, sink)?,
         }));
     }
     Ok(out)
@@ -697,7 +828,10 @@ fn joins(
             let (from, to) = (cut.mark(&s.start.at)?, cut.mark(&s.end.at)?);
             out.push(cut.stretch(from, to)?);
         }
-        let met = g.sides.iter().any(|t| t.start.vertex == s.start.vertex);
+        // A star's hub is no vertex, so it is shared with nothing: not with another star's hub
+        // at the same place either.
+        let vertex = s.start.vertex;
+        let met = vertex.is_some_and(|v| g.sides.iter().any(|t| t.start.vertex == Some(v)));
         if met && cut.holds(&s.start.at) {
             let at = cut.mark(&s.start.at)?;
             out.push(Stretch { from: at, to: at });
@@ -879,6 +1013,7 @@ pub(crate) fn edges_meet(
             return Ok(Meet::Apart);
         };
         let mut runs: Vec<Stretch> = reserve(sink.meter(), 2)?;
+        // Both sides are edges, so each of their ends is a vertex, never a star's hub.
         for end in [&s.start, &s.end] {
             if [&t.start, &t.end].iter().any(|e| e.vertex == end.vertex) {
                 let at = cut.mark(&end.at)?;
@@ -1010,6 +1145,126 @@ mod tests {
     fn crossing_point() -> Corner {
         let (p, q) = (P3::new(0, 0, 0).unwrap(), P3::new(10, 0, 0).unwrap());
         Corner::Lpi(Lpi::new(p, q, wall(5)).unwrap())
+    }
+
+    /// The grid point (`x`, `y`, `z`).
+    fn grid(x: i64, y: i64, z: i64) -> P3 {
+        P3::new(x, y, z).unwrap()
+    }
+
+    /// A ring's corners as a star reads them; no test here asks for their vertices or edges.
+    fn spokes(corners: &[[i64; 3]]) -> Vec<Spoke> {
+        corners
+            .iter()
+            .map(|&[x, y, z]| Spoke {
+                at: grid(x, y, z),
+                vertex: Ix::new(0).unwrap(),
+                edge: Ix::new(0).unwrap(),
+            })
+            .collect()
+    }
+
+    /// Whether `corner` lies on `plane`.
+    fn on(corner: &Corner, plane: &Plane) -> bool {
+        corner.side(plane) == Ok(Sign::Zero)
+    }
+
+    #[test]
+    fn a_sum_or_a_plane_that_does_not_fit_is_refused() {
+        assert_eq!(added([1, 2, 3], [10, 20, 30]), Some([11, 22, 33]));
+        let most = i128::MAX;
+        for past in [[most, 0, 0], [0, most, 0], [0, 0, most]] {
+            assert_eq!(added(past, [1; 3]), None);
+        }
+        let plane = plane_at([0, 0, 2], [5, 6, 7]).unwrap();
+        assert_eq!((plane.n(), plane.d()), ([0, 0, 2], -14));
+        // No normal, a normal past its budget, an offset past its own, and one past an `i128`.
+        assert!(plane_at([0; 3], [5, 6, 7]).is_none());
+        assert!(plane_at([1 << 83, 0, 0], [0; 3]).is_none());
+        assert!(plane_at([1, 0, 0], [1 << 125, 0, 0]).is_none());
+        assert!(plane_at([i128::MAX, 0, 0], [2, 0, 0]).is_none());
+    }
+
+    #[test]
+    fn a_hub_is_the_mean_of_its_ring_exactly() {
+        // The mean, (5/4, 3/4, 1/2), is no grid point.
+        let ring = spokes(&[[0, 0, 0], [4, 0, 0], [1, 3, 0], [0, 0, 2]]);
+        let hub = Hub::of(&ring).unwrap();
+        assert_eq!((hub.sum, hub.count), ([5, 3, 2], 4));
+        for (normal, offset) in [
+            ([4, 0, 0], -5),
+            ([0, 4, 0], -3),
+            ([0, 0, 2], -1),
+            ([2, 2, 2], -5),
+        ] {
+            assert!(on(&hub.at, &Plane::new(normal, offset).unwrap()));
+        }
+        assert_eq!(hub.at.side(&wall(1)), Ok(Sign::Positive));
+        assert_eq!(hub.at.side(&wall(2)), Ok(Sign::Negative));
+        // Four times the way from the mean to a corner.
+        assert_eq!(hub.arm(grid(4, 0, 0)), Some([11, -3, -2]));
+        assert!(Hub::of(&[]).is_none());
+    }
+
+    #[test]
+    fn a_wedge_is_a_triangle_from_the_hub_with_a_plane_along_each_side() {
+        let ring = spokes(&[[0, 0, 0], [10, 0, 0], [10, 10, 1], [0, 10, 0]]);
+        let hub = Hub::of(&ring).unwrap();
+        let (p, q) = (grid(10, 0, 0), grid(10, 10, 1));
+        let wedge = hub.wedge(p, q).unwrap();
+        // (4 p − Σ) × (q − p) = (20, −20, −1) × (0, 10, 1).
+        assert_eq!(wedge.plane.n(), [-10, -20, 200]);
+        let (start, end) = (Corner::Grid(p), Corner::Grid(q));
+        for corner in [&hub.at, &start, &end] {
+            assert!(on(corner, &wedge.plane));
+        }
+        // Each side's plane holds the side's two ends and not the third corner, and crosses.
+        for (side, ends, off) in [
+            (&wedge.out, [&hub.at, &start], &end),
+            (&wedge.along, [&start, &end], &hub.at),
+            (&wedge.back, [&end, &hub.at], &start),
+        ] {
+            assert!(ends.iter().all(|corner| on(corner, side)));
+            assert!(!on(off, side));
+            assert_eq!(planes_lie(&wedge.plane, side), Pair::Crossing);
+        }
+        // Run the other way, the triangle turns the other way.
+        assert_eq!(hub.wedge(q, p).unwrap().plane.n(), [10, 20, -200]);
+    }
+
+    #[test]
+    fn a_triangle_of_no_area_or_past_a_planes_budget_has_no_wedge() {
+        // The second corner is the mean of the five.
+        let ring = spokes(&[[-4, -2, 0], [0, 3, 1], [4, -2, 2], [6, 8, 0], [-6, 8, 2]]);
+        let hub = Hub::of(&ring).unwrap();
+        assert!(hub.wedge(grid(-4, -2, 0), grid(0, 3, 1)).is_none());
+        assert!(hub.wedge(grid(4, -2, 2), grid(6, 8, 0)).is_some());
+        // Across the whole frame: five corners pass the budget, four do not.
+        let m = (1_i64 << 40) - 1;
+        let wide = [[-m, -m, 0], [m, -m, 0], [m, m, 1], [0, m, 0], [-m, 0, 0]];
+        let (p, q) = (grid(-m, -m, 0), grid(m, -m, 0));
+        assert!(Hub::of(&spokes(&wide)).unwrap().wedge(p, q).is_none());
+        let four = [wide[0], wide[1], wide[2], wide[4]];
+        assert!(Hub::of(&spokes(&four)).unwrap().wedge(p, q).is_some());
+    }
+
+    #[test]
+    fn a_star_turns_one_way_when_every_normal_agrees_with_their_sum() {
+        let up = [0, 0, 5];
+        assert!(one_way([up, [1, 0, 2], [-1, 0, 2]].into_iter()));
+        assert!(!one_way([up, up, [0, 0, -1]].into_iter()));
+        // Two that cancel agree with nothing.
+        assert!(!one_way([up, [0, 0, -5]].into_iter()));
+        // No one of them is the one the rest are held to. Held to the first, these would pass
+        // started from the second and fail started from the first, which the third points against.
+        let mixed = [[4, 0, 1], [0, 0, 3], [-4, 0, 1]];
+        for start in 0..3 {
+            let mut turned = mixed;
+            turned.rotate_left(start);
+            assert!(one_way(turned.into_iter()), "{start}");
+        }
+        // A sum past an `i128` is no answer, so no star.
+        assert!(!one_way([[i128::MAX, 0, 0], [i128::MAX, 0, 0]].into_iter()));
     }
 
     #[test]
