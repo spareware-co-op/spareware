@@ -252,8 +252,11 @@ fn the_volumes_agree() {
     assert!(lo <= truth && truth <= hi);
 }
 
+/// One way to break a mesh: its name, and the change to the mesh's parts.
+type Break = (&'static str, fn(&mut geom_mesh::exact::Parts));
+
 /// A broken copy of each mesh, each breaking one rule.
-fn breaks() -> Vec<(&'static str, fn(&mut geom_mesh::exact::Parts))> {
+fn breaks() -> Vec<Break> {
     vec![
         ("a plane moved", |p| {
             let plane = p.planes[0];

@@ -876,11 +876,11 @@ fn attack_the_workflow_runs_when_any_crate_a_target_builds_changes() {
             .any(|v| v.contains("geom-run"))
     );
     let mut more = folders.clone();
-    more.insert("projects/engines/geometry/crates/geom-bool".to_owned());
+    more.insert("projects/engines/geometry/crates/geom-blend".to_owned());
     assert!(
         path_filter_violations(&workflow, &more)
             .iter()
-            .any(|v| v.contains("geom-bool"))
+            .any(|v| v.contains("geom-blend"))
     );
 }
 
