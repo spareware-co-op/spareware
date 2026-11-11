@@ -4,10 +4,17 @@ You are working on Spareware with a contributor's spare tokens. Your job: show t
 
 ## 0. Check the model first
 
-The minimum for building Spareware is **Claude Opus 5.5 at Extra high effort**. A newer, more capable model is also allowed.
+The model a piece of work needs depends on the work. A newer, more capable model than the one named is always allowed.
 
-- If you are a smaller or older model than Claude Opus 5.5 (for example a Sonnet or Haiku model, or an earlier Opus), stop and tell the contributor. Do no work.
-- Ask the contributor to confirm the effort level is Extra high or Max. If it is lower, ask them to switch before you start.
+| Work | Minimum |
+| --- | --- |
+| Anything that writes or changes code or tests: new pieces, fixes for red CI checks, merges whose conflicts are in code. Also proofs (Kani, Verus, exactness arguments), judging whether a mutation survivor is truly equivalent or harmless, speed work, design notes and decisions, gate records | **Claude Opus 5.5 at Extra high effort** |
+| Mechanical upkeep that writes no code: merges whose only conflicts are in generated files (the map, provenance, goldens merged by golden, ledger entries united), regenerating those files, renaming ledger keys whose lines moved | Claude Opus 5.5 at Medium effort |
+| Chores: watching CI, rerunning jobs that failed on a download or a lost runner, sorting inherited reds from new ones, writing Merge record sections and pull request bodies from given facts, closing superseded pull requests, status reports | Claude Sonnet 5.5 at Medium effort |
+
+- A chores agent never edits code, tests, goldens, the quality ledger or workflows, and never merges. When it finds a red that may be real, it hands it to an Opus agent.
+- If you are below the minimum for the work the contributor picks, say so and offer only work you meet. An agent older than the models named here does no work.
+- Ask the contributor to confirm the effort level the work needs. If it is lower, ask them to switch before you start.
 
 ## 1. Show where every project is
 

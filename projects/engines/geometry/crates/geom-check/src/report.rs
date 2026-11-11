@@ -15,6 +15,10 @@
 //!   the level asked for but which is not built yet is listed in [`Report::missing`], never
 //!   counted as passed, and what a curved face or shell leaves unjudged is counted in
 //!   [`Report::deferred`].
+//! - **Not certified is told from wrong.** A fault of a kind that says only that no certified
+//!   check exists yet ([`FaultKind::uncertified`]) is still a fault, and the report does not pass;
+//!   [`Report::uncertified`] says whether those are all it found, counting the faults past the
+//!   cap, so a caller can tell a body the checker could not follow from one it found wrong.
 //! - **One order.** Faults are listed in the order the checks find them, which is fixed (each
 //!   check runs over rows in ascending order), so the same body gives the same report everywhere.
 //! - **Plain words.** Every [`FaultKind`] has a sentence saying what is wrong ([`FaultKind::what`]),
@@ -315,6 +319,14 @@ impl FaultKind {
         }
     }
 
+    /// Whether the kind says only that no certified check exists yet
+    /// ([`FaultKind::Unchecked`], [`FaultKind::PairUnchecked`]): the checker found nothing wrong
+    /// there, and could not certify that nothing is. Every other kind says what is wrong.
+    #[must_use]
+    pub const fn uncertified(self) -> bool {
+        matches!(self, FaultKind::Unchecked | FaultKind::PairUnchecked)
+    }
+
     /// What is wrong, in plain words.
     #[must_use]
     pub const fn what(self) -> &'static str {
@@ -435,6 +447,7 @@ impl fmt::Display for Fault {
 pub struct Report {
     pub(crate) faults: Vec<Fault>,
     pub(crate) more: u64,
+    pub(crate) wrong: bool,
     pub(crate) deferred: u64,
     pub(crate) ran: [bool; 4],
     pub(crate) missing: [bool; 4],
@@ -457,6 +470,15 @@ impl Report {
     #[must_use]
     pub const fn more(&self) -> u64 {
         self.more
+    }
+
+    /// Whether the check found nothing wrong and still could not pass the body: it has faults,
+    /// and every one, kept or counted past [`crate::MAX_FAULTS`], is of a kind that says only
+    /// that no certified check exists yet ([`FaultKind::uncertified`]). A check that runs only on
+    /// a body the ones before it passed did not run, so nothing is claimed about what it judges.
+    #[must_use]
+    pub fn uncertified(&self) -> bool {
+        !self.passed() && !self.wrong
     }
 
     /// How many faces and shells had their loop sense, stored box or orientation left unjudged

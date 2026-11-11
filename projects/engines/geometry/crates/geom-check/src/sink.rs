@@ -13,7 +13,9 @@
 //! Guarantees:
 //!
 //! - **The first faults kept, in order, and the rest counted.** [`Sink::push`] keeps a fault
-//!   while fewer than [`MAX_FAULTS`] are kept, and counts it otherwise; it never allocates.
+//!   while fewer than [`MAX_FAULTS`] are kept, and counts it otherwise; it never allocates. It
+//!   notes, for kept and counted faults alike, whether any says something is wrong rather than
+//!   only that no certified check exists yet (`crate::FaultKind::uncertified`).
 //! - **Never aborts on memory.** A refused reservation is the meter's
 //!   [`geom_run::Stop::OutOfMemory`].
 //!
@@ -40,6 +42,8 @@ pub(crate) struct Sink<'m, 'c> {
     pub(crate) faults: Vec<Fault>,
     /// How many more were found.
     pub(crate) more: u64,
+    /// Whether any fault found, kept or counted, says something is wrong.
+    pub(crate) wrong: bool,
     /// How many faces and shells were left for the pieces that certify curved ones.
     pub(crate) deferred: u64,
     /// The caller's meter.
@@ -56,6 +60,7 @@ impl<'m, 'c> Sink<'m, 'c> {
         Ok(Sink {
             faults,
             more: 0,
+            wrong: false,
             deferred: 0,
             meter,
         })
@@ -78,6 +83,7 @@ impl<'m, 'c> Sink<'m, 'c> {
 
     /// Records a fault: kept while fewer than [`MAX_FAULTS`] are, counted otherwise.
     pub(crate) fn push(&mut self, fault: Fault) {
+        self.wrong |= !fault.kind.uncertified();
         if self.faults.len() < MAX_FAULTS {
             self.faults.push(fault);
         } else {

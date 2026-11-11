@@ -580,7 +580,7 @@ impl<A: Canonical, B: Canonical, C: Canonical, D: Canonical> Canonical for (A, B
     }
 }
 
-// `geom-math`'s types (decision 32.44's count benchmarks for pieces G45, G46 and G48).
+// `geom-math`'s types (decision 32.46's count benchmarks for pieces G45, G46 and G48).
 
 impl<T: Canonical + Copy> Canonical for geom_math::Rounded<T> {
     // The value, then whether it is exact (the fields are private to geom-math; these are its
@@ -672,7 +672,7 @@ impl<T: Canonical> Canonical for Result<T, geom_math::DecimalError> {
     }
 }
 
-// `geom-linalg`'s types (decision 32.44's count benchmarks for pieces G49 and G50).
+// `geom-linalg`'s types (decision 32.46's count benchmarks for pieces G49 and G50).
 
 impl Canonical for geom_linalg::Matrix {
     // The shape, then every entry row by row (its getter refuses no index inside the shape).
@@ -732,7 +732,7 @@ impl<T: Canonical> Canonical for Result<T, geom_linalg::LinalgError> {
     }
 }
 
-// `geom-topo`'s types (decision 32.44's count benchmarks for piece G80).
+// `geom-topo`'s types (decision 32.46's count benchmarks for piece G80).
 
 impl Canonical for geom_topo::Builder {
     fn encode(&self, h: &mut Sha256) {
@@ -740,7 +740,7 @@ impl Canonical for geom_topo::Builder {
     }
 }
 
-// `geom-op`'s error (decision 32.44's count benchmarks for pieces G104 and G101).
+// `geom-op`'s error (decision 32.46's count benchmarks for pieces G104 and G101).
 
 impl<T: Canonical> Canonical for Result<T, geom_op::OpError> {
     fn encode(&self, h: &mut Sha256) {
@@ -772,7 +772,7 @@ impl<T: Canonical> Canonical for Result<T, geom_topo::TopoError> {
     }
 }
 
-// The attribute step's types (decision 32.44's count benchmarks for piece G90).
+// The attribute step's types (decision 32.46's count benchmarks for piece G90).
 
 impl Canonical for crate::inputs::attributes::Scene {
     fn encode(&self, h: &mut Sha256) {
@@ -795,7 +795,7 @@ impl<T: Canonical> Canonical for Result<T, geom_name::AttrError> {
     }
 }
 
-// `geom-bvh`'s types (decision 32.44's count benchmarks for pieces G54 and G55).
+// `geom-bvh`'s types (decision 32.46's count benchmarks for pieces G54 and G55).
 
 impl<const D: usize> Canonical for geom_bvh::Aabb<D> {
     fn encode(&self, h: &mut Sha256) {
@@ -833,7 +833,7 @@ impl<T: Canonical> Canonical for Result<T, geom_bvh::BvhError> {
     }
 }
 
-// `geom-run`'s helper (decision 32.44's count benchmark of a lone wave).
+// `geom-run`'s helper (decision 32.46's count benchmark of a lone wave).
 
 impl<T: Canonical> Canonical for Result<T, geom_run::RunError> {
     fn encode(&self, h: &mut Sha256) {
@@ -850,7 +850,7 @@ impl<T: Canonical> Canonical for Result<T, geom_run::RunError> {
     }
 }
 
-// `geom-nurbs`'s types (decision 32.44's count benchmarks for pieces G56, G58 and G59).
+// `geom-nurbs`'s types (decision 32.46's count benchmarks for pieces G56, G58 and G59).
 
 impl<const D: usize> Canonical for geom_nurbs::Bounds<D> {
     fn encode(&self, h: &mut Sha256) {
@@ -939,7 +939,7 @@ impl<T: Canonical> Canonical for Result<T, geom_nurbs::NurbsError> {
     }
 }
 
-// `geom-curve`'s types (decision 32.44's count benchmarks for pieces G60 to G64 and G67).
+// `geom-curve`'s types (decision 32.46's count benchmarks for pieces G60 to G64 and G67).
 
 impl<const D: usize> Canonical for geom_nurbs::Changed<geom_curve::NurbsForm<D>> {
     // The converted curve and whether the conversion changed it, all in its `Debug` text, which
@@ -964,7 +964,7 @@ impl<T: Canonical> Canonical for Result<T, geom_curve::CurveError> {
     }
 }
 
-// `geom-make`'s operations (decision 32.44's count benchmarks for piece G101).
+// `geom-make`'s operations (decision 32.46's count benchmarks for piece G101).
 
 impl Canonical for geom_make::BoxInput {
     fn encode(&self, h: &mut Sha256) {
@@ -992,7 +992,7 @@ impl Canonical for geom_op::OpOutput<geom_make::Made> {
     }
 }
 
-// Root finding and quadrature (decision 32.44's count benchmark for piece G51).
+// Root finding and quadrature (decision 32.46's count benchmark for piece G51).
 
 impl Canonical for geom_num::brent::Zero {
     // Its fields (the zero's bracket and the evaluations used) are all in its `Debug` text, which

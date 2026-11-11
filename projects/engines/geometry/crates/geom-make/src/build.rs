@@ -16,7 +16,10 @@
 //!   comes from the operation's path, a role and the names it is relative to: never from the
 //!   order the rows were written in (8.2, 20.2).
 //! - **Checked before returned.** A body that does not pass the checker at the build's level is
-//!   never returned; the operation fails with [`MakeDetail::ResultInvalid`], a defect, instead.
+//!   never returned. What the operation fails with instead is [`Unpassed`]'s to say:
+//!   [`MakeDetail::ResultInvalid`], a defect, where the checker follows the body's data in full
+//!   or found something wrong; [`MakeDetail::NotCertifiedYet`], naming the piece that widens the
+//!   checker, where the data are less than exact and the checker could not certify them.
 //! - **Charged by what it builds.** One meter unit ([`PER_ROW`]) and 64 logical bytes per row built,
 //!   before it is built (23.10), and the publishing charges its own rows to the same meter. The
 //!   postcondition check runs on a meter of its own, cancellable and without a limit: its level
@@ -270,7 +273,7 @@ fn built(
     let body = filled(&rows, part)
         .and_then(|b| b.publish_named(&names, BodyKind::Solid, outside_row, meter))
         .map_err(|e| unbuilt(ctx, meter, e))?;
-    finish(ctx, body, records, made, None, exactness)
+    finish(ctx, body, records, made, None, exactness, Unpassed::Defect)
 }
 
 /// A solid's topology, as rows.
@@ -293,13 +296,40 @@ enum Kind {
     Vertex,
 }
 
+/// What it means for an operation that the checker did not pass the body it built: which of the
+/// checker's reports are a defect of the operation, and which a body the checker cannot certify
+/// yet (8.3: every pair or carrier without a certified test is a fault, never a pass).
+#[derive(Clone, Copy)]
+pub(crate) enum Unpassed {
+    /// A defect, whatever the report holds: the body is a primitive as written, or its data are
+    /// exact, and the checker follows both in full.
+    Defect,
+    /// The body's data were less than exact before this operation, which moved them exactly: an
+    /// earlier transform rounded its corners or moved its curved geometry by a deviation, or it
+    /// is a round primitive. A report that found nothing wrong and could not certify the body
+    /// (`geom_check::Report::uncertified`) waits for `piece`; a report that found something
+    /// wrong is a defect, since an exact move of a body that passed breaks nothing.
+    Inherited {
+        /// The piece that widens what the checker certifies, by its board number.
+        piece: &'static str,
+    },
+    /// This operation rounded a corner or moved curved geometry by a deviation: any report
+    /// waits for `piece`.
+    Rounded {
+        /// The piece that widens what the checker certifies, by its board number.
+        piece: &'static str,
+    },
+}
+
 /// Checks `body` as the postcondition, and returns it with the history of `records` (no input is
 /// deleted: a Make operation has none, and a transform keeps every entity) and the names it made.
 ///
 /// # Errors
 ///
-/// `Cancelled`; [`MakeDetail::ResultInvalid`] if the body does not pass the checker;
-/// [`MakeDetail::BuildFailed`] if the history cannot be formed.
+/// `Cancelled`; if the body does not pass the checker, [`MakeDetail::NotCertifiedYet`] where
+/// `unpassed` says the report waits for a piece and [`MakeDetail::ResultInvalid`] otherwise, each
+/// with the report's first fault as its message; [`MakeDetail::BuildFailed`] if the history cannot
+/// be formed.
 pub(crate) fn finish(
     ctx: &OpContext<'_>,
     body: Body,
@@ -307,6 +337,7 @@ pub(crate) fn finish(
     names: Vec<TopoName>,
     motion: Option<Motion>,
     exactness: Exactness,
+    unpassed: Unpassed,
 ) -> Result<OpOutput<Made>, OpError> {
     // The check's level differs by build, so its work stays off the operation's budget.
     let mut checking = ctx.unbudgeted_meter();
@@ -317,7 +348,14 @@ pub(crate) fn finish(
             || alloc::string::String::from("the checker reported faults"),
             alloc::string::ToString::to_string,
         );
-        return Err(fail(ctx, MakeDetail::ResultInvalid).with_message(first));
+        let detail = match unpassed {
+            Unpassed::Rounded { piece } => MakeDetail::NotCertifiedYet { piece },
+            Unpassed::Inherited { piece } if report.uncertified() => {
+                MakeDetail::NotCertifiedYet { piece }
+            }
+            Unpassed::Inherited { .. } | Unpassed::Defect => MakeDetail::ResultInvalid,
+        };
+        return Err(fail(ctx, detail).with_message(first));
     }
     let defect = || fail(ctx, MakeDetail::BuildFailed);
     let none = NameSet::new([]).map_err(|_| defect())?;

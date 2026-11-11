@@ -1600,7 +1600,7 @@ fn direct_digest(group: &str, name: &str, class: Class) -> Option<Digest> {
     })
 }
 
-/// The digest of the `geom-curve` benchmark `name` on `class` (decision 32.44), from direct calls
+/// The digest of the `geom-curve` benchmark `name` on `class` (decision 32.46), from direct calls
 /// on its inputs through the kind contract, with the kernels' helix and transition.
 fn curve_digest(name: &str, class: Class) -> Option<Digest> {
     use geom_bench::inputs::curve as m;
@@ -1644,7 +1644,7 @@ fn curve_digest(name: &str, class: Class) -> Option<Digest> {
     })
 }
 
-/// The digest of the `geom-math` benchmark `name` on `class` (decision 32.44), from direct calls on
+/// The digest of the `geom-math` benchmark `name` on `class` (decision 32.46), from direct calls on
 /// its inputs: each transform built here as `geom-math`'s `benches/transform.rs` builds it, and
 /// the rotation and frame from the kernels' own definitions.
 fn math_types_digest(name: &str, class: Class) -> Option<Digest> {

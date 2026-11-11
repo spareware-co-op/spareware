@@ -1,4 +1,4 @@
-//! Inputs for `geom-nurbs`'s hot paths (pieces G56, G58 and G59, decision 32.44): parameters for
+//! Inputs for `geom-nurbs`'s hot paths (pieces G56, G58 and G59, decision 32.46): parameters for
 //! evaluating a clamped cubic curve, point sets for its interpolation, and interval control points
 //! for the Bernstein bound.
 //!

@@ -1,4 +1,4 @@
-//! Inputs for `geom-format`'s hot paths (piece G105, decision 32.44): calls whose cache keys differ
+//! Inputs for `geom-format`'s hot paths (piece G105, decision 32.46): calls whose cache keys differ
 //! by edition and input, keys to look up in a memo store, and new versions of a body, each one row
 //! of its last chunk moved to another surface.
 //!

@@ -14,7 +14,7 @@ every operation at every width, `I128` to the reserved 768 bits; `cbor` (`src/cb
 `geom-format`'s strict CBOR decoder and its text form never panic, refuse inside their input and
 convert both ways bit for bit; `cache` (`src/cache.rs`, G105), `geom-format`'s memo store keeps to
 its bound, forgets the entry used longest ago first and answers only where the caller's budget
-covers the stored run; and, for Gate 2 (decision 32.44:
+covers the stored run; and, for Gate 2 (decision 32.46:
 a target per phase-2 code piece), `curves` (`src/curves.rs`) and `surfaces` (`src/surfaces.rs`),
 every curve and surface kind built from any bytes keeps the kind contract kit
 (`geom_curve::contract`, `geom_surface::contract`) under any typed transform; `arenas` (`src/arenas.rs`,
@@ -171,10 +171,18 @@ cargo bolero test orient2d_fuzz --package geom-fuzz --toolchain nightly-2026-10-
 `-T` bounds the run; `--runs`, `--jobs` and `--max-input-length` are the other limits. A crash is
 written to `tests/__fuzz__/orient2d/crashes`, where `cargo test` replays it.
 
-**Campaigns.** `.github/workflows/kernel-fuzz-campaign.yml` runs `wide_fuzz` under libFuzzer in
-five shards of five hours, 25 CPU hours, for G26's "24 hours clean". It runs only on demand: when
-the label `fuzz-campaign` is added to a pull request, or by hand from the Actions tab once the file
-is on `main`. Each shard uploads any crash and the corpus it grew.
+**Campaigns.** `.github/workflows/kernel-fuzz-campaign.yml` runs every target under libFuzzer for
+five hours each night, one shard each. On demand it runs `wide_fuzz` in five shards of five hours,
+25 CPU hours, for G26's "24 hours clean": when the label `fuzz-campaign` is added to a pull
+request, or by hand from the Actions tab. By hand it can also run every target as a night does, on
+the head of the branch or tag it is started on:
+
+```text
+gh workflow run kernel-fuzz-campaign.yml --ref main -f targets=all
+```
+
+`-f hours=1` (one to five, five by default) shortens every shard for a trial. Each shard uploads
+any crash and the corpus it grew.
 
 **Kani**, on Linux or macOS:
 
