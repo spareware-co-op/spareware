@@ -15,6 +15,13 @@
 //!   so the body stores them once.
 //! - **Refused, never guessed.** What [`merge`] refuses and what the arenas refuse are a
 //!   [`RebuildError`].
+//! - **Nothing is a valid body.** Pieces that make no face give a general body with no faces,
+//!   which the checker passes: a solid body must hold a solid region (8.3; tested).
+//! - **Non-manifold is general (11.6).** A body is a solid only if every edge has two fins and
+//!   every vertex's fins in each shell go round it in one fan. An edge of four fins, or a shell
+//!   that pinches at a vertex, as three boxes do whose empty space around a corner is two opposite
+//!   octants, gives a general body, which the checker passes; two shells may share a vertex, each
+//!   whole around it (tested).
 //!
 //! Method: chapter 11.3's rebuild (`projects/engines/geometry/architecture/11-booleans.md`), into
 //! the Parasolid model structure of chapter 8.1, after EMBER (Trettner, Nehring-Wirxel and Kobbelt
@@ -22,14 +29,14 @@
 //!
 //! Cost: linear in what [`merge`] returns, after its cost.
 
-use alloc::collections::BTreeMap;
+use alloc::collections::{BTreeMap, BTreeSet};
 use alloc::vec::Vec;
 use core::fmt;
 
 use geom_num::grid::COORD_MAX;
 use geom_num::plane::{Plane, Tpi};
 use geom_num::{NumError, P3, Sign};
-use geom_poly::merge::{Merge, MergeError, Merged, Outward, merge};
+use geom_poly::merge::{Curves, Merge, MergeError, Merged, Outward, Rules, merge_with};
 use geom_poly::order::normals_det;
 use geom_run::WorkMeter;
 use geom_topo::Line as Shadow;
@@ -191,13 +198,18 @@ fn planes_around(merged: &Merged) -> Vec<Vec<usize>> {
     clippy::too_many_lines,
     reason = "one pass over the arenas in their order, each short, sharing the rows they fill"
 )]
-fn arenas(merged: &Merged, carriers: &[Carrier]) -> Result<(Builder, Ix<Region>), RebuildError> {
+fn arenas(
+    merged: &Merged,
+    carriers: &[Carrier],
+    open: bool,
+) -> Result<(Builder, Ix<Region>), RebuildError> {
     let mut builder = Builder::new();
     let a = &mut builder.arenas;
 
-    // Solid regions, one per outer shell, then the outside.
+    // Solid regions, one per outer shell, then the outside. A sheet bounds nothing, so all its
+    // shells lie in the outside.
     let outers: Vec<usize> = (0..merged.shells.len())
-        .filter(|s| merged.shells.get(*s).is_some_and(|shell| shell.outer))
+        .filter(|s| !open && merged.shells.get(*s).is_some_and(|shell| shell.outer))
         .collect();
     let region_of: Vec<usize> = merged
         .shells
@@ -205,7 +217,10 @@ fn arenas(merged: &Merged, carriers: &[Carrier]) -> Result<(Builder, Ix<Region>)
         .enumerate()
         .map(|(s, shell)| {
             let held = shell.holder.unwrap_or(s);
-            outers.iter().position(|o| *o == held).unwrap_or(0)
+            outers
+                .iter()
+                .position(|o| *o == held)
+                .unwrap_or(outers.len())
         })
         .collect();
     for region in 0..outers.len() {
@@ -217,7 +232,9 @@ fn arenas(merged: &Merged, carriers: &[Carrier]) -> Result<(Builder, Ix<Region>)
     }
     let outside = a.regions.push(Region {
         kind: RegionKind::Void,
-        first_shell: None,
+        first_shell: (open && !merged.shells.is_empty())
+            .then(|| row(0))
+            .transpose()?,
     })?;
     for (s, region) in region_of.iter().enumerate() {
         let next =
@@ -414,12 +431,123 @@ pub fn rebuild(
     mode: Merge,
     meter: &mut WorkMeter<'_>,
 ) -> Result<Body, RebuildError> {
-    let merged = merge(pieces, mode, meter)?;
-    let (builder, outside) = arenas(&merged, carriers)?;
-    let kind = if merged.edges.iter().all(|e| e.fins.len() == 2) {
+    rebuild_with(pieces, carriers, mode, Rules::default(), meter)
+}
+
+/// [`rebuild`], under `rules`: an open merge gives a sheet.
+///
+/// # Errors
+///
+/// As [`rebuild`].
+pub fn rebuild_with(
+    pieces: &[Outward],
+    carriers: &[Carrier],
+    mode: Merge,
+    rules: Rules<'_>,
+    meter: &mut WorkMeter<'_>,
+) -> Result<Body, RebuildError> {
+    let merged = merge_with(pieces, mode, rules, meter)?;
+    let (builder, outside) = arenas(&merged, carriers, rules.open)?;
+    let kind = if rules.open {
+        BodyKind::Sheet
+    } else if merged.faces.is_empty() {
+        // Nothing kept bounds no volume, and a solid body holds a solid region (8.3): an empty
+        // result, A less A among them (11.17), is a general body, which may hold nothing.
+        BodyKind::General
+    } else if merged.edges.iter().all(|e| e.fins.len() == 2) && !pinched(&merged) {
         BodyKind::Solid
     } else {
         BodyKind::General
     };
     Ok(builder.publish(kind, outside, meter)?)
+}
+
+/// Whether some vertex's fins in one shell go round it in more than one fan: the shell's surface
+/// pinches there. Each edge has two fins. A fan is walked from a fin leaving the vertex to the fin
+/// leaving it after the one before it in its ring, across their edge, until it comes back.
+///
+/// Cost: one step per fin.
+fn pinched(merged: &Merged) -> bool {
+    let fins = &merged.fins;
+    let mut before = alloc::vec![None; fins.len()];
+    for ring in merged.faces.iter().flat_map(|face| &face.rings) {
+        for (fin, next) in ring.iter().zip(ring.iter().cycle().skip(1)) {
+            if let Some(slot) = before.get_mut(*next) {
+                *slot = Some(*fin);
+            }
+        }
+    }
+    let across = |fin: usize| {
+        let edge = merged.edges.get(fins.get(fin)?.edge)?;
+        edge.fins.iter().copied().find(|other| *other != fin)
+    };
+    let mut seen = alloc::vec![false; fins.len()];
+    let mut walked = BTreeSet::new();
+    for (start, fin) in fins.iter().enumerate() {
+        if seen.get(start).copied().unwrap_or(true) {
+            continue;
+        }
+        let mut at = Some(start);
+        while let Some(slot) = at.and_then(|f| seen.get_mut(f)).filter(|done| !**done) {
+            *slot = true;
+            at = at
+                .and_then(|f| before.get(f).copied().flatten())
+                .and_then(across);
+        }
+        let shell = merged.faces.get(fin.face).map(|face| face.shell);
+        if !walked.insert((shell, fin.from)) {
+            return true;
+        }
+    }
+    false
+}
+
+/// The wire body of `curves`: edges with no fins, each vertex a grid point or its own meeting.
+///
+/// # Errors
+///
+/// A [`RebuildError`]: what the arenas refuse.
+pub fn wire(curves: &Curves, meter: &mut WorkMeter<'_>) -> Result<Body, RebuildError> {
+    let mut builder = Builder::new();
+    let a = &mut builder.arenas;
+    let outside = a.regions.push(Region {
+        kind: RegionKind::Void,
+        first_shell: None,
+    })?;
+    let mut rounded = Vec::with_capacity(curves.vertices.len());
+    let mut stored: Vec<Plane> = Vec::new();
+    for point in &curves.vertices {
+        let near = point.to_grid()?;
+        rounded.push((near.value(), near.is_exact()));
+        let kind = if near.is_exact() {
+            PointKind::Grid(near.value())
+        } else {
+            let mut rows = [row(0)?, row(0)?, row(0)?];
+            for (slot, plane) in rows.iter_mut().zip(point.planes()) {
+                let at = stored.iter().position(|held| held == plane);
+                let at = at.unwrap_or_else(|| {
+                    stored.push(*plane);
+                    stored.len().saturating_sub(1)
+                });
+                *slot = row(at)?;
+            }
+            PointKind::Meet(rows)
+        };
+        let point = a.points.push(kind)?;
+        a.vertices.push(Vertex { point })?;
+    }
+    for plane in &stored {
+        a.planes.push(*plane)?;
+    }
+    for (low, high) in &curves.edges {
+        let end = |at: usize| rounded.get(at).copied().ok_or(RebuildError::Broken);
+        let curve = a.curves.push(shadow(end(*low)?, end(*high)?)?)?;
+        a.edges.push(Edge {
+            first_fin: None,
+            start: Some(row(*low)?),
+            end: Some(row(*high)?),
+            curve,
+        })?;
+    }
+    Ok(builder.publish(BodyKind::Wire, outside, meter)?)
 }
