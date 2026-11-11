@@ -666,23 +666,33 @@ impl Large {
             return;
         }
         let (word, bit) = (index >> 6, 1_u64 << (index & 63));
-        // One lookup of the chunk, its count and its bit in `used`: the three tables hold the same
-        // 4096 patterns, so an index has all three or none.
-        let (Some(used), Some(count), Some(chunk)) = (
-            self.used.get_mut(word),
-            self.counts.get_mut(index),
-            self.chunks.get_mut(index),
-        ) else {
+        let Some(used) = self.used.get_mut(word) else {
             sum.lost = true;
             return;
         };
+        // The chunk and its count are looked up after the transfer, not held across it: held
+        // across the call they cost every term that puts a chunk in use a saved and restored
+        // frame, which the count gate measured (3% to 5% on a sum whose terms each start one).
         if *used & bit == 0 {
             *used |= bit;
         } else {
-            move_chunk(index, count, chunk, sum);
+            self.transfer(index, sum);
         }
-        *count = LARGE_ADDS - 1;
-        *chunk = bits;
+        self.restart(index, bits, sum);
+    }
+
+    /// Starts the chunk at `index` again as the one term `bits`, with every addition but that one
+    /// left. An index outside the table has no chunk, and is reported lost; `add_slow` never
+    /// passes one, having found the index's bit in `used`, and the three tables hold the same
+    /// 4096 patterns.
+    fn restart(&mut self, index: usize, bits: u64, sum: &mut ExactSum) {
+        if let (Some(count), Some(chunk)) = (self.counts.get_mut(index), self.chunks.get_mut(index))
+        {
+            *count = LARGE_ADDS - 1;
+            *chunk = bits;
+        } else {
+            sum.lost = true;
+        }
     }
 
     /// Moves the chunk at `index` to the small accumulator and empties it ([`move_chunk`]). An
@@ -969,6 +979,20 @@ mod tests {
         let mut sum = ExactSum::new();
         large.transfer(LARGE_CHUNKS, &mut sum);
         assert_lost(&sum);
+        // Nor one to start again; the last one inside starts again as the term, with every
+        // addition but that one left.
+        let mut sum = ExactSum::new();
+        large.restart(LARGE_CHUNKS, bits, &mut sum);
+        assert_lost(&sum);
+        assert!(large.chunks.iter().all(|&chunk| chunk == 0));
+        assert!(large.counts.iter().all(|&count| count == 0));
+        let mut sum = ExactSum::new();
+        large.restart(LARGE_CHUNKS - 1, bits, &mut sum);
+        assert!(!sum.lost);
+        assert_eq!(large.chunks.last(), Some(&bits));
+        assert_eq!(large.counts.last(), Some(&(LARGE_ADDS - 1)));
+        assert_eq!(large.chunks.iter().filter(|&&c| c != 0).count(), 1);
+        let mut large = Large::new();
         // Nor has it a chunk to add a term to: the fast path hands it to the slow one.
         let mut sum = ExactSum::new();
         large.add_at(LARGE_CHUNKS, bits, &mut sum);

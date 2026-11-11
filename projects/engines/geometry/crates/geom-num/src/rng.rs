@@ -618,23 +618,19 @@ impl Stream {
     ///
     /// [`RngError::Exhausted`] when fewer than two words are left; the stream is unchanged.
     pub const fn next_u64(&mut self) -> Result<u64, RngError> {
-        // A failed draw takes nothing. With no word left the first draw fails, and leaves the
-        // stream as it was; with one left the second fails, and the first word is put back.
-        let drawn = self.drawn;
-        let block = self.block;
-        let low = match self.next_u32() {
-            Ok(word) => word,
-            Err(e) => return Err(e),
+        // Checked first, so a failed draw takes nothing, and a stream that has run out is refused
+        // at the cost of the check alone. After it both words are there, so neither draw fails;
+        // should one fail all the same, it is reported by the arm the check takes, as a stream
+        // that has run out, which is the only way a draw fails.
+        let draws = if self.remaining() < 2 {
+            None
+        } else {
+            Some((self.next_u32(), self.next_u32()))
         };
-        let high = match self.next_u32() {
-            Ok(word) => word,
-            Err(e) => {
-                self.drawn = drawn;
-                self.block = block;
-                return Err(e);
-            }
-        };
-        Ok(join_u32(low, high))
+        match draws {
+            Some((Ok(low), Ok(high))) => Ok(join_u32(low, high)),
+            _ => Err(self.exhausted()),
+        }
     }
 
     /// A double in [0, 1): the top 53 bits of [`Stream::next_u64`], times 2^−53, as a [`Real`].
@@ -651,17 +647,13 @@ impl Stream {
     pub const fn next_f64(&mut self) -> Result<Real, RngError> {
         let drawn = self.drawn;
         let block = self.block;
-        let x = match self.next_u64() {
-            Ok(word) => real_or_defect(unit_double(word)),
-            Err(e) => Err(e),
+        // Out of words, the draw took nothing, and there is nothing to put back.
+        let word = match self.next_u64() {
+            Ok(word) => word,
+            Err(e) => return Err(e),
         };
-        if x.is_err() {
-            // Out of words, when the draw took nothing, or a refused double, which is reported,
-            // not answered: either way the stream is put back where it was.
-            self.drawn = drawn;
-            self.block = block;
-        }
-        x
+        // A refused double is reported, not answered, and its two words are put back.
+        self.or_put_back(drawn, block, real_or_defect(unit_double(word)))
     }
 
     /// A whole number in [0, `bound`), every value equally likely: Lemire's method on
@@ -721,19 +713,31 @@ impl Stream {
         };
         let drawn = self.drawn;
         let block = self.block;
-        // value ≤ span = high − low, so low + value ≤ high and the sum never fails. Should it fail
-        // all the same, that is reported, not answered.
+        // A `below` that failed took nothing, and there is nothing to put back.
         let value = match self.below(values) {
-            Ok(value) => sum_or_defect(low, value),
-            Err(e) => Err(e),
+            Ok(value) => value,
+            Err(e) => return Err(e),
         };
-        if value.is_err() {
-            // `below` failed, and took nothing, or the sum did: either way the stream is put back
-            // where it was.
+        // value ≤ span = high − low, so low + value ≤ high and the sum never fails. Should it fail
+        // all the same, that is reported, not answered, and the words drawn are put back.
+        self.or_put_back(drawn, block, sum_or_defect(low, value))
+    }
+
+    /// `made`, after putting the stream back at word `drawn`, in `block`, when `made` is an error:
+    /// a step that fails after its words were drawn takes none of them. [`Stream::next_f64`] and
+    /// [`Stream::range_inclusive`] give it the step they make of the words they drew, which no
+    /// stream makes fail; the unit tests give it an error.
+    const fn or_put_back<T: Copy>(
+        &mut self,
+        drawn: u128,
+        block: [u32; 4],
+        made: Result<T, RngError>,
+    ) -> Result<T, RngError> {
+        if made.is_err() {
             self.drawn = drawn;
             self.block = block;
         }
-        value
+        made
     }
 
     /// The error for this stream running out.
@@ -1032,6 +1036,32 @@ mod tests {
         assert_eq!(sum_or_defect(1, u64::MAX), Err(RngError::Defect));
         assert_eq!(sum_or_defect(u64::MAX, 0), Ok(u64::MAX));
         assert_eq!(sum_or_defect(5, 7), Ok(12));
+    }
+
+    /// A step that failed after words were drawn takes none of them: the stream is back at the
+    /// word it was at, in that word's block, and gives the same words again. A step that did not
+    /// fail keeps what it drew.
+    #[test]
+    fn a_failed_step_puts_its_words_back() {
+        let philox = Philox::new(Seed(0x5eed), StreamId(9));
+        // From the last word of a block, so that the words drawn cross into the next block.
+        let mut stream = philox.stream();
+        for _ in 0..3 {
+            stream.next_u32().unwrap();
+        }
+        let start = stream.clone();
+        let (drawn, block) = (stream.drawn, stream.block);
+        let first = stream.next_u64().unwrap();
+        assert_ne!(stream.block, block);
+        let kept = stream.clone();
+        assert_eq!(stream.or_put_back(drawn, block, Ok(first)), Ok(first));
+        assert_eq!(stream, kept);
+        assert_eq!(
+            stream.or_put_back::<u64>(drawn, block, Err(RngError::Defect)),
+            Err(RngError::Defect)
+        );
+        assert_eq!(stream, start);
+        assert_eq!(stream.next_u64(), Ok(first));
     }
 
     /// The double a word gives is its top 53 bits times 2^−53: the ends of the range and the bit

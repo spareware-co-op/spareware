@@ -374,6 +374,12 @@ const fn pow25(k: u32) -> Option<i128> {
 /// `WrongDirection` if `to` is coarser than `from`; `OutOfRange` if the result leaves the frame's
 /// 40-bit range (a coordinate far from the origin may not fit on a finer step). `BudgetExceeded`
 /// only if a checked step failed, which the budget rules out.
+///
+/// Marked `#[inline]`: while its body was one function the compiler offered it to other crates
+/// for inlining unasked, being small and calling nothing, and a caller's loop held no call. With
+/// the conversion in `refine_by` it no longer did, and the count gate measured 7 to 13
+/// instructions more a call on x86-64 and 5 to 10 on aarch64. The attribute keeps what was there.
+#[inline]
 pub fn refine(c: Coord, from: GridStep, to: GridStep) -> Result<Coord, NumError> {
     let Some(rungs) = to.rung().checked_sub(from.rung()) else {
         return Err(NumError::WrongDirection);
@@ -387,6 +393,14 @@ pub fn refine(c: Coord, from: GridStep, to: GridStep) -> Result<Coord, NumError>
 ///
 /// As [`refine`]; `BudgetExceeded` for a number of rungs no two steps differ by, which [`refine`]
 /// never passes: reported, not answered.
+///
+/// Always inline: it is [`refine`]'s own body, apart only so that a test can pass it a number of
+/// rungs [`refine`] cannot, and [`refine`] must cost what it did as one function (see there).
+#[allow(
+    clippy::inline_always,
+    reason = "measured: out of line, or inlined late, refine costs more instructions"
+)]
+#[inline(always)]
 fn refine_by(v: i64, rungs: u32) -> Result<Coord, NumError> {
     let fine = pow25(rungs).and_then(|factor| i128::from(v).checked_mul(factor));
     match fine {
@@ -420,6 +434,16 @@ pub fn coarsen(c: Coord, from: GridStep, to: GridStep) -> Result<Rounded<Coord>,
 ///
 /// `BudgetExceeded` for a number of rungs no two steps differ by, which [`coarsen`] never passes:
 /// reported, not answered.
+///
+/// Always inline: it is [`coarsen`]'s own body, apart only so that a test can pass it a number of
+/// rungs [`coarsen`] cannot. Inlined first, [`coarsen`] compiles to the instructions it had as one
+/// function; left to the optimiser's own order it came out two instructions longer on x86-64 and
+/// on aarch64, and its refusal three longer on x86-64, which the count gate measured.
+#[allow(
+    clippy::inline_always,
+    reason = "measured: inlined late, coarsen costs more instructions"
+)]
+#[inline(always)]
 fn coarsen_by(v: i64, rungs: u32) -> Result<Rounded<Coord>, NumError> {
     let v = i128::from(v);
     let rounded = pow25(rungs).and_then(|d| {
