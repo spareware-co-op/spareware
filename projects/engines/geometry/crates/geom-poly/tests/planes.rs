@@ -15,11 +15,12 @@ use core::cmp::Ordering;
 
 use geom_num::grid::COORD_MAX;
 use geom_num::plane::{Plane, Tpi};
+use geom_num::step::Step;
 use geom_num::{NumError, P3, Sign};
 use geom_poly::order::{
     Flap, Line, Ray, about, along, around, normals_det, same_point, turn, turn_about,
 };
-use geom_poly::plane::{PlaneTable, TableError, canonical};
+use geom_poly::plane::{Corner, PlaneTable, TableError, canonical};
 use num_bigint::BigInt;
 use proptest::prelude::*;
 
@@ -224,6 +225,83 @@ fn a_table_refuses_room_no_allocator_can_give() {
     assert_eq!(table.reserve(usize::MAX), Err(TableError::OutOfMemory));
     assert_eq!(table.reserve(4), Ok(()));
     assert!(table.is_empty());
+}
+
+#[test]
+fn a_corner_on_one_of_its_own_planes_takes_no_arithmetic() {
+    let mut table = PlaneTable::new();
+    let mut held = |n: [i128; 3], d: i128| table.insert(&Plane::new(n, d).unwrap()).unwrap().plane;
+    let (x, y, z) = (
+        held([1, 0, 0], -1),
+        held([0, 1, 0], -2),
+        held([0, 0, 1], -3),
+    );
+    let (tilted, past) = (held([1, 1, 1], -6), held([1, 1, 2], -1));
+    let corner = Corner { planes: [x, y, z] };
+    for own in [x, y, z] {
+        assert_eq!(
+            table.side_of_corner(&corner, own),
+            Ok((Sign::Zero, Step::Identity))
+        );
+    }
+    assert_eq!(table.side_of_corner(&corner, tilted).unwrap().0, Sign::Zero);
+    assert_ne!(
+        table.side_of_corner(&corner, tilted).unwrap().1,
+        Step::Identity
+    );
+    assert_eq!(
+        table.side_of_corner(&corner, past).unwrap().0,
+        Sign::Positive
+    );
+    let gone = Corner { planes: [x, y, z] };
+    let short = PlaneTable::new();
+    assert_eq!(
+        short.side_of_corner(&gone, x),
+        Ok((Sign::Zero, Step::Identity))
+    );
+    assert_eq!(
+        short.side_of_corner(&gone, tilted),
+        Err(TableError::Num(NumError::Degenerate))
+    );
+}
+
+#[test]
+fn a_plane_square_to_an_axis_reads_one_coordinate() {
+    let at = P3::new(3, 5, 7).unwrap();
+    let mut table = PlaneTable::new();
+    for (n, want) in [
+        ([1, 0, 0], Sign::Positive),
+        ([0, 1, 0], Sign::Positive),
+        ([0, 0, 1], Sign::Positive),
+    ] {
+        let held = table.insert(&Plane::new(n, -2).unwrap()).unwrap().plane;
+        assert_eq!(table.side_of_point(held, at), Ok((want, Step::Axis)));
+    }
+    let on = table
+        .insert(&Plane::new([1, 0, 0], -3).unwrap())
+        .unwrap()
+        .plane;
+    assert_eq!(table.side_of_point(on, at), Ok((Sign::Zero, Step::Axis)));
+    let past = table
+        .insert(&Plane::new([0, 0, 1], -9).unwrap())
+        .unwrap()
+        .plane;
+    assert_eq!(
+        table.side_of_point(past, at),
+        Ok((Sign::Negative, Step::Axis))
+    );
+    let tilted = table
+        .insert(&Plane::new([1, 1, 0], -8).unwrap())
+        .unwrap()
+        .plane;
+    assert_eq!(
+        table.side_of_point(tilted, at),
+        Ok((Sign::Zero, Step::Exact))
+    );
+    assert_eq!(
+        PlaneTable::new().side_of_point(tilted, at),
+        Err(TableError::Num(NumError::Degenerate))
+    );
 }
 
 #[test]
