@@ -5489,69 +5489,6 @@
       "reason": "magnitude_bits runs only at compile time, in constants, and the filtered orient2d path is off while ORIENT2D_FILTER_FIRST is false (G42's measurement keeps it off), so no test runs these lines. G41 proves or removes them."
     },
     {
-      "file": "projects/engines/geometry/crates/geom-num/src/rng.rs",
-      "line_text": "Err(e) => return Err(e),",
-      "occurrences": 2,
-      "piece": "G41",
-      "reason": "The generator's defect arm: it reports RngError::Defect for a word the counter-based generator cannot produce (a non-finite double, an overflowing bound product), so the tests never reach it. G41 proves it unreachable."
-    },
-    {
-      "file": "projects/engines/geometry/crates/geom-num/src/rng.rs",
-      "line_text": "let Ok(x) = Real::new(x) else {",
-      "occurrences": 1,
-      "piece": "G41",
-      "reason": "The generator's defect arm: it reports RngError::Defect for a word the counter-based generator cannot produce (a non-finite double, an overflowing bound product), so the tests never reach it. G41 proves it unreachable."
-    },
-    {
-      "file": "projects/engines/geometry/crates/geom-num/src/rng.rs",
-      "line_text": "self.drawn = drawn;",
-      "occurrences": 2,
-      "piece": "G41",
-      "reason": "The generator's defect arm: it reports RngError::Defect for a word the counter-based generator cannot produce (a non-finite double, an overflowing bound product), so the tests never reach it. G41 proves it unreachable."
-    },
-    {
-      "file": "projects/engines/geometry/crates/geom-num/src/rng.rs",
-      "line_text": "self.block = block;",
-      "occurrences": 2,
-      "piece": "G41",
-      "reason": "The generator's defect arm: it reports RngError::Defect for a word the counter-based generator cannot produce (a non-finite double, an overflowing bound product), so the tests never reach it. G41 proves it unreachable."
-    },
-    {
-      "file": "projects/engines/geometry/crates/geom-num/src/rng.rs",
-      "line_text": "return Err(RngError::Defect);",
-      "occurrences": 4,
-      "piece": "G41",
-      "reason": "The generator's defect arm: it reports RngError::Defect for a word the counter-based generator cannot produce (a non-finite double, an overflowing bound product), so the tests never reach it. G41 proves it unreachable."
-    },
-    {
-      "file": "projects/engines/geometry/crates/geom-num/src/rng.rs",
-      "line_text": "Err(e) => break e,",
-      "occurrences": 1,
-      "piece": "G41",
-      "reason": "The generator's defect arm: it reports RngError::Defect for a word the counter-based generator cannot produce (a non-finite double, an overflowing bound product), so the tests never reach it. G41 proves it unreachable."
-    },
-    {
-      "file": "projects/engines/geometry/crates/geom-num/src/rng.rs",
-      "line_text": "let Some(value) = low.checked_add(value) else {",
-      "occurrences": 1,
-      "piece": "G41",
-      "reason": "The generator's defect arm: it reports RngError::Defect for a word the counter-based generator cannot produce (a non-finite double, an overflowing bound product), so the tests never reach it. G41 proves it unreachable."
-    },
-    {
-      "file": "projects/engines/geometry/crates/geom-num/src/rng.rs",
-      "line_text": "let Some(product) = (word as u128).checked_mul(bound as u128) else {",
-      "occurrences": 1,
-      "piece": "G41",
-      "reason": "The generator's defect arm: it reports RngError::Defect for a word the counter-based generator cannot produce (a non-finite double, an overflowing bound product), so the tests never reach it. G41 proves it unreachable."
-    },
-    {
-      "file": "projects/engines/geometry/crates/geom-num/src/rng.rs",
-      "line_text": "let Some(limit) = bound.wrapping_neg().checked_rem(bound) else {",
-      "occurrences": 1,
-      "piece": "G41",
-      "reason": "The generator's defect arm: it reports RngError::Defect for a word the counter-based generator cannot produce (a non-finite double, an overflowing bound product), so the tests never reach it. G41 proves it unreachable."
-    },
-    {
       "file": "projects/engines/geometry/crates/geom-num/src/wide.rs",
       "line_text": "if let Some(o) = out.get_mut(i) {",
       "occurrences": 3,
