@@ -775,10 +775,10 @@ fn a_face_folded_flat_along_one_line_is_found() {
 }
 
 #[test]
-fn a_bent_face_with_a_second_loop_has_no_fan() {
-    // A fan runs round one ring. This second loop turns on from the first as seen from its first
-    // corner, so that a fan through both would pass every test of a fan: it must still have none,
-    // and the face beside it cannot be told apart from it.
+fn a_bent_face_with_a_second_loop_has_no_star() {
+    // A star runs round one ring. This second loop turns on from the first as seen from the mean
+    // of all eight corners, so that a star through both would pass every test of a star: it must
+    // still have none, and the face beside it cannot be told apart from it.
     let mut r = Rows::empty();
     let shell = r.shell(0);
     let numbers = |r: &mut Rows, ring: &[[i64; 3]]| -> Vec<u32> {
@@ -1141,32 +1141,123 @@ fn off_grid() -> SurfaceKind {
 }
 
 #[test]
-fn a_bent_face_on_doubles_stands_for_its_fan() {
+fn a_bent_face_on_doubles_stands_for_its_star() {
     let mut r = sheet(&[&[[0, 0, 0], [10, 0, 0], [10, 10, 1], [0, 10, 0]]]);
     r.surfaces[0] = off_grid();
     assert_eq!(report(&r, BodyKind::Sheet, certified()).faults(), []);
 }
 
+/// A certified record of `bound` steps.
+fn within(bound: u64) -> Exactness {
+    Exactness::Certified {
+        bound: Steps(bound),
+        step: GridStep::Q0,
+    }
+}
+
+/// The kinds of fault in two sheets, the first bent off z = 0 by `bound` steps at most, and the
+/// second `other`: for the first ring started at each of its corners in turn, and run each way,
+/// which must all be found the same.
+fn bent_beside(bent: &[[i64; 3]], other: &[[i64; 3]], bound: u64) -> Vec<FaultKind> {
+    let found = |ring: &[[i64; 3]], turned: bool| {
+        let mut r = sheets(&[ring, other]);
+        r.surfaces[0] = level(0.0);
+        if turned {
+            r.faces[0].sense = Sense::Reversed;
+        }
+        kinds(report(&r, BodyKind::General, within(bound)).faults())
+    };
+    let first = found(bent, false);
+    let mut ring = bent.to_vec();
+    for turned in [false, true] {
+        for start in 0..ring.len() {
+            let again = found(&ring, turned);
+            assert_eq!(again, first, "turned {turned}, start {start}");
+            ring.rotate_left(1);
+        }
+        // Run the other way, the face is one seen from below.
+        ring.reverse();
+    }
+    first
+}
+
+/// A face that crosses z = 0 well away from the bent faces here, on the plane x = 20.
+const ASIDE: [[i64; 3]; 4] = [[20, 0, -5], [20, 10, -5], [20, 10, 5], [20, 0, 5]];
+
 #[test]
-fn a_flat_face_is_tested_against_each_triangle_of_a_fan_on_its_plane() {
-    // The fan's first triangle lies on z = 0 with the small square beside its diagonal.
-    let mut r = sheets(&[
-        &[[0, 0, 0], [10, 0, 0], [10, 10, 0], [0, 10, 1]],
-        &[[1, 8, 0], [3, 8, 0], [3, 9, 0], [1, 9, 0]],
-    ]);
-    r.surfaces[0] = level(0.0);
-    assert_eq!(report(&r, BodyKind::General, certified()).faults(), []);
+fn a_flat_face_is_tested_against_each_triangle_of_a_star_on_its_plane() {
+    // The mean of the bent face's corners is (5, 5, 0), so the triangle of its star to the edge
+    // along y = 0 lies on z = 0, where the small squares are. The first is beside that triangle
+    // and above the three others; the second lies inside it.
+    let bent = [[0, 0, 0], [10, 0, 0], [10, 10, 1], [0, 10, -1]];
+    let beside = [[1, 8, 0], [3, 8, 0], [3, 9, 0], [1, 9, 0]];
+    assert_eq!(bent_beside(&bent, &beside, 1), []);
+    let inside = [[4, 1, 0], [6, 1, 0], [6, 2, 0], [4, 2, 0]];
+    assert_eq!(bent_beside(&bent, &inside, 1), [FaultKind::FacesCross]);
 }
 
 #[test]
-fn a_bent_face_with_a_straight_corner_has_no_fan() {
-    let mut r = sheets(&[
-        &[[0, 0, 0], [5, 0, 0], [10, 0, 0], [10, 10, 1], [0, 10, 0]],
-        &[[20, 0, -5], [20, 10, -5], [20, 10, 5], [20, 0, 5]],
-    ]);
-    r.surfaces[0] = level(0.0);
-    let found = report(&r, BodyKind::General, certified());
-    assert_eq!(kinds(found.faults()), [FaultKind::PairUnchecked]);
+fn a_bent_face_has_its_star_wherever_its_ring_starts() {
+    // A straight corner, which no fan of triangles can start from, and a dent the mean sees past,
+    // which no fan can start beside: the star has no first corner, so neither matters.
+    let straight = [[0, 0, 0], [5, 0, 0], [10, 0, 0], [10, 10, 1], [0, 10, 0]];
+    assert_eq!(bent_beside(&straight, &ASIDE, 1), []);
+    let dented = [[0, 0, 0], [5, 1, 0], [10, 0, 0], [10, 10, 1], [0, 10, 0]];
+    assert_eq!(bent_beside(&dented, &ASIDE, 1), []);
+    // And a face that does cross the bent one is found from every start.
+    let through = [[5, 2, -5], [5, 8, -5], [5, 8, 5], [5, 2, 5]];
+    assert_eq!(bent_beside(&straight, &through, 1), [FaultKind::FacesCross]);
+}
+
+#[test]
+fn a_bent_face_whose_mean_sees_an_edge_from_outside_has_no_star() {
+    // A notch cut back past the mean of the corners, (7, 3): the two triangles to the notch's
+    // edges turn against the ring, so no star stands for the face, wherever the ring starts.
+    let notched = [[0, 0, 0], [10, 0, 0], [10, 10, 1], [8, 2, 0]];
+    assert_eq!(bent_beside(&notched, &ASIDE, 1), [FaultKind::PairUnchecked]);
+    // Nor for a notch whose tip, (0, 3, 1), is the mean itself: the two triangles to the notch's
+    // edges have no area, so no plane.
+    let spiked = [[-4, -2, 0], [0, 3, 1], [4, -2, 2], [6, 8, 0], [-6, 8, 2]];
+    assert_eq!(bent_beside(&spiked, &ASIDE, 2), [FaultKind::PairUnchecked]);
+}
+
+#[test]
+fn two_bent_faces_touching_at_their_means_are_found() {
+    // Two saddles with one mean, the origin, the second above the first everywhere else. The
+    // origin is a corner of every triangle of both stars and a vertex of neither face, so
+    // nothing excuses the touch.
+    let lower = [[10, 10, 2], [-10, 10, -2], [-10, -10, 2], [10, -10, -2]];
+    let upper = [[10, 10, 3], [-30, 30, -3], [-10, -10, 3], [30, -30, -3]];
+    let mut r = sheets(&[&lower, &upper]);
+    (r.surfaces[0], r.surfaces[1]) = (level(0.0), level(0.0));
+    let found = report(&r, BodyKind::General, within(3));
+    assert_eq!(kinds(found.faults()), [FaultKind::FacesCross]);
+    // Lifted a step, the upper one is clear of the lower.
+    let lifted = upper.map(|[x, y, z]| [x, y, z + 1]);
+    let mut r = sheets(&[&lower, &lifted]);
+    (r.surfaces[0], r.surfaces[1]) = (level(0.0), level(0.0));
+    assert_eq!(report(&r, BodyKind::General, within(4)).faults(), []);
+}
+
+#[test]
+fn a_ring_of_five_corners_across_the_frame_has_no_star_and_one_of_four_has() {
+    // A triangle of a star lies on a plane whose normal is the sum of n − 2 normals of triangles
+    // of grid points. Across the whole frame three of those pass a plane's budget and two do
+    // not: the ring of five waits, never with a wrong sign, and the ring of four is certified.
+    // The face beside them stands in the corner both rings cut off.
+    let beside = |m: i64| {
+        let (x, y) = (5 - m, m - 9);
+        [[x, y, -5], [x, y + 7, -5], [x, y + 7, 5], [x, y, 5]]
+    };
+    let five = |m: i64| [[-m, -m, 0], [m, -m, 0], [m, m, 1], [0, m, 0], [-m, 0, 0]];
+    let four = |m: i64| [[-m, -m, 0], [m, -m, 0], [m, m, 1], [-m, 0, 0]];
+    assert_eq!(
+        bent_beside(&five(FAR), &beside(FAR), 2),
+        [FaultKind::PairUnchecked]
+    );
+    assert_eq!(bent_beside(&four(FAR), &beside(FAR), 2), []);
+    // Half as wide, the ring of five has its star too.
+    assert_eq!(bent_beside(&five(FAR / 2), &beside(FAR / 2), 2), []);
 }
 
 #[test]
@@ -1414,7 +1505,7 @@ fn a_face_with_a_hole_on_doubles_takes_its_plane_from_its_corners() {
 }
 
 #[test]
-fn a_box_with_a_corner_lifted_is_a_fan_on_each_bent_face() {
+fn a_box_with_a_corner_lifted_is_a_star_on_each_bent_face() {
     let mut points = BOX_POINTS.to_vec();
     points[7][2] += 1;
     let faces: Vec<&[u32]> = BOX_SHELL.iter().map(|f| f[0]).collect();

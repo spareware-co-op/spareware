@@ -372,13 +372,13 @@ fn drop(p: P3, k: usize) -> [i128; 2] {
 }
 
 /// `p − q`, exactly.
-fn diff(p: P3, q: P3) -> Option<[i128; 3]> {
+pub(crate) fn diff(p: P3, q: P3) -> Option<[i128; 3]> {
     let d = |a: Coord, b: Coord| i128::from(a.get()).checked_sub(i128::from(b.get()));
     Some([d(p.x, q.x)?, d(p.y, q.y)?, d(p.z, q.z)?])
 }
 
 /// `u × w`, exactly.
-fn cross(u: [i128; 3], w: [i128; 3]) -> Option<[i128; 3]> {
+pub(crate) fn cross(u: [i128; 3], w: [i128; 3]) -> Option<[i128; 3]> {
     let [u0, u1, u2] = u;
     let [w0, w1, w2] = w;
     let term =
@@ -391,7 +391,7 @@ fn cross(u: [i128; 3], w: [i128; 3]) -> Option<[i128; 3]> {
 }
 
 /// `u · w`, exactly.
-fn dot(u: [i128; 3], w: [i128; 3]) -> Option<i128> {
+pub(crate) fn dot(u: [i128; 3], w: [i128; 3]) -> Option<i128> {
     let [u0, u1, u2] = u;
     let [w0, w1, w2] = w;
     u0.checked_mul(w0)?
