@@ -221,7 +221,7 @@ fn area(parts: &Parts, points: &[V3], f: usize) -> Option<V3> {
 fn faces(parts: &Parts, points: &[V3], out: &mut Vec<Finding>) {
     for f in 0..parts.face_plane.len() {
         let face = u32::try_from(f).unwrap_or(u32::MAX);
-        let Some((n, d)) = parts.face_plane.get(f).and_then(|p| facing(parts, *p)) else {
+        let Some((normal, offset)) = parts.face_plane.get(f).and_then(|p| facing(parts, *p)) else {
             out.push(Finding::Shape);
             continue;
         };
@@ -242,18 +242,19 @@ fn faces(parts: &Parts, points: &[V3], out: &mut Vec<Finding>) {
                 if from == to {
                     out.push(Finding::ZeroEdge(edge));
                 }
-                if dot(&n, a) + &d != RBig::ZERO {
+                if dot(&normal, a) + &offset != RBig::ZERO {
                     out.push(Finding::OffFace(edge));
                 }
-                let Some((m, e)) = parts.he_plane.get(h).and_then(|p| facing(parts, *p)) else {
+                let Some((side, level)) = parts.he_plane.get(h).and_then(|p| facing(parts, *p))
+                else {
                     out.push(Finding::Shape);
                     continue;
                 };
-                if dot(&m, a) + &e != RBig::ZERO || dot(&m, b) + &e != RBig::ZERO {
+                if dot(&side, a) + &level != RBig::ZERO || dot(&side, b) + &level != RBig::ZERO {
                     out.push(Finding::OffEdgePlane(edge));
                 }
-                // The face lies to the left of its edge, seen from outside: along n × (b − a).
-                if dot(&m, &cross(&n, &minus(b, a))) <= RBig::ZERO {
+                // The face lies to the left of its edge, seen from outside: along normal × (b − a).
+                if dot(&side, &cross(&normal, &minus(b, a))) <= RBig::ZERO {
                     out.push(Finding::EdgeFacing(edge));
                 }
             }
@@ -262,7 +263,7 @@ fn faces(parts: &Parts, points: &[V3], out: &mut Vec<Finding>) {
             out.push(Finding::Shape);
             continue;
         };
-        let along = dot(&vector, &n);
+        let along = dot(&vector, &normal);
         if along == RBig::ZERO {
             out.push(Finding::NoArea(face));
         } else if along < RBig::ZERO {

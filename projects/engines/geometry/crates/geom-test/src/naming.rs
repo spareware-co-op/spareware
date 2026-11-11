@@ -141,8 +141,9 @@ fn point(x: i64, y: i64, z: i64) -> Result<P3, NamingError> {
 }
 
 fn cuboid(op: [u8; 16], low: [i64; 3], size: [u64; 3]) -> Result<Made, NamingError> {
+    let [x, y, z] = low;
     let input = BoxInput {
-        min: point(low[0], low[1], low[2])?,
+        min: point(x, y, z)?,
         size: size.map(Steps),
     };
     Ok(make_box(&ctx(op), &input).map_err(op_error)?.result)
