@@ -41,8 +41,10 @@ use geom_topo::entity::{
 /// The checker's version, which a validation stamp records (24.7): a stored body from a known
 /// source whose stamp comes from a checker at least this new, and lists every group this one has,
 /// needs only the cheap groups when it is opened. It rises with every group built and every check
-/// made stricter: G84's framework with groups 1 and 4 is version 1.
-pub const VERSION: u64 = 1;
+/// made stricter: G84's framework with groups 1 and 4 is version 1; version 2 adds groups 2 and 3
+/// (G85), the exact test of two integer planes (G101) and the checks of loop sense, shell
+/// orientation and nesting (G102), which no version-1 stamp vouches for.
+pub const VERSION: u64 = 2;
 
 /// One of chapter 8.3's four groups of checks.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
