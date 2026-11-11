@@ -2529,6 +2529,22 @@ fn batch_typical_batches_all_succeed() {
     );
 }
 
+/// Every typical batch of the triangulation's benchmark (decision 32.46) triangulates.
+#[test]
+fn mesh_typical_batches_all_succeed() {
+    use geom_bench::inputs::mesh as m;
+    use geom_bench::kernels::mesh as k;
+    let batch = m::cdt(Typical);
+    all_ok("cdt", k::cdt, &batch);
+    let mut out = Vec::new();
+    k::cdt(&batch, &mut out);
+    assert!(
+        out.iter()
+            .flatten()
+            .all(|c| c.triangles.len() >= usize::from(m::POINTS))
+    );
+}
+
 /// Every typical batch of `geom-run`'s helper benchmarks (decision 32.46) maps every list.
 #[test]
 fn helper_typical_batches_all_succeed() {
