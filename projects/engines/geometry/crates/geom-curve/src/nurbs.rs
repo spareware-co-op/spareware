@@ -18,6 +18,11 @@
 //!   certified rounding of the knot insertion; a transform's is the largest certified error of a
 //!   control point's image, which bounds the curve's because a NURBS point is a weighted average
 //!   of its control points with weights `N_i`·`w_i` ≥ 0 (The NURBS Book, P4.3 and P4.4).
+//! - **A span of one parameter is bounded from both sides.** A derivative bound over one
+//!   parameter is the hull of every Bezier piece that touches it, so both one-sided derivatives
+//!   at a knot; a bound on the points there is the point, and at a knot repeated degree + 1
+//!   times inside the domain, where the curve itself parts, the point from each side (the
+//!   trait's rule for a span of one parameter, [`ParamCurve`]).
 //! - **Exact where the operation is.** Conversion and reversal change no bit (deviation 0).
 //! - **Refused outside the domain.** A parameter or span outside it is an error, never clamped.
 //!
@@ -226,6 +231,11 @@ fn piece_derivative_bound<const D: usize>(
 }
 
 impl<const D: usize> ParamCurve<D> for Curve<D> {
+    /// The knots.
+    fn breaks(&self) -> Vec<f64> {
+        self.basis().knots().to_vec()
+    }
+
     fn domain(&self) -> (f64, f64) {
         self.basis().domain()
     }
@@ -281,7 +291,17 @@ impl<const D: usize> ParamCurve<D> for Curve<D> {
         let (lo, hi) = span;
         if lo == hi {
             let p = self.enclose(lo, Limit::FromRight, 0, meter)?;
-            return Ok(hull_of(p.first().ok_or(CurveError::Defect)?));
+            let right = hull_of(p.first().ok_or(CurveError::Defect)?);
+            // A knot repeated degree + 1 times inside the domain parts the curve: its two
+            // sides are two points, and a span of one parameter holds both (the trait's rule).
+            // Everywhere else the curve is continuous and the one point is its box; at an end
+            // of the domain, where a clamped knot is repeated as often, both sides are the one
+            // inside it, so the second enclosure adds nothing.
+            if self.basis().multiplicity(lo) > self.degree() {
+                let q = self.enclose(lo, Limit::FromLeft, 0, meter)?;
+                return union(Some(right), hull_of(q.first().ok_or(CurveError::Defect)?));
+            }
+            return Ok(right);
         }
         let mut out = None;
         for piece in self.bernstein(meter)? {
