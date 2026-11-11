@@ -10261,6 +10261,12 @@
               "doc": "A sum past its integer's width: never for a body within its arenas' limits.",
               "name": "Overflow",
               "shape": "unit"
+            },
+            {
+              "base_kind": "ExactnessNotAccepted",
+              "doc": "A commit would change a decision the ideal shape makes for certain (`CommitFlip`, 13.2).",
+              "name": "CommitFlip",
+              "shape": "unit"
             }
           ],
           "module": "geom_op::detail",
