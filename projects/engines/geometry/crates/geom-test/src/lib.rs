@@ -144,6 +144,15 @@
 //!   clash and first contact in exact rationals, by brute force over a full plane arrangement,
 //!   written from the definitions alone; `tests/flat_reference.rs` holds it to hand cases.
 //!
+//! Piece G155 adds the law catalogue of section 28.3 for numbers and frames, booleans and cells,
+//! flat mass properties, names and history, and formats:
+//!
+//! - `tests/laws_numbers.rs`, `tests/laws_booleans.rs`, `tests/laws_mass.rs`, `tests/laws_names.rs`
+//!   and `tests/laws_formats.rs`: each law of those rows as a seeded property test, the flat ones
+//!   held to [`flat_reference`] and every rounding to exact rationals; their shared draw, report
+//!   and flat solids are `tests/catalogue`. Fixed seeds on pull requests, fresh ones nightly
+//!   (`kernel-nightly.yml`); the names row's digest is the golden `geom-test/names-on-every-target`.
+//!
 //! The other reference implementations, oracle clients and the other CI tools arrive
 //! with the pieces that need them. The sister development crates are `geom-fuzz` (fuzz harnesses),
 //! `geom-gen` (every generator whose output is committed) and `geom-bench` (benchmarks). `geom-bench` is built by
@@ -221,6 +230,9 @@
 //!   a standalone native file, and the meter its readers take.
 //! - `geom-curve`, `geom-surface` and `geom-math` (Apache-2.0, ours), development dependencies (G69):
 //!   the kinds and transforms the law catalogue checks.
+//! - `geom-bool`, `geom-make`, `geom-topo`, `geom-check`, `geom-poly` and `geom-name` (Apache-2.0,
+//!   ours), development dependencies (G155): the booleans, primitives, transforms, queries, checker
+//!   and names the law catalogue checks.
 //!
 //! Licences of every outside package this crate brings into a build, its own and its dependencies'
 //! on every target (`cargo tree --target all`), each record checked by `tests/licences.rs`. Where a

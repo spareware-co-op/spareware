@@ -302,9 +302,21 @@
               "kind": "corpus",
               "piece": "G147",
               "why": "1 new count benchmark on point location (decision 32.44): mesh/locate; no existing digest moved"
+            },
+            {
+              "sha256": "4262a6e03b4cb30709a53f5d20da1dbe59700a8b561a1160a6851e5928756a70",
+              "kind": "corpus",
+              "piece": "G140",
+              "why": "7 new count benchmarks of the flat boolean's scenarios (23.13's scenarios at reduced scale): a wall's openings, a moved door cut again from the arrangement cache, a slab's holes, a union of many boxes, one and three selections from one arrangement, and a storey's rooms; no existing digest moved"
+            },
+            {
+              "sha256": null,
+              "kind": "corpus",
+              "piece": "G155",
+              "why": "topo/publish's input pushes each vertex's point as a PointKind, the point pool's type since G136's line (a grid point or three planes' meeting), so the input's canonical encoding and its digest moved; its result digest is unchanged, and no other digest moved"
             }
           ],
-          "sha256": "4262a6e03b4cb30709a53f5d20da1dbe59700a8b561a1160a6851e5928756a70"
+          "sha256": "d56669b57872c04f31f97f7f64c8cda8298fab326f0f76fcf5621e9934fec53a"
         },
         {
           "id": "geom-nurbs/operations",
@@ -739,6 +751,16 @@
             "function": "exact_mesh_golden_hash_is_the_same_on_every_target"
           },
           "sha256": "c5cb15aaf5ad8f21e50ad1dd903efb38d0dbc85e695e17afc662519ecbdbc134"
+        },
+        {
+          "id": "geom-test/names-on-every-target",
+          "what": "The law catalogue's names row (piece G155): from a fixed seed, 60 primitives (boxes, prisms, cylinders, cones, spheres and tori), each followed by up to three steps (grid moves, quarter turns, mirrors, pattern copies and, on flat bodies, unions, intersections and differences with a box); every body's names and every history in its canonical encoding, as tests/laws_names.rs records them.",
+          "check": {
+            "crate": "geom-test",
+            "test": "laws_names",
+            "function": "the_same_names_on_every_target"
+          },
+          "sha256": "e6c47d58967776c59d90e023a3a3c099377e17ab27ea3f3e5818d7e9893bd963"
         }
       ]
     }
