@@ -736,22 +736,26 @@ fn from_i128_is_the_shipped_one_in_doc_attributes_parameters_and_body() {
     // The shipped function opens with its compile-time guard, which the twin states in Verus's
     // own form, `requires 2 <= L`: a width below two limbs does not build, so no caller can break
     // the requirement. That one statement apart, the bodies are the same.
+    //
+    // The guard is found as two lines of text, so the file is read with one line ending,
+    // whichever a checkout gave it: Git writes `\r\n` on Windows unless told not to.
+    let wide = WIDE.replace("\r\n", "\n");
     let guard = "        let () = Self::AT_LEAST_TWO_LIMBS;\n";
     let opening = "    pub fn from_i128(v: i128) -> Self {\n";
-    assert!(WIDE.contains(&format!("{opening}{guard}")));
+    assert!(wide.contains(&format!("{opening}{guard}")));
     assert!(
-        WIDE.contains("const AT_LEAST_TWO_LIMBS: () = assert!(L >= 2, \"Wide<L> needs L >= 2\");")
+        wide.contains("const AT_LEAST_TWO_LIMBS: () = assert!(L >= 2, \"Wide<L> needs L >= 2\");")
     );
-    let unguarded = WIDE.replacen(&format!("{opening}{guard}"), opening, 1);
+    let unguarded = wide.replacen(&format!("{opening}{guard}"), opening, 1);
     let shipped = find_fn(&tokens(&unguarded), "from_i128").expect("wide.rs's from_i128");
     assert_eq!(shared_parts(&twin), shared_parts(&shipped));
-    let guarded = find_fn(&tokens(WIDE), "from_i128").unwrap();
+    let guarded = find_fn(&tokens(&wide), "from_i128").unwrap();
     assert_ne!(shared_parts(&twin), shared_parts(&guarded));
     let text = canonical(&twin);
     assert!(text.contains("requires 2 <= L <= 4096"), "{text}");
     assert!(text.contains("ensures r . value ( ) == v as int"), "{text}");
     // A change on either side is seen.
-    let changed = WIDE.replacen("(1u128 << 127)", "(1u128 << 126)", 1);
+    let changed = wide.replacen("(1u128 << 127)", "(1u128 << 126)", 1);
     let changed = find_fn(&tokens(&changed), "from_i128").unwrap();
     assert_ne!(shared_parts(&twin), shared_parts(&changed));
 }
