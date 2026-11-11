@@ -352,6 +352,11 @@ fn ellipse() -> Trimmed<2> {
 
 /// An offset of the ellipse by distances at `stations` (parameter, lateral offset).
 fn by_distances(stations: &[(f64, f64)]) -> Offset<2> {
+    by_distances_from(ellipse(), stations)
+}
+
+/// An offset of `basis` by distances at `stations` (parameter, lateral offset).
+fn by_distances_from(basis: Trimmed<2>, stations: &[(f64, f64)]) -> Offset<2> {
     let stations = stations
         .iter()
         .map(|&(at, lateral)| Station {
@@ -360,7 +365,7 @@ fn by_distances(stations: &[(f64, f64)]) -> Offset<2> {
             vertical: 0.0,
         })
         .collect();
-    Offset::new(ellipse(), OffsetLaw::Distances(stations)).unwrap()
+    Offset::new(basis, OffsetLaw::Distances(stations)).unwrap()
 }
 
 /// A station on an end of the domain is not a break of the curve: there is one side there, and
@@ -388,6 +393,24 @@ fn a_station_on_an_end_of_the_domain_is_bounded_from_inside() {
 fn the_points_over_one_station_keep_their_one_piece() {
     let o = by_distances(&[(0.25, 0.1), (0.5, -0.2), (1.0, 0.3)]);
     let from_here = by_distances(&[(0.5, -0.2), (1.0, 0.3)]);
+    let b = o.bound((0.5, 0.5), &mut meter()).unwrap();
+    assert_eq!(b, from_here.bound((0.5, 0.5), &mut meter()).unwrap());
+    let k = CurveKind::Offset(o);
+    assert!(holds(&b, &point_from(&k, 0.5, Limit::FromRight), 1e-9));
+    assert!(holds(&b, &point_from(&k, 0.5, Limit::FromLeft), 1e-9));
+}
+
+/// The same on an offset of the x axis, where the box's y is the lateral offset's own enclosure
+/// and nothing of the basis rounds over it: a second piece, read from the left through the
+/// stations before this one, would widen that enclosure by a rounding, and the box with it.
+#[test]
+fn the_points_over_one_station_of_a_line_keep_their_one_piece() {
+    let axis = || {
+        let l = Line::new([0.0, 0.0], [1.0, 0.0], (0.0, 1.25)).unwrap();
+        Trimmed::whole(Basis::Line(l)).unwrap()
+    };
+    let o = by_distances_from(axis(), &[(0.25, 0.1), (0.5, -0.2), (1.0, 0.3)]);
+    let from_here = by_distances_from(axis(), &[(0.5, -0.2), (1.0, 0.3)]);
     let b = o.bound((0.5, 0.5), &mut meter()).unwrap();
     assert_eq!(b, from_here.bound((0.5, 0.5), &mut meter()).unwrap());
     let k = CurveKind::Offset(o);
@@ -575,6 +598,14 @@ fn the_contract_holds_every_kind_to_the_rule_at_its_breaks() {
             CurveKind::Offset(by_distances(&[(0.25, 0.1), (0.5, -0.2), (1.0, 0.3)])),
             0.25,
             [0.125, 0.75],
+        ),
+        // Stations on both ends of the domain: an end has one side, and asking it from outside
+        // would ask for the slope beyond the end, which the bound rightly leaves out.
+        (
+            "offset by distances to both ends",
+            CurveKind::Offset(by_distances(&[(0.0, 0.1), (0.5, -0.2), (1.25, 0.3)])),
+            0.5,
+            [0.25, 0.75],
         ),
         (
             "trimmed polyline",
