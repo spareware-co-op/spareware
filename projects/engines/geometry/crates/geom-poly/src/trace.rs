@@ -388,10 +388,9 @@ fn inward(plane: &Plane, faces: &[[Moved; 2]; 3]) -> Result<Sign, NumError> {
 /// The vectors in front of and behind `piece`, which lies on polygon `index`, and whether it is
 /// the first copy of its overlap.
 fn vectors(
-    piece: &Piece,
-    index: usize,
+    (piece, index): (&Piece, usize),
     polygons: &[(&Polygon, Canonical)],
-    faces: &[[Moved; 2]; 3],
+    (faces, legs): (&[[Moved; 2]; 3], usize),
     reference: &Winding,
     meter: &mut WorkMeter<'_>,
 ) -> Result<(Winding, Winding, bool), TraceError> {
@@ -416,7 +415,7 @@ fn vectors(
         by: Sign::Positive,
     };
     let mut near_side = reference.clone();
-    for segment in path(face, first, second, faces)? {
+    for segment in path(face, first, second, faces)?.into_iter().take(legs) {
         for (polygon, _) in polygons {
             meter.charge(1)?;
             count_crossing(&segment, polygon, &mut near_side)?;
@@ -533,6 +532,35 @@ pub fn classify(
     pieces: &[Vec<Piece>],
     meter: &mut WorkMeter<'_>,
 ) -> Result<Vec<Classified>, TraceError> {
+    classified((cell, usize::MAX), reference, polygons, pieces, meter)
+}
+
+/// [`classify`] when every polygon lies strictly inside `cell`, as in a box a step clear of them
+/// ([`crate::subdivide::around`]'s). The path from a piece to the box's reference corner leaves
+/// along the piece's edge to a wall and then runs along the box's walls and edges, just inside,
+/// where no polygon is; so only its first leg is traced and charged.
+///
+/// # Errors
+///
+/// As [`classify`].
+pub fn classify_inside(
+    cell: &Cell,
+    reference: &Winding,
+    polygons: &[Polygon],
+    pieces: &[Vec<Piece>],
+    meter: &mut WorkMeter<'_>,
+) -> Result<Vec<Classified>, TraceError> {
+    classified((cell, 1), reference, polygons, pieces, meter)
+}
+
+/// [`classify`], tracing the first `legs` legs of each piece's path.
+fn classified(
+    (cell, legs): (&Cell, usize),
+    reference: &Winding,
+    polygons: &[Polygon],
+    pieces: &[Vec<Piece>],
+    meter: &mut WorkMeter<'_>,
+) -> Result<Vec<Classified>, TraceError> {
     let faces = faces(cell)?;
     let mut held = Vec::with_capacity(polygons.len());
     for polygon in polygons {
@@ -541,7 +569,8 @@ pub fn classify(
     let mut out = Vec::new();
     for (index, list) in pieces.iter().enumerate() {
         for piece in list {
-            let (front, back, first) = vectors(piece, index, &held, &faces, reference, meter)?;
+            let (front, back, first) =
+                vectors((piece, index), &held, (&faces, legs), reference, meter)?;
             out.push(Classified {
                 polygon: index,
                 piece: piece.clone(),

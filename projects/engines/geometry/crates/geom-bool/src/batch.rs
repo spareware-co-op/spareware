@@ -12,6 +12,11 @@
 //! - **Atomic by default.** A tool that cannot enter fails the call and names itself. Under
 //!   [`BatchRule::SkipFailedTools`] it is left out and listed beside the result, and which tools
 //!   are left out depends only on the inputs.
+//! - **A cut again is a cut afresh.** A [`Cut`] may carry the last cut's [`CutResult::cache`]:
+//!   operands it holds the same bodies for are not prepared again, boxes it holds the same
+//!   polygons for are not solved again, and the result, its report, the cache and the work are
+//!   what a cut without it gives (11.6, and G139's incremental re-cut,
+//!   `projects/kit/notes/G139-incremental-rebuild.md`; tested on a moved door).
 //! - **Hosts run in parallel, and the threads do not show.** Results come in input order, and one
 //!   host alone has the threads for its boxes.
 //!
@@ -22,13 +27,15 @@
 use alloc::vec::Vec;
 
 use geom_op::{CombineDetail, Diagnostic, OpContext, OpError, OpOutput, RunDetail};
-use geom_poly::merge::Merge;
+use geom_poly::merge::{Memo, Merge};
+use geom_poly::subdivide::Solved;
 use geom_poly::trace::Classified;
 use geom_run::{ChunkPlan, Exec, Phase, RunError, WorkMeter};
 
 use crate::combine::{Combined, arranged_input, fail, prepared, selected};
+use crate::names::NameIds;
 use crate::operand::{
-    BooleanInput, Operand, OperandKey, PrepareError, Prepared, Selection, prepare_with,
+    BooleanInput, Operand, OperandKey, Operands, PrepareError, Prepared, Selection, prepare_reusing,
 };
 
 /// One host at a time on each thread.
@@ -53,6 +60,47 @@ pub struct Cut<'b> {
     pub host: Operand<'b>,
     /// The tools.
     pub tools: Vec<Operand<'b>>,
+    /// What an earlier cut kept, from its [`CutResult::cache`]: an operand with the same body is not
+    /// prepared again and a box holding the same polygons is not solved again, each charged what
+    /// it cost (11.6). Whatever it does not match is ignored, so any cache gives the answer and the
+    /// work of none.
+    pub reuse: Option<&'b Recut>,
+}
+
+/// What a cut keeps for the next cut of its host (G139): each operand's preparation and the boxes
+/// it solved, each keyed by what it was made from, what its merge kept, and its names' ids.
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct Recut {
+    operands: Operands,
+    boxes: Solved,
+    merge: Memo,
+    names: NameIds,
+}
+
+impl Recut {
+    /// The operands' preparations.
+    #[must_use]
+    pub const fn operands(&self) -> &Operands {
+        &self.operands
+    }
+
+    /// The solved boxes.
+    #[must_use]
+    pub const fn boxes(&self) -> &Solved {
+        &self.boxes
+    }
+
+    /// What the merge kept.
+    #[must_use]
+    pub const fn merge(&self) -> &Memo {
+        &self.merge
+    }
+
+    /// The names' ids.
+    #[must_use]
+    pub const fn names(&self) -> &NameIds {
+        &self.names
+    }
 }
 
 /// What one tool did.
@@ -73,6 +121,8 @@ pub struct CutResult {
     pub tools: Vec<ToolReport>,
     /// The tools left out under [`BatchRule::SkipFailedTools`], by key.
     pub skipped: Vec<OperandKey>,
+    /// What this cut kept, for the next cut of the host to reuse.
+    pub cache: Recut,
 }
 
 /// Whether the tool at `owner` took anything out: a piece of it with the host behind it. A tool
@@ -89,7 +139,7 @@ fn entered<'b>(
     cut: &Cut<'b>,
     rule: BatchRule,
     meter: &mut WorkMeter<'_>,
-) -> Result<(Vec<OperandKey>, BooleanInput<'b>, Prepared), OpError> {
+) -> Result<(Vec<OperandKey>, BooleanInput<'b>, Prepared, Operands), OpError> {
     let mut skipped = Vec::new();
     let mut tools = cut.tools.clone();
     loop {
@@ -103,8 +153,8 @@ fn entered<'b>(
             merge: Merge::RemoveRedundant,
             accept: None,
         };
-        match prepare_with(&input, true, meter) {
-            Ok(ready) => return Ok((skipped, input, ready)),
+        match prepare_reusing(&input, true, cut.reuse.map(Recut::operands), meter) {
+            Ok((ready, operands)) => return Ok((skipped, input, ready, operands)),
             Err(PrepareError::NotPlaneBased(key) | PrepareError::Broken(key))
                 if rule == BatchRule::SkipFailedTools && key != cut.host.key =>
             {
@@ -124,9 +174,30 @@ fn one_cut(
     rule: BatchRule,
     meter: &mut WorkMeter<'_>,
 ) -> Result<OpOutput<CutResult>, OpError> {
-    let (skipped, input, ready) = entered(ctx, cut, rule, meter)?;
-    let (classified, exactness) = arranged_input(ctx, exec, &input, &ready, meter)?;
-    let mut out = selected(ctx, &input, &ready, &classified, exactness, meter)?;
+    let (skipped, input, ready, operands) = entered(ctx, cut, rule, meter)?;
+    let (classified, exactness, boxes) = arranged_input(
+        ctx,
+        exec,
+        &input,
+        &ready,
+        cut.reuse.map(Recut::boxes),
+        meter,
+    )?;
+    let again = cut.reuse.map(|last| (&last.merge, &last.names));
+    let (mut out, kept) = selected(
+        ctx,
+        &input,
+        (&ready, &classified[..], again),
+        exactness,
+        meter,
+    )?;
+    let (merge, names) = kept.unwrap_or_default();
+    let cache = Recut {
+        operands,
+        boxes,
+        merge,
+        names,
+    };
     let result = out
         .result
         .pop()
@@ -154,6 +225,7 @@ fn one_cut(
             result,
             tools,
             skipped,
+            cache,
         },
         exactness,
     );

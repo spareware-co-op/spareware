@@ -5267,14 +5267,6 @@
       "reason": "Plane::through takes grid points (|coordinate| <= M = 2^40 - 1), so each normal component is at most 4M^2 < 2^82 and the offset at most 4M^3 < 2^122 in magnitude: within_budget holds of every plane it can build, and true in its place is the same function. Plane::new takes coefficients from outside, and its tests reach each limit."
     },
     {
-      "file": "projects/engines/geometry/crates/geom-poly/src/subdivide.rs",
-      "mutant": "replace | with ^ in divide",
-      "line_text": "key: node.key | bit,",
-      "occurrences": 1,
-      "kind": "equivalent",
-      "reason": "bit is the bit of this node's depth, and a node's key has only the bits of the depths above it, so the bit is clear and | and ^ give one value."
-    },
-    {
       "file": "projects/engines/geometry/crates/geom-check/src/planar.rs",
       "mutant": "replace == with != in Cut::order",
       "line_text": "Ok(ordering(if rising == Sign::Positive {",
@@ -5713,30 +5705,6 @@
       "occurrences": 1,
       "kind": "hangs",
       "reason": "Under SkipFailedTools a tool that cannot enter is set aside and the rest are prepared again. The mutant keeps only the tool that failed, which fails again the same way, so the loop never ends (skipped grows by one each time round) and the tests stop it by their timeout. It hangs; it never returns a cut."
-    },
-    {
-      "file": "projects/engines/geometry/crates/geom-poly/src/merge.rs",
-      "mutant": "delete ! in rings",
-      "line_text": ".filter(|o| !used.contains_key(o))",
-      "occurrences": 1,
-      "kind": "hangs",
-      "reason": "The ring walk goes on to a fin leaving the last fin's end that it has not used yet. The mutant takes only used ones, so each of a face's fins but the last ends a ring of its own at once, and the last, whose way on is a used fin, then follows used fins round the face for ever, pushing each onto its ring. Every merge meets it, so the tests stop it by their timeout. It hangs; it never returns wrong rings."
-    },
-    {
-      "file": "projects/engines/geometry/crates/geom-poly/src/merge.rs",
-      "mutant": "replace < with > in radial",
-      "line_text": "let rising = |fin: &Fin| fin.from < fin.to;",
-      "occurrences": 1,
-      "kind": "equivalent",
-      "reason": "rising is read only to compare one fin's with another's: the flap's reversed, turned, and the test before each join. A fin's two ends are its edge's low and high, numbers of two different points, so > is the negation of < on every fin, every rising turns over together, and every comparison comes out the same."
-    },
-    {
-      "file": "projects/engines/geometry/crates/geom-poly/src/merge.rs",
-      "mutant": "replace == with != in radial",
-      "line_text": "reversed: rising(&fin) == rising(&start),",
-      "occurrences": 1,
-      "kind": "equivalent",
-      "reason": "The mutant turns every flap's reversed over, the reference's with the rest, since all of them come from flap. about reads reversed only through turn_about and same_flap, each of which asks only whether two flaps' reversed differ, so every order about gives, and with it last, is the same; turned and the joins read rising, not the flaps."
     },
     {
       "file": "projects/engines/geometry/crates/geom-num/src/plane.rs",

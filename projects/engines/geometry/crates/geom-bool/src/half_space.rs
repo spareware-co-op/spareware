@@ -201,5 +201,11 @@ pub fn half_space(
     }
     let merged = merge(&pieces, Merge::RemoveRedundant, meter)?;
     let naming = name_fresh(op, &merged, &pieces, &roles).map_err(RebuildError::Naming)?;
-    publish(&merged, &carriers, false, Some(&naming.names), meter)
+    publish(
+        &merged,
+        &carriers,
+        false,
+        (Some(&naming.names), None),
+        meter,
+    )
 }
