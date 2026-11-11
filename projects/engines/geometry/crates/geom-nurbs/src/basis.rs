@@ -425,51 +425,16 @@ impl Basis {
         order: usize,
         out: &mut [f64],
     ) -> Result<(), NurbsError> {
-        if self.range()? >= WIDE {
-            self.ders_on::<true>(span, u, order, out)
-        } else {
-            self.ders_on::<false>(span, u, order, out)
-        }
-    }
-
-    /// [`Basis::ders`] with every sum of two differences tested (`CHECKED` true, for a knot
-    /// range of [`WIDE`] or more) or none (`CHECKED` false), as [`Basis::funs_on`].
-    fn ders_on<const CHECKED: bool>(
-        &self,
-        span: usize,
-        u: f64,
-        order: usize,
-        out: &mut [f64],
-    ) -> Result<(), NurbsError> {
         let p = self.degree;
         let w = add(p, 1)?;
         // ndu[j][r]: below the diagonal the knot differences, on and above it the basis values
         // of each degree (NLib's layout).
         let mut ndu = [0.0_f64; WIDTH * WIDTH];
         let at_ = |j: usize, r: usize| -> Result<usize, NurbsError> { add(mul(j, WIDTH)?, r) };
-        let u_ = &self.knots;
-        let mut left = [0.0_f64; WIDTH];
-        let mut right = [0.0_f64; WIDTH];
-        set(&mut ndu, 0, 1.0)?;
-        for j in 1..=p {
-            set(&mut left, j, u - get(u_, sub(add(span, 1)?, j)?)?)?;
-            set(&mut right, j, get(u_, add(span, j)?)? - u)?;
-            let mut saved = 0.0;
-            for r in 0..j {
-                let ri = get(&right, add(r, 1)?)?;
-                let le = get(&left, sub(j, r)?)?;
-                let sum = ri + le;
-                let delta = if CHECKED && !sum.is_finite() {
-                    self.width(span, j, r)?
-                } else {
-                    sum
-                };
-                set(&mut ndu, at_(j, r)?, delta)?;
-                let prev = get(&ndu, at_(r, sub(j, 1)?)?)?;
-                set(&mut ndu, at_(r, j)?, saved + prev * (ri / delta))?;
-                saved = prev * (le / delta);
-            }
-            set(&mut ndu, at_(j, j)?, saved)?;
+        if self.range()? >= WIDE {
+            self.triangle::<true>(span, u, &mut ndu)?;
+        } else {
+            self.triangle::<false>(span, u, &mut ndu)?;
         }
         let rows = add(order, 1)?;
         let total = mul(rows, w)?;
@@ -501,6 +466,44 @@ impl Basis {
         } else {
             Err(NurbsError::NotFinite)
         }
+    }
+
+    /// The triangle of A2.3 at `span` into `ndu`, the first half of [`Basis::ders`]: with every
+    /// sum of two differences tested (`CHECKED` true, for a knot range of [`WIDE`] or more) or
+    /// none (`CHECKED` false), as [`Basis::funs_on`]. Only the triangle has two copies; the
+    /// derivative rows that [`Basis::ders`] takes from it are computed in one place.
+    fn triangle<const CHECKED: bool>(
+        &self,
+        span: usize,
+        u: f64,
+        ndu: &mut [f64; WIDTH * WIDTH],
+    ) -> Result<(), NurbsError> {
+        let at_ = |j: usize, r: usize| -> Result<usize, NurbsError> { add(mul(j, WIDTH)?, r) };
+        let u_ = &self.knots;
+        let mut left = [0.0_f64; WIDTH];
+        let mut right = [0.0_f64; WIDTH];
+        set(ndu, 0, 1.0)?;
+        for j in 1..=self.degree {
+            set(&mut left, j, u - get(u_, sub(add(span, 1)?, j)?)?)?;
+            set(&mut right, j, get(u_, add(span, j)?)? - u)?;
+            let mut saved = 0.0;
+            for r in 0..j {
+                let ri = get(&right, add(r, 1)?)?;
+                let le = get(&left, sub(j, r)?)?;
+                let sum = ri + le;
+                let delta = if CHECKED && !sum.is_finite() {
+                    self.width(span, j, r)?
+                } else {
+                    sum
+                };
+                set(ndu, at_(j, r)?, delta)?;
+                let prev = get(ndu, at_(r, sub(j, 1)?)?)?;
+                set(ndu, at_(r, j)?, saved + prev * (ri / delta))?;
+                saved = prev * (le / delta);
+            }
+            set(ndu, at_(j, j)?, saved)?;
+        }
+        Ok(())
     }
 
     /// The basis function `N_i` at `u` (A2.4).
