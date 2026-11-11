@@ -1137,6 +1137,8 @@ name = "geom-fuzz"
 version = "0.0.0"
 dependencies = [
  "bolero",
+ "ciborium-io",
+ "ciborium-ll",
  "dashu-int",
  "dashu-ratio",
  "geom-bench",

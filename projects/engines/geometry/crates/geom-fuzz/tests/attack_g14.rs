@@ -39,8 +39,9 @@ use std::path::{Path, PathBuf};
 
 use geom_fuzz::orient2d::{Case, PROOF_BOUND, ProofDraw, check, check_with, proof_case, reference};
 use geom_fuzz::{
-    Harness, arenas, attributes, batch, boxtree, cache, cbor, curves, linalg, make, maths, nurbs,
-    orient2d, predicates, roots, sequence, surfaces, transforms, variants, wide,
+    Harness, arenas, attributes, batch, bodies, boxtree, cache, cbor, curves, encoder, linalg,
+    make, maths, names, nurbs, open, operations, orient2d, predicates, records, roots, sequence,
+    surfaces, transforms, variants, wide,
 };
 use geom_num::Sign;
 use geom_num::generated::orient2d::{filter, value};
@@ -52,20 +53,26 @@ use geom_test::{Seed, SplitMix64};
 
 /// Every target of the crate, by module name, with its harness. A target module that is not here,
 /// or a name here that is not a target module, fails `attack_every_target_is_listed_here`.
-const TARGETS: [(&str, Harness); 19] = [
+const TARGETS: [(&str, Harness); 25] = [
     ("arenas", arenas::harness),
     ("attributes", attributes::harness),
     ("batch", batch::harness),
+    ("bodies", bodies::harness),
     ("boxtree", boxtree::harness),
     ("cache", cache::harness),
     ("cbor", cbor::harness),
     ("curves", curves::harness),
+    ("encoder", encoder::harness),
     ("linalg", linalg::harness),
     ("make", make::harness),
     ("maths", maths::harness),
+    ("names", names::harness),
     ("nurbs", nurbs::harness),
+    ("open", open::harness),
+    ("operations", operations::harness),
     ("orient2d", orient2d::harness),
     ("predicates", predicates::harness),
+    ("records", records::harness),
     ("roots", roots::harness),
     ("sequence", sequence::harness),
     ("surfaces", surfaces::harness),
@@ -558,10 +565,8 @@ fn attack_every_target_has_its_tests_and_is_in_both_ci_matrices() {
     );
 
     // Seeded violations: each must be reported.
-    let drop_fuzz = workflow.replace(
-        "[arenas_fuzz, attributes_fuzz, batch_fuzz, boxtree_fuzz, cache_fuzz, cbor_fuzz, curves_fuzz, linalg_fuzz, make_fuzz, maths_fuzz, nurbs_fuzz, orient2d_fuzz, predicates_fuzz, roots_fuzz, sequence_fuzz, surfaces_fuzz, transforms_fuzz, variants_fuzz, wide_fuzz]",
-        "[arenas_fuzz, attributes_fuzz, batch_fuzz, boxtree_fuzz, cache_fuzz, cbor_fuzz, curves_fuzz, linalg_fuzz, make_fuzz, maths_fuzz, nurbs_fuzz, predicates_fuzz, roots_fuzz, sequence_fuzz, surfaces_fuzz, transforms_fuzz, variants_fuzz, wide_fuzz]",
-    );
+    // orient2d_fuzz dropped from the libFuzzer matrix, the one list that names it inline.
+    let drop_fuzz = workflow.replacen(" orient2d_fuzz,", "", 1);
     assert_ne!(drop_fuzz, workflow);
     assert!(
         layout_violations(&targets, &tests, &drop_fuzz)

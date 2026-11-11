@@ -24,7 +24,17 @@ each output exactly what section 8.4's table gives; `batch` (`src/batch.rs`, G10
 batch driver gives each item its own result, and the many-point calls give the single calls' bits;
 `make` (`src/make.rs`, G101), the primitives and transforms return only what the full checker
 passes, keep their laws, and refuse with a typed error; and `sequence` (`src/sequence.rs`, G116),
-whole operation logs replay to the same hash and keep every law at every step. `src/adversarial.rs`
+whole operation logs replay to the same hash and keep every law at every step. For Gate 3 (24.7:
+every reader is a fuzz target): `encoder` (`src/encoder.rs`, G86), `geom-op`'s canonical encoder
+refuses without a trace and writes only canonical items; `records` (`src/records.rs`, G92), the
+record layer reads the same twice and however its reads split, refuses inside its input and
+accepts only canonical records and files; `bodies` (`src/bodies.rs`, G94), body records read the
+same twice and give a body that writes and reads to itself; `names` (`src/names.rs`, G95) and
+`operations` (`src/operations.rs`, G96), the names, history, recipe, attributes and operation
+records accept only the one encoding of what they read; and `open` (`src/open.rs`, G108), a
+container comes back from a file to the same blobs and trust on open keeps damage with the body
+it is in. Their corpora start from the writers' output for the fixtures of `geom-format`'s own
+tests. `src/adversarial.rs`
 holds the generators aimed at the hard cases, and `src/robustness.rs` counts how many plain designs
 succeed per family: `src/robustness.txt` records it, and a count may not fall.
 
