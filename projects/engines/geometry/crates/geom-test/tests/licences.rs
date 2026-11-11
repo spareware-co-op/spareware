@@ -7,7 +7,9 @@
 //! brings in itself: every package in the tree outside the subtrees of our own path crates, whose
 //! headers record theirs. Each must have a permissive licence (`geom_test::licence`), our own crates
 //! must be Apache-2.0 (or Apache-2.0 AND permissive licences, for a crate that holds code ported under
-//! them, as geom-num holds CORE-MATH's under MIT), and each must appear in a record of the crate's `Licences` section under an
+//! them, as geom-num holds CORE-MATH's under MIT; or Apache-2.0 AND MPL-2.0, for a crate that holds a
+//! file ported from an MPL-2.0 project, as geom-mesh holds libigl's winding number, which chapter 29.2
+//! allows), and each must appear in a record of the crate's `Licences` section under an
 //! expression of the same meaning. A record naming a package the crate does not bring in fails too,
 //! so the records can neither fall behind nor run ahead of `Cargo.lock`.
 
@@ -132,27 +134,64 @@ fn brought_in(krate: &str) -> (BTreeMap<String, BTreeSet<String>>, BTreeMap<Stri
 }
 
 /// Whether one of our crates' licence is Apache-2.0: alone, or with permissive licences beside it
-/// (`Apache-2.0 AND MIT`), for code ported into the crate under its own licence.
+/// (`Apache-2.0 AND MIT`), for code ported into the crate under its own licence, or with MPL-2.0
+/// beside it (`Apache-2.0 AND MPL-2.0`), for a file ported from an MPL-2.0 project. Chapter 29.2
+/// allows that port: MPL-2.0 is copyleft per file, so the taken file stays MPL-2.0 with its notices
+/// beside our Apache-2.0 files. MPL-2.0 is the only licence off the permissive list taken here; no
+/// other copyleft licence is, in any form.
 fn ours_is_apache(licence: &str) -> bool {
     let ours = |e: &Expr| matches!(e, Expr::Licence { id, exception: None } if id == "Apache-2.0");
+    let per_file = |e: &Expr| matches!(e, Expr::Licence { id, exception: None } if id == "MPL-2.0");
     match Expr::parse(licence) {
         Ok(e) if ours(&e) => true,
         Ok(Expr::And(terms)) => {
-            terms.iter().any(ours) && terms.iter().all(|t| ours(t) || t.permissive())
+            terms.iter().any(ours)
+                && terms
+                    .iter()
+                    .all(|t| ours(t) || per_file(t) || t.permissive())
         }
         _ => false,
     }
 }
 
 #[test]
-fn our_crates_are_apache_with_only_permissive_licences_beside_it() {
+fn our_crates_are_apache_with_only_permissive_or_mpl_licences_beside_it() {
     assert!(ours_is_apache("Apache-2.0"));
     assert!(ours_is_apache("Apache-2.0 AND MIT"));
     assert!(ours_is_apache("MIT AND Apache-2.0"));
+    assert!(ours_is_apache("Apache-2.0 AND MPL-2.0"));
+    assert!(ours_is_apache("MPL-2.0 AND Apache-2.0 AND MIT"));
     assert!(!ours_is_apache("MIT"));
+    assert!(!ours_is_apache("MPL-2.0"));
     assert!(!ours_is_apache("Apache-2.0 OR MIT"));
-    assert!(!ours_is_apache("Apache-2.0 AND GPL-3.0-only"));
+    assert!(!ours_is_apache("Apache-2.0 OR MPL-2.0"));
     assert!(!ours_is_apache("Apache-2.0 WITH LLVM-exception"));
+    // Every other copyleft licence stays refused, beside MPL-2.0 or not, and so does MPL-2.0
+    // with an exception or in an older version.
+    for refused in [
+        "GPL-2.0-only",
+        "GPL-3.0-only",
+        "GPL-3.0-or-later",
+        "LGPL-2.1-only",
+        "LGPL-3.0-or-later",
+        "AGPL-3.0-only",
+        "EPL-2.0",
+        "CDDL-1.0",
+        "EUPL-1.2",
+        "MPL-1.1",
+        "MPL-2.0-no-copyleft-exception",
+        "MPL-2.0 WITH GPL-3.0-linking-exception",
+        "Unlicense",
+    ] {
+        assert!(
+            !ours_is_apache(&format!("Apache-2.0 AND {refused}")),
+            "{refused}"
+        );
+        assert!(
+            !ours_is_apache(&format!("Apache-2.0 AND MPL-2.0 AND {refused}")),
+            "MPL-2.0 and {refused}"
+        );
+    }
 }
 
 #[cfg_attr(
