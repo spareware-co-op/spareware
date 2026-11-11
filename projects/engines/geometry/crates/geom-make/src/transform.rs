@@ -303,6 +303,20 @@ fn run(
     })
 }
 
+/// The body of `input` under `t`, as `crate::placed` materialises a placement.
+///
+/// # Errors
+///
+/// [`run`]'s.
+pub(crate) fn placed_copy(
+    ctx: &OpContext<'_>,
+    input: Moved<'_>,
+    t: &TypedTransform,
+    motion: Motion,
+) -> Result<OpOutput<Made>, OpError> {
+    run(ctx, input, *t, motion)
+}
+
 /// An entity's new name, its origin, and the name itself when the copy made it (a transform keeps
 /// its input's name and makes none).
 pub(crate) type Renamed = (NameId, Origin, Option<TopoName>);
