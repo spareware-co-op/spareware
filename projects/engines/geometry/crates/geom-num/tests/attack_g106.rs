@@ -33,8 +33,11 @@ fn every_filter_call_goes_through_the_switch() {
         assert_eq!(unfiltered(text), Vec::<String>::new(), "{name}");
         calls += text.matches("filtered(||").count();
     }
-    // The four explicit predicates, the line-plane pair, the three-plane side and the crossing pair.
-    assert_eq!(calls, 9);
+    // The four explicit predicates, the line-plane pair, the three-plane side and the crossing pair,
+    // the three step probes (`orient2d_step`, `orient3d_step`, `incircle_step`), which ask a filter
+    // on its own, and `tpi_side`'s two further calls in plane.rs (`tpi_filtered` and
+    // `determinant_routed`): all must be switched off in a reference build as well.
+    assert_eq!(calls, 13);
 }
 
 #[test]

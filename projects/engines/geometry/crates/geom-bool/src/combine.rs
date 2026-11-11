@@ -1048,23 +1048,6 @@ impl<'a> Scene<'a> {
     }
 }
 
-/// A wire target's kept or trimmed `curves` as its one result: a wire body, with no names yet
-/// (11.9 names faces, cells and sections; a wire target's pieces wait for rules of their own).
-fn wired(curves: &Curves, meter: &mut WorkMeter<'_>) -> Result<Picked, Refused> {
-    Ok(Picked {
-        results: alloc::vec![Combined {
-            body: wire(curves, None, meter)?,
-            history: None,
-            names: Vec::new(),
-            cell: None,
-        }],
-        separated: true,
-        qualified: false,
-        leaks: Vec::new(),
-        memo: None,
-    })
-}
-
 /// The grid points nearest `merged`'s corners.
 fn corners_of(merged: &Merged) -> Result<Vec<P3>, NumError> {
     let mut out = Vec::with_capacity(merged.vertices.len());
