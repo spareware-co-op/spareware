@@ -68,7 +68,7 @@ pub enum Item {
     Make {
         /// The primitive.
         shape: Shape,
-        /// Which of the taken result's points to start on, and how far from it.
+        /// Which of the taken result's grid points to start on, and how far from it.
         at: Option<(u8, [i64; 3])>,
     },
     /// A transform or a pattern of an earlier result.
@@ -418,9 +418,16 @@ fn run(case: &Case) -> Result<Run, Finding> {
         let (call, input) = match &entry.item {
             Item::Make { shape, at } => {
                 let point = at.and_then(|(which, near)| {
-                    let points: Vec<&P3> = taken?.body.arenas().points.iter().collect();
+                    // Grid points only: a meeting of planes has no grid place of its own.
+                    let points: Vec<P3> = taken?
+                        .body
+                        .arenas()
+                        .points
+                        .iter()
+                        .filter_map(|p| p.grid())
+                        .collect();
                     let which = usize::from(which).checked_rem(points.len())?;
-                    Some(beside(**points.get(which)?, near))
+                    Some(beside(*points.get(which)?, near))
                 });
                 (make_call(shape, point), None)
             }
