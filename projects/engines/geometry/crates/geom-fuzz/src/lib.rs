@@ -31,7 +31,8 @@
 //! [`linalg`], the dense decompositions are refused or finite and the spectral ones backward stable
 //! (G49, G50), and [`roots`], the root engine misses no root and proves none twice, Brent's
 //! zero brackets its sign change (G51, G52, G53), and [`maths`], the proven maths functions are
-//! correctly rounded (G47). The layout every target follows, and how each engine runs it locally and in CI,
+//! correctly rounded (G47). Phase 4 adds [`planes`] (G123), `geom-poly`'s canonical planes and
+//! arrangement predicates give one entry to one plane and one order to any points or rays. The layout every target follows, and how each engine runs it locally and in CI,
 //! is in this crate's `README.md`.
 //!
 //! Layer: Development, in chapter 27's crate table: a development crate, outside the
@@ -201,6 +202,7 @@ pub mod make;
 pub mod maths;
 pub mod nurbs;
 pub mod orient2d;
+pub mod planes;
 pub mod predicates;
 pub mod robustness;
 pub mod roots;

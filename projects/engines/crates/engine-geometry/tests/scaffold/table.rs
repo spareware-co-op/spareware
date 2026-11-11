@@ -283,7 +283,7 @@ const ROWS: &[Row<'static>] = &[
     // 5. Checker.
     kernel("geom-check",     5, Accepted,   Elsewhere("G84"), "base curve topo intersect"),
     // 6. Arrangements.
-    kernel("geom-poly",      6, Accepted,   Here, "base math topo"),
+    kernel("geom-poly",      6, Accepted,   Elsewhere("G123"), "base math topo"),
     kernel("geom-bool",      6, Accepted,   Here, "base poly intersect topo name check bvh"),
     kernel("geom-2d",        6, Accepted,   Here, "base math curve topo name intersect bvh"),
     // 7. Meshes and spatial.
