@@ -3748,78 +3748,6 @@
     },
     {
       "file": "projects/engines/geometry/crates/geom-num/src/plane.rs",
-      "mutant": "replace match guard within_budget(&n, d) with true in Plane::through",
-      "line_text": "Some((n, d)) if within_budget(&n, d) => Ok(Plane { n, d }),",
-      "occurrences": 1,
-      "kind": "equivalent",
-      "reason": "within_budget's only caller is Plane::through, the only maker of a Plane (its fields are private). For grid points (|coordinate| <= M = 2^40 - 1) each normal component is at most 4M^2 < 2^82 and the offset at most 4M^3 < 2^122 in magnitude (the derivation on Plane::through; both reached in tests), below the budget's 2^83 and 2^125, so every clause is true for every input: the check never fails, and a weaker one (`||`, `<=`, or true) changes no result. It is kept because chapter 6.2 requires the plane type to check its budget at construction."
-    },
-    {
-      "file": "projects/engines/geometry/crates/geom-num/src/plane.rs",
-      "mutant": "replace within_budget -> bool with true",
-      "line_text": "let [nx, ny, nz] = *n;",
-      "occurrences": 1,
-      "kind": "equivalent",
-      "reason": "within_budget's only caller is Plane::through, the only maker of a Plane (its fields are private). For grid points (|coordinate| <= M = 2^40 - 1) each normal component is at most 4M^2 < 2^82 and the offset at most 4M^3 < 2^122 in magnitude (the derivation on Plane::through; both reached in tests), below the budget's 2^83 and 2^125, so every clause is true for every input: the check never fails, and a weaker one (`||`, `<=`, or true) changes no result. It is kept because chapter 6.2 requires the plane type to check its budget at construction."
-    },
-    {
-      "file": "projects/engines/geometry/crates/geom-num/src/plane.rs",
-      "mutant": "replace && with || in within_budget",
-      "line_text": "&& d.unsigned_abs() < OFFSET_LIMIT",
-      "occurrences": 1,
-      "kind": "equivalent",
-      "reason": "within_budget's only caller is Plane::through, the only maker of a Plane (its fields are private). For grid points (|coordinate| <= M = 2^40 - 1) each normal component is at most 4M^2 < 2^82 and the offset at most 4M^3 < 2^122 in magnitude (the derivation on Plane::through; both reached in tests), below the budget's 2^83 and 2^125, so every clause is true for every input: the check never fails, and a weaker one (`||`, `<=`, or true) changes no result. It is kept because chapter 6.2 requires the plane type to check its budget at construction."
-    },
-    {
-      "file": "projects/engines/geometry/crates/geom-num/src/plane.rs",
-      "mutant": "replace && with || in within_budget",
-      "line_text": "&& nz.unsigned_abs() < NORMAL_LIMIT",
-      "occurrences": 1,
-      "kind": "equivalent",
-      "reason": "within_budget's only caller is Plane::through, the only maker of a Plane (its fields are private). For grid points (|coordinate| <= M = 2^40 - 1) each normal component is at most 4M^2 < 2^82 and the offset at most 4M^3 < 2^122 in magnitude (the derivation on Plane::through; both reached in tests), below the budget's 2^83 and 2^125, so every clause is true for every input: the check never fails, and a weaker one (`||`, `<=`, or true) changes no result. It is kept because chapter 6.2 requires the plane type to check its budget at construction."
-    },
-    {
-      "file": "projects/engines/geometry/crates/geom-num/src/plane.rs",
-      "mutant": "replace && with || in within_budget",
-      "line_text": "&& ny.unsigned_abs() < NORMAL_LIMIT",
-      "occurrences": 1,
-      "kind": "equivalent",
-      "reason": "within_budget's only caller is Plane::through, the only maker of a Plane (its fields are private). For grid points (|coordinate| <= M = 2^40 - 1) each normal component is at most 4M^2 < 2^82 and the offset at most 4M^3 < 2^122 in magnitude (the derivation on Plane::through; both reached in tests), below the budget's 2^83 and 2^125, so every clause is true for every input: the check never fails, and a weaker one (`||`, `<=`, or true) changes no result. It is kept because chapter 6.2 requires the plane type to check its budget at construction."
-    },
-    {
-      "file": "projects/engines/geometry/crates/geom-num/src/plane.rs",
-      "mutant": "replace < with <= in within_budget",
-      "line_text": "nx.unsigned_abs() < NORMAL_LIMIT",
-      "occurrences": 1,
-      "kind": "equivalent",
-      "reason": "within_budget's only caller is Plane::through, the only maker of a Plane (its fields are private). For grid points (|coordinate| <= M = 2^40 - 1) each normal component is at most 4M^2 < 2^82 and the offset at most 4M^3 < 2^122 in magnitude (the derivation on Plane::through; both reached in tests), below the budget's 2^83 and 2^125, so every clause is true for every input: the check never fails, and a weaker one (`||`, `<=`, or true) changes no result. It is kept because chapter 6.2 requires the plane type to check its budget at construction."
-    },
-    {
-      "file": "projects/engines/geometry/crates/geom-num/src/plane.rs",
-      "mutant": "replace < with <= in within_budget",
-      "line_text": "&& ny.unsigned_abs() < NORMAL_LIMIT",
-      "occurrences": 1,
-      "kind": "equivalent",
-      "reason": "within_budget's only caller is Plane::through, the only maker of a Plane (its fields are private). For grid points (|coordinate| <= M = 2^40 - 1) each normal component is at most 4M^2 < 2^82 and the offset at most 4M^3 < 2^122 in magnitude (the derivation on Plane::through; both reached in tests), below the budget's 2^83 and 2^125, so every clause is true for every input: the check never fails, and a weaker one (`||`, `<=`, or true) changes no result. It is kept because chapter 6.2 requires the plane type to check its budget at construction."
-    },
-    {
-      "file": "projects/engines/geometry/crates/geom-num/src/plane.rs",
-      "mutant": "replace < with <= in within_budget",
-      "line_text": "&& nz.unsigned_abs() < NORMAL_LIMIT",
-      "occurrences": 1,
-      "kind": "equivalent",
-      "reason": "within_budget's only caller is Plane::through, the only maker of a Plane (its fields are private). For grid points (|coordinate| <= M = 2^40 - 1) each normal component is at most 4M^2 < 2^82 and the offset at most 4M^3 < 2^122 in magnitude (the derivation on Plane::through; both reached in tests), below the budget's 2^83 and 2^125, so every clause is true for every input: the check never fails, and a weaker one (`||`, `<=`, or true) changes no result. It is kept because chapter 6.2 requires the plane type to check its budget at construction."
-    },
-    {
-      "file": "projects/engines/geometry/crates/geom-num/src/plane.rs",
-      "mutant": "replace < with <= in within_budget",
-      "line_text": "&& d.unsigned_abs() < OFFSET_LIMIT",
-      "occurrences": 1,
-      "kind": "equivalent",
-      "reason": "within_budget's only caller is Plane::through, the only maker of a Plane (its fields are private). For grid points (|coordinate| <= M = 2^40 - 1) each normal component is at most 4M^2 < 2^82 and the offset at most 4M^3 < 2^122 in magnitude (the derivation on Plane::through; both reached in tests), below the budget's 2^83 and 2^125, so every clause is true for every input: the check never fails, and a weaker one (`||`, `<=`, or true) changes no result. It is kept because chapter 6.2 requires the plane type to check its budget at construction."
-    },
-    {
-      "file": "projects/engines/geometry/crates/geom-num/src/plane.rs",
       "mutant": "replace lpi_classify -> Option<Sign> with None",
       "line_text": "let a = Wide::<L>::product_i128(w1, s2p)?;",
       "occurrences": 1,
@@ -5329,6 +5257,14 @@
       "occurrences": 1,
       "kind": "equivalent",
       "reason": "A w of 0.0 or -0.0 (which compares equal to 0.0) has already returned the half-turn error just above, so here w is nonzero and w < 0 and w <= 0 agree for every input."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-num/src/plane.rs",
+      "mutant": "replace match guard within_budget(&n, d) with true in Plane::through",
+      "line_text": "Some((n, d)) if within_budget(&n, d) => Ok(Plane { n, d }),",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "Plane::through takes grid points (|coordinate| <= M = 2^40 - 1), so each normal component is at most 4M^2 < 2^82 and the offset at most 4M^3 < 2^122 in magnitude: within_budget holds of every plane it can build, and true in its place is the same function. Plane::new takes coefficients from outside, and its tests reach each limit."
     }
   ],
   "coverage_off": [
@@ -5795,6 +5731,13 @@
       "occurrences": 1,
       "piece": "G41",
       "reason": "magnitude_bits runs only at compile time, in constants, and the filtered orient2d path is off while ORIENT2D_FILTER_FIRST is false (G42's measurement keeps it off), so no test runs these lines. G41 proves or removes them."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-poly/src/order.rs",
+      "line_text": "Err(e) => Err(e),",
+      "occurrences": 1,
+      "piece": "G41",
+      "reason": "Tpi::new's one error other than Degenerate is BudgetExceeded, the arm G41's proofs close in geom-num: planes within budget cannot reach it, and every Plane is within budget, so no test can run this line."
     }
   ]
 }

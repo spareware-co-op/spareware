@@ -23,6 +23,12 @@
 //! Its direct dependencies are its row of chapter 27's crate table, checked by the
 //! scaffold test in `engine-geometry` (`tests/scaffold`).
 //!
-//! Status: scaffold only; built by pieces G123, G124, G125, G126, G127, G128, G142.
+//! Status: canonical planes ([`plane`]) and the arrangement predicates ([`order`]) built (G123);
+//! the rest by pieces G124, G125, G126, G127, G128, G142.
 #![cfg_attr(not(test), no_std)]
 #![forbid(unsafe_code)]
+
+extern crate alloc;
+
+pub mod order;
+pub mod plane;

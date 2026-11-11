@@ -39,6 +39,8 @@ geom-check = { path = "../geom-check", features = ["full"] }
 geom-make = { path = "../geom-make" }
 geom-op = { path = "../geom-op" }
 geom-topo = { path = "../geom-topo" }
+# The planes target (G123): geom-poly's planes and orders, under test (ours, Apache-2.0).
+geom-poly = { path = "../geom-poly" }
 # The oracle of the wide-integer target (G26) and of the variants target (G42): exact
 # arbitrary-precision integers, the big-integer oracle chapter 29.3 names. MIT OR Apache-2.0.
 num-bigint = "0.4.8"
