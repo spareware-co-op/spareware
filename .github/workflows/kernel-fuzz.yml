@@ -165,7 +165,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        target: [arenas_fuzz, attributes_fuzz, batch_fuzz, boxtree_fuzz, cache_fuzz, cbor_fuzz, cdt_fuzz, curves_fuzz, linalg_fuzz, make_fuzz, maths_fuzz, nurbs_fuzz, orient2d_fuzz, planes_fuzz, predicates_fuzz, roots_fuzz, sequence_fuzz, surfaces_fuzz, transforms_fuzz, variants_fuzz, wide_fuzz]
+        target: [arenas_fuzz, attributes_fuzz, batch_fuzz, boxtree_fuzz, cache_fuzz, cbor_fuzz, cdt_fuzz, curves_fuzz, exact_fuzz, linalg_fuzz, make_fuzz, maths_fuzz, nurbs_fuzz, orient2d_fuzz, planes_fuzz, predicates_fuzz, roots_fuzz, sequence_fuzz, surfaces_fuzz, transforms_fuzz, variants_fuzz, wide_fuzz]
     defaults:
       run:
         shell: bash
@@ -503,12 +503,6 @@ jobs:
       - name: Kani left Cargo.lock as it was
         run: git diff --exit-code -- Cargo.lock
 
-  # Bounded proofs beside geom-op's own code (chapter 28.7; piece G86), as kani-num proves
-  # geom-num's: the canonical CBOR encoder's binary16 and binary32 narrowing, each proven exact and
-  # shortest for every finite double, and a refused double proven to write nothing. geom-op's
-  # tests/kani_harnesses.rs holds this list to the harnesses in the source. The budget: on a
-  # development machine (Kani 0.68.0) each proof took under 3 seconds after a one-minute build, so
-  # 60 minutes leaves room for Kani's install, which takes most of a job.
   kani-op:
     name: Kani, geom-op (${{ matrix.proof }})
     runs-on: ubuntu-latest

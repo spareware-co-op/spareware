@@ -5857,6 +5857,246 @@
       "occurrences": 1,
       "kind": "equivalent",
       "reason": "The edges of one triangle are distinct, so an edge never equals the least so far."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-mesh/src/exact/mod.rs",
+      "mutant": "replace | with ^ in gcd",
+      "line_text": "return u128::from(x | y);",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "One of x and y is 0 on this line, so or and exclusive or give one number."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-mesh/src/exact/mod.rs",
+      "mutant": "replace >>= with <<= in gcd",
+      "line_text": "x >>= x.trailing_zeros();",
+      "occurrences": 1,
+      "kind": "hangs",
+      "reason": "A large even x shifts out to 0, which never ends the loop."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-mesh/src/exact/mod.rs",
+      "mutant": "replace >>= with <<= in gcd",
+      "line_text": "y >>= y.trailing_zeros();",
+      "occurrences": 1,
+      "kind": "hangs",
+      "reason": "y stays even, so the loop never reaches 0."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-mesh/src/exact/mod.rs",
+      "mutant": "replace < with <= in every_third",
+      "line_text": "while shift < u128::BITS {",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "The shifts go up in steps of 3, 6, 12, 24, 48 and 96 from 0, none of which lands on 128."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-mesh/src/exact/mod.rs",
+      "mutant": "replace | with ^ in spread",
+      "line_text": "x = (x | (x << 64)) & every_third(32);",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "x and x shifted overlap only in bits the mask on this line clears, so or and exclusive or agree."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-mesh/src/exact/mod.rs",
+      "mutant": "replace | with ^ in spread",
+      "line_text": "x = (x | (x << 32)) & every_third(16);",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "x and x shifted overlap only in bits the mask on this line clears, so or and exclusive or agree."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-mesh/src/exact/mod.rs",
+      "mutant": "replace | with ^ in spread",
+      "line_text": "x = (x | (x << 16)) & every_third(8);",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "x and x shifted overlap only in bits the mask on this line clears, so or and exclusive or agree."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-mesh/src/exact/mod.rs",
+      "mutant": "replace | with ^ in spread",
+      "line_text": "x = (x | (x << 8)) & every_third(4);",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "x and x shifted overlap only in bits the mask on this line clears, so or and exclusive or agree."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-mesh/src/exact/mod.rs",
+      "mutant": "replace | with ^ in spread",
+      "line_text": "x = (x | (x << 4)) & every_third(2);",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "x and x shifted overlap only in bits the mask on this line clears, so or and exclusive or agree."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-mesh/src/exact/mod.rs",
+      "mutant": "replace | with ^ in spread",
+      "line_text": "(x | (x << 2)) & every_third(1)",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "x and x shifted overlap only in bits the mask on this line clears, so or and exclusive or agree."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-mesh/src/exact/build.rs",
+      "mutant": "delete match arm (Ok(a), Ok(b)) in part",
+      "line_text": "(Ok(a), Ok(b)) => a.checked_div(b).map_or(0, i128::from),",
+      "occurrences": 1,
+      "kind": "harmless",
+      "reason": "The arm only saves the 128-bit division below it, which gives the same quotient."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-mesh/src/exact/build.rs",
+      "mutant": "replace | with ^ in rank",
+      "line_text": "let key = (u64::from(width) << 56) | top;",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "top is below 2^56, and the width sits above it."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-mesh/src/exact/build.rs",
+      "mutant": "replace | with ^ in rank",
+      "line_text": "(1 << 63) | key",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "A plane coefficient is below 2^127, so its width is at most 127 and key is below 2^63."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-mesh/src/exact/build.rs",
+      "mutant": "replace < with <= in grouped",
+      "line_text": "forward: a < b,",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "An edge from a vertex to itself is refused whichever way it counts, and no other edge has a equal to b."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-mesh/src/exact/build.rs",
+      "mutant": "replace > with >= in emit",
+      "line_text": "let ordered = if last.saturating_sub(first) > 1 {",
+      "occurrences": 1,
+      "kind": "harmless",
+      "reason": "A face of one loop sorts to that same loop, at the cost of the sort."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-mesh/src/exact/check.rs",
+      "mutant": "replace < with <= in shape",
+      "line_text": "&& p.he_vert.iter().all(|&v| (v as usize) < p.verts.len())",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "The index one past the end fails in `at` with the same Shape fault."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-mesh/src/exact/check.rs",
+      "mutant": "replace < with <= in shape",
+      "line_text": ".all(|&h| h == NONE || (h as usize) < halves)",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "The index one past the end fails in `at` with the same Shape fault."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-mesh/src/exact/check.rs",
+      "mutant": "replace < with <= in shape",
+      "line_text": ".all(|f| (f.row as usize) < p.planes.len())",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "The index one past the end fails in `at` with the same Shape fault."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-mesh/src/exact/check.rs",
+      "mutant": "replace > with >= in plane_in_order",
+      "line_text": "let upright = [x, y, z].iter().find(|c| **c != 0).is_some_and(|c| *c > 0);",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "find stops at a coefficient that is not 0."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-mesh/src/exact/check.rs",
+      "mutant": "replace == with != in vertices",
+      "line_text": "let same = rest.iter().take_while(|e| e.0 == head.0).count();",
+      "occurrences": 1,
+      "kind": "hangs",
+      "reason": "A run of no points never moves past the head."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-mesh/src/exact/mod.rs",
+      "mutant": "replace | with ^ in morton",
+      "line_text": "spread(shift(p.x.get())) | (spread(shift(p.y.get())) << 1) | (spread(shift(p.z.get())) << 2)",
+      "occurrences": 2,
+      "kind": "equivalent",
+      "reason": "Spread coordinates hold every third bit, and the shifts by 1 and 2 keep them apart."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-mesh/src/exact/build.rs",
+      "mutant": "replace rank -> u64 with 0",
+      "line_text": "let magnitude = v.unsigned_abs();",
+      "occurrences": 1,
+      "kind": "harmless",
+      "reason": "With every rank equal, every plane ties and the sort of ties gives the same order, one thread and more slowly."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-mesh/src/exact/build.rs",
+      "mutant": "replace rank -> u64 with 1",
+      "line_text": "let magnitude = v.unsigned_abs();",
+      "occurrences": 1,
+      "kind": "harmless",
+      "reason": "With every rank equal, every plane ties and the sort of ties gives the same order, one thread and more slowly."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-mesh/src/exact/build.rs",
+      "mutant": "replace != with == in radial",
+      "line_text": "reversed: facing.flipped != against,",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "The mutant turns every flap over at once, which moves each by half a circle about the edge and leaves their order round it, and so the pairs, as they were."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-mesh/src/exact/build.rs",
+      "mutant": "replace > with >= in map_blocks",
+      "line_text": "if charge > 0 {",
+      "occurrences": 1,
+      "kind": "harmless",
+      "reason": "With a charge of 0 the mutant calls charge(0), which adds no work and only counts toward the meter's next cancellation poll: every result and every budget stop is the same, and a cancellation is noticed a few items sooner."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-mesh/src/exact/build.rs",
+      "mutant": "replace || with && in edge_leaders",
+      "line_text": "if given || !grid(c)? || !grid(*at(after, c)?)? {",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "Read as given || (!grid(c) && !grid(after)), it lets an edge with one end off the grid and no given plane share; corner_plane refuses such an edge as EdgePlaneNeeded at its lower half-edge, which the leader is, so the same error comes first either way. (The other || on this line is caught by given_edge_planes_are_never_shared.)"
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-mesh/src/exact/build.rs",
+      "mutant": "delete ! in edge_leaders",
+      "line_text": "if given || !grid(c)? || !grid(*at(after, c)?)? {",
+      "occurrences": 2,
+      "kind": "harmless",
+      "reason": "Either deletion stops grid edges from sharing, so each half-edge makes its own plane, the same plane its twin would have given it; and it lets only one half of an edge with an end off the grid ask to share, while its twin's axis stays None, so no pair shares. The mesh is the same; only more planes are made and pooled."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-mesh/src/exact/build.rs",
+      "mutant": "replace != with == in edge_leaders",
+      "line_text": "if p.forward != q.forward && axis(a)?.is_some() && axis(a)? == axis(b)? {",
+      "occurrences": 1,
+      "kind": "harmless",
+      "reason": "The mutant never pairs twins, so each half-edge makes its own plane, the same one; and it pairs two half-edges running one way, which make the same plane from the same ends and which the build refuses as UnevenEdge either way. The mesh or the error is the same; only more planes are made."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-mesh/src/exact/build.rs",
+      "mutant": "replace next_group -> Option<&'a[Use]> with Some(Vec::leak(Vec::new()))",
+      "line_text": "let head = rest.first()?;",
+      "occurrences": 1,
+      "kind": "hangs",
+      "reason": "Every call then gives an empty group and leaves the rest as it was, so the loops that take groups until none is left never end."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-mesh/src/exact/build.rs",
+      "mutant": "replace == with != in next_group",
+      "line_text": "let same = rest.iter().take_while(|u| u.high == head.high).count();",
+      "occurrences": 1,
+      "kind": "hangs",
+      "reason": "The first use always has its own end, so nothing is taken: an empty group, the rest unchanged, and the loops that take groups never end."
     }
   ],
   "coverage_off": [

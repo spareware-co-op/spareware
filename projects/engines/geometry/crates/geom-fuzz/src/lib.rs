@@ -34,7 +34,8 @@
 //! correctly rounded (G47). Phase 4 adds [`planes`] (G123), `geom-poly`'s canonical planes and
 //! arrangement predicates give one entry to one plane and one order to any points or rays, and
 //! [`cdt`] (G153), `geom-mesh`'s triangulation is a true constrained Delaunay triangulation and one
-//! answer in any input order. The layout every target follows, and how each engine runs it locally and in CI,
+//! answer in any input order, and [`exact`] (G146), `geom-mesh`'s exact mesh refuses what is not a
+//! mesh and gives one mesh in any input order. The layout every target follows, and how each engine runs it locally and in CI,
 //! is in this crate's `README.md`.
 //!
 //! Layer: Development, in chapter 27's crate table: a development crate, outside the
@@ -134,7 +135,8 @@
 //! - `bolero` 0.13.7, a development dependency only: the `check!` front end, with its test-mode
 //!   engine and, under cargo-bolero, the engine chosen (`bolero-libfuzzer`, `bolero-afl`,
 //!   `bolero-honggfuzz` or `bolero-kani`).
-//! - `geom-mesh` and `geom-run` (Apache-2.0, ours), the triangulation under test and its meter.
+//! - `geom-mesh`, `geom-op` and `geom-run` (Apache-2.0, ours), the meshes under test, their names
+//!   and their meter.
 //! - `geom-gen` (Apache-2.0, ours, development only), whose description parser the [`variants`]
 //!   target reads the predicates with.
 //! - `geom-format` and `geom-run` (Apache-2.0, ours), the code under test of the [`cbor`] target and
@@ -201,6 +203,7 @@ pub mod cache;
 pub mod cbor;
 pub mod cdt;
 pub mod curves;
+pub mod exact;
 pub mod linalg;
 pub mod make;
 pub mod maths;

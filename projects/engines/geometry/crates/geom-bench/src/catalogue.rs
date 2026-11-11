@@ -416,6 +416,7 @@ pub static OPS: &[Op] = &[
     Op { group: "batch", name: "surface_points", measures: "geom_surface::ParamSurface::points", classes: T, prepare: |c| bind(inputs::batch::surface_points(c), kernels::batch::surface_points) },
     // The triangulation's hot path (piece G153; decision 32.46).
     Op { group: "mesh", name: "cdt", measures: "geom_mesh::cdt::triangulate", classes: T, prepare: |c| bind(inputs::mesh::cdt(c), kernels::mesh::cdt) },
+    Op { group: "mesh", name: "exact_build", measures: "geom_mesh::exact::build::build", classes: T, prepare: |c| bind(inputs::mesh::exact_build(c), kernels::mesh::exact_build) },
     // geom-nurbs's hot paths (pieces G56, G58 and G59; decision 32.46): evaluation, interpolation
     // and the Bernstein bound.
     Op { group: "nurbs", name: "curve_point", measures: "geom_nurbs::Curve::point", classes: T, prepare: |c| bind(inputs::nurbs::curve_point(c), kernels::nurbs::curve_point) },
