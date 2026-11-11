@@ -441,8 +441,9 @@ fn vertex_off_surface(body: &Body, exactness: Exactness) -> Option<Broken> {
     let by = past(exactness)?;
     same(body, exactness, |a| {
         let (row, normal) = on_flat(a)?;
-        let moved = along(*a.points.get(row)?, normal, by)?;
-        a.points.set(row, moved).ok()
+        // A meeting of planes is exact and is not moved: the fault is built on a grid vertex.
+        let moved = along(a.points.get(row)?.grid()?, normal, by)?;
+        a.points.set(row, moved.into()).ok()
     })
 }
 
@@ -451,8 +452,8 @@ fn vertex_off_surface(body: &Body, exactness: Exactness) -> Option<Broken> {
 fn lowered_bound(body: &Body, _exactness: Exactness) -> Option<Broken> {
     let broken = edited(body, |a| {
         let (row, normal) = on_flat(a)?;
-        let moved = along(*a.points.get(row)?, normal, 8)?;
-        a.points.set(row, moved).ok()
+        let moved = along(a.points.get(row)?.grid()?, normal, 8)?;
+        a.points.set(row, moved.into()).ok()
     })?;
     Some(Broken {
         body: broken,
@@ -546,7 +547,8 @@ fn half_size(a: &Arenas) -> Option<[i64; 3]> {
 }
 
 /// Two crossing faces: a flat body's solid gains a second shell, a copy of its own moved half its
-/// size along each axis, so faces of the two cross away from any shared edge.
+/// size along each axis, so faces of the two cross away from any shared edge. Built on a body of
+/// grid points only: a meeting of planes would need its planes moved too.
 #[allow(
     clippy::too_many_lines,
     reason = "one pass copies every arena's rows; split, each piece would carry the same counts"
@@ -650,7 +652,7 @@ fn crossing_faces(body: &Body, exactness: Exactness) -> Option<Broken> {
     }
     for row in (0..points).filter_map(Ix::new) {
         out.points
-            .push(t.apply(*a.points.get(row)?).ok()?.value())
+            .push(t.apply(a.points.get(row)?.grid()?).ok()?.value().into())
             .ok()?;
     }
     let body = builder
