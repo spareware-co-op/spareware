@@ -62,6 +62,38 @@ pub enum DerivativeBound<const D: usize> {
 }
 
 /// The behaviour of a curve kind of dimension D.
+///
+/// # Spans
+///
+/// [`ParamCurve::bound`] and [`ParamCurve::derivative_bound`] take a span (lo, hi) inside the
+/// domain [a, b], a ≤ lo ≤ hi ≤ b; lo = hi is a span like any other, the one parameter. A break
+/// is a parameter where the curve, or the derivative asked for, has two one-sided values: a
+/// vertex of a polyline, a joint of a composite, a station of an offset by distances, a knot of
+/// reduced continuity, a break of a curve the kind is built on. Every kind owes the same thing:
+///
+/// - **A span with lo < hi is the curve restricted to it.** The bound holds every parameter
+///   strictly inside from both sides, lo from the right and hi from the left: the one-sided
+///   values a walk along the span meets, and not the value beyond an end that is a break.
+/// - **A span of one parameter is that parameter from both sides.** At a break the bound holds
+///   both one-sided values, because a caller that has narrowed a span to one parameter may have
+///   come from either side; at an end of the domain, the one side there is; away from a break
+///   the two sides are one value, and the bound is a box around it. So a span of one parameter
+///   is not the limit of the spans that end on it: it can hold more than they do.
+/// - **A bound is a box.** Every lower end is finite and at most its upper end. A kind that
+///   cannot give one returns an error, or [`DerivativeBound::Unbounded`] for a derivative; it
+///   never returns an empty or inverted box, and never a box that leaves out a value above.
+/// - **A kind built on another curve may hold more at its own ends.** Where a trim, a segment
+///   or an offset ends on a break of the curve under it, its bound over that end may also hold
+///   that curve's value from beyond the end: a box that holds more is still a bound.
+///
+/// [`ParamCurve::enclose`], [`ParamCurve::point`] and [`ParamCurve::derivatives`] take one
+/// parameter and one side, and give that side's value at a break; at an end of the domain they
+/// are asked from the side inside it.
+///
+/// `geom_curve::contract::check` holds every kind to this at each parameter it is given and at
+/// the breaks the kind lists ([`ParamCurve::breaks`]), under the laws
+/// [`crate::Law::BoundHoldsPoints`] and [`crate::Law::DerivativeBoundHoldsDerivatives`]. A kind
+/// with breaks must list them, or the contract cannot visit them.
 pub trait ParamCurve<const D: usize> {
     /// The parameter domain [a, b].
     fn domain(&self) -> (f64, f64);
@@ -116,7 +148,9 @@ pub trait ParamCurve<const D: usize> {
         meter: &mut WorkMeter<'_>,
     ) -> Result<Vec<[Interval; D]>, CurveError>;
 
-    /// A box holding the curve at every parameter of `span`, inside the domain.
+    /// A box holding the curve at every parameter of `span`, inside the domain; over a span of
+    /// one parameter, the point from both sides where the curve parts there (the trait's rule
+    /// for spans).
     ///
     /// # Errors
     ///
@@ -124,7 +158,8 @@ pub trait ParamCurve<const D: usize> {
     fn bound(&self, span: (f64, f64), meter: &mut WorkMeter<'_>) -> Result<Bounds<D>, CurveError>;
 
     /// A bound on the derivative of `order` at every parameter of `span`, from both sides at a
-    /// break.
+    /// break inside it, and from both sides at a break that is the whole span (the trait's rule
+    /// for spans).
     ///
     /// # Errors
     ///
@@ -135,6 +170,14 @@ pub trait ParamCurve<const D: usize> {
         order: usize,
         meter: &mut WorkMeter<'_>,
     ) -> Result<DerivativeBound<D>, CurveError>;
+
+    /// The parameters where the curve may have a break (the trait's rule for spans), in
+    /// increasing order, some perhaps repeated or outside the domain; none for a kind that is
+    /// smooth everywhere, which is what this gives unless the kind says otherwise. The kind
+    /// contract reads them, to hold the kind to the rule at each.
+    fn breaks(&self) -> Vec<f64> {
+        Vec::new()
+    }
 
     /// The curve as a NURBS curve, with the map from the curve's parameter t to the NURBS
     /// curve's u (the same parameter, or a conic's tangent half-angle map), and a certified bound
@@ -372,6 +415,26 @@ impl<const D: usize> ParamCurve<D> for CurveKind<D> {
             CurveKind::Offset(c) => c.derivative_bound(span, order, meter),
             CurveKind::OnSurface(c) => c.derivative_bound(span, order, meter),
             CurveKind::Transition(c) => c.derivative_bound(span, order, meter),
+        }
+    }
+
+    fn breaks(&self) -> Vec<f64> {
+        match self {
+            CurveKind::Nurbs(c) => ParamCurve::breaks(c),
+            CurveKind::Line(c) => ParamCurve::breaks(c),
+            CurveKind::Circle(c) => ParamCurve::breaks(c),
+            CurveKind::Ellipse(c) => ParamCurve::breaks(c),
+            CurveKind::Hyperbola(c) => ParamCurve::breaks(c),
+            CurveKind::Parabola(c) => ParamCurve::breaks(c),
+            CurveKind::Helix(c) => ParamCurve::breaks(c),
+            CurveKind::Polynomial(c) => ParamCurve::breaks(c),
+            CurveKind::Involute(c) => ParamCurve::breaks(c),
+            CurveKind::Bulge(c) => ParamCurve::breaks(c),
+            CurveKind::Trimmed(c) => ParamCurve::breaks(c),
+            CurveKind::Composite(c) => ParamCurve::breaks(c),
+            CurveKind::Offset(c) => ParamCurve::breaks(c),
+            CurveKind::OnSurface(c) => ParamCurve::breaks(c),
+            CurveKind::Transition(c) => ParamCurve::breaks(c),
         }
     }
 

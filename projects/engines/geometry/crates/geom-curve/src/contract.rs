@@ -2,7 +2,10 @@
 //! (`projects/engines/geometry/AGENTS.md`, "How to add a geometry kind").
 //!
 //! What it does: [`check`] runs a kind through every law of [`Law`] at the parameters given and
-//! returns the first law broken, with where. The laws compare certified objects with each other:
+//! returns the first law broken, with where. The two laws of bounds are also checked over the
+//! span that is one parameter alone, at each parameter given and at the kind's own breaks
+//! ([`ParamCurve::breaks`]): there a bound must be a box that holds the value from both sides
+//! (the trait's rule for spans). The laws compare certified objects with each other:
 //! two enclosures of one exact value must overlap, so a bound, an enclosure, a conversion, a split,
 //! a reversal or a transform that is wrong by more than its own stated error is caught wherever a
 //! sample lands on it. Evaluation in doubles is compared with the certified enclosure within 2^−30
@@ -22,7 +25,8 @@
 //! SIAM (2009), <https://doi.org/10.1137/1.9780898717716>, the inclusion property of chapter 5).
 //!
 //! Cost: for each parameter, a few enclosures and bounds of the kind, a split, a reversal and a
-//! transform: the kind's own costs, a few dozen times.
+//! transform: the kind's own costs, a few dozen times; and for each of at most sixteen of the
+//! kind's breaks, two enclosures and three bounds.
 
 #![allow(
     clippy::many_single_char_names,
@@ -60,6 +64,68 @@ fn meets<const D: usize>(a: &[Interval; D], b: &Bounds<D>) -> bool {
     a.iter()
         .zip(b.lo.iter().zip(&b.hi))
         .all(|(x, (&lo, &hi))| x.lo() <= hi && lo <= x.hi())
+}
+
+/// Whether a bound is a box: every lower end finite and at most its upper end.
+fn is_box<const D: usize>(b: &Bounds<D>) -> bool {
+    b.lo.iter()
+        .zip(&b.hi)
+        .all(|(&lo, &hi)| lo.is_finite() && hi.is_finite() && lo <= hi)
+}
+
+/// The most breaks of a kind the contract visits: evenly spread over the kind's own list, so a
+/// curve of a thousand knots costs no more than one of sixteen.
+const BREAKS: usize = 16;
+
+/// The trait's rule for a span of one parameter, at `t` in [lo, hi]: the bound over (t, t) and
+/// the derivative bounds of orders 1 and 2 there are boxes, and each meets the enclosure of its
+/// value from the right and from the left (at an end of the domain, from the one side inside
+/// it). A side the kind cannot enclose is not compared, and a derivative that is `Unbounded`
+/// says so honestly; a bound that fails where the span around `t` was bounded is a broken law.
+fn one_parameter<K: ParamCurve<D>, const D: usize>(
+    kind: &K,
+    t: f64,
+    (lo, hi): (f64, f64),
+    meter: &mut WorkMeter<'_>,
+) -> Result<(), ContractError> {
+    let points = kind
+        .bound((t, t), meter)
+        .map_err(|e| broken(Law::BoundHoldsPoints, t, Some(e)))?;
+    if !is_box(&points) {
+        return Err(broken(Law::BoundHoldsPoints, t, None));
+    }
+    let mut derivatives = [None; 2];
+    for (k, slot) in derivatives.iter_mut().enumerate() {
+        let order = k.saturating_add(1);
+        match kind
+            .derivative_bound((t, t), order, meter)
+            .map_err(|e| broken(Law::DerivativeBoundHoldsDerivatives, t, Some(e)))?
+        {
+            DerivativeBound::Bounded(b) if !is_box(&b) => {
+                return Err(broken(Law::DerivativeBoundHoldsDerivatives, t, None));
+            }
+            DerivativeBound::Bounded(b) => *slot = Some(b),
+            DerivativeBound::Unbounded => {}
+        }
+    }
+    let sides = [
+        (t < hi).then_some(Limit::FromRight),
+        (t > lo).then_some(Limit::FromLeft),
+    ];
+    for side in sides.into_iter().flatten() {
+        let Ok(e) = kind.enclose(t, side, 2, meter) else {
+            continue;
+        };
+        if !e.first().is_some_and(|p| meets(p, &points)) {
+            return Err(broken(Law::BoundHoldsPoints, t, None));
+        }
+        for (dk, b) in e.iter().skip(1).zip(&derivatives) {
+            if b.as_ref().is_some_and(|b| !meets(dk, b)) {
+                return Err(broken(Law::DerivativeBoundHoldsDerivatives, t, None));
+            }
+        }
+    }
+    Ok(())
 }
 
 /// Whether doubles lie in an enclosure within the relative slack of `largest`, the largest value
@@ -182,6 +248,8 @@ pub fn check<K: ParamCurve<D>, const D: usize>(
                 _ => {}
             }
         }
+        // The span that is t alone, from both sides.
+        one_parameter(kind, t, (lo, hi), meter)?;
         // The NURBS conversion, at the point its parameter map gives.
         if let Some(nurbs) = &nurbs {
             let n = nurbs_at(&nurbs.value, t, meter).map_err(call(Law::NurbsWithinItsError, t))?;
@@ -240,6 +308,15 @@ pub fn check<K: ParamCurve<D>, const D: usize>(
         if again != e {
             return Err(broken(Law::Deterministic, t, None));
         }
+    }
+    // The span that is one break alone, at the kind's own breaks inside the domain: where a
+    // bound that holds one side only is wrong.
+    let mut breaks = kind.breaks();
+    breaks.retain(|&t| lo <= t && t <= hi);
+    breaks.dedup();
+    let step = (breaks.len() / BREAKS).saturating_add(1);
+    for &t in breaks.iter().step_by(step) {
+        one_parameter(kind, t, (lo, hi), meter)?;
     }
     if kind.bound((lo, hi), meter) != Ok(whole) {
         return Err(broken(Law::Deterministic, lo, None));

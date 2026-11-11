@@ -2215,6 +2215,7 @@
           "file": "projects/engines/geometry/crates/geom-curve/src/bulge.rs",
           "guarantees": [
             "**Exact definition, certified evaluation.** Points, derivatives of every order (Leibniz's rule on W·C = A) and bounds over spans are interval evaluations of those rational functions.",
+            "**A span of one vertex is bounded from both sides.** The tangent turns at a vertex, so a bound over the vertex alone is the hull of the segment before it and the segment after it there, as the trait's rule for a span of one parameter asks ([`ParamCurve`]).",
             "**An exact NURBS form.** The segments are rational quadratic Bezier pieces on the same parameter; an arc whose middle weight is low (a semicircle or more) is first halved, or quartered, by de Casteljau's algorithm at dyadic parameters, which keeps every weight positive. The deviation bounds only the rounding of the pieces' points and weights.",
             "**Transforms change the kind explicitly.** A similarity keeps a bulge polyline (vertices mapped, widths scaled, bulges negated by a mirror); any other transform moves its NURBS form, the form's deviation stretched by the transform (at most by its linear part's Frobenius norm) plus the move's. A grid transform that moves every vertex exactly is exact: deviation 0 (chapter 7; piece G69).",
             "**Splits are trimmed polylines.** A split leaves the polyline untouched and trims it (`crate::trimmed`); a reversal reverses the vertices and negates the bulges, exactly."
@@ -2240,6 +2241,7 @@
           "guarantees": [
             "**Exact definition.** Evaluation at a parameter whose segment parameter is exact is the segment's; otherwise the segment parameter is enclosed and the segment bounded over it, so enclosures stay certified; derivatives carry the affine map's factor.",
             "**Certified conversion.** The deviation adds, per segment, the segment's conversion, elevation and Bezier extraction, the joint's gap and weight rescaling (the rational bound of `crate::rational`), and the rounding of shifted knots (a Bezier piece reparametrised by e at its ends moves by at most |N′|·e).",
+            "**A span of one joint is bounded from both sides.** The tangent may turn at a joint, and a joint may have a gap, so a bound over the joint alone holds the end of the segment before it and the start of the segment after it, as the trait's rule for a span of one parameter asks ([`ParamCurve`]); so does a bound over one break of a segment's own curve.",
             "**Exact operations where they can be.** A split at a joint, a reversal and a split whose segment parameter is exact change no point; a transform moves each segment with its own deviation, the joints' gaps recomputed within it."
           ],
           "job": "The composite curve kind: trimmed curves joined end to end into one curve, and its conversion to one NURBS curve.",
@@ -2279,8 +2281,8 @@
           "target": "lib"
         },
         {
-          "cost": "for each parameter, a few enclosures and bounds of the kind, a split, a reversal and a transform: the kind's own costs, a few dozen times.",
-          "does": "[`check`] runs a kind through every law of [`Law`] at the parameters given and returns the first law broken, with where. The laws compare certified objects with each other: two enclosures of one exact value must overlap, so a bound, an enclosure, a conversion, a split, a reversal or a transform that is wrong by more than its own stated error is caught wherever a sample lands on it. Evaluation in doubles is compared with the certified enclosure within 2^−30 of the largest value at that parameter, which catches a wrong formula, not rounding.",
+          "cost": "for each parameter, a few enclosures and bounds of the kind, a split, a reversal and a transform: the kind's own costs, a few dozen times; and for each of at most sixteen of the kind's breaks, two enclosures and three bounds.",
+          "does": "[`check`] runs a kind through every law of [`Law`] at the parameters given and returns the first law broken, with where. The two laws of bounds are also checked over the span that is one parameter alone, at each parameter given and at the kind's own breaks ([`ParamCurve::breaks`]): there a bound must be a box that holds the value from both sides (the trait's rule for spans). The laws compare certified objects with each other: two enclosures of one exact value must overlap, so a bound, an enclosure, a conversion, a split, a reversal or a transform that is wrong by more than its own stated error is caught wherever a sample lands on it. Evaluation in doubles is compared with the certified enclosure within 2^−30 of the largest value at that parameter, which catches a wrong formula, not rounding.",
           "family": [],
           "file": "projects/engines/geometry/crates/geom-curve/src/contract.rs",
           "guarantees": [
@@ -2547,6 +2549,7 @@
           "file": "projects/engines/geometry/crates/geom-curve/src/nurbs.rs",
           "guarantees": [
             "**Certified.** Every enclosure and bound holds the exact value; a split's deviation is the certified rounding of the knot insertion; a transform's is the largest certified error of a control point's image, which bounds the curve's because a NURBS point is a weighted average of its control points with weights `N_i`·`w_i` ≥ 0 (The NURBS Book, P4.3 and P4.4).",
+            "**A span of one parameter is bounded from both sides.** A derivative bound over one parameter is the hull of every Bezier piece that touches it, so both one-sided derivatives at a knot; a bound on the points there is the point, and at a knot repeated degree + 1 times inside the domain, where the curve itself parts, the point from each side (the trait's rule for a span of one parameter, [`ParamCurve`]).",
             "**Exact where the operation is.** Conversion and reversal change no bit (deviation 0).",
             "**Refused outside the domain.** A parameter or span outside it is an error, never clamped."
           ],
@@ -2569,6 +2572,7 @@
           "file": "projects/engines/geometry/crates/geom-curve/src/offset.rs",
           "guarantees": [
             "**Certified, or refused.** Where the normal may vanish (a cusp of the basis, or a span too wide to separate it from zero) a derivative bound is `Unbounded` and an enclosure is refused, never guessed; a bound on the points still holds there, from the basis's bound widened by the offset's largest size.",
+            "**A span of one break is bounded from both sides.** The offsets' slopes jump at a station and the basis's tangent may turn at one of its breaks, so a derivative bound over one such parameter alone holds the derivative from each side, and a bound on the points there holds the offset of each side, as the trait's rule for a span of one parameter asks ([`ParamCurve`]).",
             "**Converted wherever it is defined.** Where the normal vanishes, or cannot be told from zero even over the narrowest piece the conversion cuts (the domain's width times 2^−52, or two neighbouring doubles where those are farther apart), the offset is undefined (a cusp of the basis, or a tangent parallel to the reference direction), and the NURBS form is refused as `Degenerate`, never as `Unbounded`, which names an infinite domain. A normal that only comes near zero, as on a nearly flat helix offset along its axis, is cut finer there until its pieces are bounded (issue #526); only a remainder that overflows the doubles even on the narrowest pieces is refused, as `NotFinite`.",
             "**Exact split and reversal.** A split trims the basis; a reversal reverses the basis and negates the distances (the left normal of the reversed curve is the right normal).",
             "**Transforms keep the kind only when exact.** A grid transform of an offset whose basis moves exactly gives an offset (a mirror negating the side); any other transform gives the moved NURBS cache, its deviation the cache's stretched by the transform (at most by its linear part's Frobenius norm) plus the move's."
