@@ -1211,11 +1211,6 @@ mod repository {
         ("geom-align", "G373 G374 G376"),
         ("geom-analysis", "G346 G347 G348 G349"),
         ("geom-blend", "G262 G263 G264 G265 G266 G267 G268 G269"),
-        (
-            "geom-bool",
-            "G129 G130 G131 G132 G133 G137 G138 G139 G144 G242 G243 G244 G245 G246 G247 G248 \
-             G249 G250 G324",
-        ),
         ("geom-cloud", "G350 G379 G380 G436"),
         ("geom-combine", "G336 G337"),
         (
