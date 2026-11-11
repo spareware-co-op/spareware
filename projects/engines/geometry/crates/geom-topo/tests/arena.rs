@@ -97,7 +97,7 @@ fn every_arena_has_its_name() {
         names,
         [
             "region", "shell", "face", "loop", "fin", "edge", "vertex", "surface", "curve",
-            "pcurve", "point"
+            "pcurve", "point", "plane"
         ]
     );
     for a in Arena::ALL {

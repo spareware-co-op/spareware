@@ -20,6 +20,10 @@ fn each_detail_has_its_kind() {
         (QueryDetail::Malformed, ErrorKind::InvalidInput),
         (QueryDetail::NotSolid, ErrorKind::InvalidInput),
         (QueryDetail::CurvedEdge { edge: 1 }, ErrorKind::Unsupported),
+        (
+            QueryDetail::ImplicitVertex { vertex: 4 },
+            ErrorKind::Unsupported,
+        ),
         (QueryDetail::CurvedFace { face: 2 }, ErrorKind::Unsupported),
         (QueryDetail::NoLoops { face: 3 }, ErrorKind::Unsupported),
         (QueryDetail::Overflow, ErrorKind::Internal),
@@ -49,6 +53,10 @@ fn each_detail_says_what_can_be_done() {
     ] {
         assert_eq!(curved.remedies(), std::slice::from_ref(&wait));
     }
+    assert_eq!(
+        QueryDetail::ImplicitVertex { vertex: 4 }.remedies(),
+        [Remedy::AwaitPiece { piece: "G129" }]
+    );
     assert_eq!(QueryDetail::Overflow.remedies(), [Remedy::Report]);
     assert_eq!(
         OpErrorDetail::Query(QueryDetail::Overflow).remedies(),
@@ -73,6 +81,10 @@ fn each_detail_says_what_went_wrong() {
         (
             QueryDetail::CurvedEdge { edge: 7 },
             "edge 7 is not a straight line between two vertices",
+        ),
+        (
+            QueryDetail::ImplicitVertex { vertex: 6 },
+            "vertex 6 has no grid point",
         ),
         (
             QueryDetail::CurvedFace { face: 8 },

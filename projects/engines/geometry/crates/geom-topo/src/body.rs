@@ -17,8 +17,8 @@
 //!
 //! Bytes per wall body, measured (23.9) by `tests/attack_g80.rs`: a plain wall, the solid and
 //! the outside region, one shell, six planar faces each with one loop of four fins, twelve line
-//! edges and eight vertices, built with exact reservations, holds 16,740 heap bytes in 29 chunks
-//! on 64-bit targets and 15,024 on wasm32, beside the body's own 976 bytes (492 on wasm32). The
+//! edges and eight vertices, built with exact reservations, holds 16,804 heap bytes in 29 chunks
+//! on 64-bit targets and 15,088 on wasm32, beside the body's own 1,008 bytes (508 on wasm32). The
 //! geometry pools are most of it: six planes at 1,008 bytes a row and twelve lines at 592 (536 on
 //! wasm32), each row the size of its kind's largest variant. The topology's own rows take 1,308
 //! bytes and the eight points 192; each of the 29 chunks adds 72 bytes of header and chunk

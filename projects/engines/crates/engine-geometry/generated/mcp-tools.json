@@ -903,6 +903,11 @@
               "kind": "Unsupported"
             },
             {
+              "detail": "ImplicitVertex",
+              "doc": "A vertex is where three planes meet, so the exact sums have no grid point for it; the rebuild that first makes such a body brings its mass properties with piece G129.",
+              "kind": "Unsupported"
+            },
+            {
               "detail": "CurvedFace",
               "doc": "A face is not on a plane; certified mass properties of curved bodies come with piece G177.",
               "kind": "Unsupported"
@@ -1374,6 +1379,11 @@
             {
               "detail": "CurvedEdge",
               "doc": "An edge is not a straight line between two vertices; certified mass properties of curved bodies come with piece G177.",
+              "kind": "Unsupported"
+            },
+            {
+              "detail": "ImplicitVertex",
+              "doc": "A vertex is where three planes meet, so the exact sums have no grid point for it; the rebuild that first makes such a body brings its mass properties with piece G129.",
               "kind": "Unsupported"
             },
             {

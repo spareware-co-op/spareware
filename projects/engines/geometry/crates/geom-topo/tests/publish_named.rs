@@ -15,12 +15,13 @@ mod common;
 use common::{ix, meter, wall_outside, wall_rows};
 use geom_curve::{CurveKind, Line};
 use geom_num::grid::P3;
+use geom_num::plane::Plane;
 use geom_run::{Budget, BudgetKind, Stop, WorkMeter};
 use geom_surface::SurfaceKind;
 use geom_topo::order::{NameKey, Names};
 use geom_topo::{
-    Arena, Arenas, Body, BodyKind, Builder, Edge, Face, Fin, Ix, Link, Loop, Region, RegionKind,
-    Sense, Shell, TopoError, Vertex,
+    Arena, Arenas, Body, BodyKind, Builder, Edge, Euler, Face, Fin, Ix, Link, Loop, PointKind,
+    Region, RegionKind, Sense, Shell, TopoError, Vertex,
 };
 
 /// Every row of a body, as plain vectors a test can reorder.
@@ -80,7 +81,7 @@ fn builder(r: &Rows) -> Builder {
     a.surfaces.extend(r.surfaces.clone()).unwrap();
     a.curves.extend(r.curves.clone()).unwrap();
     a.pcurves.extend(r.pcurves.clone()).unwrap();
-    a.points.extend(r.points.clone()).unwrap();
+    a.points.extend(r.points.iter().map(|&p| p.into())).unwrap();
     b
 }
 
@@ -955,6 +956,58 @@ fn the_new_faults_read_plainly() {
     for (e, text) in cases {
         assert_eq!(e.to_string(), text);
     }
+}
+
+/// The wall with planes out of coefficient order, and its first point their meeting.
+fn wall_of_planes(extra: Option<Plane>) -> (Builder, Names) {
+    let r = wall();
+    let n = names(&r, 3);
+    let mut b = builder(&r);
+    let plane = |x: i128, y: i128, z: i128| Plane::new([x, y, z], 0).unwrap();
+    let a = &mut b.arenas;
+    a.planes
+        .extend([plane(0, 0, 1), plane(1, 0, 0), plane(0, 1, 0)])
+        .unwrap();
+    a.planes.extend(extra).unwrap();
+    a.points
+        .set(ix(0), PointKind::Meet([ix(0), ix(1), ix(2)]))
+        .unwrap();
+    (b, n)
+}
+
+#[test]
+fn a_meeting_of_planes_follows_them_into_coefficient_order() {
+    let (b, n) = wall_of_planes(None);
+    let body = b
+        .publish_named(&n, BodyKind::Solid, outside(&wall()), &mut meter())
+        .unwrap();
+    let a = body.arenas();
+    let order: Vec<[i128; 3]> = a.planes.iter().map(Plane::n).collect();
+    assert_eq!(order, [[0, 0, 1], [0, 1, 0], [1, 0, 0]]);
+    let meets: Vec<&PointKind> = a
+        .points
+        .iter()
+        .filter(|p| matches!(p, PointKind::Meet(_)))
+        .collect();
+    assert_eq!(meets, [&PointKind::Meet([ix(0), ix(2), ix(1)])]);
+    // An edit keeps the pool, whatever it kills.
+    let again = Euler::edit(&body)
+        .unwrap()
+        .publish(BodyKind::Solid, body.outside(), &mut meter())
+        .unwrap();
+    assert!(again.arenas().planes.iter().eq(a.planes.iter()));
+}
+
+#[test]
+fn a_plane_given_twice_is_refused() {
+    let (b, n) = wall_of_planes(Plane::new([0, 0, 1], 0).ok());
+    assert!(matches!(
+        b.publish_named(&n, BodyKind::Solid, outside(&wall()), &mut meter()),
+        Err(TopoError::Unordered {
+            arena: Arena::Plane,
+            ..
+        })
+    ));
 }
 
 #[test]
