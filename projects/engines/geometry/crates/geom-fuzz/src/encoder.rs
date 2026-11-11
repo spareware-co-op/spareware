@@ -41,9 +41,13 @@ struct Args<'a>(&'a [u8]);
 
 impl Args<'_> {
     fn byte(&mut self) -> u8 {
-        let (first, rest) = self.0.split_first().map_or((0, &[][..]), |(f, r)| (*f, r));
-        self.0 = rest;
-        first
+        match self.0.split_first() {
+            Some((&first, rest)) => {
+                self.0 = rest;
+                first
+            }
+            None => 0,
+        }
     }
     fn u64(&mut self) -> u64 {
         u64::from_le_bytes(core::array::from_fn(|_| self.byte()))
