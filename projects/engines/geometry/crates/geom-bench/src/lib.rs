@@ -30,6 +30,11 @@
 //! each named in the catalogue with its crate's path and checked to be a public function there;
 //! and, from phase 3, `geom-topo`'s columns and publishing, `geom-name`'s attribute step, and
 //! `geom-op`'s batch driver and the flat arrays of points.
+//! From piece G140 it also runs the flat boolean's scenarios (23.13's scenarios at reduced scale):
+//! a wall's openings cut in one call, a door moved and cut again from the arrangement cache, a
+//! slab's holes, a union of many boxes, one and three selections from one arrangement, and a
+//! storey's rooms, each batch one whole job ([`inputs::scenario`]), and times them at full size
+//! for the nightly run.
 //! Beside the gates, [`steps`] tallies which step of chapter 23.2's ladder settled each call, per
 //! corpus.
 //!

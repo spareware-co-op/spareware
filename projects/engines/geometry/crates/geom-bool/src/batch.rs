@@ -22,6 +22,17 @@
 //!
 //! Method: chapter 11.6 (`projects/engines/geometry/architecture/11-booleans.md`).
 //!
+//! Recursion:
+//!
+//! - Cycle: `<geom_pool::native::Rayon as Pool>::run_all`, `geom_bool::batch::cut`, `geom_bool::batch::one_cut`, `geom_bool::combine::arranged_input`, `geom_poly::subdivide::arrange_reusing`, `geom_run::exec::Exec::try_map`, `geom_run::phase::run_items`, `geom_run::phase::run_phase`, `geom_run::pool::drive`, `geom_run::pool::run_wave`.
+//!   Bound: 2.
+//!   Why: the checker sees the pool's tasks call back into every function that runs a parallel
+//!   phase, but a phase runs inside another only here: with several hosts `cut` spreads them
+//!   over the pool and runs each host's cut on `Exec::serial()`, whose phases run inline on the
+//!   caller and never reach the pool; with one host `cut` keeps the pool for that host's
+//!   arrangement. So at most two parallel phases are ever open at once, the hosts' and one inside it.
+//!   Test: `parallel_phases_nest_at_most_twice`.
+//!
 //! Cost: one arrangement per host, linear in its faces plus local work around each tool.
 
 use alloc::vec::Vec;

@@ -1037,10 +1037,54 @@ fn boxes_that_share_only_an_edge_or_a_corner_are_not_nudged_apart() {
 }
 
 #[test]
+fn a_box_inside_another_unites_cuts_and_meets() {
+    let outer = cuboid([0, 0, 0], [40, 40, 40]);
+    let inner = cuboid([10, 10, 10], [10, 10, 10]);
+    let both = [solid(1, &outer), solid(2, &inner)];
+    let whole = unite(&ctx(), &SERIAL, &both).unwrap().result.body;
+    assert_eq!(
+        (counted(&whole), sixfold(&whole)),
+        (counted(&outer), sixfold(&outer))
+    );
+    // Clear of every face, the inner box leaves a cavity: a second shell.
+    let hollow = subtract(&ctx(), &SERIAL, key(1), &both)
+        .unwrap()
+        .result
+        .body;
+    assert_eq!(counted(&hollow), [12, 24, 16, 2]);
+    assert_eq!(sixfold(&hollow), sixfold(&outer) - sixfold(&inner));
+    checked(&hollow);
+    let none = subtract(&ctx(), &SERIAL, key(2), &both).unwrap();
+    assert!(noted(&none, "bool.empty_result"));
+    checked(&none.result.body);
+    let met = intersect(&ctx(), &SERIAL, &both).unwrap().result.body;
+    assert_eq!(
+        (counted(&met), sixfold(&met)),
+        (counted(&inner), sixfold(&inner))
+    );
+    // On one of the outer box's faces, it leaves a pocket in one shell.
+    let flush = cuboid([0, 10, 10], [10, 10, 10]);
+    let both = [solid(1, &outer), solid(2, &flush)];
+    let pocket = subtract(&ctx(), &SERIAL, key(1), &both)
+        .unwrap()
+        .result
+        .body;
+    assert_eq!(pocket.arenas().shells.len(), 1);
+    assert_eq!(sixfold(&pocket), sixfold(&outer) - sixfold(&flush));
+    checked(&pocket);
+    let met = intersect(&ctx(), &SERIAL, &both).unwrap().result.body;
+    assert_eq!(
+        (counted(&met), sixfold(&met)),
+        (counted(&flush), sixfold(&flush))
+    );
+}
+
+#[test]
 fn three_boxes_whose_union_pinches_at_a_corner_give_a_general_body() {
     // Each pair shares part of a face, and around (-1, 4, 0) the empty space is two opposite
     // octants: the union's one shell pinches there, non-manifold (11.6), so it is a general body,
-    // which the checker passes. United at once or one after another, it is the same shape.
+    // which the checker passes (G130's 857ba44a). United at once or one after another, it is the
+    // same shape.
     let boxes = [
         ([-1, 1, -1], [1, 3, 2]),
         ([-2, 4, -1], [2, 1, 1]),

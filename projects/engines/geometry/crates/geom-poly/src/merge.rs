@@ -1007,6 +1007,7 @@ fn named(corner: &Corner, meter: &mut WorkMeter<'_>) -> Result<Tpi, MergeError> 
     let near = corner.point.to_grid()?;
     if near.is_exact() {
         let at = near.value();
+        // A grid point's coordinates are within 2^40, so negating one cannot saturate.
         let axis = |n: [i128; 3], v: i64| Plane::new(n, i128::from(v).saturating_neg());
         return Ok(Tpi::meeting(
             axis([1, 0, 0], at.x.get())?,
