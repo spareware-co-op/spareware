@@ -156,9 +156,12 @@ impl From<MathError> for CurveError {
 /// A law of the kind contract (`crate::contract`).
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum Law {
-    /// The point lies in the bound over any span holding its parameter.
+    /// The point lies in the bound over any span holding its parameter, and the bound is a box.
+    /// Over the span that is one parameter alone it holds the point from both sides.
     BoundHoldsPoints,
-    /// Each derivative lies in the derivative bound over any span holding its parameter.
+    /// Each derivative lies in the derivative bound over any span holding its parameter, and the
+    /// bound is a box. Over the span that is one parameter alone it holds the derivative from
+    /// both sides.
     DerivativeBoundHoldsDerivatives,
     /// The doubles of `point` and `derivatives` lie in the certified enclosures, within the
     /// kind's evaluation error.
