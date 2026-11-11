@@ -70,6 +70,25 @@ pub assume_specification[ i128::checked_neg ](x: i128) -> (r: Option<i128>)
         r == if x == i128::MIN { None::<i128> } else { Some((-(x as int)) as i128) },
 ;
 
+// ---- The limb lookups that cannot miss (the coverage gate's proofs, chapter 28.8).
+
+/// Called in the `None` arm of `limb_at`. Its precondition is `false`, so Verus accepts the call
+/// only where it proves control cannot arrive: with `limb_at`'s `requires i < N`, checked at every
+/// call of it, a lookup at `i` in `N` limbs is never `None`, and the arm cannot run.
+pub proof fn limb_lookup_never_misses()
+    requires
+        false,
+{
+}
+
+/// Called in the `else` of `put_limb`, as [`limb_lookup_never_misses`] is in `limb_at`: with
+/// `requires i < N`, the mutable lookup at `i` always finds the limb, and the `else` cannot run.
+pub proof fn limb_store_never_misses()
+    requires
+        false,
+{
+}
+
 // ---- The value of a limb sequence.
 
 pub open spec fn unsigned(limbs: Seq<u64>, n: nat) -> int
@@ -1029,6 +1048,21 @@ pub proof fn lemma_value_bound<const L: usize>(w: Wide<L>)
 
 impl<const L: usize> Wide<L> {
     /// From an `i128`, exactly.
+    ///
+    /// A width needs two limbs to hold every `i128`:
+    ///
+    /// ```
+    /// let x = geom_num::wide::Wide::<2>::from_i128(i128::MIN);
+    /// assert_eq!(x.to_i128(), Some(i128::MIN));
+    /// ```
+    ///
+    /// A narrower width does not build, rather than hold a wrong value (the same line with one
+    /// limb):
+    ///
+    /// ```compile_fail
+    /// let x = geom_num::wide::Wide::<1>::from_i128(i128::MIN);
+    /// assert_eq!(x.to_i128(), Some(i128::MIN));
+    /// ```
     #[must_use]
     pub fn from_i128(v: i128) -> (r: Self)
         requires
@@ -1038,23 +1072,17 @@ impl<const L: usize> Wide<L> {
     {
         let mut limbs = [fill(v < 0); L];
         // v's two's complement in 128 bits, read as unsigned: v itself when v is not negative, and
-        // v + 2^128 when it is, made as (v − i128::MIN) + 2^127 so that no cast loses a value.
+        // v + 2^128 when it is, made as (v − i128::MIN) + 2^127 so that no cast loses a value. For
+        // a negative v, v − i128::MIN is at least 0 and below 2^127, so `wrapping_sub` never wraps.
         #[allow(clippy::cast_sign_loss, reason = "each cast value is at least zero")]
         let u = if v < 0 {
-            match v.checked_sub(i128::MIN) {
-                Some(d) => (d as u128) | (1u128 << 127),
-                None => 0,
-            }
+            (v.wrapping_sub(i128::MIN) as u128) | (1u128 << 127)
         } else {
             v as u128
         };
         let (low, high) = halves(u);
-        if let Some(limb) = limbs.get_mut(0) {
-            *limb = low;
-        }
-        if let Some(limb) = limbs.get_mut(1) {
-            *limb = high;
-        }
+        put_limb(&mut limbs, 0, low);
+        put_limb(&mut limbs, 1, high);
         proof {
             if v < 0 {
                 let d = (v - i128::MIN) as u128;
@@ -1164,6 +1192,61 @@ impl<const L: usize> Wide<L> {
 
 } // verus!
 
+/// Limb `i` of `a`, for an `i` below `N`.
+///
+/// Every caller passes such an `i`, so the lookup finds a limb and the `None` arm cannot run.
+/// Verus proves it: the twin (`verus/wide.rs`) requires `i < N`, which Verus checks at every call,
+/// and in the `None` arm it calls `limb_lookup_never_misses`, whose precondition is `false`, so
+/// the twin verifies only because control cannot arrive there. The function is marked for the
+/// coverage gate (28.8).
+// proof: projects/engines/geometry/crates/geom-num/verus/wide.rs::limb_lookup_never_misses
+#[cfg_attr(coverage_nightly, coverage(off))]
+#[inline]
+#[verus_spec(r =>
+    requires
+        i < N,
+    ensures
+        r == a@[i as int],
+)]
+fn limb_at<const N: usize>(a: &[u64; N], i: usize) -> u64 {
+    match a.get(i) {
+        Some(v) => *v,
+        None => {
+            // Never: `i` is below `N` (the proof cited above).
+            proof! {
+                limb_lookup_never_misses();
+            }
+            0
+        }
+    }
+}
+
+/// Sets limb `i` of `a` to `v`, for an `i` below `N`.
+///
+/// Every caller passes such an `i`, so the lookup finds the limb and the `else` cannot run. Verus
+/// proves it as for [`limb_at`]: the twin requires `i < N` at every call, and calls
+/// `limb_store_never_misses`, whose precondition is `false`, in the `else`. The function is marked
+/// for the coverage gate (28.8).
+// proof: projects/engines/geometry/crates/geom-num/verus/wide.rs::limb_store_never_misses
+#[cfg_attr(coverage_nightly, coverage(off))]
+#[inline]
+#[verus_spec(
+    requires
+        i < N,
+    ensures
+        a@ == old(a)@.update(i as int, v),
+)]
+fn put_limb<const N: usize>(a: &mut [u64; N], i: usize, v: u64) {
+    if let Some(slot) = a.get_mut(i) {
+        *slot = v;
+    } else {
+        // Never: `i` is below `N` (the proof cited above).
+        proof! {
+            limb_store_never_misses();
+        }
+    }
+}
+
 /// Limb-wise addition with carry; the carry out of the top limb is dropped (two's complement
 /// wrap), and the caller decides overflow from the signs.
 #[verus_spec(out =>
@@ -1180,14 +1263,8 @@ fn wrapping_add_limbs<const L: usize>(a: &[u64; L], b: &[u64; L]) -> [u64; L] {
                 == unsigned(a@, i as nat) + unsigned(b@, i as nat),
     )]
     for i in 0..L {
-        let x = match a.get(i) {
-            Some(v) => *v,
-            None => 0,
-        };
-        let y = match b.get(i) {
-            Some(v) => *v,
-            None => 0,
-        };
+        let x = limb_at(a, i);
+        let y = limb_at(b, i);
         let (s1, c1) = x.overflowing_add(y);
         let (s2, c2) = s1.overflowing_add(u64::from(carry));
         proof! {
@@ -1201,9 +1278,7 @@ fn wrapping_add_limbs<const L: usize>(a: &[u64; L], b: &[u64; L]) -> [u64; L] {
                 requires x as int + y as int + cin == s2 as int + cout * 0x1_0000_0000_0000_0000;
             assert(x as int * p + y as int * p + cin * p == (x as int + y as int + cin) * p) by (nonlinear_arith);
         }
-        if let Some(o) = out.get_mut(i) {
-            *o = s2;
-        }
+        put_limb(&mut out, i, s2);
         proof! {
             assert(unsigned(out@, (i + 1) as nat) == unsigned(out@, i as nat) + s2 as int * base(i as nat));
             assert(unsigned(a@, (i + 1) as nat) == unsigned(a@, i as nat) + x as int * base(i as nat));
@@ -1234,14 +1309,8 @@ fn wrapping_sub_limbs<const L: usize>(a: &[u64; L], b: &[u64; L]) -> [u64; L] {
                 + (if borrow { base(i as nat) } else { 0 }),
     )]
     for i in 0..L {
-        let x = match a.get(i) {
-            Some(v) => *v,
-            None => 0,
-        };
-        let y = match b.get(i) {
-            Some(v) => *v,
-            None => 0,
-        };
+        let x = limb_at(a, i);
+        let y = limb_at(b, i);
         let (d1, b1) = x.overflowing_sub(y);
         let (d2, b2) = d1.overflowing_sub(u64::from(borrow));
         proof! {
@@ -1255,9 +1324,7 @@ fn wrapping_sub_limbs<const L: usize>(a: &[u64; L], b: &[u64; L]) -> [u64; L] {
                 requires x as int - y as int - bin == d2 as int - bout * 0x1_0000_0000_0000_0000;
             assert(x as int * p - y as int * p - bin * p == (x as int - y as int - bin) * p) by (nonlinear_arith);
         }
-        if let Some(o) = out.get_mut(i) {
-            *o = d2;
-        }
+        put_limb(&mut out, i, d2);
         proof! {
             assert(unsigned(out@, (i + 1) as nat) == unsigned(out@, i as nat) + d2 as int * base(i as nat));
             assert(unsigned(a@, (i + 1) as nat) == unsigned(a@, i as nat) + x as int * base(i as nat));
@@ -1294,14 +1361,8 @@ fn compare_limbs<const L: usize>(a: &[u64; L], b: &[u64; L]) -> Ordering {
     while i > 0 {
         // i > 0, so i − 1 never wraps.
         i = i.wrapping_sub(1);
-        let high_a = match a.get(i) {
-            Some(v) => *v,
-            None => 0,
-        };
-        let high_b = match b.get(i) {
-            Some(v) => *v,
-            None => 0,
-        };
+        let high_a = limb_at(a, i);
+        let high_b = limb_at(b, i);
         proof! {
             lemma_unsigned_bound(a@, i as nat);
             lemma_unsigned_bound(b@, i as nat);
@@ -1376,10 +1437,7 @@ fn from_magnitude<const L: usize, const M: usize>(m: &[u64; M], negative: bool) 
             forall|j: int| L <= j < k ==> m@[j] == 0u64,
     )]
     for k in 0..M {
-        let limb = match m.get(k) {
-            Some(v) => *v,
-            None => 0,
-        };
+        let limb = limb_at(m, k);
         if let Some(slot) = out.get_mut(k) {
             *slot = limb;
         } else if limb != 0 {
@@ -1449,10 +1507,7 @@ impl<const L: usize> Wide<L> {
                     == base(i as nat) - unsigned(self.limbs(), i as nat),
         )]
         for i in 0..L {
-            let x = match self.0.get(i) {
-                Some(v) => *v,
-                None => 0,
-            };
+            let x = limb_at(&self.0, i);
             let (s, c) = u64::from(carry).overflowing_add(!x);
             proof! {
                 lemma_prefix_unchanged(out@, i as nat, s, i as nat);
@@ -1468,9 +1523,7 @@ impl<const L: usize> Wide<L> {
                 assert((nx + cin) * p == 0x1_0000_0000_0000_0000 * p - p - x as int * p + cin * p) by (nonlinear_arith)
                     requires nx == 0xFFFF_FFFF_FFFF_FFFF - x as int;
             }
-            if let Some(o) = out.get_mut(i) {
-                *o = s;
-            }
+            put_limb(&mut out, i, s);
             carry = c;
         }
         proof! {
@@ -1649,10 +1702,7 @@ impl<const L: usize> Wide<L> {
                 unsigned(out@, L as nat) == unsigned(a@, i as nat) * unsigned(b@, L as nat),
         )]
         for i in 0..L {
-            let ai = match a.get(i) {
-                Some(v) => *v,
-                None => 0,
-            };
+            let ai = limb_at(&a, i);
             if ai != 0 {
                 let mut carry = 0u64;
                 #[verus_spec(
@@ -1670,10 +1720,7 @@ impl<const L: usize> Wide<L> {
                                 + ai as int * unsigned(b@, j as nat) * base(i as nat),
                 )]
                 for j in 0..L {
-                    let bj = match b.get(j) {
-                        Some(v) => *v,
-                        None => 0,
-                    };
+                    let bj = limb_at(&b, j);
                     proof! {
                         assert(ai as int * bj as int <= 0xFFFF_FFFF_FFFF_FFFE_0000_0000_0000_0001) by (nonlinear_arith)
                             requires 0 <= ai as int <= 0xFFFF_FFFF_FFFF_FFFF, 0 <= bj as int <= 0xFFFF_FFFF_FFFF_FFFF;
@@ -1700,9 +1747,7 @@ impl<const L: usize> Wide<L> {
                             proof_decl! {
                                 let ghost before = out@;
                             }
-                            if let Some(slot) = out.get_mut(k) {
-                                *slot = low;
-                            }
+                            put_limb(&mut out, k, low);
                             proof! {
                                 lemma_slot_step(before, out@, k as nat, old, low, high, carry, prod as int, i as nat, j as nat);
                             }
@@ -1852,10 +1897,7 @@ impl<const L: usize> Wide<L> {
                                 + bj as int * unsigned(a@, i as nat) * base(shift as nat),
                 )]
                 for i in 0..L {
-                    let ai = match a.get(i) {
-                        Some(v) => *v,
-                        None => 0,
-                    };
+                    let ai = limb_at(&a, i);
                     proof! {
                         assert(ai as int * bj as int <= 0xFFFF_FFFF_FFFF_FFFE_0000_0000_0000_0001) by (nonlinear_arith)
                             requires 0 <= ai as int <= 0xFFFF_FFFF_FFFF_FFFF, 0 <= bj as int <= 0xFFFF_FFFF_FFFF_FFFF;
@@ -1882,9 +1924,7 @@ impl<const L: usize> Wide<L> {
                             proof_decl! {
                                 let ghost before = out@;
                             }
-                            if let Some(slot) = out.get_mut(k) {
-                                *slot = low;
-                            }
+                            put_limb(&mut out, k, low);
                             proof! {
                                 lemma_slot_step(before, out@, k as nat, old, low, high, carry, prod as int, shift as nat, i as nat);
                             }
@@ -1958,13 +1998,8 @@ impl<const L: usize> Wide<L> {
                 forall|j: int| i <= j < M ==> out@[j] == sign,
         )]
         for i in 0..shared {
-            let x = match self.0.get(i) {
-                Some(v) => *v,
-                None => 0,
-            };
-            if let Some(slot) = out.get_mut(i) {
-                *slot = x;
-            }
+            let x = limb_at(&self.0, i);
+            put_limb(&mut out, i, x);
         }
         proof! {
             assert(forall|j: int| 0 <= j < M ==> out@[j] == (if j < L { self.limbs()[j] } else { sign }));
@@ -1981,10 +2016,7 @@ impl<const L: usize> Wide<L> {
                     forall|j: int| M <= j < i ==> self.limbs()[j] == sign,
             )]
             for i in M..L {
-                let x = match self.0.get(i) {
-                    Some(v) => *v,
-                    None => 0,
-                };
+                let x = limb_at(&self.0, i);
                 if x != sign {
                     proof! {
                         lemma_resize_too_wide(self.limbs(), L as nat, M as nat, negative, i as nat);
@@ -2025,10 +2057,7 @@ impl<const L: usize> Wide<L> {
                 forall|j: int| 0 <= j < i ==> self.limbs()[j] == 0,
         )]
         for i in 0..L {
-            let limb = match self.0.get(i) {
-                Some(v) => *v,
-                None => 0,
-            };
+            let limb = limb_at(&self.0, i);
             if limb != 0 {
                 proof! {
                     lemma_limb_too_big(self.limbs(), i as nat, 0);

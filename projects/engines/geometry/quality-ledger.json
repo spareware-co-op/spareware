@@ -253,10 +253,10 @@
     {
       "file": "projects/engines/geometry/crates/geom-num/src/wide.rs",
       "mutant": "replace | with ^ in Wide<L>::from_i128",
-      "line_text": "Some(d) => (d as u128) | (1u128 << 127),",
+      "line_text": "(v.wrapping_sub(i128::MIN) as u128) | (1u128 << 127)",
       "occurrences": 1,
       "kind": "equivalent",
-      "reason": "This arm runs for a negative v, where d = v - i128::MIN lies in 0..2^127, so bit 127 of d is clear: setting it with | and flipping it with ^ both give d + 2^127."
+      "reason": "This branch runs for a negative v, where d = v - i128::MIN (the wrapping_sub, which does not wrap there) lies in 0..2^127, so bit 127 of d is clear: setting it with | and flipping it with ^ both give d + 2^127."
     },
     {
       "file": "projects/engines/geometry/crates/geom-nurbs/src/basis.rs",
@@ -5345,6 +5345,20 @@
       "proof": "projects/engines/geometry/crates/geom-num/src/math/hexf.rs::step_u128_never_returns_none",
       "tool": "kani",
       "reason": "step_u128 asserts that its checked step gave Some before it matches, so its None arm could run only after the assertion had failed. Kani proves step_u128(None) panics at that assertion; the reader runs only in const blocks, where that panic is a build error."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-num/src/wide.rs",
+      "item": "fn limb_at<const N: usize>(a: &[u64; N], i: usize) -> u64 {",
+      "proof": "projects/engines/geometry/crates/geom-num/verus/wide.rs::limb_lookup_never_misses",
+      "tool": "verus",
+      "reason": "limb_at reads limb i of an N-limb array; its None arm could run only for an i of N or more. The twin of wide.rs gives limb_at the precondition i < N, which Verus checks at every call in the proven functions (geom-gen's verus_twin test holds that every caller in wide.rs is one of them), and in the None arm the twin calls limb_lookup_never_misses, whose own precondition is false, so Verus verifies the twin only because that arm cannot be reached."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-num/src/wide.rs",
+      "item": "fn put_limb<const N: usize>(a: &mut [u64; N], i: usize, v: u64) {",
+      "proof": "projects/engines/geometry/crates/geom-num/verus/wide.rs::limb_store_never_misses",
+      "tool": "verus",
+      "reason": "put_limb writes limb i of an N-limb array; its else could run only for an i of N or more. The twin of wide.rs gives put_limb the precondition i < N, which Verus checks at every call in the proven functions (from_i128's two calls under its 2 <= L, which the compile-time guard enforces for the shipped function), and in the else the twin calls limb_store_never_misses, whose own precondition is false, so Verus verifies the twin only because the else cannot be reached."
     }
   ],
   "awaiting_proof": [
@@ -5426,34 +5440,6 @@
       "reason": "A plane predicate's budget, degenerate-input or fallback arm that the tests' inputs never reach (a coordinate past the budget, an overflowing cross product, a zero normal, a weight the filter cannot decide, a point the narrow commit cannot hold). G41 proves it unreachable, or a test reaches it."
     },
     {
-      "file": "projects/engines/geometry/crates/geom-num/src/wide.rs",
-      "line_text": "if let Some(o) = out.get_mut(i) {",
-      "occurrences": 3,
-      "piece": "G41",
-      "reason": "A lookup on a limb array or slice whose index is always in range (`get` or `get_mut` with i below the length), or from_i128's v − i128::MIN for a negative v, which never overflows: its `None` side never runs. The Verus twin (verus/wide.rs, token for token this code) proves each function exact for every width, which rules these arms out; G41's wide-integer harnesses prove it again on the shipped build."
-    },
-    {
-      "file": "projects/engines/geometry/crates/geom-num/src/wide.rs",
-      "line_text": "if let Some(top) = limbs.last_mut() {",
-      "occurrences": 2,
-      "piece": "G41",
-      "reason": "A lookup on a limb array or slice whose index is always in range (`get` or `get_mut` with i below the length), or from_i128's v − i128::MIN for a negative v, which never overflows: its `None` side never runs. The Verus twin (verus/wide.rs, token for token this code) proves each function exact for every width, which rules these arms out; G41's wide-integer harnesses prove it again on the shipped build."
-    },
-    {
-      "file": "projects/engines/geometry/crates/geom-num/src/wide.rs",
-      "line_text": "if let Some(limb) = limbs.get_mut(0) {",
-      "occurrences": 1,
-      "piece": "G41",
-      "reason": "A lookup on a limb array or slice whose index is always in range (`get` or `get_mut` with i below the length), or from_i128's v − i128::MIN for a negative v, which never overflows: its `None` side never runs. The Verus twin (verus/wide.rs, token for token this code) proves each function exact for every width, which rules these arms out; G41's wide-integer harnesses prove it again on the shipped build."
-    },
-    {
-      "file": "projects/engines/geometry/crates/geom-num/src/wide.rs",
-      "line_text": "if let Some(limb) = limbs.get_mut(1) {",
-      "occurrences": 1,
-      "piece": "G41",
-      "reason": "A lookup on a limb array or slice whose index is always in range (`get` or `get_mut` with i below the length), or from_i128's v − i128::MIN for a negative v, which never overflows: its `None` side never runs. The Verus twin (verus/wide.rs, token for token this code) proves each function exact for every width, which rules these arms out; G41's wide-integer harnesses prove it again on the shipped build."
-    },
-    {
       "file": "projects/engines/geometry/crates/geom-num/src/crossing.rs",
       "line_text": "None => Err(NumError::BudgetExceeded),",
       "occurrences": 2,
@@ -5529,48 +5515,6 @@
       "occurrences": 1,
       "piece": "G41",
       "reason": "A plane predicate's budget, degenerate-input or fallback arm that the tests' inputs never reach (a coordinate past the budget, an overflowing cross product, a zero normal, a weight the filter cannot decide, a point the narrow commit cannot hold). G41 proves it unreachable, or a test reaches it."
-    },
-    {
-      "file": "projects/engines/geometry/crates/geom-num/src/wide.rs",
-      "line_text": "None => 0,",
-      "occurrences": 15,
-      "piece": "G41",
-      "reason": "A lookup on a limb array or slice whose index is always in range (`get` or `get_mut` with i below the length), or from_i128's v − i128::MIN for a negative v, which never overflows: its `None` side never runs. The Verus twin (verus/wide.rs, token for token this code) proves each function exact for every width, which rules these arms out; G41's wide-integer harnesses prove it again on the shipped build."
-    },
-    {
-      "file": "projects/engines/geometry/crates/geom-num/src/wide.rs",
-      "line_text": "}",
-      "occurrences": 10,
-      "piece": "G41",
-      "reason": "A lookup on a limb array or slice whose index is always in range (`get` or `get_mut` with i below the length), or from_i128's v − i128::MIN for a negative v, which never overflows: its `None` side never runs. The Verus twin (verus/wide.rs, token for token this code) proves each function exact for every width, which rules these arms out; G41's wide-integer harnesses prove it again on the shipped build."
-    },
-    {
-      "file": "projects/engines/geometry/crates/geom-num/src/wide.rs",
-      "line_text": "if let Some(slot) = out.get_mut(k) {",
-      "occurrences": 2,
-      "piece": "G41",
-      "reason": "A lookup on a limb array or slice whose index is always in range (`get` or `get_mut` with i below the length), or from_i128's v − i128::MIN for a negative v, which never overflows: its `None` side never runs. The Verus twin (verus/wide.rs, token for token this code) proves each function exact for every width, which rules these arms out; G41's wide-integer harnesses prove it again on the shipped build."
-    },
-    {
-      "file": "projects/engines/geometry/crates/geom-num/src/wide.rs",
-      "line_text": "if let Some(slot) = out.get_mut(i) {",
-      "occurrences": 1,
-      "piece": "G41",
-      "reason": "A lookup on a limb array or slice whose index is always in range (`get` or `get_mut` with i below the length), or from_i128's v − i128::MIN for a negative v, which never overflows: its `None` side never runs. The Verus twin (verus/wide.rs, token for token this code) proves each function exact for every width, which rules these arms out; G41's wide-integer harnesses prove it again on the shipped build."
-    },
-    {
-      "file": "projects/engines/geometry/crates/geom-num/src/wide32.rs",
-      "line_text": "if let Some(top) = limbs.last_mut() {",
-      "occurrences": 2,
-      "piece": "G41",
-      "reason": "Wide32's extremes set their top limb through last_mut, which always finds one: L >= 2 is checked when the width is used (AT_LEAST_TWO_LIMBS), so the None arm and the end of the if let never run. As for Wide's same lines, G41's bounded proof of no panic in geom-num removes them."
-    },
-    {
-      "file": "projects/engines/geometry/crates/geom-num/src/wide32.rs",
-      "line_text": "}",
-      "occurrences": 2,
-      "piece": "G41",
-      "reason": "Wide32's extremes set their top limb through last_mut, which always finds one: L >= 2 is checked when the width is used (AT_LEAST_TWO_LIMBS), so the None arm and the end of the if let never run. As for Wide's same lines, G41's bounded proof of no panic in geom-num removes them."
     }
   ]
 }
