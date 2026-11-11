@@ -284,9 +284,15 @@
               "kind": "corpus",
               "piece": "G146",
               "why": "1 new count benchmark on the exact mesh (decision 32.44): mesh/exact_build; no existing digest moved"
+            },
+            {
+              "sha256": "0f92bfe436e4a8f1ed9a8e92bd80bea615141656b7aadb25dd73607f031c4380",
+              "kind": "corpus",
+              "piece": "G151",
+              "why": "7 new count benchmarks on the distance comparisons and triangle contact (decision 32.44): mesh/point_point and its fellows, mesh/triangles; no existing digest moved"
             }
           ],
-          "sha256": "0f92bfe436e4a8f1ed9a8e92bd80bea615141656b7aadb25dd73607f031c4380"
+          "sha256": "44872f106084a3f1479c01329e2f7a88f090fed7e2274923055806d613c852c2"
         },
         {
           "id": "geom-nurbs/operations",
