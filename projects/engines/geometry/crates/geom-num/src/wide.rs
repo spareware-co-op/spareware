@@ -216,6 +216,17 @@ fn from_magnitude<const L: usize, const M: usize>(m: &[u64; M], negative: bool) 
     }
 }
 
+/// Widening keeps every value: the four limbs, and above them the sign fill.
+impl From<I256> for I320 {
+    fn from(v: I256) -> I320 {
+        let mut limbs = [fill(v.is_negative()); 5];
+        for (limb, &low) in limbs.iter_mut().zip(v.0.iter()) {
+            *limb = low;
+        }
+        Wide(limbs)
+    }
+}
+
 impl<const L: usize> Wide<L> {
     /// Evaluated when a width is used: a `Wide` needs at least two limbs to hold an `i128`.
     const AT_LEAST_TWO_LIMBS: () = assert!(L >= 2, "Wide<L> needs L >= 2");

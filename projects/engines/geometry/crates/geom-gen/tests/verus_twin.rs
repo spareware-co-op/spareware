@@ -531,7 +531,7 @@ fn every_function_the_wide_twin_runs_is_proven_and_compared() {
 /// The functions marked `coverage(off)` on a Verus proof (chapter 28.8): the shipped file, its
 /// twin, the function, the proof function its mark cites, the requirement the twin gives it, and
 /// how many functions call it at least.
-const MARKED: [(&str, &str, &str, &str, &str, &str, usize); 2] = [
+const MARKED: [(&str, &str, &str, &str, &str, &str, usize); 5] = [
     (
         WIDE,
         WIDE_TWIN,
@@ -549,6 +549,33 @@ const MARKED: [(&str, &str, &str, &str, &str, &str, usize); 2] = [
         "limb_store_never_misses",
         "requires i < N",
         6,
+    ),
+    (
+        PLANE,
+        PLANE_TWIN,
+        "plane",
+        "fitted",
+        "a_fitted_step_is_never_none",
+        "requires step . is_some ( )",
+        2,
+    ),
+    (
+        PLANE,
+        PLANE_TWIN,
+        "plane",
+        "lpi_classify_total",
+        "lpi_classify_always_fits",
+        "requires - bound_126 ( ) < w1 < bound_126 ( )",
+        1,
+    ),
+    (
+        CROSSING,
+        CROSSING_TWIN,
+        "crossing",
+        "side_total",
+        "side_always_fits",
+        "requires - bound_84 ( ) < oa < bound_84 ( )",
+        1,
     ),
 ];
 
@@ -827,17 +854,20 @@ const HAND_TWINS: [HandTwin; 3] = [
             "difference",
             "dot",
             "dot_point",
+            "fitted",
             "homogeneous",
             "homogeneous",
             "homogeneous_checked",
             "lpi_axis",
             "lpi_classify",
+            "lpi_classify_total",
             "mul_sub",
             "numerator",
             "product_difference",
             "side",
             "side_of_lpi_hand",
             "side_of_tpi_hand",
+            "span",
             "weight_and_offset",
             "within_budget",
         ],
@@ -853,6 +883,7 @@ const HAND_TWINS: [HandTwin; 3] = [
             "offsets",
             "orient2d_hand",
             "side",
+            "side_total",
             "ssi_axis",
         ],
         &["new"],

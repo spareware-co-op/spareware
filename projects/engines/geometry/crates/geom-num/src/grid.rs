@@ -212,6 +212,14 @@ impl Coord {
     pub const fn get(self) -> i64 {
         self.0
     }
+
+    /// A coordinate holding `v` whatever its size, for the crate's own tests only: the steps
+    /// that are checked although no coordinate of the frame can make them fail are reached with
+    /// coordinates outside it, to show that each one then reports and none answers.
+    #[cfg(test)]
+    pub(crate) const fn unchecked(v: i64) -> Coord {
+        Coord(v)
+    }
 }
 
 /// A point on the grid in 2D.
