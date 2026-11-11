@@ -42,7 +42,7 @@ use alloc::vec;
 use alloc::vec::Vec;
 use core::fmt;
 
-use geom_num::{Exactness, NumError};
+use geom_num::{Exactness, GridStep, NumError, Steps};
 use geom_run::{Exceeded, Interrupted, ItemError, RunError};
 
 use crate::batch::BatchDetail;
@@ -69,6 +69,8 @@ pub enum OpErrorDetail {
     Query(QueryDetail),
     /// A failure of the Combine family (`geom-bool`, chapter 11.11).
     Combine(CombineDetail),
+    /// A refusal of the per-entity bounds: what a step or a history may spend (13.2, piece G143).
+    Bound(BoundDetail),
 }
 
 impl OpErrorDetail {
@@ -82,6 +84,7 @@ impl OpErrorDetail {
             OpErrorDetail::Make(detail) => detail.kind(),
             OpErrorDetail::Query(detail) => detail.kind(),
             OpErrorDetail::Combine(detail) => detail.kind(),
+            OpErrorDetail::Bound(detail) => detail.kind(),
         }
     }
 
@@ -95,6 +98,7 @@ impl OpErrorDetail {
             OpErrorDetail::Make(detail) => detail.remedies(),
             OpErrorDetail::Query(detail) => detail.remedies(),
             OpErrorDetail::Combine(detail) => detail.remedies(),
+            OpErrorDetail::Bound(detail) => detail.remedies(),
         }
     }
 }
@@ -108,6 +112,7 @@ impl fmt::Display for OpErrorDetail {
             OpErrorDetail::Make(detail) => fmt::Display::fmt(detail, f),
             OpErrorDetail::Query(detail) => fmt::Display::fmt(detail, f),
             OpErrorDetail::Combine(detail) => fmt::Display::fmt(detail, f),
+            OpErrorDetail::Bound(detail) => fmt::Display::fmt(detail, f),
         }
     }
 }
@@ -503,6 +508,101 @@ impl fmt::Display for MakeDetail {
 }
 
 impl core::error::Error for MakeDetail {}
+
+/// Why the per-entity bounds refused an operation (13.2, 32.21; [`crate::bounds`]).
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+#[non_exhaustive]
+pub enum BoundDetail {
+    /// An operation's own term for an entity passes what one step may add.
+    OverStep {
+        /// The term.
+        own: Steps,
+        /// The most one step may add.
+        limit: Steps,
+        /// The grid step they count.
+        step: GridStep,
+    },
+    /// An entity's bound would pass what the caller accepts.
+    OverCeiling {
+        /// The bound it would reach.
+        needed: Steps,
+        /// The most the caller accepts.
+        ceiling: Steps,
+        /// The grid step they count.
+        step: GridStep,
+    },
+    /// An operation gave an own term to an entity that is not an output, that passed through
+    /// unchanged, or twice to one output. A defect.
+    OwnTermAstray,
+    /// Two operands' bounds count different grid steps.
+    MixedSteps,
+}
+
+impl BoundDetail {
+    /// The base kind.
+    #[must_use]
+    pub const fn kind(&self) -> ErrorKind {
+        match self {
+            BoundDetail::OverStep { .. } | BoundDetail::OverCeiling { .. } => {
+                ErrorKind::ExactnessNotAccepted
+            }
+            BoundDetail::OwnTermAstray => ErrorKind::Internal,
+            BoundDetail::MixedSteps => ErrorKind::InvalidInput,
+        }
+    }
+
+    /// The remedies this detail knows: the larger bound, to accept explicitly.
+    #[must_use]
+    pub fn remedies(&self) -> Vec<Remedy> {
+        match *self {
+            BoundDetail::OverStep {
+                own: bound, step, ..
+            }
+            | BoundDetail::OverCeiling {
+                needed: bound,
+                step,
+                ..
+            } => vec![Remedy::Accept {
+                class: Exactness::Certified { bound, step },
+            }],
+            BoundDetail::OwnTermAstray | BoundDetail::MixedSteps => Vec::new(),
+        }
+    }
+}
+
+impl fmt::Display for BoundDetail {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            BoundDetail::OverStep { own, limit, .. } => write!(
+                f,
+                "one step would add {} steps of error, past the {} a step may add",
+                own.0, limit.0
+            ),
+            BoundDetail::OverCeiling {
+                needed, ceiling, ..
+            } => write!(
+                f,
+                "an entity's error bound would reach {} steps, past the {} accepted",
+                needed.0, ceiling.0
+            ),
+            BoundDetail::OwnTermAstray => {
+                write!(
+                    f,
+                    "an operation's own term does not belong to one changed output"
+                )
+            }
+            BoundDetail::MixedSteps => write!(f, "the operands' bounds count different grid steps"),
+        }
+    }
+}
+
+impl core::error::Error for BoundDetail {}
+
+impl From<BoundDetail> for OpErrorDetail {
+    fn from(detail: BoundDetail) -> Self {
+        OpErrorDetail::Bound(detail)
+    }
+}
 
 /// Why a query could not answer (chapter 22).
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
