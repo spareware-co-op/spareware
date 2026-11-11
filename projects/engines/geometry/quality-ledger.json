@@ -5268,67 +5268,11 @@
     },
     {
       "file": "projects/engines/geometry/crates/geom-poly/src/subdivide.rs",
-      "mutant": "replace splits -> [(usize, Option<i64>); 3] with [(0, Some(0)); 3]",
-      "line_text": "let at = |axis: usize| {",
-      "occurrences": 1,
-      "kind": "hangs",
-      "reason": "A split at half step 0 on axis 0 outside the box leaves one child the whole box, which splits the same way for ever, so the tests stop it by their timeout. It hangs; it never returns a wrong arrangement."
-    },
-    {
-      "file": "projects/engines/geometry/crates/geom-poly/src/subdivide.rs",
-      "mutant": "replace splits -> [(usize, Option<i64>); 3] with [(1, Some(0)); 3]",
-      "line_text": "let at = |axis: usize| {",
-      "occurrences": 1,
-      "kind": "hangs",
-      "reason": "A split at half step 0 on axis 1 outside the box leaves one child the whole box, which splits the same way for ever, so the tests stop it by their timeout. It hangs; it never returns a wrong arrangement."
-    },
-    {
-      "file": "projects/engines/geometry/crates/geom-poly/src/subdivide.rs",
-      "mutant": "replace | with ^ in splits",
-      "line_text": "let odd = middle | 1;",
-      "occurrences": 1,
-      "kind": "equivalent",
-      "reason": "The mutant moves an odd middle one half step down, onto a whole step, and leaves an even one as it was. The split is then on a plane of the grid, where a corner can lie. A polygon in that plane goes on as the in-plane test sends it, a path that meets the plane is settled by the moved planes of Simulation of Simplicity, and a box's vectors do not depend on where it was split (a_small_leaf_gives_the_vectors_a_large_one_does, and the body tests at every leaf size). Odd steps only keep those ties from arising, so no result changes."
-    },
-    {
-      "file": "projects/engines/geometry/crates/geom-poly/src/subdivide.rs",
-      "mutant": "replace == with != in divide",
-      "line_text": "corner.map(|v| if i.next() == Some(axis) { at } else { v })",
-      "occurrences": 1,
-      "kind": "hangs",
-      "reason": "The children's corners move on the two axes the split is not on, so a child keeps the width along the axis it was split on and splits there for ever, and the tests stop it by their timeout. It hangs; it never returns a wrong arrangement."
-    },
-    {
-      "file": "projects/engines/geometry/crates/geom-poly/src/subdivide.rs",
       "mutant": "replace | with ^ in divide",
       "line_text": "key: node.key | bit,",
       "occurrences": 1,
       "kind": "equivalent",
       "reason": "bit is the bit of this node's depth, and a node's key has only the bits of the depths above it, so the bit is clear and | and ^ give one value."
-    },
-    {
-      "file": "projects/engines/geometry/crates/geom-poly/src/subdivide.rs",
-      "mutant": "replace splits -> [(usize, Option<i64>); 3] with [(0, Some(-1)); 3]",
-      "line_text": "let at = |axis: usize| {",
-      "occurrences": 1,
-      "kind": "hangs",
-      "reason": "A split at half step -1 on axis 0 outside the box leaves one child the whole box, which splits the same way for ever, so the tests stop it by their timeout. It hangs; it never returns a wrong arrangement."
-    },
-    {
-      "file": "projects/engines/geometry/crates/geom-poly/src/subdivide.rs",
-      "mutant": "replace splits -> [(usize, Option<i64>); 3] with [(1, Some(-1)); 3]",
-      "line_text": "let at = |axis: usize| {",
-      "occurrences": 1,
-      "kind": "hangs",
-      "reason": "A split at half step -1 on axis 1 outside the box leaves one child the whole box, which splits the same way for ever, so the tests stop it by their timeout. It hangs; it never returns a wrong arrangement."
-    },
-    {
-      "file": "projects/engines/geometry/crates/geom-poly/src/subdivide.rs",
-      "mutant": "replace < with == in splits",
-      "line_text": "(low < odd && odd < high).then_some(odd)",
-      "occurrences": 1,
-      "kind": "hangs",
-      "reason": "The tests stop it by their timeout: the mutant offers a split only where the odd half step is the cell's own low face, so every polygon lies on one side, the child cell is the cell itself with every polygon, and the walk splits it there again for ever. It is a hang the tests catch; kept so that the judge counts it as one."
     },
     {
       "file": "projects/engines/geometry/crates/geom-check/src/planar.rs",
@@ -5409,30 +5353,6 @@
       "occurrences": 1,
       "kind": "hangs",
       "reason": "The radial walk stops when it comes back to the fin it started from. The mutant skips the walk at once for that fin and for every other one walks past it for ever, or until the same fin comes round, so the tests stop it by their timeout. It hangs; it never returns a wrong side."
-    },
-    {
-      "file": "projects/engines/geometry/crates/geom-poly/src/merge.rs",
-      "mutant": "replace < with > in radial",
-      "line_text": "let rising = |fin: &Fin| fin.from < fin.to;",
-      "occurrences": 1,
-      "kind": "equivalent",
-      "reason": "radial orders the fins of one edge, and every fin of an edge runs between the edge's two ends, one way or the other, so the mutant turns every fin's rising over together (or, for ends that were one vertex, none of them). radial only compares one fin's rising with another's (each flap's reversed, turned, and the joins after the order), and turning all of them over keeps every comparison."
-    },
-    {
-      "file": "projects/engines/geometry/crates/geom-poly/src/merge.rs",
-      "mutant": "replace < with <= in radial",
-      "line_text": "let rising = |fin: &Fin| fin.from < fin.to;",
-      "occurrences": 1,
-      "kind": "equivalent",
-      "reason": "radial orders the fins of one edge, and every fin of an edge runs between the edge's two ends, one way or the other, so the mutant differs only where the two ends are one vertex, and then for every fin of the edge alike. radial only compares one fin's rising with another's, so every comparison comes out the same."
-    },
-    {
-      "file": "projects/engines/geometry/crates/geom-poly/src/merge.rs",
-      "mutant": "replace == with != in radial",
-      "line_text": "reversed: rising(&fin) == rising(&start),",
-      "occurrences": 1,
-      "kind": "equivalent",
-      "reason": "The mutant turns over every flap's reversed, the reference flap's too. The flaps go only to geom_poly::order::about, which reads reversed only as a.reversed != b.reversed (turn_about and same_flap), and that is the same with both turned over; turned reads rising, not the flaps."
     },
     {
       "file": "projects/engines/geometry/crates/geom-bool/src/wires.rs",
@@ -5785,6 +5705,70 @@
       "occurrences": 2,
       "kind": "equivalent",
       "reason": "The cells' box (around) has its faces on odd half steps, and a seed's coordinate doubled is even, so half never equals low or high and < and <= agree."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-bool/src/batch.rs",
+      "mutant": "replace != with == in entered",
+      "line_text": "tools.retain(|tool| tool.key != key);",
+      "occurrences": 1,
+      "kind": "hangs",
+      "reason": "Under SkipFailedTools a tool that cannot enter is set aside and the rest are prepared again. The mutant keeps only the tool that failed, which fails again the same way, so the loop never ends (skipped grows by one each time round) and the tests stop it by their timeout. It hangs; it never returns a cut."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-poly/src/merge.rs",
+      "mutant": "delete ! in rings",
+      "line_text": ".filter(|o| !used.contains_key(o))",
+      "occurrences": 1,
+      "kind": "hangs",
+      "reason": "The ring walk goes on to a fin leaving the last fin's end that it has not used yet. The mutant takes only used ones, so each of a face's fins but the last ends a ring of its own at once, and the last, whose way on is a used fin, then follows used fins round the face for ever, pushing each onto its ring. Every merge meets it, so the tests stop it by their timeout. It hangs; it never returns wrong rings."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-poly/src/merge.rs",
+      "mutant": "replace < with > in radial",
+      "line_text": "let rising = |fin: &Fin| fin.from < fin.to;",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "rising is read only to compare one fin's with another's: the flap's reversed, turned, and the test before each join. A fin's two ends are its edge's low and high, numbers of two different points, so > is the negation of < on every fin, every rising turns over together, and every comparison comes out the same."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-poly/src/merge.rs",
+      "mutant": "replace == with != in radial",
+      "line_text": "reversed: rising(&fin) == rising(&start),",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "The mutant turns every flap's reversed over, the reference's with the rest, since all of them come from flap. about reads reversed only through turn_about and same_flap, each of which asks only whether two flaps' reversed differ, so every order about gives, and with it last, is the same; turned and the joins read rising, not the flaps."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-num/src/plane.rs",
+      "mutant": "replace tpi_routed -> Option<Sign> with None",
+      "line_text": "let [p, q, r] = &t.planes;",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "On None, Plane::side_of_tpi takes side_of_tpi_hand, which computes the same sign exactly: n . X + d . w from Tpi::homogeneous in I384 (then I512) times the sign of w, the 4 x 4 determinant the generated tpi_side evaluates. Both paths are exact, so the answer is the same for every input; only the time taken changes."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-num/src/plane.rs",
+      "mutant": "replace words -> Option<[i64; 4]> with None",
+      "line_text": "let [x, y, z] = p.n;",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "words is read only by the machine-word rung: determinant_in_words, which is then None, so determinant_routed asks the generated tpi_side predicate, filter and then exact path, for the same 4 x 4 determinant; and normals_sign, which then computes the same 3 x 3 determinant with cross and dot. Both roads are exact, so every sign is the same; only the time taken changes. The generated tpi_side predicate's exact path takes every plane (its inputs are certified to 83 bits for a normal and 125 for an offset, the widths Plane::new holds every plane to), and normals_sign's cross and dot in I256 hold any normals below 2^83, so neither fails where the words would have answered."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-num/src/plane.rs",
+      "mutant": "replace det_in_words -> Option<i64> with None",
+      "line_text": "let ([ax, ay, az, _], [bx, by, bz, _], [cx, cy, cz, _]) = (*a, *b, *c);",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "det_in_words is read only by the machine-word rung: on None, determinant_in_words is None and determinant_routed asks the generated tpi_side predicate, filter and then exact path, for the same 4 x 4 determinant, and normals_sign computes the same 3 x 3 determinant with cross and dot. Both roads are exact, so every sign is the same; only the time taken changes. The generated tpi_side predicate's exact path takes every plane (its inputs are certified to 83 bits for a normal and 125 for an offset, the widths Plane::new holds every plane to), and normals_sign's cross and dot in I256 hold any normals below 2^83, so neither fails where the words would have answered."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-num/src/plane.rs",
+      "mutant": "replace determinant_in_words -> Option<Sign> with None",
+      "line_text": "let (a, b, c, e) = (words(p)?, words(q)?, words(r)?, words(s)?);",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "determinant_in_words is the first rung of determinant_routed: on None it asks the generated tpi_side predicate, filter and then exact path, for the same 4 x 4 determinant of the four planes' coefficients. Both roads are exact, so every sign is the same; only the time taken changes. The generated tpi_side predicate's exact path takes every plane (its inputs are certified to 83 bits for a normal and 125 for an offset, the widths Plane::new holds every plane to), and normals_sign's cross and dot in I256 hold any normals below 2^83, so neither fails where the words would have answered."
     }
   ],
   "coverage_off": [
@@ -6244,13 +6228,6 @@
       "occurrences": 1,
       "piece": "G41",
       "reason": "magnitude_bits runs only at compile time, in constants, and the filtered orient2d path is off while ORIENT2D_FILTER_FIRST is false (G42's measurement keeps it off), so no test runs these lines. G41 proves or removes them."
-    },
-    {
-      "file": "projects/engines/geometry/crates/geom-poly/src/order.rs",
-      "line_text": "Err(e) => Err(e),",
-      "occurrences": 1,
-      "piece": "G41",
-      "reason": "Tpi::new's one error other than Degenerate is BudgetExceeded, the arm G41's proofs close in geom-num: planes within budget cannot reach it, and every Plane is within budget, so no test can run this line."
     },
     {
       "file": "projects/engines/geometry/crates/geom-num/src/predicate.rs",

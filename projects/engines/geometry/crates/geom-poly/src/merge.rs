@@ -42,7 +42,7 @@ use alloc::vec::Vec;
 use core::cmp::{Ordering, Reverse};
 use core::fmt;
 
-use geom_num::plane::{Plane, Tpi};
+use geom_num::plane::{Plane, Tpi, normals_sign};
 use geom_num::{I256, I320, NumError, Sign, Wide};
 use geom_run::{Stopped, WorkMeter};
 
@@ -320,7 +320,7 @@ fn point_order(a: &Corner, b: &Corner) -> Option<Ordering> {
     reason = "p and q are planes, and x and w the point, as in Tpi::homogeneous"
 )]
 fn corner(face: Plane, p: Plane, q: Plane) -> Result<Corner, NumError> {
-    let point = Tpi::new(face, p, q)?;
+    let point = Tpi::meeting(face, p, q)?;
     let (x, w) = point.homogeneous()?;
     let turn = |v: &I320| v.checked_neg().ok_or(NumError::BudgetExceeded);
     let [a, b, c] = &x;
@@ -681,7 +681,7 @@ fn named(corner: &Corner, meter: &mut WorkMeter<'_>) -> Result<Tpi, MergeError> 
     if near.is_exact() {
         let at = near.value();
         let axis = |n: [i128; 3], v: i64| Plane::new(n, i128::from(v).saturating_neg());
-        return Ok(Tpi::new(
+        return Ok(Tpi::meeting(
             axis([1, 0, 0], at.x.get())?,
             axis([0, 1, 0], at.y.get())?,
             axis([0, 0, 1], at.z.get())?,
@@ -699,10 +699,8 @@ fn named(corner: &Corner, meter: &mut WorkMeter<'_>) -> Result<Tpi, MergeError> 
         for (j, b) in list.iter().enumerate().skip(i.saturating_add(1)) {
             for c in list.iter().skip(j.saturating_add(1)) {
                 meter.charge(1)?;
-                match Tpi::new(*a, *b, *c) {
-                    Ok(point) => return Ok(point),
-                    Err(NumError::Degenerate) => {}
-                    Err(e) => return Err(e.into()),
+                if normals_sign(a, b, c)? != Sign::Zero {
+                    return Ok(Tpi::meeting(*a, *b, *c)?);
                 }
             }
         }
@@ -1108,7 +1106,7 @@ pub fn section(pieces: &[(Piece, usize)], meter: &mut WorkMeter<'_>) -> Result<C
     }
     let mut vertices = Vec::with_capacity(used.len());
     for id in &used {
-        vertices.push(points.get(*id).ok_or(MergeError::Open)?.point);
+        vertices.push(named(points.get(*id).ok_or(MergeError::Open)?, meter)?);
     }
     Ok(Curves {
         vertices,

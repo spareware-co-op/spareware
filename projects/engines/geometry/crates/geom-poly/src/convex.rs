@@ -116,7 +116,7 @@ struct Cell {
 
 /// Which side of `cut` a point lies on, from the point's planes.
 fn side_of(cut: &Plane, face: &Plane, a: &Plane, b: &Plane) -> Result<Sign, NumError> {
-    cut.side_of_tpi(&Tpi::new(*face, *a, *b)?)
+    cut.side_of_tpi(&Tpi::meeting(*face, *a, *b)?)
 }
 
 /// `plane`, facing the other way.
@@ -191,7 +191,7 @@ fn holds_length(face: &Plane, bound: &Plane, bounds: &[Plane]) -> Result<bool, N
         match normals_det(face, bound, other)? {
             Sign::Zero => {
                 // Parallel to the line: the same line with the inside the other way shuts it.
-                let point = Tpi::new(*face, *bound, first_crossing(face, bound, bounds)?)?;
+                let point = Tpi::meeting(*face, *bound, first_crossing(face, bound, bounds)?)?;
                 if other.side_of_tpi(&point)? == Sign::Negative {
                     return Ok(false);
                 }
