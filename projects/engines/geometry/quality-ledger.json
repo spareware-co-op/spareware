@@ -3324,11 +3324,11 @@
     },
     {
       "file": "projects/engines/geometry/crates/geom-num/src/dd.rs",
-      "mutant": "replace && with || in DD::normalized",
-      "line_text": "if hi.is_finite() && lo.is_finite() {",
+      "mutant": "replace & with | in DD::normalized",
+      "line_text": "if hi.is_finite() & lo.is_finite() {",
       "occurrences": 1,
       "kind": "equivalent",
-      "reason": "two_sum's error is finite exactly when its sum is (eft::two_sum: exact for every finite input whose rounded sum is finite; otherwise the error is an infinity or NaN), so hi and lo are finite together and `&&` and `||` agree on every input."
+      "reason": "two_sum's error is finite exactly when its sum is (eft::two_sum: exact for every finite input whose rounded sum is finite; otherwise the error is an infinity or NaN), so hi and lo are finite together and `&` and `|` agree on every input."
     },
     {
       "file": "projects/engines/geometry/crates/geom-num/src/dd.rs",
@@ -5361,48 +5361,6 @@
       "occurrences": 1,
       "piece": "G41",
       "reason": "A crossing point's budget arm, or its fallback to the exact weight or the wider commit, which the tests' points never need: the generated filter and the narrow budget decide every one. G41 proves it unreachable, or a test with near-degenerate inputs at the edge of the budget reaches it."
-    },
-    {
-      "file": "projects/engines/geometry/crates/geom-num/src/dd.rs",
-      "line_text": "if let Ok(e) = math::fma(a, b, -p) {",
-      "occurrences": 1,
-      "piece": "G41",
-      "reason": "A double-double defensive arm the tests do not reach: fma failing on finite operands, a non-finite split, or a branch of the exactness shortcut. G41's Kani harnesses for the error-free transforms prove it unreachable, or a test reaches it."
-    },
-    {
-      "file": "projects/engines/geometry/crates/geom-num/src/dd.rs",
-      "line_text": "}",
-      "occurrences": 1,
-      "piece": "G41",
-      "reason": "A double-double defensive arm the tests do not reach: fma failing on finite operands, a non-finite split, or a branch of the exactness shortcut. G41's Kani harnesses for the error-free transforms prove it unreachable, or a test reaches it."
-    },
-    {
-      "file": "projects/engines/geometry/crates/geom-num/src/dd.rs",
-      "line_text": "if hi.is_finite() && lo.is_finite() {",
-      "occurrences": 1,
-      "piece": "G41",
-      "reason": "A double-double defensive arm the tests do not reach: fma failing on finite operands, a non-finite split, or a branch of the exactness shortcut. G41's Kani harnesses for the error-free transforms prove it unreachable, or a test reaches it."
-    },
-    {
-      "file": "projects/engines/geometry/crates/geom-num/src/grid.rs",
-      "line_text": "None => Err(NumError::BudgetExceeded),",
-      "occurrences": 2,
-      "piece": "G41",
-      "reason": "The grid's budget arm: a checked step that the tests' inputs never overflow. G41 proves it unreachable, or a test reaches it with inputs at the budget."
-    },
-    {
-      "file": "projects/engines/geometry/crates/geom-num/src/perturb.rs",
-      "line_text": "if let Some(row) = m.get_mut(arg) {",
-      "occurrences": 1,
-      "piece": "G41",
-      "reason": "The perturbed determinant's defensive arms: `arg` always indexes a row of the matrix, so `get_mut` never misses, and the search always finds a nonzero term for distinct keys (choosing, in key order, column k for the argument of rank k leaves a coefficient of ±1), so its fallback never runs. G41 proves them unreachable."
-    },
-    {
-      "file": "projects/engines/geometry/crates/geom-num/src/perturb.rs",
-      "line_text": "}",
-      "occurrences": 1,
-      "piece": "G41",
-      "reason": "The perturbed determinant's defensive arms: `arg` always indexes a row of the matrix, so `get_mut` never misses, and the search always finds a nonzero term for distinct keys (choosing, in key order, column k for the argument of rank k leaves a coefficient of ±1), so its fallback never runs. G41 proves them unreachable."
     },
     {
       "file": "projects/engines/geometry/crates/geom-num/src/plane.rs",

@@ -370,10 +370,19 @@ pub fn refine(c: Coord, from: GridStep, to: GridStep) -> Result<Coord, NumError>
     let Some(rungs) = to.rung().checked_sub(from.rung()) else {
         return Err(NumError::WrongDirection);
     };
-    let fine = pow25(rungs).and_then(|factor| i128::from(c.0).checked_mul(factor));
+    refine_by(c.0, rungs)
+}
+
+/// [`refine`] for a position and the number of rungs between the two steps.
+///
+/// # Errors
+///
+/// As [`refine`]; `BudgetExceeded` for a number of rungs no two steps differ by, which [`refine`]
+/// never passes: reported, not answered.
+fn refine_by(v: i64, rungs: u32) -> Result<Coord, NumError> {
+    let fine = pow25(rungs).and_then(|factor| i128::from(v).checked_mul(factor));
     match fine {
         Some(v) => Coord::from_i128(v),
-        // Unreachable for the three steps (the budget above): reported, not answered.
         None => Err(NumError::BudgetExceeded),
     }
 }
@@ -394,7 +403,17 @@ pub fn coarsen(c: Coord, from: GridStep, to: GridStep) -> Result<Rounded<Coord>,
     let Some(rungs) = from.rung().checked_sub(to.rung()) else {
         return Err(NumError::WrongDirection);
     };
-    let v = i128::from(c.0);
+    coarsen_by(c.0, rungs)
+}
+
+/// [`coarsen`] for a position and the number of rungs between the two steps.
+///
+/// # Errors
+///
+/// `BudgetExceeded` for a number of rungs no two steps differ by, which [`coarsen`] never passes:
+/// reported, not answered.
+fn coarsen_by(v: i64, rungs: u32) -> Result<Rounded<Coord>, NumError> {
+    let v = i128::from(v);
     let rounded = pow25(rungs).and_then(|d| {
         let (q, r) = (v.checked_div_euclid(d)?, v.checked_rem_euclid(d)?);
         let q = if r > d.checked_div(2)? {
@@ -407,7 +426,6 @@ pub fn coarsen(c: Coord, from: GridStep, to: GridStep) -> Result<Rounded<Coord>,
     match rounded {
         // Coarsening never increases a magnitude, so `from_i128` always accepts the result.
         Some((q, exact)) => Coord::from_i128(q).map(|value| Rounded::new(value, exact)),
-        // Unreachable for the three steps (see above): reported, not answered.
         None => Err(NumError::BudgetExceeded),
     }
 }
@@ -534,6 +552,24 @@ mod tests {
             coarsen(Coord::ZERO, GridStep::Q0, GridStep::Q1),
             Err(NumError::WrongDirection)
         );
+    }
+
+    /// A number of rungs no two steps differ by has no ratio: converting by it is reported, never
+    /// answered with a wrong one. The three steps' own differences convert as the public functions
+    /// do.
+    #[test]
+    fn a_rung_count_without_a_ratio_is_reported() {
+        for rungs in [3, 4, u32::MAX] {
+            assert_eq!(refine_by(1, rungs), Err(NumError::BudgetExceeded));
+            assert_eq!(coarsen_by(1, rungs), Err(NumError::BudgetExceeded));
+            assert_eq!(coarsen_by(0, rungs), Err(NumError::BudgetExceeded));
+        }
+        assert_eq!(refine_by(-3, 2).map(Coord::get), Ok(-1875));
+        assert_eq!(refine_by(7, 0).map(Coord::get), Ok(7));
+        let r = coarsen_by(-1875, 2).unwrap();
+        assert_eq!((r.value().get(), r.is_exact()), (-3, true));
+        let r = coarsen_by(13, 1).unwrap();
+        assert_eq!((r.value().get(), r.is_exact()), (1, false));
     }
 
     /// Every rung difference has its power of 25, and no other difference has one.
