@@ -50,7 +50,9 @@
 //! test and the mean-value form of chapter 6 for the pieces).
 //!
 //! Cost: a few interval evaluations of g, one `atan2` and at most sixteen evaluations per family;
-//! the pieces' route at most 64 × 9 evaluations of g and of g′.
+//! the pieces' route at most 64 × 9 evaluations of g and of g′. One work unit per extent and per
+//! piece tried, and [`FAR_CORNER`] more for each corner of an arctangent's box that lies within
+//! 2⁻⁵³ of an axis, where the certified arctangent takes forty times its usual instructions.
 
 #![allow(
     clippy::many_single_char_names,
@@ -79,6 +81,24 @@ const SCAN: usize = 6;
 
 /// 2⁵⁰: past it a period of 2 is too near the doubles' spacing to place a member of a family.
 const FAR: f64 = 1_125_899_906_842_624.0;
+
+/// 2⁵³: a corner of an arctangent's box whose larger coordinate is at least this many times its
+/// smaller one has its angle within 2⁻⁵³ of an axis ([`angle`]).
+const FAR_APART: f64 = 9_007_199_254_740_992.0;
+
+/// The work units an extent is charged for each corner of an arctangent's box whose larger
+/// coordinate is at least 2⁵³ times its smaller one (both non-zero), on top of its own unit.
+///
+/// What it stands for, measured: the correctly rounded `atan2` (`geom_num::math`, the CORE-MATH
+/// port) decides almost every argument in double precision, in about 240 instructions, but where
+/// the two coordinates are 2⁵³ or more apart it goes straight to its 192-bit path, about 10,300
+/// instructions (callgrind on a release build of an offset of an ellipse with axes of 2⁻⁶⁰ and
+/// 2⁶⁰, issue #765: 5,285,592 such calls took 54,441,804,432 instructions, and the 2,642,796 others
+/// 641,714,340). At the curve offset's rate of about 285 instructions a unit
+/// (`crate::offset`, "What the work costs") that is 40 units a corner, rounded up. The extent's
+/// own unit stands for the rest of the closed form, the usual arctangent included, so an extent
+/// with no such corner is charged as it always was.
+pub const FAR_CORNER: u64 = 40;
 
 /// One function of one parameter with interval coefficients (module documentation).
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -177,14 +197,51 @@ fn times(
     }
 }
 
-/// φ = atan2(b, a)/π, in half-turns, for (a, b) not both zero.
-fn phase(a: Interval, b: Interval) -> Result<Interval, CurveError> {
-    let angle = b.atan2(a)?;
-    if is_zero(angle) {
-        // On the positive x-axis: exactly 0, not 0/π widened.
-        return Ok(angle);
+/// Whether the corner (x, y) of an arctangent's box is [`FAR_APART`]: both coordinates non-zero
+/// and the larger at least 2⁵³ times the smaller. The product is exact, or infinite, which no
+/// coordinate reaches.
+fn far_apart(y: f64, x: f64) -> bool {
+    let (small, large) = (
+        tight::smaller(y.abs(), x.abs()),
+        tight::larger(y.abs(), x.abs()),
+    );
+    small > 0.0 && large >= small * FAR_APART
+}
+
+/// The certified angle atan2(y, x) of every point of the box, with the meter charged
+/// [`FAR_CORNER`] units for each corner that is [`FAR_APART`].
+///
+/// The charge is a function of the box alone (chapter 23.10: a count no shortcut can change): the
+/// four corners `Interval::atan2` takes the angle of, less the boxes it answers without them (one
+/// that holds the negative x-axis and points below it, whose angles are all of [−π, π]).
+fn angle(y: Interval, x: Interval, meter: &mut WorkMeter<'_>) -> Result<Interval, CurveError> {
+    let all_round = x.lo() < 0.0 && y.lo() < 0.0 && y.hi() >= 0.0;
+    if !all_round {
+        for (cy, cx) in [
+            (y.lo(), x.lo()),
+            (y.lo(), x.hi()),
+            (y.hi(), x.lo()),
+            (y.hi(), x.hi()),
+        ] {
+            // One charge a far corner, and none where no corner is far apart: for every such
+            // extent the meter's count of charges (and with it where it reads a cancellation) is
+            // as it was.
+            if far_apart(cy, cx) {
+                meter.charge(FAR_CORNER)?;
+            }
+        }
     }
-    tight::div(angle, form::pi()?)
+    Ok(y.atan2(x)?)
+}
+
+/// φ = atan2(b, a)/π, in half-turns, for (a, b) not both zero.
+fn phase(a: Interval, b: Interval, meter: &mut WorkMeter<'_>) -> Result<Interval, CurveError> {
+    let radians = angle(b, a, meter)?;
+    if is_zero(radians) {
+        // On the positive x-axis: exactly 0, not 0/π widened.
+        return Ok(radians);
+    }
+    tight::div(radians, form::pi()?)
 }
 
 /// cosh t and sinh t over `t`.
@@ -284,10 +341,10 @@ impl Scalar {
     }
 
     /// The critical points in closed form (module documentation's table).
-    fn critical(&self) -> Result<Critical, CurveError> {
+    fn critical(&self, meter: &mut WorkMeter<'_>) -> Result<Critical, CurveError> {
         let one = point(1.0)?;
         match *self {
-            Scalar::Wave { q, a, b, .. } => wave_critical(q, a, b),
+            Scalar::Wave { q, a, b, .. } => wave_critical(q, a, b, meter),
             Scalar::Quadratic { q, r, .. } => {
                 if is_zero(r) {
                     Ok(Critical::Families(Vec::new()))
@@ -323,7 +380,7 @@ impl Scalar {
                     return Ok(Critical::Families(Vec::new()));
                 }
                 // g′ = π²·t·R·cos(π(t − φ)).
-                let phi = tight::add(phase(a, b)?, point(0.5)?)?;
+                let phi = tight::add(phase(a, b, meter)?, point(0.5)?)?;
                 Ok(Critical::Families(vec![
                     (point(0.0)?, false),
                     (phi, true),
@@ -332,7 +389,7 @@ impl Scalar {
             }
             // With no t in its coefficients it is a wave: p + a·cos πt + b·sin πt.
             Scalar::Modulated { a, b, c, d, .. } if is_zero(c) && is_zero(d) => {
-                wave_critical(point(0.0)?, a, b)
+                wave_critical(point(0.0)?, a, b, meter)
             }
             Scalar::Modulated { .. } => Ok(Critical::Undecided),
         }
@@ -340,13 +397,18 @@ impl Scalar {
 }
 
 /// The critical points of p + q·t + a·cos πt + b·sin πt (module documentation's table).
-fn wave_critical(q: Interval, a: Interval, b: Interval) -> Result<Critical, CurveError> {
+fn wave_critical(
+    q: Interval,
+    a: Interval,
+    b: Interval,
+    meter: &mut WorkMeter<'_>,
+) -> Result<Critical, CurveError> {
     let one = point(1.0)?;
     if is_zero(a) && is_zero(b) {
         // p + q·t: monotone.
         return Ok(Critical::Families(Vec::new()));
     }
-    let phi = phase(a, b)?;
+    let phi = phase(a, b, meter)?;
     if is_zero(q) {
         // Maxima at φ + 2m, minima at φ + 1 + 2m.
         return Ok(Critical::Families(vec![
@@ -370,7 +432,7 @@ fn wave_critical(q: Interval, a: Interval, b: Interval) -> Result<Critical, Curv
         return Ok(Critical::Undecided);
     }
     // ψ = asin ρ / π, in [−½, ½]: the angle whose sine is ρ and cosine √(1 − ρ²).
-    let psi = tight::div(rho.atan2(tight::sqrt(cos2)?)?, form::pi()?)?;
+    let psi = tight::div(angle(rho, tight::sqrt(cos2)?, meter)?, form::pi()?)?;
     Ok(Critical::Families(vec![
         (tight::add(phi, psi)?, true),
         (tight::sub(tight::add(phi, one)?, psi)?, true),
@@ -543,7 +605,7 @@ pub fn extent(
     if t0.abs() >= FAR || t1.abs() >= FAR {
         return pieces(g, (t0, t1), meter);
     }
-    let Critical::Families(families) = g.critical()? else {
+    let Critical::Families(families) = g.critical(meter)? else {
         return pieces(g, (t0, t1), meter);
     };
     let mut out = hull(g.over(point(t0)?)?, g.over(point(t1)?)?)?;

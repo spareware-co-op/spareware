@@ -2320,7 +2320,7 @@
           "target": "lib"
         },
         {
-          "cost": "a few interval evaluations of g, one `atan2` and at most sixteen evaluations per family; the pieces' route at most 64 × 9 evaluations of g and of g′.",
+          "cost": "a few interval evaluations of g, one `atan2` and at most sixteen evaluations per family; the pieces' route at most 64 × 9 evaluations of g and of g′. One work unit per extent and per piece tried, and [`FAR_CORNER`] more for each corner of an arctangent's box that lies within 2⁻⁵³ of an axis, where the certified arctangent takes forty times its usual instructions.",
           "does": "[`Scalar`] names the functions the analytic kinds are made of, one coordinate of one derivative at a time, each with interval coefficients (enclosures of the exact ones the stored data define), and the closed form of the zeros of its derivative:",
           "family": [],
           "file": "projects/engines/geometry/crates/geom-curve/src/extent.rs",
@@ -14601,7 +14601,8 @@
     {
       "evidence": {
         "contract": [
-          "projects/engines/geometry/crates/geom-curve/tests/compound.rs"
+          "projects/engines/geometry/crates/geom-curve/tests/compound.rs",
+          "projects/engines/geometry/crates/geom-curve/tests/offset_work.rs"
         ]
       },
       "missing": [
@@ -14744,7 +14745,8 @@
     {
       "evidence": {
         "contract": [
-          "projects/engines/geometry/crates/geom-surface/tests/offset.rs"
+          "projects/engines/geometry/crates/geom-surface/tests/offset.rs",
+          "projects/engines/geometry/crates/geom-surface/tests/offset_work.rs"
         ]
       },
       "missing": [
