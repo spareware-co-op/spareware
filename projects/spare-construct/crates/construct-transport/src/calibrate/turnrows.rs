@@ -13,7 +13,7 @@ use crate::datahub::{geh, norm};
 use crate::edit::net::{degree, len as link_len, links_at};
 use crate::edit::sites;
 use crate::graph::js_sort_by;
-use crate::jsnum::{Maybe, math_max, value_to_number};
+use crate::jsnum::{Maybe, math_max, usize_to_f64, value_to_number};
 use crate::project::{OrderedMap, Project, Scenario};
 use crate::results::Res;
 use crate::turns::{Arm, MovementRow, classify, movements, site_rows as turns_site_rows, turn_code};
@@ -86,6 +86,9 @@ fn view_rows_of(m: &[MovementRow]) -> Vec<ViewRow> {
 /// Movements through each junction site, entry arc to exit arc (`siteTraces`): site id to (entry arc, exit arc, veh/h), in the order first met.
 pub type SiteTraces = Vec<(String, Vec<(String, String, f64)>)>;
 
+// Traced flow per site while tracing: site id to ((entry arc, exit arc), veh/h), in the order first met
+type TracedFlows = Vec<(String, Vec<((String, String), f64)>)>;
+
 /// `siteTraces(sc, res)`: the movements through each junction site, from what was kept for this result (`sc.calib.siteTurns`), else traced along the result's paths (the entry arc and exit arc of each path through the site, flows in veh/h to 0.01). None when the result has no sites, or no paths and nothing was kept.
 ///
 /// The prototype also keeps the traced movements in the scenario for its own current result; [`keep_site_traces`] does that.
@@ -133,7 +136,7 @@ pub fn site_traces(sc: &Scenario, res: Option<&Res>, s: &crate::project::Setting
         }
     }
     let pf = crate::standards::pcu_f(s);
-    let mut flow: Vec<(String, Vec<((String, String), f64)>)> = Vec::new();
+    let mut flow: TracedFlows = Vec::new();
     for od in paths {
         for p in &od.list {
             let mut open: Vec<(String, String)> = Vec::new();
@@ -142,24 +145,24 @@ pub fn site_traces(sc: &Scenario, res: Option<&Res>, s: &crate::project::Setting
                 for (site, entry, k) in hs {
                     if *entry {
                         match open.iter_mut().find(|(x, _)| x == site) {
-                            Some(o) => o.1 = k.clone(),
+                            Some(o) => o.1.clone_from(k),
                             None => open.push((site.clone(), k.clone())),
                         }
                         continue;
                     }
                     let Some(pos) = open.iter().position(|(x, _)| x == site) else { continue };
-                    let e = open[pos].1.clone();
-                    let fi = if let Some(i) = flow.iter().position(|(x, _)| x == site) { i } else {
+                    // pos was just found in open, and nothing below reads open, so removing it here is as removing it last
+                    let (_, e) = open.remove(pos);
+                    if !flow.iter().any(|(x, _)| x == site) {
                         flow.push((site.clone(), Vec::new()));
-                        flow.len() - 1
-                    };
-                    let m = &mut flow[fi].1;
+                    }
+                    // the site's entry is there: it was there already or was just pushed
+                    let Some((_, m)) = flow.iter_mut().find(|(x, _)| x == site) else { continue };
                     let add = p.w / pf;
                     match m.iter_mut().find(|((x, y), _)| *x == e && y == k) {
                         Some(c) => c.1 += add,
                         None => m.push(((e, k.clone()), add)),
                     }
-                    open.remove(pos);
                 }
             }
         }
@@ -204,15 +207,16 @@ pub fn keep_site_traces(sc: &mut Scenario, res: &Res, traces: &SiteTraces) {
     if !calib.is_object() {
         *calib = Value::Object(Map::new());
     }
-    let st = calib
-        .as_object_mut()
-        .expect("an object")
-        .entry("siteTurns".to_string())
-        .or_insert_with(|| Value::Object(Map::new()));
+    // calib was just made an object if it was not one, so this always matches
+    let Value::Object(calib) = calib else { return };
+    let st = calib.entry("siteTurns".to_string()).or_insert_with(|| Value::Object(Map::new()));
     if !st.is_object() {
         *st = Value::Object(Map::new());
     }
-    st.as_object_mut().expect("an object").insert(res.period.clone(), Value::Object(rec));
+    // likewise st
+    if let Value::Object(st) = st {
+        st.insert(res.period.clone(), Value::Object(rec));
+    }
 }
 
 fn traced_rows(arms: &[Arm], rows: &[MovementRow], list: &[(String, String, f64)]) -> Vec<ViewRow> {
@@ -233,8 +237,9 @@ fn traced_rows(arms: &[Arm], rows: &[MovementRow], list: &[(String, String, f64)
     let mut out = Vec::new();
     for (f, t, v) in list {
         let (Some(&ai), Some(&xi)) = (in_leg.get(f.as_str()), out_leg.get(t.as_str())) else { continue };
-        let (a, x) = (&arms[ai], &arms[xi]);
-        if a.leg.is_empty() || x.leg.is_empty() || !(*v > 0.0) {
+        // ai and xi are positions in arms
+        let (Some(a), Some(x)) = (arms.get(ai), arms.get(xi)) else { continue };
+        if a.leg.is_empty() || x.leg.is_empty() || *v <= 0.0 || v.is_nan() {
             continue;
         }
         let tc = turn_code(a.o, x.o);
@@ -324,7 +329,7 @@ pub fn junction_view(ctx: &Ctx, sc: &Scenario, res: Option<&Res>, node_id: Optio
             name: None,
         });
     }
-    let list = res.and_then(|r| r.turns.get(&node)).map(std::vec::Vec::as_slice).unwrap_or(&[]);
+    let list: &[crate::results::TurnRow] = res.and_then(|r| r.turns.get(&node)).map_or(&[], std::vec::Vec::as_slice);
     let arms: Vec<ViewArm> = crate::turns::arms(sc, &node, list, None)
         .into_iter()
         .filter(|a| !a.conn)
@@ -352,6 +357,11 @@ impl LegMap {
 /// `legArms(sc, nodeId, s, res, view)`: counted legs onto model arms: outward bearing within 30 degrees, else the leg's road name.
 #[must_use]
 pub fn leg_arms(s: &TurnSite, view: Option<&JunctionView>) -> LegMap {
+    struct P {
+        l: String,
+        a: usize,
+        e: f64,
+    }
     let arms: &[ViewArm] = view.map_or(&[], |v| v.arms.as_slice());
     let mut legs: Vec<String> = Vec::new();
     for bin in s.bins.values() {
@@ -364,11 +374,6 @@ pub fn leg_arms(s: &TurnSite, view: Option<&JunctionView>) -> LegMap {
     }
     let mut map: Vec<(String, usize)> = Vec::new();
     let mut used: HashSet<&str> = HashSet::new();
-    struct P {
-        l: String,
-        a: usize,
-        e: f64,
-    }
     let mut pairs: Vec<P> = Vec::new();
     for l in &legs {
         for (ai, a) in arms.iter().enumerate() {
@@ -377,9 +382,11 @@ pub fn leg_arms(s: &TurnSite, view: Option<&JunctionView>) -> LegMap {
     }
     js_sort_by(&mut pairs, |p, q| p.e - q.e);
     for p in &pairs {
-        if p.e <= 30.0 && !map.iter().any(|(l, _)| *l == p.l) && !used.contains(arms[p.a].in_key.as_str()) {
+        // p.a is a position in arms
+        let Some(arm) = arms.get(p.a) else { continue };
+        if p.e <= 30.0 && !map.iter().any(|(l, _)| *l == p.l) && !used.contains(arm.in_key.as_str()) {
             map.push((p.l.clone(), p.a));
-            used.insert(arms[p.a].in_key.as_str());
+            used.insert(arm.in_key.as_str());
         }
     }
     for l in &legs {
@@ -389,9 +396,9 @@ pub fn leg_arms(s: &TurnSite, view: Option<&JunctionView>) -> LegMap {
         let road = s.leg_roads.get(l).filter(|r| r.truthy());
         if let Some(road) = road {
             let nm = norm(&road.js_string());
-            if let Some(ai) = arms.iter().position(|x| !used.contains(x.in_key.as_str()) && norm(&x.road) == nm) {
+            if let Some((ai, arm)) = arms.iter().enumerate().find(|(_, x)| !used.contains(x.in_key.as_str()) && norm(&x.road) == nm) {
                 map.push((l.clone(), ai));
-                used.insert(arms[ai].in_key.as_str());
+                used.insert(arm.in_key.as_str());
             }
         }
     }
@@ -411,7 +418,7 @@ fn canon(c: char) -> f64 {
 #[must_use]
 pub fn exit_arm(arms: &[ViewArm], from: usize, mv: &str) -> Option<usize> {
     let m0 = mv.chars().next().unwrap_or('T');
-    let in_b = (arms[from].b + 180.0) % 360.0;
+    let in_b = (arms.get(from)?.b + 180.0) % 360.0;
     let want = canon(m0);
     let (mut best, mut be) = (None, f64::INFINITY);
     for (xi, x) in arms.iter().enumerate() {
@@ -455,49 +462,51 @@ pub fn furness(ins: &[f64], outs: &[f64], seed: &[Vec<f64>], tol: f64, max_it: u
     let ti = ins.iter().fold(0.0f64, |a, b| a + b);
     let to = outs.iter().fold(0.0f64, |a, b| a + b);
     let o: Vec<f64> = if to > 0.0 { outs.iter().map(|v| v * ti / to).collect() } else { outs.to_vec() };
-    let mut it = 0usize;
+    // The seed is n by n (a row for each leg's in total, a column for each out total), so every cell read is there;
+    // a missing total reads as NaN, as undefined does in the JavaScript.
+    let total = |x: &[f64], i: usize| x.get(i).copied().unwrap_or(f64::NAN);
+    // Σ m[i][j] over the rows i < n, in row order
+    let col_sum = |mat: &[Vec<f64>], j: usize| mat.iter().take(n).fold(0.0f64, |acc, row| acc + row.get(j).copied().unwrap_or(0.0));
+    // Bound: it counts rounds, at most max_it + 1
+    let mut it = 1usize;
     let mut err = f64::INFINITY;
-    it += 1;
     while it <= max_it {
-        for i in 0..n {
-            let r = m[i].iter().fold(0.0f64, |a, b| a + b);
+        for (row, &target) in m.iter_mut().zip(ins) {
+            let r = row.iter().fold(0.0f64, |acc, x| acc + x);
             if r > 0.0 {
-                for j in 0..n {
-                    m[i][j] *= ins[i] / r;
+                for cell in row.iter_mut().take(n) {
+                    *cell *= target / r;
                 }
             }
         }
         for j in 0..n {
-            let mut c = 0.0f64;
-            for i in 0..n {
-                c += m[i][j];
-            }
+            let c = col_sum(m.as_slice(), j);
             if c > 0.0 {
-                for i in 0..n {
-                    m[i][j] *= o[j] / c;
+                let oj = total(o.as_slice(), j);
+                for cell in m.iter_mut().take(n).filter_map(|row| row.get_mut(j)) {
+                    *cell *= oj / c;
                 }
             }
         }
         err = 0.0;
-        for i in 0..n {
-            let r = m[i].iter().fold(0.0f64, |a, b| a + b);
-            if ins[i] > 0.0 {
-                err = math_max(err, (r - ins[i]).abs() / ins[i]);
+        for (row, &target) in m.iter().zip(ins) {
+            let r = row.iter().fold(0.0f64, |acc, x| acc + x);
+            if target > 0.0 {
+                err = math_max(err, (r - target).abs() / target);
             }
         }
         for j in 0..n {
-            let mut c = 0.0f64;
-            for i in 0..n {
-                c += m[i][j];
-            }
-            if o[j] > 0.0 {
-                err = math_max(err, (c - o[j]).abs() / o[j]);
+            let c = col_sum(m.as_slice(), j);
+            let oj = total(o.as_slice(), j);
+            if oj > 0.0 {
+                err = math_max(err, (c - oj).abs() / oj);
             }
         }
         if err < tol {
             break;
         }
-        it += 1;
+        let Some(next) = it.checked_add(1) else { break };
+        it = next;
     }
     FurnessResult { m, it: it.min(max_it), err, converged: err < tol, outs_scaled: (ti - to).abs() > 1e-6 }
 }
@@ -554,8 +563,11 @@ pub fn site_volumes(ctx: &Ctx, sc: &Scenario, s: &TurnSite, period: &str, res: O
                     }
                     let a = la.as_ref().and_then(|l| l.get(li));
                     let x = la.as_ref().and_then(|l| l.get(lj));
-                    if let (Some(a), Some(x), Some(v)) = (a, x, &view) {
-                        let (ak, xk) = (&v.arms[a].in_key, &v.arms[x].out_key);
+                    // leg_arms gave arm positions of this view, so both arms are there
+                    if let (Some(a), Some(x), Some(v)) = (a, x, &view)
+                        && let (Some(arm_a), Some(arm_x)) = (v.arms.get(a), v.arms.get(x))
+                    {
+                        let (ak, xk) = (&arm_a.in_key, &arm_x.out_key);
                         let tot = rows.iter().filter(|r| r.approach == *ak).fold(0.0f64, |q, r| q + r.v);
                         if tot > 0.0 {
                             return rows.iter().filter(|r| r.approach == *ak && r.to == *xk).fold(0.0f64, |q, r| q + r.v) / tot;
@@ -570,13 +582,15 @@ pub fn site_volumes(ctx: &Ctx, sc: &Scenario, s: &TurnSite, period: &str, res: O
     let mut mv: OrderedMap<f64> = OrderedMap::new();
     for (i, li) in legs.iter().enumerate() {
         for (j, lj) in legs.iter().enumerate() {
-            if !(f.m[i][j] > 0.0) {
+            // the matrix is legs by legs, so the cell is there
+            let cell = f.m.get(i).and_then(|row| row.get(j)).copied().unwrap_or(f64::NAN);
+            if cell <= 0.0 || cell.is_nan() {
                 continue;
             }
             let m = if i == j { "U".to_string() } else { classify((leg_bearing(li) + 180.0) % 360.0, leg_bearing(lj)).to_string() };
             let key = format!("{li}-{m}");
             let cur = mv.get(&key).copied().unwrap_or(0.0);
-            mv.insert(key, cur + f.m[i][j]);
+            mv.insert(key, cur + cell);
         }
     }
     Some(SiteVolumes { mv, estimated: true, balanced: false, furness: Some(f), legs })
@@ -655,8 +669,7 @@ pub fn site_rows(ctx: &Ctx, sc: &Scenario, s: &TurnSite, period: &str, res: Opti
     let view = junction_view(ctx, sc, Some(res), Some(&node));
     let scored = view.as_ref().is_some_and(|v| !v.arms.is_empty());
     let la = if scored { leg_arms(s, view.as_ref()) } else { LegMap::default() };
-    let empty: Vec<ViewRow> = Vec::new();
-    let mrows: &[ViewRow] = if scored { &view.as_ref().expect("scored").rows } else { &empty };
+    let mrows: &[ViewRow] = view.as_ref().filter(|_| scored).map_or(&[], |v| v.rows.as_slice());
     let mut out: Vec<TurnCheckRow> = Vec::new();
     for (k, v) in vol.mv.iter() {
         let mut it = k.split('-');
@@ -664,7 +677,7 @@ pub fn site_rows(ctx: &Ctx, sc: &Scenario, s: &TurnSite, period: &str, res: Opti
         if mv == "IN" || mv == "OUT" {
             continue;
         }
-        let a = la.get(leg).and_then(|i| view.as_ref().map(|v| &v.arms[i]));
+        let a = la.get(leg).and_then(|i| view.as_ref().and_then(|v| v.arms.get(i)));
         let model = a.map(|a| {
             mrows
                 .iter()
@@ -715,18 +728,8 @@ pub fn site_rows(ctx: &Ctx, sc: &Scenario, s: &TurnSite, period: &str, res: Opti
             ));
         }
     }
-    js_sort_by(&mut out, |a, b| {
-        let la = LEGS.iter().position(|x| *x == a.leg).map_or(-1.0, |i| i as f64);
-        let lb = LEGS.iter().position(|x| *x == b.leg).map_or(-1.0, |i| i as f64);
-        let d = la - lb;
-        if d != 0.0 && !d.is_nan() {
-            return d;
-        }
-        let ma = "LTRU".find(a.mv.chars().next().unwrap_or(' ')).map_or(-1.0, |i| i as f64);
-        let mb = "LTRU".find(b.mv.chars().next().unwrap_or(' ')).map_or(-1.0, |i| i as f64);
-        ma - mb
-    });
-    let note = if scored {
+    js_sort_by(&mut out, turn_row_order);
+    let why_none = if scored {
         String::new()
     } else {
         match view.as_ref().and_then(|v| v.note.clone()) {
@@ -734,7 +737,20 @@ pub fn site_rows(ctx: &Ctx, sc: &Scenario, s: &TurnSite, period: &str, res: Opti
             _ => "No roads at this junction.".to_string(),
         }
     };
-    SiteRowsResult { rows: out, node: Some(node), view, flags, vol: Some(vol), note }
+    SiteRowsResult { rows: out, node: Some(node), view, flags, vol: Some(vol), note: why_none }
+}
+
+// The order of siteRows: by leg (N, NE, E ... as LEGS lists them), then movement (L, T, R, U)
+fn turn_row_order(a: &TurnCheckRow, b: &TurnCheckRow) -> f64 {
+    let la = LEGS.iter().position(|x| *x == a.leg).map_or(-1.0, usize_to_f64);
+    let lb = LEGS.iter().position(|x| *x == b.leg).map_or(-1.0, usize_to_f64);
+    let d = la - lb;
+    if d != 0.0 && !d.is_nan() {
+        return d;
+    }
+    let ma = "LTRU".find(a.mv.chars().next().unwrap_or(' ')).map_or(-1.0, usize_to_f64);
+    let mb = "LTRU".find(b.mv.chars().next().unwrap_or(' ')).map_or(-1.0, usize_to_f64);
+    ma - mb
 }
 
 /// `turnRows(sc, period, set, area)`: the counted turning movements of the sites in a set ("valid", "calib" or all) and area ("inside", "outside" or all) that were matched to a road, against the model.
@@ -794,147 +810,61 @@ pub struct BalanceAudit {
 /// "no sinks". Movements are scaled proportionally. A gap above max(50 veh/h, 10%) is flagged as a midblock source or
 /// sink. The balanced counts and the audit are saved in each site (`bal`, `audit`). Returns the audit and how many
 /// sites were considered. Only sites matched to a node with a peak hour (not leg totals only) and arms in the model
-/// are balanced; `no_sinks` takes the panel's setting when None.
+/// are balanced; `no_sinks` takes the panel's setting when None. When the scenario is not in the project nothing is
+/// balanced (an empty audit and 0 sites).
 pub fn balance(p: &mut Project, sc_id: &str, period: &str, no_sinks: Option<bool>, res: Option<&Res>) -> (Vec<BalanceAudit>, usize) {
     match_sites(p, sc_id);
     let ctx = Ctx::new(p);
-    let sc = p.scenario(sc_id).expect("scenario");
+    let Some(sc) = p.scenario(sc_id) else {
+        return (Vec::new(), 0);
+    };
     let no_sinks = no_sinks.unwrap_or_else(|| ctx.cfg.no_sinks_on());
     let deg = degree(sc);
-    let all: Vec<usize> = ctx
-        .store
-        .turn_sites
-        .iter()
-        .enumerate()
-        .filter(|(_, s)| s.node.as_str().is_some() && s.peak.get().and_then(|k| k.get(period)).is_some_and(|k| !k.leg_only))
-        .map(|(i, _)| i)
-        .collect();
-    let mut info: HashMap<usize, (Option<JunctionView>, LegMap)> = HashMap::new();
-    for &i in &all {
-        let s = &ctx.store.turn_sites[i];
-        let view = junction_view(&ctx, sc, res, s.node.as_str());
-        let la = leg_arms(s, view.as_ref());
-        info.insert(i, (view, la));
-    }
-    // only sites compared with a node or a junction site with results (a multi-node junction without a site is left out)
-    let sites_: Vec<usize> = all.iter().copied().filter(|i| info[i].0.as_ref().is_some_and(|v| !v.arms.is_empty())).collect();
-    let mut by_node: HashMap<String, usize> = HashMap::new();
-    for &i in &sites_ {
-        for n in &info[&i].0.as_ref().expect("view").members {
-            by_node.insert(n.clone(), i);
-        }
-    }
-    let mut work: HashMap<usize, OrderedMap<f64>> =
-        sites_.iter().map(|&i| (i, ctx.store.turn_sites[i].peak.get().and_then(|k| k.get(period)).expect("peak").mv.clone())).collect();
+    let BalanceSites { order, info, by_node, mut work } = balance_sites(&ctx, sc, period, res);
+    // order holds positions in the store, so every site is there
+    let site_name = |i: usize| ctx.store.turn_sites.get(i).map(|ts| ts.name.js_string()).unwrap_or_default();
     let mut audit: Vec<BalanceAudit> = Vec::new();
-    let exits_by = |i: usize, work: &HashMap<usize, OrderedMap<f64>>| -> Vec<(String, usize)> {
-        let (view, la) = &info[&i];
-        let arms = &view.as_ref().expect("view").arms;
-        let mut o = Vec::new();
-        for k in work[&i].keys() {
-            let mut it = k.split('-');
-            let (leg, mv) = (it.next().unwrap_or(""), it.next().unwrap_or(""));
-            let Some(a) = la.get(leg) else { continue };
-            if let Some(x) = exit_arm(arms, a, mv) {
-                o.push((k.to_string(), x));
-            }
-        }
-        o
-    };
-    for &si in &sites_ {
-        let (view_s, _) = &info[&si];
-        let view_s = view_s.as_ref().expect("view");
-        for (xi, x) in view_s.arms.iter().enumerate() {
-            // leave the junction along this arm's road (either carriageway) and walk through plain bends to the next junction
-            let mut hit: Option<(usize, String)> = None;
-            for id in &x.links {
-                let mut l = sc.links.get(id);
-                let mut node: Option<String> = l.and_then(|l| {
-                    if view_s.members.contains(&l.a) {
-                        Some(l.a.clone())
-                    } else if view_s.members.contains(&l.b) {
-                        Some(l.b.clone())
-                    } else {
-                        None
-                    }
-                });
-                let (mut far, mut guard) = (0.0f64, 0);
-                let mut end: Option<String> = None;
-                if node.is_none() {
-                    continue;
-                }
-                while let Some(lk) = l {
-                    guard += 1;
-                    if guard > 50 {
-                        break;
-                    }
-                    let nd = node.clone().expect("node");
-                    let nxt = if lk.a == nd { lk.b.clone() } else { lk.a.clone() };
-                    far += link_len(sc, lk);
-                    if far > 2000.0 {
-                        break;
-                    }
-                    if by_node.contains_key(&nxt) {
-                        end = Some(nxt);
-                        break;
-                    }
-                    if view_s.members.contains(&nxt) || deg.get(&nxt).copied().unwrap_or(0) != 2 {
-                        break;
-                    }
-                    let prev = lk.id.clone();
-                    l = links_at(sc, &nxt).into_iter().find(|q| q.id != prev);
-                    node = Some(nxt);
-                }
-                if let Some(e) = &end
-                    && by_node[e] != si
-                {
-                    // the link the walk ended on
-                    let lid = l.map(|q| q.id.clone()).unwrap_or_default();
-                    hit = Some((by_node[e], lid));
-                    break;
-                }
-            }
-            let Some((ti_idx, lid)) = hit else { continue };
-            let (view_t, la_t) = &info[&ti_idx];
-            let view_t = view_t.as_ref().expect("view");
-            let Some(y) = view_t.arms.iter().position(|a| a.links.contains(&lid)) else { continue };
-            let Some(leg_t) = la_t.map.iter().find(|(_, a)| *a == y).map(|(l, _)| l.clone()) else { continue };
-            let ex = exits_by(si, &work);
-            let keys_e: Vec<String> = ex.iter().filter(|(_, a)| *a == xi).map(|(k, _)| k.clone()).collect();
-            let keys_a: Vec<String> = work[&ti_idx].keys().filter(|k| k.starts_with(&format!("{leg_t}-"))).map(String::from).collect();
-            let e_tot = keys_e.iter().fold(0.0f64, |q, k| q + work[&si].get(k).copied().unwrap_or(f64::NAN));
-            let a_tot = keys_a.iter().fold(0.0f64, |q, k| q + work[&ti_idx].get(k).copied().unwrap_or(f64::NAN));
-            if !(e_tot > 0.0) || !(a_tot > 0.0) {
+    for &si in &order {
+        let Some((view_s, la_s)) = info.get(&si) else { continue };
+        for (xi, arm) in view_s.arms.iter().enumerate() {
+            let Some((ti_idx, lid)) = next_site(sc, &deg, &by_node, view_s, arm, si) else { continue };
+            // by_node holds only balanced sites, which all have their view and movements
+            let Some((view_t, la_t)) = info.get(&ti_idx) else { continue };
+            let Some(arm_t) = view_t.arms.iter().position(|x| x.links.contains(&lid)) else { continue };
+            let Some(leg_t) = la_t.map.iter().find(|(_, x)| *x == arm_t).map(|(leg, _)| leg.clone()) else { continue };
+            let (Some(work_s), Some(work_t)) = (work.get(&si), work.get(&ti_idx)) else { continue };
+            let keys_e: Vec<String> = exits_by(view_s, la_s, work_s).iter().filter(|(_, x)| *x == xi).map(|(key, _)| key.clone()).collect();
+            let keys_a: Vec<String> = work_t.keys().filter(|key| key.starts_with(&format!("{leg_t}-"))).map(String::from).collect();
+            let e_tot = keys_e.iter().fold(0.0f64, |acc, key| acc + work_s.get(key).copied().unwrap_or(f64::NAN));
+            let a_tot = keys_a.iter().fold(0.0f64, |acc, key| acc + work_t.get(key).copied().unwrap_or(f64::NAN));
+            if e_tot <= 0.0 || e_tot.is_nan() || a_tot <= 0.0 || a_tot.is_nan() {
                 continue;
             }
-            let f = if no_sinks { math_max(e_tot, a_tot) } else { f64::midpoint(e_tot, a_tot) };
+            let target = if no_sinks { math_max(e_tot, a_tot) } else { f64::midpoint(e_tot, a_tot) };
             let gap = (e_tot - a_tot).abs() > math_max(corridor::BALANCE_ABS, corridor::BALANCE_REL * math_max(e_tot, a_tot));
-            let name_s = ctx.store.turn_sites[si].name.js_string();
-            let name_t = ctx.store.turn_sites[ti_idx].name.js_string();
             let why = format!(
                 "{} \u{2192} {}: leaving {}, arriving {}{}",
-                name_s,
-                name_t,
+                site_name(si),
+                site_name(ti_idx),
                 fmt::int(e_tot),
                 fmt::int(a_tot),
                 if gap { "; midblock source or sink, consider a driveway zone" } else { "" }
             );
             for (site, keys, tot) in [(si, &keys_e, e_tot), (ti_idx, &keys_a, a_tot)] {
-                for k in keys {
-                    let w = work.get_mut(&site).expect("work");
-                    let o = w.get(k).copied().unwrap_or(f64::NAN);
-                    let b = o * f / tot;
-                    w.insert(k.clone(), b);
-                    let s_ref = &ctx.store.turn_sites[site];
-                    let observed = s_ref.peak.get().and_then(|pk| pk.get(period)).and_then(|pk| pk.mv.get(k)).copied().unwrap_or(f64::NAN);
+                let (Some(site_work), Some(s_ref)) = (work.get_mut(&site), ctx.store.turn_sites.get(site)) else { continue };
+                for key in keys {
+                    let old = site_work.get(key).copied().unwrap_or(f64::NAN);
+                    let new_v = old * target / tot;
+                    site_work.insert(key.clone(), new_v);
+                    let observed = s_ref.peak.get().and_then(|pk| pk.get(period)).and_then(|pk| pk.mv.get(key)).copied().unwrap_or(f64::NAN);
                     audit.push(BalanceAudit {
                         site: s_ref.name.js_string(),
                         site_id: s_ref.id.clone(),
-                        movement: k.clone(),
+                        movement: key.clone(),
                         observed,
-                        balanced: b,
-                        d: b - observed,
-                        pct: if observed > 0.0 { Some(b / observed - 1.0) } else { None },
+                        balanced: new_v,
+                        d: new_v - observed,
+                        pct: if observed > 0.0 { Some(new_v / observed - 1.0) } else { None },
                         reason: why.clone(),
                         sink: gap,
                     });
@@ -943,39 +873,143 @@ pub fn balance(p: &mut Project, sc_id: &str, period: &str, no_sinks: Option<bool
         }
     }
     let mut st = ctx.store.clone();
-    let n_sites = sites_.len();
-    for &i in &sites_ {
-        let s = &mut st.turn_sites[i];
-        let mut bal = s.bal.get().cloned().unwrap_or_default();
-        bal.insert(period.to_string(), work[&i].clone());
-        s.bal = Maybe::Set(bal);
-        let mut aud = match s.audit.get() {
+    let n_sites = order.len();
+    for &i in &order {
+        let (Some(site), Some(site_work)) = (st.turn_sites.get_mut(i), work.get(&i)) else { continue };
+        let mut bal = site.bal.get().cloned().unwrap_or_default();
+        bal.insert(period.to_string(), site_work.clone());
+        site.bal = Maybe::Set(bal);
+        let mut aud = match site.audit.get() {
             Some(Value::Object(m)) => m.clone(),
             _ => Map::new(),
         };
-        let mine: Vec<Value> = audit
-            .iter()
-            .filter(|a| a.site_id == s.id)
-            .map(|a| {
-                let mut m = Map::new();
-                m.insert("site".into(), Value::String(a.site.clone()));
-                m.insert("siteId".into(), Value::String(a.site_id.clone()));
-                m.insert("movement".into(), Value::String(a.movement.clone()));
-                m.insert("observed".into(), crate::jsnum::json_number(a.observed));
-                m.insert("balanced".into(), crate::jsnum::json_number(a.balanced));
-                m.insert("d".into(), crate::jsnum::json_number(a.d));
-                m.insert("pct".into(), a.pct.map_or(Value::Null, crate::jsnum::json_number));
-                m.insert("reason".into(), Value::String(a.reason.clone()));
-                m.insert("sink".into(), Value::Bool(a.sink));
-                Value::Object(m)
-            })
-            .collect();
+        let mine: Vec<Value> = audit.iter().filter(|a| a.site_id == site.id).map(audit_json).collect();
         aud.insert(period.to_string(), Value::Array(mine));
-        s.audit = Maybe::Set(Value::Object(aud));
+        site.audit = Maybe::Set(Value::Object(aud));
     }
     drop(ctx);
     st.write(p);
     (audit, n_sites)
+}
+
+// The sites balancing works on: matched to a node, with a peak hour (not leg totals only), and compared with a node or
+// a junction site with results (a multi-node junction without a site is left out)
+struct BalanceSites {
+    // Their positions in the store, in its order
+    order: Vec<usize>,
+    // Position to the site's view and its legs on the view's arms
+    info: HashMap<usize, (JunctionView, LegMap)>,
+    // Node id to the site there (a later site takes a node over)
+    by_node: HashMap<String, usize>,
+    // Position to the site's peak-hour movements, as balancing changes them
+    work: HashMap<usize, OrderedMap<f64>>,
+}
+
+fn balance_sites(ctx: &Ctx, sc: &Scenario, period: &str, res: Option<&Res>) -> BalanceSites {
+    let mut out = BalanceSites { order: Vec::new(), info: HashMap::new(), by_node: HashMap::new(), work: HashMap::new() };
+    for (i, site) in ctx.store.turn_sites.iter().enumerate() {
+        let Some(pk) = site.peak.get().and_then(|k| k.get(period)).filter(|k| !k.leg_only) else { continue };
+        if site.node.as_str().is_none() {
+            continue;
+        }
+        let view = junction_view(ctx, sc, res, site.node.as_str());
+        let la = leg_arms(site, view.as_ref());
+        let Some(view) = view.filter(|v| !v.arms.is_empty()) else { continue };
+        for n in &view.members {
+            out.by_node.insert(n.clone(), i);
+        }
+        out.order.push(i);
+        out.work.insert(i, pk.mv.clone());
+        out.info.insert(i, (view, la));
+    }
+    out
+}
+
+// A site's counted movements ("<leg>-<movement>") with the arm each leaves by
+fn exits_by(view: &JunctionView, la: &LegMap, work: &OrderedMap<f64>) -> Vec<(String, usize)> {
+    let mut out = Vec::new();
+    for k in work.keys() {
+        let mut it = k.split('-');
+        let (leg, mv) = (it.next().unwrap_or(""), it.next().unwrap_or(""));
+        let Some(from) = la.get(leg) else { continue };
+        if let Some(to) = exit_arm(&view.arms, from, mv) {
+            out.push((k.to_string(), to));
+        }
+    }
+    out
+}
+
+// Leaves site si along one arm's road (either carriageway) and walks through plain bends (within 2 km and 50 links) to
+// the next balanced site: that site and the link the walk ended on
+fn next_site(
+    sc: &Scenario,
+    deg: &HashMap<String, usize>,
+    by_node: &HashMap<String, usize>,
+    view_s: &JunctionView,
+    arm: &ViewArm,
+    si: usize,
+) -> Option<(usize, String)> {
+    for id in &arm.links {
+        let mut link = sc.links.get(id);
+        let Some(mut node) = link.and_then(|l| {
+            if view_s.members.contains(&l.a) {
+                Some(l.a.clone())
+            } else if view_s.members.contains(&l.b) {
+                Some(l.b.clone())
+            } else {
+                None
+            }
+        }) else {
+            continue;
+        };
+        // Bound: guard counts at most 51 steps
+        let (mut far, mut guard) = (0.0f64, 0u32);
+        let mut end: Option<String> = None;
+        while let Some(lk) = link {
+            guard = guard.saturating_add(1);
+            if guard > 50 {
+                break;
+            }
+            let nxt = if lk.a == node { lk.b.clone() } else { lk.a.clone() };
+            far += link_len(sc, lk);
+            if far > 2000.0 {
+                break;
+            }
+            if by_node.contains_key(&nxt) {
+                end = Some(nxt);
+                break;
+            }
+            if view_s.members.contains(&nxt) || deg.get(&nxt).copied().unwrap_or(0) != 2 {
+                break;
+            }
+            let prev = lk.id.clone();
+            link = links_at(sc, &nxt).into_iter().find(|q| q.id != prev);
+            node = nxt;
+        }
+        // end is a key of by_node when set
+        if let Some(&ti) = end.as_ref().and_then(|e| by_node.get(e))
+            && ti != si
+        {
+            // the link the walk ended on
+            return Some((ti, link.map(|q| q.id.clone()).unwrap_or_default()));
+        }
+    }
+    None
+}
+
+// An audit entry as the site record keeps it
+fn audit_json(a: &BalanceAudit) -> Value {
+    let mut m = Map::new();
+    m.insert("site".into(), Value::String(a.site.clone()));
+    m.insert("siteId".into(), Value::String(a.site_id.clone()));
+    m.insert("movement".into(), Value::String(a.movement.clone()));
+    m.insert("observed".into(), crate::jsnum::json_number(a.observed));
+    m.insert("balanced".into(), crate::jsnum::json_number(a.balanced));
+    m.insert("d".into(), crate::jsnum::json_number(a.d));
+    m.insert("pct".into(), a.pct.map_or(Value::Null, crate::jsnum::json_number));
+    m.insert("reason".into(), Value::String(a.reason.clone()));
+    m.insert("sink".into(), Value::Bool(a.sink));
+    Value::Object(m)
 }
 
 /// `atJunction(sc, s, id)`: whether a turning-count site is at this node, or at the junction site (id or any of its nodes) the node belongs to.

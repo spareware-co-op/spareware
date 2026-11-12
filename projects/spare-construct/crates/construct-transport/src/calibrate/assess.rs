@@ -20,6 +20,7 @@ use crate::results::Res;
 use crate::util::fmt;
 use serde_json::{Map, Value};
 use std::collections::HashSet;
+use std::fmt::Write as _;
 
 /// What `Calibration.convStats` gives: how well the assignment converged.
 #[derive(Clone, Debug)]
@@ -61,7 +62,8 @@ pub fn conv_stats(res: Option<&Res>) -> ConvStats {
         };
     };
     let k = res.conv.len().saturating_sub(tag::P_CONSEC);
-    let last = &res.conv[k..];
+    // k is at most the length, so the tail is always there
+    let last = res.conv.get(k..).unwrap_or_default();
     ConvStats {
         n: 1,
         gap_pct: res.gap * 100.0,
@@ -118,10 +120,16 @@ pub struct Evidence {
     pub me: Option<MeStats>,
     /// The result is for the base year (or has no year).
     pub base_year: bool,
-    /// The result's year.
+    /// The result's year (None when there is no result).
     pub year: Option<f64>,
-    /// There is a result.
-    pub has_res: bool,
+}
+
+impl Evidence {
+    /// There is a result (`hasRes`): the year is set exactly when there is one.
+    #[must_use]
+    pub fn has_res(&self) -> bool {
+        self.year.is_some()
+    }
 }
 
 /// The options of [`evidence`] and [`assess`].
@@ -143,7 +151,8 @@ pub struct EvOpts {
 
 // `a === b` for the result's year and the settings' base year
 fn base_year_of(res: &Res, base: &Num) -> bool {
-    !(res.year > 0.0) || matches!(base, Maybe::Set(crate::jsnum::JsNum::Number(b)) if *b == res.year)
+    // !(year > 0): no year, or NaN, counts as the base year
+    res.year <= 0.0 || res.year.is_nan() || matches!(base, Maybe::Set(crate::jsnum::JsNum::Number(b)) if *b == res.year)
 }
 
 /// `evidence(sc, period, o)`: counts, screenlines, turning movements and journey times against a result.
@@ -183,7 +192,6 @@ pub fn evidence(ctx: &Ctx, sc: &Scenario, period: &str, res: Option<&Res>, o: &E
         me: me_stats(ctx.p, period),
         base_year: res.is_some_and(|r| base_year_of(r, &ctx.s().base_year)),
         year: res.map(|r| r.year),
-        has_res: res.is_some(),
         set: used,
         area,
         core,
@@ -268,7 +276,7 @@ impl Ev<'_> {
             _ => None,
         }
     }
-    fn has_cnt(&self, on: &str) -> bool {
+    fn has_cnt(on: &str) -> bool {
         matches!(on, "link" | "turn" | "screen" | "jt")
     }
 }
@@ -340,7 +348,7 @@ fn show(t: &Test, ev: &Ev, v: &Val) -> String {
                 let x = vn.unwrap_or(f64::NAN);
                 return if t.stat == "gapPct" { format!("{}%", numf(x, 3)) } else { format!("{}%", numf(x, 1)) };
             }
-            if t.kind == "none" && ev.has_cnt(on) && ev.cnt(on, t.stat).is_some() {
+            if t.kind == "none" && Ev::has_cnt(on) && ev.cnt(on, t.stat).is_some() {
                 return format!("{}/{} \u{b7} {}", ev.cnt(on, t.stat).unwrap_or(0), n, pct(vn, 1));
             }
             numf(vn.unwrap_or(f64::NAN), 3)
@@ -389,7 +397,7 @@ pub fn evaluate(t: &Test, evidence: &Evidence) -> Eval {
     }
     let vnum = match &val_ref {
         Val::Num(x) => *x,
-        Val::Bool(b) => i32::from(*b) as f64,
+        Val::Bool(b) => f64::from(i32::from(*b)),
         Val::Pair(_) => f64::NAN,
     };
     match t.kind {
@@ -528,7 +536,7 @@ pub fn assess(ctx: &Ctx, sc: &Scenario, period: &str, res: Option<&Res>, o: &EvO
         .unwrap_or_else(|| crate::jsnum::value_to_js_string(&ctx.cfg.standard));
     let cat = o.category.unwrap_or_else(|| super::common::category(Some(ctx.s())));
     let rows: Vec<Eval> = tests_for(ctx, &std, cat).iter().map(|t| evaluate(t, &ev)).collect();
-    let status = if !ev.has_res || ev.link.n == 0 {
+    let status = if !ev.has_res() || ev.link.n == 0 {
         "none"
     } else if ev.info_only {
         "info"
@@ -570,10 +578,11 @@ pub fn assess(ctx: &Ctx, sc: &Scenario, period: &str, res: Option<&Res>, o: &EvO
             match r2.iter().find(|r| r.ok != Some(true)) {
                 None => out.also.push(c2),
                 Some(bad) => {
-                    let got = match bad.shown.rfind("\u{b7} ") {
-                        Some(i) => bad.shown[i + "\u{b7} ".len()..].to_string(),
-                        None => bad.shown.clone(),
-                    };
+                    // What follows the last "\u{b7} ", or all of it
+                    let got = bad
+                        .shown
+                        .rsplit_once("\u{b7} ")
+                        .map_or_else(|| bad.shown.clone(), |(_, after)| after.to_string());
                     let tt = target_text(&bad.t);
                     out.fails.push(CatFail {
                         cat: c2,
@@ -605,7 +614,7 @@ pub fn status_line(ctx: &Ctx, a: &Assessment) -> String {
     let who = format!("{}{}, n={}", set_label(&ev.set), where_, ev.link.n);
     match a.status.as_str() {
         "none" => {
-            return if ev.has_res {
+            return if ev.has_res() {
                 format!("No {}{} match the network for the {} peak.", set_label(&ev.set), where_, a.period)
             } else {
                 format!("Run the model for the {} peak to compare it with the counts.", a.period)
@@ -636,11 +645,13 @@ pub fn status_line(ctx: &Ctx, a: &Assessment) -> String {
         if a.pass == Some(true) { "all expected tests pass".to_string() } else { format!("fails {}", failed.join(", ")) },
         who
     );
+    // Writing to a String cannot fail (the `let _ =` below)
     if !a.also.is_empty() {
-        s.push_str(&format!(" Also meets Category {}.", a.also.iter().map(std::string::ToString::to_string).collect::<Vec<_>>().join(", ")));
+        let _ = write!(s, " Also meets Category {}.", a.also.iter().map(std::string::ToString::to_string).collect::<Vec<_>>().join(", "));
     }
     if !a.fails.is_empty() && a.standard == "tmdg" {
-        s.push_str(&format!(
+        let _ = write!(
+            s,
             " Fails: {}.",
             a.fails
                 .iter()
@@ -648,7 +659,7 @@ pub fn status_line(ctx: &Ctx, a: &Assessment) -> String {
                 .map(|f| format!("{} on {} ({} v {})", f.cat, f.test, f.got, f.target))
                 .collect::<Vec<_>>()
                 .join("; ")
-        ));
+        );
     }
     let mut ind: Vec<String> = Vec::new();
     for r in &a.rows {
@@ -665,20 +676,22 @@ pub fn status_line(ctx: &Ctx, a: &Assessment) -> String {
         }
     }
     if !ind.is_empty() {
-        s.push_str(&format!(
+        let _ = write!(
+            s,
             " The {} tests have fewer than {} observations, so they are indicative and do not decide the status.",
             ind.join(" and "),
             MIN_SITES
-        ));
+        );
     }
     let dr = &ev.screen.dropped;
     if !dr.is_empty() {
-        s.push_str(&format!(
+        let _ = write!(
+            s,
             " {} validation screenline total{} left out because {} in calibration or gateway counts.",
             dr.len(),
             if dr.len() == 1 { " is" } else { "s are" },
             if dr.len() == 1 { "it adds" } else { "they add" }
-        ));
+        );
     }
     s.push_str(" Meeting criteria does not by itself show the model is fit for purpose (TAG M3.1 3.2.2).");
     s
@@ -737,9 +750,8 @@ fn drop_validation(p: &mut Project, period: &str) {
 /// roles changed), so the badge never keeps an old "Validated". `now` is the ISO time written into the record.
 pub fn record_validation(p: &mut Project, sc_id: &str, period: &str, now: &str) -> Recorded {
     let (old_scenario_is_this, res) = {
-        let sc = match p.scenario(sc_id) {
-            Some(s) => s,
-            None => return Recorded::Nothing,
+        let Some(sc) = p.scenario(sc_id) else {
+            return Recorded::Nothing;
         };
         let old = p.validation.get().and_then(|v| v.get(period)).and_then(|v| v.get());
         let res = super::fit::stored_res(sc, period);
@@ -760,7 +772,10 @@ pub fn record_validation(p: &mut Project, sc_id: &str, period: &str, now: &str) 
     }
     let (record, status_ok) = {
         let ctx = Ctx::new(p);
-        let sc = p.scenario(sc_id).expect("scenario");
+        // Found above, and nothing since has changed the scenarios
+        let Some(sc) = p.scenario(sc_id) else {
+            return Recorded::Nothing;
+        };
         let std = {
             let s = crate::jsnum::value_to_js_string(&ctx.cfg.standard);
             if value_truthy(&ctx.cfg.standard) { s } else { "tmdg".to_string() }
@@ -804,11 +819,22 @@ pub fn record_validation(p: &mut Project, sc_id: &str, period: &str, now: &str) 
     if !p.validation.is_set() {
         p.validation = Maybe::Set(OrderedMap::new());
     }
-    p.validation
-        .get_mut()
-        .expect("just made")
-        .insert(period.to_string(), Maybe::Set(record));
+    // P.validation was made above when it was not set
+    if let Some(v) = p.validation.get_mut() {
+        v.insert(period.to_string(), Maybe::Set(record));
+    }
     Recorded::Written { pass, independent }
+}
+
+fn strip_dates(v: &mut Value) {
+    match v {
+        Value::Object(m) => {
+            m.remove("date");
+            m.values_mut().for_each(strip_dates);
+        }
+        Value::Array(a) => a.iter_mut().for_each(strip_dates),
+        _ => {}
+    }
 }
 
 /// `refreshValidation(P)`: records the validation of both periods for the scenario the validation chapter reports (after a change of category, roles or estimation), removing records for any other scenario; true when the records changed (apart from their dates).
@@ -816,16 +842,6 @@ pub fn refresh_validation(p: &mut Project, now: &str) -> bool {
     let strip = |p: &Project| -> String {
         let v = serde_json::to_value(&p.validation).unwrap_or(Value::Null);
         let mut v = v;
-        fn strip_dates(v: &mut Value) {
-            match v {
-                Value::Object(m) => {
-                    m.remove("date");
-                    m.values_mut().for_each(strip_dates);
-                }
-                Value::Array(a) => a.iter_mut().for_each(strip_dates),
-                _ => {}
-            }
-        }
         strip_dates(&mut v);
         v.to_string()
     };

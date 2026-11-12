@@ -19,7 +19,7 @@ use super::jslog::log;
 use super::sites::{SiteRow, Unit};
 use super::stats::{Stats, origin, pearson2, rule_of, stats_of};
 use crate::jsmath;
-use crate::jsnum::{Maybe, Num, math_min, or_default};
+use crate::jsnum::{Maybe, Num, math_min, or_default, usize_to_f64};
 use crate::project::{OrderedMap, Scenario, Settings, Zone};
 use crate::results::{Res, plain};
 use crate::standards::year_of;
@@ -55,7 +55,7 @@ pub fn wfit(rows: &[SiteRow]) -> WFit {
     let (mut sw, mut p5, mut g) = (0.0f64, 0.0f64, 0.0f64);
     for r in rows {
         let w = r.w;
-        if !(w > 0.0) {
+        if w <= 0.0 || w.is_nan() {
             continue;
         }
         sw += w;
@@ -127,76 +127,83 @@ pub struct FitOptions {
 /// One ME2 step (`Calibrate.step`): new cumulative factors from a result.
 ///
 /// `rows` are fitting units. A path takes the weighted mean of the log ratios of the units it crosses (so counts in
-/// sequence do not compound), times the largest weight among them (weight 0: left out). `f` holds the cumulative
-/// factors by OD pair key, in the order the pairs were first changed.
+/// sequence do not compound), times the largest weight among them (weight 0: left out). `factors` holds the
+/// cumulative factors by OD pair key, in the order the pairs were first changed.
 pub fn step(
     view: &Scenario,
     res: &Res,
     rows: &[Unit],
-    f: &mut OrderedMap<f64>,
-    o: &FitOptions,
+    factors: &mut OrderedMap<f64>,
+    opts: &FitOptions,
 ) {
     let lr: Vec<Option<f64>> = rows
         .iter()
         .map(|r| {
-            if r.model < o.min_vol || r.obs < o.min_vol || !(r.w > 0.0) {
+            if r.model < opts.min_vol || r.obs < opts.min_vol || r.w <= 0.0 || r.w.is_nan() {
                 None
             } else {
-                Some(log(clamp(r.obs / r.model, 1.0 / o.max_step, o.max_step)))
+                Some(log(clamp(r.obs / r.model, 1.0 / opts.max_step, opts.max_step)))
             }
         })
         .collect();
     let wt: Vec<f64> = rows.iter().map(|r| r.w).collect();
     let mut at: std::collections::HashMap<usize, Vec<usize>> = std::collections::HashMap::new();
-    for (s, r) in rows.iter().enumerate() {
-        if lr[s].is_some() {
+    for (ui, (r, ratio)) in rows.iter().zip(&lr).enumerate() {
+        if ratio.is_some() {
             for &a in &r.arcs {
-                at.entry(a).or_default().push(s);
+                at.entry(a).or_default().push(ui);
             }
         }
     }
     let mut seen = vec![-1i64; rows.len()];
-    let lo = 1.0 / o.max_factor;
+    let lo = 1.0 / opts.max_factor;
     let mut stamp: i64 = 0;
     let Some(paths) = res.paths.get() else { return };
     for od in paths {
-        let zi = view.zones.get(&res.zone_ids[od.i]);
-        let zj = view.zones.get(&res.zone_ids[od.j]);
+        // zoneIds[i] undefined finds no zone, which is not eligible
+        let zi = res.zone_ids.get(od.i).and_then(|id| view.zones.get(id));
+        let zj = res.zone_ids.get(od.j).and_then(|id| view.zones.get(id));
         if od.i == od.j || !eligible(zi) || !eligible(zj) {
             continue;
         }
-        let (zi, zj) = (zi.expect("eligible"), zj.expect("eligible"));
-        if o.freeze_gg && zi.kind.is("gateway") && zj.kind.is("gateway") {
+        // eligible is false for a missing zone, so both are there
+        let (Some(zi), Some(zj)) = (zi, zj) else { continue };
+        if opts.freeze_gg && zi.kind.is("gateway") && zj.kind.is("gateway") {
             continue; // through traffic keeps the prior
         }
-        let (mut acc, mut w) = (0.0f64, 0.0f64);
-        for p in &od.list {
-            stamp += 1;
-            let (mut s, mut sw, mut wm) = (0.0f64, 0.0f64, 0.0f64);
-            for a in &p.arcs {
-                let Some(l) = at.get(a) else { continue };
-                for &t in l {
-                    if seen[t] != stamp {
-                        seen[t] = stamp;
-                        s += wt[t] * lr[t].expect("counted unit");
-                        sw += wt[t];
-                        if wt[t] > wm {
-                            wm = wt[t];
+        let (mut acc, mut total_w) = (0.0f64, 0.0f64);
+        for path in &od.list {
+            // Bound: one stamp per path of a result, far below i64::MAX
+            stamp = stamp.saturating_add(1);
+            let (mut weighted, mut sw, mut wm) = (0.0f64, 0.0f64, 0.0f64);
+            for a in &path.arcs {
+                let Some(counted) = at.get(a) else { continue };
+                for &t in counted {
+                    // t indexes rows, so seen, wt and lr all hold it, and lr[t] is set (only counted units are in at)
+                    let (Some(mark), Some(&wt_t), Some(&Some(lr_t))) = (seen.get_mut(t), wt.get(t), lr.get(t)) else {
+                        continue;
+                    };
+                    if *mark != stamp {
+                        *mark = stamp;
+                        weighted += wt_t * lr_t;
+                        sw += wt_t;
+                        if wt_t > wm {
+                            wm = wt_t;
                         }
                     }
                 }
             }
-            acc += p.w * (if sw > 0.0 { s / sw * wm } else { 0.0 });
-            w += p.w;
+            acc += path.w * (if sw > 0.0 { weighted / sw * wm } else { 0.0 });
+            total_w += path.w;
         }
-        if !(w > 0.0) || acc == 0.0 {
+        if total_w <= 0.0 || total_w.is_nan() || acc == 0.0 {
             continue;
         }
         let key = key_of(&zi.id, &zj.id);
-        let cur = or_default(f.get(&key).copied().unwrap_or(f64::NAN), 1.0);
-        f.insert(
+        let cur = or_default(factors.get(&key).copied().unwrap_or(f64::NAN), 1.0);
+        factors.insert(
             key,
-            clamp(cur * jsmath::exp(o.damp * acc / w), lo, o.max_factor),
+            clamp(cur * jsmath::exp(opts.damp * acc / total_w), lo, opts.max_factor),
         );
     }
 }
@@ -271,30 +278,34 @@ pub fn matrix_change(z: usize, prior: &[f64], est: &[f64]) -> MatrixChange {
     let (mut cp, mut cq): (Vec<f64>, Vec<f64>) = (Vec::new(), Vec::new());
     let (mut tp, mut te) = (0.0f64, 0.0f64);
     let (mut cells, mut dev, mut pairs) = (0usize, 0.0f64, 0usize);
-    for i in 0..z {
-        for j in 0..z {
-            let p = prior[i * z + j];
-            let e = est[i * z + j];
-            ro[i] += p;
-            re[i] += e;
-            co[j] += p;
-            ce[j] += e;
+    for (i, (prior_out, est_out)) in ro.iter_mut().zip(re.iter_mut()).enumerate() {
+        for (j, (prior_in, est_in)) in co.iter_mut().zip(ce.iter_mut()).enumerate() {
+            // Bound: i * z + j is below z * z, the length of a zone matrix in memory; a cell the matrices lack is
+            // undefined in the prototype, so NaN
+            let cell = i.saturating_mul(z).saturating_add(j);
+            let p = nth(prior, cell);
+            let e = nth(est, cell);
+            *prior_out += p;
+            *est_out += e;
+            *prior_in += p;
+            *est_in += e;
             tp += p;
             te += e;
             if p > 0.0 {
-                cells += 1;
+                // Bound: counts of matrix cells, far below usize::MAX
+                cells = cells.saturating_add(1);
                 dev += (e / p - 1.0).abs();
                 cp.push(p);
                 cq.push(e);
                 if (e / p - 1.0).abs() > 1e-6 {
-                    pairs += 1;
+                    pairs = pairs.saturating_add(1);
                 }
             }
         }
     }
-    // Zones with no trips either way are left out of the trip-end tests
-    let live: Vec<usize> = (0..z).filter(|&i| ro[i] + co[i] + re[i] + ce[i] > 0.0).collect();
-    let pick = |a: &[f64]| -> Vec<f64> { live.iter().map(|&i| a[i]).collect() };
+    // Zones with no trips either way are left out of the trip-end tests (every total has z entries)
+    let live: Vec<usize> = (0..z).filter(|&i| nth(&ro, i) + nth(&co, i) + nth(&re, i) + nth(&ce, i) > 0.0).collect();
+    let pick = |a: &[f64]| -> Vec<f64> { live.iter().map(|&i| nth(a, i)).collect() };
     let row_r2 = pearson2(&pick(&ro), &pick(&re));
     let col_r2 = pearson2(&pick(&co), &pick(&ce));
     let rs = origin(&pick(&ro), &pick(&re)).b0;
@@ -304,7 +315,7 @@ pub fn matrix_change(z: usize, prior: &[f64], est: &[f64]) -> MatrixChange {
         prior_total: tp,
         total: te,
         total_pct: if tp > 0.0 { (te - tp) / tp * 100.0 } else { 0.0 },
-        mean_abs_cell_pct: if cells > 0 { dev / cells as f64 * 100.0 } else { 0.0 },
+        mean_abs_cell_pct: if cells > 0 { dev / usize_to_f64(cells) * 100.0 } else { 0.0 },
         pairs,
         cells,
         cell_r2: pearson2(&cp, &cq),
@@ -319,6 +330,11 @@ pub fn matrix_change(z: usize, prior: &[f64], est: &[f64]) -> MatrixChange {
             (Some(r), Some(c)) => Some(math_min(r, c)),
         },
     }
+}
+
+// a[i], or NaN (JavaScript's undefined read as a number) past the end
+fn nth(a: &[f64], i: usize) -> f64 {
+    a.get(i).copied().unwrap_or(f64::NAN)
 }
 
 /// `breach(mc)`: the limit a pass broke ("matrix total" or "trip ends"), or "" when within them (TMDG section 8 total, TAG Table 5 trip-end R²).
@@ -350,7 +366,9 @@ pub fn base_view<'a>(sc: &'a Scenario, s: &Settings) -> BaseView<'a> {
     let by = s.base_year.num();
     let mut zones: OrderedMap<Zone> = OrderedMap::new();
     for (id, z) in sc.zones.iter() {
-        if eligible(Some(z)) && !(z.year.num() > by) {
+        let year = z.year.num();
+        // !(year > by): NaN on either side keeps the zone
+        if eligible(Some(z)) && (year <= by || year.is_nan() || by.is_nan()) {
             zones.insert(id.to_string(), z.clone());
         }
     }

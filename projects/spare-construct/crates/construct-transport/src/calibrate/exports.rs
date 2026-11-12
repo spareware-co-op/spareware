@@ -9,7 +9,7 @@ use super::screen::{sl_crossings, sl_rows};
 use super::turncounts::ci_of;
 use super::turnrows::site_rows;
 use crate::datahub::Count;
-use crate::jsnum::{json_number, math_round};
+use crate::jsnum::{json_number, math_round, usize_to_f64};
 use crate::project::Scenario;
 use crate::results::Res;
 use crate::util::{csv, r1, r3};
@@ -45,22 +45,21 @@ pub fn n_days(c: &Count) -> Option<Value> {
         return Some(raw(&c.n_days));
     }
     let note = if c.note.truthy() { c.note.js_string() } else { String::new() };
-    let t: Vec<char> = note.chars().collect();
+    let chars: Vec<char> = note.chars().collect();
     let pat: Vec<char> = " counted days".chars().collect();
-    let mut i = 0;
-    while i < t.len() {
-        if t[i].is_ascii_digit() {
-            let mut j = i;
-            while j < t.len() && t[j].is_ascii_digit() {
-                j += 1;
+    // Each run of digits, from its first digit, and whether the pattern follows it
+    let mut rest: &[char] = &chars;
+    while let Some((&first, after)) = rest.split_first() {
+        if first.is_ascii_digit() {
+            let run = rest.iter().take_while(|ch| ch.is_ascii_digit()).count();
+            let (digits, tail) = rest.split_at_checked(run).unwrap_or((rest, &[]));
+            if tail.starts_with(&pat) {
+                let text: String = digits.iter().collect();
+                return Some(n(text.parse::<f64>().unwrap_or(f64::NAN)));
             }
-            if t[j..].starts_with(&pat[..]) {
-                let d: String = t[i..j].iter().collect();
-                return Some(n(d.parse::<f64>().unwrap_or(f64::NAN)));
-            }
-            i = j;
+            rest = tail;
         } else {
-            i += 1;
+            rest = after;
         }
     }
     None
@@ -168,7 +167,7 @@ pub fn summary_csv(ctx: &Ctx, sc: &Scenario, res_of: &dyn Fn(&str) -> Option<Res
                 s(p),
                 s(&target_text(&r.t)),
                 s(&r.shown),
-                n(r.n as f64),
+                n(usize_to_f64(r.n)),
                 s(&r.status),
             ]);
         }
@@ -179,7 +178,7 @@ pub fn summary_csv(ctx: &Ctx, sc: &Scenario, res_of: &dyn Fn(&str) -> Option<Res
             s(p),
             s(""),
             s(&a.status),
-            n(a.ev.link.n as f64),
+            n(usize_to_f64(a.ev.link.n)),
             s(&a.line),
         ]);
     }
@@ -222,8 +221,8 @@ pub fn screenlines_csv(ctx: &Ctx, sc: &Scenario, res_of: &dyn Fn(&str) -> Option
                         s(p),
                         s(&r.label),
                         s(if mw { "with" } else { "without" }),
-                        n(r.n as f64),
-                        n(r.counted as f64),
+                        n(usize_to_f64(r.n)),
+                        n(usize_to_f64(r.counted)),
                         n(r1(r.c)),
                         n(r1(r.mc)),
                         n(r1(r.m)),

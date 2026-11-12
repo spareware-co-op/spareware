@@ -202,12 +202,14 @@ impl CalibStore {
                 extra: Map::new(),
             });
         }
-        let v = serde_json::to_value(self).expect("a store serialises");
-        p.data
-            .get_mut()
-            .expect("just made")
-            .extra
-            .insert("calib".to_string(), v);
+        // A store is plain data with text keys, so serialising it to a JSON value cannot fail
+        let Ok(v) = serde_json::to_value(self) else {
+            return;
+        };
+        // P.data was made above when it was not set
+        if let Some(d) = p.data.get_mut() {
+            d.extra.insert("calib".to_string(), v);
+        }
     }
     /// `store().roles[id]`.
     #[must_use]

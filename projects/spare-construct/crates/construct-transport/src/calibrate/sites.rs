@@ -2,7 +2,7 @@
 //! `Calibrate.units`) and the weights of counts in estimation.
 
 use crate::datahub::{Count, Data, Match, OBS_METHODS, count_weight, is_estimate, matches, model_flow, geh, period_vol, Matches};
-use crate::jsnum::math_max;
+use crate::jsnum::{math_max, usize_to_f64};
 use crate::project::{Scenario, Settings};
 use crate::results::Res;
 use crate::standards::pcu_f;
@@ -38,6 +38,9 @@ pub struct SiteRow {
     pub w: f64,
 }
 
+/// A caller's own weight of a count in a period (`opts.weight`).
+pub type CountWeight<'a> = &'a (dyn Fn(&Count, &str) -> f64 + 'a);
+
 /// How [`sites`] picks counts and weighs them (`opts` of `Calibrate.sites`).
 #[derive(Clone, Copy, Default)]
 pub struct SiteOpts<'a> {
@@ -48,7 +51,7 @@ pub struct SiteOpts<'a> {
     /// Weights by observation method (`opts.weights === true`); otherwise every count weighs 1, except estimates (RAMM 0.25, virtual 0).
     pub weights: bool,
     /// A caller's own weights (`opts.weight`), which win over `weights`.
-    pub weight: Option<&'a dyn Fn(&Count, &str) -> f64>,
+    pub weight: Option<CountWeight<'a>>,
 }
 
 /// `idSet(ids)`: the ids as a set.
@@ -149,14 +152,14 @@ pub struct Group {
     pub count_ids: Vec<String>,
 }
 
-fn id_text(id: &Option<Value>, gi: usize) -> String {
+fn id_text(id: Option<&Value>, gi: usize) -> String {
     match id {
         Some(v) if !v.is_null() => crate::jsnum::value_to_js_string(v),
         _ => gi.to_string(),
     }
 }
 
-fn id_value(id: &Option<Value>, gi: usize) -> Value {
+fn id_value(id: Option<&Value>, gi: usize) -> Value {
     match id {
         Some(v) if !v.is_null() => v.clone(),
         _ => Value::from(gi as u64),
@@ -205,6 +208,10 @@ pub struct ParallelCheck {
 /// `Calibrate.parallel(res, rows, groups)`: checks that each group's counts are parallel (no path crosses two of them carrying more than max(1 pcu/h, 1% of the group's modelled flow)).
 #[must_use]
 pub fn parallel(res: &Res, rows: &[SiteRow], groups: &[Group], s: &Settings) -> ParallelCheck {
+    struct G {
+        gi: usize,
+        members: Vec<usize>,
+    }
     let mut out = ParallelCheck::default();
     if groups.is_empty() {
         return out;
@@ -212,10 +219,6 @@ pub fn parallel(res: &Res, rows: &[SiteRow], groups: &[Group], s: &Settings) -> 
     let mut by_id: HashMap<&str, usize> = HashMap::new();
     for (k, r) in rows.iter().enumerate() {
         by_id.insert(r.c.id.as_str(), k);
-    }
-    struct G {
-        gi: usize,
-        members: Vec<usize>,
     }
     let mut gs: Vec<G> = Vec::new();
     for (gi, g) in groups.iter().enumerate() {
@@ -232,11 +235,12 @@ pub fn parallel(res: &Res, rows: &[SiteRow], groups: &[Group], s: &Settings) -> 
             gs.push(G { gi, members });
         }
     }
-    // arc index to [[group, member row]]
+    // arc index to [[group, member row]]; members are indexes into rows (from by_id), so every lookup finds its row
     let mut at: HashMap<usize, Vec<(usize, usize)>> = HashMap::new();
     for x in &gs {
         for &k in &x.members {
-            for &a in &rows[k].arcs {
+            let Some(member) = rows.get(k) else { continue };
+            for &a in &member.arcs {
                 at.entry(a).or_default().push((x.gi, k));
             }
         }
@@ -244,7 +248,7 @@ pub fn parallel(res: &Res, rows: &[SiteRow], groups: &[Group], s: &Settings) -> 
     let mut shared: HashMap<usize, f64> = HashMap::new();
     let mut flow: HashMap<usize, f64> = HashMap::new();
     for x in &gs {
-        flow.insert(x.gi, x.members.iter().fold(0.0f64, |s, &k| s + rows[k].model));
+        flow.insert(x.gi, x.members.iter().fold(0.0f64, |s, &k| s + rows.get(k).map_or(f64::NAN, |r| r.model)));
     }
     if let Some(paths) = res.paths.get() {
         for od in paths {
@@ -275,16 +279,17 @@ pub fn parallel(res: &Res, rows: &[SiteRow], groups: &[Group], s: &Settings) -> 
     }
     let pf = pcu_f(s);
     for x in &gs {
-        let g = &groups[x.gi];
+        // gi is a position in groups (from enumerate above)
+        let Some(g) = groups.get(x.gi) else { continue };
         let sh = shared.get(&x.gi).copied().unwrap_or(0.0) / pf;
         let lim = math_max(SEQ_MIN_PCU, SEQ_SHARE * flow.get(&x.gi).copied().unwrap_or(0.0));
-        let ids: Vec<String> = x.members.iter().map(|&k| rows[k].c.id.clone()).collect();
+        let ids: Vec<String> = x.members.iter().filter_map(|&k| rows.get(k).map(|r| r.c.id.clone())).collect();
         if sh > lim {
             out.rejected.push(Rejected {
-                id: id_value(&g.id, x.gi),
+                id: id_value(g.id.as_ref(), x.gi),
                 label: match g.label.as_deref() {
                     Some(l) if !l.is_empty() => l.to_string(),
-                    _ => id_text(&g.id, x.gi),
+                    _ => id_text(g.id.as_ref(), x.gi),
                 },
                 shared: r1(sh),
                 count_ids: ids,
@@ -356,8 +361,8 @@ pub fn units(rows: &[SiteRow], chk: Option<&ParallelCheck>) -> Vec<Unit> {
         let rs: Vec<&SiteRow> = x
             .ids
             .iter()
-            .filter(|id| !used.contains(id.as_str()) && by_id.contains_key(id.as_str()))
-            .map(|id| by_id[id.as_str()])
+            .filter(|id| !used.contains(id.as_str()))
+            .filter_map(|id| by_id.get(id.as_str()).copied())
             .collect();
         if rs.is_empty() {
             continue;
@@ -377,9 +382,9 @@ pub fn units(rows: &[SiteRow], chk: Option<&ParallelCheck>) -> Vec<Unit> {
             obs: rs.iter().fold(0.0f64, |s, r| s + r.obs),
             model: rs.iter().fold(0.0f64, |s, r| s + r.model),
             arcs,
-            w: rs.iter().fold(0.0f64, |s, r| s + r.w) / rs.len() as f64,
+            w: rs.iter().fold(0.0f64, |s, r| s + r.w) / usize_to_f64(rs.len()),
             ids: rs.iter().map(|r| r.c.id.clone()).collect(),
-            group: Some(id_value(&x.g.id, x.gi)),
+            group: Some(id_value(x.g.id.as_ref(), x.gi)),
         });
     }
     for r in rows {

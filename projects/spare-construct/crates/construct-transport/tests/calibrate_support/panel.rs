@@ -114,7 +114,7 @@ pub fn ev_out(ev: &Evidence, store: &CalibStore, with_all: bool) -> Value {
         "link": cal_stats_out(&ev.link), "measured": cal_stats_out(&ev.measured), "turn": cal_stats_out(&ev.turn),
         "turnRows": ev.turn_rows.iter().map(turn_row_out).collect::<Vec<_>>(), "screen": sl_obs_out(&ev.screen, store),
         "jt": jt_stats_out(&ev.jt), "jtRows": ev.jt_rows.iter().map(jr_out).collect::<Vec<_>>(), "conv": conv_out(&ev.conv), "me": me_out(&ev.me),
-        "baseYear": ev.base_year, "year": po(ev.year), "hasRes": ev.has_res })
+        "baseYear": ev.base_year, "year": po(ev.year), "hasRes": ev.has_res() })
 }
 
 fn val_out(v: &Option<Val>) -> Value {

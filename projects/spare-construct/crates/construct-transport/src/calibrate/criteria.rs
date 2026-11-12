@@ -6,6 +6,7 @@
 //! the source document before relying on them.
 
 use crate::jsnum::number_to_js_string as num_text;
+use crate::jsnum::{f64_to_usize, usize_to_f64};
 use crate::util::fmt;
 
 /// A source document the criteria cite (`SOURCES[id]`).
@@ -117,8 +118,7 @@ impl TmdgValue {
     #[must_use]
     pub fn one(self) -> f64 {
         match self {
-            TmdgValue::One(x) => x,
-            TmdgValue::Pair(x, _) => x,
+            TmdgValue::One(x) | TmdgValue::Pair(x, _) => x,
         }
     }
 }
@@ -158,13 +158,13 @@ pub const TMDG_TABLE: [TmdgRow; 17] = [
     TmdgRow { key: "meCR", v: &[('C', One(0.70)), ('D', One(0.75)), ('E', One(0.80))], vf: "", table: "Section 8, trip-length coincidence ratio" },
 ];
 
-/// `TMDG[key]`.
+// What `TMDG[key]` reads for a key the table does not have: a row with no values (every caller passes a key of the table)
+static NO_ROW: TmdgRow = TmdgRow { key: "", v: &[], vf: "", table: "" };
+
+/// `TMDG[key]`; a row with no values (and no table) for a key the table does not have.
 #[must_use]
 pub fn tmdg_row(key: &str) -> &'static TmdgRow {
-    TMDG_TABLE
-        .iter()
-        .find(|r| r.key == key)
-        .unwrap_or_else(|| panic!("no TMDG row {key:?}"))
+    TMDG_TABLE.iter().find(|r| r.key == key).unwrap_or(&NO_ROW)
 }
 
 impl TmdgRow {
@@ -179,10 +179,10 @@ impl TmdgRow {
 #[must_use]
 pub fn fig5(group: &str) -> &'static str {
     match group {
-        "link" | "turn" | "scatter" => "eeeeeee",
         "band" | "jt" => "uuuuuuu",
         "rmse" => "uuuuunn",
         "screen" => "eeeennn",
+        // "link", "turn", "scatter" and any other group
         _ => "eeeeeee",
     }
 }
@@ -602,27 +602,38 @@ pub fn common_tests(cat: char, prior_high: bool) -> Vec<Test> {
 }
 
 /// `tmdgTests(cat)`: every test of TMDG 2019 for a purpose category, then the TAG, RMS and convergence rows beside them.
+///
+/// A category that is not A to G has no TMDG values, and every Figure 5 use is "not-expected" (`FIG5[g][-1]` is undefined).
 #[must_use]
 pub fn tmdg_tests(cat: char, prior_high: bool) -> Vec<Test> {
-    let i = CATS.iter().position(|&c| c == cat).expect("a category A to G");
-    let use_of = |g: &str| use_of_letter(fig5(g).as_bytes()[i] as char);
-    let fig5ok = |g: &str| fig5_ok(cat, g);
+    let col = CATS.iter().position(|&c| c == cat);
+    let mut out = count_tests(cat, col);
+    out.extend(scatter_tests(cat, col));
+    out.extend(common_tests(cat, prior_high));
+    out
+}
+
+// `useOfLetter(FIG5[g][i])`: the applicability of a test group for the category at position col of CATS
+fn use_at(col: Option<usize>, g: &str) -> &'static str {
+    use_of_letter(col.and_then(|i| fig5(g).as_bytes().get(i)).map_or('\0', |&b| char::from(b)))
+}
+
+// tmdgTests: the link, turn and screenline tests
+fn count_tests(cat: char, col: Option<usize>) -> Vec<Test> {
     let v = |key: &str| tmdg_row(key).at(cat);
-    let vf = |key: &str| !tmdg_row(key).vf.contains(cat);
-    let tb = |key: &str| tmdg_row(key).table.to_string();
     let share = |id: &str, group: &'static str, on: &'static str, key: &str, stat: &'static str, label: &str, crit: &str| -> Test {
         Test {
             min: v(key).map(TmdgValue::one),
             label: label.to_string(),
             crit: crit.to_string(),
-            table: tb(key),
-            verified: vf(key),
-            use_: use_of(group),
-            use_verified: Some(fig5ok(group)),
+            table: tmdg_row(key).table.to_string(),
+            verified: !tmdg_row(key).vf.contains(cat),
+            use_: use_at(col, group),
+            use_verified: Some(fig5_ok(cat, group)),
             ..t0(id, group, on, stat, if v(key).is_none() { "none" } else { "share" })
         }
     };
-    let sl = use_of("screen");
+    let sl = use_at(col, "screen");
     let band = band_crit(&BAND_TMDG);
     let mut out = vec![
         share("geh5", "link", "link", "geh5", "geh5", "Link GEH < 5", "GEH < 5, % of directional counts"),
@@ -649,7 +660,15 @@ pub fn tmdg_tests(cat: char, prior_high: bool) -> Vec<Test> {
         out.push(share("sw15", "screen", "screen", "sw15", "sw15", "Screenline within 15%", "directional totals within 15%"));
     }
     out.push(tag_screen_test());
-    out.push(Test {
+    out
+}
+
+// tmdgTests: the scatter, %RMSE and journey time tests, with the RMS screenline row
+fn scatter_tests(cat: char, col: Option<usize>) -> Vec<Test> {
+    let v = |key: &str| tmdg_row(key).at(cat);
+    let vf = |key: &str| !tmdg_row(key).vf.contains(cat);
+    let tb = |key: &str| tmdg_row(key).table.to_string();
+    let mut out = vec![Test {
         min: Some(rms::SGEH4),
         label: "Screenline GEH < 4 (RMS)".to_string(),
         crit: "every directional total".to_string(),
@@ -658,7 +677,7 @@ pub fn tmdg_tests(cat: char, prior_high: bool) -> Vec<Test> {
         verified: true,
         use_: "useful",
         ..t0("rmsSl", "tag", "screen", "sgeh4", "share")
-    });
+    }];
     out.push(Test {
         label: "R\u{b2} (OLS)".to_string(),
         crit: "ordinary least squares, for information".to_string(),
@@ -672,8 +691,8 @@ pub fn tmdg_tests(cat: char, prior_high: bool) -> Vec<Test> {
         crit: "centred on the mean (the TMDG test)".to_string(),
         table: tb("r2"),
         verified: vf("r2"),
-        use_: use_of("scatter"),
-        use_verified: Some(fig5ok("scatter")),
+        use_: use_at(col, "scatter"),
+        use_verified: Some(fig5_ok(cat, "scatter")),
         ..t0("r2", "scatter", "link", "r2", "min")
     });
     out.push(Test {
@@ -694,8 +713,8 @@ pub fn tmdg_tests(cat: char, prior_high: bool) -> Vec<Test> {
         crit: "trendline through the origin".to_string(),
         table: tb("slope"),
         verified: vf("slope"),
-        use_: use_of("scatter"),
-        use_verified: Some(fig5ok("scatter")),
+        use_: use_at(col, "scatter"),
+        use_verified: Some(fig5_ok(cat, "scatter")),
         ..t0("slope", "scatter", "link", "b0", "range")
     });
     let rm = v("rmse").map(|x| match x {
@@ -709,8 +728,8 @@ pub fn tmdg_tests(cat: char, prior_high: bool) -> Vec<Test> {
         crit: "100\u{b7}\u{221a}(\u{3a3}(M\u{2212}C)\u{b2}/(N\u{2212}1)) / (\u{3a3}C/N)".to_string(),
         table: tb("rmse"),
         verified: vf("rmse"),
-        use_: use_of("rmse"),
-        use_verified: Some(fig5ok("rmse")),
+        use_: use_at(col, "rmse"),
+        use_verified: Some(fig5_ok(cat, "rmse")),
         ..t0("rmse", "rmse", "link", "rmse", if rm.is_some() { "rmse" } else { "none" })
     });
     out.push(Test {
@@ -718,7 +737,7 @@ pub fn tmdg_tests(cat: char, prior_high: bool) -> Vec<Test> {
         label: "Journey times, tier 1".to_string(),
         crit: "within 15% or 1 minute, % of routes".to_string(),
         table: tb("jt1"),
-        use_: use_of("jt"),
+        use_: use_at(col, "jt"),
         ..t0("jt1", "jt", "jt", "jt1", "share")
     });
     out.push(Test {
@@ -726,10 +745,9 @@ pub fn tmdg_tests(cat: char, prior_high: bool) -> Vec<Test> {
         label: "Journey times, tier 2".to_string(),
         crit: "within 25% or 1.5 minutes, % of routes".to_string(),
         table: tb("jt2"),
-        use_: use_of("jt"),
+        use_: use_at(col, "jt"),
         ..t0("jt2", "jt", "jt", "jt2", "share")
     });
-    out.extend(common_tests(cat, prior_high));
     out
 }
 
@@ -858,7 +876,8 @@ pub fn need(target: f64, n: usize) -> usize {
     if target >= 1.0 {
         n
     } else {
-        n.min(((target * n as f64 + 1e-9).floor() as usize) + 1)
+        // Bound: the floor is at most n (target < 1), so adding 1 never saturates in practice
+        n.min(f64_to_usize((target * usize_to_f64(n) + 1e-9).floor()).saturating_add(1))
     }
 }
 
