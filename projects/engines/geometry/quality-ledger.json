@@ -236,27 +236,11 @@
     },
     {
       "file": "projects/engines/geometry/crates/geom-num/src/wide.rs",
-      "mutant": "replace < with == in Wide<L>::from_i128",
-      "line_text": "let u = if v < 0 {",
-      "occurrences": 1,
-      "kind": "equivalent",
-      "reason": "For a negative v the mutant takes the other arm, `v as u128`, which reads v's two's complement as unsigned, v + 2^128: the same u the original builds as (v - i128::MIN) + 2^127 (it only avoids a cast clippy flags as losing the sign). For v = 0 the mutant takes the first arm, where 0 - i128::MIN overflows, so checked_sub gives None and u = 0, as `0 as u128` does. Every v gives the same u, so the same limbs."
-    },
-    {
-      "file": "projects/engines/geometry/crates/geom-num/src/wide.rs",
-      "mutant": "replace < with <= in Wide<L>::from_i128",
-      "line_text": "let u = if v < 0 {",
-      "occurrences": 1,
-      "kind": "equivalent",
-      "reason": "The two differ only at v = 0, where the mutant takes the first arm: 0 - i128::MIN = 2^127 overflows i128, so checked_sub gives None and u = 0, the same u as the original's `0 as u128`."
-    },
-    {
-      "file": "projects/engines/geometry/crates/geom-num/src/wide.rs",
       "mutant": "replace | with ^ in Wide<L>::from_i128",
-      "line_text": "Some(d) => (d as u128) | (1u128 << 127),",
+      "line_text": "(v.wrapping_sub(i128::MIN) as u128) | (1u128 << 127)",
       "occurrences": 1,
       "kind": "equivalent",
-      "reason": "This arm runs for a negative v, where d = v - i128::MIN lies in 0..2^127, so bit 127 of d is clear: setting it with | and flipping it with ^ both give d + 2^127."
+      "reason": "This branch runs for a negative v, where d = v - i128::MIN (the wrapping_sub, which does not wrap there) lies in 0..2^127, so bit 127 of d is clear: setting it with | and flipping it with ^ both give d + 2^127."
     },
     {
       "file": "projects/engines/geometry/crates/geom-nurbs/src/basis.rs",
@@ -3324,11 +3308,11 @@
     },
     {
       "file": "projects/engines/geometry/crates/geom-num/src/dd.rs",
-      "mutant": "replace && with || in DD::normalized",
-      "line_text": "if hi.is_finite() && lo.is_finite() {",
+      "mutant": "replace & with | in DD::normalized",
+      "line_text": "if hi.is_finite() & lo.is_finite() {",
       "occurrences": 1,
       "kind": "equivalent",
-      "reason": "two_sum's error is finite exactly when its sum is (eft::two_sum: exact for every finite input whose rounded sum is finite; otherwise the error is an infinity or NaN), so hi and lo are finite together and `&&` and `||` agree on every input."
+      "reason": "two_sum's error is finite exactly when its sum is (eft::two_sum: exact for every finite input whose rounded sum is finite; otherwise the error is an infinity or NaN), so hi and lo are finite together and `&` and `|` agree on every input."
     },
     {
       "file": "projects/engines/geometry/crates/geom-num/src/dd.rs",
@@ -5321,456 +5305,42 @@
       "proof": "projects/engines/geometry/crates/geom-num/src/math/hexf.rs::step_u128_never_returns_none",
       "tool": "kani",
       "reason": "step_u128 asserts that its checked step gave Some before it matches, so its None arm could run only after the assertion had failed. Kani proves step_u128(None) panics at that assertion; the reader runs only in const blocks, where that panic is a build error."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-num/src/wide.rs",
+      "item": "fn limb_at<const N: usize>(a: &[u64; N], i: usize) -> u64 {",
+      "proof": "projects/engines/geometry/crates/geom-num/verus/wide.rs::limb_lookup_never_misses",
+      "tool": "verus",
+      "reason": "limb_at reads limb i of an N-limb array; its None arm could run only for an i of N or more. The twin of wide.rs gives limb_at the precondition i < N, which Verus checks at every call in the proven functions (geom-gen's verus_twin test holds that every caller in wide.rs is one of them), and in the None arm the twin calls limb_lookup_never_misses, whose own precondition is false, so Verus verifies the twin only because that arm cannot be reached."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-num/src/wide.rs",
+      "item": "fn put_limb<const N: usize>(a: &mut [u64; N], i: usize, v: u64) {",
+      "proof": "projects/engines/geometry/crates/geom-num/verus/wide.rs::limb_store_never_misses",
+      "tool": "verus",
+      "reason": "put_limb writes limb i of an N-limb array; its else could run only for an i of N or more. The twin of wide.rs gives put_limb the precondition i < N, which Verus checks at every call in the proven functions (from_i128's two calls under its 2 <= L, which the compile-time guard enforces for the shipped function), and in the else the twin calls limb_store_never_misses, whose own precondition is false, so Verus verifies the twin only because the else cannot be reached."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-num/src/plane.rs",
+      "item": "fn fitted<T>(step: Option<T>) -> Result<T, NumError> {",
+      "proof": "projects/engines/geometry/crates/geom-num/verus/plane.rs::a_fitted_step_is_never_none",
+      "tool": "verus",
+      "reason": "fitted turns a checked step into its value, or reports BudgetExceeded for None; its None arm could run only if a caller passed a step that failed. The twin of plane.rs gives fitted the precondition step.is_some(), which Verus checks at every call (the 512-bit classify in side_of_tpi_hand, and the offset sum and the three numerators in Lpi::homogeneous; geom-gen's verus_twin test holds that every caller in plane.rs is a function the twin proves), and in the None arm the twin calls a_fitted_step_is_never_none, whose own precondition is false, so Verus verifies the twin only because that arm cannot be reached."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-num/src/plane.rs",
+      "item": "fn lpi_classify_total(w1: i128, s2p: i128, w2: i128, s1p: i128) -> Result<Sign, NumError> {",
+      "proof": "projects/engines/geometry/crates/geom-num/verus/plane.rs::lpi_classify_always_fits",
+      "tool": "verus",
+      "reason": "lpi_classify_total asks lpi_classify in 256 bits, and only after a None there asks it in 320 bits and reports BudgetExceeded if that fails too. The twin of plane.rs requires each of its four values below 2^126 in magnitude, which Verus checks at its one call, in side_of_lpi_hand, from the planes' budget; under that requirement lpi_classify's own specification says the 256-bit call is Some, and after a None the twin calls lpi_classify_always_fits, whose own precondition is false, so Verus verifies the twin only because nothing after the first call can be reached."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-num/src/crossing.rs",
+      "item": "fn side_total(oa: i128, ob2: i128, ob: i128, oa2: i128) -> Result<Sign, NumError> {",
+      "proof": "projects/engines/geometry/crates/geom-num/verus/crossing.rs::side_always_fits",
+      "tool": "verus",
+      "reason": "side_total asks side in 256 bits, and only after a None there asks it in 320 bits and reports BudgetExceeded if that fails too. The twin of crossing.rs requires each of its four turns below 2^84 in magnitude, which Verus checks at its one call, in orient2d_hand, from the grid's bound on a turn; under that requirement side's own specification says the 256-bit call is Some, and after a None the twin calls side_always_fits, whose own precondition is false, so Verus verifies the twin only because nothing after the first call can be reached."
     }
   ],
-  "awaiting_proof": [
-    {
-      "file": "projects/engines/geometry/crates/geom-num/src/crossing.rs",
-      "line_text": "let (Some((oa, ob)), Some(oa2), Some(ob2)) =",
-      "occurrences": 1,
-      "piece": "G41",
-      "reason": "The hand-written fallback G29 keeps behind the generated predicates, or a helper only it calls: it runs only when a generated exact path does not fit its certified types, which the generator's certificate rules out for every input the constructors accept, so no test reaches it. G41 proves it unreachable, or it is removed."
-    },
-    {
-      "file": "projects/engines/geometry/crates/geom-num/src/crossing.rs",
-      "line_text": ".or_else(|| commit_axes::<TOTAL_LIMBS, 2>(&x, &w))",
-      "occurrences": 1,
-      "piece": "G41",
-      "reason": "A crossing point's budget arm, or its fallback to the exact weight or the wider commit, which the tests' points never need: the generated filter and the narrow budget decide every one. G41 proves it unreachable, or a test with near-degenerate inputs at the edge of the budget reaches it."
-    },
-    {
-      "file": "projects/engines/geometry/crates/geom-num/src/dd.rs",
-      "line_text": "if let Ok(e) = math::fma(a, b, -p) {",
-      "occurrences": 1,
-      "piece": "G41",
-      "reason": "A double-double defensive arm the tests do not reach: fma failing on finite operands, a non-finite split, or a branch of the exactness shortcut. G41's Kani harnesses for the error-free transforms prove it unreachable, or a test reaches it."
-    },
-    {
-      "file": "projects/engines/geometry/crates/geom-num/src/dd.rs",
-      "line_text": "}",
-      "occurrences": 1,
-      "piece": "G41",
-      "reason": "A double-double defensive arm the tests do not reach: fma failing on finite operands, a non-finite split, or a branch of the exactness shortcut. G41's Kani harnesses for the error-free transforms prove it unreachable, or a test reaches it."
-    },
-    {
-      "file": "projects/engines/geometry/crates/geom-num/src/dd.rs",
-      "line_text": "if hi.is_finite() && lo.is_finite() {",
-      "occurrences": 1,
-      "piece": "G41",
-      "reason": "A double-double defensive arm the tests do not reach: fma failing on finite operands, a non-finite split, or a branch of the exactness shortcut. G41's Kani harnesses for the error-free transforms prove it unreachable, or a test reaches it."
-    },
-    {
-      "file": "projects/engines/geometry/crates/geom-num/src/exact_sum.rs",
-      "line_text": "self.lost = true;",
-      "occurrences": 3,
-      "piece": "G41",
-      "reason": "An arm of ExactSum that no state reaches, so no test can run it: a conversion between u32, usize and u64 that cannot fail on a 32-bit or 64-bit target; an index that is always inside its table (a finite double's exponent field is at most 2046, its sign-and-exponent pattern is below 4096, and a pattern whose used bit exists has a chunk); a u128 sum that stays below 2^69; a slice that always holds a chunk; or round_finite's shift, which is always 12 to 65 (its documentation). The arms a test can reach are tested, in tests/coverage_exact_sum.rs and the module's unit tests. This one waits for a Kani harness that proves it unreachable, or for the step to be written so that it cannot fail."
-    },
-    {
-      "file": "projects/engines/geometry/crates/geom-num/src/exact_sum.rs",
-      "line_text": "let Ok(j) = usize::try_from(exponent >> 5) else {",
-      "occurrences": 2,
-      "piece": "G41",
-      "reason": "An arm of ExactSum that no state reaches, so no test can run it: a conversion between u32, usize and u64 that cannot fail on a 32-bit or 64-bit target; an index that is always inside its table (a finite double's exponent field is at most 2046, its sign-and-exponent pattern is below 4096, and a pattern whose used bit exists has a chunk); a u128 sum that stays below 2^69; a slice that always holds a chunk; or round_finite's shift, which is always 12 to 65 (its documentation). The arms a test can reach are tested, in tests/coverage_exact_sum.rs and the module's unit tests. This one waits for a Kani harness that proves it unreachable, or for the step to be written so that it cannot fail."
-    },
-    {
-      "file": "projects/engines/geometry/crates/geom-num/src/exact_sum.rs",
-      "line_text": "return;",
-      "occurrences": 5,
-      "piece": "G41",
-      "reason": "An arm of ExactSum that no state reaches, so no test can run it: a conversion between u32, usize and u64 that cannot fail on a 32-bit or 64-bit target; an index that is always inside its table (a finite double's exponent field is at most 2046, its sign-and-exponent pattern is below 4096, and a pattern whose used bit exists has a chunk); a u128 sum that stays below 2^69; a slice that always holds a chunk; or round_finite's shift, which is always 12 to 65 (its documentation). The arms a test can reach are tested, in tests/coverage_exact_sum.rs and the module's unit tests. This one waits for a Kani harness that proves it unreachable, or for the step to be written so that it cannot fail."
-    },
-    {
-      "file": "projects/engines/geometry/crates/geom-num/src/exact_sum.rs",
-      "line_text": "if let Some([first, second, ..]) = self.chunks.get_mut(j..) {",
-      "occurrences": 1,
-      "piece": "G41",
-      "reason": "An arm of ExactSum that no state reaches, so no test can run it: a conversion between u32, usize and u64 that cannot fail on a 32-bit or 64-bit target; an index that is always inside its table (a finite double's exponent field is at most 2046, its sign-and-exponent pattern is below 4096, and a pattern whose used bit exists has a chunk); a u128 sum that stays below 2^69; a slice that always holds a chunk; or round_finite's shift, which is always 12 to 65 (its documentation). The arms a test can reach are tested, in tests/coverage_exact_sum.rs and the module's unit tests. This one waits for a Kani harness that proves it unreachable, or for the step to be written so that it cannot fail."
-    },
-    {
-      "file": "projects/engines/geometry/crates/geom-num/src/exact_sum.rs",
-      "line_text": "[] => return None,",
-      "occurrences": 1,
-      "piece": "G41",
-      "reason": "An arm of ExactSum that no state reaches, so no test can run it: a conversion between u32, usize and u64 that cannot fail on a 32-bit or 64-bit target; an index that is always inside its table (a finite double's exponent field is at most 2046, its sign-and-exponent pattern is below 4096, and a pattern whose used bit exists has a chunk); a u128 sum that stays below 2^69; a slice that always holds a chunk; or round_finite's shift, which is always 12 to 65 (its documentation). The arms a test can reach are tested, in tests/coverage_exact_sum.rs and the module's unit tests. This one waits for a Kani harness that proves it unreachable, or for the step to be written so that it cannot fail."
-    },
-    {
-      "file": "projects/engines/geometry/crates/geom-num/src/exact_sum.rs",
-      "line_text": "if !(12..=65).contains(&shift) {",
-      "occurrences": 1,
-      "piece": "G41",
-      "reason": "An arm of ExactSum that no state reaches, so no test can run it: a conversion between u32, usize and u64 that cannot fail on a 32-bit or 64-bit target; an index that is always inside its table (a finite double's exponent field is at most 2046, its sign-and-exponent pattern is below 4096, and a pattern whose used bit exists has a chunk); a u128 sum that stays below 2^69; a slice that always holds a chunk; or round_finite's shift, which is always 12 to 65 (its documentation). The arms a test can reach are tested, in tests/coverage_exact_sum.rs and the module's unit tests. This one waits for a Kani harness that proves it unreachable, or for the step to be written so that it cannot fail."
-    },
-    {
-      "file": "projects/engines/geometry/crates/geom-num/src/exact_sum.rs",
-      "line_text": "return None;",
-      "occurrences": 1,
-      "piece": "G41",
-      "reason": "An arm of ExactSum that no state reaches, so no test can run it: a conversion between u32, usize and u64 that cannot fail on a 32-bit or 64-bit target; an index that is always inside its table (a finite double's exponent field is at most 2046, its sign-and-exponent pattern is below 4096, and a pattern whose used bit exists has a chunk); a u128 sum that stays below 2^69; a slice that always holds a chunk; or round_finite's shift, which is always 12 to 65 (its documentation). The arms a test can reach are tested, in tests/coverage_exact_sum.rs and the module's unit tests. This one waits for a Kani harness that proves it unreachable, or for the step to be written so that it cannot fail."
-    },
-    {
-      "file": "projects/engines/geometry/crates/geom-num/src/exact_sum.rs",
-      "line_text": "if let (Some(count), Some(chunk)) = (self.counts.get_mut(index), self.chunks.get_mut(index))",
-      "occurrences": 2,
-      "piece": "G41",
-      "reason": "An arm of ExactSum that no state reaches, so no test can run it: a conversion between u32, usize and u64 that cannot fail on a 32-bit or 64-bit target; an index that is always inside its table (a finite double's exponent field is at most 2046, its sign-and-exponent pattern is below 4096, and a pattern whose used bit exists has a chunk); a u128 sum that stays below 2^69; a slice that always holds a chunk; or round_finite's shift, which is always 12 to 65 (its documentation). The arms a test can reach are tested, in tests/coverage_exact_sum.rs and the module's unit tests. This one waits for a Kani harness that proves it unreachable, or for the step to be written so that it cannot fail."
-    },
-    {
-      "file": "projects/engines/geometry/crates/geom-num/src/exact_sum.rs",
-      "line_text": "}",
-      "occurrences": 1,
-      "piece": "G41",
-      "reason": "An arm of ExactSum that no state reaches, so no test can run it: a conversion between u32, usize and u64 that cannot fail on a 32-bit or 64-bit target; an index that is always inside its table (a finite double's exponent field is at most 2046, its sign-and-exponent pattern is below 4096, and a pattern whose used bit exists has a chunk); a u128 sum that stays below 2^69; a slice that always holds a chunk; or round_finite's shift, which is always 12 to 65 (its documentation). The arms a test can reach are tested, in tests/coverage_exact_sum.rs and the module's unit tests. This one waits for a Kani harness that proves it unreachable, or for the step to be written so that it cannot fail."
-    },
-    {
-      "file": "projects/engines/geometry/crates/geom-num/src/exact_sum.rs",
-      "line_text": "sum.lost = true;",
-      "occurrences": 4,
-      "piece": "G41",
-      "reason": "An arm of ExactSum that no state reaches, so no test can run it: a conversion between u32, usize and u64 that cannot fail on a 32-bit or 64-bit target; an index that is always inside its table (a finite double's exponent field is at most 2046, its sign-and-exponent pattern is below 4096, and a pattern whose used bit exists has a chunk); a u128 sum that stays below 2^69; a slice that always holds a chunk; or round_finite's shift, which is always 12 to 65 (its documentation). The arms a test can reach are tested, in tests/coverage_exact_sum.rs and the module's unit tests. This one waits for a Kani harness that proves it unreachable, or for the step to be written so that it cannot fail."
-    },
-    {
-      "file": "projects/engines/geometry/crates/geom-num/src/exact_sum.rs",
-      "line_text": "let Ok(pattern) = u64::try_from(index) else {",
-      "occurrences": 1,
-      "piece": "G41",
-      "reason": "An arm of ExactSum that no state reaches, so no test can run it: a conversion between u32, usize and u64 that cannot fail on a 32-bit or 64-bit target; an index that is always inside its table (a finite double's exponent field is at most 2046, its sign-and-exponent pattern is below 4096, and a pattern whose used bit exists has a chunk); a u128 sum that stays below 2^69; a slice that always holds a chunk; or round_finite's shift, which is always 12 to 65 (its documentation). The arms a test can reach are tested, in tests/coverage_exact_sum.rs and the module's unit tests. This one waits for a Kani harness that proves it unreachable, or for the step to be written so that it cannot fail."
-    },
-    {
-      "file": "projects/engines/geometry/crates/geom-num/src/exact_sum.rs",
-      "line_text": "let Some(significands) = u128::from(fractions).checked_add(implicit) else {",
-      "occurrences": 1,
-      "piece": "G41",
-      "reason": "An arm of ExactSum that no state reaches, so no test can run it: a conversion between u32, usize and u64 that cannot fail on a 32-bit or 64-bit target; an index that is always inside its table (a finite double's exponent field is at most 2046, its sign-and-exponent pattern is below 4096, and a pattern whose used bit exists has a chunk); a u128 sum that stays below 2^69; a slice that always holds a chunk; or round_finite's shift, which is always 12 to 65 (its documentation). The arms a test can reach are tested, in tests/coverage_exact_sum.rs and the module's unit tests. This one waits for a Kani harness that proves it unreachable, or for the step to be written so that it cannot fail."
-    },
-    {
-      "file": "projects/engines/geometry/crates/geom-num/src/exact_sum.rs",
-      "line_text": "let Ok(position) = usize::try_from(position) else {",
-      "occurrences": 1,
-      "piece": "G41",
-      "reason": "An arm of ExactSum that no state reaches, so no test can run it: a conversion between u32, usize and u64 that cannot fail on a 32-bit or 64-bit target; an index that is always inside its table (a finite double's exponent field is at most 2046, its sign-and-exponent pattern is below 4096, and a pattern whose used bit exists has a chunk); a u128 sum that stays below 2^69; a slice that always holds a chunk; or round_finite's shift, which is always 12 to 65 (its documentation). The arms a test can reach are tested, in tests/coverage_exact_sum.rs and the module's unit tests. This one waits for a Kani harness that proves it unreachable, or for the step to be written so that it cannot fail."
-    },
-    {
-      "file": "projects/engines/geometry/crates/geom-num/src/grid.rs",
-      "line_text": "None => Err(NumError::BudgetExceeded),",
-      "occurrences": 2,
-      "piece": "G41",
-      "reason": "The grid's budget arm: a checked step that the tests' inputs never overflow. G41 proves it unreachable, or a test reaches it with inputs at the budget."
-    },
-    {
-      "file": "projects/engines/geometry/crates/geom-num/src/perturb.rs",
-      "line_text": "if let Some(row) = m.get_mut(arg) {",
-      "occurrences": 1,
-      "piece": "G41",
-      "reason": "The perturbed determinant's defensive arms: `arg` always indexes a row of the matrix, so `get_mut` never misses, and the search always finds a nonzero term for distinct keys (choosing, in key order, column k for the argument of rank k leaves a coefficient of ±1), so its fallback never runs. G41 proves them unreachable."
-    },
-    {
-      "file": "projects/engines/geometry/crates/geom-num/src/perturb.rs",
-      "line_text": "}",
-      "occurrences": 1,
-      "piece": "G41",
-      "reason": "The perturbed determinant's defensive arms: `arg` always indexes a row of the matrix, so `get_mut` never misses, and the search always finds a nonzero term for distinct keys (choosing, in key order, column k for the argument of rank k leaves a coefficient of ±1), so its fallback never runs. G41 proves them unreachable."
-    },
-    {
-      "file": "projects/engines/geometry/crates/geom-num/src/plane.rs",
-      "line_text": "Some((n, d)) if within_budget(&n, d) => Ok(Plane { n, d }),",
-      "occurrences": 1,
-      "piece": "G41",
-      "reason": "A plane predicate's budget, degenerate-input or fallback arm that the tests' inputs never reach (a coordinate past the budget, an overflowing cross product, a zero normal, a weight the filter cannot decide, a point the narrow commit cannot hold). G41 proves it unreachable, or a test reaches it."
-    },
-    {
-      "file": "projects/engines/geometry/crates/geom-num/src/plane.rs",
-      "line_text": "_ => Err(NumError::BudgetExceeded),",
-      "occurrences": 1,
-      "piece": "G41",
-      "reason": "A plane predicate's budget, degenerate-input or fallback arm that the tests' inputs never reach (a coordinate past the budget, an overflowing cross product, a zero normal, a weight the filter cannot decide, a point the narrow commit cannot hold). G41 proves it unreachable, or a test reaches it."
-    },
-    {
-      "file": "projects/engines/geometry/crates/geom-num/src/plane.rs",
-      "line_text": "return None;",
-      "occurrences": 2,
-      "piece": "G41",
-      "reason": "A plane predicate's budget, degenerate-input or fallback arm that the tests' inputs never reach (a coordinate past the budget, an overflowing cross product, a zero normal, a weight the filter cannot decide, a point the narrow commit cannot hold). G41 proves it unreachable, or a test reaches it."
-    },
-    {
-      "file": "projects/engines/geometry/crates/geom-num/src/plane.rs",
-      "line_text": "None => None,",
-      "occurrences": 2,
-      "piece": "G41",
-      "reason": "A plane predicate's budget, degenerate-input or fallback arm that the tests' inputs never reach (a coordinate past the budget, an overflowing cross product, a zero normal, a weight the filter cannot decide, a point the narrow commit cannot hold). G41 proves it unreachable, or a test reaches it."
-    },
-    {
-      "file": "projects/engines/geometry/crates/geom-num/src/plane.rs",
-      "line_text": "let (Some(ux), Some(uy), Some(uz), Some(vx), Some(vy), Some(vz)) = (",
-      "occurrences": 1,
-      "piece": "G41",
-      "reason": "A plane predicate's budget, degenerate-input or fallback arm that the tests' inputs never reach (a coordinate past the budget, an overflowing cross product, a zero normal, a weight the filter cannot decide, a point the narrow commit cannot hold). G41 proves it unreachable, or a test reaches it."
-    },
-    {
-      "file": "projects/engines/geometry/crates/geom-num/src/plane.rs",
-      "line_text": "let (Some(nx), Some(ny), Some(nz)) = (",
-      "occurrences": 1,
-      "piece": "G41",
-      "reason": "A plane predicate's budget, degenerate-input or fallback arm that the tests' inputs never reach (a coordinate past the budget, an overflowing cross product, a zero normal, a weight the filter cannot decide, a point the narrow commit cannot hold). G41 proves it unreachable, or a test reaches it."
-    },
-    {
-      "file": "projects/engines/geometry/crates/geom-num/src/plane.rs",
-      "line_text": ".or_else(|| commit::<TOTAL_LIMBS>(&x, &w))",
-      "occurrences": 2,
-      "piece": "G41",
-      "reason": "A plane predicate's budget, degenerate-input or fallback arm that the tests' inputs never reach (a coordinate past the budget, an overflowing cross product, a zero normal, a weight the filter cannot decide, a point the narrow commit cannot hold). G41 proves it unreachable, or a test reaches it."
-    },
-    {
-      "file": "projects/engines/geometry/crates/geom-num/src/plane.rs",
-      "line_text": "let (Some(x), Some(y), Some(z)) = (",
-      "occurrences": 1,
-      "piece": "G41",
-      "reason": "A plane predicate's budget, degenerate-input or fallback arm that the tests' inputs never reach (a coordinate past the budget, an overflowing cross product, a zero normal, a weight the filter cannot decide, a point the narrow commit cannot hold). G41 proves it unreachable, or a test reaches it."
-    },
-    {
-      "file": "projects/engines/geometry/crates/geom-num/src/plane.rs",
-      "line_text": "let (Some(r0), Some(r1), Some(r2)) = (x0.resize(), x1.resize(), x2.resize()) else {",
-      "occurrences": 1,
-      "piece": "G41",
-      "reason": "A plane predicate's budget, degenerate-input or fallback arm that the tests' inputs never reach (a coordinate past the budget, an overflowing cross product, a zero normal, a weight the filter cannot decide, a point the narrow commit cannot hold). G41 proves it unreachable, or a test reaches it."
-    },
-    {
-      "file": "projects/engines/geometry/crates/geom-num/src/predicate.rs",
-      "line_text": "if ORIENT2D_FILTER_FIRST {",
-      "occurrences": 1,
-      "piece": "G41",
-      "reason": "magnitude_bits runs only at compile time, in constants, and the filtered orient2d path is off while ORIENT2D_FILTER_FIRST is false (G42's measurement keeps it off), so no test runs these lines. G41 proves or removes them."
-    },
-    {
-      "file": "projects/engines/geometry/crates/geom-num/src/predicate.rs",
-      "line_text": "Some(sign) => Ok(sign),",
-      "occurrences": 1,
-      "piece": "G41",
-      "reason": "magnitude_bits runs only at compile time, in constants, and the filtered orient2d path is off while ORIENT2D_FILTER_FIRST is false (G42's measurement keeps it off), so no test runs these lines. G41 proves or removes them."
-    },
-    {
-      "file": "projects/engines/geometry/crates/geom-num/src/predicate.rs",
-      "line_text": "None => orient2d_unfiltered(a, b, c),",
-      "occurrences": 1,
-      "piece": "G41",
-      "reason": "magnitude_bits runs only at compile time, in constants, and the filtered orient2d path is off while ORIENT2D_FILTER_FIRST is false (G42's measurement keeps it off), so no test runs these lines. G41 proves or removes them."
-    },
-    {
-      "file": "projects/engines/geometry/crates/geom-num/src/rng.rs",
-      "line_text": "Err(e) => return Err(e),",
-      "occurrences": 2,
-      "piece": "G41",
-      "reason": "The generator's defect arm: it reports RngError::Defect for a word the counter-based generator cannot produce (a non-finite double, an overflowing bound product), so the tests never reach it. G41 proves it unreachable."
-    },
-    {
-      "file": "projects/engines/geometry/crates/geom-num/src/rng.rs",
-      "line_text": "let Ok(x) = Real::new(x) else {",
-      "occurrences": 1,
-      "piece": "G41",
-      "reason": "The generator's defect arm: it reports RngError::Defect for a word the counter-based generator cannot produce (a non-finite double, an overflowing bound product), so the tests never reach it. G41 proves it unreachable."
-    },
-    {
-      "file": "projects/engines/geometry/crates/geom-num/src/rng.rs",
-      "line_text": "self.drawn = drawn;",
-      "occurrences": 2,
-      "piece": "G41",
-      "reason": "The generator's defect arm: it reports RngError::Defect for a word the counter-based generator cannot produce (a non-finite double, an overflowing bound product), so the tests never reach it. G41 proves it unreachable."
-    },
-    {
-      "file": "projects/engines/geometry/crates/geom-num/src/rng.rs",
-      "line_text": "self.block = block;",
-      "occurrences": 2,
-      "piece": "G41",
-      "reason": "The generator's defect arm: it reports RngError::Defect for a word the counter-based generator cannot produce (a non-finite double, an overflowing bound product), so the tests never reach it. G41 proves it unreachable."
-    },
-    {
-      "file": "projects/engines/geometry/crates/geom-num/src/rng.rs",
-      "line_text": "return Err(RngError::Defect);",
-      "occurrences": 4,
-      "piece": "G41",
-      "reason": "The generator's defect arm: it reports RngError::Defect for a word the counter-based generator cannot produce (a non-finite double, an overflowing bound product), so the tests never reach it. G41 proves it unreachable."
-    },
-    {
-      "file": "projects/engines/geometry/crates/geom-num/src/rng.rs",
-      "line_text": "Err(e) => break e,",
-      "occurrences": 1,
-      "piece": "G41",
-      "reason": "The generator's defect arm: it reports RngError::Defect for a word the counter-based generator cannot produce (a non-finite double, an overflowing bound product), so the tests never reach it. G41 proves it unreachable."
-    },
-    {
-      "file": "projects/engines/geometry/crates/geom-num/src/rng.rs",
-      "line_text": "let Some(value) = low.checked_add(value) else {",
-      "occurrences": 1,
-      "piece": "G41",
-      "reason": "The generator's defect arm: it reports RngError::Defect for a word the counter-based generator cannot produce (a non-finite double, an overflowing bound product), so the tests never reach it. G41 proves it unreachable."
-    },
-    {
-      "file": "projects/engines/geometry/crates/geom-num/src/rng.rs",
-      "line_text": "let Some(product) = (word as u128).checked_mul(bound as u128) else {",
-      "occurrences": 1,
-      "piece": "G41",
-      "reason": "The generator's defect arm: it reports RngError::Defect for a word the counter-based generator cannot produce (a non-finite double, an overflowing bound product), so the tests never reach it. G41 proves it unreachable."
-    },
-    {
-      "file": "projects/engines/geometry/crates/geom-num/src/rng.rs",
-      "line_text": "let Some(limit) = bound.wrapping_neg().checked_rem(bound) else {",
-      "occurrences": 1,
-      "piece": "G41",
-      "reason": "The generator's defect arm: it reports RngError::Defect for a word the counter-based generator cannot produce (a non-finite double, an overflowing bound product), so the tests never reach it. G41 proves it unreachable."
-    },
-    {
-      "file": "projects/engines/geometry/crates/geom-num/src/wide.rs",
-      "line_text": "if let Some(o) = out.get_mut(i) {",
-      "occurrences": 3,
-      "piece": "G41",
-      "reason": "A lookup on a limb array or slice whose index is always in range (`get` or `get_mut` with i below the length), or from_i128's v − i128::MIN for a negative v, which never overflows: its `None` side never runs. The Verus twin (verus/wide.rs, token for token this code) proves each function exact for every width, which rules these arms out; G41's wide-integer harnesses prove it again on the shipped build."
-    },
-    {
-      "file": "projects/engines/geometry/crates/geom-num/src/wide.rs",
-      "line_text": "if let Some(top) = limbs.last_mut() {",
-      "occurrences": 2,
-      "piece": "G41",
-      "reason": "A lookup on a limb array or slice whose index is always in range (`get` or `get_mut` with i below the length), or from_i128's v − i128::MIN for a negative v, which never overflows: its `None` side never runs. The Verus twin (verus/wide.rs, token for token this code) proves each function exact for every width, which rules these arms out; G41's wide-integer harnesses prove it again on the shipped build."
-    },
-    {
-      "file": "projects/engines/geometry/crates/geom-num/src/wide.rs",
-      "line_text": "if let Some(limb) = limbs.get_mut(0) {",
-      "occurrences": 1,
-      "piece": "G41",
-      "reason": "A lookup on a limb array or slice whose index is always in range (`get` or `get_mut` with i below the length), or from_i128's v − i128::MIN for a negative v, which never overflows: its `None` side never runs. The Verus twin (verus/wide.rs, token for token this code) proves each function exact for every width, which rules these arms out; G41's wide-integer harnesses prove it again on the shipped build."
-    },
-    {
-      "file": "projects/engines/geometry/crates/geom-num/src/wide.rs",
-      "line_text": "if let Some(limb) = limbs.get_mut(1) {",
-      "occurrences": 1,
-      "piece": "G41",
-      "reason": "A lookup on a limb array or slice whose index is always in range (`get` or `get_mut` with i below the length), or from_i128's v − i128::MIN for a negative v, which never overflows: its `None` side never runs. The Verus twin (verus/wide.rs, token for token this code) proves each function exact for every width, which rules these arms out; G41's wide-integer harnesses prove it again on the shipped build."
-    },
-    {
-      "file": "projects/engines/geometry/crates/geom-num/src/crossing.rs",
-      "line_text": "None => Err(NumError::BudgetExceeded),",
-      "occurrences": 2,
-      "piece": "G41",
-      "reason": "A crossing point's budget arm, or its fallback to the exact weight or the wider commit, which the tests' points never need: the generated filter and the narrow budget decide every one. G41 proves it unreachable, or a test with near-degenerate inputs at the edge of the budget reaches it."
-    },
-    {
-      "file": "projects/engines/geometry/crates/geom-num/src/crossing.rs",
-      "line_text": "let Some((oa, ob)) = self.offsets() else {",
-      "occurrences": 1,
-      "piece": "G41",
-      "reason": "A crossing point's budget arm, or its fallback to the exact weight or the wider commit, which the tests' points never need: the generated filter and the narrow budget decide every one. G41 proves it unreachable, or a test with near-degenerate inputs at the edge of the budget reaches it."
-    },
-    {
-      "file": "projects/engines/geometry/crates/geom-num/src/crossing.rs",
-      "line_text": "return Err(NumError::BudgetExceeded);",
-      "occurrences": 4,
-      "piece": "G41",
-      "reason": "A crossing point's budget arm, or its fallback to the exact weight or the wider commit, which the tests' points never need: the generated filter and the narrow budget decide every one. G41 proves it unreachable, or a test with near-degenerate inputs at the edge of the budget reaches it."
-    },
-    {
-      "file": "projects/engines/geometry/crates/geom-num/src/crossing.rs",
-      "line_text": "let (Some(x), Some(y), Some(w)) = (",
-      "occurrences": 1,
-      "piece": "G41",
-      "reason": "A crossing point's budget arm, or its fallback to the exact weight or the wider commit, which the tests' points never need: the generated filter and the narrow budget decide every one. G41 proves it unreachable, or a test with near-degenerate inputs at the edge of the budget reaches it."
-    },
-    {
-      "file": "projects/engines/geometry/crates/geom-num/src/crossing.rs",
-      "line_text": "let Some(w) = oa.checked_sub(ob) else {",
-      "occurrences": 1,
-      "piece": "G41",
-      "reason": "The hand-written fallback G29 keeps behind the generated predicates, or a helper only it calls: it runs only when a generated exact path does not fit its certified types, which the generator's certificate rules out for every input the constructors accept, so no test reaches it. G41 proves it unreachable, or it is removed."
-    },
-    {
-      "file": "projects/engines/geometry/crates/geom-num/src/crossing.rs",
-      "line_text": "None => side::<5>(oa, ob2, ob, oa2),",
-      "occurrences": 1,
-      "piece": "G41",
-      "reason": "The hand-written fallback G29 keeps behind the generated predicates, or a helper only it calls: it runs only when a generated exact path does not fit its certified types, which the generator's certificate rules out for every input the constructors accept, so no test reaches it. G41 proves it unreachable, or it is removed."
-    },
-    {
-      "file": "projects/engines/geometry/crates/geom-num/src/plane.rs",
-      "line_text": "None => Err(NumError::BudgetExceeded),",
-      "occurrences": 7,
-      "piece": "G41",
-      "reason": "A plane predicate's budget, degenerate-input or fallback arm that the tests' inputs never reach (a coordinate past the budget, an overflowing cross product, a zero normal, a weight the filter cannot decide, a point the narrow commit cannot hold). G41 proves it unreachable, or a test reaches it."
-    },
-    {
-      "file": "projects/engines/geometry/crates/geom-num/src/plane.rs",
-      "line_text": "return Err(NumError::BudgetExceeded);",
-      "occurrences": 4,
-      "piece": "G41",
-      "reason": "A plane predicate's budget, degenerate-input or fallback arm that the tests' inputs never reach (a coordinate past the budget, an overflowing cross product, a zero normal, a weight the filter cannot decide, a point the narrow commit cannot hold). G41 proves it unreachable, or a test reaches it."
-    },
-    {
-      "file": "projects/engines/geometry/crates/geom-num/src/plane.rs",
-      "line_text": "None => lpi_classify::<5>(w1, s2p, w2, s1p),",
-      "occurrences": 1,
-      "piece": "G41",
-      "reason": "The hand-written fallback G29 keeps behind the generated predicates, or a helper only it calls: it runs only when a generated exact path does not fit its certified types, which the generator's certificate rules out for every input the constructors accept, so no test reaches it. G41 proves it unreachable, or it is removed."
-    },
-    {
-      "file": "projects/engines/geometry/crates/geom-num/src/plane.rs",
-      "line_text": "let Some((w, sp)) = self.plane.weight_and_offset(self.p, self.q) else {",
-      "occurrences": 1,
-      "piece": "G41",
-      "reason": "A plane predicate's budget, degenerate-input or fallback arm that the tests' inputs never reach (a coordinate past the budget, an overflowing cross product, a zero normal, a weight the filter cannot decide, a point the narrow commit cannot hold). G41 proves it unreachable, or a test reaches it."
-    },
-    {
-      "file": "projects/engines/geometry/crates/geom-num/src/plane.rs",
-      "line_text": "let Some(sq) = sp.checked_add(w) else {",
-      "occurrences": 1,
-      "piece": "G41",
-      "reason": "A plane predicate's budget, degenerate-input or fallback arm that the tests' inputs never reach (a coordinate past the budget, an overflowing cross product, a zero normal, a weight the filter cannot decide, a point the narrow commit cannot hold). G41 proves it unreachable, or a test reaches it."
-    },
-    {
-      "file": "projects/engines/geometry/crates/geom-num/src/wide.rs",
-      "line_text": "None => 0,",
-      "occurrences": 15,
-      "piece": "G41",
-      "reason": "A lookup on a limb array or slice whose index is always in range (`get` or `get_mut` with i below the length), or from_i128's v − i128::MIN for a negative v, which never overflows: its `None` side never runs. The Verus twin (verus/wide.rs, token for token this code) proves each function exact for every width, which rules these arms out; G41's wide-integer harnesses prove it again on the shipped build."
-    },
-    {
-      "file": "projects/engines/geometry/crates/geom-num/src/wide.rs",
-      "line_text": "}",
-      "occurrences": 10,
-      "piece": "G41",
-      "reason": "A lookup on a limb array or slice whose index is always in range (`get` or `get_mut` with i below the length), or from_i128's v − i128::MIN for a negative v, which never overflows: its `None` side never runs. The Verus twin (verus/wide.rs, token for token this code) proves each function exact for every width, which rules these arms out; G41's wide-integer harnesses prove it again on the shipped build."
-    },
-    {
-      "file": "projects/engines/geometry/crates/geom-num/src/wide.rs",
-      "line_text": "if let Some(slot) = out.get_mut(k) {",
-      "occurrences": 2,
-      "piece": "G41",
-      "reason": "A lookup on a limb array or slice whose index is always in range (`get` or `get_mut` with i below the length), or from_i128's v − i128::MIN for a negative v, which never overflows: its `None` side never runs. The Verus twin (verus/wide.rs, token for token this code) proves each function exact for every width, which rules these arms out; G41's wide-integer harnesses prove it again on the shipped build."
-    },
-    {
-      "file": "projects/engines/geometry/crates/geom-num/src/wide.rs",
-      "line_text": "if let Some(slot) = out.get_mut(i) {",
-      "occurrences": 1,
-      "piece": "G41",
-      "reason": "A lookup on a limb array or slice whose index is always in range (`get` or `get_mut` with i below the length), or from_i128's v − i128::MIN for a negative v, which never overflows: its `None` side never runs. The Verus twin (verus/wide.rs, token for token this code) proves each function exact for every width, which rules these arms out; G41's wide-integer harnesses prove it again on the shipped build."
-    },
-    {
-      "file": "projects/engines/geometry/crates/geom-num/src/wide32.rs",
-      "line_text": "if let Some(top) = limbs.last_mut() {",
-      "occurrences": 2,
-      "piece": "G41",
-      "reason": "Wide32's extremes set their top limb through last_mut, which always finds one: L >= 2 is checked when the width is used (AT_LEAST_TWO_LIMBS), so the None arm and the end of the if let never run. As for Wide's same lines, G41's bounded proof of no panic in geom-num removes them."
-    },
-    {
-      "file": "projects/engines/geometry/crates/geom-num/src/wide32.rs",
-      "line_text": "}",
-      "occurrences": 2,
-      "piece": "G41",
-      "reason": "Wide32's extremes set their top limb through last_mut, which always finds one: L >= 2 is checked when the width is used (AT_LEAST_TWO_LIMBS), so the None arm and the end of the if let never run. As for Wide's same lines, G41's bounded proof of no panic in geom-num removes them."
-    },
-    {
-      "file": "projects/engines/geometry/crates/geom-num/src/predicate.rs",
-      "line_text": "match filtered(|| generated::orient2d::filter(a, b, c)) {",
-      "occurrences": 1,
-      "piece": "G41",
-      "reason": "magnitude_bits runs only at compile time, in constants, and the filtered orient2d path is off while ORIENT2D_FILTER_FIRST is false (G42's measurement keeps it off), so no test runs these lines. G41 proves or removes them."
-    }
-  ]
+  "awaiting_proof": []
 }
