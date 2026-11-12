@@ -2720,3 +2720,148 @@ pub mod records {
         run(batch, out, |container| opened(container, Trust::Unknown));
     }
 }
+
+/// `geom-op`'s canonical CBOR encoder and SHA-256 (piece G86; decision 32.46): a map of every kind
+/// of scalar and a set written whole, a row of doubles each written as the shortest float that
+/// holds it, and a message hashed. A refusal is stored as `None`; no typical input is refused.
+pub mod encoder {
+    use geom_op::cbor::Encoder;
+    use geom_op::hash::sha256;
+
+    use super::run;
+
+    /// One map per input: key 0 its integer, 1 its double, 2 its text and 3 its set, each set item
+    /// written as an item of its own and the set sorted by their bytes.
+    #[inline(never)]
+    pub fn maps(batch: &[(i64, f64, String, Vec<u64>)], out: &mut Vec<Option<Vec<u8>>>) {
+        run(batch, out, |(int, float, text, set)| {
+            let mut items = Vec::with_capacity(set.len());
+            for &v in set {
+                let mut item = Encoder::new();
+                item.uint(v).ok()?;
+                items.push(item.finish().ok()?);
+            }
+            let mut e = Encoder::new();
+            e.map(4).ok()?;
+            e.key(0).ok()?;
+            e.int(i128::from(*int)).ok()?;
+            e.key(1).ok()?;
+            e.float(*float).ok()?;
+            e.key(2).ok()?;
+            e.text(text).ok()?;
+            e.key(3).ok()?;
+            e.set(items).ok()?;
+            Some(e.finish().ok()?.into_bytes())
+        });
+    }
+
+    /// One array of each row's doubles per input.
+    #[inline(never)]
+    pub fn floats(batch: &[Vec<f64>], out: &mut Vec<Option<Vec<u8>>>) {
+        run(batch, out, |row| {
+            let mut e = Encoder::new();
+            e.array(u64::try_from(row.len()).ok()?).ok()?;
+            for &x in row {
+                e.float(x).ok()?;
+            }
+            Some(e.finish().ok()?.into_bytes())
+        });
+    }
+
+    /// `sha256` of each message.
+    #[inline(never)]
+    pub fn hashes(batch: &[Vec<u8>], out: &mut Vec<[u8; 32]>) {
+        run(batch, out, |message| sha256(message));
+    }
+}
+
+/// Persistent names, history records, reference resolution and `PruneHistory` (pieces G87, G88,
+/// G89 and G109; decision 32.46), each on one small element's names and history, under an
+/// unlimited budget. A refusal is stored as `None` or `false`; no typical input is refused.
+pub mod naming {
+    use geom_format::pruned::{Pruned, pruned_record, read_pruned};
+    use geom_format::record::Record;
+    use geom_name::NameGraph;
+    use geom_name::resolve::{Body, Lookup, Resolution, Step, resolve};
+    use geom_op::{History, NameId, NameSet, OpContext, OpId, OpPath, Relations, TopoName};
+    use geom_run::{Budget, WorkMeter};
+
+    use super::run;
+    use crate::inputs::naming::Scene;
+
+    /// The `NameId` of each name.
+    #[inline(never)]
+    pub fn name_ids(batch: &[TopoName], out: &mut Vec<Option<NameId>>) {
+        run(batch, out, |name| name.id().ok());
+    }
+
+    /// A new graph per input, with each of its names interned in turn (each name is cloned into
+    /// the graph, as a program hands one over).
+    #[inline(never)]
+    pub fn interned(batch: &[Vec<TopoName>], out: &mut Vec<Option<NameGraph>>) {
+        run(batch, out, |names| {
+            let mut graph = NameGraph::new();
+            for name in names {
+                graph.intern(name.clone()).ok()?;
+            }
+            Some(graph)
+        });
+    }
+
+    /// `History::check` of each step against its inputs: whether it keeps the laws.
+    #[inline(never)]
+    pub fn checks(batch: &[(History, NameSet)], out: &mut Vec<bool>) {
+        run(batch, out, |(history, inputs)| history.check(inputs).is_ok());
+    }
+
+    /// `Relations::then` of each pair of steps.
+    #[inline(never)]
+    pub fn composed(batch: &[(Relations, Relations)], out: &mut Vec<Relations>) {
+        run(batch, out, |(first, next)| first.then(next));
+    }
+
+    /// `resolve` of each reference against its element.
+    #[inline(never)]
+    pub fn resolved(batch: &[Scene], out: &mut Vec<Resolution>) {
+        run(batch, out, |scene| {
+            let lookup = Lookup::Found {
+                body: Body {
+                    names: &scene.chain.body,
+                    carriers: &scene.chain.carriers,
+                    history: &scene.history,
+                    graph: &scene.chain.graph,
+                },
+                version: None,
+            };
+            resolve(&scene.reference, &lookup)
+        });
+    }
+
+    /// `prune` of each element's steps for the names held.
+    #[inline(never)]
+    pub fn pruned(batch: &[(Vec<Step>, NameSet)], out: &mut Vec<Option<Vec<Step>>>) {
+        let ctx = OpContext::new(OpPath::new(OpId::from_bytes([9; 16])), Budget::UNLIMITED);
+        run(batch, out, |(steps, held)| {
+            geom_name::prune(&ctx, steps, held).ok().map(|o| o.result)
+        });
+    }
+
+    /// `pruned_record` of each pruned element.
+    #[inline(never)]
+    pub fn record_write(
+        batch: &[(OpPath, NameSet, Vec<(OpPath, History)>)],
+        out: &mut Vec<Option<Record>>,
+    ) {
+        run(batch, out, |(by, held, steps)| {
+            pruned_record(by, held, steps).ok()
+        });
+    }
+
+    /// `read_pruned` of each pruned history record's payload.
+    #[inline(never)]
+    pub fn record_read(batch: &[Vec<u8>], out: &mut Vec<Option<Pruned>>) {
+        run(batch, out, |payload| {
+            read_pruned(payload, &mut WorkMeter::new(Budget::UNLIMITED)).ok()
+        });
+    }
+}

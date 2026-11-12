@@ -812,6 +812,103 @@ fn make_counts(out: &geom_op::OpOutput<geom_make::Made>) -> [u32; 4] {
     ]
 }
 
+/// The digest of a benchmark of the encoder, names, history, resolution or `PruneHistory` (pieces
+/// G86 to G89 and G109), from each function called directly on its batch.
+fn naming_digest(group: &str, name: &str, class: Class) -> Option<Digest> {
+    use geom_bench::inputs::encoder as ie;
+    use geom_bench::inputs::naming as inm;
+    use geom_op::cbor::Encoder;
+    let item = |write: &dyn Fn(&mut Encoder) -> Option<()>| -> Option<Vec<u8>> {
+        let mut e = Encoder::new();
+        write(&mut e)?;
+        Some(e.finish().ok()?.into_bytes())
+    };
+    Some(match (group, name) {
+        ("encoder", "map") => fold(ie::maps(class).iter().map(|(int, float, text, set)| {
+            let items: Option<Vec<_>> = set
+                .iter()
+                .map(|&v| {
+                    let mut i = Encoder::new();
+                    i.uint(v).ok()?;
+                    i.finish().ok()
+                })
+                .collect();
+            let items = items?;
+            item(&|e| {
+                e.map(4).ok()?;
+                e.key(0).ok()?;
+                e.int(i128::from(*int)).ok()?;
+                e.key(1).ok()?;
+                e.float(*float).ok()?;
+                e.key(2).ok()?;
+                e.text(text).ok()?;
+                e.key(3).ok()?;
+                e.set(items.clone()).ok()
+            })
+        })),
+        ("encoder", "float") => fold(ie::floats(class).iter().map(|row| {
+            item(&|e| {
+                e.array(row.len() as u64).ok()?;
+                row.iter().try_for_each(|&x| e.float(x).ok())
+            })
+        })),
+        ("encoder", "sha256") => fold(
+            ie::messages(class)
+                .iter()
+                .map(|m| geom_op::hash::sha256(m)),
+        ),
+        ("names", "name_id") => fold(inm::names(class).iter().map(|n| n.id().ok())),
+        ("names", "intern") => fold(inm::groups(class).iter().map(|names| {
+            let mut graph = geom_name::NameGraph::new();
+            for n in names {
+                graph.intern(n.clone()).ok()?;
+            }
+            Some(graph)
+        })),
+        ("history", "check") => fold(
+            inm::checks(class)
+                .iter()
+                .map(|(h, inputs)| h.check(inputs).is_ok()),
+        ),
+        ("history", "compose") => fold(inm::compositions(class).iter().map(|(a, b)| a.then(b))),
+        ("resolve", "reference") => fold(inm::scenes(class).iter().map(|s| {
+            let body = geom_name::Body {
+                names: &s.chain.body,
+                carriers: &s.chain.carriers,
+                history: &s.history,
+                graph: &s.chain.graph,
+            };
+            geom_name::resolve(
+                &s.reference,
+                &geom_name::Lookup::Found {
+                    body,
+                    version: None,
+                },
+            )
+        })),
+        ("prune", "steps") => {
+            let ctx = geom_op::OpContext::new(
+                geom_op::OpPath::new(geom_op::OpId::from_bytes([9; 16])),
+                geom_run::Budget::UNLIMITED,
+            );
+            fold(
+                inm::prunes(class)
+                    .iter()
+                    .map(|(steps, held)| geom_name::prune(&ctx, steps, held).ok().map(|o| o.result)),
+            )
+        }
+        ("prune", "record_write") => fold(inm::pruned(class).iter().map(|(by, held, steps)| {
+            geom_format::pruned::pruned_record(by, held, steps).ok()
+        })),
+        ("prune", "record_read") => fold(
+            inm::pruned_payloads(class)
+                .iter()
+                .map(|p| geom_format::pruned::read_pruned(p, &mut unlimited()).ok()),
+        ),
+        _ => return None,
+    })
+}
+
 /// The digest of the core query benchmark `query/name/class`, from each query called directly on
 /// its batch, each answer read as the benchmark reads it, with its class's rank.
 fn query_digest(name: &str, class: Class) -> Option<Digest> {
@@ -1660,6 +1757,9 @@ fn direct_digest(group: &str, name: &str, class: Class) -> Option<Digest> {
                 .map(|c| open_roots(c, geom_format::trust::Trust::Unknown)),
         ),
         ("query", _) => query_digest(name, class)?,
+        ("encoder" | "names" | "history" | "resolve" | "prune", _) => {
+            naming_digest(group, name, class)?
+        }
         ("attributes", "apply") => fold(inputs::attributes::apply(class).iter().map(
             |scene| -> Result<u64, geom_name::AttrError> {
                 let (after, notes) = geom_name::apply(

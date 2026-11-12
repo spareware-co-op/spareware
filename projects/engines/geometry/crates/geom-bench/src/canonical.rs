@@ -960,6 +960,54 @@ impl Canonical for geom_op::History {
     }
 }
 
+// Persistent names, history, resolution and `PruneHistory` (decision 32.46's count benchmarks for
+// pieces G87, G88, G89 and G109).
+
+impl Canonical for geom_op::NameSet {
+    // The count, then each name in name order.
+    fn encode(&self, h: &mut Sha256) {
+        (self.names().len() as u64).encode(h);
+        for id in self.names() {
+            id.encode(h);
+        }
+    }
+}
+
+impl Canonical for geom_op::TopoName {
+    // Its `Debug` text writes its kind and every field.
+    fn encode(&self, h: &mut Sha256) {
+        debug_text(self, h);
+    }
+}
+
+impl Canonical for geom_op::Relations {
+    // Its `Debug` text writes every list of the relations.
+    fn encode(&self, h: &mut Sha256) {
+        debug_text(self, h);
+    }
+}
+
+impl Canonical for geom_name::resolve::Step {
+    // Its `Debug` text writes its kind, its paths, its history and the set held.
+    fn encode(&self, h: &mut Sha256) {
+        debug_text(self, h);
+    }
+}
+
+impl Canonical for geom_name::resolve::Resolution {
+    // Its `Debug` text writes the outcome and every field.
+    fn encode(&self, h: &mut Sha256) {
+        debug_text(self, h);
+    }
+}
+
+impl Canonical for crate::inputs::naming::Scene {
+    // Its `Debug` text writes the element's graph, steps, body and carriers, and the reference.
+    fn encode(&self, h: &mut Sha256) {
+        debug_text(self, h);
+    }
+}
+
 impl Canonical for geom_format::operation::Operation {
     // Its `Debug` text writes every field.
     fn encode(&self, h: &mut Sha256) {

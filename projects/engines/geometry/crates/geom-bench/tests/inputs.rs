@@ -2480,6 +2480,73 @@ fn query_typical_batches_all_succeed() {
     }));
 }
 
+/// Every typical batch of the encoder's and SHA-256's benchmarks (piece G86; decision 32.46) is
+/// written whole: each map and row is one canonical item, and each float row uses each width.
+#[test]
+fn encoder_typical_batches_all_succeed() {
+    use geom_bench::inputs::encoder as m;
+    use geom_bench::kernels::encoder as k;
+    let maps = all_some("map", k::maps, &m::maps(Typical));
+    let mut meter = geom_run::WorkMeter::new(geom_run::Budget::UNLIMITED);
+    for bytes in &maps {
+        assert!(geom_format::cbor::check(bytes, 4, &mut meter).is_ok());
+    }
+    let rows = all_some("float", k::floats, &m::floats(Typical));
+    // Each row: an array head, then eight floats; binary16, binary32 and binary64 all appear.
+    let heads: std::collections::BTreeSet<u8> = rows
+        .iter()
+        .flat_map(|r| r.iter().copied())
+        .filter(|b| matches!(b, 0xf9..=0xfb))
+        .collect();
+    assert_eq!(heads.len(), 3);
+    let messages = m::messages(Typical);
+    assert_eq!(messages.len(), BATCH);
+    let mut hashes = Vec::new();
+    k::hashes(&messages, &mut hashes);
+    assert_eq!(hashes.len(), BATCH);
+}
+
+/// Every typical batch of the names, history, resolution and `PruneHistory` benchmarks (pieces
+/// G87, G88, G89 and G109; decision 32.46) succeeds: every name has an ID and interns, every step
+/// keeps the laws, each reference resolves as its turn says, and each prune and its record round
+/// trip.
+#[test]
+fn naming_typical_batches_all_succeed() {
+    use geom_bench::inputs::naming as m;
+    use geom_bench::kernels::naming as k;
+    use geom_name::Resolution;
+    all_some("name_id", k::name_ids, &m::names(Typical));
+    let graphs = all_some("intern", k::interned, &m::groups(Typical));
+    assert!(graphs.iter().all(|g| g.len() == 5));
+    let mut laws = Vec::new();
+    k::checks(&m::checks(Typical), &mut laws);
+    assert_eq!(laws.len(), BATCH);
+    assert!(laws.iter().all(|ok| *ok));
+    let mut composed = Vec::new();
+    k::composed(&m::compositions(Typical), &mut composed);
+    assert_eq!(composed.len(), BATCH);
+    let mut resolved = Vec::new();
+    k::resolved(&m::scenes(Typical), &mut resolved);
+    assert_eq!(resolved.len(), BATCH);
+    for (n, r) in resolved.iter().enumerate() {
+        let expected = match n % 6 {
+            0 => matches!(r, Resolution::Exact { .. }),
+            4 => matches!(r, Resolution::Deleted { .. }),
+            5 => matches!(r, Resolution::Ambiguous { .. }),
+            _ => matches!(r, Resolution::FollowedHistory { .. }),
+        };
+        assert!(expected, "reference {n}: {r:?}");
+    }
+    let pruned = all_some("steps", k::pruned, &m::prunes(Typical));
+    assert!(pruned.iter().all(|steps| steps.len() == 2));
+    let parts = m::pruned(Typical);
+    let records = all_some("record_write", k::record_write, &parts);
+    let payloads: Vec<Vec<u8>> = records.into_iter().map(|r| r.payload).collect();
+    let back = all_some("record_read", k::record_read, &payloads);
+    assert_eq!(back, parts);
+    all_some("record_read", k::record_read, &m::pruned_payloads(Typical));
+}
+
 /// Every typical batch of `geom-bvh`'s benchmarks (decision 32.46) builds every scene and answers
 /// every query.
 #[test]

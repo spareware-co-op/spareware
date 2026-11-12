@@ -472,6 +472,22 @@ pub static OPS: &[Op] = &[
     Op { group: "query", name: "faces", measures: "geom_name::faces::faces", classes: T, prepare: |c| bind(inputs::query::listed(c), kernels::query::faces) },
     Op { group: "query", name: "validity", measures: "geom_check::query::validity", classes: T, prepare: |c| bind(inputs::query::validities(c), kernels::query::validities) },
     Op { group: "query", name: "volume", measures: "geom_topo::query_ops::six_volume", classes: T, prepare: |c| bind(inputs::query::volumes(c), kernels::query::volumes) },
+    // geom-op's canonical encoder and SHA-256 (piece G86; decision 32.46).
+    Op { group: "encoder", name: "map", measures: "geom_op::Encoder::map", classes: T, prepare: |c| bind(inputs::encoder::maps(c), kernels::encoder::maps) },
+    Op { group: "encoder", name: "float", measures: "geom_op::Encoder::float", classes: T, prepare: |c| bind(inputs::encoder::floats(c), kernels::encoder::floats) },
+    Op { group: "encoder", name: "sha256", measures: "geom_op::hash::sha256", classes: T, prepare: |c| bind(inputs::encoder::messages(c), kernels::encoder::hashes) },
+    // Persistent names (piece G87; decision 32.46): a name's ID, and names interned in a graph.
+    Op { group: "names", name: "name_id", measures: "geom_op::TopoName::id", classes: T, prepare: |c| bind(inputs::naming::names(c), kernels::naming::name_ids) },
+    Op { group: "names", name: "intern", measures: "geom_name::NameGraph::intern", classes: T, prepare: |c| bind(inputs::naming::groups(c), kernels::naming::interned) },
+    // History records (piece G88; decision 32.46): a step's laws checked, and two steps composed.
+    Op { group: "history", name: "check", measures: "geom_op::History::check", classes: T, prepare: |c| bind(inputs::naming::checks(c), kernels::naming::checks) },
+    Op { group: "history", name: "compose", measures: "geom_op::Relations::then", classes: T, prepare: |c| bind(inputs::naming::compositions(c), kernels::naming::composed) },
+    // Reference resolution (piece G89; decision 32.46): each of its paths in turn.
+    Op { group: "resolve", name: "reference", measures: "geom_name::resolve::resolve", classes: T, prepare: |c| bind(inputs::naming::scenes(c), kernels::naming::resolved) },
+    // PruneHistory and its record (piece G109; decision 32.46).
+    Op { group: "prune", name: "steps", measures: "geom_name::prune::prune", classes: T, prepare: |c| bind(inputs::naming::prunes(c), kernels::naming::pruned) },
+    Op { group: "prune", name: "record_write", measures: "geom_format::pruned::pruned_record", classes: T, prepare: |c| bind(inputs::naming::pruned(c), kernels::naming::record_write) },
+    Op { group: "prune", name: "record_read", measures: "geom_format::pruned::read_pruned", classes: T, prepare: |c| bind(inputs::naming::pruned_payloads(c), kernels::naming::record_read) },
     // Root finding and quadrature (piece G51; decision 32.46).
     Op { group: "brent", name: "zero", measures: "brent::zero", classes: T, prepare: |c| bind(inputs::roots::zero(c), kernels::roots::zero) },
     Op { group: "quadrature", name: "gauss_legendre", measures: "quadrature::gauss_legendre", classes: T, prepare: |c| bind(inputs::roots::gauss_legendre(c), kernels::roots::gauss_legendre) },
@@ -483,7 +499,7 @@ pub static OPS: &[Op] = &[
 ];
 
 /// The groups of [`OPS`], in order.
-pub const GROUPS: [&str; 43] = [
+pub const GROUPS: [&str; 48] = [
     "predicate",
     "sign",
     "wide",
@@ -527,6 +543,11 @@ pub const GROUPS: [&str; 43] = [
     "op_record",
     "open",
     "query",
+    "encoder",
+    "names",
+    "history",
+    "resolve",
+    "prune",
 ];
 
 /// The group of the growth checks.
