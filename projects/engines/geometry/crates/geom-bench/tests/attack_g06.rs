@@ -786,18 +786,17 @@ fn query_digest(name: &str, class: Class) -> Option<Digest> {
     use geom_topo::query_ops::{bounding_box, six_volume, twice_area};
     let ctx = make_context();
     let rank = |e: geom_num::Exactness| u32::from(e.rank());
-    let bodies = inputs::query::bodies(class);
     Some(match name {
         "area" => fold(inputs::query::faces(class).iter().map(|(body, face)| {
             let face = geom_topo::Ix::new(*face).unwrap();
             twice_area(&ctx, &body.result.body, face, body.exactness)
                 .map(|a| (a.result, rank(a.exactness)))
         })),
-        "volume" => fold(bodies.iter().map(|body| {
+        "volume" => fold(inputs::query::volumes(class).iter().map(|body| {
             six_volume(&ctx, &body.result.body, body.exactness)
                 .map(|v| (v.result, rank(v.exactness)))
         })),
-        "bounding_box" => fold(bodies.iter().map(|body| {
+        "bounding_box" => fold(inputs::query::boxes(class).iter().map(|body| {
             bounding_box(&ctx, &body.result.body, body.exactness).map(|b| {
                 let corners = b
                     .result
@@ -805,7 +804,7 @@ fn query_digest(name: &str, class: Class) -> Option<Digest> {
                 (corners, rank(b.exactness))
             })
         })),
-        "exactness" => fold(bodies.iter().map(|body| {
+        "exactness" => fold(inputs::query::reports(class).iter().map(|body| {
             exactness(&ctx, &body.result.body, body.exactness).map(|e| {
                 let r = &e.result;
                 let counts = [
@@ -817,7 +816,7 @@ fn query_digest(name: &str, class: Class) -> Option<Digest> {
                 (counts, r.report.passed(), rank(e.exactness))
             })
         })),
-        "faces" => fold(bodies.iter().map(|body| {
+        "faces" => fold(inputs::query::listed(class).iter().map(|body| {
             geom_name::faces(
                 &ctx,
                 &body.result.body,
@@ -833,7 +832,7 @@ fn query_digest(name: &str, class: Class) -> Option<Digest> {
                 (rows, rank(listed.exactness))
             })
         })),
-        "validity" => fold(bodies.iter().map(|body| {
+        "validity" => fold(inputs::query::validities(class).iter().map(|body| {
             validity(
                 &ctx,
                 &body.result.body,

@@ -2313,28 +2313,28 @@ fn query_typical_batches_all_succeed() {
     use geom_bench::inputs::query as m;
     use geom_bench::kernels::query as k;
     all_ok("area", k::areas, &m::faces(Typical));
-    all_ok("volume", k::volumes, &m::bodies(Typical));
-    all_ok("bounding_box", k::boxes, &m::bodies(Typical));
-    all_ok("exactness", k::reports, &m::bodies(Typical));
-    all_ok("faces", k::faces, &m::bodies(Typical));
-    all_ok("validity", k::validities, &m::bodies(Typical));
+    all_ok("volume", k::volumes, &m::volumes(Typical));
+    all_ok("bounding_box", k::boxes, &m::boxes(Typical));
+    all_ok("exactness", k::reports, &m::reports(Typical));
+    all_ok("faces", k::faces, &m::listed(Typical));
+    all_ok("validity", k::validities, &m::validities(Typical));
     // Each body is valid, so the reports pass, and its box is the tight box of its vertices.
     let mut reports = Vec::new();
-    k::reports(&m::bodies(Typical), &mut reports);
+    k::reports(&m::reports(Typical), &mut reports);
     assert!(
         reports
             .iter()
             .all(|r| r.as_ref().is_ok_and(|(_, passed, _)| *passed))
     );
     let mut valid = Vec::new();
-    k::validities(&m::bodies(Typical), &mut valid);
+    k::validities(&m::validities(Typical), &mut valid);
     assert!(
         valid
             .iter()
             .all(|r| r.as_ref().is_ok_and(|(passed, _, _)| *passed))
     );
     let mut boxes = Vec::new();
-    k::boxes(&m::bodies(Typical), &mut boxes);
+    k::boxes(&m::boxes(Typical), &mut boxes);
     assert!(boxes.iter().all(|r| {
         r.as_ref()
             .is_ok_and(|(b, _)| b.is_some_and(|(_, tight)| tight))

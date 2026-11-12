@@ -60,15 +60,43 @@ fn body(g: &mut SplitMix64, n: usize) -> Option<OpOutput<Made>> {
     prism(&ctx, &input).ok()
 }
 
-/// Built bodies, for `query.volume`, `query.bounding_box`, `query.exactness`, `query.faces` and
-/// `query.validity`.
-#[must_use]
-pub fn bodies(class: Class) -> Vec<OpOutput<Made>> {
+/// Built bodies from the stream `label`: each benchmark draws its own, so no two share inputs.
+fn built(label: &str, class: Class) -> Vec<OpOutput<Made>> {
     if class != Class::Typical {
         return Vec::new();
     }
-    let mut g = rng("query::bodies", class);
+    let mut g = rng(label, class);
     batch_of(|n| body(&mut g, n))
+}
+
+/// Built bodies, for `query.volume`.
+#[must_use]
+pub fn volumes(class: Class) -> Vec<OpOutput<Made>> {
+    built("query::volumes", class)
+}
+
+/// Built bodies, for `query.bounding_box`.
+#[must_use]
+pub fn boxes(class: Class) -> Vec<OpOutput<Made>> {
+    built("query::boxes", class)
+}
+
+/// Built bodies, for `query.exactness`.
+#[must_use]
+pub fn reports(class: Class) -> Vec<OpOutput<Made>> {
+    built("query::reports", class)
+}
+
+/// Built bodies, for `query.faces`.
+#[must_use]
+pub fn listed(class: Class) -> Vec<OpOutput<Made>> {
+    built("query::listed", class)
+}
+
+/// Built bodies, for `query.validity`.
+#[must_use]
+pub fn validities(class: Class) -> Vec<OpOutput<Made>> {
+    built("query::validities", class)
 }
 
 /// Built bodies, and a face of each, for `query.area`.
