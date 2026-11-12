@@ -2,7 +2,7 @@
 
 *Stage: Mapping. A readable copy of [features.json](features.json), which is the source; keep the two in step. Every priority and size is a proposal for an owner to accept.*
 
-Spare Construct replaces Revit and the add-ins people buy for it. One open building model for every discipline, built from scratch in Rust, that runs on the desktop, in the browser and headless for AI and scripts. Everything people buy add-ins for today is built in as first-party add-ins on the same public API, free to use, with hosting run at cost. This page maps the whole job top-down: 26 areas, 214 things a person can do, and 687 buildable parts. **Core** means needed for the first usable release (roadmap Gate D: a full council set for a house), **next** follows soon after, and **later** waits. Parts name what they lean on: kit parts by their ID (see the [kit map](../kit/FEATURES.md)), shared engines, or other Spare Construct parts. Where a part is already on the [work board](STATUS.md), its piece is linked.
+Spare Construct replaces Revit and the add-ins people buy for it. One open building model for every discipline, built from scratch in Rust, that runs on the desktop, in the browser and headless for AI and scripts. Everything people buy add-ins for today is built in as first-party add-ins on the same public API, free to use, with hosting run at cost. This page maps the whole job top-down: 26 areas, 214 things a person can do, and 691 buildable parts. **Core** means needed for the first usable release (roadmap Gate D: a full council set for a house), **next** follows soon after, and **later** waits. Parts name what they lean on: kit parts by their ID (see the [kit map](../kit/FEATURES.md)), shared engines, or other Spare Construct parts. Where a part is already on the [work board](STATUS.md), its piece is linked.
 
 **Replaces:** Revit, and the add-ins people buy or bolt on to it: Navisworks, Revizto and BIMcollab for clash; Solibri and UpCodes for model checking; Enscape, Twinmotion, Lumion and D5 Render for rendering; Dynamo for visual scripting; pyRevit, DiRoots, Ideate and Naviate toolkits; Ideate BIMLink and DiRoots SheetLink for Excel; AGACAD, StrucSoft MWF and hsbcad for framing; CostX and Assemble for quantities; Autodesk Docs, Newforma and Aconex for document control; Autodesk Design Collaboration for sharing between firms.
 
@@ -28,7 +28,7 @@ Where the kit part could wait, the Spare Construct part moved instead: office si
 | CON-A5 | [Structure](#con-a5-structure) | 7 | 20 | 1 |
 | CON-A6 | [Building services](#con-a6-building-services) | 9 | 27 | 1 |
 | CON-A7 | [Families and content library](#con-a7-families-and-content-library) | 9 | 35 | 6 |
-| CON-A8 | [Views and graphics](#con-a8-views-and-graphics) | 8 | 33 | 6 |
+| CON-A8 | [Views and graphics](#con-a8-views-and-graphics) | 8 | 35 | 6 |
 | CON-A9 | [Annotation and detailing](#con-a9-annotation-and-detailing) | 7 | 18 | 6 |
 | CON-A10 | [Schedules, quantities and cost](#con-a10-schedules-quantities-and-cost) | 8 | 22 | 3 |
 | CON-A11 | [Sheets, printing and issuing](#con-a11-sheets-printing-and-issuing) | 11 | 33 | 5 |
@@ -44,7 +44,7 @@ Where the kit part could wait, the Spare Construct part moved instead: office si
 | CON-A21 | [Construction, fabrication and prefab](#con-a21-construction-fabrication-and-prefab) | 8 | 22 | 1 |
 | CON-A22 | [Interface, accessibility and languages](#con-a22-interface-accessibility-and-languages) | 8 | 30 | 3 |
 | CON-A23 | [Hosting, offices, security and running costs](#con-a23-hosting-offices-security-and-running-costs) | 7 | 26 | 0 |
-| CON-A24 | [Legal, licence, community and support](#con-a24-legal-licence-community-and-support) | 7 | 28 | 4 |
+| CON-A24 | [Legal, licence, community and support](#con-a24-legal-licence-community-and-support) | 7 | 30 | 4 |
 | CON-A25 | [Sharing between firms](#con-a25-sharing-between-firms) | 7 | 22 | 7 |
 | CON-A26 | [Project files and document control](#con-a26-project-files-and-document-control) | 13 | 29 | 12 |
 
@@ -191,7 +191,7 @@ The exact solid geometry under every element, the sketch solver, snapping and ed
 | CON-A3-F2-P1 | **Sketch solver**. A 2D constraint solver following the planegcs method, written as our own code. | library | large | CON-A3-F1-P1 | [A11](STATUS.md) |
 | CON-A3-F2-P2 | **Sketch mode**. Draw lines, arcs, splines, circles and rectangles with snaps and live dimensions. | interface | medium | CON-A3-F2-P1, CON-A3-F3-P1 |  |
 | CON-A3-F2-P3 | **Project locks**. Locked dimensions and alignments between elements in the project, not only inside families. | library | large | CON-A3-F2-P1, CON-A2-F6-P1, CON-A3-F2-P4 |  |
-| CON-A3-F2-P4 | **Project locks decision**. A decision note on Revit-style locks between elements in the project, or constraints inside families only at first (lean: families first). | research | small |  |  |
+| CON-A3-F2-P4 | **Project locks decision**. A decision note on Revit-style locks between elements in the project, or constraints inside families only at first (lean: families first). | research | small |  | [A21](STATUS.md) |
 | CON-A3-F3-P1 | **Snapping**. Snapping against exact kernel geometry, with temporary dimensions while drawing. | library | medium | CON-A3-F1-P1, CON-A2-F4-P4 |  |
 | CON-A3-F3-P2 | **Picking**. Fast picking through a GPU ID buffer, with cycling through overlapping elements. | library | small | CON-A8-F4-P1 |  |
 | CON-A3-F3-P3 | **Work planes**. Set a work plane from a level, face, reference plane or line. | library | small | CON-A3-F1-P1 |  |
@@ -416,10 +416,10 @@ Every kind of view, the drawing engine that turns 3D into correct 2D, and the gr
 
 | Feature | What a person can do | Priority | Parts |
 | --- | --- | --- | --- |
-| CON-A8-F1 Open plans, sections and elevations | Create floor plans, ceiling plans, sections, elevations, callouts, legends and 3D views. | core | P1 View types; P2 View range; P3 Crop regions; P4 Project browser; P5 Plan regions; P6 Dependent views; P7 Legend components |
+| CON-A8-F1 Open plans, sections and elevations | Create floor plans, ceiling plans, sections, elevations, callouts, legends and 3D views. | core | P1 View types; P2 View range; P3 Crop regions; P4 Project browser; P5 Plan regions; P6 Dependent views; P7 Legend components; P8 View range decision |
 | CON-A8-F2 Get correct drawings from the model | See cut and projected lines, hidden lines, patterns and line weights drawn correctly at any scale. | core | P1 Section cut; P2 Hidden line removal; P3 Line clean-up; P4 2D output |
 | CON-A8-F3 Control how things look | Set graphics by category, filter, phase and design option, and save them as view templates. | core | P1 Object and line styles; P2 Graphics rules; P3 View filters; P4 View templates; P5 Design option visibility; P6 Element overrides; P7 Linework; P8 Cut profile; P9 Linked model display |
-| CON-A8-F4 Look around in 3D | Orbit, walk, cut with a section box and isolate elements in 3D views. | core | P1 Renderer; P2 3D navigation; P3 Section boxes and isolate; P4 Visual styles |
+| CON-A8-F4 Look around in 3D | Orbit, walk, cut with a section box and isolate elements in 3D views. | core | P1 Renderer; P2 3D navigation; P3 Section boxes and isolate; P4 Visual styles; P5 Stand-in 3D view |
 | CON-A8-F5 Show sun and shadows | Show the sun's position and shadows for a place, date and time. | core | P1 Sun position; P2 Shadows in views |
 | CON-A8-F6 Work fast in huge views | Open a plan or 3D view of a very large model and keep it smooth. | next | P1 View streaming; P2 Simplified meshes; P3 Drawing cache |
 | CON-A8-F7 Compare and present views | Show plans and 3D side by side, and present from saved viewpoints. | next | P1 Tiled windows; P2 Saved viewpoints |
@@ -430,12 +430,13 @@ Every kind of view, the drawing engine that turns 3D into correct 2D, and the gr
 | ID | Part | Kind | Size | Depends on | Piece |
 | --- | --- | --- | --- | --- | --- |
 | CON-A8-F1-P1 | **View types**. Plan, ceiling plan, section, elevation, callout, 3D, detail, drafting and legend views as elements. | library | medium | CON-A2-F1-P1 |  |
-| CON-A8-F1-P2 | **View range**. Cut plane, top, bottom and view depth for each plan. | library | small | CON-A8-F1-P1 |  |
+| CON-A8-F1-P2 | **View range**. Cut plane, top, bottom and view depth for each plan. | library | small | CON-A8-F1-P1, CON-A8-F1-P8 |  |
 | CON-A8-F1-P3 | **Crop regions**. Crop regions, shaped crops and annotation crops. | library | small | CON-A8-F1-P1 |  |
 | CON-A8-F1-P4 | **Project browser**. A tree of views, sheets, schedules and families, sorted by rules a person can set. | interface | medium | CON-A8-F1-P1 |  |
 | CON-A8-F1-P5 | **Plan regions**. A local view range for part of a plan, such as a split level or a high window. | library | medium | CON-A8-F1-P2 |  |
 | CON-A8-F1-P6 | **Dependent views**. Copies of a view that share its settings, used to split a large plan across sheets. | library | small | CON-A8-F1-P3 |  |
 | CON-A8-F1-P7 | **Legend components**. Family types drawn in legend views, such as window and door type legends, updating when the type changes. | library | small | CON-A8-F1-P1, CON-A7-F1-P4 |  |
+| CON-A8-F1-P8 | **View range decision**. A decision note on matching Revit's view range (top, cut plane, bottom, view depth) or a simpler model, which fixes the planes passed to the drawing engine and what each plan view stores. | research | small |  | [A22](STATUS.md) |
 | CON-A8-F2-P1 | **Section cut**. Intersects solids with the cut plane to get closed regions, then clips patterns to them. | library | large | CON-A3-F1-P1, engine-draw2d |  |
 | CON-A8-F2-P2 | **Hidden line removal**. Removes or dashes hidden edges per view, worked out in tiles and cached per element. | library | large | CON-A8-F2-P1, engine-draw2d | [A12](STATUS.md) |
 | CON-A8-F2-P3 | **Line clean-up**. Joined elements draw without seams between layers of the same material. | library | medium | CON-A8-F2-P1 |  |
@@ -453,6 +454,7 @@ Every kind of view, the drawing engine that turns 3D into correct 2D, and the gr
 | CON-A8-F4-P2 | **3D navigation**. Orbit, pan, zoom, walk, a view orientation cube of our own design, and saved views. | interface | medium | CON-A8-F4-P1 |  |
 | CON-A8-F4-P3 | **Section boxes and isolate**. Section boxes and temporary isolate and hide. | library | small | CON-A8-F4-P1, CON-A2-F4-P4 |  |
 | CON-A8-F4-P4 | **Visual styles**. Wireframe, hidden line, shaded, consistent colours and realistic styles. | library | medium | CON-A8-F4-P1 |  |
+| CON-A8-F4-P5 | **Stand-in 3D view**. The app's three.js view, kept until the renderer is ready, drawing one instanced mesh per element type rather than one mesh per element. | interface | small |  | [A20](STATUS.md) |
 | CON-A8-F5-P1 | **Sun position**. Solar position for any place and time from a published method. | library | small | CON-A2-F3-P2 |  |
 | CON-A8-F5-P2 | **Shadows in views**. Shadows in 3D and plan views, with ambient light. | library | medium | CON-A8-F4-P1, CON-A8-F5-P1 |  |
 | CON-A8-F6-P1 | **View streaming**. The client asks for what is in view; near chunks arrive in full detail and far ones simplified. | library | large | CON-A2-F4-P2, CON-A2-F10-P2 |  |
@@ -1131,7 +1133,7 @@ The licence, proof that it is built legally, privacy, fair moderation of shared 
 | CON-A24-F4 Meet professional duties | Know what the software does and does not certify, and keep the records designers need. | core | P1 Limits and duties; P2 Design records; P3 Design copyright; P4 Certificate of design work |
 | CON-A24-F5 Get community help | Ask questions, share tips and find answers from other members. | next | P1 Community forum; P2 Documentation site; P3 Free courses |
 | CON-A24-F6 Have a say in what gets built | Propose features and vote on priorities as a member. | next | P1 Roadmap votes; P2 Feature proposals; P3 Spare Construct's electorate |
-| CON-A24-F7 Build Spare Construct with spare tokens | Pick a Spare Construct piece sized to spare tokens and have an agent do it to Spare Construct's own standard of benchmarks, truth tests and determinism checks; the repo-wide workflow lives in AGENTS.md. | core | P1 Agent workflow; P2 Agent-ready issues |
+| CON-A24-F7 Build Spare Construct with spare tokens | Pick a Spare Construct piece sized to spare tokens and have an agent do it to Spare Construct's own standard of benchmarks, truth tests and determinism checks; the repo-wide workflow lives in AGENTS.md. | core | P1 Agent workflow; P2 Agent-ready issues; P3 Program agent guide; P4 Never-crash lints |
 
 **Parts in Legal, licence, community and support**
 
@@ -1165,6 +1167,8 @@ The licence, proof that it is built legally, privacy, fair moderation of shared 
 | CON-A24-F6-P3 | **Spare Construct's electorate**. Who votes on Spare Construct's hosting fee and free line (hosting payers, all users, contributors or add-in publishers), set through the kit's electorates (KIT-A12-F5-P2). | legal | small | KIT-A12-F5-P2 |  |
 | CON-A24-F7-P1 | **Agent workflow**. What Spare Construct can copy from ArtCraft's Rust repo layout and agent workflow. | research | small |  | [A10](STATUS.md) |
 | CON-A24-F7-P2 | **Agent-ready issues**. Spare Construct pieces name the benchmark, truth test or determinism check that proves them done, on top of the repo-wide piece format. | data | small |  |  |
+| CON-A24-F7-P3 | **Program agent guide**. Spare Construct's own AGENTS.md: what to read first, what each crate, the server and the app own, the commands that build and test each, and the program's rules, on top of the repo-wide one. | data | small | CON-A24-F7-P1 | [A18](STATUS.md) |
+| CON-A24-F7-P4 | **Never-crash lints**. The geometry kernel's lint tables in every Spare Construct crate and the server: no unwrap, expect, panic, unchecked indexing, unchecked arithmetic or lossy casts outside tests, denied in CI. | service | medium | CON-A24-F7-P1 | [A19](STATUS.md) |
 
 ## CON-A25 Sharing between firms
 
