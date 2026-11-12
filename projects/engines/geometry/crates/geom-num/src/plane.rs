@@ -1110,18 +1110,16 @@ fn tpi_filtered(t: &Tpi, s: &Plane) -> Option<Sign> {
     Some(side.mul(t.weight))
 }
 
-/// [`tpi_filtered`] from machine words if they fit, else the generated exact path. `None` only
-/// when that path does not fit its certified types, which no planes within budget cause; the
-/// caller then takes the hand-written paths. The filter is not asked again: the only caller comes
-/// here after [`tpi_filtered`] could not decide these same four planes.
-#[allow(
-    clippy::many_single_char_names,
-    reason = "p, q and r are the three planes and s the fourth, as in the formulas above"
-)]
+/// [`tpi_filtered`] from the generated exact path. `None` only when that path does not fit its
+/// certified types, which no planes within budget cause; the caller then takes the hand-written
+/// paths. The only caller comes here after [`tpi_filtered`], [`tpi_narrow`] and [`tpi_axis`] could
+/// not decide these same four planes, so neither the filter nor machine words are asked again:
+/// planes too long for the narrow path are, within the frame, almost always too long for the
+/// determinant in words, and its failed attempt cost a degenerate meeting point 8% more than the
+/// exact path alone (23.13).
 fn tpi_routed(t: &Tpi, s: &Plane) -> Option<Sign> {
     let [p, q, r] = &t.planes;
-    let side = determinant_in_words(p, q, r, s).or_else(|| determinant_exact(p, q, r, s))?;
-    Some(side.mul(t.weight))
+    Some(determinant_exact(p, q, r, s)?.mul(t.weight))
 }
 
 /// The sign of the determinant of four planes' coefficients: machine words if they fit, else the
@@ -1152,6 +1150,7 @@ fn determinant_routed(p: &Plane, q: &Plane, r: &Plane, s: &Plane) -> Option<Sign
     clippy::many_single_char_names,
     reason = "p, q, r and s are the planes, as on Plane::side_of_tpi"
 )]
+#[inline]
 fn determinant_exact(p: &Plane, q: &Plane, r: &Plane, s: &Plane) -> Option<Sign> {
     let ([ax, ay, az], ad) = (p.n, p.d);
     let ([bx, by, bz], bd) = (q.n, q.d);
