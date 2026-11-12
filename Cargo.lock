@@ -897,6 +897,7 @@ version = "0.0.0"
 dependencies = [
  "divan",
  "geom-bvh",
+ "geom-check",
  "geom-curve",
  "geom-format",
  "geom-linalg",

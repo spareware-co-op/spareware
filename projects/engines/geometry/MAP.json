@@ -1032,6 +1032,26 @@
           "target": "lib"
         },
         {
+          "cost": "a few draws of [`SplitMix64`] and one body built per input, once per batch, outside every measured run.",
+          "does": null,
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-bench/src/inputs/query.rs",
+          "guarantees": [
+            "every batch is full and the same on every target, and every result of a typical batch is `Ok` (`tests/inputs.rs`); every result is the query's own, run directly (`tests/attack_g06.rs`)."
+          ],
+          "job": "Inputs for the core queries (piece G102, decision 32.46): each of the six queries on a built body, half of them boxes and half prisms on a right triangle, and a face of each for the area.",
+          "method": {
+            "links": [
+              "projects/engines/geometry/architecture/28-testing.md"
+            ],
+            "text": "the bodies of `engine-geometry`'s contract and query laws (`tests/contract_laws.rs`, `tests/query_laws.rs`), under an unlimited budget, in the build a program ships. Each is measured as chapter 28.14 sets benchmarks out, `projects/engines/geometry/architecture/28-testing.md`."
+          },
+          "path": "geom_bench::inputs::query",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
           "cost": "a few draws of [`crate::rng::SplitMix64`] per input, once per batch, outside every measured run.",
           "does": null,
           "family": [],
@@ -4804,16 +4824,16 @@
           "target": "lib"
         },
         {
-          "cost": "at most [`MAX_STEPS`] transforms, each of at most [`MAX_COPIES`] copies, on a body of at most [`MAX_CORNERS`] base corners, each run twice and checked in full; at most [`MAX_INPUT_BYTES`] bytes read.",
-          "does": "[`decode`] turns a fuzzer's bytes into a [`Case`]: a primitive, its inputs placed on the hard cases of chapter 28.5 (one-step sizes, coarse sub-grids, coordinates at the grid's edge), and a short list of transforms and patterns, each with the class the caller accepts and a work budget. [`check`] builds the primitive and runs the list, each step on the last result, and holds every outcome to the laws below. [`harness`] is `decode` then `check`.",
+          "cost": "at most [`MAX_STEPS`] transforms, each of at most [`MAX_COPIES`] copies, on a body of at most [`MAX_CORNERS`] base corners, each run twice and checked in full; the six queries three times on at most `1 + MAX_STEPS` bodies, each time with the checker in full; at most [`MAX_INPUT_BYTES`] bytes read.",
+          "does": "[`decode`] turns a fuzzer's bytes into a [`Case`]: a primitive, its inputs placed on the hard cases of chapter 28.5 (one-step sizes, coarse sub-grids, coordinates at the grid's edge), and a short list of transforms and patterns, each with the class the caller accepts and a work budget. [`check`] builds the primitive and runs the list, each step on the last result, and holds every outcome to the laws below. On the primitive and on each transform's result it asks all six queries ([`answers`]), twice and under the step's budget, and holds the answers to [`answers_hold`]. [`harness`] is `decode` then `check`.",
           "family": [],
           "file": "projects/engines/geometry/crates/geom-fuzz/src/make.rs",
           "guarantees": [
             "**Any bytes are a case.** Every byte string, the empty one included, decodes to a case.",
             "**A bounded input.** [`decode`] reads at most [`MAX_INPUT_BYTES`] bytes, derived below; a unit test builds the input that reaches it.",
-            "**A panic is a failure; a broken law is a [`Finding`]** naming the law and the case: a result the full checker rejects, a result without names, a history that breaks its laws, a transform that loses a name, a class that rises, a flat solid that turns inside out, a rerun that gives another answer, a budget that changes a result instead of stopping it, a defect on valid input, or an error of a kind no schema lists."
+            "**A panic is a failure; a broken law is a [`Finding`]** naming the law and the case: a result the full checker rejects, a result without names, a history that breaks its laws, a transform that loses a name, a class that rises, a flat solid that turns inside out, a rerun that gives another answer, a budget that changes a result instead of stopping it, a defect on valid input, or an error of a kind no schema lists. For the queries: an answer that states another class than its body's, differs when asked again, or changes under a budget instead of stopping; a refusal of a valid body other than for a curved face or edge; a validity report or exactness judgement that is not the checker's; an exactness report that miscounts the faces and edges by kind; faces not the body's by name and order; a box that misses a vertex or is wrongly tight; and, for a flat solid, area vectors that do not close or a volume that is not the one its loops enclose."
           ],
-          "job": "Fuzz target: `geom-make`'s primitives and transforms, on any bytes, return only what the full checker passes, keep their laws, and refuse with a typed error, never a defect.",
+          "job": "Fuzz target: `geom-make`'s primitives and transforms, on any bytes, return only what the full checker passes, keep their laws, and refuse with a typed error, never a defect; and the core queries (piece G102) on every body they make keep the Query family's laws.",
           "method": {
             "links": [
               "projects/engines/geometry/architecture/28-testing.md"
@@ -15113,91 +15133,163 @@
       "version": 1
     },
     {
-      "evidence": {},
+      "evidence": {
+        "benchmark": [
+          "projects/engines/geometry/crates/geom-bench/src/catalogue.rs"
+        ],
+        "contract": [
+          "projects/engines/crates/engine-geometry/tests/contract_laws.rs"
+        ],
+        "family_laws": [
+          "projects/engines/crates/engine-geometry/tests/query_laws.rs"
+        ],
+        "fuzz": [
+          "projects/engines/geometry/crates/geom-fuzz/src/make.rs"
+        ],
+        "property": [
+          "projects/engines/crates/engine-geometry/tests/query_laws.rs"
+        ],
+        "unit": [
+          "projects/engines/crates/engine-geometry/tests/query_laws.rs"
+        ]
+      },
       "family": "Query",
-      "missing": [
-        "benchmark",
-        "contract",
-        "family_laws",
-        "fuzz",
-        "property",
-        "unit"
-      ],
+      "missing": [],
       "name": "query.area",
       "tier": "Preview since 2026-10-31",
       "version": 1
     },
     {
-      "evidence": {},
+      "evidence": {
+        "benchmark": [
+          "projects/engines/geometry/crates/geom-bench/src/catalogue.rs"
+        ],
+        "contract": [
+          "projects/engines/crates/engine-geometry/tests/contract_laws.rs"
+        ],
+        "family_laws": [
+          "projects/engines/crates/engine-geometry/tests/query_laws.rs"
+        ],
+        "fuzz": [
+          "projects/engines/geometry/crates/geom-fuzz/src/make.rs"
+        ],
+        "property": [
+          "projects/engines/crates/engine-geometry/tests/query_laws.rs"
+        ],
+        "unit": [
+          "projects/engines/crates/engine-geometry/tests/query_laws.rs"
+        ]
+      },
       "family": "Query",
-      "missing": [
-        "benchmark",
-        "contract",
-        "family_laws",
-        "fuzz",
-        "property",
-        "unit"
-      ],
+      "missing": [],
       "name": "query.bounding_box",
       "tier": "Preview since 2026-10-31",
       "version": 1
     },
     {
-      "evidence": {},
+      "evidence": {
+        "benchmark": [
+          "projects/engines/geometry/crates/geom-bench/src/catalogue.rs"
+        ],
+        "contract": [
+          "projects/engines/crates/engine-geometry/tests/contract_laws.rs"
+        ],
+        "family_laws": [
+          "projects/engines/crates/engine-geometry/tests/query_laws.rs"
+        ],
+        "fuzz": [
+          "projects/engines/geometry/crates/geom-fuzz/src/make.rs"
+        ],
+        "property": [
+          "projects/engines/crates/engine-geometry/tests/query_laws.rs"
+        ],
+        "unit": [
+          "projects/engines/crates/engine-geometry/tests/query_laws.rs"
+        ]
+      },
       "family": "Query",
-      "missing": [
-        "benchmark",
-        "contract",
-        "family_laws",
-        "fuzz",
-        "property",
-        "unit"
-      ],
+      "missing": [],
       "name": "query.exactness",
       "tier": "Preview since 2026-10-31",
       "version": 1
     },
     {
-      "evidence": {},
+      "evidence": {
+        "benchmark": [
+          "projects/engines/geometry/crates/geom-bench/src/catalogue.rs"
+        ],
+        "contract": [
+          "projects/engines/crates/engine-geometry/tests/contract_laws.rs"
+        ],
+        "family_laws": [
+          "projects/engines/crates/engine-geometry/tests/query_laws.rs"
+        ],
+        "fuzz": [
+          "projects/engines/geometry/crates/geom-fuzz/src/make.rs"
+        ],
+        "property": [
+          "projects/engines/crates/engine-geometry/tests/query_laws.rs"
+        ],
+        "unit": [
+          "projects/engines/crates/engine-geometry/tests/query_laws.rs"
+        ]
+      },
       "family": "Query",
-      "missing": [
-        "benchmark",
-        "contract",
-        "family_laws",
-        "fuzz",
-        "property",
-        "unit"
-      ],
+      "missing": [],
       "name": "query.faces",
       "tier": "Preview since 2026-10-31",
       "version": 1
     },
     {
-      "evidence": {},
+      "evidence": {
+        "benchmark": [
+          "projects/engines/geometry/crates/geom-bench/src/catalogue.rs"
+        ],
+        "contract": [
+          "projects/engines/crates/engine-geometry/tests/contract_laws.rs"
+        ],
+        "family_laws": [
+          "projects/engines/crates/engine-geometry/tests/query_laws.rs"
+        ],
+        "fuzz": [
+          "projects/engines/geometry/crates/geom-fuzz/src/make.rs"
+        ],
+        "property": [
+          "projects/engines/crates/engine-geometry/tests/query_laws.rs"
+        ],
+        "unit": [
+          "projects/engines/crates/engine-geometry/tests/query_laws.rs"
+        ]
+      },
       "family": "Query",
-      "missing": [
-        "benchmark",
-        "contract",
-        "family_laws",
-        "fuzz",
-        "property",
-        "unit"
-      ],
+      "missing": [],
       "name": "query.validity",
       "tier": "Preview since 2026-10-31",
       "version": 1
     },
     {
-      "evidence": {},
+      "evidence": {
+        "benchmark": [
+          "projects/engines/geometry/crates/geom-bench/src/catalogue.rs"
+        ],
+        "contract": [
+          "projects/engines/crates/engine-geometry/tests/contract_laws.rs"
+        ],
+        "family_laws": [
+          "projects/engines/crates/engine-geometry/tests/query_laws.rs"
+        ],
+        "fuzz": [
+          "projects/engines/geometry/crates/geom-fuzz/src/make.rs"
+        ],
+        "property": [
+          "projects/engines/crates/engine-geometry/tests/query_laws.rs"
+        ],
+        "unit": [
+          "projects/engines/crates/engine-geometry/tests/query_laws.rs"
+        ]
+      },
       "family": "Query",
-      "missing": [
-        "benchmark",
-        "contract",
-        "family_laws",
-        "fuzz",
-        "property",
-        "unit"
-      ],
+      "missing": [],
       "name": "query.volume",
       "tier": "Preview since 2026-10-31",
       "version": 1

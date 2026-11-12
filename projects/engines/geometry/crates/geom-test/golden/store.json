@@ -266,9 +266,15 @@
               "kind": "corpus",
               "piece": "G101",
               "why": "4 new count benchmarks on geom-make's hot paths (decision 32.44): a box and a cylinder built, a box moved and quarter-turned; no existing digest moved"
+            },
+            {
+              "sha256": "889323ae8306639d37f0a83194768968d86dea765bc9bfcf1efdc2250ba238c1",
+              "kind": "corpus",
+              "piece": "G102",
+              "why": "6 new count benchmarks in a new group: query (the six core queries, area, bounding box, exactness, faces, validity and volume, each on built boxes and prisms); no existing digest moved"
             }
           ],
-          "sha256": "889323ae8306639d37f0a83194768968d86dea765bc9bfcf1efdc2250ba238c1"
+          "sha256": "91278c976085161cfa437d631856ea7627419359316e4911c28ae6623359fabc"
         },
         {
           "id": "geom-nurbs/operations",
