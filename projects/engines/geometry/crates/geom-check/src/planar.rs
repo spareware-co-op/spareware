@@ -456,6 +456,14 @@ fn side_of(
 /// corners is read on depends on where the corners lie and not on how its plane is written: a
 /// plane written half a step off its corners is no integer plane, and the same plane scaled by
 /// two is one, a step off them.
+///
+/// Why that keeps what a Certified body promises: group 2 alone holds each corner within the
+/// body's bound of the surface written for the face, whichever plane is read here, and a body
+/// reaches group 3 only if it passed. Group 3 has always judged the corners: a face is the polygon
+/// its corners make, never a piece of its written plane. So a face read on the plane its corners
+/// fix is the same polygon, every point of it a mix of corners that lie within the bound of the
+/// written surface; a written plane the corners are farther from is group 2's fault, found before
+/// any face is read.
 fn outline(
     a: &Arenas,
     f: Ix<Face>,

@@ -10,6 +10,7 @@
     clippy::arithmetic_side_effects,
     clippy::cast_possible_truncation,
     clippy::cast_possible_wrap,
+    clippy::cast_precision_loss,
     clippy::cast_sign_loss,
     clippy::expect_used,
     clippy::indexing_slicing,
@@ -1223,26 +1224,43 @@ fn a_bent_face_whose_mean_sees_an_edge_from_outside_has_no_star() {
 
 #[test]
 fn a_face_is_read_on_the_plane_of_its_corners_however_its_own_is_written() {
-    // The same notch on a flat face, which no star stands for, under a plane written half a step
-    // above its corners and one written a whole step above. The first is no plane of integers
-    // and the second is one, as the first scaled by two would be. Both times the face is read on
-    // the plane its corners fix, as the polygon it is: beside a face through its notch, which is
-    // inside its hull and outside it, and crossing a face through its inside.
+    // The same notch on a flat face, which no star stands for, under its own plane, a plane
+    // written half a step above its corners and one written a whole step above. The second is no
+    // plane of integers and the third is one, as the second scaled by two would be. Each time the
+    // face is read on the plane its corners fix, as the polygon it is: beside a face through its
+    // notch, which is inside its hull and outside it, and crossing a face through its inside.
     let notched = [[0, 0, 0], [10, 0, 0], [10, 10, 0], [8, 2, 0]];
     let through_the_notch = [[4, 2, -5], [4, 4, -5], [4, 4, 5], [4, 2, 5]];
     let through_the_inside = [[9, 1, -5], [9, 2, -5], [9, 2, 5], [9, 1, 5]];
-    for above in [0.5, 1.0] {
-        let found = |other: &[[i64; 3]]| {
-            let mut r = sheets(&[&notched, other]);
-            r.surfaces[0] = level(above);
-            kinds(report(&r, BodyKind::General, within(1)).faults())
-        };
-        assert_eq!(found(&ASIDE), [], "{above}");
-        assert_eq!(found(&through_the_notch), [], "{above}");
+    let found = |above: f64, other: &[[i64; 3]]| {
+        let mut r = sheets(&[&notched, other]);
+        r.surfaces[0] = level(above);
+        kinds(report(&r, BodyKind::General, within(1)).faults())
+    };
+    for above in [0.0, 0.5, 1.0] {
+        assert_eq!(found(above, &ASIDE), [], "{above}");
+        assert_eq!(found(above, &through_the_notch), [], "{above}");
         assert_eq!(
-            found(&through_the_inside),
+            found(above, &through_the_inside),
             [FaultKind::FacesCross],
             "{above}"
+        );
+    }
+    // Two steps above under a bound of one, the corners are off their surface: group 2 says so
+    // of each, and no plane is read for a face that never reaches group 3.
+    for other in [&ASIDE, &through_the_notch, &through_the_inside] {
+        let far = found(2.0, other);
+        assert_eq!(
+            far.iter()
+                .filter(|k| **k == FaultKind::VertexOffSurface)
+                .count(),
+            4,
+            "{far:?}"
+        );
+        assert!(
+            far.iter()
+                .all(|k| matches!(k, FaultKind::VertexOffSurface | FaultKind::EdgeOffSurface)),
+            "{far:?}"
         );
     }
 }
@@ -1541,4 +1559,259 @@ fn a_box_with_a_corner_lifted_is_a_star_on_each_bent_face() {
         step: GridStep::Q0,
     };
     assert_eq!(report(&r, BodyKind::Solid, room).faults(), []);
+}
+
+#[test]
+fn a_flat_notched_face_through_another_on_its_plane_is_found_however_its_plane_is_written() {
+    // The same ring flat on z = 0, with the square its edge runs through, both on one plane.
+    // Read on the plane its corners fix, the ring is found crossing the square whether its own
+    // plane is written on its corners, half a step above them or a whole step above. Read on a
+    // plane written a step above, it had no outline, and the pair was passed as two faces on
+    // parallel planes.
+    let flat = [[0, 0, 0], [10, 0, 0], [10, 10, 0], [8, 2, 0]];
+    let square = [[4, -1, 0], [6, -1, 0], [6, 1, 0], [4, 1, 0]];
+    for above in [0.0, 0.5, 1.0] {
+        let mut r = sheets(&[&flat, &square]);
+        r.surfaces[0] = level(above);
+        let found = report(&r, BodyKind::General, within(1));
+        assert_eq!(kinds(found.faults()), [FaultKind::FacesCross], "{above}");
+    }
+}
+
+/// A linear congruential generator (Knuth's MMIX multiplier), its high bits taken.
+struct Lcg(u64);
+
+impl Lcg {
+    fn next(&mut self) -> u64 {
+        self.0 = self
+            .0
+            .wrapping_mul(6_364_136_223_846_793_005)
+            .wrapping_add(1_442_695_040_888_963_407);
+        self.0 >> 33
+    }
+
+    fn below(&mut self, n: u64) -> i64 {
+        (self.next() % n) as i64
+    }
+}
+
+/// A ring about (20, 20) on z = 0, its corners in order of angle: often not convex.
+fn ring_about(g: &mut Lcg) -> Vec<[i64; 3]> {
+    let n = 3 + g.below(5) as usize;
+    let mut angles: Vec<f64> = (0..n).map(|_| g.below(6283) as f64 / 1000.0).collect();
+    angles.sort_by(|a, b| a.partial_cmp(b).unwrap());
+    let mut out: Vec<[i64; 3]> = Vec::new();
+    for t in angles {
+        let r = 3.0 + g.below(16) as f64;
+        // The kernel's own sine and cosine, of half-turns, so the rings are the same everywhere.
+        let turns = t / core::f64::consts::PI;
+        let (cos, sin) = (
+            geom_num::math::cospi(turns).unwrap().get(),
+            geom_num::math::sinpi(turns).unwrap().get(),
+        );
+        let p = [
+            (20.0 + r * cos).round() as i64,
+            (20.0 + r * sin).round() as i64,
+            0,
+        ];
+        if !out.contains(&p) {
+            out.push(p);
+        }
+    }
+    out
+}
+
+/// A square to set beside `ring`, in one of eight ways: through z = 0, standing on it, lying on
+/// it, a step above it, sloping through it, sharing a corner of the ring, sharing its first edge,
+/// and a step below it.
+fn beside_ring(g: &mut Lcg, ring: &[[i64; 3]], mode: u64) -> Vec<[i64; 3]> {
+    let c = 5 + g.below(30);
+    let y0 = 5 + g.below(28);
+    let y1 = y0 + 1 + g.below(6);
+    let x1 = c + 1 + g.below(6);
+    let (p, q) = (ring[0], ring[1]);
+    match mode {
+        0 => vec![[c, y0, -5], [c, y1, -5], [c, y1, 5], [c, y0, 5]],
+        1 => vec![[c, y0, 0], [c, y1, 0], [c, y1, 5], [c, y0, 5]],
+        2 => vec![[c, y0, 0], [x1, y0, 0], [x1, y1, 0], [c, y1, 0]],
+        3 => vec![[c, y0, 1], [x1, y0, 1], [x1, y1, 1], [c, y1, 1]],
+        4 => vec![[c, y0, -3], [x1, y0, -3], [x1, y1, 4], [c, y1, 4]],
+        5 => vec![p, [p[0], p[1], 5], [p[0] + 3, p[1], 5], [p[0] + 3, p[1], 0]],
+        6 => vec![p, q, [q[0], q[1], 5], [p[0], p[1], 5]],
+        _ => vec![[c, y0, -1], [x1, y0, -1], [x1, y1, -1], [c, y1, -1]],
+    }
+}
+
+/// Whether `ring`, on z = 0, has fewer than three corners or encloses no area.
+fn no_ring(ring: &[[i64; 3]]) -> bool {
+    let mut area = 0_i64;
+    for k in 0..ring.len() {
+        let (p, q) = (ring[k], ring[(k + 1) % ring.len()]);
+        area += p[0] * q[1] - p[1] * q[0];
+    }
+    ring.len() < 3 || area == 0
+}
+
+#[test]
+fn the_plane_written_for_a_flat_face_does_not_move_its_verdict() {
+    // An independent judge's cases for reading a face on the plane its corners fix: 1,500 rings
+    // on z = 0, most not convex, each beside a square, written under z = 0, half a step above, a
+    // step above and a step below, all within a bound of one. The verdict is the same four times,
+    // and the cases reach both sides of it. Read on the written plane, twenty of them were passed
+    // under a plane a step off though the faces crossed.
+    let mut g = Lcg(0x5eed_0134);
+    let (mut passed, mut crossed) = (0_u32, 0_u32);
+    for case in 0..1500 {
+        let ring = ring_about(&mut g);
+        let mode = g.next() % 8;
+        if no_ring(&ring) {
+            continue;
+        }
+        let other = beside_ring(&mut g, &ring, mode);
+        let found = |above: f64| {
+            let mut r = sheets(&[&ring, &other]);
+            r.surfaces[0] = level(above);
+            kinds(report(&r, BodyKind::General, within(1)).faults())
+        };
+        let own = found(0.0);
+        for above in [0.5, 1.0, -1.0] {
+            assert_eq!(found(above), own, "{case}, {above}: {ring:?} {other:?}");
+        }
+        passed += u32::from(own.is_empty());
+        crossed += u32::from(own.contains(&FaultKind::FacesCross));
+        // Two steps off, past the bound, group 2 speaks and group 3 never runs.
+        let far = found(2.0);
+        assert!(
+            far.contains(&FaultKind::VertexOffSurface)
+                && far
+                    .iter()
+                    .all(|k| matches!(k, FaultKind::VertexOffSurface | FaultKind::EdgeOffSurface)),
+            "{case}: {far:?}"
+        );
+    }
+    assert!(passed > 1000 && crossed > 150, "{passed} {crossed}");
+}
+
+#[test]
+fn the_plane_written_for_a_tilted_face_does_not_move_its_verdict() {
+    // The same rings and squares sheared onto the plane z = x, the ring written under its own
+    // plane and under the level planes z = 1/2 and z = 0, with a bound wide enough for the tilt.
+    let mut g = Lcg(0x5eed_0417);
+    let (mut passed, mut crossed) = (0_u32, 0_u32);
+    for case in 0..800 {
+        let flat = ring_about(&mut g);
+        let mode = g.next() % 8;
+        if no_ring(&flat) {
+            continue;
+        }
+        let other: Vec<[i64; 3]> = beside_ring(&mut g, &flat, mode)
+            .into_iter()
+            .map(|p| [p[0], p[1], p[2] + p[0]])
+            .collect();
+        let ring: Vec<[i64; 3]> = flat.iter().map(|p| [p[0], p[1], p[0]]).collect();
+        let found = |surface: SurfaceKind| {
+            let mut r = sheets(&[&ring, &other]);
+            r.surfaces[0] = surface;
+            kinds(report(&r, BodyKind::General, within(60)).faults())
+        };
+        let own = found(SurfaceKind::Plane(
+            Plane::new(
+                [0.0; 3],
+                [1.0, 0.0, 1.0],
+                [0.0, 1.0, 0.0],
+                ((0.0, 1.0), (0.0, 1.0)),
+            )
+            .unwrap(),
+        ));
+        for above in [0.5, 0.0] {
+            assert_eq!(
+                found(level(above)),
+                own,
+                "{case}, {above}: {ring:?} {other:?}"
+            );
+        }
+        passed += u32::from(own.is_empty());
+        crossed += u32::from(own.contains(&FaultKind::FacesCross));
+    }
+    assert!(passed > 500 && crossed > 80, "{passed} {crossed}");
+}
+
+/// The L as a solid of grid corners, its two caps written `off` steps outside their corners.
+fn ell_with_caps_off(off: f64) -> Rows {
+    let faces: Vec<&[u32]> = ELL_SHELL.iter().map(|f| f[0]).collect();
+    let mut r = polyhedron(&ELL_POINTS, &faces);
+    r.surfaces[0] = SurfaceKind::Plane(
+        Plane::new(
+            [0.0, 0.0, -off],
+            [0.0, 1.0, 0.0],
+            [1.0, 0.0, 0.0],
+            ((0.0, 1.0), (0.0, 1.0)),
+        )
+        .unwrap(),
+    );
+    r.surfaces[1] = level(100.0 + off);
+    r
+}
+
+#[test]
+fn a_solid_with_caps_written_off_their_corners_is_judged_by_its_corners() {
+    // Caps that are not convex, written on their corners, half a step outside them and a whole
+    // step outside: each lump set against the L is found where its corners put it, the same
+    // three times.
+    for off in [0.0, 0.5, 1.0] {
+        let found = |lump: Option<[[i64; 3]; 8]>| {
+            let mut r = ell_with_caps_off(off);
+            if let Some(points) = lump {
+                add_lump(&mut r, &points);
+            }
+            kinds(report(&r, BodyKind::Solid, within(1)).faults())
+        };
+        assert_eq!(found(None), [], "{off}");
+        // A lump through the top cap.
+        assert_eq!(
+            found(Some(corners([20, 20, 50], [30, 30, 100]))),
+            [FaultKind::FacesCross; 4],
+            "{off}"
+        );
+        // A lump wholly inside the material.
+        assert_eq!(
+            found(Some(corners([20, 20, 20], [30, 30, 30]))),
+            [FaultKind::ShellNesting],
+            "{off}"
+        );
+        // A lump resting on the plane of the top cap's corners, z = 100, from above.
+        assert_eq!(
+            found(Some(corners([20, 20, 100], [30, 30, 30]))),
+            [FaultKind::FacesCross; 5],
+            "{off}"
+        );
+        // A lump a step above the corners, where the cap's plane is written at most: clear.
+        assert_eq!(
+            found(Some(corners([20, 20, 101], [30, 30, 30]))),
+            [],
+            "{off}"
+        );
+        // The L inside out.
+        let turned: Vec<Vec<u32>> = ELL_SHELL
+            .iter()
+            .map(|f| f[0].iter().rev().copied().collect())
+            .collect();
+        let refs: Vec<&[u32]> = turned.iter().map(Vec::as_slice).collect();
+        let mut out = polyhedron(&ELL_POINTS, &refs);
+        out.surfaces[0] = level(-off);
+        out.surfaces[1] = SurfaceKind::Plane(
+            Plane::new(
+                [0.0, 0.0, 100.0 + off],
+                [0.0, 1.0, 0.0],
+                [1.0, 0.0, 0.0],
+                ((0.0, 1.0), (0.0, 1.0)),
+            )
+            .unwrap(),
+        );
+        let found = report(&out, BodyKind::Solid, within(1));
+        assert_eq!(kinds(found.faults()), [FaultKind::ShellInward], "{off}");
+    }
+    // Two steps off under a bound of one: group 2 speaks.
+    let far = report(&ell_with_caps_off(2.0), BodyKind::Solid, within(1));
+    assert!(kinds(far.faults()).contains(&FaultKind::VertexOffSurface));
 }
