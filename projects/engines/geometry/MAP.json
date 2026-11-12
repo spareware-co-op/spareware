@@ -4664,6 +4664,28 @@
           "target": "bin"
         },
         {
+          "cost": "two reads of the records, and for an accepted body one write and two more reads, each linear in the body, under a work meter of [`WORK`] units each.",
+          "does": "[`decode`] splits the fuzzer's bytes into payloads, each a two-byte little-endian length and that many bytes: the first is a body index, the rest its chunks. [`harness`] makes them a `StoredBody` and reads it with `read_body`. A chunk is found by its payload's content ID, a SHA-256 digest no fuzzer forges, so before reading the harness writes each chunk's real digest over the digest the index lists in its place, and sets the index's `depends` to those IDs, as the writer does; the bytes around them stay exactly as the fuzzer gave them. The corpus starts from bodies `write_body` stored, so the fuzzer edits real chunks and the reader sees them past the hash.",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-fuzz/src/bodies.rs",
+          "guarantees": [
+            "**Any bytes are a case**, the empty string included.",
+            "**A panic is a failure; a broken law is a [`Finding`]** naming it, with the input in hexadecimal. The laws (24.2 to 24.4, as the `body` module header states them): the same verdict twice, from `read_body` and from `chunk_ids`; a refusal's offset inside the payload it read; a body accepted writes with `write_body`, reads back equal, index for index, and its records write again to the same records, a fixed point."
+          ],
+          "job": "Fuzz target: `geom-format`'s body records, read from any index and chunks, give the same answer twice, refuse inside their input, and give back a body that writes and reads to itself.",
+          "method": {
+            "links": [
+              "projects/engines/geometry/architecture/24-file-format-exchange.md",
+              "projects/engines/geometry/architecture/28-testing.md"
+            ],
+            "text": "the laws of `geom-format`'s `body` module header (chapter 24.2 to 24.4, `projects/engines/geometry/architecture/24-file-format-exchange.md`), driven by coverage-guided fuzzing (28.5, `projects/engines/geometry/architecture/28-testing.md`)."
+          },
+          "path": "geom_fuzz::bodies",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
           "cost": "building and querying trees of at most [`MAX_BOXES`] boxes and an index of at most [`MAX_POINTS`] points, and brute force over them, O(n²); at most [`MAX_INPUT_BYTES`] bytes.",
           "does": "[`decode`] turns a fuzzer's bytes into a [`Case`]: up to [`MAX_BOXES`] boxes in two or three dimensions, a query box, a second set of boxes, a set of moved boxes, up to [`MAX_POINTS`] grid points, a centre and a radius. [`check`] builds `geom_bvh::BoxTree`s and a `geom_bvh::CellIndex` and holds every query to the answer of a brute force written here, from the boxes' corners and exact integer distances, never from `geom-bvh`'s own tests: overlapping a box, all overlapping pairs, pairs across two trees, a refit's answers (piece G54), and the points within a radius of a point and all pairs within a radius (G55). [`harness`] is `decode` then `check`.",
           "family": [],
@@ -4749,6 +4771,29 @@
             "text": "the kind contract of chapter 7 as `geom_curve::contract` states it, driven by coverage-guided fuzzing (chapter 28.5), with inputs aimed at the hard cases 28.5 lists (`projects/engines/geometry/architecture/28-testing.md`)."
           },
           "path": "geom_fuzz::curves",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
+          "cost": "each call does work linear in its arguments; each finished item is read twice, by ciborium-ll and by the decoder, each linear in its length, without recursion.",
+          "does": "[`harness`] reads the fuzzer's bytes as a stream of encoder calls, as `geom-op`'s `tests/fuzz.rs` does: each byte chooses the next call and the bytes after it give the call's arguments, so every call is tried in every place, refused ones included (NaN and the infinities, keys out of order or out of place, sets with repeats, items after the whole). Each item that finishes starts a new encoder and may be handed to later calls.",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-fuzz/src/encoder.rs",
+          "guarantees": [
+            "**Any bytes are a case**, the empty string included.",
+            "**A panic is a failure; a broken law is a [`Finding`]** naming it, with the input in hexadecimal. The laws (the encoder's module header): a refused call leaves the encoder as it was, so a copy taken before the call finishes the same as the encoder after it; whatever finishes is one well-formed item with nothing after it, every length definite and every map's keys unsigned and ascending, and ciborium-ll, reading it head by head and writing each head again in its fewest bytes and each double as its shortest float, writes exactly the same bytes; and `geom-format`'s strict decoder (piece G91) accepts it whole."
+          ],
+          "job": "Fuzz target: `geom-op`'s canonical CBOR encoder, on any stream of calls, refuses without a trace and writes only canonical items.",
+          "method": {
+            "links": [
+              "https://www.rfc-editor.org/rfc/rfc8949#section-4.2.1",
+              "projects/engines/geometry/architecture/24-file-format-exchange.md",
+              "projects/engines/geometry/architecture/28-testing.md"
+            ],
+            "text": "the canonical form of RFC 8949 section 4.2.1 (<https://www.rfc-editor.org/rfc/rfc8949#section-4.2.1>) as chapter 24.3 restricts it (`projects/engines/geometry/architecture/24-file-format-exchange.md`), checked against an encoder written elsewhere, ciborium-ll 0.2.2 (the crate's dependencies), and against the kernel's own decoder, the property harness of `geom-op`'s `tests/fuzz.rs` made a fuzz target (28.5, `projects/engines/geometry/architecture/28-testing.md`)."
+          },
+          "path": "geom_fuzz::encoder",
           "provenance": [],
           "spdx": null,
           "target": "lib"
@@ -4844,6 +4889,29 @@
           "target": "lib"
         },
         {
+          "cost": "two reads of the payload and one write, each linear in it.",
+          "does": "[`harness`] takes the fuzzer's first byte as a [`Reader`] and the rest as a payload, and reads it with that reader: `read_names` under the header's `NameScheme`, `read_history`, `read_recipe`, `read_attributes`, or `read_topo_name` for one name. The corpus starts from payloads the writers made from the records of `geom-format`'s names and history tests, so the fuzzer edits real records.",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-fuzz/src/names.rs",
+          "guarantees": [
+            "**Any bytes are a case**, the empty string included.",
+            "**A panic is a failure; a broken law is a [`Finding`]** naming it, with the input in hexadecimal. The laws (24.4 and 32.19, as the module headers state them): the same verdict twice; a refusal's offset inside the payload; and what is accepted, written again by its own writer, is exactly the payload read, since each reader reads by decoding and encoding again."
+          ],
+          "job": "Fuzz target: `geom-format`'s names, history, recipe and attributes records, read from any payload, give the same answer twice, refuse inside their input, and accept only the one canonical encoding of what they read.",
+          "method": {
+            "links": [
+              "projects/engines/geometry/architecture/24-file-format-exchange.md",
+              "projects/engines/geometry/architecture/32-decisions.md",
+              "projects/engines/geometry/architecture/28-testing.md"
+            ],
+            "text": "the laws of `geom-format`'s `names`, `history`, `recipe` and `attributes` module headers (chapter 24.4, `projects/engines/geometry/architecture/24-file-format-exchange.md`, and decision 32.19, `projects/engines/geometry/architecture/32-decisions.md`), driven by coverage-guided fuzzing (28.5, `projects/engines/geometry/architecture/28-testing.md`)."
+          },
+          "path": "geom_fuzz::names",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
           "cost": "one curve, one insertion, one Bernstein decomposition and one interpolation of at most [`MAX_POINTS`] points per input, each bounded by [`WORK`] work units, and their exact evaluations; at most [`MAX_INPUT_BYTES`] bytes read.",
           "does": "[`decode`] turns a fuzzer's bytes into a [`Case`]: a NURBS curve in two or three dimensions (degree 1 to 4, a clamped or uniform knot vector with repeated knots, rational or not), a parameter, a knot to insert and the curve's control points again as data to interpolate. [`check`] builds it with `geom-nurbs` and holds four laws against `geom_test::nurbs_reference`, which computes the same curves in exact rationals:",
           "family": [],
@@ -4862,6 +4930,49 @@
             "text": "the bounds `geom-nurbs` states, checked exactly against the reference implementation of chapter 28.9 (`projects/engines/geometry/architecture/28-testing.md`), as piece G69's law catalogue does, driven here by coverage-guided fuzzing (28.5)."
           },
           "path": "geom_fuzz::nurbs",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
+          "cost": "one read of the file, two writes of it and six opens, each linear in the file, under a work meter of [`WORK`] units each.",
+          "does": "[`decode`] splits the fuzzer's bytes into an [`Edit`] (which blob, where, which byte, and whether it is flipped, inserted or cut) and a file. [`harness`] reads the file with the registry's records, takes it into a `Container`, opens it at both trusts, then makes the edit to one blob, or to the document blob, and opens and salvages it again. It also reads the file's bytes as a stamp's payload, and every stamp the file holds, with `Stamp::read`.",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-fuzz/src/open.rs",
+          "guarantees": [
+            "**Any bytes are a case**, the empty string included.",
+            "**A panic is a failure; a broken law is a [`Finding`]** naming it, with the input in hexadecimal. The laws (24.5 and 24.7, as the `container` and `trust` module headers state them): a container written to a file and read back is the same container; opening gives the same answer twice, at either trust; a changed blob leaves every body that does not need it exactly as it opened before, opens every body that does as damaged, and never stops a document that opened; salvage names only the changed blob; a stamp accepted writes back to the same record, and a stamp refused names an offset inside its payload."
+          ],
+          "job": "Fuzz target: `geom-format`'s containers and trust on open, on any file and any blob changed, give the same answer twice, come back from a file to the same blobs, and keep damage with the body it is in.",
+          "method": {
+            "links": [
+              "projects/engines/geometry/architecture/24-file-format-exchange.md",
+              "projects/engines/geometry/architecture/28-testing.md"
+            ],
+            "text": "the laws of `geom-format`'s `container`, `trust` and `stamp` module headers (chapter 24.5 and 24.7, `projects/engines/geometry/architecture/24-file-format-exchange.md`), the property harness of `geom-format`'s `tests/fuzz_open.rs` made a fuzz target, driven by coverage-guided fuzzing (28.5, `projects/engines/geometry/architecture/28-testing.md`). The checker passes every body, as that harness's does: the target is about reading, not checking."
+          },
+          "path": "geom_fuzz::open",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
+          "cost": "two reads of the payload and one write, each linear in it.",
+          "does": "[`harness`] reads the fuzzer's bytes as an operation record's payload with `read_operation`, the reader every replay of an operation log goes through, and writes back what it read with `Operation::encode`. The corpus starts from payloads written from the operations of `geom-format`'s operation record tests, so the fuzzer edits real records.",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-fuzz/src/operations.rs",
+          "guarantees": [
+            "**Any bytes are a case**, the empty string included.",
+            "**A panic is a failure; a broken law is a [`Finding`]** naming it, with the input in hexadecimal. The laws (the `operation` module header's): the same verdict twice; a refusal's offset inside the payload; and an operation accepted, encoded again, is exactly the payload read, its parameters one canonical item."
+          ],
+          "job": "Fuzz target: `geom-format`'s operation record, read from any payload, gives the same answer twice, refuses inside its input, and accepts only the one canonical encoding of what it reads.",
+          "method": {
+            "links": [
+              "projects/engines/geometry/architecture/21-determinism.md"
+            ],
+            "text": "the laws of `geom-format`'s `operation` module header (chapter 21's replay and 28.13's operation logs, `projects/engines/geometry/architecture/21-determinism.md` and `28-testing.md`), driven by coverage-guided fuzzing (28.5)."
+          },
+          "path": "geom_fuzz::operations",
           "provenance": [],
           "spdx": null,
           "target": "lib"
@@ -4913,6 +5024,28 @@
             "text": "the algebraic laws of section 28.6 of the kernel architecture (`projects/engines/geometry/architecture/28-testing.md`, \"Swapping two points flips the sign\"). Each predicate is the sign of a determinant with one row per point (the points lifted onto the paraboloid z = |p|² for in-circle and in-sphere), as in Shewchuk, \"Adaptive Precision Floating-Point Arithmetic and Fast Robust Geometric Predicates\", Discrete & Computational Geometry 18, 1997 (<https://doi.org/10.1007/PL00009321>), which `geom_num::predicate` follows. Exchanging two points exchanges two rows, and by the Leibniz formula an exchange of two rows negates a determinant, so every transposition must flip the sign. The board names orient2d's swap; the same law is checked on the other three predicates, whose points the harness decodes anyway."
           },
           "path": "geom_fuzz::predicates",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
+          "cost": "each read twice and once split, linear in the input; salvage tries a record at each byte of a damaged span, all under a work meter of [`WORK`] units.",
+          "does": "[`harness`] reads the fuzzer's bytes as the record layer must read any file (24.7: every reader is a fuzz target), with [`check_bytes`]: one record with `Record::decode`, a whole file with `file::read`, from a slice and from a source that splits its reads by the input's own bytes, and a damaged file with `file::salvage`. It then reads the same bytes as a recipe for records ([`decode`]: up to [`MAX_RECORDS`] records, each a type, flags, a schema, `depends` and a payload), writes them with `Record::encode` and `file::write`, and holds what it wrote to the same laws with [`check_built`], so the paths behind a matching check run too.",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-fuzz/src/records.rs",
+          "guarantees": [
+            "**Any bytes are a case**, the empty string included.",
+            "**A panic is a failure; a broken law is a [`Finding`]** naming it, with the input in hexadecimal. The laws: the same verdict on a second read and through a split source; every refusal's offset inside the input; a record or file accepted is exactly the bytes its writer gives back; every record salvage keeps is the bytes at its offset, and every damaged span lies inside the input; whatever the writers accept reads back to what they were given, and writes again to the same bytes."
+          ],
+          "job": "Fuzz target: `geom-format`'s record layer reads any bytes the same way twice and however its source splits them, refuses inside its input, and accepts only canonical records and files.",
+          "method": {
+            "links": [
+              "projects/engines/geometry/architecture/24-file-format-exchange.md",
+              "projects/engines/geometry/architecture/28-testing.md"
+            ],
+            "text": "the laws of `geom-format`'s `record` and `file` module headers (chapter 24.2 and 24.5, `projects/engines/geometry/architecture/24-file-format-exchange.md`), the property harness of `geom-format`'s `tests/fuzz_records.rs` made a fuzz target, driven by coverage-guided fuzzing (28.5, `projects/engines/geometry/architecture/28-testing.md`)."
+          },
+          "path": "geom_fuzz::records",
           "provenance": [],
           "spdx": null,
           "target": "lib"
