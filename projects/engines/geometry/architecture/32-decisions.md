@@ -973,3 +973,68 @@ An edit in place, which moves no row, rewrites one chunk under either scheme (24
 Reopen this if real containers show saved versions dominated by the tables of values of big bodies; `tests/bucket_tree.rs` then gives the numbers again.
 
 **Changes:** 24.2, 23.8's as-built note, 31.7, `tests/bucket_tree.rs`.
+
+## 32.48 What a release build checks: the shipped-checker leg
+
+**What it is.** Two findings that are one question.
+- Gate 3's dry run could not find the "shipped-checker leg" that G98's and G118's done-when name. 8.3 lets a shipped release build run only the cheap checker groups, 1 and 4, after each operation, and 28.4 asks for a leg of the determinism matrix in that configuration whose hashes equal the full-checker legs'. 28.13's as-built note said the golden step "in release as shipped" was that leg.
+- Workshop, the first program to run the kernel in a browser, turned a part by 35 degrees (13 November 2026). Its debug and test builds refused the turn as `NotCertifiedYet`, since the checker cannot certify planes off the integers until G134. Its release builds, the browser's WebAssembly among them, returned the body.
+
+The question: may an operation's result be accepted in one build and refused in another? And what must a release build of the kernel check?
+
+**Found.**
+- **There was no shipped-checker leg.** `geom-test` depended on `geom-check` with its `full` feature on, and every kernel crate's tests depend on `geom-test`. Cargo gives a crate one set of features in one build, so `cargo tree -e features -i geom-check` showed `full` on in the test build of every kernel crate, `geom-bench`'s benchmarks included. The step "Every golden in release as shipped" ran the full checker. No build in continuous integration ran an operation with the cheap groups, and 28.13's note was wrong.
+- **The corpus could not have shown it.** Its transforms are a move, a mirror and a quarter turn of an exact box.
+- **The difference was written into the operation.** `Level::of_build()` is read in one place, `geom-make`'s check of a result (`build.rs`, `finish`). For a primitive as written, and for an exact transform of an exact body, a result that fails is a defect (`ResultInvalid`): the operation has by construction what groups 2 and 3 would prove. For a transform that rounds a corner or moves geometry by a deviation, and for an exact transform of a body already less than exact, it has no such proof, the refusal `NotCertifiedYet` is an ordinary answer, and only groups 2 and 3 give it. A shipped build ran neither, so it returned every such body. Some are worse than uncertified: a thin prism halved rounds one corner onto another, and the full set reports two edges of a face that meet (`geom-make/tests/not_certified.rs`).
+- **Seen in a build that really checks as shipped** (release, `geom-test` built alone without the full checker, `tests/shipped.rs`): before the change the hinge was returned, recorded Certified within 2 steps, and the sweep below stopped at a box moved and then turned 35 degrees, returned with a pair of faces the full set reports as unchecked.
+
+| Option | What it means |
+| --- | --- |
+| A. Every group after every operation in every build | The simplest rule. It ends 8.3's cheap level for every operation of every program, though group 3 is quadratic in faces and in shells, to fix two routes of one crate |
+| B. Every group in every build wherever the checker's verdict is the operation's answer | Two routes of `geom-make` today. 8.3's levels stay, no interface changes, and a shipped build pays for the full set only on a result that is less than exact |
+| C. Every result records the level that checked it, and the caller chooses the level | The level becomes an input, so two builds agree by definition. But a caller can then ask for a body principle 4 forbids, every program must learn the question, and `OpContext` and every operation's output change |
+| D. Leave the kernel, and have each program ask `query.validity` for the full set | What Workshop did the same day. The kernel still answers differently by build |
+
+**Decided 2026-11-13, under the standing rule to decide by research (the chapters, and the measurements below): no, and B.**
+- **Principle 5 names no build.** "The same inputs give bit-identical outputs on every supported target and thread count." Chapter 21 runs debug and release as legs of that one promise; a build mode is not an input. 28.4 says it of the checker by name: the shipped leg's hashes "must equal those of the full-checker leg. That proves the checker never changes a result." And 28.13 has already ruled on one such difference: the check once charged the operation's budget at a level that differs by build, "so a budget could stop an operation in a test build and not in a shipped one", and that was fixed as a defect.
+- **Principle 4 needs the full set exactly where the operation has no proof.** "Every operation returns a model that passes the validity checker, or an error." 8.3's cheap level keeps that promise where a result passes groups 2 and 3 by construction, and the full-checker builds of continuous integration are there to find a defect in the construction (28.4: the checker "catches a skipped check or a broken invariant"). It breaks the promise where a body the full set refuses is an expected outcome.
+- **So a build's level may decide how much of a proof is repeated, never an answer.** An operation checks at `Level::of_build()` only a result that passes groups 2 and 3 by construction. Where the checker's verdict is the operation's answer, every group runs in every build.
+- **A is more than the finding needs, C moves a kernel promise onto its callers, and D is not a fix.** C stays open to a later decision: nothing here closes it.
+
+**What a release build of the kernel checks.**
+1. After every operation, groups 1 and 4 (8.3).
+2. After an operation whose result does not pass groups 2 and 3 by construction, those two as well. Today that is a transform or a pattern whose result rounded or moved by a deviation, or whose input was less than exact (`geom-make`'s `Unpassed::Rounded` and `Unpassed::Inherited`). Every later operation that can return a body it has not proved is on this side until its piece shows otherwise, and says which in its module header.
+3. On an open and on request, what the caller asks: `trust::open` and `query.validity` take the level as an input, so they answer the same in every build already.
+
+A result recorded Exact from inputs that came from an operation or a checked open (24.7) is the only kind checked at the build's level. If the full set refuses one, that is a defect, reported `ResultInvalid` by a test build and returned by a shipped one; the shipped-checker leg and the full-checker legs together are what must find it first.
+
+**Measured.** `geom-test`'s `tests/shipped.rs`, in counts that are the same on every machine.
+- *The answers.* Every primitive at three sizes and places, under ten transforms (a move, a mirror, a quarter turn, a doubling, a tripling, turns by 35 degrees and by the 3-4-5 angle, scales by 3/2, 1/2 and 7/3 along one axis), and each body returned transformed again by the same ten: 1,590 operations. With the full checker and with the shipped one alike: 1,263 bodies returned, each passing the full set when asked; 123 refusals waiting for G134 and 96 for G177; 108 refusals that are not the checker's, which no level touches (a scale along one axis of a curved body, for one); no defect.
+- *The cost.* The full set in place of the cheap groups, in the checker's work units (23.10: one per row or pair visited), on the 30 bodies of that sweep's first step that are less than exact (the twelve round primitives moved, all eighteen primitives scaled by 3/2): 4,320 units against 2,088, a factor of 2.07. The largest of each kind:
+
+| Body | Cheap groups | Full set |
+| --- | --- | --- |
+| Box (6 faces) | 227 | 520 |
+| Prism (6 faces) | 227 | 536 |
+| Cylinder | 48 | 79 |
+| Cone | 27 | 46 |
+| Sphere | 6 | 13 |
+| Torus | 40 | 54 |
+
+Group 3 compares pairs of faces, so the factor grows with the body: about linear in faces for the cheap groups, quadratic for the full set. That is the price of B on a large body that is less than exact, and it is the price of knowing the body is valid, which nothing else in the operation establishes. G134 and G177 widen what the checker certifies; they do not remove the check.
+
+**Gate 3's reading of "the shipped-checker leg"** (G118's fourth condition; the dry run's row 4b). The leg is `kernel.yml`'s step "The replay corpus and the transform sweep with the checker as shipped" in the job `test` (six native targets, release) and its twin in the job `wasm` (wasmtime and Node): `cargo test --locked --release -p geom-test --no-default-features --test shipped --test determinism`. It is not the golden step named "as shipped", which builds without overflow checks and runs the full checker. Its evidence, test by test:
+- `shipped.rs::the_build_checks_at_the_level_its_switches_say`: the leg ran the cheap groups, and no dependency turned the full set back on;
+- `determinism.rs::replay_corpus_golden` and `shipped.rs::the_replay_corpus_gives_the_stores_digest`: the corpus's digest is the full-checker legs';
+- `shipped.rs::every_body_the_replay_corpus_makes_passes_the_full_checker` and `every_returned_body_passes_the_full_checker_and_the_answers_are_the_full_builds`: nothing is returned that the full set refuses, and the answers are the full-checker build's;
+- `shipped.rs::kernel_yml_runs_the_shipped_checker_leg_natively_and_on_wasm32`: the leg cannot be dropped from the workflow unseen.
+
+**Left for later, each small.**
+- The replay corpus has no case that rounds. A `rounded` family (a turn that is not a quarter turn, a scale that rounds, a move of a round primitive) would put the two routes into the one digest every leg holds. It moves the golden `geom-test/replay-corpus`, so it needs a kernel owner's approval (32.12).
+- `geom-bench`'s count benchmarks build with the full checker, through the same dependency, so `make/*` measures a test build's check, not a shipped one's. Whether the count gate should measure the shipped configuration is 23.13's to say.
+- Workshop's own full check of a turned part (its piece A25) now repeats what the kernel does, and can go.
+- The step costs one more build of `geom-test` per release leg; if that weighs on the matrix, the leg can move to a job of its own.
+
+Reopen this if a measured operation on real models spends most of its time in groups 2 and 3 on bodies less than exact; C is then the option to weigh again, with the level as a recorded input.
+
+**Changes:** 8.3 and its as-built note, 28.4's and 28.13's as-built notes, 31.7; `geom-make` (`build.rs`, `Unpassed::level`), `geom-test` (the feature `full-checker`, `tests/shipped.rs`), `kernel.yml`'s two steps, AGENTS.md's gate table.

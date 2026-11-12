@@ -121,6 +121,7 @@ Run everything from the repository root. The first build of the whole kernel tak
 | `cargo fmt --check $KERNEL_CRATES` | Formatting | `kernel.yml` |
 | `cargo clippy $KERNEL_CRATES --all-targets --locked -- -D warnings` | Any lint: the kernel's denials, chapter 21's bans, pedantic warnings, missing docs | `kernel.yml` |
 | `cargo test $KERNEL_CRATES --locked --no-fail-fast` | Any test, debug build | `kernel.yml` (also in release, with overflow checks on) |
+| `cargo test --locked --release -p geom-test --no-default-features --test shipped --test determinism` | An operation that answers differently when a build runs only the cheap checker groups, as a shipped build does, or returns a body the full checker refuses (chapter 8.3; decision 32.48). Every other test build runs the full checker | `kernel.yml`, natively and on wasm32 |
 | `cargo test $KERNEL_CRATES --target wasm32-wasip1 --release --locked --no-fail-fast`, without `geom-test`, `geom-fuzz`, `geom-gen` and `geom-bench` | Any kernel test on 32-bit WebAssembly | `kernel.yml`, under wasmtime and Node |
 | `cargo test --locked -p geom-test -p geom-fuzz -p geom-gen --target wasm32-wasip1` | The development crates on WebAssembly | `kernel-dev.yml` |
 | `cargo run --locked -p geom-gen -- check` | A committed generated file differs from what its generator writes, or a generated folder holds an orphan | `kernel-dev.yml` |
