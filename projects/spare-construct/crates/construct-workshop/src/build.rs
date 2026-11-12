@@ -156,18 +156,18 @@ pub struct BodyOut {
 }
 
 /// Why a feature was not built.
-enum Refusal {
+pub(crate) enum Refusal {
     Failed(String),
     Waits(String),
 }
-type Res<T> = Result<T, Refusal>;
-fn fail<T>(m: impl Into<String>) -> Res<T> {
+pub(crate) type Res<T> = Result<T, Refusal>;
+pub(crate) fn fail<T>(m: impl Into<String>) -> Res<T> {
     Err(Refusal::Failed(m.into()))
 }
 fn waits<T>(m: impl Into<String>) -> Res<T> {
     Err(Refusal::Waits(m.into()))
 }
-fn refused(e: &OpError) -> Refusal {
+pub(crate) fn refused(e: &OpError) -> Refusal {
     Refusal::Failed(format!("The kernel refused it: {}", e.message()))
 }
 
@@ -201,11 +201,11 @@ enum Left {
     Bodies(Vec<String>),
 }
 
-const IDENTITY: [f64; 12] = [1., 0., 0., 0., 0., 1., 0., 0., 0., 0., 1., 0.];
+pub(crate) const IDENTITY: [f64; 12] = [1., 0., 0., 0., 0., 1., 0., 0., 0., 0., 1., 0.];
 
 /// `a` then `b`: the map that applies `a` first.
 #[allow(clippy::needless_range_loop)] // the indices are the matrix's rows and columns
-fn then(a: &[f64; 12], b: &[f64; 12]) -> [f64; 12] {
+pub(crate) fn then(a: &[f64; 12], b: &[f64; 12]) -> [f64; 12] {
     let mut r = [0.0; 12];
     for i in 0..3 {
         for j in 0..4 {
@@ -218,7 +218,7 @@ fn then(a: &[f64; 12], b: &[f64; 12]) -> [f64; 12] {
     }
     r
 }
-fn translation(d: [f64; 3]) -> [f64; 12] {
+pub(crate) fn translation(d: [f64; 3]) -> [f64; 12] {
     [1., 0., 0., d[0], 0., 1., 0., d[1], 0., 0., 1., d[2]]
 }
 fn mirror_map(axis: usize, at: f64) -> [f64; 12] {
@@ -228,14 +228,14 @@ fn mirror_map(axis: usize, at: f64) -> [f64; 12] {
     m
 }
 
-fn mm(steps: i64) -> f64 {
+pub(crate) fn mm(steps: i64) -> f64 {
     // a coordinate is at most 2^40 - 1 steps, so it converts to f64 exactly
     #[allow(clippy::cast_precision_loss)]
     let v = steps as f64;
     v / STEPS_PER_MM
 }
 /// Millimetres to the nearest grid step, rounding a half step up, as the page's prototype rounds.
-fn steps(v: f64) -> Res<i64> {
+pub(crate) fn steps(v: f64) -> Res<i64> {
     let s = (v * STEPS_PER_MM + 0.5).floor();
     #[allow(clippy::cast_precision_loss)]
     let reach = COORD_MAX as f64;
@@ -434,14 +434,14 @@ fn profile(env: &Env, f: &Map<String, Value>) -> Res<Profile> {
 
 /// The context for one kernel operation: its path names the feature and the step within it, so every
 /// face the part has gets a name of its own (kernel chapter 20).
-fn ctx(feature: usize, step: u32) -> OpContext<'static> {
+pub(crate) fn ctx(feature: usize, step: u32) -> OpContext<'static> {
     let mut id = [0_u8; 16];
     id[..8].copy_from_slice(&(feature as u64).to_be_bytes());
     id[8..12].copy_from_slice(&step.to_be_bytes());
     OpContext::new(OpPath::new(OpId::from_bytes(id)), Budget::UNLIMITED)
 }
 
-fn class(e: Exactness) -> (&'static str, Option<u64>) {
+pub(crate) fn class(e: Exactness) -> (&'static str, Option<u64>) {
     match e {
         Exactness::Certified { bound, .. } => ("Certified", Some(bound.get())),
         Exactness::Approximate { .. } => ("Approximate", None),
@@ -516,7 +516,7 @@ fn axis_of(f: &Map<String, Value>) -> Res<(Axis, usize, char)> {
     }
 }
 
-fn fmt_mm(v: f64) -> String {
+pub(crate) fn fmt_mm(v: f64) -> String {
     let r = (v * 1000.0).round() / 1000.0;
     if r == r.trunc() {
         format!("{r:.0}")
@@ -541,7 +541,7 @@ fn length0(env: &Env, f: &Map<String, Value>, k: &str, what: &str) -> Res<f64> {
         v => length(env, v, what),
     }
 }
-fn point(p: [i64; 3]) -> Res<P3> {
+pub(crate) fn point(p: [i64; 3]) -> Res<P3> {
     P3::new(p[0], p[1], p[2])
         .map_err(|_| Refusal::Failed("A corner lands past the kernel's reach for parts.".into()))
 }
@@ -948,6 +948,12 @@ fn read_params(part: &Value) -> (Env, Vec<ParamRow>) {
 /// Builds a part's recipe, given as a JSON value.
 #[must_use]
 pub fn build_part(part: &Value) -> Answer {
+    build_with_bodies(part).0
+}
+
+/// Builds a part, and keeps the kernel's bodies behind the answer's, in the same order, with their
+/// exactness, for an assembly to place.
+pub(crate) fn build_with_bodies(part: &Value) -> (Answer, Vec<(Body, Exactness)>) {
     let (env, params) = read_params(part);
     let feats: &[Value] = part
         .get("features")
@@ -995,7 +1001,11 @@ pub fn build_part(part: &Value) -> Answer {
         }
         b.rows.push(row);
     }
-    let bodies: Vec<BodyOut> = b.live.into_iter().map(|l| l.out).collect();
+    let (bodies, kept): (Vec<BodyOut>, Vec<(Body, Exactness)>) = b
+        .live
+        .into_iter()
+        .map(|l| (l.out, (l.body, l.exactness)))
+        .unzip();
     let volume = bodies.iter().map(|x| x.volume).sum();
     let bbox = bodies.iter().map(|x| x.bbox).reduce(|a, x| {
         [
@@ -1011,14 +1021,15 @@ pub fn build_part(part: &Value) -> Answer {
             ],
         ]
     });
-    Answer {
+    let answer = Answer {
         engine: "kernel",
         params,
         features: b.rows,
         bodies,
         volume,
         bbox,
-    }
+    };
+    (answer, kept)
 }
 /// Builds a part's recipe given as JSON text, and gives the answer as JSON text, or
 /// `{"failed": {code, message}}` for text that is not a recipe.
