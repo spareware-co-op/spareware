@@ -39,9 +39,13 @@
 //! the same twice and give a body that writes and reads to itself (G94); [`names`], the names,
 //! history, recipe and attributes records accept only the one encoding of what they read (G95);
 //! [`operations`], the operation record likewise (G96); and [`open`], containers come back from a
-//! file to the same blobs and trust on open keeps damage with the body it is in (G108). The
-//! layout every target follows, and how each engine runs it locally and in CI, is in this crate's
-//! `README.md`.
+//! file to the same blobs and trust on open keeps damage with the body it is in (G108). For the
+//! Gate 3 pieces no other target reaches (30.1's standard bar), [`naming`] holds names, the name
+//! graph, the duplicate detector and the ordinal order to their laws (G87); [`references`],
+//! reference resolution gives 20.4's outcome on any history (G89); and [`prune`], `PruneHistory`
+//! keeps every held reference and its record reads back, and reads only its one encoding (G109).
+//! The layout every target follows, and how each engine runs it locally and in CI, is in this
+//! crate's `README.md`.
 //!
 //! Layer: Development, in chapter 27's crate table: a development crate, outside the
 //! thirteen layers of the crates that ship. It never ships, and its dependencies are as needed
@@ -222,12 +226,15 @@ pub mod linalg;
 pub mod make;
 pub mod maths;
 pub mod names;
+pub mod naming;
 pub mod nurbs;
 pub mod open;
 pub mod operations;
 pub mod orient2d;
 pub mod predicates;
+pub mod prune;
 pub mod records;
+pub mod references;
 pub mod robustness;
 pub mod roots;
 pub mod seeded;
