@@ -105,7 +105,9 @@ pub fn decode(data: &[u8]) -> Option<(Case, usize)> {
     let element = references::element(&mut s)?;
     let held = chosen(&element.names, mask(&mut s));
     let again = chosen(&element.names, mask(&mut s));
-    let at = usize::from(s.byte()) % element.history.len().saturating_add(1);
+    let at = usize::from(s.byte())
+        .checked_rem(element.history.len().saturating_add(1))
+        .unwrap_or(0);
     let place = u16::from_le_bytes([s.byte(), s.byte()]);
     let edit = (place, s.byte(), s.byte());
     let read = data.len().saturating_sub(s.remaining());
@@ -334,7 +336,7 @@ fn check_budget(
         work: charges,
         logical_bytes: u64::MAX,
     };
-    if pruned(history, held, FIRST, exact).as_deref() != Ok(once) {
+    if pruned(history, held, FIRST, exact).ok().as_deref() != Some(once) {
         return Err(law(
             "a prune within its charges gives the same steps",
             format!("{charges} units"),
@@ -363,7 +365,7 @@ fn check_payload(payload: &[u8], law: &impl Fn(&str, String) -> Finding) -> Resu
         ));
     }
     if let Ok((by, held, steps)) = &first
-        && encode_pruned(by, held, steps).as_deref() != Ok(payload)
+        && encode_pruned(by, held, steps).ok().as_deref() != Some(payload)
     {
         return Err(law(
             "a pruned record read is its one encoding",

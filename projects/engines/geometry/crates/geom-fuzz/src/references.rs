@@ -201,7 +201,7 @@ impl Interned {
 /// Reads an element from `s` (see the module documentation); `None` only if the history kit or
 /// the graph refuses what the bytes chose, which is a defect of one of them.
 pub fn element(s: &mut ByteSource<'_>) -> Option<Element> {
-    let first = s.byte() % MAX_FIRST + 1;
+    let first = (s.byte() % MAX_FIRST).saturating_add(1);
     let weak_mask = s.byte();
     let mut graph = NameGraph::new();
     let mut weak = BTreeSet::new();
@@ -214,10 +214,12 @@ pub fn element(s: &mut ByteSource<'_>) -> Option<Element> {
         };
         // Faces after the first may be weak: told apart from the first by their ordinal.
         let name = match current.first() {
-            Some(&base) if weak_mask >> i & 1 == 1 => TopoName::Weak {
-                base,
-                ord: Ordinal::new(u32::from(i), u32::from(first)).ok()?,
-            },
+            Some(&base) if weak_mask.checked_shr(u32::from(i)).is_some_and(|m| m & 1 == 1) => {
+                TopoName::Weak {
+                    base,
+                    ord: Ordinal::new(u32::from(i), u32::from(first)).ok()?,
+                }
+            }
             _ => made,
         };
         let is_weak = matches!(name, TopoName::Weak { .. });
@@ -232,7 +234,7 @@ pub fn element(s: &mut ByteSource<'_>) -> Option<Element> {
         names: BTreeMap::new(),
     };
     let mut names: BTreeSet<NameId> = current.iter().copied().collect();
-    let count = s.byte() % (MAX_STEPS + 1);
+    let count = s.byte() % MAX_STEPS.saturating_add(1);
     let mut steps = Vec::new();
     for k in 0..count {
         let new = s.byte() % 3;
@@ -253,8 +255,9 @@ pub fn element(s: &mut ByteSource<'_>) -> Option<Element> {
     }
     let drop = s.byte();
     let mut body = current;
-    if drop & 15 == 15 && !body.is_empty() {
-        let at = usize::from(drop >> 4) % body.len();
+    if drop & 15 == 15
+        && let Some(at) = usize::from(drop >> 4).checked_rem(body.len())
+    {
         body.remove(at);
     }
     let mut carriers = Vec::new();
@@ -277,8 +280,9 @@ pub fn element(s: &mut ByteSource<'_>) -> Option<Element> {
         })
         .collect();
     let pruned = s.byte();
-    if pruned & 7 == 7 {
-        let at = usize::from(pruned >> 4) % history.len().saturating_add(1);
+    if pruned & 7 == 7
+        && let Some(at) = usize::from(pruned >> 4).checked_rem(history.len().saturating_add(1))
+    {
         let by = (pruned & 8 == 8).then(|| op(0xF0));
         history.insert(at, Step::Pruned { by });
     }
@@ -315,7 +319,9 @@ pub fn decode(data: &[u8]) -> Option<(Case, usize)> {
         1 => Want::AllPieces,
         _ => Want::Carrier,
     };
-    let from = usize::from(s.byte()) % element.history.len().saturating_add(1);
+    let from = usize::from(s.byte())
+        .checked_rem(element.history.len().saturating_add(1))
+        .unwrap_or(0);
     let link = s.byte();
     let (made_at, supplied) = (u64::from(s.byte() % 4), u64::from(s.byte() % 4));
     let doc = (link % 2 == 1).then_some(DocRef {
