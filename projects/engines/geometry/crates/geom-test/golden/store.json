@@ -266,9 +266,15 @@
               "kind": "corpus",
               "piece": "G101",
               "why": "4 new count benchmarks on geom-make's hot paths (decision 32.44): a box and a cylinder built, a box moved and quarter-turned; no existing digest moved"
+            },
+            {
+              "sha256": "889323ae8306639d37f0a83194768968d86dea765bc9bfcf1efdc2250ba238c1",
+              "kind": "corpus",
+              "piece": "#773",
+              "why": "20 new count benchmarks on the Phase 3 readers and writers (Gate 3 dry run, item 5) in six new groups: cbor (G91), record (G92), body_record (G94), name_record (G95), op_record (G96) and open (G108); no existing digest moved"
             }
           ],
-          "sha256": "889323ae8306639d37f0a83194768968d86dea765bc9bfcf1efdc2250ba238c1"
+          "sha256": "d196a2dee27fdbc3bd2b181bfd27eb4bb63e01bbb757ab01a826ecddcd886431"
         },
         {
           "id": "geom-nurbs/operations",
