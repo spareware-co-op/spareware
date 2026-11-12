@@ -56,6 +56,20 @@
 //! where even 128 cannot, only the pieces that need it are halved, each at most about 52 times
 //! (to 2^−52 of the domain, or to neighbouring doubles), depth first on an explicit stack of at
 //! most one piece per halving, every piece examined charged to the meter.
+//!
+//! What the work costs: an offset is the one curve kind whose conversion decides, from its data,
+//! how many times it evaluates itself, so the meter is what bounds it, and each evaluation is
+//! charged what it costs. The basis charges its own bounds (a unit an extent, and more where an
+//! arctangent is dear, `crate::extent::FAR_CORNER`); the offset charges its jets' recurrences,
+//! [`TERM_WORK`] units a term ([`Offset::jet_work`]). Measured, in instructions of a release build
+//! (callgrind on issue #765's offset of an ellipse in 3D): the 54,440 evaluations of order 10 its
+//! conversion made, 660 terms each, spent 9,328 million outside the basis's bounds, about 260 a
+//! term, which is one interval product and one interval sum; and each asked the basis for 36
+//! closed-form bounds, about 5,700 each where no arctangent is dear, which the basis charges one
+//! unit. So a term stands for about 570 instructions of an evaluation, its own and as much
+//! again for the basis, and a unit for about 285. Before issue #765 the jets were free and a
+//! piece examined cost a unit, so a budget of 2,000,000 units ran out only after 77 thousand
+//! million instructions; now it runs out within about 600 million.
 
 #![allow(
     clippy::many_single_char_names,
@@ -72,7 +86,7 @@ use geom_run::WorkMeter;
 use crate::affine::Entries;
 use crate::error::CurveError;
 use crate::form::check_parameter;
-use crate::jet::Jet;
+use crate::jet::{Jet, MAX_ORDER};
 use crate::map::NurbsForm;
 use crate::param::{CurveKind, DerivativeBound, ParamCurve};
 use crate::taylor;
@@ -120,6 +134,11 @@ pub struct Offset<const D: usize> {
 
 /// The degree of the cache's pieces.
 const CACHE_DEGREE: usize = 9;
+
+/// The work units a term of a jet recurrence is charged (module documentation, "What the work
+/// costs"): two, one for the term's own interval product and sum and one for its share of the
+/// basis's closed-form bounds, so that a unit stands for about 285 instructions of an evaluation.
+pub const TERM_WORK: u64 = 2;
 
 /// Where an offset is evaluated: one parameter from one side, or every parameter of a span. A
 /// span lies in one station piece; where it is one station alone, the side says which of the two
@@ -346,6 +365,39 @@ impl<const D: usize> Offset<D> {
         ))
     }
 
+    /// The work units one evaluation of the offset's jets to `order` is charged: [`TERM_WORK`]
+    /// for each term of its recurrences (module documentation, "What the work costs").
+    ///
+    /// The formula O = C + d·N/|N| takes 3·D + 1 products, quotients and roots of jets: D squares
+    /// for |N|², its root, and for each coordinate a quotient by |N| and a product with the
+    /// distance. Each is a recurrence of (order + 1)·(order + 2)/2 terms (`crate::jet`), so the
+    /// count is fixed by the dimension and the order, whatever the numbers are. The sums and the
+    /// scalings, linear in the order, ride on those terms.
+    ///
+    /// # Errors
+    ///
+    /// [`CurveError::Defect`] for an order whose count passes `u64`, which no caller asks: the
+    /// offset's jets of an order from 170 up are refused first (the basis's go one order higher,
+    /// and past 170 their factorials pass the doubles), and the count passes `u64` only from
+    /// about 1.4·10⁹.
+    pub fn jet_work(order: usize) -> Result<u64, CurveError> {
+        let wide = |x: usize| u64::try_from(x).map_err(|_| CurveError::Defect);
+        let n = wide(order)?.checked_add(1).ok_or(CurveError::Defect)?;
+        let terms = n
+            .checked_mul(n.checked_add(1).ok_or(CurveError::Defect)?)
+            .ok_or(CurveError::Defect)?
+            .checked_div(2)
+            .ok_or(CurveError::Defect)?;
+        let recurrences = wide(D)?
+            .checked_mul(3)
+            .and_then(|x| x.checked_add(1))
+            .ok_or(CurveError::Defect)?;
+        terms
+            .checked_mul(recurrences)
+            .and_then(|x| x.checked_mul(TERM_WORK))
+            .ok_or(CurveError::Defect)
+    }
+
     /// The offset's jets per coordinate, to `order`, at `at`.
     fn jets(
         &self,
@@ -353,6 +405,14 @@ impl<const D: usize> Offset<D> {
         order: usize,
         meter: &mut WorkMeter<'_>,
     ) -> Result<Vec<Jet>, CurveError> {
+        // The basis's jets go one order higher, and past `jet::MAX_ORDER` building them is
+        // NotFinite whatever the basis gives: refused here as the jets refuse it, before the
+        // basis is asked and before the charge, whose count would pass `u64` far beyond.
+        if order >= MAX_ORDER {
+            return Err(CurveError::NotFinite);
+        }
+        // Charged before the work, so a budget stops an evaluation it cannot pay for.
+        meter.charge(Self::jet_work(order)?)?;
         let c = self.basis_jets(at, order, meter)?;
         let mut cp = Vec::with_capacity(D);
         let mut c0 = Vec::with_capacity(D);
