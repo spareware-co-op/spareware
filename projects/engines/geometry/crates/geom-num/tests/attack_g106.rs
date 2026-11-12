@@ -35,9 +35,10 @@ fn every_filter_call_goes_through_the_switch() {
     }
     // The four explicit predicates, the line-plane pair, the three-plane side and the crossing pair,
     // the three step probes (`orient2d_step`, `orient3d_step`, `incircle_step`), which ask a filter
-    // on its own, and `tpi_side`'s two further calls in plane.rs (`tpi_filtered` and
-    // `determinant_routed`): all must be switched off in a reference build as well.
-    assert_eq!(calls, 13);
+    // on its own, `tpi_side`'s two further calls in plane.rs (`tpi_filtered` and
+    // `determinant_routed`), and `normals_sign`'s `tpi_weight` (piece G148): all must be switched
+    // off in a reference build as well.
+    assert_eq!(calls, 14);
 }
 
 #[test]
