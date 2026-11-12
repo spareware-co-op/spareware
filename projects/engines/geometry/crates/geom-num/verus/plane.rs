@@ -39,6 +39,26 @@ use crate::wide::*;
 
 verus! {
 
+// ---- The steps that cannot fail where they are asked for (the coverage gate's proofs, 28.8).
+
+/// Called in the `None` arm of `fitted`. Its precondition is `false`, so Verus accepts the call
+/// only where it proves control cannot arrive: with `fitted`'s `requires step.is_some()`, checked
+/// at every call of it, the arm cannot run.
+pub proof fn a_fitted_step_is_never_none()
+    requires
+        false,
+{
+}
+
+/// Called in `lpi_classify_total` after `lpi_classify::<4>` gave `None`, as
+/// [`a_fitted_step_is_never_none`] is in `fitted`: with the four values below 2^126 in magnitude,
+/// which `lpi_classify_total` requires, `lpi_classify` always fits four limbs.
+pub proof fn lpi_classify_always_fits()
+    requires
+        false,
+{
+}
+
 /// The budget for each plane normal component, `NORMAL_LIMIT` in `src/plane.rs`: 2^83.
 const NORMAL_LIMIT: u128 = 0x800000000000000000000;
 
@@ -768,6 +788,17 @@ pub(crate) const fn difference(q: Coord, p: Coord) -> Option<i128> {
     (q.get() as i128).checked_sub(p.get() as i128)
 }
 
+/// q − p for two coordinates, in `i128`, for a caller with no failure to report: formed modulo
+/// 2^128, which it never reaches, since |q − p| < 2^64 for any two `i64` values, by the types
+/// alone.
+#[verus_spec(r =>
+    ensures
+        r as int == q@ - p@,
+)]
+const fn span(q: Coord, p: Coord) -> i128 {
+    (q.get() as i128).wrapping_sub(p.get() as i128)
+}
+
 /// p · q − r · s in `i128`, every step checked: `None` if a step does not fit.
 #[verus_spec(res =>
     ensures
@@ -830,16 +861,8 @@ const fn coefficients(a: P3, b: P3, c: P3) -> Option<([i128; 3], i128)> {
     proof! {
         lemma_coefficient_bounds(a, b, c);
     }
-    let (Some(ux), Some(uy), Some(uz), Some(vx), Some(vy), Some(vz)) = (
-        difference(b.x, a.x),
-        difference(b.y, a.y),
-        difference(b.z, a.z),
-        difference(c.x, a.x),
-        difference(c.y, a.y),
-        difference(c.z, a.z),
-    ) else {
-        return None;
-    };
+    let (ux, uy, uz) = (span(b.x, a.x), span(b.y, a.y), span(b.z, a.z));
+    let (vx, vy, vz) = (span(c.x, a.x), span(c.y, a.y), span(c.z, a.z));
     let (Some(nx), Some(ny), Some(nz)) = (
         mul_sub(uy, vz, uz, vy),
         mul_sub(uz, vx, ux, vz),
@@ -1156,10 +1179,7 @@ impl Plane {
         }
         match classify::<BUDGET_LIMBS>(&self.n, self.d, &x, &w) {
             Some(s) => Ok(s),
-            None => match classify::<TOTAL_LIMBS>(&self.n, self.d, &x, &w) {
-                Some(s) => Ok(s),
-                None => Err(NumError::BudgetExceeded),
-            },
+            None => fitted(classify::<TOTAL_LIMBS>(&self.n, self.d, &x, &w)),
         }
     }
 }
@@ -1207,14 +1227,8 @@ impl Plane {
         ) else {
             return Err(NumError::BudgetExceeded);
         };
-        let side = match lpi_classify::<4>(w1, s2p, w2, s1p) {
-            Some(s) => Some(s),
-            None => lpi_classify::<5>(w1, s2p, w2, s1p),
-        };
-        match side {
-            Some(s) => Ok(s.mul(Sign::of_i128(w1))),
-            None => Err(NumError::BudgetExceeded),
-        }
+        let side = lpi_classify_total(w1, s2p, w2, s1p)?;
+        Ok(side.mul(Sign::of_i128(w1)))
     }
 }
 
@@ -1248,17 +1262,40 @@ impl Lpi {
         let Some((w, sp)) = self.plane.weight_and_offset(self.p, self.q) else {
             return Err(NumError::BudgetExceeded);
         };
-        let Some(sq) = sp.checked_add(w) else {
-            return Err(NumError::BudgetExceeded);
-        };
-        let (Some(x), Some(y), Some(z)) = (
-            lpi_axis(sq, sp, self.p.x, self.q.x),
-            lpi_axis(sq, sp, self.p.y, self.q.y),
-            lpi_axis(sq, sp, self.p.z, self.q.z),
-        ) else {
-            return Err(NumError::BudgetExceeded);
-        };
+        let sq = fitted(sp.checked_add(w))?;
+        let x = fitted(lpi_axis(sq, sp, self.p.x, self.q.x))?;
+        let y = fitted(lpi_axis(sq, sp, self.p.y, self.q.y))?;
+        let z = fitted(lpi_axis(sq, sp, self.p.z, self.q.z))?;
         Ok(([x, y, z], w))
+    }
+}
+
+/// The value of a checked step that always fits where it is asked for, or
+/// [`NumError::BudgetExceeded`] should it not: reported, not answered.
+///
+/// Every caller passes a step that cannot fail there, so the `None` arm cannot run. Verus proves
+/// it: the twin (`verus/plane.rs`) requires the step to be `Some`, which Verus checks at every
+/// call, and in the `None` arm it calls `a_fitted_step_is_never_none`, whose precondition is
+/// `false`, so the twin verifies only because control cannot arrive there. The function is marked
+/// for the coverage gate (28.8).
+// proof: projects/engines/geometry/crates/geom-num/verus/plane.rs::a_fitted_step_is_never_none
+#[cfg_attr(coverage_nightly, coverage(off))]
+#[verus_spec(res =>
+    requires
+        step.is_some(),
+    ensures
+        step matches Some(value) && res == Ok::<T, NumError>(value),
+)]
+fn fitted<T>(step: Option<T>) -> Result<T, NumError> {
+    match step {
+        Some(value) => Ok(value),
+        None => {
+            // Never: the step fits at every call (the proof cited above).
+            proof! {
+                a_fitted_step_is_never_none();
+            }
+            Err(NumError::BudgetExceeded)
+        }
     }
 }
 
@@ -1299,5 +1336,40 @@ fn lpi_classify<const L: usize>(w1: i128, s2p: i128, w2: i128, s1p: i128) -> Opt
     let a = Wide::<L>::product_i128(w1, s2p)?;
     let b = Wide::<L>::product_i128(w2, s1p)?;
     Some(a.checked_sub(&b)?.signum())
+}
+
+/// [`lpi_classify`] in [`I256`], then in [`I320`] should a step there not fit (the total path of
+/// [`Plane::side_of_lpi`]), and [`NumError::BudgetExceeded`] should neither fit.
+///
+/// For the weights and offsets of planes within their budget the first always fits, so nothing
+/// after it can run. Verus proves it: the twin (`verus/plane.rs`) requires each of the four values
+/// below 2^126 in magnitude, which Verus checks at the call, and after a first `None` it calls
+/// `lpi_classify_always_fits`, whose precondition is `false`. The function is marked for the
+/// coverage gate (28.8).
+// proof: projects/engines/geometry/crates/geom-num/verus/plane.rs::lpi_classify_always_fits
+#[cfg_attr(coverage_nightly, coverage(off))]
+#[verus_spec(res =>
+    requires
+        -bound_126() < w1 < bound_126(),
+        -bound_126() < s2p < bound_126(),
+        -bound_126() < w2 < bound_126(),
+        -bound_126() < s1p < bound_126(),
+    ensures
+        res == Ok::<Sign, NumError>(sign_of(w1 as int * s2p as int - w2 as int * s1p as int)),
+)]
+fn lpi_classify_total(w1: i128, s2p: i128, w2: i128, s1p: i128) -> Result<Sign, NumError> {
+    match lpi_classify::<4>(w1, s2p, w2, s1p) {
+        Some(s) => Ok(s),
+        None => {
+            // Never, for planes within their budget (the proof cited above).
+            proof! {
+                lpi_classify_always_fits();
+            }
+            match lpi_classify::<5>(w1, s2p, w2, s1p) {
+                Some(s) => Ok(s),
+                None => Err(NumError::BudgetExceeded),
+            }
+        }
+    }
 }
 

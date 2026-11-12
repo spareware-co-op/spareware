@@ -32,7 +32,8 @@
 //! - **Integers, and no step that wraps or drops a bit unseen.** Every operation is on integers.
 //!   Wrapping happens only where the method is defined modulo a power of two: the specification's
 //!   32 × 32-bit product, formed modulo 2^64 as its reference forms it (it never reaches 2^64), and
-//!   its key schedule, modulo 2^32; and Lemire's threshold, a negation modulo 2^64. Every other
+//!   its key schedule, modulo 2^32; Lemire's 64 × 64-bit product, formed modulo 2^128 the same way
+//!   (it never reaches 2^128); and Lemire's threshold, a negation modulo 2^64. Every other
 //!   step is a checked method, or exact by construction (words split and joined through their
 //!   bytes, widening casts, bit masks and shifts by constants with their ranges written beside
 //!   them, and `abs_diff` where the invariants make it the difference), and each place says why. A
@@ -217,7 +218,7 @@ pub enum RngError {
         /// The range's last stream id.
         last: StreamId,
     },
-    /// A step this module proves cannot fail did fail: Lemire's 128-bit product or its threshold
+    /// A step this module proves cannot fail did fail: Lemire's threshold
     /// ([`Stream::below`] and [`Stream::range_inclusive`]), the sum that places a value in its
     /// range ([`Stream::range_inclusive`]), or [`Real::new`] on the double [`Stream::next_f64`]
     /// made. Each step's proof is written beside it, so no input can cause this, only a defect in
@@ -617,19 +618,19 @@ impl Stream {
     ///
     /// [`RngError::Exhausted`] when fewer than two words are left; the stream is unchanged.
     pub const fn next_u64(&mut self) -> Result<u64, RngError> {
-        // Checked first, so a failed draw takes nothing; after it, both words below are there.
-        if self.remaining() < 2 {
-            return Err(self.exhausted());
+        // Checked first, so a failed draw takes nothing, and a stream that has run out is refused
+        // at the cost of the check alone. After it both words are there, so neither draw fails;
+        // should one fail all the same, it is reported by the arm the check takes, as a stream
+        // that has run out, which is the only way a draw fails.
+        let draws = if self.remaining() < 2 {
+            None
+        } else {
+            Some((self.next_u32(), self.next_u32()))
+        };
+        match draws {
+            Some((Ok(low), Ok(high))) => Ok(join_u32(low, high)),
+            _ => Err(self.exhausted()),
         }
-        let low = match self.next_u32() {
-            Ok(word) => word,
-            Err(e) => return Err(e),
-        };
-        let high = match self.next_u32() {
-            Ok(word) => word,
-            Err(e) => return Err(e),
-        };
-        Ok(join_u32(low, high))
     }
 
     /// A double in [0, 1): the top 53 bits of [`Stream::next_u64`], times 2^−53, as a [`Real`].
@@ -641,28 +642,18 @@ impl Stream {
     /// # Errors
     ///
     /// [`RngError::Exhausted`] when fewer than two words are left, and [`RngError::Defect`] should
-    /// [`Real::new`] refuse the double, which it cannot (the proof is in the code). Either way the
+    /// [`Real::new`] refuse the double, which it cannot (`unit_double`'s proof). Either way the
     /// stream is unchanged.
     pub const fn next_f64(&mut self) -> Result<Real, RngError> {
         let drawn = self.drawn;
         let block = self.block;
+        // Out of words, the draw took nothing, and there is nothing to put back.
         let word = match self.next_u64() {
             Ok(word) => word,
             Err(e) => return Err(e),
         };
-        // k = word >> 11 < 2^53 as a double, exactly: its high part (below 2^21) times 2^32, plus
-        // its low 32 bits. Each `u32` converts to `f64` exactly; the product and the sum are whole
-        // numbers below 2^53, which are all doubles, so neither rounds; and times 2^−53 only moves
-        // the exponent, since k · 2^−53 is 0 or at least 2^−53, a normal double.
-        let [low, high] = split_u64(word >> 11);
-        let x = (high as f64 * TWO_POW_32 + low as f64) * TWO_POW_MINUS_53;
-        let Ok(x) = Real::new(x) else {
-            // Unreachable: x is k · 2^−53 with k below 2^53, so finite. Reported, not answered.
-            self.drawn = drawn;
-            self.block = block;
-            return Err(RngError::Defect);
-        };
-        Ok(x)
+        // A refused double is reported, not answered, and its two words are put back.
+        self.or_put_back(drawn, block, real_or_defect(unit_double(word)))
     }
 
     /// A whole number in [0, `bound`), every value equally likely: Lemire's method on
@@ -685,12 +676,15 @@ impl Stream {
         let block = self.block;
         let mut threshold = None;
         let failed = loop {
-            match self.next_u64() {
-                Ok(word) => match lemire(word, bound, &mut threshold) {
-                    Ok(Some(value)) => return Ok(value),
-                    Ok(None) => {}
-                    Err(e) => break e,
-                },
+            // One word, judged: out of words and a step of Lemire's method that failed leave by
+            // the same arm.
+            let step = match self.next_u64() {
+                Ok(word) => lemire(word, bound, &mut threshold),
+                Err(e) => Err(e),
+            };
+            match step {
+                Ok(Some(value)) => return Ok(value),
+                Ok(None) => {}
                 Err(e) => break e,
             }
         };
@@ -719,18 +713,31 @@ impl Stream {
         };
         let drawn = self.drawn;
         let block = self.block;
+        // A `below` that failed took nothing, and there is nothing to put back.
         let value = match self.below(values) {
             Ok(value) => value,
             Err(e) => return Err(e),
         };
         // value ≤ span = high − low, so low + value ≤ high and the sum never fails. Should it fail
-        // all the same, that is reported, not answered.
-        let Some(value) = low.checked_add(value) else {
+        // all the same, that is reported, not answered, and the words drawn are put back.
+        self.or_put_back(drawn, block, sum_or_defect(low, value))
+    }
+
+    /// `made`, after putting the stream back at word `drawn`, in `block`, when `made` is an error:
+    /// a step that fails after its words were drawn takes none of them. [`Stream::next_f64`] and
+    /// [`Stream::range_inclusive`] give it the step they make of the words they drew, which no
+    /// stream makes fail; the unit tests give it an error.
+    const fn or_put_back<T: Copy>(
+        &mut self,
+        drawn: u128,
+        block: [u32; 4],
+        made: Result<T, RngError>,
+    ) -> Result<T, RngError> {
+        if made.is_err() {
             self.drawn = drawn;
             self.block = block;
-            return Err(RngError::Defect);
-        };
-        Ok(value)
+        }
+        made
     }
 
     /// The error for this stream running out.
@@ -756,43 +763,107 @@ impl Stream {
 ///
 /// # Errors
 ///
-/// [`RngError::Defect`] should the product or the threshold fail, which neither can (the proofs
-/// are in the code).
+/// [`RngError::Defect`] should the threshold fail, which it cannot: the bound is not zero.
 const fn lemire(
     word: u64,
     bound: NonZeroU64,
     threshold: &mut Option<u64>,
 ) -> Result<Option<u64>, RngError> {
     let bound = bound.get();
-    // The exact product, the paper's 128-bit `m`: both factors are below 2^64 (the widening casts
-    // are lossless), so it is at most (2^64 − 1)^2 < 2^128 and `checked_mul` never fails. Should it
-    // fail all the same, that is reported, not answered.
-    let Some(product) = (word as u128).checked_mul(bound as u128) else {
-        return Err(RngError::Defect);
-    };
+    // The exact product, the paper's 128-bit `m`, formed modulo 2^128, which it never reaches:
+    // both factors are below 2^64 (the widening casts are lossless), so it is at most
+    // (2^64 − 1)^2 < 2^128 by the types alone, as Philox's 32 × 32-bit product is below 2^64.
+    let product = (word as u128).wrapping_mul(bound as u128);
     // Its low half, the product modulo 2^64, which the method compares, and its high half, which it
     // returns.
     let [low, high] = split_u128(product);
     if low < bound {
-        let limit = if let Some(limit) = *threshold {
-            limit
-        } else {
-            // 2^64 mod bound, computed in 64 bits as (2^64 − bound) mod bound, as the paper
-            // computes it (`-s % s` on 64-bit unsigned integers, whose negation C defines modulo
-            // 2^64): `wrapping_neg` is that negation, by the method's definition. `checked_rem`
-            // fails only for a zero divisor, and the bound is not zero; should it fail all the
-            // same, that is reported, not answered.
-            let Some(limit) = bound.wrapping_neg().checked_rem(bound) else {
-                return Err(RngError::Defect);
-            };
-            *threshold = Some(limit);
-            limit
+        let limit = match *threshold {
+            Some(limit) => Ok(limit),
+            None => two_pow_64_mod(bound),
         };
-        if low < limit {
-            return Ok(None);
-        }
+        return judged(low, high, limit, threshold);
     }
     Ok(Some(high))
+}
+
+/// 2^64 mod `bound`, computed in 64 bits as (2^64 − bound) mod bound, as Lemire's paper computes
+/// it (`-s % s` on 64-bit unsigned integers, whose negation C defines modulo 2^64): `wrapping_neg`
+/// is that negation, by the method's definition.
+///
+/// # Errors
+///
+/// [`RngError::Defect`] for a zero bound, the one divisor `checked_rem` refuses: reported, not
+/// answered. [`lemire`] never passes one.
+const fn two_pow_64_mod(bound: u64) -> Result<u64, RngError> {
+    match bound.wrapping_neg().checked_rem(bound) {
+        Some(limit) => Ok(limit),
+        None => Err(RngError::Defect),
+    }
+}
+
+/// Lemire's verdict on a word whose product's low half is `low` and high half `high`, against the
+/// threshold `limit`: rejected (`None`) when `low` is below it, otherwise `high`. The threshold is
+/// kept in `threshold` for the next word.
+///
+/// # Errors
+///
+/// The error the threshold failed with, unchanged.
+const fn judged(
+    low: u64,
+    high: u64,
+    limit: Result<u64, RngError>,
+    threshold: &mut Option<u64>,
+) -> Result<Option<u64>, RngError> {
+    match limit {
+        Ok(limit) => {
+            *threshold = Some(limit);
+            if low < limit {
+                Ok(None)
+            } else {
+                Ok(Some(high))
+            }
+        }
+        Err(e) => Err(e),
+    }
+}
+
+/// k · 2^−53 for k = `word` >> 11, the top 53 bits of a word: a double in [0, 1), exactly.
+///
+/// k < 2^53 as a double, exactly: its high part (below 2^21) times 2^32, plus its low 32 bits.
+/// Each `u32` converts to `f64` exactly; the product and the sum are whole numbers below 2^53,
+/// which are all doubles, so neither rounds; and times 2^−53 only moves the exponent, since
+/// k · 2^−53 is 0 or at least 2^−53, a normal double. Kani proves the result finite, at least 0
+/// and below 1 for every word (`every_unit_double_is_a_real_below_one`).
+const fn unit_double(word: u64) -> f64 {
+    let [low, high] = split_u64(word >> 11);
+    (high as f64 * TWO_POW_32 + low as f64) * TWO_POW_MINUS_53
+}
+
+/// `x` as a [`Real`].
+///
+/// # Errors
+///
+/// [`RngError::Defect`] for a double that is not finite: reported, not answered.
+/// [`Stream::next_f64`] never passes one ([`unit_double`]).
+const fn real_or_defect(x: f64) -> Result<Real, RngError> {
+    match Real::new(x) {
+        Ok(x) => Ok(x),
+        Err(_) => Err(RngError::Defect),
+    }
+}
+
+/// `low + value`.
+///
+/// # Errors
+///
+/// [`RngError::Defect`] if the sum does not fit a `u64`: reported, not answered.
+/// [`Stream::range_inclusive`] never asks for one (its `value` is at most `high − low`).
+const fn sum_or_defect(low: u64, value: u64) -> Result<u64, RngError> {
+    match low.checked_add(value) {
+        Some(sum) => Ok(sum),
+        None => Err(RngError::Defect),
+    }
 }
 
 #[cfg(test)]
@@ -931,6 +1002,88 @@ mod tests {
         assert_eq!(planted, Some(0));
     }
 
+    /// The steps that cannot fail where the generator uses them do report when they are made to:
+    /// a zero bound has no remainder, a threshold that failed passes through the verdict unchanged
+    /// and leaves the cache alone, a double that is not finite is no `Real`, and a sum past
+    /// `u64::MAX` is no value. Each is `Defect`, never an answer.
+    #[test]
+    fn a_step_that_fails_is_a_defect_and_never_an_answer() {
+        assert_eq!(two_pow_64_mod(0), Err(RngError::Defect));
+        assert_eq!(two_pow_64_mod(1), Ok(0));
+        assert_eq!(two_pow_64_mod(3), Ok(1));
+        assert_eq!(two_pow_64_mod(u64::MAX), Ok(1));
+
+        let mut cache = None;
+        assert_eq!(
+            judged(0, 7, Err(RngError::Defect), &mut cache),
+            Err(RngError::Defect)
+        );
+        assert_eq!(cache, None);
+        // Below the threshold is rejected, at it and above it is the high half; the threshold is
+        // kept either way.
+        assert_eq!(judged(4, 7, Ok(5), &mut cache), Ok(None));
+        assert_eq!(cache, Some(5));
+        assert_eq!(judged(5, 7, Ok(5), &mut cache), Ok(Some(7)));
+        assert_eq!(judged(6, 7, Ok(5), &mut cache), Ok(Some(7)));
+        assert_eq!(cache, Some(5));
+
+        for x in [f64::NAN, f64::INFINITY, f64::NEG_INFINITY] {
+            assert_eq!(real_or_defect(x), Err(RngError::Defect));
+        }
+        assert_eq!(real_or_defect(0.5).map(Real::get), Ok(0.5));
+
+        assert_eq!(sum_or_defect(u64::MAX, 1), Err(RngError::Defect));
+        assert_eq!(sum_or_defect(1, u64::MAX), Err(RngError::Defect));
+        assert_eq!(sum_or_defect(u64::MAX, 0), Ok(u64::MAX));
+        assert_eq!(sum_or_defect(5, 7), Ok(12));
+    }
+
+    /// A step that failed after words were drawn takes none of them: the stream is back at the
+    /// word it was at, in that word's block, and gives the same words again. A step that did not
+    /// fail keeps what it drew.
+    #[test]
+    fn a_failed_step_puts_its_words_back() {
+        let philox = Philox::new(Seed(0x5eed), StreamId(9));
+        // From the last word of a block, so that the words drawn cross into the next block.
+        let mut stream = philox.stream();
+        for _ in 0..3 {
+            stream.next_u32().unwrap();
+        }
+        let start = stream.clone();
+        let (drawn, block) = (stream.drawn, stream.block);
+        let first = stream.next_u64().unwrap();
+        assert_ne!(stream.block, block);
+        let kept = stream.clone();
+        assert_eq!(stream.or_put_back(drawn, block, Ok(first)), Ok(first));
+        assert_eq!(stream, kept);
+        assert_eq!(
+            stream.or_put_back::<u64>(drawn, block, Err(RngError::Defect)),
+            Err(RngError::Defect)
+        );
+        assert_eq!(stream, start);
+        assert_eq!(stream.next_u64(), Ok(first));
+    }
+
+    /// The double a word gives is its top 53 bits times 2^−53: the ends of the range and the bit
+    /// that separates the two halves it is built from.
+    #[test]
+    fn the_unit_double_is_the_top_53_bits_times_two_to_the_minus_53() {
+        assert_eq!(unit_double(0).to_bits(), 0.0_f64.to_bits());
+        // The low 11 bits are dropped.
+        assert_eq!(unit_double(0x7ff).to_bits(), 0.0_f64.to_bits());
+        assert_eq!(unit_double(1 << 11), TWO_POW_MINUS_53);
+        assert_eq!(unit_double(1 << 63), 0.5);
+        // k = 2^32, the first with a high part, and k = 2^32 + 1.
+        assert_eq!(unit_double(1 << 43), TWO_POW_32 * TWO_POW_MINUS_53);
+        assert_eq!(
+            unit_double((1 << 43) | (1 << 11)),
+            (TWO_POW_32 + 1.0) * TWO_POW_MINUS_53
+        );
+        // The largest: 1 − 2^−53, the double just below one.
+        assert_eq!(unit_double(u64::MAX), 1.0 - TWO_POW_MINUS_53);
+        assert_eq!(unit_double(u64::MAX).to_bits(), 1.0_f64.to_bits() - 1);
+    }
+
     /// Counts the accepted words whose value is `r`, over every word that maps to `r`.
     fn accepted_preimages(r: u64, bound: NonZeroU64) -> u64 {
         let n = u128::from(bound.get());
@@ -1047,8 +1200,17 @@ mod proofs {
         assert!(!matches!(stream.next_f64(), Err(RngError::Defect)));
     }
 
-    /// Lemire's method never reports a defect, for every word and every bound: the 128-bit
-    /// product cannot overflow and the bound is never zero, so both defensive arms are unreachable.
+    /// The double a word gives is finite, at least 0 and below 1, for every word, so
+    /// [`Stream::next_f64`] never has a double for `Real::new` to refuse, at any place in a block.
+    #[kani::proof]
+    fn every_unit_double_is_a_real_below_one() {
+        let x = unit_double(kani::any());
+        assert!(x.is_finite() && x >= 0.0 && x < 1.0);
+        assert!(real_or_defect(x).is_ok());
+    }
+
+    /// Lemire's method never reports a defect, for every word and every bound: the product has
+    /// no step that can fail, and the bound is never zero, so the threshold's divisor is not.
     #[kani::proof]
     fn lemire_never_reports_a_defect() {
         let word: u64 = kani::any();

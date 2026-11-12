@@ -176,14 +176,8 @@ impl Ssi {
         let Some(w) = oa.checked_sub(ob) else {
             return Err(NumError::BudgetExceeded);
         };
-        let s = match side::<4>(oa, ob2, ob, oa2) {
-            Some(s) => Some(s),
-            None => side::<5>(oa, ob2, ob, oa2),
-        };
-        match s {
-            Some(s) => Ok(s.mul(Sign::of_i128(w))),
-            None => Err(NumError::BudgetExceeded),
-        }
+        let s = side_total(oa, ob2, ob, oa2)?;
+        Ok(s.mul(Sign::of_i128(w)))
     }
 
     /// The point committed to the grid: each coordinate `X_i` / w rounded half to even, by the same
@@ -231,6 +225,28 @@ fn side<const L: usize>(oa: i128, ob2: i128, ob: i128, oa2: i128) -> Option<Sign
     Some(left.checked_sub(&right)?.signum())
 }
 
+/// [`side`] in [`I256`], then in [`I320`] should a step there not fit (the total path of
+/// [`Ssi::orient2d`]), and [`NumError::BudgetExceeded`] should neither fit.
+///
+/// For the turns of grid points the first always fits, so nothing after it can run. Verus proves
+/// it: the twin (`verus/crossing.rs`) requires each of the four turns below 2^84 in magnitude,
+/// which Verus checks at the call, and after a first `None` it calls `side_always_fits`, whose
+/// precondition is `false`. The function is marked for the coverage gate (28.8).
+// proof: projects/engines/geometry/crates/geom-num/verus/crossing.rs::side_always_fits
+#[cfg_attr(coverage_nightly, coverage(off))]
+fn side_total(oa: i128, ob2: i128, ob: i128, oa2: i128) -> Result<Sign, NumError> {
+    match side::<4>(oa, ob2, ob, oa2) {
+        Some(s) => Ok(s),
+        None => {
+            // Never, for the turns of grid points (the proof cited above).
+            match side::<5>(oa, ob2, ob, oa2) {
+                Some(s) => Ok(s),
+                None => Err(NumError::BudgetExceeded),
+            }
+        }
+    }
+}
+
 #[cfg(test)]
 #[allow(
     clippy::arithmetic_side_effects,
@@ -252,7 +268,7 @@ mod tests {
 
     use super::{Ssi, side};
     use crate::error::NumError;
-    use crate::grid::{COORD_MAX, P2};
+    use crate::grid::{COORD_MAX, Coord, P2};
     use crate::sign::Sign;
 
     const M: i64 = COORD_MAX;
@@ -443,5 +459,72 @@ mod tests {
             "swapping the two products flips the sign"
         );
         assert!(tally.iter().all(|&n| n > 0), "{tally:?}");
+    }
+
+    /// A grid point holding these numbers whatever their size, which only a test can make.
+    fn raw(c: [i64; 2]) -> P2 {
+        let [x, y] = c.map(Coord::unchecked);
+        P2 { x, y }
+    }
+
+    /// `Ssi::new`, `Ssi::homogeneous` and the hand-written side check every step although no grid
+    /// point can make one fail. With points outside the frame, which only a test can make, each
+    /// step that can fail does, and each is reported: a turn's product, a numerator, and the
+    /// weight oa − ob.
+    #[test]
+    fn a_crossing_of_points_outside_the_frame_reports_every_step_that_does_not_fit() {
+        let (top, bottom) = (i64::MAX, i64::MIN);
+        // Differences of 2^64 − 1: the turn (d − c) × (a − c) does not fit.
+        let far = [[top, top], [0, 0], [bottom, bottom], [top, bottom]].map(raw);
+        assert_eq!(
+            Ssi::new(far[0], far[1], far[2], far[3]),
+            Err(NumError::BudgetExceeded)
+        );
+        let unmade = Ssi { points: far };
+        assert_eq!(unmade.offsets(), None);
+        assert_eq!(unmade.homogeneous(), Err(NumError::BudgetExceeded));
+        assert_eq!(
+            unmade.orient2d_hand(raw([0, 0]), raw([1, 0])),
+            Err(NumError::BudgetExceeded)
+        );
+        assert_eq!(unmade.to_grid(), Err(NumError::BudgetExceeded));
+
+        // oa = 2^100 and ob = −2^100 fit, and the numerator oa · b_x = 2^162 does not.
+        let side = 1_i64 << 50;
+        let long = Ssi {
+            points: [[0, side], [1 << 62, -side], [0, 0], [side, 0]].map(raw),
+        };
+        assert_eq!(long.offsets(), Some((1 << 100, -(1 << 100))));
+        assert_eq!(long.homogeneous(), Err(NumError::BudgetExceeded));
+
+        // oa = (2^64 − 1)(2^62 + 1) and ob = −oa fit, and the weight oa − ob does not. The third
+        // line, from (0, 0) to (1, 0), turns to a and to b by their y alone, which fits.
+        let high = (1_i64 << 62) + 1;
+        let tall = Ssi {
+            points: [[bottom, high], [bottom, -high], [bottom, 0], [top, 0]].map(raw),
+        };
+        let oa = i128::from(u64::MAX) * i128::from(high);
+        assert_eq!(tall.offsets(), Some((oa, -oa)));
+        assert_eq!(oa.checked_sub(-oa), None);
+        assert_eq!(
+            tall.orient2d_hand(raw([0, 0]), raw([1, 0])),
+            Err(NumError::BudgetExceeded)
+        );
+    }
+
+    /// Two lines through one point of the first are no crossing for `Ssi::new`. Built field by
+    /// field all the same, with a = b, the weight is zero and there is nothing to commit: the
+    /// budgeted commit refuses it, the total commit is asked next and refuses it too, and
+    /// `to_grid` reports, never a coordinate.
+    #[test]
+    fn a_crossing_without_weight_goes_to_the_total_commit_and_is_reported() {
+        let [a, c, d] = [[1, 1], [0, 0], [4, 0]].map(p2);
+        assert_eq!(Ssi::new(a, a, c, d), Err(NumError::Degenerate));
+        let flat = Ssi {
+            points: [a, a, c, d],
+        };
+        let (_, w) = flat.homogeneous().unwrap();
+        assert_eq!(w, 0);
+        assert_eq!(flat.to_grid(), Err(NumError::BudgetExceeded));
     }
 }
