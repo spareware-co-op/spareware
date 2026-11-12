@@ -400,8 +400,9 @@ pub enum MakeDetail {
     /// A transform gave a body the checker cannot certify yet, from corners it rounded or curved
     /// geometry it moved by a certified deviation, or from a body an earlier transform left so:
     /// rounded corners leave their faces' planes, and a tilted curved face meets its caps where
-    /// only exact data is followed today. A rounded flat face is certified by its fan of triangles
-    /// (G134); one no fan can stand for, with a hole or a reflex corner, still waits.
+    /// only exact data is followed today. A rounded flat face is certified by the star of
+    /// triangles from the mean of its corners (G134); one no star can stand for, with a hole or
+    /// an edge the mean does not see from inside, still waits.
     NotCertifiedYet {
         /// The piece that widens what the checker certifies, by its board number.
         piece: &'static str,

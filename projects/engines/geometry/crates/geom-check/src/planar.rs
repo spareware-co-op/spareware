@@ -37,8 +37,11 @@
 //! which renames everything, moved the fan, and a valid body's exact copy could be found crossing
 //! itself. The mean of a ring's corners, the triangles from it and the test of their turning are
 //! the same whichever corner the ring starts at and whichever way it runs, and the mean of a ring
-//! moved by any affine map is the moved mean. So a body, its mirror, and every exact move, turn,
-//! scale and renumbered copy of it get one verdict.
+//! moved by any affine map is the moved mean. So a body, its mirror, and every exact move, quarter
+//! turn, scale by one factor and renumbered copy of it get one verdict. A scale by unlike factors
+//! keeps the triangles and what they cross, but not the angles between them, so it can leave a
+//! triangle turned against its ring: such a face waits, and no crossing is found that was not
+//! there before.
 //!
 //! Guarantees:
 //!
@@ -48,7 +51,10 @@
 //!   is sampled. The mean of n corners is such a meeting, of the planes n x = Σx, n y = Σy and
 //!   n z = Σz, so a star needs no arithmetic of its own.
 //! - **One verdict for a shape.** A bent face's star depends on where its corners lie, in their
-//!   order round the ring, and on nothing else (above).
+//!   order round the ring, and on nothing else (above). Nor does the plane a face of grid corners
+//!   is read on depend on how its plane is written: it is the written plane if the corners lie on
+//!   it, and otherwise the plane the corners fix, whether or not the written one is given by
+//!   integers (a whole scale can make it so).
 //! - **Any polygon.** A face that is not convex, has holes, or has several outer loops is cut like
 //!   any other. A vertex on the line, an edge along it and a touch from one side all fall to the
 //!   moved line, which sees each as ordinary crossings at one mark.
@@ -444,6 +450,12 @@ fn side_of(
 }
 
 /// Face `f` as an outline, if it is one: exactly on an integer plane, with a plane for each side.
+///
+/// The plane is the one written for the face, if that is given by integers and the face's
+/// corners lie on it, and otherwise the one its grid corners fix. So which plane a face of grid
+/// corners is read on depends on where the corners lie and not on how its plane is written: a
+/// plane written half a step off its corners is no integer plane, and the same plane scaled by
+/// two is one, a step off them.
 fn outline(
     a: &Arenas,
     f: Ix<Face>,
@@ -454,12 +466,25 @@ fn outline(
     if !matches!(kind, Some(SurfaceKind::Plane(_))) {
         return Ok(None);
     }
-    let Some(plane) = surface(a, f, exact)
-        .and_then(|on| on.grid)
-        .or_else(|| corners_plane(a, f))
-    else {
-        return Ok(None);
-    };
+    if let Some(written) = surface(a, f, exact).and_then(|on| on.grid)
+        && let Some(one) = outline_on(a, f, written, exact, sink)?
+    {
+        return Ok(Some(one));
+    }
+    match corners_plane(a, f) {
+        Some(fixed) => outline_on(a, f, fixed, exact, sink),
+        None => Ok(None),
+    }
+}
+
+/// Face `f` as an outline on `plane`, if its corners lie on it and each side has a plane.
+fn outline_on(
+    a: &Arenas,
+    f: Ix<Face>,
+    plane: Plane,
+    exact: bool,
+    sink: &mut Sink<'_, '_>,
+) -> Result<Option<Outline>, Stopped> {
     let mut sides: Vec<Side> = reserve(sink.meter(), count(face_fins(a, f).count()))?;
     for n in face_fins(a, f) {
         sink.charge()?;
@@ -571,11 +596,11 @@ struct Hub {
 /// three sides that crosses it.
 struct Wedge {
     plane: Plane,
-    /// Along the spoke from the hub out to the first corner.
+    /// Along the spoke from the hub out to the edge's start.
     out: Plane,
-    /// Along the ring's edge from the first corner to the second.
+    /// Along the ring's edge, from its start to its end.
     along: Plane,
-    /// Along the spoke from the second corner back to the hub.
+    /// Along the spoke from the edge's end back to the hub.
     back: Plane,
 }
 

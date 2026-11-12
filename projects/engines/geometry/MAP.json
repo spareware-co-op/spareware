@@ -2283,9 +2283,10 @@
           "family": [],
           "file": "projects/engines/geometry/crates/geom-check/src/planar.rs",
           "guarantees": [
-            "**Exact.** Every decision is the sign of a plane at a grid point or at a meeting of three planes (`geom_num::plane::Plane::side` and `side_of_tpi`, within 384 bits), or the sign of a 3 × 3 determinant of normals (`geom_num::plane::Tpi::weight`). No double is read and nothing is sampled.",
+            "**Exact.** Every decision is the sign of a plane at a grid point or at a meeting of three planes (`geom_num::plane::Plane::side` and `side_of_tpi`, within 384 bits), or the sign of a 3 × 3 determinant of normals (`geom_num::plane::Tpi::weight`). No double is read and nothing is sampled. The mean of n corners is such a meeting, of the planes n x = Σx, n y = Σy and n z = Σz, so a star needs no arithmetic of its own.",
+            "**One verdict for a shape.** A bent face's star depends on where its corners lie, in their order round the ring, and on nothing else (above). Nor does the plane a face of grid corners is read on depend on how its plane is written: it is the written plane if the corners lie on it, and otherwise the plane the corners fix, whether or not the written one is given by integers (a whole scale can make it so).",
             "**Any polygon.** A face that is not convex, has holes, or has several outer loops is cut like any other. A vertex on the line, an edge along it and a touch from one side all fall to the moved line, which sees each as ordinary crossings at one mark.",
-            "**Fails closed.** A step that cannot be decided is [`Meet::Unknown`], which the caller reports, never a pass. A face without a plane or a plane for each side has no outline, and its pairs are the caller's to report.",
+            "**Fails closed.** A step that cannot be decided is [`Meet::Unknown`], which the caller reports, never a pass. A face without a plane or a plane for each side has no outline, and its pairs are the caller's to report. So is a bent face with no star: one with a second loop, one whose mean does not see every edge from inside, and one of five or more corners so wide that a triangle's plane passes a plane's budget (its normal is the sum of n − 2 normals of triangles of grid points, each below 2^82, against the budget's 2^83; a ring of four never does).",
             "**Runs on bodies that passed group 2.** Every vertex is on every face it bounds, so a shared edge lies on both faces' planes and the other face's plane crosses along it.",
             "**Charged.** One meter unit per side visited and per pair of sides or stretches compared."
           ],
@@ -10857,7 +10858,7 @@
             },
             {
               "base_kind": "Unsupported",
-              "doc": "A transform gave a body the checker cannot certify yet, from corners it rounded or curved geometry it moved by a certified deviation, or from a body an earlier transform left so: rounded corners leave their faces' planes, and a tilted curved face meets its caps where only exact data is followed today. A rounded flat face is certified by its fan of triangles (G134); one no fan can stand for, with a hole or a reflex corner, still waits.",
+              "doc": "A transform gave a body the checker cannot certify yet, from corners it rounded or curved geometry it moved by a certified deviation, or from a body an earlier transform left so: rounded corners leave their faces' planes, and a tilted curved face meets its caps where only exact data is followed today. A rounded flat face is certified by the star of triangles from the mean of its corners (G134); one no star can stand for, with a hole or an edge the mean does not see from inside, still waits.",
               "name": "NotCertifiedYet",
               "shape": "struct"
             },
