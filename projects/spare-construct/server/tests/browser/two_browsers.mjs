@@ -270,5 +270,15 @@ check(
   (await viewer.evaluate(() => window.spare.pending.length)) === 0,
   'and sends no edits: it is a viewer',
 );
+
+console.log('\n   Workshop');
+await anna.click('#b-disc');
+await anna.click('#disc-menu [data-a="workshop"]');
+await anna.frameLocator('#sc-workshop iframe').locator('#engine[data-engine="kernel"]').waitFor({ timeout: 30000 });
+const workshop = anna.frames().find((f) => f.url().endsWith('/workshop/'));
+const built = await workshop.evaluate(() => document.querySelector('#vinfo').textContent);
+console.log(`      ${built}`);
+check(/^6 bodies, 87,549\.28 mm³\. 2 features wait for the kernel\./.test(built), 'Workshop opens, and the geometry kernel builds its sample part in the browser');
+await shot(anna, 'anna-workshop');
 await browser.close();
 console.log('\nThe browser checks passed.');

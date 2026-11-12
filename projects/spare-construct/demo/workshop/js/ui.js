@@ -13,6 +13,9 @@ const esc = (s) => String(s == null ? '' : s).replace(/[&<>"']/g, (c) => ({ '&':
 const ic = (n, cls = '') => `<svg class="ic ${cls}" aria-hidden="true"><use href="#i-${n}"/></svg>`;
 const n2 = (v) => (Math.round(v * 100) / 100).toLocaleString('en-NZ', { maximumFractionDigits: 2 });
 const STORE = 'spare-construct-workshop-v1';
+/* In the Spare Construct app (the server's page adds connect.js), parts are kept in this browser until they go into
+   the project's model through its edit log; the demo keeps them here too. */
+const IN_APP = (() => { try { return !!parent.document.querySelector('script[src$="connect.js"]'); } catch (e) { return false; } })();
 
 /* Workshop's own icons, drawn to the family's rules (design/ribbon/README.md): a 24-unit grid, lines in currentColor,
    round ends, at most one accent area. Ours, drawn from the thing itself. */
@@ -66,7 +69,11 @@ const part = () => S.project.parts.find((p) => p.id === S.part) || S.project.par
 const cache = new Map();
 function built(p) {
   const key = JSON.stringify(p);
-  if (!cache.has(p.id) || cache.get(p.id).key !== key) cache.set(p.id, { key, out: builder(p) });
+  if (!cache.has(p.id) || cache.get(p.id).key !== key) {
+    let out;
+    try { out = builder(p); } catch (e) { console.warn('Workshop: the builder refused this recipe, so the prototype built it.', e); out = buildPart(p); }
+    cache.set(p.id, { key, out });
+  }
   return cache.get(p.id).out;
 }
 
@@ -224,13 +231,11 @@ const endMarker = (end, n) => `<li class="endm" aria-label="End of the history">
 const field = (label, key, v, f, note = '') => `<label class="fld"><span>${label}</span><input data-chg="f" data-a="${key}" value="${esc(v == null ? '' : v)}" list="pnames" spellcheck="false"${note ? ` title="${esc(note)}"` : ''}></label>`;
 const pick = (label, key, v, opts) => `<label class="fld"><span>${label}</span><select data-chg="f" data-a="${key}">${opts.map(([k, l, dis]) => `<option value="${esc(k)}"${k === v ? ' selected' : ''}${dis ? ' disabled' : ''}>${esc(l)}</option>`).join('')}</select></label>`;
 
-function profileSvg(f, r, out) {
+function profileSvg(f, r) {
   // the sketch drawn from the built profile, or nothing if it did not build
-  const b = out.bodies;
-  void b;
-  const pr = (() => { try { return buildPart({ params: part().params, features: [f], end: 1 }); } catch (e) { return null; } })();
-  if (!pr || pr.features[0].state !== 'built') return '';
-  const one = buildPart({ params: part().params, features: [f, { id: 'x', type: 'extrude', sketch: f.id, depth: 1, op: 'new' }], end: 2 });
+  if (!r || r.state !== 'built') return '';
+  let one;
+  try { one = builder({ params: part().params, features: [f, { id: 'x', type: 'extrude', sketch: f.id, depth: 1, op: 'new' }], end: 2 }); } catch (e) { return ''; }
   const body = one.bodies[0];
   let pts;
   if (body && body.kind === 'prism') pts = body.outline;
@@ -260,7 +265,7 @@ function renderSide() {
       if (f.shape === 'outline') {
         h += `<div class="lbl sub">Corners, from the centre</div><table class="pts"><tbody>${(f.pts || []).map((q, j) => `<tr><td class="u">${j + 1}</td><td><input aria-label="Corner ${j + 1} x" data-chg="pt" data-a="${j}" data-c="0" value="${esc(q[0])}" list="pnames"></td><td><input aria-label="Corner ${j + 1} y" data-chg="pt" data-a="${j}" data-c="1" value="${esc(q[1])}" list="pnames"></td><td><button class="mini" data-act="delpt" data-a="${j}" title="Remove corner ${j + 1}">${ic('x', 'sm')}</button></td></tr>`).join('')}</tbody></table><p class="small faint">Click in the sketch below to add a corner after the last.</p>`;
       }
-      h += profileSvg(f, r, out);
+      h += profileSvg(f, r);
       h += `<button class="btn" data-act="tool" data-a="extrude"${r && r.state === 'built' ? '' : ' disabled'}>${ic('ws-extrude', 'sm')}Extrude this sketch</button>`;
       h += `<p class="small faint mt">${ic('info', 'sm')} Constraints between corners and edges wait for ${esc(WAITS.constraints.what)}; until then each size is typed in or named.</p>`;
     } else if (f.type === 'extrude') {
@@ -321,6 +326,7 @@ function renderSide() {
       ${`<label class="fld"><span>Material</span><select data-chg="material">${Object.entries(MATERIALS).map(([k, m]) => `<option value="${k}"${k === p.material ? ' selected' : ''}>${esc(m.label)}, ${m.density} kg/m³</option>`).join('')}</select></label>`}</div>
       <div class="sec"><div class="lbl">Mass properties</div><table class="props"><tbody><tr><th>Bodies</th><td>${out.bodies.length}</td></tr><tr><th>Volume</th><td>${n2(out.volume)} mm³</td></tr><tr><th>Mass</th><td>${n2((out.volume * mat.density) / 1e6)} g</td></tr>
       ${b ? `<tr><th>Size</th><td>${n2(b[1][0] - b[0][0])} × ${n2(b[1][1] - b[0][1])} × ${n2(b[1][2] - b[0][2])} mm</td></tr>` : ''}<tr><th>Built by</th><td>${esc(engine.label)}</td></tr></tbody></table>
+      ${IN_APP ? '<div class="note wait">Parts are kept in this browser for now. Keeping them in the project, for everyone on it, comes next.</div>' : ''}
       <p class="small faint">Volumes add body by body: joining bodies into one solid waits for ${esc(WAITS.join.what)}. Mass properties of curved bodies, certified, wait for G247.</p></div>
       <div class="sec"><div class="lbl">What waits for the kernel</div><ul class="waits">${Object.values(WAITS).map((w) => `<li>${ic(w.icon, 'sm')}<span><b>${esc(w.label)}</b>: ${esc(w.what)}.</span></li>`).join('')}</ul></div>`;
   }
@@ -547,3 +553,5 @@ try { view = createView($('#v3d'), { onPick: (key) => {
   view = null;
 }
 render();
+// the geometry kernel, compiled for the browser, builds instead once it loads (piece A17)
+import('./kernel.js').then((k) => k.useKernel(window.WorkshopFrame)).catch((e) => console.warn("Workshop: the geometry kernel did not load, so the prototype's builder carries on.", e));
