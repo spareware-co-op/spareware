@@ -29,8 +29,10 @@
 //! with, from phase 3, `geom-make`'s primitives and transforms and the core queries of
 //! `geom-topo`, `geom-name` and `geom-check`,
 //! each named in the catalogue with its crate's path and checked to be a public function there;
-//! and, from phase 3, `geom-topo`'s columns and publishing, `geom-name`'s attribute step, and
-//! `geom-op`'s batch driver and the flat arrays of points.
+//! and, from phase 3, `geom-topo`'s columns and publishing, `geom-name`'s attribute step,
+//! `geom-op`'s batch driver and the flat arrays of points, and `geom-format`'s file readers and
+//! writers: the CBOR decoder and text form, the record layer and files, body, name, history and
+//! operation records, and containers read and opened at either trust.
 //!
 //! Map: chapter 23.13 (benchmarks and regression gates) and 28.14 (benchmarks in the test suite)
 //! of the kernel architecture, `projects/engines/geometry/architecture/`; board entry G18, which

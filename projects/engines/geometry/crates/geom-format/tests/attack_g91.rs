@@ -29,7 +29,7 @@ use std::sync::OnceLock;
 
 use geom_format::cbor::{
     CborError, CborErrorKind, Decoder, Item, TextError, TextErrorKind, check, float_column,
-    from_text, int_column, item_len, to_text,
+    int_column, item_len, to_text,
 };
 use geom_run::{Budget, Cancel, Stop, WorkMeter};
 use geom_test::rng::SplitMix64;
@@ -60,6 +60,25 @@ const DEPTH: usize = 64;
 /// failed test, not a hang.
 fn meter() -> WorkMeter<'static> {
     WorkMeter::new(Budget::of_work(1_000_000))
+}
+
+/// The text parser's `from_text`, after a probe that it reads in a bounded number of steps.
+///
+/// The budget above stops a decoder, which charges it for every head, but the text parser charges
+/// it once per item, and its loops over characters (spaces, digits, strings, comments) end only
+/// when its cursor moves on. A cursor that stopped moving would hang most texts, and one hanging
+/// test hangs this whole file, whose tests run in one process. The probe `[true]` at depth 1,
+/// under a budget of 64 steps, enters none of those loops: a cursor that does not move past `[`
+/// reads it again as a second array, which the depth limit refuses (and the budget would), so the
+/// probe fails the test at once. Every text this file parses is read through here.
+fn from_text(text: &str, depth: usize, meter: &mut WorkMeter<'_>) -> Result<Vec<u8>, TextError> {
+    let mut probe = WorkMeter::new(Budget::of_work(64));
+    assert_eq!(
+        geom_format::cbor::from_text("[true]", 1, &mut probe),
+        Ok(vec![0x81, 0xf5]),
+        "the probe"
+    );
+    geom_format::cbor::from_text(text, depth, meter)
 }
 
 /// 2^k exactly, for −1074 ≤ k ≤ 1023, from its bits.
