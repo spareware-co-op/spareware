@@ -143,6 +143,31 @@ fn parameters_come_from_params_param_and_files() {
         None,
     ));
     assert_eq!(three["count"], json!(3));
+    // `--param=KEY=VALUE` is the same as `--param KEY=VALUE`, and the two forms mix
+    let joined = json_of(&construct(
+        &[
+            "transport",
+            "network.list",
+            "--project",
+            path(&p),
+            "--param=kind=node",
+            "--param",
+            "limit=3",
+        ],
+        None,
+    ));
+    assert_eq!(joined, three);
+    // the value keeps any `=` of its own
+    let with_equals = json_of(&construct(
+        &["transport", "project.rename", "--param=name=a=b"],
+        None,
+    ));
+    assert_eq!(with_equals["name"], json!("a=b"));
+    // an empty key is still wrong use
+    assert_eq!(
+        construct(&["transport", "network.list", "--param==node"], None).code,
+        2
+    );
     // text stays text where the schema says text, even when it looks like a number
     let renamed = json_of(&construct(
         &["transport", "project.rename", "--param", "name=2026"],
