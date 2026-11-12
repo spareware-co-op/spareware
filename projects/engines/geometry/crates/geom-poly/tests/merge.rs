@@ -12,8 +12,10 @@
     reason = "tests: native arithmetic and short names, and a failure stops the test"
 )]
 
+use core::cmp::Ordering;
 use geom_num::plane::{Plane, Tpi, normals_sign};
 use geom_num::{NumError, P3, Sign};
+use num_bigint::BigInt;
 use geom_poly::convex::{Piece, convex_pieces};
 use geom_poly::merge::{
     Memo, Merge, MergeError, Merged, Outward, Rules, as_kept, both_ways, merge, merge_with,
@@ -1435,6 +1437,503 @@ fn faces_that_look_like_splits_name_the_points_on_them() {
             assert!(off > 0, "no point off the grid");
         }
     }
+}
+
+/// The determinant of three rows.
+fn det(a: &[BigInt; 3], b: &[BigInt; 3], c: &[BigInt; 3]) -> BigInt {
+    &a[0] * (&b[1] * &c[2] - &b[2] * &c[1]) - &a[1] * (&b[0] * &c[2] - &b[2] * &c[0])
+        + &a[2] * (&b[0] * &c[1] - &b[1] * &c[0])
+}
+
+/// Where a point's three planes meet, exactly, by Cramer's rule in big integers: X and w with w
+/// positive, the point being X / w. An oracle of its own, sharing no arithmetic with the merge.
+fn exact_point(t: &Tpi) -> ([BigInt; 3], BigInt) {
+    let rows = t.planes().map(|p| p.n().map(BigInt::from));
+    let minus_d = t.planes().map(|p| -BigInt::from(p.d()));
+    let with = |i: usize| {
+        let mut r = rows.clone();
+        for (row, v) in r.iter_mut().zip(&minus_d) {
+            row[i] = v.clone();
+        }
+        det(&r[0], &r[1], &r[2])
+    };
+    let (x, w) = ([with(0), with(1), with(2)], det(&rows[0], &rows[1], &rows[2]));
+    assert!(w != BigInt::from(0), "{t:?} is no point");
+    if w < BigInt::from(0) {
+        (x.map(|v| -v), -w)
+    } else {
+        (x, w)
+    }
+}
+
+/// a / b against c / d, b and d positive.
+fn ratio_cmp(a: &BigInt, b: &BigInt, c: &BigInt, d: &BigInt) -> Ordering {
+    (a * d).cmp(&(c * b))
+}
+
+/// Two points lexicographically, exactly.
+fn point_cmp(p: &([BigInt; 3], BigInt), q: &([BigInt; 3], BigInt)) -> Ordering {
+    (0..3)
+        .map(|i| ratio_cmp(&p.0[i], &p.1, &q.0[i], &q.1))
+        .find(|o| o.is_ne())
+        .unwrap_or(Ordering::Equal)
+}
+
+/// Holds `m`'s vertices to their promise, lexicographic order, checked exactly: each strictly
+/// after the one before, so no point is listed twice.
+fn in_point_order(m: &Merged) {
+    let points: Vec<_> = m.vertices.iter().map(exact_point).collect();
+    for (at, pair) in points.windows(2).enumerate() {
+        assert_eq!(
+            point_cmp(&pair[0], &pair[1]),
+            Ordering::Less,
+            "vertices {at} and {}",
+            at + 1
+        );
+    }
+}
+
+/// The line where two planes meet, as the merge orders lines: which component of its direction
+/// `n_p` × `n_q` is the first not zero, that component made positive, then its direction and
+/// moment `d_p` `n_q` − `d_q` `n_p` over it.
+fn exact_line(p: &Plane, q: &Plane) -> (usize, [BigInt; 6], BigInt) {
+    let (a, b) = (p.n().map(BigInt::from), q.n().map(BigInt::from));
+    let (da, db) = (BigInt::from(p.d()), BigInt::from(q.d()));
+    let mut c = [
+        &a[1] * &b[2] - &a[2] * &b[1],
+        &a[2] * &b[0] - &a[0] * &b[2],
+        &a[0] * &b[1] - &a[1] * &b[0],
+        &da * &b[0] - &db * &a[0],
+        &da * &b[1] - &db * &a[1],
+        &da * &b[2] - &db * &a[2],
+    ];
+    let first = (0..3).find(|i| c[*i] != BigInt::from(0)).unwrap();
+    if c[first] < BigInt::from(0) {
+        c = c.map(|v| -v);
+    }
+    let over = c[first].clone();
+    (first, c, over)
+}
+
+/// The line of each edge of `m`, from its first fin's face and bound.
+fn edge_lines(m: &Merged) -> Vec<(usize, [BigInt; 6], BigInt)> {
+    m.edges
+        .iter()
+        .map(|e| {
+            let fin = &m.fins[e.fins[0]];
+            let face = m.sheets[m.faces[fin.face].sheet].face;
+            exact_line(&face, &fin.bound)
+        })
+        .collect()
+}
+
+/// Holds `m`'s edges to coming line by line in the order of their lines, checked exactly, and
+/// each edge's fins to lie on its line.
+fn in_line_order(m: &Merged) {
+    let lines = edge_lines(m);
+    let cmp = |p: &(usize, [BigInt; 6], BigInt), q: &(usize, [BigInt; 6], BigInt)| {
+        p.0.cmp(&q.0).then_with(|| {
+            (0..6)
+                .map(|i| ratio_cmp(&p.1[i], &p.2, &q.1[i], &q.2))
+                .find(|o| o.is_ne())
+                .unwrap_or(Ordering::Equal)
+        })
+    };
+    for (at, pair) in lines.windows(2).enumerate() {
+        assert_ne!(
+            cmp(&pair[0], &pair[1]),
+            Ordering::Greater,
+            "edges {at} and {}",
+            at + 1
+        );
+    }
+    for (e, edge) in m.edges.iter().enumerate() {
+        for f in &edge.fins {
+            let fin = &m.fins[*f];
+            let face = m.sheets[m.faces[fin.face].sheet].face;
+            assert_eq!(cmp(&exact_line(&face, &fin.bound), &lines[e]), Ordering::Equal);
+        }
+    }
+}
+
+/// `t` turned to face the other way along x, its corners' order swapped where that keeps them
+/// a tetrahedron the helper accepts.
+fn mirrored_x(t: [[i64; 3]; 4]) -> [[i64; 3]; 4] {
+    t.map(|[x, y, z]| [-x, y, z])
+}
+
+#[test]
+fn points_in_wide_cells_keep_their_order_and_meet_points_in_words() {
+    // Tilted solids with edges of a few thousand steps: three of their faces meet where w, near
+    // 2^74, is past `i64` and X still fits `i128`, so their corners' cells come from 128-bit
+    // division. A box touches one solid at its corner (0, 0, 0), which the box's faces name with
+    // w = 1, in machine words: both must be one vertex. The same mirrored in x puts the points at
+    // negative x, where a division rounds the other way.
+    let a = [
+        [0, 0, 0],
+        [4999, 701, 3],
+        [607, 4801, 903],
+        [1301, 599, 4703],
+    ];
+    let b = [
+        [701, 803, 599],
+        [5303, 2101, 1409],
+        [2003, 5897, 2609],
+        [2707, 1301, 5801],
+    ];
+    for mirror in [false, true] {
+        let way = |t: [[i64; 3]; 4]| if mirror { mirrored_x(t) } else { t };
+        let mut polygons = scene(&[if mirror {
+            block([0, -4, -4], [4, 0, 0])
+        } else {
+            block([-4, -4, -4], [0, 0, 0])
+        }]);
+        for (entry, t) in [a, b].into_iter().enumerate() {
+            let t = way(t);
+            if tetrahedron(t, entry as u32 + 1, &mut polygons).is_none() {
+                tetrahedron([t[1], t[0], t[2], t[3]], entry as u32 + 1, &mut polygons).unwrap();
+            }
+        }
+        for leaf in [1, LEAF_POLYGONS] {
+            let pieces = kept(&polygons, &WindingTest::unite(), leaf);
+            let m = merge(&pieces, Merge::RemoveRedundant, &mut meter()).unwrap();
+            closed(&m, &pieces);
+            in_point_order(&m);
+            in_line_order(&m);
+            let origin = m
+                .vertices
+                .iter()
+                .filter(|v| {
+                    let (x, _) = exact_point(v);
+                    x.iter().all(|c| *c == BigInt::from(0))
+                })
+                .count();
+            assert_eq!(origin, 1, "mirror {mirror}, leaf {leaf}");
+            assert!(m.vertices.iter().any(|v| {
+                let (_, w) = v.homogeneous().unwrap();
+                w.to_i128().is_some_and(|w| w.unsigned_abs() > 1 << 64)
+            }));
+            assert!(m.vertices.iter().any(|v| !v.to_grid().unwrap().is_exact()));
+        }
+    }
+}
+
+#[test]
+fn points_whose_first_coordinates_agree_to_32_binary_places_are_ordered_by_them() {
+    // A box's four edges along x pierce a face nearly square to x, its normal (2^20 + 3) 2^20
+    // along x and about 2^20 across: where they cross it, x is 4 and a little, and the crossings on
+    // the edges at (y, z) = (8, 0) and (0, 8) lie 8 / ((2^20 + 3) 2^20), about 2^-37, apart.
+    // Their x share their floor and first 32 binary places, and neither stops there, so only the
+    // whole fraction orders them: the one at y = 0 has the greater x and comes after.
+    let (a, c) = ((1i64 << 20) + 3, 1i64 << 20);
+    let p0 = [4, -1, -1];
+    let u = [p0[0] + 1, p0[1] + a, p0[2]];
+    let v = [p0[0], p0[1] - c - 1, p0[2] + c];
+    let mut polygons = scene(&[block([0, 0, 0], [8, 8, 8])]);
+    let wedge = [p0, u, v, [-100, 3, 3]];
+    if tetrahedron(wedge, 1, &mut polygons).is_none() {
+        tetrahedron([u, p0, v, [-100, 3, 3]], 1, &mut polygons).unwrap();
+    }
+    let at = |m: &Merged, y: i64, z: i64| {
+        let found = m.vertices.iter().enumerate().find(|(_, v)| {
+            let (x, w) = exact_point(v);
+            x[1] == BigInt::from(y) * &w
+                && x[2] == BigInt::from(z) * &w
+                && x[0] > BigInt::from(4) * &w
+                && x[0] < BigInt::from(5) * &w
+        });
+        let (k, v) = found.unwrap();
+        (k, exact_point(v))
+    };
+    for leaf in [1, 4, LEAF_POLYGONS] {
+        let pieces = kept(&polygons, &WindingTest::unite(), leaf);
+        let m = merge(&pieces, Merge::RemoveRedundant, &mut meter()).unwrap();
+        closed(&m, &pieces);
+        in_point_order(&m);
+        in_line_order(&m);
+        let ((low, p), (high, q)) = (at(&m, 8, 0), at(&m, 0, 8));
+        assert!(low < high, "leaf {leaf}");
+        // The floor and first 32 binary places of x agree, and neither fraction stops there.
+        let lead = |(x, w): &([BigInt; 3], BigInt)| {
+            let scaled = &x[0] << 32;
+            (&scaled / w, &scaled % w != BigInt::from(0))
+        };
+        assert_eq!(lead(&p), lead(&q));
+        assert!(lead(&p).1);
+    }
+}
+
+#[test]
+fn points_whose_fractions_need_more_than_96_bits_keep_their_order() {
+    // Two tilted solids a thousand times larger: their faces' normals near 2^33, and where three
+    // faces of the two meet, w is past 2^96 and X still fits `i128`, so a corner's fraction is
+    // read a binary place at a time.
+    let big = |t: [[i64; 3]; 4]| t.map(|p| p.map(|v| v * 1024 + 1));
+    let a = big([[0, 0, 0], [90, 10, 0], [10, 80, 10], [20, 10, 70]]);
+    let b = big([[10, 10, 10], [80, 30, 20], [30, 90, 40], [40, 20, 90]]);
+    for (a, b) in [(a, b), (mirrored_x(a), mirrored_x(b))] {
+        let mut polygons = Vec::new();
+        for (entry, t) in [a, b].into_iter().enumerate() {
+            if tetrahedron(t, entry as u32, &mut polygons).is_none() {
+                tetrahedron([t[1], t[0], t[2], t[3]], entry as u32, &mut polygons).unwrap();
+            }
+        }
+        for leaf in [1, LEAF_POLYGONS] {
+            let pieces = kept(&polygons, &WindingTest::unite(), leaf);
+            let m = merge(&pieces, Merge::RemoveRedundant, &mut meter()).unwrap();
+            closed(&m, &pieces);
+            in_point_order(&m);
+            in_line_order(&m);
+            assert!(m.vertices.iter().any(|v| {
+                let (x, w) = v.homogeneous().unwrap();
+                let fits = x.iter().all(|c| c.to_i128().is_some());
+                fits && w.to_i128().is_some_and(|w| w.unsigned_abs() >> 96 != 0)
+            }));
+        }
+    }
+}
+
+/// A prism along `axis` from `low` to `high` over a convex polygon, each face one piece of entry
+/// `entry`: the polygon's sides in turn, counterclockwise seen from the high end, each a line
+/// `n[0] u + n[1] v + d = 0` facing out, u and v the next two axes in turn. Each face's bounds run
+/// in turn about its outward normal, as [`side`] makes a block's.
+fn prism(
+    axis: usize,
+    (low, high): (i64, i64),
+    sides: &[([i128; 2], i128)],
+    entry: u32,
+    polygons: &mut Vec<Polygon>,
+) {
+    let (u, v) = ((axis + 1) % 3, (axis + 2) % 3);
+    let walls: Vec<Plane> = sides
+        .iter()
+        .map(|(n, d)| {
+            let mut m = [0i128; 3];
+            m[u] = n[0];
+            m[v] = n[1];
+            Plane::new(m, *d).unwrap()
+        })
+        .collect();
+    let (bottom, top) = (down(axis, low), up(axis, high));
+    let inside = |p: &Plane| opposite(p).unwrap();
+    let k = walls.len();
+    let mut push = |face: Plane, bounds: Vec<Plane>| {
+        polygons.push(Polygon {
+            piece: Piece { face, bounds },
+            entry: Some(entry),
+        });
+    };
+    push(top, walls.iter().map(inside).collect());
+    push(bottom, walls.iter().rev().map(inside).collect());
+    for (i, wall) in walls.iter().enumerate() {
+        let bounds = vec![
+            inside(&bottom),
+            inside(&walls[(i + 1) % k]),
+            inside(&top),
+            inside(&walls[(i + k - 1) % k]),
+        ];
+        push(*wall, bounds);
+    }
+}
+
+/// A quadrilateral with corners (0, 0) and (0, 12) on its left and a right side nearly square to
+/// the first axis, x = 13 / 3 + (20 − y) / `n` (`n` a multiple of 3), whose ends meet a bottom
+/// x = `n1` y and a top y = 12 + x / `n2`: the two corners on the right both lie a little past
+/// x = 13 / 3, the lower further, by 12 / `n` and less, with w = `n` `n1` + 1 and `n` `n2` + 1.
+fn sliver(n: i128, n1: i128, n2: i128) -> Vec<([i128; 2], i128)> {
+    vec![
+        ([1, -n1], 0),
+        ([n, 1], -(13 * (n / 3) + 20)),
+        ([-1, n2], -12 * n2),
+        ([-1, 0], 0),
+    ]
+}
+
+/// Its floor and first 32 binary places, and whether it runs on past them, of X / w.
+fn lead_of(x: &BigInt, w: &BigInt) -> (BigInt, bool) {
+    let scaled = x << 32;
+    let floor = num_integer_floor(&scaled, w);
+    let rest = &scaled - &floor * w;
+    (floor, rest != BigInt::from(0))
+}
+
+/// The floor of a / b, b positive.
+fn num_integer_floor(a: &BigInt, b: &BigInt) -> BigInt {
+    let q = a / b;
+    if &q * b > *a { q - 1 } else { q }
+}
+
+#[test]
+fn points_whose_first_coordinates_agree_past_32_binary_places_keep_their_order_at_any_width() {
+    // A prism over a sliver: its right side's two lower corners lie a little past x = 13 / 3, at
+    // y near 0 and near 12, their x apart by about 12 / n. With n near 2^37 the corners' w is
+    // below 2^63 and their remainders below 2^96, so a fraction's first 32 places come from one
+    // division; with n near 2^50 w passes 2^96 and so does the remainder, and they come a place
+    // at a time. Either way the two x share their floor and first 32 places and both run on, so
+    // only the whole fractions order them: the corner near y = 12, with the smaller x, first.
+    for (n, n1, n2, wide) in [
+        (3i128 << 36, 1i128 << 24, (1i128 << 24) + 1, false),
+        (3 << 48, (1 << 50) + 1, (1 << 50) + 3, true),
+    ] {
+        let mut polygons = Vec::new();
+        prism(2, (0, 8), &sliver(n, n1, n2), 0, &mut polygons);
+        for leaf in [1, LEAF_POLYGONS] {
+            let pieces = kept(&polygons, &WindingTest::unite(), leaf);
+            let m = merge(&pieces, Merge::RemoveRedundant, &mut meter()).unwrap();
+            closed(&m, &pieces);
+            in_point_order(&m);
+            in_line_order(&m);
+            let corner = |near_top: bool| {
+                let found = m.vertices.iter().enumerate().find(|(_, v)| {
+                    let (x, w) = exact_point(v);
+                    let y_high = x[1] > BigInt::from(6) * &w;
+                    x[2] == BigInt::from(0) && x[0] > BigInt::from(4) * &w && y_high == near_top
+                });
+                let (k, v) = found.unwrap();
+                (k, exact_point(v))
+            };
+            let ((upper, p), (lower, q)) = (corner(true), corner(false));
+            assert!(upper < lower, "n {n}, leaf {leaf}");
+            assert_eq!(lead_of(&p.0[0], &p.1), lead_of(&q.0[0], &q.1));
+            assert!(lead_of(&p.0[0], &p.1).1);
+            let past_96 = q.1.bits() > 97;
+            assert_eq!(past_96, wide, "n {n}");
+        }
+    }
+}
+
+#[test]
+fn a_fraction_that_stops_is_ordered_by_its_places_when_w_is_wide() {
+    // A prism whose bottom right corner is (9 / 2, 0), where its bottom and right side meet with
+    // w near 2^100, so the half is read a binary place at a time and stops after one; a block's
+    // corner at (4, 5, 20) has the same floor in x and a fraction of none. The corner at x = 4
+    // comes first, though its y is the greater.
+    let (n, n1) = (1i128 << 49, (1i128 << 49) + 1);
+    let sides = vec![
+        ([2, -2 * n1], -9),
+        ([2 * n, 2], -9 * n),
+        ([-1, n1], -12 * n1),
+        ([-1, 0], 0),
+    ];
+    let mut polygons = scene(&[block([0, 5, 20], [4, 9, 24])]);
+    prism(2, (0, 8), &sides, 1, &mut polygons);
+    let pieces = kept(&polygons, &WindingTest::unite(), LEAF_POLYGONS);
+    let m = merge(&pieces, Merge::RemoveRedundant, &mut meter()).unwrap();
+    closed(&m, &pieces);
+    in_point_order(&m);
+    let at = |want: [i64; 3], half: bool| {
+        m.vertices
+            .iter()
+            .position(|v| {
+                let (x, w) = exact_point(v);
+                let twice = |i: usize| BigInt::from(2) * &x[i];
+                let goal = |i: usize| BigInt::from(want[i] * 2 + i64::from(half && i == 0)) * &w;
+                (0..3).all(|i| twice(i) == goal(i))
+            })
+            .unwrap()
+    };
+    let (half, whole) = (at([4, 0, 0], true), at([4, 5, 20], false));
+    assert!(whole < half);
+    let (_, w) = exact_point(&m.vertices[half]);
+    assert!(w.bits() > 97);
+}
+
+#[test]
+fn lines_whose_marked_cells_pass_the_reach_keep_their_order() {
+    // A prism along x over a sliver in (y, z): its right side is two faces nearly square to y,
+    // normals (0, K, 2) with K just past 2^63 and differing by two, meeting at (y, z) = (-1, 4),
+    // and its left side a third, normal (0, -K', 2). Where an end of the prism meets them, a line
+    // runs along y whose z over y is -K / 2 or K' / 2, past the 2^62 a mark holds, and whose
+    // moment's x over y is within it, for the two right faces in the other order from their z.
+    // Lines of the prism's ends along y with z over y 0 lie between those past the reach.
+    let k1 = (1i128 << 63) + 1;
+    let k3 = (1i128 << 63) + 5;
+    let sides = vec![
+        ([0, -1], 0),
+        ([k1 + 2, 2], k1 - 6),
+        ([k1, 2], k1 - 8),
+        ([0, 1], -8),
+        ([-k3, 2], -5 * k3),
+    ];
+    let mut polygons = Vec::new();
+    prism(0, (0, 8), &sides, 0, &mut polygons);
+    for leaf in [1, LEAF_POLYGONS] {
+        let pieces = kept(&polygons, &WindingTest::unite(), leaf);
+        let m = merge(&pieces, Merge::RemoveRedundant, &mut meter()).unwrap();
+        closed(&m, &pieces);
+        in_point_order(&m);
+        in_line_order(&m);
+        let beyond = edge_lines(&m)
+            .iter()
+            .filter(|(first, c, over)| {
+                *first == 1 && num_integer_floor(&c[2], over).bits() > 62
+            })
+            .count();
+        assert!(beyond >= 6, "leaf {leaf}: {beyond}");
+    }
+}
+
+#[test]
+fn an_edge_s_turn_is_taken_from_a_memo_only_for_fins_that_run_as_they_did() {
+    // Wedges round the z axis, each a prism over a triangle with a corner on the axis. One, from
+    // 0 to about 27 degrees, runs the whole height. Below z = 4 two more stand beside it, from 63
+    // to 101 degrees and from 146 to 170; above z = 6 two others, from 63 to 170 and from 281 to
+    // 326, on the same four planes facing the same ways. The axis is then two edges of six fins
+    // on the same planes, the first fin the same, which turn about it in different orders, as
+    // their fins run up the axis in different patterns.
+    let wedge = |a: [i128; 2], b: [i128; 2]| {
+        let n = [b[1] - a[1], a[0] - b[0]];
+        vec![
+            ([a[1], -a[0]], 0),
+            (n, -10 * (n[0] * a[0] + n[1] * a[1])),
+            ([-b[1], b[0]], 0),
+        ]
+    };
+    let (start, end) = ([1, 0], [2, 1]);
+    let (a, b, c, d) = ([1, 2], [-1, 5], [-3, 2], [-6, 1]);
+    let (b_back, c_back) = ([1, -5], [3, -2]);
+    let mut polygons = Vec::new();
+    prism(2, (0, 10), &wedge(start, end), 0, &mut polygons);
+    prism(2, (0, 4), &wedge(a, b), 1, &mut polygons);
+    prism(2, (0, 4), &wedge(c, d), 2, &mut polygons);
+    prism(2, (6, 10), &wedge(a, d), 3, &mut polygons);
+    prism(2, (6, 10), &wedge(b_back, c_back), 4, &mut polygons);
+    let pieces = kept(&polygons, &WindingTest::unite(), LEAF_POLYGONS);
+    let m = merge(&pieces, Merge::RemoveRedundant, &mut meter()).unwrap();
+    closed(&m, &pieces);
+    // The two edges of six fins on the axis read the same planes in sheet order, from the same
+    // first fin, and turn their fins in different orders.
+    let on_axis = |v: usize| {
+        let (x, _) = exact_point(&m.vertices[v]);
+        x[0] == BigInt::from(0) && x[1] == BigInt::from(0)
+    };
+    let six: Vec<&geom_poly::merge::Edge> = m
+        .edges
+        .iter()
+        .filter(|e| e.fins.len() == 6 && on_axis(e.low) && on_axis(e.high))
+        .collect();
+    assert_eq!(six.len(), 2);
+    let read = |e: &geom_poly::merge::Edge| {
+        let mut fins: Vec<usize> = e.fins.clone();
+        fins.sort_by_key(|f| m.faces[m.fins[*f].face].sheet);
+        let planes: Vec<Plane> = fins
+            .iter()
+            .map(|f| m.sheets[m.faces[m.fins[*f].face].sheet].face)
+            .collect();
+        let turn: Vec<usize> = e
+            .fins
+            .iter()
+            .map(|f| fins.iter().position(|g| g == f).unwrap())
+            .collect();
+        (m.fins[fins[0]].bound, planes, turn)
+    };
+    let (one, other) = (read(six[0]), read(six[1]));
+    assert_eq!((one.0, &one.1), (other.0, &other.1));
+    assert_ne!(one.2, other.2);
+    // A merge from its own memo is the merge without it.
+    let (again, shared) = merged_again(&pieces, &pieces, None);
+    assert_eq!(again.unwrap(), m);
+    assert_eq!(shared, pieces.len());
 }
 
 fn any_block() -> impl Strategy<Value = Block> {

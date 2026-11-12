@@ -977,11 +977,12 @@ fn join(parents: &mut [usize], a: usize, b: usize) {
     let (ra, rb) = (root(parents, a), root(parents, b));
     let (low, high) = (ra.min(rb), ra.max(rb));
     for (mut at, top) in [(a, ra), (b, rb)] {
+        // [`root`] walked these same steps and stopped at `top`, so every one is in the forest;
+        // past its end the walk would stop there too.
         while at != top {
-            let Some(slot) = parents.get_mut(at) else {
-                break;
-            };
-            at = core::mem::replace(slot, low);
+            at = parents
+                .get_mut(at)
+                .map_or(top, |slot| core::mem::replace(slot, low));
         }
     }
     parents

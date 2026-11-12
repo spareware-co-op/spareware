@@ -6769,6 +6769,214 @@
       "occurrences": 1,
       "kind": "equivalent",
       "reason": "axis_point returns Some(p) only for a meeting of the planes x = a, y = b and z = c, in that order with normals (1, 0, 0), (0, 1, 0) and (0, 0, 1), whose a, b and c fit i64 and make a point P3::new accepts, so a point in the frame: then the meeting is exactly (a, b, c), and Tpi::to_grid, which corners_of asks instead when axis_point says None, rounds it to (a, b, c) and calls it exact, so the corner is Some((a, b, c)) either way. Nothing is charged between the two, and to_grid fails only for a point outside the frame, which this one is not; for every other vertex both take to_grid. Only the cost differs."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-poly/src/merge.rs",
+      "mutant": "replace floor_and_rest -> Option<(i128, i128)> with None",
+      "line_text": "let quotient = a.checked_div(b)?;",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "floor_and_rest is the division Cell::new takes where v or over leaves i64. With None that cell is not made, so the corner or line has no cells and the merge compares it in wide integers, by point_order or line_order's ratios, the same order exactly, as for cells_of returning None; only the work changes, and nothing is charged for a comparison."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-poly/src/merge.rs",
+      "mutant": "replace floor_and_rest_in_words -> Option<(i64, i64)> with None",
+      "line_text": "let quotient = a.checked_div(b)?;",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "floor_and_rest_in_words is Cell::new's division in machine words. With None no cell is made, so no corner or line has cells and every comparison is made in wide integers by point_order and line_order, the same order exactly, as for cells_of and line_cells_of returning None; only the work changes."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-poly/src/merge.rs",
+      "mutant": "replace | with ^ in lead",
+      "line_text": "digits = digits.wrapping_shl(1) | u32::from(one);",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "digits.wrapping_shl(1) has its lowest bit clear, so | and ^ with a value of 0 or 1 give one value."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-poly/src/merge.rs",
+      "mutant": "replace << with >>",
+      "line_text": "const REACH: i128 = 1 << 62;",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "With 1 >> 62, REACH is 0: every floor below 0 marks 1 and every other u128::MAX. A mark of 1 or u128::MAX has its lowest bit set, so where two marks are equal MarkKey::cmp leaves the cells to decide, and where they differ they order as the cells do: 1 lies below every mark in reach and u128::MAX above. Every pair of marks is then either unequal, ordered as the floors are, or equal with its lowest bit set, so the cells decide; the order is the same, and only how often the cells are read changes."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-poly/src/merge.rs",
+      "mutant": "replace mark -> u128 with 1",
+      "line_text": "let (floor, digits, more) = lead(cell);",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "Every mark 1, with its lowest bit set: MarkKey::cmp then finds the first marks equal and leaves the cells to decide, by CellKey, which orders them exactly. The order is the same; only how often the cells are read changes, and nothing is charged for a comparison."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-poly/src/merge.rs",
+      "mutant": "replace < with == in mark",
+      "line_text": "if floor < REACH.wrapping_neg() {",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "The two differ only for a floor of exactly -2^62, which the mutant marks 1 rather than by its lead. A mark of 1 or u128::MAX has its lowest bit set, so where two marks are equal MarkKey::cmp leaves the cells to decide, and where they differ they order as the cells do: 1 lies below every mark in reach and u128::MAX above. Such a cell is below every other in reach, as 1 is, and against another marked 1 the cells decide; so every order is the same."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-poly/src/merge.rs",
+      "mutant": "replace < with <= in mark",
+      "line_text": "if floor < REACH.wrapping_neg() {",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "The two differ only for a floor of exactly -2^62, which the mutant marks 1 rather than by its lead. A mark of 1 or u128::MAX has its lowest bit set, so where two marks are equal MarkKey::cmp leaves the cells to decide, and where they differ they order as the cells do: 1 lies below every mark in reach and u128::MAX above. Such a cell is below every other in reach, as 1 is, and against another marked 1 the cells decide; so every order is the same."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-poly/src/merge.rs",
+      "mutant": "replace | with ^ in mark",
+      "line_text": "shifted.wrapping_shl(64) | u128::from(digits).wrapping_shl(32) | u128::from(more)",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "The three parts take disjoint bits: the shifted floor bits 64 and up, the digits bits 32 to 63 and more bit 0, so | and ^ give one value."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-poly/src/merge.rs",
+      "mutant": "replace <impl PartialEq for MarkKey<'_, N, M>>::eq -> bool with true",
+      "line_text": "self.cmp(other) == Ordering::Equal",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "MarkKey's PartialEq and PartialOrd exist for Ord's bounds and nothing calls them: the sorts (Exec::sort_stable, which compares keys by Ord::cmp alone, and sorted_from's comparison) and the runs of equal points and lines after them all read MarkKey::cmp."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-poly/src/merge.rs",
+      "mutant": "replace <impl PartialEq for MarkKey<'_, N, M>>::eq -> bool with false",
+      "line_text": "self.cmp(other) == Ordering::Equal",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "MarkKey's PartialEq and PartialOrd exist for Ord's bounds and nothing calls them: the sorts (Exec::sort_stable, which compares keys by Ord::cmp alone, and sorted_from's comparison) and the runs of equal points and lines after them all read MarkKey::cmp."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-poly/src/merge.rs",
+      "mutant": "replace == with != in <impl PartialEq for MarkKey<'_, N, M>>::eq",
+      "line_text": "self.cmp(other) == Ordering::Equal",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "MarkKey's PartialEq and PartialOrd exist for Ord's bounds and nothing calls them: the sorts (Exec::sort_stable, which compares keys by Ord::cmp alone, and sorted_from's comparison) and the runs of equal points and lines after them all read MarkKey::cmp."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-poly/src/merge.rs",
+      "mutant": "replace <impl PartialOrd for MarkKey<'_, N, M>>::partial_cmp -> Option<Ordering> with None",
+      "line_text": "Some(self.cmp(other))",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "MarkKey's PartialEq and PartialOrd exist for Ord's bounds and nothing calls them: the sorts (Exec::sort_stable, which compares keys by Ord::cmp alone, and sorted_from's comparison) and the runs of equal points and lines after them all read MarkKey::cmp."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-poly/src/merge.rs",
+      "mutant": "replace & with | in <impl Ord for MarkKey<'_, N, M>>::cmp",
+      "line_text": "if a & 1 != 0 {",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "a | 1 is never 0, so wherever two marks are equal the cells decide, by CellKey, which orders them exactly: where the original instead goes on to the next marks, the equal marks stop and are the cells' own, so the cells agree there and the order is the same."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-poly/src/merge.rs",
+      "mutant": "replace || with && in <impl Ord for MarkKey<'_, N, M>>::cmp",
+      "line_text": "if self.past || other.past {",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "past is from + M < N, the same for every key of one sort: a corner's key marks all three cells from 0 (past false for every corner), and a line's marks two from first + 1 with first at most 2 (past true for every line). So the two keys compared always agree in past, and || and && give one value."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-poly/src/merge.rs",
+      "mutant": "replace LineKey::cells -> Option<&[Cell; 6]> with None",
+      "line_text": "match &self.form {",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "Without its cells a line is sorted by line_order, which compares the coordinates over the first in wide integers (LineKey::coordinates rebuilds them exactly from cells), the same order exactly, as for line_cells returning None; only the work changes."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-poly/src/merge.rs",
+      "mutant": "replace flatten with ()",
+      "line_text": "for at in 0..parents.len() {",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "flatten only shortens the walks root takes later: every read of same_piece and same_shell after it goes through root, which walks a longer chain to the same root. No set or root changes, and nothing is charged for a step."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-poly/src/merge.rs",
+      "mutant": "replace != with == in join",
+      "line_text": "while at != top {",
+      "occurrences": 1,
+      "kind": "hangs",
+      "reason": "With == the walk runs only from a root, where it sets the root's parent to the lower root and steps to what was there, the root itself, so it runs again; when that root is the lower one it steps to itself for ever. The first join of every merge joins two pieces that are their own roots, so the tests stop it by their timeout. It hangs; it never returns a wrong set."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-poly/src/merge.rs",
+      "mutant": "replace == with != in sweep",
+      "line_text": "if sides.iter().all(|side| (side.low, side.high) == ends) {",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "ends are first's own, and first is one of the sides, so with != the test fails on first and every line takes the general path: stretches over a line whose sides all share their ends gives one stretch with every side along it, in the order its sort by Reverse(low) and pops leave them, last first, which is the order the shortcut takes them in. The same joins and runs come out; nothing is charged in either."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-poly/src/merge.rs",
+      "mutant": "replace Corners::lines -> Option<&[LineKey]> with None",
+      "line_text": "match self {",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "Corners::lines only lets sides_of take a last merge's line keys for a piece it took whole: the piece is the same, by its planes' coefficients (key_of_piece), and each kept key is line_key of the same face and bound, so without them line_key makes each again, the same key. Only the work changes, and sides_of charges each side once either way."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-poly/src/merge.rs",
+      "mutant": "replace Corners::lines -> Option<&[LineKey]> with Some(Vec::leak(Vec::new()))",
+      "line_text": "match self {",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "Corners::lines only lets sides_of take a last merge's line keys for a piece it took whole: with an empty list no key is found at any place, so line_key makes each again from the same face and bound, the same key as the kept one. Only the work changes, and sides_of charges each side once either way."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-poly/src/merge.rs",
+      "mutant": "replace < with > in radial_key",
+      "line_text": "list.push(((plane.n(), plane.d()), fin.from < fin.to));",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "A fin runs between two different vertices, so from > to is from < to turned round for every fin at once; radial reads only whether a fin rises as the first does, so two keys equal under the one are equal under the other, and every lookup finds the same order."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-poly/src/merge.rs",
+      "mutant": "replace < with <= in radial_key",
+      "line_text": "list.push(((plane.n(), plane.d()), fin.from < fin.to));",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "A fin runs between two different vertices, so from < to and from <= to agree."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-poly/src/merge.rs",
+      "mutant": "replace grid_range -> Option<GridRange> with None",
+      "line_text": "let mut low = [i64::MAX; 3];",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "Without a range nest has no box for the shell and sides_of_first takes around_on's box for its polygons, also a step clear of every one with its faces on odd half steps. The path then runs from the same point and leaves the box along its walls just inside, where no polygon is, so it crosses the same polygons and counts the same: classify_inside promises the same vectors for any box that holds every polygon strictly inside. around_on charges nothing, and the trace charges by polygon, so the work is the same."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-poly/src/merge.rs",
+      "mutant": "replace != with == in grid_range",
+      "line_text": "let up = cell.floor.checked_add(i128::from(cell.rest != 0))?;",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "With == a corner off the grid takes its floor as its high end and one on the grid its floor and one more, so a range's top may lie below a corner, but by less than a step: nest's box reaches a step and a half past the top, so every corner, and every polygon, lies strictly inside it, with the box's faces on odd half steps. classify_inside gives the same vectors for any box that holds every polygon strictly inside (the path runs along its walls just inside, where no polygon is), and the trace charges by polygon, so the counts and the work are the same."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-poly/src/merge.rs",
+      "mutant": "replace floor_span -> Option<Span> with None",
+      "line_text": "let mut low = [i64::MAX; 3];",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "A piece's span is read in one place: count_crossing returns early, adding nothing, when the segment's span misses the piece's, a shortcut for a crossing that cannot happen, as the entries for trace.rs's held_of say. Without a span count_crossing finds the same, its end readings agreeing or the crossing not covered; the meter is charged before count_crossing either way, and the readings cannot fail for planes within budget. Only how many pieces are skipped changes."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-poly/src/merge.rs",
+      "mutant": "replace cell_of -> Option<Box3> with None",
+      "line_text": "let mut whole: Option<Box3> = None;",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "Without the box around the shells sides_of_first takes around_on's box for the same polygons, also a step clear of every one with its faces on odd half steps. classify_inside gives the same vectors for any box that holds every polygon strictly inside (the path runs along its walls just inside, where no polygon is), around_on charges nothing and the trace charges by polygon, so the counts and the work are the same."
     }
   ],
   "coverage_off": [
