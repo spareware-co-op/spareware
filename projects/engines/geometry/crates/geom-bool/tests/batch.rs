@@ -453,6 +453,7 @@ fn a_wall_of_three_hundred_openings_timed() {
 
 /// A door of the 300-opening wall moved and the wall cut again from its last cut, timed by hand;
 /// G140's gate counts its instructions.
+#[cfg(not(target_family = "wasm"))]
 #[test]
 #[ignore = "a timing to read, not a check"]
 #[allow(clippy::print_stdout, reason = "the timing is the output")]

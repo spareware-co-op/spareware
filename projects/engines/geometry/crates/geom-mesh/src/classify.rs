@@ -506,7 +506,12 @@ impl<'m> Classifier<'m> {
         let mut reference = Winding::default();
         let start = i32::try_from(base).map_err(|_| NumError::BudgetExceeded)?;
         reference.add(0, start).map_err(|_| MeshError::Defect)?;
-        let cell = Cell { low, high };
+        // A cell is in half steps; the grid corners are below 2^41, so doubling them is exact.
+        let half = |v: i64| v.saturating_mul(2);
+        let cell = Cell {
+            low: low.map(half),
+            high: high.map(half),
+        };
         let traced = classify(&cell, &reference, &polygons, &pieces, meter).map_err(trace_error)?;
         let one = traced.first().ok_or(MeshError::Defect)?;
         Ok(i64::from(one.front.count(0)))
