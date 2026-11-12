@@ -44,6 +44,11 @@ harness = false
 name = "classify"
 harness = false
 
+# Booleans' timing (piece G148), at 1 and 8 threads.
+[[bench]]
+name = "boolean"
+harness = false
+
 # The triangle contact test's timing (piece G151).
 [[bench]]
 name = "contact"

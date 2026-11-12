@@ -48,7 +48,7 @@ use geom_poly::winding::Winding;
 use geom_run::{Exec, Phase, RunError, WorkMeter};
 
 use crate::exact::build::span;
-use crate::exact::{ExactMesh, Facing, MeshError, MeshFault, MeshKind, PLAN, Vertex, at};
+use crate::exact::{ExactMesh, Facing, MeshError, MeshFault, MeshKind, PLAN, Parts, Vertex, at};
 
 const LOCATE: Phase = Phase::new("classify: points");
 
@@ -214,7 +214,7 @@ impl<'m> Classifier<'m> {
                 return Err(MeshFault::Shape.into());
             };
             let [a, b, c] = rows.map(|row| at(&p.planes, row).copied());
-            implicit.push(Tpi::new(a?, b?, c?)?);
+            implicit.push(Tpi::meeting(a?, b?, c?)?);
         }
         let mut reach = Vec::with_capacity(p.verts.len());
         for (i, v) in p.verts.iter().enumerate() {
@@ -451,27 +451,7 @@ impl<'m> Classifier<'m> {
             .overlapping(&Aabb::new([lx, ly], [ux, uy])?, meter)?
         {
             let face = u32::try_from(key).map_err(|_| MeshError::Full)?;
-            let facing = *at(&parts.face_plane, face)?;
-            let surface = turned(at(&parts.planes, facing.row)?, facing)?;
-            let (first, last) = span(&parts.face_loops, face)?;
-            let mut rings = Vec::new();
-            for looped in first..last {
-                let (start, end) = span(&parts.loop_start, looped)?;
-                let mut ring: Vec<Plane> = Vec::new();
-                for h in start..end {
-                    let edge = *at(&parts.he_plane, h)?;
-                    let side = turned(at(&parts.planes, edge.row)?, edge)?;
-                    // Consecutive vertices on one straight edge share a plane: one side.
-                    if ring.last() != Some(&side) {
-                        ring.push(side);
-                    }
-                }
-                if ring.first() == ring.last() {
-                    ring.pop();
-                }
-                rings.push(ring);
-            }
-            let pieces = convex_pieces(&surface, &rings, meter).map_err(convex_error)?;
+            let pieces = pieces_of(parts, face, meter)?;
             out.extend(pieces.into_iter().map(|piece| Polygon {
                 piece,
                 entry: Some(0),
@@ -506,15 +486,48 @@ impl<'m> Classifier<'m> {
         let mut reference = Winding::default();
         let start = i32::try_from(base).map_err(|_| NumError::BudgetExceeded)?;
         reference.add(0, start).map_err(|_| MeshError::Defect)?;
-        let cell = Cell { low, high };
+        // A box is in half steps.
+        let cell = Cell {
+            low: low.map(|v| v.saturating_mul(2)),
+            high: high.map(|v| v.saturating_mul(2)),
+        };
         let traced = classify(&cell, &reference, &polygons, &pieces, meter).map_err(trace_error)?;
         let one = traced.first().ok_or(MeshError::Defect)?;
         Ok(i64::from(one.front.count(0)))
     }
 }
 
+/// The convex pieces of face `face`, facing out.
+pub(crate) fn pieces_of(
+    parts: &Parts,
+    face: u32,
+    meter: &mut WorkMeter<'_>,
+) -> Result<Vec<Piece>, MeshError> {
+    let facing = *at(&parts.face_plane, face)?;
+    let surface = turned(at(&parts.planes, facing.row)?, facing)?;
+    let (first, last) = span(&parts.face_loops, face)?;
+    let mut rings = Vec::new();
+    for looped in first..last {
+        let (start, end) = span(&parts.loop_start, looped)?;
+        let mut ring: Vec<Plane> = Vec::new();
+        for h in start..end {
+            let edge = *at(&parts.he_plane, h)?;
+            let side = turned(at(&parts.planes, edge.row)?, edge)?;
+            // Consecutive vertices on one straight edge share a plane: one side.
+            if ring.last() != Some(&side) {
+                ring.push(side);
+            }
+        }
+        if ring.first() == ring.last() {
+            ring.pop();
+        }
+        rings.push(ring);
+    }
+    convex_pieces(&surface, &rings, meter).map_err(convex_error)
+}
+
 /// A tracing error as the mesh's.
-fn trace_error(e: TraceError) -> MeshError {
+pub(crate) fn trace_error(e: TraceError) -> MeshError {
     match e {
         TraceError::Num(e) => MeshError::Num(e),
         TraceError::Winding(_) => MeshError::Defect,

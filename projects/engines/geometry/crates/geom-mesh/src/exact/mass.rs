@@ -97,7 +97,7 @@ fn coordinates(mesh: &ExactMesh, vertex: Vertex) -> Result<[Interval; 3], MeshEr
         }
         Vertex::Planes(rows) => {
             let [a, b, d] = rows.map(|row| at(&parts.planes, row).copied());
-            let (x, w) = Tpi::new(a?, b?, d?)?.homogeneous()?;
+            let (x, w) = Tpi::meeting(a?, b?, d?)?.homogeneous()?;
             let w = enclose(&w)?;
             let [p, q, r] = x;
             Ok([
