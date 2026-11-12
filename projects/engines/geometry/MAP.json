@@ -4946,13 +4946,14 @@
           "target": "lib"
         },
         {
-          "cost": "at most [`MAX_OPERATIONS`] operations, each checked in full, then two replays and one replay under a cut budget; at most [`MAX_INPUT_BYTES`] bytes read.",
+          "cost": "at most [`MAX_OPERATIONS`] operations, charging at most [`WORK`] units between them, each checked in full, then two replays and one replay under a cut budget, and for a stopped case one replay to its stop; at most [`MAX_INPUT_BYTES`] bytes read.",
           "does": "[`decode`] turns a fuzzer's bytes into a [`Case`]: up to [`MAX_OPERATIONS`] operations on the hard cases of chapter 28.5, each transform on any earlier result, each new primitive free to start exactly on a point of an earlier one or one step from it, some patterns of [`MANY_COPIES`] copies. The first operation is always a primitive, and half of them are tamed to sizes the grid can hold, so a log gets past its first step and its later laws run. [`check`] runs it through the kernel's replay, one operation at a time, and holds each to chapter 28.5's oracle stack; then it writes the operations that succeeded as a log and replays that. [`harness`] is `decode` then `check`.",
           "family": [],
           "file": "projects/engines/geometry/crates/geom-fuzz/src/sequence.rs",
           "guarantees": [
             "**Any bytes are a case**, and [`decode`] reads at most [`MAX_INPUT_BYTES`] bytes, derived below; a unit test builds the input that reaches it.",
             "**A panic is a failure; a broken law is a [`Finding`]** naming the law and the case: a log the kernel refuses; a defect, or an error no schema lists; a result without names, or one the full checker rejects; a history that breaks its laws, alone or composed along a chain; a class that rises; an input that changes; a log that does not read back as written; a replay of the log that gives another hash; a budget that changes a result instead of stopping it.",
+            "**No hang.** A case's operations run under one work budget of [`WORK`] units between them: each is given what the earlier ones left. Running out is a typed stop, which is legal; the case ends at that operation, and its stop is held to laws of its own: it is the budget the operation was given, a work budget, and a replay of the log with the stopped operation stops with the same error after the same work.",
             "**Not yet in the stack:** a thread-count rerun waits for the first parallel operation, since none of the operations a log can hold uses the helper, and an imported Tolerant body waits for the first importer."
           ],
           "job": "Fuzz target: whole operation logs. On any bytes, a log of primitives, transforms and patterns, each on any earlier result, replays to the same hash, and every step keeps every law.",
