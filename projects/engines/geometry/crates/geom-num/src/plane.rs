@@ -1110,16 +1110,18 @@ fn tpi_filtered(t: &Tpi, s: &Plane) -> Option<Sign> {
     Some(side.mul(t.weight))
 }
 
-/// [`tpi_filtered`] from the generated exact path. `None` only when that path does not fit its
-/// certified types, which no planes within budget cause; the caller then takes the hand-written
-/// paths.
+/// [`tpi_filtered`] from machine words if they fit, else the generated exact path. `None` only
+/// when that path does not fit its certified types, which no planes within budget cause; the
+/// caller then takes the hand-written paths. The filter is not asked again: the only caller comes
+/// here after [`tpi_filtered`] could not decide these same four planes.
 #[allow(
     clippy::many_single_char_names,
     reason = "p, q and r are the three planes and s the fourth, as in the formulas above"
 )]
 fn tpi_routed(t: &Tpi, s: &Plane) -> Option<Sign> {
     let [p, q, r] = &t.planes;
-    Some(determinant_routed(p, q, r, s)?.mul(t.weight))
+    let side = determinant_in_words(p, q, r, s).or_else(|| determinant_exact(p, q, r, s))?;
+    Some(side.mul(t.weight))
 }
 
 /// The sign of the determinant of four planes' coefficients: machine words if they fit, else the
@@ -1139,12 +1141,25 @@ fn determinant_routed(p: &Plane, q: &Plane, r: &Plane, s: &Plane) -> Option<Sign
                 ax, ay, az, ad, bx, by, bz, bd, cx, cy, cz, cd, sx, sy, sz, sd,
             )
         })
-        .or_else(|| {
-            generated::tpi_side::exact(
-                ax, ay, az, ad, bx, by, bz, bd, cx, cy, cz, cd, sx, sy, sz, sd,
-            )
-        })
+        .or_else(|| determinant_exact(p, q, r, s))
     })
+}
+
+/// The sign of the determinant of four planes' coefficients from the generated predicate's exact
+/// path (6.2): `None` only if it does not fit its certified types, which no planes within budget
+/// cause.
+#[allow(
+    clippy::many_single_char_names,
+    reason = "p, q, r and s are the planes, as on Plane::side_of_tpi"
+)]
+fn determinant_exact(p: &Plane, q: &Plane, r: &Plane, s: &Plane) -> Option<Sign> {
+    let ([ax, ay, az], ad) = (p.n, p.d);
+    let ([bx, by, bz], bd) = (q.n, q.d);
+    let ([cx, cy, cz], cd) = (r.n, r.d);
+    let ([sx, sy, sz], sd) = (s.n, s.d);
+    generated::tpi_side::exact(
+        ax, ay, az, ad, bx, by, bz, bd, cx, cy, cz, cd, sx, sy, sz, sd,
+    )
 }
 
 /// A plane's coefficients as machine words, if they fit: a face square to the axes always does.

@@ -234,9 +234,11 @@ struct Cut {
 }
 
 impl Cut {
-    /// The point where `plane` crosses the line, if it does.
+    /// The point where `plane` crosses the line, if it does. Made by [`Tpi::meeting`], which finds
+    /// only the sign of the point's weight: every caller reads a sign from it, and [`Tpi::new`],
+    /// which also works out where the point is, cost a box three times its build (23.13).
     fn at(&self, plane: &Plane) -> Option<Tpi> {
-        Tpi::new(self.first, self.second, *plane).ok()
+        Tpi::meeting(self.first, self.second, *plane).ok()
     }
 
     /// The order along the line of the points where `a` and `b` cross it. `b` rises along the
