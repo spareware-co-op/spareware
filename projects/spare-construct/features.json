@@ -10173,25 +10173,25 @@
       {
        "id": "CON-A27-F5-P2",
        "name": "Joints",
-       "what": "Fixed, hinge, slider, pin-in-slot, planar and ball joints between named faces and axes of two parts, solved by the kernel's assembly mates (G479). Waits for the kernel; the demo moves hinge and slider joints itself.",
+       "what": "Fixed, hinge, slider, pin-in-slot, planar and ball joints between named faces and axes of two parts, solved by the kernel's assembly mates (G479). Fixed, hinge and slider joints on a typed-in axis are posed by the kernel's transform.move and transform.rotate; a hinge at an angle other than a quarter turn waits for the kernel's checker (G134 for flat faces, G177 for curved), and the page places that part itself. Joints on named faces, pin-in-slot, planar and ball joints wait for the kernel.",
        "kind": "library",
        "size": "large",
        "depends_on": [
         "CON-A27-F5-P1",
         "CON-A27-F3-P4"
        ],
-       "piece": null
+       "piece": "A25"
       },
       {
        "id": "CON-A27-F5-P3",
        "name": "Motion limits and drive",
-       "what": "A least and a greatest value for each joint, a drive that moves it through its range, and optional stops where parts touch.",
+       "what": "A least and a greatest value for each joint, a drive that moves it through its range, and optional stops where parts touch. The kernel poses each joint held within its limits, at rest; while it is driven the page moves it each frame. Stops where parts touch wait for the kernel's booleans (G130 to G133).",
        "kind": "library",
        "size": "medium",
        "depends_on": [
         "CON-A27-F5-P2"
        ],
-       "piece": null
+       "piece": "A25"
       },
       {
        "id": "CON-A27-F5-P4",
@@ -10227,14 +10227,14 @@
       {
        "id": "CON-A27-F6-P1",
        "name": "Part views",
-       "what": "Front, top, side, section and pictorial views projected from the part, with hidden lines from the kernel's drawing engine (G394, G396). The demo draws its own flat parts' views.",
+       "what": "Front, top, side, section and pictorial views projected from the part, with hidden lines from the kernel's drawing engine (G394, G396). The demo draws its own flat parts' views; their scale and overall sizes come from the kernel's query.bounding_box of the part, or of the assembly when the kernel posed every part. Hidden lines and sections wait for the kernel.",
        "kind": "library",
        "size": "large",
        "depends_on": [
         "CON-A8-F2-P2",
         "CON-A27-F3-P1"
        ],
-       "piece": "A16"
+       "piece": "A25"
       },
       {
        "id": "CON-A27-F6-P2",

@@ -14,12 +14,18 @@
 //! cuts, revolve, sweep, fillet, chamfer, shell, holes) is kept in the history and answered as waiting,
 //! with the kernel pieces it waits for, so it lights up as they land.
 //!
+//! An assembly is posed by the kernel too ([`assembly`]): each part's bodies are moved and turned
+//! into place by `transform.move` and `transform.rotate`, through the joints and within their
+//! limits, and the drawings take their sizes from `query.bounding_box` of the posed bodies.
+//!
 //! The recipe and the answer have the same form as the browser prototype's builder
 //! (`demo/workshop/js/build.js`), so the Workshop page can use either; the page uses this one, compiled
 //! to WebAssembly into `demo/workshop/pkg` by `server/scripts/build-workshop.sh`.
 
+pub mod assembly;
 pub mod build;
 
+pub use assembly::{Pose, pose_assembly, pose_json};
 pub use build::{Answer, build_json, build_part};
 
 use wasm_bindgen::prelude::wasm_bindgen;
@@ -29,6 +35,13 @@ use wasm_bindgen::prelude::wasm_bindgen;
 #[must_use]
 pub fn build_wasm(recipe: &str) -> String {
     build_json(recipe)
+}
+
+/// Poses an assembly, given as JSON, and gives the answer as JSON (see [`assembly`]).
+#[wasm_bindgen(js_name = pose)]
+#[must_use]
+pub fn pose_wasm(input: &str) -> String {
+    pose_json(input)
 }
 
 /// What builds parts here, as JSON: the kernel's facade and this crate.

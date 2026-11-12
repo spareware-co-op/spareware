@@ -54,6 +54,10 @@ jobs:
         run: >-
           cargo test --locked -p construct-model -p construct-regen -p construct-shapes
           -p construct-api -p construct-workshop -p construct-formulas --all-features
+      # A release build runs only the kernel's cheap checker groups after each operation, as the
+      # browser's does, so Workshop's assembly is held to the same answers there too.
+      - name: Workshop's assembly, posed as the browser's release build poses it
+        run: cargo test --locked --release -p construct-workshop --test assembly
       - name: The browser's builds stay free of the store
         run: >-
           cargo check --locked --target wasm32-unknown-unknown -p construct-shapes -p construct-wasm
