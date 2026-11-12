@@ -1,0 +1,116 @@
+{
+  "format": "construct.family",
+  "version": 1,
+  "name": "Single swing door",
+  "category": "door",
+  "host": { "kind": "wall", "cuts": "Opening", "reads": ["Thickness"] },
+  "parameters": [
+    { "name": "Width", "kind": "length", "scope": "type", "default": "820 mm" },
+    { "name": "Height", "kind": "length", "scope": "type", "default": "2040 mm" },
+    { "name": "FrameWidth", "kind": "length", "scope": "type", "default": "40 mm" },
+    { "name": "LeafThickness", "kind": "length", "scope": "type", "default": "40 mm" },
+    { "name": "Clearance", "kind": "length", "scope": "type", "default": "3 mm" },
+    { "name": "Undercut", "kind": "length", "scope": "type", "default": "10 mm" },
+    { "name": "FireRating", "kind": "text", "scope": "type", "default": "" },
+    { "name": "FrameMaterial", "kind": "material", "scope": "type", "default": "Timber, painted" },
+    { "name": "LeafMaterial", "kind": "material", "scope": "type", "default": "Timber, painted" },
+    { "name": "Swing", "kind": "choice", "choices": ["left", "right"], "scope": "instance", "default": "left" },
+    { "name": "Opens", "kind": "choice", "choices": ["in", "out"], "scope": "instance", "default": "in" },
+    { "name": "LeafWidth", "kind": "length", "formula": "Width - 2 * FrameWidth - 2 * Clearance" },
+    { "name": "LeafHeight", "kind": "length", "formula": "Height - FrameWidth - Clearance - Undercut" },
+    { "name": "FrameDepth", "kind": "length", "formula": "host.Thickness" }
+  ],
+  "planes": [
+    { "name": "Centre", "axis": "x", "at": "0 mm", "fixed": true },
+    { "name": "Sill", "axis": "z", "at": "0 mm", "fixed": true },
+    { "name": "Left", "axis": "x", "from": "Centre", "offset": "-Width / 2" },
+    { "name": "Right", "axis": "x", "from": "Centre", "offset": "Width / 2" },
+    { "name": "Head", "axis": "z", "from": "Sill", "offset": "Height" },
+    { "name": "Exterior", "axis": "y", "host_face": "exterior" },
+    { "name": "Interior", "axis": "y", "host_face": "interior" },
+    { "name": "HostCentre", "axis": "y", "midway": ["Exterior", "Interior"] }
+  ],
+  "sketches": [
+    {
+      "name": "FrameOutline",
+      "on": "elevation",
+      "outer": { "rect": ["Left", "Right", "Sill", "Head"] },
+      "holes": [{ "rect": ["Left + FrameWidth", "Right - FrameWidth", "Sill", "Head - FrameWidth"] }]
+    },
+    {
+      "name": "LeafOutline",
+      "on": "elevation",
+      "outer": {
+        "rect": [
+          "Left + FrameWidth + Clearance",
+          "Right - FrameWidth - Clearance",
+          "Sill + Undercut",
+          "Sill + Undercut + LeafHeight"
+        ]
+      }
+    },
+    {
+      "name": "OpeningOutline",
+      "on": "elevation",
+      "outer": { "rect": ["Left", "Right", "Sill", "Head"] }
+    }
+  ],
+  "solids": [
+    {
+      "name": "Frame",
+      "op": "extrude",
+      "sketch": "FrameOutline",
+      "between": ["Exterior", "Interior"],
+      "material": "FrameMaterial",
+      "visible": { "views": ["plan", "elevation", "section", "3d"], "detail": ["medium", "fine"] }
+    },
+    {
+      "name": "Leaf",
+      "op": "extrude",
+      "sketch": "LeafOutline",
+      "from": "Opens == 'in' ? Interior : Exterior",
+      "depth": "Opens == 'in' ? -LeafThickness : LeafThickness",
+      "material": "LeafMaterial",
+      "visible": { "views": ["plan", "elevation", "section", "3d"], "detail": ["medium", "fine"] }
+    }
+  ],
+  "voids": [
+    { "name": "Opening", "op": "extrude", "sketch": "OpeningOutline", "through": "host" }
+  ],
+  "symbols": [
+    {
+      "name": "LeafOpen",
+      "view": "plan",
+      "line": { "from": ["Left + FrameWidth", "Interior"], "to": ["Left + FrameWidth", "Interior + LeafWidth"] },
+      "detail": ["coarse", "medium", "fine"]
+    },
+    {
+      "name": "SwingArc",
+      "view": "plan",
+      "arc": {
+        "centre": ["Left + FrameWidth", "Interior"],
+        "radius": "LeafWidth",
+        "from": "0 deg",
+        "to": "90 deg"
+      },
+      "style": "thin",
+      "detail": ["coarse", "medium", "fine"]
+    },
+    {
+      "name": "OpeningLines",
+      "view": "plan",
+      "lines": [
+        { "from": ["Left", "Exterior"], "to": ["Left", "Interior"] },
+        { "from": ["Right", "Exterior"], "to": ["Right", "Interior"] }
+      ],
+      "detail": ["coarse"]
+    }
+  ],
+  "mirror": [{ "about": "Centre", "when": "Swing == 'right'" }],
+  "flip": [{ "about": "HostCentre", "when": "Opens == 'out'", "applies_to": ["symbols"] }],
+  "types": [
+    { "name": "820 x 2040", "values": {} },
+    { "name": "920 x 2040", "values": { "Width": "920 mm" } },
+    { "name": "920 x 2040 FR30", "values": { "Width": "920 mm", "LeafThickness": "45 mm", "FireRating": "FR30" } }
+  ]
+}
