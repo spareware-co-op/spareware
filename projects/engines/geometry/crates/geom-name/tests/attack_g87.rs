@@ -106,8 +106,24 @@ fn entities(rng: &mut SplitMix64, n: usize) -> Vec<Entity> {
     out
 }
 
+/// Checks that two entities given in reverse order come out sorted, before a test hands the sort
+/// fewer than two.
+///
+/// The sort's loop runs while its run width is below the number of entities, so a loop condition
+/// that is wrong for two or more entities can also never end for zero or one. Every test of this
+/// file runs in one process, which ends only when every test has, so one test that never ends
+/// would hide the tests that fail. Each test that may sort fewer than two entities calls this
+/// first: a fault in the loop then fails that test at once instead of hanging it.
+fn two_are_sorted_first() {
+    let es = [Entity::decided(1, vec![], 0), Entity::decided(0, vec![], 0)];
+    let got: Vec<u32> = ordinals(&es).unwrap().iter().map(|o| o.n()).collect();
+    assert_eq!(got, [1, 0], "two entities in reverse order");
+}
+
 #[test]
 fn ordinals_follow_the_rule_and_not_the_input_order() {
+    // The cases below include zero and one entity.
+    two_are_sorted_first();
     let seed = resolve("g87 ordinal order", Seed::DEFAULT).unwrap();
     let mut rng = SplitMix64::new(seed);
     for case in 0..2000 {
@@ -240,6 +256,7 @@ fn a_tie_or_an_undecided_comparison_is_refused_never_guessed() {
 
 #[test]
 fn one_entity_none_and_weak_names() {
+    two_are_sorted_first();
     assert_eq!(ordinals::<Entity>(&[]), Ok(vec![]));
     let one = [Entity::decided(0, vec![], 0)];
     assert_eq!(ordinals(&one), Ok(vec![Ordinal::new(0, 1).unwrap()]));

@@ -890,6 +890,96 @@ impl Canonical for geom_topo::Body {
     }
 }
 
+// `geom-format`'s file readers and writers (decision 32.46's count benchmarks for pieces G91, G92,
+// G94, G95, G96 and G108).
+
+impl Canonical for u8 {
+    fn encode(&self, h: &mut Sha256) {
+        h.update(&[*self]);
+    }
+}
+
+impl Canonical for geom_format::record::Record {
+    // Every field: the tag, flags and schema, the records it depends on, and the payload's bytes.
+    fn encode(&self, h: &mut Sha256) {
+        self.tag.encode(h);
+        self.flags.encode(h);
+        self.schema.encode(h);
+        self.depends.encode(h);
+        self.payload.encode(h);
+    }
+}
+
+impl Canonical for geom_format::file::ReadFile {
+    fn encode(&self, h: &mut Sha256) {
+        Canonical::encode(&self.header, h);
+        self.records.encode(h);
+        (self.skipped.len() as u64).encode(h);
+        for &(tag, schema, at) in &self.skipped {
+            (tag, schema, at).encode(h);
+        }
+    }
+}
+
+impl Canonical for geom_format::body::StoredBody {
+    // The index record, then every chunk record, in order.
+    fn encode(&self, h: &mut Sha256) {
+        Canonical::encode(&self.index, h);
+        self.chunks.encode(h);
+    }
+}
+
+impl Canonical for geom_op::NameId {
+    fn encode(&self, h: &mut Sha256) {
+        h.update(&self.to_bytes());
+    }
+}
+
+impl Canonical for geom_name::NameGraph {
+    // Each name in name order: its ID, then its canonical bytes.
+    fn encode(&self, h: &mut Sha256) {
+        (self.len() as u64).encode(h);
+        for id in self.ids() {
+            id.encode(h);
+            self.bytes(id).map(<[u8]>::to_vec).encode(h);
+        }
+    }
+}
+
+impl Canonical for geom_op::OpPath {
+    // Its `Debug` text writes the operation's ID and every label.
+    fn encode(&self, h: &mut Sha256) {
+        debug_text(self, h);
+    }
+}
+
+impl Canonical for geom_op::History {
+    // Its `Debug` text writes every record, deleted name and topology change.
+    fn encode(&self, h: &mut Sha256) {
+        debug_text(self, h);
+    }
+}
+
+impl Canonical for geom_format::operation::Operation {
+    // Its `Debug` text writes every field.
+    fn encode(&self, h: &mut Sha256) {
+        debug_text(self, h);
+    }
+}
+
+impl Canonical for geom_format::container::Container {
+    // The document blob, the roots, then every other blob with its key, in key order.
+    fn encode(&self, h: &mut Sha256) {
+        self.document.encode(h);
+        self.roots.encode(h);
+        (self.blobs.len() as u64).encode(h);
+        for (key, blob) in &self.blobs {
+            key.encode(h);
+            blob.encode(h);
+        }
+    }
+}
+
 impl<const D: usize> Canonical for geom_curve::DerivativeBound<D> {
     fn encode(&self, h: &mut Sha256) {
         match self {

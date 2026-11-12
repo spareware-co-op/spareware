@@ -90,6 +90,9 @@ enum Fault {
     LocalBound,
     /// Derivative bounds moved far away.
     DerivativeBound,
+    /// Derivative bounds over spans wider than one parameter moved far away; over a span of one
+    /// parameter they are right.
+    WideDerivativeBound,
 }
 
 #[derive(Clone)]
@@ -159,7 +162,9 @@ impl ParamCurve<3> for Faulty {
         meter: &mut WorkMeter<'_>,
     ) -> Result<DerivativeBound<3>, CurveError> {
         let b = self.inner.derivative_bound(span, order, meter)?;
-        if self.fault == Fault::DerivativeBound {
+        if self.fault == Fault::DerivativeBound
+            || (self.fault == Fault::WideDerivativeBound && span.0 < span.1)
+        {
             return Ok(DerivativeBound::Bounded(Bounds {
                 lo: [1e9; 3],
                 hi: [2e9; 3],
@@ -254,6 +259,16 @@ fn a_local_bound_or_a_derivative_bound_that_misses_is_caught() {
         run(Fault::DerivativeBound).unwrap_err().law,
         Law::DerivativeBoundHoldsDerivatives
     );
+}
+
+/// Claim: a derivative bound wrong only over spans of positive width, and right over the span that
+/// is one parameter alone, is caught by its law: the kit checks the span around each parameter,
+/// not only the parameter's own span (a cubic has no breaks inside its domain, so nothing else
+/// asks for a derivative bound).
+#[test]
+fn a_derivative_bound_that_misses_only_over_wide_spans_is_caught() {
+    let e = run(Fault::WideDerivativeBound).unwrap_err();
+    assert_eq!(e.law, Law::DerivativeBoundHoldsDerivatives, "{e}");
 }
 
 /// Claim: the refusal probes lie outside the domain whatever it is: on [3.3, 4] a probe built from

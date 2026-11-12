@@ -768,6 +768,39 @@ fn make_context() -> geom_op::OpContext<'static> {
     )
 }
 
+/// A meter under no limit, as the `geom-format` benchmarks run each call.
+fn unlimited() -> geom_run::WorkMeter<'static> {
+    geom_run::WorkMeter::new(geom_run::Budget::UNLIMITED)
+}
+
+/// A container opened at `trust`, as the open benchmarks read it: each root's body's content ID
+/// and where it stands (0 usable, 1 pending, 2 damaged, 3 failed).
+fn open_roots(
+    c: &geom_format::container::Container,
+    trust: geom_format::trust::Trust,
+) -> Option<Vec<(Option<geom_format::content::ContentId>, u64)>> {
+    use geom_format::trust::State;
+    let mut pass = inputs::records::Pass;
+    let opened =
+        geom_format::trust::open(c, &c.document, &c.roots, trust, &mut pass, &mut unlimited())
+            .ok()?;
+    Some(
+        opened
+            .entries
+            .into_iter()
+            .map(|entry| {
+                let state = match entry.state {
+                    State::Usable => 0,
+                    State::Pending => 1,
+                    State::Damaged(_) => 2,
+                    State::Failed(_) => 3,
+                };
+                (entry.id, state)
+            })
+            .collect(),
+    )
+}
+
 /// What a `geom-make` result is read by.
 fn make_counts(out: &geom_op::OpOutput<geom_make::Made>) -> [u32; 4] {
     let a = out.result.body.arenas();
@@ -1458,6 +1491,101 @@ fn direct_digest(group: &str, name: &str, class: Class) -> Option<Digest> {
                     }),
             )
         }
+        ("cbor", "check") => fold(inputs::cbor::check(class).iter().map(|bytes| {
+            geom_format::cbor::check(bytes, inputs::cbor::DEPTH, &mut unlimited()).is_ok()
+        })),
+        ("cbor", "int_column") => fold(inputs::cbor::int_column(class).iter().map(|bytes| {
+            let mut rows = Vec::new();
+            geom_format::cbor::int_column(bytes, &mut rows, &mut unlimited())
+                .ok()
+                .map(|()| rows)
+        })),
+        ("cbor", "float_column") => fold(inputs::cbor::float_column(class).iter().map(|bytes| {
+            let mut rows = Vec::new();
+            geom_format::cbor::float_column(bytes, &mut rows, &mut unlimited())
+                .ok()
+                .map(|()| rows)
+        })),
+        ("cbor", "to_text") => fold(inputs::cbor::to_text(class).iter().map(|bytes| {
+            geom_format::cbor::to_text(bytes, inputs::cbor::DEPTH, &mut unlimited()).ok()
+        })),
+        ("cbor", "from_text") => fold(inputs::cbor::from_text(class).iter().map(|text| {
+            geom_format::cbor::from_text(text, inputs::cbor::DEPTH, &mut unlimited()).ok()
+        })),
+        ("record", "encode") => fold(
+            inputs::records::record(class)
+                .iter()
+                .map(|record| record.encode(&mut unlimited()).ok()),
+        ),
+        ("record", "decode") => fold(inputs::records::record_bytes(class).iter().map(|bytes| {
+            geom_format::record::Record::decode(bytes, &mut unlimited())
+                .ok()
+                .map(|(record, used)| (record, used as u64))
+        })),
+        ("record", "file_write") => fold(inputs::records::file_parts(class).iter().map(
+            |(header, records)| geom_format::file::write(header, records, &mut unlimited()).ok(),
+        )),
+        ("record", "file_read") => fold(inputs::records::file(class).iter().map(|bytes| {
+            let mut source = geom_format::source::SliceSource::new(bytes);
+            geom_format::file::read(&mut source, |_, _| true, &mut unlimited()).ok()
+        })),
+        ("body_record", "write") => fold(
+            inputs::records::boxes(class)
+                .iter()
+                .map(|body| geom_format::body::write_body(body, &mut unlimited()).ok()),
+        ),
+        ("body_record", "read") => fold(
+            inputs::records::stored(class)
+                .iter()
+                .map(|stored| geom_format::body::read_body(stored, &mut unlimited()).ok()),
+        ),
+        ("name_record", "names_write") => fold(
+            inputs::records::graph(class)
+                .iter()
+                .map(|graph| geom_format::names::names_record(graph).ok()),
+        ),
+        ("name_record", "names_read") => fold(
+            inputs::records::names_payload(class)
+                .iter()
+                .map(|payload| geom_format::names::read_names(payload, 1, &mut unlimited()).ok()),
+        ),
+        ("name_record", "history_write") => fold(
+            inputs::records::history(class)
+                .iter()
+                .map(|(op, history)| geom_format::history::history_record(op, history).ok()),
+        ),
+        ("name_record", "history_read") => fold(
+            inputs::records::history_payload(class)
+                .iter()
+                .map(|payload| geom_format::history::read_history(payload, &mut unlimited()).ok()),
+        ),
+        ("op_record", "write") => fold(
+            inputs::records::operation(class)
+                .iter()
+                .map(|op| geom_format::operation::operation_record(op, &mut unlimited()).ok()),
+        ),
+        ("op_record", "read") => fold(
+            inputs::records::operation_payload(class)
+                .iter()
+                .map(|payload| {
+                    geom_format::operation::read_operation(payload, &mut unlimited()).ok()
+                }),
+        ),
+        ("open", "from_file") => {
+            fold(inputs::records::read_file(class).iter().map(|file| {
+                geom_format::container::Container::from_file(file, &mut unlimited()).ok()
+            }))
+        }
+        ("open", "known") => fold(
+            inputs::records::container("open::known", class)
+                .iter()
+                .map(|c| open_roots(c, geom_format::trust::Trust::Known)),
+        ),
+        ("open", "unknown") => fold(
+            inputs::records::container("open::unknown", class)
+                .iter()
+                .map(|c| open_roots(c, geom_format::trust::Trust::Unknown)),
+        ),
         ("attributes", "apply") => fold(inputs::attributes::apply(class).iter().map(
             |scene| -> Result<u64, geom_name::AttrError> {
                 let (after, notes) = geom_name::apply(
