@@ -15,7 +15,7 @@
 import { WAITS } from './model.js';
 
 export const STEPS_PER_MM = 160000;   // the kernel's grid step for parts and boards, Q1: 6.25 nm
-export const REACH_MM = (2 ** 40 - 1) / STEPS_PER_MM;   // geom_num::grid::COORD_MAX in steps: about 6.87 m
+export const REACH_MM = (2 ** 40 - 1) / STEPS_PER_MM;   // geom_num::grid::COORD_MAX in steps: about 6.87 km
 const q = (v) => Math.round(v * STEPS_PER_MM) / STEPS_PER_MM;
 const fmt = (v) => (Math.round(v * 1000) / 1000).toString();
 
@@ -151,7 +151,7 @@ function boxOf(points) {
 }
 function finish(b) {
   b.bbox = boxOf(vertices(b));
-  for (const p of b.bbox) for (const v of p) if (Math.abs(v) > REACH_MM) fail("A corner lands past the kernel's reach for parts, 6.87 m from the origin.");
+  for (const p of b.bbox) for (const v of p) if (Math.abs(v) > REACH_MM) fail("A corner lands past the kernel's reach for parts, 6.87 km from the origin.");
   return b;
 }
 
