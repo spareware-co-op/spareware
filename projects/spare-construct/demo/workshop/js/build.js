@@ -12,7 +12,7 @@
      { id, by, kind: 'prism' | 'cylinder', outline | center and radius, z, height, m, exactness, volume, faces, bbox }
    where m is the affine map (3 rows of 4, row-major) from the profile's own place to where the body is. */
 
-import { WAITS } from './model.js';
+import { WAITS, MATERIALS } from './model.js';
 
 export const STEPS_PER_MM = 160000;   // the kernel's grid step for parts and boards, Q1: 6.25 nm
 export const REACH_MM = (2 ** 40 - 1) / STEPS_PER_MM;   // geom_num::grid::COORD_MAX in steps: about 6.87 km
@@ -267,7 +267,45 @@ export function buildPart(part) {
   out.bodies = [...live.values()];
   out.volume = out.bodies.reduce((s, b) => s + b.volume, 0);
   out.bbox = out.bodies.length ? boxOf(out.bodies.flatMap((b) => b.bbox)) : null;
+  if (part.material) out.mass = massOf(part.material, out.bodies);
   return out;
+}
+
+/* A part's mass in its material, in the kernel builder's form (crate construct-workshop, src/mass.rs): a prism's
+   volume is exact, a cylinder's worked out from the recipe; the centre of mass is each body's centroid through its
+   map, weighted by its volume. */
+export function massOf(id, bodies) {
+  const exactly = (b) => (b.volume_from ? b.volume_from === 'kernel' : b.kind === 'prism');
+  const exact = bodies.filter(exactly).reduce((s, b) => s + b.volume, 0);
+  const fromRecipe = bodies.filter((b) => !exactly(b)).reduce((s, b) => s + b.volume, 0);
+  const volume = exact + fromRecipe;
+  let centre = null;
+  if (volume > 0) {
+    centre = [0, 0, 0];
+    for (const b of bodies) {
+      let c;
+      if (b.outline) {
+        let a = 0, x = 0, y = 0;
+        b.outline.forEach((p, i) => {
+          const r = b.outline[(i + 1) % b.outline.length], k = p[0] * r[1] - r[0] * p[1];
+          a += k; x += (p[0] + r[0]) * k; y += (p[1] + r[1]) * k;
+        });
+        c = [x / (3 * a), y / (3 * a), b.z + b.height / 2];
+      } else c = [b.center[0], b.center[1], b.z + b.height / 2];
+      apply(b.m, c).forEach((v, k) => { centre[k] += v * b.volume; });
+    }
+    centre = centre.map((v) => v / volume);
+  }
+  const m = MATERIALS[id];
+  if (!m) return { material: id, name: null, density: null, source: null, grams: null, exact, from_recipe: fromRecipe, centre, message: `There is no material called ${id} with a sourced density, so the part has no mass. Pick one from the list.` };
+  const grams = (volume * m.density) / 1e6;
+  const volumes = fromRecipe > 0
+    ? `${fmt(exact)} mm³ of the volume is the kernel's, exact, and ${fmt(fromRecipe)} mm³ is worked out from the recipe for its cylinders, whose certified volume waits for the kernel's mass properties (G247)`
+    : "the volume is the kernel's, exact";
+  return {
+    material: id, name: m.label, density: m.density, source: m.source, grams, exact, from_recipe: fromRecipe, centre,
+    message: `${fmt(grams)} g of ${m.label}: ${volumes}; the density, ${fmt(m.density)} kg/m³, is from ${m.source}. The centre of mass is worked out from the recipe; the kernel's certified mass properties wait for G247.`,
+  };
 }
 
 /* Where each instance of an assembly sits, with its joints at their values, clamped to their limits. */

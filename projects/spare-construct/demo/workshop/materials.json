@@ -1,0 +1,51 @@
+{
+  "about": "Workshop's materials: each density in kilograms per cubic metre, worked out from the value its source prints, which is kept beside it. Every source is a work of the United States government, in the public domain. Read by the Workshop page (js/model.js) and by construct-workshop, which checks each density against its printed value.",
+  "conversions": {
+    "lb/in3": "1 lb/in3 = 27679.9047 kg/m3 (1 lb = 0.45359237 kg exactly, 1 in = 0.0254 m exactly)",
+    "sg12": "Density at 12% moisture = 1000 kg/m3 x G12 x (1 + 12/100), the Wood Handbook's equation 4-14, where G12 is the specific gravity on ovendry weight and volume at 12% moisture"
+  },
+  "sources": {
+    "mil-hdbk-5j": {
+      "title": "MIL-HDBK-5J, Metallic Materials and Elements for Aerospace Vehicle Structures",
+      "by": "United States Department of Defense",
+      "date": "2003-01-31",
+      "status": "Distribution Statement A: approved for public release; distribution is unlimited",
+      "url": "https://everyspec.com/MIL-HDBK/MIL-HDBK-0001-0099/download.php?spec=MIL_HDBK_5J.139.pdf"
+    },
+    "fpl-gtr-282": {
+      "title": "Wood Handbook: Wood as an Engineering Material, General Technical Report FPL-GTR-282, chapters 4 and 5",
+      "by": "United States Department of Agriculture, Forest Service, Forest Products Laboratory",
+      "date": "2021",
+      "status": "A work of the United States government, in the public domain",
+      "url": "https://research.fs.usda.gov/download/treesearch/62244.pdf",
+      "also": "https://research.fs.usda.gov/download/treesearch/62243.pdf"
+    }
+  },
+  "materials": [
+    { "id": "steel", "name": "Carbon steel, AISI 1025", "group": "metal", "density": 7861, "printed": 0.284, "unit": "lb/in3", "source": "mil-hdbk-5j", "where": "Table 2.2.1.0(b), page 2-8" },
+    { "id": "steel-4130", "name": "Alloy steel, AISI 4130", "group": "metal", "density": 7833, "printed": 0.283, "unit": "lb/in3", "source": "mil-hdbk-5j", "where": "Table 2.3.1.0(c1), page 2-17" },
+    { "id": "steel-4340", "name": "Alloy steel, AISI 4340", "group": "metal", "density": 7833, "printed": 0.283, "unit": "lb/in3", "source": "mil-hdbk-5j", "where": "Table 2.3.1.0(f1), page 2-22" },
+    { "id": "stainless", "name": "Stainless steel, AISI 301 (and 302, 304, 316)", "group": "metal", "density": 7916, "printed": 0.286, "unit": "lb/in3", "source": "mil-hdbk-5j", "where": "Table 2.7.1.0(b), page 2-223" },
+    { "id": "stainless-17-4ph", "name": "Stainless steel, 17-4PH, H1075", "group": "metal", "density": 7833, "printed": 0.283, "unit": "lb/in3", "source": "mil-hdbk-5j", "where": "Table 2.6.9.0(b), page 2-197" },
+    { "id": "aluminium", "name": "Aluminium 6061", "group": "metal", "density": 2713, "printed": 0.098, "unit": "lb/in3", "source": "mil-hdbk-5j", "where": "Table 3.6.2.0(b1), page 3-264" },
+    { "id": "aluminium-2024", "name": "Aluminium 2024", "group": "metal", "density": 2768, "printed": 0.100, "unit": "lb/in3", "source": "mil-hdbk-5j", "where": "Table 3.2.3.0(b1), page 3-71" },
+    { "id": "aluminium-7075", "name": "Aluminium 7075", "group": "metal", "density": 2796, "printed": 0.101, "unit": "lb/in3", "source": "mil-hdbk-5j", "where": "Table 3.7.6.0(b1), page 3-371" },
+    { "id": "magnesium", "name": "Magnesium AZ31B", "group": "metal", "density": 1769, "printed": 0.0639, "unit": "lb/in3", "source": "mil-hdbk-5j", "where": "Table 4.2.1.0(b), page 4-7" },
+    { "id": "titanium", "name": "Titanium Ti-6Al-4V", "group": "metal", "density": 4429, "printed": 0.160, "unit": "lb/in3", "source": "mil-hdbk-5j", "where": "Table 5.4.1.0(b), page 5-53" },
+    { "id": "copper-beryllium", "name": "Copper beryllium", "group": "metal", "density": 8249, "printed": 0.298, "unit": "lb/in3", "source": "mil-hdbk-5j", "where": "Table 7.3.2.0(c), page 7-14" },
+    { "id": "bronze", "name": "Manganese bronze, C86500", "group": "metal", "density": 8332, "printed": 0.301, "unit": "lb/in3", "source": "mil-hdbk-5j", "where": "Table 7.3.1.0(c), page 7-10" },
+    { "id": "oak", "name": "White oak", "group": "timber", "density": 762, "printed": 0.68, "unit": "sg12", "source": "fpl-gtr-282", "where": "Table 5-3a, page 5-6" },
+    { "id": "red-oak", "name": "Northern red oak", "group": "timber", "density": 706, "printed": 0.63, "unit": "sg12", "source": "fpl-gtr-282", "where": "Table 5-3a, page 5-5" },
+    { "id": "maple", "name": "Sugar maple", "group": "timber", "density": 706, "printed": 0.63, "unit": "sg12", "source": "fpl-gtr-282", "where": "Table 5-3a, page 5-5" },
+    { "id": "birch", "name": "Yellow birch", "group": "timber", "density": 694, "printed": 0.62, "unit": "sg12", "source": "fpl-gtr-282", "where": "Table 5-3a, page 5-4" },
+    { "id": "ash", "name": "White ash", "group": "timber", "density": 672, "printed": 0.60, "unit": "sg12", "source": "fpl-gtr-282", "where": "Table 5-3a, page 5-4" },
+    { "id": "walnut", "name": "Black walnut", "group": "timber", "density": 616, "printed": 0.55, "unit": "sg12", "source": "fpl-gtr-282", "where": "Table 5-3a, page 5-6" },
+    { "id": "poplar", "name": "Yellow-poplar", "group": "timber", "density": 470, "printed": 0.42, "unit": "sg12", "source": "fpl-gtr-282", "where": "Table 5-3a, page 5-6" },
+    { "id": "douglas-fir", "name": "Douglas-fir, coast", "group": "timber", "density": 538, "printed": 0.48, "unit": "sg12", "source": "fpl-gtr-282", "where": "Table 5-3a, page 5-7" },
+    { "id": "longleaf-pine", "name": "Longleaf pine", "group": "timber", "density": 661, "printed": 0.59, "unit": "sg12", "source": "fpl-gtr-282", "where": "Table 5-3a, page 5-7" },
+    { "id": "loblolly-pine", "name": "Loblolly pine", "group": "timber", "density": 571, "printed": 0.51, "unit": "sg12", "source": "fpl-gtr-282", "where": "Table 5-3a, page 5-7" },
+    { "id": "white-pine", "name": "Eastern white pine", "group": "timber", "density": 392, "printed": 0.35, "unit": "sg12", "source": "fpl-gtr-282", "where": "Table 5-3a, page 5-7" },
+    { "id": "spruce", "name": "Sitka spruce", "group": "timber", "density": 448, "printed": 0.40, "unit": "sg12", "source": "fpl-gtr-282", "where": "Table 5-3a, page 5-8" },
+    { "id": "cedar", "name": "Western redcedar", "group": "timber", "density": 358, "printed": 0.32, "unit": "sg12", "source": "fpl-gtr-282", "where": "Table 5-3a, page 5-7" }
+  ]
+}
