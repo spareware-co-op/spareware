@@ -40,8 +40,9 @@
 //! history, recipe and attributes records accept only the one encoding of what they read (G95);
 //! [`operations`], the operation record likewise (G96); and [`open`], containers come back from a
 //! file to the same blobs and trust on open keeps damage with the body it is in (G108). For the
-//! Gate 3 pieces no other target reaches (30.1's standard bar), [`naming`] holds names, the name
-//! graph, the duplicate detector and the ordinal order to their laws (G87); [`references`],
+//! Gate 3 code no other target reaches (30.1's standard bar), [`euler`] holds `geom-topo`'s Euler
+//! operators to their table of counts, Euler's formula and their refusals (G81); [`naming`] holds
+//! names, the name graph, the duplicate detector and the ordinal order to their laws (G87); [`references`],
 //! reference resolution gives 20.4's outcome on any history (G89); and [`prune`], `PruneHistory`
 //! keeps every held reference and its record reads back, and reads only its one encoding (G109).
 //! The layout every target follows, and how each engine runs it locally and in CI, is in this
@@ -222,6 +223,7 @@ pub mod cache;
 pub mod cbor;
 pub mod curves;
 pub mod encoder;
+pub mod euler;
 pub mod linalg;
 pub mod make;
 pub mod maths;

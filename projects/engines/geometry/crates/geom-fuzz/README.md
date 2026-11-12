@@ -35,7 +35,9 @@ records accept only the one encoding of what they read; and `open` (`src/open.rs
 container comes back from a file to the same blobs and trust on open keeps damage with the body
 it is in. Their corpora start from the writers' output for the fixtures of `geom-format`'s own
 tests. For the Gate 3 pieces that `make` and `sequence` do not reach (30.1: a fuzz target per
-code piece): `naming` (`src/naming.rs`, G87), names get the one ID their bytes hash to, the name
+code piece): `euler` (`src/euler.rs`, G81), the Euler operators change the counts by their table,
+keep Euler's formula, refuse dead rows without a trace and publish back to themselves; `naming`
+(`src/naming.rs`, G87), names get the one ID their bytes hash to, the name
 graph keeps each once and knows which are weak, and the duplicate detector, the reference pick and
 the ordinal order agree with oracles written from 20.2; `references` (`src/references.rs`, G89),
 reference resolution gives 20.4's outcome on any history from `geom-test`'s kit; and `prune`
