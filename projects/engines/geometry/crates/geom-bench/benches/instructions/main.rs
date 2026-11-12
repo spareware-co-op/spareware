@@ -27,8 +27,11 @@ use gate::{
     bvh::bvh, cbor::cbor, crossing::crossing, curve::curve, dd::dd, dual::dual, eft::eft,
     exact_sum::exact_sum, exactness::exactness, format::format, generated::generated, grid::grid,
     growth::growth, helper::helper, interval::interval, isolate::isolate, linalg::linalg,
-    make::make, math::math, math_types::math_types, mesh::mesh, name_record::name_record, newton::newton, nurbs::nurbs, op_record::op_record, open::open, perturb::perturb, plane::plane, predicate::predicate, quadrature::quadrature, query::query, real::real, record::record, rng::rng, scenario::scenario, sign::sign, surface::surface, topo::topo, unproven::unproven, wide::wide,
-    wide32::wide32,
+    make::make, math::math, math_types::math_types, mesh::mesh, name_record::name_record,
+    newton::newton, nurbs::nurbs, op_record::op_record, open::open, perturb::perturb, plane::plane,
+    predicate::predicate, quadrature::quadrature, query::query, real::real, record::record,
+    rng::rng, scenario::scenario, sign::sign, surface::surface, topo::topo, unproven::unproven,
+    wide::wide, wide32::wide32,
 };
 
 #[cfg(target_os = "linux")]

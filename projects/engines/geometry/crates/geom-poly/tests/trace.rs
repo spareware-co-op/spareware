@@ -516,7 +516,11 @@ fn polygons_inside_their_box_are_classified_by_each_path_s_first_leg() {
             let used = (before + charges) as u128;
             assert_eq!(first.used(), Usage::new(used, 0), "{blocks:?}");
             let read = asked.0.load(std::sync::atomic::Ordering::Relaxed);
-            assert_eq!(read, (before + charges) / POLL_EVERY, "{blocks:?}, {before}");
+            assert_eq!(
+                read,
+                (before + charges) / POLL_EVERY,
+                "{blocks:?}, {before}"
+            );
         }
         agrees(blocks, &whole);
     }

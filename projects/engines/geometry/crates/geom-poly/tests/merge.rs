@@ -15,7 +15,6 @@
 use core::cmp::Ordering;
 use geom_num::plane::{Plane, Tpi, normals_sign};
 use geom_num::{NumError, P3, Sign};
-use num_bigint::BigInt;
 use geom_poly::convex::{Piece, convex_pieces};
 use geom_poly::merge::{
     Memo, Merge, MergeError, Merged, Outward, Rules, as_kept, both_ways, merge, merge_with,
@@ -25,6 +24,7 @@ use geom_poly::subdivide::{LEAF_POLYGONS, around, arrange};
 use geom_poly::trace::{Classified, Polygon, TraceError};
 use geom_poly::winding::{Term, Winding, WindingTest};
 use geom_run::{Budget, Exec, WorkMeter};
+use num_bigint::BigInt;
 use proptest::prelude::*;
 
 fn meter() -> WorkMeter<'static> {
@@ -1457,7 +1457,10 @@ fn exact_point(t: &Tpi) -> ([BigInt; 3], BigInt) {
         }
         det(&r[0], &r[1], &r[2])
     };
-    let (x, w) = ([with(0), with(1), with(2)], det(&rows[0], &rows[1], &rows[2]));
+    let (x, w) = (
+        [with(0), with(1), with(2)],
+        det(&rows[0], &rows[1], &rows[2]),
+    );
     assert!(w != BigInt::from(0), "{t:?} is no point");
     if w < BigInt::from(0) {
         (x.map(|v| -v), -w)
@@ -1551,7 +1554,10 @@ fn in_line_order(m: &Merged) {
         for f in &edge.fins {
             let fin = &m.fins[*f];
             let face = m.sheets[m.faces[fin.face].sheet].face;
-            assert_eq!(cmp(&exact_line(&face, &fin.bound), &lines[e]), Ordering::Equal);
+            assert_eq!(
+                cmp(&exact_line(&face, &fin.bound), &lines[e]),
+                Ordering::Equal
+            );
         }
     }
 }
@@ -1865,9 +1871,7 @@ fn lines_whose_marked_cells_pass_the_reach_keep_their_order() {
         in_line_order(&m);
         let beyond = edge_lines(&m)
             .iter()
-            .filter(|(first, c, over)| {
-                *first == 1 && num_integer_floor(&c[2], over).bits() > 62
-            })
+            .filter(|(first, c, over)| *first == 1 && num_integer_floor(&c[2], over).bits() > 62)
             .count();
         assert!(beyond >= 6, "leaf {leaf}: {beyond}");
     }
