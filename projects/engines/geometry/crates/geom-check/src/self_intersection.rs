@@ -22,9 +22,9 @@
 //!   meet when the planes are certainly farther apart than the two faces may stray from them:
 //!   nothing for a face whose corners and edges lie on its plane exactly, and the body's bound
 //!   for any other, since group 2 held it no nearer. Nearer planes say nothing of where their
-//!   faces lie, and such a pair is unchecked. A plane perpendicular to a cylinder's or cone's axis, or a plane and a sphere,
-//!   meet in one circle at most, so faces on them that share a full circle edge meet only along
-//!   it. Any other pair is reported unchecked.
+//!   faces lie, and such a pair is unchecked. A plane perpendicular to a cylinder's or cone's
+//!   axis, or a plane and a sphere, meet in one circle at most, so faces on them that share a
+//!   full circle edge meet only along it. Any other pair is reported unchecked.
 //! - **Edges with a vertex where three planes meet** are tested by `crate::planar` too.
 //! - **A wall between two cells is two faces.** In a general body, two faces with the same edges,
 //!   each run the opposite way, are the two sides of one wall, each in its own cell's shell
@@ -127,16 +127,10 @@ pub(crate) fn check(
 /// The edges of `f`, each with the way its fin runs, sorted.
 fn runs(a: &Arenas, f: Ix<Face>) -> Vec<(u32, bool)> {
     let mut out = Vec::new();
-    let mut at_loop = a.faces.get(f).and_then(|face| face.first_loop);
-    while let Some(ix) = at_loop {
-        let held = a.loops.get(ix);
-        let first = held.and_then(|l| l.first_fin);
-        let mut at = first;
-        while let Some(fin) = at.and_then(|ix| a.fins.get(ix)) {
-            out.push((fin.edge.row(), fin.sense == Sense::Forward));
-            at = Some(fin.next).filter(|next| Some(*next) != first);
-        }
-        at_loop = held.and_then(|l| l.next);
+    // By the walk every other check of a face's fins takes: a ring walked by hand here ran for
+    // ever, filling this list, under one changed comparison.
+    for fin in face_fins(a, f).filter_map(|n| a.fins.get(n)) {
+        out.push((fin.edge.row(), fin.sense == Sense::Forward));
     }
     out.sort_unstable();
     out
