@@ -438,6 +438,33 @@ fn campaign_violations(campaign: &str, fuzz: &str) -> Vec<String> {
     if c["concurrency"]["cancel-in-progress"].as_bool() != Some(false) {
         found.push("a campaign that has started can be cancelled by a newer one".to_owned());
     }
+
+    // Time limits: five hours of fuzzing and the build before it inside the fuzz step's limit,
+    // and that limit plus the uploads after it inside the job's, which GitHub caps at six hours
+    // on a hosted runner. A job that ends close to its limit can be cancelled although every
+    // step passed (run 43221765733, 2026-11-12).
+    let job_limit = job["timeout-minutes"].as_i64().unwrap_or_default();
+    let step_limit = job["steps"]
+        .as_vec()
+        .into_iter()
+        .flatten()
+        .find(|s| {
+            s["run"]
+                .as_str()
+                .is_some_and(|r| r.contains("cargo bolero test"))
+        })
+        .and_then(|s| s["timeout-minutes"].as_i64())
+        .unwrap_or_default();
+    if step_limit < 300 + 20 {
+        found.push(format!(
+            "the fuzz step's limit of {step_limit} minutes leaves under 20 to build before five hours of fuzzing"
+        ));
+    }
+    if job_limit > 360 || job_limit < step_limit + 20 {
+        found.push(format!(
+            "the job's limit of {job_limit} minutes is over six hours or leaves under 20 for the uploads"
+        ));
+    }
     found
 }
 
@@ -780,6 +807,26 @@ fn the_nightly_campaign_fuzzes_every_target() {
             "  cancel-in-progress: false\n",
             "  cancel-in-progress: true\n",
             "can be cancelled",
+        ),
+        (
+            "        timeout-minutes: 330\n",
+            "        timeout-minutes: 300\n",
+            "under 20 to build",
+        ),
+        (
+            "        timeout-minutes: 330\n",
+            "",
+            "under 20 to build",
+        ),
+        (
+            "    timeout-minutes: 360\n",
+            "    timeout-minutes: 330\n",
+            "under 20 for the uploads",
+        ),
+        (
+            "    timeout-minutes: 360\n",
+            "    timeout-minutes: 400\n",
+            "over six hours",
         ),
     ] {
         let seeded = campaign.replacen(from, to, 1);
