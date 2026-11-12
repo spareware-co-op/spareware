@@ -1,0 +1,10 @@
+# Clippy's settings for every Spare Construct crate and the server: clippy reads the nearest
+# clippy.toml above a crate's Cargo.toml, and no crate here has its own.
+#
+# The crates deny unwrap, expect, panic and unchecked indexing outside tests (their [lints] tables,
+# copied from the geometry kernel's). Tests may use them, as in the kernel's clippy.toml: a failing
+# test should stop loudly.
+allow-unwrap-in-tests = true
+allow-expect-in-tests = true
+allow-panic-in-tests = true
+allow-indexing-slicing-in-tests = true

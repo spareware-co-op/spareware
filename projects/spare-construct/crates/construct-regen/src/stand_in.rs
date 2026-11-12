@@ -15,6 +15,7 @@ use std::collections::BTreeMap;
 /// The stand-in's edition. A change to what it builds is a new version, as with the kernel.
 const VERSION: u32 = 1;
 
+/// The stand-in: builds every recipe as a box, until the geometry kernel can build it.
 pub struct Boxes;
 
 /// The six sides of a box, in the kernel's role words (20.2).

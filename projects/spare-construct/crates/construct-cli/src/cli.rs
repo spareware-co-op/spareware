@@ -45,13 +45,19 @@ struct Opts {
     params: Option<String>,
     kv: Vec<(String, String)>,
     input: Option<String>,
-    progress: bool,
-    raw: bool,
-    pretty: bool,
+    show: Show,
     stop_on_error: bool,
     save: bool,
     names: bool,
     rest: Vec<String>,
+}
+
+/// How results and progress are printed.
+#[derive(Default)]
+struct Show {
+    progress: bool,
+    raw: bool,
+    pretty: bool,
 }
 
 /// What stops the command line: wrong use (exit 2) or a failure (exit 1).
@@ -62,71 +68,71 @@ enum Fail {
 
 type Res<T> = Result<T, Fail>;
 
-fn usage<T>(m: impl Into<String>) -> Res<T> {
-    Err(Fail::Usage(m.into()))
+fn usage<T>(message: impl Into<String>) -> Res<T> {
+    Err(Fail::Usage(message.into()))
 }
 
 fn parse_opts(args: &[String]) -> Res<Opts> {
-    let mut o = Opts::default();
-    let mut i = 0;
-    while i < args.len() {
-        let a = &args[i];
-        let (flag, inline) = match a.split_once('=') {
-            Some((f, v)) if f.starts_with("--") && !["--param"].contains(&f) => {
-                (f.to_string(), Some(v.to_string()))
+    let mut opts = Opts::default();
+    let mut args = args.iter();
+    while let Some(arg) = args.next() {
+        let (flag, inline) = match arg.split_once('=') {
+            Some((name, given)) if name.starts_with("--") && !["--param"].contains(&name) => {
+                (name.to_string(), Some(given.to_string()))
             }
-            _ => (a.clone(), None),
+            _ => (arg.clone(), None),
         };
         let mut value = |name: &str| -> Res<String> {
-            if let Some(v) = inline.clone() {
-                return Ok(v);
+            if let Some(given) = inline.clone() {
+                return Ok(given);
             }
-            i += 1;
-            args.get(i)
+            args.next()
                 .cloned()
                 .map_or_else(|| usage(format!("{name} needs a value")), Ok)
         };
         match flag.as_str() {
-            "--project" => o.project = Some(value("--project")?),
-            "--out" => o.out = Some(value("--out")?),
-            "--params" => o.params = Some(value("--params")?),
-            "--input" => o.input = Some(value("--input")?),
+            "--project" => opts.project = Some(value("--project")?),
+            "--out" => opts.out = Some(value("--out")?),
+            "--params" => opts.params = Some(value("--params")?),
+            "--input" => opts.input = Some(value("--input")?),
             "--param" => {
-                let v = if a == "--param" {
-                    value("--param")?
-                } else {
-                    a["--param=".len()..].to_string()
+                let pair = match arg.strip_prefix("--param=") {
+                    Some(rest) => rest.to_string(),
+                    None => value("--param")?,
                 };
-                match v.split_once('=') {
-                    Some((k, x)) if !k.is_empty() => o.kv.push((k.to_string(), x.to_string())),
-                    _ => return usage(format!("--param needs KEY=VALUE, not {v}")),
+                match pair.split_once('=') {
+                    Some((key, given)) if !key.is_empty() => {
+                        opts.kv.push((key.to_string(), given.to_string()));
+                    }
+                    _ => return usage(format!("--param needs KEY=VALUE, not {pair}")),
                 }
             }
-            "--progress" => o.progress = true,
-            "--raw" => o.raw = true,
-            "--pretty" => o.pretty = true,
-            "--stop-on-error" => o.stop_on_error = true,
-            "--save" => o.save = true,
-            "--names" => o.names = true,
-            "-h" | "--help" => o.rest.push("--help".to_string()),
-            f if f.starts_with("--") => return usage(format!("unknown option {f}")),
-            _ => o.rest.push(a.clone()),
+            "--progress" => opts.show.progress = true,
+            "--raw" => opts.show.raw = true,
+            "--pretty" => opts.show.pretty = true,
+            "--stop-on-error" => opts.stop_on_error = true,
+            "--save" => opts.save = true,
+            "--names" => opts.names = true,
+            "-h" | "--help" => opts.rest.push("--help".to_string()),
+            unknown if unknown.starts_with("--") => {
+                return usage(format!("unknown option {unknown}"));
+            }
+            _ => opts.rest.push(arg.clone()),
         }
-        i += 1;
     }
-    Ok(o)
+    Ok(opts)
 }
 
 /// Runs the command line and gives the exit code.
-pub fn run(args: Vec<String>) -> i32 {
-    match dispatch(&args) {
+pub fn run(args: &[String]) -> i32 {
+    match dispatch(args) {
         Ok(code) => code,
-        Err(Fail::Usage(m)) => {
-            eprintln!("construct: {m}\nRun construct --help for the options.");
+        Err(Fail::Usage(message)) => {
+            eprintln!("construct: {message}\nRun construct --help for the options.");
             2
         }
-        Err(Fail::Run(m)) => {
-            eprintln!("{m}");
+        Err(Fail::Run(message)) => {
+            eprintln!("{message}");
             1
         }
     }
@@ -142,14 +148,14 @@ fn dispatch(args: &[String]) -> Res<i32> {
         println!("construct {}", env!("CARGO_PKG_VERSION"));
         return Ok(0);
     }
-    let o = parse_opts(&args[1..])?;
-    if o.rest.iter().any(|x| x == "--help") {
+    let opts = parse_opts(args.get(1..).unwrap_or_default())?;
+    if opts.rest.iter().any(|arg| arg == "--help") {
         print!("{USAGE}");
         return Ok(0);
     }
     match first {
-        Some("transport") => transport(o),
-        Some("mcp") => serve_mcp(o),
+        Some("transport") => transport(&opts),
+        Some("mcp") => serve_mcp(&opts),
         Some(other) => usage(format!(
             "unknown command {other}; the programs are transport and mcp"
         )),
@@ -168,24 +174,25 @@ fn fail_json(e: &construct_api::ApiError) -> Fail {
 }
 
 /// A session with the project file open, and the revision to compare against to know whether the project changed.
-fn open_session(o: &Opts) -> Res<(Session, u64)> {
-    let mut s = Session::system();
-    if let Some(path) = &o.project {
+fn open_session(opts: &Opts) -> Res<(Session, u64)> {
+    let mut session = Session::system();
+    if let Some(path) = &opts.project {
         let text = read_file(path)?;
-        s.run("transport.project.open", &json!({ "text": text }))
+        session
+            .run("transport.project.open", &json!({ "text": text }))
             .map_err(|e| fail_json(&e))?;
     }
-    let rev = s.revision();
-    Ok((s, rev))
+    let rev = session.revision();
+    Ok((session, rev))
 }
 
 /// Writes the project to `--out` (or back to `--project`) when it changed.
-fn persist(s: &Session, rev: u64, o: &Opts) -> Res<()> {
-    if s.revision() == rev {
+fn persist(session: &Session, rev: u64, opts: &Opts) -> Res<()> {
+    if session.revision() == rev {
         return Ok(());
     }
-    if let Some(path) = o.out.as_ref().or(o.project.as_ref()) {
-        std::fs::write(path, s.project().serialise())
+    if let Some(path) = opts.out.as_ref().or(opts.project.as_ref()) {
+        std::fs::write(path, session.project().serialise())
             .map_err(|e| Fail::Run(format!("cannot write {path}: {e}")))?;
     }
     Ok(())
@@ -207,8 +214,8 @@ fn command_name(text: &str) -> Res<String> {
     ))
 }
 
-fn print_json(v: &Value, o: &Opts) {
-    let text = if o.pretty {
+fn print_json(v: &Value, show: &Show) {
+    let text = if show.pretty {
         serde_json::to_string_pretty(v)
     } else {
         serde_json::to_string(v)
@@ -241,9 +248,9 @@ fn stdin_text() -> Res<String> {
     Ok(t)
 }
 
-fn build_params(command: &str, o: &Opts) -> Res<Value> {
+fn build_params(command: &str, opts: &Opts) -> Res<Value> {
     let mut obj = Map::new();
-    if let Some(p) = &o.params {
+    if let Some(p) = &opts.params {
         let text = if p == "-" {
             stdin_text()?
         } else if let Some(path) = p.strip_prefix('@') {
@@ -258,7 +265,7 @@ fn build_params(command: &str, o: &Opts) -> Res<Value> {
             Err(e) => return usage(format!("--params is not valid JSON: {e}")),
         }
     }
-    for (k, v) in &o.kv {
+    for (k, v) in &opts.kv {
         let text = match v.strip_prefix('@') {
             Some(path) => read_file(path)?,
             None => v.clone(),
@@ -275,23 +282,23 @@ fn build_params(command: &str, o: &Opts) -> Res<Value> {
 
 // ------------------------------------------------------------------ the transport program
 
-fn transport(o: Opts) -> Res<i32> {
-    let Some(sub) = o.rest.first().cloned() else {
+fn transport(opts: &Opts) -> Res<i32> {
+    let Some(sub) = opts.rest.first() else {
         return usage("transport needs a command, or batch, or commands");
     };
     match sub.as_str() {
         "commands" => {
-            if o.names {
+            if opts.names {
                 for c in registry().all() {
                     println!("{}", c.name);
                 }
             } else {
-                print_json(&registry().describe(), &o);
+                print_json(&registry().describe(), &opts.show);
             }
             Ok(0)
         }
-        "batch" => batch(o),
-        _ => single(&sub, o),
+        "batch" => batch(opts),
+        _ => single(sub, opts),
     }
 }
 
@@ -302,40 +309,40 @@ fn raw_text(v: &Value) -> Option<&str> {
         .find_map(|k| v.get(k)?.as_str())
 }
 
-fn single(cmd: &str, o: Opts) -> Res<i32> {
+fn single(cmd: &str, opts: &Opts) -> Res<i32> {
     let name = command_name(cmd)?;
-    if o.rest.len() > 1 {
-        return usage(format!("unexpected argument {}", o.rest[1]));
+    if let Some(extra) = opts.rest.get(1) {
+        return usage(format!("unexpected argument {extra}"));
     }
-    let params = build_params(&name, &o)?;
-    let (mut s, rev) = open_session(&o)?;
-    if o.progress {
-        s.set_progress(|ev| eprintln!("{ev}"));
+    let params = build_params(&name, opts)?;
+    let (mut session, rev) = open_session(opts)?;
+    if opts.show.progress {
+        session.set_progress(|event| eprintln!("{event}"));
     }
-    match s.run(&name, &params) {
-        Ok(v) => {
-            match (o.raw, raw_text(&v)) {
-                (true, Some(t)) => {
+    match session.run(&name, &params) {
+        Ok(result) => {
+            match (opts.show.raw, raw_text(&result)) {
+                (true, Some(text)) => {
                     let out = io::stdout();
-                    let mut h = out.lock();
-                    let _ = h.write_all(t.as_bytes());
-                    let _ = h.flush();
+                    let mut handle = out.lock();
+                    let _ = handle.write_all(text.as_bytes());
+                    let _ = handle.flush();
                 }
-                _ => print_json(&v, &o),
+                _ => print_json(&result, &opts.show),
             }
-            persist(&s, rev, &o)?;
+            persist(&session, rev, opts)?;
             Ok(0)
         }
         Err(e) => Err(fail_json(&e)),
     }
 }
 
-fn batch(o: Opts) -> Res<i32> {
-    if o.rest.len() > 1 {
-        return usage(format!("unexpected argument {}", o.rest[1]));
+fn batch(opts: &Opts) -> Res<i32> {
+    if let Some(extra) = opts.rest.get(1) {
+        return usage(format!("unexpected argument {extra}"));
     }
-    let (mut s, rev) = open_session(&o)?;
-    let lines: Vec<String> = match &o.input {
+    let (mut session, rev) = open_session(opts)?;
+    let lines: Vec<String> = match &opts.input {
         Some(path) => read_file(path)?.lines().map(str::to_string).collect(),
         None => io::stdin().lock().lines().map_while(Result::ok).collect(),
     };
@@ -346,20 +353,23 @@ fn batch(o: Opts) -> Res<i32> {
         }
         let (id, out) = match serde_json::from_str::<Value>(&line) {
             Err(e) => (Value::Null, Err(format!("the line is not valid JSON: {e}"))),
-            Ok(v) => {
-                let id = v.get("id").cloned().unwrap_or(Value::Null);
-                let cmd = v
+            Ok(request) => {
+                let id = request.get("id").cloned().unwrap_or(Value::Null);
+                let cmd = request
                     .get("command")
-                    .or_else(|| v.get("name"))
+                    .or_else(|| request.get("name"))
                     .and_then(Value::as_str);
                 match cmd {
                     None => (id, Err("the line has no `command`".to_string())),
-                    Some(c) => match command_name(c) {
-                        Err(Fail::Usage(m) | Fail::Run(m)) => (id, Err(m)),
+                    Some(text) => match command_name(text) {
+                        Err(Fail::Usage(message) | Fail::Run(message)) => (id, Err(message)),
                         Ok(name) => {
-                            let params = v.get("params").cloned().unwrap_or_else(|| json!({}));
-                            match s.run(&name, &params) {
-                                Ok(r) => (id, Ok(r)),
+                            let params = request
+                                .get("params")
+                                .cloned()
+                                .unwrap_or_else(|| json!({}));
+                            match session.run(&name, &params) {
+                                Ok(result) => (id, Ok(result)),
                                 Err(e) => (id, Err(e.to_value().to_string())),
                             }
                         }
@@ -372,39 +382,39 @@ fn batch(o: Opts) -> Res<i32> {
             reply.insert("id".into(), id);
         }
         match out {
-            Ok(r) => {
+            Ok(result) => {
                 reply.insert("ok".into(), json!(true));
-                reply.insert("result".into(), r);
+                reply.insert("result".into(), result);
             }
-            Err(m) => {
+            Err(message) => {
                 failed = true;
                 reply.insert("ok".into(), json!(false));
-                let e = serde_json::from_str::<Value>(&m)
-                    .unwrap_or_else(|_| json!({ "code": "bad_params", "message": m }));
-                reply.insert("error".into(), e);
+                let error = serde_json::from_str::<Value>(&message)
+                    .unwrap_or_else(|_| json!({ "code": "bad_params", "message": message }));
+                reply.insert("error".into(), error);
             }
         }
-        print_json(&Value::Object(reply), &Opts::default());
-        if failed && o.stop_on_error {
+        print_json(&Value::Object(reply), &Show::default());
+        if failed && opts.stop_on_error {
             break;
         }
     }
-    persist(&s, rev, &o)?;
-    Ok(if failed { 1 } else { 0 })
+    persist(&session, rev, opts)?;
+    Ok(i32::from(failed))
 }
 
-fn serve_mcp(o: Opts) -> Res<i32> {
-    if let Some(extra) = o.rest.first() {
+fn serve_mcp(opts: &Opts) -> Res<i32> {
+    if let Some(extra) = opts.rest.first() {
         return usage(format!("unexpected argument {extra}"));
     }
-    let (s, rev) = open_session(&o)?;
-    let session = Rc::new(RefCell::new(s));
+    let (session, rev) = open_session(opts)?;
+    let session = Rc::new(RefCell::new(session));
     let mut server = mcp::server(Rc::clone(&session), env!("CARGO_PKG_VERSION"));
     server
         .serve_stdio()
         .map_err(|e| Fail::Run(format!("the MCP server stopped: {e}")))?;
-    if o.save || o.out.is_some() {
-        persist(&session.borrow(), rev, &o)?;
+    if opts.save || opts.out.is_some() {
+        persist(&session.borrow(), rev, opts)?;
     }
     Ok(0)
 }
