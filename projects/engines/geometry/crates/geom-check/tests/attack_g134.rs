@@ -1394,17 +1394,136 @@ fn two_lumps_sharing_a_meeting_are_judged_by_their_other_corners() {
 }
 
 #[test]
-fn a_shell_of_meetings_inside_a_bent_one_fails_closed() {
+fn a_shell_of_meetings_inside_a_bent_one_is_found_through_its_stars() {
+    // The big lump has three bent faces, each read as its star: the ray from a corner of the
+    // tilted box is counted against their triangles, and finds the box inside the lump's
+    // material. While nesting read outlines only, the pair waited.
     let mut r = tilted(BOX, &jog(59));
     let mut bent = corners([-500, -500, -500], [1500, 1500, 1500]);
     bent[7][2] += 1;
     add_lump(&mut r, &bent);
-    let certified = Exactness::Certified {
-        bound: Steps(2),
-        step: GridStep::Q0,
-    };
-    let found = report(&r, BodyKind::Solid, certified);
-    assert_eq!(kinds(found.faults()), [FaultKind::PairUnchecked]);
+    let found = report(&r, BodyKind::Solid, within(2));
+    assert_eq!(kinds(found.faults()), [FaultKind::ShellNesting]);
+    assert_eq!(found.faults()[0].at, Entity::Shell(ix(0)));
+    assert_eq!(found.faults()[0].with, Some(Entity::Shell(ix(1))));
+}
+
+/// A box 20 wide and 40 high whose floor is bent: the corner at (20, 20) is lifted 8 steps, so
+/// the floor's four corners leave one plane and no other face's do. `start` is the corner the
+/// floor's ring starts at.
+fn box_with_a_bent_floor(start: usize) -> Rows {
+    let mut points = corners([0, 0, 0], [20, 20, 40]);
+    points[3][2] = 8;
+    let mut floor = BOX_SHELL[0][0].to_vec();
+    floor.rotate_left(start);
+    let mut faces: Vec<&[u32]> = BOX_SHELL.iter().map(|f| f[0]).collect();
+    faces[0] = &floor;
+    polyhedron(&points, &faces)
+}
+
+/// Adds a box of corners `points` to solid region `region` as a cavity's shell, facing inward.
+fn add_cavity(r: &mut Rows, region: u32, points: &[[i64; 3]; 8]) {
+    let s = r.shell(region);
+    let base = r.vertices.len() as u32;
+    for p in points {
+        r.vertex(*p);
+    }
+    let rings: Vec<Vec<u32>> = BOX_SHELL
+        .iter()
+        .map(|f| f[0].iter().rev().map(|v| v + base).collect())
+        .collect();
+    let refs: Vec<&[u32]> = rings.iter().map(Vec::as_slice).collect();
+    faces_into(r, s, &refs);
+}
+
+#[test]
+fn a_shell_just_above_a_bent_floor_is_inside_wherever_the_floor_starts() {
+    // The floor's star rises from its hub, (10, 10, 2), to 2.6 under the small box, which stands
+    // on z = 3: clear of the star and inside the big box. A fan from the floor's first corner is
+    // somewhere else. From (0, 0, 0) or (20, 20, 8) its fold runs between them, 3.6 high under
+    // the small box's first corner, which a count of crossings with that fan puts outside; from
+    // the other two corners its fold lies below. Read through the star there is one answer for
+    // every start: a cavity there is where a cavity may be, and a lump there is inside another
+    // lump's material.
+    let small = corners([9, 9, 3], [2, 2, 2]);
+    for start in 0..4 {
+        let mut hollow = box_with_a_bent_floor(start);
+        add_cavity(&mut hollow, 1, &small);
+        let found = report(&hollow, BodyKind::Solid, within(8));
+        assert_eq!(found.faults(), [], "{start}");
+        let mut lumps = box_with_a_bent_floor(start);
+        add_lump(&mut lumps, &small);
+        let found = report(&lumps, BodyKind::Solid, within(8));
+        assert_eq!(kinds(found.faults()), [FaultKind::ShellNesting], "{start}");
+    }
+    // A step lower the small box stands in the star, and is found crossing it, not nested.
+    let mut sunk = box_with_a_bent_floor(0);
+    add_cavity(&mut sunk, 1, &corners([9, 9, 2], [2, 2, 2]));
+    let found = report(&sunk, BodyKind::Solid, within(8));
+    assert!(kinds(found.faults()).contains(&FaultKind::FacesCross));
+    // In a body recorded Exact the floor's corners are off their plane, and nothing is read.
+    let exact = report(&box_with_a_bent_floor(0), BodyKind::Solid, Exactness::Exact);
+    assert!(kinds(exact.faults()).contains(&FaultKind::VertexOffSurface));
+}
+
+/// A slab over a square of side 20, `thick` steps thick, its floor and roof one saddle: the
+/// corners at (20, 0) and (0, 20) are `rise` steps higher than the other two. Each ring starts
+/// `start` corners on, and all run the other way if `turned`, which turns the slab inside out.
+fn saddle_slab(thick: i64, rise: i64, start: usize, turned: bool) -> Rows {
+    let mut points = corners([0, 0, 0], [20, 20, thick]);
+    for k in [1, 2, 5, 6] {
+        points[k][2] += rise;
+    }
+    let rings: Vec<Vec<u32>> = BOX_SHELL
+        .iter()
+        .enumerate()
+        .map(|(f, face)| {
+            let mut ring = face[0].to_vec();
+            if turned {
+                ring.reverse();
+            }
+            ring.rotate_left((start + f) % 4);
+            ring
+        })
+        .collect();
+    let faces: Vec<&[u32]> = rings.iter().map(Vec::as_slice).collect();
+    polyhedron(&points, &faces)
+}
+
+#[test]
+fn a_bent_shell_has_one_sign_wherever_its_rings_start() {
+    // Six times the slab's volume lies between 2400 t - 800 r and 2400 t + 800 r for thickness t
+    // and rise r: the floor's corners give its area vector 0 or -800 r, the roof's 800 t or
+    // 800 (t + r), and the two flat sides away from the origin 800 t each.
+    for start in 0..4 {
+        // Five thick and one high: outward, and a cavity's shell when turned, from every start.
+        let found = report(&saddle_slab(5, 1, start, false), BodyKind::Solid, within(8));
+        assert_eq!(found.faults(), [], "{start}");
+        let found = report(&saddle_slab(5, 1, start, true), BodyKind::Solid, within(8));
+        assert_eq!(kinds(found.faults()), [FaultKind::ShellInward], "{start}");
+        // One thick and four high, the bracket runs from -800 to 5600: the slab is thinner than
+        // its corners' rounding, and its sign waits, whichever way it faces. Read from each
+        // loop's first corner it was outward from one start and a cavity's from another.
+        for turned in [false, true] {
+            let found = report(
+                &saddle_slab(1, 4, start, turned),
+                BodyKind::Solid,
+                within(8),
+            );
+            assert_eq!(
+                kinds(found.faults()),
+                [FaultKind::Unchecked],
+                "{start} {turned}"
+            );
+            assert_eq!(found.faults()[0].at, Entity::Shell(ix(0)));
+        }
+        // One thick and three high, the least is exactly nothing: no sign either.
+        let found = report(&saddle_slab(1, 3, start, false), BodyKind::Solid, within(8));
+        assert_eq!(kinds(found.faults()), [FaultKind::Unchecked], "{start}");
+        // Two thick and three high, the least is 2400: outward.
+        let found = report(&saddle_slab(2, 3, start, false), BodyKind::Solid, within(8));
+        assert_eq!(found.faults(), [], "{start}");
+    }
 }
 
 #[test]

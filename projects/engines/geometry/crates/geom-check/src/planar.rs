@@ -28,7 +28,10 @@
 //!   meets another where any of its triangles does. A bent face no star can stand for has no
 //!   outline.
 //! - **A point against a shell.** The parity of the crossings of a ray along the line of two of the
-//!   point's planes, moved infinitely little off both, so that no tie is left.
+//!   point's planes, moved infinitely little off both, so that no tie is left. A shell is its
+//!   faces' outlines, a bent face's being the triangles of its star: they close the shell as the
+//!   faces do, and group 3's orientation asks them of every body that is not recorded Exact, so
+//!   that where a shell lies does not depend on where a ring starts either.
 //!
 //! Why a star from the mean, and not a fan from a corner: what the checker finds of a body must
 //! depend on where the body lies and on nothing else. A fan needs a corner to start from, and a
@@ -63,7 +66,8 @@
 //!   the caller's to report. So is a bent face with no star: one with a second loop, one whose
 //!   mean does not see every edge from inside, and one of five or more corners so wide that a
 //!   triangle's plane passes a plane's budget (its normal is the sum of n − 2 normals of triangles
-//!   of grid points, each below 2^82, against the budget's 2^83; a ring of four never does).
+//!   of grid points, each below 2^82, against the budget's 2^83; a ring of four never does). No
+//!   point is given a side of a shell with a face that has neither.
 //! - **Runs on bodies that passed group 2.** Every vertex is on every face it bounds, so a shared
 //!   edge lies on both faces' planes and the other face's plane crosses along it.
 //! - **Charged.** One meter unit per side visited and per pair of sides or stretches compared.
@@ -756,6 +760,18 @@ fn star(a: &Arenas, f: Ix<Face>, sink: &mut Sink<'_, '_>) -> Result<Vec<Outline>
     Ok(if turns { out } else { Vec::new() })
 }
 
+/// What face `f` is made of, as outlines: its own, a star's triangles, or none.
+fn slot(a: &Arenas, f: Ix<Face>, exact: bool, sink: &mut Sink<'_, '_>) -> Result<Slot, Stopped> {
+    Ok(Slot(match outline(a, f, exact, sink)? {
+        Some(one) => {
+            let mut list: Vec<Outline> = reserve(sink.meter(), 1)?;
+            list.push(one);
+            list
+        }
+        None => star(a, f, sink)?,
+    }))
+}
+
 /// One slot per face of `a`.
 pub(crate) fn outlines(
     a: &Arenas,
@@ -764,14 +780,7 @@ pub(crate) fn outlines(
 ) -> Result<Vec<Slot>, Stopped> {
     let mut out: Vec<Slot> = reserve(sink.meter(), u64::from(a.rows(Arena::Face)))?;
     for f in rows::<Face>(a.rows(Arena::Face)) {
-        out.push(Slot(match outline(a, f, exact, sink)? {
-            Some(one) => {
-                let mut list: Vec<Outline> = reserve(sink.meter(), 1)?;
-                list.push(one);
-                list
-            }
-            None => star(a, f, sink)?,
-        }));
+        out.push(slot(a, f, exact, sink)?);
     }
     Ok(out)
 }
@@ -1082,15 +1091,13 @@ fn frame(p: &Corner) -> Option<[Plane; 3]> {
 /// parity of the faces pierced is the side.
 fn point_side(
     p: &Corner,
-    shell: &[Outline],
+    shell: &[Slot],
     sink: &mut Sink<'_, '_>,
 ) -> Result<Option<ShellSide>, Stuck> {
     let [x, y, z] = known(frame(p))?;
     let on = |c: &Corner| [&x, &y, &z].iter().all(|q| c.side(q) == Ok(Sign::Zero));
-    if shell
-        .iter()
-        .any(|o| o.sides.iter().any(|s| on(&s.start.at)))
-    {
+    let outlines = || shell.iter().flat_map(|slot| slot.0.iter());
+    if outlines().any(|o| o.sides.iter().any(|s| on(&s.start.at))) {
         return Ok(None);
     }
     let ray = Cut {
@@ -1098,7 +1105,7 @@ fn point_side(
         second: y,
     };
     let mut inside = false;
-    for o in shell {
+    for o in outlines() {
         sink.charge()?;
         // A face parallel to the ray cannot be crossed by it, even one that holds it unmoved.
         if ray.at(&o.plane).is_none() || ray.order(&Mark(z), &Mark(o.plane))? != Ordering::Less {
@@ -1128,7 +1135,16 @@ fn point_side(
 }
 
 /// Which side of closed shell `t` shell `s` lies on: the side of the first of `s`'s corners that is
-/// not at a corner of `t`, or `None` if there is none, or a face of `t` has no outline.
+/// not at a corner of `t`, or `None` if there is none, or a face of `t` has neither an outline nor
+/// a star.
+///
+/// Each face of `t` is read as group 3 read it against every other face: its outline, or for a
+/// bent face the triangles of its star, which close the shell as the faces do (two neighbours
+/// share their edge, two triangles of a star their spoke). So the side does not depend on where a
+/// ring starts or which way it runs, as the count of a ray's crossings with a fan from each loop's
+/// first corner does on a bent shell (`geom_topo::query::side_of_shell`). Two shells that do not
+/// cross lie wholly on one side of each other, so whichever corner of `s` comes first gives the
+/// one answer, and a corner at a star's hub is passed over like one at a vertex.
 pub(crate) fn shell_side(
     a: &Arenas,
     s: Ix<Shell>,
@@ -1138,16 +1154,19 @@ pub(crate) fn shell_side(
     let of = |shell: Ix<Shell>| {
         rows::<Face>(a.rows(Arena::Face)).filter(move |&f| a.faces.shell.get(f) == Some(&shell))
     };
-    let mut shell: Vec<Outline> = reserve(sink.meter(), count(of(t).count()))?;
+    let mut shell: Vec<Slot> = reserve(sink.meter(), count(of(t).count()))?;
     for f in of(t) {
-        let Some(one) = outline(a, f, false, sink)? else {
-            return Ok(None);
-        };
-        shell.push(one);
+        shell.push(slot(a, f, false, sink)?);
     }
+    // A face nothing stands for would leave the shell open to the ray, so against such a shell no
+    // corner is asked. (No body brings one this far: such a face shares a corner with its
+    // neighbours, so their planes are within twice the bound of each other or cross, and each of
+    // those pairs was reported unchecked before any shell was compared.)
+    let closed = shell.iter().all(|one| !one.0.is_empty());
     let corners = of(s)
         .flat_map(|f| face_fins(a, f))
-        .filter_map(|n| fin_ends(a, n).and_then(|(v, _)| corner(a, v)));
+        .filter_map(|n| fin_ends(a, n).and_then(|(v, _)| corner(a, v)))
+        .filter(|_| closed);
     for p in corners {
         let side = settled(point_side(&p, &shell, sink), None)?;
         if side.is_some() {

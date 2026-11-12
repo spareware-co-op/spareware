@@ -93,7 +93,8 @@ pub fn check(
                 // not cross.
                 if sink.found() == 0 {
                     flat::sense(body, &mut sink)?;
-                    orientation::check(body, &mut scratch, &mut sink)?;
+                    let exact = matches!(exactness, Exactness::Exact);
+                    orientation::check(body, exact, &mut scratch, &mut sink)?;
                 }
                 &mut ran
             }
