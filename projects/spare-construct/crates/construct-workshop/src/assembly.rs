@@ -9,23 +9,28 @@
 //! assembly's, is the kernel's `query.bounding_box` of the bodies where they end up.
 //!
 //! A quarter turn keeps a body Exact. Any other angle is the rotation along the whole-number
-//! direction nearest it (within a hundred-millionth of a degree), which rounds each vertex once;
-//! the answer gives the bound the kernel proved, and this accepts bounds up to the model's
-//! tolerance, 0.01 mm. What the kernel can't do yet stays out and says so where it is asked for:
-//! joints between faces and axes picked on the parts wait for its assembly mates (G479) and
-//! persistent face names, and interference for its booleans (G130 to G133).
+//! direction nearest it (within a hundred-millionth of a degree), which rounds each vertex once,
+//! and this would accept a bound up to the model's tolerance, 0.01 mm. Today the kernel's checker
+//! can't certify a body turned so: rounded corners leave their faces' planes, and a tilted curved
+//! face meets its caps where only exact data is followed. It says so
+//! (`MakeDetail::NotCertifiedYet`, naming G134 for flat faces and G177 for curved ones), and that
+//! instance and its joint wait for the kernel, naming the piece, as a feature does. What else the
+//! kernel can't do yet stays out and says so where it is asked for: joints between faces and axes
+//! picked on the parts wait for its assembly mates (G479) and persistent face names, and
+//! interference for its booleans (G130 to G133).
 //!
 //! The answer: `{ engine, instances: [{ id, part, state, message, m, exactness, bound, bbox }],
 //! joints: [{ id, state, value, message }], bbox, notes }`. `m` maps the part's own space to where
 //! the instance is, 3 rows of 4, row-major, in millimetres, as the page draws it; `state` is
-//! `built`, or `waits` with the kernel's reason when it refused a step, and the page then places
-//! that instance itself.
+//! `built`, `waits` with the kernel piece it waits for, or `failed` with the kernel's reason, and
+//! the page places an instance that isn't built itself. `bbox` holds only the built instances.
 
 use std::collections::BTreeMap;
 
 use engine_geometry::operations::{Moved, bounding_box, move_by, rotate};
 use engine_geometry::value::Exactness;
 use engine_geometry::value::body::Body;
+use engine_geometry::value::error::{MakeDetail, OpError, OpErrorDetail};
 use engine_geometry::value::grid::{GridStep, Steps};
 use engine_geometry::value::transform::{Axis, Rotation};
 use serde::Serialize;
@@ -171,6 +176,25 @@ fn map_of(step: Step) -> [f64; 12] {
     }
 }
 
+/// What the kernel's refusal of a step means here: a body its checker can't certify yet waits for
+/// the piece it names; anything else fails with the kernel's reason.
+fn refused_pose(e: &OpError) -> Refusal {
+    match e.detail() {
+        OpErrorDetail::Make(MakeDetail::NotCertifiedYet { piece }) => {
+            let what = match *piece {
+                "G134" => "certifying a turned body's flat faces",
+                "G177" => "certifying a turned body's curved faces",
+                _ => "certifying a body turned so",
+            };
+            Refusal::Waits(format!(
+                "Turned to this angle, it waits for the kernel's checker: {what} ({piece}). \
+                 Quarter turns are exact today."
+            ))
+        }
+        _ => refused(e),
+    }
+}
+
 /// Puts one body through an instance's steps with the kernel.
 fn place(key: usize, body: &Body, exactness: Exactness, chain: &[Step]) -> Res<(Body, Exactness)> {
     let accept = Some(Exactness::Certified {
@@ -194,7 +218,7 @@ fn place(key: usize, body: &Body, exactness: Exactness, chain: &[Step]) -> Res<(
                 rotate(&c, moved, axis, rotation, point([0, 0, 0])?)
             }
         }
-        .map_err(|e| refused(&e))?;
+        .map_err(|e| refused_pose(&e))?;
         now = (made.result.body, made.exactness);
     }
     Ok(now)
@@ -410,15 +434,20 @@ pub fn pose_assembly(input: &Value) -> Pose {
                     }
                     worst.1 = worst.1.max(bound);
                 }
-                Err(Refusal::Failed(m) | Refusal::Waits(m)) => {
-                    failed = Some(m);
+                Err(r) => {
+                    failed = Some(r);
                     break;
                 }
             }
         }
-        if let Some(m) = failed {
-            row.state = "waits";
-            row.message = format!("{m} Until the kernel can, the page places it.");
+        if let Some(r) = failed {
+            (row.state, row.message) = match r {
+                Refusal::Waits(m) => (
+                    "waits",
+                    format!("{m} Until the kernel can, the page places it."),
+                ),
+                Refusal::Failed(m) => ("failed", format!("{m} The page places it instead.")),
+            };
         } else {
             let (cls, bound) = worst;
             row.exactness = cls;
@@ -437,8 +466,25 @@ pub fn pose_assembly(input: &Value) -> Pose {
         }
         rows.push(row);
     }
+    // a joint the kernel couldn't pose its moving part through says why, as that part does
     let joints = joint_rows
         .into_iter()
+        .zip(&joints)
+        .map(|(row, j)| {
+            let mut row = row?;
+            if row.state == "built"
+                && let Some(moving) = rows.iter().find(|r| r.id == text(j, "b"))
+                && moving.state != "built"
+            {
+                let held = row
+                    .message
+                    .find(" Held at")
+                    .map_or("", |k| &row.message[k..]);
+                row.message = format!("{}{held}", moving.message);
+                row.state = moving.state;
+            }
+            Some(row)
+        })
         .zip(&joints)
         .map(|(row, j)| {
             row.unwrap_or_else(|| JointRow {

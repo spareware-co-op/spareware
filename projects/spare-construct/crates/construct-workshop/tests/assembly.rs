@@ -68,8 +68,53 @@ fn near(a: &Value, b: [[f64; 3]; 2], within: f64) -> bool {
     (0..2).all(|i| (0..3).all(|k| (a[i][k].as_f64().unwrap() - b[i][k]).abs() <= within))
 }
 
+/// An instance's or a body's class and bound.
+fn class_of(v: &Value) -> (String, Option<u64>) {
+    (
+        v["exactness"].as_str().unwrap().to_owned(),
+        v["bound"].as_u64(),
+    )
+}
+
+/// The least exact of a part's bodies as the kernel built them, and the largest bound.
+fn built_class(part: &Value) -> (String, Option<u64>) {
+    let a = serde_json::to_value(build_part(part)).unwrap();
+    let mut worst = ("Exact".to_owned(), None);
+    for b in a["bodies"].as_array().unwrap() {
+        let (c, bound) = class_of(b);
+        if c != "Exact" {
+            worst.0 = c;
+        }
+        worst.1 = worst.1.max(bound);
+    }
+    worst
+}
+
+fn matrix(v: &Value) -> Vec<f64> {
+    v.as_array()
+        .unwrap()
+        .iter()
+        .map(|x| x.as_f64().unwrap())
+        .collect()
+}
+
+/// The box round every built instance's box.
+fn holds_every_built_box(a: &Value) {
+    let whole = &a["bbox"];
+    for i in a["instances"].as_array().unwrap() {
+        if i["state"] != "built" {
+            assert_eq!(i["bbox"], Value::Null, "{i}");
+            continue;
+        }
+        for k in 0..3 {
+            assert!(whole[0][k].as_f64().unwrap() <= i["bbox"][0][k].as_f64().unwrap());
+            assert!(whole[1][k].as_f64().unwrap() >= i["bbox"][1][k].as_f64().unwrap());
+        }
+    }
+}
+
 #[test]
-fn the_kernel_poses_the_hinged_stop() {
+fn the_kernel_poses_the_hinged_stop_and_its_hinge_waits() {
     let s = hinged_stop();
     let a = pose(&s);
     assert_eq!(a["engine"], "kernel");
@@ -79,39 +124,34 @@ fn the_kernel_poses_the_hinged_stop() {
         .iter()
         .map(|i| i["state"].as_str().unwrap())
         .collect();
-    assert_eq!(states, ["built", "built", "built"], "{:#}", a["instances"]);
-    for j in a["joints"].as_array().unwrap() {
-        assert_eq!(j["state"], "built", "{j}");
+    // the bracket where it was put, the block slid; the arm, turned 35°, the kernel can't certify
+    // yet, so it waits, naming the checker piece, and the page places it
+    assert_eq!(states, ["built", "waits", "built"], "{:#}", a["instances"]);
+    let arm = &a["instances"][1];
+    let said = arm["message"].as_str().unwrap();
+    assert!(said.contains("G134") || said.contains("G177"), "{said}");
+    assert!(said.contains("the page places it"), "{said}");
+    assert_eq!(arm["bbox"], Value::Null);
+    // its map is still the one the page draws it by: turned 35° about z at the hinge's origin
+    let m = matrix(&arm["m"]);
+    let (c, sn) = (35f64.to_radians().cos(), 35f64.to_radians().sin());
+    for (got, want) in m
+        .iter()
+        .zip([c, -sn, 0.0, 40.0, sn, c, 0.0, 0.0, 0.0, 0.0, 1.0, 38.0])
+    {
+        assert!((got - want).abs() < 1e-8, "{m:?}");
     }
-    assert!(
-        a["joints"][0]["message"]
-            .as_str()
-            .unwrap()
-            .contains("Turned 35° about z by the kernel's transform.rotate")
-    );
+
+    // the hinge waits as its arm does; the slider is built
+    let hinge = &a["joints"][0];
+    assert_eq!(hinge["state"], "waits", "{hinge}");
+    assert_eq!(hinge["message"], arm["message"]);
+    assert_eq!(a["joints"][1]["state"], "built");
     assert!(
         a["joints"][1]["message"]
             .as_str()
             .unwrap()
-            .contains("transform.move")
-    );
-
-    // the arm, turned 35°, is Certified within the model's tolerance, and its box is where the page
-    // draws it, to within that tolerance and the drawn circle's chords
-    let arm = &a["instances"][1];
-    assert_eq!(arm["exactness"], "Certified");
-    let bound = arm["bound"].as_u64().unwrap();
-    assert!((1..=1600).contains(&bound), "{bound}");
-    let m: Vec<f64> = arm["m"]
-        .as_array()
-        .unwrap()
-        .iter()
-        .map(|v| v.as_f64().unwrap())
-        .collect();
-    assert!(
-        near(&arm["bbox"], drawn_box(&s["parts"][1], &m), 0.01),
-        "{}",
-        arm["bbox"]
+            .contains("Slid 0 mm along x by the kernel's transform.move")
     );
 
     // the block, slid by nothing from its joint's origin, is moved exactly
@@ -122,14 +162,12 @@ fn the_kernel_poses_the_hinged_stop() {
         json!([[-45.0, 13.0, 8.0], [-15.0, 29.0, 24.0]])
     );
 
-    // the assembly's box holds every instance's
-    let whole = &a["bbox"];
-    for i in a["instances"].as_array().unwrap() {
-        for k in 0..3 {
-            assert!(whole[0][k].as_f64().unwrap() <= i["bbox"][0][k].as_f64().unwrap());
-            assert!(whole[1][k].as_f64().unwrap() >= i["bbox"][1][k].as_f64().unwrap());
-        }
-    }
+    // the bracket, grounded at the origin, is its own box
+    let bracket = serde_json::to_value(build_part(&s["parts"][0])).unwrap();
+    assert_eq!(a["instances"][0]["bbox"], bracket["bbox"]);
+    assert_eq!(class_of(&a["instances"][0]), built_class(&s["parts"][0]));
+
+    holds_every_built_box(&a);
 }
 
 #[test]
@@ -139,15 +177,26 @@ fn a_quarter_turn_and_a_slide_are_exact_moves() {
     s["assembly"]["joints"][1]["value"] = json!(5);
     let a = pose(&s);
     let arm = &a["instances"][1];
-    let m: Vec<f64> = arm["m"]
-        .as_array()
-        .unwrap()
-        .iter()
-        .map(|v| v.as_f64().unwrap())
-        .collect();
-    assert!(near(&arm["bbox"], drawn_box(&s["parts"][1], &m), 0.01));
+    assert_eq!(arm["state"], "built", "{arm}");
+    // a quarter turn rounds nothing: the arm is as exact as the kernel built it
+    assert_eq!(class_of(arm), built_class(&s["parts"][1]), "{arm}");
+    assert_eq!(a["joints"][0]["state"], "built");
+    assert!(
+        a["joints"][0]["message"]
+            .as_str()
+            .unwrap()
+            .contains("Turned 90° about z by the kernel's transform.rotate")
+    );
+    // the arm's box is where the page draws it, to within the drawn circle's chords
+    let m = matrix(&arm["m"]);
+    assert!(
+        near(&arm["bbox"], drawn_box(&s["parts"][1], &m), 0.01),
+        "{}",
+        arm["bbox"]
+    );
     assert_eq!(a["instances"][2]["bbox"][0][0], json!(-40.0));
     assert_eq!(a["instances"][2]["exactness"], "Exact");
+    holds_every_built_box(&a);
 }
 
 #[test]
@@ -157,12 +206,14 @@ fn limits_hold_and_what_waits_says_so() {
     s["assembly"]["joints"][1]["type"] = json!("ball");
     let a = pose(&s);
     assert_eq!(a["joints"][0]["value"], json!(120.0));
+    // held at 120°, not a quarter turn, so it waits for the kernel's checker, and says both
+    assert_eq!(a["joints"][0]["state"], "waits");
+    let said = a["joints"][0]["message"].as_str().unwrap();
     assert!(
-        a["joints"][0]["message"]
-            .as_str()
-            .unwrap()
-            .contains("Held at its limit")
+        said.contains("Held at its limit: it was set to 200."),
+        "{said}"
     );
+    assert!(said.contains("waits for the kernel's checker"), "{said}");
     assert_eq!(a["joints"][1]["state"], "waits");
     assert!(a["joints"][1]["message"].as_str().unwrap().contains("G479"));
     // the block, with no joint the kernel can place, stays where it was put
