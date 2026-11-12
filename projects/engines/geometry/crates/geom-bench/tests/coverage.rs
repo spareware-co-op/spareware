@@ -494,6 +494,29 @@ const OTHER_CRATES: &[(&str, &[(&str, &str)])] = &[
         &[
             ("cache", include_str!("../../geom-format/src/cache.rs")),
             ("body", include_str!("../../geom-format/src/body.rs")),
+            (
+                "decode",
+                include_str!("../../geom-format/src/cbor/decode.rs"),
+            ),
+            (
+                "column",
+                include_str!("../../geom-format/src/cbor/column.rs"),
+            ),
+            ("text", include_str!("../../geom-format/src/cbor/text.rs")),
+            ("parse", include_str!("../../geom-format/src/cbor/parse.rs")),
+            ("record", include_str!("../../geom-format/src/record.rs")),
+            ("file", include_str!("../../geom-format/src/file.rs")),
+            ("names", include_str!("../../geom-format/src/names.rs")),
+            ("history", include_str!("../../geom-format/src/history.rs")),
+            (
+                "operation",
+                include_str!("../../geom-format/src/operation.rs"),
+            ),
+            (
+                "container",
+                include_str!("../../geom-format/src/container.rs"),
+            ),
+            ("trust", include_str!("../../geom-format/src/trust.rs")),
         ],
     ),
     (

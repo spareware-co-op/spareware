@@ -4956,22 +4956,6 @@
     },
     {
       "file": "projects/engines/geometry/crates/geom-format/src/cbor/parse.rs",
-      "mutant": "replace Cursor<'_>::bump -> Option<char> with Some(Default::default())",
-      "line_text": "let c = self.peek()?;",
-      "occurrences": 1,
-      "kind": "hangs",
-      "reason": "The cursor never advances, so the first loop that reads past a character (whitespace, a digit, a string) reads the same character for ever. It hangs; it never returns bytes."
-    },
-    {
-      "file": "projects/engines/geometry/crates/geom-format/src/cbor/parse.rs",
-      "mutant": "replace Cursor<'_>::bump -> Option<char> with None",
-      "line_text": "let c = self.peek()?;",
-      "occurrences": 1,
-      "kind": "hangs",
-      "reason": "The cursor never advances, so the first loop that reads past a character (whitespace, a digit, a string) reads the same character for ever. It hangs; it never returns bytes."
-    },
-    {
-      "file": "projects/engines/geometry/crates/geom-format/src/cbor/parse.rs",
       "mutant": "replace | with ^ in hex_float",
       "line_text": "significand = (significand << 4) | u128::from(d);",
       "occurrences": 1,
@@ -5121,14 +5105,6 @@
       "occurrences": 1,
       "kind": "equivalent",
       "reason": "With <=, the loop makes one more pass when width equals the number of entities. That pass has one chunk, split at its full length, so the right run is empty and the merge copies the left run unchanged. The order, and every comparison's outcome, is the same."
-    },
-    {
-      "file": "projects/engines/geometry/crates/geom-name/src/ordinal.rs",
-      "mutant": "replace < with > in sorted",
-      "line_text": "while width < from.len() {",
-      "occurrences": 1,
-      "kind": "hangs",
-      "reason": "With >, for no entity or one the condition 1 > 0 or 1 > 1 holds and stays true as width doubles and saturates at usize::MAX, so the loop never ends and the tests stop it by their timeout. For two or more entities the loop does not run and the unsorted order fails the tests. It hangs or is caught; it never returns a wrong order unnoticed."
     },
     {
       "file": "projects/engines/geometry/crates/geom-format/src/file.rs",

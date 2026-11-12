@@ -270,11 +270,17 @@
             {
               "sha256": "889323ae8306639d37f0a83194768968d86dea765bc9bfcf1efdc2250ba238c1",
               "kind": "corpus",
+              "piece": "#773",
+              "why": "20 new count benchmarks on the Phase 3 readers and writers (Gate 3 dry run, item 5) in six new groups: cbor (G91), record (G92), body_record (G94), name_record (G95), op_record (G96) and open (G108); no existing digest moved"
+            },
+            {
+              "sha256": "d196a2dee27fdbc3bd2b181bfd27eb4bb63e01bbb757ab01a826ecddcd886431",
+              "kind": "corpus",
               "piece": "Phase 4 train 1 (G123 to G155)",
               "why": "Phase 4's first train, one record for its pieces' 31 new count benchmarks: 14 on geom-num's plane functions (G138: plane::determinant_sign and its fellows), mesh/cdt (G153), mesh/exact_build (G146), 6 on the distance comparisons and triangle contact (G151), mesh/envelope (G152), mesh/locate (G147) and 7 scenarios of the flat boolean (G140); and topo/publish's input digest, which moves because a vertex's point is now a PointKind (the G129 fix), while its output digest stays. No other existing digest moved"
             }
           ],
-          "sha256": "4262a6e03b4cb30709a53f5d20da1dbe59700a8b561a1160a6851e5928756a70"
+          "sha256": "7f36a4f05fc85e7e34dfa89e5005509b18af567396103857e3487df4998826c4"
         },
         {
           "id": "geom-nurbs/operations",

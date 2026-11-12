@@ -28,8 +28,10 @@
 //! evaluation, certified enclosures and conversion to NURBS in `geom-curve` and `geom-surface`,
 //! with, from phase 3, `geom-make`'s primitives and transforms,
 //! each named in the catalogue with its crate's path and checked to be a public function there;
-//! and, from phase 3, `geom-topo`'s columns and publishing, `geom-name`'s attribute step, and
-//! `geom-op`'s batch driver and the flat arrays of points.
+//! and, from phase 3, `geom-topo`'s columns and publishing, `geom-name`'s attribute step,
+//! `geom-op`'s batch driver and the flat arrays of points, and `geom-format`'s file readers and
+//! writers: the CBOR decoder and text form, the record layer and files, body, name, history and
+//! operation records, and containers read and opened at either trust.
 //! With them, `geom-mesh`'s triangulation (piece G153).
 //! From piece G140 it also runs the flat boolean's scenarios (23.13's scenarios at reduced scale):
 //! a wall's openings cut in one call, a door moved and cut again from the arrangement cache, a

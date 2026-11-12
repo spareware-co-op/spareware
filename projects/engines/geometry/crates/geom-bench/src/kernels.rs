@@ -2647,3 +2647,238 @@ pub mod scenario {
         });
     }
 }
+
+/// `geom-format`'s CBOR decoder and text form (piece G91; decision 32.46): an item checked, read
+/// as text and read back from it, and a column's rows read, each under an unlimited budget. A
+/// refusal is stored as `None` or `false`; no typical input is refused.
+pub mod cbor {
+    use geom_format::cbor as c;
+    use geom_run::{Budget, WorkMeter};
+
+    use super::run;
+    use crate::inputs::cbor::{DEPTH, ROWS};
+
+    /// A meter under no limit.
+    fn meter() -> WorkMeter<'static> {
+        WorkMeter::new(Budget::UNLIMITED)
+    }
+
+    /// `check` on each item: whether the strict decoder accepts it.
+    #[inline(never)]
+    pub fn check(batch: &[Vec<u8>], out: &mut Vec<bool>) {
+        run(batch, out, |bytes| {
+            c::check(bytes, DEPTH, &mut meter()).is_ok()
+        });
+    }
+
+    /// `int_column` on each column's rows.
+    #[inline(never)]
+    pub fn int_column(batch: &[Vec<u8>], out: &mut Vec<Option<Vec<i64>>>) {
+        run(batch, out, |bytes| {
+            let mut rows = Vec::with_capacity(ROWS);
+            c::int_column(bytes, &mut rows, &mut meter())
+                .ok()
+                .map(|()| rows)
+        });
+    }
+
+    /// `float_column` on each column's rows.
+    #[inline(never)]
+    pub fn float_column(batch: &[Vec<u8>], out: &mut Vec<Option<Vec<f64>>>) {
+        run(batch, out, |bytes| {
+            let mut rows = Vec::with_capacity(ROWS);
+            c::float_column(bytes, &mut rows, &mut meter())
+                .ok()
+                .map(|()| rows)
+        });
+    }
+
+    /// `to_text` on each item.
+    #[inline(never)]
+    pub fn to_text(batch: &[Vec<u8>], out: &mut Vec<Option<String>>) {
+        run(batch, out, |bytes| {
+            c::to_text(bytes, DEPTH, &mut meter()).ok()
+        });
+    }
+
+    /// `from_text` on each item's text.
+    #[inline(never)]
+    pub fn from_text(batch: &[String], out: &mut Vec<Option<Vec<u8>>>) {
+        run(batch, out, |text| {
+            c::from_text(text, DEPTH, &mut meter()).ok()
+        });
+    }
+}
+
+/// `geom-format`'s file readers and writers (pieces G92, G94, G95, G96 and G108; decision 32.46):
+/// records and files, a body's records, names and history records, operation records, and a
+/// container read from a file and opened at each trust, each under an unlimited budget. A refusal
+/// is stored as `None`; no typical input is refused.
+pub mod records {
+    use geom_format::body::{StoredBody, read_body, write_body};
+    use geom_format::container::Container;
+    use geom_format::content::ContentId;
+    use geom_format::file::{ReadFile, read, write};
+    use geom_format::history::{history_record, read_history};
+    use geom_format::names::{names_record, read_names};
+    use geom_format::operation::{Operation, operation_record, read_operation};
+    use geom_format::record::Record;
+    use geom_format::source::SliceSource;
+    use geom_format::trust::{State, Trust, open};
+    use geom_name::NameGraph;
+    use geom_op::{History, OpPath};
+    use geom_run::{Budget, WorkMeter};
+    use geom_topo::Body;
+
+    use super::run;
+    use crate::inputs::records::Pass;
+
+    /// A meter under no limit.
+    fn meter() -> WorkMeter<'static> {
+        WorkMeter::new(Budget::UNLIMITED)
+    }
+
+    /// The `NameScheme` every names record here is read under.
+    const NAME_SCHEME: u64 = 1;
+
+    /// `Record::encode` on each record.
+    #[inline(never)]
+    pub fn record_encode(batch: &[Record], out: &mut Vec<Option<Vec<u8>>>) {
+        run(batch, out, |record| record.encode(&mut meter()).ok());
+    }
+
+    /// `Record::decode` on each record's bytes: the record and the bytes it took.
+    #[inline(never)]
+    pub fn record_decode(batch: &[Vec<u8>], out: &mut Vec<Option<(Record, u64)>>) {
+        run(batch, out, |bytes| {
+            Record::decode(bytes, &mut meter())
+                .ok()
+                .map(|(record, used)| (record, used as u64))
+        });
+    }
+
+    /// `file::write` on each header and its records.
+    #[inline(never)]
+    pub fn file_write(batch: &[(Record, Vec<Record>)], out: &mut Vec<Option<Vec<u8>>>) {
+        run(batch, out, |(header, records)| {
+            write(header, records, &mut meter()).ok()
+        });
+    }
+
+    /// `file::read` on each file's bytes, keeping every record.
+    #[inline(never)]
+    pub fn file_read(batch: &[Vec<u8>], out: &mut Vec<Option<ReadFile>>) {
+        run(batch, out, |bytes| {
+            read(&mut SliceSource::new(bytes), |_, _| true, &mut meter()).ok()
+        });
+    }
+
+    /// `write_body` on each body.
+    #[inline(never)]
+    pub fn body_write(batch: &[Body], out: &mut Vec<Option<StoredBody>>) {
+        run(batch, out, |body| write_body(body, &mut meter()).ok());
+    }
+
+    /// `read_body` on each body's records.
+    #[inline(never)]
+    pub fn body_read(batch: &[StoredBody], out: &mut Vec<Option<Body>>) {
+        run(batch, out, |stored| read_body(stored, &mut meter()).ok());
+    }
+
+    /// `names_record` on each name graph.
+    #[inline(never)]
+    pub fn names_write(batch: &[NameGraph], out: &mut Vec<Option<Record>>) {
+        run(batch, out, |graph| names_record(graph).ok());
+    }
+
+    /// `read_names` on each names record's payload.
+    #[inline(never)]
+    pub fn names_read(batch: &[Vec<u8>], out: &mut Vec<Option<NameGraph>>) {
+        run(batch, out, |payload| {
+            read_names(payload, NAME_SCHEME, &mut meter()).ok()
+        });
+    }
+
+    /// `history_record` on each path and history.
+    #[inline(never)]
+    pub fn history_write(batch: &[(OpPath, History)], out: &mut Vec<Option<Record>>) {
+        run(batch, out, |(op, history)| history_record(op, history).ok());
+    }
+
+    /// `read_history` on each history record's payload.
+    #[inline(never)]
+    pub fn history_read(batch: &[Vec<u8>], out: &mut Vec<Option<(OpPath, History)>>) {
+        run(batch, out, |payload| {
+            read_history(payload, &mut meter()).ok()
+        });
+    }
+
+    /// `operation_record` on each operation.
+    #[inline(never)]
+    pub fn op_write(batch: &[Operation], out: &mut Vec<Option<Record>>) {
+        run(batch, out, |operation| {
+            operation_record(operation, &mut meter()).ok()
+        });
+    }
+
+    /// `read_operation` on each operation record's payload.
+    #[inline(never)]
+    pub fn op_read(batch: &[Vec<u8>], out: &mut Vec<Option<Operation>>) {
+        run(batch, out, |payload| {
+            read_operation(payload, &mut meter()).ok()
+        });
+    }
+
+    /// `Container::from_file` on each file as read.
+    #[inline(never)]
+    pub fn from_file(batch: &[ReadFile], out: &mut Vec<Option<Container>>) {
+        run(batch, out, |file| {
+            Container::from_file(file, &mut meter()).ok()
+        });
+    }
+
+    /// Each root as opened: its body's content ID and where it stands (0 usable, 1 pending, 2
+    /// damaged, 3 failed).
+    pub type Roots = Option<Vec<(Option<ContentId>, u64)>>;
+
+    /// `open` of each container at `trust`.
+    fn opened(container: &Container, trust: Trust) -> Roots {
+        let o = open(
+            container,
+            &container.document,
+            &container.roots,
+            trust,
+            &mut Pass,
+            &mut meter(),
+        )
+        .ok()?;
+        Some(
+            o.entries
+                .into_iter()
+                .map(|entry| {
+                    let state = match entry.state {
+                        State::Usable => 0,
+                        State::Pending => 1,
+                        State::Damaged(_) => 2,
+                        State::Failed(_) => 3,
+                    };
+                    (entry.id, state)
+                })
+                .collect(),
+        )
+    }
+
+    /// `open` of each container from a known source: its current stamp read, so the cheap check
+    /// alone makes the body usable.
+    #[inline(never)]
+    pub fn open_known(batch: &[Container], out: &mut Vec<Roots>) {
+        run(batch, out, |container| opened(container, Trust::Known));
+    }
+
+    /// `open` of each container from an unknown source: the cheap check run, the full check left
+    /// pending.
+    #[inline(never)]
+    pub fn open_unknown(batch: &[Container], out: &mut Vec<Roots>) {
+        run(batch, out, |container| opened(container, Trust::Unknown));
+    }
+}

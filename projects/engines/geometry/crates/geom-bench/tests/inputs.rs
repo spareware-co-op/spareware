@@ -2417,6 +2417,145 @@ fn format_typical_batches_all_succeed() {
     }
 }
 
+/// Runs `kernel` on `batch` and requires a full batch of results, every one `Some`, and returns
+/// them.
+fn all_some<T, R>(name: &str, kernel: fn(&[T], &mut Vec<Option<R>>), batch: &[T]) -> Vec<R> {
+    let mut out = Vec::with_capacity(batch.len());
+    kernel(batch, &mut out);
+    assert_eq!(out.len(), BATCH, "{name}: a batch that is not full");
+    out.into_iter()
+        .enumerate()
+        .map(|(i, r)| {
+            assert!(r.is_some(), "{name}: input {i} refused");
+            r.unwrap()
+        })
+        .collect()
+}
+
+/// Every typical batch of `geom-format`'s CBOR benchmarks (piece G91, decision 32.46) is full and
+/// accepted: every item is canonical, its text reads back to it, and every column reads its rows.
+#[test]
+fn cbor_typical_batches_all_succeed() {
+    use geom_bench::inputs::cbor as m;
+    use geom_bench::kernels::cbor as k;
+    let items = m::check(Typical);
+    let mut out = Vec::with_capacity(BATCH);
+    k::check(&items, &mut out);
+    assert_eq!(out.len(), BATCH);
+    assert!(out.iter().all(|&ok| ok));
+    let items = m::to_text(Typical);
+    let texts = all_some("to_text", k::to_text, &items);
+    let back = all_some("from_text", k::from_text, &texts);
+    assert_eq!(back, items, "the text reads back to its item");
+    all_some("from_text", k::from_text, &m::from_text(Typical));
+    let ints = all_some("int_column", k::int_column, &m::int_column(Typical));
+    assert!(ints.iter().all(|rows| rows.len() == m::ROWS));
+    let floats = all_some("float_column", k::float_column, &m::float_column(Typical));
+    assert!(floats.iter().all(|rows| rows.len() == m::ROWS));
+    for class in [Degenerate, Extreme] {
+        assert!(m::check(class).is_empty());
+        assert!(m::to_text(class).is_empty());
+        assert!(m::from_text(class).is_empty());
+        assert!(m::int_column(class).is_empty());
+        assert!(m::float_column(class).is_empty());
+    }
+}
+
+/// Every typical batch of `geom-format`'s file benchmarks (pieces G92, G94, G95, G96 and G108,
+/// decision 32.46) is full and accepted: what is written reads back as what was written, and
+/// every stamped box opens usable from a known source and pending from an unknown one.
+#[test]
+fn records_typical_batches_all_succeed() {
+    use geom_bench::inputs::records as m;
+    use geom_bench::kernels::records as k;
+    use geom_run::{Budget, WorkMeter};
+    let records = m::record(Typical);
+    let bytes = all_some("record_encode", k::record_encode, &records);
+    let back = all_some("record_decode", k::record_decode, &bytes);
+    for ((record, (read, used)), b) in records.iter().zip(&back).zip(&bytes) {
+        assert_eq!(read, record);
+        assert_eq!(*used, b.len() as u64);
+    }
+    all_some("record_decode", k::record_decode, &m::record_bytes(Typical));
+    let parts = m::file_parts(Typical);
+    let files = all_some("file_write", k::file_write, &parts);
+    let read = all_some("file_read", k::file_read, &files);
+    for ((header, records), file) in parts.iter().zip(&read) {
+        assert_eq!((&file.header, &file.records), (header, records));
+    }
+    all_some("file_read", k::file_read, &m::file(Typical));
+
+    let bodies = m::boxes(Typical);
+    let stored = all_some("body_write", k::body_write, &bodies);
+    let rebuilt = all_some("body_read", k::body_read, &stored);
+    for (s, body) in stored.iter().zip(&rebuilt) {
+        let mut meter = WorkMeter::new(Budget::UNLIMITED);
+        let again = geom_format::body::write_body(body, &mut meter).unwrap();
+        assert_eq!(
+            again.content_id(),
+            s.content_id(),
+            "a body reads back as written"
+        );
+    }
+    all_some("body_read", k::body_read, &m::stored(Typical));
+
+    let graphs = m::graph(Typical);
+    let written = all_some("names_write", k::names_write, &graphs);
+    let payloads: Vec<Vec<u8>> = written.into_iter().map(|r| r.payload).collect();
+    let back = all_some("names_read", k::names_read, &payloads);
+    assert_eq!(back, graphs);
+    all_some("names_read", k::names_read, &m::names_payload(Typical));
+    let histories = m::history(Typical);
+    let written = all_some("history_write", k::history_write, &histories);
+    let payloads: Vec<Vec<u8>> = written.into_iter().map(|r| r.payload).collect();
+    assert_eq!(
+        all_some("history_read", k::history_read, &payloads),
+        histories
+    );
+    all_some(
+        "history_read",
+        k::history_read,
+        &m::history_payload(Typical),
+    );
+
+    let operations = m::operation(Typical);
+    let written = all_some("op_write", k::op_write, &operations);
+    let payloads: Vec<Vec<u8>> = written.into_iter().map(|r| r.payload).collect();
+    assert_eq!(all_some("op_read", k::op_read, &payloads), operations);
+    all_some("op_read", k::op_read, &m::operation_payload(Typical));
+
+    all_some("from_file", k::from_file, &m::read_file(Typical));
+    for (op, kernel, state) in [
+        ("open::known", k::open_known as fn(&[_], &mut Vec<_>), 0),
+        ("open::unknown", k::open_unknown, 1),
+    ] {
+        let roots = all_some(op, kernel, &m::container(op, Typical));
+        for entries in roots {
+            assert_eq!(entries.len(), 1, "{op}: one body");
+            assert!(
+                entries.iter().all(|(id, s)| id.is_some() && *s == state),
+                "{op}"
+            );
+        }
+    }
+    for class in [Degenerate, Extreme] {
+        assert!(m::record(class).is_empty());
+        assert!(m::record_bytes(class).is_empty());
+        assert!(m::file_parts(class).is_empty());
+        assert!(m::file(class).is_empty());
+        assert!(m::boxes(class).is_empty());
+        assert!(m::stored(class).is_empty());
+        assert!(m::graph(class).is_empty());
+        assert!(m::names_payload(class).is_empty());
+        assert!(m::history(class).is_empty());
+        assert!(m::history_payload(class).is_empty());
+        assert!(m::operation(class).is_empty());
+        assert!(m::operation_payload(class).is_empty());
+        assert!(m::read_file(class).is_empty());
+        assert!(m::container("open::known", class).is_empty());
+    }
+}
+
 /// Runs `kernel` on `batch` and requires a full batch of `Ok` results, naming the first error.
 fn all_ok<T, R, E: core::fmt::Debug>(
     name: &str,
