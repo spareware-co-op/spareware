@@ -5113,6 +5113,28 @@
           "target": "bin"
         },
         {
+          "cost": "two reads of the records, and for an accepted body one write and two more reads, each linear in the body, under a work meter of [`WORK`] units each.",
+          "does": "[`decode`] splits the fuzzer's bytes into payloads, each a two-byte little-endian length and that many bytes: the first is a body index, the rest its chunks. [`harness`] makes them a `StoredBody` and reads it with `read_body`. A chunk is found by its payload's content ID, a SHA-256 digest no fuzzer forges, so before reading the harness writes each chunk's real digest over the digest the index lists in its place, and sets the index's `depends` to those IDs, as the writer does; the bytes around them stay exactly as the fuzzer gave them. The corpus starts from bodies `write_body` stored, so the fuzzer edits real chunks and the reader sees them past the hash.",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-fuzz/src/bodies.rs",
+          "guarantees": [
+            "**Any bytes are a case**, the empty string included.",
+            "**A panic is a failure; a broken law is a [`Finding`]** naming it, with the input in hexadecimal. The laws (24.2 to 24.4, as the `body` module header states them): the same verdict twice, from `read_body` and from `chunk_ids`; a refusal's offset inside the payload it read; a body accepted writes with `write_body`, reads back equal, index for index, and its records write again to the same records, a fixed point."
+          ],
+          "job": "Fuzz target: `geom-format`'s body records, read from any index and chunks, give the same answer twice, refuse inside their input, and give back a body that writes and reads to itself.",
+          "method": {
+            "links": [
+              "projects/engines/geometry/architecture/24-file-format-exchange.md",
+              "projects/engines/geometry/architecture/28-testing.md"
+            ],
+            "text": "the laws of `geom-format`'s `body` module header (chapter 24.2 to 24.4, `projects/engines/geometry/architecture/24-file-format-exchange.md`), driven by coverage-guided fuzzing (28.5, `projects/engines/geometry/architecture/28-testing.md`)."
+          },
+          "path": "geom_fuzz::bodies",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
           "cost": "building and querying trees of at most [`MAX_BOXES`] boxes and an index of at most [`MAX_POINTS`] points, and brute force over them, O(n²); at most [`MAX_INPUT_BYTES`] bytes.",
           "does": "[`decode`] turns a fuzzer's bytes into a [`Case`]: up to [`MAX_BOXES`] boxes in two or three dimensions, a query box, a second set of boxes, a set of moved boxes, up to [`MAX_POINTS`] grid points, a centre and a radius. [`check`] builds `geom_bvh::BoxTree`s and a `geom_bvh::CellIndex` and holds every query to the answer of a brute force written here, from the boxes' corners and exact integer distances, never from `geom-bvh`'s own tests: overlapping a box, all overlapping pairs, pairs across two trees, a refit's answers (piece G54), and the points within a radius of a point and all pairs within a radius (G55). [`harness`] is `decode` then `check`.",
           "family": [],
@@ -5221,6 +5243,29 @@
             "text": "the kind contract of chapter 7 as `geom_curve::contract` states it, driven by coverage-guided fuzzing (chapter 28.5), with inputs aimed at the hard cases 28.5 lists (`projects/engines/geometry/architecture/28-testing.md`)."
           },
           "path": "geom_fuzz::curves",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
+          "cost": "each call does work linear in its arguments; each finished item is read twice, by ciborium-ll and by the decoder, each linear in its length, without recursion.",
+          "does": "[`harness`] reads the fuzzer's bytes as a stream of encoder calls, as `geom-op`'s `tests/fuzz.rs` does: each byte chooses the next call and the bytes after it give the call's arguments, so every call is tried in every place, refused ones included (NaN and the infinities, keys out of order or out of place, sets with repeats, items after the whole). Each item that finishes starts a new encoder and may be handed to later calls.",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-fuzz/src/encoder.rs",
+          "guarantees": [
+            "**Any bytes are a case**, the empty string included.",
+            "**A panic is a failure; a broken law is a [`Finding`]** naming it, with the input in hexadecimal. The laws (the encoder's module header): a refused call leaves the encoder as it was, so a copy taken before the call finishes the same as the encoder after it; whatever finishes is one well-formed item with nothing after it, every length definite and every map's keys unsigned and ascending, and ciborium-ll, reading it head by head and writing each head again in its fewest bytes and each double as its shortest float, writes exactly the same bytes; and `geom-format`'s strict decoder (piece G91) accepts it whole."
+          ],
+          "job": "Fuzz target: `geom-op`'s canonical CBOR encoder, on any stream of calls, refuses without a trace and writes only canonical items.",
+          "method": {
+            "links": [
+              "https://www.rfc-editor.org/rfc/rfc8949#section-4.2.1",
+              "projects/engines/geometry/architecture/24-file-format-exchange.md",
+              "projects/engines/geometry/architecture/28-testing.md"
+            ],
+            "text": "the canonical form of RFC 8949 section 4.2.1 (<https://www.rfc-editor.org/rfc/rfc8949#section-4.2.1>) as chapter 24.3 restricts it (`projects/engines/geometry/architecture/24-file-format-exchange.md`), checked against an encoder written elsewhere, ciborium-ll 0.2.2 (the crate's dependencies), and against the kernel's own decoder, the property harness of `geom-op`'s `tests/fuzz.rs` made a fuzz target (28.5, `projects/engines/geometry/architecture/28-testing.md`)."
+          },
+          "path": "geom_fuzz::encoder",
           "provenance": [],
           "spdx": null,
           "target": "lib"
@@ -5338,6 +5383,29 @@
           "target": "lib"
         },
         {
+          "cost": "two reads of the payload and one write, each linear in it.",
+          "does": "[`harness`] takes the fuzzer's first byte as a [`Reader`] and the rest as a payload, and reads it with that reader: `read_names` under the header's `NameScheme`, `read_history`, `read_recipe`, `read_attributes`, or `read_topo_name` for one name. The corpus starts from payloads the writers made from the records of `geom-format`'s names and history tests, so the fuzzer edits real records.",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-fuzz/src/names.rs",
+          "guarantees": [
+            "**Any bytes are a case**, the empty string included.",
+            "**A panic is a failure; a broken law is a [`Finding`]** naming it, with the input in hexadecimal. The laws (24.4 and 32.19, as the module headers state them): the same verdict twice; a refusal's offset inside the payload; and what is accepted, written again by its own writer, is exactly the payload read, since each reader reads by decoding and encoding again."
+          ],
+          "job": "Fuzz target: `geom-format`'s names, history, recipe and attributes records, read from any payload, give the same answer twice, refuse inside their input, and accept only the one canonical encoding of what they read.",
+          "method": {
+            "links": [
+              "projects/engines/geometry/architecture/24-file-format-exchange.md",
+              "projects/engines/geometry/architecture/32-decisions.md",
+              "projects/engines/geometry/architecture/28-testing.md"
+            ],
+            "text": "the laws of `geom-format`'s `names`, `history`, `recipe` and `attributes` module headers (chapter 24.4, `projects/engines/geometry/architecture/24-file-format-exchange.md`, and decision 32.19, `projects/engines/geometry/architecture/32-decisions.md`), driven by coverage-guided fuzzing (28.5, `projects/engines/geometry/architecture/28-testing.md`)."
+          },
+          "path": "geom_fuzz::names",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
           "cost": "one curve, one insertion, one Bernstein decomposition and one interpolation of at most [`MAX_POINTS`] points per input, each bounded by [`WORK`] work units, and their exact evaluations; at most [`MAX_INPUT_BYTES`] bytes read.",
           "does": "[`decode`] turns a fuzzer's bytes into a [`Case`]: a NURBS curve in two or three dimensions (degree 1 to 4, a clamped or uniform knot vector with repeated knots, rational or not), a parameter, a knot to insert and the curve's control points again as data to interpolate. [`check`] builds it with `geom-nurbs` and holds four laws against `geom_test::nurbs_reference`, which computes the same curves in exact rationals:",
           "family": [],
@@ -5356,6 +5424,49 @@
             "text": "the bounds `geom-nurbs` states, checked exactly against the reference implementation of chapter 28.9 (`projects/engines/geometry/architecture/28-testing.md`), as piece G69's law catalogue does, driven here by coverage-guided fuzzing (28.5)."
           },
           "path": "geom_fuzz::nurbs",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
+          "cost": "one read of the file, two writes of it and six opens, each linear in the file, under a work meter of [`WORK`] units each.",
+          "does": "[`decode`] splits the fuzzer's bytes into an [`Edit`] (which blob, where, which byte, and whether it is flipped, inserted or cut) and a file. [`harness`] reads the file with the registry's records, takes it into a `Container`, opens it at both trusts, then makes the edit to one blob, or to the document blob, and opens and salvages it again. It also reads the file's bytes as a stamp's payload, and every stamp the file holds, with `Stamp::read`.",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-fuzz/src/open.rs",
+          "guarantees": [
+            "**Any bytes are a case**, the empty string included.",
+            "**A panic is a failure; a broken law is a [`Finding`]** naming it, with the input in hexadecimal. The laws (24.5 and 24.7, as the `container` and `trust` module headers state them): a container written to a file and read back is the same container; opening gives the same answer twice, at either trust; a changed blob leaves every body that does not need it exactly as it opened before, opens every body that does as damaged, and never stops a document that opened; salvage names only the changed blob; a stamp accepted writes back to the same record, and a stamp refused names an offset inside its payload."
+          ],
+          "job": "Fuzz target: `geom-format`'s containers and trust on open, on any file and any blob changed, give the same answer twice, come back from a file to the same blobs, and keep damage with the body it is in.",
+          "method": {
+            "links": [
+              "projects/engines/geometry/architecture/24-file-format-exchange.md",
+              "projects/engines/geometry/architecture/28-testing.md"
+            ],
+            "text": "the laws of `geom-format`'s `container`, `trust` and `stamp` module headers (chapter 24.5 and 24.7, `projects/engines/geometry/architecture/24-file-format-exchange.md`), the property harness of `geom-format`'s `tests/fuzz_open.rs` made a fuzz target, driven by coverage-guided fuzzing (28.5, `projects/engines/geometry/architecture/28-testing.md`). The checker passes every body, as that harness's does: the target is about reading, not checking."
+          },
+          "path": "geom_fuzz::open",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
+          "cost": "two reads of the payload and one write, each linear in it.",
+          "does": "[`harness`] reads the fuzzer's bytes as an operation record's payload with `read_operation`, the reader every replay of an operation log goes through, and writes back what it read with `Operation::encode`. The corpus starts from payloads written from the operations of `geom-format`'s operation record tests, so the fuzzer edits real records.",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-fuzz/src/operations.rs",
+          "guarantees": [
+            "**Any bytes are a case**, the empty string included.",
+            "**A panic is a failure; a broken law is a [`Finding`]** naming it, with the input in hexadecimal. The laws (the `operation` module header's): the same verdict twice; a refusal's offset inside the payload; and an operation accepted, encoded again, is exactly the payload read, its parameters one canonical item."
+          ],
+          "job": "Fuzz target: `geom-format`'s operation record, read from any payload, gives the same answer twice, refuses inside its input, and accepts only the one canonical encoding of what it reads.",
+          "method": {
+            "links": [
+              "projects/engines/geometry/architecture/21-determinism.md"
+            ],
+            "text": "the laws of `geom-format`'s `operation` module header (chapter 21's replay and 28.13's operation logs, `projects/engines/geometry/architecture/21-determinism.md` and `28-testing.md`), driven by coverage-guided fuzzing (28.5)."
+          },
+          "path": "geom_fuzz::operations",
           "provenance": [],
           "spdx": null,
           "target": "lib"
@@ -5428,6 +5539,28 @@
             "text": "the algebraic laws of section 28.6 of the kernel architecture (`projects/engines/geometry/architecture/28-testing.md`, \"Swapping two points flips the sign\"). Each predicate is the sign of a determinant with one row per point (the points lifted onto the paraboloid z = |p|² for in-circle and in-sphere), as in Shewchuk, \"Adaptive Precision Floating-Point Arithmetic and Fast Robust Geometric Predicates\", Discrete & Computational Geometry 18, 1997 (<https://doi.org/10.1007/PL00009321>), which `geom_num::predicate` follows. Exchanging two points exchanges two rows, and by the Leibniz formula an exchange of two rows negates a determinant, so every transposition must flip the sign. The board names orient2d's swap; the same law is checked on the other three predicates, whose points the harness decodes anyway."
           },
           "path": "geom_fuzz::predicates",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
+          "cost": "each read twice and once split, linear in the input; salvage tries a record at each byte of a damaged span, all under a work meter of [`WORK`] units.",
+          "does": "[`harness`] reads the fuzzer's bytes as the record layer must read any file (24.7: every reader is a fuzz target), with [`check_bytes`]: one record with `Record::decode`, a whole file with `file::read`, from a slice and from a source that splits its reads by the input's own bytes, and a damaged file with `file::salvage`. It then reads the same bytes as a recipe for records ([`decode`]: up to [`MAX_RECORDS`] records, each a type, flags, a schema, `depends` and a payload), writes them with `Record::encode` and `file::write`, and holds what it wrote to the same laws with [`check_built`], so the paths behind a matching check run too.",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-fuzz/src/records.rs",
+          "guarantees": [
+            "**Any bytes are a case**, the empty string included.",
+            "**A panic is a failure; a broken law is a [`Finding`]** naming it, with the input in hexadecimal. The laws: the same verdict on a second read and through a split source; every refusal's offset inside the input; a record or file accepted is exactly the bytes its writer gives back; every record salvage keeps is the bytes at its offset, and every damaged span lies inside the input; whatever the writers accept reads back to what they were given, and writes again to the same bytes."
+          ],
+          "job": "Fuzz target: `geom-format`'s record layer reads any bytes the same way twice and however its source splits them, refuses inside its input, and accepts only canonical records and files.",
+          "method": {
+            "links": [
+              "projects/engines/geometry/architecture/24-file-format-exchange.md",
+              "projects/engines/geometry/architecture/28-testing.md"
+            ],
+            "text": "the laws of `geom-format`'s `record` and `file` module headers (chapter 24.2 and 24.5, `projects/engines/geometry/architecture/24-file-format-exchange.md`), the property harness of `geom-format`'s `tests/fuzz_records.rs` made a fuzz target, driven by coverage-guided fuzzing (28.5, `projects/engines/geometry/architecture/28-testing.md`)."
+          },
+          "path": "geom_fuzz::records",
           "provenance": [],
           "spdx": null,
           "target": "lib"
@@ -8217,7 +8350,7 @@
               "shape": "struct"
             },
             {
-              "doc": "A step this module proves cannot fail did fail: Lemire's 128-bit product or its threshold ([`Stream::below`] and [`Stream::range_inclusive`]), the sum that places a value in its range ([`Stream::range_inclusive`]), or [`Real::new`] on the double [`Stream::next_f64`] made. Each step's proof is written beside it, so no input can cause this, only a defect in geom-num. It is reported rather than answered, because any answer would be a guess, as [`NumError::BudgetExceeded`](crate::NumError::BudgetExceeded) is.",
+              "doc": "A step this module proves cannot fail did fail: Lemire's threshold ([`Stream::below`] and [`Stream::range_inclusive`]), the sum that places a value in its range ([`Stream::range_inclusive`]), or [`Real::new`] on the double [`Stream::next_f64`] made. Each step's proof is written beside it, so no input can cause this, only a defect in geom-num. It is reported rather than answered, because any answer would be a guess, as [`NumError::BudgetExceeded`](crate::NumError::BudgetExceeded) is.",
               "name": "Defect",
               "shape": "unit"
             }
@@ -9353,7 +9486,7 @@
           "guarantees": [
             "**Specified, and checked against the reference.** [`philox4x32_10`] is Philox4x32-10 as its authors specify it (Method, below). The tests reproduce Random123's published known answers (`tests/rng_kat.rs`), and golden hashes pin every draw function's output on every CI target, WebAssembly included (`tests/rng_determinism.rs`).",
             "**Explicit inputs only.** A [`Seed`] and a [`StreamId`] are plain integers the caller writes. There is deliberately no `Default`, no constructor from entropy and no global or thread-local generator.",
-            "**Integers, and no step that wraps or drops a bit unseen.** Every operation is on integers. Wrapping happens only where the method is defined modulo a power of two: the specification's 32 × 32-bit product, formed modulo 2^64 as its reference forms it (it never reaches 2^64), and its key schedule, modulo 2^32; and Lemire's threshold, a negation modulo 2^64. Every other step is a checked method, or exact by construction (words split and joined through their bytes, widening casts, bit masks and shifts by constants with their ranges written beside them, and `abs_diff` where the invariants make it the difference), and each place says why. A checked step's failure either has a meaning, which is then the answer (a stream id past 2^64 − 1 lies past every range's end), or is ruled out by a proof written beside it and reported as [`RngError::Defect`] should it happen all the same, never answered. The floating-point steps, in [`Stream::next_f64`], are exact. So results are the same bits on every target, in debug and release, with overflow checks on or off, and no lint on arithmetic or casts is allowed outside the tests.",
+            "**Integers, and no step that wraps or drops a bit unseen.** Every operation is on integers. Wrapping happens only where the method is defined modulo a power of two: the specification's 32 × 32-bit product, formed modulo 2^64 as its reference forms it (it never reaches 2^64), and its key schedule, modulo 2^32; Lemire's 64 × 64-bit product, formed modulo 2^128 the same way (it never reaches 2^128); and Lemire's threshold, a negation modulo 2^64. Every other step is a checked method, or exact by construction (words split and joined through their bytes, widening casts, bit masks and shifts by constants with their ranges written beside them, and `abs_diff` where the invariants make it the difference), and each place says why. A checked step's failure either has a meaning, which is then the answer (a stream id past 2^64 − 1 lies past every range's end), or is ruled out by a proof written beside it and reported as [`RngError::Defect`] should it happen all the same, never answered. The floating-point steps, in [`Stream::next_f64`], are exact. So results are the same bits on every target, in debug and release, with overflow checks on or off, and no lint on arithmetic or casts is allowed outside the tests.",
             "**Exactly uniform, given uniform words.** [`Stream::below`] and [`Stream::range_inclusive`] give every value of the range from exactly the same number of 64-bit words (Lemire's rejection method, so there is no modulo bias), and [`Stream::next_f64`] gives each of the 2^53 values k · 2^−53 in [0, 1) from exactly 2^11 words. That Philox's words are themselves indistinguishable from uniform and independent is the authors' claim, from the `TestU01` library's Crush batteries: seven rounds of Philox4x32 pass, and ten keep three rounds as a safety margin. This module relies on that claim; it does not prove it.",
             "**Streams never overlap and never wrap.** For one key, Philox is a bijection on counters (each round can be undone; `tests/rng_properties.rs` inverts it), so no two (stream, block) pairs share a block. A stream is 2^64 blocks of four words; moving to the next block carries from counter word 0 into word 1, never into the stream's words. Drawing past the end returns [`RngError::Exhausted`].",
             "**Ranges handed out never overlap.** Chunks of one size cut from one [`StreamRange`] are disjoint and lie inside it, with checked integer arithmetic; a range too small for a request returns [`RngError::TooFewStreams`] (`tests/rng_ranges.rs` checks both against a model in arbitrary-precision integers).",
@@ -9799,6 +9932,8 @@
             "**Well formed or refused.** A basis has a degree from 1 to [`MAX_DEGREE`], at least 2p + 2 knots, every knot finite and none smaller than the one before, no value repeated more than p + 1 times, a finite difference between the last knot and the first, and a domain [`u_p`, `u_(m−p)`] that is more than one value (chapter 24.7). Unclamped knot vectors are accepted, so periodic curves can be stored as they are (chapter 7).",
             "**Parameters inside the domain only.** A parameter that is NaN, infinite or outside the domain is [`NurbsError::ParameterOutside`]; `NLib` clamps it to the nearest span in silence. A domain end is in the last (or first) span with more than one value, found exactly, where `NLib` steps over equal knots within 10^−12.",
             "**Basis values, near exact.** The values of [`Basis::eval`] and [`Basis::eval_one`] lie in [0, 1], and each is within `γ_(6p)` · N of the exact value N for the knots and parameter given: every step of the scheme adds or multiplies quantities that are not negative, and the knot difference that divides each step is at least the term it divides, so each level adds at most six roundings, all relative. On a clamped knot vector the values at the ends of the domain are exactly 1 and 0. [`Basis::eval_derivs`] gives the same bits for the values as [`Basis::eval`].",
+            "**The p + 1 functions are right on every knot range.** [`Basis::eval`] and [`Basis::eval_derivs`] keep their bounds on every basis [`Basis::new`] accepts, up to a knot range of the largest double, and never refuse one for its size. Their schemes divide by the sum of two rounded differences, each finite, and on such a range the sum can round to infinity. Where it does, the knot difference the sum stands for divides instead: it is finite, it is at least each difference it divides, and it carries one rounding in place of three, so the bounds hold as written. Where the sum is finite it divides, as it always has.",
+            "**Relative bounds, so for runs in which nothing underflows.** A quotient, product or derivative below 2^−1022 is rounded to the spacing of the doubles there, 2^−1074, and no bound here counts that rounding. A first derivative on a range near the largest double is such a value. So is an intermediate of [`Basis::eval_one`] and [`Basis::eval_one_derivs`] where a knot difference is above 2^1022 times the lower-degree value it divides, or a difference times such a value is below 2^−1022: they divide a value by one knot difference before they multiply it by another, or multiply before they divide, in `NLib`'s order. So on a knot range wide enough or narrow enough (the widest is one) a function of ordinary size loses bits its bound needs and a small one can come out 0; their bounds hold while no such intermediate underflows.",
             "**Derivatives, bounded by their magnitudes.** Each derivative of order k ≥ 1 is within `γ_(6p+2)` · M of the exact derivative, where M is the same scheme run on magnitudes: every difference of two terms replaced by the sum of their absolute values, with the exact knots and parameter. Each level of the derivative scheme adds at most four roundings to the terms it combines and the sums and the final factor p!/(p − k)! at most 2k more, so 6p + 2 covers every order (the tests check this bound against exact rationals). A derivative that overflows, which a span far shorter than its neighbours can cause, is [`NurbsError::NotFinite`]; the functions never return a value that is not finite.",
             "**Deterministic.** Only IEEE 754 addition, subtraction, multiplication and division in the fixed order written here; no fused multiply-add, no platform maths."
           ],
@@ -9823,7 +9958,7 @@
                 "SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved."
               ],
               "pinned": true,
-              "purpose": "translated to safe `no_std` Rust from `N_BasisFindSpan`, `N_BasisEval`, `N_BasisDerivs`, `N_BasisIEval` and `N_BasisIDerivs`; a parameter outside the domain is an error instead of being clamped, and the domain's ends find their span exactly instead of stepping over knots within 10^−12; the span search stops by its loop invariant, without `NLib`'s guard against a repeated midpoint; the end shortcuts of `N_BasisEval` are dropped, because its scheme gives the same exact values there, and those of `N_BasisIEval` apply only to a clamped end, where they are exact; the zero-divisor guard (10^−24) is dropped, because a valid basis never divides by a difference that is not positive; the factor p!/(p − k)! is a double rather than an integer, which overflowed past degree 12; the checks of `N_KnotVectorIsValid` are those of chapter 24.7, which also accept unclamped knots and interior knots repeated p + 1 times; every result that could overflow is checked.",
+              "purpose": "translated to safe `no_std` Rust from `N_BasisFindSpan`, `N_BasisEval`, `N_BasisDerivs`, `N_BasisIEval` and `N_BasisIDerivs`; a parameter outside the domain is an error instead of being clamped, and the domain's ends find their span exactly instead of stepping over knots within 10^−12; the span search stops by its loop invariant, without `NLib`'s guard against a repeated midpoint; the end shortcuts of `N_BasisEval` are dropped, because its scheme gives the same exact values there, and those of `N_BasisIEval` apply only to a clamped end, where they are exact; the zero-divisor guard (10^−24) is dropped, because a valid basis never divides by a difference that is not positive; the factor p!/(p − k)! is a double rather than an integer, which overflowed past degree 12; a step of `N_BasisEval` or `N_BasisDerivs` whose sum of two differences is past the largest double divides by the knot difference instead; the checks of `N_KnotVectorIsValid` are those of chapter 24.7, which also accept unclamped knots and interior knots repeated p + 1 times; every result that could overflow is checked.",
               "take": "port"
             }
           ],
