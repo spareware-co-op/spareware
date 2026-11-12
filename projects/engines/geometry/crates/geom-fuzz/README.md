@@ -24,7 +24,17 @@ each output exactly what section 8.4's table gives; `batch` (`src/batch.rs`, G10
 batch driver gives each item its own result, and the many-point calls give the single calls' bits;
 `make` (`src/make.rs`, G101), the primitives and transforms return only what the full checker
 passes, keep their laws, and refuse with a typed error; and `sequence` (`src/sequence.rs`, G116),
-whole operation logs replay to the same hash and keep every law at every step. `src/adversarial.rs`
+whole operation logs replay to the same hash and keep every law at every step. For Gate 3 (24.7:
+every reader is a fuzz target): `encoder` (`src/encoder.rs`, G86), `geom-op`'s canonical encoder
+refuses without a trace and writes only canonical items; `records` (`src/records.rs`, G92), the
+record layer reads the same twice and however its reads split, refuses inside its input and
+accepts only canonical records and files; `bodies` (`src/bodies.rs`, G94), body records read the
+same twice and give a body that writes and reads to itself; `names` (`src/names.rs`, G95) and
+`operations` (`src/operations.rs`, G96), the names, history, recipe, attributes and operation
+records accept only the one encoding of what they read; and `open` (`src/open.rs`, G108), a
+container comes back from a file to the same blobs and trust on open keeps damage with the body
+it is in. Their corpora start from the writers' output for the fixtures of `geom-format`'s own
+tests. `src/adversarial.rs`
 holds the generators aimed at the hard cases, and `src/robustness.rs` counts how many plain designs
 succeed per family: `src/robustness.txt` records it, and a count may not fall.
 
@@ -170,6 +180,17 @@ cargo bolero test orient2d_fuzz --package geom-fuzz --toolchain nightly-2026-10-
 
 `-T` bounds the run; `--runs`, `--jobs` and `--max-input-length` are the other limits. A crash is
 written to `tests/__fuzz__/orient2d/crashes`, where `cargo test` replays it.
+
+`--timeout` (10 seconds unless given; both workflows give it) bounds one input: an input that runs
+that long stops the run, which fails, and libFuzzer writes it to the same folder as
+`timeout-<sha1>`. That is a slow or hung input, not a broken law, so find why it is slow rather
+than leave it with the crash files, where `cargo test` would replay it every time. libFuzzer
+enforces the limit only on the thread that runs the fuzzer, and cargo-bolero starts the fuzzer
+inside the test harness, on a thread of its own, while the timer's signal goes to the main thread;
+so on Linux each target's test makes it work itself: the first `holds` under libFuzzer starts a
+thread that sends that signal to the fuzzing thread once a second, and libFuzzer's own handler
+decides (`tests/common/mod.rs`, issue #764). Before that the limit never fired. On macOS it still
+does not.
 
 **Campaigns.** `.github/workflows/kernel-fuzz-campaign.yml` runs every target under libFuzzer for
 five hours each night, one shard each. On demand it runs `wide_fuzz` in five shards of five hours,

@@ -225,8 +225,12 @@ fn tie<const N: usize>(
             }
             rows_used |= row_bit;
             cols_used |= col_bit;
-            if let Some(row) = m.get_mut(arg) {
-                *row = core::array::from_fn(|j| i128::from(j == column));
+            // The row of argument `arg`, found by walking the rows: `arg` is one of them, so no
+            // lookup can miss.
+            for (r, row) in m.iter_mut().enumerate() {
+                if r == arg {
+                    *row = core::array::from_fn(|j| i128::from(j == column));
+                }
             }
         }
         if !valid {

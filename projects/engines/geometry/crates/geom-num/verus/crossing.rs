@@ -30,6 +30,17 @@ use crate::wide::*;
 
 verus! {
 
+// ---- The step that cannot fail where it is asked for (the coverage gate's proof, 28.8).
+
+/// Called in `side_total` after `side::<4>` gave `None`. Its precondition is `false`, so Verus
+/// accepts the call only where it proves control cannot arrive: with the four turns below 2^84 in
+/// magnitude, which `side_total` requires, `side` always fits four limbs.
+pub proof fn side_always_fits()
+    requires
+        false,
+{
+}
+
 /// Whether both coordinates of p are on the grid.
 pub open spec fn on_grid2(p: P2) -> bool {
     p.x.on_grid() && p.y.on_grid()
@@ -302,14 +313,8 @@ impl Ssi {
         let Some(w) = oa.checked_sub(ob) else {
             return Err(NumError::BudgetExceeded);
         };
-        let s = match side::<4>(oa, ob2, ob, oa2) {
-            Some(s) => Some(s),
-            None => side::<5>(oa, ob2, ob, oa2),
-        };
-        match s {
-            Some(s) => Ok(s.mul(Sign::of_i128(w))),
-            None => Err(NumError::BudgetExceeded),
-        }
+        let s = side_total(oa, ob2, ob, oa2)?;
+        Ok(s.mul(Sign::of_i128(w)))
     }
 }
 
@@ -374,5 +379,39 @@ fn side<const L: usize>(oa: i128, ob2: i128, ob: i128, oa2: i128) -> Option<Sign
     let left = Wide::<L>::product_i128(oa, ob2)?;
     let right = Wide::<L>::product_i128(ob, oa2)?;
     Some(left.checked_sub(&right)?.signum())
+}
+
+/// [`side`] in [`I256`], then in [`I320`] should a step there not fit (the total path of
+/// [`Ssi::orient2d`]), and [`NumError::BudgetExceeded`] should neither fit.
+///
+/// For the turns of grid points the first always fits, so nothing after it can run. Verus proves
+/// it: the twin (`verus/crossing.rs`) requires each of the four turns below 2^84 in magnitude,
+/// which Verus checks at the call, and after a first `None` it calls `side_always_fits`, whose
+/// precondition is `false`. The function is marked for the coverage gate (28.8).
+// proof: projects/engines/geometry/crates/geom-num/verus/crossing.rs::side_always_fits
+#[cfg_attr(coverage_nightly, coverage(off))]
+#[verus_spec(res =>
+    requires
+        -bound_84() < oa < bound_84(),
+        -bound_84() < ob2 < bound_84(),
+        -bound_84() < ob < bound_84(),
+        -bound_84() < oa2 < bound_84(),
+    ensures
+        res == Ok::<Sign, NumError>(sign_of(oa as int * ob2 as int - ob as int * oa2 as int)),
+)]
+fn side_total(oa: i128, ob2: i128, ob: i128, oa2: i128) -> Result<Sign, NumError> {
+    match side::<4>(oa, ob2, ob, oa2) {
+        Some(s) => Ok(s),
+        None => {
+            // Never, for the turns of grid points (the proof cited above).
+            proof! {
+                side_always_fits();
+            }
+            match side::<5>(oa, ob2, ob, oa2) {
+                Some(s) => Ok(s),
+                None => Err(NumError::BudgetExceeded),
+            }
+        }
+    }
 }
 
