@@ -18,9 +18,11 @@ use geom_num::plane::{Plane, Tpi};
 use geom_num::{NumError, P3, Sign};
 use geom_poly::convex::Piece;
 use geom_poly::cut::{Clipped, clip, local_cuts};
-use geom_poly::trace::{Cell, Classified, Polygon, TraceError, classify, winding_at};
+use geom_poly::trace::{
+    Cell, Classified, Polygon, TraceError, classify, classify_inside, winding_at,
+};
 use geom_poly::winding::{Kept, Winding, WindingError, WindingTest, kept};
-use geom_run::{Budget, WorkMeter};
+use geom_run::{Budget, Cancel, POLL_EVERY, Usage, WorkMeter};
 use proptest::prelude::*;
 
 fn meter() -> WorkMeter<'static> {
@@ -435,6 +437,81 @@ fn the_same_polygons_give_the_same_vectors() {
         },
     ];
     assert_eq!(scene(&blocks), scene(&blocks));
+}
+
+/// A cancellation source that never asks to stop, and counts how often it is read.
+struct Asked(std::sync::atomic::AtomicUsize);
+
+impl Cancel for Asked {
+    fn requested(&self) -> bool {
+        self.0.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+        false
+    }
+}
+
+#[test]
+fn polygons_inside_their_box_are_classified_by_each_path_s_first_leg() {
+    // classify_inside: every polygon strictly inside the box, so a path's legs past its first run
+    // just inside the box's walls, where no polygon is, and are neither traced nor charged.
+    let scenes: [&[Block]; 3] = [
+        &[A],
+        &[
+            A,
+            Block {
+                low: [2, -2, 1],
+                high: [7, 3, 3],
+            },
+        ],
+        &[
+            A,
+            Block {
+                low: [1, 1, 1],
+                high: [3, 3, 3],
+            },
+            Block {
+                low: [2, 2, -3],
+                high: [9, 5, 2],
+            },
+            Block {
+                low: [-6, 0, 0],
+                high: [1, 4, 4],
+            },
+        ],
+    ];
+    let cell = Cell {
+        low: [-100; 3],
+        high: [100; 3],
+    };
+    for blocks in scenes {
+        let polygons: Vec<Polygon> = blocks
+            .iter()
+            .enumerate()
+            .flat_map(|(i, b)| faces(b, Some(i as u32)))
+            .collect();
+        let cuts = local_cuts(&pieces_of(&polygons), &mut meter()).unwrap();
+        let whole = classify(&cell, &Winding::new(), &polygons, &cuts, &mut meter()).unwrap();
+        // A unit for each polygon on each piece's first leg and across it, nothing more.
+        let pieces: usize = cuts.iter().map(Vec::len).sum();
+        let charges = 2 * pieces * polygons.len();
+        // Each unit a charge of its own: the meter reads the cancellation every POLL_EVERY
+        // charges, so started at each place in that count, the reads it makes show how many
+        // charges the call made, one more included.
+        for before in 0..POLL_EVERY {
+            let asked = Asked(std::sync::atomic::AtomicUsize::new(0));
+            let mut first = meter().with_cancel(&asked);
+            for _ in 0..before {
+                first.charge(1).unwrap();
+            }
+            let inside =
+                classify_inside(&cell, &Winding::new(), &polygons, &cuts, &mut first).unwrap();
+            assert_eq!(inside, whole, "{blocks:?}");
+            let used = (before + charges) as u128;
+            assert_eq!(first.used(), Usage::new(used, 0), "{blocks:?}");
+            let read = asked.0.load(std::sync::atomic::Ordering::Relaxed);
+            assert_eq!(read, (before + charges) / POLL_EVERY, "{blocks:?}, {before}");
+        }
+        agrees(blocks, &whole);
+    }
 }
 
 #[test]

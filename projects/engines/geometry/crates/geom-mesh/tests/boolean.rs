@@ -333,9 +333,15 @@ fn solids_give_what_their_arrays_give() {
         let made = ExactMesh::new(m.parts().clone(), &Exec::serial(), &mut meter()).unwrap();
         assert!(!made.is_solid());
         assert_eq!(&made, m);
+        // Known to be a solid or not, one mesh prints as one.
+        assert_eq!(format!("{made:?}"), format!("{m:?}"));
         made
     };
     let (pa, pb, pc) = (plain(&a), plain(&b), plain(&c));
+    // Meshes of other arrays are not equal, and print otherwise.
+    assert!(pa != pb && pb != pc && a != c);
+    assert_ne!(format!("{pa:?}"), format!("{pb:?}"));
+    assert!(format!("{pa:?}").starts_with("ExactMesh { parts: Parts {"));
     for test in [
         WindingTest::unite(),
         WindingTest::intersect(2),

@@ -916,3 +916,33 @@ fn points_that_break_the_rules_are_refused() {
     // A grid point short of a coordinate.
     assert!(shape(&with(points(&kinds, &all[4..], &[1, 3, 5]))));
 }
+
+#[test]
+fn a_chunk_of_another_width_is_refused_before_it_is_read() {
+    let stored = store(&mixed(&[]));
+    let columns = |s: &StoredBody| {
+        matches!(
+            read_body(s, &mut meter()),
+            Err(BodyError::Shape("a chunk with another number of columns"))
+        )
+    };
+    let all: Vec<i64> = (0..8).flat_map(corner).collect();
+    // Points have one column or, holding meetings, three: two is neither.
+    let two = chunk(8, 8, 2, |e| {
+        e.array(8).unwrap();
+        for _ in 0..8 {
+            e.uint(0).unwrap();
+        }
+        e.i64_column(&all).unwrap();
+    });
+    assert!(columns(&swap(&stored, 8, Some(8), vec![two])));
+    // Three columns are a points chunk's alone: the plane pool has one.
+    let three = chunk(16, 6, 3, |e| {
+        for _ in 0..3 {
+            e.array(0).unwrap();
+        }
+    });
+    assert!(columns(&swap(&stored, 16, Some(6), vec![three])));
+    // The writer's own chunks, as a control, read back.
+    assert!(read_body(&stored, &mut meter()).is_ok());
+}

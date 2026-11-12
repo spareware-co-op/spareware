@@ -5283,14 +5283,6 @@
       "reason": "The numbers layer refuses nothing a plane within budget can reach (6.2), so no test can make this arm run. Without it the error would come out as ResultInvalid instead of the numbers layer's own: still an error, never a body."
     },
     {
-      "file": "projects/engines/geometry/crates/geom-bool/src/operand.rs",
-      "mutant": "replace != with == in side_of_fin",
-      "line_text": "while at != own {",
-      "occurrences": 1,
-      "kind": "hangs",
-      "reason": "The radial walk stops when it comes back to the fin it started from. The mutant skips the walk at once for that fin and for every other one walks past it for ever, or until the same fin comes round, so the tests stop it by their timeout. It hangs; it never returns a wrong side."
-    },
-    {
       "file": "projects/engines/geometry/crates/geom-bool/src/wires.rs",
       "mutant": "replace > with >= in line",
       "line_text": "if change.saturating_abs() > most {",
@@ -5329,14 +5321,6 @@
       "occurrences": 1,
       "kind": "equivalent",
       "reason": "axis is the normal's largest component in magnitude, and a plane's normal is never zero (Plane::new refuses one), so that component is never 0 and < 0 and <= 0 agree."
-    },
-    {
-      "file": "projects/engines/geometry/crates/geom-bool/src/certificate.rs",
-      "mutant": "replace == with != in pairs_up",
-      "line_text": "if at == first {",
-      "occurrences": 1,
-      "kind": "hangs",
-      "reason": "The radial walk stops when it comes back to the edge's first fin. The mutant stops at the second fin and otherwise walks the ring for ever, on any edge with more than two fins, so the tests stop it by their timeout. It hangs; it never passes a body."
     },
     {
       "file": "projects/engines/geometry/crates/geom-bool/src/names.rs",
@@ -6140,14 +6124,6 @@
     },
     {
       "file": "projects/engines/geometry/crates/geom-poly/src/subdivide.rs",
-      "mutant": "replace < with == in splits",
-      "line_text": "(low < odd && odd < high).then_some(odd)",
-      "occurrences": 2,
-      "kind": "hangs",
-      "reason": "A box split at the same plane every time, or outside itself, has a child equal to itself, so the level-by-level subdivision never runs out of boxes over SUBTREE_POLYGONS and the tests stop it by their timeout. It hangs; it never returns a wrong arrangement."
-    },
-    {
-      "file": "projects/engines/geometry/crates/geom-poly/src/subdivide.rs",
       "mutant": "replace < with <= in splits",
       "line_text": "(low < odd && odd < high).then_some(odd)",
       "occurrences": 2,
@@ -6201,14 +6177,6 @@
       "occurrences": 1,
       "kind": "equivalent",
       "reason": "With && the shortcut runs only when both rests are zero; when one is, the general comparison that follows orders 0 / over against r / o the same way."
-    },
-    {
-      "file": "projects/engines/geometry/crates/geom-poly/src/merge.rs",
-      "mutant": "replace narrow_order -> Option<Ordering> with None",
-      "line_text": "let wide = I256::from_i128;",
-      "occurrences": 1,
-      "kind": "equivalent",
-      "reason": "Without cells the merge compares the point or line in wide integers, the same order exactly (far_tilted_solids_merge_in_wide_integers and two_tilted_solids_moved_to_the_frame_s_far_corner reach that path); only the work changes."
     },
     {
       "file": "projects/engines/geometry/crates/geom-poly/src/merge.rs",
@@ -6281,14 +6249,6 @@
       "occurrences": 1,
       "kind": "equivalent",
       "reason": "Without cells the merge compares the point or line in wide integers, the same order exactly (far_tilted_solids_merge_in_wide_integers and two_tilted_solids_moved_to_the_frame_s_far_corner reach that path); only the work changes."
-    },
-    {
-      "file": "projects/engines/geometry/crates/geom-poly/src/merge.rs",
-      "mutant": "replace & with | in splits_boxes",
-      "line_text": "&& plane.d() & 1 != 0",
-      "occurrences": 1,
-      "kind": "equivalent",
-      "reason": "plane.d() | 1 is never 0, so the test becomes 'one non-zero normal component of size 2'. A canonical plane with such a normal has an odd offset (Plane::new divides out the common factor), so the same planes are found: the boxes' own sides."
     },
     {
       "file": "projects/engines/geometry/crates/geom-poly/src/merge.rs",
@@ -6524,14 +6484,6 @@
     },
     {
       "file": "projects/engines/geometry/crates/geom-poly/src/order.rs",
-      "mutant": "replace && with || in Meeting::rounded",
-      "line_text": "let up = twice > w || (twice == w && floor.checked_rem_euclid(2)? == 1);",
-      "occurrences": 1,
-      "kind": "equivalent",
-      "reason": "rounded only places the root box (subdivide's nearest, through range_of and cell_around), whose sides lie a step and a half past the rounded corners. None and every one of these roundings put a corner within one step of the true point, or hand it to the exact Tpi::to_grid, so every polygon stays inside the box; the arrangement does not depend on where the box falls (a_small_leaf_gives_the_vectors_a_large_one_does)."
-    },
-    {
-      "file": "projects/engines/geometry/crates/geom-poly/src/order.rs",
       "mutant": "replace == with != in Meeting::rounded",
       "line_text": "let up = twice > w || (twice == w && floor.checked_rem_euclid(2)? == 1);",
       "occurrences": 2,
@@ -6541,30 +6493,6 @@
     {
       "file": "projects/engines/geometry/crates/geom-poly/src/order.rs",
       "mutant": "replace Meeting::floors -> Option<[i64; 3]> with None",
-      "line_text": "if let Some((x, w)) = self.words",
-      "occurrences": 1,
-      "kind": "equivalent",
-      "reason": "Floors only build spans, which let a pair of polygons whose spans miss skip the cut. None, or one value for every point, makes no spans miss, so nothing is skipped and the result is the same. The other path's division by a negative w gives the true floor or one more, and a span runs a step below its lowest floor and two above its highest, so it still holds every point with its moves: a skipped pair is still apart."
-    },
-    {
-      "file": "projects/engines/geometry/crates/geom-poly/src/order.rs",
-      "mutant": "replace Meeting::floors -> Option<[i64; 3]> with Some([0; 3])",
-      "line_text": "if let Some((x, w)) = self.words",
-      "occurrences": 1,
-      "kind": "equivalent",
-      "reason": "Floors only build spans, which let a pair of polygons whose spans miss skip the cut. None, or one value for every point, makes no spans miss, so nothing is skipped and the result is the same. The other path's division by a negative w gives the true floor or one more, and a span runs a step below its lowest floor and two above its highest, so it still holds every point with its moves: a skipped pair is still apart."
-    },
-    {
-      "file": "projects/engines/geometry/crates/geom-poly/src/order.rs",
-      "mutant": "replace Meeting::floors -> Option<[i64; 3]> with Some([1; 3])",
-      "line_text": "if let Some((x, w)) = self.words",
-      "occurrences": 1,
-      "kind": "equivalent",
-      "reason": "Floors only build spans, which let a pair of polygons whose spans miss skip the cut. None, or one value for every point, makes no spans miss, so nothing is skipped and the result is the same. The other path's division by a negative w gives the true floor or one more, and a span runs a step below its lowest floor and two above its highest, so it still holds every point with its moves: a skipped pair is still apart."
-    },
-    {
-      "file": "projects/engines/geometry/crates/geom-poly/src/order.rs",
-      "mutant": "replace Meeting::floors -> Option<[i64; 3]> with Some([-1; 3])",
       "line_text": "if let Some((x, w)) = self.words",
       "occurrences": 1,
       "kind": "equivalent",
@@ -6668,27 +6596,27 @@
     },
     {
       "file": "projects/engines/geometry/crates/geom-poly/src/trace.rs",
-      "mutant": "replace > with == in classify",
+      "mutant": "replace > with == in held_of",
       "line_text": "let span = (paths > 1).then(|| piece_span(&polygon.piece)).flatten();",
       "occurrences": 1,
       "kind": "equivalent",
-      "reason": "paths > 1 only decides whether spans are made for skipping; with or without them the counts are the same."
+      "reason": "held_of only decides whether each polygon is given a Span, and a span is read in one place: count_crossing returns early, adding nothing, when the segment's span misses the polygon's. Span::of holds every point within a unit of the points it is made from, so the segment's span holds the segment (the box of its two ends, a step wider) and the polygon's holds the convex polygon (the box of its corners, a step wider); spans that miss share no point, so the segment cannot cross the polygon, and without the span count_crossing finds the same: its two end readings agree or the crossing is not covered, and it adds nothing. The meter is charged before count_crossing whether a span is there or not, so the work and the reads of the cancellation are the same; the readings it then makes cannot fail for planes within budget, which Plane::new enforces. The mutant (spans for one path only, for none, or for every count) changes only how many polygons are skipped, never a vector, a count, a charge or an error."
     },
     {
       "file": "projects/engines/geometry/crates/geom-poly/src/trace.rs",
-      "mutant": "replace > with >= in classify",
+      "mutant": "replace > with >= in held_of",
       "line_text": "let span = (paths > 1).then(|| piece_span(&polygon.piece)).flatten();",
       "occurrences": 1,
       "kind": "equivalent",
-      "reason": "paths > 1 only decides whether spans are made for skipping; with or without them the counts are the same."
+      "reason": "held_of only decides whether each polygon is given a Span, and a span is read in one place: count_crossing returns early, adding nothing, when the segment's span misses the polygon's. Span::of holds every point within a unit of the points it is made from, so the segment's span holds the segment (the box of its two ends, a step wider) and the polygon's holds the convex polygon (the box of its corners, a step wider); spans that miss share no point, so the segment cannot cross the polygon, and without the span count_crossing finds the same: its two end readings agree or the crossing is not covered, and it adds nothing. The meter is charged before count_crossing whether a span is there or not, so the work and the reads of the cancellation are the same; the readings it then makes cannot fail for planes within budget, which Plane::new enforces. The mutant (spans for one path only, for none, or for every count) changes only how many polygons are skipped, never a vector, a count, a charge or an error."
     },
     {
       "file": "projects/engines/geometry/crates/geom-poly/src/trace.rs",
-      "mutant": "replace > with < in classify",
+      "mutant": "replace > with < in held_of",
       "line_text": "let span = (paths > 1).then(|| piece_span(&polygon.piece)).flatten();",
       "occurrences": 1,
       "kind": "equivalent",
-      "reason": "paths > 1 only decides whether spans are made for skipping; with or without them the counts are the same."
+      "reason": "held_of only decides whether each polygon is given a Span, and a span is read in one place: count_crossing returns early, adding nothing, when the segment's span misses the polygon's. Span::of holds every point within a unit of the points it is made from, so the segment's span holds the segment (the box of its two ends, a step wider) and the polygon's holds the convex polygon (the box of its corners, a step wider); spans that miss share no point, so the segment cannot cross the polygon, and without the span count_crossing finds the same: its two end readings agree or the crossing is not covered, and it adds nothing. The meter is charged before count_crossing whether a span is there or not, so the work and the reads of the cancellation are the same; the readings it then makes cannot fail for planes within budget, which Plane::new enforces. The mutant (spans for one path only, for none, or for every count) changes only how many polygons are skipped, never a vector, a count, a charge or an error."
     },
     {
       "file": "projects/engines/geometry/crates/geom-poly/src/subdivide.rs",
@@ -6705,6 +6633,142 @@
       "occurrences": 1,
       "kind": "equivalent",
       "reason": "bit is the bit of the split box's depth, and a box's key has only the bits of the depths above it, so the bit is clear and | and ^ give one value."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-poly/src/subdivide.rs",
+      "mutant": "replace match guard a == b with true in <impl PartialEq for Divided>::eq",
+      "line_text": "(Shape::Leaf(a), Shape::Leaf(b)) if a == b => {}",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "A kept leaf's key is the SHA-256 key_of makes of the box's cell, vector and polygons, which the box itself holds: arrange_reusing keys a leaf it solves by key_of(node), and a held leaf by the earlier box's own key, and a box is held only when its cell, vector and polygons are that box's (held_if_same), so by induction every leaf's key is key_of of its own fields. The comparison reaches the shapes only once it has found those fields equal, so two leaves' keys are equal there and the guard is true wherever it runs. A Divided is reachable only inside a Solved, which only arrange_reusing makes."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-poly/src/subdivide.rs",
+      "mutant": "replace <impl Drop for Divided>::drop with ()",
+      "line_text": "let mut shape = core::mem::replace(&mut self.shape, Shape::Dropped);",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "With the body empty the compiler's drop glue drops the tree instead, field by field: the same boxes are freed, each once, when its Arc's last holder goes, and a drop has no other effect a caller can see. The glue recurses a level a box, but a kept tree is at most 127 boxes deep (the module's recursion statement), and at that depth it fits any thread's stack: with the mutant applied, in the build the mutants are judged in, the tree of a_kept_tree_far_down_the_frame_compares_and_prints (over a hundred splits deep) dropped on a thread with 12 KiB of stack left, below a thread's least stack of 16 KiB; unoptimised it needs over 32 KiB, far below the 2 MiB of a native thread and the 1 MiB of a WebAssembly module. The explicit stack is there for principle 13, which the recursion gate checks on the source, not for any result."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-poly/src/subdivide.rs",
+      "mutant": "replace == with != in solved_in",
+      "line_text": "let points = if node.points.len() == pieces.len() {",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "points is the box's own lists when it holds one per polygon, else lists made from the pieces. Every box a call divides holds its own, and they are what meetings makes: the root's are meetings of each polygon, a polygon that goes whole into a half keeps its lists, and a split part's are meetings of the part (divide). So with != such a box makes the same lists again, uncharged, and gives the same pieces at the same work. The only boxes without lists are those taken from an earlier tree, and a taken leaf's answer is always in the Solved the tree came from (arrange_reusing puts every leaf it solves or takes into its boxes, and builds the tree from those leaves), so answer returns it and solved_in never runs on such a box."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-poly/src/subdivide.rs",
+      "mutant": "delete match arm Some(Shape::Leaf(key)) in answer",
+      "line_text": "Some(Shape::Leaf(key)) => *key,",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "Without the arm a held leaf's key is key_of(node), made again from the box's cell, vector and polygons. A box is held only when those three are the earlier box's (held_if_same), whose key is key_of of the same three (the entry for PartialEq for Divided's leaf guard says why), so it is the same key: the same answer is taken from the cache at the same work, and key_of charges nothing."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-poly/src/subdivide.rs",
+      "mutant": "replace | with ^ in next_level",
+      "line_text": "(&children.upper, node.key | bit),",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "bit is the bit of the held box's depth, and a box's key has only the bits of the depths above it, so the bit is clear and | and ^ give one value."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-poly/src/subdivide.rs",
+      "mutant": "replace == with != in halves",
+      "line_text": "corner.map(|v| if i.next() == Some(axis) { at } else { v })",
+      "occurrences": 1,
+      "kind": "hangs",
+      "reason": "With != a split's halves keep the box's whole extent along the split axis and take the split's half step on the other two, so the split axis stays the longest and the half is split at the same half step again: its polygons all lie on one side, the split is taken, and one child holds them all and splits the same way for ever. The subdivision never ends and the tests stop it by their timeout. It hangs; it never returns a wrong arrangement."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-poly/src/subdivide.rs",
+      "mutant": "replace splits -> [(usize, Option<i64>); 3] with [(0, Some(0)); 3]",
+      "line_text": "let at = |axis: usize| {",
+      "occurrences": 1,
+      "kind": "hangs",
+      "reason": "A box split at the same plane every time, or outside itself, has a child equal to itself, so the level-by-level subdivision never runs out of boxes over SUBTREE_POLYGONS and the tests stop it by their timeout. It hangs; it never returns a wrong arrangement."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-poly/src/subdivide.rs",
+      "mutant": "replace splits -> [(usize, Option<i64>); 3] with [(0, Some(-1)); 3]",
+      "line_text": "let at = |axis: usize| {",
+      "occurrences": 1,
+      "kind": "hangs",
+      "reason": "A box split at the same plane every time, or outside itself, has a child equal to itself, so the level-by-level subdivision never runs out of boxes over SUBTREE_POLYGONS and the tests stop it by their timeout. It hangs; it never returns a wrong arrangement."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-poly/src/subdivide.rs",
+      "mutant": "replace splits -> [(usize, Option<i64>); 3] with [(1, Some(0)); 3]",
+      "line_text": "let at = |axis: usize| {",
+      "occurrences": 1,
+      "kind": "hangs",
+      "reason": "A box split at the same plane every time, or outside itself, has a child equal to itself, so the level-by-level subdivision never runs out of boxes over SUBTREE_POLYGONS and the tests stop it by their timeout. It hangs; it never returns a wrong arrangement."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-poly/src/subdivide.rs",
+      "mutant": "replace splits -> [(usize, Option<i64>); 3] with [(1, Some(-1)); 3]",
+      "line_text": "let at = |axis: usize| {",
+      "occurrences": 1,
+      "kind": "hangs",
+      "reason": "A box split at the same plane every time, or outside itself, has a child equal to itself, so the level-by-level subdivision never runs out of boxes over SUBTREE_POLYGONS and the tests stop it by their timeout. It hangs; it never returns a wrong arrangement."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-poly/src/subdivide.rs",
+      "mutant": "replace > with == in Printer<'_, '_>::text",
+      "line_text": "while left > 0 {",
+      "occurrences": 1,
+      "kind": "hangs",
+      "reason": "The loop writes a pretty line's indent a run of spaces at a time until none is left. With == it runs only while nothing is left to write, and a run of nothing leaves left at 0, so it never ends: every pretty text of a tree has a line at depth 0 after a newline (its closing brace), and a_kept_tree_prints_as_a_derived_debug_would prints one, so the tests stop it by their timeout. It hangs; it never prints a wrong text."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-poly/src/subdivide.rs",
+      "mutant": "replace > with >= in Printer<'_, '_>::text",
+      "line_text": "while left > 0 {",
+      "occurrences": 1,
+      "kind": "hangs",
+      "reason": "The loop writes a pretty line's indent a run of spaces at a time until none is left. With >= it runs on once nothing is left, and a run of nothing leaves left at 0, so it never ends: every pretty text of a tree has a line at depth 0 after a newline (its closing brace), and a_kept_tree_prints_as_a_derived_debug_would prints one, so the tests stop it by their timeout. It hangs; it never prints a wrong text."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-bool/src/names.rs",
+      "mutant": "replace < with <= in Mint<'k>::ids",
+      "line_text": "while let Some(first) = taken.next_if(|held| held.0 < entry.0) {",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "The two differ only when a taken known name equals a hashed one. A name is hashed only when Mint::id's binary search of the known ids did not find it, and an entry of known is taken only when that search found it; the search is a function of the name, so no name is both, and the hashed and taken lists never hold equal names. Every merge step therefore compares unequal names, where < and <= agree, and the merged list is the same."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-run/src/sort.rs",
+      "mutant": "replace < with <= in co_rank",
+      "line_text": "while low < high {",
+      "occurrences": 1,
+      "kind": "hangs",
+      "reason": "With <= the search goes on once low meets high, at the co-rank r: mid is r, and unless left[r] is among the first t (it is not, below both upper bounds, and there is no left[r] at r = left.len()) high is set to r again and the loop never ends. Every merge of two runs that interleave has such a co-rank, so the tests stop it by their timeout; it never returns a co-rank."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-run/src/sort.rs",
+      "mutant": "replace < with == in co_rank",
+      "line_text": "while low < high {",
+      "occurrences": 1,
+      "kind": "hangs",
+      "reason": "With == the loop runs only while low equals high, as it does for the co-rank of a piece's start at 0 (both bounds 0): mid is 0, and where the right run's first element comes before the left's, high is set to 0 again and again, for ever. Interleaving runs reach it on the first piece of a merge, so the tests stop it by their timeout."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-run/src/sort.rs",
+      "mutant": "replace / with % in co_rank",
+      "line_text": "let mid = low.saturating_add(high.saturating_sub(low) / 2);",
+      "occurrences": 1,
+      "kind": "hangs",
+      "reason": "With % the probe is low or low + 1, so the gap narrows by at most one a step; once it is 1 the probe is high itself, and where left[high] is not among the first t, high is set to high again and the loop never ends. A co-rank below both upper bounds ends that way, so the tests stop it by their timeout."
+    },
+    {
+      "file": "projects/engines/geometry/crates/geom-mesh/src/boolean.rs",
+      "mutant": "replace axis_point -> Option<P3> with None",
+      "line_text": "let [x, y, z] = t.planes();",
+      "occurrences": 1,
+      "kind": "equivalent",
+      "reason": "axis_point returns Some(p) only for a meeting of the planes x = a, y = b and z = c, in that order with normals (1, 0, 0), (0, 1, 0) and (0, 0, 1), whose a, b and c fit i64 and make a point P3::new accepts, so a point in the frame: then the meeting is exactly (a, b, c), and Tpi::to_grid, which corners_of asks instead when axis_point says None, rounds it to (a, b, c) and calls it exact, so the corner is Some((a, b, c)) either way. Nothing is charged between the two, and to_grid fails only for a point outside the frame, which this one is not; for every other vertex both take to_grid. Only the cost differs."
     }
   ],
   "coverage_off": [
