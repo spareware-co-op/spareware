@@ -13,9 +13,10 @@ const esc = (s) => String(s == null ? '' : s).replace(/[&<>"']/g, (c) => ({ '&':
 const ic = (n, cls = '') => `<svg class="ic ${cls}" aria-hidden="true"><use href="#i-${n}"/></svg>`;
 const n2 = (v) => (Math.round(v * 100) / 100).toLocaleString('en-NZ', { maximumFractionDigits: 2 });
 const STORE = 'spare-construct-workshop-v1';
-/* In the Spare Construct app (the server's page adds connect.js), parts are kept in this browser until they go into
-   the project's model through its edit log; the demo keeps them here too. */
+/* In the Spare Construct app (the server's page adds connect.js), the open model keeps the parts, through its edit
+   log (see "the project's model" below); the demo keeps them in this browser. */
 const IN_APP = (() => { try { return !!parent.document.querySelector('script[src$="connect.js"]'); } catch (e) { return false; } })();
+const LINK = (() => { try { return (IN_APP && parent.spare && parent.spare.workshop) || null; } catch (e) { return null; } })();
 
 /* Workshop's own icons, drawn to the family's rules (design/ribbon/README.md): a 24-unit grid, lines in currentColor,
    round ends, at most one accent area. Ours, drawn from the thing itself. */
@@ -55,6 +56,7 @@ export const ICONS = {
 const S = {
   project: null, part: 'bracket', mode: 'part', drawOf: 'part', sel: null, undo: [], redo: [], dims: true, list: true,
   driving: null, toast: '',
+  linked: false, draft: false, kept: new Map(), // in the app: the model's parts, and what it holds of each
 };
 let builder = buildPart, engine = { id: 'prototype', label: 'Prototype', tip: "Built by the prototype's own geometry, which does only what the geometry kernel does today." };
 const subs = new Set();
@@ -64,7 +66,10 @@ function load() {
   try { const s = localStorage.getItem(STORE); if (s) { const p = JSON.parse(s); if (p && Array.isArray(p.parts)) return p; } } catch (e) { /* storage is a convenience */ }
   return sample();
 }
-function save() { try { localStorage.setItem(STORE, JSON.stringify(S.project)); } catch (e) { /* the page works without it */ } }
+function save() {
+  if (S.linked) { queueSync(); return; }
+  try { localStorage.setItem(STORE, JSON.stringify(S.project)); } catch (e) { /* the page works without it */ }
+}
 const part = () => S.project.parts.find((p) => p.id === S.part) || S.project.parts[0];
 const cache = new Map();
 function built(p) {
@@ -78,6 +83,7 @@ function built(p) {
 }
 
 function edit(label, fn) {
+  if (S.linked && !LINK.state().editable) { say(LOOK_ONLY); return; }
   S.undo.push({ label, snap: JSON.stringify(S.project) });
   if (S.undo.length > 100) S.undo.shift();
   S.redo.length = 0;
@@ -88,6 +94,118 @@ function edit(label, fn) {
 function undo() { const u = S.undo.pop(); if (!u) return; S.redo.push({ label: u.label, snap: JSON.stringify(S.project) }); S.project = JSON.parse(u.snap); save(); say('Undone: ' + u.label); render(); }
 function redo() { const u = S.redo.pop(); if (!u) return; S.undo.push({ label: u.label, snap: JSON.stringify(S.project) }); S.project = JSON.parse(u.snap); save(); say('Redone: ' + u.label); render(); }
 function say(t) { S.toast = t; const el = $('#toast'); el.textContent = t; el.hidden = !t; clearTimeout(say.h); say.h = setTimeout(() => { el.hidden = true; }, 4200); }
+
+/* ---------- the project's model ----------
+   In the Spare Construct app the open model keeps the parts and the assembly, as elements written through its edit log
+   like walls and doors (construct-model's FORMAT.md, "Workshop's elements"; connect.js's spare.workshop). Each change
+   here becomes element.create, element.set or element.delete for what it changed, so a part survives a reload and
+   everyone on the model sees it; other people's changes redraw the page. A number with a fraction is kept as its
+   decimal text, so no hash depends on how a number prints. Outside the app, in the demo, parts stay in this browser. */
+const LOOK_ONLY = 'This model is open to look at, so changes here are not kept.';
+const TEXT = new Set(['id', 'type', 'name', 'note', 'shape', 'sketch', 'of', 'plane', 'op', 'material', 'part', 'a', 'b', 'axis', 'unit']);
+const DECIMAL = /^[-+]?(\d+\.?\d*|\.\d+)(e[-+]?\d+)?$/i;
+function encode(v) {
+  if (typeof v === 'number') return Number.isSafeInteger(v) ? v : String(v);
+  if (Array.isArray(v)) return v.map(encode);
+  if (v && typeof v === 'object') { const o = {}; for (const k of Object.keys(v).sort()) if (v[k] !== undefined) o[k] = encode(v[k]); return o; }
+  return v;
+}
+function decode(v, key) {
+  if (typeof v === 'string') return !TEXT.has(key) && DECIMAL.test(v) ? Number(v) : v;
+  if (Array.isArray(v)) return v.map((x) => decode(x, key));
+  if (v && typeof v === 'object') { const o = {}; for (const k of Object.keys(v)) o[k] = decode(v[k], k); return o; }
+  return v;
+}
+const elementId = (tag) => `${tag}-${crypto.randomUUID().slice(0, 8)}`;
+const recipeOf = (op, args) => ({ owner: 'workshop', schema: 1, op, op_version: 1, args });
+/* What the model should hold: each part, and the assembly once it has an id. */
+function wanted() {
+  const out = new Map();
+  for (const p of S.project.parts) out.set(p.id, { kind: 'workshop.part', op: 'part', name: p.name, args: encode({ params: p.params, features: p.features, end: p.end, material: p.material }) });
+  const a = S.project.assembly;
+  if (a && a.id) out.set(a.id, { kind: 'workshop.assembly', op: 'assembly', name: a.name, args: encode({ instances: a.instances, joints: a.joints }) });
+  return out;
+}
+const keyOf = (w) => JSON.stringify([w.kind, w.name, w.args]);
+function fromModel() {
+  const st = LINK.state(), els = LINK.elements();
+  const name = st.model ? st.model.name : 'A fixed version';
+  const parts = els.filter((e) => e.kind === 'workshop.part').map((e) => ({ ...decode(e.recipe.args), id: e.id, name: e.name }))
+    .sort((x, y) => x.name.localeCompare(y.name) || (x.id < y.id ? -1 : 1));
+  const asm = els.find((e) => e.kind === 'workshop.assembly');
+  S.kept = new Map();
+  if (!parts.length) { S.project = sample(); S.project.name = name; S.draft = true; return; }
+  S.draft = false;
+  S.project = { name, units: 'mm', parts, assembly: asm ? { ...decode(asm.recipe.args), id: asm.id, name: asm.name } : { name, instances: [], joints: [] } };
+  for (const [id, w] of wanted()) S.kept.set(id, keyOf(w));
+}
+/* The sample becomes the model's at the first change: its parts get element ids. */
+function adopt() {
+  const ids = new Map();
+  for (const p of S.project.parts) { const id = elementId('WP'); ids.set(p.id, id); if (S.part === p.id) S.part = id; p.id = id; }
+  const a = S.project.assembly;
+  a.id = elementId('WA');
+  for (const i of a.instances) i.part = ids.get(i.part) || i.part;
+  S.draft = false;
+  S.undo.length = 0;
+  S.redo.length = 0;
+}
+let syncTimer = 0;
+function queueSync() { clearTimeout(syncTimer); syncTimer = setTimeout(sync, 150); }
+function sync() {
+  clearTimeout(syncTimer);
+  syncTimer = 0;
+  if (!S.linked || !LINK.state().editable) return;
+  if (S.draft) adopt();
+  const a = S.project.assembly;
+  if (a && !a.id && a.instances.length) a.id = elementId('WA');
+  const want = wanted();
+  for (const [id, w] of want) {
+    const key = keyOf(w);
+    if (S.kept.get(id) === key) continue;
+    if (S.kept.has(id)) LINK.set(id, w.name, recipeOf(w.op, w.args)); else LINK.create(w.kind, id, w.name, recipeOf(w.op, w.args));
+    S.kept.set(id, key);
+  }
+  for (const id of [...S.kept.keys()]) if (!want.has(id)) { LINK.remove(id); S.kept.delete(id); }
+}
+/* The model changed: another person's edit, a refused edit of this page's, or another model opened. */
+function linkChanged(why) {
+  const st = LINK.state();
+  if (!st.loaded) return;
+  if (syncTimer) sync();
+  if (!st.model && !st.fixed) { S.linked = false; S.project = load(); render(); return; }
+  S.linked = true;
+  fromModel();
+  // an undo from before someone else's change would put their change back, so the history starts here
+  S.undo.length = 0;
+  S.redo.length = 0;
+  if (!S.project.parts.some((p) => p.id === S.part)) { S.part = S.project.parts[0].id; S.sel = null; }
+  render();
+  if (why && why.turnedBack) say('Not kept: ' + why.turnedBack);
+}
+function linkNote() {
+  if (!IN_APP) return '';
+  if (!S.linked) return '<div class="note wait">Open a model in your team’s WIP to keep parts in it, for everyone on it. Until then they stay in this browser.</div>';
+  const st = LINK.state();
+  if (!st.editable) return `<div class="note">${st.fixed ? 'A fixed version' : esc(S.project.name) + ' is open to look at'}: you can look, not change.</div>`;
+  if (S.draft) return `<div class="note wait">${esc(S.project.name)} has no parts yet, so this is a sample. Your first change keeps it in the model.</div>`;
+  return `<div class="note ok">Kept in ${esc(S.project.name)}, for everyone on it: each change goes through the model’s edit log.</div>`;
+}
+function newPart() {
+  edit('Add a part', () => {
+    let k = S.project.parts.length + 1;
+    while (S.project.parts.some((p) => p.name === 'Part ' + k)) k++;
+    const id = S.linked && !S.draft ? elementId('WP') : 'part' + k;
+    const p = { id, name: 'Part ' + k, material: 'steel', params: [{ name: 'size', value: 40, note: '' }], features: [], end: 0 };
+    p.features.push(newFeature(p, 'sketch', { shape: 'rect' }));
+    p.end = 1;
+    S.project.parts.push(p);
+    S.part = id;
+    S.sel = null;
+    if (S.mode !== 'drawing') S.mode = 'part';
+  });
+  say('A new part, with a rectangle to start from. Extrude it, or change it on the right.');
+}
 
 /* ---------- tools ---------- */
 function insertFeature(f) {
@@ -203,7 +321,7 @@ function stateBadge(r) {
 function renderLeft() {
   const p = part(), out = built(p), end = Math.min(p.end ?? p.features.length, p.features.length);
   let h = `<div class="seg" role="group" aria-label="Workspace">${[['part', 'Part'], ['assembly', 'Assembly'], ['drawing', 'Drawing']].map(([k, l]) => `<button data-act="mode" data-a="${k}" aria-pressed="${S.mode === k}">${l}</button>`).join('')}</div>`;
-  h += `<div class="sec"><div class="lbl">Parts</div><ul class="list">${S.project.parts.map((x) => {
+  h += `<div class="sec"><div class="lbl">Parts <button class="mini" data-act="newpart" title="Add a part">${ic('plus', 'sm')}<span class="sr">Add a part</span></button></div><ul class="list">${S.project.parts.map((x) => {
     const o = built(x), mat = MATERIALS[x.material] || MATERIALS.steel;
     return `<li><button class="leaf${x.id === p.id ? ' cur' : ''}" data-act="part" data-a="${esc(x.id)}">${ic('ws-part', 'sm')}<span>${esc(x.name)}</span><span class="n">${n2((o.volume * mat.density) / 1e6)} g</span></button></li>`;
   }).join('')}</ul></div>`;
@@ -326,7 +444,7 @@ function renderSide() {
       ${`<label class="fld"><span>Material</span><select data-chg="material">${Object.entries(MATERIALS).map(([k, m]) => `<option value="${k}"${k === p.material ? ' selected' : ''}>${esc(m.label)}, ${m.density} kg/m³</option>`).join('')}</select></label>`}</div>
       <div class="sec"><div class="lbl">Mass properties</div><table class="props"><tbody><tr><th>Bodies</th><td>${out.bodies.length}</td></tr><tr><th>Volume</th><td>${n2(out.volume)} mm³</td></tr><tr><th>Mass</th><td>${n2((out.volume * mat.density) / 1e6)} g</td></tr>
       ${b ? `<tr><th>Size</th><td>${n2(b[1][0] - b[0][0])} × ${n2(b[1][1] - b[0][1])} × ${n2(b[1][2] - b[0][2])} mm</td></tr>` : ''}<tr><th>Built by</th><td>${esc(engine.label)}</td></tr></tbody></table>
-      ${IN_APP ? '<div class="note wait">Parts are kept in this browser for now. Keeping them in the project, for everyone on it, comes next.</div>' : ''}
+      ${linkNote()}
       <p class="small faint">Volumes add body by body: joining bodies into one solid waits for ${esc(WAITS.join.what)}. Mass properties of curved bodies, certified, wait for G247.</p></div>
       <div class="sec"><div class="lbl">What waits for the kernel</div><ul class="waits">${Object.values(WAITS).map((w) => `<li>${ic(w.icon, 'sm')}<span><b>${esc(w.label)}</b>: ${esc(w.what)}.</span></li>`).join('')}</ul></div>`;
   }
@@ -403,6 +521,7 @@ const ACT = {
   part: (b) => { S.part = b.dataset.a; S.sel = null; if (S.mode !== 'part') S.mode = S.mode === 'drawing' ? 'drawing' : 'part'; S.drawOf = 'part'; render(); },
   sel: (b) => { S.sel = { kind: b.dataset.k, id: b.dataset.a }; render(); },
   addparam: addParam,
+  newpart: newPart,
   roll: (b) => rollTo(Number(b.dataset.a)),
   tool: (b) => tool(b.dataset.a),
   suppress: () => { const f = selFeature(); if (f) edit((f.suppressed ? 'Unsuppress ' : 'Suppress ') + f.name, () => { f.suppressed = !f.suppressed; }); },
@@ -531,10 +650,19 @@ window.WorkshopFrame = {
   icons: () => ICONS,
   tabs,
   home: () => ({ part: 'ws-home', assembly: 'ws-asm', drawing: 'ws-draw' }[S.mode]),
-  state: () => ({ mode: S.mode, part: part().name, undo: S.undo.length ? S.undo[S.undo.length - 1].label : '', redo: S.redo.length > 0, engine: engine.label, driving: !!S.driving }),
+  state: () => ({ mode: S.mode, part: part().name, undo: S.undo.length ? S.undo[S.undo.length - 1].label : '', redo: S.redo.length > 0, engine: engine.label, driving: !!S.driving,
+    kept: !S.linked ? 'browser' : S.draft ? 'sample' : 'model' }),
+  /* a copy of the parts and the assembly, as the page holds them */
+  project: () => JSON.parse(JSON.stringify(S.project)),
   undo, redo,
   file: () => [
-    { label: 'Start again from the sample', run: () => edit('Start again from the sample', () => { S.project = sample(); S.part = 'bracket'; S.sel = null; }) },
+    { label: 'New part', run: newPart },
+    { label: 'Start again from the sample', run: () => edit('Start again from the sample', () => {
+      const name = S.project.name;
+      S.project = sample(); S.part = 'bracket'; S.sel = null;
+      // in the model, the sample's parts take the place of what was there, under new element ids
+      if (S.linked) { S.project.name = name; S.draft = true; }
+    }) },
   ],
   /* the app's way to build with the geometry kernel instead (piece A17) */
   useBuilder(fn, about) { builder = fn; engine = about; cache.clear(); render(); },
@@ -553,5 +681,7 @@ try { view = createView($('#v3d'), { onPick: (key) => {
   view = null;
 }
 render();
+// in the app: the open model's parts, once it has them, and every change to them after that
+if (LINK) { LINK.subscribe(linkChanged); linkChanged({}); }
 // the geometry kernel, compiled for the browser, builds instead once it loads (piece A17)
 import('./kernel.js').then((k) => k.useKernel(window.WorkshopFrame)).catch((e) => console.warn("Workshop: the geometry kernel did not load, so the prototype's builder carries on.", e));

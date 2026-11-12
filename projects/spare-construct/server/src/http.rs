@@ -108,6 +108,10 @@ pub fn routes(app: Shared) -> Router {
             get(bridge_targets),
         )
         .route("/api/projects/{project}/models/{model}/area", get(area))
+        .route(
+            "/api/projects/{project}/models/{model}/kind/{kind}",
+            get(kind),
+        )
         .route("/api/projects/{project}/models/{model}/claims", get(claims))
         .route(
             "/api/projects/{project}/models/{model}/links",
@@ -382,6 +386,18 @@ async fn area(
     Ok(Json(
         app.service
             .area(&person, &id(&project)?, &id(&model)?, &view)
+            .await?,
+    ))
+}
+
+async fn kind(
+    State(app): State<Shared>,
+    Me(person): Me,
+    Path((project, model, kind)): Path<(String, String, String)>,
+) -> Result<impl IntoResponse, ApiError> {
+    Ok(Json(
+        app.service
+            .kind(&person, &id(&project)?, &id(&model)?, &id(&kind)?)
             .await?,
     ))
 }

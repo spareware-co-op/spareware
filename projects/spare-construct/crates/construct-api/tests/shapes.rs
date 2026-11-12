@@ -198,6 +198,34 @@ impl Stack {
             .collect()
     }
 
+    /// The elements listed under a kind, with the record hash each points at.
+    async fn of_kind(&self, kind: &str) -> BTreeMap<String, String> {
+        let mut snapshot = self.store.snapshot().await.unwrap();
+        let prefix = list::kind(&i("p"), &i(DOCUMENT), &i(kind));
+        let mut found = BTreeMap::new();
+        for (key, hash) in snapshot.scan(&prefix).await.unwrap() {
+            let Some(Place::Kind { element, .. }) = Place::parse(&key) else {
+                panic!("{key} isn't a kind row");
+            };
+            found.insert(element.to_string(), kit_store::from_row(&hash).unwrap());
+        }
+        found
+    }
+
+    /// The record hash an element's pointer holds now.
+    async fn pointer(&self, id: &str) -> String {
+        let place = kit_store::Place::Piece {
+            project: i("p"),
+            document: i(DOCUMENT),
+            piece: i(id),
+        };
+        let mut snapshot = self.store.snapshot().await.unwrap();
+        read_row(&mut snapshot, &place.key())
+            .await
+            .unwrap()
+            .unwrap()
+    }
+
     /// Everything derived, as bytes.
     async fn derived(&self) -> BTreeMap<String, Vec<u8>> {
         let mut snapshot = self.store.snapshot().await.unwrap();
@@ -339,6 +367,89 @@ async fn a_recipe_that_cant_build_is_stored_as_a_failure_and_nothing_stops() {
         verify_log(&mut snapshot, &Scope::Project(i("p")))
             .await
             .unwrap();
+    }
+}
+
+/// A Workshop part's recipe: owned by Workshop, built in the browser by the geometry kernel.
+fn part(width: i64) -> Value {
+    json!({ "owner": "workshop", "schema": 1, "op": "part", "op_version": 1,
+            "args": { "end": 2, "features": [
+                { "id": "f1", "type": "sketch", "shape": "rect", "w": "width", "h": 60, "z": 0 },
+                { "id": "f2", "type": "extrude", "sketch": "f1", "depth": "8.5" }],
+                "material": "steel", "params": [{ "name": "width", "value": width }] } })
+}
+
+#[tokio::test]
+async fn every_element_is_listed_by_kind_built_or_not() {
+    for geometry in generators() {
+        let stack = Stack::new(geometry).await;
+        stack.create("w", 0, wall(900)).await;
+        let create = |id: &str, kind: &str, recipe: Value| {
+            json!({ "element": id, "kind": kind, "level": 0,
+                    "placement": { "x": 0, "y": 0, "z": 0 }, "recipe": recipe })
+        };
+        for id in ["WP-1", "WP-2"] {
+            stack
+                .edit("element.create", create(id, "workshop.part", part(120)))
+                .await
+                .unwrap();
+        }
+        // A kind that can't be part of a key is kept, and simply not listed.
+        stack
+            .edit("element.create", create("odd", "two words", part(1)))
+            .await
+            .unwrap();
+        stack.regen.catch_up(&i("p")).await.unwrap();
+
+        // Neither generator here builds Workshop's parts, and both still list them.
+        assert!(matches!(
+            stack.built("WP-1").await.unwrap().result,
+            BuiltResult::Failed { .. }
+        ));
+        let parts = stack.of_kind("workshop.part").await;
+        assert_eq!(parts.keys().collect::<Vec<_>>(), ["WP-1", "WP-2"]);
+        assert_eq!(parts["WP-1"], stack.pointer("WP-1").await);
+        assert_eq!(stack.of_kind("wall").await.len(), 1);
+        assert!(stack.of_kind("workshop").await.is_empty());
+
+        // A change points the list at the new record; a delete takes it off.
+        stack
+            .edit(
+                "element.set",
+                json!({ "element": "WP-1", "recipe": part(150) }),
+            )
+            .await
+            .unwrap();
+        stack
+            .edit("element.delete", json!({ "element": "WP-2" }))
+            .await
+            .unwrap();
+        stack.regen.catch_up(&i("p")).await.unwrap();
+        let parts = stack.of_kind("workshop.part").await;
+        assert_eq!(parts.keys().collect::<Vec<_>>(), ["WP-1"]);
+        assert_eq!(parts["WP-1"], stack.pointer("WP-1").await);
+
+        // Deleted and made again as another kind, it moves lists.
+        stack
+            .edit("element.delete", json!({ "element": "WP-1" }))
+            .await
+            .unwrap();
+        stack
+            .edit(
+                "element.create",
+                create("WP-1", "workshop.assembly", part(1)),
+            )
+            .await
+            .unwrap();
+        stack.regen.catch_up(&i("p")).await.unwrap();
+        assert!(stack.of_kind("workshop.part").await.is_empty());
+        assert_eq!(stack.of_kind("workshop.assembly").await.len(), 1);
+
+        // The list is derived: thrown away and made again from the log, it is the same.
+        let before = stack.derived().await;
+        stack.regen.rebuild(&i("p")).await.unwrap();
+        assert_eq!(stack.derived().await, before);
+        assert_eq!(stack.regen.verify(&i("p")).await.unwrap(), 3);
     }
 }
 
