@@ -55,7 +55,7 @@ export const ICONS = {
 
 const S = {
   project: null, part: 'bracket', mode: 'part', drawOf: 'part', sel: null, undo: [], redo: [], dims: true, list: true,
-  driving: null, toast: '',
+  driving: null, sliding: false, toast: '',
   linked: false, draft: false, kept: new Map(), // in the app: the model's parts, and what it holds of each
 };
 let builder = buildPart, engine = { id: 'prototype', label: 'Prototype', tip: "Built by the prototype's own geometry, which does only what the geometry kernel does today." };
@@ -80,6 +80,29 @@ function built(p) {
     cache.set(p.id, { key, out });
   }
   return cache.get(p.id).out;
+}
+
+/* The assembly posed by the geometry kernel, once it loads (piece A25): at rest, the kernel moves and turns each part
+   into place and boxes it; while a joint is driven or slid, the page poses it itself each frame, and the kernel poses
+   it again when it stops. An instance the kernel can't pose yet says what it waits for, and the page places it. */
+let poser = null, posed = { key: '', out: null };
+function kernelPose() {
+  if (!poser || S.driving || S.sliding) return null;
+  const a = S.project.assembly, parts = S.project.parts.filter((p) => a.instances.some((i) => i.part === p.id));
+  const input = { parts, assembly: { instances: a.instances, joints: a.joints } }, key = JSON.stringify(input);
+  if (posed.key !== key) {
+    let out = null;
+    try { out = poser(input); } catch (e) { console.warn('Workshop: the kernel refused this assembly, so the page posed it.', e); }
+    posed = { key, out };
+  }
+  return posed.out;
+}
+const poseRow = (list, id) => { const k = kernelPose(); return k ? k[list].find((r) => r.id === id) : null; };
+function poseNote(list, id) {
+  if (!poser) return '';
+  if (S.driving || S.sliding) return '<div class="note">While it moves, the page poses it each frame; the geometry kernel poses it again when it stops.</div>';
+  const r = poseRow(list, id);
+  return r ? `<div class="note ${{ waits: 'wait', failed: 'bad' }[r.state] || 'ok'}">${esc(r.message)}</div>` : '';
 }
 
 function edit(label, fn) {
@@ -343,8 +366,8 @@ function renderLeft() {
   }).join('')}</ul></div>`;
   if (S.mode === 'assembly' || (S.mode === 'drawing' && S.drawOf === 'assembly')) {
     const a = S.project.assembly;
-    h += `<div class="sec"><div class="lbl">Assembly: ${esc(a.name)}</div><ul class="list">${a.instances.map((i) => `<li><button class="leaf${S.sel && S.sel.id === i.id ? ' cur' : ''}" data-act="sel" data-k="instance" data-a="${esc(i.id)}">${ic(i.grounded ? 'pin' : 'ws-part', 'sm')}<span>${esc(i.name)}</span><span class="n">${i.grounded ? 'Grounded' : ''}</span></button></li>`).join('')}</ul>`;
-    h += `<div class="lbl sub">Joints</div><ul class="list">${a.joints.map((j) => `<li><button class="leaf${S.sel && S.sel.id === j.id ? ' cur' : ''}" data-act="sel" data-k="joint" data-a="${esc(j.id)}">${ic('ws-' + j.type, 'sm')}<span>${esc(j.name)}</span><span class="n">${j.type === 'fixed' ? '' : n2(j.value) + (j.unit === 'deg' ? '°' : ' mm')}</span></button></li>`).join('') || '<li class="faint pad">No joints yet.</li>'}</ul></div>`;
+    h += `<div class="sec"><div class="lbl">Assembly: ${esc(a.name)}</div><ul class="list">${a.instances.map((i) => `<li><button class="leaf${S.sel && S.sel.id === i.id ? ' cur' : ''}" data-act="sel" data-k="instance" data-a="${esc(i.id)}">${ic(i.grounded ? 'pin' : 'ws-part', 'sm')}<span>${esc(i.name)}</span>${stateBadge(poseRow('instances', i.id))}<span class="n">${i.grounded ? 'Grounded' : ''}</span></button></li>`).join('')}</ul>`;
+    h += `<div class="lbl sub">Joints</div><ul class="list">${a.joints.map((j) => `<li><button class="leaf${S.sel && S.sel.id === j.id ? ' cur' : ''}" data-act="sel" data-k="joint" data-a="${esc(j.id)}">${ic('ws-' + j.type, 'sm')}<span>${esc(j.name)}</span>${stateBadge(poseRow('joints', j.id))}<span class="n">${j.type === 'fixed' ? '' : n2(j.value) + (j.unit === 'deg' ? '°' : ' mm')}</span></button></li>`).join('') || '<li class="faint pad">No joints yet.</li>'}</ul></div>`;
   }
   h += `<div class="sec"><div class="lbl">Parameters of ${esc(p.name)} <button class="mini" data-act="addparam" title="Add a parameter">${ic('plus', 'sm')}<span class="sr">Add a parameter</span></button></div><table class="params"><tbody>${p.params.map((x, i) => {
     const r = out.params[i] || {};
@@ -449,12 +472,15 @@ function renderSide() {
       <div class="two">${jf('Least' + (j.unit === 'deg' ? ', degrees' : ', mm'), 'min', j.min)}${jf('Greatest', 'max', j.max)}</div>
       <label class="fld"><span>Position: ${n2(j.value)}${u}</span><input type="range" data-chg="jv" min="${j.min}" max="${j.max}" step="${j.unit === 'deg' ? 1 : 0.5}" value="${Math.min(j.max, Math.max(j.min, j.value))}"></label>
       <button class="btn${S.driving ? ' on' : ''}" data-act="drive" data-a="${esc(j.id)}">${ic('ws-drive', 'sm')}${S.driving ? 'Stop' : 'Drive through its range'}</button>`}
+      <div class="mt">${poseNote('joints', j.id)}</div>
+      ${j.type === 'hinge' ? `<p class="small faint">${ic('info', 'sm')} The kernel turns a part by quarter turns, rounding nothing. At any other angle it waits for ${esc(WAITS.hinge.what.split('; ')[0])}.</p>` : ''}
       <p class="small faint mt">${ic('info', 'sm')} Here a joint's axis is typed in. Joining faces and axes picked on the parts waits for ${esc(WAITS.mates.what.split(' and ')[0])} and persistent face names.</p></div>
       <div class="sec acts"><button class="btn" data-act="delj">${ic('del', 'sm')}Delete</button></div>`;
   } else if (sel && sel.kind === 'instance' && S.project.assembly.instances.some((i) => i.id === sel.id)) {
     const a = S.project.assembly, i = a.instances.find((x) => x.id === sel.id), pt = S.project.parts.find((x) => x.id === i.part), joined = a.joints.find((j) => j.b === i.id);
     h += `<div class="sec"><div class="lbl">Part in the assembly</div><label class="fld"><span>Name</span><input data-chg="iname" value="${esc(i.name)}"></label><p>${esc(pt ? pt.name : '')}${i.grounded ? ', grounded: it does not move.' : joined ? `, placed by the joint ${esc(joined.name)}.` : ', not joined to anything yet.'}</p>
       ${joined || i.grounded ? '' : `<div class="three">${['x', 'y', 'z'].map((ax, k) => `<label class="fld"><span>At ${ax}</span><input data-chg="iat" data-a="${k}" value="${esc((i.at || [0, 0, 0])[k])}"></label>`).join('')}</div>`}
+      ${poseNote('instances', i.id)}
       <button class="btn" data-act="part" data-a="${esc(i.part)}">${ic('ws-part', 'sm')}Edit ${esc(pt ? pt.name : 'the part')}</button></div>
       ${i.grounded ? '' : `<div class="sec acts"><button class="btn" data-act="deli">${ic('del', 'sm')}Remove from the assembly</button></div>`}`;
   } else {
@@ -474,16 +500,20 @@ const pick2 = (label, key, v, opts) => `<label class="fld"><span>${label}</span>
 
 /* ---------- the view ---------- */
 let view = null, shown = '';
+/* Each instance's bodies where they go: the kernel's map for an instance it posed, the page's own otherwise. size is
+   the kernel's box round the whole assembly, when it posed every instance. */
 function assemblyItems() {
-  const a = S.project.assembly, { at, notes } = pose(a), items = [];
+  const a = S.project.assembly, { at, notes } = pose(a), k = kernelPose(), items = [];
   a.instances.forEach((inst, n) => {
     const pt = S.project.parts.find((x) => x.id === inst.part);
     if (!pt) return;
-    const out = built(pt);
+    const out = built(pt), r = k && k.instances.find((x) => x.id === inst.id);
+    const m = r && r.state === 'built' ? r.m : at.get(inst.id);
     const order = [...new Set(a.instances.map((x) => x.part))].indexOf(inst.part) + 1;
-    for (const b of out.bodies) items.push({ body: b, at: at.get(inst.id), tone: S.sel && S.sel.id === inst.id ? 'sel' : 'abc'[n % 3], key: inst.id, item: order });
+    for (const b of out.bodies) items.push({ body: b, at: m, tone: S.sel && S.sel.id === inst.id ? 'sel' : 'abc'[n % 3], key: inst.id, item: order });
   });
-  return { items, notes };
+  const waiting = k ? k.instances.filter((r) => r.state !== 'built').length : 0;
+  return { items, notes: k ? k.notes : notes, kernel: !!k, waiting, size: k && !waiting ? k.bbox : null };
 }
 function renderView() {
   const p = part(), draw = S.mode === 'drawing';
@@ -491,9 +521,10 @@ function renderView() {
   $('#vdraw').hidden = !draw;
   let info = '';
   if (draw) {
-    let items, title, list = null, material = '', mass = '';
+    // overall sizes are the kernel's boxes when it built the part, or posed every instance
+    let items, title, list = null, material = '', mass = '', size = null;
     if (S.drawOf === 'assembly') {
-      ({ items } = assemblyItems());
+      ({ items, size } = assemblyItems());
       title = S.project.assembly.name;
       const counts = new Map();
       for (const i of S.project.assembly.instances) counts.set(i.part, (counts.get(i.part) || 0) + 1);
@@ -504,14 +535,16 @@ function renderView() {
       title = p.name;
       material = mat.label;
       mass = n2((out.volume * mat.density) / 1e6) + ' g';
+      if (out.engine === 'kernel') size = out.bbox;
     }
-    $('#vdraw').innerHTML = items.length ? sheet(items, { title, project: S.project.name, material, mass, list, dims: S.dims }) : '<p class="pad faint">Nothing is built yet, so there is nothing to draw.</p>';
+    $('#vdraw').innerHTML = items.length ? sheet(items, { title, project: S.project.name, material, mass, list, dims: S.dims, size }) : '<p class="pad faint">Nothing is built yet, so there is nothing to draw.</p>';
     info = `${S.drawOf === 'assembly' ? 'Assembly' : 'Part'} drawing, A3, third-angle projection.`;
   } else if (S.mode === 'assembly') {
-    const { items, notes } = assemblyItems();
+    const { items, notes, kernel, waiting } = assemblyItems();
     if (view) view.show(items, { fit: shown !== 'assembly' });
     shown = 'assembly';
-    info = `${S.project.assembly.instances.length} parts and ${S.project.assembly.joints.length} joints.${notes.length ? ' ' + notes.join(' ') : ''}`;
+    const by = kernel ? ` Posed by the geometry kernel${waiting ? `; ${waiting} part${waiting === 1 ? '' : 's'} wait${waiting === 1 ? 's' : ''} for it, placed by the page` : ''}.` : '';
+    info = `${S.project.assembly.instances.length} parts and ${S.project.assembly.joints.length} joints.${by}${notes.length ? ' ' + notes.join(' ') : ''}`;
   } else {
     const out = built(p), f = S.sel && S.sel.kind === 'feature' ? S.sel.id : null;
     const mine = f ? new Set((out.features.find((r) => r.id === f) || { bodies: [] }).bodies) : new Set();
@@ -609,8 +642,14 @@ document.addEventListener('click', (e) => {
   }
   if (ACT[b.dataset.act]) ACT[b.dataset.act](b);
 });
-document.addEventListener('change', (e) => { const el = e.target.closest('[data-chg]'); if (el && CHG[el.dataset.chg]) CHG[el.dataset.chg](el); });
-document.addEventListener('input', (e) => { const el = e.target.closest('[data-chg="jv"]'); if (el) CHG.jv(el); });
+document.addEventListener('change', (e) => {
+  const el = e.target.closest('[data-chg]');
+  if (!el || !CHG[el.dataset.chg]) return;
+  // a joint's slider let go: the kernel poses it again where it was left
+  if (el.dataset.chg === 'jv') { S.sliding = false; CHG.jv(el); renderSide(); return; }
+  CHG[el.dataset.chg](el);
+});
+document.addEventListener('input', (e) => { const el = e.target.closest('[data-chg="jv"]'); if (el) { S.sliding = true; CHG.jv(el); } });
 document.addEventListener('keydown', (e) => {
   const typing = /INPUT|TEXTAREA|SELECT/.test((e.target.tagName || ''));
   if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'z' && !typing) { e.preventDefault(); undo(); }
@@ -687,6 +726,8 @@ window.WorkshopFrame = {
   ],
   /* the app's way to build with the geometry kernel instead (piece A17) */
   useBuilder(fn, about) { builder = fn; engine = about; cache.clear(); render(); },
+  /* and to pose the assembly with it (piece A25): fn({ parts, assembly }) gives each instance's map and box */
+  usePoser(fn) { poser = fn; posed = { key: '', out: null }; render(); },
 };
 
 /* ---------- start ---------- */

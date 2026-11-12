@@ -14,7 +14,12 @@
 //! can't certify a body turned so: rounded corners leave their faces' planes, and a tilted curved
 //! face meets its caps where only exact data is followed. It says so
 //! (`MakeDetail::NotCertifiedYet`, naming G134 for flat faces and G177 for curved ones), and that
-//! instance and its joint wait for the kernel, naming the piece, as a feature does. What else the
+//! instance and its joint wait for the kernel, naming the piece, as a feature does.
+//!
+//! The kernel runs its full checker after every operation only in debug and test builds; shipped
+//! release builds, the browser's among them, run its cheap groups, which pass such a body. So that
+//! every build answers the same, a body a turn rounded is checked again here on request, with
+//! every group (`query.validity` at `Level::Full`), and waits on the same terms. What else the
 //! kernel can't do yet stays out and says so where it is asked for: joints between faces and axes
 //! picked on the parts wait for its assembly mates (G479) and persistent face names, and
 //! interference for its booleans (G130 to G133).
@@ -27,7 +32,9 @@
 
 use std::collections::BTreeMap;
 
-use engine_geometry::operations::{Moved, bounding_box, move_by, rotate};
+use engine_geometry::operations::{
+    Level, Moved, bounding_box, exactness as exactness_of, move_by, rotate, validity,
+};
 use engine_geometry::value::Exactness;
 use engine_geometry::value::body::Body;
 use engine_geometry::value::error::{MakeDetail, OpError, OpErrorDetail};
@@ -95,6 +102,8 @@ enum Step {
         axis: Axis,
         index: usize,
         rotation: Rotation,
+        /// A whole number of quarter turns, which rounds nothing.
+        quarter: bool,
         cos: f64,
         sin: f64,
     },
@@ -132,15 +141,16 @@ fn text<'a>(v: &'a Value, k: &str) -> &'a str {
     v.get(k).and_then(Value::as_str).unwrap_or_default()
 }
 
-/// The turn by `degrees`: a quarter turn exactly, or the nearest whole-number direction.
-fn turn(degrees: f64) -> Res<(Rotation, f64, f64)> {
+/// The turn by `degrees`: a quarter turn exactly (and `true`), or the nearest whole-number
+/// direction.
+fn turn(degrees: f64) -> Res<(Rotation, bool, f64, f64)> {
     let quarters = degrees / 90.0;
     if quarters == quarters.round() && quarters.abs() < 1e9 {
         // a whole number of quarter turns, well inside i32
         #[allow(clippy::cast_possible_truncation)]
         let q = (quarters.round() as i64).rem_euclid(4) as i32;
         let (c, s) = [(1.0, 0.0), (0.0, 1.0), (-1.0, 0.0), (0.0, -1.0)][q as usize];
-        return Ok((Rotation::quarter_turns(q), c, s));
+        return Ok((Rotation::quarter_turns(q), true, c, s));
     }
     let r = degrees.to_radians();
     // |cos|, |sin| <= 1, so each scaled value is within i32
@@ -153,7 +163,7 @@ fn turn(degrees: f64) -> Res<(Rotation, f64, f64)> {
         .map_err(|_| Refusal::Failed("That angle has no direction.".into()))?;
     let (c, s) = (f64::from(c), f64::from(s));
     let n = c.hypot(s);
-    Ok((rotation, c / n, s / n))
+    Ok((rotation, false, c / n, s / n))
 }
 
 /// The map of one step, as the page draws it.
@@ -176,23 +186,45 @@ fn map_of(step: Step) -> [f64; 12] {
     }
 }
 
+/// A turned body the kernel's checker can't certify yet, waiting for `piece`.
+fn waits_for_checker(piece: &str) -> Refusal {
+    let what = match piece {
+        "G134" => "certifying a turned body's flat faces",
+        "G177" => "certifying a turned body's curved faces",
+        _ => "certifying a body turned so",
+    };
+    Refusal::Waits(format!(
+        "Turned to this angle, it waits for the kernel's checker: {what} ({piece}). A quarter \
+         turn rounds nothing and is posed today."
+    ))
+}
+
 /// What the kernel's refusal of a step means here: a body its checker can't certify yet waits for
 /// the piece it names; anything else fails with the kernel's reason.
 fn refused_pose(e: &OpError) -> Refusal {
     match e.detail() {
-        OpErrorDetail::Make(MakeDetail::NotCertifiedYet { piece }) => {
-            let what = match *piece {
-                "G134" => "certifying a turned body's flat faces",
-                "G177" => "certifying a turned body's curved faces",
-                _ => "certifying a body turned so",
-            };
-            Refusal::Waits(format!(
-                "Turned to this angle, it waits for the kernel's checker: {what} ({piece}). \
-                 Quarter turns are exact today."
-            ))
-        }
+        OpErrorDetail::Make(MakeDetail::NotCertifiedYet { piece }) => waits_for_checker(piece),
         _ => refused(e),
     }
+}
+
+/// Every group of the kernel's checker on a body a turn rounded, asked for here so that a release
+/// build, which runs only the cheap groups after an operation, answers as a debug build does. As
+/// the kernel's transforms do, a rounded body that doesn't pass waits for the piece that widens
+/// the checker for its kind: G177 when a face or an edge is curved, G134 otherwise.
+fn check_fully(key: usize, body: &Body, exactness: Exactness) -> Res<()> {
+    let c = ctx(key, 997);
+    let report = validity(&c, body, exactness, Level::Full)
+        .map_err(|e| refused(&e))?
+        .result;
+    if report.passed() {
+        return Ok(());
+    }
+    let kinds = exactness_of(&c, body, exactness)
+        .map_err(|e| refused(&e))?
+        .result;
+    let curved = kinds.curved_faces > 0 || kinds.curved_edges > 0;
+    Err(waits_for_checker(if curved { "G177" } else { "G134" }))
 }
 
 /// Puts one body through an instance's steps with the kernel.
@@ -202,6 +234,7 @@ fn place(key: usize, body: &Body, exactness: Exactness, chain: &[Step]) -> Res<(
         step: GridStep::Q1,
     });
     let mut now = (body.clone(), exactness);
+    let mut rounded = false;
     for (n, step) in chain.iter().enumerate() {
         let c = ctx(key, u32::try_from(n).unwrap_or(u32::MAX));
         let moved = Moved {
@@ -214,12 +247,21 @@ fn place(key: usize, body: &Body, exactness: Exactness, chain: &[Step]) -> Res<(
                 let d = [steps(d[0])?, steps(d[1])?, steps(d[2])?];
                 move_by(&c, moved, d)
             }
-            Step::Turn { axis, rotation, .. } => {
+            Step::Turn {
+                axis,
+                rotation,
+                quarter,
+                ..
+            } => {
+                rounded |= !quarter;
                 rotate(&c, moved, axis, rotation, point([0, 0, 0])?)
             }
         }
         .map_err(|e| refused_pose(&e))?;
         now = (made.result.body, made.exactness);
+    }
+    if rounded {
+        check_fully(key, &now.0, now.1)?;
     }
     Ok(now)
 }
@@ -297,11 +339,12 @@ pub fn pose_assembly(input: &Value) -> Pose {
             let origin: [f64; 3] = numbers(j.get("origin"));
             let (motion, said) = match (text(j, "type"), axis) {
                 ("hinge", Some((axis, index))) => match turn(value) {
-                    Ok((rotation, cos, sin)) => (
+                    Ok((rotation, quarter, cos, sin)) => (
                         Some(Step::Turn {
                             axis,
                             index,
                             rotation,
+                            quarter,
                             cos,
                             sin,
                         }),

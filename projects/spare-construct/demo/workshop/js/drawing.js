@@ -1,7 +1,8 @@
 /* Spare Construct · Workshop: a drawing sheet of a part or an assembly, as SVG, in millimetres on an A3 sheet.
 
    Front, top and right views in third-angle projection and a pictorial view, each drawn from the bodies a builder
-   answered, with overall dimensions, a parts list and balloons for an assembly, and a title block. Every edge is
+   answered, with overall dimensions (the geometry kernel's bounding box when it built the part or posed the whole
+   assembly), a parts list and balloons for an assembly, and a title block. Every edge is
    drawn: removing the hidden ones, exactly, waits for the kernel's drawing engine (G394, G396), and the sheet says so. */
 
 import { apply, then } from './build.js';
@@ -78,16 +79,20 @@ function dim(x1, y1, x2, y2, text, side) {
   return `<g class="dim"><path d="M${n1(x1)} ${n1(y1)}L${n1(a[0])} ${n1(a[1])}M${n1(x2)} ${n1(y2)}L${n1(b[0])} ${n1(b[1])}M${n1(a[0])} ${n1(a[1])}L${n1(b[0])} ${n1(b[1])}"/>${ar(a, b)}${ar(b, a)}${t}</g>`;
 }
 
-/* items: [{ body, at, item }] where item numbers an assembly's parts; info: { title, project, material, mass, list, dims } */
+/* items: [{ body, at, item }] where item numbers an assembly's parts; info: { title, project, material, mass, list, dims,
+   size }, size the geometry kernel's box of the whole, when it gave one: it sets the scale and the overall sizes */
 export function sheet(items, info) {
   const [W, H] = SHEET, m = 10;
   const views = { front: viewOf(items, 'front'), top: viewOf(items, 'top'), right: viewOf(items, 'right'), iso: viewOf(items, 'iso') };
   const w = (v) => v.box[2] - v.box[0], h = (v) => v.box[3] - v.box[1];
   const room = [250, 200];
+  // the sizes along x, y and z: the kernel's box when it gave one (info.size, [[x, y, z] least, [x, y, z] greatest],
+  // its query.bounding_box of the bodies), or what the views drawn from the bodies' outlines span
+  const s = info.size, ext = s ? [0, 1, 2].map((i) => s[1][i] - s[0][i]) : [w(views.front), h(views.top), h(views.front)];
   let scale = SCALES[SCALES.length - 1];
-  for (const s of SCALES) {
-    const k = s[0] / s[1];
-    if ((w(views.front) + w(views.right)) * k + 30 <= room[0] && (h(views.top) + h(views.front)) * k + 30 <= room[1]) { scale = s; break; }
+  for (const sc of SCALES) {
+    const k = sc[0] / sc[1];
+    if ((ext[0] + ext[1]) * k + 30 <= room[0] && (ext[1] + ext[2]) * k + 30 <= room[1]) { scale = sc; break; }
   }
   const k = scale[0] / scale[1];
   const g = 18;   // the gap between views, room for dimensions
@@ -110,9 +115,10 @@ export function sheet(items, info) {
   }
   if (info.dims !== false) {
     const F = views.front, T = views.top, [ox, oy] = place.front, [tx, ty] = place.top;
-    out += dim(ox + F.box[0] * k, oy + F.box[3] * k, ox + F.box[2] * k, oy + F.box[3] * k, n1(w(F)), 1);
-    out += dim(ox + F.box[0] * k, oy + F.box[1] * k, ox + F.box[0] * k, oy + F.box[3] * k, n1(h(F)), -1);
-    out += dim(tx + T.box[0] * k, ty + T.box[1] * k, tx + T.box[0] * k, ty + T.box[3] * k, n1(h(T)), -1);
+    out += dim(ox + F.box[0] * k, oy + F.box[3] * k, ox + F.box[2] * k, oy + F.box[3] * k, n1(ext[0]), 1);
+    out += dim(ox + F.box[0] * k, oy + F.box[1] * k, ox + F.box[0] * k, oy + F.box[3] * k, n1(ext[2]), -1);
+    out += dim(tx + T.box[0] * k, ty + T.box[1] * k, tx + T.box[0] * k, ty + T.box[3] * k, n1(ext[1]), -1);
+    if (s) out += `<text class="note" x="${m + 4}" y="${H - m - 8}">Overall sizes from the geometry kernel's bounding box of the bodies.</text>`;
   }
   // balloons for an assembly's parts, on the pictorial view
   const seen = new Set();

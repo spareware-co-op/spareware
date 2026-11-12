@@ -23,6 +23,7 @@ export const WAITS = {
   onface: { label: 'Sketch on a face', icon: 'ws-onface', what: "persistent face names in the history (kernel chapter 20)" },
   outline: { label: 'Extrude any outline', icon: 'ws-extrude', what: "the kernel's extrude (G255) or its booleans (G130, G131); today it extrudes convex outlines and circles" },
   turn: { label: 'Pattern round an axis', icon: 'ws-pattern', what: "accepting a Certified result for turns other than quarter turns (the kernel's transform.pattern can)" },
+  hinge: { label: 'Hinge at any angle', icon: 'ws-hinge', what: "the kernel's checker certifying turned bodies (G134 for flat faces, G177 for curved); a quarter turn rounds nothing and is posed today, and the page places a part turned to any other angle" },
   mates: { label: 'Joints on faces', icon: 'ws-joint', what: "the kernel's assembly mates (G479) and persistent face names; here a joint's axis is typed in" },
   pinslot: { label: 'Pin in slot', icon: 'ws-joint', what: "the kernel's assembly mates (G479)" },
   ball: { label: 'Ball joint', icon: 'ws-joint', what: "the kernel's assembly mates (G479)" },
