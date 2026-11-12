@@ -10098,7 +10098,7 @@
        "depends_on": [
         "CON-A27-F3-P1"
        ],
-       "piece": null
+       "piece": "A26"
       },
       {
        "id": "CON-A27-F3-P4",

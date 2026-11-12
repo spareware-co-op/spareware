@@ -404,6 +404,139 @@ fn references_must_point_back_to_something_built() {
     );
 }
 
+/// The remedies' actions and pieces of a row's rebuild report.
+fn remedies(row: &Value) -> Vec<(String, Option<String>)> {
+    row["error"]["remedies"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|r| {
+            (
+                r["action"].as_str().unwrap().to_owned(),
+                r["piece"].as_str().map(str::to_owned),
+            )
+        })
+        .collect()
+}
+
+#[test]
+fn the_rebuild_report_keeps_the_kernels_own_error() {
+    // the top of this prism lands past the kernel's reach: Workshop passes each size, the kernel
+    // refuses the body, and its structured error comes back whole
+    let p = json!({ "params": [], "features": [
+        { "id": "s", "type": "sketch", "name": "S", "shape": "rect", "w": 4, "h": 2, "z": 6_871_940 },
+        { "id": "e", "type": "extrude", "name": "E", "sketch": "s", "depth": 10 } ] });
+    let a = answer(&p);
+    assert_eq!(states(&a), ["built", "failed"]);
+    let e = &a["features"][1]["error"];
+    assert_eq!(e["source"], "kernel");
+    assert_eq!(e["kind"], "FrameRangeExceeded");
+    assert!(e["detail"].as_str().unwrap().contains("OutOfRange"), "{e}");
+    assert!(!e["op"].as_str().unwrap().is_empty());
+    assert_eq!(
+        remedies(&a["features"][1]),
+        [("ChangeFrame".to_owned(), None)]
+    );
+    assert!(
+        a["features"][1]["message"]
+            .as_str()
+            .unwrap()
+            .starts_with("The kernel refused it: ")
+    );
+    // a built feature carries no report
+    assert!(a["features"][0].get("error").is_none());
+}
+
+#[test]
+fn what_waits_names_its_pieces_as_remedies() {
+    let a = answer(&bracket());
+    for k in [8, 9] {
+        let row = &a["features"][k];
+        assert_eq!(row["error"]["source"], "workshop");
+        assert_eq!(row["error"]["kind"], "Unsupported");
+        assert_eq!(row["error"]["message"], row["message"]);
+        assert!(
+            remedies(row)
+                .iter()
+                .all(|(action, piece)| action == "AwaitPiece" && piece.is_some()),
+            "{row}"
+        );
+    }
+    // a join waits for the booleans, and says a new body extrudes today
+    let mut p = one_outline(json!([[0, 0], [10, 0], [10, 10], [0, 10]]));
+    p["features"][1]["op"] = json!("join");
+    let a = answer(&p);
+    assert_eq!(
+        remedies(&a["features"][1]),
+        [
+            ("ChangeInput".to_owned(), None),
+            ("AwaitPiece".to_owned(), Some("G130".to_owned())),
+            ("AwaitPiece".to_owned(), Some("G131".to_owned())),
+            ("AwaitPiece".to_owned(), Some("G132".to_owned())),
+            ("AwaitPiece".to_owned(), Some("G133".to_owned())),
+        ]
+    );
+    // an outline that is not convex: make it convex today, or wait for G255, G130 and G131
+    let a = answer(&one_outline(json!([
+        [0, 0],
+        [20, 0],
+        [10, 5],
+        [20, 20],
+        [0, 20]
+    ])));
+    let pieces: Vec<_> = remedies(&a["features"][1])
+        .into_iter()
+        .filter_map(|r| r.1)
+        .collect();
+    assert_eq!(pieces, ["G255", "G130", "G131"]);
+}
+
+#[test]
+fn a_feature_broken_by_an_earlier_one_names_it() {
+    let mut p = bracket();
+    p["features"][2]["suppressed"] = json!(true);
+    let a = answer(&p);
+    let row = &a["features"][3];
+    assert_eq!(row["error"]["source"], "workshop");
+    assert_eq!(row["error"]["kind"], "InvalidInput");
+    assert_eq!(row["error"]["detail"], "PickedNotBuilt");
+    assert_eq!(row["error"]["cause"], p["features"][2]["id"]);
+    assert_eq!(row["error"]["remedies"][0]["action"], "ChangeInput");
+
+    // a copy of a feature that waits waits for the same pieces, and names it
+    let mut p = one_outline(json!([[0, 0], [10, 0], [10, 10], [0, 10]]));
+    p["features"][1]["op"] = json!("cut");
+    p["features"]
+        .as_array_mut()
+        .unwrap()
+        .push(json!({ "id": "m", "type": "mirror", "name": "M", "of": "e" }));
+    p["end"] = json!(3);
+    let a = answer(&p);
+    assert_eq!(states(&a), ["built", "waits", "failed"]);
+    assert_eq!(a["features"][2]["error"]["cause"], "e");
+    assert!(
+        remedies(&a["features"][2]).contains(&("AwaitPiece".to_owned(), Some("G130".to_owned())))
+    );
+
+    // a field that won't do names the field to change; a parameter that fails says why as data
+    let mut p = bracket();
+    p["params"][0]["value"] = json!("nothing_called_this");
+    let a = answer(&p);
+    assert_eq!(a["params"][0]["error"]["detail"], "UnknownName");
+    assert_eq!(a["params"][0]["error"]["remedies"][0]["input"], "width");
+    let e = &a["features"][0]["error"];
+    assert_eq!(e["kind"], "InvalidInput");
+    assert_eq!(e["remedies"][0]["action"], "ChangeInput");
+    assert!(e["remedies"][0]["input"].is_string());
+    // a size past the kernel's reach, caught before the kernel is asked, has the kernel's kind
+    let p = json!({ "params": [], "features": [
+        { "id": "s", "type": "sketch", "name": "S", "shape": "circle", "r": 5, "cx": 7.0e9, "cy": 0 } ] });
+    assert_eq!(
+        answer(&p)["features"][0]["error"]["kind"],
+        "FrameRangeExceeded"
+    );
+}
+
 #[test]
 fn text_that_is_not_a_recipe_comes_back_as_an_answer() {
     let bad: Value = serde_json::from_str(&build_json("not json")).unwrap();

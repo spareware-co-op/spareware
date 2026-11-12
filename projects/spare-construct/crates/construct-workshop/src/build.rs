@@ -6,10 +6,12 @@
 //! `kind` is `length` (the default), `angle` or `count`, and its formula may use the others in any
 //! order; a loop of formulas is refused. Features before `end` are built in order; the rest are
 //! rolled back. The answer:
-//! `{ engine, params, features: [{ id, state, message, bodies }], bodies, volume, bbox }`, where a
-//! feature's state is `built`, `waits`, `failed`, `suppressed` or `rolled_back`, and a body says how to
-//! draw it (its profile, height and the map from the profile's place to where it is) and what the
-//! kernel says of it (its exactness, volume, face count and box).
+//! `{ engine, params, features: [{ id, state, message, bodies, error }], bodies, volume, bbox }`,
+//! where a feature's state is `built`, `waits`, `failed`, `suppressed` or `rolled_back`, a feature or
+//! parameter that waits or fails carries its rebuild report (`error`, [`crate::report`]: the kernel's
+//! structured error, or Workshop's in the same shape), and a body says how to draw it (its profile,
+//! height and the map from the profile's place to where it is) and what the kernel says of it (its
+//! exactness, volume, face count and box).
 //!
 //! The kernel decides: a profile goes to `make.prism` as it is, and if the kernel refuses it as not
 //! convex, the feature waits for the kernel's extrude or booleans rather than being built some other
@@ -26,12 +28,14 @@ use engine_geometry::operations::{
 };
 use engine_geometry::value::Exactness;
 use engine_geometry::value::body::Body;
-use engine_geometry::value::error::{MakeDetail, OpError, OpErrorDetail};
+use engine_geometry::value::error::{ErrorKind, MakeDetail, OpError, OpErrorDetail};
 use engine_geometry::value::grid::{GridStep, P3, Steps};
 use engine_geometry::value::op::{Budget, OpContext, OpId, OpOutput, OpPath};
 use engine_geometry::value::transform::{Axis, GridTransform, TypedTransform};
 use serde::Serialize;
 use serde_json::{Map, Value, json};
+
+use crate::report::{Report, change, report_it};
 
 /// Grid steps per millimetre: the kernel's step for parts and boards, `Q1`, is 6.25 nm.
 pub const STEPS_PER_MM: f64 = 160_000.0;
@@ -39,31 +43,67 @@ pub const STEPS_PER_MM: f64 = 160_000.0;
 const COORD_MAX: i64 = (1 << 40) - 1;
 
 /// The features a part can hold that the kernel cannot build yet, and the kernel pieces each waits
-/// for (`projects/engines/geometry/architecture/30-build-order.json`). The same words as the page's.
-const WAITS: &[(&str, &str, &str)] = &[
-    ("revolve", "Revolve", "the kernel's revolve (G255)"),
-    ("sweep", "Sweep", "the kernel's sweeps (G256, G257)"),
+/// for (`projects/engines/geometry/architecture/30-build-order.json`), in words (the same as the
+/// page's) and as the pieces the rebuild report names.
+const WAITS: &[(&str, &str, &str, &[&str])] = &[
+    (
+        "revolve",
+        "Revolve",
+        "the kernel's revolve (G255)",
+        &["G255"],
+    ),
+    (
+        "sweep",
+        "Sweep",
+        "the kernel's sweeps (G256, G257)",
+        &["G256", "G257"],
+    ),
     (
         "fillet",
         "Fillet",
         "the kernel's blends (G263 to G265) and persistent edge names",
+        &["G263", "G264", "G265"],
     ),
     (
         "chamfer",
         "Chamfer",
         "the kernel's blends (G263) and persistent edge names",
+        &["G263"],
     ),
-    ("shell", "Shell", "the kernel's offsets (G275, G277)"),
-    ("hole", "Hole", "the kernel's booleans (G130 to G133)"),
-    ("join", "Join", "the kernel's booleans (G130 to G133)"),
-    ("cut", "Cut", "the kernel's booleans (G130 to G133)"),
+    (
+        "shell",
+        "Shell",
+        "the kernel's offsets (G275, G277)",
+        &["G275", "G277"],
+    ),
+    (
+        "hole",
+        "Hole",
+        "the kernel's booleans (G130 to G133)",
+        BOOLEANS,
+    ),
+    (
+        "join",
+        "Join",
+        "the kernel's booleans (G130 to G133)",
+        BOOLEANS,
+    ),
+    (
+        "cut",
+        "Cut",
+        "the kernel's booleans (G130 to G133)",
+        BOOLEANS,
+    ),
     (
         "intersect",
         "Intersect",
         "the kernel's booleans (G130 to G133)",
+        BOOLEANS,
     ),
 ];
+const BOOLEANS: &[&str] = &["G130", "G131", "G132", "G133"];
 const OUTLINE_WAITS: &str = "the kernel's extrude (G255) or its booleans (G130, G131); today it extrudes convex outlines and circles";
+const OUTLINE_PIECES: &[&str] = &["G255", "G130", "G131"];
 
 /// What a builder answers for a part.
 #[derive(Debug, Serialize)]
@@ -97,6 +137,9 @@ pub struct ParamRow {
     pub kind: &'static str,
     /// Whether it is a formula of other parameters rather than a number.
     pub formula: bool,
+    /// Why it failed, as data.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub error: Option<Report>,
 }
 
 /// A feature, as built.
@@ -113,6 +156,9 @@ pub struct FeatureRow {
     /// For a sketch: whether the kernel can extrude its profile today.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub convex: Option<bool>,
+    /// Why it waits or fails, as data: the rebuild report.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub error: Option<Report>,
 }
 
 /// A body, as the page draws it and as the kernel describes it.
@@ -155,20 +201,75 @@ pub struct BodyOut {
     pub bbox: [[f64; 3]; 2],
 }
 
-/// Why a feature was not built.
-pub(crate) enum Refusal {
-    Failed(String),
-    Waits(String),
+/// Why a feature was not built: whether it waits for the kernel, Workshop's sentence for its row, and
+/// the rebuild report (boxed, so every builder step's `Result` stays small).
+pub(crate) struct Refusal {
+    pub(crate) waits: bool,
+    pub(crate) said: String,
+    pub(crate) report: Box<Report>,
 }
 pub(crate) type Res<T> = Result<T, Refusal>;
-pub(crate) fn fail<T>(m: impl Into<String>) -> Res<T> {
-    Err(Refusal::Failed(m.into()))
+impl Refusal {
+    /// It fails, saying the report's words.
+    pub(crate) fn failed(report: Report) -> Self {
+        Self {
+            waits: false,
+            said: report.message.clone(),
+            report: Box::new(report),
+        }
+    }
+    /// It waits for the kernel, saying `said`.
+    pub(crate) fn waits(said: impl Into<String>, report: Report) -> Self {
+        Self {
+            waits: true,
+            said: said.into(),
+            report: Box::new(report),
+        }
+    }
 }
-fn waits<T>(m: impl Into<String>) -> Res<T> {
-    Err(Refusal::Waits(m.into()))
+/// Workshop refuses it, with the report given.
+pub(crate) fn refuse<T>(report: Report) -> Res<T> {
+    Err(Refusal::failed(report))
 }
+/// A field that won't do: `input` is the field as the page labels it, `fix` what would.
+pub(crate) fn bad<T>(
+    kind: ErrorKind,
+    detail: &str,
+    input: &str,
+    message: impl Into<String>,
+    fix: impl Into<String>,
+) -> Res<T> {
+    refuse(Report::workshop(kind, detail, message).with(change(input, fix)))
+}
+/// A size past the kernel's reach for parts.
+pub(crate) fn past_reach<T>(message: &str) -> Res<T> {
+    bad(
+        ErrorKind::FrameRangeExceeded,
+        "PastReach",
+        "the sizes",
+        message,
+        "Keep the part within 6.87 km of its origin",
+    )
+}
+/// The kernel answered something it should not have: a defect to report.
+pub(crate) fn defect<T>(message: &str) -> Res<T> {
+    refuse(Report::workshop(ErrorKind::Internal, "KernelAnswer", message).with(report_it()))
+}
+/// It waits for the kernel `pieces`, saying `said`; `fix` is what works today, if anything.
+fn waits<T>(said: String, pieces: &[&str], fix: Option<(&str, &str)>) -> Res<T> {
+    let mut r = Report::workshop(ErrorKind::Unsupported, "AwaitsKernel", said.clone());
+    if let Some((input, how)) = fix {
+        r = r.with(change(input, how));
+    }
+    Err(Refusal::waits(said, r.awaiting(pieces)))
+}
+/// The kernel refused it: its own error, whole.
 pub(crate) fn refused(e: &OpError) -> Refusal {
-    Refusal::Failed(format!("The kernel refused it: {}", e.message()))
+    Refusal {
+        waits: false,
+        said: format!("The kernel refused it: {}", e.message()),
+        report: Box::new(Report::kernel(e)),
+    }
 }
 
 /// A body the part has, with the kernel's body behind it.
@@ -240,7 +341,9 @@ pub(crate) fn steps(v: f64) -> Res<i64> {
     #[allow(clippy::cast_precision_loss)]
     let reach = COORD_MAX as f64;
     if !s.is_finite() || s.abs() > reach {
-        return fail("A size lands past the kernel's reach for parts, 6.87 km from the origin.");
+        return past_reach(
+            "A size lands past the kernel's reach for parts, 6.87 km from the origin.",
+        );
     }
     #[allow(clippy::cast_possible_truncation)]
     Ok(s as i64)
@@ -264,17 +367,39 @@ fn lookup(env: &Env, name: &str) -> Result<Quantity, FormulaError> {
 /// A field's value of `kind`: a number in the kind's own unit, a parameter's name or a formula. A
 /// formula is worked out exactly and meets one rounding, to the nearest double, here.
 fn value_as(env: &Env, v: Option<&Value>, what: &str, kind: Kind) -> Res<f64> {
+    let field = lower(what);
     match v {
-        Some(Value::Number(n)) => n
-            .as_f64()
-            .map_or_else(|| fail(format!("{what} is not a number.")), Ok),
+        Some(Value::Number(n)) => n.as_f64().map_or_else(
+            || {
+                bad(
+                    ErrorKind::InvalidInput,
+                    "NotANumber",
+                    &field,
+                    format!("{what} is not a number."),
+                    format!("Give {field} a number"),
+                )
+            },
+            Ok,
+        ),
         Some(Value::String(s)) if !s.trim().is_empty() => {
             match value_of(s, kind, &mut |name| lookup(env, name)) {
                 Ok(x) => Ok(x.to_f64()),
-                Err(e) => fail(format!("{what}: {}", lower(&e.message))),
+                Err(e) => bad(
+                    ErrorKind::InvalidInput,
+                    e.code,
+                    &field,
+                    format!("{what}: {}", lower(&e.message)),
+                    format!("Change {field}"),
+                ),
             }
         }
-        _ => fail(format!("{what} is not set.")),
+        _ => bad(
+            ErrorKind::InvalidInput,
+            "NotSet",
+            &field,
+            format!("{what} is not set."),
+            format!("Set {field}"),
+        ),
     }
 }
 fn value(env: &Env, v: Option<&Value>, what: &str) -> Res<f64> {
@@ -293,14 +418,28 @@ fn length(env: &Env, v: Option<&Value>, what: &str) -> Res<f64> {
 fn positive(env: &Env, v: Option<&Value>, what: &str) -> Res<f64> {
     let x = length(env, v, what)?;
     if x < 1.0 / STEPS_PER_MM {
-        return fail(format!("{what} must be more than zero."));
+        let field = lower(what);
+        return bad(
+            ErrorKind::Degenerate,
+            "NotPositive",
+            &field,
+            format!("{what} must be more than zero."),
+            format!("Make {field} more than zero"),
+        );
     }
     Ok(x)
 }
 fn whole(env: &Env, v: Option<&Value>, what: &str, lo: u32, hi: u32) -> Res<u32> {
     let x = value_as(env, v, what, Kind::Count)?;
     if x.fract() != 0.0 || x < f64::from(lo) || x > f64::from(hi) {
-        return fail(format!("{what} must be a whole number from {lo} to {hi}."));
+        let field = lower(what);
+        return bad(
+            ErrorKind::InvalidInput,
+            "NotWhole",
+            &field,
+            format!("{what} must be a whole number from {lo} to {hi}."),
+            format!("Make {field} a whole number from {lo} to {hi}"),
+        );
     }
     // checked against hi just above
     #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
@@ -391,7 +530,13 @@ fn profile(env: &Env, f: &Map<String, Value>) -> Res<Profile> {
                 .and_then(Value::as_array)
                 .filter(|p| p.len() >= 3)
             else {
-                return fail("An outline needs at least three corners.");
+                return bad(
+                    ErrorKind::InvalidInput,
+                    "TooFewCorners",
+                    "the corners",
+                    "An outline needs at least three corners.",
+                    "Add corners until there are at least three",
+                );
             };
             let mut out = Vec::with_capacity(pts.len());
             for (i, p) in pts.iter().enumerate() {
@@ -401,7 +546,15 @@ fn profile(env: &Env, f: &Map<String, Value>) -> Res<Profile> {
             }
             out
         }
-        other => return fail(format!("There is no sketch shape called {other}.")),
+        other => {
+            return bad(
+                ErrorKind::InvalidInput,
+                "UnknownShape",
+                "the shape",
+                format!("There is no sketch shape called {other}."),
+                "Pick a rectangle, a circle, a regular polygon or an outline",
+            );
+        }
     };
     let mut pts = Vec::with_capacity(raw.len());
     for p in raw {
@@ -409,15 +562,24 @@ fn profile(env: &Env, f: &Map<String, Value>) -> Res<Profile> {
     }
     let n = pts.len();
     if let Some(i) = (0..n).find(|&i| pts[i] == pts[(i + 1) % n]) {
-        return fail(format!(
-            "Corners {} and {} are the same point.",
-            i + 1,
-            (i + 1) % n + 1
-        ));
+        let next = (i + 1) % n + 1;
+        return bad(
+            ErrorKind::Degenerate,
+            "RepeatedCorner",
+            &format!("corner {next}"),
+            format!("Corners {} and {next} are the same point.", i + 1),
+            format!("Move corner {next}, or remove it"),
+        );
     }
     let s = area2(&pts);
     if s == 0 {
-        return fail("The outline has no area.");
+        return bad(
+            ErrorKind::Degenerate,
+            "NoArea",
+            "the corners",
+            "The outline has no area.",
+            "Spread the corners so the outline encloses an area",
+        );
     }
     let turned = s < 0;
     if turned {
@@ -459,7 +621,7 @@ fn describe(
 ) -> Res<([[f64; 3]; 2], usize, f64, &'static str)> {
     let b = bounding_box(c, body, e).map_err(|e| refused(&e))?.result;
     let Some(b) = b else {
-        return fail("The kernel built an empty body.");
+        return defect("The kernel built an empty body.");
     };
     let (lo, hi) = (b.bound.min(), b.bound.max());
     let bbox = [
@@ -473,7 +635,7 @@ fn describe(
     if flat {
         let six = six_volume(c, body, e).map_err(|e| refused(&e))?.result;
         let Some(six) = six.to_i128() else {
-            return fail("The volume does not fit.");
+            return defect("The volume does not fit.");
         };
         // six times the volume in cubic steps: at most about 2^122, so f64 keeps 53 bits of it
         #[allow(clippy::cast_precision_loss)]
@@ -512,7 +674,13 @@ fn axis_of(f: &Map<String, Value>) -> Res<(Axis, usize, char)> {
         "x" => Ok((Axis::X, 0, 'x')),
         "y" => Ok((Axis::Y, 1, 'y')),
         "z" => Ok((Axis::Z, 2, 'z')),
-        _ => fail("Mirror across x, y or z."),
+        _ => bad(
+            ErrorKind::InvalidInput,
+            "NoSuchPlane",
+            "the plane",
+            "Mirror across x, y or z.",
+            "Mirror across x, y or z",
+        ),
     }
 }
 
@@ -543,7 +711,7 @@ fn length0(env: &Env, f: &Map<String, Value>, k: &str, what: &str) -> Res<f64> {
 }
 pub(crate) fn point(p: [i64; 3]) -> Res<P3> {
     P3::new(p[0], p[1], p[2])
-        .map_err(|_| Refusal::Failed("A corner lands past the kernel's reach for parts.".into()))
+        .or_else(|_| past_reach("A corner lands past the kernel's reach for parts."))
 }
 
 impl Builder<'_> {
@@ -553,11 +721,24 @@ impl Builder<'_> {
             .feats
             .iter()
             .position(|g| g.get("id").and_then(Value::as_str) == Some(rid));
+        let input = format!("the {what}");
         let Some(k) = k.filter(|_| !rid.is_empty()) else {
-            return fail(format!("Pick the {what}."));
+            return bad(
+                ErrorKind::InvalidInput,
+                "NothingPicked",
+                &input,
+                format!("Pick the {what}."),
+                format!("Pick the {what}"),
+            );
         };
         if k >= i {
-            return fail(format!("The {what} comes later in the history."));
+            return bad(
+                ErrorKind::InvalidInput,
+                "PickedLater",
+                &input,
+                format!("The {what} comes later in the history."),
+                format!("Pick a {what} earlier in the history, or move this feature after it"),
+            );
         }
         if let Some(l) = self.left.get(rid) {
             return Ok(l.clone());
@@ -566,24 +747,46 @@ impl Builder<'_> {
             .get("name")
             .and_then(Value::as_str)
             .unwrap_or_default();
-        let state = self
-            .rows
-            .get(k)
-            .map_or("not built", |r| r.state)
-            .replace('_', " ");
-        fail(format!("The {what}, {name}, is not built ({state})."))
+        let row = self.rows.get(k);
+        let state = row.map_or("not built", |r| r.state).replace('_', " ");
+        let mut report = Report::workshop(
+            ErrorKind::InvalidInput,
+            "PickedNotBuilt",
+            format!("The {what}, {name}, is not built ({state})."),
+        )
+        .with(change(
+            &input,
+            format!("Build {name} first, or pick another {what}"),
+        ));
+        // what the earlier feature waits for, this one waits for too
+        if let Some(e) = row.and_then(|r| r.error.as_ref()) {
+            report.remedies.extend(
+                e.remedies
+                    .iter()
+                    .filter(|r| r.action == "AwaitPiece")
+                    .cloned(),
+            );
+        }
+        report.cause = Some(rid.to_owned());
+        refuse(report)
     }
 
     fn feature(&mut self, i: usize, f: &Map<String, Value>, row: &mut FeatureRow) -> Res<()> {
         let kind = text(f, "type");
-        if let Some((_, _, what)) = WAITS.iter().find(|w| w.0 == kind) {
-            return waits(format!("Waits for {what}."));
+        if let Some((_, _, what, pieces)) = WAITS.iter().find(|w| w.0 == kind) {
+            return waits(format!("Waits for {what}."), pieces, None);
         }
         match kind.as_str() {
             "sketch" => self.sketch(f, row),
             "extrude" => self.extrude(i, f, row),
             "mirror" | "pattern" | "move" => self.copy(i, f, &kind, row),
-            other => fail(format!("There is no feature called {other}.")),
+            other => bad(
+                ErrorKind::InvalidInput,
+                "UnknownFeature",
+                "the feature",
+                format!("There is no feature called {other}."),
+                "Make it a feature Workshop has: sketch, extrude, mirror, pattern or move",
+            ),
         }
     }
 
@@ -619,14 +822,24 @@ impl Builder<'_> {
 
     fn extrude(&mut self, i: usize, f: &Map<String, Value>, row: &mut FeatureRow) -> Res<()> {
         let Left::Profile(p) = self.refer(i, &text(f, "sketch"), "sketch")? else {
-            return fail("Extrude a sketch, not a body.");
+            return bad(
+                ErrorKind::InvalidInput,
+                "NotASketch",
+                "the sketch",
+                "Extrude a sketch, not a body.",
+                "Pick a sketch",
+            );
         };
         let op = f.get("op").and_then(Value::as_str).unwrap_or("new");
         if op != "new" {
             let label = WAITS.iter().find(|w| w.0 == op).map_or(op, |w| w.1);
-            return waits(format!(
-                "{label} waits for the kernel's booleans (G130 to G133). A new body extrudes today."
-            ));
+            return waits(
+                format!(
+                    "{label} waits for the kernel's booleans (G130 to G133). A new body extrudes today."
+                ),
+                BOOLEANS,
+                Some(("the result", "Make it a new body, which extrudes today")),
+            );
         }
         let height = positive(&self.env, f.get("depth"), "The distance")?;
         let h = Steps(steps(height)?.unsigned_abs());
@@ -672,9 +885,14 @@ impl Builder<'_> {
             }
             Profile::Outline { pts, z, convex, .. } => {
                 if !convex {
-                    return waits(format!(
-                        "Extruding a shape that is not convex waits for {OUTLINE_WAITS}."
-                    ));
+                    return waits(
+                        format!("Extruding a shape that is not convex waits for {OUTLINE_WAITS}."),
+                        OUTLINE_PIECES,
+                        Some((
+                            "the sketch",
+                            "Make the outline convex, which extrudes today",
+                        )),
+                    );
                 }
                 let base = pts
                     .iter()
@@ -685,8 +903,12 @@ impl Builder<'_> {
                     Err(e)
                         if matches!(e.detail(), OpErrorDetail::Make(MakeDetail::BaseNotConvex)) =>
                     {
-                        return waits(format!(
-                            "The kernel finds this outline not convex. Extruding it waits for {OUTLINE_WAITS}."
+                        // the kernel's own error, and the pieces that would extrude it as it is
+                        return Err(Refusal::waits(
+                            format!(
+                                "The kernel finds this outline not convex. Extruding it waits for {OUTLINE_WAITS}."
+                            ),
+                            Report::kernel(&e).awaiting(OUTLINE_PIECES),
                         ));
                     }
                     Err(e) => return Err(refused(&e)),
@@ -713,14 +935,26 @@ impl Builder<'_> {
         row: &mut FeatureRow,
     ) -> Res<()> {
         let Left::Bodies(src_ids) = self.refer(i, &text(f, "of"), "feature to copy")? else {
-            return fail("Pick a feature that made a body.");
+            return bad(
+                ErrorKind::InvalidInput,
+                "NotABody",
+                "the feature to copy",
+                "Pick a feature that made a body.",
+                "Pick a feature that made a body",
+            );
         };
         let src: Vec<usize> = src_ids
             .iter()
             .filter_map(|s| self.live.iter().position(|l| &l.out.id == s))
             .collect();
         if src.is_empty() {
-            return fail("That feature has no bodies left.");
+            return bad(
+                ErrorKind::InvalidInput,
+                "NoBodiesLeft",
+                "the feature to copy",
+                "That feature has no bodies left.",
+                "Pick a feature that still has bodies",
+            );
         }
         let id = row.id.clone();
         let c = ctx(i, 0);
@@ -771,10 +1005,22 @@ impl Builder<'_> {
                     length0(env, f, "dz2", "The row spacing")?,
                 ];
                 if d.iter().all(|v| *v == 0.0) {
-                    return fail("The spacing is zero.");
+                    return bad(
+                        ErrorKind::Degenerate,
+                        "ZeroSpacing",
+                        "the spacing",
+                        "The spacing is zero.",
+                        "Give the spacing a length",
+                    );
                 }
                 if n2 > 1 && d2.iter().all(|v| *v == 0.0) {
-                    return fail("The row spacing is zero.");
+                    return bad(
+                        ErrorKind::Degenerate,
+                        "ZeroSpacing",
+                        "the row spacing",
+                        "The row spacing is zero.",
+                        "Give the row spacing a length",
+                    );
                 }
                 let ds = [steps(d[0])?, steps(d[1])?, steps(d[2])?];
                 let d2s = [steps(d2[0])?, steps(d2[1])?, steps(d2[2])?];
@@ -792,14 +1038,14 @@ impl Builder<'_> {
                                 .zip(i64::from(j).checked_mul(d2s[a]))
                                 .and_then(|(x, y)| x.checked_add(y));
                             let Some(v) = v.filter(|v| v.abs() <= COORD_MAX) else {
-                                return fail("A copy lands past the kernel's reach for parts.");
+                                return past_reach(
+                                    "A copy lands past the kernel's reach for parts.",
+                                );
                             };
                             *o = v;
                         }
-                        let t = GridTransform::translation(off).map_err(|_| {
-                            Refusal::Failed(
-                                "A copy lands past the kernel's reach for parts.".into(),
-                            )
+                        let t = GridTransform::translation(off).or_else(|_| {
+                            past_reach("A copy lands past the kernel's reach for parts.")
                         })?;
                         let mut key = [0_u8; 16];
                         key[..4].copy_from_slice(&j.to_be_bytes());
@@ -823,7 +1069,7 @@ impl Builder<'_> {
                     let copies = pattern(&c, moved, &instances).map_err(|e| refused(&e))?;
                     for (key, made) in &copies.result {
                         let Some(&(j, k, off)) = offsets.get(key) else {
-                            return fail("The kernel gave back a copy it was not asked for.");
+                            return defect("The kernel gave back a copy it was not asked for.");
                         };
                         let mut shape = l.out.clone();
                         shape.id = format!("{id}:{}:{j}.{k}", l.out.id);
@@ -925,21 +1171,36 @@ fn read_params(part: &Value) -> (Env, Vec<ParamRow>) {
                     value: Some(value.to_f64()),
                     kind,
                     formula,
+                    error: None,
                 });
                 env.insert(entry.name.clone(), value);
             }
-            Err(e) => rows.push(ParamRow {
-                name: entry.name.clone(),
-                state: "failed",
-                message: if entry.text.trim().is_empty() {
+            Err(e) => {
+                let unset = entry.text.trim().is_empty();
+                let message = if unset {
                     format!("{} is not set.", entry.name)
                 } else {
                     e.message
-                },
-                value: None,
-                kind,
-                formula,
-            }),
+                };
+                let report = Report::workshop(
+                    ErrorKind::InvalidInput,
+                    if unset { "NotSet" } else { e.code },
+                    message.clone(),
+                )
+                .with(change(
+                    &entry.name,
+                    format!("Change the value of {}", entry.name),
+                ));
+                rows.push(ParamRow {
+                    name: entry.name.clone(),
+                    state: "failed",
+                    message,
+                    value: None,
+                    kind,
+                    formula,
+                    error: Some(report),
+                });
+            }
         }
     }
     (env, rows)
@@ -981,6 +1242,7 @@ pub(crate) fn build_with_bodies(part: &Value) -> (Answer, Vec<(Body, Exactness)>
             message: String::new(),
             bodies: Vec::new(),
             convex: None,
+            error: None,
         };
         if i >= end {
             row.state = "rolled_back";
@@ -989,14 +1251,12 @@ pub(crate) fn build_with_bodies(part: &Value) -> (Answer, Vec<(Body, Exactness)>
             row.state = "suppressed";
             row.message = "Suppressed: kept in the history, not built.".into();
         } else {
-            match b.feature(i, f, &mut row) {
-                Ok(()) => {}
-                Err(Refusal::Failed(m)) => {
-                    (row.state, row.message, row.bodies) = ("failed", m, Vec::new())
-                }
-                Err(Refusal::Waits(m)) => {
-                    (row.state, row.message, row.bodies) = ("waits", m, Vec::new())
-                }
+            if let Err(r) = b.feature(i, f, &mut row) {
+                row.state = if r.waits { "waits" } else { "failed" };
+                row.message = r.said;
+                row.bodies = Vec::new();
+                row.convex = None;
+                row.error = Some(*r.report);
             }
         }
         b.rows.push(row);

@@ -18,15 +18,22 @@
 //! into place by `transform.move` and `transform.rotate`, through the joints and within their
 //! limits, and the drawings take their sizes from `query.bounding_box` of the posed bodies.
 //!
+//! Whatever is not built says why as data, not only in words ([`report`]): the kernel's own
+//! structured error when it refused (its kind, detail, operation, entities, evidence and what would
+//! make it succeed, a waiting piece among them), and Workshop's own refusals in the same shape, so
+//! the page's rebuild report and an AI agent read one form.
+//!
 //! The recipe and the answer have the same form as the browser prototype's builder
 //! (`demo/workshop/js/build.js`), so the Workshop page can use either; the page uses this one, compiled
 //! to WebAssembly into `demo/workshop/pkg` by `server/scripts/build-workshop.sh`.
 
 pub mod assembly;
 pub mod build;
+pub mod report;
 
 pub use assembly::{Pose, pose_assembly, pose_json};
 pub use build::{Answer, build_json, build_part};
+pub use report::Report;
 
 use wasm_bindgen::prelude::wasm_bindgen;
 
