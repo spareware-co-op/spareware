@@ -96,6 +96,13 @@ pub fn stored(data: &[u8]) -> Option<StoredBody> {
     for (old, chunk) in listed.iter().zip(&chunks) {
         let new = chunk.content_id();
         let width = old.digest().len();
+        // The format lets an ID of an algorithm other than SHA-256 carry any digest, the empty one
+        // included (24.2, `content-id = [alg: uint, digest: bstr]`; `ContentId::new` keeps it as
+        // read). An empty digest has no place in the index to find, and no slot is rewritten that
+        // is not a SHA-256 digest's 32 bytes, so it is passed by and the search goes on from here.
+        if width == 0 {
+            continue;
+        }
         let found = index
             .payload
             .get(from..)

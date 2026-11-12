@@ -14993,7 +14993,8 @@
     {
       "evidence": {
         "contract": [
-          "projects/engines/geometry/crates/geom-curve/tests/attack_g64.rs"
+          "projects/engines/geometry/crates/geom-curve/tests/attack_g64.rs",
+          "projects/engines/geometry/crates/geom-curve/tests/transition_work.rs"
         ]
       },
       "missing": [
