@@ -24,7 +24,8 @@
 //! Cost: the tables are static. Finding a name scans them once (a few hundred entries), and
 //! preparing a benchmark builds its batch, O([`inputs::BATCH`]).
 //!
-//! Covers: make.box, make.cylinder, transform.move, transform.rotate.
+//! Covers: make.box, make.cylinder, query.area, query.bounding_box, query.exactness, query.faces,
+//! query.validity, query.volume, transform.move, transform.rotate.
 
 use core::fmt;
 
@@ -438,6 +439,13 @@ pub static OPS: &[Op] = &[
     Op { group: "make", name: "cylinder", measures: "geom_make::primitive::cylinder", classes: T, prepare: |c| bind(inputs::make::cylinders(c), kernels::make::cylinders) },
     Op { group: "make", name: "move_box", measures: "geom_make::transform::move_by", classes: T, prepare: |c| bind(inputs::make::moved_boxes(c), kernels::make::moved_boxes) },
     Op { group: "make", name: "turn_box", measures: "geom_make::transform::rotate", classes: T, prepare: |c| bind(inputs::make::turned_boxes(c), kernels::make::turned_boxes) },
+    // The core queries (piece G102; decision 32.46): each of the six on a built box or prism.
+    Op { group: "query", name: "area", measures: "geom_topo::query_ops::twice_area", classes: T, prepare: |c| bind(inputs::query::faces(c), kernels::query::areas) },
+    Op { group: "query", name: "bounding_box", measures: "geom_topo::query_ops::bounding_box", classes: T, prepare: |c| bind(inputs::query::bodies(c), kernels::query::boxes) },
+    Op { group: "query", name: "exactness", measures: "geom_check::query::exactness", classes: T, prepare: |c| bind(inputs::query::bodies(c), kernels::query::reports) },
+    Op { group: "query", name: "faces", measures: "geom_name::faces::faces", classes: T, prepare: |c| bind(inputs::query::bodies(c), kernels::query::faces) },
+    Op { group: "query", name: "validity", measures: "geom_check::query::validity", classes: T, prepare: |c| bind(inputs::query::bodies(c), kernels::query::validities) },
+    Op { group: "query", name: "volume", measures: "geom_topo::query_ops::six_volume", classes: T, prepare: |c| bind(inputs::query::bodies(c), kernels::query::volumes) },
     // Root finding and quadrature (piece G51; decision 32.46).
     Op { group: "brent", name: "zero", measures: "brent::zero", classes: T, prepare: |c| bind(inputs::roots::zero(c), kernels::roots::zero) },
     Op { group: "quadrature", name: "gauss_legendre", measures: "quadrature::gauss_legendre", classes: T, prepare: |c| bind(inputs::roots::gauss_legendre(c), kernels::roots::gauss_legendre) },
@@ -449,7 +457,7 @@ pub static OPS: &[Op] = &[
 ];
 
 /// The groups of [`OPS`], in order.
-pub const GROUPS: [&str; 36] = [
+pub const GROUPS: [&str; 37] = [
     "predicate",
     "sign",
     "wide",
@@ -486,6 +494,7 @@ pub const GROUPS: [&str; 36] = [
     "linalg",
     "helper",
     "make",
+    "query",
 ];
 
 /// The group of the growth checks.

@@ -26,7 +26,8 @@
 //! reader, `geom-linalg`'s pivoted QR and SVD, `geom-bvh`'s box tree and cell index,
 //! `geom-nurbs`'s evaluation, interpolation and Bernstein bound, and the curve and surface kinds'
 //! evaluation, certified enclosures and conversion to NURBS in `geom-curve` and `geom-surface`,
-//! with, from phase 3, `geom-make`'s primitives and transforms,
+//! with, from phase 3, `geom-make`'s primitives and transforms and the core queries of
+//! `geom-topo`, `geom-name` and `geom-check`,
 //! each named in the catalogue with its crate's path and checked to be a public function there;
 //! and, from phase 3, `geom-topo`'s columns and publishing, `geom-name`'s attribute step, and
 //! `geom-op`'s batch driver and the flat arrays of points.

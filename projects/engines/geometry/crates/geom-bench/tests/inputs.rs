@@ -2306,6 +2306,34 @@ fn make_typical_batches_all_succeed() {
     all_ok("turn_box", k::turned_boxes, &m::turned_boxes(Typical));
 }
 
+/// Every typical batch of the core queries' benchmarks (piece G102; decision 32.46) answers every
+/// body: each face is a polygon on a plane, each body a solid.
+#[test]
+fn query_typical_batches_all_succeed() {
+    use geom_bench::inputs::query as m;
+    use geom_bench::kernels::query as k;
+    all_ok("area", k::areas, &m::faces(Typical));
+    all_ok("volume", k::volumes, &m::bodies(Typical));
+    all_ok("bounding_box", k::boxes, &m::bodies(Typical));
+    all_ok("exactness", k::reports, &m::bodies(Typical));
+    all_ok("faces", k::faces, &m::bodies(Typical));
+    all_ok("validity", k::validities, &m::bodies(Typical));
+    // Each body is valid, so the reports pass, and its box is the tight box of its vertices.
+    let mut reports = Vec::new();
+    k::reports(&m::bodies(Typical), &mut reports);
+    assert!(reports.iter().all(|r| r.as_ref().is_ok_and(|(_, passed, _)| *passed)));
+    let mut valid = Vec::new();
+    k::validities(&m::bodies(Typical), &mut valid);
+    assert!(valid.iter().all(|r| r.as_ref().is_ok_and(|(passed, _, _)| *passed)));
+    let mut boxes = Vec::new();
+    k::boxes(&m::bodies(Typical), &mut boxes);
+    assert!(
+        boxes
+            .iter()
+            .all(|r| r.as_ref().is_ok_and(|(b, _)| b.is_some_and(|(_, tight)| tight)))
+    );
+}
+
 /// Every typical batch of `geom-bvh`'s benchmarks (decision 32.46) builds every scene and answers
 /// every query.
 #[test]

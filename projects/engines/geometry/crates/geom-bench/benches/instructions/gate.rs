@@ -2890,3 +2890,55 @@ pub mod make {
         benchmarks = build_box, cylinder, move_box, turn_box
     );
 }
+
+/// The core queries (piece G102; decision 32.46).
+pub mod query {
+    use super::*;
+
+    #[library_benchmark(teardown = verify)]
+    #[bench::typical(leak("query/area/typical"))]
+    fn area(run: &'static mut Named) -> &'static mut Named {
+        run.bench.measure();
+        run
+    }
+
+    #[library_benchmark(teardown = verify)]
+    #[bench::typical(leak("query/bounding_box/typical"))]
+    fn bounding_box(run: &'static mut Named) -> &'static mut Named {
+        run.bench.measure();
+        run
+    }
+
+    #[library_benchmark(teardown = verify)]
+    #[bench::typical(leak("query/exactness/typical"))]
+    fn exactness(run: &'static mut Named) -> &'static mut Named {
+        run.bench.measure();
+        run
+    }
+
+    #[library_benchmark(teardown = verify)]
+    #[bench::typical(leak("query/faces/typical"))]
+    fn faces(run: &'static mut Named) -> &'static mut Named {
+        run.bench.measure();
+        run
+    }
+
+    #[library_benchmark(teardown = verify)]
+    #[bench::typical(leak("query/validity/typical"))]
+    fn validity(run: &'static mut Named) -> &'static mut Named {
+        run.bench.measure();
+        run
+    }
+
+    #[library_benchmark(teardown = verify)]
+    #[bench::typical(leak("query/volume/typical"))]
+    fn volume(run: &'static mut Named) -> &'static mut Named {
+        run.bench.measure();
+        run
+    }
+
+    library_benchmark_group!(
+        name = query;
+        benchmarks = area, bounding_box, exactness, faces, validity, volume
+    );
+}
