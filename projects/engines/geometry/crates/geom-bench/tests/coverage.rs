@@ -558,11 +558,22 @@ const OTHER_CRATES: &[(&str, &[(&str, &str)])] = &[
         &[
             ("column", include_str!("../../geom-topo/src/column.rs")),
             ("builder", include_str!("../../geom-topo/src/builder.rs")),
+            (
+                "query_ops",
+                include_str!("../../geom-topo/src/query_ops.rs"),
+            ),
         ],
     ),
     (
         "geom_name",
-        &[("classes", include_str!("../../geom-name/src/classes.rs"))],
+        &[
+            ("classes", include_str!("../../geom-name/src/classes.rs")),
+            ("faces", include_str!("../../geom-name/src/faces.rs")),
+        ],
+    ),
+    (
+        "geom_check",
+        &[("query", include_str!("../../geom-check/src/query.rs"))],
     ),
     (
         "geom_op",

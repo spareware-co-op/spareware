@@ -142,10 +142,43 @@ fn the_kernel_poses_the_hinged_stop_and_its_hinge_waits() {
         assert!((got - want).abs() < 1e-8, "{m:?}");
     }
 
-    // the hinge waits as its arm does; the slider is built
+    // its rebuild report is the kernel's own error, the same in debug and release builds: the
+    // checker can't certify it yet, and the piece that will is the remedy, after the quarter turn
+    // that works today
+    let e = &arm["error"];
+    assert_eq!(e["source"], "kernel", "{e}");
+    assert_eq!(e["kind"], "Unsupported");
+    assert!(
+        e["detail"]
+            .as_str()
+            .unwrap()
+            .starts_with("Make(NotCertifiedYet"),
+        "{e}"
+    );
+    assert!(!e["op"].as_str().unwrap().is_empty());
+    let actions: Vec<(&str, Option<&str>)> = e["remedies"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|r| (r["action"].as_str().unwrap(), r["piece"].as_str()))
+        .collect();
+    let piece = if said.contains("G134") {
+        "G134"
+    } else {
+        "G177"
+    };
+    assert_eq!(
+        actions,
+        [("AwaitPiece", Some(piece)), ("ChangeInput", None)],
+        "{e}"
+    );
+
+    // the hinge waits as its arm does, with its report; the slider is built
     let hinge = &a["joints"][0];
     assert_eq!(hinge["state"], "waits", "{hinge}");
     assert_eq!(hinge["message"], arm["message"]);
+    assert_eq!(hinge["error"], arm["error"]);
+    assert!(a["instances"][0].get("error").is_none());
     assert_eq!(a["joints"][1]["state"], "built");
     assert!(
         a["joints"][1]["message"]
@@ -216,6 +249,12 @@ fn limits_hold_and_what_waits_says_so() {
     assert!(said.contains("waits for the kernel's checker"), "{said}");
     assert_eq!(a["joints"][1]["state"], "waits");
     assert!(a["joints"][1]["message"].as_str().unwrap().contains("G479"));
+    let e = &a["joints"][1]["error"];
+    assert_eq!(
+        (&e["source"], &e["kind"]),
+        (&json!("workshop"), &json!("Unsupported"))
+    );
+    assert_eq!(e["remedies"][1]["piece"], "G479", "{e}");
     // the block, with no joint the kernel can place, stays where it was put
     assert!(
         a["notes"][0]
@@ -228,5 +267,6 @@ fn limits_hold_and_what_waits_says_so() {
     let mut s = hinged_stop();
     s["assembly"]["instances"][1]["part"] = json!("nothing");
     assert_eq!(pose(&s)["instances"][1]["state"], "failed");
+    assert_eq!(pose(&s)["instances"][1]["error"]["detail"], "NoSuchPart");
     assert!(pose_json("[]").contains("BadAssembly"));
 }

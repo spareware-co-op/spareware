@@ -187,9 +187,13 @@ pub fn chosen_way(chosen: &str) -> Option<Way> {
 /// The gate's record of licence choices (29.20, rule 3): every crate in the kernel family's graph
 /// whose licence offers a choice, its expression exactly as its manifest gives it, and the licence
 /// (or licences, joined by `AND`) taken: the first of 29.2's identifiers, in its order, offered.
-pub const LICENCE_CHOICES: [(&str, &str, &str); 125] = [
+pub const LICENCE_CHOICES: [(&str, &str, &str); 134] = [
     ("aho-corasick", "Unlicense OR MIT", "MIT"),
+    ("anstream", "MIT OR Apache-2.0", "MIT"),
     ("anstyle", "MIT OR Apache-2.0", "MIT"),
+    ("anstyle-parse", "MIT OR Apache-2.0", "MIT"),
+    ("anstyle-query", "MIT OR Apache-2.0", "MIT"),
+    ("anstyle-wincon", "MIT OR Apache-2.0", "MIT"),
     ("anyhow", "MIT OR Apache-2.0", "MIT"),
     ("arraydeque", "MIT/Apache-2.0", "MIT"),
     ("autocfg", "Apache-2.0 OR MIT", "MIT"),
@@ -209,6 +213,7 @@ pub const LICENCE_CHOICES: [(&str, &str, &str); 125] = [
     ("clap_builder", "MIT OR Apache-2.0", "MIT"),
     ("clap_derive", "MIT OR Apache-2.0", "MIT"),
     ("clap_lex", "MIT OR Apache-2.0", "MIT"),
+    ("colorchoice", "MIT OR Apache-2.0", "MIT"),
     ("condtype", "MIT OR Apache-2.0", "MIT"),
     ("core_detect", "MIT/Apache-2.0", "MIT"),
     ("cpufeatures", "MIT OR Apache-2.0", "MIT"),
@@ -243,10 +248,12 @@ pub const LICENCE_CHOICES: [(&str, &str, &str); 125] = [
     ("hex", "MIT OR Apache-2.0", "MIT"),
     ("hybrid-array", "MIT OR Apache-2.0", "MIT"),
     ("indexmap", "Apache-2.0 OR MIT", "MIT"),
+    ("is_terminal_polyfill", "MIT OR Apache-2.0", "MIT"),
     ("itoa", "MIT OR Apache-2.0", "MIT"),
     ("lazy_static", "MIT OR Apache-2.0", "MIT"),
     ("lcov", "MIT/Apache-2.0", "MIT"),
     ("libc", "MIT OR Apache-2.0", "MIT"),
+    ("libtest-mimic", "MIT/Apache-2.0", "MIT"),
     (
         "linux-raw-sys",
         "Apache-2.0 WITH LLVM-exception OR Apache-2.0 OR MIT",
@@ -259,6 +266,7 @@ pub const LICENCE_CHOICES: [(&str, &str, &str); 125] = [
     ("num-rational", "MIT OR Apache-2.0", "MIT"),
     ("num-traits", "MIT OR Apache-2.0", "MIT"),
     ("once_cell", "MIT OR Apache-2.0", "MIT"),
+    ("once_cell_polyfill", "MIT OR Apache-2.0", "MIT"),
     ("petgraph", "MIT OR Apache-2.0", "MIT"),
     ("ppv-lite86", "MIT OR Apache-2.0", "MIT"),
     ("proc-macro-crate", "MIT OR Apache-2.0", "MIT"),
@@ -321,6 +329,7 @@ pub const LICENCE_CHOICES: [(&str, &str, &str); 125] = [
     ),
     ("unicode-segmentation", "MIT OR Apache-2.0", "MIT"),
     ("unty-next", "MIT OR Apache-2.0", "MIT"),
+    ("utf8parse", "Apache-2.0 OR MIT", "MIT"),
     ("wait-timeout", "MIT/Apache-2.0", "MIT"),
     (
         "wasip2",

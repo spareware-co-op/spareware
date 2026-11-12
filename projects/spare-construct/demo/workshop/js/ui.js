@@ -102,7 +102,24 @@ function poseNote(list, id) {
   if (!poser) return '';
   if (S.driving || S.sliding) return '<div class="note">While it moves, the page poses it each frame; the geometry kernel poses it again when it stops.</div>';
   const r = poseRow(list, id);
-  return r ? `<div class="note ${{ waits: 'wait', failed: 'bad' }[r.state] || 'ok'}">${esc(r.message)}</div>` : '';
+  return r ? `<div class="note ${{ waits: 'wait', failed: 'bad' }[r.state] || 'ok'}">${esc(r.message)}</div>${reportCard(r.error)}` : '';
+}
+
+/* The rebuild report of a row that waits or fails: the kernel's structured error, or Workshop's in the same form,
+   and what would make it succeed. */
+const SOURCE = { kernel: 'The geometry kernel', workshop: 'Workshop, before asking the kernel' };
+const piecesOf = (e) => [...new Set(((e && e.remedies) || []).filter((x) => x.piece).map((x) => x.piece))];
+function reportCard(e) {
+  if (!e) return '';
+  const cause = e.cause && part().features.find((f) => f.id === e.cause);
+  const row = (th, td) => `<tr><th>${th}</th><td>${td}</td></tr>`;
+  const ev = (e.evidence || []).map((x) => esc(`${x.what}: ${x.mm ? x.mm.map(n2).join(', ') + ' mm' : x.value}`)).join('<br>');
+  return `<div class="report" role="group" aria-label="Rebuild report"><div class="lbl">Rebuild report</div><table class="props"><tbody>
+    ${row('From', esc(SOURCE[e.source] || e.source))}${row('Kind', esc(e.kind))}${row('Detail', esc(e.detail))}
+    ${e.op ? row('Operation', esc(e.op)) : ''}${e.entities && e.entities.length ? row('Entities', esc(e.entities.join(', '))) : ''}${ev ? row('Evidence', ev) : ''}
+    ${e.source === 'kernel' ? row('It says', esc(e.message)) : ''}
+    ${cause ? row('Because of', `<button class="cause" data-act="sel" data-k="feature" data-a="${esc(cause.id)}">${esc(cause.name)}</button>`) : ''}
+    </tbody></table>${e.remedies && e.remedies.length ? `<div class="lbl sub">What would make it succeed</div><ul class="fixes">${e.remedies.map((x) => `<li>${x.piece ? `<span class="badge wait">${esc(x.piece)}</span> ` : ''}${esc(x.text)}</li>`).join('')}</ul>` : ''}</div>`;
 }
 
 function edit(label, fn) {
@@ -352,8 +369,16 @@ function stopDrive() { if (S.driving) { cancelAnimationFrame(S.driving.frame); S
 /* ---------- the panels ---------- */
 function stateBadge(r) {
   if (!r) return '';
-  if (r.state === 'waits') return '<span class="badge wait">Waits for the kernel</span>';
-  if (r.state === 'failed') return '<span class="badge bad">Fails</span>';
+  // the first thing that would make it succeed, as the badge's tip; a wait names its first piece
+  const tip = r.error && r.error.remedies && r.error.remedies.length ? ` title="${esc(r.error.remedies[0].text)}"` : '';
+  if (r.state === 'waits') {
+    const pieces = piecesOf(r.error);
+    return `<span class="badge wait"${tip}>${pieces.length ? `Waits for ${esc(pieces[0])}${pieces.length > 1 ? ' +' + (pieces.length - 1) : ''}` : 'Waits for the kernel'}</span>`;
+  }
+  if (r.state === 'failed') {
+    const cause = r.error && r.error.cause && part().features.find((f) => f.id === r.error.cause);
+    return `<span class="badge bad"${tip}>${cause ? `Fails: needs ${esc(cause.name)}` : 'Fails'}</span>`;
+  }
   if (r.state === 'suppressed') return '<span class="badge n">Suppressed</span>';
   return '';
 }
@@ -444,7 +469,7 @@ function renderSide() {
     }
     h += '</div>';
     const cls = r.state === 'waits' ? 'wait' : r.state === 'failed' ? 'bad' : r.state === 'built' ? 'ok' : 'n';
-    h += `<div class="sec"><div class="lbl">Result</div><div class="note ${cls}">${esc(r.message || { built: 'Built.', rolled_back: 'After the end of the history.' }[r.state] || '')}</div>`;
+    h += `<div class="sec"><div class="lbl">Result</div><div class="note ${cls}">${esc(r.message || { built: 'Built.', rolled_back: 'After the end of the history.' }[r.state] || '')}</div>${reportCard(r.error)}`;
     const bodies = out.bodies.filter((b) => r.bodies.includes(b.id));
     if (bodies.length) h += `<table class="props"><tbody>${bodies.slice(0, 8).map((b) => `<tr><th>${b.kind === 'prism' ? 'Prism' : 'Cylinder'}</th><td>${b.faces} faces · ${esc(b.exactness)} · ${n2(b.volume)} mm³</td></tr>`).join('')}${bodies.length > 8 ? `<tr><th></th><td>and ${bodies.length - 8} more</td></tr>` : ''}</tbody></table>`;
     if (KINDS[f.type] && KINDS[f.type].kernel) h += `<p class="small faint">In the kernel: ${esc(KINDS[f.type].kernel)}.</p>`;
@@ -458,7 +483,7 @@ function renderSide() {
       <label class="fld"><span>What it is</span><select data-chg="pkind" data-a="${i}">${[['length', 'A length, in mm'], ['angle', 'An angle, in degrees'], ['count', 'A count']].map(([k, l]) => `<option value="${k}"${k === kind ? ' selected' : ''}>${l}</option>`).join('')}</select></label>
       <label class="fld"><span>Value: a number${UNIT[kind] ? ' in ' + UNIT[kind] : ''}, another parameter's name, or a formula</span><input data-chg="param" data-a="${i}" value="${esc(x.value)}" list="pnames" spellcheck="false"></label>
       ${r && r.state === 'built' && r.formula ? `<div class="note ok">Works out to ${n2(r.value)}${UNIT[kind] ? ' ' + UNIT[kind] : ''}.</div>` : ''}
-      <label class="fld"><span>Note</span><input data-chg="pnote" data-a="${i}" value="${esc(x.note || '')}"></label>${r && r.state === 'failed' ? `<div class="note bad">${esc(r.message)}</div>` : ''}
+      <label class="fld"><span>Note</span><input data-chg="pnote" data-a="${i}" value="${esc(x.note || '')}"></label>${r && r.state === 'failed' ? `<div class="note bad">${esc(r.message)}</div>${reportCard(r.error)}` : ''}
       <p class="small faint">${ic('info', 'sm')} A formula uses other parameters in any order, with units: <span class="mono">width / 2 - 4 mm</span>, <span class="mono">2 ft 8 in</span>, <span class="mono">n &gt; 3 ? 12 mm : 8 mm</span>, and min, max, abs, round, floor and ceil. It is worked out exactly; a length and a plain number don't add, so write 5 mm, not 5.</p></div>
       <div class="sec"><div class="lbl">Used by</div>${users.length || formulas.length ? `<ul class="list">${users.map((f) => `<li><button class="leaf" data-act="sel" data-k="feature" data-a="${esc(f.id)}">${ic(kindOf(f).icon, 'sm')}<span>${esc(f.name)}</span></button></li>`).join('')}${formulas.map((y) => `<li><button class="leaf" data-act="sel" data-k="param" data-a="${esc(y.name)}">${ic('ws-param', 'sm')}<span>${esc(y.name)}</span></button></li>`).join('')}</ul>` : '<p class="pad faint">Nothing uses it yet.</p>'}</div>
       <div class="sec acts"><button class="btn" data-act="delp" data-a="${i}"${users.length || formulas.length ? ' disabled title="Something uses it"' : ''}>${ic('del', 'sm')}Delete</button></div>`;

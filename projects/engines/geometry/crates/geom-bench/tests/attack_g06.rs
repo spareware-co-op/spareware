@@ -812,6 +812,79 @@ fn make_counts(out: &geom_op::OpOutput<geom_make::Made>) -> [u32; 4] {
     ]
 }
 
+/// The digest of the core query benchmark `query/name/class`, from each query called directly on
+/// its batch, each answer read as the benchmark reads it, with its class's rank.
+fn query_digest(name: &str, class: Class) -> Option<Digest> {
+    use geom_check::query::{exactness, validity};
+    use geom_topo::query_ops::{bounding_box, six_volume, twice_area};
+    let ctx = make_context();
+    let rank = |e: geom_num::Exactness| u32::from(e.rank());
+    Some(match name {
+        "area" => fold(inputs::query::faces(class).iter().map(|(body, face)| {
+            let face = geom_topo::Ix::new(*face).unwrap();
+            twice_area(&ctx, &body.result.body, face, body.exactness)
+                .map(|a| (a.result, rank(a.exactness)))
+        })),
+        "volume" => fold(inputs::query::volumes(class).iter().map(|body| {
+            six_volume(&ctx, &body.result.body, body.exactness)
+                .map(|v| (v.result, rank(v.exactness)))
+        })),
+        "bounding_box" => fold(inputs::query::boxes(class).iter().map(|body| {
+            bounding_box(&ctx, &body.result.body, body.exactness).map(|b| {
+                let corners = b
+                    .result
+                    .map(|bb| ([bb.bound.min(), bb.bound.max()], bb.tight));
+                (corners, rank(b.exactness))
+            })
+        })),
+        "exactness" => fold(inputs::query::reports(class).iter().map(|body| {
+            exactness(&ctx, &body.result.body, body.exactness).map(|e| {
+                let r = &e.result;
+                let counts = [
+                    r.flat_faces,
+                    r.curved_faces,
+                    r.straight_edges,
+                    r.curved_edges,
+                ];
+                (counts, r.report.passed(), rank(e.exactness))
+            })
+        })),
+        "faces" => fold(inputs::query::listed(class).iter().map(|body| {
+            geom_name::faces(
+                &ctx,
+                &body.result.body,
+                &[&body.result.history],
+                body.exactness,
+            )
+            .map(|listed| {
+                let rows: Vec<[u32; 2]> = listed
+                    .result
+                    .iter()
+                    .map(|f| [f.row.loops, u32::try_from(f.roles.len()).unwrap()])
+                    .collect();
+                (rows, rank(listed.exactness))
+            })
+        })),
+        "validity" => fold(inputs::query::validities(class).iter().map(|body| {
+            validity(
+                &ctx,
+                &body.result.body,
+                body.exactness,
+                geom_check::Level::Full,
+            )
+            .map(|v| {
+                let r = &v.result;
+                (
+                    r.passed(),
+                    r.deferred(),
+                    u32::try_from(r.ran().count()).unwrap(),
+                )
+            })
+        })),
+        _ => return None,
+    })
+}
+
 /// The output digest of one run of `kernel` over `batch`, as a benchmark computes it.
 fn kernel_digest<T, R: Canonical>(kernel: fn(&[T], &mut Vec<R>), batch: &[T]) -> Digest {
     let mut out = Vec::with_capacity(batch.len());
@@ -1586,6 +1659,7 @@ fn direct_digest(group: &str, name: &str, class: Class) -> Option<Digest> {
                 .iter()
                 .map(|c| open_roots(c, geom_format::trust::Trust::Unknown)),
         ),
+        ("query", _) => query_digest(name, class)?,
         ("attributes", "apply") => fold(inputs::attributes::apply(class).iter().map(
             |scene| -> Result<u64, geom_name::AttrError> {
                 let (after, notes) = geom_name::apply(

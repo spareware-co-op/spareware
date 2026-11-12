@@ -272,9 +272,15 @@
               "kind": "corpus",
               "piece": "#773",
               "why": "20 new count benchmarks on the Phase 3 readers and writers (Gate 3 dry run, item 5) in six new groups: cbor (G91), record (G92), body_record (G94), name_record (G95), op_record (G96) and open (G108); no existing digest moved"
+            },
+            {
+              "sha256": "d196a2dee27fdbc3bd2b181bfd27eb4bb63e01bbb757ab01a826ecddcd886431",
+              "kind": "corpus",
+              "piece": "G102",
+              "why": "6 new count benchmarks in a new group: query (the six core queries, area, bounding box, exactness, faces, validity and volume, each on built boxes and prisms); no existing digest moved; merged after #773's 20 benchmarks, whose rows are kept unchanged"
             }
           ],
-          "sha256": "d196a2dee27fdbc3bd2b181bfd27eb4bb63e01bbb757ab01a826ecddcd886431"
+          "sha256": "80a2b28d43791d51e103a693a7781d8278643c3ae5efd2dcb9a2b17db90be699"
         },
         {
           "id": "geom-nurbs/operations",

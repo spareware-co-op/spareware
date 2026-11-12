@@ -24,11 +24,14 @@
 //! picked on the parts wait for its assembly mates (G479) and persistent face names, and
 //! interference for its booleans (G130 to G133).
 //!
-//! The answer: `{ engine, instances: [{ id, part, state, message, m, exactness, bound, bbox }],
-//! joints: [{ id, state, value, message }], bbox, notes }`. `m` maps the part's own space to where
-//! the instance is, 3 rows of 4, row-major, in millimetres, as the page draws it; `state` is
-//! `built`, `waits` with the kernel piece it waits for, or `failed` with the kernel's reason, and
-//! the page places an instance that isn't built itself. `bbox` holds only the built instances.
+//! The answer: `{ engine, instances: [{ id, part, state, message, m, exactness, bound, bbox,
+//! error }], joints: [{ id, state, value, message, error }], bbox, notes }`. `m` maps the part's own
+//! space to where the instance is, 3 rows of 4, row-major, in millimetres, as the page draws it;
+//! `state` is `built`, `waits` with the kernel piece it waits for, or `failed` with the kernel's
+//! reason, and the page places an instance that isn't built itself. An instance or joint that
+//! waits or fails carries its rebuild report (`error`, [`crate::report`]): a turn the checker can't
+//! certify yet is the kernel's `NotCertifiedYet` in every build, with the piece as its remedy.
+//! `bbox` holds only the built instances.
 
 use std::collections::BTreeMap;
 
@@ -37,16 +40,17 @@ use engine_geometry::operations::{
 };
 use engine_geometry::value::Exactness;
 use engine_geometry::value::body::Body;
-use engine_geometry::value::error::{MakeDetail, OpError, OpErrorDetail};
+use engine_geometry::value::error::{ErrorKind, MakeDetail, OpError, OpErrorDetail};
 use engine_geometry::value::grid::{GridStep, Steps};
 use engine_geometry::value::transform::{Axis, Rotation};
 use serde::Serialize;
 use serde_json::{Value, json};
 
 use crate::build::{
-    IDENTITY, Refusal, Res, build_with_bodies, class, ctx, fail, fmt_mm, mm, point, refused, steps,
-    then, translation,
+    IDENTITY, Refusal, Res, bad, build_with_bodies, class, ctx, defect, fmt_mm, mm, point, refused,
+    steps, then, translation,
 };
+use crate::report::{Report, change};
 
 /// The largest bound accepted for a turned body: 0.01 mm, the model's tolerance, in grid steps.
 const ACCEPT_STEPS: u64 = 1600;
@@ -70,6 +74,9 @@ pub struct InstanceRow {
     pub bound: Option<u64>,
     /// The kernel's box round its posed bodies, millimetres; `None` when it isn't built.
     pub bbox: Option<[[f64; 3]; 2]>,
+    /// Why it waits or fails, as data: the rebuild report.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub error: Option<Report>,
 }
 
 /// A joint, as posed.
@@ -81,6 +88,9 @@ pub struct JointRow {
     /// Its value, held within its limits: degrees for a hinge, millimetres for a slider.
     pub value: f64,
     pub message: String,
+    /// Why it waits or fails, as data: the rebuild report.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub error: Option<Report>,
 }
 
 /// What posing an assembly gives.
@@ -159,8 +169,15 @@ fn turn(degrees: f64) -> Res<(Rotation, bool, f64, f64)> {
         (r.cos() * DIRECTION_SCALE).round() as i32,
         (r.sin() * DIRECTION_SCALE).round() as i32,
     );
-    let rotation = Rotation::direction(c, s)
-        .map_err(|_| Refusal::Failed("That angle has no direction.".into()))?;
+    let Ok(rotation) = Rotation::direction(c, s) else {
+        return bad(
+            ErrorKind::Degenerate,
+            "NoDirection",
+            "the angle",
+            "That angle has no direction.",
+            "Change the angle",
+        );
+    };
     let (c, s) = (f64::from(c), f64::from(s));
     let n = c.hypot(s);
     Ok((rotation, false, c / n, s / n))
@@ -186,24 +203,31 @@ fn map_of(step: Step) -> [f64; 12] {
     }
 }
 
-/// A turned body the kernel's checker can't certify yet, waiting for `piece`.
-fn waits_for_checker(piece: &str) -> Refusal {
+/// A turned body the kernel's checker can't certify yet, waiting for `piece`, with the kernel's
+/// error as its report.
+fn waits_for_checker(piece: &str, error: &OpError) -> Refusal {
     let what = match piece {
         "G134" => "certifying a turned body's flat faces",
         "G177" => "certifying a turned body's curved faces",
         _ => "certifying a body turned so",
     };
-    Refusal::Waits(format!(
-        "Turned to this angle, it waits for the kernel's checker: {what} ({piece}). A quarter \
-         turn rounds nothing and is posed today."
-    ))
+    Refusal::waits(
+        format!(
+            "Turned to this angle, it waits for the kernel's checker: {what} ({piece}). A quarter \
+             turn rounds nothing and is posed today."
+        ),
+        Report::kernel(error).with(change(
+            "the angle",
+            "Turn it by a whole number of quarter turns, which is posed today",
+        )),
+    )
 }
 
 /// What the kernel's refusal of a step means here: a body its checker can't certify yet waits for
 /// the piece it names; anything else fails with the kernel's reason.
 fn refused_pose(e: &OpError) -> Refusal {
     match e.detail() {
-        OpErrorDetail::Make(MakeDetail::NotCertifiedYet { piece }) => waits_for_checker(piece),
+        OpErrorDetail::Make(MakeDetail::NotCertifiedYet { piece }) => waits_for_checker(piece, e),
         _ => refused(e),
     }
 }
@@ -211,8 +235,10 @@ fn refused_pose(e: &OpError) -> Refusal {
 /// Every group of the kernel's checker on a body a turn rounded, asked for here so that a release
 /// build, which runs only the cheap groups after an operation, answers as a debug build does. As
 /// the kernel's transforms do, a rounded body that doesn't pass waits for the piece that widens
-/// the checker for its kind: G177 when a face or an edge is curved, G134 otherwise.
-fn check_fully(key: usize, body: &Body, exactness: Exactness) -> Res<()> {
+/// the checker for its kind: G177 when a face or an edge is curved, G134 otherwise. The error is
+/// the one the kernel's transform gives in a debug build, at the turn's step: its detail
+/// (`NotCertifiedYet`), its remedy (that piece) and the checker's first fault as its words.
+fn check_fully(key: usize, turned_at: u32, body: &Body, exactness: Exactness) -> Res<()> {
     let c = ctx(key, 997);
     let report = validity(&c, body, exactness, Level::Full)
         .map_err(|e| refused(&e))?
@@ -224,7 +250,15 @@ fn check_fully(key: usize, body: &Body, exactness: Exactness) -> Res<()> {
         .map_err(|e| refused(&e))?
         .result;
     let curved = kinds.curved_faces > 0 || kinds.curved_edges > 0;
-    Err(waits_for_checker(if curved { "G177" } else { "G134" }))
+    let piece = if curved { "G177" } else { "G134" };
+    let mut error = OpError::new(
+        ctx(key, turned_at).path().clone(),
+        MakeDetail::NotCertifiedYet { piece },
+    );
+    if let Some(first) = report.faults().first() {
+        error = error.with_message(first.to_string());
+    }
+    Err(waits_for_checker(piece, &error))
 }
 
 /// Puts one body through an instance's steps with the kernel.
@@ -234,9 +268,11 @@ fn place(key: usize, body: &Body, exactness: Exactness, chain: &[Step]) -> Res<(
         step: GridStep::Q1,
     });
     let mut now = (body.clone(), exactness);
-    let mut rounded = false;
+    // the step of the first turn that rounded, if any
+    let mut rounded = None;
     for (n, step) in chain.iter().enumerate() {
-        let c = ctx(key, u32::try_from(n).unwrap_or(u32::MAX));
+        let n = u32::try_from(n).unwrap_or(u32::MAX);
+        let c = ctx(key, n);
         let moved = Moved {
             body: &now.0,
             exactness: now.1,
@@ -253,15 +289,17 @@ fn place(key: usize, body: &Body, exactness: Exactness, chain: &[Step]) -> Res<(
                 quarter,
                 ..
             } => {
-                rounded |= !quarter;
+                if !quarter && rounded.is_none() {
+                    rounded = Some(n);
+                }
                 rotate(&c, moved, axis, rotation, point([0, 0, 0])?)
             }
         }
         .map_err(|e| refused_pose(&e))?;
         now = (made.result.body, made.exactness);
     }
-    if rounded {
-        check_fully(key, &now.0, now.1)?;
+    if let Some(turned_at) = rounded {
+        check_fully(key, turned_at, &now.0, now.1)?;
     }
     Ok(now)
 }
@@ -354,7 +392,7 @@ pub fn pose_assembly(input: &Value) -> Pose {
                             text(j, "axis")
                         ),
                     ),
-                    Err(Refusal::Failed(m) | Refusal::Waits(m)) => (None, m),
+                    Err(r) => (None, r.said),
                 },
                 ("slider", Some((_, index))) => {
                     let mut d = [0.0; 3];
@@ -370,23 +408,42 @@ pub fn pose_assembly(input: &Value) -> Pose {
                 }
                 ("fixed", _) => (None, "Held by the kernel's transform.move".to_owned()),
                 ("hinge" | "slider", None) => {
+                    let message = "Pick the axis it moves about: x, y or z.".to_owned();
                     joint_rows[k] = Some(JointRow {
                         id: text(j, "id").to_owned(),
                         state: "failed",
                         value,
-                        message: "Pick the axis it moves about: x, y or z.".into(),
+                        error: Some(
+                            Report::workshop(ErrorKind::InvalidInput, "NoAxis", message.clone())
+                                .with(change("the axis", "Pick x, y or z")),
+                        ),
+                        message,
                     });
                     continue;
                 }
                 (other, _) => {
+                    let message = format!(
+                        "A {other} joint waits for the kernel's assembly mates (G479) and \
+                         persistent face names."
+                    );
                     joint_rows[k] = Some(JointRow {
                         id: text(j, "id").to_owned(),
                         state: "waits",
                         value,
-                        message: format!(
-                            "A {other} joint waits for the kernel's assembly mates (G479) and \
-                             persistent face names."
+                        error: Some(
+                            Report::workshop(
+                                ErrorKind::Unsupported,
+                                "AwaitsKernel",
+                                message.clone(),
+                            )
+                            .with(change(
+                                "the joint",
+                                "Make it a fixed, hinge or slider joint on a typed-in axis, \
+                                     which is posed today",
+                            ))
+                            .awaiting(&["G479"]),
                         ),
+                        message,
                     });
                     continue;
                 }
@@ -401,6 +458,7 @@ pub fn pose_assembly(input: &Value) -> Pose {
                 state: "built",
                 value,
                 message: format!("{said}.{held}"),
+                error: None,
             });
             placed_any = true;
         }
@@ -437,10 +495,15 @@ pub fn pose_assembly(input: &Value) -> Pose {
             exactness: "Exact",
             bound: None,
             bbox: None,
+            error: None,
         };
         let Some(part) = parts.iter().find(|p| text(p, "id") == part_id) else {
             row.state = "failed";
             row.message = "Its part isn't in the project.".into();
+            row.error = Some(
+                Report::workshop(ErrorKind::InvalidInput, "NoSuchPart", row.message.clone())
+                    .with(change("the part", "Pick a part that is in the project")),
+            );
             rows.push(row);
             continue;
         };
@@ -457,7 +520,7 @@ pub fn pose_assembly(input: &Value) -> Pose {
                 let c = ctx(key, 999);
                 let found = bounding_box(&c, &b, e).map_err(|e| refused(&e))?.result;
                 let Some(found) = found else {
-                    return fail("The kernel posed an empty body.");
+                    return defect("The kernel posed an empty body.");
                 };
                 let (lo, hi) = (found.bound.min(), found.bound.max());
                 Ok((
@@ -484,13 +547,15 @@ pub fn pose_assembly(input: &Value) -> Pose {
             }
         }
         if let Some(r) = failed {
-            (row.state, row.message) = match r {
-                Refusal::Waits(m) => (
+            (row.state, row.message) = if r.waits {
+                (
                     "waits",
-                    format!("{m} Until the kernel can, the page places it."),
-                ),
-                Refusal::Failed(m) => ("failed", format!("{m} The page places it instead.")),
+                    format!("{} Until the kernel can, the page places it.", r.said),
+                )
+            } else {
+                ("failed", format!("{} The page places it instead.", r.said))
             };
+            row.error = Some(*r.report);
         } else {
             let (cls, bound) = worst;
             row.exactness = cls;
@@ -525,17 +590,29 @@ pub fn pose_assembly(input: &Value) -> Pose {
                     .map_or("", |k| &row.message[k..]);
                 row.message = format!("{}{held}", moving.message);
                 row.state = moving.state;
+                row.error.clone_from(&moving.error);
             }
             Some(row)
         })
         .zip(&joints)
         .map(|(row, j)| {
-            row.unwrap_or_else(|| JointRow {
-                id: text(j, "id").to_owned(),
-                state: "failed",
-                value: number(j.get("value")),
-                message: "Its first part isn't placed, or its second is placed by another joint."
-                    .into(),
+            row.unwrap_or_else(|| {
+                let message =
+                    "Its first part isn't placed, or its second is placed by another joint.";
+                JointRow {
+                    id: text(j, "id").to_owned(),
+                    state: "failed",
+                    value: number(j.get("value")),
+                    message: message.into(),
+                    error: Some(
+                        Report::workshop(ErrorKind::InvalidInput, "NotPlaced", message).with(
+                            change(
+                                "the parts it joins",
+                                "Join it from a part that is placed, to one no other joint places",
+                            ),
+                        ),
+                    ),
+                }
             })
         })
         .collect();
