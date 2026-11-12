@@ -813,11 +813,7 @@ fn the_nightly_campaign_fuzzes_every_target() {
             "        timeout-minutes: 300\n",
             "under 20 to build",
         ),
-        (
-            "        timeout-minutes: 330\n",
-            "",
-            "under 20 to build",
-        ),
+        ("        timeout-minutes: 330\n", "", "under 20 to build"),
         (
             "    timeout-minutes: 360\n",
             "    timeout-minutes: 330\n",
