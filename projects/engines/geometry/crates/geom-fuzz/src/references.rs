@@ -198,11 +198,9 @@ impl Interned {
     }
 }
 
-/// Reads an element from `s` (see the module documentation); `None` only if the history kit or
-/// the graph refuses what the bytes chose, which is a defect of one of them.
-pub fn element(s: &mut ByteSource<'_>) -> Option<Element> {
-    let first = (s.byte() % MAX_FIRST).saturating_add(1);
-    let weak_mask = s.byte();
+/// The element's first faces, interned in a new graph, the faces whose bit in `weak_mask` is set
+/// (after the first) weak, with the weak ones.
+fn first_faces(first: u8, weak_mask: u8) -> Option<(NameGraph, BTreeSet<NameId>, Vec<NameId>)> {
     let mut graph = NameGraph::new();
     let mut weak = BTreeSet::new();
     let mut current = Vec::new();
@@ -229,12 +227,21 @@ pub fn element(s: &mut ByteSource<'_>) -> Option<Element> {
         }
         current.push(id);
     }
+    Some((graph, weak, current))
+}
+
+/// Reads an element from `s` (see the module documentation); `None` only if the history kit or
+/// the graph refuses what the bytes chose, which is a defect of one of them.
+pub fn element(s: &mut ByteSource<'_>) -> Option<Element> {
+    const STEP_COUNTS: u8 = MAX_STEPS + 1;
+    let first = (s.byte() % MAX_FIRST).saturating_add(1);
+    let (graph, weak, mut current) = first_faces(first, s.byte())?;
     let mut interned = Interned {
         graph,
         names: BTreeMap::new(),
     };
     let mut names: BTreeSet<NameId> = current.iter().copied().collect();
-    let count = s.byte() % MAX_STEPS.saturating_add(1);
+    let count = s.byte() % STEP_COUNTS;
     let mut steps = Vec::new();
     for k in 0..count {
         let new = s.byte() % 3;

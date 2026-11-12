@@ -184,12 +184,16 @@ fn direction(byte: u8) -> Option<u8> {
 /// The fuzzer's bytes as a case, and how many bytes were read (at most [`MAX_INPUT_BYTES`]).
 #[must_use]
 pub fn decode(data: &[u8]) -> (Case, usize) {
-    let mut s = ByteSource::new(data);
-    let n = s.byte() % MAX_NAMES.saturating_add(1);
-    let names = (0..n)
+    const NAME_COUNTS: u8 = MAX_NAMES + 1;
+    const LIST_LENGTHS: u8 = MAX_LIST + 1;
+    const SET_COUNTS: u8 = MAX_SETS + 1;
+    const ENTITY_COUNTS: u8 = MAX_ENTITIES + 1;
+    let mut src = ByteSource::new(data);
+    let count = src.byte() % NAME_COUNTS;
+    let names = (0..count)
         .map(|at| {
-            let (kind, op, arg) = (s.byte(), s.byte(), s.byte());
-            let parents = [parent(s.byte(), at), parent(s.byte(), at)];
+            let (kind, op, arg) = (src.byte(), src.byte(), src.byte());
+            let parents = [parent(src.byte(), at), parent(src.byte(), at)];
             Draw {
                 kind,
                 op,
@@ -198,22 +202,22 @@ pub fn decode(data: &[u8]) -> (Case, usize) {
             }
         })
         .collect();
-    let len = s.byte() % MAX_LIST.saturating_add(1);
-    let list = (0..len).map(|_| s.byte()).collect();
-    let count = s.byte() % MAX_SETS.saturating_add(1);
-    let sets = (0..count).map(|_| s.byte()).collect();
-    let count = s.byte() % MAX_ENTITIES.saturating_add(1);
+    let len = src.byte() % LIST_LENGTHS;
+    let list = (0..len).map(|_| src.byte()).collect();
+    let count = src.byte() % SET_COUNTS;
+    let sets = (0..count).map(|_| src.byte()).collect();
+    let count = src.byte() % ENTITY_COUNTS;
     let keys = (0..count)
         .map(|_| {
-            let (l, v, d) = (s.byte(), s.byte(), s.byte());
+            let (point, list, leaving) = (src.byte(), src.byte(), src.byte());
             Key {
-                least: least(l),
-                vertices: vertices(v),
-                direction: direction(d),
+                least: least(point),
+                vertices: vertices(list),
+                direction: direction(leaving),
             }
         })
         .collect();
-    let read = data.len().saturating_sub(s.remaining());
+    let read = data.len().saturating_sub(src.remaining());
     (
         Case {
             names,
@@ -240,7 +244,7 @@ const ROLES: [&str; 3] = ["side", "blend", "tool"];
 
 /// The `TopoName` of `draw`, on the parents' IDs, with the parents a walk of the graph follows
 /// from it, as 20.2 defines them.
-fn build(draw: &Draw, ids: &[NameId]) -> Option<(TopoName, Vec<NameId>)> {
+fn build(draw: Draw, ids: &[NameId]) -> Option<(TopoName, Vec<NameId>)> {
     let id = |p: Parent| match p {
         Parent::Earlier(i) => ids.get(usize::from(i)).copied(),
         Parent::Stranger(b) => Some(stranger(b)),
@@ -416,7 +420,7 @@ pub fn check(case: &Case) -> Result<(), Finding> {
     let mut ids: Vec<NameId> = Vec::new();
     let mut held: BTreeMap<NameId, (bool, Vec<NameId>)> = BTreeMap::new();
     for draw in &case.names {
-        let Some((name, walked)) = build(draw, &ids) else {
+        let Some((name, walked)) = build(*draw, &ids) else {
             return Err(law("the decoder builds every name", format!("{draw:?}")));
         };
         let Ok(bytes) = name.encode().map(geom_op::cbor::Item::into_bytes) else {
