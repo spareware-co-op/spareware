@@ -185,7 +185,10 @@ async fn a_second_generator_runs_the_whole_server_and_changes_only_the_shapes() 
 #[test]
 fn only_the_regen_crate_knows_the_stand_in() {
     let root = concat!(env!("CARGO_MANIFEST_DIR"), "/..");
-    let mut files = vec![format!("{root}/app/connect.js")];
+    let mut files = vec![
+        format!("{root}/app/connect.js"),
+        format!("{root}/app/view3d.js"),
+    ];
     for folder in [
         "server/src",
         "crates/construct-api/src/cloud",
