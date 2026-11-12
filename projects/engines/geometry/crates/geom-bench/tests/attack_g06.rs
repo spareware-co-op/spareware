@@ -1757,6 +1757,16 @@ fn direct_digest(group: &str, name: &str, class: Class) -> Option<Digest> {
                 .iter()
                 .map(|&(t, p)| geom_mesh::envelope::TriangleEnvelope::new(t, 1 << 16)?.contains(p)),
         ),
+        ("mesh", "boolean") => fold(inputs::mesh::boolean(class).iter().map(|pair| {
+            let mut meter = geom_run::WorkMeter::new(geom_run::Budget::UNLIMITED);
+            geom_mesh::boolean::boolean(
+                &[&pair.first, &pair.second],
+                &[geom_poly::winding::WindingTest::unite()],
+                &geom_op::OpPath::new(geom_op::OpId::from_bytes([7; 16])),
+                &geom_run::Exec::serial(),
+                &mut meter,
+            )
+        })),
         ("mesh", "cdt") => fold(inputs::mesh::cdt(class).iter().map(|t| {
             let mut meter = geom_run::WorkMeter::new(geom_run::Budget::UNLIMITED);
             geom_mesh::triangulate(&t.sites, &t.constraints, None, &mut meter)

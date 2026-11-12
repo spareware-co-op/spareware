@@ -1985,8 +1985,12 @@ fn radial(edge: &[usize], fins: &[Fin], planes: &[Plane]) -> Result<Vec<usize>, 
 }
 
 /// An edge's fins in [`radial`] order and, for a merge that keeps a memo, what the order read with
-/// the order as places in the edge's list of fins (G139).
-type Turn = (Vec<usize>, Option<(RadialKey, Vec<usize>)>);
+/// the order as places in the edge's list of fins (G139). A type by name, so the recursion gate
+/// reads the radial phase's result without unfolding the key.
+struct Turn {
+    order: Vec<usize>,
+    read: Option<(RadialKey, Vec<usize>)>,
+}
 
 /// [`radial`] for a merge that keeps a memo (G139): the order `last` holds for an edge that reads
 /// the same, where it holds one, rather than turning the fins about the edge again, and what the
@@ -2016,7 +2020,10 @@ fn radial_kept(
                 .ok_or(MergeError::Open)?,
         );
     }
-    Ok((order, Some((key, positions))))
+    Ok(Turn {
+        order,
+        read: Some((key, positions)),
+    })
 }
 
 /// What `edge`'s radial order reads of it.
@@ -2616,7 +2623,7 @@ fn merged(
             Ok(if keeping {
                 radial_kept(here, &fins, &planes, turned)
             } else {
-                radial(here, &fins, &planes).map(|order| (order, None))
+                radial(here, &fins, &planes).map(|order| Turn { order, read: None })
             })
         },
     );
@@ -2626,7 +2633,7 @@ fn merged(
     let mut edges = Vec::with_capacity(runs.len());
     for (run, turn) in runs.iter().zip(orders) {
         let (low, high) = (vertex(run.low)?, vertex(run.high)?);
-        let (order, read) = turn?;
+        let Turn { order, read } = turn?;
         if let Some((key, places)) = read {
             radials.insert(key, places);
         }
