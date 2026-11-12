@@ -261,7 +261,7 @@ pub fn use_count(p: &mut Project, sc_idx: usize, gw_id: &str, count_id: &str) ->
         let counts = Data::read(p).counts;
         return UseCount { n, src: Some(gw_src_text(&p.scenarios[sc_idx], gw_id, &counts)), error: None };
     }
-    let zname = p.scenarios[sc_idx].zones[gw_id].name.str_or("this gateway").to_string();
+    let zname = p.scenarios.get(sc_idx).and_then(|s| s.zones.get(gw_id)).map_or("this gateway", |z| z.name.str_or("this gateway")).to_string();
     fail(format!(
         "{c_name} cannot set {zname}'s flows: it must be on the gateway's road, of the same class, within 3 km (and its source switched on). Pick another count, or enter the flows by hand."
     ))

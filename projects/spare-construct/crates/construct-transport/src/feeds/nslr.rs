@@ -398,7 +398,9 @@ pub fn assign_nslr(sc: &mut Scenario, set: &NslrSet) -> NslrStats {
     let ids: Vec<String> = live_links(sc).iter().map(|l| l.id.clone()).collect();
     for id in ids {
         st.links += 1;
-        let l = &sc.links[id.as_str()];
+        let Some(l) = sc.links.get(id.as_str()) else {
+            continue;
+        };
         let g = sc.geom(l);
         let cum = util::cum_len(&g);
         let len = cum[cum.len() - 1];

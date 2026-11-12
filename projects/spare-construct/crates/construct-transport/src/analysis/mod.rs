@@ -901,7 +901,9 @@ pub fn dev_distribution(sc: Option<&Scenario>, res_list: &[&Res]) -> DevDistribu
                     .gateways
                     .get(&id)
                     .map_or((0.0, 0.0), |x| (x.r#in, x.out));
-                let p = &periods[r.period.as_str()];
+                let Some(p) = periods.get(r.period.as_str()) else {
+                    continue;
+                };
                 row.shares.insert(
                     format!("{}in", r.period),
                     if p.r#in > 0.0 {

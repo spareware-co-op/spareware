@@ -525,7 +525,10 @@ pub fn ags_gateways(p: &mut Project, data: Option<&AgsData>, now_ms: f64) -> Vec
         let y = year_of(Some(sc), &settings);
         let ids: Vec<String> = sc.zones.values().filter(|z| z.kind.is("gateway")).map(|z| z.id.clone()).collect();
         for id in ids {
-            let g = ags_gateway(sc, &sc.zones[id.as_str()], &settings.base_year, y, data);
+            let Some(z) = sc.zones.get(id.as_str()) else {
+                continue;
+            };
+            let g = ags_gateway(sc, z, &settings.base_year, y, data);
             if let Some(g) = g {
                 let z = sc.zones.get_mut(id.as_str()).expect("zone");
                 let mut v = serde_json::to_value(&g).expect("gateway");

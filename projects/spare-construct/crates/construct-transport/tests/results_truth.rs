@@ -41,7 +41,7 @@ fn travel_and_isochrone_as_recorded() {
                 .filter(|z| !z.kind.is("gateway"))
                 .map(|z| z.id.as_str())
                 .collect();
-            for (period, r) in rec.scenarios[&sc.id].periods.iter() {
+            for (period, r) in rec.scenarios.get(&sc.id).unwrap().periods.iter() {
                 let path = format!("{name}.{}.{period}", sc.id);
                 if zl.len() >= 2 {
                     let t = travel(sc, &p.settings, Some(&r.res), zl[0], zl[1]);
@@ -74,7 +74,7 @@ fn select_link_lts_export_ready_and_meta_as_recorded() {
         let (p, rec) = project_and_record(name);
         let s = &p.settings;
         for sc in &p.scenarios {
-            for (period, r) in rec.scenarios[&sc.id].periods.iter() {
+            for (period, r) in rec.scenarios.get(&sc.id).unwrap().periods.iter() {
                 let path = format!("{name}.{}.{period}", sc.id);
                 let res = &r.res;
                 // the busiest arc, as gen-expected.mjs picks it
@@ -127,7 +127,7 @@ fn model_status_and_year_as_recorded() {
         for sc in &p.scenarios {
             assert_close(
                 &json!(year_of(Some(sc), &p.settings)),
-                &rec.scenarios[&sc.id].year_of,
+                &rec.scenarios.get(&sc.id).unwrap().year_of,
                 &format!("{name}.{}.yearOf", sc.id),
             );
         }

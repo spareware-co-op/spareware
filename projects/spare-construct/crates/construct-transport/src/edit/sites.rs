@@ -227,7 +227,7 @@ pub fn detect(sc: &mut Scenario, ids: &mut dyn IdSource, opts: &DetectOpts) -> D
             if kept.contains(*id) || ls.iter().any(|&li| rank(links[li]) >= 5.0) {
                 continue;
             }
-            let controlled = nodes[*id].control.str_or("none") != "none";
+            let controlled = nodes.get(id).is_some_and(|n| n.control.str_or("none") != "none");
             let max_rank = ls
                 .iter()
                 .map(|&li| rank(links[li]))
@@ -237,7 +237,7 @@ pub fn detect(sc: &mut Scenario, ids: &mut dyn IdSource, opts: &DetectOpts) -> D
                 cand.push(*id);
             }
         }
-        let ll = |id: &str| -> LatLng { nodes[id].ll() };
+        let ll = |id: &str| -> LatLng { nodes.get(id).map_or([f64::NAN; 2], |n| n.ll()) };
         let lens: Vec<f64> = links.iter().map(|l| sc.link_len(l)).collect();
         let oneway = |l: &Link| !(l.lanes_ab.int32() > 0 && l.lanes_ba.int32() > 0);
         // One-way links between candidates short enough to be one carriageway of a pair: bearing and midpoint
@@ -330,8 +330,8 @@ pub fn detect(sc: &mut Scenario, ids: &mut dyn IdSource, opts: &DetectOpts) -> D
             if ra || rb {
                 continue; // a roundabout is not merged with a junction beside it
             }
-            let sig = nodes[l.a.as_str()].control.is("signals")
-                && nodes[l.b.as_str()].control.is("signals");
+            let sig = nodes.get(l.a.as_str()).is_some_and(|n| n.control.is("signals"))
+                && nodes.get(l.b.as_str()).is_some_and(|n| n.control.is("signals"));
             if d <= r.near || (d <= r.wide && (sig || dual(li) || same_at(&l.a, &l.b))) {
                 join(&mut par, ia, ib);
             }

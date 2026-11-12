@@ -19,12 +19,15 @@
 // fdlibm's constants are written as it writes them (some equal std's constants, which must not stand in for them)
 #![allow(clippy::excessive_precision, clippy::approx_constant)]
 
+// fdlibm's words of a double: the high 32 bits read as signed (GET_HIGH_WORD), the low 32 bits
 fn hi(x: f64) -> i32 {
-    (x.to_bits() >> 32) as u32 as i32
+    let [_, _, _, _, b4, b5, b6, b7] = x.to_bits().to_le_bytes();
+    i32::from_le_bytes([b4, b5, b6, b7])
 }
 
 fn lo(x: f64) -> u32 {
-    x.to_bits() as u32
+    let [b0, b1, b2, b3, ..] = x.to_bits().to_le_bytes();
+    u32::from_le_bytes([b0, b1, b2, b3])
 }
 
 fn with_lo(x: f64, l: u32) -> f64 {
@@ -32,17 +35,28 @@ fn with_lo(x: f64, l: u32) -> f64 {
 }
 
 fn words(h: i32, l: u32) -> f64 {
-    f64::from_bits((u64::from(h as u32) << 32) | u64::from(l))
+    f64::from_bits((u64::from(h.cast_unsigned()) << 32) | u64::from(l))
+}
+
+// C's (int) conversion of a double, as fdlibm uses it. Bound: every caller passes a value far
+// inside i32's range (exp's k is within -1075..=1025, rem_pio2's n at most 2^19 + 1, and the
+// kernels' arguments are below 2^-27), where `as` truncates toward zero exactly as C does.
+#[allow(
+    clippy::cast_possible_truncation,
+    reason = "callers pass values far inside i32's range"
+)]
+fn c_int(x: f64) -> i32 {
+    x as i32
 }
 
 /// `Math.exp(x)`.
 #[must_use]
 pub fn exp(x: f64) -> f64 {
-    const HALF: [f64; 2] = [0.5, -0.5];
+    // fdlibm's halF, ln2HI and ln2LO hold each constant and its negation, picked by the sign bit
     const O_THRESHOLD: f64 = 7.097_827_128_933_839_730_96e+02;
     const U_THRESHOLD: f64 = -7.451_332_191_019_411_084_20e+02;
-    const LN2_HI: [f64; 2] = [6.931_471_803_691_238_164_90e-01, -6.931_471_803_691_238_164_90e-01];
-    const LN2_LO: [f64; 2] = [1.908_214_929_270_587_700_02e-10, -1.908_214_929_270_587_700_02e-10];
+    const LN2_HI: f64 = 6.931_471_803_691_238_164_90e-01;
+    const LN2_LO: f64 = 1.908_214_929_270_587_700_02e-10;
     const INVLN2: f64 = 1.442_695_040_888_963_387_00e+00;
     const P1: f64 = 1.666_666_666_666_660_190_37e-01;
     const P2: f64 = -2.777_777_777_701_559_338_42e-03;
@@ -55,8 +69,13 @@ pub fn exp(x: f64) -> f64 {
     let mut x = x;
     let (mut hh, mut ll) = (0.0f64, 0.0f64);
     let mut k: i32 = 0;
-    let mut hx = hi(x) as u32;
-    let xsb = ((hx >> 31) & 1) as usize;
+    let mut hx = hi(x).cast_unsigned();
+    let negative = (hx >> 31) & 1 == 1;
+    let (half, ln2_hi, ln2_lo) = if negative {
+        (-0.5, -LN2_HI, -LN2_LO)
+    } else {
+        (0.5, LN2_HI, LN2_LO)
+    };
     hx &= 0x7fff_ffff;
     // filter out non-finite argument
     if hx >= 0x4086_2E42 {
@@ -64,7 +83,7 @@ pub fn exp(x: f64) -> f64 {
             if ((hx & 0xfffff) | lo(x)) != 0 {
                 return x + x; // NaN
             }
-            return if xsb == 0 { x } else { 0.0 };
+            return if negative { 0.0 } else { x };
         }
         if x > O_THRESHOLD {
             return f64::INFINITY;
@@ -79,14 +98,14 @@ pub fn exp(x: f64) -> f64 {
             if x == 1.0 {
                 return E;
             }
-            hh = x - LN2_HI[xsb];
-            ll = LN2_LO[xsb];
-            k = 1 - xsb as i32 - xsb as i32;
+            hh = x - ln2_hi;
+            ll = ln2_lo;
+            k = if negative { -1 } else { 1 };
         } else {
-            k = (INVLN2 * x + HALF[xsb]) as i32;
+            k = c_int(INVLN2 * x + half);
             let t = f64::from(k);
-            hh = x - t * LN2_HI[0];
-            ll = t * LN2_LO[0];
+            hh = x - t * LN2_HI;
+            ll = t * LN2_LO;
         }
         x = hh - ll;
     } else if hx < 0x3e30_0000 {
@@ -101,7 +120,7 @@ pub fn exp(x: f64) -> f64 {
     let twopk = if k >= -1021 {
         words(0x3ff0_0000i32.wrapping_add(k << 20), 0)
     } else {
-        words(0x3ff0_0000i32.wrapping_add((k + 1000) << 20), 0)
+        words(0x3ff0_0000i32.wrapping_add(k.wrapping_add(1000) << 20), 0)
     };
     let c = x - t * (P1 + t * (P2 + t * (P3 + t * (P4 + t * P5))));
     if k == 0 {
@@ -159,7 +178,7 @@ const S6: f64 = 1.589_690_995_211_550_102_21e-10;
 
 fn kernel_sin(x: f64, y: f64, iy: i32) -> f64 {
     let ix = hi(x) & 0x7fff_ffff;
-    if ix < 0x3e40_0000 && (x as i32) == 0 {
+    if ix < 0x3e40_0000 && c_int(x) == 0 {
         return x;
     }
     let z = x * x;
@@ -181,7 +200,7 @@ const C6: f64 = -1.135_964_755_778_819_482_65e-11;
 
 fn kernel_cos(x: f64, y: f64) -> f64 {
     let ix = hi(x) & 0x7fff_ffff;
-    if ix < 0x3e40_0000 && (x as i32) == 0 {
+    if ix < 0x3e40_0000 && c_int(x) == 0 {
         return 1.0;
     }
     let z = x * x;
@@ -189,7 +208,7 @@ fn kernel_cos(x: f64, y: f64) -> f64 {
     if ix < 0x3fd3_3333 {
         1.0 - (0.5 * z - (z * r - x * y))
     } else {
-        let qx = if ix > 0x3fe9_0000 { 0.28125 } else { words(ix - 0x0020_0000, 0) };
+        let qx = if ix > 0x3fe9_0000 { 0.28125 } else { words(ix.wrapping_sub(0x0020_0000), 0) };
         let hz = 0.5 * z - qx;
         let a = 1.0 - qx;
         a - (hz - (z * r - x * y))
@@ -224,30 +243,30 @@ fn rem_pio2(x: f64) -> Option<(i32, f64, f64)> {
                 y1 = (z - y0) - PIO2_1T;
             }
             return Some((1, y0, y1));
-        } else {
-            let mut z = x + PIO2_1;
-            let (y0, y1);
-            if ix == 0x3ff9_21fb {
-                z += PIO2_2;
-                y0 = z + PIO2_2T;
-                y1 = (z - y0) + PIO2_2T;
-            } else {
-                y0 = z + PIO2_1T;
-                y1 = (z - y0) + PIO2_1T;
-            }
-            return Some((-1, y0, y1));
         }
+        let mut z = x + PIO2_1;
+        let (y0, y1);
+        if ix == 0x3ff9_21fb {
+            z += PIO2_2;
+            y0 = z + PIO2_2T;
+            y1 = (z - y0) + PIO2_2T;
+        } else {
+            y0 = z + PIO2_1T;
+            y1 = (z - y0) + PIO2_1T;
+        }
+        return Some((-1, y0, y1));
     }
     if ix <= 0x4139_21fb {
         // medium size
         let t = x.abs();
-        let n = (t * INVPIO2 + 0.5) as i32;
+        let n = c_int(t * INVPIO2 + 0.5);
         let fn_ = f64::from(n);
         let mut r = t - fn_ * PIO2_1;
         let mut w = fn_ * PIO2_1T;
         let j = ix >> 20;
         let mut y0 = r - w;
-        let mut i = j - ((hi(y0) >> 20) & 0x7ff);
+        // Both are 11-bit exponent fields, so the difference cannot wrap
+        let mut i = j.wrapping_sub((hi(y0) >> 20) & 0x7ff);
         if i > 16 {
             // 2nd iteration needed, good to 118 bits
             let t = r;
@@ -255,7 +274,7 @@ fn rem_pio2(x: f64) -> Option<(i32, f64, f64)> {
             r = t - w;
             w = fn_ * PIO2_2T - ((t - r) - w);
             y0 = r - w;
-            i = j - ((hi(y0) >> 20) & 0x7ff);
+            i = j.wrapping_sub((hi(y0) >> 20) & 0x7ff);
             if i > 49 {
                 // 3rd iteration, 151 bits
                 let t = r;
@@ -266,7 +285,7 @@ fn rem_pio2(x: f64) -> Option<(i32, f64, f64)> {
             }
         }
         let y1 = (r - y0) - w;
-        return if hx < 0 { Some((-n, -y0, -y1)) } else { Some((n, y0, y1)) };
+        return if hx < 0 { Some((n.wrapping_neg(), -y0, -y1)) } else { Some((n, y0, y1)) };
     }
     None
 }
@@ -332,7 +351,7 @@ pub fn asin(x: f64) -> f64 {
     let hx = hi(x);
     let ix = hx & 0x7fff_ffff;
     if ix >= 0x3ff0_0000 {
-        if ((ix - 0x3ff0_0000) as u32 | lo(x)) == 0 {
+        if (ix.wrapping_sub(0x3ff0_0000).cast_unsigned() | lo(x)) == 0 {
             return x * PIO2_HI + x * PIO2_LO;
         }
         return f64::NAN;

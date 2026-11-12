@@ -2,7 +2,7 @@
 
 use super::sites::site_entries;
 use super::sort::{js_sort_by, js_str_lt};
-use super::{Ctl, CtlSrc, Ctrl, Graph, Leg, SignalTiming, SiteCtl};
+use super::{Ctl, CtlSrc, Ctrl, Graph, Leg, Priority, SignalTiming, SiteCtl};
 use crate::jsnum::{Maybe, Num, math_max, math_max_of, math_min, math_round, or_default, value_to_number};
 use crate::junction::prep_moves;
 use crate::project::{OrderedMap, Scenario, Settings, Site};
@@ -481,10 +481,11 @@ fn make_ctl(
             a.node = Some(n);
             if ms.contains(&i) {
                 a.ctrl = Ctrl::Free;
-                a.major = true;
+                a.priority = Priority::Major;
             } else {
                 a.ctrl = Ctrl::Minor;
-                a.stop = kind == "stop";
+                // Each arc enters one controller, so this is its first and only priority
+                a.priority = if kind == "stop" { Priority::Stop } else { Priority::Neither };
                 a.conf = Some(major.iter().map(|&j| (j, 1.0)).collect());
             }
         }

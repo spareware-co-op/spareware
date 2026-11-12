@@ -275,8 +275,8 @@ pub fn assign_crashes<'a>(sc: &'a Scenario, cr: &[Crash], cas: &CasLoad) -> Assi
         .collect();
     let node_ids: Vec<&str> = sc.nodes.keys().collect();
     let mut lat0 = 0.0;
-    for id in &node_ids {
-        lat0 += sc.nodes[*id].lat.num();
+    for n in sc.nodes.values() {
+        lat0 += n.lat.num();
     }
     lat0 = if !node_ids.is_empty() {
         lat0 / node_ids.len() as f64
@@ -346,8 +346,7 @@ pub fn assign_crashes<'a>(sc: &'a Scenario, cr: &[Crash], cas: &CasLoad) -> Assi
         }
     }
     let xy = |id: &str| -> (f64, f64) {
-        let n = &sc.nodes[id];
-        let ll = [n.lat.num(), n.lng.num()];
+        let ll = sc.nodes.get(id).map_or([f64::NAN; 2], |n| [n.lat.num(), n.lng.num()]);
         (f.x(&ll), f.y(&ll))
     };
     let name_set = |id: &str| -> std::collections::HashSet<String> {

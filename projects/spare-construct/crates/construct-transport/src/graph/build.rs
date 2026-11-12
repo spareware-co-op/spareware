@@ -4,7 +4,7 @@ use super::controls::setup_controls;
 use super::sites::{site_index, site_move_index};
 use super::turns::{TurnCtx, build_turns, turn_set};
 use super::zones::{Cand, connector_targets, main_component};
-use super::{Arc, Ctrl, Graph};
+use super::{Arc, Ctrl, Graph, Priority};
 use crate::jsnum::{math_max, math_min, value_to_number};
 use crate::project::{Link, OrderedMap, RoadClass, Scenario, Settings};
 use crate::standards::cap_method_of;
@@ -102,13 +102,11 @@ pub fn build_graph(sc: &Scenario, s: &Settings, period: Option<&str>) -> Graph {
                 key: format!("{}{}", l.id, if dir > 0 { ":ab" } else { ":ba" }),
                 link: l.id.clone(),
                 dir,
-                conn: false,
                 from: if dir > 0 { ia } else { ib },
                 to: if dir > 0 { ib } else { ia },
                 len,
                 lanes,
                 gl,
-                bus,
                 two,
                 ff: len / v,
                 cap_mid: f64::from(gl) * cap_lane,
@@ -130,8 +128,7 @@ pub fn build_graph(sc: &Scenario, s: &Settings, period: Option<&str>) -> Graph {
                 phase: None,
                 c: None,
                 g_c: None,
-                major: false,
-                stop: false,
+                priority: Priority::Neither,
                 conf: None,
                 ring_in: None,
                 ring_out: None,
@@ -196,13 +193,11 @@ pub fn build_graph(sc: &Scenario, s: &Settings, period: Option<&str>) -> Graph {
                     key: format!("c:{}:{}:{}", z.id, t, suffix),
                     link: String::new(),
                     dir: 0,
-                    conn: true,
                     from,
                     to,
                     len: d,
                     lanes: 1,
                     gl: 1,
-                    bus: false,
                     two: false,
                     ff,
                     cap_mid: f64::INFINITY,
@@ -224,8 +219,7 @@ pub fn build_graph(sc: &Scenario, s: &Settings, period: Option<&str>) -> Graph {
                     phase: None,
                     c: None,
                     g_c: None,
-                    major: false,
-                    stop: false,
+                    priority: Priority::Neither,
                     conf: None,
                     ring_in: None,
                     ring_out: None,
@@ -248,7 +242,7 @@ pub fn build_graph(sc: &Scenario, s: &Settings, period: Option<&str>) -> Graph {
     for (i, a) in arcs.iter_mut().enumerate() {
         a.i = i;
         ffc[i] = a.ff;
-        if !a.conn {
+        if !a.conn() {
             into[a.to].push(i);
             out_r[a.from].push(i);
         }

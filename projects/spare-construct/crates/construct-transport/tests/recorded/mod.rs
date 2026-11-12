@@ -83,7 +83,7 @@ pub fn load(name: &str) -> Recorded {
 impl Recorded {
     /// A scenario's results by period, as `sc.res` held them when gen-expected.mjs ran the queries.
     pub fn results(&self, scenario: &str) -> Results {
-        self.scenarios[scenario]
+        self.scenarios.get(scenario).unwrap()
             .periods
             .iter()
             .map(|(p, r)| (p.to_string(), r.res.clone()))

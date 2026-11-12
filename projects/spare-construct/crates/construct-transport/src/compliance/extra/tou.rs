@@ -80,7 +80,7 @@ pub fn tou_skim(p: &V, g: &Graph, r: Option<&V>, charged: Option<&[(String, &'st
             t = math_max(0.1, t - ap * math_max(1.0, (x.g("t").n() - n0(x.g("nd"))) / x.g("ff").n()));
         }
         if let Some(s) = &set
-            && !a.conn && s.contains(a.link.as_str()) {
+            && !a.conn() && s.contains(a.link.as_str()) {
                 chg[i] = true;
                 t += pen;
             }

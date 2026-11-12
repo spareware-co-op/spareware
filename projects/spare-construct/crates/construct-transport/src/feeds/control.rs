@@ -553,8 +553,13 @@ pub fn control_proposals(sc: &Scenario, data: Option<&ControlData>) -> ControlPr
     }
     let mut rows: Vec<Row> = Vec::new();
     for (_, p) in &plan.entries {
-        let node_id = p["node"].as_str().expect("node id");
-        let n = &sc.nodes[node_id];
+        let Some((node_id, n)) = p
+            .get("node")
+            .and_then(Value::as_str)
+            .and_then(|id| sc.nodes.get(id).map(|n| (id, n)))
+        else {
+            continue;
+        };
         let user = user_control(n);
         let to = p.get("to").and_then(Value::as_str);
         let change = n.control.as_str() != to;

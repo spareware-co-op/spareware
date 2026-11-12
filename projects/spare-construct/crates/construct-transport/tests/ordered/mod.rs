@@ -109,7 +109,7 @@ pub fn first_difference(a: &OJ, e: &OJ, path: &str) -> Option<String> {
                 return Some(format!("{path}: keys {ak:?}, expected {ek:?}"));
             }
             for (k, ev) in em.iter() {
-                if let Some(d) = first_difference(&am[k], ev, &format!("{path}.{k}")) {
+                if let Some(d) = first_difference(&am.get(k).unwrap(), ev, &format!("{path}.{k}")) {
                     return Some(d);
                 }
             }

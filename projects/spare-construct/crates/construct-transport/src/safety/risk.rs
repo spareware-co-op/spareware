@@ -478,9 +478,9 @@ impl<'a> SafetyModel<'a> {
         let mut top_links: Vec<TopLink> = lr
             .iter()
             .filter(|(_, r)| r.t.crashes > 0 && !r.short)
-            .map(|(id, r)| {
-                let lk = &self.sc.links[id];
-                TopLink {
+            .filter_map(|(id, r)| {
+                let lk = self.sc.links.get(id)?;
+                Some(TopLink {
                     id: id.to_string(),
                     name: lk.name.str_or("Unnamed road").to_string(),
                     cls: lk.cls.as_str().map(str::to_string),
@@ -491,7 +491,7 @@ impl<'a> SafetyModel<'a> {
                     } else {
                         risk_band(r.personal, "personal")
                     },
-                }
+                })
             })
             .collect();
         js_sort_by(&mut top_links, |p, q| rank(&p.risk.t, &q.risk.t));

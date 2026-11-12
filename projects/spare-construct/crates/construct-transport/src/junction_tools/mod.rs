@@ -586,7 +586,9 @@ pub fn entries<'a>(sc: &Scenario, res: &'a Res, all: bool) -> Vec<Entry<'a>> {
         if in_a_site || in_site.contains(id) || !sc.nodes.contains_key(id) {
             continue;
         }
-        let n = &sc.nodes[id];
+        let Some(n) = sc.nodes.get(id) else {
+            continue;
+        };
         out.push(Entry {
             id: id.to_string(),
             is_site: false,
@@ -604,7 +606,9 @@ pub fn entries<'a>(sc: &Scenario, res: &'a Res, all: bool) -> Vec<Entry<'a>> {
             if res.nodes.contains_key(id) || in_site.contains(id) || !sc.nodes.contains_key(id) {
                 continue;
             }
-            let n = &sc.nodes[id];
+            let Some(n) = sc.nodes.get(id) else {
+                continue;
+            };
             out.push(Entry {
                 id: id.to_string(),
                 is_site: false,

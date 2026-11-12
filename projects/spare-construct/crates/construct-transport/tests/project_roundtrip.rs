@@ -239,7 +239,7 @@ fn ordered_map_behaves_like_a_javascript_object() {
     assert_eq!(m.remove("b"), Some(1));
     m.insert("b", 4);
     assert_eq!(m.keys().collect::<Vec<_>>(), ["a", "c", "b"]);
-    assert_eq!((m["a"], m["c"], m["b"]), (20, 3, 4));
+    assert_eq!((*m.get("a").unwrap(), *m.get("c").unwrap(), *m.get("b").unwrap()), (20, 3, 4));
     assert_eq!(m.index_of("b"), Some(2));
     m.retain(|k, _| k != "c");
     assert_eq!(m.iter().collect::<Vec<_>>(), [("a", &20), ("b", &4)]);
@@ -322,7 +322,7 @@ fn defaults_and_constructors_match_the_prototype() {
     }
     let mut sc: Scenario = serde_json::from_value(m["geomScenario"].clone()).unwrap();
     for g in m["geom"].as_array().unwrap() {
-        let l = &sc.links[g["link"].as_str().unwrap()];
+        let l = &sc.links.get(g["link"].as_str().unwrap()).unwrap();
         let want: Vec<[f64; 2]> = serde_json::from_value(g["geom"].clone()).unwrap();
         assert_eq!(sc.geom(l), want, "Net.geom {}", l.id);
         assert_eq!(
@@ -333,9 +333,9 @@ fn defaults_and_constructors_match_the_prototype() {
         );
     }
     sc.add_node("n3", [-36.91, 174.77]);
-    sc.add_link("l3", "n2", "n3", &[], Some("arterial")).name = Maybe::Set("New".to_string());
+    sc.add_link("l3", "n2", "n3", &[], Some("arterial")).unwrap().name = Maybe::Set("New".to_string());
     assert_eq!(sc.links.keys().last(), Some("l3"));
-    assert_eq!(sc.links["l3"].lanes_ab.num(), 2.0);
+    assert_eq!(sc.links.get("l3").unwrap().lanes_ab.num(), 2.0);
     for c in m["linkStage"].as_array().unwrap() {
         let l: Link = serde_json::from_value(c["link"].clone()).unwrap();
         assert_eq!(

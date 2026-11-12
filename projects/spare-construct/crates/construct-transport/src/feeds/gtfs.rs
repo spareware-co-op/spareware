@@ -920,8 +920,7 @@ pub fn gtfs_routes(sc: &Scenario, g: &GtfsLoaded) -> Vec<GtfsRoute> {
     };
     let ll = |id: Option<&Option<String>>| -> Option<[f64; 2]> { id.and_then(|i| by_stop.get(i)).map(|s| [s.lat, s.lng]) };
     let node = |id: &str| -> [f64; 2] {
-        let n = &sc.nodes[id];
-        [n.lat.num(), n.lng.num()]
+        sc.nodes.get(id).map_or([f64::NAN; 2], |n| [n.lat.num(), n.lng.num()])
     };
     struct Merged {
         p: GtfsPattern,
@@ -933,7 +932,9 @@ pub fn gtfs_routes(sc: &Scenario, g: &GtfsLoaded) -> Vec<GtfsRoute> {
         let mut wp: Vec<String> = Vec::new();
         for (i, s) in p.stops.iter().enumerate() {
             let Some(hit) = link_of(s) else { continue };
-            let l = &sc.links[hit.as_str()];
+            let Some(l) = sc.links.get(hit.as_str()) else {
+                continue;
+            };
             let nx = ll(p.stops.get(i + 1));
             let pv = if i > 0 { ll(p.stops.get(i - 1)) } else { None };
             // the exit end: nearer the next stop, or (for the last stop) further from the previous one

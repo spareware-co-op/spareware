@@ -478,7 +478,7 @@ pub fn osm_to_scenario(
     }
     for nid in &touched {
         let d = deg.get(nid).copied().unwrap_or(0) as f64;
-        let osm = sc.nodes[nid.as_str()].osm.get().cloned();
+        let osm = sc.nodes.get(nid.as_str()).and_then(|n| n.osm.get().cloned());
         let tags: Value = osm
             .as_ref()
             .and_then(|o| nodes.get(o))
@@ -523,7 +523,9 @@ pub fn osm_to_scenario(
         let mut best: Option<&String> = None;
         let mut bd = 45.0;
         for j in &junctions {
-            let n = &sc.nodes[j.as_str()];
+            let Some(n) = sc.nodes.get(j.as_str()) else {
+                continue;
+            };
             let d = util::dist(&at, &n.ll());
             if d < bd {
                 bd = d;
@@ -597,7 +599,9 @@ pub fn auto_gateways(
         let Some(n) = sc.nodes.get(nid) else {
             continue;
         };
-        let l = &sc.links[ls[0].as_str()];
+        let Some(l) = ls.first().and_then(|id| sc.links.get(id.as_str())) else {
+            continue;
+        };
         let c = road_class(l.cls.as_str());
         if c.rank < 3.0 || l.status.is("closed") {
             continue;

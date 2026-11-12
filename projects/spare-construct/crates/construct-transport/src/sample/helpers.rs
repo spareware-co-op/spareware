@@ -398,7 +398,9 @@ pub fn simplify(sc: &mut Scenario, tol: f64) -> usize {
     let mut dropped = 0usize;
     let ids: Vec<String> = sc.links.keys().map(str::to_string).collect();
     for id in ids {
-        let l = &sc.links[id.as_str()];
+        let Some(l) = sc.links.get(id.as_str()) else {
+            continue;
+        };
         let g = sc.geom(l);
         if g.len() < 3 {
             continue;
@@ -426,7 +428,7 @@ pub fn simplify(sc: &mut Scenario, tol: f64) -> usize {
             }
         }
         let pts: Vec<Point> = g[1..g.len() - 1].iter().enumerate().filter(|(m, _)| keep[m + 1]).map(|(_, p)| Point(*p)).collect();
-        let before = sc.links[id.as_str()].pts.get().map_or(0, Vec::len);
+        let before = sc.links.get(id.as_str()).and_then(|l| l.pts.get()).map_or(0, Vec::len);
         dropped += before - pts.len();
         sc.links.get_mut(&id).expect("the link").pts = Maybe::Set(pts);
     }
@@ -474,7 +476,9 @@ pub fn option_b(sc: &mut Scenario) -> usize {
     let mut n = 0;
     let ids: Vec<String> = sc.links.keys().map(str::to_string).collect();
     for id in ids {
-        let l = &sc.links[id.as_str()];
+        let Some(l) = sc.links.get(id.as_str()) else {
+            continue;
+        };
         if !has_word(l.name.as_str().unwrap_or(""), "waihoehoe") || l.ring.truthy() {
             continue;
         }

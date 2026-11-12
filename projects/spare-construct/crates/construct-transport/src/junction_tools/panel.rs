@@ -186,7 +186,7 @@ impl Tools<'_> {
                     "<div class=\"lg-row\"><a href=\"#\" data-fly=\"node:{}\">{}</a> <span class=\"note\">{}</span><button class=\"btn small\" style=\"margin-left:auto\" data-jx-do=\"unsite\" data-site=\"{}\" data-node=\"{}\">Remove</button></div>",
                     esc(id),
                     esc(&junction_name(sc, id, None)),
-                    esc(&ctl_name(sc.nodes[id].control.as_str().unwrap_or(""))),
+                    esc(&ctl_name(sc.nodes.get(id).and_then(|n| n.control.as_str()).unwrap_or(""))),
                     esc(&s.id),
                     esc(id)
                 )

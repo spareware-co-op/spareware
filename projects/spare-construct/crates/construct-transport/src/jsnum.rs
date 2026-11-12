@@ -33,6 +33,7 @@
 use serde::de::{Deserialize, Deserializer};
 use serde::ser::{Serialize, Serializer};
 use serde_json::Value;
+use std::fmt::Write as _;
 
 /* ---------------- white space and strings ---------------- */
 
@@ -69,22 +70,26 @@ pub fn string_to_number(s: &str) -> f64 {
     if t.is_empty() {
         return 0.0;
     }
-    let b = t.as_bytes();
-    if b.len() > 2 && b[0] == b'0' {
-        let radix = match b[1] {
+    if let [b'0', prefix, _, ..] = t.as_bytes() {
+        let radix = match prefix {
             b'x' | b'X' => 16,
             b'o' | b'O' => 8,
             b'b' | b'B' => 2,
             _ => 0,
         };
-        if radix != 0 {
-            return parse_radix(&t[2..], radix);
+        // The first two bytes are ASCII, so the text after them starts on a character boundary
+        if radix != 0
+            && let Some(digits) = t.get(2..)
+        {
+            return parse_radix(digits, radix);
         }
     }
-    let (sign, body) = match b[0] {
-        b'+' => (1.0, &t[1..]),
-        b'-' => (-1.0, &t[1..]),
-        _ => (1.0, t),
+    let (sign, body) = if let Some(rest) = t.strip_prefix('+') {
+        (1.0, rest)
+    } else if let Some(rest) = t.strip_prefix('-') {
+        (-1.0, rest)
+    } else {
+        (1.0, t)
     };
     if body == "Infinity" {
         return sign * f64::INFINITY;
@@ -98,38 +103,34 @@ pub fn string_to_number(s: &str) -> f64 {
 
 // StrUnsignedDecimalLiteral: digits [. digits] | . digits, then an optional exponent
 fn is_decimal_literal(s: &str) -> bool {
-    let b = s.as_bytes();
-    let mut i = 0;
-    let int_start = i;
-    while i < b.len() && b[i].is_ascii_digit() {
-        i += 1;
+    let (int_digits, mut rest) = split_digits(s.as_bytes());
+    let mut any_digit = !int_digits.is_empty();
+    if let Some((b'.', after)) = rest.split_first() {
+        let (frac_digits, after) = split_digits(after);
+        any_digit |= !frac_digits.is_empty();
+        rest = after;
     }
-    let mut digits = i - int_start;
-    if i < b.len() && b[i] == b'.' {
-        i += 1;
-        let frac_start = i;
-        while i < b.len() && b[i].is_ascii_digit() {
-            i += 1;
-        }
-        digits += i - frac_start;
-    }
-    if digits == 0 {
+    if !any_digit {
         return false;
     }
-    if i < b.len() && (b[i] == b'e' || b[i] == b'E') {
-        i += 1;
-        if i < b.len() && (b[i] == b'+' || b[i] == b'-') {
-            i += 1;
-        }
-        let exp_start = i;
-        while i < b.len() && b[i].is_ascii_digit() {
-            i += 1;
-        }
-        if i == exp_start {
+    if let Some((b'e' | b'E', after)) = rest.split_first() {
+        let after = match after.split_first() {
+            Some((b'+' | b'-', unsigned)) => unsigned,
+            _ => after,
+        };
+        let (exp_digits, after) = split_digits(after);
+        if exp_digits.is_empty() {
             return false;
         }
+        rest = after;
     }
-    i == b.len()
+    rest.is_empty()
+}
+
+/// The leading ASCII digits of b, and what follows them.
+pub(crate) fn split_digits(b: &[u8]) -> (&[u8], &[u8]) {
+    let n = b.iter().take_while(|c| c.is_ascii_digit()).count();
+    b.split_at_checked(n).unwrap_or((b, &[]))
 }
 
 fn parse_radix(s: &str, radix: u32) -> f64 {
@@ -147,11 +148,17 @@ fn parse_radix(s: &str, radix: u32) -> f64 {
             .and_then(|v| v.checked_add(u128::from(d)));
         approx = approx * f64::from(radix) + f64::from(d);
     }
-    // u128 to f64 rounds to nearest, ties to even, as the specification's rounding does
-    match exact {
-        Some(v) => v as f64,
-        None => approx,
-    }
+    exact.map_or(approx, u128_to_f64)
+}
+
+// Bound: u128 to f64 rounds to nearest, ties to even, as the specification's rounding of a literal does;
+// the rounding is the meaning wanted.
+#[allow(
+    clippy::cast_precision_loss,
+    reason = "rounds to nearest, ties to even, as StringToNumber does"
+)]
+fn u128_to_f64(v: u128) -> f64 {
+    v as f64
 }
 
 /// `Number(v)` for any JSON value: null 0, booleans 0 or 1, text by [`string_to_number`], arrays through their text, objects NaN.
@@ -222,19 +229,18 @@ pub fn or_default(x: f64, d: f64) -> f64 {
 /// `x | 0` (ToInt32): NaN and infinities give 0; otherwise truncated and wrapped modulo 2^32 into the signed range.
 #[must_use]
 pub fn to_int32(x: f64) -> i32 {
-    if !x.is_finite() {
-        return 0;
-    }
-    let m = x.trunc().rem_euclid(4_294_967_296.0);
-    if m >= 2_147_483_648.0 {
-        (m - 4_294_967_296.0) as i32
-    } else {
-        m as i32
-    }
+    // ToInt32 is ToUint32 read as two's complement: 2^31 and above are the value minus 2^32
+    to_uint32(x).cast_signed()
 }
 
 /// `x >>> 0` (ToUint32): NaN and infinities give 0; otherwise truncated and wrapped modulo 2^32.
 #[must_use]
+// Bound: rem_euclid leaves a whole number in 0..2^32, which u32 holds exactly.
+#[allow(
+    clippy::cast_possible_truncation,
+    clippy::cast_sign_loss,
+    reason = "a whole number in 0..2^32"
+)]
 pub fn to_uint32(x: f64) -> u32 {
     if !x.is_finite() {
         return 0;
@@ -378,34 +384,49 @@ pub fn math_hypot(xs: &[f64]) -> f64 {
 // (1642031110231315.25 is "1642031110231315.2" in JavaScript, not ".3").
 fn shortest_digits(x: f64) -> (Vec<u8>, i32) {
     let s = format!("{x:e}");
-    let (mant, exp) = s.split_once('e').expect("exponent form");
-    let exp: i32 = exp.parse().expect("exponent");
+    // Rust's `{:e}` always writes one 'e' and a decimal exponent
+    let (mant, exp) = s.split_once('e').unwrap_or((s.as_str(), "0"));
+    let exp: i32 = exp.parse().unwrap_or(0);
     let mut digits: Vec<u8> = mant.bytes().filter(u8::is_ascii_digit).collect();
     strip_zeros(&mut digits);
-    let n = exp + 1;
+    let n = exp.saturating_add(1);
     // The last digit counts units of 10^unit; a tie means x is exactly half a unit from two candidates
-    let unit = n - digits.len() as i32;
+    let unit = n.saturating_sub(len_i32(digits.len()));
     let (exact, e10) = exact_digits(x);
-    if e10 == unit - 1 && exact.last() == Some(&b'5') {
-        let mut down = exact[..exact.len() - 1].to_vec();
+    if let Some((b'5', above)) = exact.split_last()
+        && e10 == unit.saturating_sub(1)
+    {
+        let mut down = above.to_vec();
         if down.is_empty() {
             down.push(b'0');
         }
-        let up = round_digits(&exact, e10, -unit);
-        let even = if down.last().is_some_and(|d| (d - b'0').is_multiple_of(2)) {
+        let up = round_digits(&exact, e10, unit.saturating_neg());
+        // ASCII '0' is even, so a digit's byte has the digit's parity
+        let even = if down.last().is_some_and(|d| d.is_multiple_of(2)) {
             down
         } else {
             up
         };
         let text = format!("{}e{}", ascii(&even), unit);
         if even != digits && text.parse::<f64>() == Ok(x) {
-            let n2 = unit + even.len() as i32;
+            let n2 = unit.saturating_add(len_i32(even.len()));
             let mut d2 = even;
             strip_zeros(&mut d2);
             return (d2, n2);
         }
     }
     (digits, n)
+}
+
+// A digit count as an exponent step. Bound: a double's exact expansion has at most 767 digits, so a
+// count never comes near i32::MAX; the saturation only keeps the conversion total.
+fn len_i32(n: usize) -> i32 {
+    i32::try_from(n).unwrap_or(i32::MAX)
+}
+
+// A count of digits or zeros from an exponent step, with a negative step giving none.
+fn count(n: i32) -> usize {
+    usize::try_from(n).unwrap_or(0)
 }
 
 fn strip_zeros(d: &mut Vec<u8>) {
@@ -431,10 +452,12 @@ impl Big {
         }
         Big(l)
     }
+    // Bound: k is at most 5^13 (below 1.3e9) and a limb below 1e9, so limb * k + carry stays below
+    // 1.3e18 + 1.3e9, far inside u64; the saturating steps never saturate.
     fn mul_small(&mut self, k: u64) {
         let mut carry = 0u64;
         for limb in &mut self.0 {
-            let t = *limb * k + carry;
+            let t = limb.saturating_mul(k).saturating_add(carry);
             *limb = t % LIMB;
             carry = t / LIMB;
         }
@@ -446,7 +469,7 @@ impl Big {
     fn mul_pow2(&mut self, mut e: u32) {
         while e >= 29 {
             self.mul_small(1 << 29);
-            e -= 29;
+            e = e.saturating_sub(29);
         }
         if e > 0 {
             self.mul_small(1 << e);
@@ -455,7 +478,7 @@ impl Big {
     fn mul_pow5(&mut self, mut e: u32) {
         while e >= 13 {
             self.mul_small(1_220_703_125);
-            e -= 13;
+            e = e.saturating_sub(13);
         }
         if e > 0 {
             self.mul_small(5u64.pow(e));
@@ -464,7 +487,8 @@ impl Big {
     fn digits(&self) -> Vec<u8> {
         let mut s = self.0.last().copied().unwrap_or(0).to_string();
         for limb in self.0.iter().rev().skip(1) {
-            s.push_str(&format!("{limb:09}"));
+            // Writing to a String cannot fail
+            let _ = write!(s, "{limb:09}");
         }
         s.into_bytes()
     }
@@ -478,21 +502,22 @@ fn exact_digits(x: f64) -> (Vec<u8>, i32) {
     let (m, e2) = if exp_bits == 0 {
         (frac, -1074)
     } else {
-        (frac | (1u64 << 52), exp_bits - 1075)
+        // exp_bits is at most 0x7ff, so this stays within -1074..=972
+        (frac | (1u64 << 52), exp_bits.saturating_sub(1075))
     };
     let mut big = Big::from_u64(m);
-    let mut e10 = 0;
+    let mut e10 = 0i32;
     if e2 >= 0 {
-        big.mul_pow2(e2 as u32);
+        big.mul_pow2(e2.unsigned_abs());
     } else {
         // m times 2^e2 = m times 5^-e2 times 10^e2
-        big.mul_pow5((-e2) as u32);
+        big.mul_pow5(e2.unsigned_abs());
         e10 = e2;
     }
     let mut d = big.digits();
     while d.len() > 1 && d.last() == Some(&b'0') {
         d.pop();
-        e10 += 1;
+        e10 = e10.saturating_add(1);
     }
     (d, e10)
 }
@@ -500,45 +525,54 @@ fn exact_digits(x: f64) -> (Vec<u8>, i32) {
 // The whole number nearest digits times 10^(exp + frac), a tie rounding up (the value is a magnitude,
 // so this is round half away from zero): its decimal digits, without leading zeros ("0" for zero).
 fn round_digits(digits: &[u8], exp: i32, frac: i32) -> Vec<u8> {
-    let shift = i64::from(exp) + i64::from(frac);
+    let shift = i64::from(exp).saturating_add(i64::from(frac));
+    // Bound: exponents and digit counts here are a few hundred at most (a double's expansion), so
+    // the step fits usize on every target
+    let step = usize::try_from(shift.unsigned_abs()).unwrap_or(usize::MAX);
     let mut v: Vec<u8>;
     if shift >= 0 {
         v = digits.to_vec();
-        v.extend(std::iter::repeat_n(b'0', shift as usize));
+        v.extend(std::iter::repeat_n(b'0', step));
     } else {
-        let drop = (-shift) as usize;
-        if drop > digits.len() {
+        let Some((kept, dropped)) = digits
+            .len()
+            .checked_sub(step)
+            .and_then(|keep| digits.split_at_checked(keep))
+        else {
             return vec![b'0'];
-        }
-        let keep = digits.len() - drop;
-        v = digits[..keep].to_vec();
+        };
+        v = kept.to_vec();
         if v.is_empty() {
             v.push(b'0');
         }
-        if digits[keep] >= b'5' {
-            let mut i = v.len();
-            loop {
-                if i == 0 {
-                    v.insert(0, b'1');
-                    break;
-                }
-                i -= 1;
-                if v[i] == b'9' {
-                    v[i] = b'0';
-                } else {
-                    v[i] += 1;
-                    break;
-                }
-            }
+        if dropped.first().is_some_and(|&d| d >= b'5') {
+            increment(&mut v);
         }
     }
-    let first = v.iter().position(|&c| c != b'0').unwrap_or(v.len() - 1);
+    let first = v
+        .iter()
+        .position(|&c| c != b'0')
+        .unwrap_or(v.len().saturating_sub(1));
     v.drain(..first);
     v
 }
 
+// Adds one to a whole number's decimal digits, carrying through nines (999 becomes 1000)
+fn increment(v: &mut Vec<u8>) {
+    for d in v.iter_mut().rev() {
+        if *d == b'9' {
+            *d = b'0';
+        } else {
+            *d = d.saturating_add(1);
+            return;
+        }
+    }
+    v.insert(0, b'1');
+}
+
 fn ascii(v: &[u8]) -> &str {
-    std::str::from_utf8(v).expect("ASCII digits")
+    // Every caller passes ASCII digits, which are always UTF-8
+    std::str::from_utf8(v).unwrap_or_default()
 }
 
 /* ---------------- number to text ---------------- */
@@ -559,34 +593,42 @@ pub fn number_to_js_string(x: f64) -> String {
         return "Infinity".to_string();
     }
     let (d, n) = shortest_digits(x);
-    let k = d.len() as i32;
+    let k = len_i32(d.len());
     let s = ascii(&d);
     if k <= n && n <= 21 {
-        return format!("{}{}", s, "0".repeat((n - k) as usize));
+        return format!("{}{}", s, "0".repeat(count(n.saturating_sub(k))));
     }
     if 0 < n && n <= 21 {
-        return format!("{}.{}", &s[..n as usize], &s[n as usize..]);
+        let (int, frac) = s.split_at_checked(count(n)).unwrap_or((s, ""));
+        return format!("{int}.{frac}");
     }
     if -6 < n && n <= 0 {
-        return format!("0.{}{}", "0".repeat((-n) as usize), s);
+        return format!("0.{}{}", "0".repeat(count(n.saturating_neg())), s);
     }
-    let e = n - 1;
-    let es = if e >= 0 {
-        format!("+{e}")
-    } else {
-        format!("-{}", -e)
-    };
+    let es = exponent_text(n.saturating_sub(1));
     if k == 1 {
         format!("{s}e{es}")
     } else {
-        format!("{}.{}e{}", &s[..1], &s[1..], es)
+        let (first, rest) = s.split_at_checked(1).unwrap_or((s, ""));
+        format!("{first}.{rest}e{es}")
+    }
+}
+
+// An exponent as Number::toString and toPrecision write it: "+3", "-7"
+fn exponent_text(e: i32) -> String {
+    if e >= 0 {
+        format!("+{e}")
+    } else {
+        format!("-{}", e.unsigned_abs())
     }
 }
 
 /// `x.toFixed(digits)` (digits 0 to 100): exact decimal value rounded half up; from 1e21 the `String(x)` form.
+///
+/// JavaScript throws a `RangeError` for more than 100 digits; here more than 100 are read as 100.
 #[must_use]
 pub fn to_fixed(x: f64, digits: usize) -> String {
-    assert!(digits <= 100, "toFixed digits must be 0 to 100");
+    let digits = digits.min(100);
     if !x.is_finite() {
         return number_to_js_string(x);
     }
@@ -599,7 +641,7 @@ pub fn to_fixed(x: f64, digits: usize) -> String {
         vec![b'0']
     } else {
         let (d, e) = exact_digits(a);
-        round_digits(&d, e, digits as i32)
+        round_digits(&d, e, len_i32(digits))
     };
     format!("{}{}", sign, with_point(n, digits))
 }
@@ -610,61 +652,67 @@ fn with_point(mut n: Vec<u8>, frac: usize) -> String {
         return ascii(&n).to_string();
     }
     if n.len() <= frac {
-        let mut z = vec![b'0'; frac + 1 - n.len()];
+        let mut z = vec![b'0'; frac.saturating_sub(n.len()).saturating_add(1)];
         z.extend_from_slice(&n);
         n = z;
     }
-    let k = n.len() - frac;
-    format!("{}.{}", ascii(&n[..k]), ascii(&n[k..]))
+    let (int, fraction) = n
+        .split_at_checked(n.len().saturating_sub(frac))
+        .unwrap_or((n.as_slice(), &[]));
+    format!("{}.{}", ascii(int), ascii(fraction))
 }
 
 /// `x.toPrecision(p)` (p 1 to 100): exact decimal value rounded half up to p significant digits.
+///
+/// JavaScript throws a `RangeError` for p outside 1 to 100; here p is clamped to that range.
 #[must_use]
 pub fn to_precision(x: f64, p: usize) -> String {
-    assert!(
-        (1..=100).contains(&p),
-        "toPrecision precision must be 1 to 100"
-    );
+    let p = p.clamp(1, 100);
     if !x.is_finite() {
         return number_to_js_string(x);
     }
     let (sign, a) = if x < 0.0 { ("-", -x) } else { ("", x) };
+    let pi = len_i32(p);
     let (m, e): (Vec<u8>, i32) = if a == 0.0 {
         (vec![b'0'; p], 0)
     } else {
         let (d, de) = exact_digits(a);
-        let e0 = d.len() as i32 - 1 + de;
-        let n = round_digits(&d, de, p as i32 - 1 - e0);
+        let e0 = len_i32(d.len()).saturating_sub(1).saturating_add(de);
+        let mut n = round_digits(&d, de, pi.saturating_sub(1).saturating_sub(e0));
         if n.len() > p {
-            (n[..p].to_vec(), e0 + 1)
+            n.truncate(p);
+            (n, e0.saturating_add(1))
         } else {
             (n, e0)
         }
     };
     let s = ascii(&m);
-    let pi = p as i32;
     if e < -6 || e >= pi {
-        let mut out = format!("{}{}", sign, &s[..1]);
+        let (first, rest) = s.split_at_checked(1).unwrap_or((s, ""));
+        let mut out = format!("{sign}{first}");
         if p != 1 {
             out.push('.');
-            out.push_str(&s[1..]);
+            out.push_str(rest);
         }
         out.push('e');
-        out.push_str(&if e >= 0 {
-            format!("+{e}")
-        } else {
-            format!("-{}", -e)
-        });
+        out.push_str(&exponent_text(e));
         return out;
     }
-    if e == pi - 1 {
+    if e == pi.saturating_sub(1) {
         return format!("{sign}{s}");
     }
     if e >= 0 {
-        let k = (e + 1) as usize;
-        return format!("{}{}.{}", sign, &s[..k], &s[k..]);
+        let (int, frac) = s
+            .split_at_checked(count(e.saturating_add(1)))
+            .unwrap_or((s, ""));
+        return format!("{sign}{int}.{frac}");
     }
-    format!("{}0.{}{}", sign, "0".repeat((-(e + 1)) as usize), s)
+    format!(
+        "{}0.{}{}",
+        sign,
+        "0".repeat(count(e.saturating_add(1).saturating_neg())),
+        s
+    )
 }
 
 /// `new Intl.NumberFormat('en-NZ', { minimumFractionDigits: d, maximumFractionDigits: d }).format(x)` for finite x.
@@ -681,7 +729,11 @@ pub fn intl_format(x: f64, d: usize) -> String {
     } else {
         let (digits, pos) = shortest_digits(a);
         // a = 0.digits times 10^pos = digits times 10^(pos - len)
-        round_digits(&digits, pos - digits.len() as i32, d as i32)
+        round_digits(
+            &digits,
+            pos.saturating_sub(len_i32(digits.len())),
+            len_i32(d),
+        )
     };
     let text = with_point(n, d);
     let (int, frac) = match text.split_once('.') {
@@ -693,7 +745,7 @@ pub fn intl_format(x: f64, d: usize) -> String {
         out.push('-');
     }
     for (i, c) in int.chars().enumerate() {
-        if i > 0 && (int.len() - i) % 3 == 0 {
+        if i > 0 && int.len().saturating_sub(i).is_multiple_of(3) {
             out.push(',');
         }
         out.push(c);
@@ -714,13 +766,29 @@ pub fn json_number(x: f64) -> Value {
     }
     if x.fract() == 0.0 {
         if (-9_223_372_036_854_775_808.0..9_223_372_036_854_775_808.0).contains(&x) {
-            return Value::from(x as i64);
+            return Value::from(whole_to_i64(x));
         }
         if (0.0..18_446_744_073_709_551_616.0).contains(&x) {
-            return Value::from(x as u64);
+            return Value::from(whole_to_u64(x));
         }
     }
     serde_json::Number::from_f64(x).map_or(Value::Null, Value::Number)
+}
+
+// Bound: json_number passes only whole numbers in -2^63..2^63, which i64 holds exactly.
+#[allow(clippy::cast_possible_truncation, reason = "a whole number in -2^63..2^63")]
+fn whole_to_i64(x: f64) -> i64 {
+    x as i64
+}
+
+// Bound: json_number passes only whole numbers in 0..2^64, which u64 holds exactly.
+#[allow(
+    clippy::cast_possible_truncation,
+    clippy::cast_sign_loss,
+    reason = "a whole number in 0..2^64"
+)]
+fn whole_to_u64(x: f64) -> u64 {
+    x as u64
 }
 
 /// A number as tools/transport-truth/gen-expected.mjs writes results: finite as [`json_number`], otherwise "NaN", "Infinity" or "-Infinity".

@@ -136,7 +136,9 @@ pub fn conflate_fc(sc: &mut Scenario, feats: &[FutureConnect], radius: Option<f6
     let (mut matched, mut links, mut art, mut art_m) = (0usize, 0usize, 0usize, 0usize);
     let ids: Vec<String> = sc.links.keys().map(str::to_string).collect();
     for id in &ids {
-        let l = &sc.links[id.as_str()];
+        let Some(l) = sc.links.get(id.as_str()) else {
+            continue;
+        };
         if l.status.is("closed") || !sc.nodes.contains_key(&l.a) || !sc.nodes.contains_key(&l.b) {
             continue;
         }
@@ -228,7 +230,9 @@ pub fn conflate_fc(sc: &mut Scenario, feats: &[FutureConnect], radius: Option<f6
     }
     for _pass in 0..3 {
         for id in &ids {
-            let l = &sc.links[id.as_str()];
+            let Some(l) = sc.links.get(id.as_str()) else {
+                continue;
+            };
             if l.fc.get().is_some_and(value_truthy) || l.status.is("closed") || !sc.nodes.contains_key(&l.a) || !sc.nodes.contains_key(&l.b) || sc.link_len(l) >= 60.0 {
                 continue;
             }
@@ -236,7 +240,9 @@ pub fn conflate_fc(sc: &mut Scenario, feats: &[FutureConnect], radius: Option<f6
             let mut adj: Vec<&crate::project::Link> = Vec::new();
             for end in [&l.a, &l.b] {
                 for mid in at.get(end).map(Vec::as_slice).unwrap_or(&[]) {
-                    let m = &sc.links[mid.as_str()];
+                    let Some(m) = sc.links.get(mid.as_str()) else {
+                        continue;
+                    };
                     if m.id != l.id && m.fc.get().is_some_and(value_truthy) && fc_src(m).unwrap_or_default().starts_with("AT Future Connect") {
                         adj.push(m);
                     }

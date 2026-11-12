@@ -50,7 +50,7 @@ fn arc_results(run: &Run) -> (OrderedMap<ArcRes>, Vec<ArcFlow>, Totals) {
     };
     for a in 0..run.m {
         let arc = &g.arcs[a];
-        if arc.conn {
+        if arc.conn() {
             continue;
         }
         // t is time only: a charge (apen) steers routes but is money, not time
@@ -122,7 +122,7 @@ fn turn_results(run: &Run) -> OrderedMap<Vec<TurnRow>> {
     let mut turns: OrderedMap<Vec<TurnRow>> = OrderedMap::new();
     let mut conn_in: HashMap<usize, Vec<usize>> = HashMap::new();
     for a in &g.arcs {
-        if a.conn && g.is_c()[a.to] == 0 {
+        if a.conn() && g.is_c()[a.to] == 0 {
             conn_in.entry(a.to).or_default().push(a.i);
         }
     }
@@ -142,7 +142,7 @@ fn turn_results(run: &Run) -> OrderedMap<Vec<TurnRow>> {
                 let b = g.t_to()[t] as usize;
                 let (arc_a, arc_b) = (&g.arcs[a], &g.arcs[b]);
                 let dv = r1(run.trk[T_TD].x[t] / pf);
-                let mv = if arc_a.conn || arc_b.conn {
+                let mv = if arc_a.conn() || arc_b.conn() {
                     turn_type(arc_a.in_b, arc_b.out_b)
                 } else {
                     g.movement(a, b).unwrap_or("")
@@ -170,7 +170,7 @@ fn class_results(run: &Run) -> (ClassFlows, DevRes) {
     let mut arcs: OrderedMap<Vec<f64>> = OrderedMap::new();
     for a in 0..run.m {
         let arc = &g.arcs[a];
-        if arc.conn {
+        if arc.conn() {
             continue;
         }
         let tot = run.x[a] / pf;
@@ -234,7 +234,7 @@ fn select_result(run: &Run, turns: &OrderedMap<Vec<TurnRow>>) -> Option<Select> 
     );
     let mut flows: OrderedMap<f64> = OrderedMap::new();
     for a in 0..run.m {
-        if !g.arcs[a].conn && run.trk[xs].x[a] / pf > 0.05 {
+        if !g.arcs[a].conn() && run.trk[xs].x[a] / pf > 0.05 {
             flows.insert(g.arcs[a].key.clone(), r1(run.trk[xs].x[a] / pf));
         }
     }
@@ -338,7 +338,7 @@ pub(super) fn build_res(
     if run.hist.len() == 6 {
         let mut d: Vec<f64> = Vec::new();
         for a in 0..run.m {
-            if !g.arcs[a].conn {
+            if !g.arcs[a].conn() {
                 d.push((run.hist[5][a] - run.hist[0][a]).abs() / pf);
             }
         }
@@ -400,7 +400,7 @@ pub(super) fn build_res(
             let ai = ra[q];
             let arc = &g.arcs[ai];
             len += arc.len;
-            t += if arc.bus { arc.ff * 1.1 } else { run.cost[ai] - run.apen[ai] };
+            t += if arc.bus() { arc.ff * 1.1 } else { run.cost[ai] - run.apen[ai] };
             if q > 0 {
                 let ti = g.turn_idx(ra[q - 1], ai);
                 if ti >= 0 && g.tpen()[ti as usize].is_finite() {

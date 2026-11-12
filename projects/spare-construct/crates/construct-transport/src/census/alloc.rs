@@ -374,7 +374,7 @@ fn nz(x: Option<f64>) -> f64 {
 pub fn census_to_zones(sc: &mut Scenario, ids: &mut dyn IdSource, c: &CensusData, blds: &[Building], b: &Bx, opts: &ApplyOpts) -> CensusReport {
     let zone_ids: Vec<String> = land_zone_ids(sc, Some(b)).into_iter().filter(|id| sc.zones.get(id).is_some_and(is_existing)).collect();
     // (id, lat, lng) of each existing zone: nearest() looks only at these, in this order
-    let mut zones: Vec<(String, f64, f64)> = zone_ids.iter().map(|id| { let z = &sc.zones[id]; (id.clone(), z.lat.num(), z.lng.num()) }).collect();
+    let mut zones: Vec<(String, f64, f64)> = zone_ids.iter().filter_map(|id| sc.zones.get(id).map(|z| (id.clone(), z.lat.num(), z.lng.num()))).collect();
     let f = util::flat(f64::midpoint(b.s, b.n));
     let dw_ok = !c.missing.iter().any(|m| m == "dw layer");
     let nearest_n = zones.len();
@@ -592,7 +592,9 @@ pub fn census_to_zones(sc: &mut Scenario, ids: &mut dyn IdSource, c: &CensusData
     }
     // Location-only mode shares for the other land-use zones (development, committed): the SA1 they stand in
     for id in land_zone_ids(sc, Some(b)) {
-        let z = &sc.zones[&id];
+        let Some(z) = sc.zones.get(&id) else {
+            continue;
+        };
         if is_existing(z) {
             continue;
         }

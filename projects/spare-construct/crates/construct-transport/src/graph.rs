@@ -69,6 +69,19 @@ impl Ctrl {
     }
 }
 
+/// An arc's standing at a give-way or stop junction (the prototype's `a.major` and `a.stop`,
+/// which are never both true).
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum Priority {
+    /// Neither: no priority junction, or a give-way minor approach.
+    #[default]
+    Neither,
+    /// A major road approach (`a.major`).
+    Major,
+    /// A stop-controlled minor approach (`a.stop`).
+    Stop,
+}
+
 /// One arc of the graph: a link direction or a zone connector (the prototype's arc object).
 ///
 /// Connector arcs have no link: `link` and `name` are empty, `dir` is 0, `cls` is None, `speed`
@@ -81,10 +94,8 @@ pub struct Arc {
     pub key: String,
     /// Link id.
     pub link: String,
-    /// 1 from a to b, -1 from b to a, 0 for a connector.
+    /// 1 from a to b, -1 from b to a, 0 for a connector ([`Arc::conn`]).
     pub dir: i8,
-    /// A zone connector.
-    pub conn: bool,
     /// Start node index.
     pub from: usize,
     /// End node index.
@@ -93,10 +104,8 @@ pub struct Arc {
     pub len: f64,
     /// Lanes.
     pub lanes: i32,
-    /// General traffic lanes (lanes less a bus lane).
+    /// General traffic lanes (lanes less a bus lane, [`Arc::bus`]).
     pub gl: i32,
-    /// One lane is a bus lane.
-    pub bus: bool,
     /// The link has lanes both ways.
     pub two: bool,
     /// Free-flow time (s).
@@ -139,10 +148,8 @@ pub struct Arc {
     pub c: Option<f64>,
     /// Effective green ratio.
     pub g_c: Option<f64>,
-    /// A major road approach at a give-way or stop junction.
-    pub major: bool,
-    /// A stop-controlled minor approach.
-    pub stop: bool,
+    /// Major road or stop-controlled approach at a give-way or stop junction.
+    pub priority: Priority,
     /// Conflicting arcs and their weights (minor and roundabout entries).
     pub conf: Option<Vec<(usize, f64)>>,
     /// Ring arcs arriving at a mapped roundabout node.
@@ -157,6 +164,29 @@ pub struct Arc {
     pub mv_res: Option<EntryRes>,
     /// Source of the lane model (movement method).
     pub lm_src: Option<Value>,
+}
+
+impl Arc {
+    /// A zone connector (`a.conn`): the arcs with no link direction.
+    #[must_use]
+    pub fn conn(&self) -> bool {
+        self.dir == 0
+    }
+    /// One lane is a bus lane (`a.bus`): the general traffic lanes are one fewer than the lanes.
+    #[must_use]
+    pub fn bus(&self) -> bool {
+        self.gl < self.lanes
+    }
+    /// A major road approach at a give-way or stop junction (`a.major`).
+    #[must_use]
+    pub fn major(&self) -> bool {
+        self.priority == Priority::Major
+    }
+    /// A stop-controlled minor approach (`a.stop`).
+    #[must_use]
+    pub fn stop(&self) -> bool {
+        self.priority == Priority::Stop
+    }
 }
 
 /// Signal timing of a controller.

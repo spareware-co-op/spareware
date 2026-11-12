@@ -118,7 +118,7 @@ fn proposals_applying_and_gateways_match() {
         assert_close(&Value::Object(kept), &rec["gatewayZones"], &format!("{label} growth kept on the zones"));
         for g in rec["gateway"].as_array().unwrap() {
             let sc = p3.scenarios.iter().find(|s| s.id == g["scenario"].as_str().unwrap()).unwrap();
-            let z = &sc.zones[g["zone"].as_str().unwrap()];
+            let z = &sc.zones.get(g["zone"].as_str().unwrap()).unwrap();
             let base: construct_transport::jsnum::Num = if g["base"].get("undefined").is_some() { Maybe::Missing } else { Maybe::Set(JsNum::from(g["base"].clone())) };
             let got = ags_gateway(sc, z, &base, number_arg(&g["year"]), Some(&data));
             assert_close(&serde_json::to_value(got).unwrap(), &g["g"], &format!("{label} gateway {} {} base {} year {}", g["scenario"], g["zone"], g["base"], g["year"]));

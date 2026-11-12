@@ -153,7 +153,7 @@ impl<'a, 'p> Run<'a, 'p> {
         for (k, r) in routes.iter().enumerate() {
             let f = bus_freq(r, Some(period));
             for &ai in &route_arcs[k] {
-                if !g.arcs[ai].bus {
+                if !g.arcs[ai].bus() {
                     pre[ai] += f * bus_pcu;
                 }
             }
@@ -168,7 +168,7 @@ impl<'a, 'p> Run<'a, 'p> {
         let mut has_pen = false;
         for a in 0..m {
             let arc = &g.arcs[a];
-            if arc.conn {
+            if arc.conn() {
                 continue;
             }
             let mut p = arc.toll;
@@ -634,7 +634,7 @@ impl Run<'_, '_> {
             for a in 0..self.m {
                 num += self.cost[a] * (self.x[a] - self.y[a]);
                 den += self.cost[a] * self.x[a];
-                if !self.g.arcs[a].conn {
+                if !self.g.arcs[a].conn() {
                     vh += self.x[a] * (self.cost[a] - self.apen[a]);
                 }
             }
@@ -675,7 +675,7 @@ impl Run<'_, '_> {
             }
             let (mut n_p, mut ok_p) = (0u32, 0u32);
             for a in 0..self.m {
-                if self.g.arcs[a].conn || !(self.x_prev[a] > 1.0) {
+                if self.g.arcs[a].conn() || !(self.x_prev[a] > 1.0) {
                     continue;
                 }
                 n_p += 1;

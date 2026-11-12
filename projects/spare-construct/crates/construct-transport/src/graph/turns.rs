@@ -98,7 +98,7 @@ pub(crate) struct TurnCtx<'a> {
 
 impl TurnCtx<'_> {
     pub fn movement(&self, a: &Arc, b: &Arc) -> Option<&'static str> {
-        if a.conn || b.conn {
+        if a.conn() || b.conn() {
             return None;
         }
         if a.link == b.link {
@@ -115,7 +115,7 @@ impl TurnCtx<'_> {
     }
 
     pub fn penalty(&self, a: &Arc, b: &Arc) -> f64 {
-        if a.conn || b.conn {
+        if a.conn() || b.conn() {
             return 0.0;
         }
         let t = self.turn_s;
@@ -154,7 +154,7 @@ impl TurnCtx<'_> {
     }
 
     pub fn banned(&self, a: &Arc, b: &Arc) -> bool {
-        if a.conn || b.conn {
+        if a.conn() || b.conn() {
             return false;
         }
         let n = a.to;
@@ -189,7 +189,7 @@ pub(crate) fn build_turns(net: &Network, cx: &TurnCtx) -> (Turns, Vec<u8>) {
         let aa = &cx.arcs[a];
         for t in turns.of(a) {
             let bb = &cx.arcs[turns.to[t] as usize];
-            let m = if aa.conn || bb.conn {
+            let m = if aa.conn() || bb.conn() {
                 Some(turn_type(aa.in_b, bb.out_b))
             } else {
                 cx.movement(aa, bb)

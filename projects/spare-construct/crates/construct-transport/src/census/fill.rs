@@ -193,8 +193,8 @@ pub fn employees_to_zones(sc: &mut Scenario, ids: &dyn IdSource, e: &EmployeeDat
             continue;
         }
         let in_n = math_round(an * in_share);
-        let zs: Vec<&String> = zone_ids.iter().filter(|id| { let z = &sc.zones[*id]; in_poly(&a.poly, z.lng.num(), z.lat.num()) && gfa(z) > 0.0 }).collect();
-        let weights: Vec<f64> = zs.iter().map(|id| gfa(&sc.zones[*id])).collect();
+        let zs: Vec<&String> = zone_ids.iter().filter(|id| sc.zones.get(*id).is_some_and(|z| in_poly(&a.poly, z.lng.num(), z.lat.num()) && gfa(z) > 0.0)).collect();
+        let weights: Vec<f64> = zs.iter().map(|id| sc.zones.get(*id).map_or(0.0, gfa)).collect();
         let parts = lr(in_n, &weights);
         let zs: Vec<String> = zs.into_iter().cloned().collect();
         for (i, id) in zs.iter().enumerate() {
@@ -233,7 +233,7 @@ pub fn employees_to_zones(sc: &mut Scenario, ids: &dyn IdSource, e: &EmployeeDat
         });
     }
     let census = zone_ids.iter().fold(0.0, |s, id| {
-        let v = sc.zones[id].extra.get("census").and_then(|c| c.get("empWork")).map_or(0.0, |x| crate::jsnum::or_default(value_to_number(x), 0.0));
+        let v = sc.zones.get(id).and_then(|z| z.extra.get("census")).and_then(|c| c.get("empWork")).map_or(0.0, |x| crate::jsnum::or_default(value_to_number(x), 0.0));
         s + v
     });
     let ratio = if census > 0.0 { Some(allocated / census) } else { None };
@@ -441,7 +441,9 @@ pub fn schools_to_zones(sc: &mut Scenario, ids: &mut dyn IdSource, schools: &[Mo
             let mut zid: Option<String> = None;
             let mut bd = 300.0;
             for x in &cands {
-                let z = &sc.zones[x];
+                let Some(z) = sc.zones.get(x) else {
+                    continue;
+                };
                 let d = math_hypot(&[(z.lng.num() - c.lng) * f.kx, (z.lat.num() - c.lat) * f.ky]);
                 if d < bd {
                     bd = d;

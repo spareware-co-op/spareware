@@ -69,14 +69,13 @@ impl<V> OrderedMap<V> {
     /// `obj[key]`.
     #[must_use]
     pub fn get(&self, key: &str) -> Option<&V> {
-        self.index.get(key).map(|&i| &self.entries[i].1)
+        let &i = self.index.get(key)?;
+        self.entries.get(i).map(|(_, v)| v)
     }
     /// `obj[key]`, for changing.
     pub fn get_mut(&mut self, key: &str) -> Option<&mut V> {
-        match self.index.get(key) {
-            Some(&i) => Some(&mut self.entries[i].1),
-            None => None,
-        }
+        let &i = self.index.get(key)?;
+        self.entries.get_mut(i).map(|(_, v)| v)
     }
     /// `key in obj` (own keys only).
     #[must_use]
@@ -96,8 +95,8 @@ impl<V> OrderedMap<V> {
     /// `obj[key] = value`: a new key goes last, an existing key keeps its place; returns the old value.
     pub fn insert(&mut self, key: impl Into<String>, value: V) -> Option<V> {
         let key = key.into();
-        if let Some(&i) = self.index.get(&key) {
-            return Some(std::mem::replace(&mut self.entries[i].1, value));
+        if let Some(old) = self.get_mut(&key) {
+            return Some(std::mem::replace(old, value));
         }
         self.index.insert(key.clone(), self.entries.len());
         self.entries.push((key, value));
@@ -106,10 +105,13 @@ impl<V> OrderedMap<V> {
     /// `delete obj[key]`: later keys move up one place; returns the value.
     pub fn remove(&mut self, key: &str) -> Option<V> {
         let i = self.index.remove(key)?;
+        if i >= self.entries.len() {
+            return None;
+        }
         let (_, v) = self.entries.remove(i);
-        for (k, _) in &self.entries[i..] {
+        for (k, _) in self.entries.iter().skip(i) {
             if let Some(p) = self.index.get_mut(k) {
-                *p -= 1;
+                *p = p.saturating_sub(1);
             }
         }
         Some(v)
@@ -202,14 +204,6 @@ impl<'a, V> IntoIterator for &'a OrderedMap<V> {
         std::iter::Map<std::slice::Iter<'a, (String, V)>, fn(&'a (String, V)) -> (&'a str, &'a V)>;
     fn into_iter(self) -> Self::IntoIter {
         self.entries.iter().map(|(k, v)| (k.as_str(), v))
-    }
-}
-
-impl<V> std::ops::Index<&str> for OrderedMap<V> {
-    type Output = V;
-    fn index(&self, key: &str) -> &V {
-        self.get(key)
-            .unwrap_or_else(|| panic!("no key {key:?} in the map"))
     }
 }
 
@@ -843,25 +837,6 @@ fn num_map(items: &[(&str, f64)]) -> Maybe<OrderedMap<Num>> {
 /// model.js `defaultSettings()`: the settings of a new project, every nested object included, keys in its order.
 #[must_use]
 pub fn default_settings() -> Settings {
-    let rates: OrderedMap<Maybe<PeriodRates>> = [
-        ("residential", (0.85, 20.0), (0.95, 65.0)),
-        ("apartment", (0.45, 20.0), (0.50, 60.0)),
-        ("retail", (1.5, 60.0), (4.5, 50.0)),
-        ("office", (2.0, 85.0), (1.8, 15.0)),
-        ("industrial", (0.6, 70.0), (0.6, 30.0)),
-        ("school", (0.45, 50.0), (0.05, 50.0)),
-        ("supermarket", (3.0, 60.0), (9.0, 50.0)),
-        ("childcare", (0.8, 55.0), (0.7, 45.0)),
-        ("medical", (2.5, 75.0), (3.0, 35.0)),
-        ("retirement", (0.2, 40.0), (0.3, 55.0)),
-        ("hotel", (0.4, 30.0), (0.4, 60.0)),
-        ("warehouse", (0.5, 65.0), (0.5, 35.0)),
-        ("fastfood", (4.0, 50.0), (12.0, 50.0)),
-        ("tertiary", (0.25, 85.0), (0.2, 20.0)),
-    ]
-    .into_iter()
-    .map(|(k, am, pm)| (k.to_string(), rate_pair(am, pm)))
-    .collect();
     Settings {
         sv: n(SETTINGS_VERSION),
         period: s("AM"),
@@ -910,7 +885,7 @@ pub fn default_settings() -> Settings {
         gravity_beta: n(0.10),
         connector_speed: n(25.0),
         connectors: n(2.0),
-        rates: Maybe::Set(rates),
+        rates: Maybe::Set(default_rates()),
         turns: Maybe::Set(TurnSettings {
             left: n(2.0),
             right: n(6.0),
@@ -918,39 +893,7 @@ pub fn default_settings() -> Settings {
             uturn: txt("ban"),
             extra: Map::new(),
         }),
-        econ: Maybe::Set(EconSettings {
-            method: s("mbcm"),
-            activity: s("non-commercial"),
-            vot: n(32.0),
-            vot_update: false.into(),
-            annual_hours: n(1200.0),
-            period_hours: num_map(&[("AM", 600.0), ("PM", 600.0), ("IP", 0.0)]),
-            rates: Maybe::Set(
-                serde_json::json!([{ "to": 30, "r": 2 }, { "to": 100, "r": 1.5 }, { "to": null, "r": 1 }]),
-            ),
-            sens_rate: n(8.0),
-            discount: n(2.0),
-            years: n(40.0),
-            long_life_note: txt(""),
-            approval: txt(""),
-            benefit_growth: Maybe::Null,
-            p95: false.into(),
-            lane_km: num_map(&[
-                ("motorway", 12.0),
-                ("ramp", 8.0),
-                ("arterial", 5.0),
-                ("collector", 3.5),
-                ("local", 2.5),
-            ]),
-            node: num_map(&[
-                ("signals", 1.5),
-                ("roundabout", 3.0),
-                ("priority", 0.2),
-                ("stop", 0.2),
-                ("none", 0.0),
-            ]),
-            extra: Map::new(),
-        }),
+        econ: Maybe::Set(default_econ()),
         sim: Maybe::Set(SimSettings {
             scale: n(1.0),
             speed: n(6.0),
@@ -967,6 +910,66 @@ pub fn default_settings() -> Settings {
         basemap: s(""),
         calib: Maybe::Missing,
         co2_factor: Maybe::Missing,
+        extra: Map::new(),
+    }
+}
+
+// defaultSettings().rates: trip rates per land use, AM and PM, in model.js's order
+fn default_rates() -> OrderedMap<Maybe<PeriodRates>> {
+    [
+        ("residential", (0.85, 20.0), (0.95, 65.0)),
+        ("apartment", (0.45, 20.0), (0.50, 60.0)),
+        ("retail", (1.5, 60.0), (4.5, 50.0)),
+        ("office", (2.0, 85.0), (1.8, 15.0)),
+        ("industrial", (0.6, 70.0), (0.6, 30.0)),
+        ("school", (0.45, 50.0), (0.05, 50.0)),
+        ("supermarket", (3.0, 60.0), (9.0, 50.0)),
+        ("childcare", (0.8, 55.0), (0.7, 45.0)),
+        ("medical", (2.5, 75.0), (3.0, 35.0)),
+        ("retirement", (0.2, 40.0), (0.3, 55.0)),
+        ("hotel", (0.4, 30.0), (0.4, 60.0)),
+        ("warehouse", (0.5, 65.0), (0.5, 35.0)),
+        ("fastfood", (4.0, 50.0), (12.0, 50.0)),
+        ("tertiary", (0.25, 85.0), (0.2, 20.0)),
+    ]
+    .into_iter()
+    .map(|(k, am, pm)| (k.to_string(), rate_pair(am, pm)))
+    .collect()
+}
+
+// defaultSettings().econ: the economic evaluation's defaults
+fn default_econ() -> EconSettings {
+    EconSettings {
+        method: s("mbcm"),
+        activity: s("non-commercial"),
+        vot: n(32.0),
+        vot_update: false.into(),
+        annual_hours: n(1200.0),
+        period_hours: num_map(&[("AM", 600.0), ("PM", 600.0), ("IP", 0.0)]),
+        rates: Maybe::Set(
+            serde_json::json!([{ "to": 30, "r": 2 }, { "to": 100, "r": 1.5 }, { "to": null, "r": 1 }]),
+        ),
+        sens_rate: n(8.0),
+        discount: n(2.0),
+        years: n(40.0),
+        long_life_note: txt(""),
+        approval: txt(""),
+        benefit_growth: Maybe::Null,
+        p95: false.into(),
+        lane_km: num_map(&[
+            ("motorway", 12.0),
+            ("ramp", 8.0),
+            ("arterial", 5.0),
+            ("collector", 3.5),
+            ("local", 2.5),
+        ]),
+        node: num_map(&[
+            ("signals", 1.5),
+            ("roundabout", 3.0),
+            ("priority", 0.2),
+            ("stop", 0.2),
+            ("none", 0.0),
+        ]),
         extra: Map::new(),
     }
 }
@@ -1202,7 +1205,7 @@ pub struct Scenario {
     /// Share of the development zones built (%), staging.
     #[serde(default, skip_serializing_if = "Maybe::is_missing")]
     pub buildout: Num,
-    /// Periods assessed (["AM", "PM"]).
+    /// Periods assessed (`["AM", "PM"]`).
     #[serde(default, skip_serializing_if = "Maybe::is_missing")]
     pub periods: Maybe<Vec<String>>,
     /// Scenario code ("S0", "S1" ...).
@@ -1637,12 +1640,14 @@ impl Zone {
 }
 
 impl Scenario {
-    /// `Net.addNode(sc, ll)`: adds a node (last in order) and returns it for further fields.
-    pub fn add_node(&mut self, id: &str, ll: LatLng) -> &mut Node {
+    /// `Net.addNode(sc, ll)`: adds a node (last in order) and returns it for further fields
+    /// (always `Some`: the map holds what it was just given).
+    pub fn add_node(&mut self, id: &str, ll: LatLng) -> Option<&mut Node> {
         self.nodes.insert(id, Node::new(id, ll));
-        self.nodes.get_mut(id).expect("just inserted")
+        self.nodes.get_mut(id)
     }
-    /// `Net.addLink(sc, a, b, pts, { cls })`: adds a link (last in order) and returns it for further fields.
+    /// `Net.addLink(sc, a, b, pts, { cls })`: adds a link (last in order) and returns it for further fields
+    /// (always `Some`, as for [`Scenario::add_node`]).
     pub fn add_link(
         &mut self,
         id: &str,
@@ -1650,25 +1655,20 @@ impl Scenario {
         b: &str,
         pts: &[LatLng],
         cls: Option<&str>,
-    ) -> &mut Link {
+    ) -> Option<&mut Link> {
         self.links.insert(id, Link::new(id, a, b, pts, cls));
-        self.links.get_mut(id).expect("just inserted")
+        self.links.get_mut(id)
     }
-    /// `Net.geom(sc, L)`: [node a, shape points..., node b]. Both end nodes must exist (the JavaScript throws otherwise).
+    /// `Net.geom(sc, L)`: [node a, shape points..., node b].
+    ///
+    /// The JavaScript throws when an end node is missing; here a missing end node is left out,
+    /// so the shape runs from the nodes that exist.
     pub fn geom(&self, l: &Link) -> Vec<LatLng> {
-        let a = self
-            .nodes
-            .get(&l.a)
-            .unwrap_or_else(|| panic!("link {} has no node {}", l.id, l.a));
-        let b = self
-            .nodes
-            .get(&l.b)
-            .unwrap_or_else(|| panic!("link {} has no node {}", l.id, l.b));
         let pts = l.pts.get().map_or(&[][..], Vec::as_slice);
-        let mut g = Vec::with_capacity(pts.len() + 2);
-        g.push(a.ll());
+        let mut g = Vec::with_capacity(pts.len().saturating_add(2));
+        g.extend(self.nodes.get(&l.a).map(Node::ll));
         g.extend(pts.iter().map(|p| p.0));
-        g.push(b.ll());
+        g.extend(self.nodes.get(&l.b).map(Node::ll));
         g
     }
     /// `Net.len(sc, L)`: link length along its shape (m).
@@ -1680,20 +1680,28 @@ impl Scenario {
 
 impl Project {
     /// Reads a saved project from JSON text.
+    ///
+    /// # Errors
+    ///
+    /// serde's error when the text is not JSON or does not have a project's shape.
     pub fn from_json(text: &str) -> serde_json::Result<Project> {
         serde_json::from_str(text)
     }
     /// The project as a JSON value (every key it was read with, `extra` included).
+    ///
+    /// A project's types serialise only to JSON's own kinds (string keys, finite numbers or
+    /// null), which `serde_json::to_value` cannot refuse; null stands in if it ever did.
     #[must_use]
     pub fn to_value(&self) -> Value {
-        serde_json::to_value(self).expect("a project always serialises")
+        serde_json::to_value(self).unwrap_or(Value::Null)
     }
     /// `Store.serialise(P)`: JSON text without the keys "paths", "arcKeys" and "settingsNotice" at any depth.
     #[must_use]
     pub fn serialise(&self) -> String {
         let mut v = self.to_value();
         strip_keys(&mut v, &["paths", "arcKeys", "settingsNotice"]);
-        serde_json::to_string(&v).expect("a JSON value always serialises")
+        // A Value always writes as JSON text (Value's Display is serde_json::to_string's output)
+        v.to_string()
     }
     /// The scenario with this id.
     #[must_use]

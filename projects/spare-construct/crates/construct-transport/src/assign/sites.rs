@@ -21,7 +21,7 @@ pub(super) struct SiteOut {
 // siteMv(G, pseudo, a, b): "U" when the movement leaves on the leg it entered, else by the bearings
 fn site_mv(g: &Graph, li: &HashMap<usize, usize>, lo: &HashMap<usize, usize>, a: usize, b: usize) -> &'static str {
     let bb = &g.arcs[b];
-    if !bb.conn && li.get(&a) == lo.get(&b) {
+    if !bb.conn() && li.get(&a) == lo.get(&b) {
         return "U";
     }
     turn_type(g.arcs[a].in_b, bb.out_b)

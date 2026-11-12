@@ -28,7 +28,7 @@ pub(crate) fn prep_moves(sc: &Scenario, g: &mut Graph, k: usize) {
     let mut ent: Vec<MoveEntry> = Vec::new();
     for &i in &ctl.arcs {
         let a = &g.arcs[i];
-        if a.ring || (a.ctrl == crate::graph::Ctrl::Free && !a.major) {
+        if a.ring || (a.ctrl == crate::graph::Ctrl::Free && !a.major()) {
             continue;
         }
         let node = sc.nodes.get(&g.ids[a.to]);
@@ -59,7 +59,7 @@ pub(crate) fn prep_moves(sc: &Scenario, g: &mut Graph, k: usize) {
             for t in g.search.turns.of(i) {
                 if g.tpen()[t] != f64::INFINITY {
                     let b = &g.arcs[g.t_to()[t] as usize];
-                    let leg = if b.conn {
+                    let leg = if b.conn() {
                         format!("c:{}", b.zone.as_deref().unwrap_or("undefined"))
                     } else {
                         b.link.clone()
@@ -85,7 +85,7 @@ pub(crate) fn prep_moves(sc: &Scenario, g: &mut Graph, k: usize) {
         };
         ent.push(MoveEntry {
             i,
-            major: a.major,
+            major: a.major(),
             in_b: a.in_b,
             leg: match &ctl.site {
                 Some(s) => leg_key(s.leg_in.get(&i)),
@@ -93,7 +93,7 @@ pub(crate) fn prep_moves(sc: &Scenario, g: &mut Graph, k: usize) {
             },
             gl: math_max(1.0, f64::from(a.gl)),
             s_lane: a.cap_mid / math_max(1.0, f64::from(a.gl)),
-            stop: a.stop,
+            stop: a.stop(),
             gaps,
             lanes: lm.lanes,
             median: lm.median,
@@ -188,7 +188,7 @@ pub fn site_exits(g: &Graph, ctl: &Ctl, x_t: &[f64]) -> Vec<(usize, Vec<(usize, 
 #[must_use]
 pub fn site_mv(g: &Graph, ctl: &Ctl, a: usize, b: usize) -> &'static str {
     let bb = &g.arcs[b];
-    if !bb.conn {
+    if !bb.conn() {
         let st = ctl.site.as_ref();
         let li = st.and_then(|s| s.leg_in.get(&a));
         let lo = st.and_then(|s| s.leg_out.get(&b));
@@ -243,7 +243,7 @@ pub fn ctl_flows(g: &Graph, ctl: &Ctl, ent: &mut [MoveEntry], x_t: &[f64], pff: 
                 if let Some((_, m)) = ex.iter().find(|x| x.0 == e.i) {
                     for &(b, f) in m {
                         let bb = &g.arcs[b];
-                        let leg = if bb.conn {
+                        let leg = if bb.conn() {
                             format!("c:{}", bb.zone.as_deref().unwrap_or("undefined"))
                         } else {
                             leg_key(ctl.site.as_ref().and_then(|s| s.leg_out.get(&b)))

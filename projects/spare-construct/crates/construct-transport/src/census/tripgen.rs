@@ -949,12 +949,12 @@ pub fn project_scope(p: &Project) -> String {
 #[must_use]
 pub fn tables(p: &Project, sc: &Scenario, s: &Settings, opts: &TablesOpts) -> Tables {
     let zones = opts.zones.clone().unwrap_or_else(|| table_zones(sc, &opts.scope.clone().unwrap_or_else(|| project_scope(p))));
+    // A zone id the scenario does not hold is left out of both lists, so they stay in step
+    let zones: Vec<String> = zones.into_iter().filter(|id| sc.zones.contains_key(id)).collect();
     let tg: Vec<ZoneTrips> = zones
         .iter()
-        .map(|id| {
-            let z = &sc.zones[id];
-            ZoneTrips { am: trip_gen(z, s, "AM", sc), pm: trip_gen(z, s, "PM", sc) }
-        })
+        .filter_map(|id| sc.zones.get(id))
+        .map(|z| ZoneTrips { am: trip_gen(z, s, "AM", sc), pm: trip_gen(z, s, "PM", sc) })
         .collect();
     let mut flags: Vec<ZoneFlag> = Vec::new();
     let mut seen: Vec<String> = Vec::new();

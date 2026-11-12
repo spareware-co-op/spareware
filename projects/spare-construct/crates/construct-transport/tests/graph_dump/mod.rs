@@ -32,7 +32,7 @@ fn pts(p: &[[f64; 2]]) -> Value {
 
 /// An arc as gen-graph.mjs arcOut writes it.
 pub fn arc_value(a: &Arc) -> Value {
-    let c = a.conn;
+    let c = a.conn();
     let mut m = Map::new();
     let mut put = |k: &str, v: Value| {
         m.insert(k.to_string(), v);
@@ -47,7 +47,7 @@ pub fn arc_value(a: &Arc) -> Value {
     put("len", n(a.len));
     put("lanes", json!(a.lanes));
     put("gl", json!(a.gl));
-    put("bus", if c { Value::Null } else { json!(a.bus) });
+    put("bus", if c { Value::Null } else { json!(a.bus()) });
     put("two", if c { Value::Null } else { json!(a.two) });
     put("ff", n(a.ff));
     put("capMid", n(a.cap_mid));
@@ -69,8 +69,8 @@ pub fn arc_value(a: &Arc) -> Value {
     put("phase", a.phase.map_or(Value::Null, |x| json!(x)));
     put("C", opt_n(a.c));
     put("gC", opt_n(a.g_c));
-    put("major", json!(a.major));
-    put("stop", json!(a.stop));
+    put("major", json!(a.major()));
+    put("stop", json!(a.stop()));
     put(
         "conf",
         a.conf.as_ref().map_or(Value::Null, |cf| {

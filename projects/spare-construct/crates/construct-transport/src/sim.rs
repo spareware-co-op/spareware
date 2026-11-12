@@ -163,7 +163,7 @@ fn car_routes(g: &Graph, res: &SimResults, pf: f64) -> (Vec<MicroRoute>, Vec<Sim
                     break;
                 }
                 Some(m) => {
-                    if g.arcs.get(m).is_some_and(|a| !a.conn) {
+                    if g.arcs.get(m).is_some_and(|a| !a.conn()) {
                         arcs.push(m);
                     }
                 }
@@ -229,7 +229,7 @@ impl<R: Rng> Sim<R> {
             let arcs: Vec<usize> = g
                 .resolve_route(r, None)
                 .into_iter()
-                .filter(|&i| g.arcs.get(i).is_some_and(|a| !a.conn))
+                .filter(|&i| g.arcs.get(i).is_some_and(|a| !a.conn()))
                 .collect();
             let freq = bus_freq(r, period.as_deref());
             if !arcs.is_empty() && freq > 0.0 {
@@ -380,7 +380,7 @@ impl<R: Rng> Sim<R> {
         let passed = self.core.arc_passed();
         let mut rows: Vec<ValidationRow> = Vec::new();
         for (ai, a) in self.graph.arcs.iter().enumerate() {
-            if a.conn {
+            if a.conn() {
                 continue;
             }
             let Some(&v) = res.arc_flow.get(&a.key) else {
@@ -463,14 +463,14 @@ pub fn micro_net(g: &Graph) -> MicroNet {
                 speed: a.speed,
                 ff: a.ff,
                 lanes: usize::try_from(a.gl).unwrap_or(0),
-                bus_lane: a.bus,
-                virtual_arc: a.conn,
+                bus_lane: a.bus(),
+                virtual_arc: a.conn(),
                 to: a.to,
                 in_bearing: a.in_b,
                 out_bearing: a.out_b,
                 control,
-                major: a.major,
-                stop: a.stop,
+                major: a.major(),
+                stop: a.stop(),
                 conflicts: a
                     .conf
                     .as_ref()

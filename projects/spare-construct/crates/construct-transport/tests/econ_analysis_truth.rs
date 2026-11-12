@@ -20,7 +20,7 @@ fn capital_as_recorded() {
         for sc in &p.scenarios {
             assert_close(
                 &json(&capital(sc, &p.settings)),
-                &rec.scenarios[&sc.id].capital,
+                &rec.scenarios.get(&sc.id).unwrap().capital,
                 &format!("{name}.{}.capital", sc.id),
             );
             n += 1;
@@ -75,7 +75,7 @@ fn dev_distribution_as_recorded() {
             let list: Vec<_> = ["AM", "PM"].iter().filter_map(|x| res.get(x)).collect();
             assert_close(
                 &json(&dev_distribution(Some(sc), &list)),
-                &rec.scenarios[&sc.id].dev_distribution,
+                &rec.scenarios.get(&sc.id).unwrap().dev_distribution,
                 &format!("{name}.{}.devDistribution", sc.id),
             );
             n += 1;

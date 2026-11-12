@@ -47,7 +47,7 @@ impl PerfSet {
 /// at free-flow time; a major approach with right turners adds their delay (movement method).
 #[must_use]
 pub fn arc_time(a: &Arc, x: f64, p: &PerfSet) -> f64 {
-    if a.conn || a.internal {
+    if a.conn() || a.internal {
         return a.ff;
     }
     let mut t = a.ff * (1.0 + p.bpr_alpha * jsmath::pow(x / a.cap_mid, p.bpr_beta));
@@ -71,7 +71,7 @@ pub fn arc_time(a: &Arc, x: f64, p: &PerfSet) -> f64 {
         let c = math_max(1.0, or_default(a.cap_n.unwrap_or(f64::NAN), a.cap_mid));
         let xx = q / c;
         let h = 3600.0 / c;
-        let extra = if a.stop {
+        let extra = if a.stop() {
             5.0
         } else if a.ctrl == Ctrl::Rbt {
             5.0 * math_min(1.0, xx)
@@ -88,7 +88,7 @@ pub fn arc_time(a: &Arc, x: f64, p: &PerfSet) -> f64 {
 /// `effCap(a, S)`: capacity (pcu/h) of an arc: infinite for a connector, the signal or gap-acceptance capacity where lower than mid-block, else mid-block.
 #[must_use]
 pub fn eff_cap(a: &Arc, p: &PerfSet) -> f64 {
-    if a.conn {
+    if a.conn() {
         return f64::INFINITY;
     }
     match a.ctrl {
@@ -113,7 +113,7 @@ pub fn arc_cap(a: &Arc, xt: &[f64]) -> Option<f64> {
                 vc += xt[j] * f;
             }
             vc = math_max(vc, 1.0);
-            let (tc, tf) = if a.stop { (6.5, 3.5) } else { (6.0, 3.2) };
+            let (tc, tf) = if a.stop() { (6.5, 3.5) } else { (6.0, 3.2) };
             let cp = vc * jsmath::exp(-vc * tc / 3600.0) / (1.0 - jsmath::exp(-vc * tf / 3600.0));
             Some(math_max(
                 80.0,

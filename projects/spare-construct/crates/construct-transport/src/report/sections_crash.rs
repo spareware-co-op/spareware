@@ -115,7 +115,7 @@ fn crash_sites0(c: &Ctx) -> Vec<CrashSite> {
             continue;
         };
         let members: Vec<String> = g.nodes.iter().filter(|x| home.nodes.contains_key(x)).cloned().collect();
-        let pts: Vec<[f64; 2]> = members.iter().map(|x| home.nodes[x].ll()).collect();
+        let pts: Vec<[f64; 2]> = members.iter().filter_map(|x| home.nodes.get(x)).map(|n| n.ll()).collect();
         let (mut f, mut s, mut m, mut nn, mut injury, mut p, mut cc, mut mc, mut dsi) = (0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0f64);
         let mut list: Vec<(usize, f64)> = Vec::new();
         for (ci, k) in cr.iter().enumerate() {

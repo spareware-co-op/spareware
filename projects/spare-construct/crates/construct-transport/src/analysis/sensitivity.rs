@@ -609,7 +609,9 @@ pub fn sensitivity(
         let mut state = crate::project::OrderedMap::new();
         let (mut n5, mut n10) = (0.0, 0.0);
         for per in &periods {
-            let r = &o.with[per.as_str()];
+            let Some(r) = o.with.get(per.as_str()) else {
+                continue;
+            };
             trips += r.kpi.trips;
             vht += r.kpi.vht;
             for (id, nr) in r.nodes.iter() {

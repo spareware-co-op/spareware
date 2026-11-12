@@ -106,12 +106,12 @@ pub fn mov_rows(
     let k = j.pff / pf;
     let extra = if kind == "roundabout" {
         None
-    } else if a.stop {
+    } else if a.stop() {
         Some(5.0)
     } else {
         Some(2.0)
     };
-    let is_maj = a.major;
+    let is_maj = a.major();
     let lf = |x: f64| if rta { los_lt(x, th) } else { los_of(x, th) };
     let lanes: &[LaneRow] = mv.lanes.as_deref().unwrap_or(&[]);
     let lane_d = |l: &LaneRow| {
@@ -508,7 +508,7 @@ pub fn junction_result(
         let r = arcs_res[ai];
         let nd = math_max(0.0, r.nd);
         let mv = if movement && !a.ring { a.mv_res.as_ref() } else { None };
-        let mjr = matches!(mv, Some(m) if a.major && a.mj.is_some() && m.v.r > 0.0);
+        let mjr = matches!(mv, Some(m) if a.major() && a.mj.is_some() && m.v.r > 0.0);
         let free = a.ctrl == Ctrl::Free && !mjr;
         let cap_p = if mjr {
             mv.map_or(f64::NAN, |m| m.cap)
@@ -589,7 +589,7 @@ pub fn junction_result(
             q95: math_round(math_max(0.0, qv) * j.queue_space),
             q95veh: r1(math_max(0.0, qv)),
             phase: a.phase,
-            major: a.major,
+            major: a.major(),
             ctrl: a.ctrl.as_str(),
             mov,
         });

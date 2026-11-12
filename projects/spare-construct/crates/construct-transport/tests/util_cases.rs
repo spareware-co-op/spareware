@@ -364,7 +364,7 @@ fn util_heap() {
             if op[0] == "push" {
                 h.push(dec(&op[1]), op[2].as_i64().unwrap() as i32);
             } else {
-                let v = h.pop();
+                let v = h.pop().unwrap();
                 pops.push((v, h.top));
             }
         }

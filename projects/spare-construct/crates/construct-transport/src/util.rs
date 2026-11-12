@@ -13,7 +13,8 @@
 use crate::jsmath;
 use crate::jsnum::{
     intl_format, is_js_space, math_hypot, math_max, math_min, math_round, number_to_js_string,
-    or_default, string_to_number, to_fixed, truthy_number, value_to_js_string,
+    or_default, split_digits, string_to_number, to_fixed, truthy_number, u64_to_f64,
+    value_to_js_string,
 };
 use serde_json::Value;
 
@@ -42,9 +43,13 @@ pub fn dist(a: &LatLng, b: &LatLng) -> f64 {
 #[must_use]
 pub fn cum_len(pts: &[LatLng]) -> Vec<f64> {
     let mut c = Vec::with_capacity(pts.len().max(1));
-    c.push(0.0);
-    for i in 1..pts.len() {
-        c.push(c[i - 1] + dist(&pts[i - 1], &pts[i]));
+    let mut total = 0.0;
+    c.push(total);
+    for pair in pts.windows(2) {
+        if let [a, b] = pair {
+            total += dist(a, b);
+            c.push(total);
+        }
     }
     c
 }
@@ -52,8 +57,18 @@ pub fn cum_len(pts: &[LatLng]) -> Vec<f64> {
 /// `U.polyLen(pts)`: length (m) of a polyline.
 #[must_use]
 pub fn poly_len(pts: &[LatLng]) -> f64 {
-    let c = cum_len(pts);
-    c[c.len() - 1]
+    cum_len(pts).last().copied().unwrap_or(0.0)
+}
+
+// `xs[i]` read as a number in JavaScript: past the end it is undefined, which reads as NaN
+fn num_at(xs: &[f64], i: usize) -> f64 {
+    xs.get(i).copied().unwrap_or(f64::NAN)
+}
+
+// An index as the signed segment index `U.along` returns. Bound: an index of something in memory
+// is below isize::MAX, so the saturation never applies.
+fn signed_index(i: usize) -> isize {
+    isize::try_from(i).unwrap_or(isize::MAX)
 }
 
 /// `U.bearing(a, b)`: initial bearing from a to b, degrees clockwise from north in [0, 360).
@@ -123,42 +138,57 @@ pub struct Along {
     pub f: f64,
 }
 
-/// `U.along(pts, cum, s)`: point at distance s along a polyline with cumulative lengths cum (pts must not be empty).
+/// `U.along(pts, cum, s)`: point at distance s along a polyline with cumulative lengths cum.
+///
+/// cum holds one length per point, as [`cum_len`] gives them. With no points (which the
+/// JavaScript does not handle) the point is NaN, NaN.
 #[must_use]
 pub fn along(pts: &[LatLng], cum: &[f64], s: f64) -> Along {
+    let (Some(&first), Some(&last)) = (pts.first(), pts.last()) else {
+        return Along {
+            p: [f64::NAN; 2],
+            i: -1,
+            f: f64::NAN,
+        };
+    };
     let n = pts.len();
-    let l = cum[n - 1];
+    let total = num_at(cum, n.saturating_sub(1));
     if s <= 0.0 {
         return Along {
-            p: pts[0],
+            p: first,
             i: 0,
             f: 0.0,
         };
     }
-    if s >= l {
+    if s >= total {
         return Along {
-            p: pts[n - 1],
-            i: n as isize - 2,
+            p: last,
+            i: signed_index(n).saturating_sub(2),
             f: 1.0,
         };
     }
-    let (mut lo, mut hi) = (0usize, n - 1);
-    while hi - lo > 1 {
-        let m = usize::midpoint(lo, hi);
-        if cum[m] <= s {
-            lo = m;
+    let (mut lo, mut hi) = (0usize, n.saturating_sub(1));
+    while hi.saturating_sub(lo) > 1 {
+        let mid = usize::midpoint(lo, hi);
+        if num_at(cum, mid) <= s {
+            lo = mid;
         } else {
-            hi = m;
+            hi = mid;
         }
     }
-    let f = (s - cum[lo]) / or_default(cum[lo + 1] - cum[lo], 1.0);
-    let p = [
-        pts[lo][0] + (pts[lo + 1][0] - pts[lo][0]) * f,
-        pts[lo][1] + (pts[lo + 1][1] - pts[lo][1]) * f,
-    ];
+    let (c0, c1) = (num_at(cum, lo), num_at(cum, lo.saturating_add(1)));
+    let f = (s - c0) / or_default(c1 - c0, 1.0);
+    let point = match pts.get(lo..) {
+        Some([from, to, ..]) => [
+            from[0] + (to[0] - from[0]) * f,
+            from[1] + (to[1] - from[1]) * f,
+        ],
+        // cum longer than pts: the JavaScript reads undefined coordinates
+        _ => [f64::NAN; 2],
+    };
     Along {
-        p,
-        i: lo as isize,
+        p: point,
+        i: signed_index(lo),
         f,
     }
 }
@@ -205,8 +235,8 @@ pub fn seg_dist(px: f64, py: f64, ax: f64, ay: f64, bx: f64, by: f64) -> SegDist
 /// heap in the same order and shortest-path ties break the same way.
 #[derive(Clone, Debug, Default)]
 pub struct Heap {
-    k: Vec<f64>,
-    v: Vec<i32>,
+    // (key, value) slots; the first n are the heap, as util.js keeps its typed arrays
+    e: Vec<(f64, i32)>,
     n: usize,
     /// Key of the entry the last `pop` returned (`heap.top`; 0 before any pop).
     pub top: f64,
@@ -222,11 +252,21 @@ impl Heap {
     #[must_use]
     pub fn with_capacity(cap: usize) -> Self {
         Heap {
-            k: Vec::with_capacity(cap),
-            v: Vec::with_capacity(cap),
+            e: Vec::with_capacity(cap),
             n: 0,
             top: 0.0,
         }
+    }
+    fn key(&self, i: usize) -> f64 {
+        self.e.get(i).map_or(f64::NAN, |e| e.0)
+    }
+    fn set(&mut self, i: usize, entry: (f64, i32)) {
+        if let Some(slot) = self.e.get_mut(i) {
+            *slot = entry;
+        }
+    }
+    fn entry(&self, i: usize) -> (f64, i32) {
+        self.e.get(i).copied().unwrap_or((f64::NAN, 0))
     }
     /// `heap.clear()`.
     pub fn clear(&mut self) {
@@ -244,54 +284,54 @@ impl Heap {
     }
     /// `heap.push(key, val)`.
     pub fn push(&mut self, key: f64, val: i32) {
-        if self.n == self.k.len() {
-            self.k.push(0.0);
-            self.v.push(0);
+        if self.n == self.e.len() {
+            self.e.push((0.0, 0));
         }
         let mut i = self.n;
-        self.n += 1;
+        self.n = self.n.saturating_add(1);
         while i > 0 {
-            let p = (i - 1) >> 1;
-            if self.k[p] <= key {
+            let p = i.saturating_sub(1) / 2;
+            let parent = self.entry(p);
+            if parent.0 <= key {
                 break;
             }
-            self.k[i] = self.k[p];
-            self.v[i] = self.v[p];
+            self.set(i, parent);
             i = p;
         }
-        self.k[i] = key;
-        self.v[i] = val;
+        self.set(i, (key, val));
     }
-    /// `heap.pop()`: removes the entry with the smallest key and returns its value; sets `top` to its key. The heap must not be empty.
-    pub fn pop(&mut self) -> i32 {
-        assert!(self.n > 0, "pop from an empty heap");
-        let rv = self.v[0];
-        self.top = self.k[0];
-        self.n -= 1;
-        let n = self.n;
+    /// `heap.pop()`: removes the entry with the smallest key and returns its value; sets `top` to its key.
+    ///
+    /// None when the heap is empty (the JavaScript reads past its entries there; callers check
+    /// `heap.n` first).
+    pub fn pop(&mut self) -> Option<i32> {
+        let n = self.n.checked_sub(1)?;
+        let (top, rv) = self.entry(0);
+        self.top = top;
+        self.n = n;
         if n > 0 {
-            let key = self.k[n];
-            let val = self.v[n];
-            let mut i = 0;
+            let (key, val) = self.entry(n);
+            let mut i = 0usize;
             loop {
-                let mut c = 2 * i + 1;
+                // Bound: i < n, and n counts slots in memory, so 2i + 2 stays far below usize::MAX
+                let mut c = i.saturating_mul(2).saturating_add(1);
                 if c >= n {
                     break;
                 }
-                if c + 1 < n && self.k[c + 1] < self.k[c] {
-                    c += 1;
+                let right = c.saturating_add(1);
+                if right < n && self.key(right) < self.key(c) {
+                    c = right;
                 }
-                if self.k[c] >= key {
+                let child = self.entry(c);
+                if child.0 >= key {
                     break;
                 }
-                self.k[i] = self.k[c];
-                self.v[i] = self.v[c];
+                self.set(i, child);
                 i = c;
             }
-            self.k[i] = key;
-            self.v[i] = val;
+            self.set(i, (key, val));
         }
-        rv
+        Some(rv)
     }
 }
 
@@ -312,7 +352,9 @@ pub fn now_ms() -> f64 {
     {
         std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
-            .map_or(0.0, |d| d.as_millis() as f64)
+            .ok()
+            .and_then(|d| u64::try_from(d.as_millis()).ok())
+            .map_or(0.0, u64_to_f64)
     }
     #[cfg(target_arch = "wasm32")]
     {
@@ -508,43 +550,42 @@ pub fn esc(s: &str) -> String {
 // NUMLIKE in util.js: /^[-+]?(\d+\.?\d*|\.\d+)(e[-+]?\d+)?$/i
 fn is_numlike(s: &str) -> bool {
     let b = s.as_bytes();
-    let len = b.len();
-    let digits_from = |mut i: usize| {
-        while i < len && b[i].is_ascii_digit() {
-            i += 1;
-        }
-        i
+    let b = match b.split_first() {
+        Some((b'-' | b'+', unsigned)) => unsigned,
+        _ => b,
     };
-    let mut i = 0;
-    if i < len && (b[i] == b'-' || b[i] == b'+') {
-        i += 1;
-    }
-    if i < len && b[i].is_ascii_digit() {
-        i = digits_from(i);
-        if i < len && b[i] == b'.' {
-            i = digits_from(i + 1);
+    let rest = match b.split_first() {
+        Some((c, _)) if c.is_ascii_digit() => {
+            let (_, after) = split_digits(b);
+            match after.split_first() {
+                Some((b'.', frac)) => split_digits(frac).1,
+                _ => after,
+            }
         }
-    } else if i < len && b[i] == b'.' {
-        let start = i + 1;
-        i = digits_from(start);
-        if i == start {
-            return false;
+        Some((b'.', frac)) => {
+            let (digits, after) = split_digits(frac);
+            if digits.is_empty() {
+                return false;
+            }
+            after
         }
-    } else {
-        return false;
-    }
-    if i < len && (b[i] == b'e' || b[i] == b'E') {
-        i += 1;
-        if i < len && (b[i] == b'-' || b[i] == b'+') {
-            i += 1;
+        _ => return false,
+    };
+    let rest = match rest.split_first() {
+        Some((b'e' | b'E', exp)) => {
+            let exp = match exp.split_first() {
+                Some((b'-' | b'+', unsigned)) => unsigned,
+                _ => exp,
+            };
+            let (digits, after) = split_digits(exp);
+            if digits.is_empty() {
+                return false;
+            }
+            after
         }
-        let start = i;
-        i = digits_from(start);
-        if i == start {
-            return false;
-        }
-    }
-    i == len
+        _ => rest,
+    };
+    rest.is_empty()
 }
 
 /// `U.csvCell(v)`: one RFC 4180 cell; text that a spreadsheet would read as a formula gets a leading apostrophe.
