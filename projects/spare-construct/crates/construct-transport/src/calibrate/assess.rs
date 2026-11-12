@@ -707,8 +707,13 @@ pub fn report_scenario(p: &Project) -> Option<&Scenario> {
 /// What `recordValidation` did to the project's record for the period.
 #[derive(Clone, Debug, PartialEq)]
 pub enum Recorded {
-    /// A record was written: pass, independent.
-    Written { pass: bool, independent: bool },
+    /// A record was written.
+    Written {
+        /// Whether the validation passed.
+        pass: bool,
+        /// Whether it used enough independent counts, rather than the calibration counts standing in.
+        independent: bool,
+    },
     /// The record was removed.
     Dropped,
     /// Nothing changed (no record, none needed).

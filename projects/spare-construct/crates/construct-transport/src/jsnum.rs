@@ -228,6 +228,30 @@ pub fn to_uint32(x: f64) -> u32 {
     x.trunc().rem_euclid(4294967296.0) as u32
 }
 
+/// A count, limit or position read from a JSON number, as Rust's `x as usize` gives it: truncated toward zero, with NaN and
+/// anything below 0 giving 0 and anything above `usize::MAX` giving `usize::MAX`.
+#[must_use]
+// Bound: a float-to-integer `as` saturates to 0..=usize::MAX and maps NaN to 0, which is the meaning wanted here.
+#[allow(
+    clippy::cast_possible_truncation,
+    clippy::cast_sign_loss,
+    reason = "saturates to 0..=usize::MAX, NaN to 0"
+)]
+pub fn f64_to_usize(x: f64) -> usize {
+    x as usize
+}
+
+/// A count or index as a JavaScript number (`arr.length`, a loop index).
+#[must_use]
+// Bound: lengths and indexes of things in memory stay far below 2^53, below which every whole number is exact as an f64.
+#[allow(
+    clippy::cast_precision_loss,
+    reason = "a length stays below 2^53, where f64 is exact"
+)]
+pub fn usize_to_f64(n: usize) -> f64 {
+    n as f64
+}
+
 /* ---------------- Math ---------------- */
 
 /// `Math.round`: the nearest integer, ties toward +Infinity; keeps -0 for -0.5 <= x <= -0 (V8's Float64Round).

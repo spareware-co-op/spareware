@@ -1,6 +1,16 @@
 //! The analysis commands against the JavaScript's recorded answers: capital, economics, difference, with and without, extent test,
 //! development distribution, cycling stress, export readiness, model metadata and status, select link, trip ends and the sensitivity pack.
 
+// The crate denies these outside tests (Cargo.toml); clippy.toml's allow-*-in-tests settings don't
+// reach helpers outside `#[test]` functions, and a broken helper must stop the test loudly.
+#![allow(
+    clippy::expect_used,
+    clippy::panic,
+    clippy::too_many_lines,
+    clippy::needless_pass_by_value,
+    reason = "test code; the rules are for the crate's own code"
+)]
+
 mod support;
 
 use construct_api::Session;
@@ -84,7 +94,7 @@ fn analysis_commands_match_the_recorded_answers() {
                     let sl = ok(
                         &mut s,
                         "transport.analysis.select_link",
-                        json!({ "scenario": sid, "period": period, "key": key, "limit": 100000 }),
+                        json!({ "scenario": sid, "period": period, "key": key, "limit": 100_000 }),
                     );
                     let want = &pr["selectLink"];
                     assert_close(

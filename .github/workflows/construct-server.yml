@@ -45,9 +45,8 @@ jobs:
           targets: wasm32-unknown-unknown
           components: clippy
       - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
-      # Every crate linted here but construct-api carries the geometry kernel's lint tables (piece
-      # A19); construct-api is linted with clippy's defaults until it does. construct-transport is
-      # not linted here yet.
+      # Every crate linted here carries the geometry kernel's lint tables (piece A19).
+      # construct-transport carries them too but is not linted here until its lints are fixed.
       - name: Clippy
         run: >-
           cargo clippy --locked --no-deps -p construct-model -p construct-regen -p construct-shapes

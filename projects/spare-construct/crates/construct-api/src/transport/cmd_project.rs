@@ -4,7 +4,8 @@ use super::Session;
 use super::helpers::{from_jv, kit_get_path, kit_set_path, to_jv};
 use super::registry::Registry;
 use crate::error::{ApiError, ApiResult};
-use crate::schema::*;
+use crate::schema::{Params, choice, free_object, none, params, string, strings};
+use crate::transport::helpers::put;
 use construct_transport::edit::json::JsonValue;
 use construct_transport::edit::{self, migrate};
 use construct_transport::jsnum::{Maybe, math_round};
@@ -13,6 +14,12 @@ use construct_transport::util::clamp;
 use serde_json::{Value, json};
 
 pub(super) fn register(r: &mut Registry) {
+    register_1(r);
+    register_2(r);
+}
+
+/// Part 1 of [`register`]: `transport.project.new` to `transport.settings.reset`.
+fn register_1(r: &mut Registry) {
     r.add(
         "transport.project.new",
         "Start a new project with one empty Base case scenario and the default settings.",
@@ -35,7 +42,7 @@ pub(super) fn register(r: &mut Registry) {
         "Give the project as JSON text, as Save writes it (results without their paths), with the file name Save suggests.",
         false,
         none(),
-        project_save,
+        |s, _| Ok(project_save(s)),
     );
     r.add(
         "transport.project.info",
@@ -97,6 +104,10 @@ pub(super) fn register(r: &mut Registry) {
         none(),
         settings_reset,
     );
+}
+
+/// Part 2 of [`register`]: `transport.settings.adopt_defaults` to `transport.reference.tables`.
+fn register_2(r: &mut Registry) {
     r.add(
         "transport.settings.adopt_defaults",
         "Adopt the new defaults the project's notice lists (all of them, or the named keys); an empty list keeps the project's own settings.",
@@ -109,7 +120,7 @@ pub(super) fn register(r: &mut Registry) {
         "Keep the project's own settings and clear the notice about changed defaults.",
         true,
         none(),
-        settings_keep,
+        |s, _| Ok(settings_keep(s)),
     );
     r.add(
         "transport.reference.tables",
@@ -120,7 +131,7 @@ pub(super) fn register(r: &mut Registry) {
     );
 }
 
-fn project_new(s: &mut Session, p: &Params) -> ApiResult {
+fn project_new(s: &mut Session, p: Params<'_>) -> ApiResult {
     let name = p.opt_str("name")?.unwrap_or("Untitled project").to_string();
     let view = s.project.view.clone();
     let theme = s.project.extra.get("theme").cloned();
@@ -134,16 +145,16 @@ fn project_new(s: &mut Session, p: &Params) -> ApiResult {
     np.settings.basemap = basemap;
     let bad = s.set_project(np);
     let mut out = s.project_info();
-    out["warnings"] = json!(bad);
+    put(&mut out, "warnings", json!(bad));
     Ok(out)
 }
 
-fn project_open(s: &mut Session, p: &Params) -> ApiResult {
+fn project_open(s: &mut Session, p: Params<'_>) -> ApiResult {
     let text = p.str("text")?;
     let np = migrate::migrate_text(text, &mut s.ids)?;
     let bad = s.set_project(np);
     let mut out = s.project_info();
-    out["warnings"] = json!(bad);
+    put(&mut out, "warnings", json!(bad));
     Ok(out)
 }
 
@@ -168,7 +179,7 @@ fn file_name(name: &str) -> String {
     )
 }
 
-fn project_save(s: &mut Session, _: &Params) -> ApiResult {
+fn project_save(s: &Session) -> Value {
     let text = s.project.serialise();
     let name = s
         .project
@@ -176,10 +187,10 @@ fn project_save(s: &mut Session, _: &Params) -> ApiResult {
         .as_str()
         .filter(|n| !n.is_empty())
         .unwrap_or("project");
-    Ok(json!({ "fileName": file_name(name), "bytes": text.len(), "text": text }))
+    json!({ "fileName": file_name(name), "bytes": text.len(), "text": text })
 }
 
-fn project_rename(s: &mut Session, p: &Params) -> ApiResult {
+fn project_rename(s: &mut Session, p: Params<'_>) -> ApiResult {
     let name = p.str("name")?.trim();
     let name = if name.is_empty() {
         "Untitled project"
@@ -191,7 +202,7 @@ fn project_rename(s: &mut Session, p: &Params) -> ApiResult {
     Ok(json!({ "name": name }))
 }
 
-fn project_set_period(s: &mut Session, p: &Params) -> ApiResult {
+fn project_set_period(s: &mut Session, p: Params<'_>) -> ApiResult {
     let period = p.str("period")?;
     s.project.settings.period = Maybe::Set(period.to_string());
     s.touch();
@@ -202,7 +213,7 @@ fn settings_json(s: &Session) -> ApiResult<JsonValue> {
     to_jv(&s.project.settings)
 }
 
-fn settings_get(s: &mut Session, p: &Params) -> ApiResult {
+fn settings_get(s: &mut Session, p: Params<'_>) -> ApiResult {
     let jv = settings_json(s)?;
     match p.opt_str("path")? {
         None => Ok(jv.to_value()),
@@ -262,7 +273,7 @@ fn tidy_settings(jv: &mut JsonValue) {
     }
 }
 
-fn settings_set(s: &mut Session, p: &Params) -> ApiResult {
+fn settings_set(s: &mut Session, p: Params<'_>) -> ApiResult {
     let values = p.object("values")?;
     if values.is_empty() {
         return Err(ApiError::bad_params("`values` has no settings in it"));
@@ -287,7 +298,7 @@ fn settings_set(s: &mut Session, p: &Params) -> ApiResult {
     Ok(json!({ "changed": true, "message": "Settings saved. Run the model again to apply them." }))
 }
 
-fn settings_reset(s: &mut Session, _: &Params) -> ApiResult {
+fn settings_reset(s: &mut Session, _: Params<'_>) -> ApiResult {
     let cur = settings_json(s)?;
     let mut d = to_jv(&default_settings())?;
     for k in ["period", "basemap", "linzKey", "display"] {
@@ -306,7 +317,7 @@ fn settings_reset(s: &mut Session, _: &Params) -> ApiResult {
     Ok(json!({ "message": "Settings reset to the defaults. Run the model again to apply them." }))
 }
 
-fn settings_adopt(s: &mut Session, p: &Params) -> ApiResult {
+fn settings_adopt(s: &mut Session, p: Params<'_>) -> ApiResult {
     if migrate::settings_notice(&s.project).is_none() {
         return Ok(
             json!({ "adopted": 0, "message": "There is no notice about changed defaults." }),
@@ -330,12 +341,12 @@ fn settings_adopt(s: &mut Session, p: &Params) -> ApiResult {
     }))
 }
 
-fn settings_keep(s: &mut Session, _: &Params) -> ApiResult {
+fn settings_keep(s: &mut Session) -> Value {
     let kept = migrate::keep_settings(&mut s.project);
     if kept {
         s.touch();
     }
-    Ok(json!({ "kept": kept, "message": "Kept this project's own settings." }))
+    json!({ "kept": kept, "message": "Kept this project's own settings." })
 }
 
 fn pairs(t: &[(&str, &str)]) -> Value {

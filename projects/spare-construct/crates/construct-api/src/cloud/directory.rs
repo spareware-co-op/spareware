@@ -166,6 +166,10 @@ async fn add_to_project<T: Txn>(
 }
 
 /// Runs one of these commands.
+///
+/// # Errors
+///
+/// A store error; a command that cannot be made is the outcome's error instead.
 pub async fn apply<T: Txn>(txn: &mut T, edit: &Edit) -> Result<Outcome, StoreError> {
     match edit.cmd.as_str() {
         "hub.add" => {

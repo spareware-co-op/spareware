@@ -407,7 +407,7 @@ fn serve_mcp(opts: &Opts) -> Res<i32> {
     }
     let (session, rev) = open_session(opts)?;
     let session = Rc::new(RefCell::new(session));
-    let mut server = mcp::server(Rc::clone(&session), env!("CARGO_PKG_VERSION"));
+    let mut server = mcp::server(&session, env!("CARGO_PKG_VERSION"));
     server
         .serve_stdio()
         .map_err(|e| Fail::Run(format!("the MCP server stopped: {e}")))?;

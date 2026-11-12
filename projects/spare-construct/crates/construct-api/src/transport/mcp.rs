@@ -11,11 +11,13 @@ use std::cell::RefCell;
 use std::rc::Rc;
 
 /// The name MCP clients see for a command: the dots replaced by underscores.
+#[must_use]
 pub fn tool_name(command: &str) -> String {
     command.replace('.', "_")
 }
 
 /// The command name for a tool name, if it is one of ours.
+#[must_use]
 pub fn command_of(tool: &str) -> Option<&'static str> {
     registry()
         .all()
@@ -51,13 +53,13 @@ fn progress_text(ev: &Value) -> String {
 }
 
 /// One MCP tool per transport command, all working on the one shared session.
-pub fn tools(session: Rc<RefCell<Session>>) -> Vec<Tool> {
+pub fn tools(session: &Rc<RefCell<Session>>) -> Vec<Tool> {
     registry()
         .all()
         .iter()
         .map(|cmd| {
             let name = cmd.name;
-            let session = Rc::clone(&session);
+            let session = Rc::clone(session);
             let description = if cmd.changes {
                 format!("{} (changes the project)", cmd.description)
             } else {
@@ -84,7 +86,7 @@ pub fn tools(session: Rc<RefCell<Session>>) -> Vec<Tool> {
 }
 
 /// An MCP server with every transport command as a tool.
-pub fn server(session: Rc<RefCell<Session>>, version: &str) -> Server {
+pub fn server(session: &Rc<RefCell<Session>>, version: &str) -> Server {
     let mut s = Server::new("spare-construct", version).instructions(
         "Spare Construct Transport, headless. One project is open in the session; every tool works on it. Start with \
          transport_project_info (or transport_project_open with a project file's text), then transport_scenario_list. Edits go \
