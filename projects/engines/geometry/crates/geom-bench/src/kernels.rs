@@ -2477,6 +2477,137 @@ pub mod make {
     }
 }
 
+/// The core queries (piece G102; decision 32.46), each on a built body recorded with the class it
+/// was made with, under an unlimited budget. Each result is the query's answer as a program reads
+/// it, with its class's rank.
+pub mod query {
+    use geom_check::Level;
+    use geom_check::query::{exactness, validity};
+    use geom_make::Made;
+    use geom_num::Exactness;
+    use geom_num::grid::P3;
+    use geom_num::wide::I256;
+    use geom_op::{OpContext, OpError, OpId, OpOutput, OpPath};
+    use geom_run::Budget;
+    use geom_topo::Ix;
+    use geom_topo::query_ops::{bounding_box, six_volume, twice_area};
+
+    use super::run;
+
+    /// What a benchmark reads of `query.bounding_box`: the box's corners and whether it is tight,
+    /// with the class's rank.
+    pub type BoxRead = Result<(Option<([P3; 2], bool)>, u32), OpError>;
+
+    /// What a benchmark reads of `query.exactness`: the four counts, whether the cheap groups
+    /// passed, and the class's rank.
+    pub type ReportRead = Result<([u32; 4], bool, u32), OpError>;
+
+    /// What a benchmark reads of `query.faces`: each face's loops and roles, and the class's rank.
+    pub type FacesRead = Result<(Vec<[u32; 2]>, u32), OpError>;
+
+    /// A context of one query, under no limit.
+    fn context() -> OpContext<'static> {
+        OpContext::new(OpPath::new(OpId::from_bytes([2; 16])), Budget::UNLIMITED)
+    }
+
+    /// The rank of a result's class.
+    fn rank(class: Exactness) -> u32 {
+        u32::from(class.rank())
+    }
+
+    /// `query.area` of each body's face.
+    #[inline(never)]
+    pub fn areas(
+        batch: &[(OpOutput<Made>, u32)],
+        out: &mut Vec<Result<([i128; 3], u32), OpError>>,
+    ) {
+        let ctx = context();
+        run(batch, out, |(body, face)| {
+            let face = Ix::new(*face)
+                .ok_or_else(|| OpError::new(ctx.path().clone(), geom_op::QueryDetail::Malformed))?;
+            let area = twice_area(&ctx, &body.result.body, face, body.exactness)?;
+            Ok((area.result, rank(area.exactness)))
+        });
+    }
+
+    /// `query.volume` of each body.
+    #[inline(never)]
+    pub fn volumes(batch: &[OpOutput<Made>], out: &mut Vec<Result<(I256, u32), OpError>>) {
+        let ctx = context();
+        run(batch, out, |body| {
+            let v = six_volume(&ctx, &body.result.body, body.exactness)?;
+            Ok((v.result, rank(v.exactness)))
+        });
+    }
+
+    /// `query.bounding_box` of each body: its corners and whether it is tight.
+    #[inline(never)]
+    pub fn boxes(batch: &[OpOutput<Made>], out: &mut Vec<BoxRead>) {
+        let ctx = context();
+        run(batch, out, |body| {
+            let b = bounding_box(&ctx, &body.result.body, body.exactness)?;
+            let corners = b.result.map(|b| ([b.bound.min(), b.bound.max()], b.tight));
+            Ok((corners, rank(b.exactness)))
+        });
+    }
+
+    /// `query.exactness` of each body: its counts of flat and curved faces, straight and curved
+    /// edges, and whether the cheap groups passed it.
+    #[inline(never)]
+    pub fn reports(batch: &[OpOutput<Made>], out: &mut Vec<ReportRead>) {
+        let ctx = context();
+        run(batch, out, |body| {
+            let e = exactness(&ctx, &body.result.body, body.exactness)?;
+            let r = &e.result;
+            let counts = [
+                r.flat_faces,
+                r.curved_faces,
+                r.straight_edges,
+                r.curved_edges,
+            ];
+            Ok((counts, r.report.passed(), rank(e.exactness)))
+        });
+    }
+
+    /// `query.faces` of each body, with the history that made it: each face's loops and roles.
+    #[inline(never)]
+    pub fn faces(batch: &[OpOutput<Made>], out: &mut Vec<FacesRead>) {
+        let ctx = context();
+        run(batch, out, |body| {
+            let listed = geom_name::faces(
+                &ctx,
+                &body.result.body,
+                &[&body.result.history],
+                body.exactness,
+            )?;
+            let rows = listed
+                .result
+                .iter()
+                .map(|f| {
+                    [
+                        f.row.loops,
+                        u32::try_from(f.roles.len()).unwrap_or(u32::MAX),
+                    ]
+                })
+                .collect();
+            Ok((rows, rank(listed.exactness)))
+        });
+    }
+
+    /// `query.validity` of each body in full: whether it passed, how much was deferred, and how
+    /// many groups ran.
+    #[inline(never)]
+    pub fn validities(batch: &[OpOutput<Made>], out: &mut Vec<Result<(bool, u64, u32), OpError>>) {
+        let ctx = context();
+        run(batch, out, |body| {
+            let v = validity(&ctx, &body.result.body, body.exactness, Level::Full)?;
+            let r = &v.result;
+            let ran = u32::try_from(r.ran().count()).unwrap_or(u32::MAX);
+            Ok((r.passed(), r.deferred(), ran))
+        });
+    }
+}
+
 /// `geom-run`'s parallel helper (decision 32.46): `Exec::map` over a list that fits one chunk, on
 /// the serial executor and on a pool, under an unlimited budget. The pool runs its tasks on the
 /// calling thread, in order, so the two counts differ by the helper's own dispatch only, never by

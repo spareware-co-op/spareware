@@ -265,11 +265,19 @@ pub fn check<K: ParamSurface>(
         {
             return Err(broken(Law::TransformMovesTheCurve, u, None));
         }
-        if kind.enclose(u, v, sides, meter) != Ok(e) {
+        // Determinism: the same call again, bit for bit. A call that fails (the meter running out
+        // on it, say) is that failure, as for every other law, not a different answer.
+        let again = kind
+            .enclose(u, v, sides, meter)
+            .map_err(call(Law::Deterministic, u))?;
+        if again != e {
             return Err(broken(Law::Deterministic, u, None));
         }
     }
-    if kind.bound(whole_box, meter) != Ok(whole) {
+    let again = kind
+        .bound(whole_box, meter)
+        .map_err(call(Law::Deterministic, a))?;
+    if again != whole {
         return Err(broken(Law::Deterministic, a, None));
     }
     Ok(())

@@ -28,8 +28,8 @@ use geom_format::body::write_body;
 use geom_fuzz::make::{Motion, Shape, Step};
 use geom_fuzz::seeded;
 use geom_fuzz::sequence::{
-    Case, Entry, Item, MANY_COPIES, MAX_INPUT_BYTES, MAX_OPERATIONS, check, decode, harness, judge,
-    reached, replay_line,
+    Case, Entry, Item, MANY_COPIES, MAX_INPUT_BYTES, MAX_OPERATIONS, WORK, check, decode, harness,
+    judge, reached, reached_under, replay_line,
 };
 use geom_make::BoxInput;
 use geom_num::{Exactness, P3, Steps};
@@ -85,7 +85,7 @@ fn seeded_cases_reach_whole_logs() {
     let (mut some, mut long) = (0, 0);
     for _ in 0..200 {
         let data: Vec<u8> = (0..MAX_LEN).map(|_| g.next_u64() as u8).collect();
-        let count = reached(&decode(&data).0).unwrap();
+        let count = reached(&decode(&data).0).unwrap().succeeded;
         some += usize::from(count >= 1);
         long += usize::from(count >= 3);
     }
@@ -245,7 +245,76 @@ fn the_extreme_wall_is_reached() {
     };
     assert!(step.pattern);
     assert_eq!(step.motions.len(), usize::from(MANY_COPIES));
+    // Under the case's budget the wall stops part way, and its stop keeps its laws.
+    let cut = reached(&c).unwrap();
+    assert_eq!((cut.succeeded, cut.stopped), (1, true), "{cut:?}");
+    // With no budget it runs whole, and the whole wall keeps every law of a log.
+    let whole = reached_under(&c, u64::MAX).unwrap();
+    println!("the wall of a one-step box charged {} units", whole.work);
+    assert_eq!((whole.succeeded, whole.stopped), (2, false), "{whole:?}");
+    assert!(whole.work > WORK, "{whole:?}");
+}
+
+/// A case of walls past the budget stops, and its stop keeps its laws: the budget's, and a replay
+/// that stops at the same point.
+#[test]
+fn walls_past_the_budget_stop_the_case() {
+    let wall = || {
+        transform(
+            (1..=i64::from(MANY_COPIES))
+                .map(|k| Motion::Move([250 * k, 0, 0]))
+                .collect(),
+            true,
+        )
+    };
+    let mut items = vec![(
+        Item::Make {
+            shape: a_box(p(0, 0, 0)),
+            at: None,
+        },
+        0,
+    )];
+    items.extend((0..MAX_OPERATIONS - 1).map(|_| (wall(), 0)));
+    let c = case(items);
+    let got = reached(&c).unwrap();
+    println!("{got:?}");
+    assert!(got.stopped, "{got:?}");
+    assert!(got.succeeded < usize::from(MAX_OPERATIONS), "{got:?}");
+    assert!(got.work > WORK, "{got:?}");
     holds(check(&c));
+}
+
+/// A small case under budgets a test picks: it stops where each runs out and holds every law
+/// there.
+#[test]
+fn a_cut_case_budget_stops_at_each_operation_alike() {
+    let c = case(vec![
+        (
+            Item::Make {
+                shape: a_box(p(0, 0, 0)),
+                at: None,
+            },
+            0,
+        ),
+        (transform(vec![Motion::Move([5, 0, 0])], false), 0),
+        (
+            transform(
+                vec![Motion::Move([500, 0, 0]), Motion::Move([900, 0, 0])],
+                true,
+            ),
+            1,
+        ),
+    ]);
+    let whole = reached_under(&c, u64::MAX).unwrap();
+    assert_eq!((whole.succeeded, whole.stopped), (3, false));
+    let mut stops = std::collections::BTreeSet::new();
+    for work in 0..=whole.work {
+        let got = reached_under(&c, work).unwrap();
+        assert_eq!(got.stopped, work < whole.work, "{work}: {got:?}");
+        stops.insert(got.succeeded);
+    }
+    // Every operation is the one some budget stops.
+    assert_eq!(stops, (0..=3).collect());
 }
 
 #[test]

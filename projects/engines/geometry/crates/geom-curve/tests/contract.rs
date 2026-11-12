@@ -117,6 +117,29 @@ fn every_nurbs_curve_keeps_the_contract() {
 }
 
 #[test]
+fn a_meter_that_runs_out_anywhere_is_reported_as_the_stop() {
+    // On every budget short of what the whole check takes, the check ends with the meter's stop
+    // as the error of the law it was on: never a law broken with no error behind it, which the
+    // fuzz targets report as a finding (the last Deterministic call was once compared with the
+    // first answer as it came, so a stop on it read as a different answer).
+    let mut rng = Lcg(61);
+    let c = curve::<3>(&mut rng);
+    let (ps, t) = (params(&c), &transforms()[3]);
+    let mut m = meter();
+    check(&c, &ps, t, &mut m).unwrap();
+    let whole = u64::try_from(m.used().work).unwrap();
+    assert!(0 < whole && whole < 20_000, "{whole}");
+    for budget in 0..whole {
+        let e = check(&c, &ps, t, &mut WorkMeter::new(Budget::of_work(budget))).unwrap_err();
+        assert!(
+            matches!(e.error, Some(CurveError::Stopped(_))),
+            "budget {budget} of {whole}: {e}"
+        );
+    }
+    assert!(check(&c, &ps, t, &mut WorkMeter::new(Budget::of_work(whole))).is_ok());
+}
+
+#[test]
 fn exact_operations_are_exact() {
     let m = &mut meter();
     let c = Curve::new(
