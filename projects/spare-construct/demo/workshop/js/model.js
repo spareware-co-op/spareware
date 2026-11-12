@@ -63,7 +63,7 @@ export function sample() {
       {
         id: 'bracket', name: 'Bracket', material: 'steel',
         params: [P('width', 120, 'Along x'), P('depth', 60, 'Along y'), P('thickness', 8), P('boss_radius', 12),
-          P('boss_height', 30), P('boss_offset', 40, 'From the middle to each boss'), P('lug_pitch', 20)],
+          P('boss_height', 30), P('boss_offset', 40, 'From the middle to each boss'), P('lug_pitch', 'boss_offset / 2', 'A formula: half the boss offset')],
         features: [
           { id: 'f1', type: 'sketch', name: 'Base outline', z: 0, shape: 'rect', w: 'width', h: 'depth', cx: 0, cy: 0 },
           { id: 'f2', type: 'extrude', name: 'Base plate', sketch: 'f1', depth: 'thickness', op: 'new' },

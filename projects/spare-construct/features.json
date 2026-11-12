@@ -10131,13 +10131,13 @@
       {
        "id": "CON-A27-F4-P2",
        "name": "Parameter formulas",
-       "what": "A parameter written as a formula of others, read by a well-known, permissively licensed expression library rather than our own parser, with units checked and circular formulas refused.",
+       "what": "A parameter written as a formula of others, with units checked, worked out exactly and circular formulas refused, in the small formula language families share (note A07; no well-known expression library has units or exact numbers), read by a well-known parser crate rather than by hand.",
        "kind": "library",
        "size": "small",
        "depends_on": [
         "CON-A27-F4-P1"
        ],
-       "piece": null
+       "piece": "A24"
       },
       {
        "id": "CON-A27-F4-P3",
