@@ -7,9 +7,10 @@
 //! on every target. [`digest`]
 //! replays the corpus and hashes what it gave: each case's id, its hash and its two counts, in order.
 //! `tests/determinism.rs` holds that digest as the golden `geom-test/replay-corpus`, which
-//! `golden run` then carries through every target and build mode, the release build as shipped
-//! among them, whose checker runs only the cheap groups: one digest across the legs proves the
-//! checker changes nothing (28.4).
+//! `golden run` then carries through every target and build mode, each with the full checker
+//! (this crate's default feature `full-checker`). The shipped-checker leg replays the corpus with
+//! the cheap groups only and must reach the same digest (`tests/shipped.rs`; decision 32.48):
+//! one digest across the legs proves the checker changes nothing (28.4).
 //!
 //! Guarantees:
 //!
