@@ -2322,6 +2322,17 @@ pub mod query {
 
     use super::run;
 
+    /// What a benchmark reads of `query.bounding_box`: the box's corners and whether it is tight,
+    /// with the class's rank.
+    pub type BoxRead = Result<(Option<([P3; 2], bool)>, u32), OpError>;
+
+    /// What a benchmark reads of `query.exactness`: the four counts, whether the cheap groups
+    /// passed, and the class's rank.
+    pub type ReportRead = Result<([u32; 4], bool, u32), OpError>;
+
+    /// What a benchmark reads of `query.faces`: each face's loops and roles, and the class's rank.
+    pub type FacesRead = Result<(Vec<[u32; 2]>, u32), OpError>;
+
     /// A context of one query, under no limit.
     fn context() -> OpContext<'static> {
         OpContext::new(OpPath::new(OpId::from_bytes([2; 16])), Budget::UNLIMITED)
@@ -2359,10 +2370,7 @@ pub mod query {
 
     /// `query.bounding_box` of each body: its corners and whether it is tight.
     #[inline(never)]
-    pub fn boxes(
-        batch: &[OpOutput<Made>],
-        out: &mut Vec<Result<(Option<([P3; 2], bool)>, u32), OpError>>,
-    ) {
+    pub fn boxes(batch: &[OpOutput<Made>], out: &mut Vec<BoxRead>) {
         let ctx = context();
         run(batch, out, |body| {
             let b = bounding_box(&ctx, &body.result.body, body.exactness)?;
@@ -2374,10 +2382,7 @@ pub mod query {
     /// `query.exactness` of each body: its counts of flat and curved faces, straight and curved
     /// edges, and whether the cheap groups passed it.
     #[inline(never)]
-    pub fn reports(
-        batch: &[OpOutput<Made>],
-        out: &mut Vec<Result<([u32; 4], bool, u32), OpError>>,
-    ) {
+    pub fn reports(batch: &[OpOutput<Made>], out: &mut Vec<ReportRead>) {
         let ctx = context();
         run(batch, out, |body| {
             let e = exactness(&ctx, &body.result.body, body.exactness)?;
@@ -2394,7 +2399,7 @@ pub mod query {
 
     /// `query.faces` of each body, with the history that made it: each face's loops and roles.
     #[inline(never)]
-    pub fn faces(batch: &[OpOutput<Made>], out: &mut Vec<Result<(Vec<[u32; 2]>, u32), OpError>>) {
+    pub fn faces(batch: &[OpOutput<Made>], out: &mut Vec<FacesRead>) {
         let ctx = context();
         run(batch, out, |body| {
             let listed = geom_name::faces(

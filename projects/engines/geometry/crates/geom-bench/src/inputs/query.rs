@@ -41,7 +41,7 @@ fn body(g: &mut SplitMix64, n: usize) -> Option<OpOutput<Made>> {
     let ctx = OpContext::new(OpPath::new(OpId::from_bytes([1; 16])), Budget::UNLIMITED);
     let (x, y, z) = (within(g, REACH), within(g, REACH), within(g, REACH));
     let (a, b, h) = (size(g), size(g), size(g));
-    if n % 2 == 0 {
+    if n.is_multiple_of(2) {
         let input = BoxInput {
             min: p3(x, y, z),
             size: [Steps(a), Steps(b), Steps(h)],
