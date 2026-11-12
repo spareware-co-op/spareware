@@ -20,7 +20,8 @@
 //! [`batch`] (G104), `geom-op`'s batch driver gives each item its own result, and the curve and
 //! surface kinds' many-point calls give the single calls' bits; [`make`] (G101), the primitives
 //! and transforms return only what the full checker passes, keep their laws, and refuse with a
-//! typed error; and [`sequence`] (G116), whole operation logs replay to the same hash and keep
+//! typed error, and the core queries on every body they make keep the Query family's laws
+//! (G102); and [`sequence`] (G116), whole operation logs replay to the same hash and keep
 //! every law at every step. [`adversarial`] holds the generators aimed at chapter 28.5's hard
 //! cases, and [`robustness`] counts how many plain designs succeed. Gate 2 (32.46) adds
 //! [`curves`], every curve kind keeps the kind contract on any bytes (G60 to G64, G67, G68), and

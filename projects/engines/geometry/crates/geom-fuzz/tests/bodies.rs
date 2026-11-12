@@ -42,6 +42,25 @@ fn bodies_fuzz() {
         .for_each(|data: &[u8]| holds(harness(data)));
 }
 
+/// The first finding (crash-3b985045191d43eb2bb86ed918c8fe2817ff930d, and the scheduled campaign's
+/// crash-ea1e9ccf374666057eff8d9be7e2fbe0da8949b5), cut to an index of one table that lists one
+/// chunk by the ID `[alg, h'']`: an algorithm other than SHA-256 with an empty digest, which the
+/// format allows (24.2). Relinking the chunk searched the index for that empty digest, and a search
+/// for an empty window panics. The body is refused, and that is all.
+#[test]
+fn an_id_with_an_empty_digest_is_a_case() {
+    for alg in [0x00, 0x02, 0x17] {
+        // `[1, 2, [[8, 8, [[alg, h'']]]], ...]`: the five fields' first three, all `chunk_ids` reads.
+        let index: [u8; 11] = [
+            0x85, 0x01, 0x02, 0x81, 0x83, 0x08, 0x08, 0x81, 0x82, alg, 0x40,
+        ];
+        let mut data = vec![11, 0];
+        data.extend(index);
+        data.extend([0, 0]);
+        holds(harness(&data));
+    }
+}
+
 #[test]
 fn bodies_seeded() -> Result<(), seeded::Failure> {
     seeded::run(

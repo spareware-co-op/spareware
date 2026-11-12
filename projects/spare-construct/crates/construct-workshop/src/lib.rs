@@ -18,15 +18,21 @@
 //! into place by `transform.move` and `transform.rotate`, through the joints and within their
 //! limits, and the drawings take their sizes from `query.bounding_box` of the posed bodies.
 //!
+//! A part names its material, and its mass comes from the kernel's exact volume and the material's
+//! density ([`mass`]); the materials are one data file the page reads too, each density checked
+//! against the public-domain handbook it comes from.
+//!
 //! The recipe and the answer have the same form as the browser prototype's builder
 //! (`demo/workshop/js/build.js`), so the Workshop page can use either; the page uses this one, compiled
 //! to WebAssembly into `demo/workshop/pkg` by `server/scripts/build-workshop.sh`.
 
 pub mod assembly;
 pub mod build;
+pub mod mass;
 
 pub use assembly::{Pose, pose_assembly, pose_json};
 pub use build::{Answer, build_json, build_part};
+pub use mass::{MassOut, materials};
 
 use wasm_bindgen::prelude::wasm_bindgen;
 

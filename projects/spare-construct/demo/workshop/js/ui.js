@@ -349,6 +349,10 @@ function drive(id) {
 }
 function stopDrive() { if (S.driving) { cancelAnimationFrame(S.driving.frame); S.driving = null; save(); } }
 
+/* A part's mass, as its builder gives it from its material's sourced density, and its material's name. */
+const gramsOf = (out) => (out.mass && out.mass.grams != null ? n2(out.mass.grams) + ' g' : '');
+const materialName = (p) => (MATERIALS[p.material] ? MATERIALS[p.material].label : `${p.material || 'No material'} (no sourced density)`);
+
 /* ---------- the panels ---------- */
 function stateBadge(r) {
   if (!r) return '';
@@ -361,8 +365,7 @@ function renderLeft() {
   const p = part(), out = built(p), end = Math.min(p.end ?? p.features.length, p.features.length);
   let h = `<div class="seg" role="group" aria-label="Workspace">${[['part', 'Part'], ['assembly', 'Assembly'], ['drawing', 'Drawing']].map(([k, l]) => `<button data-act="mode" data-a="${k}" aria-pressed="${S.mode === k}">${l}</button>`).join('')}</div>`;
   h += `<div class="sec"><div class="lbl">Parts <button class="mini" data-act="newpart" title="Add a part">${ic('plus', 'sm')}<span class="sr">Add a part</span></button></div><ul class="list">${S.project.parts.map((x) => {
-    const o = built(x), mat = MATERIALS[x.material] || MATERIALS.steel;
-    return `<li><button class="leaf${x.id === p.id ? ' cur' : ''}" data-act="part" data-a="${esc(x.id)}">${ic('ws-part', 'sm')}<span>${esc(x.name)}</span><span class="n">${n2((o.volume * mat.density) / 1e6)} g</span></button></li>`;
+    return `<li><button class="leaf${x.id === p.id ? ' cur' : ''}" data-act="part" data-a="${esc(x.id)}">${ic('ws-part', 'sm')}<span>${esc(x.name)}</span><span class="n">${gramsOf(built(x))}</span></button></li>`;
   }).join('')}</ul></div>`;
   if (S.mode === 'assembly' || (S.mode === 'drawing' && S.drawOf === 'assembly')) {
     const a = S.project.assembly;
@@ -484,13 +487,19 @@ function renderSide() {
       <button class="btn" data-act="part" data-a="${esc(i.part)}">${ic('ws-part', 'sm')}Edit ${esc(pt ? pt.name : 'the part')}</button></div>
       ${i.grounded ? '' : `<div class="sec acts"><button class="btn" data-act="deli">${ic('del', 'sm')}Remove from the assembly</button></div>`}`;
   } else {
-    const mat = MATERIALS[p.material] || MATERIALS.steel, b = out.bbox;
+    const b = out.bbox, ms = out.mass, mat = MATERIALS[p.material];
+    const group = (g, label) => `<optgroup label="${label}">${Object.entries(MATERIALS).filter(([, m]) => m.group === g).map(([k, m]) => `<option value="${k}"${k === p.material ? ' selected' : ''}>${esc(m.label)}, ${m.density} kg/m³</option>`).join('')}</optgroup>`;
     h += `<div class="sec"><div class="lbl">Part</div><label class="fld"><span>Name</span><input data-chg="partname" value="${esc(p.name)}"></label>
-      ${`<label class="fld"><span>Material</span><select data-chg="material">${Object.entries(MATERIALS).map(([k, m]) => `<option value="${k}"${k === p.material ? ' selected' : ''}>${esc(m.label)}, ${m.density} kg/m³</option>`).join('')}</select></label>`}</div>
-      <div class="sec"><div class="lbl">Mass properties</div><table class="props"><tbody><tr><th>Bodies</th><td>${out.bodies.length}</td></tr><tr><th>Volume</th><td>${n2(out.volume)} mm³</td></tr><tr><th>Mass</th><td>${n2((out.volume * mat.density) / 1e6)} g</td></tr>
+      <label class="fld"><span>Material</span><select data-chg="material">${mat ? '' : `<option value="${esc(p.material || '')}" selected disabled>${esc(p.material || 'None')}: no sourced density</option>`}${group('metal', 'Metals, MIL-HDBK-5J')}${group('timber', 'Timbers at 12% moisture, USDA Wood Handbook')}</select></label>
+      ${mat ? `<p class="small faint">Density from <a href="${esc(mat.url)}" target="_blank" rel="noopener">${esc(mat.source)}</a>, a public-domain US government handbook. Plastics are not listed yet: they wait for a public-domain source.</p>` : ''}</div>
+      <div class="sec"><div class="lbl">Mass properties</div><table class="props"><tbody><tr><th>Bodies</th><td>${out.bodies.length}</td></tr><tr><th>Volume</th><td>${n2(out.volume)} mm³</td></tr>
+      ${ms && ms.from_recipe > 0 ? `<tr><th>Of which exact</th><td>${n2(ms.exact)} mm³</td></tr><tr><th>From the recipe</th><td>${n2(ms.from_recipe)} mm³</td></tr>` : ''}
+      <tr><th>Mass</th><td>${ms && ms.grams != null ? n2(ms.grams) + ' g' : 'None'}</td></tr>
+      ${ms && ms.centre ? `<tr><th>Centre of mass</th><td>${ms.centre.map((v) => n2(Math.abs(v) < 1e-9 ? 0 : v)).join(', ')} mm, from the recipe</td></tr>` : ''}
       ${b ? `<tr><th>Size</th><td>${n2(b[1][0] - b[0][0])} × ${n2(b[1][1] - b[0][1])} × ${n2(b[1][2] - b[0][2])} mm</td></tr>` : ''}<tr><th>Built by</th><td>${esc(engine.label)}</td></tr></tbody></table>
+      ${ms ? `<div class="note ${ms.grams == null ? 'bad' : ms.from_recipe > 0 ? 'wait' : 'ok'}">${esc(ms.message)}</div>` : ''}
       ${linkNote()}
-      <p class="small faint">Volumes add body by body: joining bodies into one solid waits for ${esc(WAITS.join.what)}. Mass properties of curved bodies, certified, wait for G247.</p></div>
+      <p class="small faint">Volumes add body by body: joining bodies into one solid waits for ${esc(WAITS.join.what)}.</p></div>
       <div class="sec"><div class="lbl">What waits for the kernel</div><ul class="waits">${Object.values(WAITS).map((w) => `<li>${ic(w.icon, 'sm')}<span><b>${esc(w.label)}</b>: ${esc(w.what)}.</span></li>`).join('')}</ul></div>`;
   }
   $('#right').innerHTML = h;
@@ -528,13 +537,13 @@ function renderView() {
       title = S.project.assembly.name;
       const counts = new Map();
       for (const i of S.project.assembly.instances) counts.set(i.part, (counts.get(i.part) || 0) + 1);
-      list = S.list ? [...counts].map(([pid, qty], k) => { const x = S.project.parts.find((y) => y.id === pid); return { item: k + 1, name: x.name, material: (MATERIALS[x.material] || MATERIALS.steel).label, qty }; }) : null;
+      list = S.list ? [...counts].map(([pid, qty], k) => { const x = S.project.parts.find((y) => y.id === pid); return { item: k + 1, name: x.name, material: materialName(x), qty }; }) : null;
     } else {
-      const out = built(p), mat = MATERIALS[p.material] || MATERIALS.steel;
+      const out = built(p);
       items = out.bodies.map((b) => ({ body: b }));
       title = p.name;
-      material = mat.label;
-      mass = n2((out.volume * mat.density) / 1e6) + ' g';
+      material = materialName(p);
+      mass = gramsOf(out);
       if (out.engine === 'kernel') size = out.bbox;
     }
     $('#vdraw').innerHTML = items.length ? sheet(items, { title, project: S.project.name, material, mass, list, dims: S.dims, size }) : '<p class="pad faint">Nothing is built yet, so there is nothing to draw.</p>';

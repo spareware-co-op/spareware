@@ -20,7 +20,7 @@
    "end": 7
   },
   {
-   "id": "block", "name": "Slide block", "material": "nylon",
+   "id": "block", "name": "Slide block", "material": "bronze",
    "params": [
     { "name": "block_length", "value": 30 },
     { "name": "block_width", "value": 16 },

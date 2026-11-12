@@ -11,6 +11,9 @@
 //! draw it (its profile, height and the map from the profile's place to where it is) and what the
 //! kernel says of it (its exactness, volume, face count and box).
 //!
+//! A part that names its `material` also gets its `mass` ([`crate::mass`]): its volume times the
+//! material's sourced density, saying how much of the volume is the kernel's, exact.
+//!
 //! The kernel decides: a profile goes to `make.prism` as it is, and if the kernel refuses it as not
 //! convex, the feature waits for the kernel's extrude or booleans rather than being built some other
 //! way. The page draws a body from its profile and map because the facade has no display meshes yet
@@ -32,6 +35,8 @@ use engine_geometry::value::op::{Budget, OpContext, OpId, OpOutput, OpPath};
 use engine_geometry::value::transform::{Axis, GridTransform, TypedTransform};
 use serde::Serialize;
 use serde_json::{Map, Value, json};
+
+use crate::mass::{MassOut, mass_of};
 
 /// Grid steps per millimetre: the kernel's step for parts and boards, `Q1`, is 6.25 nm.
 pub const STEPS_PER_MM: f64 = 160_000.0;
@@ -80,6 +85,9 @@ pub struct Answer {
     pub volume: f64,
     /// The box round every body, in millimetres; `None` with no bodies.
     pub bbox: Option<[[f64; 3]; 2]>,
+    /// The part's mass in its material, when it names one ([`crate::mass`]).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub mass: Option<MassOut>,
 }
 
 /// A parameter, as read.
@@ -1021,6 +1029,11 @@ pub(crate) fn build_with_bodies(part: &Value) -> (Answer, Vec<(Body, Exactness)>
             ],
         ]
     });
+    let mass = part
+        .get("material")
+        .and_then(Value::as_str)
+        .filter(|m| !m.is_empty())
+        .map(|m| mass_of(m, &bodies));
     let answer = Answer {
         engine: "kernel",
         params,
@@ -1028,6 +1041,7 @@ pub(crate) fn build_with_bodies(part: &Value) -> (Answer, Vec<(Body, Exactness)>
         bodies,
         volume,
         bbox,
+        mass,
     };
     (answer, kept)
 }

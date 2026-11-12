@@ -318,7 +318,12 @@ pub fn check<K: ParamCurve<D>, const D: usize>(
     for &t in breaks.iter().step_by(step) {
         one_parameter(kind, t, (lo, hi), meter)?;
     }
-    if kind.bound((lo, hi), meter) != Ok(whole) {
+    // A call that fails (the meter running out on it, say) is that failure, as for every other
+    // law, not a different answer.
+    let again = kind
+        .bound((lo, hi), meter)
+        .map_err(call(Law::Deterministic, lo))?;
+    if again != whole {
         return Err(broken(Law::Deterministic, lo, None));
     }
     Ok(())

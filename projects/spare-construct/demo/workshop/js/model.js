@@ -7,6 +7,8 @@
 
    An assembly places parts and joins them with joints that move within limits. Drawings are made from either. */
 
+import MATERIAL_DATA from '../materials.json' with { type: 'json' };
+
 /* What waits for the geometry kernel, and the kernel pieces it waits for (projects/engines/geometry/architecture,
    chapter 30). The ribbon shows each one, unavailable, with this text, and the feature map (CON-A27) says the same. */
 export const WAITS = {
@@ -43,15 +45,13 @@ export const KINDS = {
 };
 export const kindOf = (f) => KINDS[f.type] || WAITS[f.type] || { label: f.type, icon: 'gear' };
 
-/* Materials, by density in kg per cubic metre. */
-export const MATERIALS = {
-  steel: { label: 'Mild steel', density: 7850 },
-  stainless: { label: 'Stainless steel', density: 8000 },
-  aluminium: { label: 'Aluminium', density: 2700 },
-  brass: { label: 'Brass', density: 8500 },
-  nylon: { label: 'Nylon', density: 1150 },
-  oak: { label: 'Oak', density: 750 },
-};
+/* Materials, by density in kg per cubic metre: the data file the geometry kernel's builder reads too (crate
+   construct-workshop, src/mass.rs), each density worked out from the value its public-domain source prints, with the
+   table and page it is on. */
+export const MATERIALS = Object.fromEntries(MATERIAL_DATA.materials.map((m) => [m.id, {
+  label: m.name, group: m.group, density: m.density,
+  source: `${MATERIAL_DATA.sources[m.source].title}, ${m.where}`, url: MATERIAL_DATA.sources[m.source].url,
+}]));
 
 const P = (name, value, note = '') => ({ name, value, note });
 
@@ -94,7 +94,7 @@ export function sample() {
         end: 7,
       },
       {
-        id: 'block', name: 'Slide block', material: 'nylon',
+        id: 'block', name: 'Slide block', material: 'bronze',
         params: [P('block_length', 30), P('block_width', 16), P('block_height', 16)],
         features: [
           { id: 'b1', type: 'sketch', name: 'Block outline', z: 0, shape: 'rect', w: 'block_length', h: 'block_width', cx: 0, cy: 0 },

@@ -10284,22 +10284,22 @@
       {
        "id": "CON-A27-F7-P1",
        "name": "Volume and mass",
-       "what": "Volume from the kernel's exact query.volume for flat-faced solids, and certified mass properties for curved ones once the kernel has them (G247); mass from the material's density. Volume is in the first slice.",
+       "what": "Volume from the kernel's exact query.volume for flat-faced solids, and certified mass properties for curved ones once the kernel has them (G247); mass from the material's density. Volume is in the first slice; mass from the material's sourced density, saying how much of the volume is exact, and the centre of mass worked out from the recipe until G247.",
        "kind": "library",
        "size": "small",
        "depends_on": [
         "CON-A27-F2-P1"
        ],
-       "piece": "A17"
+       "piece": "A27"
       },
       {
        "id": "CON-A27-F7-P2",
        "name": "Materials for parts",
-       "what": "Steels, aluminium, timbers and plastics with their densities, kept as data a part refers to.",
+       "what": "Steels, aluminium, timbers and plastics with their densities, kept as data a part refers to. Metals from MIL-HDBK-5J and timbers from the USDA Wood Handbook, each density checked against the value printed; plastics wait for a public-domain source.",
        "kind": "data",
        "size": "small",
        "depends_on": [],
-       "piece": null
+       "piece": "A27"
       },
       {
        "id": "CON-A27-F7-P3",

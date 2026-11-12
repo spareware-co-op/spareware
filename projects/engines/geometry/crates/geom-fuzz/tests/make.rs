@@ -32,14 +32,15 @@ mod common;
 use common::holds;
 
 use geom_fuzz::make::{
-    Case, MAX_COPIES, MAX_CORNERS, MAX_INPUT_BYTES, MAX_STEPS, Motion, Shape, Step, check,
-    check_with, decode, harness,
+    Answers, Case, MAX_COPIES, MAX_CORNERS, MAX_INPUT_BYTES, MAX_STEPS, Motion, Shape, Step,
+    answers, answers_hold, check, check_with, decode, harness,
 };
 use geom_fuzz::seeded;
 use geom_make::{BoxInput, RoundInput};
 use geom_num::{Exactness, GridStep, P3, Steps};
 use geom_op::history::History;
-use geom_op::{NameSet, OpOutput};
+use geom_op::{NameSet, OpContext, OpId, OpOutput, OpPath};
+use geom_run::Budget;
 use geom_test::{Seed, SplitMix64};
 use geom_topo::Builder;
 
@@ -179,6 +180,132 @@ fn a_broken_operation_is_caught() {
         }],
     };
     assert!(check_with(&round, raised).is_err());
+}
+
+/// A wrong query, as a change to the real queries' answers.
+type Breaks = dyn Fn(&mut Answers);
+
+fn query_context() -> OpContext<'static> {
+    OpContext::new(OpPath::new(OpId::from_bytes([4; 16])), Budget::UNLIMITED)
+}
+
+fn flat_box() -> OpOutput<geom_make::Made> {
+    let input = BoxInput {
+        min: p(-3, 1, 2),
+        size: [Steps(3), Steps(4), Steps(5)],
+    };
+    geom_make::make_box(&query_context(), &input).unwrap()
+}
+
+fn round_body() -> OpOutput<geom_make::Made> {
+    let input = RoundInput {
+        base: p(0, 0, 0),
+        radius: Steps(5),
+        height: Steps(10),
+        step: GridStep::Q0,
+    };
+    geom_make::cylinder(&query_context(), &input).unwrap()
+}
+
+/// A query error a valid body never gives.
+fn malformed() -> geom_op::OpError {
+    geom_op::OpError::new(
+        OpPath::new(OpId::from_bytes([4; 16])),
+        geom_op::detail::QueryDetail::Malformed,
+    )
+}
+
+/// The law `edit` breaks in the answers on `out`.
+fn broken_law(out: &OpOutput<geom_make::Made>, edit: &Breaks) -> String {
+    let mut broken = answers(&query_context(), out);
+    edit(&mut broken);
+    answers_hold(out, &broken).unwrap_err().law
+}
+
+#[test]
+fn a_curved_body_whose_volume_is_answered_is_caught() {
+    let round = round_body();
+    assert_eq!(
+        answers_hold(&round, &answers(&query_context(), &round)),
+        Ok(())
+    );
+    let answered = |a: &mut Answers| {
+        let class = a.exactness.as_ref().unwrap().exactness;
+        a.volume = Ok(OpOutput::new(geom_num::wide::I256::from_i64(6), class));
+    };
+    assert_eq!(
+        broken_law(&round, &answered),
+        "query.volume refuses a body with a curved face or edge"
+    );
+}
+
+#[test]
+fn a_broken_query_is_caught() {
+    let flat = flat_box();
+    assert_eq!(
+        answers_hold(&flat, &answers(&query_context(), &flat)),
+        Ok(())
+    );
+    let cases: [(&str, &Breaks); 8] = [
+        ("a query states its body's class", &|a| {
+            if let Ok(v) = &mut a.volume {
+                v.exactness = Exactness::Approximate {
+                    deviation: Steps(1),
+                    step: GridStep::Q0,
+                };
+            }
+        }),
+        ("query.validity is the checker's report", &|a| {
+            a.validity[1] = a.validity[0].clone();
+        }),
+        (
+            "query.exactness reports the record, the geometry and the checker's judgement",
+            &|a| {
+                if let Ok(r) = &mut a.exactness {
+                    r.result.flat_faces -= 1;
+                    r.result.curved_faces += 1;
+                }
+            },
+        ),
+        (
+            "query.faces lists the body's faces by name, in arena order",
+            &|a| {
+                if let Ok(f) = &mut a.faces {
+                    f.result.swap(0, 1);
+                }
+            },
+        ),
+        (
+            "the box holds every vertex, tight exactly when every face is flat",
+            &|a| {
+                if let Ok(o) = &mut a.bounding_box {
+                    if let Some(b) = &mut o.result {
+                        b.tight = false;
+                    }
+                }
+            },
+        ),
+        ("a closed shell's area vectors sum to zero", &|a| {
+            if let Some(Ok(f)) = a.areas.first_mut() {
+                f.result[2] += 2;
+            }
+        }),
+        (
+            "query.volume is six times the volume its loops enclose",
+            &|a| {
+                if let Ok(v) = &mut a.volume {
+                    v.result = geom_num::wide::I256::from_i64(1);
+                }
+            },
+        ),
+        (
+            "a query refuses a valid body only for a curved face or edge",
+            &|a| a.faces = Err(malformed()),
+        ),
+    ];
+    for (name, edit) in cases {
+        assert_eq!(broken_law(&flat, edit), name);
+    }
 }
 
 #[test]
