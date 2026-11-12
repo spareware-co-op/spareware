@@ -5,7 +5,7 @@ use super::sites::{site_index, site_move_index};
 use super::turns::{TurnCtx, build_turns, turn_set};
 use super::zones::{Cand, connector_targets, main_component};
 use super::{Arc, Ctrl, Graph, Priority};
-use crate::jsnum::{math_max, math_min, value_to_number};
+use crate::jsnum::{math_max, math_min, usize_to_f64, value_to_number};
 use crate::project::{Link, OrderedMap, RoadClass, Scenario, Settings};
 use crate::standards::cap_method_of;
 use crate::util::{along, bearing, cum_len, dist, flat};
@@ -47,18 +47,167 @@ pub fn toll_of(l: &Link, period: Option<&str>) -> f64 {
     if v > 0.0 && v.is_finite() { v } else { 0.0 }
 }
 
+// The graph's node table while it is built: ids, [lat, lng] and the index of each id
+struct NodeTable {
+    ids: Vec<String>,
+    ll: Vec<[f64; 2]>,
+    idx: HashMap<String, usize>,
+}
+
 /// `buildGraph(sc, S, period)`: the scenario's network graph; period (optional) applies its variable speed limits and charges.
 pub fn build_graph(sc: &Scenario, s: &Settings, period: Option<&str>) -> Graph {
-    let mut ids: Vec<String> = sc.nodes.keys().map(str::to_string).collect();
+    let ids: Vec<String> = sc.nodes.keys().map(str::to_string).collect();
     let n0 = ids.len();
     let mut idx: HashMap<String, usize> = HashMap::new();
     for (i, id) in ids.iter().enumerate() {
         idx.insert(id.clone(), i);
     }
-    let mut ll: Vec<[f64; 2]> = sc.nodes.values().map(crate::project::Node::ll).collect();
+    let ll: Vec<[f64; 2]> = sc.nodes.values().map(crate::project::Node::ll).collect();
+    let mut table = NodeTable { ids, ll, idx };
+    let (site_of0, sites) = site_index(sc, &table.idx);
+    let (mut arcs, ok_node) = link_arcs(sc, period, &table.idx, &site_of0, n0);
+    let zones: Vec<crate::project::Zone> = sc
+        .zones
+        .values()
+        .filter(|z| z.lat.num().is_finite() && z.lng.num().is_finite())
+        .cloned()
+        .collect();
+    let lat0 = if n0 > 0 {
+        table.ll.iter().fold(0.0, |sum, p| sum + p[0]) / usize_to_f64(n0)
+    } else {
+        -36.85
+    };
+    let fl = flat(lat0);
+    // Zones only connect to the main connected network, never to an unconnected fragment
+    let edges: Vec<(usize, usize)> = arcs.iter().map(|a| (a.from, a.to)).collect();
+    let main = main_component(n0, &edges);
+    let cand: Vec<Cand> = table
+        .ids
+        .iter()
+        .zip(&table.ll)
+        .zip(ok_node.iter().zip(&main).zip(&site_of0))
+        .filter(|&(_, ((&ok, &in_main), site))| ok != 0 && in_main != 0 && site.is_none())
+        .map(|((id, p), _)| Cand {
+            id: id.clone(),
+            x: fl.x(p),
+            y: fl.y(p),
+        })
+        .collect();
+    let (zone_node, conns) = connector_arcs(sc, s, &zones, &cand, &fl, &mut table, &mut arcs);
+    let NodeTable { ids, ll, idx } = table;
+    let n = ids.len();
+    let m = arcs.len();
+    let from: Vec<usize> = arcs.iter().map(|a| a.from).collect();
+    let to: Vec<usize> = arcs.iter().map(|a| a.to).collect();
+    let net = Network::new(n, &from, &to);
+    let ffc: Vec<f64> = arcs.iter().map(|a| a.ff).collect();
+    let mut into: Vec<Vec<usize>> = vec![Vec::new(); n];
+    let mut out_r: Vec<Vec<usize>> = vec![Vec::new(); n];
+    for (i, a) in arcs.iter_mut().enumerate() {
+        a.i = i;
+        if !a.conn() {
+            if let Some(v) = into.get_mut(a.to) {
+                v.push(i);
+            }
+            if let Some(v) = out_r.get_mut(a.from) {
+                v.push(i);
+            }
+        }
+    }
+    let mut is_c = vec![0u8; n];
+    for &i in &zone_node {
+        if let Some(c) = is_c.get_mut(i) {
+            *c = 1;
+        }
+    }
+    let mut key_idx = HashMap::new();
+    for (i, a) in arcs.iter().enumerate() {
+        key_idx.insert(a.key.clone(), i);
+    }
+    let deg = degrees(&arcs, &into, &out_r, &is_c);
+    let nodes: Vec<Option<crate::project::Node>> =
+        ids.iter().map(|id| sc.nodes.get(id).cloned()).collect();
+    let turn_settings = turn_set(s);
+    let (turns, tmv) = build_turns(
+        &net,
+        &TurnCtx {
+            arcs: &arcs,
+            deg: &deg,
+            nodes: &nodes,
+            turn_s: &turn_settings,
+        },
+    );
+    let n_t = turns.len();
+    let mut site_of = site_of0;
+    site_of.resize(n, None);
+    let mut g = Graph {
+        ids,
+        idx,
+        ll,
+        arcs,
+        n,
+        m,
+        search: EdgeGraph::new(net, turns, is_c),
+        ffc,
+        into,
+        out_r,
+        zones,
+        zone_node,
+        key_idx,
+        conns,
+        ctl: Vec::new(),
+        ctl_at: vec![-1; n],
+        nodes,
+        deg,
+        turn_s: turn_settings,
+        site_of,
+        sites,
+        cap_method: cap_method_of(s),
+        settings: s.clone(),
+        period: period.map(str::to_string),
+        tmv,
+        n_t,
+        sm: None,
+        sm_x: None,
+        mv_detail: true,
+    };
+    g.sm = site_move_index(&g);
+    setup_controls(sc, &mut g, s);
+    g
+}
+
+// Links meeting at each node (connectors not counted): 1 = dead end, 3 or more = junction
+fn degrees(arcs: &[Arc], into: &[Vec<usize>], out_r: &[Vec<usize>], is_c: &[u8]) -> Vec<i32> {
+    into.iter()
+        .zip(out_r)
+        .zip(is_c)
+        .map(|((ins, outs), &c)| {
+            if c != 0 {
+                return 0;
+            }
+            let set: HashSet<&str> = ins
+                .iter()
+                .chain(outs)
+                .filter_map(|&i| arcs.get(i))
+                .map(|a| a.link.as_str())
+                .collect();
+            // Bound: a node meets far fewer than i32::MAX links
+            i32::try_from(set.len()).unwrap_or(i32::MAX)
+        })
+        .collect()
+}
+
+// buildGraph's arcs for each link direction with lanes, and which nodes a non-motorway link reaches
+// (ok_node: the candidates for zone connectors)
+fn link_arcs(
+    sc: &Scenario,
+    period: Option<&str>,
+    idx: &HashMap<String, usize>,
+    site_of0: &[Option<String>],
+    n0: usize,
+) -> (Vec<Arc>, Vec<u8>) {
     let mut arcs: Vec<Arc> = Vec::new();
     let mut ok_node = vec![0u8; n0];
-    let (site_of0, sites) = site_index(sc, &idx);
     for l in sc.links.values() {
         if l.status.is("closed") || l.a == l.b {
             continue;
@@ -66,37 +215,42 @@ pub fn build_graph(sc: &Scenario, s: &Settings, period: Option<&str>) -> Graph {
         let (Some(&ia), Some(&ib)) = (idx.get(&l.a), idx.get(&l.b)) else {
             continue;
         };
-        let c = l.class();
-        let g = sc.geom(l);
-        let cum = cum_len(&g);
-        let len = math_max(cum[cum.len() - 1], 1.0);
-        let spd = speed_of(l, c, period);
+        let class = l.class();
+        let geom = sc.geom(l);
+        let cum = cum_len(&geom);
+        let len = math_max(cum.last().copied().unwrap_or(0.0), 1.0);
+        let spd = speed_of(l, class, period);
         let v = spd / 3.6;
-        let cap_lane = l.cap_per_lane.or(c.cap);
+        let cap_lane = l.cap_per_lane.or(class.cap);
         let toll = toll_of(l, period);
-        if c.rank < 5.0 {
-            ok_node[ia] = 1;
-            ok_node[ib] = 1;
+        if class.rank < 5.0 {
+            for i in [ia, ib] {
+                if let Some(ok) = ok_node.get_mut(i) {
+                    *ok = 1;
+                }
+            }
         }
         let two = l.lanes_ab.int32() > 0 && l.lanes_ba.int32() > 0;
-        let sa = &site_of0[ia];
-        let internal = sa.is_some() && *sa == site_of0[ib];
+        let internal = matches!((site_of0.get(ia), site_of0.get(ib)), (Some(Some(sa)), Some(Some(sb))) if sa == sb);
         for dir in [1i8, -1] {
             let lanes = if dir > 0 { l.lanes_ab.int32() } else { l.lanes_ba.int32() };
             if lanes <= 0 {
                 continue;
             }
             let bus = l.bus_lane.truthy() && lanes >= 2;
-            let gl = if bus { lanes - 1 } else { lanes };
+            let gl = if bus { lanes.saturating_sub(1) } else { lanes };
             let pts: Vec<[f64; 2]> = if dir > 0 {
-                g.clone()
+                geom.clone()
             } else {
-                g.iter().rev().copied().collect()
+                geom.iter().rev().copied().collect()
             };
             let cumd = if dir > 0 { cum.clone() } else { cum_len(&pts) };
+            let (Some(first), Some(last)) = (pts.first(), pts.last()) else {
+                continue;
+            };
             let e = math_min(20.0, len / 2.0);
-            let in_b = bearing(&along(&pts, &cumd, len - e).p, &pts[pts.len() - 1]);
-            let out_b = bearing(&pts[0], &along(&pts, &cumd, e).p);
+            let in_b = bearing(&along(&pts, &cumd, len - e).p, last);
+            let out_b = bearing(first, &along(&pts, &cumd, e).p);
             arcs.push(Arc {
                 i: 0,
                 key: format!("{}{}", l.id, if dir > 0 { ":ab" } else { ":ba" }),
@@ -111,9 +265,9 @@ pub fn build_graph(sc: &Scenario, s: &Settings, period: Option<&str>) -> Graph {
                 ff: len / v,
                 cap_mid: f64::from(gl) * cap_lane,
                 cls: l.cls.as_str().map(str::to_string),
-                rank: c.rank,
+                rank: class.rank,
                 speed: spd,
-                lw: c.lw,
+                lw: class.lw,
                 ring: l.ring.truthy(),
                 name: l.name.str_or("").to_string(),
                 pts,
@@ -139,54 +293,43 @@ pub fn build_graph(sc: &Scenario, s: &Settings, period: Option<&str>) -> Graph {
             });
         }
     }
-    let zones: Vec<crate::project::Zone> = sc
-        .zones
-        .values()
-        .filter(|z| z.lat.num().is_finite() && z.lng.num().is_finite())
-        .cloned()
-        .collect();
-    let lat0 = if n0 > 0 {
-        ll.iter().fold(0.0, |s, p| s + p[0]) / n0 as f64
-    } else {
-        -36.85
-    };
-    let f = flat(lat0);
-    // Zones only connect to the main connected network, never to an unconnected fragment
-    let edges: Vec<(usize, usize)> = arcs.iter().map(|a| (a.from, a.to)).collect();
-    let main = main_component(n0, &edges);
-    let mut cand = Vec::new();
-    for i in 0..n0 {
-        if ok_node[i] != 0 && main[i] != 0 && site_of0[i].is_none() {
-            cand.push(Cand {
-                id: ids[i].clone(),
-                x: f.x(&ll[i]),
-                y: f.y(&ll[i]),
-            });
-        }
-    }
+    (arcs, ok_node)
+}
+
+// buildGraph's zone connectors: a node per zone (added to the table) and an arc each way to each
+// of its targets. Returns each zone's node and the zones' targets.
+fn connector_arcs(
+    sc: &Scenario,
+    s: &Settings,
+    zones: &[crate::project::Zone],
+    cand: &[Cand],
+    fl: &crate::util::Flat,
+    table: &mut NodeTable,
+    arcs: &mut Vec<Arc>,
+) -> (Vec<usize>, OrderedMap<Vec<String>>) {
     let mut zone_node = Vec::new();
     let mut conns: OrderedMap<Vec<String>> = OrderedMap::new();
     let connector_speed = s.connector_speed.num();
-    for z in &zones {
-        let zi = ids.len();
+    for z in zones {
+        let zi = table.ids.len();
         let zll = z.ll();
-        ids.push(format!("z:{}", z.id));
-        ll.push(zll);
-        idx.insert(format!("z:{}", z.id), zi);
+        table.ids.push(format!("z:{}", z.id));
+        table.ll.push(zll);
+        table.idx.insert(format!("z:{}", z.id), zi);
         zone_node.push(zi);
-        let tg = connector_targets(sc, z, &cand, &f, s);
-        conns.insert(z.id.clone(), tg.clone());
-        for t in &tg {
-            let Some(&ti) = idx.get(t) else {
+        let targets = connector_targets(sc, z, cand, fl, s);
+        conns.insert(z.id.clone(), targets.clone());
+        for t in &targets {
+            let Some((ti, tll)) = table.idx.get(t).and_then(|&ti| table.ll.get(ti).map(|&p| (ti, p))) else {
                 continue;
             };
-            let d = math_max(10.0, dist(&zll, &ll[ti]));
+            let d = math_max(10.0, dist(&zll, &tll));
             let ff = d / (connector_speed / 3.6);
-            let bo = bearing(&zll, &ll[ti]);
-            let bd = bearing(&ll[ti], &zll);
+            let bo = bearing(&zll, &tll);
+            let bd = bearing(&tll, &zll);
             for (suffix, from, to, pts, b) in [
-                ("o", zi, ti, vec![zll, ll[ti]], bo),
-                ("d", ti, zi, vec![ll[ti], zll], bd),
+                ("o", zi, ti, vec![zll, tll], bo),
+                ("d", ti, zi, vec![tll, zll], bd),
             ] {
                 arcs.push(Arc {
                     i: 0,
@@ -231,92 +374,5 @@ pub fn build_graph(sc: &Scenario, s: &Settings, period: Option<&str>) -> Graph {
             }
         }
     }
-    let n = ids.len();
-    let m = arcs.len();
-    let from: Vec<usize> = arcs.iter().map(|a| a.from).collect();
-    let to: Vec<usize> = arcs.iter().map(|a| a.to).collect();
-    let net = Network::new(n, &from, &to);
-    let mut ffc = vec![0.0f64; m];
-    let mut into: Vec<Vec<usize>> = vec![Vec::new(); n];
-    let mut out_r: Vec<Vec<usize>> = vec![Vec::new(); n];
-    for (i, a) in arcs.iter_mut().enumerate() {
-        a.i = i;
-        ffc[i] = a.ff;
-        if !a.conn() {
-            into[a.to].push(i);
-            out_r[a.from].push(i);
-        }
-    }
-    let mut is_c = vec![0u8; n];
-    for &i in &zone_node {
-        is_c[i] = 1;
-    }
-    let mut key_idx = HashMap::new();
-    for (i, a) in arcs.iter().enumerate() {
-        key_idx.insert(a.key.clone(), i);
-    }
-    // Links meeting at each node (connectors not counted): 1 = dead end, 3 or more = junction
-    let mut deg = vec![0i32; n];
-    for v in 0..n {
-        if is_c[v] != 0 {
-            continue;
-        }
-        let mut set: HashSet<&str> = HashSet::new();
-        for &i in &into[v] {
-            set.insert(&arcs[i].link);
-        }
-        for &i in &out_r[v] {
-            set.insert(&arcs[i].link);
-        }
-        deg[v] = set.len() as i32;
-    }
-    let nodes: Vec<Option<crate::project::Node>> =
-        ids.iter().map(|id| sc.nodes.get(id).cloned()).collect();
-    let turn_s = turn_set(s);
-    let (turns, tmv) = build_turns(
-        &net,
-        &TurnCtx {
-            arcs: &arcs,
-            deg: &deg,
-            nodes: &nodes,
-            turn_s: &turn_s,
-        },
-    );
-    let n_t = turns.len();
-    let mut site_of = site_of0;
-    site_of.resize(n, None);
-    let mut g = Graph {
-        ids,
-        idx,
-        ll,
-        arcs,
-        n,
-        m,
-        search: EdgeGraph::new(net, turns, is_c),
-        ffc,
-        into,
-        out_r,
-        zones,
-        zone_node,
-        key_idx,
-        conns,
-        ctl: Vec::new(),
-        ctl_at: vec![-1; n],
-        nodes,
-        deg,
-        turn_s,
-        site_of,
-        sites,
-        cap_method: cap_method_of(s),
-        settings: s.clone(),
-        period: period.map(str::to_string),
-        tmv,
-        n_t,
-        sm: None,
-        sm_x: None,
-        mv_detail: true,
-    };
-    g.sm = site_move_index(&g);
-    setup_controls(sc, &mut g, s);
-    g
+    (zone_node, conns)
 }

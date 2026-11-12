@@ -51,17 +51,23 @@ impl Graph {
             .unwrap_or_default();
         let mut w = self.workspace();
         let mut arcs: Vec<usize> = Vec::new();
-        for k in 1..wp.len() {
+        // Bound: node and arc indexes are far below i32::MAX (the search's own index type)
+        let as_i32 = |i: usize| i32::try_from(i).unwrap_or(-1);
+        for pair in wp.windows(2) {
+            let &[prev, next] = pair else {
+                continue;
+            };
             let from = match arcs.last() {
-                Some(&last) if self.arcs[last].to == wp[k - 1] => last as i32,
+                Some(&last) if self.arcs.get(last).is_some_and(|a| a.to == prev) => as_i32(last),
                 _ => -1,
             };
-            self.spt(cost, wp[k - 1], &mut w, wp[k] as i32, from);
-            if from >= 0 && !w.nd[wp[k]].is_finite() {
-                self.spt(cost, wp[k - 1], &mut w, wp[k] as i32, -1);
+            let reached = |w: &Workspace| w.nd.get(next).is_some_and(|d| d.is_finite());
+            self.spt(cost, prev, &mut w, as_i32(next), from);
+            if from >= 0 && !reached(&w) {
+                self.spt(cost, prev, &mut w, as_i32(next), -1);
             }
-            if w.nd[wp[k]].is_finite()
-                && let Some(p) = w.path_to(wp[k])
+            if reached(&w)
+                && let Some(p) = w.path_to(next)
             {
                 arcs.extend(p);
             }

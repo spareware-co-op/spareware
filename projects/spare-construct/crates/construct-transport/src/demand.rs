@@ -19,10 +19,14 @@
 // The loops and comparisons mirror the JavaScript's, index for index, so that the sums come out in the same order and
 // NaN takes the same branches (`!(a > b)` is not `a <= b`)
 #![allow(clippy::needless_range_loop, clippy::neg_cmp_op_on_partial_ord)]
+#![allow(
+    clippy::many_single_char_names,
+    reason = "the matrix names are engine.js's (Z, O, D, T, f), so the port reads against it"
+)]
 
 use crate::graph::{Graph, zone_class};
 use crate::jsnum::{JsNum, Maybe, Num, math_max, number_to_js_string, or_default, value_to_number, value_truthy};
-use crate::project::{LANDUSES, OrderedMap, Project, Scenario, Settings, Zone};
+use crate::project::{LANDUSES, OdMatrix, OrderedMap, Project, Scenario, Settings, Zone};
 use crate::standards::{growth, year_of};
 use crate::util::{clamp, dist, fmt};
 use serde_json::Value;
@@ -128,10 +132,13 @@ pub fn trip_ends(p: &Project, z: &Zone, s: &Settings, period: &str, sc: &Scenari
         let get = |k: &str| g.map_or(f64::NAN, |g| g.num_at(k).num());
         o = or_default(get(&pin), 0.0) * gf;
         d = or_default(get(&pout), 0.0) * gf;
-    } else if z.tg.get().is_some_and(|tg| tg.get("on").is_some_and(value_truthy)) && z.tg_load.is_set() {
+    } else if let Some(load) = z
+        .tg_load
+        .get()
+        .filter(|_| z.tg.get().is_some_and(|tg| tg.get("on").is_some_and(value_truthy)))
+    {
         // A switched-on trip-generation table replaces land use times rates and the extra trips; the
         // reduction and staging still apply, as they do to every land-use zone
-        let load = z.tg_load.get().expect("set");
         o = math_max(0.0, load.num_at(&pout).or(0.0));
         d = math_max(0.0, load.num_at(&pin).or(0.0));
         let k = reduction_stage(z, sc);
@@ -172,8 +179,8 @@ pub fn trip_ends(p: &Project, z: &Zone, s: &Settings, period: &str, sc: &Scenari
 pub fn furness(z: usize, o: &[f64], d: &[f64], f: &[f64], t: &mut [f64]) -> Option<(f64, f64)> {
     let (mut so, mut sd) = (0.0f64, 0.0f64);
     for i in 0..z {
-        so += o[i];
-        sd += d[i];
+        so += at(o, i);
+        sd += at(d, i);
     }
     if !(so > 0.0 && sd > 0.0) {
         return None;
@@ -185,24 +192,72 @@ pub fn furness(z: usize, o: &[f64], d: &[f64], f: &[f64], t: &mut [f64]) -> Opti
         for i in 0..z {
             let mut s = 0.0;
             for j in 0..z {
-                s += b[j] * dt[j] * f[i * z + j];
+                s += at(&b, j) * at(&dt, j) * at(f, ij(z, i, j));
             }
-            a[i] = if s > 0.0 { 1.0 / s } else { 0.0 };
+            set_at(&mut a, i, if s > 0.0 { 1.0 / s } else { 0.0 });
         }
         for j in 0..z {
             let mut s = 0.0;
             for i in 0..z {
-                s += a[i] * o[i] * f[i * z + j];
+                s += at(&a, i) * at(o, i) * at(f, ij(z, i, j));
             }
-            b[j] = if s > 0.0 { 1.0 / s } else { 0.0 };
+            set_at(&mut b, j, if s > 0.0 { 1.0 / s } else { 0.0 });
         }
     }
     for i in 0..z {
         for j in 0..z {
-            t[i * z + j] += a[i] * o[i] * b[j] * dt[j] * f[i * z + j];
+            let k = ij(z, i, j);
+            add_at(t, k, at(&a, i) * at(o, i) * at(&b, j) * at(&dt, j) * at(f, k));
         }
     }
     Some((so, sd))
+}
+
+// x[i] as the JavaScript reads a number array: past the end (which the vectors here, sized to the
+// zones, never are) it gives 0, adding nothing
+fn at(x: &[f64], i: usize) -> f64 {
+    x.get(i).copied().unwrap_or(0.0)
+}
+
+// x[i] for the flag arrays, false past the end
+fn flag(x: &[bool], i: usize) -> bool {
+    x.get(i).copied().unwrap_or(false)
+}
+
+// Position of cell (i, j) in a row-major matrix of n columns. Bound: i and j are zone indexes and
+// the matrix of n * n cells is in memory, so this never overflows; past usize it is a position no
+// slice reaches, which reads as 0 and takes no writes.
+fn ij(n: usize, i: usize, j: usize) -> usize {
+    i.checked_mul(n)
+        .and_then(|r| r.checked_add(j))
+        .unwrap_or(usize::MAX)
+}
+
+// x[i] += v; a position past the end takes nothing
+fn add_at(x: &mut [f64], i: usize, v: f64) {
+    if let Some(c) = x.get_mut(i) {
+        *c += v;
+    }
+}
+
+// x[i] = v; a position past the end takes nothing
+fn set_at(x: &mut [f64], i: usize, v: f64) {
+    if let Some(c) = x.get_mut(i) {
+        *c = v;
+    }
+}
+
+// O and D as the sums of the matrix's rows and columns, in the JavaScript's order
+fn sum_ends(zn: usize, t: &[f64], o: &mut [f64], d: &mut [f64]) {
+    o.fill(0.0);
+    d.fill(0.0);
+    for i in 0..zn {
+        for j in 0..zn {
+            let x = at(t, ij(zn, i, j));
+            add_at(o, i, x);
+            add_at(d, j, x);
+        }
+    }
 }
 
 /// `applyME(G, period, T, year)`: matrix estimation of the base year, applied to the matrix `t` over the graph's `zones`; returns a note, or "" when nothing changed.
@@ -237,11 +292,11 @@ pub fn apply_me(p: &Project, zones: &[Zone], period: &str, t: &mut [f64], year: 
         _ => None,
     };
     let (mut n, mut before, mut after) = (0u32, 0.0f64, 0.0f64);
-    let pair = |key: &str| -> Option<(usize, usize)> {
-        let s = key.find('>')?;
-        let i = *pos.get(&key[..s])?;
-        let j = *pos.get(&key[s + 1..])?;
-        (i != j).then_some((i, j))
+    let pair = |key: &str| -> Option<usize> {
+        let (from, to) = key.split_once('>')?;
+        let i = *pos.get(from)?;
+        let j = *pos.get(to)?;
+        (i != j).then(|| ij(zn, i, j))
     };
     let plural = |n: u32| if n == 1 { "" } else { "s" };
     if let Some(add) = add {
@@ -250,13 +305,13 @@ pub fn apply_me(p: &Project, zones: &[Zone], period: &str, t: &mut [f64], year: 
             if !key.contains('>') || !dlt.is_finite() || v.as_str() == Some("") || v.is_null() {
                 continue;
             }
-            let Some((i, j)) = pair(key) else {
+            let Some(k) = pair(key) else {
                 continue;
             };
-            before += t[i * zn + j];
-            t[i * zn + j] = math_max(0.0, t[i * zn + j] + dlt);
-            after += t[i * zn + j];
-            n += 1;
+            before += at(t, k);
+            set_at(t, k, math_max(0.0, at(t, k) + dlt));
+            after += at(t, k);
+            n = n.saturating_add(1);
         }
         return if n > 0 {
             format!(
@@ -276,16 +331,16 @@ pub fn apply_me(p: &Project, zones: &[Zone], period: &str, t: &mut [f64], year: 
         if !key.contains('>') || !(f >= 0.0) || !f.is_finite() {
             continue;
         }
-        let Some((i, j)) = pair(key) else {
+        let Some(k) = pair(key) else {
             continue;
         };
-        if !(t[i * zn + j] > 0.0) {
+        if !(at(t, k) > 0.0) {
             continue;
         }
-        before += t[i * zn + j];
-        t[i * zn + j] *= f;
-        after += t[i * zn + j];
-        n += 1;
+        before += at(t, k);
+        set_at(t, k, at(t, k) * f);
+        after += at(t, k);
+        n = n.saturating_add(1);
     }
     if n > 0 {
         format!(
@@ -313,11 +368,11 @@ pub fn demand(p: &Project, sc: &Scenario, g: &Graph, period: &str, s: &Settings)
     let zn = g.zones.len();
     let mut o = vec![0.0f64; zn];
     let mut d = vec![0.0f64; zn];
-    let mut t = vec![0.0f64; zn * zn];
-    for (i, z) in g.zones.iter().enumerate() {
+    let mut t = vec![0.0f64; zn.saturating_mul(zn)];
+    for ((z, oi), di) in g.zones.iter().zip(&mut o).zip(&mut d) {
         let te = trip_ends(p, z, s, period, sc);
-        o[i] = te.o;
-        d[i] = te.d;
+        *oi = te.o;
+        *di = te.d;
     }
     let mut note = String::new();
     let mut manual = false;
@@ -325,185 +380,11 @@ pub fn demand(p: &Project, sc: &Scenario, g: &Graph, period: &str, s: &Settings)
     let man_zones = man.and_then(|m| m.zones.get());
     if let (Some(man), Some(man_zones)) = (man, man_zones) {
         manual = true;
-        let mut pos: HashMap<&str, usize> = HashMap::new();
-        for (i, id) in man_zones.iter().enumerate() {
-            pos.insert(id.as_str(), i);
-        }
-        // The C2 zone rules hold here too: nothing before a zone's opening year, and its reduction applies
-        // to its row and column (land-use zones only, as in tripEnds)
-        let yr = year_of(Some(sc), s);
-        let kz: Vec<f64> = g
-            .zones
-            .iter()
-            .map(|z| {
-                if z.year.num() > yr {
-                    0.0
-                } else if z.kind.is("gateway") {
-                    1.0
-                } else {
-                    reduction_stage(z, sc)
-                }
-            })
-            .collect();
-        let rows = man.m.get();
-        for i in 0..zn {
-            for j in 0..zn {
-                let a = pos.get(g.zones[i].id.as_str());
-                let b = pos.get(g.zones[j].id.as_str());
-                if let (Some(&a), Some(&b)) = (a, b)
-                    && i != j
-                {
-                    let v = rows
-                        .and_then(|r| r.get(a))
-                        .and_then(|r| r.get())
-                        .and_then(|r| r.get(b))
-                        .map_or(f64::NAN, super::jsnum::Maybe::num);
-                    t[i * zn + j] = or_default(v, 0.0) * kz[i] * kz[j];
-                }
-            }
-        }
-        o.fill(0.0);
-        d.fill(0.0);
-        for i in 0..zn {
-            for j in 0..zn {
-                o[i] += t[i * zn + j];
-                d[j] += t[i * zn + j];
-            }
-        }
+        manual_matrix(sc, s, g, man, man_zones, &mut t);
+        sum_ends(zn, &t, &mut o, &mut d);
         note = "Using the manual OD matrix for this period.".to_string();
     } else if zn > 1 {
-        let mut w = g.workspace();
-        let mut sk = vec![f64::INFINITY; zn * zn];
-        for i in 0..zn {
-            if o[i] <= 0.0 {
-                continue;
-            }
-            g.spt(&g.ffc, g.zone_node[i], &mut w, -1, -1);
-            for j in 0..zn {
-                sk[i * zn + j] = w.nd[g.zone_node[j]];
-            }
-        }
-        // Zone trip ends are fixed by land use. Gateway counts are the totals crossing the boundary:
-        // the part not used by zone trips passes through to other gateways.
-        let is_g: Vec<bool> = g.zones.iter().map(|z| z.kind.is("gateway")).collect();
-        let beta = s.gravity_beta.num();
-        let f = |k: usize| if sk[k].is_finite() { crate::jsmath::exp(-beta * sk[k] / 60.0) } else { 0.0 };
-        let mut notes: Vec<String> = Vec::new();
-        let mut lost = 0.0f64;
-        // 1. trips leaving each zone, to zones (by attraction) and gateways (by outbound count)
-        for i in 0..zn {
-            if is_g[i] || o[i] <= 0.0 {
-                continue;
-            }
-            let mut sum = 0.0f64;
-            for j in 0..zn {
-                if j != i {
-                    sum += d[j] * f(i * zn + j);
-                }
-            }
-            if sum <= 0.0 {
-                lost += o[i];
-                continue;
-            }
-            for j in 0..zn {
-                if j != i {
-                    t[i * zn + j] += o[i] * d[j] * f(i * zn + j) / sum;
-                }
-            }
-        }
-        // 2. trips arriving at each zone not already supplied by other zones come in through the gateways
-        for j in 0..zn {
-            if is_g[j] || d[j] <= 0.0 {
-                continue;
-            }
-            let mut got = 0.0f64;
-            for i in 0..zn {
-                if !is_g[i] {
-                    got += t[i * zn + j];
-                }
-            }
-            let rem = d[j] - got;
-            if rem <= 0.5 {
-                continue;
-            }
-            let mut sum = 0.0f64;
-            for i in 0..zn {
-                if is_g[i] {
-                    sum += o[i] * f(i * zn + j);
-                }
-            }
-            if sum <= 0.0 {
-                continue;
-            }
-            for i in 0..zn {
-                if is_g[i] {
-                    t[i * zn + j] += rem * o[i] * f(i * zn + j) / sum;
-                }
-            }
-        }
-        // 3. the rest of each gateway count is through traffic, favouring gateways on the far side of the area
-        let yr = year_of(Some(sc), s);
-        let gz: Vec<&Zone> = g.zones.iter().filter(|z| z.kind.is("gateway") && !(z.year.num() > yr)).collect();
-        let mut diag = 1.0f64;
-        for a in &gz {
-            for b in &gz {
-                diag = math_max(diag, dist(&a.ll(), &b.ll()));
-            }
-        }
-        let mut or = vec![0.0f64; zn];
-        let mut dr = vec![0.0f64; zn];
-        let mut f1 = vec![0.0f64; zn * zn];
-        let mut over: Vec<&str> = Vec::new();
-        for gi in 0..zn {
-            if !is_g[gi] {
-                continue;
-            }
-            let (mut out, mut inn) = (0.0f64, 0.0f64);
-            for j in 0..zn {
-                if !is_g[j] {
-                    out += t[gi * zn + j];
-                    inn += t[j * zn + gi];
-                }
-            }
-            or[gi] = math_max(0.0, o[gi] - out);
-            dr[gi] = math_max(0.0, d[gi] - inn);
-            if inn > d[gi] * 1.05 + 20.0 {
-                over.push(g.zones[gi].name.as_str().unwrap_or(""));
-            }
-            for j in 0..zn {
-                if !is_g[j] || j == gi || !sk[gi * zn + j].is_finite() {
-                    continue;
-                }
-                let dd = dist(&g.zones[gi].ll(), &g.zones[j].ll()) / diag;
-                f1[gi * zn + j] = if dd < 0.3 { 0.0 } else { dd * dd };
-            }
-        }
-        let s1 = furness(zn, &or, &dr, &f1, &mut t);
-        if lost > 1.0 {
-            notes.push(format!(
-                "{} veh/h from zones had nowhere to go. Add gateways or destination land uses.",
-                fmt::int(lost)
-            ));
-        }
-        if !over.is_empty() {
-            notes.push(format!(
-                "Zone trips leaving through {} exceed the gateway count; raise the count or check the land use.",
-                over.iter().take(3).copied().collect::<Vec<_>>().join(", ")
-            ));
-        }
-        if let Some((so, sd)) = s1
-            && (so - sd).abs() / math_max(so, sd) > 0.08
-        {
-            notes.push(format!(
-                "Through traffic entering ({}) and leaving ({}) differs and was balanced.",
-                fmt::int(so),
-                fmt::int(sd)
-            ));
-        }
-        if gz.is_empty() {
-            notes.push("There are no gateways, so all trips stay inside the area.".to_string());
-        }
-        note = notes.join(" ");
+        note = gravity(sc, s, g, &o, &d, &mut t);
     }
     let me = apply_me(p, &g.zones, period, &mut t, Some(year_of(Some(sc), s)));
     let (mut o0, mut d0) = (None, None);
@@ -512,14 +393,7 @@ pub fn demand(p: &Project, sc: &Scenario, g: &Graph, period: &str, s: &Settings)
         note = if note.is_empty() { me } else { format!("{note} {me}") };
         o0 = Some(o.clone());
         d0 = Some(d.clone());
-        o.fill(0.0);
-        d.fill(0.0);
-        for i in 0..zn {
-            for j in 0..zn {
-                o[i] += t[i * zn + j];
-                d[j] += t[i * zn + j];
-            }
-        }
+        sum_ends(zn, &t, &mut o, &mut d);
     }
     Demand {
         z: zn,
@@ -531,4 +405,216 @@ pub fn demand(p: &Project, sc: &Scenario, g: &Graph, period: &str, s: &Settings)
         o0,
         d0,
     }
+}
+
+// The manual OD matrix as saved, over the graph's zones: nothing before a zone's opening year, and
+// its reduction and staging applied to its row and column (land-use zones only, as in tripEnds)
+fn manual_matrix(sc: &Scenario, s: &Settings, g: &Graph, man: &OdMatrix, man_zones: &[String], t: &mut [f64]) {
+    let zn = g.zones.len();
+    let mut pos: HashMap<&str, usize> = HashMap::new();
+    for (i, id) in man_zones.iter().enumerate() {
+        pos.insert(id.as_str(), i);
+    }
+    let yr = year_of(Some(sc), s);
+    let kz: Vec<f64> = g
+        .zones
+        .iter()
+        .map(|z| {
+            if z.year.num() > yr {
+                0.0
+            } else if z.kind.is("gateway") {
+                1.0
+            } else {
+                reduction_stage(z, sc)
+            }
+        })
+        .collect();
+    let rows = man.m.get();
+    for (i, zi) in g.zones.iter().enumerate() {
+        for (j, zj) in g.zones.iter().enumerate() {
+            let a = pos.get(zi.id.as_str());
+            let b = pos.get(zj.id.as_str());
+            if let (Some(&a), Some(&b)) = (a, b)
+                && i != j
+            {
+                let v = rows
+                    .and_then(|r| r.get(a))
+                    .and_then(|r| r.get())
+                    .and_then(|r| r.get(b))
+                    .map_or(f64::NAN, super::jsnum::Maybe::num);
+                set_at(t, ij(zn, i, j), or_default(v, 0.0) * at(&kz, i) * at(&kz, j));
+            }
+        }
+    }
+}
+
+// The gravity matrix with gateway through traffic, added into t; returns the notes
+fn gravity(sc: &Scenario, s: &Settings, g: &Graph, o: &[f64], d: &[f64], t: &mut [f64]) -> String {
+    let zn = g.zones.len();
+    let mut w = g.workspace();
+    let mut sk = vec![f64::INFINITY; zn.saturating_mul(zn)];
+    for i in 0..zn {
+        if at(o, i) <= 0.0 {
+            continue;
+        }
+        let Some(&src) = g.zone_node.get(i) else {
+            continue;
+        };
+        g.spt(&g.ffc, src, &mut w, -1, -1);
+        for j in 0..zn {
+            let reach = g.zone_node.get(j).and_then(|&n| w.nd.get(n)).copied().unwrap_or(f64::INFINITY);
+            set_at(&mut sk, ij(zn, i, j), reach);
+        }
+    }
+    // Zone trip ends are fixed by land use. Gateway counts are the totals crossing the boundary:
+    // the part not used by zone trips passes through to other gateways.
+    let is_g: Vec<bool> = g.zones.iter().map(|z| z.kind.is("gateway")).collect();
+    let beta = s.gravity_beta.num();
+    let lost = zone_trips(o, d, t, &is_g, &|k| deterrence(&sk, beta, k));
+    let (s1, over, no_gateways) = through_traffic(g, year_of(Some(sc), s), o, d, t, &is_g, &sk);
+    let mut notes: Vec<String> = Vec::new();
+    if lost > 1.0 {
+        notes.push(format!(
+            "{} veh/h from zones had nowhere to go. Add gateways or destination land uses.",
+            fmt::int(lost)
+        ));
+    }
+    if !over.is_empty() {
+        notes.push(format!(
+            "Zone trips leaving through {} exceed the gateway count; raise the count or check the land use.",
+            over.iter().take(3).copied().collect::<Vec<_>>().join(", ")
+        ));
+    }
+    if let Some((so, sd)) = s1
+        && (so - sd).abs() / math_max(so, sd) > 0.08
+    {
+        notes.push(format!(
+            "Through traffic entering ({}) and leaving ({}) differs and was balanced.",
+            fmt::int(so),
+            fmt::int(sd)
+        ));
+    }
+    if no_gateways {
+        notes.push("There are no gateways, so all trips stay inside the area.".to_string());
+    }
+    notes.join(" ")
+}
+
+// The skim's deterrence for cell k: exp(-beta x free-flow time / 60), 0 where the zone is not reached
+fn deterrence(sk: &[f64], beta: f64, k: usize) -> f64 {
+    let time = sk.get(k).copied().unwrap_or(f64::INFINITY);
+    if time.is_finite() { crate::jsmath::exp(-beta * time / 60.0) } else { 0.0 }
+}
+
+// Steps 1 and 2 of the gravity model, added into t; returns the trips that had nowhere to go
+fn zone_trips(o: &[f64], d: &[f64], t: &mut [f64], is_g: &[bool], f: &dyn Fn(usize) -> f64) -> f64 {
+    let zn = o.len();
+    let mut lost = 0.0f64;
+    // 1. trips leaving each zone, to zones (by attraction) and gateways (by outbound count)
+    for i in 0..zn {
+        if flag(is_g,i) || at(o, i) <= 0.0 {
+            continue;
+        }
+        let mut sum = 0.0f64;
+        for j in 0..zn {
+            if j != i {
+                sum += at(d, j) * f(ij(zn, i, j));
+            }
+        }
+        if sum <= 0.0 {
+            lost += at(o, i);
+            continue;
+        }
+        for j in 0..zn {
+            if j != i {
+                let k = ij(zn, i, j);
+                add_at(t, k, at(o, i) * at(d, j) * f(k) / sum);
+            }
+        }
+    }
+    // 2. trips arriving at each zone not already supplied by other zones come in through the gateways
+    for j in 0..zn {
+        if flag(is_g,j) || at(d, j) <= 0.0 {
+            continue;
+        }
+        let mut got = 0.0f64;
+        for i in 0..zn {
+            if !flag(is_g,i) {
+                got += at(t, ij(zn, i, j));
+            }
+        }
+        let rem = at(d, j) - got;
+        if rem <= 0.5 {
+            continue;
+        }
+        let mut sum = 0.0f64;
+        for i in 0..zn {
+            if flag(is_g,i) {
+                sum += at(o, i) * f(ij(zn, i, j));
+            }
+        }
+        if sum <= 0.0 {
+            continue;
+        }
+        for i in 0..zn {
+            if flag(is_g,i) {
+                let k = ij(zn, i, j);
+                add_at(t, k, rem * at(o, i) * f(k) / sum);
+            }
+        }
+    }
+    lost
+}
+
+// Step 3 of the gravity model: the rest of each gateway count is through traffic, favouring
+// gateways on the far side of the area, balanced by Furness and added into t. Returns Furness's
+// totals, the gateways whose count the zone trips exceed, and whether there are no gateways.
+fn through_traffic<'a>(
+    g: &'a Graph,
+    yr: f64,
+    o: &[f64],
+    d: &[f64],
+    t: &mut [f64],
+    is_g: &[bool],
+    sk: &[f64],
+) -> (Option<(f64, f64)>, Vec<&'a str>, bool) {
+    let zn = g.zones.len();
+    let skim = |k: usize| sk.get(k).copied().unwrap_or(f64::INFINITY);
+    let gz: Vec<&Zone> = g.zones.iter().filter(|z| z.kind.is("gateway") && !(z.year.num() > yr)).collect();
+    let mut diag = 1.0f64;
+    for a in &gz {
+        for b in &gz {
+            diag = math_max(diag, dist(&a.ll(), &b.ll()));
+        }
+    }
+    let mut or = vec![0.0f64; zn];
+    let mut dr = vec![0.0f64; zn];
+    let mut f1 = vec![0.0f64; zn.saturating_mul(zn)];
+    let mut over: Vec<&str> = Vec::new();
+    for (gi, zg) in g.zones.iter().enumerate() {
+        if !flag(is_g,gi) {
+            continue;
+        }
+        let (mut out, mut inn) = (0.0f64, 0.0f64);
+        for j in 0..zn {
+            if !flag(is_g,j) {
+                out += at(t, ij(zn, gi, j));
+                inn += at(t, ij(zn, j, gi));
+            }
+        }
+        set_at(&mut or, gi, math_max(0.0, at(o, gi) - out));
+        set_at(&mut dr, gi, math_max(0.0, at(d, gi) - inn));
+        if inn > at(d, gi) * 1.05 + 20.0 {
+            over.push(zg.name.as_str().unwrap_or(""));
+        }
+        for (j, zj) in g.zones.iter().enumerate() {
+            let k = ij(zn, gi, j);
+            if !flag(is_g,j) || j == gi || !skim(k).is_finite() {
+                continue;
+            }
+            let dd = dist(&zg.ll(), &zj.ll()) / diag;
+            set_at(&mut f1, k, if dd < 0.3 { 0.0 } else { dd * dd });
+        }
+    }
+    (furness(zn, &or, &dr, &f1, t), over, gz.is_empty())
 }
