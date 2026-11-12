@@ -36,6 +36,10 @@
 //!   a body it passed can leave a pair of parallel faces it cannot tell apart. A fault that says
 //!   something is wrong there is still a defect: an exact move of a body that passed breaks
 //!   nothing.
+//! - **Refused the same in every build.** Those refusals are groups 2 and 3's to give, so a
+//!   result that rounded, or whose input was less than exact, is checked with every group in a
+//!   shipped build too; only a result recorded Exact is checked at the build's level
+//!   (`build.rs`; decision 32.48).
 //! - **Mirrors keep the outside outside.** A mirror reverses orientation, so every face's sense
 //!   and every loop's direction is reversed with it.
 //!

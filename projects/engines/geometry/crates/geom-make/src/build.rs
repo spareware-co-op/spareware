@@ -15,16 +15,24 @@
 //! - **Names, not positions.** Every index of the body follows its entities' names, and every name
 //!   comes from the operation's path, a role and the names it is relative to: never from the
 //!   order the rows were written in (8.2, 20.2).
-//! - **Checked before returned.** A body that does not pass the checker at the build's level is
-//!   never returned. What the operation fails with instead is [`Unpassed`]'s to say:
-//!   [`MakeDetail::ResultInvalid`], a defect, where the checker follows the body's data in full
-//!   or found something wrong; [`MakeDetail::NotCertifiedYet`], naming the piece that widens the
-//!   checker, where the data are less than exact and the checker could not certify them.
+//! - **Checked before returned.** A body that does not pass the checker is never returned. What
+//!   the operation fails with instead is [`Unpassed`]'s to say: [`MakeDetail::ResultInvalid`], a
+//!   defect, where the checker follows the body's data in full or found something wrong;
+//!   [`MakeDetail::NotCertifiedYet`], naming the piece that widens the checker, where the data
+//!   are less than exact and the checker could not certify them.
+//! - **The same answer in every build.** How much of the checker a build runs never decides what
+//!   an operation answers (principle 5; decision 32.48). A primitive as written and an exact
+//!   transform of an exact body pass groups 2 and 3 by construction, so there the check runs at
+//!   the build's level ([`Level::of_build`]: the cheap groups in a shipped build, 8.3), and a
+//!   fault is a defect the full-checker builds of continuous integration exist to find. A
+//!   transform that rounded, or that moved a body already less than exact, has no such proof: a
+//!   rounded corner can land on another, and the refusal [`MakeDetail::NotCertifiedYet`] is an
+//!   ordinary answer. There every group runs in every build ([`Unpassed::level`]).
 //! - **Charged by what it builds.** One meter unit ([`PER_ROW`]) and 64 logical bytes per row built,
 //!   before it is built (23.10), and the publishing charges its own rows to the same meter. The
-//!   postcondition check runs on a meter of its own, cancellable and without a limit: its level
-//!   differs between a test build and a shipped one, and a budget must stop an operation the same way
-//!   in both.
+//!   postcondition check runs on a meter of its own, cancellable and without a limit: where it
+//!   runs at the build's level, that differs between a test build and a shipped one, and a budget
+//!   must stop an operation the same way in both.
 //! - **Transactional.** Nothing the caller holds is changed; a failure, or a stop the operation
 //!   did not report, returns no body (`OpContext::run`).
 //!
@@ -321,6 +329,20 @@ pub(crate) enum Unpassed {
     },
 }
 
+impl Unpassed {
+    /// The level the result is checked at. A body the checker follows in full passes groups 2
+    /// and 3 by construction, so the build's level is enough and a shipped build runs the cheap
+    /// groups (8.3). On the other two routes the checker's verdict is the operation's answer, so
+    /// every group runs in every build: otherwise a shipped build would return what a test build
+    /// refuses (principle 5; decision 32.48).
+    const fn level(self) -> Level {
+        match self {
+            Unpassed::Defect => Level::of_build(),
+            Unpassed::Inherited { .. } | Unpassed::Rounded { .. } => Level::Full,
+        }
+    }
+}
+
 /// Checks `body` as the postcondition, and returns it with the history of `records` (no input is
 /// deleted: a Make operation has none, and a transform keeps every entity) and the names it made.
 ///
@@ -339,9 +361,10 @@ pub(crate) fn finish(
     exactness: Exactness,
     unpassed: Unpassed,
 ) -> Result<OpOutput<Made>, OpError> {
-    // The check's level differs by build, so its work stays off the operation's budget.
+    // Where the check's level is the build's, its work differs by build, so it stays off the
+    // operation's budget on every route.
     let mut checking = ctx.unbudgeted_meter();
-    let report = check(&body, exactness, Level::of_build(), &mut checking)
+    let report = check(&body, exactness, unpassed.level(), &mut checking)
         .map_err(|stop| ctx.stopped(&checking, stop, PHASE))?;
     if !report.passed() {
         let first = report.faults().first().map_or_else(
