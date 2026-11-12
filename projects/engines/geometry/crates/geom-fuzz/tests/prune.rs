@@ -66,7 +66,7 @@ fn the_input_bound_is_reached_and_never_passed() {
     data.extend([0u8; 59]);
     let (case, read) = decode(&data).unwrap();
     assert_eq!(read, MAX_INPUT_BYTES);
-    assert!(case.tail.is_empty());
+    assert_eq!(case.tail, Vec::<u8>::new());
     data.extend([0x83, 0x81, 0x50]);
     let (case, read) = decode(&data).unwrap();
     assert_eq!(

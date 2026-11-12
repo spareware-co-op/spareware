@@ -212,7 +212,11 @@ fn first_faces(first: u8, weak_mask: u8) -> Option<(NameGraph, BTreeSet<NameId>,
         };
         // Faces after the first may be weak: told apart from the first by their ordinal.
         let name = match current.first() {
-            Some(&base) if weak_mask.checked_shr(u32::from(i)).is_some_and(|m| m & 1 == 1) => {
+            Some(&base)
+                if weak_mask
+                    .checked_shr(u32::from(i))
+                    .is_some_and(|m| m & 1 == 1) =>
+            {
                 TopoName::Weak {
                     base,
                     ord: Ordinal::new(u32::from(i), u32::from(first)).ok()?,

@@ -2850,10 +2850,7 @@ pub mod naming {
 
     /// `pruned_record` of each pruned element.
     #[inline(never)]
-    pub fn record_write(
-        batch: &[Pruned],
-        out: &mut Vec<Option<Record>>,
-    ) {
+    pub fn record_write(batch: &[Pruned], out: &mut Vec<Option<Record>>) {
         run(batch, out, |(by, held, steps)| {
             pruned_record(by, held, steps).ok()
         });

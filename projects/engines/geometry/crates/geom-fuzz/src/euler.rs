@@ -184,97 +184,127 @@ impl Run {
         !self.euler.is_live(arena, row)
     }
 
-    /// Runs one step: the rows it was given (with whether each is dead), the counts its table row
-    /// adds, and what the editor answered; `None` for a step with nothing to act on.
-    fn step(&mut self, [op, x, y, z]: [u8; 4]) -> Option<(bool, [i64; 5], Result<(), TopoError>)> {
-        let fin = |run: &Run, b| run.pick(Arena::Fin, b);
-        Some(match op % 14 {
+    /// Runs one step: whether a row it was given is dead, the counts its table row adds, and what
+    /// the editor answered; `None` for a step with nothing to act on.
+    fn step(&mut self, [op, first, second, third]: [u8; 4]) -> Stepped {
+        match op % 14 {
+            0..=6 => self.edit(op % 14, first, second, third),
+            _ => self.ring_or_region(op % 14, first, second),
+        }
+    }
+
+    /// The operators on wires, edges and fins (0 to 6).
+    fn edit(&mut self, op: u8, first: u8, second: u8, third: u8) -> Stepped {
+        let fin = |run: &Run, byte| run.pick(Arena::Fin, byte);
+        Some(match op {
             0 => {
-                let r = self.pick(Arena::Region, x)?;
-                let (face, edge, v0, v1) = (self.face()?, self.edge()?, self.vertex()?, self.vertex()?);
-                let dead = self.dead(Arena::Region, r);
-                (dead, [2, 1, 1, 1, 1], self.euler.make_wire(ix(r)?, face, edge, v0, v1).map(|_| ()))
+                let region = self.pick(Arena::Region, first)?;
+                let (face, edge) = (self.face()?, self.edge()?);
+                let (start, end) = (self.vertex()?, self.vertex()?);
+                let dead = self.dead(Arena::Region, region);
+                let got = self.euler.make_wire(ix(region)?, face, edge, start, end);
+                (dead, [2, 1, 1, 1, 1], got.map(|_| ()))
             }
             1 => {
-                let f = fin(self, x)?;
+                let from = fin(self, first)?;
                 let (edge, vertex) = (self.edge()?, self.vertex()?);
-                (self.dead(Arena::Fin, f), [1, 1, 0, 0, 0], self.euler.mev(ix(f)?, edge, vertex).map(|_| ()))
+                let got = self.euler.mev(ix(from)?, edge, vertex).map(|_| ());
+                (self.dead(Arena::Fin, from), [1, 1, 0, 0, 0], got)
             }
             2 => {
-                let e = self.pick(Arena::Edge, x)?;
-                (self.dead(Arena::Edge, e), [-1, -1, 0, 0, 0], self.euler.kev(ix(e)?))
+                let edge = self.pick(Arena::Edge, first)?;
+                (self.dead(Arena::Edge, edge), [-1, -1, 0, 0, 0], self.euler.kev(ix(edge)?))
             }
             3 => {
-                let f = fin(self, x)?;
-                let to = match y % 4 {
-                    0 => ix(f),
-                    1 => ix(fin(self, z)?),
-                    _ => self.partner(ix(f)?, true, z),
+                let from = fin(self, first)?;
+                let to = match second % 4 {
+                    0 => ix(from),
+                    1 => ix(fin(self, third)?),
+                    _ => self.partner(ix(from)?, true, third),
                 }?;
-                let dead = self.dead(Arena::Fin, f) || self.dead(Arena::Fin, to.row());
+                let dead = self.dead(Arena::Fin, from) || self.dead(Arena::Fin, to.row());
                 let (edge, face) = (self.edge()?, self.face()?);
-                (dead, [0, 1, 1, 1, 0], self.euler.mef(ix(f)?, to, edge, face).map(|_| ()))
+                let got = self.euler.mef(ix(from)?, to, edge, face).map(|_| ());
+                (dead, [0, 1, 1, 1, 0], got)
             }
             4 => {
-                let f = fin(self, x)?;
-                (self.dead(Arena::Fin, f), [0, -1, -1, -1, 0], self.euler.kef(ix(f)?))
+                let gone = fin(self, first)?;
+                (self.dead(Arena::Fin, gone), [0, -1, -1, -1, 0], self.euler.kef(ix(gone)?))
             }
             5 => {
-                let f = fin(self, x)?;
-                let to = if y % 3 == 0 {
-                    ix(fin(self, z)?)
+                let from = fin(self, first)?;
+                let to = if second % 3 == 0 {
+                    ix(fin(self, third)?)
                 } else {
-                    self.partner(ix(f)?, false, z)
+                    self.partner(ix(from)?, false, third)
                 }?;
-                let dead = self.dead(Arena::Fin, f) || self.dead(Arena::Fin, to.row());
+                let dead = self.dead(Arena::Fin, from) || self.dead(Arena::Fin, to.row());
                 let edge = self.edge()?;
-                (dead, [0, 1, 0, -1, 0], self.euler.mekr(ix(f)?, to, edge).map(|_| ()))
+                (dead, [0, 1, 0, -1, 0], self.euler.mekr(ix(from)?, to, edge).map(|_| ()))
             }
-            6 => {
-                let f = fin(self, x)?;
-                (self.dead(Arena::Fin, f), [0, -1, 0, 1, 0], self.euler.kemr(ix(f)?).map(|_| ()))
+            _ => {
+                let at = fin(self, first)?;
+                let got = self.euler.kemr(ix(at)?).map(|_| ());
+                (self.dead(Arena::Fin, at), [0, -1, 0, 1, 0], got)
             }
+        })
+    }
+
+    /// The operators on rings and wires, and on regions (7 to 12).
+    fn ring_or_region(&mut self, op: u8, first: u8, second: u8) -> Stepped {
+        Some(match op {
             7 => {
-                let (k, l) = (self.pick(Arena::Face, x)?, self.pick(Arena::Loop, y)?);
-                let dead = self.dead(Arena::Face, k) || self.dead(Arena::Loop, l);
-                let r = self.euler.kfmrh(ix(k)?, ix(l)?);
-                if r.is_ok() {
+                let (keep, ring) = (self.pick(Arena::Face, first)?, self.pick(Arena::Loop, second)?);
+                let dead = self.dead(Arena::Face, keep) || self.dead(Arena::Loop, ring);
+                let got = self.euler.kfmrh(ix(keep)?, ix(ring)?);
+                if got.is_ok() {
                     self.holes = self.holes.saturating_add(1);
                 }
-                (dead, [0, 0, -1, 0, 0], r)
+                (dead, [0, 0, -1, 0, 0], got)
             }
             8 => {
-                let l = self.pick(Arena::Loop, x)?;
+                let ring = self.pick(Arena::Loop, first)?;
                 let face = self.face()?;
-                let r = self.euler.mfkrh(ix(l)?, face).map(|_| ());
-                if r.is_ok() {
+                let got = self.euler.mfkrh(ix(ring)?, face).map(|_| ());
+                if got.is_ok() {
                     self.holes = self.holes.saturating_sub(1);
                 }
-                (self.dead(Arena::Loop, l), [0, 0, 1, 0, 0], r)
+                (self.dead(Arena::Loop, ring), [0, 0, 1, 0, 0], got)
             }
             9 => {
-                let e = self.pick(Arena::Edge, x)?;
-                (self.dead(Arena::Edge, e), [-2, -1, -1, -1, -1], self.euler.kill_wire(ix(e)?))
+                let edge = self.pick(Arena::Edge, first)?;
+                let got = self.euler.kill_wire(ix(edge)?);
+                (self.dead(Arena::Edge, edge), [-2, -1, -1, -1, -1], got)
             }
             10 => {
-                let kind = if x % 2 == 0 { RegionKind::Solid } else { RegionKind::Void };
+                let kind = if first % 2 == 0 {
+                    RegionKind::Solid
+                } else {
+                    RegionKind::Void
+                };
                 let name = self.name();
                 (false, [0; 5], self.euler.make_region(kind, name).map(|_| ()))
             }
             11 => {
                 // Row 0 is the outside, which every publish needs.
-                let r = self.pick(Arena::Region, x).filter(|&r| r != 0)?;
-                (self.dead(Arena::Region, r), [0; 5], self.euler.kill_region(ix(r)?))
+                let region = self.pick(Arena::Region, first).filter(|&r| r != 0)?;
+                let got = self.euler.kill_region(ix(region)?);
+                (self.dead(Arena::Region, region), [0; 5], got)
             }
             12 => {
-                let (s, r) = (self.pick(Arena::Shell, x)?, self.pick(Arena::Region, y)?);
-                let dead = self.dead(Arena::Shell, s) || self.dead(Arena::Region, r);
-                (dead, [0; 5], self.euler.move_shell(ix(s)?, ix(r)?))
+                let shell = self.pick(Arena::Shell, first)?;
+                let region = self.pick(Arena::Region, second)?;
+                let dead = self.dead(Arena::Shell, shell) || self.dead(Arena::Region, region);
+                (dead, [0; 5], self.euler.move_shell(ix(shell)?, ix(region)?))
             }
             _ => return None,
         })
     }
 }
+
+/// What a step did: whether a row it was given is dead, the counts its table row adds, and what
+/// the editor answered; `None` for a step with nothing to act on.
+type Stepped = Option<(bool, [i64; 5], Result<(), TopoError>)>;
 
 /// Holds the case to every law of the module header.
 ///
@@ -346,12 +376,12 @@ fn run_case(case: &Case) -> Result<[u32; 13], Finding> {
             }
             Err(_) => {}
         }
-        let [v, e, f, l, s] = now.0;
-        let chi = v
-            .saturating_sub(e)
-            .saturating_add(f)
-            .saturating_sub(l.saturating_sub(f));
-        if chi != s.saturating_sub(run.holes).saturating_mul(2) {
+        let [vertices, edges, faces, loops, shells] = now.0;
+        let chi = vertices
+            .saturating_sub(edges)
+            .saturating_add(faces)
+            .saturating_sub(loops.saturating_sub(faces));
+        if chi != shells.saturating_sub(run.holes).saturating_mul(2) {
             return Err(law(
                 "V - E + F - R = 2 (S - H) after every step",
                 format!("step {at}: {now:?}, {} holes", run.holes),
