@@ -161,18 +161,22 @@
 //! - `ciborium-ll` 0.2.2 and `ciborium-io` 0.2.2 (Apache-2.0), without their default features:
 //!   the [`encoder`] target's oracle, an encoder written elsewhere that reads each finished item
 //!   head by head and writes it again, the versions `geom-op`'s tests pin.
+//! - `nix` 0.31.3 (MIT), a development dependency on Linux only, with its `pthread` and `signal`
+//!   modules alone: the tests' alarm thread sends `SIGALRM` to the fuzzing thread with it, so that
+//!   libFuzzer's per-input time limit works under the test harness (`tests/common/mod.rs`, issue
+//!   #764). Safe Rust over libc's `pthread_kill`, as the crate forbids unsafe code.
 //!
-//! Licences of every outside package this crate brings into a build, through `bolero` and
-//! `num-bigint`, on every target (`cargo tree --target all`), each record checked by `geom-test`'s
-//! `tests/licences.rs`.
+//! Licences of every outside package this crate brings into a build, through `bolero`,
+//! `num-bigint` and `nix`, on every target (`cargo tree --target all`), each record checked by
+//! `geom-test`'s `tests/licences.rs`.
 //! Where a package offers a choice, it is taken under the permissive licences offered (MIT or
 //! Apache-2.0):
 //!
 //! - MIT: `bolero`, `bolero-engine`, `bolero-generator`, `bolero-generator-derive`,
-//!   `bolero-libfuzzer`, `bolero-afl`, `bolero-honggfuzz`, `bolero-kani`, `pretty-hex`, `winnow`
-//!   and `crunchy` (through `half`).
-//! - MIT OR Apache-2.0: `half`, `anyhow`, `cfg-if`, `lazy_static`, `either`, `rand`, `rand_core`,
-//!   `rand_chacha`, `rand_xoshiro`, `getrandom`, `libc`, `ppv-lite86`, `proc-macro-crate`,
+//!   `bolero-libfuzzer`, `bolero-afl`, `bolero-honggfuzz`, `bolero-kani`, `pretty-hex`, `winnow`,
+//!   `nix`, `cfg_aliases` and `crunchy` (through `half`).
+//! - MIT OR Apache-2.0: `half`, `anyhow`, `bitflags`, `cfg-if`, `lazy_static`, `either`, `rand`,
+//!   `rand_core`, `rand_chacha`, `rand_xoshiro`, `getrandom`, `libc`, `ppv-lite86`, `proc-macro-crate`,
 //!   `toml_edit`, `toml_datetime`, `indexmap`, `hashbrown`, `equivalent`, `serde`, `serde_core`,
 //!   `serde_derive`, `proc-macro2`, `quote`, `syn`, `cc`, `find-msvc-tools`, `shlex`,
 //!   `num-bigint`, `num-integer`, `num-traits`, `autocfg`, `dashu-base`, `dashu-int`,

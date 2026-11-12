@@ -62,6 +62,13 @@ geom-name = { path = "../geom-name" }
 # libFuzzer, AFL or honggfuzz (cargo-bolero) and under Kani. MIT.
 bolero = "0.13.7"
 
+# Under libFuzzer on Linux, the tests' alarm thread sends SIGALRM to the fuzzing thread, so that
+# libFuzzer's per-input time limit works under the test harness (tests/common/mod.rs, issue #764):
+# `pthread_kill` as safe Rust, since the crate forbids unsafe code. MIT; only its `pthread` and
+# `signal` modules.
+[target.'cfg(target_os = "linux")'.dev-dependencies]
+nix = { version = "=0.31.3", default-features = false, features = ["pthread", "signal"] }
+
 [lints.rust]
 unsafe_code = "forbid"
 missing_docs = "warn"
