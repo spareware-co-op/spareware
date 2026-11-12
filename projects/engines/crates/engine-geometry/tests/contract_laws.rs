@@ -7,8 +7,15 @@
 //! healing lands, so "No tolerance grows" joins here with the first operation that takes one; the
 //! law itself is seeded in `geom-test/tests/contract_kit.rs`.
 //!
+//! The queries of piece G102 are held to the same laws, on bodies recorded at every class: a query
+//! reads its body and changes nothing (each call watches its input), answers the same twice and
+//! stops cleanly under every cancellation and budget, gives each error its schema lists, states the
+//! class its body is recorded with, no more and no less, and runs its schema's example. A query
+//! makes no coordinate, so for the range law it answers a body that fills the frame instead.
+//!
 //! Covers: `make.box`, `make.cone`, `make.cylinder`, `make.prism`, `make.sphere`, `make.torus`,
-//! `transform.mirror`, `transform.move`, `transform.pattern`, `transform.rotate`,
+//! `query.area`, `query.bounding_box`, `query.exactness`, `query.faces`, `query.validity`,
+//! `query.volume`, `transform.mirror`, `transform.move`, `transform.pattern`, `transform.rotate`,
 //! `transform.scale`.
 
 #![allow(
@@ -24,13 +31,14 @@ use std::collections::BTreeSet;
 use std::sync::Arc;
 
 use engine_geometry::operations::{
-    BoxInput, Copies, Instance, Made, Moved, OPERATIONS, PrismInput, RoundInput, SphereInput,
-    TorusInput, cone, cylinder, make_box, mirror, move_by, pattern, prism, rotate, scale, sphere,
-    torus,
+    BoxInput, Copies, Instance, Level, Made, Moved, OPERATIONS, PrismInput, RoundInput,
+    SphereInput, TorusInput, bounding_box, cone, cylinder, exactness, faces, make_box, mirror,
+    move_by, pattern, prism, rotate, scale, six_volume, sphere, torus, twice_area, validity,
 };
 use geom_math::{Axis, GridTransform, RationalTransform, Rotation, Scale, TypedTransform};
 use geom_num::{Exactness, GridStep, P3, Steps};
-use geom_op::{NameId, NameSet, OpContext, OpError, OpId, OpOutput, OpPath};
+use geom_op::history::History;
+use geom_op::{ErrorKind, Family, NameId, NameSet, OpContext, OpError, OpId, OpOutput, OpPath};
 use geom_run::{Budget, WorkMeter};
 use geom_test::Seed;
 use geom_test::contract::{
@@ -40,7 +48,7 @@ use geom_test::contract::{
 use geom_test::history::check_laws;
 use geom_test::rng::SplitMix64;
 use geom_topo::ix::Arena;
-use geom_topo::{Body, Builder};
+use geom_topo::{Body, BodyKind, Builder, Ix, SurfaceKind};
 
 /// A call, its answer the text of its whole result.
 type S = Subject<'static, String>;
@@ -107,6 +115,8 @@ struct Held {
     body: Arc<Body>,
     first: Arc<Body>,
     exactness: Exactness,
+    /// The history of the operation that made it, which `query.faces` reads roles from.
+    history: Arc<History>,
 }
 
 impl Held {
@@ -115,7 +125,14 @@ impl Held {
             body: Arc::new(out.result.body.clone()),
             first: Arc::new(out.result.body),
             exactness: out.exactness,
+            history: Arc::new(out.result.history),
         }
+    }
+
+    /// The same body recorded with `exactness`: a body does not hold its own class (24.4), so a
+    /// query is told it and must state it back.
+    fn recorded(self, exactness: Exactness) -> Self {
+        Self { exactness, ..self }
     }
 
     fn moved(&self, accept: Option<Exactness>) -> Moved<'_> {
@@ -219,6 +236,26 @@ fn unnamed() -> Held {
         body: Arc::new(body.clone()),
         first: Arc::new(body),
         exactness: Exactness::Exact,
+        history: Arc::new(b.result.history),
+    }
+}
+
+/// The box with `edit` made to its rows, published as `kind` without its names: a body a query
+/// must refuse. Publishing checks that every link stays inside its arena, not that a list ends or
+/// a face has a loop, which is what the queries' own errors are for.
+fn edited(kind: BodyKind, edit: impl FnOnce(&mut Builder)) -> Held {
+    let b = a_box();
+    let mut builder = Builder::edit(&b.result.body);
+    edit(&mut builder);
+    let mut meter = WorkMeter::new(Budget::UNLIMITED);
+    let body = builder
+        .publish(kind, b.result.body.outside(), &mut meter)
+        .unwrap();
+    Held {
+        body: Arc::new(body.clone()),
+        first: Arc::new(body),
+        exactness: Exactness::Exact,
+        history: Arc::new(b.result.history),
     }
 }
 
@@ -272,6 +309,9 @@ struct Driver {
     accept: Option<Box<dyn Fn(Option<Exactness>) -> S>>,
     /// A call reaching the frame's edge, and one a step past it.
     range: Option<(S, S)>,
+    /// For a query, which makes no coordinate and so has no step past the frame: a call on a body
+    /// that reaches the frame's edge on every side.
+    edge: Option<S>,
     /// The schema's example: what its call gave.
     example: Option<(Vec<(&'static str, u64)>, Exactness)>,
 }
@@ -731,6 +771,324 @@ fn drive_pattern() -> Driver {
     }
 }
 
+/// The flat bodies every query answers, each recorded at a class: a unit box, a box, a prism, and
+/// the box recorded Certified and Approximate, as a body read back from a file may be.
+fn flat() -> Vec<Held> {
+    vec![
+        unit_box(),
+        Held::new(a_box()),
+        Held::new(prism(&ctx(), &a_prism()).unwrap()),
+        Held::new(a_box()).recorded(certified(3)),
+        Held::new(a_box()).recorded(Exactness::Approximate {
+            deviation: Steps(5),
+            step: GridStep::Q0,
+        }),
+    ]
+}
+
+/// The curved primitives, which the queries of a body's whole answer and the flat ones refuse.
+fn curved() -> Vec<Held> {
+    vec![
+        Held::new(cylinder(&ctx(), &round(5, 10)).unwrap()),
+        Held::new(cone(&ctx(), &round(6, 12)).unwrap()),
+        Held::new(sphere(&ctx(), &ball(p(1, 2, 3), 5)).unwrap()),
+        Held::new(torus(&ctx(), &ring(p(0, 0, 0), 10, 3)).unwrap()),
+    ]
+}
+
+/// A box from −(2^40 − 1) to 2^40 − 1 on every axis: every vertex on the frame's edge.
+fn filling() -> Held {
+    Held::new(
+        make_box(
+            &ctx(),
+            &BoxInput {
+                min: p(-EDGE, -EDGE, -EDGE),
+                size: [Steps(2 * EDGE.unsigned_abs()); 3],
+            },
+        )
+        .unwrap(),
+    )
+}
+
+/// The box with a face list that comes back on itself.
+fn ringed_faces() -> Held {
+    edited(BodyKind::Solid, |b| {
+        b.arenas
+            .faces
+            .next
+            .set(Ix::new(1).unwrap(), Some(Ix::new(0).unwrap()))
+            .unwrap();
+    })
+}
+
+/// The box with a loop list that comes back on itself.
+fn ringed_loops() -> Held {
+    edited(BodyKind::Solid, |b| {
+        b.arenas
+            .loops
+            .next
+            .set(Ix::new(0).unwrap(), Some(Ix::new(0).unwrap()))
+            .unwrap();
+    })
+}
+
+/// The box with its first face's loops taken off.
+fn loopless() -> Held {
+    edited(BodyKind::Solid, |b| {
+        b.arenas
+            .faces
+            .first_loop
+            .set(Ix::new(0).unwrap(), None)
+            .unwrap();
+    })
+}
+
+/// The box's rows published as a sheet.
+fn sheet() -> Held {
+    edited(BodyKind::Sheet, |_| {})
+}
+
+/// The first face of `held` on a plane, or the first not on one.
+fn face_of(held: &Held, plane: bool) -> u32 {
+    let a = held.body.arenas();
+    (0..a.rows(Arena::Face))
+        .find(|&row| {
+            let face = a.faces.get(Ix::new(row).unwrap()).unwrap();
+            matches!(a.surfaces.get(face.surface), Some(SurfaceKind::Plane(_))) == plane
+        })
+        .unwrap()
+}
+
+/// `query.area` of face `face` of `held`.
+fn area_of(held: &Held, face: u32) -> S {
+    held.on(format!("query.area face {face}"), move |c, h| {
+        twice_area(c, &h.body, Ix::new(face).unwrap(), h.exactness)
+    })
+}
+
+/// Every flat body's every face, with the class its body is recorded with.
+fn areas() -> Vec<(S, Vec<Exactness>)> {
+    flat()
+        .iter()
+        .flat_map(|h| {
+            let faces = h.body.arenas().rows(Arena::Face);
+            (0..faces).map(move |f| (area_of(h, f), vec![h.exactness]))
+        })
+        .collect()
+}
+
+fn drive_area() -> Driver {
+    let round = curved();
+    let cyl = &round[0];
+    let example = Held::new(a_box_at_origin());
+    let listed = faces(
+        &ctx(),
+        &example.body,
+        &[&example.history],
+        example.exactness,
+    )
+    .unwrap();
+    let min_z = listed
+        .result
+        .iter()
+        .find(|f| f.roles.iter().any(|r| r.name() == "min.z"))
+        .unwrap()
+        .row
+        .face;
+    let shown = twice_area(&ctx(), &example.body, min_z, example.exactness).unwrap();
+    assert_eq!(shown.result, [0, 0, -400]);
+    Driver {
+        good: areas(),
+        triggers: vec![
+            trigger("Malformed", area_of(&unit_box(), 99)),
+            trigger("Malformed", area_of(&ringed_loops(), 0)),
+            trigger("CurvedFace", area_of(cyl, face_of(cyl, false))),
+            trigger("CurvedEdge", area_of(cyl, face_of(cyl, true))),
+            trigger("NoLoops", area_of(&loopless(), 0)),
+        ],
+        edge: Some(area_of(&filling(), 0)),
+        example: Some((vec![], shown.exactness)),
+        ..Driver::default()
+    }
+}
+
+/// `query.volume` of `held`.
+fn volume_of(held: &Held) -> S {
+    held.on("query.volume", |c, h| six_volume(c, &h.body, h.exactness))
+}
+
+fn drive_volume() -> Driver {
+    let round = curved();
+    let (cyl, ball) = (&round[0], &round[2]);
+    let shown = six_volume(&ctx(), &a_box_at_origin().result.body, Exactness::Exact).unwrap();
+    assert_eq!(shown.result, geom_num::I256::from_i64(36_000));
+    Driver {
+        good: flat()
+            .iter()
+            .map(|h| (volume_of(h), vec![h.exactness]))
+            .collect(),
+        triggers: vec![
+            trigger("Malformed", volume_of(&ringed_faces())),
+            trigger("CurvedEdge", volume_of(cyl)),
+            trigger("CurvedFace", volume_of(ball)),
+            trigger("NoLoops", volume_of(&loopless())),
+            trigger("NotSolid", volume_of(&sheet())),
+        ],
+        edge: Some(volume_of(&filling())),
+        example: Some((vec![], shown.exactness)),
+        ..Driver::default()
+    }
+}
+
+/// The box of 10 by 20 by 30 at the origin, the queries' examples' body.
+fn a_box_at_origin() -> OpOutput<Made> {
+    make_box(
+        &ctx(),
+        &BoxInput {
+            min: p(0, 0, 0),
+            size: [Steps(10), Steps(20), Steps(30)],
+        },
+    )
+    .unwrap()
+}
+
+/// Every flat and curved body, with the class each is recorded with.
+fn every_body() -> Vec<Held> {
+    let mut all = flat();
+    all.extend(curved());
+    all
+}
+
+/// `query.bounding_box` of `held`.
+fn box_of(held: &Held) -> S {
+    held.on("query.bounding_box", |c, h| {
+        bounding_box(c, &h.body, h.exactness)
+    })
+}
+
+fn drive_bounding_box() -> Driver {
+    let shown = bounding_box(&ctx(), &a_box_at_origin().result.body, Exactness::Exact).unwrap();
+    let boxed = shown.result.unwrap();
+    assert!(boxed.tight);
+    assert_eq!(
+        (boxed.bound.min(), boxed.bound.max()),
+        (p(0, 0, 0), p(10, 20, 30))
+    );
+    Driver {
+        good: every_body()
+            .iter()
+            .map(|h| (box_of(h), vec![h.exactness]))
+            .collect(),
+        triggers: vec![trigger("Malformed", box_of(&ringed_loops()))],
+        edge: Some(box_of(&filling())),
+        example: Some((vec![], shown.exactness)),
+        ..Driver::default()
+    }
+}
+
+/// `query.exactness` of `held`.
+fn report_of(held: &Held) -> S {
+    held.on("query.exactness", |c, h| exactness(c, &h.body, h.exactness))
+}
+
+fn drive_exactness() -> Driver {
+    let round = curved();
+    let cyl = &round[0];
+    let shown = exactness(&ctx(), &cyl.body, cyl.exactness).unwrap();
+    let r = &shown.result;
+    assert!(r.report.passed());
+    assert_eq!((r.curved_faces, r.curved_edges), (1, 2));
+    Driver {
+        good: every_body()
+            .iter()
+            .map(|h| (report_of(h), vec![h.exactness]))
+            .collect(),
+        edge: Some(report_of(&filling())),
+        example: Some((
+            vec![
+                ("flat", u64::from(r.flat_faces)),
+                ("straight", u64::from(r.straight_edges)),
+            ],
+            shown.exactness,
+        )),
+        ..Driver::default()
+    }
+}
+
+/// `query.faces` of `held`, with the history that made it.
+fn faces_of(held: &Held) -> S {
+    held.on("query.faces", |c, h| {
+        faces(c, &h.body, &[&h.history], h.exactness)
+    })
+}
+
+fn drive_faces() -> Driver {
+    let made = a_box_at_origin();
+    let shown = faces(
+        &ctx(),
+        &made.result.body,
+        &[&made.result.history],
+        made.exactness,
+    )
+    .unwrap();
+    let roles: BTreeSet<String> = shown
+        .result
+        .iter()
+        .flat_map(|f| f.roles.iter().map(|r| r.name().to_owned()))
+        .collect();
+    let said = ["min.x", "max.x", "min.y", "max.y", "min.z", "max.z"];
+    assert_eq!(roles, said.map(str::to_owned).into_iter().collect());
+    Driver {
+        good: every_body()
+            .iter()
+            .map(|h| (faces_of(h), vec![h.exactness]))
+            .collect(),
+        triggers: vec![trigger("Malformed", faces_of(&ringed_loops()))],
+        edge: Some(faces_of(&filling())),
+        example: Some((
+            vec![("row", u64::try_from(shown.result.len()).unwrap())],
+            shown.exactness,
+        )),
+        ..Driver::default()
+    }
+}
+
+/// `query.validity` of `held` at `level`.
+fn validity_of(held: &Held, level: Level) -> S {
+    held.on(format!("query.validity {level:?}"), move |c, h| {
+        validity(c, &h.body, h.exactness, level)
+    })
+}
+
+fn drive_validity() -> Driver {
+    let shown = validity(
+        &ctx(),
+        &a_box_at_origin().result.body,
+        Exactness::Exact,
+        Level::Full,
+    )
+    .unwrap();
+    let r = &shown.result;
+    Driver {
+        good: every_body()
+            .iter()
+            .flat_map(|h| {
+                [Level::Cheap, Level::Full].map(|level| (validity_of(h, level), vec![h.exactness]))
+            })
+            .collect(),
+        edge: Some(validity_of(&filling(), Level::Full)),
+        example: Some((
+            vec![
+                ("fault", u64::try_from(r.faults().len()).unwrap()),
+                ("group", u64::try_from(r.ran().count()).unwrap()),
+                ("deferred", r.deferred()),
+            ],
+            shown.exactness,
+        )),
+        ..Driver::default()
+    }
+}
+
 /// Every driver, by the name its operation registers.
 fn drivers() -> Vec<(&'static str, Driver)> {
     vec![
@@ -743,6 +1101,12 @@ fn drivers() -> Vec<(&'static str, Driver)> {
         ("make.prism", drive_prism()),
         ("make.sphere", drive_sphere()),
         ("make.torus", drive_torus()),
+        ("query.area", drive_area()),
+        ("query.bounding_box", drive_bounding_box()),
+        ("query.exactness", drive_exactness()),
+        ("query.faces", drive_faces()),
+        ("query.validity", drive_validity()),
+        ("query.volume", drive_volume()),
         ("transform.mirror", drive_mirror()),
         ("transform.move", drive_move()),
         ("transform.pattern", drive_pattern()),
@@ -753,13 +1117,7 @@ fn drivers() -> Vec<(&'static str, Driver)> {
 
 #[test]
 fn every_registered_operation_has_a_driver() {
-    // The queries (piece G102) are Preview and carry no driver yet: the map lists their contract
-    // evidence as missing. A piece that drives them removes the exemption here.
-    let registered: BTreeSet<&str> = OPERATIONS
-        .iter()
-        .map(|o| o.schema.name)
-        .filter(|name| !name.starts_with("query."))
-        .collect();
+    let registered: BTreeSet<&str> = OPERATIONS.iter().map(|o| o.schema.name).collect();
     let driven: BTreeSet<&str> = drivers().iter().map(|(name, _)| *name).collect();
     assert_eq!(registered, driven);
 }
@@ -824,10 +1182,40 @@ fn exactness_is_never_lost_unasked() {
 }
 
 #[test]
+fn a_query_states_its_bodys_class() {
+    // Principle 3 for a query: its answer is as exact as the record it was given, so it states
+    // that record, never a class of its own (22; `geom_topo::query_ops`).
+    each(|schema, driver| {
+        if schema.family != Family::Query {
+            return;
+        }
+        for (subject, inputs) in &driver.good {
+            let done = subject.once().unwrap();
+            assert_eq!(&[done.exactness], &inputs[..], "{}", subject.label());
+        }
+    });
+}
+
+#[test]
 fn the_range_holds_at_the_frames_edge() {
-    each(|_, driver| {
-        let (inside, outside) = driver.range.as_ref().unwrap();
-        range_holds(inside, outside).unwrap();
+    each(|schema, driver| {
+        let ranged = schema
+            .errors
+            .iter()
+            .any(|e| e.kind == ErrorKind::FrameRangeExceeded);
+        if ranged {
+            assert!(driver.edge.is_none(), "{}", schema.name);
+            let (inside, outside) = driver.range.as_ref().unwrap();
+            range_holds(inside, outside).unwrap();
+        } else {
+            // Only a query makes no coordinate, so only a query has no step past the frame: it
+            // answers a body whose every vertex is on the frame's edge, exactly.
+            assert_eq!(schema.family, Family::Query, "{}", schema.name);
+            assert!(driver.range.is_none(), "{}", schema.name);
+            let edge = driver.edge.as_ref().unwrap();
+            let answered = edge.once().map(|_| ()).map_err(|e| e.kind());
+            assert_eq!(answered, Ok(()), "{}", edge.label());
+        }
     });
 }
 

@@ -1075,8 +1075,9 @@ const QUERY_EXACTNESS: OpSchema = OpSchema {
     ],
     batch: false,
     name_free: false,
-    example: "query.exactness { body: a cylinder, exactness: Certified } gives 2 flat faces, 1 \
-              curved face, 0 straight edges, 2 curved edges, and a report that passed.",
+    example: "query.exactness { body: the cylinder of radius 5 and height 10, exactness: Certified \
+              within 1 step } gives 2 flat faces, 1 curved face, 0 straight edges, 2 curved edges, \
+              a report that passed, and Certified within 1 step.",
 };
 
 /// `query.faces`.
@@ -1117,7 +1118,7 @@ const FACES: OpSchema = OpSchema {
     batch: false,
     name_free: false,
     example: "query.faces { body: a box, histories: [its make.box history], exactness: Exact } \
-              gives six rows with the roles min.x, max.x, min.y, max.y, min.z and max.z.",
+              gives 6 rows with the roles min.x, max.x, min.y, max.y, min.z and max.z, and Exact.",
 };
 
 /// `query.validity`.
@@ -1153,8 +1154,8 @@ const VALIDITY: OpSchema = OpSchema {
     charges: &[Charge::new(QUERY, "row the checker visits", 1)],
     batch: false,
     name_free: false,
-    example: "query.validity { body: a box, exactness: Exact, level: Full } gives a report with \
-              no faults, all four groups run and nothing deferred.",
+    example: "query.validity { body: a box, exactness: Exact, level: Full } gives a report with 0 \
+              faults, 4 groups run and 0 deferred, and Exact.",
 };
 
 /// `query.volume`.
