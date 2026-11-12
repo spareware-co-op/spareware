@@ -9,7 +9,8 @@
 //!   of the arctangent's own cuts and one double either side, among subnormal coordinates too;
 //!   and a budget one unit short stops it.
 //! - An offset's evaluation costs its basis's plus `Offset::jet_work`, at a point and over a span,
-//!   in 2D and in 3D, at every order the cache uses.
+//!   in 2D and in 3D, at every order the cache uses; an order its jets cannot hold is refused
+//!   before any work.
 //! - The offset of issue #765's smallest input, under that input's transform and the fuzz
 //!   target's budget of 2,000,000 units, is a typed stop, and an ordinary offset's whole kind
 //!   contract still fits half that budget, in 2D and in 3D.
@@ -302,6 +303,35 @@ fn the_jets_work_is_their_terms() {
         }
     }
     assert_eq!(Offset::<3>::jet_work(usize::MAX), Err(CurveError::Defect));
+}
+
+#[test]
+fn an_order_the_jets_cannot_hold_is_refused_before_any_work() {
+    // From order 170 the basis's jets would need 171!, past the doubles, so the jets would be
+    // NotFinite whatever the basis gave: refused so before the basis is asked or anything is
+    // charged, and never the Defect of a count past u64 (from about 1.4·10⁹).
+    let offset = Offset::new(
+        ellipse::<3>(),
+        OffsetLaw::Reference {
+            distance: 0.25,
+            direction: [0.0, 0.0, 1.0],
+        },
+    )
+    .unwrap();
+    for order in [170, 171, 1_000_000, 1_400_000_000, usize::MAX] {
+        let mut m = meter();
+        let got = offset.enclose(0.125, Limit::FromRight, order, &mut m);
+        assert_eq!(got.err(), Some(CurveError::NotFinite), "order {order}");
+        assert_eq!(m.used().work, 0, "order {order}");
+        let mut m = meter();
+        let got = offset.derivative_bound((0.0, 0.0625), order, &mut m);
+        assert_eq!(got.err(), Some(CurveError::NotFinite), "order {order}");
+        assert_eq!(m.used().work, 0, "order {order}");
+    }
+    // One order lower the jets are built, and charged for.
+    let mut m = meter();
+    let _ = offset.enclose(0.125, Limit::FromRight, 169, &mut m);
+    assert!(m.used().work >= u128::from(Offset::<3>::jet_work(169).unwrap()));
 }
 
 /// An ordinary ellipse in the plane z = 0, in D dimensions, trimmed to [−½, ½].

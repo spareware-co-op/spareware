@@ -5,7 +5,7 @@
 //! - `Offset::jet_work` is thirteen recurrences of C(order + 4, 4) terms, a unit a term.
 //! - An offset's partials cost its base's one order higher plus the jets': one evaluation at a
 //!   point, two over a box (the box's and its centre's, for the centred form), at every order
-//!   the cache uses.
+//!   the cache uses; an order the jets cannot hold is refused by name before any work.
 //! - The offset of issue #765's smallest input, under the fuzz target's budget of 4,000,000
 //!   units, is a typed stop, and an ordinary offset's whole kind contract still fits that budget.
 //!
@@ -23,7 +23,7 @@
 
 use geom_curve::{CurveError, Frame};
 use geom_math::{Axis, Transform, TypedTransform};
-use geom_nurbs::Limit;
+use geom_nurbs::{Limit, NurbsError};
 use geom_run::{Budget, Stop, WorkMeter};
 use geom_surface::{Cylinder, Offset, ParamBox, ParamSurface, SurfaceKind, contract};
 
@@ -115,6 +115,35 @@ fn an_offsets_partials_cost_its_bases_and_its_jets() {
                 + base_work(&base, centre, order + 1)
                 + jets(order),
             "order {order}"
+        );
+    }
+}
+
+#[test]
+fn an_order_the_jets_cannot_hold_is_refused_before_any_work() {
+    // The base's jets go one order higher, and a jet holds 18 at most: an offset's jets of order
+    // 18 or more are refused as the jets refuse them (their first factorial past 18, 19!), before
+    // the base is asked or anything is charged, and never the Defect of a count past u64 (from
+    // order 65,534). At a point the partials' order is the jets'; over a box it is one lower.
+    let (_, offset) = ordinary();
+    let refused = Err(CurveError::Nurbs(NurbsError::DerivativeOrder { order: 19 }));
+    let at = ((0.125, 0.125), (0.5, 0.5));
+    let region = ((0.0, 0.25), (0.0, 1.0));
+    for (r, from) in [(at, 18), (region, 17)] {
+        for order in [from, from + 1, 65_533, 65_534, usize::MAX] {
+            let mut m = meter();
+            assert_eq!(
+                offset.partials_over(r, SIDES, order, &mut m),
+                refused,
+                "order {order}"
+            );
+            assert_eq!(m.used().work, 0, "order {order}");
+        }
+        // One order lower the jets are built.
+        assert!(
+            offset
+                .partials_over(r, SIDES, from - 1, &mut meter())
+                .is_ok()
         );
     }
 }

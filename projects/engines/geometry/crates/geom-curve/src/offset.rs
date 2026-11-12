@@ -86,7 +86,7 @@ use geom_run::WorkMeter;
 use crate::affine::Entries;
 use crate::error::CurveError;
 use crate::form::check_parameter;
-use crate::jet::Jet;
+use crate::jet::{Jet, MAX_ORDER};
 use crate::map::NurbsForm;
 use crate::param::{CurveKind, DerivativeBound, ParamCurve};
 use crate::taylor;
@@ -376,7 +376,10 @@ impl<const D: usize> Offset<D> {
     ///
     /// # Errors
     ///
-    /// [`CurveError::Defect`] for an order whose count passes `u64`, which no caller asks.
+    /// [`CurveError::Defect`] for an order whose count passes `u64`, which no caller asks: the
+    /// offset's jets of an order from 170 up are refused first (the basis's go one order higher,
+    /// and past 170 their factorials pass the doubles), and the count passes `u64` only from
+    /// about 1.4·10⁹.
     pub fn jet_work(order: usize) -> Result<u64, CurveError> {
         let wide = |x: usize| u64::try_from(x).map_err(|_| CurveError::Defect);
         let n = wide(order)?.checked_add(1).ok_or(CurveError::Defect)?;
@@ -402,6 +405,12 @@ impl<const D: usize> Offset<D> {
         order: usize,
         meter: &mut WorkMeter<'_>,
     ) -> Result<Vec<Jet>, CurveError> {
+        // The basis's jets go one order higher, and past `jet::MAX_ORDER` building them is
+        // NotFinite whatever the basis gives: refused here as the jets refuse it, before the
+        // basis is asked and before the charge, whose count would pass `u64` far beyond.
+        if order >= MAX_ORDER {
+            return Err(CurveError::NotFinite);
+        }
         // Charged before the work, so a budget stops an evaluation it cannot pay for.
         meter.charge(Self::jet_work(order)?)?;
         let c = self.basis_jets(at, order, meter)?;

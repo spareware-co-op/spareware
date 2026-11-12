@@ -124,7 +124,7 @@ use geom_nurbs::{Bounds, Changed, Direction, Limit};
 use geom_run::WorkMeter;
 
 use crate::cache;
-use crate::jet::Jet;
+use crate::jet::{self, Jet};
 use crate::param::{
     ParamBox, ParamSurface, SurfaceForm, SurfaceKind, centred, offset_from, partial_index,
 };
@@ -385,8 +385,9 @@ impl Offset {
     ///
     /// # Errors
     ///
-    /// [`CurveError::Defect`] for an order whose count passes `u64`, which no caller asks (the
-    /// jets refuse an order above 18).
+    /// [`CurveError::Defect`] for an order whose count passes `u64`, which no caller asks: the
+    /// offset's jets of an order from 18 up are refused first (the base's go one order higher, and
+    /// a jet holds 18 at most), and the count passes `u64` only from 65,534.
     pub fn jet_work(order: usize) -> Result<u64, CurveError> {
         let n = u64::try_from(order).map_err(|_| CurveError::Defect)?;
         // C(n + 4, 4) = (n + 1)(n + 2)(n + 3)(n + 4)/24: a product of four consecutive whole
@@ -412,6 +413,10 @@ impl Offset {
         order: usize,
         meter: &mut WorkMeter<'_>,
     ) -> Result<[Jet; 3], CurveError> {
+        // The base's jets go one order higher: an order they cannot hold is refused here as they
+        // refuse it, before the base is asked and before the charge, whose count would pass
+        // `u64` far beyond.
+        jet::check_order(order.saturating_add(1))?;
         // Charged before the work, so a budget stops an evaluation it cannot pay for.
         meter.charge(Offset::jet_work(order)?)?;
         let k = order.checked_add(1).ok_or(CurveError::Defect)?;
@@ -479,7 +484,8 @@ impl Offset {
         if (point_u && point_v) || in_u || in_v {
             return self.direct(region, sides, order, meter);
         }
-        let up = order.checked_add(1).ok_or(CurveError::Defect)?;
+        // No order this high is held: the jets refuse it by name.
+        let up = order.saturating_add(1);
         let wide = self.direct(region, sides, up, meter)?;
         let (cu, cv) = (f64::midpoint(u0, u1), f64::midpoint(v0, v1));
         let at = self.direct(((cu, cu), (cv, cv)), sides, order, meter)?;
