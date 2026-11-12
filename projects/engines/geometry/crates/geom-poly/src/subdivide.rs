@@ -1479,8 +1479,13 @@ mod tests {
     use geom_num::plane::Plane;
     use geom_run::{Budget, Exec, WorkMeter};
 
-    use super::{Child, Divided, Halves, Shape, around, arrange_reusing};
+    use super::{
+        Child, Divided, Halves, Node, Part, Printer, Shape, Step, Trail, around, arrange_reusing,
+        built, next_level, solved_in,
+    };
     use crate::convex::Piece;
+    use crate::cut::meetings;
+    use crate::order::Meeting;
     use crate::trace::{Cell, Polygon};
     use crate::winding::{Winding, WindingTest};
 
@@ -1755,6 +1760,110 @@ mod tests {
             assert_ne!(*base, *other);
             assert_ne!(mirror(&base), mirror(&other));
         }
+        // A split whose halves differ only in which of its polygons they took: no call makes
+        // two such, as a box's split is its own, but the comparison is the derived one still.
+        let took = |from: Vec<usize>| {
+            one(Shape::Split(Box::new(Halves {
+                lower: Child {
+                    from,
+                    divided: one(Shape::Dropped),
+                },
+                upper: Child {
+                    from: alloc::vec![1],
+                    divided: one(Shape::Dropped),
+                },
+            })))
+        };
+        let (first, second) = (took(alloc::vec![0]), took(alloc::vec![0, 1]));
+        assert_eq!(*first, *took(alloc::vec![0]));
+        assert_ne!(*first, *second);
+        assert_ne!(mirror(&first), mirror(&second));
+    }
+
+    #[test]
+    fn a_struct_or_variant_with_no_fields_prints_its_name_alone() {
+        // Every struct and tuple variant of the tree has a field, so the printer never closes one
+        // that has none; were one to come, it would print as the derived form does, the name.
+        struct Bare;
+        impl fmt::Debug for Bare {
+            fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+                let mut printer = Printer {
+                    pretty: f.alternate(),
+                    f,
+                    depth: 0,
+                    on_newline: false,
+                    open: Vec::new(),
+                };
+                let mut stack = alloc::vec![
+                    Part::CloseTuple,
+                    Part::Open("Variant"),
+                    Part::CloseStruct,
+                    Part::Open("Unit"),
+                ];
+                while let Some(part) = stack.pop() {
+                    printer.put(part, &mut stack)?;
+                }
+                // Nothing open is left to close.
+                printer.put(Part::CloseStruct, &mut stack)?;
+                printer.put(Part::CloseTuple, &mut stack)
+            }
+        }
+        assert_eq!(format!("{Bare:?}"), "UnitVariant");
+        assert_eq!(format!("{Bare:#?}"), "UnitVariant");
+    }
+
+    #[test]
+    fn a_leaf_without_its_points_makes_them() {
+        // A box taken from an earlier tree carries no points, and its answer is always taken with
+        // it; solved here anyway, it makes its points and gives the pieces a box with them gives.
+        let mut list = Vec::new();
+        block([0; 3], [4; 3], 0, &mut list);
+        block([2; 3], [6; 3], 1, &mut list);
+        let node = |points: Vec<Vec<Option<Meeting>>>| Node {
+            key: 0,
+            depth: 0,
+            cell: around(&list).unwrap(),
+            reference: Winding::new(),
+            polygons: Arc::new(list.clone()),
+            sources: (0..list.len()).collect(),
+            points,
+            kept: Trail::default(),
+        };
+        let meter = &mut WorkMeter::new(Budget::UNLIMITED);
+        let with = node(list.iter().map(|p| meetings(&p.piece)).collect());
+        let without = node(Vec::new());
+        let want = solved_in(&with, &[], meter).unwrap();
+        assert!(want.len() >= list.len());
+        assert_eq!(solved_in(&without, &[], meter).unwrap(), want);
+    }
+
+    #[test]
+    fn a_held_step_without_a_held_box_is_dropped() {
+        // `step` says a box is held only when it holds one, so this never comes; were it to, the
+        // box would be kept as dropped and nothing below it made.
+        let (mut pending, mut leaves, mut next) = (alloc::vec![None], Vec::new(), Vec::new());
+        let node = Node {
+            key: 0,
+            depth: 0,
+            cell: Cell {
+                low: [-1; 3],
+                high: [1; 3],
+            },
+            reference: Winding::new(),
+            polygons: Arc::new(Vec::new()),
+            sources: Vec::new(),
+            points: Vec::new(),
+            kept: Trail {
+                old: None,
+                held: false,
+                slot: Some(0),
+            },
+        };
+        next_level(node, Step::Held, &mut pending, &mut leaves, &mut next);
+        assert!(leaves.is_empty() && next.is_empty());
+        let kept = built(pending).unwrap();
+        assert_eq!(kept.shape, Shape::Dropped);
+        assert_eq!(kept.work, 0);
     }
 
     #[test]
