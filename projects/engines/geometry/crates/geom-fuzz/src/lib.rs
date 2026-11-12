@@ -31,8 +31,16 @@
 //! [`linalg`], the dense decompositions are refused or finite and the spectral ones backward stable
 //! (G49, G50), and [`roots`], the root engine misses no root and proves none twice, Brent's
 //! zero brackets its sign change (G51, G52, G53), and [`maths`], the proven maths functions are
-//! correctly rounded (G47). The layout every target follows, and how each engine runs it locally and in CI,
-//! is in this crate's `README.md`.
+//! correctly rounded (G47). Gate 3 (24.7: every reader is a fuzz target) adds [`encoder`],
+//! `geom-op`'s canonical encoder refuses without a trace and writes only canonical items (G86);
+//! [`records`], the record layer reads the same twice and however its reads split, refuses inside
+//! its input and accepts only canonical records and files (G92); [`bodies`], the body records read
+//! the same twice and give a body that writes and reads to itself (G94); [`names`], the names,
+//! history, recipe and attributes records accept only the one encoding of what they read (G95);
+//! [`operations`], the operation record likewise (G96); and [`open`], containers come back from a
+//! file to the same blobs and trust on open keeps damage with the body it is in (G108). The
+//! layout every target follows, and how each engine runs it locally and in CI, is in this crate's
+//! `README.md`.
 //!
 //! Layer: Development, in chapter 27's crate table: a development crate, outside the
 //! thirteen layers of the crates that ship. It never ships, and its dependencies are as needed
@@ -147,23 +155,34 @@
 //! - `num-bigint` 0.4.8 (MIT OR Apache-2.0), the oracle of the [`wide`] and [`variants`] targets:
 //!   exact arbitrary-precision integers, the big-integer oracle chapter 29.3 names, sharing no
 //!   code with `geom-num`.
+//! - `geom-format`, `geom-op`, `geom-topo` and `geom-run` (Apache-2.0, ours), the code under test
+//!   of the [`records`], [`bodies`], [`names`], [`operations`] and [`open`] targets, and `geom-op`'s
+//!   encoder that of the [`encoder`] target.
+//! - `ciborium-ll` 0.2.2 and `ciborium-io` 0.2.2 (Apache-2.0), without their default features:
+//!   the [`encoder`] target's oracle, an encoder written elsewhere that reads each finished item
+//!   head by head and writes it again, the versions `geom-op`'s tests pin.
+//! - `nix` 0.31.3 (MIT), a development dependency on Linux only, with its `pthread` and `signal`
+//!   modules alone: the tests' alarm thread sends `SIGALRM` to the fuzzing thread with it, so that
+//!   libFuzzer's per-input time limit works under the test harness (`tests/common/mod.rs`, issue
+//!   #764). Safe Rust over libc's `pthread_kill`, as the crate forbids unsafe code.
 //!
-//! Licences of every outside package this crate brings into a build, through `bolero` and
-//! `num-bigint`, on every target (`cargo tree --target all`), each record checked by `geom-test`'s
-//! `tests/licences.rs`.
+//! Licences of every outside package this crate brings into a build, through `bolero`,
+//! `num-bigint` and `nix`, on every target (`cargo tree --target all`), each record checked by
+//! `geom-test`'s `tests/licences.rs`.
 //! Where a package offers a choice, it is taken under the permissive licences offered (MIT or
 //! Apache-2.0):
 //!
 //! - MIT: `bolero`, `bolero-engine`, `bolero-generator`, `bolero-generator-derive`,
-//!   `bolero-libfuzzer`, `bolero-afl`, `bolero-honggfuzz`, `bolero-kani`, `pretty-hex` and `winnow`.
-//! - MIT OR Apache-2.0: `anyhow`, `cfg-if`, `lazy_static`, `either`, `rand`, `rand_core`,
-//!   `rand_chacha`, `rand_xoshiro`, `getrandom`, `libc`, `ppv-lite86`, `proc-macro-crate`,
+//!   `bolero-libfuzzer`, `bolero-afl`, `bolero-honggfuzz`, `bolero-kani`, `pretty-hex`, `winnow`,
+//!   `nix`, `cfg_aliases` and `crunchy` (through `half`).
+//! - MIT OR Apache-2.0: `half`, `anyhow`, `bitflags`, `cfg-if`, `lazy_static`, `either`, `rand`,
+//!   `rand_core`, `rand_chacha`, `rand_xoshiro`, `getrandom`, `libc`, `ppv-lite86`, `proc-macro-crate`,
 //!   `toml_edit`, `toml_datetime`, `indexmap`, `hashbrown`, `equivalent`, `serde`, `serde_core`,
 //!   `serde_derive`, `proc-macro2`, `quote`, `syn`, `cc`, `find-msvc-tools`, `shlex`,
 //!   `num-bigint`, `num-integer`, `num-traits`, `autocfg`, `dashu-base`, `dashu-int`,
 //!   `dashu-ratio` and `static_assertions`.
 //! - (MIT OR Apache-2.0) AND Unicode-3.0: `unicode-ident`.
-//! - Apache-2.0: `num-modular` (through `dashu-int`).
+//! - Apache-2.0: `num-modular` (through `dashu-int`), `ciborium-ll` and `ciborium-io`.
 //! - BSD-2-Clause OR Apache-2.0 OR MIT: `zerocopy` and `zerocopy-derive`.
 //! - Apache-2.0 WITH LLVM-exception OR Apache-2.0 OR MIT: `wasip2` and `wit-bindgen` (WASI targets
 //!   only).
@@ -192,16 +211,22 @@ pub mod adversarial;
 pub mod arenas;
 pub mod attributes;
 pub mod batch;
+pub mod bodies;
 pub mod boxtree;
 pub mod cache;
 pub mod cbor;
 pub mod curves;
+pub mod encoder;
 pub mod linalg;
 pub mod make;
 pub mod maths;
+pub mod names;
 pub mod nurbs;
+pub mod open;
+pub mod operations;
 pub mod orient2d;
 pub mod predicates;
+pub mod records;
 pub mod robustness;
 pub mod roots;
 pub mod seeded;
