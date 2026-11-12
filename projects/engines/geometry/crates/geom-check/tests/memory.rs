@@ -18,6 +18,10 @@
     clippy::indexing_slicing,
     reason = "test code: a failure should stop loudly"
 )]
+#![allow(
+    clippy::arithmetic_side_effects,
+    reason = "test code may use native arithmetic, and clippy sees no #[test] here"
+)]
 
 mod common;
 
