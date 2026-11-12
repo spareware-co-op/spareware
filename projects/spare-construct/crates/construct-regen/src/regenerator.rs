@@ -2,8 +2,9 @@
 //! leaves regeneration to this, as note A05 says, so a slow rebuild never holds up the log.
 //!
 //! Everything written here is derived: bodies and display records under their content IDs, what
-//! each element built to, and the area index. It isn't in any log, because the log can make it
-//! again. [`Regenerator::rebuild`] does exactly that, and the tests check it gives the same bytes.
+//! each element built to, the area index, and each document's elements listed by kind. It isn't
+//! in any log, because the log can make it again. [`Regenerator::rebuild`] does exactly that, and
+//! the tests check it gives the same bytes.
 //!
 //! Large records go to file storage, linked by hash, because a store holds small values well: note
 //! A06 measured a 16 MB record taking 60 ms to write, and a view rarely needs all of it.
@@ -339,6 +340,16 @@ impl<K: Kv, F: FileStore> Regenerator<K, F> {
                 };
                 txn.delete(cell.key()).await?;
             }
+            // Records are never deleted, so the old one still says what kind it was.
+            let record = kit_store::Place::Record {
+                project: project.clone(),
+                hash: old.input.clone(),
+            };
+            let before: Option<Element> = read_row(txn, &record.key()).await?;
+            let before = before.ok_or_else(|| damaged("an element's old record is missing"))?;
+            if let Some(kind) = kind_row(project, document, &before) {
+                txn.delete(kind.key()).await?;
+            }
         }
         let Some(after) = after else {
             txn.delete(place.key()).await?;
@@ -351,6 +362,9 @@ impl<K: Kv, F: FileStore> Regenerator<K, F> {
         };
         let element: Option<Element> = read_row(txn, &record.key()).await?;
         let element = element.ok_or_else(|| damaged("an element's record is missing"))?;
+        if let Some(kind) = kind_row(project, document, &element) {
+            txn.put(kind.key(), to_row(&after.as_str())?).await?;
+        }
         let edition = edition_of(txn, project, document).await?;
         let (result, cells, body) = match self.make(&edition, &element) {
             Ok((built, cells)) => {
@@ -478,6 +492,17 @@ async fn edition_of<R: Reader>(
     Ok(model
         .ok_or_else(|| damaged("an element's document is missing"))?
         .edition)
+}
+
+/// Where an element is listed by its kind. Every element is, built or not; a kind that isn't a
+/// plain name (letters, digits, `.`, `_` and `-`) can't be part of a key, so it isn't listed.
+fn kind_row(project: &Id, document: &Id, element: &Element) -> Option<Place> {
+    Some(Place::Kind {
+        project: project.clone(),
+        document: document.clone(),
+        kind: Id::parse(&element.kind).ok()?,
+        element: element.id.clone(),
+    })
 }
 
 /// The cells an element's shape touches, unless there are too many.

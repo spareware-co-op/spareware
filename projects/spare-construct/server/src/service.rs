@@ -380,6 +380,32 @@ impl<K: Kv, F: FileStore> Service<K, F> {
         Ok(AreaView { through, pieces })
     }
 
+    /// The elements of a model of one kind, built or not, as `area` gives them: a page that works
+    /// on one kind (Workshop's parts and assemblies) finds them without a place in the plan.
+    pub async fn kind(
+        &self,
+        person: &Id,
+        project: &Id,
+        model: &Id,
+        kind: &Id,
+    ) -> Result<AreaView, Refusal> {
+        self.require(person, "model.read", Target::Model(project, model))
+            .await?;
+        let mut snapshot = self.kv.snapshot().await?;
+        let mut pieces = BTreeMap::new();
+        for (key, hash) in snapshot.scan(&list::kind(project, model, kind)).await? {
+            let Some(Place::Kind { element, .. }) = Place::parse(&key) else {
+                continue;
+            };
+            pieces.insert(element.to_string(), from_row::<String>(&hash)?);
+        }
+        let cursor = Place::Regenerated {
+            project: project.clone(),
+        };
+        let through: u64 = read_row(&mut snapshot, &cursor.key()).await?.unwrap_or(0);
+        Ok(AreaView { through, pieces })
+    }
+
     pub async fn claims(&self, person: &Id, project: &Id, model: &Id) -> Result<Value, Refusal> {
         self.require(person, "model.read", Target::Model(project, model))
             .await?;

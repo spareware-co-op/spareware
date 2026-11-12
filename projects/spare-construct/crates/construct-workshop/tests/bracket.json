@@ -1,0 +1,27 @@
+{
+ "id": "bracket",
+ "name": "Bracket",
+ "material": "steel",
+ "params": [
+  { "name": "width", "value": 120, "note": "Along x" },
+  { "name": "depth", "value": 60, "note": "Along y" },
+  { "name": "thickness", "value": 8 },
+  { "name": "boss_radius", "value": 12 },
+  { "name": "boss_height", "value": 30 },
+  { "name": "boss_offset", "value": 40, "note": "From the middle to each boss" },
+  { "name": "lug_pitch", "value": "boss_offset / 2", "note": "A formula: half the boss offset" }
+ ],
+ "features": [
+  { "id": "f1", "type": "sketch", "name": "Base outline", "z": 0, "shape": "rect", "w": "width", "h": "depth", "cx": 0, "cy": 0 },
+  { "id": "f2", "type": "extrude", "name": "Base plate", "sketch": "f1", "depth": "thickness", "op": "new" },
+  { "id": "f3", "type": "sketch", "name": "Boss circle", "z": "thickness", "shape": "circle", "r": "boss_radius", "cx": "boss_offset", "cy": 0 },
+  { "id": "f4", "type": "extrude", "name": "Boss", "sketch": "f3", "depth": "boss_height", "op": "new" },
+  { "id": "f5", "type": "mirror", "name": "Second boss", "of": "f4", "plane": "x", "at": 0 },
+  { "id": "f6", "type": "sketch", "name": "Lug outline", "z": "thickness", "shape": "polygon", "n": 6, "r": 6, "cx": 0, "cy": -20 },
+  { "id": "f7", "type": "extrude", "name": "Lug", "sketch": "f6", "depth": 10, "op": "new" },
+  { "id": "f8", "type": "pattern", "name": "Lug row", "of": "f7", "count": 3, "dx": 0, "dy": "lug_pitch", "dz": 0 },
+  { "id": "f9", "type": "hole", "name": "Mounting holes", "note": "Four 8.5 mm clearance holes through the base" },
+  { "id": "f10", "type": "fillet", "name": "Round the plate corners", "note": "5 mm on the four upright edges" }
+ ],
+ "end": 10
+}

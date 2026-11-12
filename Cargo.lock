@@ -493,6 +493,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "construct-formulas"
+version = "0.0.0"
+dependencies = [
+ "dashu-int",
+ "dashu-ratio",
+ "winnow 0.7.15",
+]
+
+[[package]]
 name = "construct-interop"
 version = "0.0.0"
 dependencies = [
@@ -584,6 +593,17 @@ dependencies = [
  "construct-api",
  "construct-transport",
  "js-sys",
+ "serde_json",
+ "wasm-bindgen",
+]
+
+[[package]]
+name = "construct-workshop"
+version = "0.0.0"
+dependencies = [
+ "construct-formulas",
+ "engine-geometry",
+ "serde",
  "serde_json",
  "wasm-bindgen",
 ]
