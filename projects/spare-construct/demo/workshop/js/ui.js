@@ -102,8 +102,24 @@ function say(t) { S.toast = t; const el = $('#toast'); el.textContent = t; el.hi
    everyone on the model sees it; other people's changes redraw the page. A number with a fraction is kept as its
    decimal text, so no hash depends on how a number prints. Outside the app, in the demo, parts stay in this browser. */
 const LOOK_ONLY = 'This model is open to look at, so changes here are not kept.';
-const TEXT = new Set(['id', 'type', 'name', 'note', 'shape', 'sketch', 'of', 'plane', 'op', 'material', 'part', 'a', 'b', 'axis', 'unit']);
+const TEXT = new Set(['id', 'type', 'name', 'note', 'shape', 'sketch', 'of', 'plane', 'op', 'material', 'part', 'a', 'b', 'axis', 'unit', 'kind']);
 const DECIMAL = /^[-+]?(\d+\.?\d*|\.\d+)(e[-+]?\d+)?$/i;
+/* A parameter's kind and the unit its values are shown in. */
+const UNIT = { length: 'mm', angle: '°', count: '' };
+/* A parameter's name where it is used in a value: the whole word, and not a unit after a number (2 m). */
+const nameRe = (name) => new RegExp(`(?<![0-9.]\\s*)\\b${name.replace(/[^\w]/g, '')}\\b`, 'g');
+/* Whether a feature or a parameter uses a parameter, by name or in a formula. */
+function uses(o, name) {
+  const re = nameRe(name);
+  const any = (v, k) => typeof v === 'string' ? !TEXT.has(k) && (re.lastIndex = 0, re.test(v)) : Array.isArray(v) ? v.some((x) => any(x, k)) : false;
+  return Object.entries(o).some(([k, v]) => k !== 'name' && any(v, k));
+}
+/* Renames a parameter wherever a value uses it. */
+function renameIn(o, old, nu) {
+  const re = nameRe(old);
+  const swap = (v, k) => typeof v === 'string' ? (TEXT.has(k) ? v : v.replace(re, nu)) : Array.isArray(v) ? v.map((x) => swap(x, k)) : v;
+  for (const k of Object.keys(o)) if (k !== 'name') o[k] = swap(o[k], k);
+}
 function encode(v) {
   if (typeof v === 'number') return Number.isSafeInteger(v) ? v : String(v);
   if (Array.isArray(v)) return v.map(encode);
@@ -332,7 +348,7 @@ function renderLeft() {
   }
   h += `<div class="sec"><div class="lbl">Parameters of ${esc(p.name)} <button class="mini" data-act="addparam" title="Add a parameter">${ic('plus', 'sm')}<span class="sr">Add a parameter</span></button></div><table class="params"><tbody>${p.params.map((x, i) => {
     const r = out.params[i] || {};
-    return `<tr class="${S.sel && S.sel.kind === 'param' && S.sel.id === x.name ? 'cur' : ''}${r.state === 'failed' ? ' bad' : ''}"><td><button class="pname" data-act="sel" data-k="param" data-a="${esc(x.name)}" title="${esc(x.note || r.message || '')}">${esc(x.name)}</button></td><td><input aria-label="${esc(x.name)}" data-chg="param" data-a="${i}" value="${esc(x.value)}" spellcheck="false"></td><td class="u">mm</td></tr>`;
+    return `<tr class="${S.sel && S.sel.kind === 'param' && S.sel.id === x.name ? 'cur' : ''}${r.state === 'failed' ? ' bad' : ''}"><td><button class="pname" data-act="sel" data-k="param" data-a="${esc(x.name)}" title="${esc(x.note || r.message || '')}">${esc(x.name)}</button></td><td><input aria-label="${esc(x.name)}" data-chg="param" data-a="${i}" value="${esc(x.value)}" spellcheck="false"></td><td class="u">${r.formula && r.value != null ? '= ' + n2(r.value) + ' ' : ''}${UNIT[x.kind] ?? 'mm'}</td></tr>`;
   }).join('')}</tbody></table></div>`;
   h += `<div class="sec"><div class="lbl">History of ${esc(p.name)}</div><ol class="hist">`;
   p.features.forEach((f, i) => {
@@ -413,13 +429,16 @@ function renderSide() {
       <button class="btn" data-act="mv" data-a="-1"${i ? '' : ' disabled'}>Earlier</button><button class="btn" data-act="mv" data-a="1"${i < p.features.length - 1 ? '' : ' disabled'}>Later</button><button class="btn" data-act="delf">${ic('del', 'sm')}Delete</button></div>`;
   } else if (sel && sel.kind === 'param' && p.params.some((x) => x.name === sel.id)) {
     const i = p.params.findIndex((x) => x.name === sel.id), x = p.params[i], r = out.params[i];
-    const users = p.features.filter((f) => Object.values(f).some((v) => v === x.name) || (Array.isArray(f.pts) && f.pts.some((q) => q.includes(x.name))));
+    const users = p.features.filter((f) => uses(f, x.name)), formulas = p.params.filter((y) => y !== x && uses(y, x.name));
+    const kind = x.kind || 'length';
     h += `<div class="sec"><div class="lbl">Parameter</div><label class="fld"><span>Name</span><input data-chg="pname" data-a="${i}" value="${esc(x.name)}" spellcheck="false"></label>
-      <label class="fld"><span>Value, in mm, or another parameter's name</span><input data-chg="param" data-a="${i}" value="${esc(x.value)}" list="pnames"></label>
+      <label class="fld"><span>What it is</span><select data-chg="pkind" data-a="${i}">${[['length', 'A length, in mm'], ['angle', 'An angle, in degrees'], ['count', 'A count']].map(([k, l]) => `<option value="${k}"${k === kind ? ' selected' : ''}>${l}</option>`).join('')}</select></label>
+      <label class="fld"><span>Value: a number${UNIT[kind] ? ' in ' + UNIT[kind] : ''}, another parameter's name, or a formula</span><input data-chg="param" data-a="${i}" value="${esc(x.value)}" list="pnames" spellcheck="false"></label>
+      ${r && r.state === 'built' && r.formula ? `<div class="note ok">Works out to ${n2(r.value)}${UNIT[kind] ? ' ' + UNIT[kind] : ''}.</div>` : ''}
       <label class="fld"><span>Note</span><input data-chg="pnote" data-a="${i}" value="${esc(x.note || '')}"></label>${r && r.state === 'failed' ? `<div class="note bad">${esc(r.message)}</div>` : ''}
-      <p class="small faint">${ic('info', 'sm')} Formulas of other parameters come with a well-known, permissively licensed expression library (CON-A27-F4-P2).</p></div>
-      <div class="sec"><div class="lbl">Used by</div>${users.length ? `<ul class="list">${users.map((f) => `<li><button class="leaf" data-act="sel" data-k="feature" data-a="${esc(f.id)}">${ic(kindOf(f).icon, 'sm')}<span>${esc(f.name)}</span></button></li>`).join('')}</ul>` : '<p class="pad faint">No feature uses it yet.</p>'}</div>
-      <div class="sec acts"><button class="btn" data-act="delp" data-a="${i}"${users.length ? ' disabled title="Features use it"' : ''}>${ic('del', 'sm')}Delete</button></div>`;
+      <p class="small faint">${ic('info', 'sm')} A formula uses other parameters in any order, with units: <span class="mono">width / 2 - 4 mm</span>, <span class="mono">2 ft 8 in</span>, <span class="mono">n &gt; 3 ? 12 mm : 8 mm</span>, and min, max, abs, round, floor and ceil. It is worked out exactly; a length and a plain number don't add, so write 5 mm, not 5.</p></div>
+      <div class="sec"><div class="lbl">Used by</div>${users.length || formulas.length ? `<ul class="list">${users.map((f) => `<li><button class="leaf" data-act="sel" data-k="feature" data-a="${esc(f.id)}">${ic(kindOf(f).icon, 'sm')}<span>${esc(f.name)}</span></button></li>`).join('')}${formulas.map((y) => `<li><button class="leaf" data-act="sel" data-k="param" data-a="${esc(y.name)}">${ic('ws-param', 'sm')}<span>${esc(y.name)}</span></button></li>`).join('')}</ul>` : '<p class="pad faint">Nothing uses it yet.</p>'}</div>
+      <div class="sec acts"><button class="btn" data-act="delp" data-a="${i}"${users.length || formulas.length ? ' disabled title="Something uses it"' : ''}>${ic('del', 'sm')}Delete</button></div>`;
   } else if (sel && sel.kind === 'joint' && S.project.assembly.joints.some((j) => j.id === sel.id)) {
     const a = S.project.assembly, j = a.joints.find((x) => x.id === sel.id), inst = a.instances;
     const u = j.unit === 'deg' ? '°' : ' mm';
@@ -554,13 +573,15 @@ const CHG = {
   pname: (el) => {
     const p = part(), x = p.params[Number(el.dataset.a)], old = x.name, nu = el.value.trim();
     if (!nu || nu === old) return;
+    if (!/^[A-Za-z_][A-Za-z0-9_]*$/.test(nu)) { say('A name is letters, digits and _, starting with a letter.'); render(); return; }
     edit('Rename ' + old, () => {
+      for (const f of p.features) renameIn(f, old, nu);
+      for (const y of p.params) if (y !== x) renameIn(y, old, nu);
       x.name = nu;
-      for (const f of p.features) { for (const k of Object.keys(f)) if (f[k] === old) f[k] = nu; if (Array.isArray(f.pts)) f.pts = f.pts.map((q) => q.map((v) => (v === old ? nu : v))); }
-      for (const y of p.params) if (y.value === old) y.value = nu;
       S.sel = { kind: 'param', id: nu };
     });
   },
+  pkind: (el) => { const p = part(), x = p.params[Number(el.dataset.a)]; edit('Set what ' + x.name + ' is', () => { if (el.value === 'length') delete x.kind; else x.kind = el.value; }); },
   pnote: (el) => { const p = part(), x = p.params[Number(el.dataset.a)]; edit('Note on ' + x.name, () => { x.note = el.value; }); },
   partname: (el) => { const p = part(); edit('Rename the part', () => { p.name = el.value; }); },
   material: (el) => { const p = part(); edit('Set the material', () => { p.material = el.value; }); },

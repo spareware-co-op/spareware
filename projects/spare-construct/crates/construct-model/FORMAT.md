@@ -44,10 +44,10 @@ Workshop, the discipline for things that are made (feature map area CON-A27), ke
 
 | Kind | Recipe `op` | `args` |
 | --- | --- | --- |
-| `workshop.part` | `part` | `params` (each `{name, value, note}`), `features` (the history, in order, each `{id, type, name, ...}`), `end` (how many features are built; the rest are rolled back), `material` |
+| `workshop.part` | `part` | `params` (each `{name, value, note, kind}`, where `kind` is `length`, the default, `angle` or `count`), `features` (the history, in order, each `{id, type, name, ...}`), `end` (how many features are built; the rest are rolled back), `material` |
 | `workshop.assembly` | `assembly` | `instances` (each `{id, part, name, at, grounded}`, where `part` is a `workshop.part` element's ID) and `joints` (each `{id, name, type, a, b, origin, axis, min, max, value, unit}`) |
 
-The recipe's `owner` is `workshop`, schema 1, op version 1. A value is a whole number, the name of a parameter, or text: a number with a fraction is written as its decimal text (`"8.5"`), so no hash depends on how a float prints. The element's `name` is the part's name. The stand-in edition doesn't build these, and says so (`UnknownOperation`): the Workshop page builds a part in the browser with the geometry kernel (`construct-workshop`), and the server will too once a document's edition is the kernel's.
+The recipe's `owner` is `workshop`, schema 1, op version 1. A value is a whole number, or text: a number with a fraction written as its decimal text (`"8.5"`), so no hash depends on how a float prints, a parameter's name, or a formula of parameters with units, such as `"width / 2 - 4 mm"`, in the formula language of [`construct-formulas`](../construct-formulas/src/lib.rs). A formula is stored as written. The element's `name` is the part's name. The stand-in edition doesn't build these, and says so (`UnknownOperation`): the Workshop page builds a part in the browser with the geometry kernel (`construct-workshop`), and the server will too once a document's edition is the kernel's.
 
 ## A document
 

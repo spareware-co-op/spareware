@@ -48,11 +48,12 @@ jobs:
       - name: Clippy
         run: >-
           cargo clippy --locked --no-deps -p construct-model -p construct-regen -p construct-shapes
-          -p construct-api -p construct-workshop --all-features --all-targets -- -D warnings
+          -p construct-api -p construct-workshop -p construct-formulas --all-features --all-targets
+          -- -D warnings
       - name: Tests, with the shapes run on two generators
         run: >-
           cargo test --locked -p construct-model -p construct-regen -p construct-shapes
-          -p construct-api -p construct-workshop --all-features
+          -p construct-api -p construct-workshop -p construct-formulas --all-features
       - name: The browser's builds stay free of the store
         run: >-
           cargo check --locked --target wasm32-unknown-unknown -p construct-shapes -p construct-wasm

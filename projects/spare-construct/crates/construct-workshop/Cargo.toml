@@ -11,6 +11,8 @@ crate-type = ["cdylib", "rlib"]
 [dependencies]
 # The geometry kernel, through its one stable facade, as every Spare Construct discipline reaches it.
 engine-geometry = { path = "../../../engines/crates/engine-geometry" }
+# Parameter formulas with units, worked out exactly: the language families use too.
+construct-formulas = { path = "../construct-formulas" }
 # The recipe and the answer are JSON. MIT OR Apache-2.0. float_roundtrip: numbers are read correctly
 # rounded, as JSON.parse reads them, so the browser's prototype and this builder see the same values.
 serde = { version = "1.0.229", features = ["derive"] }
