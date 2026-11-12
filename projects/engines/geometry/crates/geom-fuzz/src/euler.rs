@@ -134,7 +134,12 @@ impl Run {
     }
 
     fn face(&mut self) -> Option<NewFace> {
-        let plane = Plane::new([0.0; 3], [1.0, 0.0, 0.0], [0.0, 1.0, 0.0], ((0.0, 1.0), (0.0, 1.0)));
+        let plane = Plane::new(
+            [0.0; 3],
+            [1.0, 0.0, 0.0],
+            [0.0, 1.0, 0.0],
+            ((0.0, 1.0), (0.0, 1.0)),
+        );
         let corner = P3::new(0, 0, 0).ok()?;
         Some(NewFace {
             name: self.name(),
@@ -210,11 +215,19 @@ impl Run {
                 let from = fin(self, first)?;
                 let (edge, vertex) = (self.edge()?, self.vertex()?);
                 let dead = self.dead(Arena::Fin, from);
-                (dead, [1, 1, 0, 0, 0], self.euler.mev(ix(from)?, edge, vertex).map(|_| ()))
+                (
+                    dead,
+                    [1, 1, 0, 0, 0],
+                    self.euler.mev(ix(from)?, edge, vertex).map(|_| ()),
+                )
             }
             2 => {
                 let edge = self.pick(Arena::Edge, first)?;
-                (self.dead(Arena::Edge, edge), [-1, -1, 0, 0, 0], self.euler.kev(ix(edge)?))
+                (
+                    self.dead(Arena::Edge, edge),
+                    [-1, -1, 0, 0, 0],
+                    self.euler.kev(ix(edge)?),
+                )
             }
             3 => {
                 let from = fin(self, first)?;
@@ -230,7 +243,11 @@ impl Run {
             }
             4 => {
                 let gone = fin(self, first)?;
-                (self.dead(Arena::Fin, gone), [0, -1, -1, -1, 0], self.euler.kef(ix(gone)?))
+                (
+                    self.dead(Arena::Fin, gone),
+                    [0, -1, -1, -1, 0],
+                    self.euler.kef(ix(gone)?),
+                )
             }
             5 => {
                 let from = fin(self, first)?;
@@ -241,7 +258,11 @@ impl Run {
                 }?;
                 let dead = self.dead(Arena::Fin, from) || self.dead(Arena::Fin, to.row());
                 let edge = self.edge()?;
-                (dead, [0, 1, 0, -1, 0], self.euler.mekr(ix(from)?, to, edge).map(|_| ()))
+                (
+                    dead,
+                    [0, 1, 0, -1, 0],
+                    self.euler.mekr(ix(from)?, to, edge).map(|_| ()),
+                )
             }
             _ => {
                 let at = fin(self, first)?;
@@ -255,7 +276,10 @@ impl Run {
     fn ring_or_region(&mut self, op: u8, first: u8, second: u8) -> Stepped {
         Some(match op {
             7 => {
-                let (keep, ring) = (self.pick(Arena::Face, first)?, self.pick(Arena::Loop, second)?);
+                let (keep, ring) = (
+                    self.pick(Arena::Face, first)?,
+                    self.pick(Arena::Loop, second)?,
+                );
                 let dead = self.dead(Arena::Face, keep) || self.dead(Arena::Loop, ring);
                 let got = self.euler.kfmrh(ix(keep)?, ix(ring)?);
                 if got.is_ok() {
@@ -285,7 +309,11 @@ impl Run {
                     RegionKind::Void
                 };
                 let name = self.name();
-                (false, [0; 5], self.euler.make_region(kind, name).map(|_| ()))
+                (
+                    false,
+                    [0; 5],
+                    self.euler.make_region(kind, name).map(|_| ()),
+                )
             }
             11 => {
                 // Row 0 is the outside, which every publish needs.
@@ -356,7 +384,10 @@ fn run_case(case: &Case) -> Result<[u32; 13], Finding> {
         }
         match &got {
             Err(_) if run.euler != before => {
-                return Err(law("a refusal changes nothing", format!("step {at}: {got:?}")));
+                return Err(law(
+                    "a refusal changes nothing",
+                    format!("step {at}: {got:?}"),
+                ));
             }
             Ok(()) if dead => {
                 return Err(law("an operator refuses a dead row", format!("step {at}")));
@@ -374,7 +405,10 @@ fn run_case(case: &Case) -> Result<[u32; 13], Finding> {
                 }
             }
             Err(e) if dead && !matches!(e, TopoError::Euler(Refusal::Dead { .. })) => {
-                return Err(law("a dead row is refused as dead", format!("step {at}: {e:?}")));
+                return Err(law(
+                    "a dead row is refused as dead",
+                    format!("step {at}: {e:?}"),
+                ));
             }
             Err(_) => {}
         }
@@ -400,7 +434,11 @@ fn round_trip(run: &mut Run, law: &impl Fn(&str, String) -> Finding) -> Result<(
     let Some(outside) = ix(0) else {
         return Ok(());
     };
-    let body = match run.euler.clone().publish(BodyKind::General, outside, &mut meter()) {
+    let body = match run
+        .euler
+        .clone()
+        .publish(BodyKind::General, outside, &mut meter())
+    {
         Ok(body) => body,
         Err(e) => return Err(law("an editor publishes", format!("{e:?}"))),
     };
@@ -414,7 +452,9 @@ fn round_trip(run: &mut Run, law: &impl Fn(&str, String) -> Finding) -> Result<(
             format!("{:?}, then {:?}", counts(&run.euler), counts(&again)),
         ));
     }
-    let republished = again.clone().publish(BodyKind::General, body.outside(), &mut meter());
+    let republished = again
+        .clone()
+        .publish(BodyKind::General, body.outside(), &mut meter());
     if republished.as_ref().ok() != Some(&body) {
         return Err(law(
             "an edited body publishes to itself",

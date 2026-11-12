@@ -4859,6 +4859,27 @@
           "target": "lib"
         },
         {
+          "cost": "at most [`MAX_STEPS`] operators, each followed by a count of the live rows and a copy of the editor; a publish, an edit and a second publish per publish step and at the end; at most [`MAX_INPUT_BYTES`] bytes read.",
+          "does": "[`decode`] turns a fuzzer's bytes into a [`Case`]: up to [`MAX_STEPS`] steps of four bytes each, an operator and the bytes that pick its rows. A row is picked from all the rows of its arena, live and dead, so refusals come up as often as edits; the second fin of `mef` and `mekr` is, by turns, the first fin itself, any fin, or a fin of the same face, in the same loop or another. [`check`] starts an editor with the outside region, runs each step, and holds the editor to the laws after it; a publish step, and the end of the case, publish the editor, edit the body again and publish that. [`harness`] is `decode` then `check`.",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-fuzz/src/euler.rs",
+          "guarantees": [
+            "**Any bytes are a case**, the empty string included; [`decode`] reads at most [`MAX_INPUT_BYTES`] bytes, and a unit test builds the input that reaches it.",
+            "**A panic is a failure; a broken law is a [`Finding`]** naming the law and the case. The laws, the `euler` module header's: an operator that applies changes the live counts (V, E, F, loops, S) by its row of the table and nothing else; V − E + F − R = 2 (S − H) after every step, with R the loops less the faces and H the holes, which only `kfmrh` (one more) and `mfkrh` (one fewer) change; an operator given a dead row refuses it as dead; a refusal leaves the editor equal to what it was; and a published editor edits back to an editor with the same counts, which publishes to the same body."
+          ],
+          "job": "Fuzz target: `geom-topo`'s Euler operators (piece G81). On any sequence of operators, regions and publishes, each operator changes the counts of vertices, edges, faces, loops and shells by its row of the table, Euler's formula holds after every step, an operator on a dead row refuses, a refusal changes nothing, and publishing the editor and editing the body again gives the body back.",
+          "method": {
+            "links": [
+              "https://doi.org/10.1109/MCG.1982.1674396"
+            ],
+            "text": "Mäntylä and Sulonen's GWB operators (\"GWB: a solid modeler with Euler operators\", IEEE Computer Graphics and Applications 2(7), 1982, <https://doi.org/10.1109/MCG.1982.1674396>) as the module header of `geom_topo::builder::euler` states them, with the counts of its table as the oracle and `tests/euler_model.rs`'s choice of rows, driven by coverage-guided fuzzing (28.5)."
+          },
+          "path": "geom_fuzz::euler",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
           "cost": "none at run time for the alias; [`Finding::new`] runs its detail closure once, except under Kani; displaying a [`Finding`] writes its two strings.",
           "does": null,
           "family": [],
