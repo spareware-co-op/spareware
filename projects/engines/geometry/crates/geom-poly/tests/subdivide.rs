@@ -15,7 +15,9 @@
 use geom_num::NumError;
 use geom_num::plane::{Plane, Tpi};
 use geom_poly::convex::Piece;
-use geom_poly::subdivide::{LEAF_POLYGONS, Solved, around, arrange, arrange_reusing};
+use geom_poly::subdivide::{
+    LEAF_POLYGONS, Solved, around, around_on, arrange, arrange_reusing, arrange_with,
+};
 use geom_poly::trace::{Cell, Classified, Polygon, TraceError};
 use geom_poly::winding::{Kept, Winding, WindingTest, kept};
 #[cfg(not(target_family = "wasm"))]
@@ -245,6 +247,33 @@ fn the_box_around_polygons_is_clear_of_them_on_odd_half_steps() {
         entry: None,
     };
     assert_eq!(around(&[broken]), Err(NumError::Degenerate));
+}
+
+/// A and B as one entry: inside both its count is 2, so it is no solid, and a leaf holding only
+/// its faces there must be traced. Read as a solid's, those faces would bound the union.
+#[test]
+fn an_entry_that_overlaps_itself_is_traced() {
+    let mut list = polygons(&[A, B]);
+    for polygon in &mut list {
+        polygon.entry = Some(0);
+    }
+    let cell = around(&list).unwrap();
+    let classified = arrange(
+        &Exec::serial(),
+        cell,
+        Winding::new(),
+        &list,
+        1,
+        &[],
+        &mut meter(),
+    )
+    .unwrap();
+    assert_eq!(volume(&WindingTest::unite(), &classified), 120 * 8);
+    let inner = classified
+        .iter()
+        .filter(|c| c.front.count(0) == 1 && c.back.count(0) == 2)
+        .count();
+    assert!(inner > 0);
 }
 
 #[test]
@@ -598,6 +627,67 @@ fn any_block() -> impl Strategy<Value = Block> {
 proptest! {
     #![proptest_config(ProptestConfig::with_cases(96))]
 
+    /// Every block is a solid, so a box of one block's faces is a leaf, solved without cuts or
+    /// tracing: no more pieces than tracing gives, each with the blocks' own vectors, and the same
+    /// volumes.
+    #[test]
+    fn a_solid_s_leaves_are_what_tracing_gives(
+        blocks in prop::collection::vec(any_block(), 1..5),
+        leaf in 1usize..12,
+    ) {
+        let list = polygons(&blocks);
+        let cell = around(&list).unwrap();
+        let solids: Vec<u32> = (0..blocks.len() as u32).collect();
+        let quick = arrange_with(
+            &Exec::serial(),
+            (cell, Winding::new()),
+            &list,
+            (leaf, &[]),
+            &solids,
+            &mut meter(),
+        )
+        .unwrap();
+        let traced = run(&blocks, leaf, &[]);
+        prop_assert!(quick.len() <= traced.len());
+        agrees(&blocks, &quick);
+        for test in [
+            WindingTest::unite(),
+            WindingTest::intersect(blocks.len() as u32),
+            WindingTest::subtract(0),
+        ] {
+            prop_assert_eq!(volume(&test, &quick), volume(&test, &traced));
+        }
+    }
+
+    /// The box around, made on a pool, is the box made one polygon at a time.
+    #[test]
+    fn the_box_around_is_the_same_on_a_pool(blocks in prop::collection::vec(any_block(), 0..5)) {
+        let list = polygons(&blocks);
+        let one = around(&list).unwrap();
+        prop_assert_eq!(around_on(&Exec::serial(), &list, &mut meter()).unwrap(), one);
+        #[cfg(not(target_family = "wasm"))]
+        prop_assert_eq!(around_on(&Exec::with_pool(&Threads), &list, &mut meter()).unwrap(), one);
+    }
+
+    /// One block alone, a solid, is one leaf whatever the leaf size: its six faces whole.
+    #[test]
+    fn a_lone_solid_is_one_leaf(block in any_block(), leaf in 1usize..6) {
+        let list = polygons(&[block]);
+        let cell = around(&list).unwrap();
+        let quick = arrange_with(
+            &Exec::serial(),
+            (cell, Winding::new()),
+            &list,
+            (leaf, &[]),
+            &[0],
+            &mut meter(),
+        )
+        .unwrap();
+        let pieces: Vec<&Piece> = quick.iter().map(|c| &c.piece).collect();
+        let whole: Vec<&Piece> = list.iter().map(|p| &p.piece).collect();
+        prop_assert_eq!(pieces, whole);
+    }
+
     #[test]
     fn every_arrangement_agrees_with_the_blocks(
         blocks in prop::collection::vec(any_block(), 1..5),
@@ -745,4 +835,58 @@ proptest! {
             cache = next;
         }
     }
+}
+
+#[test]
+fn a_box_over_the_subtree_size_splits_level_by_level() {
+    // 25 cubes of one solid, apart, and a cube of another far off: 156 polygons, more than one
+    // task solves at once, so the root is split level by level. The half that holds only the
+    // first solid is still too big; at the next level it is one solid's, a leaf at once, for a
+    // union, and settled, so dropped, for an intersection. Either way the pieces are those one
+    // leaf over the whole scene gives.
+    let mut blocks: Vec<Block> = (0..25)
+        .map(|i| {
+            let (x, y) = (4 * (i % 5), 4 * (i / 5));
+            Block {
+                low: [x, y, 0],
+                high: [x + 2, y + 2, 2],
+            }
+        })
+        .collect();
+    blocks.push(Block {
+        low: [40, 40, 40],
+        high: [42, 42, 42],
+    });
+    let mut list = polygons(&blocks);
+    for polygon in &mut list {
+        polygon.entry = Some(u32::from(polygon.entry == Some(25)));
+    }
+    for test in [WindingTest::unite(), WindingTest::intersect(2)] {
+        let tests = [test.clone()];
+        let at = |leaf: usize| {
+            let cell = around(&list).unwrap();
+            arrange_with(
+                &Exec::serial(),
+                (cell, Winding::new()),
+                &list,
+                (leaf, &tests),
+                &[0, 1],
+                &mut meter(),
+            )
+            .unwrap()
+        };
+        let (levels, one) = (at(LEAF_POLYGONS), at(1_000_000));
+        assert_eq!(volume(&test, &levels), volume(&test, &one), "{test:?}");
+        // The far cube is in the upper half, a task at the first level, while the lower half is
+        // split again: tree order still puts it last.
+        let far = 25 * 6;
+        if let Some(first) = levels.iter().position(|c| c.polygon >= far) {
+            assert!(first > 0, "{test:?}");
+            assert!(levels[first..].iter().all(|c| c.polygon >= far), "{test:?}");
+        }
+    }
+    assert_eq!(
+        volume(&WindingTest::unite(), &run(&blocks, 1_000_000, &[])),
+        26 * 64
+    );
 }

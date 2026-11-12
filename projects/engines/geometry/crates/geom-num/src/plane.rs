@@ -1214,6 +1214,14 @@ pub fn normals_sign(a: &Plane, b: &Plane, c: &Plane) -> Result<Sign, NumError> {
     {
         return Ok(Sign::of_i64(det));
     }
+    // The generated filter of `tpi_weight`, which is this determinant (its bound is proven for
+    // normals below 2^83, as `Plane` keeps them): it decides nearly every call that machine words
+    // cannot, in a handful of `f64` operations, where the exact path below makes six wide products
+    // and a wide dot. `None` when it cannot tell, and then the exact path decides, as before.
+    let ([ax, ay, az], [bx, by, bz], [cx, cy, cz]) = (a.n, b.n, c.n);
+    if let Some(sign) = generated::tpi_weight::filter(ax, ay, az, bx, by, bz, cx, cy, cz) {
+        return Ok(sign);
+    }
     cross(&b.n, &c.n)
         .and_then(|across| dot(&a.n, &across))
         .map(|w| w.signum())
