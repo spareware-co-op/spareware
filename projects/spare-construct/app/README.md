@@ -4,6 +4,7 @@ The browser app, on the [demo's](../demo/index.html) layout. The server sends th
 
 - [connect.js](connect.js): puts live data into the page: sign-in, hubs, projects, folders, the plan and 3D views, the Wall and Door tools, Share, Bridge, Take in and links.
 - [pkg](pkg): the same geometry the server builds with, compiled for the browser. `server/scripts/build-shapes.sh` makes it, from `crates/construct-shapes`.
+- **Workshop**, the discipline for parts, assemblies and drawings, is the demo's own page ([demo/workshop](../demo/workshop)), which the server serves at `/workshop/`. Its parts are built by the geometry kernel, compiled for the browser (`crates/construct-workshop`, made into `demo/workshop/pkg` by `server/scripts/build-workshop.sh`). For now a part is kept in the browser that made it; keeping parts in the project's model, through its edit log, comes next.
 
 An element here is its recipe. The page builds it through that package and draws what comes back, an outline and a mesh, so it doesn't change when the geometry does. A browser that can't build a document's edition draws the server's stored shapes and doesn't edit.
 

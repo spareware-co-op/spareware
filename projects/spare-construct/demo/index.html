@@ -815,7 +815,7 @@ let DISC='architecture';
 /* Each discipline is its own program on the same model: its own ribbon (SETS, in ribbonCfg), opening on its home tab */
 const DTAB={architecture:'arch',structure:'str',mep:'sys',civil:'site',survey:'srv',transport:'tr-home',workshop:'ws-home',coord:'col'};
 // Which tools run on their Rust engine; the rest are prototypes until their engine is ported and proven against them
-const ENGINE={transport:'Rust engine'};
+const ENGINE={transport:'Rust engine',workshop:'Geometry kernel'};
 function renderDisc(){const d=DISCS.find(x=>x[0]===DISC);document.documentElement.dataset.disc=DISC;if(DTAB[DISC])RB.select(DTAB[DISC]);$('#disc-name').textContent=d[1];$('#b-disc').setAttribute('aria-label','Discipline: '+d[1]);$('#disc-menu').innerHTML=DISCS.map(([k,l,w,no,ok])=>`<button type="button" role="menuitemradio" aria-checked="${k===DISC}"${ok?` data-act="disc"`:' aria-disabled="true"'} data-a="${k}" data-dsw="${k}"><span class="dsw" aria-hidden="true"></span><span class="dno">${no}</span><span>${l}${ok?`<span class="badge${ENGINE[k]?'':' n'}">${ENGINE[k]||'Prototype'}</span>`:''}<small>${ok?w:w+'. Not in this demo yet.'}</small></span></button>`).join('')}
 function discMenu(open){const m=$('#disc-menu');m.hidden=!open;$('#b-disc').setAttribute('aria-expanded',String(open));if(open){const c=m.querySelector('[aria-checked="true"]');if(c)c.focus()}}
 ACT.discmenu=()=>discMenu($('#disc-menu').hidden);
