@@ -10,8 +10,8 @@ use super::plain;
 use super::types::{Convergence, ModelMeta, ModelStatus, OdFlow, Res, Vintage};
 use crate::graph::{Graph, build_graph};
 use crate::jsnum::{
-    Maybe, Num, js_trim, math_max, or_default, to_int32, to_precision, value_to_js_string,
-    value_truthy,
+    Maybe, Num, f64_to_i64, i64_to_f64, js_trim, math_max, or_default, to_int32, to_precision,
+    value_to_js_string, value_truthy,
 };
 use crate::junction::{PerfSet, arc_time};
 use crate::project::{Link, OrderedMap, Project, Scenario, Settings};
@@ -74,15 +74,17 @@ impl SearchTree {
         if v == self.src {
             return Some(Vec::new());
         }
-        let mut a = self.na[v];
+        let mut a = self.na.get(v).copied().unwrap_or(-1);
         if a < 0 {
             return None;
         }
         let m = self.pred.len();
         let mut p = Vec::new();
-        while a >= 0 && p.len() <= m {
-            p.push(a as usize);
-            a = self.pred[a as usize];
+        while let Ok(ai) = usize::try_from(a)
+            && p.len() <= m
+        {
+            p.push(ai);
+            a = self.pred.get(ai).copied().unwrap_or(-1);
         }
         p.reverse();
         Some(p)
@@ -161,21 +163,22 @@ pub fn travel_on(
     to_id: &str,
 ) -> Option<Travel> {
     // the JavaScript works out the costs first; they have no effect when an id is not a node
-    let s = g.node_index(from_id)?;
-    let t = g.node_index(to_id)?;
+    let src = g.node_index(from_id)?;
+    let dst = g.node_index(to_id)?;
     let cost = cost_from_res(g, res);
-    let w = g.shortest(&cost, s, Some(t));
-    if !w.nd[t].is_finite() {
+    let w = g.shortest(&cost, src, Some(dst));
+    let time = w.nd.get(dst).copied().unwrap_or(f64::INFINITY);
+    if !time.is_finite() {
         return Some(Travel::Unreached { none: true });
     }
     // pathTo returns a path whenever the node was reached
-    let p = w.path_to(t).unwrap_or_default();
+    let path = w.path_to(dst).unwrap_or_default();
     let (mut len, mut ff, mut run) = (0.0, 0.0, 0.0);
     let mut pts: Vec<LatLng> = Vec::new();
-    for &ai in &p {
+    for &ai in &path {
         len += g.arc_len(ai);
         ff += g.arc_ff(ai);
-        run += cost[ai];
+        run += cost.get(ai).copied().unwrap_or(0.0);
         let ap = g.arc_pts(ai);
         if pts.is_empty() {
             pts.extend_from_slice(ap);
@@ -184,12 +187,12 @@ pub fn travel_on(
         }
     }
     Some(Travel::Route(TravelRoute {
-        arcs: p.iter().map(|&i| g.arc_key(i).to_string()).collect(),
+        arcs: path.iter().map(|&i| g.arc_key(i).to_string()).collect(),
         pts,
-        time: w.nd[t],
+        time,
         ff,
         len,
-        pen: math_max(0.0, w.nd[t] - run),
+        pen: math_max(0.0, time - run),
     }))
 }
 
@@ -220,9 +223,9 @@ pub fn isochrone_on(g: &impl RouteGraph, res: Option<&Res>, from_id: &str) -> Op
     let cost = cost_from_res(g, res);
     let w = g.shortest(&cost, s, None);
     let mut times = OrderedMap::new();
-    for i in 0..g.node_count() {
-        if !g.is_centroid(i) && w.nd[i].is_finite() {
-            times.insert(g.node_id(i), w.nd[i]);
+    for (i, &t) in w.nd.iter().enumerate().take(g.node_count()) {
+        if !g.is_centroid(i) && t.is_finite() {
+            times.insert(g.node_id(i), t);
         }
     }
     Some(Isochrone {
@@ -240,33 +243,39 @@ impl RouteGraph for Graph {
     fn node_count(&self) -> usize {
         self.n
     }
+    // Past the end of the graph's arrays (indexes the graph never hands out) a node has no id
+    // and is not a centroid, and an arc has no key, shape or length and cannot be used
     fn node_id(&self, i: usize) -> &str {
-        &self.ids[i]
+        self.ids.get(i).map_or("", String::as_str)
     }
     fn is_centroid(&self, i: usize) -> bool {
-        self.is_c()[i] != 0
+        self.is_c().get(i).is_some_and(|&c| c != 0)
     }
     fn arc_count(&self) -> usize {
         self.m
     }
     fn arc_key(&self, a: usize) -> &str {
-        &self.arcs[a].key
+        self.arcs.get(a).map_or("", |arc| arc.key.as_str())
     }
     fn arc_len(&self, a: usize) -> f64 {
-        self.arcs[a].len
+        self.arcs.get(a).map_or(f64::NAN, |arc| arc.len)
     }
     fn arc_ff(&self, a: usize) -> f64 {
-        self.arcs[a].ff
+        self.arcs.get(a).map_or(f64::NAN, |arc| arc.ff)
     }
     fn arc_pts(&self, a: usize) -> &[LatLng] {
-        &self.arcs[a].pts
+        self.arcs.get(a).map_or(&[], |arc| arc.pts.as_slice())
     }
     fn empty_time(&self, a: usize) -> f64 {
-        arc_time(&self.arcs[a], 0.0, &PerfSet::new(&self.settings))
+        self.arcs
+            .get(a)
+            .map_or(f64::INFINITY, |arc| arc_time(arc, 0.0, &PerfSet::new(&self.settings)))
     }
     fn shortest(&self, cost: &[f64], src: usize, target: Option<usize>) -> SearchTree {
         let mut w = self.workspace();
-        self.spt(cost, src, &mut w, target.map_or(-1, |t| t as i32), -1);
+        // Bound: node indexes are far below i32::MAX (the search's own index type)
+        let target = target.and_then(|t| i32::try_from(t).ok()).unwrap_or(-1);
+        self.spt(cost, src, &mut w, target, -1);
         SearchTree {
             src,
             nd: w.nd,
@@ -377,17 +386,17 @@ pub fn export_ready(res: Option<&Res>) -> ExportReady {
 /// Daily traffic is both directions' flow times `Store.S.peakToDaily` (the project settings `s`).
 #[must_use]
 pub fn lts(l: &Link, res: Option<&Res>, s: &Settings) -> u8 {
-    let c = l.class();
-    let sp = l.speed.or(c.speed);
+    let class = l.class();
+    let sp = l.speed.or(class.speed);
     let lanes = to_int32(l.lanes_ab.num()).max(to_int32(l.lanes_ba.num()));
-    if c.rank >= 5.0 {
+    if class.rank >= 5.0 {
         return 0;
     }
     let mut aadt: Option<f64> = None;
     if let Some(res) = res {
-        let a = res.arcs.get(&format!("{}:ab", l.id));
-        let b = res.arcs.get(&format!("{}:ba", l.id));
-        aadt = Some((a.map_or(0.0, |x| x.v) + b.map_or(0.0, |x| x.v)) * s.peak_to_daily.num());
+        let ab = res.arcs.get(&format!("{}:ab", l.id));
+        let ba = res.arcs.get(&format!("{}:ba", l.id));
+        aadt = Some((ab.map_or(0.0, |r| r.v) + ba.map_or(0.0, |r| r.v)) * s.peak_to_daily.num());
     }
     if l.cycle.is("separated") {
         return 1;
@@ -490,34 +499,9 @@ pub fn model_status(p: &Project, period: &str) -> ModelStatus {
         "calibrated" => "Calibrated",
         _ => "Uncalibrated",
     };
-    let std_text = |x: &str| -> String {
-        if x == "tmdg" {
-            format!("TMDG Category {}", v_cat_or.unwrap_or(&cat))
-        } else {
-            std_name(x).unwrap_or(x).to_string()
-        }
-    };
-    let label = match status {
-        "uncalibrated" => "Uncalibrated".to_string(),
-        "calibrated" => "Calibrated: base matched to counts used in calibration".to_string(),
-        _ => format!(
-            "Validated: independent validation counts meet the {} targets",
-            std_text(v_std_or.unwrap_or(&std))
-        ),
-    };
+    let label = status_label(status, v_std_or.unwrap_or(&std), v_cat_or.unwrap_or(&cat));
     let stale = if passed && !matches {
-        let recorded = match v_std_or {
-            Some(x) if x != "tmdg" => std_name(x).unwrap_or(x).to_string(),
-            _ => format!("TMDG Category {}", v_cat_or.unwrap_or(&cat)),
-        };
-        let now = if std != "tmdg" {
-            std_name(&std).unwrap_or(&std).to_string()
-        } else {
-            format!("TMDG Category {cat}")
-        };
-        format!(
-            "The validation was recorded for {recorded}; the settings now name {now}. Validate the base year again."
-        )
+        stale_note(v_std_or, v_cat_or.unwrap_or(&cat), &cat, &std)
     } else {
         String::new()
     };
@@ -553,6 +537,36 @@ pub fn model_status(p: &Project, period: &str) -> ModelStatus {
         footer,
         standing: STANDARDS.tmdg.standing.to_string(),
     }
+}
+
+// The status line: validated against the standard (and TMDG category) it names
+fn status_label(status: &str, standard: &str, category: &str) -> String {
+    match status {
+        "uncalibrated" => "Uncalibrated".to_string(),
+        "calibrated" => "Calibrated: base matched to counts used in calibration".to_string(),
+        _ => {
+            let named = if standard == "tmdg" {
+                format!("TMDG Category {category}")
+            } else {
+                std_name(standard).unwrap_or(standard).to_string()
+            };
+            format!("Validated: independent validation counts meet the {named} targets")
+        }
+    }
+}
+
+// A validation recorded for another standard or category than the settings now name
+fn stale_note(v_std: Option<&str>, v_cat: &str, cat: &str, std: &str) -> String {
+    let recorded = match v_std {
+        Some(x) if x != "tmdg" => std_name(x).unwrap_or(x).to_string(),
+        _ => format!("TMDG Category {v_cat}"),
+    };
+    let now = if std == "tmdg" {
+        format!("TMDG Category {cat}")
+    } else {
+        std_name(std).unwrap_or(std).to_string()
+    };
+    format!("The validation was recorded for {recorded}; the settings now name {now}. Validate the base year again.")
 }
 
 const SRC_NAME: [(&str, &str); 5] = [
@@ -661,12 +675,13 @@ pub fn iso_day_of_ms(ms: f64) -> Option<String> {
         return None;
     }
     let t = ms.trunc() + 0.0;
-    let days = (t / 86_400_000.0).floor() as i64;
-    let (y, m, d) = civil_from_days(days);
+    // At most 10^8 days either way (8.64e15 ms), a whole number i64 holds exactly
+    let days = f64_to_i64((t / 86_400_000.0).floor());
+    let (y, m, d) = civil_from_days(days)?;
     let year = if (0..=9999).contains(&y) {
         format!("{y:04}")
     } else if y < 0 {
-        format!("-{:06}", -y)
+        format!("-{:06}", y.unsigned_abs())
     } else {
         format!("+{y:06}")
     };
@@ -674,104 +689,122 @@ pub fn iso_day_of_ms(ms: f64) -> Option<String> {
     Some(full.chars().take(10).collect())
 }
 
-// Days since 1970-01-01 to (year, month, day) in the proleptic Gregorian calendar (H. Hinnant's algorithm)
-fn civil_from_days(z: i64) -> (i64, u32, u32) {
-    let z = z + 719_468;
+// Days since 1970-01-01 to (year, month, day) in the proleptic Gregorian calendar (H. Hinnant's
+// algorithm). Bound: a JavaScript date is within 10^8 days of 1970, far inside i64, so the checked
+// steps never fail; None only keeps the function total.
+fn civil_from_days(z: i64) -> Option<(i64, u32, u32)> {
+    let z = z.checked_add(719_468)?;
     let era = z.div_euclid(146_097);
     let doe = z.rem_euclid(146_097);
-    let yoe = (doe - doe / 1460 + doe / 36_524 - doe / 146_096) / 365;
-    let y = yoe + era * 400;
-    let doy = doe - (365 * yoe + yoe / 4 - yoe / 100);
-    let mp = (5 * doy + 2) / 153;
-    let d = (doy - (153 * mp + 2) / 5 + 1) as u32;
-    let m = if mp < 10 { mp + 3 } else { mp - 9 } as u32;
-    (if m <= 2 { y + 1 } else { y }, m, d)
+    let yoe = doe
+        .checked_sub(doe / 1460)?
+        .checked_add(doe / 36_524)?
+        .checked_sub(doe / 146_096)?
+        / 365;
+    let y = yoe.checked_add(era.checked_mul(400)?)?;
+    let doy = doe.checked_sub(yoe.checked_mul(365)?.checked_add(yoe / 4)?.checked_sub(yoe / 100)?)?;
+    let mp = doy.checked_mul(5)?.checked_add(2)? / 153;
+    let d = u32::try_from(doy.checked_sub(mp.checked_mul(153)?.checked_add(2)? / 5)?.checked_add(1)?).ok()?;
+    let m = u32::try_from(if mp < 10 { mp.checked_add(3)? } else { mp.checked_sub(9)? }).ok()?;
+    Some((if m <= 2 { y.checked_add(1)? } else { y }, m, d))
 }
 
-fn days_from_civil(y: i64, m: i64, d: i64) -> i64 {
-    let y = if m <= 2 { y - 1 } else { y };
+// (year, month, day) to days since 1970-01-01, the inverse of civil_from_days, with its bound
+fn days_from_civil(y: i64, m: i64, d: i64) -> Option<i64> {
+    let y = if m <= 2 { y.checked_sub(1)? } else { y };
     let era = y.div_euclid(400);
     let yoe = y.rem_euclid(400);
-    let mp = if m > 2 { m - 3 } else { m + 9 };
-    let doy = (153 * mp + 2) / 5 + d - 1;
-    let doe = yoe * 365 + yoe / 4 - yoe / 100 + doy;
-    era * 146_097 + doe - 719_468
+    let mp = if m > 2 { m.checked_sub(3)? } else { m.checked_add(9)? };
+    let doy = (mp.checked_mul(153)?.checked_add(2)? / 5).checked_add(d)?.checked_sub(1)?;
+    let doe = yoe.checked_mul(365)?.checked_add(yoe / 4)?.checked_sub(yoe / 100)?.checked_add(doy)?;
+    era.checked_mul(146_097)?.checked_add(doe)?.checked_sub(719_468)
+}
+
+// Days in a month (1 to 12) of a proleptic Gregorian year
+fn days_in_month(year: i64, month: i64) -> Option<i64> {
+    let dim: [i64; 12] = [31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31];
+    let leap = (year % 4 == 0 && year % 100 != 0) || year % 400 == 0;
+    if month == 2 && leap {
+        return Some(29);
+    }
+    dim.get(usize::try_from(month).ok()?.checked_sub(1)?).copied()
 }
 
 // The ECMAScript date time string format: milliseconds since 1970, or None
 fn parse_iso_date(s: &str) -> Option<f64> {
     let b = s.as_bytes();
-    let mut i = 0;
+    let mut i = 0usize;
+    // i only moves forward over bytes of s, so it stays at most s.len() and steps cannot overflow
     let digits = |i: &mut usize, n: usize| -> Option<i64> {
-        let part = b.get(*i..*i + n)?;
+        let end = i.checked_add(n)?;
+        let part = b.get(*i..end)?;
         if !part.iter().all(u8::is_ascii_digit) {
             return None;
         }
-        *i += n;
+        *i = end;
         std::str::from_utf8(part).ok()?.parse().ok()
     };
+    let at = |i: usize, c: u8| b.get(i) == Some(&c);
     let year = match b.first()? {
-        b'+' | b'-' => {
-            let neg = b[0] == b'-';
+        &sign @ (b'+' | b'-') => {
             i = 1;
             let y = digits(&mut i, 6)?;
-            if neg && y == 0 {
+            if sign == b'-' && y == 0 {
                 return None;
             }
-            if neg { -y } else { y }
+            if sign == b'-' { y.checked_neg()? } else { y }
         }
         _ => digits(&mut i, 4)?,
     };
     let (mut month, mut day) = (1, 1);
-    if b.get(i) == Some(&b'-') {
-        i += 1;
+    if at(i, b'-') {
+        i = i.saturating_add(1);
         month = digits(&mut i, 2)?;
-        if b.get(i) == Some(&b'-') {
-            i += 1;
+        if at(i, b'-') {
+            i = i.saturating_add(1);
             day = digits(&mut i, 2)?;
         }
     }
     let (mut hh, mut mm, mut ss, mut msec, mut offset) = (0, 0, 0, 0, 0);
-    if b.get(i) == Some(&b'T') {
-        i += 1;
+    if at(i, b'T') {
+        i = i.saturating_add(1);
         hh = digits(&mut i, 2)?;
-        if b.get(i) != Some(&b':') {
+        if !at(i, b':') {
             return None;
         }
-        i += 1;
+        i = i.saturating_add(1);
         mm = digits(&mut i, 2)?;
-        if b.get(i) == Some(&b':') {
-            i += 1;
+        if at(i, b':') {
+            i = i.saturating_add(1);
             ss = digits(&mut i, 2)?;
-            if b.get(i) == Some(&b'.') {
-                i += 1;
+            if at(i, b'.') {
+                i = i.saturating_add(1);
                 let start = i;
-                while i < b.len() && b[i].is_ascii_digit() {
-                    i += 1;
-                }
+                i = i.saturating_add(b.get(i..).map_or(0, |r| r.iter().take_while(|c| c.is_ascii_digit()).count()));
                 if i == start {
                     return None;
                 }
                 // milliseconds from the first three digits
-                let frac = &s[start..i];
+                let frac = s.get(start..i)?;
                 let three: String = frac.chars().chain("000".chars()).take(3).collect();
                 msec = three.parse().ok()?;
             }
         }
         match b.get(i) {
-            Some(b'Z') => i += 1,
+            Some(b'Z') => i = i.saturating_add(1),
             Some(&c) if c == b'+' || c == b'-' => {
-                i += 1;
+                i = i.saturating_add(1);
                 let oh = digits(&mut i, 2)?;
-                if b.get(i) != Some(&b':') {
+                if !at(i, b':') {
                     return None;
                 }
-                i += 1;
+                i = i.saturating_add(1);
                 let om = digits(&mut i, 2)?;
                 if oh > 23 || om > 59 {
                     return None;
                 }
-                offset = (oh * 60 + om) * if c == b'+' { 1 } else { -1 };
+                let minutes = oh.checked_mul(60)?.checked_add(om)?;
+                offset = if c == b'+' { minutes } else { minutes.checked_neg()? };
             }
             _ => {}
         }
@@ -779,25 +812,23 @@ fn parse_iso_date(s: &str) -> Option<f64> {
     if i != b.len() {
         return None;
     }
-    let dim = [31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31];
-    let leap = (year % 4 == 0 && year % 100 != 0) || year % 400 == 0;
     if !(1..=12).contains(&month) || day < 1 {
         return None;
     }
-    let max_day = if month == 2 && leap {
-        29
-    } else {
-        dim[month as usize - 1]
-    };
-    if day > max_day || hh > 24 || mm > 59 || ss > 59 {
+    if day > days_in_month(year, month)? || hh > 24 || mm > 59 || ss > 59 {
         return None;
     }
     if hh == 24 && (mm != 0 || ss != 0 || msec != 0) {
         return None;
     }
-    let days = days_from_civil(year, month, day);
-    let ms = days as f64 * 86_400_000.0
-        + ((hh * 60 + mm - offset) * 60 + ss) as f64 * 1000.0
-        + f64::from(msec);
+    let days = days_from_civil(year, month, day)?;
+    // Bound: hours, minutes and seconds are two digits each, so these steps are small
+    let secs = hh
+        .checked_mul(60)?
+        .checked_add(mm)?
+        .checked_sub(offset)?
+        .checked_mul(60)?
+        .checked_add(ss)?;
+    let ms = i64_to_f64(days) * 86_400_000.0 + i64_to_f64(secs) * 1000.0 + f64::from(msec);
     if ms.abs() > 8.64e15 { None } else { Some(ms) }
 }

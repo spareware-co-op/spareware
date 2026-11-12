@@ -15,6 +15,10 @@ use serde_json::Value;
 /// neither (paths is then missing, not null).
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+#[allow(
+    clippy::struct_excessive_bools,
+    reason = "the saved result's JSON: four flags the prototype writes as separate keys, in its order"
+)]
 pub struct Res {
     /// Period ("AM", "PM").
     pub period: String,

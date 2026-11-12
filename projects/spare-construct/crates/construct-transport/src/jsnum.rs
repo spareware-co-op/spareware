@@ -283,6 +283,43 @@ pub fn u64_to_f64(n: u64) -> f64 {
     n as f64
 }
 
+/// A whole number as a JavaScript number: the nearest double, as `JSON.parse` reads an integer
+/// (exact below 2^53, as day and millisecond counts are).
+#[must_use]
+// Bound: i64 to f64 rounds to nearest, ties to even, as JavaScript's number parsing does; that
+// rounding is the meaning wanted.
+#[allow(
+    clippy::cast_precision_loss,
+    reason = "rounds to nearest, as JSON.parse does"
+)]
+pub fn i64_to_f64(n: i64) -> f64 {
+    n as f64
+}
+
+/// A number as Rust's `x as i64` gives it: truncated toward zero, NaN giving 0 and values beyond
+/// i64's range its nearest end. Callers pass whole numbers inside the range (a day count of a
+/// JavaScript date, at most 10^8), where this is exact.
+#[must_use]
+// Bound: a float-to-integer `as` saturates to i64's range and maps NaN to 0, which is the meaning wanted.
+#[allow(
+    clippy::cast_possible_truncation,
+    reason = "saturates to i64's range, NaN to 0"
+)]
+pub fn f64_to_i64(x: f64) -> i64 {
+    x as i64
+}
+
+/// A JSON integer above `i64::MAX` as `JSON.parse` reads it: the nearest double.
+#[must_use]
+// Bound: as json_i64_to_f64, u64 to f64 rounds to nearest, ties to even, as JavaScript does.
+#[allow(
+    clippy::cast_precision_loss,
+    reason = "rounds to nearest, as JSON.parse does"
+)]
+pub fn json_u64_to_f64(n: u64) -> f64 {
+    n as f64
+}
+
 /* ---------------- Math ---------------- */
 
 /// `Math.round`: the nearest integer, ties toward +Infinity; keeps -0 for -0.5 <= x <= -0 (V8's `Float64Round`).
@@ -766,19 +803,14 @@ pub fn json_number(x: f64) -> Value {
     }
     if x.fract() == 0.0 {
         if (-9_223_372_036_854_775_808.0..9_223_372_036_854_775_808.0).contains(&x) {
-            return Value::from(whole_to_i64(x));
+            // a whole number in -2^63..2^63, which i64 holds exactly
+            return Value::from(f64_to_i64(x));
         }
         if (0.0..18_446_744_073_709_551_616.0).contains(&x) {
             return Value::from(whole_to_u64(x));
         }
     }
     serde_json::Number::from_f64(x).map_or(Value::Null, Value::Number)
-}
-
-// Bound: json_number passes only whole numbers in -2^63..2^63, which i64 holds exactly.
-#[allow(clippy::cast_possible_truncation, reason = "a whole number in -2^63..2^63")]
-fn whole_to_i64(x: f64) -> i64 {
-    x as i64
 }
 
 // Bound: json_number passes only whole numbers in 0..2^64, which u64 holds exactly.

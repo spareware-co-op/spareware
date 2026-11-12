@@ -66,12 +66,7 @@ pub fn build_graph(sc: &Scenario, s: &Settings, period: Option<&str>) -> Graph {
     let mut table = NodeTable { ids, ll, idx };
     let (site_of0, sites) = site_index(sc, &table.idx);
     let (mut arcs, ok_node) = link_arcs(sc, period, &table.idx, &site_of0, n0);
-    let zones: Vec<crate::project::Zone> = sc
-        .zones
-        .values()
-        .filter(|z| z.lat.num().is_finite() && z.lng.num().is_finite())
-        .cloned()
-        .collect();
+    let zones = located_zones(sc);
     let lat0 = if n0 > 0 {
         table.ll.iter().fold(0.0, |sum, p| sum + p[0]) / usize_to_f64(n0)
     } else {
@@ -101,29 +96,14 @@ pub fn build_graph(sc: &Scenario, s: &Settings, period: Option<&str>) -> Graph {
     let to: Vec<usize> = arcs.iter().map(|a| a.to).collect();
     let net = Network::new(n, &from, &to);
     let ffc: Vec<f64> = arcs.iter().map(|a| a.ff).collect();
-    let mut into: Vec<Vec<usize>> = vec![Vec::new(); n];
-    let mut out_r: Vec<Vec<usize>> = vec![Vec::new(); n];
-    for (i, a) in arcs.iter_mut().enumerate() {
-        a.i = i;
-        if !a.conn() {
-            if let Some(v) = into.get_mut(a.to) {
-                v.push(i);
-            }
-            if let Some(v) = out_r.get_mut(a.from) {
-                v.push(i);
-            }
-        }
-    }
+    let (into, out_r) = arc_rows(&mut arcs, n);
     let mut is_c = vec![0u8; n];
     for &i in &zone_node {
         if let Some(c) = is_c.get_mut(i) {
             *c = 1;
         }
     }
-    let mut key_idx = HashMap::new();
-    for (i, a) in arcs.iter().enumerate() {
-        key_idx.insert(a.key.clone(), i);
-    }
+    let key_idx: HashMap<String, usize> = arcs.iter().enumerate().map(|(i, a)| (a.key.clone(), i)).collect();
     let deg = degrees(&arcs, &into, &out_r, &is_c);
     let nodes: Vec<Option<crate::project::Node>> =
         ids.iter().map(|id| sc.nodes.get(id).cloned()).collect();
@@ -174,6 +154,33 @@ pub fn build_graph(sc: &Scenario, s: &Settings, period: Option<&str>) -> Graph {
     g.sm = site_move_index(&g);
     setup_controls(sc, &mut g, s);
     g
+}
+
+// The zones with a numeric position, which the graph connects
+fn located_zones(sc: &Scenario) -> Vec<crate::project::Zone> {
+    sc.zones
+        .values()
+        .filter(|z| z.lat.num().is_finite() && z.lng.num().is_finite())
+        .cloned()
+        .collect()
+}
+
+// Numbers the arcs, and lists the arcs arriving at and leaving each of the n nodes (connectors not listed)
+fn arc_rows(arcs: &mut [Arc], n: usize) -> (Vec<Vec<usize>>, Vec<Vec<usize>>) {
+    let mut into: Vec<Vec<usize>> = vec![Vec::new(); n];
+    let mut out_r: Vec<Vec<usize>> = vec![Vec::new(); n];
+    for (i, a) in arcs.iter_mut().enumerate() {
+        a.i = i;
+        if !a.conn() {
+            if let Some(v) = into.get_mut(a.to) {
+                v.push(i);
+            }
+            if let Some(v) = out_r.get_mut(a.from) {
+                v.push(i);
+            }
+        }
+    }
+    (into, out_r)
 }
 
 // Links meeting at each node (connectors not counted): 1 = dead end, 3 or more = junction

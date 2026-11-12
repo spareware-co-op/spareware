@@ -243,7 +243,7 @@ pub fn build(
     if p.scenarios[si].sites.get().is_none_or(crate::project::OrderedMap::is_empty) {
         detect(&mut p.scenarios[si], ids, &DetectOpts::default());
     }
-    auto_gateways(&mut p.scenarios[si], ids, &bounds_of(&bounds), None);
+    auto_gateways(&mut p.scenarios[si], ids, &bounds_of(&bounds), None::<&std::collections::HashSet<String>>);
     mark_stale(&mut p.scenarios[si]);
 
     /* 2 \u{b7} counts and crashes (one source at a time, so each can fail on its own), for the area the roads were cut to */

@@ -44,17 +44,33 @@ pub mod plain {
     /// A value whose numbers are written and read the plain way.
     pub trait Plain: Sized {
         /// Writes the value.
+        ///
+        /// # Errors
+        ///
+        /// The serializer's error.
         fn ser<S: Serializer>(&self, s: S) -> Result<S::Ok, S::Error>;
         /// Reads the value.
+        ///
+        /// # Errors
+        ///
+        /// The deserializer's error, or a number that is neither JSON nor one of the three texts.
         fn de<'de, D: Deserializer<'de>>(d: D) -> Result<Self, D::Error>;
     }
 
     /// Serde `serialize_with` entry point.
+    ///
+    /// # Errors
+    ///
+    /// The serializer's error.
     pub fn serialize<T: Plain, S: Serializer>(v: &T, s: S) -> Result<S::Ok, S::Error> {
         v.ser(s)
     }
 
     /// Serde `deserialize_with` entry point.
+    ///
+    /// # Errors
+    ///
+    /// As [`Plain::de`].
     pub fn deserialize<'de, T: Plain, D: Deserializer<'de>>(d: D) -> Result<T, D::Error> {
         T::de(d)
     }
@@ -88,10 +104,10 @@ pub mod plain {
             Ok(x)
         }
         fn visit_i64<E: de::Error>(self, x: i64) -> Result<f64, E> {
-            Ok(x as f64)
+            Ok(crate::jsnum::i64_to_f64(x))
         }
         fn visit_u64<E: de::Error>(self, x: u64) -> Result<f64, E> {
-            Ok(x as f64)
+            Ok(crate::jsnum::json_u64_to_f64(x))
         }
         fn visit_str<E: de::Error>(self, s: &str) -> Result<f64, E> {
             match s {
@@ -141,11 +157,10 @@ pub mod plain {
             s.collect_seq(self.iter().map(Ser))
         }
         fn de<'de, D: Deserializer<'de>>(d: D) -> Result<Self, D::Error> {
-            let v = Vec::<f64>::de(d)?;
-            if v.len() != 2 {
-                return Err(de::Error::invalid_length(v.len(), &"a [lat, lng] pair"));
+            match Vec::<f64>::de(d)?.as_slice() {
+                &[lat, lng] => Ok([lat, lng]),
+                v => Err(de::Error::invalid_length(v.len(), &"a [lat, lng] pair")),
             }
-            Ok([v[0], v[1]])
         }
     }
 
@@ -170,43 +185,41 @@ pub mod plain {
 /// For a consistent comparator the order is the one V8 gives (every stable sort agrees);
 /// unlike `slice::sort_by` it never panics on an inconsistent one.
 pub fn js_sort_by<T>(v: &mut Vec<T>, mut cmp: impl FnMut(&T, &T) -> f64) {
-    let n = v.len();
-    if n < 2 {
+    let len = v.len();
+    if len < 2 {
         return;
     }
     // bottom-up merge sort of the positions, then the items moved into that order
-    let mut order: Vec<usize> = (0..n).collect();
-    let mut buf = vec![0usize; n];
-    let mut width = 1;
-    while width < n {
-        let mut lo = 0;
-        while lo < n {
-            let mid = (lo + width).min(n);
-            let hi = (lo + 2 * width).min(n);
-            let (mut i, mut j, mut k) = (lo, mid, lo);
-            while i < mid && j < hi {
+    let mut order: Vec<usize> = (0..len).collect();
+    let mut buf: Vec<usize> = Vec::with_capacity(len);
+    let mut width = 1usize;
+    while width < len {
+        buf.clear();
+        // Each run of 2 * width positions merges its two sorted halves
+        for run in order.chunks(width.saturating_mul(2)) {
+            let (left, right) = run.split_at_checked(width.min(run.len())).unwrap_or((run, &[]));
+            let (mut li, mut ri) = (0usize, 0usize);
+            while let (Some(&l), Some(&r)) = (left.get(li), right.get(ri)) {
                 // take from the right only when the left sorts strictly after it
-                if cmp(&v[order[i]], &v[order[j]]) > 0.0 {
-                    buf[k] = order[j];
-                    j += 1;
+                let after = match (v.get(l), v.get(r)) {
+                    (Some(a), Some(b)) => cmp(a, b) > 0.0,
+                    _ => false,
+                };
+                if after {
+                    buf.push(r);
+                    ri = ri.saturating_add(1);
                 } else {
-                    buf[k] = order[i];
-                    i += 1;
+                    buf.push(l);
+                    li = li.saturating_add(1);
                 }
-                k += 1;
             }
-            buf[k..k + mid - i].copy_from_slice(&order[i..mid]);
-            k += mid - i;
-            buf[k..k + hi - j].copy_from_slice(&order[j..hi]);
-            lo = hi;
+            buf.extend_from_slice(left.get(li..).unwrap_or_default());
+            buf.extend_from_slice(right.get(ri..).unwrap_or_default());
         }
         std::mem::swap(&mut order, &mut buf);
-        width *= 2;
+        width = width.saturating_mul(2);
     }
     let mut items: Vec<Option<T>> = v.drain(..).map(Some).collect();
-    v.extend(
-        order
-            .into_iter()
-            .map(|i| items[i].take().expect("each item once")),
-    );
+    // order holds each position once, so every item is taken
+    v.extend(order.into_iter().filter_map(|i| items.get_mut(i).and_then(Option::take)));
 }

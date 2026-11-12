@@ -146,10 +146,12 @@ fn pt5(s: &str) -> bool {
     }
     let b = l.as_bytes();
     (0..b.len()).any(|p| {
-        (p == 0 || !is_word(b[p - 1]))
+        let starts_word = p.checked_sub(1).and_then(|q| b.get(q)).is_none_or(|&c| !is_word(c));
+        let rest = b.get(p..).unwrap_or_default();
+        starts_word
             && ["irtn", "rtn", "ftn"].iter().any(|w| {
-                let e = p + w.len();
-                b[p..].starts_with(w.as_bytes()) && (e == b.len() || !is_word(b[e]))
+                rest.strip_prefix(w.as_bytes())
+                    .is_some_and(|after| after.first().is_none_or(|&c| !is_word(c)))
             })
     })
 }
@@ -163,7 +165,9 @@ fn freight5(s: &str) -> bool {
 
 // /^collector/i
 fn gt10(s: &str) -> bool {
-    s.len() >= 9 && s.as_bytes()[..9].eq_ignore_ascii_case(b"collector")
+    s.as_bytes()
+        .get(..9)
+        .is_some_and(|head| head.eq_ignore_ascii_case(b"collector"))
 }
 
 /// `Engine.extentClass(fc)`: the AT ITA 4.2.1.1 threshold for a link's classes: 5%, 10% (collectors) or none.
@@ -417,6 +421,38 @@ pub fn extent_test(
         .map(|r| r.key.clone())
         .collect();
     let inc: std::collections::HashSet<&str> = links.iter().map(String::as_str).collect();
+    let (sites, site_of) = extent_sites(with, &inc);
+    let bounds = extent_bounds(sc, &rows);
+    let same_gap = without.gap_tol == with.gap_tol;
+    Some(ExtentTest {
+        period: with.period.clone(),
+        rows,
+        links,
+        sites,
+        site_of,
+        floor,
+        decade: if decade { "first decade" } else { "current" }.to_string(),
+        bounds,
+        buffer: STANDARDS.extent.buffer,
+        label: format!(
+            "AT ITA Guidelines 2025 v2 s4.2.1.1: 5% on motorways, strategic, primary and secondary arterials, RTN and FTN routes and freight levels 1A, 1B and 2; 10% on collectors; changes under {} veh/h left out (Spare Construct assumption). The freight set is a Spare Construct assumption.",
+            number_to_js_string(floor)
+        ),
+        same_gap,
+        note: if same_gap {
+            String::new()
+        } else {
+            "Without and with ran at different convergence targets; re-run both at the same target before relying on the extent.".to_string()
+        },
+    })
+}
+
+// The junctions any of whose approaches the extent includes: their ids in order (a site's id for a
+// site's node) and each one's node, site and included approaches
+fn extent_sites(
+    with: &Res,
+    inc: &std::collections::HashSet<&str>,
+) -> (Vec<String>, OrderedMap<ExtentSite>) {
     let mut sites = Vec::new();
     let mut site_of = OrderedMap::new();
     for (nid, nr) in with.nodes.iter() {
@@ -440,8 +476,12 @@ pub fn extent_test(
             );
         }
     }
-    // the suggested study area: the included links' extent with a buffer
-    let (mut s, mut w, mut n, mut e) = (
+    (sites, site_of)
+}
+
+// The suggested study area: the included links' extent with a buffer, as [[south, west], [north, east]]
+fn extent_bounds(sc: &Scenario, rows: &[ExtentRow]) -> Option<Vec<[f64; 2]>> {
+    let (mut south, mut west, mut north, mut east) = (
         f64::INFINITY,
         f64::INFINITY,
         f64::NEG_INFINITY,
@@ -455,44 +495,19 @@ pub fn extent_test(
             continue;
         }
         for q in sc.geom(l) {
-            s = math_min(s, q[0]);
-            n = math_max(n, q[0]);
-            w = math_min(w, q[1]);
-            e = math_max(e, q[1]);
+            south = math_min(south, q[0]);
+            north = math_max(north, q[0]);
+            west = math_min(west, q[1]);
+            east = math_max(east, q[1]);
         }
     }
+    if !south.is_finite() {
+        return None;
+    }
     let pad = STANDARDS.extent.buffer / 111_320.0;
-    let pad_l = if s.is_finite() {
-        STANDARDS.extent.buffer / (111_320.0 * crate::jsmath::cos(f64::midpoint(s, n) * std::f64::consts::PI / 180.0))
-    } else {
-        0.0
-    };
-    let same_gap = without.gap_tol == with.gap_tol;
-    Some(ExtentTest {
-        period: with.period.clone(),
-        rows,
-        links,
-        sites,
-        site_of,
-        floor,
-        decade: if decade { "first decade" } else { "current" }.to_string(),
-        bounds: if s.is_finite() {
-            Some(vec![[s - pad, w - pad_l], [n + pad, e + pad_l]])
-        } else {
-            None
-        },
-        buffer: STANDARDS.extent.buffer,
-        label: format!(
-            "AT ITA Guidelines 2025 v2 s4.2.1.1: 5% on motorways, strategic, primary and secondary arterials, RTN and FTN routes and freight levels 1A, 1B and 2; 10% on collectors; changes under {} veh/h left out (Spare Construct assumption). The freight set is a Spare Construct assumption.",
-            number_to_js_string(floor)
-        ),
-        same_gap,
-        note: if same_gap {
-            String::new()
-        } else {
-            "Without and with ran at different convergence targets; re-run both at the same target before relying on the extent.".to_string()
-        },
-    })
+    let pad_l = STANDARDS.extent.buffer
+        / (111_320.0 * crate::jsmath::cos(f64::midpoint(south, north) * std::f64::consts::PI / 180.0));
+    Some(vec![[south - pad, west - pad_l], [north + pad, east + pad_l]])
 }
 
 /* ---------------- difference plots ---------------- */
@@ -550,15 +565,15 @@ pub struct DiffOpts {
 
 /// `Engine.difference(base, opt, o)`: per arc change in flow, V/C and junction delay; bars hidden under max(20, 2 × noise95), labels from 10 veh/h (50 below zoom 15). None without both results.
 #[must_use]
-pub fn difference(base: Option<&Res>, opt: Option<&Res>, o: DiffOpts) -> Option<Difference> {
+pub fn difference(base: Option<&Res>, opt: Option<&Res>, opts: DiffOpts) -> Option<Difference> {
     let (base, opt) = (base?, opt?);
     let n95 = math_max(
         or_default(base.noise95.unwrap_or(0.0), 0.0),
         or_default(opt.noise95.unwrap_or(0.0), 0.0),
     );
     let hide = math_max(STANDARDS.diff.floor, STANDARDS.diff.noise_k * n95);
-    let k = o.k.unwrap_or(0.02);
-    let zoom = o.zoom.unwrap_or(16.0);
+    let k = opts.k.unwrap_or(0.02);
+    let zoom = opts.zoom.unwrap_or(16.0);
     let label_min = if zoom < STANDARDS.diff.low_zoom {
         STANDARDS.diff.label_low_zoom
     } else {
@@ -566,19 +581,19 @@ pub fn difference(base: Option<&Res>, opt: Option<&Res>, o: DiffOpts) -> Option<
     };
     let mut arcs = OrderedMap::new();
     for key in union_keys(&base.arcs, &opt.arcs) {
-        let a = base.arcs.get(key);
-        let b = opt.arcs.get(key);
+        let before = base.arcs.get(key);
+        let after = opt.arcs.get(key);
         let get = |x: Option<&crate::results::ArcRes>, f: fn(&crate::results::ArcRes) -> f64| {
             or_default(x.map_or(0.0, f), 0.0)
         };
-        let d = get(b, |x| x.v) - get(a, |x| x.v);
+        let d = get(after, |x| x.v) - get(before, |x| x.v);
         let show = d.abs() >= hide;
         arcs.insert(
             key,
             DiffArc {
                 d: r1(d),
-                dvc: r3(get(b, |x| x.vc) - get(a, |x| x.vc)),
-                dnd: r1(get(b, |x| x.nd) - get(a, |x| x.nd)),
+                dvc: r3(get(after, |x| x.vc) - get(before, |x| x.vc)),
+                dnd: r1(get(after, |x| x.nd) - get(before, |x| x.nd)),
                 show,
                 label: show && d.abs() >= label_min,
                 w: r1(clamp(
@@ -707,7 +722,7 @@ fn ww_pick(nr: Option<&crate::results::NodeRes>) -> Option<WwSide> {
 
 // '–' under half a unit of the last decimal, otherwise '+12.2 s' / '−3.0 s'
 fn ww_sgn(x: f64, u: &str, dp: usize) -> String {
-    let half = [1.0, 0.1, 0.01][dp] / 2.0;
+    let half = [1.0, 0.1, 0.01].get(dp).copied().unwrap_or(0.01) / 2.0;
     if x.abs() < half {
         return fmt::DASH.to_string();
     }
@@ -830,7 +845,7 @@ pub struct DevRow {
 
 impl Serialize for DevRow {
     fn serialize<S: Serializer>(&self, s: S) -> Result<S::Ok, S::Error> {
-        let mut m = s.serialize_map(Some(3 + self.shares.len()))?;
+        let mut m = s.serialize_map(Some(self.shares.len().saturating_add(3)))?;
         m.serialize_entry("id", &self.id)?;
         m.serialize_entry("name", &self.name)?;
         m.serialize_entry("vph", &plain::Ser(&self.vph))?;
@@ -1086,6 +1101,6 @@ pub fn msm_check(
             number_to_js_string(pct)
         ),
         rows,
-        flagged: n as f64,
+        flagged: crate::jsnum::usize_to_f64(n),
     }
 }
