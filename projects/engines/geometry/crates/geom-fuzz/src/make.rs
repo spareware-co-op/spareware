@@ -37,8 +37,9 @@
 //! [`MAX_INPUT_BYTES`] bytes read.
 //!
 //! Covers: make.box, make.cone, make.cylinder, make.prism, make.sphere, make.torus,
-//! query.area, query.bounding_box, query.exactness, query.faces, query.validity, query.volume,
-//! transform.mirror, transform.move, transform.pattern, transform.rotate, transform.scale.
+//! `query.area`, `query.bounding_box`, `query.exactness`, `query.faces`, `query.validity`,
+//! `query.volume`, transform.mirror, transform.move, transform.pattern, transform.rotate,
+//! transform.scale.
 
 use geom_check::query::{self, ExactnessReport};
 use geom_check::{Level, Report, check as full_check};
