@@ -108,6 +108,7 @@ async fn a_teams_wip_is_shut_to_everyone_else() {
         i(area.pieces.values().next().unwrap())
     };
     assert!(refused(s.area(&dan, &project, &model, &VIEW).await));
+    assert!(refused(s.kind(&dan, &project, &model, &i("wall")).await));
     assert!(refused(s.claims(&dan, &project, &model).await));
     assert!(refused(s.record(&dan, &project, &model, &hash).await));
     assert!(refused(
@@ -128,6 +129,56 @@ async fn a_teams_wip_is_shut_to_everyone_else() {
         .map(|f| f["kind"].clone())
         .collect();
     assert_eq!(kinds, [json!("shared"), json!("consumed")]);
+}
+
+/// Workshop keeps its parts as elements, through the same edit log as walls, and finds them by
+/// kind: they have no place in the plan, because this server's geometry doesn't build them.
+#[tokio::test(flavor = "multi_thread")]
+async fn workshop_parts_are_elements_listed_by_kind() {
+    let stack = seeded().await;
+    let s = &stack.service;
+    let (anna, ben, project, model) = (i("anna"), i("ben"), i("example-1"), i("arch-model"));
+    let recipe = json!({ "owner": "workshop", "schema": 1, "op": "part", "op_version": 1,
+        "args": { "end": 0, "features": [], "material": "steel",
+                  "params": [{ "name": "width", "value": 120 }] } });
+    let args = json!({ "element": "WP-1", "kind": "workshop.part", "name": "Bracket", "level": 0,
+        "placement": { "x": 0, "y": 0, "z": 0 }, "recipe": recipe,
+        "props": { "category": "Workshop parts" } });
+    let seq = s
+        .edit(&anna, &project, &model, "element.create", args)
+        .await
+        .unwrap();
+    s.regenerate(&project).await.unwrap();
+
+    // Ben, on the same team, finds it, reads it and sees no place for it in the plan.
+    let parts = s
+        .kind(&ben, &project, &model, &i("workshop.part"))
+        .await
+        .unwrap();
+    assert!(parts.through >= seq);
+    let hash = i(&parts.pieces["WP-1"]);
+    let record = s.record(&ben, &project, &model, &hash).await.unwrap();
+    assert_eq!(record.recipe.owner, "workshop");
+    assert_eq!(record.name, "Bracket");
+    let area = s
+        .area(&ben, &project, &model, &View { level: 0, ..VIEW })
+        .await
+        .unwrap();
+    assert!(!area.pieces.contains_key("WP-1"));
+    let walls = s.kind(&ben, &project, &model, &i("wall")).await.unwrap();
+    assert!(!walls.pieces.is_empty() && !walls.pieces.contains_key("WP-1"));
+
+    // A change goes through the log like any other, and the list follows it.
+    let width = json!({ "element": "WP-1", "name": "Wide bracket" });
+    s.edit(&ben, &project, &model, "element.set", width)
+        .await
+        .unwrap();
+    s.regenerate(&project).await.unwrap();
+    let parts = s
+        .kind(&anna, &project, &model, &i("workshop.part"))
+        .await
+        .unwrap();
+    assert_ne!(parts.pieces["WP-1"], hash.to_string());
 }
 
 #[tokio::test(flavor = "multi_thread")]

@@ -22,7 +22,7 @@ Elements are recipes, and shapes are built from them. Boxes are a stand-in behin
 
 [tests/swap.rs](tests/swap.rs) runs the whole server on a second, different shape generator, then compares the stores: same keys, same log.
 
-**The page is the Spare Construct demo.** The server sends [the demo's own file](../demo/index.html) unchanged and adds [app/connect.js](../app/connect.js), so the ribbon, palettes, view tabs and status bar are the real ones and stay in step with the demo. Connected to live data: sign-in, the hub switcher, the project list, WIP, Shared and Consumed folders in the project browser, the plan and 3D views, properties, the Wall and Door tools, Share, Bridge, Take in, and links. Everything else in the demo says it isn't connected yet, rather than showing sample data.
+**The page is the Spare Construct demo.** The server sends [the demo's own file](../demo/index.html) unchanged and adds [app/connect.js](../app/connect.js), so the ribbon, palettes, view tabs and status bar are the real ones and stay in step with the demo. Connected to live data: sign-in, the hub switcher, the project list, WIP, Shared and Consumed folders in the project browser, the plan and 3D views, properties, the Wall and Door tools, Workshop's parts and assembly (elements found by kind, at `/api/projects/<project>/models/<model>/kind/<kind>`), Share, Bridge, Take in, and links. Everything else in the demo says it isn't connected yet, rather than showing sample data.
 
 ## Where everything is
 
@@ -38,6 +38,7 @@ Elements are recipes, and shapes are built from them. Boxes are a stand-in behin
 | [`construct-regen`](../crates/construct-regen) | The stand-in, and the regenerator that keeps derived shapes up to date | Unit tests, and [shapes.rs](../crates/construct-api/tests/shapes.rs), on two generators |
 | [`construct-api`](../crates/construct-api) | With its `cloud` feature: Cedar's rules, element commands, folders, packages, bridges, links, hubs, projects and teams | [shapes.rs](../crates/construct-api/tests/shapes.rs), [directory.rs](tests/directory.rs) |
 | [`construct-shapes`](../crates/construct-shapes) | The geometry for the browser | Unit tests, and every browser's checkpoints |
+| [`construct-workshop`](../crates/construct-workshop) | Workshop's parts, built by the geometry kernel, for the browser; this server serves its page at `/workshop/` | [kernel.rs](../crates/construct-workshop/tests/kernel.rs) |
 | [app](../app) | The browser app on the demo's layout | [Real browsers](tests/browser/two_browsers.mjs) |
 | This folder | The web layer, the live channel, seed data, deployment | [Rules in-memory](tests/service.rs), [the swap](tests/swap.rs), [the checklist](tests/checklist.rs) |
 

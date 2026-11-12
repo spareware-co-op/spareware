@@ -47,6 +47,12 @@ fn construct_keys_read_back() {
                     y: *y,
                     element: b.clone(),
                 },
+                Place::Kind {
+                    project: a.clone(),
+                    document: b.clone(),
+                    kind: a.clone(),
+                    element: b.clone(),
+                },
                 Place::Item {
                     project: a.clone(),
                     team: b.clone(),

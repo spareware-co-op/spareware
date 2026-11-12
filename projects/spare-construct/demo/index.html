@@ -144,6 +144,7 @@ html[data-disc="mep"],[data-dsw="mep"]{--app:#93D9A6;--app-strong:#1F7A45;--app-
 html[data-disc="civil"],[data-dsw="civil"]{--app:#DCC196;--app-strong:#7A5626;--app-tint:#F9F1E4}
 html[data-disc="coord"],[data-dsw="coord"]{--app:#C9B8F5;--app-strong:#5A3FB0;--app-tint:#F3EFFE}
 html[data-disc="transport"],[data-dsw="transport"]{--app:#F2D675;--app-strong:#7A6210;--app-tint:#FCF6DD}
+html[data-disc="workshop"],[data-dsw="workshop"]{--app:#F2AFCF;--app-strong:#9A2C66;--app-tint:#FDEEF5}
 [data-dsw="survey"]{--app:#7FD8CF;--app-strong:#13756B;--app-tint:#E8F8F6}
 [data-dsw="construction"]{--app:#FDBA8C;--app-strong:#A34A12;--app-tint:#FFF1E7}
 .disc-menu .dno{flex:none;width:20px;font-family:var(--font-mono);font-size:12px;color:var(--ink-2);margin-top:1px}
@@ -180,7 +181,7 @@ main{display:flex;flex-direction:column;min-width:0;min-height:0;overflow:hidden
 .views{flex:1;display:flex;min-width:0;min-height:0}
 .screen{display:none;flex:1;min-width:0;min-height:0}
 .screen.on{display:grid}
-#sc-transport.on{display:flex}
+#sc-transport.on,#sc-workshop.on{display:flex}
 .tframe{flex:1;width:100%;min-height:0;border:0}
 .split{grid-template-columns:minmax(0,1fr)}
 .center{position:relative;display:flex;flex-direction:column;min-width:0;min-height:0;overflow:hidden}
@@ -542,6 +543,7 @@ button.badge:hover{background:var(--hairline);color:var(--ink)}
    <div class="views">
    <section class="screen" id="sc-start"></section>
    <section class="screen" id="sc-transport" aria-label="Transport network"></section>
+   <section class="screen" id="sc-workshop" aria-label="Workshop: parts, assemblies and drawings"></section>
    <section class="screen split" id="sc-plan"></section>
    <section class="screen split" id="sc-3d"></section>
    <section class="screen split" id="sc-sheet"></section>
@@ -749,7 +751,9 @@ ACT.redo=()=>{const u=REDO.pop();if(!u){toast('Nothing to redo.');return}UNDO.pu
 /* ---------- screens and routing ---------- */
 const SCREENS=[['start','Start','start'],['plan','Plan','plan'],['3d','3D','cube'],['sheet','Sheets','sheet'],['schedule','Schedules','table'],['clash','Clash','clash'],['compare','Team and versions','compare'],['sharing','Sharing','timeline'],['files','Project files','folder'],['family','Components','family'],['checks','Checks','shield'],['commands','Commands and AI','term']];
 const NODOCK=['start'];
-const VIEWS={transport:{name:'Transport network',kind:'Live map',sc:'Live map'},framing:{name:'Framing plan',kind:'Floor plan',sc:'1:100'},services:{name:'Services plan',kind:'Floor plan',sc:'1:100'},coord:{name:'Coordination plan',kind:'Floor plan',sc:'1:100'},ground:{name:'Ground floor plan',kind:'Floor plan',sc:'1:100'},found:{name:'Foundation plan',kind:'Floor plan',sc:'1:100'},bracing:{name:'Bracing plan',kind:'Floor plan',sc:'1:100'},drain:{name:'Drainage plan',kind:'Floor plan',sc:'1:100'},site:{name:'Site plan',kind:'Site plan',sc:'1:200'},elev:{name:'North elevation',kind:'Elevation',sc:'1:100'},secA:{name:'Section A',kind:'Section',sc:'1:100'}};
+/* Views that are a discipline's own page in a frame, with that page's own panels: the view and its discipline */
+const FRAMEV={transport:'transport',workshop:'workshop'};
+const VIEWS={transport:{name:'Transport network',kind:'Live map',sc:'Live map'},workshop:{name:'Workshop',kind:'Parts and assemblies',sc:'1:1'},framing:{name:'Framing plan',kind:'Floor plan',sc:'1:100'},services:{name:'Services plan',kind:'Floor plan',sc:'1:100'},coord:{name:'Coordination plan',kind:'Floor plan',sc:'1:100'},ground:{name:'Ground floor plan',kind:'Floor plan',sc:'1:100'},found:{name:'Foundation plan',kind:'Floor plan',sc:'1:100'},bracing:{name:'Bracing plan',kind:'Floor plan',sc:'1:100'},drain:{name:'Drainage plan',kind:'Floor plan',sc:'1:100'},site:{name:'Site plan',kind:'Site plan',sc:'1:200'},elev:{name:'North elevation',kind:'Elevation',sc:'1:100'},secA:{name:'Section A',kind:'Section',sc:'1:100'}};
 function go(h){if(location.hash==='#'+h)route();else location.hash=h}
 function route(){
  const h=decodeURIComponent(location.hash.slice(1)||'plan');let[scr,arg]=h.split(':');
@@ -758,9 +762,10 @@ function route(){
  if(S.screen!==scr&&S.keepTool!==scr){S.tool='select';S.pend=null}
  S.keepTool=null;
  S.screen=scr;
- if(scr==='plan'&&S.view==='transport'&&DISC!=='transport'){DISC='transport';renderDisc()}
- else if(!(scr==='plan'&&S.view==='transport')&&DISC==='transport'){DISC=(scr==='plan'&&VDISC[S.view])||'architecture';renderDisc()}
- const sid=scr==='plan'&&S.view==='transport'?'transport':scr;
+ const fv=scr==='plan'&&FRAMEV[S.view];
+ if(fv&&DISC!==fv){DISC=fv;renderDisc()}
+ else if(!fv&&Object.values(FRAMEV).includes(DISC)){DISC=(scr==='plan'&&VDISC[S.view])||'architecture';renderDisc()}
+ const sid=fv||scr;
  $$('.screen').forEach(s=>s.classList.toggle('on',s.id==='sc-'+sid));
  openView(curView());
  refresh();
@@ -778,7 +783,7 @@ ACT.on=b=>{const[h,act,a]=b.dataset.a.split('|');const run=()=>{if(ACT[act])ACT[
 const OPEN=[];
 function curView(){const s=S.screen;return s==='plan'?'plan:'+S.view:s==='sheet'?'sheet:'+S.sheet:s==='schedule'?'schedule:'+S.sched:s}
 function viewName(h){const[s,a]=h.split(':');if(s==='plan')return VIEWS[a]?VIEWS[a].name:a;if(s==='sheet'){const sh=SHEETS().find(x=>x.id===a);return sh?sh.id+' '+sh.name:'Sheet '+a}if(s==='schedule'){const k=SCHEDS.find(x=>x[0]===a);return k?k[1]:'Schedule'}return{start:'Start','3d':'Default 3D',clash:'Clash results',compare:'Team and versions',sharing:'Sharing timeline',files:'Project files',family:'Single swing door',checks:'Checks',commands:'Commands and AI'}[s]||s}
-function viewIcon(h){const[s,a]=h.split(':');if(s==='plan')return{site:'pin',elev:'elev',secA:'section',transport:'road',found:'foundation',bracing:'bracing',drain:'drain'}[a]||'plan';return(SCREENS.find(x=>x[0]===s)||[0,0,'file'])[2]}
+function viewIcon(h){const[s,a]=h.split(':');if(s==='plan')return{site:'pin',elev:'elev',secA:'section',transport:'road',workshop:'cube',found:'foundation',bracing:'bracing',drain:'drain'}[a]||'plan';return(SCREENS.find(x=>x[0]===s)||[0,0,'file'])[2]}
 function openView(h){if(OPEN.includes(h))return;OPEN.push(h);while(OPEN.length>10)OPEN.splice(OPEN.findIndex(x=>x!==h),1)}
 function renderViewTabs(){const cur=curView();$('#vtabs').innerHTML=`<button class="btn sm bt-browser" data-act="browser" aria-expanded="${!!S.bopen}">${ic('tree','sm')}Browser</button>`+OPEN.map(h=>`<div class="rb-doc"${h===cur?' aria-current="true"':''}><button data-act="vtab" data-a="${esc(h)}"${h===cur?' aria-current="page"':''}>${ic(viewIcon(h),'sm')}<span>${esc(viewName(h))}</span></button><button class="rb-x" data-act="vclose" data-a="${esc(h)}" aria-label="Close ${esc(viewName(h))}" title="Close">${ic('x','sm')}</button></div>`).join('')}
 ACT.vtab=b=>go(b.dataset.a);
@@ -787,7 +792,7 @@ ACT.vcloseothers=()=>{const c=curView();OPEN.splice(0,OPEN.length,c);refresh();t
 
 /* ---------- the dock: properties above the project browser ---------- */
 S.ui={props:true,browser:true};
-function renderDock(){$('#pal-props').hidden=!S.ui.props;$('#pal-browser').hidden=!S.ui.browser;DOCK.layout();$$('.rb-dock').forEach(d=>d.classList.toggle('has',!d.hidden));$('#work').classList.toggle('nodock',NODOCK.includes(S.screen)||(S.screen==='plan'&&S.view==='transport')||!(S.ui.props||S.ui.browser))}
+function renderDock(){$('#pal-props').hidden=!S.ui.props;$('#pal-browser').hidden=!S.ui.browser;DOCK.layout();$$('.rb-dock').forEach(d=>d.classList.toggle('has',!d.hidden));$('#work').classList.toggle('nodock',NODOCK.includes(S.screen)||(S.screen==='plan'&&!!FRAMEV[S.view])||!(S.ui.props||S.ui.browser))}
 ACT.uipal=b=>{const k=b.dataset.a;S.ui[k]=!S.ui[k];refresh();if(!S.ui[k])toast((k==='props'?'Properties':'Project browser')+' closed. Open it again from View, User interface.')};
 /* Each page builds its properties in its own aside; they all show in the one properties palette. */
 function dockSide(){const host=$('#props-host'),sid=S.screen,sc=$('#sc-'+sid);
@@ -799,18 +804,18 @@ const DOCK=SpareRibbon.dock($('#work'),{app:'construct',ribbon:RB,sides:{props:'
 
 /* ---------- the status bar prompt: what to do next on this page ---------- */
 const HINTS={start:'Open a project, start a new one, or learn as you go.','3d':'Click any face to select it.',sheet:'Every view on this sheet is live from the model.',schedule:'Edit a cell and the model changes. Undo works here too.',clash:'Hits are grouped into issues, each with an owner and a saved view.',compare:'<b>+</b> added · <b>−</b> removed · <b>~</b> changed, shown in colour and by symbol.',family:'Change a value and the door flexes. Load it into the project when it is right.',commands:'People, scripts, add-ins and agents all run these.',sharing:'Each team publishes when it is ready, and takes in other teams’ packages when it chooses.',files:'Every file in one versioned store with the model.',checks:'Problems, code checks and clean up for the whole model. Nothing here stops your work.'};
-function setPrompt(){if(S.screen==='plan'&&S.view!=='transport')return;$('#hint').innerHTML=S.screen==='plan'?'Traffic and public transport, modelled on a live map.':HINTS[S.screen]||''}
+function setPrompt(){if(S.screen==='plan'&&!FRAMEV[S.view])return;$('#hint').innerHTML=S.screen==='plan'?(S.view==='workshop'?'Parts, assemblies and drawings for things that are made.':'Traffic and public transport, modelled on a live map.'):HINTS[S.screen]||''}
 ACT.view=b=>{S.view=b.dataset.a;S.zoom=1;S.zc=null;go('plan:'+b.dataset.a)};
 ACT.browser=()=>{S.bopen=!S.bopen;$('#work').classList.toggle('bopen',S.bopen)};
 
 /* ---------- disciplines ---------- */
-/* In the order a project runs: survey first, the contractor on site last. Construction is mapped but not in this demo yet. */
-const DISCS=[['survey','Survey','Ground, boundaries and what is already there','01',1],['civil','Civil','Ground, roads and pipe networks','02',1],['transport','Transport','Roads, public transport, walking and traffic simulation on a live map','03',1],['architecture','Architecture','Walls, doors, windows, rooms and sheets','04',1],['structure','Structure','Framing, bracing and foundations','05',1],['mep','MEP','Ducts, pipes, drainage and electrical','06',1],['coord','Coordination','Linked models, clash and issues','07',1],['construction','Construction','Stages, set-out, site and as-builts','08',0]];
+/* In the order a project runs: survey first, the contractor on site last. Workshop designs the things that are made for it. Construction is mapped but not in this demo yet. */
+const DISCS=[['survey','Survey','Ground, boundaries and what is already there','01',1],['civil','Civil','Ground, roads and pipe networks','02',1],['transport','Transport','Roads, public transport, walking and traffic simulation on a live map','03',1],['architecture','Architecture','Walls, doors, windows, rooms and sheets','04',1],['structure','Structure','Framing, bracing and foundations','05',1],['mep','MEP','Ducts, pipes, drainage and electrical','06',1],['workshop','Workshop','Parts, assemblies and drawings for things that are made','07',1],['coord','Coordination','Linked models, clash and issues','08',1],['construction','Construction','Stages, set-out, site and as-builts','09',0]];
 let DISC='architecture';
 /* Each discipline is its own program on the same model: its own ribbon (SETS, in ribbonCfg), opening on its home tab */
-const DTAB={architecture:'arch',structure:'str',mep:'sys',civil:'site',survey:'srv',transport:'tr-home',coord:'col'};
+const DTAB={architecture:'arch',structure:'str',mep:'sys',civil:'site',survey:'srv',transport:'tr-home',workshop:'ws-home',coord:'col'};
 // Which tools run on their Rust engine; the rest are prototypes until their engine is ported and proven against them
-const ENGINE={transport:'Rust engine'};
+const ENGINE={transport:'Rust engine',workshop:'Geometry kernel'};
 function renderDisc(){const d=DISCS.find(x=>x[0]===DISC);document.documentElement.dataset.disc=DISC;if(DTAB[DISC])RB.select(DTAB[DISC]);$('#disc-name').textContent=d[1];$('#b-disc').setAttribute('aria-label','Discipline: '+d[1]);$('#disc-menu').innerHTML=DISCS.map(([k,l,w,no,ok])=>`<button type="button" role="menuitemradio" aria-checked="${k===DISC}"${ok?` data-act="disc"`:' aria-disabled="true"'} data-a="${k}" data-dsw="${k}"><span class="dsw" aria-hidden="true"></span><span class="dno">${no}</span><span>${l}${ok?`<span class="badge${ENGINE[k]?'':' n'}">${ENGINE[k]||'Prototype'}</span>`:''}<small>${ok?w:w+'. Not in this demo yet.'}</small></span></button>`).join('')}
 function discMenu(open){const m=$('#disc-menu');m.hidden=!open;$('#b-disc').setAttribute('aria-expanded',String(open));if(open){const c=m.querySelector('[aria-checked="true"]');if(c)c.focus()}}
 ACT.discmenu=()=>discMenu($('#disc-menu').hidden);
@@ -874,12 +879,13 @@ function selPanels(id){const k=kindOf(id),e=byId(id),own=elDisc(id),L=[];
  if(['wall','door','window','room','opening'].includes(k))L.push(P('Modify',MODIFY()));
  L.push(P('Selection',[{label:'Deselect',icon:'x',act:'deselect'}]));
  return L}
-/* Each discipline's ribbon: its own home tab first, then the shared tabs whose tools work for it. Transport's comes from its page (transportCfg). */
+/* Each discipline's ribbon: its own home tab first, then the shared tabs whose tools work for it. Transport's and Workshop's come from their pages (transportCfg, workshopCfg). */
 const SETS={architecture:['arch','ins','ann','anl','col','view','man','add','mod'],structure:['str','ins','anl','col','view','man','add','mod'],mep:['sys','ins','anl','col','view','man','add','mod'],
  civil:['site','ins','anl','col','view','man','add','mod'],survey:['srv','ins','col','view','man','add','mod'],coord:['col','ins','anl','view','man','add','mod']};
 const SOON='Not in this demo yet: ';
 function ribbonCfg(){
  if(DISC==='transport')return transportCfg();
+ if(DISC==='workshop')return workshopCfg();
  const sc=S.screen,t=S.tool,pref=a=>document.documentElement.hasAttribute('data-'+a);
  const V=(v,label,icon)=>({act:'view',a:v,label,icon:icon||'plan',pressed:sc==='plan'&&S.view===v});
  const T={
@@ -947,9 +953,9 @@ function ribbonCfg(){
  const tabs=(SETS[DISC]||SETS.architecture).map(k=>T[k]);
  const ctx=[];
  if(TOOLS[sc])ctx.push({id:'v-'+sc,key:'v-'+sc,label:VCTX[sc],panels:TOOLS[sc]()});
- if(sc==='plan'&&t!=='select'&&S.view!=='transport'){const d=Object.keys(DTOOLS).find(k=>DTOOLS[k].some(x=>x[0]===t))||DISC;
+ if(sc==='plan'&&t!=='select'&&!FRAMEV[S.view]){const d=Object.keys(DTOOLS).find(k=>DTOOLS[k].some(x=>x[0]===t))||DISC;
   ctx.push({id:'tool',key:'tool:'+t,group:'Modify',label:'Place '+TOOLNAME[t],panels:[P('Select',[{label:'Modify',icon:'select',act:'seltool',tip:'Stop placing. Esc does the same.'}]),P('Draw',DTOOLS[d].map(x=>DT_(d,x[0]))),...(d==='architecture'?[P('Tag',[{label:'Tag all',icon:'tag',act:'tagall',pressed:S.cats.tags}])]:[])]})}
- else if(S.sel&&byId(S.sel)&&((sc==='plan'&&S.view!=='transport')||sc==='3d'))ctx.push({id:'sel',key:'sel:'+S.sel,group:'Modify',label:selCat(S.sel),panels:selPanels(S.sel)});
+ else if(S.sel&&byId(S.sel)&&((sc==='plan'&&!FRAMEV[S.view])||sc==='3d'))ctx.push({id:'sel',key:'sel:'+S.sel,group:'Modify',label:selCat(S.sel),panels:selPanels(S.sel)});
  return{tabs,contextual:ctx,
   quick:[{label:'Start',icon:'start',act:'go',a:'start'},{label:'Open',icon:'open',act:'go',a:'start',tip:'Open a project from the start page.'},{label:'Save',icon:'save',act:'save',kbd:'Ctrl S'},{label:'Undo',icon:'undo',act:'undo',kbd:'Ctrl Z',disabled:!UNDO.length,tip:UNDO.length?UNDO[UNDO.length-1].label:'Nothing to undo'},{label:'Redo',icon:'redo',act:'redo',kbd:'Ctrl Y',disabled:!REDO.length,tip:REDO.length?REDO[REDO.length-1].label:'Nothing to redo'},{sep:1},{label:'Print set',icon:'print',act:'on',a:'sheet|print|'},...(DISC==='architecture'?[{label:'Dimension',icon:'dim',act:'dtool',a:'architecture:dim'},{label:'Tag all',icon:'tag',act:'tagall'}]:[]),{label:'Default 3D',icon:'cube',act:'go',a:'3d'},{label:'Section A',icon:'section',act:'view',a:'secA'},{label:'Close other views',icon:'closeviews',act:'vcloseothers'}],
   file:{label:'File',items:[{label:'New project',icon:'plus',act:'on',a:'start|startto|np'},{label:'Open',icon:'open',act:'go',a:'start',sub:'From this computer, the cloud or a link'},{label:'Save',icon:'save',act:'save',kbd:'Ctrl S'},{label:'Save a version',icon:'flag',act:'on',a:'compare|focusVer|'},{sep:1},{label:'Print set',icon:'print',act:'on',a:'sheet|print|'},{label:'Issue set',icon:'send',act:'on',a:'sheet|issueTool|'},{label:'Export a schedule to a spreadsheet',icon:'down',act:'on',a:'schedule|export|XLSX'},{label:'Export clash issues (BCF)',icon:'down',act:'on',a:'clash|bcf|out'},{sep:1},{label:'Project files',icon:'folder',act:'go',a:'files'},{label:'Close the project',icon:'lock',act:'on',a:'files|fsclose|'},{sep:1},{label:'Install',icon:'down',act:'on',a:'start|startto|plat'},{label:'Learn',icon:'book',act:'on',a:'start|startto|learn'},{label:'Account',icon:'user',act:'account'}],
@@ -1007,6 +1013,21 @@ function transportCfg(){
  return{tabs:ok([home,anl,packTab]),contextual:[],
   quick:[...quick,{label:'Undo',icon:'undo',kbd:'Ctrl Z',disabled:!st.undo,tip:st.undo?'Undo '+st.undo:'Nothing to undo',run:()=>F.undo()},{label:'Redo',icon:'redo',kbd:'Ctrl Y',disabled:!st.redo,run:()=>F.redo()},{sep:1},{label:'Close other views',icon:'closeviews',act:'vcloseothers'}],
   file:{label:'File',items,side:side.length?{head:'Recent',items:side}:null}}}
+/* ---------- Workshop's own ribbon ----------
+   Workshop is its own page too (workshop/), with its browser, view and properties. Its tabs (Part, Assembly and
+   Drawing) are the ones the page gives (workshop/js/ui.js, WorkshopFrame.tabs()), and every button runs the page's
+   own function; what waits for the geometry kernel is there, unavailable, saying which kernel pieces it waits for. */
+const WSF=()=>{const f=$('#sc-workshop iframe');try{return(f&&f.contentWindow&&f.contentWindow.WorkshopFrame)||null}catch(e){return null}};
+let WSICONS=false,WSHOME='';
+function wsChanged(){const F=WSF();if(!F)return;if(!WSICONS){SpareIcons.install(F.icons());WSICONS=true}
+ if(DISC!=='workshop')return;renderRibbon();const h=F.home();if(h!==WSHOME){WSHOME=h;RB.select(h)}}
+function workshopCfg(){
+ const F=WSF(),quick=[{label:'Start',icon:'start',act:'go',a:'start'},{label:'Open',icon:'open',act:'go',a:'start',tip:'Open a project from the start page.'}];
+ let st;try{st=F&&F.state()}catch(e){st=null}
+ if(!st)return{tabs:[{id:'ws-home',label:'Part',panels:[P('Part',[{label:'Loading Workshop',icon:'cube',disabled:true,tip:'Workshop is still loading.'}])]}],contextual:[],quick,file:{label:'File',items:[{label:'Start',icon:'start',act:'go',a:'start'}]}};
+ return{tabs:F.tabs(),contextual:[],
+  quick:[...quick,{label:'Undo',icon:'undo',kbd:'Ctrl Z',disabled:!st.undo,tip:st.undo?'Undo: '+st.undo:'Nothing to undo',run:()=>F.undo()},{label:'Redo',icon:'redo',kbd:'Ctrl Y',disabled:!st.redo,run:()=>F.redo()},{sep:1},{label:'Close other views',icon:'closeviews',act:'vcloseothers'}],
+  file:{label:'File',items:[...F.file(),{sep:1},{label:'Start',icon:'start',act:'go',a:'start'}]}}}
 let RBDISC=null;
 function renderRibbon(){RB.update(ribbonCfg());if(RBDISC!==DISC){RBDISC=DISC;if(S.screen==='plan')RB.select(DTAB[DISC])}}   // a new discipline's ribbon opens on its home tab
 const renderTools=renderRibbon;
@@ -1026,7 +1047,7 @@ ACT.save=()=>{saving();toast('Every change is saved as you make it. To mark a po
 const DETAIL={coarse:'Coarse',medium:'Medium',fine:'Fine'};
 function renderVbar(){const vb=$('#vbar'),sc=S.screen,sep='<span class="rb-vsep" aria-hidden="true"></span>';let h='';
  const B=(act,a,label,icon,on,dis,txt)=>`<button class="rb-vb" ${dis?'aria-disabled="true"':`data-act="${act}"${a!=null?` data-a="${a}"`:''}`}${on!=null?` aria-pressed="${!!on}"`:''} aria-label="${esc(label)}" data-tl="${esc(label)}">${ic(icon,'sm')}${txt?`<span>${txt}</span>`:''}</button>`;
- if(sc==='plan'&&S.view!=='transport'){const v=VIEWS[S.view],fl=FLOORV.includes(S.view);
+ if(sc==='plan'&&!FRAMEV[S.view]){const v=VIEWS[S.view],fl=FLOORV.includes(S.view);
   h=`<span>${esc(v.kind)}</span>${sep}`+(fl?`<label class="sr" for="pv-scale">View scale</label><select id="pv-scale" data-chg="scale" data-tl="View scale">${['1:50','1:100','1:200'].map(o=>`<option${o===S.scale?' selected':''}>${o}</option>`).join('')}</select>`:`<span data-tl="View scale">${v.sc}</span>`)
    +B('vbmenu','detail','Detail level: '+DETAIL[S.detail],'detail',null,false,DETAIL[S.detail])
    +B('','','Visual style: plans are drawn in hidden line','vstyle',null,true)
@@ -1046,7 +1067,7 @@ ACT.vcrop=()=>{S.crop=!S.crop;refresh()};
 ACT.sunset=()=>{const e=$('#sun-date');if(e){e.scrollIntoView({block:'center'});e.focus()}};
 
 /* ---------- discipline tools: each discipline has its own home view, tools and elements, in the same model ---------- */
-const HOMEV={architecture:'ground',structure:'framing',mep:'services',civil:'site',survey:'site',transport:'transport',coord:'coord'};
+const HOMEV={architecture:'ground',structure:'framing',mep:'services',civil:'site',survey:'site',transport:'transport',workshop:'workshop',coord:'coord'};
 /* The discipline a view belongs to, for leaving the Transport map by opening another view */
 const VDISC={framing:'structure',found:'structure',bracing:'structure',services:'mep',drain:'mep',site:'civil',coord:'coord'};
 const homeView=()=>HOMEV[DISC];
@@ -1342,6 +1363,7 @@ function planBody(view,o={}){
 function viewBox(view){const b=VB[view]||VB.ground;const z=S.zoom||1;const cx=S.zc?S.zc[0]:b[0]+b[2]/2,cy=S.zc?S.zc[1]:b[1]+b[3]/2;const w=b[2]/z,h=b[3]/z;return[cx-w/2,cy-h/2,w,h].map(n0).join(' ')}
 
 R.plan=()=>{
+ if(S.view==='workshop'){const t=$('#sc-workshop');if(!t.firstChild){t.innerHTML='<iframe class="tframe" src="workshop/" title="Workshop: parts, assemblies and drawings"></iframe>';t.firstChild.addEventListener('load',()=>{const F=WSF();if(F)F.subscribe(wsChanged);wsChanged()})}return}
  if(S.view==='transport'){const t=$('#sc-transport');if(!t.firstChild){t.innerHTML='<iframe class="tframe" src="transport/?ribbon" title="Transport network: traffic and public transport model"></iframe>';t.firstChild.addEventListener('load',()=>{const F=TRF();if(F){F.subscribe(trChanged);F.refreshRecent()}trChanged()})}return}
  const sc=$('#sc-plan');const v=VIEWS[S.view];
  if(!sc.dataset.built){sc.innerHTML=`<div class="center"><div class="canvas" id="pv-canvas"></div><div class="rb-nav" role="toolbar" aria-label="Zoom"><button data-act="zoom" data-a="in" aria-label="Zoom in" data-tl="Zoom in">${ic('zoomin')}</button><button data-act="zoom" data-a="out" aria-label="Zoom out" data-tl="Zoom out">${ic('zoomout')}</button><button data-act="zoom" data-a="fit" aria-label="Zoom to fit" data-tl="Zoom to fit">${ic('fit')}</button></div></div><aside class="side" id="pv-side" aria-label="Properties"></aside>`;sc.dataset.built=1;bindPlanCanvas()}
