@@ -13,6 +13,7 @@ on:
       - "projects/spare-construct/app/**"
       - "projects/spare-construct/crates/**"
       - "projects/spare-construct/demo/index.html"
+      - "projects/spare-construct/clippy.toml"
       - "projects/kit/crates/kit-core/**"
       - "projects/kit/crates/kit-ops/**"
       - "projects/kit/crates/kit-store/**"
@@ -44,10 +45,15 @@ jobs:
           targets: wasm32-unknown-unknown
           components: clippy
       - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
+      # Every crate linted here but construct-api carries the geometry kernel's lint tables (piece
+      # A19); construct-api is linted with clippy's defaults until it does. construct-transport is
+      # not linted here yet.
       - name: Clippy
         run: >-
           cargo clippy --locked --no-deps -p construct-model -p construct-regen -p construct-shapes
-          -p construct-api --all-features --all-targets -- -D warnings
+          -p construct-api -p construct-wasm -p construct-cli -p construct-clash
+          -p construct-elements -p construct-families -p construct-interop -p construct-solver
+          -p construct-versions -p construct-views --all-features --all-targets -- -D warnings
       - name: Tests, with the shapes run on two generators
         run: >-
           cargo test --locked -p construct-model -p construct-regen -p construct-shapes

@@ -364,10 +364,8 @@ fn batch(opts: &Opts) -> Res<i32> {
                     Some(text) => match command_name(text) {
                         Err(Fail::Usage(message) | Fail::Run(message)) => (id, Err(message)),
                         Ok(name) => {
-                            let params = request
-                                .get("params")
-                                .cloned()
-                                .unwrap_or_else(|| json!({}));
+                            let params =
+                                request.get("params").cloned().unwrap_or_else(|| json!({}));
                             match session.run(&name, &params) {
                                 Ok(result) => (id, Ok(result)),
                                 Err(e) => (id, Err(e.to_value().to_string())),

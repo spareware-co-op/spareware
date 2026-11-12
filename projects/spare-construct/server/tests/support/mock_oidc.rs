@@ -1,8 +1,16 @@
 //! A stand-in for Google's sign-in, for tests only: built as an example, never by the deploy
-//! script, and the server reaches it only through the OIDC_ISSUER setting. It speaks real OpenID
+//! script, and the server reaches it only through the `OIDC_ISSUER` setting. It speaks real OpenID
 //! Connect, with signed ID tokens and PKCE, so the server's one sign-in path is exercised without
 //! a Google account and without any test back door in the server. It lets anyone be anyone: never
 //! run it anywhere but your own machine.
+
+// The server denies these outside tests (Cargo.toml); this is test code, and a broken stand-in must
+// stop loudly.
+#![allow(
+    clippy::expect_used,
+    clippy::arithmetic_side_effects,
+    reason = "a test stand-in; the rules are for the server's own code"
+)]
 
 use axum::extract::{Form, Query, State};
 use axum::response::{Html, IntoResponse, Redirect};
@@ -71,7 +79,8 @@ async fn authorize(
                     .append_pair("login_hint", &format!("{person}@example.test"));
                 format!("<p><a href=\"{url}\">{person}</a></p>")
             })
-            .collect();
+            .collect::<Vec<String>>()
+            .concat();
         return Html(format!("<h1>Local test sign-in</h1>{links}")).into_response();
     };
     let code = format!("code-{}", query.nonce);

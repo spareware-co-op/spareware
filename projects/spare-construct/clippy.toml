@@ -8,3 +8,6 @@ allow-unwrap-in-tests = true
 allow-expect-in-tests = true
 allow-panic-in-tests = true
 allow-indexing-slicing-in-tests = true
+
+# Names that documentation spells as their owners do, not as code. ".." keeps clippy's own list.
+doc-valid-idents = ["TiKV", "RustFS", "OpenID", ".."]
