@@ -741,7 +741,8 @@ pub fn check(case: &Case) -> Result<(), Finding> {
     let law = |law: &str, what: String| Finding::new(law, || format!("{case:?}: {what}"));
     check_kinds(&law)?;
     let paths = check_ids(case, &law)?;
-    check_context(&case.context, &paths[0], &law)?;
+    let [head, _] = &paths;
+    check_context(&case.context, head, &law)?;
     let built = build(case, &paths);
     hold(
         build(case, &paths) == built
@@ -753,7 +754,7 @@ pub fn check(case: &Case) -> Result<(), Finding> {
         String::new,
     )?;
     for (draw, error) in case.errors.iter().zip(&built) {
-        let at = paths.get(draw.on).unwrap_or(&paths[0]);
+        let at = paths.get(draw.on).unwrap_or(head);
         check_error(draw, at, error, &law)?;
     }
     let remedies: Vec<&Remedy> = built.iter().flat_map(OpError::remedies).collect();
@@ -765,10 +766,11 @@ pub fn check(case: &Case) -> Result<(), Finding> {
 
 /// The errors of `case`, built at `paths`.
 fn build(case: &Case, paths: &[OpPath; 2]) -> Vec<OpError> {
+    let [head, _] = paths;
     case.errors
         .iter()
         .map(|d| {
-            let at = paths.get(d.on).unwrap_or(&paths[0]).clone();
+            let at = paths.get(d.on).unwrap_or(head).clone();
             let (first, second) = d.entities.split_at(d.entities.len() / 2);
             let mut e = OpError::new(at, d.detail).with_entities(first.iter().copied());
             for ev in &d.evidence {
