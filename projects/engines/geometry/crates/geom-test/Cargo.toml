@@ -8,6 +8,13 @@ license.workspace = true
 description = "Spare Kit geometry kernel, development only: shared test support, seeds, generators and the dependency rule."
 
 [features]
+default = ["full-checker"]
+# Every checker group after every operation in a release build too, as debug builds run them
+# (chapter 28.4): on by default, so every crate's tests run the full set. Only the shipped-checker
+# leg leaves it out (`cargo test --release -p geom-test --no-default-features --test shipped
+# --test determinism`; decision 32.48), which builds this crate alone, so nothing else turns
+# geom-check's `full` on and operations check as a shipped build does.
+full-checker = ["geom-check/full"]
 # Reference mode (23.13; piece G106): caches and filters off through the kernel, for the fixture
 # tool and the tests that replay under it.
 reference = ["geom-num/reference", "geom-format/reference"]
@@ -25,9 +32,10 @@ geom-run = { path = "../geom-run" }
 geom-op = { path = "../geom-op" }
 # What the fixture runner replays (pieces G97, G101): the operations, and the types of their inputs.
 geom-make = { path = "../geom-make" }
-# The fault-injection catalogue (piece G110): the checker it attacks, with every group on in every
-# build (chapter 28.4), and the kernel crates whose rows and values it breaks.
-geom-check = { path = "../geom-check", features = ["full"] }
+# The fault-injection catalogue (piece G110): the checker it attacks, and the kernel crates whose
+# rows and values it breaks. Every group runs after every operation in every test build through
+# the default feature `full-checker` above (chapter 28.4).
+geom-check = { path = "../geom-check" }
 geom-curve = { path = "../geom-curve" }
 geom-math = { path = "../geom-math" }
 geom-surface = { path = "../geom-surface" }
