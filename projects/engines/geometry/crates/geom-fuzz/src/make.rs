@@ -1,11 +1,14 @@
 //! Fuzz target: `geom-make`'s primitives and transforms, on any bytes, return only what the full
-//! checker passes, keep their laws, and refuse with a typed error, never a defect.
+//! checker passes, keep their laws, and refuse with a typed error, never a defect; and the core
+//! queries (piece G102) on every body they make keep the Query family's laws.
 //!
 //! What it does: [`decode`] turns a fuzzer's bytes into a [`Case`]: a primitive, its inputs
 //! placed on the hard cases of chapter 28.5 (one-step sizes, coarse sub-grids, coordinates at the
 //! grid's edge), and a short list of transforms and patterns, each with the class the caller
 //! accepts and a work budget. [`check`] builds the primitive and runs the list, each step on the
-//! last result, and holds every outcome to the laws below. [`harness`] is `decode` then `check`.
+//! last result, and holds every outcome to the laws below. On the primitive and on each
+//! transform's result it asks all six queries ([`answers`]), twice and under the step's budget,
+//! and holds the answers to [`answers_hold`]. [`harness`] is `decode` then `check`.
 //!
 //! Guarantees:
 //!
@@ -16,31 +19,45 @@
 //!   the full checker rejects, a result without names, a history that breaks its laws, a transform
 //!   that loses a name, a class that rises, a flat solid that turns inside out, a rerun that gives
 //!   another answer, a budget that changes a result instead of stopping it, a defect on valid
-//!   input, or an error of a kind no schema lists.
+//!   input, or an error of a kind no schema lists. For the queries: an answer that states another
+//!   class than its body's, differs when asked again, or changes under a budget instead of
+//!   stopping; a refusal of a valid body other than for a curved face or edge; a validity report
+//!   or exactness judgement that is not the checker's; an exactness report that miscounts the
+//!   faces and edges by kind; faces not the body's by name and order; a box that misses a vertex
+//!   or is wrongly tight; and, for a flat solid, area vectors that do not close or a volume that
+//!   is not the one its loops enclose.
 //!
 //! Method: chapter 28.5's oracle stack and its generators aimed at the hard cases
 //! (`projects/engines/geometry/architecture/28-testing.md`), with the volume of a flat solid
 //! computed from its loops as an oracle the checker does not share.
 //!
 //! Cost: at most [`MAX_STEPS`] transforms, each of at most [`MAX_COPIES`] copies, on a body of at
-//! most [`MAX_CORNERS`] base corners, each run twice and checked in full; at most
+//! most [`MAX_CORNERS`] base corners, each run twice and checked in full; the six queries three
+//! times on at most `1 + MAX_STEPS` bodies, each time with the checker in full; at most
 //! [`MAX_INPUT_BYTES`] bytes read.
 //!
 //! Covers: make.box, make.cone, make.cylinder, make.prism, make.sphere, make.torus,
+//! query.area, query.bounding_box, query.exactness, query.faces, query.validity, query.volume,
 //! transform.mirror, transform.move, transform.pattern, transform.rotate, transform.scale.
 
-use geom_check::{Level, check as full_check};
+use geom_check::query::{self, ExactnessReport};
+use geom_check::{Level, Report, check as full_check};
 use geom_make::{
     BoxInput, Instance, Made, Moved, PrismInput, RoundInput, SphereInput, TorusInput, cone,
     cylinder, make_box, mirror, move_by, pattern, prism, rotate, scale, sphere, torus,
 };
-use geom_math::{Axis, GridTransform, RationalTransform, Rotation, Scale, TypedTransform};
+use geom_math::{
+    Axis, Box3, GridTransform, RationalTransform, Rotation, Scale, TypedTransform,
+};
+use geom_name::NamedFace;
+use geom_num::wide::I256;
 use geom_num::{Exactness, GridStep, P3, Steps};
 use geom_op::{ErrorKind, NameId, NameSet, OpContext, OpError, OpId, OpOutput, OpPath};
 use geom_run::{Budget, WorkMeter};
 use geom_test::{ByteSource, Entropy};
 use geom_topo::ix::Arena;
-use geom_topo::{Body, Ix, Sense};
+use geom_topo::query_ops::{self, BoundingBox};
+use geom_topo::{Body, CurveKind, Ix, Sense, SurfaceKind};
 
 use crate::Finding;
 pub use crate::adversarial::MAX_CORNERS;
@@ -290,6 +307,8 @@ where
             format!("{case:?}")
         }));
     }
+    let work = case.steps.first().map_or(0, |s| s.work);
+    queries(case, "primitive", &body, work)?;
     for step in &case.steps {
         match run(&ctx, &body, step) {
             Ok(mut results) => {
@@ -313,6 +332,7 @@ where
                         }));
                     }
                     rerun(case, &body, step, &out)?;
+                    queries(case, "a transform", &out, step.work)?;
                     body = out;
                 }
             }
@@ -524,6 +544,238 @@ fn rerun(
             || format!("{case:?}"),
         )),
     }
+}
+
+/// Every query of piece G102 on one body, as a program asks them: each face's twice-area vector,
+/// six times the volume, the bounding box, the exactness report, the faces, and the validity
+/// report at the cheap level and in full.
+#[derive(Clone, Debug, PartialEq)]
+pub struct Answers {
+    /// `query.area` of each face, in arena order.
+    pub areas: Vec<Result<OpOutput<[i128; 3]>, OpError>>,
+    /// `query.volume`.
+    pub volume: Result<OpOutput<I256>, OpError>,
+    /// `query.bounding_box`.
+    pub bounding_box: Result<OpOutput<Option<BoundingBox>>, OpError>,
+    /// `query.exactness`.
+    pub exactness: Result<OpOutput<ExactnessReport>, OpError>,
+    /// `query.faces`, with the history of the operation that made the body.
+    pub faces: Result<OpOutput<Vec<NamedFace>>, OpError>,
+    /// `query.validity` at [`Level::Cheap`] and [`Level::Full`].
+    pub validity: [Result<OpOutput<Report>, OpError>; 2],
+}
+
+/// The six queries on `out`, under `ctx`, the body recorded with the class it was made with.
+#[must_use]
+pub fn answers(ctx: &OpContext<'_>, out: &OpOutput<Made>) -> Answers {
+    let (body, class) = (&out.result.body, out.exactness);
+    Answers {
+        areas: (0..body.arenas().rows(Arena::Face))
+            .filter_map(Ix::new)
+            .map(|f| query_ops::twice_area(ctx, body, f, class))
+            .collect(),
+        volume: query_ops::six_volume(ctx, body, class),
+        bounding_box: query_ops::bounding_box(ctx, body, class),
+        exactness: query::exactness(ctx, body, class),
+        faces: geom_name::faces(ctx, body, &[&out.result.history], class),
+        validity: [Level::Cheap, Level::Full].map(|level| query::validity(ctx, body, class, level)),
+    }
+}
+
+/// Whether `got`, from a run under a budget, is `want` or the budget's stop.
+fn same_or_stopped<T: PartialEq>(got: &Result<T, OpError>, want: &Result<T, OpError>) -> bool {
+    got == want || matches!(got, Err(e) if e.kind() == ErrorKind::BudgetExceeded)
+}
+
+/// The queries on `out` keep chapter 22's laws: each answers the same twice, and under a budget of
+/// `work` units the same or a stop; each holds to [`answers_hold`].
+fn queries(case: &Case, what: &str, out: &OpOutput<Made>, work: u64) -> Result<(), Finding> {
+    let first = answers(&context(Budget::UNLIMITED), out);
+    answers_hold(out, &first)
+        .map_err(|f| Finding::new(&f.law, || format!("{what}: {case:?}: {}", f.detail)))?;
+    if answers(&context(Budget::UNLIMITED), out) != first {
+        return Err(Finding::new("a query answers the same twice", || {
+            format!("{what}: {case:?}")
+        }));
+    }
+    let tight = answers(&context(Budget::new(work, u64::MAX)), out);
+    let kept = tight
+        .areas
+        .iter()
+        .zip(&first.areas)
+        .all(|(g, w)| same_or_stopped(g, w))
+        && tight.areas.len() == first.areas.len()
+        && same_or_stopped(&tight.volume, &first.volume)
+        && same_or_stopped(&tight.bounding_box, &first.bounding_box)
+        && same_or_stopped(&tight.exactness, &first.exactness)
+        && same_or_stopped(&tight.faces, &first.faces)
+        && tight
+            .validity
+            .iter()
+            .zip(&first.validity)
+            .all(|(g, w)| same_or_stopped(g, w));
+    if kept {
+        Ok(())
+    } else {
+        Err(Finding::new(
+            "a budget stops a query or leaves it alone",
+            || format!("{what}: {case:?}: under {work}"),
+        ))
+    }
+}
+
+/// The answers of the queries on a valid body `out`, held to the laws and to oracles that do not
+/// share their code: every answer states the body's class; a refusal is a curved face or edge
+/// (`Unsupported`), and only of the area and volume; `query.validity` and `query.exactness`'s
+/// judgement are the checker's own reports; the exactness report counts the body's faces and edges
+/// by kind; the faces are the body's, by name, in arena order; the box holds every vertex, and is
+/// tight exactly when every face is a polygon on a plane, and then the vertices' box; and then the
+/// faces' area vectors sum to zero over the closed shell and six times the volume is the one
+/// [`six_volume`] reads from the loops.
+///
+/// # Errors
+///
+/// A [`Finding`] naming the law the answers break.
+#[allow(
+    clippy::too_many_lines,
+    reason = "one law after another, each a few lines, read in the order the header lists them"
+)]
+pub fn answers_hold(out: &OpOutput<Made>, answers: &Answers) -> Result<(), Finding> {
+    let body = &out.result.body;
+    let class = out.exactness;
+    let law = |name: &'static str| Err(Finding::new(name, String::new));
+    let curved = |e: &OpError| e.kind() == ErrorKind::Unsupported;
+    let classes = answers
+        .areas
+        .iter()
+        .map(|r| r.as_ref().map(|o| o.exactness))
+        .chain([
+            answers.volume.as_ref().map(|o| o.exactness),
+            answers.bounding_box.as_ref().map(|o| o.exactness),
+            answers.exactness.as_ref().map(|o| o.exactness),
+            answers.faces.as_ref().map(|o| o.exactness),
+        ])
+        .chain(answers.validity.iter().map(|r| r.as_ref().map(|o| o.exactness)));
+    let mut flat = true;
+    for (at, answer) in classes.enumerate() {
+        match answer {
+            Ok(stated) if stated == class => {}
+            Ok(_) => return law("a query states its body's class"),
+            Err(e) if curved(e) && at <= answers.areas.len() => flat = false,
+            Err(_) => return law("a query refuses a valid body only for a curved face or edge"),
+        }
+    }
+    let mut meter = WorkMeter::new(Budget::UNLIMITED);
+    let (Ok(cheap), Ok(full)) = (
+        full_check(body, class, Level::Cheap, &mut meter),
+        full_check(body, class, Level::Full, &mut meter),
+    ) else {
+        return law("an unlimited check finishes");
+    };
+    let [at_cheap, at_full] = &answers.validity;
+    let (Ok(at_cheap), Ok(at_full), Ok(report), Ok(listed), Ok(boxed)) = (
+        at_cheap,
+        at_full,
+        &answers.exactness,
+        &answers.faces,
+        &answers.bounding_box,
+    ) else {
+        return law("a query refuses a valid body only for a curved face or edge");
+    };
+    if at_cheap.result != cheap || at_full.result != full {
+        return law("query.validity is the checker's report");
+    }
+    let r = &report.result;
+    let a = body.arenas();
+    let planes = (0..a.rows(Arena::Face))
+        .filter_map(Ix::new)
+        .filter(|&f| {
+            let surface = a.faces.get(f).map(|face| face.surface);
+            matches!(
+                surface.and_then(|s| a.surfaces.get(s)),
+                Some(SurfaceKind::Plane(_))
+            )
+        })
+        .count();
+    let lines = (0..a.rows(Arena::Edge))
+        .filter_map(Ix::new)
+        .filter(|&e| {
+            let curve = a.edges.get(e).map(|edge| edge.curve);
+            matches!(
+                curve.and_then(|c| a.curves.get(c)),
+                Some(CurveKind::Line(_))
+            )
+        })
+        .count();
+    let by_kind = [
+        (r.flat_faces, planes),
+        (r.straight_edges, lines),
+        (
+            r.flat_faces.saturating_add(r.curved_faces),
+            usize::try_from(a.rows(Arena::Face)).unwrap_or(usize::MAX),
+        ),
+        (
+            r.straight_edges.saturating_add(r.curved_edges),
+            usize::try_from(a.rows(Arena::Edge)).unwrap_or(usize::MAX),
+        ),
+    ];
+    let counted = by_kind
+        .iter()
+        .all(|&(said, is)| usize::try_from(said).is_ok_and(|s| s == is));
+    if r.recorded != class || !counted || r.report != cheap {
+        return law("query.exactness reports the record, the geometry and the checker's judgement");
+    }
+    let names: Vec<Option<NameId>> = body.names().map_or_else(Vec::new, |n| {
+        n.faces
+            .iter()
+            .map(|k| Some(NameId::from_bytes(k.0)))
+            .collect()
+    });
+    let rows: Vec<Option<NameId>> = listed.result.iter().map(|f| f.name).collect();
+    let ordered = listed
+        .result
+        .iter()
+        .zip(0u32..)
+        .all(|(f, row)| f.row.face.row() == row);
+    if rows != names || !ordered {
+        return law("query.faces lists the body's faces by name, in arena order");
+    }
+    let corners: Vec<P3> = (0..a.rows(Arena::Vertex))
+        .filter_map(Ix::new)
+        .filter_map(|v| a.vertices.get(v).and_then(|vx| a.points.get(vx.point)).copied())
+        .collect();
+    let Some(b) = boxed.result else {
+        return law("a solid has a bounding box");
+    };
+    if !corners.iter().all(|q| b.bound.contains(*q)) || b.tight != flat {
+        return law("the box holds every vertex, tight exactly when every face is flat");
+    }
+    if !flat {
+        return if answers.volume.is_ok() {
+            law("query.volume refuses a body with a curved face or edge")
+        } else {
+            Ok(())
+        };
+    }
+    if Box3::from_points(corners) != Some(b.bound) {
+        return law("a flat body's box is its vertices' box");
+    }
+    let mut sum = [0i128; 3];
+    for area in answers.areas.iter().flatten() {
+        for (s, v) in sum.iter_mut().zip(area.result) {
+            *s = s.saturating_add(v);
+        }
+    }
+    let Ok(volume) = &answers.volume else {
+        return law("a query refuses a valid body only for a curved face or edge");
+    };
+    if sum != [0; 3] {
+        return law("a closed shell's area vectors sum to zero");
+    }
+    if volume.result != I256::from_i128(six_volume(body)) {
+        return law("query.volume is six times the volume its loops enclose");
+    }
+    Ok(())
 }
 
 /// Six times the signed volume of a flat solid, from its loops as published: positive when every

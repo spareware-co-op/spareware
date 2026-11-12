@@ -32,14 +32,15 @@ mod common;
 use common::holds;
 
 use geom_fuzz::make::{
-    Case, MAX_COPIES, MAX_CORNERS, MAX_INPUT_BYTES, MAX_STEPS, Motion, Shape, Step, check,
-    check_with, decode, harness,
+    Answers, Case, MAX_COPIES, MAX_CORNERS, MAX_INPUT_BYTES, MAX_STEPS, Motion, Shape, Step,
+    answers, answers_hold, check, check_with, decode, harness,
 };
 use geom_fuzz::seeded;
 use geom_make::{BoxInput, RoundInput};
 use geom_num::{Exactness, GridStep, P3, Steps};
 use geom_op::history::History;
-use geom_op::{NameSet, OpOutput};
+use geom_op::{NameSet, OpContext, OpId, OpOutput, OpPath};
+use geom_run::Budget;
 use geom_test::{Seed, SplitMix64};
 use geom_topo::Builder;
 
@@ -179,6 +180,112 @@ fn a_broken_operation_is_caught() {
         }],
     };
     assert!(check_with(&round, raised).is_err());
+}
+
+#[test]
+fn a_broken_query_is_caught() {
+    let ctx = OpContext::new(OpPath::new(OpId::from_bytes([4; 16])), Budget::UNLIMITED);
+    let flat = geom_make::make_box(
+        &ctx,
+        &BoxInput {
+            min: p(-3, 1, 2),
+            size: [Steps(3), Steps(4), Steps(5)],
+        },
+    )
+    .unwrap();
+    let round = geom_make::cylinder(
+        &ctx,
+        &RoundInput {
+            base: p(0, 0, 0),
+            radius: Steps(5),
+            height: Steps(10),
+            step: GridStep::Q0,
+        },
+    )
+    .unwrap();
+    for out in [&flat, &round] {
+        assert_eq!(answers_hold(out, &answers(&ctx, out)), Ok(()));
+    }
+    let law = |out: &OpOutput<geom_make::Made>, edit: &dyn Fn(&mut Answers)| {
+        let mut broken = answers(&ctx, out);
+        edit(&mut broken);
+        answers_hold(out, &broken).unwrap_err().law
+    };
+    let malformed = || {
+        geom_op::OpError::new(
+            OpPath::new(OpId::from_bytes([4; 16])),
+            geom_op::detail::QueryDetail::Malformed,
+        )
+    };
+    let cases: [(&str, &dyn Fn(&mut Answers)); 8] = [
+        ("a query states its body's class", &|a| {
+            if let Ok(v) = &mut a.volume {
+                v.exactness = Exactness::Approximate {
+                    deviation: Steps(1),
+                    step: GridStep::Q0,
+                };
+            }
+        }),
+        ("query.validity is the checker's report", &|a| {
+            a.validity[1] = a.validity[0].clone();
+        }),
+        (
+            "query.exactness reports the record, the geometry and the checker's judgement",
+            &|a| {
+                if let Ok(r) = &mut a.exactness {
+                    r.result.flat_faces -= 1;
+                    r.result.curved_faces += 1;
+                }
+            },
+        ),
+        (
+            "query.faces lists the body's faces by name, in arena order",
+            &|a| {
+                if let Ok(f) = &mut a.faces {
+                    f.result.swap(0, 1);
+                }
+            },
+        ),
+        (
+            "the box holds every vertex, tight exactly when every face is flat",
+            &|a| {
+                if let Ok(o) = &mut a.bounding_box {
+                    if let Some(b) = &mut o.result {
+                        b.tight = false;
+                    }
+                }
+            },
+        ),
+        ("a closed shell's area vectors sum to zero", &|a| {
+            if let Some(Ok(f)) = a.areas.first_mut() {
+                f.result[2] += 2;
+            }
+        }),
+        (
+            "query.volume is six times the volume its loops enclose",
+            &|a| {
+                if let Ok(v) = &mut a.volume {
+                    v.result = geom_num::wide::I256::from_i64(1);
+                }
+            },
+        ),
+        (
+            "a query refuses a valid body only for a curved face or edge",
+            &|a| a.faces = Err(malformed()),
+        ),
+    ];
+    for (name, edit) in cases {
+        assert_eq!(law(&flat, edit), name);
+    }
+    // A curved body's volume, answered, is caught too.
+    let answered = |a: &mut Answers| {
+        let class = a.exactness.as_ref().unwrap().exactness;
+        a.volume = Ok(OpOutput::new(geom_num::wide::I256::from_i64(6), class));
+    };
+    assert_eq!(
+        law(&round, &answered),
+        "query.volume refuses a body with a curved face or edge"
+    );
 }
 
 #[test]
