@@ -564,6 +564,26 @@
           "target": "lib"
         },
         {
+          "cost": "O([`BATCH`](super::BATCH)) draws and one encoding per input, once per batch, outside every measured run.",
+          "does": "[`item`] writes an array of [`MAPS`] maps, each of an integer, a text string of three letters and a float, the item `benches/cbor.rs` in `geom-format` builds, cut to a few maps; [`check`] and [`to_text`] give one such item per call, [`from_text`] its text, and [`int_column`] and [`float_column`] the little-endian rows of a column of [`ROWS`] values, as a tag 79 or tag 86 byte string holds them.",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-bench/src/inputs/cbor.rs",
+          "guarantees": [
+            "every typical batch is full and every call succeeds (`tests/inputs.rs`), so each benchmark measures the path that accepts: every item is canonical, every text reads back to its item, every row is a whole value and every float is finite. Only the typical class exists: the refusals are tested in `geom-format` itself (`tests/attack_g91.rs`)."
+          ],
+          "job": "Inputs for `geom-format`'s CBOR decoder and text form (piece G91, decision 32.46): small items of SKG's deterministic CBOR, their text, and the rows of short columns.",
+          "method": {
+            "links": [
+              "projects/engines/geometry/architecture/28-testing.md"
+            ],
+            "text": "the items and columns of `geom-format`'s wall-clock benchmark of piece G91 (`benches/cbor.rs`), sized so a batch costs a few hundred thousand instructions, each measured as chapter 28.14 sets benchmarks out, `projects/engines/geometry/architecture/28-testing.md`. The board's 500 MB/s per core for column decoding is a wall-clock reading for the reference runner (piece G107), not a count: this group gates the instructions only."
+          },
+          "path": "geom_bench::inputs::cbor",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
           "cost": "a batch of up to 64 inputs, built once per benchmark run.",
           "does": null,
           "family": [],
@@ -1047,6 +1067,26 @@
             "text": "IEEE 754-2019 totalOrder (section 5.10) as Rust's `f64::total_cmp` implements it (<https://doc.rust-lang.org/std/primitive.f64.html#method.total_cmp>); one input per case of the ordering, including the signed zeros."
           },
           "path": "geom_bench::inputs::real",
+          "provenance": [],
+          "spdx": null,
+          "target": "lib"
+        },
+        {
+          "cost": "O([`BATCH`](super::BATCH)) draws, and for the bodies and containers one box built and written per input, once per batch, outside every measured run.",
+          "does": "[`record`] makes a record holding a short `f64` column, as the record layer's own benchmark (`benches/records.rs` in `geom-format`) does; [`file`] writes a header and two such records as a file. [`boxes`] builds a box with `geom-make`, a small whole solid; [`stored`] is its records. [`graph`] interns three names of three kinds and [`history`] is one operation's history over a few names, as `tests/names_history.rs` writes them; [`operation`] is one authored operation, as `tests/operation.rs` writes it. [`container`] holds a box's records and its validation stamp, read from a file as `benches/open.rs` does, and [`Pass`] is the checker it is opened with. Each input draws its own coordinates, names and values, so no two are alike.",
+          "family": [],
+          "file": "projects/engines/geometry/crates/geom-bench/src/inputs/records.rs",
+          "guarantees": [
+            "every typical batch is full and every call succeeds (`tests/inputs.rs`), so each benchmark measures the path that accepts: every record and file reads back, every body rebuilds, every name's ID matches its bytes, and every root of a container opens as its trust asks. Only the typical class exists: the refusals are tested in `geom-format` itself."
+          ],
+          "job": "Inputs for `geom-format`'s file readers and writers (pieces G92, G94, G95, G96 and G108, decision 32.46): records and files, a body's records, names and history records, operation records, and a container to open at either trust.",
+          "method": {
+            "links": [
+              "projects/engines/geometry/architecture/28-testing.md"
+            ],
+            "text": "the cases of `geom-format`'s own tests and wall-clock benchmarks of the pieces (`tests/record_layer.rs`, `tests/body_records.rs`, `tests/names_history.rs`, `tests/operation.rs`, `tests/trust.rs`; `benches/records.rs`, `benches/open.rs`), sized so a batch costs a few hundred thousand instructions, each measured as chapter 28.14 sets benchmarks out, `projects/engines/geometry/architecture/28-testing.md`. The checker passes every body for one unit of work, as `benches/open.rs`'s does, so an open measures reading, rebuilding and the open's own bookkeeping; the checker's cost is `geom-check`'s to measure."
+          },
+          "path": "geom_bench::inputs::records",
           "provenance": [],
           "spdx": null,
           "target": "lib"
