@@ -12,7 +12,7 @@ use super::sources::{AC, SRC_FLOOD};
 use super::vintage::{fail_stamp, stamp};
 use crate::edit::json::JsonValue;
 use crate::graph::{connector_map, js_sort_by};
-use crate::jsnum::{math_hypot, math_max, math_min, math_min_of, math_max_of};
+use crate::jsnum::{f64_to_usize, math_hypot, math_max, math_min, math_min_of, math_max_of};
 use crate::project::{road_class, Project, Scenario, Settings};
 use crate::util::{flat, fmt, r1, Flat};
 use serde::Serialize;
@@ -179,19 +179,24 @@ impl HazardsLoad {
             let a = x.get("attributes").filter(|a| a.truthy()).unwrap_or(&empty);
             let Some(rings) = x.get("geometry").and_then(|g| g.get("rings")).filter(|r| r.truthy()) else { continue };
             if a.get("Superseded_Date").is_some_and(JsonValue::truthy) {
-                sup += 1;
+                // Bound: sup counts some of the features, so it stays at most feats.len()
+                sup = sup.saturating_add(1);
                 continue;
             }
             self.add_poly(flood_label(a), "flood", rings_of(Some(rings)), a.to_value());
         }
-        self.flood_stamp = Some((feats.len() - sup, sup));
+        self.flood_stamp = Some((feats.len().saturating_sub(sup), sup));
     }
     fn start_list(&mut self) {
         self.statuses.push("Looking for coastal inundation layers\u{2026}".to_string());
         self.stage = HStage::List;
     }
     fn start_coastal(&mut self, i: usize) {
-        let (nm, _) = self.use_[i];
+        // callers pass a position in use_; past its end there is no layer left to ask for
+        let Some(&(nm, _)) = self.use_.get(i) else {
+            self.end_coastal();
+            return;
+        };
         let url = format!("{}/{}/FeatureServer/0", AC, encode_uri_component(nm));
         let mut p: Vec<(String, String)> = vec![("where".into(), "1=1".into()), ("outFields".into(), "OBJECTID".into())];
         p.extend(env_params(&self.bounds));
@@ -266,7 +271,8 @@ impl Flow for HazardsLoad {
                 self.start_flood();
             }
             HStage::Flood => {
-                let q = self.query.as_mut().expect("query");
+                // start_flood set the query
+                let Some(q) = self.query.as_mut() else { return Ok(()) };
                 if let Err(e) = q.answer(a) {
                     // the prototype puts the whole problem in the errors and stamps the failure
                     self.errors.push(format!("Flood plains: {e}"));
@@ -274,7 +280,7 @@ impl Flow for HazardsLoad {
                     self.query = None;
                     self.start_list();
                 } else if q.is_done() {
-                    let q = self.query.take().expect("query");
+                    let Some(q) = self.query.take() else { return Ok(()) };
                     self.finish_flood(q);
                     self.start_list();
                 }
@@ -320,27 +326,32 @@ impl Flow for HazardsLoad {
                 }
             }
             HStage::Coastal(i) => {
-                let q = self.query.as_mut().expect("query");
-                let label = self.use_[i].1;
+                // start_coastal set the query and checked the layer is in use_
+                let Some(q) = self.query.as_mut() else { return Ok(()) };
+                let Some(&(_, label)) = self.use_.get(i) else { return Ok(()) };
                 if let Err(e) = q.answer(a) {
                     // each layer fails on its own without stopping the others
                     self.errors.push(format!("{label}: {e}"));
                     self.query = None;
                 } else if q.is_done() {
-                    let q = self.query.take().expect("query");
-                    self.got[i] = true;
+                    let Some(q) = self.query.take() else { return Ok(()) };
+                    if let Some(got) = self.got.get_mut(i) {
+                        *got = true;
+                    }
                     for f in q.into_features() {
                         if let Some(rings) = f.get("geometry").and_then(|g| g.get("rings")).filter(|r| r.truthy()) {
                             let attrs = f.get("attributes").filter(|a| a.truthy()).map_or_else(|| json!({}), JsonValue::to_value);
                             self.add_poly(label.to_string(), "coastal", rings_of(Some(rings)), attrs);
-                            self.coastal_n += 1;
+                            // Bound: a count of polygons in memory
+                            self.coastal_n = self.coastal_n.saturating_add(1);
                         }
                     }
                 } else {
                     return Ok(());
                 }
-                if i + 1 < self.use_.len() {
-                    self.start_coastal(i + 1);
+                let next = i.saturating_add(1);
+                if next < self.use_.len() {
+                    self.start_coastal(next);
                 } else {
                     self.end_coastal();
                 }
@@ -375,29 +386,33 @@ fn prep_poly(rings: &[Ring], bb: &RingsBox, fl: &Flat) -> PolyGrid {
     let j0 = (bx[1] / cs).floor();
     let ni = (bx[2] / cs).floor() - i0 + 1.0;
     let nj = (bx[3] / cs).floor() - j0 + 1.0;
-    let mut cells: Vec<Option<Vec<usize>>> = vec![None; (ni * nj).max(0.0) as usize];
+    let mut cells: Vec<Option<Vec<usize>>> = vec![None; f64_to_usize((ni * nj).max(0.0))];
     let mut ex: Vec<f64> = Vec::new();
-    for r in rings {
-        let mut j = r.len().wrapping_sub(1);
-        for i in 0..r.len() {
-            let (x1, y1, x2, y2) = (r[j][0] * fl.kx, r[j][1] * fl.ky, r[i][0] * fl.kx, r[i][1] * fl.ky);
-            let e = ex.len() / 4;
+    for ring in rings {
+        // each point with the one before it, the first with the last
+        let Some(&last) = ring.last() else { continue };
+        let mut prev = last;
+        for &pt in ring {
+            let (x1, y1, x2, y2) = (prev[0] * fl.kx, prev[1] * fl.ky, pt[0] * fl.kx, pt[1] * fl.ky);
+            let edge = ex.len() / 4;
             ex.extend([x1, y1, x2, y2]);
             let a0 = math_max(0.0, (math_min(x1, x2) / cs).floor() - i0);
             let a1 = math_min(ni - 1.0, (math_max(x1, x2) / cs).floor() - i0);
             let c0 = math_max(0.0, (math_min(y1, y2) / cs).floor() - j0);
             let c1 = math_min(nj - 1.0, (math_max(y1, y2) / cs).floor() - j0);
-            let mut a = a0;
-            while a <= a1 {
-                let mut c = c0;
-                while c <= c1 {
-                    let k = (a * nj + c) as usize;
-                    cells[k].get_or_insert_with(Vec::new).push(e);
-                    c += 1.0;
+            let mut col = a0;
+            while col <= a1 {
+                let mut row = c0;
+                while row <= c1 {
+                    // col and row are inside the grid, so the cell is there
+                    if let Some(cell) = cells.get_mut(f64_to_usize(col * nj + row)) {
+                        cell.get_or_insert_with(Vec::new).push(edge);
+                    }
+                    row += 1.0;
                 }
-                a += 1.0;
+                col += 1.0;
             }
-            j = i;
+            prev = pt;
         }
     }
     let n_edges = ex.len() / 4;
@@ -409,10 +424,18 @@ impl PolyGrid {
         if i < self.i0 || j < self.j0 || i >= self.i0 + self.ni || j >= self.j0 + self.nj {
             return &[];
         }
-        self.cells[((i - self.i0) * self.nj + (j - self.j0)) as usize].as_deref().unwrap_or(&[])
+        // i and j are inside the grid here, so the cell is there
+        self.cells.get(f64_to_usize((i - self.i0) * self.nj + (j - self.j0))).and_then(Option::as_deref).unwrap_or(&[])
+    }
+    // Edge e's end points [x1, y1, x2, y2]; prep_poly writes four numbers for every edge it lists
+    fn edge(&self, e: usize) -> Option<[f64; 4]> {
+        let start = e.checked_mul(4)?;
+        let end = start.checked_add(4)?;
+        <[f64; 4]>::try_from(self.e.get(start..end)?).ok()
     }
     fn next(&self) -> u32 {
-        let t = self.tick.get() + 1;
+        // the tick goes back to 1 before it reaches u32::MAX, so this never saturates
+        let t = self.tick.get().saturating_add(1);
         if t == 0xFFFF_FFFF {
             self.seen.borrow_mut().fill(0);
             self.tick.set(1);
@@ -429,7 +452,7 @@ fn pip_flat(g: &PolyGrid, x: f64, y: f64) -> bool {
     if x < g.bx[0] || x > g.bx[2] || y < g.bx[1] || y > g.bx[3] {
         return false;
     }
-    let t = g.next();
+    let tick = g.next();
     let cy = (y / g.cs).floor();
     let c0 = (x / g.cs).floor();
     let right = g.bx[2] - x <= x - g.bx[0];
@@ -437,12 +460,14 @@ fn pip_flat(g: &PolyGrid, x: f64, y: f64) -> bool {
     let mut cx = c0;
     let mut seen = g.seen.borrow_mut();
     while if right { cx < g.i0 + g.ni } else { cx >= g.i0 } {
-        for &e in g.cell(cx, cy) {
-            if seen[e] == t {
+        for &edge in g.cell(cx, cy) {
+            // seen has a mark for every edge the cells list
+            let Some(mark) = seen.get_mut(edge) else { continue };
+            if *mark == tick {
                 continue;
             }
-            seen[e] = t;
-            let (x1, y1, x2, y2) = (g.e[e * 4], g.e[e * 4 + 1], g.e[e * 4 + 2], g.e[e * 4 + 3]);
+            *mark = tick;
+            let Some([x1, y1, x2, y2]) = g.edge(edge) else { continue };
             if (y1 > y) != (y2 > y) {
                 let xc = (x2 - x1) * (y - y1) / (y2 - y1) + x1;
                 if if right { x < xc } else { x > xc } {
@@ -461,47 +486,49 @@ fn seg_inside(g: &PolyGrid, ax: f64, ay: f64, bx: f64, by: f64) -> Vec<[f64; 2]>
         return Vec::new();
     }
     let mut ts: Vec<f64> = vec![0.0, 1.0];
-    let t = g.next();
+    let tick = g.next();
     let (dx, dy) = (bx - ax, by - ay);
     {
         let mut seen = g.seen.borrow_mut();
-        let mut i = (math_min(ax, bx) / g.cs).floor();
-        while i <= (math_max(ax, bx) / g.cs).floor() {
-            let mut j = (math_min(ay, by) / g.cs).floor();
-            while j <= (math_max(ay, by) / g.cs).floor() {
-                for &e in g.cell(i, j) {
-                    if seen[e] == t {
+        let mut ci = (math_min(ax, bx) / g.cs).floor();
+        while ci <= (math_max(ax, bx) / g.cs).floor() {
+            let mut cj = (math_min(ay, by) / g.cs).floor();
+            while cj <= (math_max(ay, by) / g.cs).floor() {
+                for &edge in g.cell(ci, cj) {
+                    // seen has a mark for every edge the cells list
+                    let Some(mark) = seen.get_mut(edge) else { continue };
+                    if *mark == tick {
                         continue;
                     }
-                    seen[e] = t;
-                    let x1 = g.e[e * 4];
-                    let y1 = g.e[e * 4 + 1];
-                    let ex = g.e[e * 4 + 2] - x1;
-                    let ey = g.e[e * 4 + 3] - y1;
+                    *mark = tick;
+                    let Some([x1, y1, x2, y2]) = g.edge(edge) else { continue };
+                    let ex = x2 - x1;
+                    let ey = y2 - y1;
                     let den = dx * ey - dy * ex;
                     if den == 0.0 || den.is_nan() {
                         continue;
                     }
-                    let s = ((x1 - ax) * ey - (y1 - ay) * ex) / den;
-                    let u = ((x1 - ax) * dy - (y1 - ay) * dx) / den;
-                    if s > 0.0 && s < 1.0 && (0.0..=1.0).contains(&u) {
-                        ts.push(s);
+                    let along = ((x1 - ax) * ey - (y1 - ay) * ex) / den;
+                    let on_edge = ((x1 - ax) * dy - (y1 - ay) * dx) / den;
+                    if along > 0.0 && along < 1.0 && (0.0..=1.0).contains(&on_edge) {
+                        ts.push(along);
                     }
                 }
-                j += 1.0;
+                cj += 1.0;
             }
-            i += 1.0;
+            ci += 1.0;
         }
     }
     js_sort_by(&mut ts, |p, q| p - q);
     let mut out = Vec::new();
-    for k in 0..ts.len() - 1 {
-        if ts[k + 1] - ts[k] < 1e-9 {
+    for pair in ts.windows(2) {
+        let &[t0, t1] = pair else { continue };
+        if t1 - t0 < 1e-9 {
             continue;
         }
-        let m = f64::midpoint(ts[k], ts[k + 1]);
+        let m = f64::midpoint(t0, t1);
         if pip_flat(g, ax + dx * m, ay + dy * m) {
-            out.push([ts[k], ts[k + 1]]);
+            out.push([t0, t1]);
         }
     }
     out
@@ -570,17 +597,19 @@ pub fn hazard_links(sc: &Scenario, data: &Hazards, s: &Settings) -> Vec<HazardRo
         let bb = [math_min_of(&lng), math_min_of(&lat), math_max_of(&lng), math_max_of(&lat)];
         for (li, lay) in data.layers.iter().enumerate() {
             let mut len = 0.0;
-            for i in 0..g.len().saturating_sub(1) {
+            // each segment of the link, from one point to the next
+            for (xw, yw) in xs.windows(2).zip(ys.windows(2)) {
+                let (&[xa, xb], &[ya, yb]) = (xw, yw) else { continue };
                 let mut iv: Vec<[f64; 2]> = Vec::new();
                 for (pi, p) in lay.polys.iter().enumerate() {
                     if bb[2] < p.bb[0] || bb[0] > p.bb[2] || bb[3] < p.bb[1] || bb[1] > p.bb[3] {
                         continue;
                     }
                     let grid = grids.entry((li, pi)).or_insert_with(|| prep_poly(&p.rings, &p.bb, &fl));
-                    iv.extend(seg_inside(grid, xs[i], ys[i], xs[i + 1], ys[i + 1]));
+                    iv.extend(seg_inside(grid, xa, ya, xb, yb));
                 }
                 if !iv.is_empty() {
-                    len += merge_len(iv) * math_hypot(&[xs[i + 1] - xs[i], ys[i + 1] - ys[i]]);
+                    len += merge_len(iv) * math_hypot(&[xb - xa, yb - ya]);
                 }
             }
             if len >= 0.5 {
@@ -615,7 +644,7 @@ pub fn hazard_links(sc: &Scenario, data: &Hazards, s: &Settings) -> Vec<HazardRo
                 if gw_n.contains(x) {
                     return true;
                 }
-                for (y, id) in adj.get(x).map(Vec::as_slice).unwrap_or(&[]) {
+                for (y, id) in adj.get(x).into_iter().flatten() {
                     if Some(*id) != skip && !seen.contains(y) {
                         seen.insert(y);
                         st.push(y);
@@ -630,7 +659,7 @@ pub fn hazard_links(sc: &Scenario, data: &Hazards, s: &Settings) -> Vec<HazardRo
                 continue;
             }
             let v = dev.iter().any(|z| {
-                let c: &[String] = cm.get(&z.id).map(Vec::as_slice).unwrap_or(&[]);
+                let c: &[String] = cm.get(&z.id).map_or(<&[String]>::default(), Vec::as_slice);
                 !c.is_empty() && reach(c, None) && !reach(c, Some(&r.link))
             });
             only.insert(r.link.clone(), v);

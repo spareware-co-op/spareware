@@ -24,6 +24,10 @@ pub fn fleet_cache_key(district: &str) -> String {
 }
 
 /// The district as the register spells it: trimmed, upper case, with quotes taken out.
+///
+/// # Errors
+///
+/// The message asking for a district name when the text is empty.
 pub fn fleet_district(text: &str) -> Result<String, String> {
     let d = crate::jsnum::js_trim(text).to_uppercase().replace('\'', "");
     if d.is_empty() {
@@ -87,6 +91,10 @@ pub fn newest_mvr(list: &JsonValue) -> Option<String> {
 }
 
 /// What the statistics answer holds, as the fleet.
+///
+/// # Errors
+///
+/// The message the prototype shows when the register has no passenger cars for the district.
 pub fn fleet_from_answer(features: &[JsonValue], district: &str, service: &str, url: &str, mp: &str, now_ms: f64) -> Result<Fleet, String> {
     let empty = JsonValue::object();
     let mut counts: Vec<(String, f64)> = Vec::new();
@@ -180,10 +188,12 @@ impl FleetLoad {
         self.vt = pick("VEHICLE_TYPE");
         self.mp = pick("MOTIVE_POWER");
         let oid = pick("OBJECTID");
+        // Writing text as JSON cannot fail
+        let oid_json = serde_json::to_string(&oid).unwrap_or_default();
         let params = vec![
             ("where".to_string(), format!("{}='{}' AND {}='PASSENGER CAR/VAN'", self.tla, self.district, self.vt)),
             ("groupByFieldsForStatistics".to_string(), self.mp.clone()),
-            ("outStatistics".to_string(), format!("[{{\"statisticType\":\"count\",\"onStatisticField\":{},\"outStatisticFieldName\":\"n\"}}]", serde_json::to_string(&oid).expect("text"))),
+            ("outStatistics".to_string(), format!("[{{\"statisticType\":\"count\",\"onStatisticField\":{oid_json},\"outStatisticFieldName\":\"n\"}}]")),
         ];
         self.query = Some(ArcQuery::new(&self.url, params, 2, math_max(self.timeout_ms, FLEET_TIMEOUT * 1000.0)));
         self.stage = FStage::Query;
@@ -225,15 +235,20 @@ impl Flow for FleetLoad {
                 Ok(())
             }
             FStage::Meta => {
-                self.meta.as_mut().expect("meta").answer(a)?;
+                // The Meta stage is entered only with the layer's description request set
+                if let Some(m) = self.meta.as_mut() {
+                    m.answer(a)?;
+                }
                 self.start_query();
                 Ok(())
             }
             FStage::Query => {
-                let q = self.query.as_mut().expect("query");
+                // The Query stage is entered only with the statistics query set
+                let Some(q) = self.query.as_mut() else { return Ok(()) };
                 q.answer(a)?;
-                if q.is_done() {
-                    let q = self.query.take().expect("query");
+                if q.is_done()
+                    && let Some(q) = self.query.take()
+                {
                     let fleet = fleet_from_answer(q.features(), &self.district, &self.service, &self.url, &self.mp, self.now_ms)?;
                     self.fleet = Some(fleet);
                     self.stage = FStage::Done;
@@ -262,7 +277,8 @@ pub fn apply_fleet(p: &mut Project, fleet: &Fleet, now_ms: f64) {
 pub fn use_cached_fleet(p: &mut Project, cached: &Value, now_ms: f64) -> Option<Value> {
     let at = cached.get("at").and_then(Value::as_str)?;
     let t = super::nztime::parse_date(at)?;
-    if !(now_ms - t < FLEET_DAYS * super::nztime::DAY_MS) {
+    let age = now_ms - t;
+    if age >= FLEET_DAYS * super::nztime::DAY_MS || age.is_nan() {
         return None;
     }
     feeds_of(p).insert("fleet".to_string(), cached.clone());

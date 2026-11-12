@@ -167,12 +167,12 @@ impl Flow for AgsLoad {
         self.query.as_mut().and_then(Flow::next_request)
     }
     fn answer(&mut self, a: Result<Answer, FetchFailure>) -> Result<(), String> {
-        if self.query.is_none() {
-            let _ = self.meta.answer(a);
-            self.start_query();
-            return Ok(());
+        if let Some(q) = self.query.as_mut() {
+            return q.answer(a);
         }
-        self.query.as_mut().expect("query").answer(a)
+        let _ = self.meta.answer(a);
+        self.start_query();
+        Ok(())
     }
     fn is_done(&self) -> bool {
         self.query.as_ref().is_some_and(Flow::is_done)
@@ -300,65 +300,66 @@ fn strict_eq(n: &Num, x: f64) -> bool {
 
 /// `agsProposals(P, data)`: growth for every existing-land-use zone of every forecast-year scenario (those not in the base year).
 pub fn ags_proposals(p: &Project, data: Option<&AgsData>) -> Vec<AgsRow> {
-    let s = &p.settings;
+    let settings = &p.settings;
     let mut rows = Vec::new();
     for sc in &p.scenarios {
-        let y = year_of(Some(sc), s);
-        if strict_eq(&s.base_year, y) {
+        let yr = year_of(Some(sc), settings);
+        if strict_eq(&settings.base_year, yr) {
             continue;
         }
-        for z in sc.zones.values() {
-            if !existing_zone(z) {
+        for zone in sc.zones.values() {
+            if !existing_zone(zone) {
                 continue;
             }
-            let f = ags_zone_factor([z.lat.num(), z.lng.num()], s.base_year.num(), y, data);
+            let factor = ags_zone_factor([zone.lat.num(), zone.lng.num()], settings.base_year.num(), yr, data);
             // the base land use: luBase, else lu
-            let base: Vec<(String, Value)> = match z.extra.get("luBase") {
+            let base: Vec<(String, Value)> = match zone.extra.get("luBase") {
                 Some(Value::Object(o)) => o.iter().map(|(k, v)| (k.clone(), v.clone())).collect(),
-                _ => z.lu.get().map(|l| l.iter().map(|(k, v)| (k.to_string(), v.get().map_or(Value::Null, JsNum::to_value))).collect()).unwrap_or_default(),
+                _ => zone.lu.get().map(|l| l.iter().map(|(k, v)| (k.to_string(), v.get().map_or(Value::Null, JsNum::to_value))).collect()).unwrap_or_default(),
             };
+            let current = |k: &str| zone.lu.get().and_then(|l| l.get(k)).map_or(Value::Null, |v| v.get().map_or(Value::Null, JsNum::to_value));
             let mut lu: BTreeMap<String, (Value, f64)> = BTreeMap::new();
-            if let Some(f) = &f {
-                for (k, q) in &base {
-                    let g = land_use(k).map(|l| l.group).and_then(|grp| AGS_GROUPS.iter().find(|(gk, _)| *gk == grp)).map_or("emp", |(_, v)| v);
-                    let m = match g {
-                        "hh" => f.hh,
-                        "pop" => f.pop,
-                        _ => f.emp,
+            if let Some(fac) = &factor {
+                for (k, qty) in &base {
+                    let group = land_use(k).map(|l| l.group).and_then(|grp| AGS_GROUPS.iter().find(|(gk, _)| *gk == grp)).map_or("emp", |(_, v)| v);
+                    let mult = match group {
+                        "hh" => fac.hh,
+                        "pop" => fac.pop,
+                        _ => fac.emp,
                     };
-                    let qn = value_to_number(q);
-                    if let Some(m) = m
+                    let qn = value_to_number(qty);
+                    if let Some(mult) = mult
                         && qn != 0.0
                         && !qn.is_nan()
                     {
-                        let cur = z.lu.get().and_then(|l| l.get(k)).map_or(Value::Null, |v| v.get().map_or(Value::Null, JsNum::to_value));
-                        lu.insert(k.clone(), (cur, math_round(qn * m * 10.0) / 10.0));
+                        lu.insert(k.clone(), (current(k), math_round(qn * mult * 10.0) / 10.0));
                     }
                 }
             }
             // A land use the user edited after Spare Construct applied a factor is the user's
-            let user = match z.extra.get("ags").and_then(|a| a.get("lu")) {
-                Some(Value::Object(o)) => o.iter().any(|(k, q)| {
-                    let cur = z.lu.get().and_then(|l| l.get(k)).map_or(Value::Null, |v| v.get().map_or(Value::Null, JsNum::to_value));
-                    let have = z.lu.get().and_then(|l| l.get(k)).is_some();
-                    !(have && JsonValue::from_value(&cur).strict_eq(&JsonValue::from_value(q)))
+            let user = match zone.extra.get("ags").and_then(|rec| rec.get("lu")) {
+                Some(Value::Object(o)) => o.iter().any(|(k, qty)| {
+                    let have = zone.lu.get().and_then(|l| l.get(k)).is_some();
+                    !(have && JsonValue::from_value(&current(k)).strict_eq(&JsonValue::from_value(qty)))
                 }),
                 _ => false,
             };
             // AGS23 runs 2022 to 2052: a year outside that uses the nearest AGS23 year, and the row says so
-            let clamped = match &f {
-                Some(f) if f.year != y || !strict_eq(&s.base_year, f.base) => ags_range_text(&num_text(&s.base_year), &crate::jsnum::number_to_js_string(y), f.base, f.year),
+            let clamped = match &factor {
+                Some(fac) if fac.year != yr || !strict_eq(&settings.base_year, fac.base) => {
+                    ags_range_text(&num_text(&settings.base_year), &crate::jsnum::number_to_js_string(yr), fac.base, fac.year)
+                }
                 _ => String::new(),
             };
             rows.push(AgsRow {
-                id: format!("{}|{}", sc.id, z.id),
+                id: format!("{}|{}", sc.id, zone.id),
                 sc: sc.id.clone(),
                 sc_name: sc.name.as_str().map(str::to_string),
-                zone: z.id.clone(),
-                name: z.name.str_or("Zone").to_string(),
-                year: y,
-                outside: f.is_none(),
-                f,
+                zone: zone.id.clone(),
+                name: zone.name.str_or("Zone").to_string(),
+                year: yr,
+                outside: factor.is_none(),
+                f: factor,
                 lu,
                 user,
                 clamped,
@@ -370,39 +371,40 @@ pub fn ags_proposals(p: &Project, data: Option<&AgsData>) -> Vec<AgsRow> {
 
 /// `applyAGS(P, rows, ids, when)`: grows the chosen zones' land use (keeping the base-year land use in `luBase`) and records the factors in `zone.ags`; gives how many zones changed.
 pub fn apply_ags(p: &mut Project, rows: &[AgsRow], pick: &[String], when: &str) -> usize {
-    let mut n = 0;
-    for r in rows {
-        if !pick.contains(&r.id) {
+    let mut changed: usize = 0;
+    for row in rows {
+        if !pick.contains(&row.id) {
             continue;
         }
-        let Some(f) = &r.f else { continue };
-        let Some(sc) = p.scenarios.iter_mut().find(|s| s.id == r.sc) else { continue };
-        let Some(z) = sc.zones.get_mut(&r.zone) else { continue };
-        if !z.extra.get("luBase").is_some_and(crate::jsnum::value_truthy) {
-            let lu_now: Map<String, Value> = z.lu.get().map(|l| l.iter().map(|(k, v)| (k.to_string(), v.get().map_or(Value::Null, JsNum::to_value))).collect()).unwrap_or_default();
-            z.extra.insert("luBase".to_string(), Value::Object(lu_now));
+        let Some(fac) = &row.f else { continue };
+        let Some(sc) = p.scenarios.iter_mut().find(|s| s.id == row.sc) else { continue };
+        let Some(zone) = sc.zones.get_mut(&row.zone) else { continue };
+        if !zone.extra.get("luBase").is_some_and(crate::jsnum::value_truthy) {
+            let lu_now: Map<String, Value> = zone.lu.get().map(|l| l.iter().map(|(k, v)| (k.to_string(), v.get().map_or(Value::Null, JsNum::to_value))).collect()).unwrap_or_default();
+            zone.extra.insert("luBase".to_string(), Value::Object(lu_now));
         }
         // A new object, never an edit in place
-        let mut lu = z.lu.get().cloned().unwrap_or_default();
-        for (k, (_, to)) in &r.lu {
+        let mut lu = zone.lu.get().cloned().unwrap_or_default();
+        for (k, (_, to)) in &row.lu {
             lu.insert(k.clone(), Maybe::number(*to));
         }
-        z.lu = Maybe::Set(lu);
-        let mut a = Map::new();
-        a.insert("msm".into(), json!(f.msm));
-        a.insert("base".into(), json_number(f.base));
-        a.insert("year".into(), json_number(f.year));
-        a.insert("f".into(), json!({ "hh": f.hh, "emp": f.emp, "pop": f.pop }));
-        a.insert("lu".into(), Value::Object(r.lu.iter().map(|(k, (_, to))| (k.clone(), json_number(*to))).collect()));
-        a.insert("at".into(), json!(when));
-        a.insert("src".into(), json!(AGS_BASIS_TEXT));
-        if !r.clamped.is_empty() {
-            a.insert("note".into(), json!(r.clamped));
+        zone.lu = Maybe::Set(lu);
+        let mut rec = Map::new();
+        rec.insert("msm".into(), json!(fac.msm));
+        rec.insert("base".into(), json_number(fac.base));
+        rec.insert("year".into(), json_number(fac.year));
+        rec.insert("f".into(), json!({ "hh": fac.hh, "emp": fac.emp, "pop": fac.pop }));
+        rec.insert("lu".into(), Value::Object(row.lu.iter().map(|(k, (_, to))| (k.clone(), json_number(*to))).collect()));
+        rec.insert("at".into(), json!(when));
+        rec.insert("src".into(), json!(AGS_BASIS_TEXT));
+        if !row.clamped.is_empty() {
+            rec.insert("note".into(), json!(row.clamped));
         }
-        z.extra.insert("ags".to_string(), Value::Object(a));
-        n += 1;
+        zone.extra.insert("ags".to_string(), Value::Object(rec));
+        // Bound: at most one for each row
+        changed = changed.saturating_add(1);
     }
-    n
+    changed
 }
 
 /// What `agsGateway` finds: the growth beyond a gateway as an equivalent linear percentage a year.
@@ -430,23 +432,23 @@ pub struct AgsGateway {
 #[must_use]
 pub fn ags_gateway(sc: &Scenario, z: &Zone, base: &Num, year: f64, data: Option<&AgsData>) -> Option<AgsGateway> {
     let data = data?;
-    let (b, y) = (ags_year(base.num()), ags_year(year));
+    let (yb, yf) = (ags_year(base.num()), ags_year(year));
     let area = net_box(sc)?;
-    if y == b {
+    if yf == yb {
         return None;
     }
-    let c: LatLng = [f64::midpoint(area.s, area.n), f64::midpoint(area.w, area.e)];
-    let g: LatLng = [z.lat.num(), z.lng.num()];
-    let dir = bearing(&c, &g);
+    let centre: LatLng = [f64::midpoint(area.s, area.n), f64::midpoint(area.w, area.e)];
+    let gate: LatLng = [z.lat.num(), z.lng.num()];
+    let dir = bearing(&centre, &gate);
     let (mut b0, mut b1) = (0.0, 0.0);
     let mut used: Vec<String> = Vec::new();
-    let (kb, ky) = (crate::jsnum::number_to_js_string(b), crate::jsnum::number_to_js_string(y));
-    for m in &data.zones {
-        if in_box(&area, &m.c) || dist(&g, &m.c) > AGS_GATEWAY_KM * 1000.0 || ang_diff(bearing(&c, &m.c), dir) > AGS_GATEWAY_DEG {
+    let (kb, ky) = (crate::jsnum::number_to_js_string(yb), crate::jsnum::number_to_js_string(yf));
+    for mz in &data.zones {
+        if in_box(&area, &mz.c) || dist(&gate, &mz.c) > AGS_GATEWAY_KM * 1000.0 || ang_diff(bearing(&centre, &mz.c), dir) > AGS_GATEWAY_DEG {
             continue;
         }
-        let (Some(v0), Some(v1)) = (m.v.get(&kb), m.v.get(&ky)) else { continue };
-        let or0 = |x: Option<f64>| match x {
+        let (Some(v0), Some(v1)) = (mz.v.get(&kb), mz.v.get(&ky)) else { continue };
+        let or0 = |val: Option<f64>| match val {
             Some(v) if v != 0.0 && !v.is_nan() => v,
             _ => 0.0,
         };
@@ -457,12 +459,12 @@ pub fn ags_gateway(sc: &Scenario, z: &Zone, base: &Num, year: f64, data: Option<
         }
         b0 += x0;
         b1 += x1;
-        used.push(m.msm.clone());
+        used.push(mz.msm.clone());
     }
     if b0 == 0.0 {
         return Some(AgsGateway {
-            base: b,
-            year: y,
+            base: yb,
+            year: yf,
             factor: None,
             pct: None,
             n: 0,
@@ -471,15 +473,15 @@ pub fn ags_gateway(sc: &Scenario, z: &Zone, base: &Num, year: f64, data: Option<
         });
     }
     let factor = b1 / b0;
-    let pct = (factor - 1.0) / (y - b) * 100.0;
-    let cl = if y != year || b != base.num() {
-        format!(" {}.", ags_range_text(&num_text(base), &crate::jsnum::number_to_js_string(year), b, y))
+    let pct = (factor - 1.0) / (yf - yb) * 100.0;
+    let cl = if yf != year || yb != base.num() {
+        format!(" {}.", ags_range_text(&num_text(base), &crate::jsnum::number_to_js_string(year), yb, yf))
     } else {
         String::new()
     };
     Some(AgsGateway {
-        base: b,
-        year: y,
+        base: yb,
+        year: yf,
         factor: Some(factor),
         pct: Some(pct),
         n: used.len(),
@@ -519,25 +521,27 @@ pub struct AgsGatewayRow {
 /// `agsGateways(P, data)`: the growth beyond every gateway of every scenario, also kept on each gateway zone as `agsGrowth` (with the date and the AGS23 attribution).
 pub fn ags_gateways(p: &mut Project, data: Option<&AgsData>, now_ms: f64) -> Vec<AgsGatewayRow> {
     let settings = p.settings.clone();
-    let date = today(now_ms);
+    let day_text = today(now_ms);
     let mut out = Vec::new();
     for sc in &mut p.scenarios {
-        let y = year_of(Some(sc), &settings);
+        let yr = year_of(Some(sc), &settings);
         let ids: Vec<String> = sc.zones.values().filter(|z| z.kind.is("gateway")).map(|z| z.id.clone()).collect();
         for id in ids {
-            let Some(z) = sc.zones.get(id.as_str()) else {
+            let Some(zone) = sc.zones.get(id.as_str()) else {
                 continue;
             };
-            let g = ags_gateway(sc, z, &settings.base_year, y, data);
-            if let Some(g) = g {
-                let z = sc.zones.get_mut(id.as_str()).expect("zone");
-                let mut v = serde_json::to_value(&g).expect("gateway");
-                if let Value::Object(o) = &mut v {
-                    o.insert("at".into(), json!(date));
-                    o.insert("src".into(), json!(SRC_AGS.attribution.unwrap_or("")));
+            let growth = ags_gateway(sc, zone, &settings.base_year, yr, data);
+            if let Some(growth) = growth {
+                // The id was read from this scenario's zones just above
+                let Some(zone) = sc.zones.get_mut(id.as_str()) else { continue };
+                // AgsGateway holds only numbers, text and lists, which always write as JSON
+                let mut rec = serde_json::to_value(&growth).unwrap_or_default();
+                if let Value::Object(obj) = &mut rec {
+                    obj.insert("at".into(), json!(day_text));
+                    obj.insert("src".into(), json!(SRC_AGS.attribution.unwrap_or("")));
                 }
-                z.extra.insert("agsGrowth".to_string(), v);
-                out.push(AgsGatewayRow { sc: sc.id.clone(), zone: id, name: z.name.as_str().map(str::to_string), g });
+                zone.extra.insert("agsGrowth".to_string(), rec);
+                out.push(AgsGatewayRow { sc: sc.id.clone(), zone: id, name: zone.name.as_str().map(str::to_string), g: growth });
             }
         }
     }

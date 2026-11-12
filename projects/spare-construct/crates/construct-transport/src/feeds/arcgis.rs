@@ -7,6 +7,7 @@
 
 use crate::edit::json::JsonValue;
 use crate::jsnum::{math_round, to_fixed};
+use std::fmt::Write as _;
 
 /// The time limit of one `ArcGIS` request in the data hub (`ARCGIS_TIMEOUT`), in milliseconds.
 pub const ARCGIS_TIMEOUT_MS: f64 = 30_000.0;
@@ -92,7 +93,10 @@ pub fn form_encode(s: &str) -> String {
         match b {
             b'0'..=b'9' | b'a'..=b'z' | b'A'..=b'Z' | b'*' | b'-' | b'.' | b'_' => out.push(b as char),
             b' ' => out.push('+'),
-            _ => out.push_str(&format!("%{b:02X}")),
+            _ => {
+                // Writing to a String cannot fail
+                let _ = write!(out, "%{b:02X}");
+            }
         }
     }
     out
@@ -111,7 +115,10 @@ pub fn encode_uri_component(s: &str) -> String {
     for b in s.bytes() {
         match b {
             b'0'..=b'9' | b'a'..=b'z' | b'A'..=b'Z' | b'-' | b'_' | b'.' | b'!' | b'~' | b'*' | b'\'' | b'(' | b')' => out.push(b as char),
-            _ => out.push_str(&format!("%{b:02X}")),
+            _ => {
+                // Writing to a String cannot fail
+                let _ = write!(out, "%{b:02X}");
+            }
         }
     }
     out
@@ -137,7 +144,8 @@ pub fn host_of_url(url: &str) -> Option<String> {
         "http" | "ws" => ":80",
         _ => "",
     };
-    Some(if !default.is_empty() && lower.ends_with(default) { lower[..lower.len() - default.len()].to_string() } else { lower })
+    let stripped = if default.is_empty() { None } else { lower.strip_suffix(default).map(str::to_string) };
+    Some(stripped.unwrap_or(lower))
 }
 
 pub use crate::importers::Bounds;
@@ -229,6 +237,11 @@ impl ArcgisPager {
         Some(HttpRequest::get_json(format!("{}/query?{}", self.url, query_string(&q)), self.timeout_ms))
     }
     /// Takes the answer to the last request: adds its features and works out whether another page is needed. A failure ends the query with the prototype's message (or [`LoadError::Cancelled`]).
+    ///
+    /// # Errors
+    ///
+    /// [`LoadError::Cancelled`] for a cancelled request; otherwise [`LoadError::Failed`] with the prototype's message for a
+    /// failed request, an unreadable answer or an error the service reports.
     pub fn answer(&mut self, a: Result<JsonValue, FetchFailure>) -> Result<(), LoadError> {
         let host = &self.host;
         let j = match a {
@@ -254,11 +267,13 @@ impl ArcgisPager {
         };
         let n = f.len();
         self.features.extend(f);
-        self.page += 1;
+        // Bound: at most 25 pages
+        self.page = self.page.saturating_add(1);
         if !j.get("exceededTransferLimit").is_some_and(JsonValue::truthy) || n == 0 || self.page >= 25 {
             self.done = true;
         } else {
-            self.offset += n;
+            // Bound: a count of features held in memory, far below usize::MAX
+            self.offset = self.offset.saturating_add(n);
         }
         Ok(())
     }

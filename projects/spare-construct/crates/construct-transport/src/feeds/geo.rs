@@ -40,13 +40,17 @@ pub fn rings_box(rings: &[Ring]) -> RingsBox {
 pub fn in_rings(x: f64, y: f64, rings: &[Ring]) -> bool {
     let mut inside = false;
     for r in rings {
-        let mut j = r.len().wrapping_sub(1);
-        for i in 0..r.len() {
-            let (xi, yi, xj, yj) = (r[i][0], r[i][1], r[j][0], r[j][1]);
+        // Each point with the one before it, the first with the last
+        let Some(&last) = r.last() else {
+            continue;
+        };
+        let mut pj = last;
+        for &pi in r {
+            let ([xi, yi], [xj, yj]) = (pi, pj);
             if (yi > y) != (yj > y) && x < (xj - xi) * (y - yi) / (yj - yi) + xi {
                 inside = !inside;
             }
-            j = i;
+            pj = pi;
         }
     }
     inside
@@ -63,13 +67,16 @@ pub fn centroid(rings: &[Ring]) -> LatLng {
         }
     }
     let (mut a, mut cx, mut cy) = (0.0, 0.0, 0.0);
-    let mut j = r.len().wrapping_sub(1);
-    for i in 0..r.len() {
-        let f = r[j][0] * r[i][1] - r[i][0] * r[j][1];
-        a += f;
-        cx += (r[j][0] + r[i][0]) * f;
-        cy += (r[j][1] + r[i][1]) * f;
-        j = i;
+    // Each point with the one before it, the first with the last
+    if let Some(&last) = r.last() {
+        let mut pj = last;
+        for &pi in r {
+            let f = pj[0] * pi[1] - pi[0] * pj[1];
+            a += f;
+            cx += (pj[0] + pi[0]) * f;
+            cy += (pj[1] + pi[1]) * f;
+            pj = pi;
+        }
     }
     if a == 0.0 || a.is_nan() {
         let bb = rings_box(rings);
@@ -94,7 +101,7 @@ pub struct PolyIndex {
 }
 
 fn key(i: f64, j: f64) -> i64 {
-    (i * 1e6 + j) as i64
+    crate::jsnum::f64_to_i64(i * 1e6 + j)
 }
 
 impl PolyIndex {
@@ -123,7 +130,10 @@ impl PolyIndex {
                 v.iter()
                     .copied()
                     .filter(|&n| {
-                        let p = &polys[n];
+                        // n is a position in the list that was indexed; a shorter list simply holds no such polygon
+                        let Some(p) = polys.get(n) else {
+                            return false;
+                        };
                         let bb = p.bb();
                         x >= bb[0] && x <= bb[2] && y >= bb[1] && y <= bb[3] && in_rings(x, y, p.rings())
                     })

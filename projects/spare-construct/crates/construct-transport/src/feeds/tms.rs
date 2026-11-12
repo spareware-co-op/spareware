@@ -15,7 +15,7 @@ use crate::datahub::{period_vol, Count};
 use crate::edit::ids::iso_string;
 use crate::edit::json::JsonValue;
 use crate::graph::js_sort_by;
-use crate::jsnum::{math_max_of, math_min_of, math_round, value_to_number, value_truthy, Maybe};
+use crate::jsnum::{f64_to_i64, i64_to_f64, math_max_of, math_min_of, math_round, usize_to_f64, value_to_number, value_truthy, Maybe};
 use crate::project::{Project, Settings};
 use crate::util::fmt;
 use serde::Serialize;
@@ -47,20 +47,21 @@ fn md(y: f64, m: f64, d: f64) -> f64 {
 /// `easter(y)`: Easter Sunday of a year as a day count (the Gregorian computus).
 #[must_use]
 pub fn easter(y: f64) -> f64 {
-    let a = y % 19.0;
-    let b = (y / 100.0).floor();
-    let c = y % 100.0;
-    let d = (b / 4.0).floor();
-    let e = b % 4.0;
-    let f = ((b + 8.0) / 25.0).floor();
-    let g = ((b - f + 1.0) / 3.0).floor();
-    let h = (19.0 * a + b - d - g + 15.0) % 30.0;
-    let i = (c / 4.0).floor();
-    let k = c % 4.0;
-    let l = (32.0 + 2.0 * e + 2.0 * i - h - k) % 7.0;
-    let m = ((a + 11.0 * h + 22.0 * l) / 451.0).floor();
-    let mo = ((h + l - 7.0 * m + 114.0) / 31.0).floor();
-    let da = ((h + l - 7.0 * m + 114.0) % 31.0) + 1.0;
+    // The anonymous Gregorian algorithm (Meeus, Jones, Butcher); its letters are in brackets
+    let golden = y % 19.0; // (a)
+    let century = (y / 100.0).floor(); // (b)
+    let of_century = y % 100.0; // (c)
+    let leap_centuries = (century / 4.0).floor(); // (d)
+    let century_rem = century % 4.0; // (e)
+    let lunar = ((century + 8.0) / 25.0).floor(); // (f)
+    let moon = ((century - lunar + 1.0) / 3.0).floor(); // (g)
+    let epact = (19.0 * golden + century - leap_centuries - moon + 15.0) % 30.0; // (h)
+    let leap_years = (of_century / 4.0).floor(); // (i)
+    let year_rem = of_century % 4.0; // (k)
+    let week = (32.0 + 2.0 * century_rem + 2.0 * leap_years - epact - year_rem) % 7.0; // (l)
+    let shift = ((golden + 11.0 * epact + 22.0 * week) / 451.0).floor(); // (m)
+    let mo = ((epact + week - 7.0 * shift + 114.0) / 31.0).floor();
+    let da = ((epact + week - 7.0 * shift + 114.0) % 31.0) + 1.0;
     math_round(date_utc(y, mo - 1.0, da) / DAY_MS)
 }
 
@@ -79,7 +80,7 @@ pub fn nth_monday(y: f64, m: f64, nth: f64) -> f64 {
 /// Auckland Anniversary (the Monday nearest 29 January) is added for the Auckland region. Matariki only for the years entered in [`MATARIKI_DATES`].
 #[must_use]
 pub fn holidays(y: i64, region: &str) -> Vec<f64> {
-    let yf = y as f64;
+    let yf = i64_to_f64(y);
     let mut out: Vec<f64> = Vec::new();
     let add = |out: &mut Vec<f64>, d: f64| {
         if !out.contains(&d) {
@@ -149,11 +150,13 @@ fn median(xs: &[f64]) -> Option<f64> {
     let mut s = xs.to_vec();
     js_sort_by(&mut s, |p, q| p - q);
     let m = s.len() >> 1;
-    Some(if s.len() % 2 == 1 { s[m] } else { f64::midpoint(s[m - 1], s[m]) })
+    // s is not empty, so m is a position in it, and m - 1 is too when the length is even
+    let hi = s.get(m).copied()?;
+    Some(if s.len() % 2 == 1 { hi } else { f64::midpoint(m.checked_sub(1).and_then(|i| s.get(i)).copied()?, hi) })
 }
 
 fn mean(xs: &[f64]) -> Option<f64> {
-    if xs.is_empty() { None } else { Some(xs.iter().fold(0.0, |s, x| s + x) / xs.len() as f64) }
+    if xs.is_empty() { None } else { Some(xs.iter().fold(0.0, |s, x| s + x) / usize_to_f64(xs.len())) }
 }
 
 fn sdev(xs: &[f64]) -> Option<f64> {
@@ -161,7 +164,7 @@ fn sdev(xs: &[f64]) -> Option<f64> {
         return None;
     }
     let m = mean(xs)?;
-    Some((xs.iter().fold(0.0, |s, x| s + (x - m) * (x - m)) / (xs.len() as f64 - 1.0)).sqrt())
+    Some((xs.iter().fold(0.0, |s, x| s + (x - m) * (x - m)) / (usize_to_f64(xs.len()) - 1.0)).sqrt())
 }
 
 /// The fit `ols(pts)` gives: slope, intercept and the mean of y.
@@ -306,19 +309,15 @@ struct Day {
     o: f64,
 }
 
-/// `tmsStats(rows, opts)`: the statistics of one site from deduplicated rows ({ `SiteRef`, startDate, laneNumber, flowDirection, classWeight, v }).
-///
-/// `hist` is the site's five years of AADT, oldest first; `region` decides the regional holidays (Auckland by default); `now_ms` is the date the growth is
-/// counted to and `clock_ms` the time the statistics are stamped with (the same in the prototype's own use). Gives
-/// None without data, and an error text for a start date that is not a date.
-pub fn tms_stats(rows: &[JsonValue], reference: &Value, region: &str, hist: Option<&[JsonValue]>, now_ms: f64, clock_ms: f64) -> Result<Option<TmsStats>, String> {
+// The day totals of the rows by day count, and the flow directions seen in the order met; an error text for a start date that is not a date
+fn day_totals(rows: &[JsonValue]) -> Result<(HashMap<i64, Day>, Vec<JsonValue>), String> {
     let heavy = Regex::lit("heavy", "i");
     let light = Regex::lit("light", "i");
     let mut day: HashMap<i64, Day> = HashMap::new();
     let mut dirs: Vec<JsonValue> = Vec::new();
     for r in rows {
         let ms = r.get("startDate").and_then(date_of).ok_or_else(|| "Invalid time value".to_string())?;
-        let n = dnum(&today(ms)) as i64;
+        let n = f64_to_i64(dnum(&today(ms)));
         let v = {
             let x = r.get("v").map_or(f64::NAN, JsonValue::to_number);
             if x == 0.0 || x.is_nan() { 0.0 } else { x }
@@ -341,16 +340,138 @@ pub fn tms_stats(rows: &[JsonValue], reference: &Value, region: &str, hist: Opti
                 dirs.push(fd.clone());
             }
     }
+    Ok((day, dirs))
+}
+
+// tot(n): a day's Light plus Heavy, else its other classes. Every day asked for is a key of day; another would read as NaN
+fn day_total(day: &HashMap<i64, Day>, n: f64) -> f64 {
+    let Some(t) = day.get(&f64_to_i64(n)) else { return f64::NAN };
+    let s = t.l + t.h;
+    if s != 0.0 && !s.is_nan() { s } else { t.o }
+}
+
+// Calibration target: Tue to Thu, not a holiday, in school term, latest 12 term weeks; None without such days
+fn school_target(valid: &[f64], hol: &HashSet<i64>, day: &HashMap<i64, Day>) -> Option<TmsTarget> {
+    let mut tt: Vec<f64> = valid.iter().copied().filter(|&n| dow(n) >= 2.0 && dow(n) <= 4.0 && !hol.contains(&f64_to_i64(n)) && in_term(n) != Some(false)).collect();
+    js_sort_by(&mut tt, |p, q| q - p);
+    let mut weeks: Vec<f64> = Vec::new();
+    let mut used: Vec<f64> = Vec::new();
+    for &n in &tt {
+        let w = ((n + 3.0) / 7.0).floor();
+        if !weeks.contains(&w) && usize_to_f64(weeks.len()) >= TMS_TERM_WEEKS[1] {
+            break;
+        }
+        if !weeks.contains(&w) {
+            weeks.push(w);
+        }
+        used.push(n);
+    }
+    let tv: Vec<f64> = used.iter().map(|&n| day_total(day, n)).collect();
+    // the mean is None exactly when no day is used
+    let tm = mean(&tv)?;
+    let sd = sdev(&tv);
+    let unknown_term = used.iter().any(|&n| in_term(n).is_none());
+    let nw = weeks.len();
+    Some(TmsTarget {
+        mean: tm,
+        sd,
+        n: used.len(),
+        ci95: sd.map(|s| TMS_Z * s / usize_to_f64(used.len()).sqrt()),
+        weeks: nw,
+        from: diso(math_min_of(&used)),
+        to: diso(math_max_of(&used)),
+        ok: usize_to_f64(nw) >= TMS_TERM_WEEKS[0] && !unknown_term,
+        note: if usize_to_f64(nw) < TMS_TERM_WEEKS[0] {
+            format!(
+                "Only {} school-term week{} of Tuesday\u{2013}Thursday data ({}\u{2013}{} wanted): indicative.",
+                nw,
+                if nw == 1 { "" } else { "s" },
+                crate::jsnum::number_to_js_string(TMS_TERM_WEEKS[0]),
+                crate::jsnum::number_to_js_string(TMS_TERM_WEEKS[1])
+            )
+        } else if unknown_term {
+            "School term dates are not entered for every year used: indicative.".to_string()
+        } else {
+            String::new()
+        },
+    })
+}
+
+// Day-of-week factors, Sunday first: each weekday's mean against the mean of every valid day
+fn dow_factors(valid: &[f64], all: Option<f64>, day: &HashMap<i64, Day>) -> Vec<Option<f64>> {
+    (0..7)
+        .map(|k| {
+            let x: Vec<f64> = valid.iter().copied().filter(|&n| dow(n) == f64::from(k)).map(|n| day_total(day, n)).collect();
+            // mean(&x) is None exactly when x is empty
+            match (all, mean(&x)) {
+                (Some(a), Some(mx)) if a != 0.0 && !a.is_nan() => Some(mx / a),
+                _ => None,
+            }
+        })
+        .collect()
+}
+
+// Monthly factors against the AADT, by month number
+fn monthly(last_year: &[f64], aadt: Option<f64>, day: &HashMap<i64, Day>) -> Option<BTreeMap<String, f64>> {
+    let a = aadt.filter(|a| *a != 0.0 && !a.is_nan())?;
+    let mut by: BTreeMap<u32, Vec<f64>> = BTreeMap::new();
+    for &n in last_year {
+        let m: u32 = diso(n)[5..7].parse().unwrap_or(0);
+        by.entry(m).or_default().push(day_total(day, n));
+    }
+    // every month listed holds a day, so each has a mean
+    Some(by.into_iter().filter_map(|(m, v)| mean(&v).map(|mv| (m.to_string(), mv / a))).collect::<BTreeMap<String, f64>>())
+}
+
+// Growth: OLS slope of annual ADT (the NZTA site's five years of AADT, oldest first)
+fn growth_of(hist: Option<&[JsonValue]>, now_ms: f64) -> Option<TmsGrowth> {
+    let hist = hist.filter(|h| h.iter().any(JsonValue::truthy))?;
+    let y = i64_to_f64(nz_year(now_ms));
+    let pts: Vec<[f64; 2]> = hist.iter().enumerate().filter(|(_, v)| v.truthy()).map(|(i, v)| [y - 5.0 + usize_to_f64(i), v.to_number()]).collect();
+    let f = ols(&pts)?;
+    Some(TmsGrowth {
+        slope: f.slope,
+        pct: if f.mean != 0.0 && !f.mean.is_nan() { Some(f.slope / f.mean * 100.0) } else { None },
+        years: pts.len(),
+        // ols needs two points, so there is a first and a last
+        from: pts.first().map_or(f64::NAN, |p| p[0]),
+        to: pts.last().map_or(f64::NAN, |p| p[0]),
+        basis: "OLS slope of annual ADT (NZTA site history)".to_string(),
+    })
+}
+
+// The flow directions sorted as text (by UTF-16 code units, as the prototype's sort compares)
+fn sort_dirs(mut dirs: Vec<JsonValue>) -> Vec<Value> {
+    js_sort_by(&mut dirs, |a, b| {
+        let (x, y): (Vec<u16>, Vec<u16>) = (a.js_string().encode_utf16().collect(), b.js_string().encode_utf16().collect());
+        match x.cmp(&y) {
+            std::cmp::Ordering::Less => -1.0,
+            std::cmp::Ordering::Equal => 0.0,
+            std::cmp::Ordering::Greater => 1.0,
+        }
+    });
+    dirs.iter().map(JsonValue::to_value).collect()
+}
+
+/// `tmsStats(rows, opts)`: the statistics of one site from deduplicated rows ({ `SiteRef`, startDate, laneNumber, flowDirection, classWeight, v }).
+///
+/// `hist` is the site's five years of AADT, oldest first; `region` decides the regional holidays (Auckland by default); `now_ms` is the date the growth is
+/// counted to and `clock_ms` the time the statistics are stamped with (the same in the prototype's own use). Gives
+/// None without data, and an error text for a start date that is not a date.
+///
+/// # Errors
+///
+/// "Invalid time value" when a row's start date is not a date.
+pub fn tms_stats(rows: &[JsonValue], reference: &Value, region: &str, hist: Option<&[JsonValue]>, now_ms: f64, clock_ms: f64) -> Result<Option<TmsStats>, String> {
+    let (day, dirs) = day_totals(rows)?;
     if day.is_empty() {
         return Ok(None);
     }
-    let mut ds: Vec<f64> = day.keys().map(|k| *k as f64).collect();
+    let mut ds: Vec<f64> = day.keys().map(|k| i64_to_f64(*k)).collect();
     js_sort_by(&mut ds, |p, q| p - q);
-    let tot = |n: f64| -> f64 {
-        let t = &day[&(n as i64)];
-        let s = t.l + t.h;
-        if s != 0.0 && !s.is_nan() { s } else { t.o }
-    };
+    // day is not empty, so neither is ds
+    let (Some(&d0), Some(&last)) = (ds.first(), ds.last()) else { return Ok(None) };
+    let tot = |n: f64| -> f64 { day_total(&day, n) };
     let (mut valid, mut dropped): (Vec<f64>, Vec<f64>) = (Vec::new(), Vec::new());
     for &n in &ds {
         let win: Vec<f64> = ds.iter().filter(|&&m| (m - n).abs() <= TMS_MEDIAN_DAYS / 2.0).map(|&m| tot(m)).collect();
@@ -371,116 +492,25 @@ pub fn tms_stats(rows: &[JsonValue], reference: &Value, region: &str, hist: Opti
     let mut hol: HashSet<i64> = HashSet::new();
     for y in &years {
         for d in holidays(*y, region) {
-            hol.insert(d as i64);
+            hol.insert(f64_to_i64(d));
         }
     }
     let vals = |ns: &[f64]| -> Vec<f64> { ns.iter().map(|&n| tot(n)).collect() };
-    let last = ds[ds.len() - 1];
     let last_year: Vec<f64> = valid.iter().copied().filter(|&n| n > last - 365.0).collect();
-    let aadt = if last_year.len() as f64 >= TMS_AADT_DAYS { mean(&vals(&last_year)) } else { None };
+    let aadt = if usize_to_f64(last_year.len()) >= TMS_AADT_DAYS { mean(&vals(&last_year)) } else { None };
     // AAWDT is annual too: weekdays of the same last 12 months, with the same 300-day rule; otherwise only a weekday mean
-    let is_wk = |n: f64| dow(n) >= 1.0 && dow(n) <= 5.0 && !hol.contains(&(n as i64));
+    let is_wk = |n: f64| dow(n) >= 1.0 && dow(n) <= 5.0 && !hol.contains(&f64_to_i64(n));
     let wk: Vec<f64> = valid.iter().copied().filter(|&n| is_wk(n)).collect();
-    let aawdt = if aadt.is_some() { mean(&vals(&last_year.iter().copied().filter(|&n| is_wk(n)).collect::<Vec<_>>())) } else { None };
-    // Calibration target: Tue to Thu, not a holiday, in school term, latest 12 term weeks
-    let mut tt: Vec<f64> = valid.iter().copied().filter(|&n| dow(n) >= 2.0 && dow(n) <= 4.0 && !hol.contains(&(n as i64)) && in_term(n) != Some(false)).collect();
-    js_sort_by(&mut tt, |p, q| q - p);
-    let mut weeks: Vec<f64> = Vec::new();
-    let mut used: Vec<f64> = Vec::new();
-    for &n in &tt {
-        let w = ((n + 3.0) / 7.0).floor();
-        if !weeks.contains(&w) && weeks.len() as f64 >= TMS_TERM_WEEKS[1] {
-            break;
-        }
-        if !weeks.contains(&w) {
-            weeks.push(w);
-        }
-        used.push(n);
-    }
-    let tv = vals(&used);
-    let tm = mean(&tv);
-    let sd = sdev(&tv);
-    let unknown_term = used.iter().any(|&n| in_term(n).is_none());
-    let target = if used.is_empty() {
-        None
-    } else {
-        let nw = weeks.len();
-        Some(TmsTarget {
-            mean: tm.expect("a mean"),
-            sd,
-            n: used.len(),
-            ci95: sd.map(|s| TMS_Z * s / (used.len() as f64).sqrt()),
-            weeks: nw,
-            from: diso(math_min_of(&used)),
-            to: diso(math_max_of(&used)),
-            ok: nw as f64 >= TMS_TERM_WEEKS[0] && !unknown_term,
-            note: if (nw as f64) < TMS_TERM_WEEKS[0] {
-                format!(
-                    "Only {} school-term week{} of Tuesday\u{2013}Thursday data ({}\u{2013}{} wanted): indicative.",
-                    nw,
-                    if nw == 1 { "" } else { "s" },
-                    crate::jsnum::number_to_js_string(TMS_TERM_WEEKS[0]),
-                    crate::jsnum::number_to_js_string(TMS_TERM_WEEKS[1])
-                )
-            } else if unknown_term {
-                "School term dates are not entered for every year used: indicative.".to_string()
-            } else {
-                String::new()
-            },
-        })
-    };
-    let l: f64 = valid.iter().fold(0.0, |s, n| s + day[&(*n as i64)].l);
-    let h: f64 = valid.iter().fold(0.0, |s, n| s + day[&(*n as i64)].h);
+    let annual_weekday = if aadt.is_some() { mean(&vals(&last_year.iter().copied().filter(|&n| is_wk(n)).collect::<Vec<_>>())) } else { None };
+    let target = school_target(&valid, &hol, &day);
+    // valid days are keys of day; another would add nothing
+    let l: f64 = valid.iter().fold(0.0, |s, n| s + day.get(&f64_to_i64(*n)).map_or(0.0, |t| t.l));
+    let h: f64 = valid.iter().fold(0.0, |s, n| s + day.get(&f64_to_i64(*n)).map_or(0.0, |t| t.h));
     let all = mean(&vals(&valid));
-    let dow_f: Vec<Option<f64>> = (0..7)
-        .map(|k| {
-            let x = vals(&valid.iter().copied().filter(|&n| dow(n) == f64::from(k)).collect::<Vec<_>>());
-            match all {
-                Some(a) if !x.is_empty() && a != 0.0 && !a.is_nan() => Some(mean(&x).expect("a mean") / a),
-                _ => None,
-            }
-        })
-        .collect();
-    let madt = match aadt {
-        Some(a) if a != 0.0 && !a.is_nan() => {
-            let mut by: BTreeMap<u32, Vec<f64>> = BTreeMap::new();
-            for &n in &last_year {
-                let m: u32 = diso(n)[5..7].parse().unwrap_or(0);
-                by.entry(m).or_default().push(tot(n));
-            }
-            Some(by.into_iter().map(|(m, v)| (m.to_string(), mean(&v).expect("a mean") / a)).collect::<BTreeMap<String, f64>>())
-        }
-        _ => None,
-    };
-    // Growth: OLS slope of annual ADT (the NZTA site's five years of AADT, oldest first)
-    let mut growth = None;
-    if let Some(hist) = hist
-        && hist.iter().any(JsonValue::truthy)
-    {
-        let y = nz_year(now_ms) as f64;
-        let pts: Vec<[f64; 2]> = hist.iter().enumerate().filter(|(_, v)| v.truthy()).map(|(i, v)| [y - 5.0 + i as f64, v.to_number()]).collect();
-        if let Some(f) = ols(&pts) {
-            growth = Some(TmsGrowth {
-                slope: f.slope,
-                pct: if f.mean != 0.0 && !f.mean.is_nan() { Some(f.slope / f.mean * 100.0) } else { None },
-                years: pts.len(),
-                from: pts[0][0],
-                to: pts[pts.len() - 1][0],
-                basis: "OLS slope of annual ADT (NZTA site history)".to_string(),
-            });
-        }
-    }
-    let d0 = ds[0];
-    let ok: HashSet<i64> = valid.iter().map(|n| *n as i64).collect();
-    let mut sorted_dirs = dirs;
-    js_sort_by(&mut sorted_dirs, |a, b| {
-        let (x, y): (Vec<u16>, Vec<u16>) = (a.js_string().encode_utf16().collect(), b.js_string().encode_utf16().collect());
-        match x.cmp(&y) {
-            std::cmp::Ordering::Less => -1.0,
-            std::cmp::Ordering::Equal => 0.0,
-            std::cmp::Ordering::Greater => 1.0,
-        }
-    });
+    let dow_f = dow_factors(&valid, all, &day);
+    let madt = monthly(&last_year, aadt, &day);
+    let growth = growth_of(hist, now_ms);
+    let ok: HashSet<i64> = valid.iter().map(|n| f64_to_i64(*n)).collect();
     Ok(Some(TmsStats {
         reference: reference.clone(),
         from: diso(d0),
@@ -490,15 +520,16 @@ pub fn tms_stats(rows: &[JsonValue], reference: &Value, region: &str, hist: Opti
         dropped: dropped.len(),
         adt: all,
         aadt,
-        aawdt,
-        wdt: if wk.is_empty() { None } else { Some(TmsWeekday { mean: mean(&vals(&wk)).expect("a mean"), n: wk.len() }) },
+        aawdt: annual_weekday,
+        // mean is None exactly when there are no weekdays
+        wdt: mean(&vals(&wk)).map(|m| TmsWeekday { mean: m, n: wk.len() }),
         target,
         hcv: if l + h == 0.0 { None } else { Some(h / (l + h)) },
         dow: dow_f,
         madt,
         growth,
-        dirs: sorted_dirs.iter().map(JsonValue::to_value).collect(),
-        series: TmsSeries { d0: diso(d0), v: ds.iter().map(|&n| (if ok.contains(&(n as i64)) { 1.0 } else { -1.0 }) * math_round(tot(n))).collect() },
+        dirs: sort_dirs(dirs),
+        series: TmsSeries { d0: diso(d0), v: ds.iter().map(|&n| (if ok.contains(&f64_to_i64(n)) { 1.0 } else { -1.0 }) * math_round(tot(n))).collect() },
         units: "veh/day".to_string(),
         method: "weekday_factored".to_string(),
         at: iso_string(clock_ms),
@@ -589,16 +620,21 @@ impl TmsLoad {
         l
     }
     fn start_chunk(&mut self) {
-        let i = self.chunk * TMS_CHUNK;
+        // Bound: positions in the list of sites, far below usize::MAX
+        let i = self.chunk.saturating_mul(TMS_CHUNK);
         if i >= self.refs.len() {
             self.query = None;
             return;
         }
-        let part = &self.refs[i..(i + TMS_CHUNK).min(self.refs.len())];
+        // i is inside the list here, so the part is there
+        let Some(part) = self.refs.get(i..i.saturating_add(TMS_CHUNK).min(self.refs.len())) else {
+            self.query = None;
+            return;
+        };
         self.statuses.push(format!(
             "Downloading daily counts for sites {}\u{2013}{} of {} (NZTA TMS)\u{2026}",
-            i + 1,
-            i + part.len(),
+            i.saturating_add(1),
+            i.saturating_add(part.len()),
             self.refs.len()
         ));
         let list = part.iter().map(|s| format!("'{}'", s.replace('\'', ""))).collect::<Vec<_>>().join(",");
@@ -620,6 +656,10 @@ impl TmsLoad {
         &self.statuses
     }
     /// After the download: works out each site's statistics, puts them in `P.feeds.tms` and on the NZTA counts, and stamps the vintage table.
+    ///
+    /// # Errors
+    ///
+    /// "Invalid time value" when a downloaded row's start date is not a date.
     pub fn finish(self, p: &mut Project) -> Result<TmsResult, String> {
         let mut out: BTreeMap<String, TmsStats> = BTreeMap::new();
         for s in &self.sites {
@@ -635,7 +675,8 @@ impl TmsLoad {
         }
         if let Some(Value::Object(t)) = f.get_mut("tms") {
             for (k, v) in &out {
-                t.insert(k.clone(), serde_json::to_value(v).expect("stats"));
+                // the statistics are numbers, text and lists, which always convert
+                t.insert(k.clone(), serde_json::to_value(v).map_err(|e| e.to_string())?);
             }
         }
         attach_tms(p);
@@ -645,7 +686,7 @@ impl TmsLoad {
             "note".into(),
             json!(format!(
                 "{} deduplicated rows (groupBy and max) since {}. {}.{}",
-                fmt::int(self.n as f64),
+                fmt::int(usize_to_f64(self.n)),
                 self.since,
                 TMS_HCV_RULE,
                 if self.complete { "" } else { " Some sites hit the download cap: shorten the period in Settings." }
@@ -661,10 +702,11 @@ impl Flow for TmsLoad {
         self.query.as_mut().and_then(Flow::next_request)
     }
     fn answer(&mut self, a: Result<Answer, FetchFailure>) -> Result<(), String> {
-        let q = self.query.as_mut().expect("a query is running");
+        // a request is only asked for while a query runs; an answer without one has nothing to go to
+        let Some(q) = self.query.as_mut() else { return Ok(()) };
         q.answer(a)?;
         if q.is_done() {
-            let q = self.query.take().expect("query");
+            let Some(q) = self.query.take() else { return Ok(()) };
             self.complete = self.complete && q.complete();
             for f in q.into_features() {
                 let empty = JsonValue::object();
@@ -674,10 +716,11 @@ impl Flow for TmsLoad {
                     && let Some(list) = self.rows.get_mut(&r.js_string())
                 {
                     list.push(a.clone());
-                    self.n += 1;
+                    // Bound: counts of rows and chunks in memory, far below usize::MAX
+                    self.n = self.n.saturating_add(1);
                 }
             }
-            self.chunk += 1;
+            self.chunk = self.chunk.saturating_add(1);
             self.start_chunk();
         }
         Ok(())
@@ -716,54 +759,55 @@ pub fn period_uses_share(s: &Settings) -> bool {
 /// The prototype counts a count as changed when its `tms` is not the same object as the result; a project read from a file never holds the same object, so every count with a result counts.
 pub fn attach_tms(p: &mut Project) -> usize {
     let feeds = p.extra.get("feeds").cloned();
-    let t = feeds.as_ref().and_then(|f| f.get("tms")).filter(|t| value_truthy(t)).cloned();
+    let tms_all = feeds.as_ref().and_then(|f| f.get("tms")).filter(|t| value_truthy(t)).cloned();
     let prof = feeds.as_ref().and_then(|f| f.get("profiles")).filter(|t| value_truthy(t)).cloned();
-    if t.is_none() && prof.is_none() {
+    if tms_all.is_none() && prof.is_none() {
         return 0;
     }
-    let weekday = t.is_some() && period_uses_tms(&p.settings);
+    let weekday = tms_all.is_some() && period_uses_tms(&p.settings);
     let settings = p.settings.clone();
-    let Some(d) = p.data.get_mut() else { return 0 };
-    let Some(Value::Array(counts)) = d.extra.get_mut("counts") else { return 0 };
-    let mut n = 0;
-    for c in counts.iter_mut() {
-        let Some(o) = c.as_object_mut() else { continue };
-        if o.get("src").and_then(Value::as_str) != Some("nzta") {
+    let Some(data) = p.data.get_mut() else { return 0 };
+    let Some(Value::Array(counts)) = data.extra.get_mut("counts") else { return 0 };
+    let mut changed: usize = 0;
+    for count in counts.iter_mut() {
+        let Some(obj) = count.as_object_mut() else { continue };
+        if obj.get("src").and_then(Value::as_str) != Some("nzta") {
             continue;
         }
-        let key = match o.get("ref") {
+        let key = match obj.get("ref") {
             Some(r) => crate::jsnum::value_to_js_string(r),
             None => "undefined".to_string(),
         };
-        let s = t.as_ref().and_then(|t| t.get(&key)).filter(|s| value_truthy(s)).cloned();
+        let stats = tms_all.as_ref().and_then(|t| t.get(&key)).filter(|s| value_truthy(s)).cloned();
         // Older Spare Construct versions wrote c.obsMethod 'weekday_factored' although the volume came from the AADT
-        o.remove("obsMethod");
-        if let Some(s) = &s {
-            o.insert("tms".to_string(), s.clone());
-            n += 1;
+        obj.remove("obsMethod");
+        if let Some(found) = &stats {
+            obj.insert("tms".to_string(), found.clone());
+            // Bound: a count of the project's counts
+            changed = changed.saturating_add(1);
         }
-        if let Some(s) = &s
+        if let Some(found) = &stats
             && weekday
-            && s.get("target").is_some_and(|t| !t.is_null())
+            && found.get("target").is_some_and(|t| !t.is_null())
         {
-            let uses = match serde_json::from_value::<Count>(Value::Object(o.clone())) {
+            let uses = match serde_json::from_value::<Count>(Value::Object(obj.clone())) {
                 Ok(cc) => period_vol(&cc, "AM", &settings).is_some_and(|r| r.basis == "weekday_factored"),
                 Err(_) => false,
             };
             if uses {
-                o.insert("obs_method".to_string(), json!("weekday_factored"));
-                o.insert("n_days".to_string(), s["target"].get("n").cloned().unwrap_or(Value::Null));
-            } else if o.get("obs_method").and_then(Value::as_str) == Some("weekday_factored") {
-                o.remove("obs_method");
-                o.remove("n_days");
+                obj.insert("obs_method".to_string(), json!("weekday_factored"));
+                obj.insert("n_days".to_string(), found["target"].get("n").cloned().unwrap_or(Value::Null));
+            } else if obj.get("obs_method").and_then(Value::as_str) == Some("weekday_factored") {
+                obj.remove("obs_method");
+                obj.remove("n_days");
             }
         }
         let site = prof.as_ref().and_then(|pr| pr.get("sites")).and_then(|st| st.get(&key)).filter(|x| value_truthy(x));
         if let (Some(pr), Some(site)) = (prof.as_ref(), site) {
             let src_text = pr.get("source").cloned().unwrap_or(Value::Null);
-            let same = o.get("share").filter(|s| value_truthy(s)).is_some_and(|s| s.get("src") == Some(&src_text) && !src_text.is_null());
+            let same = obj.get("share").filter(|s| value_truthy(s)).is_some_and(|s| s.get("src") == Some(&src_text) && !src_text.is_null());
             if !same {
-                o.insert(
+                obj.insert(
                     "share".to_string(),
                     json!({ "AM": site.get("amShare").cloned().unwrap_or(Value::Null), "PM": site.get("pmShare").cloned().unwrap_or(Value::Null),
                         "amStart": site.get("amStart").cloned().unwrap_or(Value::Null), "pmStart": site.get("pmStart").cloned().unwrap_or(Value::Null), "src": src_text }),
@@ -771,7 +815,7 @@ pub fn attach_tms(p: &mut Project) -> usize {
             }
         }
     }
-    n
+    changed
 }
 
 /// `loadProfiles()`: the request for the peak profiles file (`data/tms_profiles.json` on the host's own site).
@@ -781,6 +825,10 @@ pub fn profiles_request() -> GetOnce {
 }
 
 /// After `loadProfiles`: keeps the profiles in `P.feeds.profiles`, attaches them to the counts and stamps the vintage table. Gives how many counts changed.
+///
+/// # Errors
+///
+/// "`data/tms_profiles.json` has no sites" when the answer holds no sites.
 pub fn apply_profiles(p: &mut Project, answer: &JsonValue, now_ms: f64) -> Result<usize, String> {
     let sites = answer.get("sites").filter(|s| s.truthy());
     let Some(sites) = (answer.truthy()).then_some(sites).flatten() else {

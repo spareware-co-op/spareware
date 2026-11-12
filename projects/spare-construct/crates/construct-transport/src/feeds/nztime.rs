@@ -7,37 +7,46 @@
 //! ahead of UTC in summer, 12 in winter). The truth tests check the rule against Node's own time zone data.
 //! Local time here always means New Zealand time.
 
-use crate::jsnum::{number_to_js_string, string_to_number};
+use crate::jsnum::{f64_to_i64, f64_to_usize, i64_to_f64, number_to_js_string, string_to_number, usize_to_f64};
 use crate::edit::json::JsonValue;
 
 /// Milliseconds in a day.
 pub const DAY_MS: f64 = 86_400_000.0;
 
+// `x as u32`: truncated toward zero, NaN and anything below 0 giving 0, anything above u32::MAX giving u32::MAX
+fn f64_to_u32(x: f64) -> u32 {
+    u32::try_from(f64_to_usize(x)).unwrap_or(u32::MAX)
+}
+
 /// Days since 1970-01-01 of a proleptic Gregorian date (month 1 to 12).
 #[must_use]
 pub fn days_from_civil(y: i64, m: u32, d: u32) -> i64 {
-    let y = if m <= 2 { y - 1 } else { y };
+    // Bound: years of real dates are far inside i64 (a JavaScript date is within 275,760 years of 1970), and yoe, mp and
+    // doy are small; the saturating steps only keep an absurd year from overflowing
+    let y = if m <= 2 { y.saturating_sub(1) } else { y };
     let era = y.div_euclid(400);
     let yoe = y.rem_euclid(400);
-    let mp = (i64::from(m) + 9) % 12;
-    let doy = (153 * mp + 2) / 5 + i64::from(d) - 1;
-    let doe = yoe * 365 + yoe / 4 - yoe / 100 + doy;
-    era * 146_097 + doe - 719_468
+    let mp = i64::from(m).saturating_add(9) % 12;
+    let doy = (mp.saturating_mul(153).saturating_add(2) / 5).saturating_add(i64::from(d)).saturating_sub(1);
+    let doe = yoe.saturating_mul(365).saturating_add(yoe / 4).saturating_sub(yoe / 100).saturating_add(doy);
+    era.saturating_mul(146_097).saturating_add(doe).saturating_sub(719_468)
 }
 
 /// The (year, month 1 to 12, day 1 to 31) of a day count since 1970-01-01.
 #[must_use]
 pub fn civil_from_days(z: i64) -> (i64, u32, u32) {
-    let z = z + 719_468;
+    // Bound: doe is in 0..146_097, so yoe, doy and mp are small; era only saturates for an absurd day count
+    let z = z.saturating_add(719_468);
     let era = z.div_euclid(146_097);
     let doe = z.rem_euclid(146_097);
-    let yoe = (doe - doe / 1460 + doe / 36_524 - doe / 146_096) / 365;
-    let y = yoe + era * 400;
-    let doy = doe - (365 * yoe + yoe / 4 - yoe / 100);
-    let mp = (5 * doy + 2) / 153;
-    let d = (doy - (153 * mp + 2) / 5 + 1) as u32;
-    let m = if mp < 10 { mp + 3 } else { mp - 9 } as u32;
-    (if m <= 2 { y + 1 } else { y }, m, d)
+    let yoe = doe.saturating_sub(doe / 1460).saturating_add(doe / 36_524).saturating_sub(doe / 146_096) / 365;
+    let y = yoe.saturating_add(era.saturating_mul(400));
+    let doy = doe.saturating_sub(yoe.saturating_mul(365).saturating_add(yoe / 4).saturating_sub(yoe / 100));
+    let mp = doy.saturating_mul(5).saturating_add(2) / 153;
+    // d is in 1..=31 and m in 1..=12, so the conversions never fall back
+    let d = u32::try_from(doy.saturating_sub(mp.saturating_mul(153).saturating_add(2) / 5).saturating_add(1)).unwrap_or(1);
+    let m = u32::try_from(if mp < 10 { mp.saturating_add(3) } else { mp.saturating_sub(9) }).unwrap_or(1);
+    (if m <= 2 { y.saturating_add(1) } else { y }, m, d)
 }
 
 /// `Date.UTC(year, month0, day)`: month 0 to 11 and day 1 to 31, either may run over into the next period.
@@ -45,43 +54,43 @@ pub fn civil_from_days(z: i64) -> (i64, u32, u32) {
 pub fn date_utc(year: f64, month0: f64, day: f64) -> f64 {
     let y = year + (month0 / 12.0).floor();
     let m = month0 - (month0 / 12.0).floor() * 12.0;
-    days_from_civil(y as i64, m as u32 + 1, 1) as f64 * DAY_MS + (day - 1.0) * DAY_MS
+    i64_to_f64(days_from_civil(f64_to_i64(y), f64_to_u32(m).saturating_add(1), 1)) * DAY_MS + (day - 1.0) * DAY_MS
 }
 
 /// Day of the week of a day count since 1970-01-01, 0 = Sunday.
 #[must_use]
 pub fn weekday_of_days(days: i64) -> i64 {
-    (days + 4).rem_euclid(7)
+    days.saturating_add(4).rem_euclid(7)
 }
 
 // The Sunday on or after a date, as a day count
 fn sunday_on_or_after(y: i64, m: u32, d: u32) -> i64 {
     let z = days_from_civil(y, m, d);
-    z + (7 - weekday_of_days(z)) % 7
+    z.saturating_add(7_i64.saturating_sub(weekday_of_days(z)) % 7)
 }
 
 // The Sunday on or before a date, as a day count
 fn sunday_on_or_before(y: i64, m: u32, d: u32) -> i64 {
     let z = days_from_civil(y, m, d);
-    z - weekday_of_days(z)
+    z.saturating_sub(weekday_of_days(z))
 }
 
 // The UTC instant daylight saving starts in a year: a Sunday 02:00 standard time is 14:00 UTC the day before
 fn dst_start_ms(y: i64) -> f64 {
     let sun = if y <= 2006 { sunday_on_or_after(y, 10, 1) } else { sunday_on_or_before(y, 9, 30) };
-    sun as f64 * DAY_MS - 10.0 * 3_600_000.0
+    i64_to_f64(sun) * DAY_MS - 10.0 * 3_600_000.0
 }
 
 // The UTC instant daylight saving ends in a year: a Sunday 03:00 summer time is 14:00 UTC the day before
 fn dst_end_ms(y: i64) -> f64 {
     let sun = if y <= 2007 { sunday_on_or_after(y, 3, 15) } else { sunday_on_or_after(y, 4, 1) };
-    sun as f64 * DAY_MS - 10.0 * 3_600_000.0
+    i64_to_f64(sun) * DAY_MS - 10.0 * 3_600_000.0
 }
 
 /// Hours New Zealand is ahead of UTC at an instant (12, or 13 in daylight saving time).
 #[must_use]
 pub fn nz_offset_hours(utc_ms: f64) -> f64 {
-    let (y, _, _) = civil_from_days((utc_ms / DAY_MS).floor() as i64);
+    let (y, _, _) = civil_from_days(f64_to_i64((utc_ms / DAY_MS).floor()));
     if utc_ms < dst_end_ms(y) || utc_ms >= dst_start_ms(y) { 13.0 } else { 12.0 }
 }
 
@@ -108,10 +117,10 @@ pub fn nz_parts(utc_ms: f64) -> NzParts {
     let local = utc_ms + nz_offset_hours(utc_ms) * 3_600_000.0;
     let days = (local / DAY_MS).floor();
     let rem = local - days * DAY_MS;
-    let (y, m, d) = civil_from_days(days as i64);
+    let (y, m, d) = civil_from_days(f64_to_i64(days));
     let hour = (rem / 3_600_000.0).floor();
     let minute = ((rem - hour * 3_600_000.0) / 60_000.0).floor();
-    NzParts { year: y, month: m, day: d, hour: hour as u32, minute: minute as u32, weekday: weekday_of_days(days as i64) }
+    NzParts { year: y, month: m, day: d, hour: f64_to_u32(hour), minute: f64_to_u32(minute), weekday: weekday_of_days(f64_to_i64(days)) }
 }
 
 /// The UTC instant of midnight at the start of a New Zealand date (`new Date(y, m0, d)` in a New Zealand browser).
@@ -143,12 +152,14 @@ pub fn time_clip(ms: f64) -> Option<f64> {
 }
 
 fn digits(s: &[u8], from: usize, n: usize) -> Option<f64> {
-    if from + n > s.len() || !s[from..from + n].iter().all(u8::is_ascii_digit) {
+    let part = s.get(from..from.checked_add(n)?)?;
+    if !part.iter().all(u8::is_ascii_digit) {
         return None;
     }
     let mut v = 0.0;
-    for b in &s[from..from + n] {
-        v = v * 10.0 + f64::from(b - b'0');
+    for b in part {
+        // b is an ASCII digit, so this never saturates
+        v = v * 10.0 + f64::from(b.saturating_sub(b'0'));
     }
     Some(v)
 }
@@ -165,7 +176,7 @@ fn parse_header_date(text: &str) -> Option<f64> {
     let mut parts = t.split_whitespace();
     let day: f64 = parts.next()?.parse().ok()?;
     let mon = parts.next()?.to_ascii_lowercase();
-    let month = MONTH_NAMES.iter().position(|m| mon.starts_with(m))? as f64;
+    let month = usize_to_f64(MONTH_NAMES.iter().position(|m| mon.starts_with(m))?);
     let year: f64 = parts.next()?.parse().ok()?;
     let clock = parts.next().unwrap_or("00:00:00");
     let mut c = clock.split(':');
@@ -180,8 +191,8 @@ fn parse_header_date(text: &str) -> Option<f64> {
     let ms = match zone.map(str::to_ascii_uppercase).as_deref() {
         Some("GMT" | "UTC" | "Z" | "UT") => local,
         Some(z) if (z.starts_with('+') || z.starts_with('-')) && z.len() == 5 => {
-            let oh: f64 = z[1..3].parse().ok()?;
-            let om: f64 = z[3..5].parse().ok()?;
+            let oh: f64 = z.get(1..3)?.parse().ok()?;
+            let om: f64 = z.get(3..5)?.parse().ok()?;
             let off = (oh * 60.0 + om) * 60_000.0;
             local - if z.starts_with('+') { off } else { -off }
         }
@@ -199,14 +210,17 @@ fn parse_header_date(text: &str) -> Option<f64> {
 pub fn parse_date(text: &str) -> Option<f64> {
     let s = text.as_bytes();
     let Some(year) = digits(s, 0, 4) else { return parse_header_date(text) };
-    let mut i = 4;
+    // s[k] in JavaScript terms: None past the end
+    let at = |k: usize| s.get(k).copied();
+    // Bound: i only moves past fields that were read, so it stays at most s.len() and the sums below never saturate
+    let mut i: usize = 4;
     let (mut month, mut day) = (1.0, 1.0);
-    if i < s.len() && s[i] == b'-' {
-        month = digits(s, i + 1, 2)?;
-        i += 3;
-        if i < s.len() && s[i] == b'-' {
-            day = digits(s, i + 1, 2)?;
-            i += 3;
+    if at(i) == Some(b'-') {
+        month = digits(s, i.saturating_add(1), 2)?;
+        i = i.saturating_add(3);
+        if at(i) == Some(b'-') {
+            day = digits(s, i.saturating_add(1), 2)?;
+            i = i.saturating_add(3);
         }
     }
     if !(1.0..=12.0).contains(&month) || !(1.0..=31.0).contains(&day) {
@@ -216,29 +230,32 @@ pub fn parse_date(text: &str) -> Option<f64> {
     if i == s.len() {
         return time_clip(date_ms);
     }
-    if s[i] != b'T' && s[i] != b' ' {
+    if !matches!(at(i), Some(b'T' | b' ')) {
         return None;
     }
-    let h = digits(s, i + 1, 2)?;
-    if s.get(i + 3) != Some(&b':') {
+    let h = digits(s, i.saturating_add(1), 2)?;
+    if at(i.saturating_add(3)) != Some(b':') {
         return None;
     }
-    let mi = digits(s, i + 4, 2)?;
-    i += 6;
+    let mi = digits(s, i.saturating_add(4), 2)?;
+    i = i.saturating_add(6);
     let (mut sec, mut milli) = (0.0, 0.0);
-    if i < s.len() && s[i] == b':' {
-        sec = digits(s, i + 1, 2)?;
-        i += 3;
-        if i < s.len() && s[i] == b'.' {
-            let mut j = i + 1;
+    if at(i) == Some(b':') {
+        sec = digits(s, i.saturating_add(1), 2)?;
+        i = i.saturating_add(3);
+        if at(i) == Some(b'.') {
+            let start = i.saturating_add(1);
+            let mut j = start;
             let mut frac = 0.0;
             let mut scale = 100.0;
-            while j < s.len() && s[j].is_ascii_digit() {
-                frac += f64::from(s[j] - b'0') * scale;
+            while let Some(c) = at(j)
+                && c.is_ascii_digit()
+            {
+                frac += f64::from(c.saturating_sub(b'0')) * scale;
                 scale /= 10.0;
-                j += 1;
+                j = j.saturating_add(1);
             }
-            if j == i + 1 {
+            if j == start {
                 return None;
             }
             milli = frac.floor();
@@ -253,13 +270,13 @@ pub fn parse_date(text: &str) -> Option<f64> {
         // No offset: local (New Zealand) time
         let local = date_ms + clock;
         local - nz_offset_for_local(local) * 3_600_000.0
-    } else if s[i] == b'Z' && i + 1 == s.len() {
+    } else if at(i) == Some(b'Z') && i.saturating_add(1) == s.len() {
         date_ms + clock
-    } else if (s[i] == b'+' || s[i] == b'-') && i + 6 == s.len() && s[i + 3] == b':' {
-        let oh = digits(s, i + 1, 2)?;
-        let om = digits(s, i + 4, 2)?;
+    } else if matches!(at(i), Some(b'+' | b'-')) && i.saturating_add(6) == s.len() && at(i.saturating_add(3)) == Some(b':') {
+        let oh = digits(s, i.saturating_add(1), 2)?;
+        let om = digits(s, i.saturating_add(4), 2)?;
         let off = (oh * 60.0 + om) * 60_000.0;
-        date_ms + clock - if s[i] == b'+' { off } else { -off }
+        date_ms + clock - if at(i) == Some(b'+') { off } else { -off }
     } else {
         return None;
     };
@@ -289,7 +306,8 @@ const MONTHS: [&str; 12] = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Au
 /// The short month name `toLocaleDateString('en-NZ', { month: 'short' })` gives (September is "Sept").
 #[must_use]
 pub fn month_short(month: u32) -> &'static str {
-    MONTHS[(month as usize).saturating_sub(1).min(11)]
+    // The index is at most 11, so the fallback never applies
+    MONTHS.get((month as usize).saturating_sub(1).min(11)).copied().unwrap_or("Dec")
 }
 
 /// `toLocaleDateString('en-NZ', { day: 'numeric', month: 'short', year: 'numeric' })` in New Zealand: "9 Oct 2026".
@@ -327,7 +345,7 @@ pub fn date_text(v: Option<&JsonValue>) -> String {
 /// `new Date(ms).toISOString().slice(0, 10)`: the UTC date as YYYY-MM-DD.
 #[must_use]
 pub fn utc_date(ms: f64) -> String {
-    let (y, m, d) = civil_from_days((ms / DAY_MS).floor() as i64);
+    let (y, m, d) = civil_from_days(f64_to_i64((ms / DAY_MS).floor()));
     format!("{y:04}-{m:02}-{d:02}")
 }
 

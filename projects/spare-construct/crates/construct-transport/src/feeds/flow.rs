@@ -40,12 +40,20 @@ pub trait Flow {
     /// The next request, or None when the flow needs nothing more.
     fn next_request(&mut self) -> Option<HttpRequest>;
     /// Takes the answer to the last request; Err ends the flow.
+    ///
+    /// # Errors
+    ///
+    /// The message the prototype would show when the request failed or its answer reports an error.
     fn answer(&mut self, a: Result<Answer, FetchFailure>) -> Result<(), String>;
     /// True when the flow needs no more requests.
     fn is_done(&self) -> bool;
 }
 
 /// Runs a flow to the end with a function that does the fetching (for tests and simple hosts).
+///
+/// # Errors
+///
+/// The flow's own message from the first answer it refuses.
 pub fn run_flow<F: Flow>(flow: &mut F, mut fetch: impl FnMut(&HttpRequest) -> Result<Answer, FetchFailure>) -> Result<(), String> {
     while let Some(req) = flow.next_request() {
         let a = fetch(&req);
@@ -323,8 +331,9 @@ impl Flow for ArcQuery {
             self.done = true;
             return Ok(());
         }
-        self.offset += n;
-        self.page += 1;
+        // Bound: counts of features and pages held in memory, far below usize::MAX
+        self.offset = self.offset.saturating_add(n);
+        self.page = self.page.saturating_add(1);
         if self.page >= self.max_pages {
             self.done = true;
         }

@@ -12,7 +12,7 @@ use super::sources::{council, SRC_COUNCIL};
 use super::vintage::stamp;
 use crate::datahub::Count;
 use crate::edit::json::JsonValue;
-use crate::jsnum::{json_number, math_round, number_to_js_string};
+use crate::jsnum::{f64_to_i64, i64_to_f64, json_number, math_round, number_to_js_string, usize_to_f64};
 use crate::project::Project;
 use crate::util::{self, r7};
 use serde::Serialize;
@@ -112,6 +112,10 @@ pub struct CouncilLayer {
 }
 
 /// `councilRead(url)`: the address cleaned up (`/query...`, a query string and trailing slashes taken off), or why it is not a layer.
+///
+/// # Errors
+///
+/// The prototype's message when the cleaned address is not one `ArcGIS` layer.
 pub fn council_url(url: &str) -> Result<String, String> {
     let t = crate::jsnum::js_trim(url);
     let q1 = Regex::lit(r"\/query.*$", "i");
@@ -132,11 +136,19 @@ pub struct CouncilRead {
 
 impl CouncilRead {
     /// Reads a layer; Err when the text is not the address of a layer.
+    ///
+    /// # Errors
+    ///
+    /// As [`council_url`].
     pub fn new(url: &str, timeout_ms: f64, cache: &MetaCache) -> Result<CouncilRead, String> {
         let u = council_url(url)?;
         Ok(CouncilRead { meta: LayerMeta::new(&u, cache, timeout_ms), url: u })
     }
     /// The layer, once its description was read; Err when it has no fields.
+    ///
+    /// # Errors
+    ///
+    /// A message when the description was not read or the layer has no fields.
     pub fn finish(self) -> Result<CouncilLayer, String> {
         let meta = self.meta.meta().cloned().ok_or("The layer was not read.")?;
         let fields: Vec<String> = match meta.get("fields") {
@@ -172,7 +184,7 @@ pub fn year_of_val(v: Option<&JsonValue>) -> Option<f64> {
         JsonValue::String(s) if s.is_empty() => return None,
         JsonValue::Number(n) if *n > 1e10 => {
             let ms = super::nztime::time_clip(*n)?;
-            return Some(civil_from_days((ms / DAY_MS).floor() as i64).0 as f64);
+            return Some(i64_to_f64(civil_from_days(f64_to_i64((ms / DAY_MS).floor())).0));
         }
         _ => {}
     }
@@ -243,172 +255,28 @@ impl CouncilImport {
         let complete = self.query.complete();
         let n_features = feats.len();
         let preset = self.preset.as_deref().and_then(council);
-        let y_now = super::nztime::nz_year(self.now_ms) as f64;
-        let max_age = preset.and_then(|pr| pr.max_age_years).filter(|a| *a != 0.0);
+        let max_age = preset.and_then(|pr| pr.max_age_years).filter(|age| *age != 0.0);
         let key = hash_str(&self.layer.url);
         let label = preset.map_or_else(|| self.layer.name.clone(), |pr| pr.label.to_string());
-        let (m_adt, m_date, m_peak, m_ptime, m_hcv, m_name, m_dir) =
-            (map_str(&self.map, "adt"), map_str(&self.map, "date"), map_str(&self.map, "peak"), map_str(&self.map, "peakTime"), map_str(&self.map, "hcv"), map_str(&self.map, "name"), map_str(&self.map, "dir"));
-        let year_cols: Vec<String> = match self.map.get("years") {
-            Some(JsonValue::Array(a)) => a.iter().map(JsonValue::js_string).collect(),
-            _ => Vec::new(),
+        let reader = FeatureReader {
+            cols: Columns::of(&self.map),
+            layer: &self.layer,
+            key: &key,
+            label: &label,
+            now_ms: self.now_ms,
+            y_now: i64_to_f64(super::nztime::nz_year(self.now_ms)),
+            max_age,
+            dir_re: Regex::lit(r"\b(NB|SB|EB|WB)\b", "i"),
+            digits_re: Regex::lit(r"\D", "g"),
         };
-        let dir_re = Regex::lit(r"\b(NB|SB|EB|WB)\b", "i");
-        let digits_re = Regex::lit(r"\D", "g");
-        let empty = JsonValue::object();
         let mut list: Vec<Count> = Vec::new();
-        for x in &feats {
-            let a = x.get("attributes").filter(|a| a.truthy()).unwrap_or(&empty);
-            let Some(g) = x.get("geometry").filter(|g| g.truthy()) else { continue };
-            let at = |k: &str| a.get(k);
-            let ll: Option<[f64; 2]> = if g.get("x").is_some_and(|v| !v.is_null()) {
-                Some([g.get("y").map_or(f64::NAN, JsonValue::to_number), g.get("x").map_or(f64::NAN, JsonValue::to_number)])
-            } else if let Some(JsonValue::Array(paths)) = g.get("paths").filter(|p| p.truthy()) {
-                match paths.first() {
-                    Some(JsonValue::Array(p0)) => {
-                        let pa: Vec<[f64; 2]> = p0
-                            .iter()
-                            .map(|q| match q {
-                                JsonValue::Array(c) => [c.get(1).map_or(f64::NAN, JsonValue::to_number), c.first().map_or(f64::NAN, JsonValue::to_number)],
-                                _ => [f64::NAN, f64::NAN],
-                            })
-                            .collect();
-                        let cum = util::cum_len(&pa);
-                        Some(util::along(&pa, &cum, cum[cum.len() - 1] / 2.0).p)
-                    }
-                    _ => None,
-                }
-            } else if let Some(JsonValue::Array(pts)) = g.get("points").filter(|p| p.truthy()) {
-                match pts.first() {
-                    Some(JsonValue::Array(c)) => Some([c.get(1).map_or(f64::NAN, JsonValue::to_number), c.first().map_or(f64::NAN, JsonValue::to_number)]),
-                    _ => None,
-                }
-            } else {
-                None
-            };
-            let Some(ll) = ll else { continue };
-            let oid = at("OBJECTID").filter(|v| !v.is_null());
-            let mut adt: Option<f64> = if m_adt.is_empty() { None } else { Some(at(&m_adt).map_or(f64::NAN, JsonValue::to_number)) };
-            let mut year: Option<f64> = if m_date.is_empty() { None } else { year_of_val(at(&m_date)) };
-            if !adt.is_some_and(|v| v > 0.0) && !year_cols.is_empty() {
-                for f in &year_cols {
-                    let v = at(f).map_or(f64::NAN, JsonValue::to_number);
-                    if v > 0.0 {
-                        adt = Some(v);
-                        year = year_of_val(Some(&JsonValue::String(f.clone())));
-                        break;
-                    }
-                }
-            }
-            let Some(adt) = adt.filter(|v| *v > 0.0) else { continue };
-            if let Some(ma) = max_age
-                && let Some(yr) = year.filter(|y| *y != 0.0)
-                && y_now - yr > ma
-            {
-                continue;
-            }
-            let dir: Option<String> = if m_dir.is_empty() {
-                None
-            } else {
-                let t = match at(&m_dir) {
-                    Some(v) if v.truthy() => v.js_string(),
-                    _ => String::new(),
-                }
-                .to_uppercase();
-                let u: Vec<u16> = t.encode_utf16().collect();
-                dir_re.exec_units(&u, 0).and_then(|m| m.text(&u, 1)).filter(|s| !s.is_empty())
-            };
-            let peak: Option<f64> = if m_peak.is_empty() {
-                None
-            } else {
-                let v = at(&m_peak).map_or(f64::NAN, JsonValue::to_number);
-                if v == 0.0 || v.is_nan() { None } else { Some(v) }
-            };
-            let pt: String = if m_ptime.is_empty() {
-                String::new()
-            } else {
-                let t = match at(&m_ptime) {
-                    Some(v) if !v.is_null() => v.js_string(),
-                    _ => String::new(),
-                };
-                let digits = digits_re.replace(&t, |_, _| String::new());
-                let n = digits.encode_utf16().count();
-                if n >= 4 { digits } else { format!("{}{}", "0".repeat(4 - n), digits) }
-            };
-            let h: Option<f64> = if pt.is_empty() {
-                None
-            } else {
-                let u: Vec<u16> = pt.encode_utf16().collect();
-                let part = |a: usize, b: usize| crate::jsnum::string_to_number(&String::from_utf16_lossy(&u[a.min(u.len())..b.min(u.len())]));
-                Some(part(0, 2) + part(2, 4) / 60.0)
-            };
-            let oid_text = oid.map_or_else(|| list.len().to_string(), JsonValue::js_string);
-            let site_no = match oid {
-                Some(v) => v.js_string(),
-                None => number_to_js_string((list.len() + 1) as f64),
-            };
-            let name = match at(&m_name).filter(|_| !m_name.is_empty()).filter(|v| v.truthy()) {
-                Some(v) => v.js_string(),
-                None => format!("{} site {}", self.layer.name, site_no),
-            };
-            let hv = if !m_hcv.is_empty() && at(&m_hcv).is_some_and(|v| !v.is_null()) && at(&m_hcv).map_or(f64::NAN, JsonValue::to_number).is_finite() {
-                json_number(at(&m_hcv).map_or(f64::NAN, JsonValue::to_number))
-            } else {
-                Value::Null
-            };
-            let yr_text = year.filter(|y| *y != 0.0).map(number_to_js_string);
-            let in_am = peak.is_some() && h.is_some_and(|h| (6.0..10.0).contains(&h));
-            let in_pm = peak.is_some() && h.is_some_and(|h| (14.5..19.0).contains(&h));
-            let mut o = Map::new();
-            o.insert("id".into(), json!(format!("feeds:{key}:{oid_text}")));
-            o.insert("src".into(), json!("user"));
-            o.insert("name".into(), json!(name));
-            o.insert("lat".into(), json_number(r7(ll[0])));
-            o.insert("lng".into(), json_number(r7(ll[1])));
-            o.insert("adt".into(), json_number(math_round(adt)));
-            o.insert("hv".into(), hv);
-            o.insert("dir".into(), dir.as_ref().map_or(Value::Null, |d| json!(d)));
-            o.insert("directional".into(), json!(dir.is_some()));
-            o.insert("date".into(), yr_text.as_ref().map_or(Value::Null, |y| json!(y)));
-            o.insert("am".into(), if in_am { json_number(peak.expect("peak")) } else { Value::Null });
-            o.insert("pm".into(), if in_pm { json_number(peak.expect("peak")) } else { Value::Null });
-            o.insert("note".into(), json!(format!("{}{}", label, yr_text.as_ref().map_or(String::new(), |y| format!(", {y}")))));
-            o.insert("obsMethod".into(), json!("council count"));
-            o.insert("feed".into(), json!({ "source": label, "url": self.layer.url, "date": today(self.now_ms), "licence": SRC_COUNCIL.licence }));
-            list.push(serde_json::from_value::<Count>(Value::Object(o)).expect("a count reads"));
-        }
-        crate::datahub::ensure_data(p);
-        {
-            let d = p.data.get_mut().expect("data");
-            let old: Vec<Value> = match d.extra.get("counts") {
-                Some(Value::Array(a)) => a.clone(),
-                _ => Vec::new(),
-            };
-            let mut counts: Vec<Value> = old.into_iter().filter(|c| c.get("feed").and_then(|f| f.get("url")).and_then(Value::as_str) != Some(self.layer.url.as_str())).collect();
-            counts.extend(list.iter().map(|c| serde_json::to_value(c).expect("count")));
-            d.extra.insert("counts".to_string(), Value::Array(counts));
-        }
-        // the fields used, as the prototype words them
-        let mut used: Vec<String> = Vec::new();
-        if let Some(o) = self.map.as_object() {
-            for (k, v) in o.iter() {
-                let items: Vec<String> = match v {
-                    JsonValue::Array(a) if !a.is_empty() => a.iter().take(3).map(JsonValue::js_string).collect(),
-                    JsonValue::String(s) if !s.is_empty() => vec![s.clone()],
-                    _ => continue,
-                };
-                used.push(format!("{} = {}", k, items.join(", ")));
+        for feat in &feats {
+            if let Some(count) = reader.count(feat, list.len()) {
+                list.push(count);
             }
         }
-        let note = format!(
-            "Fields used: {}.{}{}",
-            used.join("; "),
-            match max_age {
-                Some(a) => format!(" Counts older than {} years left out.", number_to_js_string(a)),
-                None => String::new(),
-            },
-            if complete { "" } else { " Not every page downloaded." }
-        );
+        replace_counts(p, &self.layer.url, &list);
+        let note = fields_note(&self.map, max_age, complete);
         let mut extra = Map::new();
         extra.insert("key".into(), json!(format!("council:{key}")));
         extra.insert("url".into(), json!(self.layer.url));
@@ -423,6 +291,225 @@ impl CouncilImport {
     pub fn layer(&self) -> &CouncilLayer {
         &self.layer
     }
+}
+
+// The fields of a layer the user confirmed, as each feature is read with them (empty text for a field not chosen).
+struct Columns {
+    adt: String,
+    date: String,
+    peak: String,
+    peak_time: String,
+    hcv: String,
+    name: String,
+    dir: String,
+    years: Vec<String>,
+}
+
+impl Columns {
+    fn of(map: &CouncilMap) -> Columns {
+        Columns {
+            adt: map_str(map, "adt"),
+            date: map_str(map, "date"),
+            peak: map_str(map, "peak"),
+            peak_time: map_str(map, "peakTime"),
+            hcv: map_str(map, "hcv"),
+            name: map_str(map, "name"),
+            dir: map_str(map, "dir"),
+            years: match map.get("years") {
+                Some(JsonValue::Array(arr)) => arr.iter().map(JsonValue::js_string).collect(),
+                _ => Vec::new(),
+            },
+        }
+    }
+}
+
+// What `CouncilImport::finish` reads each feature with.
+struct FeatureReader<'a> {
+    cols: Columns,
+    layer: &'a CouncilLayer,
+    key: &'a str,
+    label: &'a str,
+    now_ms: f64,
+    y_now: f64,
+    max_age: Option<f64>,
+    dir_re: Regex,
+    digits_re: Regex,
+}
+
+impl FeatureReader<'_> {
+    // The count of one feature, or None when it has no point or no volume or is older than the preset allows;
+    // `before` is how many counts were kept before it.
+    fn count(&self, feat: &JsonValue, before: usize) -> Option<Count> {
+        let empty = JsonValue::object();
+        let attrs = feat.get("attributes").filter(|v| v.truthy()).unwrap_or(&empty);
+        let geom = feat.get("geometry").filter(|v| v.truthy())?;
+        let ll = feature_point(geom)?;
+        let at = |field: &str| attrs.get(field);
+        let num = |field: &str| at(field).map_or(f64::NAN, JsonValue::to_number);
+        let cols = &self.cols;
+        let oid = at("OBJECTID").filter(|v| !v.is_null());
+        let mut adt: Option<f64> = if cols.adt.is_empty() { None } else { Some(num(&cols.adt)) };
+        let mut year: Option<f64> = if cols.date.is_empty() { None } else { year_of_val(at(&cols.date)) };
+        if !adt.is_some_and(|v| v > 0.0) && !cols.years.is_empty() {
+            for field in &cols.years {
+                let vol = num(field);
+                if vol > 0.0 {
+                    adt = Some(vol);
+                    year = year_of_val(Some(&JsonValue::String(field.clone())));
+                    break;
+                }
+            }
+        }
+        let adt = adt.filter(|v| *v > 0.0)?;
+        if let Some(ma) = self.max_age
+            && let Some(yr) = year.filter(|v| *v != 0.0)
+            && self.y_now - yr > ma
+        {
+            return None;
+        }
+        let dir: Option<String> = if cols.dir.is_empty() {
+            None
+        } else {
+            let text = match at(&cols.dir) {
+                Some(v) if v.truthy() => v.js_string(),
+                _ => String::new(),
+            }
+            .to_uppercase();
+            let units: Vec<u16> = text.encode_utf16().collect();
+            self.dir_re.exec_units(&units, 0).and_then(|found| found.text(&units, 1)).filter(|txt| !txt.is_empty())
+        };
+        let peak: Option<f64> = if cols.peak.is_empty() {
+            None
+        } else {
+            let vol = num(&cols.peak);
+            if vol == 0.0 || vol.is_nan() { None } else { Some(vol) }
+        };
+        let hour = if cols.peak_time.is_empty() { None } else { peak_hour(at(&cols.peak_time), &self.digits_re) };
+        let oid_text = oid.map_or_else(|| before.to_string(), JsonValue::js_string);
+        let site_no = match oid {
+            Some(v) => v.js_string(),
+            None => number_to_js_string(usize_to_f64(before) + 1.0),
+        };
+        let name = match at(&cols.name).filter(|_| !cols.name.is_empty()).filter(|v| v.truthy()) {
+            Some(v) => v.js_string(),
+            None => format!("{} site {}", self.layer.name, site_no),
+        };
+        let hv = if !cols.hcv.is_empty() && at(&cols.hcv).is_some_and(|v| !v.is_null()) && num(&cols.hcv).is_finite() {
+            json_number(num(&cols.hcv))
+        } else {
+            Value::Null
+        };
+        let yr_text = year.filter(|v| *v != 0.0).map(number_to_js_string);
+        let am = peak.filter(|_| hour.is_some_and(|hr| (6.0..10.0).contains(&hr)));
+        let pm = peak.filter(|_| hour.is_some_and(|hr| (14.5..19.0).contains(&hr)));
+        let mut obj = Map::new();
+        obj.insert("id".into(), json!(format!("feeds:{}:{oid_text}", self.key)));
+        obj.insert("src".into(), json!("user"));
+        obj.insert("name".into(), json!(name));
+        obj.insert("lat".into(), json_number(r7(ll[0])));
+        obj.insert("lng".into(), json_number(r7(ll[1])));
+        obj.insert("adt".into(), json_number(math_round(adt)));
+        obj.insert("hv".into(), hv);
+        obj.insert("dir".into(), dir.as_ref().map_or(Value::Null, |txt| json!(txt)));
+        obj.insert("directional".into(), json!(dir.is_some()));
+        obj.insert("date".into(), yr_text.as_ref().map_or(Value::Null, |txt| json!(txt)));
+        obj.insert("am".into(), am.map_or(Value::Null, json_number));
+        obj.insert("pm".into(), pm.map_or(Value::Null, json_number));
+        obj.insert("note".into(), json!(format!("{}{}", self.label, yr_text.as_ref().map_or(String::new(), |txt| format!(", {txt}")))));
+        obj.insert("obsMethod".into(), json!("council count"));
+        obj.insert("feed".into(), json!({ "source": self.label, "url": self.layer.url, "date": today(self.now_ms), "licence": SRC_COUNCIL.licence }));
+        // Every field above has the type a Count reads, so this does not fail
+        serde_json::from_value::<Count>(Value::Object(obj)).ok()
+    }
+}
+
+// The point of a feature: the point itself, the middle of a line's first path, or the first of several points.
+fn feature_point(geom: &JsonValue) -> Option<[f64; 2]> {
+    let num = |v: Option<&JsonValue>| v.map_or(f64::NAN, JsonValue::to_number);
+    if geom.get("x").is_some_and(|v| !v.is_null()) {
+        Some([num(geom.get("y")), num(geom.get("x"))])
+    } else if let Some(JsonValue::Array(paths)) = geom.get("paths").filter(|v| v.truthy()) {
+        match paths.first() {
+            Some(JsonValue::Array(p0)) => {
+                let pa: Vec<[f64; 2]> = p0
+                    .iter()
+                    .map(|q| match q {
+                        JsonValue::Array(c) => [num(c.get(1)), num(c.first())],
+                        _ => [f64::NAN, f64::NAN],
+                    })
+                    .collect();
+                let cum = util::cum_len(&pa);
+                // cum_len gives a length for every point; for none, cum[cum.length - 1] is undefined (NaN)
+                Some(util::along(&pa, &cum, cum.last().map_or(f64::NAN, |len| len / 2.0)).p)
+            }
+            _ => None,
+        }
+    } else if let Some(JsonValue::Array(pts)) = geom.get("points").filter(|v| v.truthy()) {
+        match pts.first() {
+            Some(JsonValue::Array(c)) => Some([num(c.get(1)), num(c.first())]),
+            _ => None,
+        }
+    } else {
+        None
+    }
+}
+
+// The peak-hour time as hours: the digits of the text padded to four in front ("730" is 7.5), None for no digits.
+fn peak_hour(v: Option<&JsonValue>, digits_re: &Regex) -> Option<f64> {
+    let text = match v {
+        Some(v) if !v.is_null() => v.js_string(),
+        _ => String::new(),
+    };
+    let digits = digits_re.replace(&text, |_, _| String::new());
+    let len = digits.encode_utf16().count();
+    let pt = if len >= 4 { digits } else { format!("{}{}", "0".repeat(4_usize.saturating_sub(len)), digits) };
+    if pt.is_empty() {
+        return None;
+    }
+    let units: Vec<u16> = pt.encode_utf16().collect();
+    let part = |from: usize, to: usize| {
+        crate::jsnum::string_to_number(&String::from_utf16_lossy(units.get(from.min(units.len())..to.min(units.len())).unwrap_or(&[])))
+    };
+    Some(part(0, 2) + part(2, 4) / 60.0)
+}
+
+// Puts a layer's counts in the project's data in place of the ones it gave before.
+fn replace_counts(p: &mut Project, url: &str, list: &[Count]) {
+    crate::datahub::ensure_data(p);
+    // ensure_data has just set the data record
+    let Some(data) = p.data.get_mut() else { return };
+    let old: Vec<Value> = match data.extra.get("counts") {
+        Some(Value::Array(arr)) => arr.clone(),
+        _ => Vec::new(),
+    };
+    let mut counts: Vec<Value> = old.into_iter().filter(|c| c.get("feed").and_then(|f| f.get("url")).and_then(Value::as_str) != Some(url)).collect();
+    // A Count always writes as JSON
+    counts.extend(list.iter().filter_map(|c| serde_json::to_value(c).ok()));
+    data.extra.insert("counts".to_string(), Value::Array(counts));
+}
+
+// The fields used, and what was left out, as the prototype words them.
+fn fields_note(map: &CouncilMap, max_age: Option<f64>, complete: bool) -> String {
+    let mut used: Vec<String> = Vec::new();
+    if let Some(obj) = map.as_object() {
+        for (k, v) in obj.iter() {
+            let items: Vec<String> = match v {
+                JsonValue::Array(arr) if !arr.is_empty() => arr.iter().take(3).map(JsonValue::js_string).collect(),
+                JsonValue::String(txt) if !txt.is_empty() => vec![txt.clone()],
+                _ => continue,
+            };
+            used.push(format!("{} = {}", k, items.join(", ")));
+        }
+    }
+    format!(
+        "Fields used: {}.{}{}",
+        used.join("; "),
+        match max_age {
+            Some(age) => format!(" Counts older than {} years left out.", number_to_js_string(age)),
+            None => String::new(),
+        },
+        if complete { "" } else { " Not every page downloaded." }
+    )
 }
 
 impl Flow for CouncilImport {
