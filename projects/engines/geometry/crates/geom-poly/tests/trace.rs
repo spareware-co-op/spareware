@@ -440,6 +440,10 @@ fn the_same_polygons_give_the_same_vectors() {
 }
 
 /// A cancellation source that never asks to stop, and counts how often it is read.
+#[allow(
+    clippy::disallowed_types,
+    reason = "a test's count of the reads; no kernel result depends on it"
+)]
 struct Asked(std::sync::atomic::AtomicUsize);
 
 impl Cancel for Asked {
@@ -450,6 +454,10 @@ impl Cancel for Asked {
 }
 
 #[test]
+#[allow(
+    clippy::disallowed_types,
+    reason = "a test's count of the reads; no kernel result depends on it"
+)]
 fn polygons_inside_their_box_are_classified_by_each_path_s_first_leg() {
     // classify_inside: every polygon strictly inside the box, so a path's legs past its first run
     // just inside the box's walls, where no polygon is, and are neither traced nor charged.
