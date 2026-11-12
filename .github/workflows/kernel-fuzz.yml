@@ -355,6 +355,7 @@ jobs:
           - real::proofs::real_new_refuses_exactly_nan_and_the_infinities
           - real::proofs::total_order_and_its_tie_rules
           - rng::proofs::draws_never_panic
+          - rng::proofs::every_unit_double_is_a_real_below_one
           - rng::proofs::lemire_never_reports_a_defect
           - rng::proofs::philox_never_panics
           - rng::proofs::stream_ranges_cut_without_overflow

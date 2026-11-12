@@ -378,12 +378,18 @@ fn scale_pow2(v: f64, m: i32) -> Result<f64, NumError> {
 #[must_use]
 pub fn two_prod_fma(a: f64, b: f64) -> (f64, f64) {
     let p = a * b;
-    if p.is_finite() && magnitude(p) >= TWO_POW_NEG_968 {
-        if let Ok(e) = math::fma(a, b, -p) {
-            return (p, zero_to_plus(e.get()));
-        }
+    // The error by one fused multiply-add, where the product is in its range. There it is a
+    // double, so the fused multiply-add cannot refuse it; should it all the same, the product
+    // goes to `two_prod` with every other input.
+    let error = if p.is_finite() && magnitude(p) >= TWO_POW_NEG_968 {
+        math::fma(a, b, -p).ok()
+    } else {
+        None
+    };
+    match error {
+        Some(e) => (p, zero_to_plus(e.get())),
+        None => two_prod(a, b),
     }
-    two_prod(a, b)
 }
 
 /// A real number `hi + lo` held as two doubles: finite, `hi` the value rounded to nearest, a zero
@@ -411,7 +417,9 @@ impl DD {
     /// `NotFinite` if the rounded sum overflows or a part is not finite.
     fn normalized(a: f64, b: f64) -> Result<DD, NumError> {
         let (hi, lo) = two_sum(a, b);
-        if hi.is_finite() && lo.is_finite() {
+        // One decision on both parts. A finite sum's error is finite, so the second part alone
+        // never decides, and is not a branch of its own.
+        if hi.is_finite() & lo.is_finite() {
             Ok(DD {
                 hi: zero_to_plus(hi),
                 lo: zero_to_plus(lo),

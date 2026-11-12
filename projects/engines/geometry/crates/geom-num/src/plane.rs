@@ -370,10 +370,7 @@ impl Plane {
         let (x, w) = t.homogeneous()?;
         match classify::<BUDGET_LIMBS>(&self.n, self.d, &x, &w) {
             Some(s) => Ok(s),
-            None => match classify::<TOTAL_LIMBS>(&self.n, self.d, &x, &w) {
-                Some(s) => Ok(s),
-                None => Err(NumError::BudgetExceeded),
-            },
+            None => fitted(classify::<TOTAL_LIMBS>(&self.n, self.d, &x, &w)),
         }
     }
 
@@ -417,14 +414,8 @@ impl Plane {
         ) else {
             return Err(NumError::BudgetExceeded);
         };
-        let side = match lpi_classify::<4>(w1, s2p, w2, s1p) {
-            Some(s) => Some(s),
-            None => lpi_classify::<5>(w1, s2p, w2, s1p),
-        };
-        match side {
-            Some(s) => Ok(s.mul(Sign::of_i128(w1))),
-            None => Err(NumError::BudgetExceeded),
-        }
+        let side = lpi_classify_total(w1, s2p, w2, s1p)?;
+        Ok(side.mul(Sign::of_i128(w1)))
     }
 
     /// w = n · (q − p) and sₚ = n · p + d for the line from p to q, in `i128`: `None` if either
@@ -440,6 +431,13 @@ impl Plane {
 /// |q − p| < 2^64 for any two `i64` values.
 pub(crate) const fn difference(q: Coord, p: Coord) -> Option<i128> {
     (q.get() as i128).checked_sub(p.get() as i128)
+}
+
+/// q − p for two coordinates, in `i128`, for a caller with no failure to report: formed modulo
+/// 2^128, which it never reaches, since |q − p| < 2^64 for any two `i64` values, by the types
+/// alone.
+const fn span(q: Coord, p: Coord) -> i128 {
+    (q.get() as i128).wrapping_sub(p.get() as i128)
 }
 
 /// p · q − r · s in `i128`, every step checked: `None` if a step does not fit.
@@ -474,16 +472,8 @@ const fn dot_point(n: &[i128; 3], p: P3) -> Option<i128> {
     reason = "a, b and c are the points and n and d the coefficients of the formulas above"
 )]
 const fn coefficients(a: P3, b: P3, c: P3) -> Option<([i128; 3], i128)> {
-    let (Some(ux), Some(uy), Some(uz), Some(vx), Some(vy), Some(vz)) = (
-        difference(b.x, a.x),
-        difference(b.y, a.y),
-        difference(b.z, a.z),
-        difference(c.x, a.x),
-        difference(c.y, a.y),
-        difference(c.z, a.z),
-    ) else {
-        return None;
-    };
+    let (ux, uy, uz) = (span(b.x, a.x), span(b.y, a.y), span(b.z, a.z));
+    let (vx, vy, vz) = (span(c.x, a.x), span(c.y, a.y), span(c.z, a.z));
     let (Some(nx), Some(ny), Some(nz)) = (
         mul_sub(uy, vz, uz, vy),
         mul_sub(uz, vx, ux, vz),
@@ -791,16 +781,10 @@ impl Lpi {
         let Some((w, sp)) = self.plane.weight_and_offset(self.p, self.q) else {
             return Err(NumError::BudgetExceeded);
         };
-        let Some(sq) = sp.checked_add(w) else {
-            return Err(NumError::BudgetExceeded);
-        };
-        let (Some(x), Some(y), Some(z)) = (
-            lpi_axis(sq, sp, self.p.x, self.q.x),
-            lpi_axis(sq, sp, self.p.y, self.q.y),
-            lpi_axis(sq, sp, self.p.z, self.q.z),
-        ) else {
-            return Err(NumError::BudgetExceeded);
-        };
+        let sq = fitted(sp.checked_add(w))?;
+        let x = fitted(lpi_axis(sq, sp, self.p.x, self.q.x))?;
+        let y = fitted(lpi_axis(sq, sp, self.p.y, self.q.y))?;
+        let z = fitted(lpi_axis(sq, sp, self.p.z, self.q.z))?;
         Ok(([x, y, z], w))
     }
 
@@ -813,15 +797,32 @@ impl Lpi {
     /// [`NumError::BudgetExceeded`] as for [`Lpi::homogeneous`].
     pub fn to_grid(&self) -> Result<Rounded<P3>, NumError> {
         let (x, w) = self.homogeneous()?;
-        let [x0, x1, x2] = x;
-        let (Some(r0), Some(r1), Some(r2)) = (x0.resize(), x1.resize(), x2.resize()) else {
-            return Err(NumError::BudgetExceeded);
-        };
-        let x: [I320; 3] = [r0, r1, r2];
+        // Widening keeps every value.
+        let x = x.map(I320::from);
         let w = I256::from_i128(w);
         commit::<BUDGET_LIMBS>(&x, &w)
             .or_else(|| commit::<TOTAL_LIMBS>(&x, &w))
             .unwrap_or(Err(NumError::BudgetExceeded))
+    }
+}
+
+/// The value of a checked step that always fits where it is asked for, or
+/// [`NumError::BudgetExceeded`] should it not: reported, not answered.
+///
+/// Every caller passes a step that cannot fail there, so the `None` arm cannot run. Verus proves
+/// it: the twin (`verus/plane.rs`) requires the step to be `Some`, which Verus checks at every
+/// call, and in the `None` arm it calls `a_fitted_step_is_never_none`, whose precondition is
+/// `false`, so the twin verifies only because control cannot arrive there. The function is marked
+/// for the coverage gate (28.8).
+// proof: projects/engines/geometry/crates/geom-num/verus/plane.rs::a_fitted_step_is_never_none
+#[cfg_attr(coverage_nightly, coverage(off))]
+fn fitted<T>(step: Option<T>) -> Result<T, NumError> {
+    match step {
+        Some(value) => Ok(value),
+        None => {
+            // Never: the step fits at every call (the proof cited above).
+            Err(NumError::BudgetExceeded)
+        }
     }
 }
 
@@ -853,6 +854,29 @@ fn lpi_classify<const L: usize>(w1: i128, s2p: i128, w2: i128, s1p: i128) -> Opt
     let a = Wide::<L>::product_i128(w1, s2p)?;
     let b = Wide::<L>::product_i128(w2, s1p)?;
     Some(a.checked_sub(&b)?.signum())
+}
+
+/// [`lpi_classify`] in [`I256`], then in [`I320`] should a step there not fit (the total path of
+/// [`Plane::side_of_lpi`]), and [`NumError::BudgetExceeded`] should neither fit.
+///
+/// For the weights and offsets of planes within their budget the first always fits, so nothing
+/// after it can run. Verus proves it: the twin (`verus/plane.rs`) requires each of the four values
+/// below 2^126 in magnitude, which Verus checks at the call, and after a first `None` it calls
+/// `lpi_classify_always_fits`, whose precondition is `false`. The function is marked for the
+/// coverage gate (28.8).
+// proof: projects/engines/geometry/crates/geom-num/verus/plane.rs::lpi_classify_always_fits
+#[cfg_attr(coverage_nightly, coverage(off))]
+fn lpi_classify_total(w1: i128, s2p: i128, w2: i128, s1p: i128) -> Result<Sign, NumError> {
+    match lpi_classify::<4>(w1, s2p, w2, s1p) {
+        Some(s) => Ok(s),
+        None => {
+            // Never, for planes within their budget (the proof cited above).
+            match lpi_classify::<5>(w1, s2p, w2, s1p) {
+                Some(s) => Ok(s),
+                None => Err(NumError::BudgetExceeded),
+            }
+        }
+    }
 }
 
 /// The side of plane `s` that the point where `t`'s planes meet is on, through the generated
@@ -1782,5 +1806,123 @@ mod tests {
             &[4 * m * m, -4 * m * m, 4 * m * m],
             4 * m * m * m
         ));
+    }
+
+    /// A grid point holding these numbers whatever their size, which only a test can make.
+    fn raw(c: [i64; 3]) -> P3 {
+        let [x, y, z] = c.map(Coord::unchecked);
+        P3 { x, y, z }
+    }
+
+    /// `Plane::through` checks every step although no grid point can make one fail. With points
+    /// outside the frame, which only a test can make, each step that can fail does, and each is
+    /// reported: a product of two differences, the normal times the point, the offset's negation
+    /// (only −2^127 has none), and coefficients past the budget.
+    #[test]
+    fn through_reports_every_step_that_does_not_fit() {
+        let through =
+            |a: [i64; 3], b: [i64; 3], c: [i64; 3]| Plane::through(raw(a), raw(b), raw(c));
+        let (top, bottom) = (i64::MAX, i64::MIN);
+        // Differences of 2^64 − 1: their product does not fit.
+        assert_eq!(
+            through([0, bottom, bottom], [0, top, bottom], [0, bottom, top]),
+            Err(NumError::BudgetExceeded)
+        );
+        // n = (2^124, 0, 0) fits, and n · a = 2^134 does not.
+        let side = 1_i64 << 62;
+        assert_eq!(
+            through([1024, 0, 0], [1024, side, 0], [1024, 0, side]),
+            Err(NumError::BudgetExceeded)
+        );
+        // n = (2^64, 0, 0) and a_x = −2^63: n · a = −2^127 fits, and its negation does not.
+        let side = 1_i64 << 32;
+        assert_eq!(
+            through([bottom, 0, 0], [bottom, side, 0], [bottom, 0, side]),
+            Err(NumError::BudgetExceeded)
+        );
+        // Every step fits, and n = (2^100, 0, 0) is past the budget's 2^83.
+        let side = 1_i64 << 50;
+        assert_eq!(
+            through([0, 0, 0], [0, side, 0], [0, 0, side]),
+            Err(NumError::BudgetExceeded)
+        );
+        // One step inside all of that, the same shape is a plane: n = (4, 0, 0), d = −4.
+        let plane = through([1, 0, 0], [1, 2, 0], [1, 0, 2]).unwrap();
+        assert_eq!((plane.n(), plane.d()), ([4, 0, 0], -4));
+    }
+
+    /// `Plane::side`, `Tpi::new`, `Tpi::homogeneous`, `Lpi::new` and `Lpi::homogeneous` check every
+    /// step although no plane within its budget can make one fail. A plane over its budget, built
+    /// field by field, makes each fail, and each reports.
+    #[test]
+    fn a_plane_over_its_budget_is_reported_by_every_function_it_reaches() {
+        let top = i128::MAX;
+        // n · p: two products of 2^127 − 1 do not fit together.
+        let wide = Plane {
+            n: [top, top, 0],
+            d: 0,
+        };
+        assert_eq!(wide.side(p3([1, 1, 0])), Err(NumError::BudgetExceeded));
+        assert_eq!(wide.side(p3([1, -1, 0])), Ok(Sign::Zero));
+        // n · p fits, and n · p + d does not.
+        let offset = Plane {
+            n: [top, 0, 0],
+            d: top,
+        };
+        assert_eq!(offset.side(p3([1, 0, 0])), Err(NumError::BudgetExceeded));
+        assert_eq!(offset.side(p3([-1, 0, 0])), Ok(Sign::Zero));
+
+        // Three planes whose weight, (2^127 − 1)^3, does not fit 256 bits.
+        let axes = [[top, 0, 0], [0, top, 0], [0, 0, top]].map(|n| Plane { n, d: 0 });
+        assert_eq!(
+            Tpi::new(axes[0], axes[1], axes[2]),
+            Err(NumError::BudgetExceeded)
+        );
+        let unmade = Tpi {
+            planes: axes,
+            weight: Sign::Positive,
+        };
+        assert_eq!(unmade.homogeneous(), Err(NumError::BudgetExceeded));
+        assert_eq!(unmade.to_grid(), Err(NumError::BudgetExceeded));
+
+        // A line whose n · p = 2 (2^127 − 1) does not fit.
+        let steep = Plane {
+            n: [top, 0, 0],
+            d: 0,
+        };
+        let (p, q) = (p3([2, 0, -1]), p3([2, 0, 1]));
+        assert_eq!(Lpi::new(p, q, steep), Err(NumError::BudgetExceeded));
+        let unmade = Lpi { p, q, plane: steep };
+        assert_eq!(unmade.homogeneous(), Err(NumError::BudgetExceeded));
+        assert_eq!(unmade.to_grid(), Err(NumError::BudgetExceeded));
+    }
+
+    /// A point with weight zero is no point, and `Tpi::new` and `Lpi::new` refuse it. Built field
+    /// by field all the same, it has nothing to commit: the budgeted commit refuses it, the total
+    /// commit is asked next and refuses it too, and `to_grid` reports, never a coordinate.
+    #[test]
+    fn a_point_without_weight_goes_to_the_total_commit_and_is_reported() {
+        let floor = plane_through([0, 0, 0], [1, 0, 0], [0, 1, 0]).unwrap();
+        assert_eq!(Tpi::new(floor, floor, floor), Err(NumError::Degenerate));
+        let flat = Tpi {
+            planes: [floor; 3],
+            weight: Sign::Positive,
+        };
+        let (x, w) = flat.homogeneous().unwrap();
+        assert!(w.is_zero());
+        assert_eq!(commit_axes::<BUDGET_LIMBS, 3>(&x, &w), None);
+        assert_eq!(commit_axes::<TOTAL_LIMBS, 3>(&x, &w), None);
+        assert_eq!(flat.to_grid(), Err(NumError::BudgetExceeded));
+
+        let p = p3([3, 4, 5]);
+        assert_eq!(Lpi::new(p, p, floor), Err(NumError::Degenerate));
+        let still = Lpi {
+            p,
+            q: p,
+            plane: floor,
+        };
+        let (_, w) = still.homogeneous().unwrap();
+        assert_eq!(w, 0);
+        assert_eq!(still.to_grid(), Err(NumError::BudgetExceeded));
     }
 }
