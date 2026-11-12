@@ -23,7 +23,8 @@
     clippy::cast_possible_truncation,
     clippy::cast_possible_wrap,
     clippy::cast_sign_loss,
-    clippy::too_many_arguments,
+    clippy::many_single_char_names,
+    clippy::similar_names,
     reason = "test code: a failure should stop loudly"
 )]
 
@@ -246,14 +247,16 @@ fn flat_oracles(asked: &Asked, answers: &Answers, six: i128) -> Result<(), Strin
             *a.points.get(vertex.point).unwrap()
         })
         .collect();
-    let least = |get: fn(&P3) -> i64| corners.iter().map(get).min().unwrap();
-    let most = |get: fn(&P3) -> i64| corners.iter().map(get).max().unwrap();
-    let (x, y, z): (fn(&P3) -> i64, fn(&P3) -> i64, fn(&P3) -> i64) =
-        (|q| q.x.get(), |q| q.y.get(), |q| q.z.get());
-    let want = (
-        p(least(x), least(y), least(z)),
-        p(most(x), most(y), most(z)),
+    let axis = |get: &dyn Fn(&P3) -> i64| {
+        let values = corners.iter().map(get);
+        (values.clone().min().unwrap(), values.max().unwrap())
+    };
+    let ((x0, x1), (y0, y1), (z0, z1)) = (
+        axis(&|q| q.x.get()),
+        axis(&|q| q.y.get()),
+        axis(&|q| q.z.get()),
     );
+    let want = (p(x0, y0, z0), p(x1, y1, z1));
     let boxed = answers
         .bounding_box
         .as_ref()
