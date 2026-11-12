@@ -24,8 +24,9 @@
 //!   equal to what it was; and a published editor edits back to an editor with the same counts,
 //!   which publishes to the same body.
 //!
-//! Method: Mäntylä and Sulonen's GWB operators as the module header of `geom_topo::builder::euler`
-//! states them, with the counts of its table as the oracle and `tests/euler_model.rs`'s choice of
+//! Method: Mäntylä and Sulonen's GWB operators ("GWB: a solid modeler with Euler operators", IEEE
+//! Computer Graphics and Applications 2(7), 1982, <https://doi.org/10.1109/MCG.1982.1674396>) as
+//! the module header of `geom_topo::builder::euler` states them, with the counts of its table as the oracle and `tests/euler_model.rs`'s choice of
 //! rows, driven by coverage-guided fuzzing (28.5).
 //!
 //! Cost: at most [`MAX_STEPS`] operators, each followed by a count of the live rows and a copy of
@@ -208,8 +209,8 @@ impl Run {
             1 => {
                 let from = fin(self, first)?;
                 let (edge, vertex) = (self.edge()?, self.vertex()?);
-                let got = self.euler.mev(ix(from)?, edge, vertex).map(|_| ());
-                (self.dead(Arena::Fin, from), [1, 1, 0, 0, 0], got)
+                let dead = self.dead(Arena::Fin, from);
+                (dead, [1, 1, 0, 0, 0], self.euler.mev(ix(from)?, edge, vertex).map(|_| ()))
             }
             2 => {
                 let edge = self.pick(Arena::Edge, first)?;
@@ -244,8 +245,8 @@ impl Run {
             }
             _ => {
                 let at = fin(self, first)?;
-                let got = self.euler.kemr(ix(at)?).map(|_| ());
-                (self.dead(Arena::Fin, at), [0, -1, 0, 1, 0], got)
+                let dead = self.dead(Arena::Fin, at);
+                (dead, [0, -1, 0, 1, 0], self.euler.kemr(ix(at)?).map(|_| ()))
             }
         })
     }
@@ -265,16 +266,17 @@ impl Run {
             8 => {
                 let ring = self.pick(Arena::Loop, first)?;
                 let face = self.face()?;
+                let dead = self.dead(Arena::Loop, ring);
                 let got = self.euler.mfkrh(ix(ring)?, face).map(|_| ());
                 if got.is_ok() {
                     self.holes = self.holes.saturating_sub(1);
                 }
-                (self.dead(Arena::Loop, ring), [0, 0, 1, 0, 0], got)
+                (dead, [0, 0, 1, 0, 0], got)
             }
             9 => {
                 let edge = self.pick(Arena::Edge, first)?;
-                let got = self.euler.kill_wire(ix(edge)?);
-                (self.dead(Arena::Edge, edge), [-2, -1, -1, -1, -1], got)
+                let dead = self.dead(Arena::Edge, edge);
+                (dead, [-2, -1, -1, -1, -1], self.euler.kill_wire(ix(edge)?))
             }
             10 => {
                 let kind = if first % 2 == 0 {
@@ -288,8 +290,8 @@ impl Run {
             11 => {
                 // Row 0 is the outside, which every publish needs.
                 let region = self.pick(Arena::Region, first).filter(|&r| r != 0)?;
-                let got = self.euler.kill_region(ix(region)?);
-                (self.dead(Arena::Region, region), [0; 5], got)
+                let dead = self.dead(Arena::Region, region);
+                (dead, [0; 5], self.euler.kill_region(ix(region)?))
             }
             12 => {
                 let shell = self.pick(Arena::Shell, first)?;
