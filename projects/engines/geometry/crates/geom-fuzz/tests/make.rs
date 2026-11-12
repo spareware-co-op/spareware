@@ -182,42 +182,63 @@ fn a_broken_operation_is_caught() {
     assert!(check_with(&round, raised).is_err());
 }
 
+/// A wrong query, as a change to the real queries' answers.
+type Breaks = dyn Fn(&mut Answers);
+
+fn query_context() -> OpContext<'static> {
+    OpContext::new(OpPath::new(OpId::from_bytes([4; 16])), Budget::UNLIMITED)
+}
+
+fn flat_box() -> OpOutput<geom_make::Made> {
+    let input = BoxInput {
+        min: p(-3, 1, 2),
+        size: [Steps(3), Steps(4), Steps(5)],
+    };
+    geom_make::make_box(&query_context(), &input).unwrap()
+}
+
+fn round_body() -> OpOutput<geom_make::Made> {
+    let input = RoundInput {
+        base: p(0, 0, 0),
+        radius: Steps(5),
+        height: Steps(10),
+        step: GridStep::Q0,
+    };
+    geom_make::cylinder(&query_context(), &input).unwrap()
+}
+
+/// The law `edit` breaks in the answers on `out`.
+fn broken_law(out: &OpOutput<geom_make::Made>, edit: &Breaks) -> String {
+    let mut broken = answers(&query_context(), out);
+    edit(&mut broken);
+    answers_hold(out, &broken).unwrap_err().law
+}
+
+#[test]
+fn a_curved_body_whose_volume_is_answered_is_caught() {
+    let round = round_body();
+    assert_eq!(answers_hold(&round, &answers(&query_context(), &round)), Ok(()));
+    let answered = |a: &mut Answers| {
+        let class = a.exactness.as_ref().unwrap().exactness;
+        a.volume = Ok(OpOutput::new(geom_num::wide::I256::from_i64(6), class));
+    };
+    assert_eq!(
+        broken_law(&round, &answered),
+        "query.volume refuses a body with a curved face or edge"
+    );
+}
+
 #[test]
 fn a_broken_query_is_caught() {
-    let ctx = OpContext::new(OpPath::new(OpId::from_bytes([4; 16])), Budget::UNLIMITED);
-    let flat = geom_make::make_box(
-        &ctx,
-        &BoxInput {
-            min: p(-3, 1, 2),
-            size: [Steps(3), Steps(4), Steps(5)],
-        },
-    )
-    .unwrap();
-    let round = geom_make::cylinder(
-        &ctx,
-        &RoundInput {
-            base: p(0, 0, 0),
-            radius: Steps(5),
-            height: Steps(10),
-            step: GridStep::Q0,
-        },
-    )
-    .unwrap();
-    for out in [&flat, &round] {
-        assert_eq!(answers_hold(out, &answers(&ctx, out)), Ok(()));
-    }
-    let law = |out: &OpOutput<geom_make::Made>, edit: &dyn Fn(&mut Answers)| {
-        let mut broken = answers(&ctx, out);
-        edit(&mut broken);
-        answers_hold(out, &broken).unwrap_err().law
-    };
+    let flat = flat_box();
+    assert_eq!(answers_hold(&flat, &answers(&query_context(), &flat)), Ok(()));
     let malformed = || {
         geom_op::OpError::new(
             OpPath::new(OpId::from_bytes([4; 16])),
             geom_op::detail::QueryDetail::Malformed,
         )
     };
-    let cases: [(&str, &dyn Fn(&mut Answers)); 8] = [
+    let cases: [(&str, &Breaks); 8] = [
         ("a query states its body's class", &|a| {
             if let Ok(v) = &mut a.volume {
                 v.exactness = Exactness::Approximate {
@@ -275,17 +296,8 @@ fn a_broken_query_is_caught() {
         ),
     ];
     for (name, edit) in cases {
-        assert_eq!(law(&flat, edit), name);
+        assert_eq!(broken_law(&flat, edit), name);
     }
-    // A curved body's volume, answered, is caught too.
-    let answered = |a: &mut Answers| {
-        let class = a.exactness.as_ref().unwrap().exactness;
-        a.volume = Ok(OpOutput::new(geom_num::wide::I256::from_i64(6), class));
-    };
-    assert_eq!(
-        law(&round, &answered),
-        "query.volume refuses a body with a curved face or edge"
-    );
 }
 
 #[test]
