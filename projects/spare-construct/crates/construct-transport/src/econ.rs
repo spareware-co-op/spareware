@@ -920,21 +920,26 @@ pub fn econ(
             / n_pairs
     };
     let dvht = avg(|k| k.vht);
-    let bcr_of = |pv: f64| if cap > 0.001 { Some(pv / cap) } else { None };
-    let commercial = e.activity.is("commercial");
     if !e.method.is("mbcm") {
         return Some(econ_uniform(&e, dvht, avg(|k| k.co2), cap, n_pairs, noise));
     }
-    // { AM: 600, PM: 600, IP: 0, ...periodHours }
-    let mut hours: OrderedMap<Num> = [("AM", 600.0), ("PM", 600.0), ("IP", 0.0)]
-        .into_iter()
-        .map(|(k, v)| (k.to_string(), Num::number(v)))
-        .collect();
-    if let Some(ph) = e.period_hours.get() {
-        for (k, v) in ph.iter() {
-            hours.insert(k, v.clone());
-        }
-    }
+    Some(econ_mbcm(s, &e, &pairs, cap, dvht, n_pairs, noise))
+}
+
+// econ's MBCM evaluation: benefits over each modelled period's equivalent hours a year, discounted
+// by GC 25/01's schedule (or the commercial rate), beside the sensitivity rate
+fn econ_mbcm(
+    s: &Settings,
+    e: &EconSettings,
+    pairs: &[(&Res, &Res, &str)],
+    cap: f64,
+    dvht: f64,
+    n_pairs: f64,
+    noise: Option<PeriodSnr>,
+) -> Econ {
+    let bcr_of = |pv: f64| if cap > 0.001 { Some(pv / cap) } else { None };
+    let commercial = e.activity.is("commercial");
+    let hours = mbcm_hours(e);
     let mut warnings: Vec<String> = Vec::new();
     let vot = e.vot.or(0.0)
         * if e.vot_update.truthy() {
@@ -942,118 +947,41 @@ pub fn econ(
         } else {
             1.0
         };
-    let mut dvht_by: OrderedMap<f64> = OrderedMap::new();
-    let (mut annual, mut dco2) = (0.0, 0.0);
-    for (b, o, p) in &pairs {
-        let d = b.kpi.vht - o.kpi.vht;
-        dvht_by.insert(*p, d);
-        let h = hours_of(&hours, p);
-        annual += d * vot * h / 1e6;
-        dco2 += (b.kpi.co2 - o.kpi.co2) * h;
-    }
+    let (dvht_by, annual, dco2) = period_benefits(pairs, &hours, vot);
+    // Periods with hours a year that were not modelled
     let missing: Vec<String> = hours
         .iter()
         .filter(|(p, v)| v.num() > 0.0 && !pairs.iter().any(|x| x.2 == *p))
         .map(|(p, _)| p.to_string())
         .collect();
     if !missing.is_empty() {
-        let many = missing.len() > 1;
-        let are = if many { "are" } else { "is" };
-        let hours_text = missing
-            .iter()
-            .map(|p| format!("{} h a year ({})", fmt::int(hours.num_at(p).num()), p))
-            .collect::<Vec<_>>()
-            .join(" and ");
-        warnings.push(format!(
-            "{} {} not modelled, so {} {} left out of the benefits. Run {} or set its hours to 0.",
-            missing.join(" and "),
-            are,
-            hours_text,
-            are,
-            if many { "those periods" } else { "that period" }
-        ));
+        warnings.push(missing_hours_warning(&missing, &hours));
     }
-    let per = econ_period(&e);
+    let per = econ_period(e);
     if !per.ok {
         warnings.push(per.why.clone());
     }
-    // Benefits grow arithmetically with background traffic (or the user's own benefit growth rate)
-    let bg = &e.benefit_growth;
-    let bg_blank = bg.is_nullish() || bg.get().and_then(|v| v.as_str()) == Some("");
-    let r = if !bg_blank && bg.num().is_finite() {
-        bg.num() / 100.0
-    } else {
-        s.growth.or(0.0) / 100.0
-    };
-    if s.growth_mode.is("compound") && bg_blank {
-        warnings.push("Traffic growth is set to compound; MBCM benefits grow arithmetically, so its rate is used as the arithmetic rate.".to_string());
-    }
-    // NZTA GC 25/01: non-commercial 2% / 1.5% / 1% with 8% sensitivity; commercial 8% with 2% sensitivity
-    let rates = if commercial {
-        json!([{ "to": null, "r": json_number(STANDARDS.mbcm.commercial_rate) }])
-    } else {
-        match e.rates.get() {
-            Some(Value::Array(a)) if !a.is_empty() => Value::Array(a.clone()),
-            _ => mbcm_rates(),
-        }
-    };
-    let sens = if commercial {
-        STANDARDS.mbcm.commercial_sens_rate
-    } else if e.sens_rate.num() > 0.0 {
-        e.sens_rate.num()
-    } else {
-        STANDARDS.mbcm.sens_rate
-    };
+    let r = benefit_growth_rate(s, e, &mut warnings);
+    let rates = mbcm_schedule(e, commercial);
+    let sens = sens_rate_of(e, commercial);
     let f = pwf(&rates, per.years);
     let f8 = pwf(&json!([{ "to": null, "r": plain_number(sens) }]), per.years);
     let pv = annual * (f.uspwf + r * f.agpwf);
     let pv8 = annual * (f8.uspwf + r * f8.agpwf);
-    let bcr = bcr_of(pv);
-    let bcr8 = bcr_of(pv8);
+    let (bcr, bcr8) = (bcr_of(pv), bcr_of(pv8));
     let ipm = ipm_band(bcr, None);
     let ipm8 = ipm_band(bcr8, None);
     let lstar = !missing.is_empty() || !(cap > 0.001);
-    let basis = format!(
-        "MBCM {}: {}{}; {}% sensitivity ({}); {} years from {}; benefits growing {}% of year-one benefit a year (arithmetic)",
-        STANDARDS.mbcm.src.edition,
-        if commercial {
-            "commercial activity, "
-        } else {
-            ""
-        },
-        seg_text(&rates),
-        number_to_js_string(sens),
-        STANDARDS.mbcm.discount.src.name,
-        number_to_js_string(per.years),
-        STANDARDS.mbcm.time_zero,
-        to_fixed(r * 100.0, 1)
-    );
-    let compare40 = if per.compare40 == Some(true) {
+    let compare40 = (per.compare40 == Some(true)).then(|| {
         let f40 = pwf(&rates, STANDARDS.mbcm.years);
         let pv40 = annual * (f40.uspwf + r * f40.agpwf);
-        Some(Compare40 {
+        Compare40 {
             years: STANDARDS.mbcm.years,
             pv: pv40,
             bcr: bcr_of(pv40),
-        })
-    } else {
-        None
-    };
-    // A band boundary between the central and sensitivity results makes the band uncertain
-    for (b, x) in ipm.iter().zip(&ipm8) {
-        if let (Some(bb), Some(xb)) = (&b.band, &x.band)
-            && bb != xb
-        {
-            warnings.push(format!(
-                "The {}{} band changes from {} to {} at the {}% sensitivity rate.",
-                b.edition,
-                if b.draft { " (draft)" } else { "" },
-                b.label,
-                x.label,
-                number_to_js_string(sens)
-            ));
         }
-    }
+    });
+    warnings.extend(band_warnings(&ipm, &ipm8, sens));
     if cap >= STANDARDS.mbcm.p95_from && !e.p95.truthy() {
         warnings.push(format!(
             "The cost is {}, at least ${}m: an MBCM evaluation needs a P95 cost estimate.",
@@ -1062,26 +990,10 @@ pub fn econ(
         ));
     }
     if lstar {
-        warnings.push(
-            "L*: the inputs are incomplete, so the efficiency rating is provisional.".to_string(),
-        );
+        warnings.push("L*: the inputs are incomplete, so the efficiency rating is provisional.".to_string());
     }
-    if let Some(n) = &noise
-        && !n.snr.ok
-    {
-        warnings.push(n.snr.text.clone());
-    }
-    let vot_note = if e.vot_update.truthy() {
-        None
-    } else {
-        Some(format!(
-            "Value of time ${}/veh\u{b7}h as entered. Use MBCM values for the evaluation year (update factor to {}: \u{d7}{}).",
-            e.vot.js_string(),
-            STANDARDS.mbcm_update.src.edition,
-            number_to_js_string(STANDARDS.mbcm_update.travel_time)
-        ))
-    };
-    Some(Econ::Mbcm(Box::new(EconMbcm {
+    warnings.extend(noise.as_ref().filter(|n| !n.snr.ok).map(|n| n.snr.text.clone()));
+    Econ::Mbcm(Box::new(EconMbcm {
         method: "mbcm".to_string(),
         dvht,
         dvht_by,
@@ -1093,22 +1005,14 @@ pub fn econ(
         bcr8,
         npv: pv - cap,
         npv8: pv8 - cap,
-        fyrr: if cap > 0.001 {
-            Some(annual / cap)
-        } else {
-            None
-        },
+        fyrr: bcr_of(annual),
         dco2,
         periods: n_pairs,
         years: per.years,
+        basis: basis_text(commercial, &rates, sens, per.years, r),
         rates,
         sens_rate: sens,
-        activity: if commercial {
-            "commercial"
-        } else {
-            "non-commercial"
-        }
-        .to_string(),
+        activity: if commercial { "commercial" } else { "non-commercial" }.to_string(),
         r,
         vot,
         vot_update: e.vot_update.truthy(),
@@ -1130,9 +1034,146 @@ pub fn econ(
         disclaimer: STANDARDS.mbcm.disclaimer.to_string(),
         standard: std_ref(&STANDARDS.mbcm.src),
         discount: std_ref(&STANDARDS.mbcm.discount.src),
-        basis,
         warnings,
         compare40,
-        vot_note,
-    })))
+        vot_note: mbcm_vot_note(e),
+    }))
+}
+
+// Each modelled period's VHT saved, and the year's benefit (NZ$m) and CO2 saved over the periods' hours
+fn period_benefits(pairs: &[(&Res, &Res, &str)], hours: &OrderedMap<Num>, vot: f64) -> (OrderedMap<f64>, f64, f64) {
+    let mut dvht_by: OrderedMap<f64> = OrderedMap::new();
+    let (mut annual, mut dco2) = (0.0, 0.0);
+    for (b, o, p) in pairs {
+        let d = b.kpi.vht - o.kpi.vht;
+        dvht_by.insert(*p, d);
+        let h = hours_of(hours, p);
+        annual += d * vot * h / 1e6;
+        dco2 += (b.kpi.co2 - o.kpi.co2) * h;
+    }
+    (dvht_by, annual, dco2)
+}
+
+// { AM: 600, PM: 600, IP: 0, ...periodHours }: each period's equivalent hours a year
+fn mbcm_hours(e: &EconSettings) -> OrderedMap<Num> {
+    let mut hours: OrderedMap<Num> = [("AM", 600.0), ("PM", 600.0), ("IP", 0.0)]
+        .into_iter()
+        .map(|(k, v)| (k.to_string(), Num::number(v)))
+        .collect();
+    if let Some(ph) = e.period_hours.get() {
+        for (k, v) in ph.iter() {
+            hours.insert(k, v.clone());
+        }
+    }
+    hours
+}
+
+// The warning for periods with hours a year that were not modelled
+fn missing_hours_warning(missing: &[String], hours: &OrderedMap<Num>) -> String {
+    let many = missing.len() > 1;
+    let are = if many { "are" } else { "is" };
+    let hours_text = missing
+        .iter()
+        .map(|p| format!("{} h a year ({})", fmt::int(hours.num_at(p).num()), p))
+        .collect::<Vec<_>>()
+        .join(" and ");
+    format!(
+        "{} {} not modelled, so {} {} left out of the benefits. Run {} or set its hours to 0.",
+        missing.join(" and "),
+        are,
+        hours_text,
+        are,
+        if many { "those periods" } else { "that period" }
+    )
+}
+
+// Benefits grow arithmetically with background traffic (or the user's own benefit growth rate);
+// a compound traffic growth setting is read as the arithmetic rate, with a warning
+fn benefit_growth_rate(s: &Settings, e: &EconSettings, warnings: &mut Vec<String>) -> f64 {
+    let bg = &e.benefit_growth;
+    let bg_blank = bg.is_nullish() || bg.get().and_then(|v| v.as_str()) == Some("");
+    let r = if !bg_blank && bg.num().is_finite() {
+        bg.num() / 100.0
+    } else {
+        s.growth.or(0.0) / 100.0
+    };
+    if s.growth_mode.is("compound") && bg_blank {
+        warnings.push("Traffic growth is set to compound; MBCM benefits grow arithmetically, so its rate is used as the arithmetic rate.".to_string());
+    }
+    r
+}
+
+// NZTA GC 25/01: non-commercial 2% / 1.5% / 1% (or the saved schedule); commercial 8%
+fn mbcm_schedule(e: &EconSettings, commercial: bool) -> Value {
+    if commercial {
+        json!([{ "to": null, "r": json_number(STANDARDS.mbcm.commercial_rate) }])
+    } else {
+        match e.rates.get() {
+            Some(Value::Array(a)) if !a.is_empty() => Value::Array(a.clone()),
+            _ => mbcm_rates(),
+        }
+    }
+}
+
+// The sensitivity rate: 8% non-commercial (or the saved rate), 2% commercial
+fn sens_rate_of(e: &EconSettings, commercial: bool) -> f64 {
+    if commercial {
+        STANDARDS.mbcm.commercial_sens_rate
+    } else if e.sens_rate.num() > 0.0 {
+        e.sens_rate.num()
+    } else {
+        STANDARDS.mbcm.sens_rate
+    }
+}
+
+// The evaluation's basis in words
+fn basis_text(commercial: bool, rates: &Value, sens: f64, years: f64, r: f64) -> String {
+    format!(
+        "MBCM {}: {}{}; {}% sensitivity ({}); {} years from {}; benefits growing {}% of year-one benefit a year (arithmetic)",
+        STANDARDS.mbcm.src.edition,
+        if commercial {
+            "commercial activity, "
+        } else {
+            ""
+        },
+        seg_text(rates),
+        number_to_js_string(sens),
+        STANDARDS.mbcm.discount.src.name,
+        number_to_js_string(years),
+        STANDARDS.mbcm.time_zero,
+        to_fixed(r * 100.0, 1)
+    )
+}
+
+// A band boundary between the central and sensitivity results makes the band uncertain
+fn band_warnings(ipm: &[IpmRating], ipm8: &[IpmRating], sens: f64) -> Vec<String> {
+    let mut out = Vec::new();
+    for (b, x) in ipm.iter().zip(ipm8) {
+        if let (Some(bb), Some(xb)) = (&b.band, &x.band)
+            && bb != xb
+        {
+            out.push(format!(
+                "The {}{} band changes from {} to {} at the {}% sensitivity rate.",
+                b.edition,
+                if b.draft { " (draft)" } else { "" },
+                b.label,
+                x.label,
+                number_to_js_string(sens)
+            ));
+        }
+    }
+    out
+}
+
+// The value of time note when it was not updated to MBCM values
+fn mbcm_vot_note(e: &EconSettings) -> Option<String> {
+    if e.vot_update.truthy() {
+        return None;
+    }
+    Some(format!(
+        "Value of time ${}/veh\u{b7}h as entered. Use MBCM values for the evaluation year (update factor to {}: \u{d7}{}).",
+        e.vot.js_string(),
+        STANDARDS.mbcm_update.src.edition,
+        number_to_js_string(STANDARDS.mbcm_update.travel_time)
+    ))
 }
