@@ -1021,7 +1021,19 @@ A result recorded Exact from inputs that came from an operation or a checked ope
 | Sphere | 6 | 13 |
 | Torus | 40 | 54 |
 
-Group 3 compares pairs of faces, so the factor grows with the body: about linear in faces for the cheap groups, quadratic for the full set. That is the price of B on a large body that is less than exact, and it is the price of knowing the body is valid, which nothing else in the operation establishes. G134 and G177 widen what the checker certifies; they do not remove the check.
+A work unit of group 2 or 3 is a certified test of geometry, which costs far more than a row of links, so instructions tell more. Callgrind's instruction counts, taken once (Valgrind 3.22 on x86-64 Linux, rustc 1.99.0, a release build with the shipped checker; a probe that is not in the tree, so these are a record, not a gate), over the same 30 bodies by kind: first the check alone, then four transforms of each body (a move, a quarter turn, a doubling and a scale by 3/2) before the change, when a shipped build checked them with the cheap groups, and after it.
+
+| Bodies | Check, cheap groups | Check, full set | Four transforms of each, before | After | Rise |
+| --- | --- | --- | --- | --- | --- |
+| 3 boxes | 105,566 | 1,800,396 | 7,189,110 | 13,975,301 | 94% |
+| 3 prisms | 106,013 | 1,963,175 | 7,189,449 | 14,589,860 | 103% |
+| 6 cylinders | 53,298 | 553,608 | 6,852,106 | 8,854,604 | 29% |
+| 6 cones | 37,434 | 260,550 | 5,467,548 | 6,360,536 | 16% |
+| 6 spheres | 16,386 | 24,084 | 2,498,267 | 2,529,107 | 1% |
+| 6 tori | 47,702 | 765,468 | 6,003,735 | 8,879,667 | 48% |
+| All 30 | 366,399 | 5,367,281 | 35,200,215 | 55,189,075 | 57% |
+
+So in a shipped build a transform of a six-faced body that is less than exact about doubles, some 570,000 instructions more each, and a transform of an exact body costs what it did. Group 3 compares pairs of faces, so the rise grows with the body: about linear in faces for the cheap groups, quadratic for the full set. That is the price of B on a large body that is less than exact, and it is the price of knowing the body is valid, which nothing else in the operation establishes. Every test build has always paid it, and so have the count benchmarks, which build with the full checker. G134 and G177 widen what the checker certifies; they do not remove the check.
 
 **Gate 3's reading of "the shipped-checker leg"** (G118's fourth condition; the dry run's row 4b). The leg is `kernel.yml`'s step "The replay corpus and the transform sweep with the checker as shipped" in the job `test` (six native targets, release) and its twin in the job `wasm` (wasmtime and Node): `cargo test --locked --release -p geom-test --no-default-features --test shipped --test determinism`. It is not the golden step named "as shipped", which builds without overflow checks and runs the full checker. Its evidence, test by test:
 - `shipped.rs::the_build_checks_at_the_level_its_switches_say`: the leg ran the cheap groups, and no dependency turned the full set back on;
