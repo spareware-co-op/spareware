@@ -1117,6 +1117,10 @@ fn tpi_filtered(t: &Tpi, s: &Plane) -> Option<Sign> {
 /// planes too long for the narrow path are, within the frame, almost always too long for the
 /// determinant in words, and its failed attempt took a degenerate meeting point's count from 4%
 /// over the exact path alone to 8% (23.13).
+#[allow(
+    clippy::many_single_char_names,
+    reason = "p, q and r are the three planes and s the fourth, as in the formulas above"
+)]
 fn tpi_routed(t: &Tpi, s: &Plane) -> Option<Sign> {
     let [p, q, r] = &t.planes;
     Some(determinant_exact(p, q, r, s)?.mul(t.weight))
