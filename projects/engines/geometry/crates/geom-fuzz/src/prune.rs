@@ -217,7 +217,9 @@ pub fn check(case: &Case) -> Result<(), Finding> {
                 if a != expected {
                     return Err(law(
                         "a held reference resolves as before, and any other meets HistoryPruned",
-                        format!("{name} from {from} for {want:?}: {a:?}, not {expected:?}; before {b:?}"),
+                        format!(
+                            "{name} from {from} for {want:?}: {a:?}, not {expected:?}; before {b:?}"
+                        ),
                     ));
                 }
             }

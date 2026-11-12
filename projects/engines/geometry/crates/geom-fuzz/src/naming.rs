@@ -326,7 +326,10 @@ fn build(draw: &Draw, ids: &[NameId]) -> Option<(TopoName, Vec<NameId>)> {
 /// What the graph's walk may answer for `id`, from the oracle's map of each held name to whether
 /// it is a `Weak` node and the parents it is walked to: `Ok` of its weakness, or `Missing` of a
 /// stranger it can reach; both when a weak node and a stranger are reachable.
-fn weak_answers(id: NameId, held: &BTreeMap<NameId, (bool, Vec<NameId>)>) -> Vec<Result<bool, GraphError>> {
+fn weak_answers(
+    id: NameId,
+    held: &BTreeMap<NameId, (bool, Vec<NameId>)>,
+) -> Vec<Result<bool, GraphError>> {
     let mut stack = vec![id];
     let mut seen = BTreeSet::from([id]);
     let (mut weak, mut missing) = (false, BTreeSet::new());
@@ -417,7 +420,10 @@ pub fn check(case: &Case) -> Result<(), Finding> {
             return Err(law("the decoder builds every name", format!("{draw:?}")));
         };
         let Ok(bytes) = name.encode().map(geom_op::cbor::Item::into_bytes) else {
-            return Err(law("every name has a canonical encoding", format!("{name:?}")));
+            return Err(law(
+                "every name has a canonical encoding",
+                format!("{name:?}"),
+            ));
         };
         let mut message = NAME_SCHEME_V1_PREFIX.to_vec();
         message.extend_from_slice(&bytes);
@@ -471,7 +477,11 @@ pub fn check(case: &Case) -> Result<(), Finding> {
         }
     }
     check_lists(case, &ids, &law)?;
-    check_order(case, ids.first().copied().unwrap_or_else(|| stranger(0)), &law)
+    check_order(
+        case,
+        ids.first().copied().unwrap_or_else(|| stranger(0)),
+        &law,
+    )
 }
 
 /// The duplicate detector and the reference pick, against brute force.
@@ -511,7 +521,9 @@ fn check_lists(
             let chosen: BTreeSet<NameId> = ids
                 .iter()
                 .enumerate()
-                .filter(|&(i, _)| u32::try_from(i).is_ok_and(|i| mask.checked_shr(i).is_some_and(|m| m & 1 == 1)))
+                .filter(|&(i, _)| {
+                    u32::try_from(i).is_ok_and(|i| mask.checked_shr(i).is_some_and(|m| m & 1 == 1))
+                })
                 .map(|(_, &id)| id)
                 .collect();
             NameSet::new(chosen).ok()

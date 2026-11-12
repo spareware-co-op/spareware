@@ -26,11 +26,9 @@
 //!
 //! Cost: one chain of a dozen names built per input, once per batch, outside every measured run.
 
-use geom_format::pruned::encode_pruned;
+use geom_format::pruned::{Pruned, encode_pruned};
 use geom_name::NameGraph;
-use geom_name::resolve::{
-    CarrierIx, ElementId, EntityKind, Reference, Signature, Step, Want,
-};
+use geom_name::resolve::{CarrierIx, ElementId, EntityKind, Reference, Signature, Step, Want};
 use geom_op::{
     EdgeOrVertex, History, NameId, NameList, NameSet, OpContext, OpId, OpPath, Ordinal, Origin,
     PieceKey, Record, Relations, Role, RoleArg, Side, TopoName, TopologyChange, Vanish,
@@ -414,7 +412,7 @@ pub fn prunes(class: Class) -> Vec<(Vec<Step>, NameSet)> {
 }
 
 /// What one `PruneHistory` operation cut: its path, the set held, and each step it kept.
-fn cut_down(g: &mut SplitMix64, n: usize) -> Option<(OpPath, NameSet, Vec<(OpPath, History)>)> {
+fn cut_down(g: &mut SplitMix64, n: usize) -> Option<Pruned> {
     let (chain, held) = held_chain(g, n)?;
     let by = path(g, "prune")?;
     let ctx = OpContext::new(by.clone(), Budget::UNLIMITED);
@@ -432,7 +430,7 @@ fn cut_down(g: &mut SplitMix64, n: usize) -> Option<(OpPath, NameSet, Vec<(OpPat
 
 /// One pruned element per call of `pruned_record`.
 #[must_use]
-pub fn pruned(class: Class) -> Vec<(OpPath, NameSet, Vec<(OpPath, History)>)> {
+pub fn pruned(class: Class) -> Vec<Pruned> {
     if class != Class::Typical {
         return Vec::new();
     }

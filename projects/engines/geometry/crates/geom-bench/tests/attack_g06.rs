@@ -852,11 +852,7 @@ fn naming_digest(group: &str, name: &str, class: Class) -> Option<Digest> {
                 row.iter().try_for_each(|&x| e.float(x).ok())
             })
         })),
-        ("encoder", "sha256") => fold(
-            ie::messages(class)
-                .iter()
-                .map(|m| geom_op::hash::sha256(m)),
-        ),
+        ("encoder", "sha256") => fold(ie::messages(class).iter().map(|m| geom_op::hash::sha256(m))),
         ("names", "name_id") => fold(inm::names(class).iter().map(|n| n.id().ok())),
         ("names", "intern") => fold(inm::groups(class).iter().map(|names| {
             let mut graph = geom_name::NameGraph::new();
@@ -892,14 +888,16 @@ fn naming_digest(group: &str, name: &str, class: Class) -> Option<Digest> {
                 geom_run::Budget::UNLIMITED,
             );
             fold(
-                inm::prunes(class)
-                    .iter()
-                    .map(|(steps, held)| geom_name::prune(&ctx, steps, held).ok().map(|o| o.result)),
+                inm::prunes(class).iter().map(|(steps, held)| {
+                    geom_name::prune(&ctx, steps, held).ok().map(|o| o.result)
+                }),
             )
         }
-        ("prune", "record_write") => fold(inm::pruned(class).iter().map(|(by, held, steps)| {
-            geom_format::pruned::pruned_record(by, held, steps).ok()
-        })),
+        ("prune", "record_write") => fold(
+            inm::pruned(class)
+                .iter()
+                .map(|(by, held, steps)| geom_format::pruned::pruned_record(by, held, steps).ok()),
+        ),
         ("prune", "record_read") => fold(
             inm::pruned_payloads(class)
                 .iter()

@@ -69,7 +69,10 @@ fn the_input_bound_is_reached_and_never_passed() {
     assert!(case.tail.is_empty());
     data.extend([0x83, 0x81, 0x50]);
     let (case, read) = decode(&data).unwrap();
-    assert_eq!((read, case.tail.as_slice()), (MAX_INPUT_BYTES, &[0x83, 0x81, 0x50][..]));
+    assert_eq!(
+        (read, case.tail.as_slice()),
+        (MAX_INPUT_BYTES, &[0x83, 0x81, 0x50][..])
+    );
     holds(harness(&data));
     let mut g = SplitMix64::new(Seed(0x109));
     for _ in 0..500 {

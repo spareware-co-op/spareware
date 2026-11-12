@@ -76,7 +76,12 @@ fn the_input_bound_is_reached_and_never_passed() {
     let (case, read) = decode(&data);
     assert_eq!(read, MAX_INPUT_BYTES);
     assert_eq!(
-        (case.names.len(), case.list.len(), case.sets.len(), case.keys.len()),
+        (
+            case.names.len(),
+            case.list.len(),
+            case.sets.len(),
+            case.keys.len()
+        ),
         (8, 12, 3, 8)
     );
     holds(harness(&data));
@@ -101,9 +106,11 @@ fn the_seeded_inputs_reach_every_kind_and_the_hard_cases() {
             kinds[usize::from(d.kind % 5)] += 1;
             strangers += u32::from(d.parents.iter().any(|p| matches!(p, Parent::Stranger(_))));
         }
-        undecided += u32::from(case.keys.iter().any(|k| {
-            k.least.is_none() || k.vertices.is_none() || k.direction.is_none()
-        }));
+        undecided += u32::from(
+            case.keys
+                .iter()
+                .any(|k| k.least.is_none() || k.vertices.is_none() || k.direction.is_none()),
+        );
         ties += u32::from(
             case.keys
                 .iter()

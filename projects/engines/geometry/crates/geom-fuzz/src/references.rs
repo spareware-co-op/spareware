@@ -239,7 +239,11 @@ pub fn element(s: &mut ByteSource<'_>) -> Option<Element> {
     for k in 0..count {
         let new = s.byte() % 3;
         let fates: Vec<Fate> = (0..MAX_FACES)
-            .map(|_| *Fate::ALL.get(usize::from(s.byte() % 6)).unwrap_or(&Fate::Unchanged))
+            .map(|_| {
+                *Fate::ALL
+                    .get(usize::from(s.byte() % 6))
+                    .unwrap_or(&Fate::Unchanged)
+            })
             .collect();
         let (raw, _) = built(k, &current, fates.get(..current.len())?, new)?;
         let history = interned.history(&raw)?;
@@ -299,7 +303,10 @@ pub fn element(s: &mut ByteSource<'_>) -> Option<Element> {
 
 /// A name no graph holds.
 fn stranger(byte: u8) -> NameId {
-    NameId::from_bytes([0xEE, byte, 0xEE, 0xEE, 0xEE, 0xEE, 0xEE, 0xEE, 0xEE, 0xEE, 0xEE, 0xEE, 0xEE, 0xEE, 0xEE, 0xEE])
+    NameId::from_bytes([
+        0xEE, byte, 0xEE, 0xEE, 0xEE, 0xEE, 0xEE, 0xEE, 0xEE, 0xEE, 0xEE, 0xEE, 0xEE, 0xEE, 0xEE,
+        0xEE,
+    ])
 }
 
 /// The fuzzer's bytes as a case, and how many bytes were read (at most [`MAX_INPUT_BYTES`]);
@@ -405,7 +412,10 @@ pub fn check(case: &Case) -> Result<(), Finding> {
     let law = |law: &str, what: String| Finding::new(law, || format!("{case:?}: {what}"));
     let got = resolved(case, &case.reference);
     if resolved(case, &case.reference) != got {
-        return Err(law("a reference resolves the same twice", format!("{got:?}")));
+        return Err(law(
+            "a reference resolves the same twice",
+            format!("{got:?}"),
+        ));
     }
     let mut other = case.reference.clone();
     other.signature = Signature(vec![0xA5; 9]);
@@ -498,7 +508,13 @@ pub fn expected(case: &Case) -> Resolution {
             })
             .map(|rec| rec.output)
             .collect();
-        if next.is_empty() && history.deleted().names().iter().any(|n| current.contains(n)) {
+        if next.is_empty()
+            && history
+                .deleted()
+                .names()
+                .iter()
+                .any(|n| current.contains(n))
+        {
             deleted_by = Some(by.clone());
         }
         current = next;

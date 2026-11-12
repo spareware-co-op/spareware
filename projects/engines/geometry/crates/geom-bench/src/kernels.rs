@@ -2811,7 +2811,9 @@ pub mod naming {
     /// `History::check` of each step against its inputs: whether it keeps the laws.
     #[inline(never)]
     pub fn checks(batch: &[(History, NameSet)], out: &mut Vec<bool>) {
-        run(batch, out, |(history, inputs)| history.check(inputs).is_ok());
+        run(batch, out, |(history, inputs)| {
+            history.check(inputs).is_ok()
+        });
     }
 
     /// `Relations::then` of each pair of steps.
@@ -2849,7 +2851,7 @@ pub mod naming {
     /// `pruned_record` of each pruned element.
     #[inline(never)]
     pub fn record_write(
-        batch: &[(OpPath, NameSet, Vec<(OpPath, History)>)],
+        batch: &[Pruned],
         out: &mut Vec<Option<Record>>,
     ) {
         run(batch, out, |(by, held, steps)| {

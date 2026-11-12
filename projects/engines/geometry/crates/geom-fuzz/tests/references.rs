@@ -110,10 +110,17 @@ fn the_seeded_inputs_reach_every_outcome() {
         UnresolvedReason::NameUnknown,
         UnresolvedReason::HistoryBroken,
     ];
-    for want in ["Exact", "FollowedHistory", "Ambiguous", "WeakChanged", "Deleted", "HistoryPruned"]
-        .into_iter()
-        .map(String::from)
-        .chain(reasons.iter().map(|r| format!("{r:?}")))
+    for want in [
+        "Exact",
+        "FollowedHistory",
+        "Ambiguous",
+        "WeakChanged",
+        "Deleted",
+        "HistoryPruned",
+    ]
+    .into_iter()
+    .map(String::from)
+    .chain(reasons.iter().map(|r| format!("{r:?}")))
     {
         assert!(seen.contains(&want), "{want} not reached: {seen:?}");
     }
