@@ -1197,6 +1197,7 @@ dependencies = [
  "ciborium-ll",
  "dashu-int",
  "dashu-ratio",
+ "engine-geometry",
  "geom-bench",
  "geom-bvh",
  "geom-check",
@@ -1216,6 +1217,7 @@ dependencies = [
  "geom-topo",
  "nix",
  "num-bigint",
+ "serde_json",
 ]
 
 [[package]]

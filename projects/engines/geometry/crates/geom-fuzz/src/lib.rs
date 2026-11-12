@@ -43,8 +43,11 @@
 //! Gate 3 code no other target reaches (30.1's standard bar), [`euler`] holds `geom-topo`'s Euler
 //! operators to their table of counts, Euler's formula and their refusals (G81); [`naming`] holds
 //! names, the name graph, the duplicate detector and the ordinal order to their laws (G87); [`references`],
-//! reference resolution gives 20.4's outcome on any history (G89); and [`prune`], `PruneHistory`
-//! keeps every held reference and its record reads back, and reads only its one encoding (G109).
+//! reference resolution gives 20.4's outcome on any history (G89); [`prune`], `PruneHistory`
+//! keeps every held reference and its record reads back, and reads only its one encoding (G109);
+//! and [`contract`], the operation contract's errors keep their detail's kind and chapter 22's
+//! remedies, write text that names what they hold, and every schema the facade lists names details
+//! the contract has, whose MCP tool descriptions parse and round-trip (G82).
 //! The layout every target follows, and how each engine runs it locally and in CI, is in this
 //! crate's `README.md`.
 //!
@@ -167,26 +170,30 @@
 //! - `ciborium-ll` 0.2.2 and `ciborium-io` 0.2.2 (Apache-2.0), without their default features:
 //!   the [`encoder`] target's oracle, an encoder written elsewhere that reads each finished item
 //!   head by head and writes it again, the versions `geom-op`'s tests pin.
+//! - `engine-geometry` (Apache-2.0, ours), the facade whose operation schemas the [`contract`]
+//!   target holds to the contract, with `geom-gen` writing their tool descriptions, and
+//!   `serde_json` 1.0.154 (MIT OR Apache-2.0), the version `geom-gen` pins, which reads them back.
 //! - `nix` 0.31.3 (MIT), a development dependency on Linux only, with its `pthread` and `signal`
 //!   modules alone: the tests' alarm thread sends `SIGALRM` to the fuzzing thread with it, so that
 //!   libFuzzer's per-input time limit works under the test harness (`tests/common/mod.rs`, issue
 //!   #764). Safe Rust over libc's `pthread_kill`, as the crate forbids unsafe code.
 //!
 //! Licences of every outside package this crate brings into a build, through `bolero`,
-//! `num-bigint` and `nix`, on every target (`cargo tree --target all`), each record checked by
+//! `num-bigint`, `serde_json` and `nix`, on every target (`cargo tree --target all`), each record checked by
 //! `geom-test`'s `tests/licences.rs`.
 //! Where a package offers a choice, it is taken under the permissive licences offered (MIT or
 //! Apache-2.0):
 //!
 //! - MIT: `bolero`, `bolero-engine`, `bolero-generator`, `bolero-generator-derive`,
 //!   `bolero-libfuzzer`, `bolero-afl`, `bolero-honggfuzz`, `bolero-kani`, `pretty-hex`, `winnow`,
-//!   `nix`, `cfg_aliases` and `crunchy` (through `half`).
+//!   `nix`, `cfg_aliases`, `crunchy` (through `half`) and `zmij` (through `serde_json`).
 //! - MIT OR Apache-2.0: `half`, `anyhow`, `bitflags`, `cfg-if`, `lazy_static`, `either`, `rand`,
 //!   `rand_core`, `rand_chacha`, `rand_xoshiro`, `getrandom`, `libc`, `ppv-lite86`, `proc-macro-crate`,
 //!   `toml_edit`, `toml_datetime`, `indexmap`, `hashbrown`, `equivalent`, `serde`, `serde_core`,
 //!   `serde_derive`, `proc-macro2`, `quote`, `syn`, `cc`, `find-msvc-tools`, `shlex`,
 //!   `num-bigint`, `num-integer`, `num-traits`, `autocfg`, `dashu-base`, `dashu-int`,
-//!   `dashu-ratio` and `static_assertions`.
+//!   `dashu-ratio`, `static_assertions`, `serde_json` and `itoa`.
+//! - Unlicense OR MIT: `memchr` (through `serde_json`).
 //! - (MIT OR Apache-2.0) AND Unicode-3.0: `unicode-ident`.
 //! - Apache-2.0: `num-modular` (through `dashu-int`), `ciborium-ll` and `ciborium-io`.
 //! - BSD-2-Clause OR Apache-2.0 OR MIT: `zerocopy` and `zerocopy-derive`.
@@ -221,6 +228,7 @@ pub mod bodies;
 pub mod boxtree;
 pub mod cache;
 pub mod cbor;
+pub mod contract;
 pub mod curves;
 pub mod encoder;
 pub mod euler;

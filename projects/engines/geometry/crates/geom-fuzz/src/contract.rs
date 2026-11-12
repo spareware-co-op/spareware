@@ -88,8 +88,7 @@ use geom_op::{
     Remedy, RunDetail, Tally, Value,
 };
 use geom_run::{
-    Budget, BudgetKind, Cancel as _, CancelToken, Exceeded, Interrupted, ItemError, Phase,
-    RunError, Usage,
+    Budget, BudgetKind, CancelToken, Exceeded, Interrupted, ItemError, Phase, RunError, Usage,
 };
 use geom_test::contract::detail_name;
 use geom_test::{ByteSource, Entropy};
@@ -337,7 +336,10 @@ fn at(p: [u8; PAYLOAD], at: usize) -> u8 {
 
 /// An exactness class and its bound from `p`.
 fn exactness(p: [u8; PAYLOAD]) -> Exactness {
-    let (bound, step) = (Steps(u64::from(quad(p, 1))), pick(&STEPS, GridStep::Q0, at(p, 5)));
+    let (bound, step) = (
+        Steps(u64::from(quad(p, 1))),
+        pick(&STEPS, GridStep::Q0, at(p, 5)),
+    );
     match at(p, 0) % 3 {
         0 => Exactness::Exact,
         1 => Exactness::Certified { bound, step },
@@ -717,8 +719,17 @@ pub fn harness(data: &[u8]) -> Result<(), Finding> {
 type Law<'a> = &'a dyn Fn(&str, String) -> Finding;
 
 /// `Err` of `law(name, what())` unless `holds`.
-fn hold(holds: bool, law: Law<'_>, name: &str, what: impl FnOnce() -> String) -> Result<(), Finding> {
-    if holds { Ok(()) } else { Err(law(name, what())) }
+fn hold(
+    holds: bool,
+    law: Law<'_>,
+    name: &str,
+    what: impl FnOnce() -> String,
+) -> Result<(), Finding> {
+    if holds {
+        Ok(())
+    } else {
+        Err(law(name, what()))
+    }
 }
 
 /// Holds the case to every law of the module header.
@@ -734,10 +745,9 @@ pub fn check(case: &Case) -> Result<(), Finding> {
     let built = build(case, &paths);
     hold(
         build(case, &paths) == built
-            && built
-                .iter()
-                .zip(build(case, &paths))
-                .all(|(a, b)| a.to_string() == b.to_string() && format!("{a:?}") == format!("{b:?}")),
+            && built.iter().zip(build(case, &paths)).all(|(a, b)| {
+                a.to_string() == b.to_string() && format!("{a:?}") == format!("{b:?}")
+            }),
         &law,
         "the errors built twice from the case are equal and write the same text",
         String::new,
@@ -849,9 +859,11 @@ fn path_text(path: &OpPath) -> String {
 /// the ID's sixteen bytes and each label, a step as text and a key as sixteen bytes.
 fn read_path(bytes: &[u8]) -> Result<OpPath, String> {
     let mut dec = Decoder::from(bytes);
-    let mut take = |n: usize, dec: &mut Decoder<&[u8]>| {
+    let take = |n: usize, dec: &mut Decoder<&[u8]>| {
         let mut buf = vec![0; n];
-        dec.read_exact(&mut buf).map(|()| buf).map_err(|e| format!("{e:?}"))
+        dec.read_exact(&mut buf)
+            .map(|()| buf)
+            .map_err(|e| format!("{e:?}"))
     };
     let Ok(Header::Array(Some(n))) = dec.pull() else {
         return Err("not an array of known length".into());
@@ -867,7 +879,8 @@ fn read_path(bytes: &[u8]) -> Result<OpPath, String> {
         path = match dec.pull() {
             Ok(Header::Text(Some(len))) => {
                 let text = String::from_utf8(take(len, &mut dec)?).map_err(|e| e.to_string())?;
-                path.step(&text).ok_or_else(|| format!("{text:?} is no step"))?
+                path.step(&text)
+                    .ok_or_else(|| format!("{text:?} is no step"))?
             }
             Ok(Header::Bytes(Some(16))) => {
                 let key: [u8; 16] = take(16, &mut dec)?
@@ -963,7 +976,7 @@ fn check_path(draw: &PathDraw, law: Law<'_>) -> Result<OpPath, Finding> {
             }
         };
         hold(
-            next.labels().len() == path.labels().len() + 1
+            Some(next.labels().len()) == path.labels().len().checked_add(1)
                 && next.labels().starts_with(path.labels())
                 && path.contains(&next)
                 && !next.contains(&path)
@@ -1003,6 +1016,28 @@ impl Tally for Deaf {
     fn add(&self, _used: Usage) {}
 }
 
+/// The context `c` draws at `path`, with `cancel` attached if it asks for one.
+fn made_context<'c>(
+    c: &ContextDraw,
+    path: &OpPath,
+    budget: Budget,
+    precision: Precision,
+    cancel: &'c CancelToken,
+    tally: &'c Deaf,
+) -> OpContext<'c> {
+    let mut ctx = OpContext::new(path.clone(), budget);
+    if c.preview.is_some() {
+        ctx = ctx.with_precision(precision);
+    }
+    if c.cancel {
+        ctx = ctx.with_cancel(cancel);
+    }
+    if c.tally {
+        ctx = ctx.with_tally(tally);
+    }
+    ctx
+}
+
 /// The context's laws.
 fn check_context(c: &ContextDraw, path: &OpPath, law: Law<'_>) -> Result<(), Finding> {
     let budget = Budget::new(c.work, c.bytes);
@@ -1024,21 +1059,12 @@ fn check_context(c: &ContextDraw, path: &OpPath, law: Law<'_>) -> Result<(), Fin
     )?;
     let precision = c
         .preview
-        .map_or(Precision::Final, |(bound, step)| Precision::Preview { bound, step });
+        .map_or(Precision::Final, |(bound, step)| Precision::Preview {
+            bound,
+            step,
+        });
     let tally = Deaf;
-    let made = |cancel: &'_ CancelToken| {
-        let mut ctx = OpContext::new(path.clone(), budget);
-        if c.preview.is_some() {
-            ctx = ctx.with_precision(precision);
-        }
-        if c.cancel {
-            ctx = ctx.with_cancel(cancel);
-        }
-        if c.tally {
-            ctx = ctx.with_tally(&tally);
-        }
-        ctx
-    };
+    let made = |cancel| made_context(c, path, budget, precision, cancel, &tally);
     let ctx = made(&token);
     hold(
         ctx.path() == path
@@ -1046,7 +1072,7 @@ fn check_context(c: &ContextDraw, path: &OpPath, law: Law<'_>) -> Result<(), Fin
             && ctx.budget() == budget
             && ctx.precision() == precision
             && ctx.precision().is_final() == c.preview.is_none()
-            && ctx.cancel().map(|x| x.requested()) == c.cancel.then_some(c.cancelled)
+            && ctx.cancel().map(geom_run::Cancel::requested) == c.cancel.then_some(c.cancelled)
             && ctx.tally().is_some() == c.tally,
         law,
         "a context holds its path, budget, precision, cancellation and tally",
@@ -1106,7 +1132,8 @@ fn data_texts(detail: &OpErrorDetail) -> Vec<String> {
         OpErrorDetail::Batch(BatchDetail::RepeatedKey { key }) => vec![hex(key)],
         OpErrorDetail::Make(m) => match m {
             MakeDetail::ZeroLength { input } => vec![(*input).to_owned()],
-            MakeDetail::TooFewCorners { corners: n } | MakeDetail::MinorNotBelowMajor { major: n } => {
+            MakeDetail::TooFewCorners { corners: n }
+            | MakeDetail::MinorNotBelowMajor { major: n } => {
                 vec![n.to_string()]
             }
             MakeDetail::NotAccepted { would } => vec![format!("{would:?}")],
@@ -1152,9 +1179,9 @@ fn carried(detail: &OpErrorDetail, remedies: &[Remedy]) -> Option<&'static str> 
         OpErrorDetail::Make(MakeDetail::NotCertifiedYet { piece }) => {
             (!has(&Remedy::AwaitPiece { piece })).then_some("a missing route names its piece")
         }
-        OpErrorDetail::Make(MakeDetail::ZeroLength { input }) => (!remedies.iter().any(|r| {
-            matches!(r, Remedy::ChangeInput { input: named, .. } if named == input)
-        }))
+        OpErrorDetail::Make(MakeDetail::ZeroLength { input }) => (!remedies
+            .iter()
+            .any(|r| matches!(r, Remedy::ChangeInput { input: named, .. } if named == input)))
         .then_some("a zero length offers to change the input it names"),
         _ => None,
     }
@@ -1225,7 +1252,8 @@ fn check_error(
             .strip_prefix(ev.what)
             .and_then(|r| r.strip_prefix(": "));
         hold(
-            rest.is_some_and(|r| reads_back(&ev.value, r)) && ev.value.to_string() == rest.unwrap_or(""),
+            rest.is_some_and(|r| reads_back(&ev.value, r))
+                && ev.value.to_string() == rest.unwrap_or(""),
             law,
             "evidence writes its name, then its value, whose text reads back to it",
             || text.clone(),
@@ -1315,10 +1343,12 @@ fn names_itself(remedy: &Remedy, text: &str) -> bool {
             input,
             to: Some((bound, value)),
         } => {
-            let value = value.to_string();
-            all(&[format!("`{input}`"), format!("{} {value}", bound_words(*bound))])
-                && text.ends_with(&value)
-                && reads_back(&Value::clone(&remedy_value(remedy)), &value)
+            let shown = value.to_string();
+            all(&[
+                format!("`{input}`"),
+                format!("{} {shown}", bound_words(*bound)),
+            ]) && text.ends_with(&shown)
+                && reads_back(value, &shown)
         }
         Remedy::Choose { candidates } => {
             let mut rest = text;
@@ -1337,17 +1367,6 @@ fn names_itself(remedy: &Remedy, text: &str) -> bool {
         Remedy::RaiseBudget { kind, at_least } => all(&[kind.to_string(), at_least.to_string()]),
         Remedy::AwaitPiece { piece } => all(&[(*piece).to_owned()]),
         _ => true,
-    }
-}
-
-/// The value a remedy changes its input to; a count of zero for any other.
-fn remedy_value(remedy: &Remedy) -> Value {
-    match remedy {
-        Remedy::ChangeInput {
-            to: Some((_, value)),
-            ..
-        } => *value,
-        _ => Value::Count(0),
     }
 }
 
@@ -1393,17 +1412,29 @@ fn chapter_kind(error: NumError) -> ErrorKind {
 
 /// The conversions' laws, on values from `p`.
 fn check_conversions(p: [u8; PAYLOAD], law: Law<'_>) -> Result<(), Finding> {
-    let (x, q, m) = (exceeded(p), query_detail(at(p, 0), p), make_detail(at(p, 1), p));
+    let (over, query, make) = (
+        exceeded(p),
+        query_detail(at(p, 0), p),
+        make_detail(at(p, 1), p),
+    );
     let what = pick(&BROKE, "", at(p, 2));
-    let run = |d: RunDetail| OpErrorDetail::Run(d);
+    let run = |stop: RunDetail| OpErrorDetail::Run(stop);
     let pairs: [(OpErrorDetail, OpErrorDetail, ErrorKind); 15] = [
-        (RunError::Failed(q).into(), OpErrorDetail::Query(q), q.kind()),
         (
-            RunError::<QueryDetail>::BudgetExceeded(x).into(),
-            run(RunDetail::BudgetExceeded(x)),
+            RunError::Failed(query).into(),
+            OpErrorDetail::Query(query),
+            query.kind(),
+        ),
+        (
+            RunError::<QueryDetail>::BudgetExceeded(over).into(),
+            run(RunDetail::BudgetExceeded(over)),
             ErrorKind::BudgetExceeded,
         ),
-        (RunError::<QueryDetail>::Cancelled.into(), run(RunDetail::Cancelled), ErrorKind::Cancelled),
+        (
+            RunError::<QueryDetail>::Cancelled.into(),
+            run(RunDetail::Cancelled),
+            ErrorKind::Cancelled,
+        ),
         (
             RunError::<QueryDetail>::OutOfMemory.into(),
             run(RunDetail::OutOfMemory),
@@ -1414,19 +1445,31 @@ fn check_conversions(p: [u8; PAYLOAD], law: Law<'_>) -> Result<(), Finding> {
             run(RunDetail::Internal { what }),
             ErrorKind::Internal,
         ),
-        (ItemError::Failed(m).into(), OpErrorDetail::Make(m), m.kind()),
         (
-            ItemError::<MakeDetail>::BudgetExceeded(x).into(),
-            run(RunDetail::BudgetExceeded(x)),
+            ItemError::Failed(make).into(),
+            OpErrorDetail::Make(make),
+            make.kind(),
+        ),
+        (
+            ItemError::<MakeDetail>::BudgetExceeded(over).into(),
+            run(RunDetail::BudgetExceeded(over)),
             ErrorKind::BudgetExceeded,
         ),
         (
-            ItemError::<MakeDetail>::BatchTotal(x).into(),
-            run(RunDetail::BatchTotal(x)),
+            ItemError::<MakeDetail>::BatchTotal(over).into(),
+            run(RunDetail::BatchTotal(over)),
             ErrorKind::BudgetExceeded,
         ),
-        (Interrupted::Cancelled.into(), run(RunDetail::Cancelled), ErrorKind::Cancelled),
-        (Interrupted::OutOfMemory.into(), run(RunDetail::OutOfMemory), ErrorKind::OutOfMemory),
+        (
+            Interrupted::Cancelled.into(),
+            run(RunDetail::Cancelled),
+            ErrorKind::Cancelled,
+        ),
+        (
+            Interrupted::OutOfMemory.into(),
+            run(RunDetail::OutOfMemory),
+            ErrorKind::OutOfMemory,
+        ),
         (
             Interrupted::Internal(what).into(),
             run(RunDetail::Internal { what }),
@@ -1437,9 +1480,13 @@ fn check_conversions(p: [u8; PAYLOAD], law: Law<'_>) -> Result<(), Finding> {
             run(RunDetail::Internal { what }),
             ErrorKind::Internal,
         ),
-        (m.into(), OpErrorDetail::Make(m), m.kind()),
-        (q.into(), OpErrorDetail::Query(q), q.kind()),
-        (RunDetail::Cancelled.into(), run(RunDetail::Cancelled), ErrorKind::Cancelled),
+        (make.into(), OpErrorDetail::Make(make), make.kind()),
+        (query.into(), OpErrorDetail::Query(query), query.kind()),
+        (
+            RunDetail::Cancelled.into(),
+            run(RunDetail::Cancelled),
+            ErrorKind::Cancelled,
+        ),
     ];
     for (made, expected, kind) in pairs {
         hold(
@@ -1450,15 +1497,15 @@ fn check_conversions(p: [u8; PAYLOAD], law: Law<'_>) -> Result<(), Finding> {
         )?;
     }
     for v in 0..11 {
-        let n = num_error(v, p);
-        let d = OpErrorDetail::from(n);
+        let num = num_error(v, p);
+        let got = OpErrorDetail::from(num);
         hold(
-            d == OpErrorDetail::Num(NumDetail::from(n))
-                && d == OpErrorDetail::from(NumDetail::from(n))
-                && d.kind() == chapter_kind(n),
+            got == OpErrorDetail::Num(NumDetail::from(num))
+                && got == OpErrorDetail::from(NumDetail::from(num))
+                && got.kind() == chapter_kind(num),
             law,
             "every error of the numbers layer lands on the kind chapter 22 gives it",
-            || format!("{n:?}: {d:?}"),
+            || format!("{num:?}: {got:?}"),
         )?;
     }
     Ok(())
@@ -1489,7 +1536,10 @@ fn check_schemas(case: &Case, law: Law<'_>) -> Result<(), Finding> {
         for (i, spec) in s.errors.iter().enumerate() {
             hold(
                 !matches!(spec.kind, ErrorKind::Cancelled | ErrorKind::OutOfMemory)
-                    && s.errors.iter().skip(i.saturating_add(1)).all(|o| o.detail != spec.detail),
+                    && s.errors
+                        .iter()
+                        .skip(i.saturating_add(1))
+                        .all(|o| o.detail != spec.detail),
                 law,
                 "no schema lists Cancelled, OutOfMemory or a detail twice",
                 || format!("{}: {}", s.name, spec.detail),
@@ -1523,9 +1573,15 @@ fn check_schemas(case: &Case, law: Law<'_>) -> Result<(), Finding> {
     let n = OPERATIONS.len();
     let chosen: Vec<Operation> = (0..n)
         .filter(|i| {
-            u32::try_from(i % 24).is_ok_and(|b| case.chosen.checked_shr(b).is_some_and(|m| m & 1 == 1))
+            u32::try_from(i % 24)
+                .is_ok_and(|b| case.chosen.checked_shr(b).is_some_and(|m| m & 1 == 1))
         })
-        .filter_map(|i| OPERATIONS.get((i + usize::from(case.turn)) % n).copied())
+        .filter_map(|i| {
+            i.checked_add(usize::from(case.turn))
+                .and_then(|j| j.checked_rem(n))
+                .and_then(|j| OPERATIONS.get(j))
+                .copied()
+        })
         .collect();
     check_tools(&chosen, law)
 }
@@ -1556,9 +1612,16 @@ fn check_tools(ops: &[Operation], law: Law<'_>) -> Result<(), Finding> {
     )?;
     for (tool, op) in tools.into_iter().flatten().zip(ops) {
         let s = op.schema;
-        let meta = tool.get("_meta").and_then(|m| m.get("org.spareware/kernel"));
+        let meta = tool
+            .get("_meta")
+            .and_then(|m| m.get("org.spareware/kernel"));
         let field = |k: &str| meta.and_then(|m| m.get(k));
-        let list = |k: &str| field(k).and_then(Json::as_array).cloned().unwrap_or_default();
+        let list = |k: &str| {
+            field(k)
+                .and_then(Json::as_array)
+                .cloned()
+                .unwrap_or_default()
+        };
         let text = |j: &Json, k: &str| j.get(k).and_then(Json::as_str).map(str::to_owned);
         let errors = list("errors");
         let errors_back = errors.len() == s.errors.len()

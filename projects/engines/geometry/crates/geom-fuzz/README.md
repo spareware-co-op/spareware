@@ -40,9 +40,12 @@ keep Euler's formula, refuse dead rows without a trace and publish back to thems
 (`src/naming.rs`, G87), names get the one ID their bytes hash to, the name
 graph keeps each once and knows which are weak, and the duplicate detector, the reference pick and
 the ordinal order agree with oracles written from 20.2; `references` (`src/references.rs`, G89),
-reference resolution gives 20.4's outcome on any history from `geom-test`'s kit; and `prune`
+reference resolution gives 20.4's outcome on any history from `geom-test`'s kit; `prune`
 (`src/prune.rs`, G109), `PruneHistory` keeps every held reference and charges exactly its
-schedule, and the pruned record reads back and reads only its one encoding. `src/adversarial.rs`
+schedule, and the pruned record reads back and reads only its one encoding; and `contract`
+(`src/contract.rs`, G82), the operation contract's errors keep their detail's kind and chapter 22's
+remedies and write text that names what they hold, and every schema the facade lists names details
+the contract has, whose MCP tool descriptions parse and round-trip. `src/adversarial.rs`
 holds the generators aimed at the hard cases, and `src/robustness.rs` counts how many plain designs
 succeed per family: `src/robustness.txt` records it, and a count may not fall.
 
